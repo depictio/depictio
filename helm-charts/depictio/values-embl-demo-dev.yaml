@@ -21,34 +21,51 @@
 demo:
   autoWipeOnUpgrade: true  # Delete PVCs before each upgrade for fresh demo state
 
-# Celery worker — biggest share of the budget because it's the
-# advanced-viz compute bottleneck (volcano / heatmap / coverage_track /
-# sankey / upset / etc.). Threads pool, so the GIL doesn't bottleneck
-# polars (most compute is in C extensions).
+# Viewer (nginx SPA) — stateless and tiny, so run 2 replicas for HA + a
+# zero-downtime rolling deploy (no PVC, so RollingUpdate is safe here).
+viewer:
+  replicas: 2
+  strategy: "RollingUpdate"
+
+# Protect the multi-replica workloads during node drains / cluster upgrades.
+# dev runs >1 replica for backend, viewer AND celery, so all three get a PDB.
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# Celery worker — the advanced-viz compute bottleneck (volcano / heatmap /
+# coverage_track / sankey / upset / …). dev is where we VALIDATE multi-replica
+# celery before promoting to stable: Redis is a multi-consumer broker and the
+# screenshots PVC is ReadWriteMany, so 2 workers is architecturally sound.
+# Budget-neutral: per-pod halved, aggregate (3 CPU / 6 Gi requests, 8 CPU /
+# 16 Gi limits, 8 task slots) unchanged vs the old single pod.
 celery:
   enabled: true
-  replicas: 1   # multi-replica celery not validated yet on this chart
+  replicas: 2
   resources:
     requests:
-      memory: "6Gi"
-      cpu: "3"
-    limits:
-      memory: "16Gi"
-      cpu: "8"
-  env:
-    DEPICTIO_CELERY_WORKERS: "8"  # parallel tasks per worker (was 2)
-
-# Backend API — serves both Dash AJAX *and* the React viewer SPA + its
-# data-fetching endpoints (render_figure, bulk_compute_cards, …), so React
-# adoption raises backend load.
-backend:
-  resources:
-    requests:
-      memory: "4Gi"
-      cpu: "2"
+      memory: "3Gi"
+      cpu: "1.5"
     limits:
       memory: "8Gi"
       cpu: "4"
+  env:
+    DEPICTIO_CELERY_WORKERS: "4"  # 4 slots per pod × 2 pods = 8 total
+
+# Backend API — serves the React viewer SPA + its data-fetching endpoints
+# (render_figure, bulk_compute_cards, …). 2 replicas for HA + tail latency;
+# budget-neutral (per-pod halved, aggregate 2 CPU / 4 Gi req, 4 CPU / 8 Gi
+# limit, 4 gunicorn workers unchanged). Safe across pods via the Mongo
+# `init_lock`. Kept on Recreate — this env auto-wipes PVCs on upgrade.
+backend:
+  replicas: 2
+  resources:
+    requests:
+      memory: "2Gi"
+      cpu: "1"
+    limits:
+      memory: "4Gi"
+      cpu: "2"
   env:
     # Demo mode with guided tour tooltips
     DEPICTIO_AUTH_DEMO_MODE: "true"
@@ -56,39 +73,15 @@ backend:
     # Anonymous user configuration
     DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL: "anonymous@depict.io"
     DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS: "1"
-    # Performance
-    DEPICTIO_FASTAPI_WORKERS: "4"  # Gunicorn workers for API
+    # Performance — 2 gunicorn workers per pod × 2 pods = 4 total, sized to
+    # the 2-CPU per-pod limit.
+    DEPICTIO_FASTAPI_WORKERS: "2"  # Gunicorn workers for API
     DEPICTIO_DEV_MODE: "false"
     DEPICTIO_MONGODB_WIPE: "true"
     DEPICTIO_GOOGLE_ANALYTICS_ENABLED: "true"
     DEPICTIO_GOOGLE_ANALYTICS_TRACKING_ID: "G-MCC33FDF2Z"
     # Explicit API URL to match ingress host (for browser-based requests)
     DEPICTIO_FASTAPI_PUBLIC_URL: "https://dev.api.demo.depictio.embl.org"
-
-# Frontend Dash — being phased out in favour of the React viewer (served
-# from the backend container at /dashboard-beta). Halved to free budget
-# for backend + celery. Still single-worker (state_manager limitation).
-frontend:
-  resources:
-    requests:
-      memory: "512Mi"
-      cpu: "250m"
-    limits:
-      memory: "1Gi"
-      cpu: "500m"
-  env:
-    # Demo mode with guided tour tooltips
-    DEPICTIO_AUTH_DEMO_MODE: "true"
-    DEPICTIO_AUTH_PUBLIC_MODE: "true"
-    # Anonymous user configuration
-    DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL: "anonymous@depict.io"
-    DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS: "1"
-    # Performance
-    DEPICTIO_DASH_WORKERS: "1"  # MUST be 1 until state_manager is refactored
-    DEPICTIO_DEV_MODE: "false"
-    DEPICTIO_DASH_DEBUG_UI: "true"  # Show Dash debug UI without full dev mode
-    DEPICTIO_GOOGLE_ANALYTICS_ENABLED: "true"
-    DEPICTIO_GOOGLE_ANALYTICS_TRACKING_ID: "G-MCC33FDF2Z"
 
 # Ingress - Dev Environment
 ingress:
@@ -105,7 +98,7 @@ ingress:
         - path: /
           pathType: Prefix
           service:
-            name: depictio-frontend
+            name: depictio-viewer
             portName: http
     - host: "dev.api.demo.depictio.embl.org"
       paths:

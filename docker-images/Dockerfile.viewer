@@ -1,0 +1,68 @@
+# -----------------------------
+# Depictio viewer image (nginx + built React SPA)
+# -----------------------------
+# Two-stage build: node:20-slim produces depictio/viewer/dist, then a
+# clean nginx:alpine layer ships the static bundle. Final image is ~30 MB
+# and carries zero Python or Node tooling.
+#
+# Pinned: pnpm 11+ requires Node 22.13+ (uses node:sqlite). Stay on
+# pnpm 10's tip until we bump the base image — matches the pin in
+# _uv.dockerfile's viewer-builder stage.
+# -----------------------------
+
+FROM node:20-slim AS builder
+WORKDIR /build
+
+RUN corepack enable && corepack prepare pnpm@10 --activate
+
+COPY pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY packages ./packages/
+COPY depictio/viewer ./depictio/viewer/
+
+RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile
+
+# Memory caps for typical 6 GB container limits: sourcemaps off (peak-mem
+# win, not shipped to users anyway), heap capped at 4 GB to leave cgroup
+# headroom for native + worker stacks. Same knobs as the _uv.dockerfile
+# viewer-builder stage.
+RUN VITE_NO_SOURCEMAP=true NODE_OPTIONS="--max-old-space-size=4096" \
+    pnpm --filter depictio-viewer build
+
+# -----------------------------
+# Runtime stage
+# -----------------------------
+FROM nginx:1.27-alpine
+
+ARG VERSION=latest
+LABEL org.opencontainers.image.description="Depictio viewer — nginx-served React SPA."
+LABEL org.opencontainers.image.source="https://github.com/depictio/depictio"
+LABEL org.opencontainers.image.version="${VERSION:-latest}"
+LABEL org.opencontainers.image.authors="Thomas Weber <thomas.weber@embl.de>"
+LABEL org.opencontainers.image.licenses="MIT"
+
+# Vite builds under base `/dashboard-beta/`, so the bundle lives there on
+# disk too — keeps nginx's `root` simple and asset URLs untouched.
+COPY --from=builder /build/depictio/viewer/dist /usr/share/nginx/html/dashboard-beta
+
+# Ship the config as an envsubst template. The base image's entrypoint
+# (/docker-entrypoint.d/20-envsubst-on-templates.sh) renders every
+# /etc/nginx/templates/*.template into /etc/nginx/conf.d/ at container
+# start, substituting only shell-exported vars (here: DEPICTIO_API_UPSTREAM).
+COPY docker-images/nginx.conf.template /etc/nginx/templates/default.conf.template
+
+# Default backend upstream — keeps docker-compose working with no extra
+# config (the compose service is named `depictio-backend`). Overridden in
+# k8s to `<release>-depictio-backend:80` (the backend Service port).
+ENV DEPICTIO_API_UPSTREAM=depictio-backend:8058
+
+# Auto-detect the DNS resolver from /etc/resolv.conf at container start
+# (base image's 15-local-resolvers.envsh exports $NGINX_LOCAL_RESOLVERS,
+# consumed by the `resolver` directive in nginx.conf.template). Required so
+# the API proxy resolves the backend in Kubernetes (kube-dns) as well as in
+# docker-compose (127.0.0.11) — see nginx.conf.template for the full why.
+ENV NGINX_ENTRYPOINT_LOCAL_RESOLVERS=1
+
+EXPOSE 80
+
+# nginx:alpine's default CMD already runs in the foreground; no override needed.

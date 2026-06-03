@@ -20,7 +20,29 @@ else
     echo "🔧 CELERY WORKER: Dashboard view mode will use synchronous callbacks"
 fi
 
-# Start Celery worker - pointing to celery_worker module (imports flask_dispatcher for task discovery)
-exec celery -A depictio.dash.celery_worker:celery_app worker \
-    --loglevel=info \
-    --concurrency="$CELERY_WORKERS"
+# Start Celery worker - pointing to celery_worker module (imports flask_dispatcher for task discovery).
+#
+# Celery has no built-in autoreload. In dev mode we wrap it in watchmedo
+# (watchdog), which restarts the worker whenever a .py under /app/depictio
+# changes — the worker equivalent of the backend's uvicorn --reload, so code
+# edits land without a manual container restart. `--debug-force-polling`
+# because native fs events don't cross the macOS/Colima → Linux VM bind-mount
+# boundary (same reason the Vite viewer uses VITE_USE_POLLING). Prod runs
+# celery directly (no watcher, no polling cost).
+DEV_MODE_LOWER=$(echo "${DEPICTIO_DEV_MODE:-false}" | tr '[:upper:]' '[:lower:]')
+if [ "$DEV_MODE_LOWER" = "true" ]; then
+    echo "🔁 CELERY WORKER: dev mode — live reload via watchmedo (watching /app/depictio/**/*.py)"
+    exec watchmedo auto-restart \
+        --directory=/app/depictio \
+        --patterns='*.py' \
+        --ignore-patterns='*/__pycache__/*;*.pyc' \
+        --recursive \
+        --debug-force-polling \
+        -- celery -A depictio.api.celery_worker:celery_app worker \
+            --loglevel=info \
+            --concurrency="$CELERY_WORKERS"
+else
+    exec celery -A depictio.api.celery_worker:celery_app worker \
+        --loglevel=info \
+        --concurrency="$CELERY_WORKERS"
+fi

@@ -7,16 +7,14 @@ if [ -f /workspace/.env.instance ]; then
     source /workspace/.env.instance
 fi
 
-DASH_PORT=${DASH_PORT:-5080}
 FASTAPI_PORT=${FASTAPI_PORT:-8058}
 MINIO_CONSOLE_PORT=${MINIO_CONSOLE_PORT:-9001}
 VIEWER_DEV_PORT=${VIEWER_DEV_PORT:-5173}
 
 echo "🔌 Starting port forwarding..."
-echo "   Dash: $DASH_PORT -> depictio-frontend:5080"
+echo "   Viewer (Vite HMR): $VIEWER_DEV_PORT -> depictio-viewer-dev:5173"
 echo "   FastAPI: $FASTAPI_PORT -> depictio-backend:8058"
 echo "   MinIO Console: $MINIO_CONSOLE_PORT -> minio:9001"
-echo "   Vite (viewer-dev): $VIEWER_DEV_PORT -> depictio-viewer-dev:5173"
 
 # Check if socat is installed
 if ! command -v socat &> /dev/null; then
@@ -28,12 +26,11 @@ fi
 pkill -f "socat.*TCP-LISTEN" 2>/dev/null || true
 
 # Start port forwarding in background
-socat TCP-LISTEN:"$DASH_PORT",fork,reuseaddr TCP:depictio-frontend:5080 &
+socat TCP-LISTEN:"$VIEWER_DEV_PORT",fork,reuseaddr TCP:depictio-viewer-dev:5173 &
 socat TCP-LISTEN:"$FASTAPI_PORT",fork,reuseaddr TCP:depictio-backend:8058 &
 socat TCP-LISTEN:"$MINIO_CONSOLE_PORT",fork,reuseaddr TCP:minio:9001 &
-socat TCP-LISTEN:"$VIEWER_DEV_PORT",fork,reuseaddr TCP:depictio-viewer-dev:5173 &
 
 echo "✅ Port forwarding started!"
 echo ""
 echo "Ports should now appear in VS Code Ports panel."
-echo "If not, manually add: $DASH_PORT, $FASTAPI_PORT, $MINIO_CONSOLE_PORT, $VIEWER_DEV_PORT"
+echo "If not, manually add: $VIEWER_DEV_PORT, $FASTAPI_PORT, $MINIO_CONSOLE_PORT"

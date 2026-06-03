@@ -331,18 +331,18 @@ spec:
           - |
             echo "Fixing permissions for mounted volumes..."
             # Create directories with correct permissions for mounted PVCs
-            mkdir -p /app/depictio/dash/static/screenshots
+            mkdir -p /app/depictio/api/static/screenshots
             mkdir -p /app/depictio/keys
             mkdir -p /app/depictio/.depictio
             mkdir -p /tmp/depictio-uploads
 
             # Set ownership and permissions for PVC-mounted directories
-            chown -R 1000:2000 /app/depictio/dash/static/screenshots
+            chown -R 1000:2000 /app/depictio/api/static/screenshots
             chown -R 1000:2000 /app/depictio/keys
             chown -R 1000:2000 /app/depictio/.depictio
             chown -R 1000:2000 /tmp/depictio-uploads
 
-            chmod -R 775 /app/depictio/dash/static/screenshots
+            chmod -R 775 /app/depictio/api/static/screenshots
             chmod -R 775 /app/depictio/keys
             chmod -R 775 /app/depictio/.depictio
             chmod -R 775 /tmp/depictio-uploads
@@ -350,7 +350,7 @@ spec:
             echo "PVC permissions fixed!"
           volumeMounts:
             - name: depictio-screenshots
-              mountPath: /app/depictio/dash/static/screenshots
+              mountPath: /app/depictio/api/static/screenshots
             - name: depictio-keys
               mountPath: /app/depictio/keys
             - name: depictio-config
@@ -372,7 +372,7 @@ spec:
           command: ['sh', '-c']
           args:
             - |
-              SCREENSHOT_DIR="/app/depictio/dash/static/screenshots"
+              SCREENSHOT_DIR="/app/depictio/api/static/screenshots"
               COPIED=0
               # Copy all light theme screenshots (id_light.png)
               for f in "$SCREENSHOT_DIR"/*_light.png; do
@@ -485,7 +485,7 @@ spec:
             {{- toYaml .Values.backend.resources | nindent 12 }}
           volumeMounts:
             - name: depictio-screenshots
-              mountPath: /app/depictio/dash/static/screenshots
+              mountPath: /app/depictio/api/static/screenshots
             - name: depictio-keys
               mountPath: /app/depictio/keys
             - name: depictio-config
@@ -525,36 +525,33 @@ spec:
             type: Directory
         {{- end }}
 ---
-# Depictio Frontend Deployment (Dash)
+# Depictio Viewer Deployment (nginx serving the React SPA, proxying the API)
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ .Release.Name }}-depictio-frontend
+  name: {{ .Release.Name }}-depictio-viewer
   namespace: {{ .Release.Namespace }}
   labels:
-    app: depictio-frontend
+    app: depictio-viewer
 spec:
-  replicas: {{ .Values.frontend.replicas }}
+  replicas: {{ .Values.viewer.replicas }}
   strategy:
-    type: Recreate
+    type: {{ .Values.viewer.strategy | default "Recreate" }}
   selector:
     matchLabels:
       release: {{ .Release.Name }}
-      app: depictio-frontend
+      app: depictio-viewer
       project: {{ .Values.project.slug }}
       type: app
   template:
     metadata:
       labels:
         release: {{ .Release.Name }}
-        app: depictio-frontend
+        app: depictio-viewer
         project: {{ .Values.project.slug }}
         type: app
-      annotations:
-        checksum/config: {{ include (print $.Template.BasePath "/configmaps.yaml") . | sha256sum }}
-        checksum/secrets: {{ include (print $.Template.BasePath "/secrets.yaml") . | sha256sum }}
     spec:
-      {{- if gt (.Values.frontend.replicas | int) 1 }}
+      {{- if gt (.Values.viewer.replicas | int) 1 }}
       affinity:
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
@@ -565,316 +562,40 @@ spec:
                 - key: app
                   operator: In
                   values:
-                  - depictio-frontend
+                  - depictio-viewer
                 - key: release
                   operator: In
                   values:
                   - {{ .Release.Name }}
               topologyKey: kubernetes.io/hostname
       {{- end }}
-      initContainers:
-        # STEP 0: Fix permissions for mounted volumes (always run for frontend)
-        - name: fix-permissions-frontend
-          image: "{{ .Values.initContainerImage.repository }}:{{ .Values.initContainerImage.tag }}"
-          imagePullPolicy: {{ .Values.initContainerImage.pullPolicy }}
-          command: ["/bin/sh"]
-          args:
-          - -c
-          - |
-            echo "Fixing permissions for frontend mounted volumes..."
-            # Create directories with correct permissions for mounted PVCs
-            mkdir -p /app/depictio/dash/static/screenshots
-            mkdir -p /app/depictio/keys
-            mkdir -p /app/depictio/.depictio
-            mkdir -p /tmp/depictio-uploads
-
-            # Set ownership and permissions for PVC-mounted directories
-            # Match frontend security context: user 1000, group 2000
-            chown -R 1000:2000 /app/depictio/dash/static/screenshots
-            chown -R 1000:2000 /app/depictio/keys
-            chown -R 1000:2000 /app/depictio/.depictio
-            chown -R 1000:2000 /tmp/depictio-uploads
-
-            chmod -R 775 /app/depictio/dash/static/screenshots
-            chmod -R 775 /app/depictio/keys
-            chmod -R 775 /app/depictio/.depictio
-            chmod -R 775 /tmp/depictio-uploads
-
-            echo "Frontend PVC permissions fixed!"
-          volumeMounts:
-            - name: depictio-screenshots
-              mountPath: /app/depictio/dash/static/screenshots
-            - name: depictio-keys
-              mountPath: /app/depictio/keys
-            - name: depictio-config
-              mountPath: /app/depictio/.depictio
-            - name: depictio-uploads
-              mountPath: /tmp/depictio-uploads
-          securityContext:
-            {{- toYaml .Values.frontend.securityContext | nindent 12 }}
-          resources:
-            {{- toYaml .Values.initContainerResources | nindent 12 }}
-        # STEP 0.5: Verify config storage is mounted and writable
-        - name: verify-config-storage
-          image: "{{ .Values.initContainerImage.repository }}:{{ .Values.initContainerImage.tag }}"
-          imagePullPolicy: {{ .Values.initContainerImage.pullPolicy }}
-          command: ['sh', '-c']
-          args:
-            - |
-              echo "Verifying config storage is mounted and writable..."
-
-              # Test write access to config directory
-              if touch /app/depictio/.depictio/.storage_test 2>/dev/null; then
-                rm /app/depictio/.depictio/.storage_test
-                echo "✅ Config storage is ready and writable"
-                exit 0
-              else
-                echo "❌ Config storage is not writable"
-                echo "Directory listing:"
-                ls -la /app/depictio/.depictio/ || echo "Directory not accessible"
-                exit 1
-              fi
-          securityContext:
-            {{- toYaml .Values.frontend.securityContext | nindent 12 }}
-          resources:
-            {{- toYaml .Values.initContainerResources | nindent 12 }}
-          volumeMounts:
-            - name: depictio-config
-              mountPath: /app/depictio/.depictio
-        # STEP 0.6: Copy screenshot files from Docker image to shared PVC
-        - name: copy-screenshot-files
-          image: "{{ .Values.frontend.image.repository }}:{{ .Values.frontend.image.tag }}"
-          imagePullPolicy: {{ .Values.frontend.image.pullPolicy }}
-          securityContext:
-            {{- toYaml .Values.frontend.securityContext | nindent 12 }}
-          resources:
-            {{- toYaml .Values.initContainerResources | nindent 12 }}
-          command: ['sh', '-c']
-          args:
-            - |
-              SCREENSHOT_DIR="/app/depictio/dash/static/screenshots"
-              COPIED=0
-              # Copy all light theme screenshots (id_light.png)
-              for f in "$SCREENSHOT_DIR"/*_light.png; do
-                if [ -f "$f" ]; then
-                  cp "$f" /mounted-screenshots/
-                  COPIED=$((COPIED + 1))
-                fi
-              done
-              # Copy all dark theme screenshots (id_dark.png)
-              for f in "$SCREENSHOT_DIR"/*_dark.png; do
-                if [ -f "$f" ]; then
-                  cp "$f" /mounted-screenshots/
-                  COPIED=$((COPIED + 1))
-                fi
-              done
-              if [ $COPIED -gt 0 ]; then
-                echo "Copied $COPIED screenshot files successfully"
-                ls -la /mounted-screenshots/
-              else
-                echo "No screenshot files found in image, skipping copy"
-              fi
-          volumeMounts:
-            - name: depictio-screenshots
-              mountPath: /mounted-screenshots
-        # STEP 1: Wait for backend service to be available (network check)
-        - name: wait-for-backend
-          image: "{{ .Values.initContainerImage.repository }}:{{ .Values.initContainerImage.tag }}"
-          imagePullPolicy: {{ .Values.initContainerImage.pullPolicy }}
-          command: ['sh', '-c']
-          args:
-            - |
-              echo "⏳ Waiting for backend service to be available..."
-              echo "🎯 Target: {{ .Release.Name }}-depictio-backend:{{ .Values.backend.service.httpPort }}"
-              timeout=300  # 5 minutes timeout
-              elapsed=0
-
-              while [ $elapsed -lt $timeout ]; do
-                if nc -z {{ .Release.Name }}-depictio-backend {{ .Values.backend.service.httpPort }}; then
-                  echo "✅ Backend service {{ .Release.Name }}-depictio-backend:{{ .Values.backend.service.httpPort }} is accepting connections"
-                  exit 0
-                fi
-                echo "⏳ Backend service {{ .Release.Name }}-depictio-backend:{{ .Values.backend.service.httpPort }} not ready... (${elapsed}s/${timeout}s)"
-                sleep 5
-                elapsed=$((elapsed + 5))
-              done
-
-              echo "❌ Timeout waiting for backend service {{ .Release.Name }}-depictio-backend:{{ .Values.backend.service.httpPort }}"
-              exit 1
-          securityContext:
-            {{- toYaml .Values.frontend.securityContext | nindent 12 }}
-          resources:
-            {{- toYaml .Values.initContainerResources | nindent 12 }}
-
-        # STEP 2: Wait for backend to fully start and generate keys
-        - name: wait-for-backend-startup
-          image: "{{ .Values.curlInitContainerImage.repository }}:{{ .Values.curlInitContainerImage.tag }}"
-          imagePullPolicy: {{ .Values.curlInitContainerImage.pullPolicy }}
-          securityContext:
-            {{- toYaml .Values.frontend.securityContext | nindent 12 }}
-          resources:
-            {{- toYaml .Values.initContainerResources | nindent 12 }}
-          command:
-            - 'sh'
-            - '-c'
-            - |
-              echo "Waiting for backend to complete initialization..."
-              timeout=300
-              elapsed=0
-
-              while [ $elapsed -lt $timeout ]; do
-                # Try to get a response from backend (any response means it's started)
-                if curl -s -m 10 http://{{ .Release.Name }}-depictio-backend:{{ .Values.backend.service.httpPort }}/ >/dev/null 2>&1 || \
-                  curl -s -m 10 http://{{ .Release.Name }}-depictio-backend:{{ .Values.backend.service.httpPort }}/health >/dev/null 2>&1 || \
-                  curl -s -m 10 http://{{ .Release.Name }}-depictio-backend:{{ .Values.backend.service.httpPort }}/docs >/dev/null 2>&1; then
-                  echo "✅ Backend is responding to HTTP requests"
-                  # Additional wait to ensure key generation completes
-                  echo "⏳ Allowing time for key generation..."
-                  sleep 10
-                  break
-                fi
-                echo "⏳ Backend still starting up... (${elapsed}s/${timeout}s)"
-                sleep 5
-                elapsed=$((elapsed + 5))
-              done
-
-              if [ $elapsed -ge $timeout ]; then
-                echo "❌ Timeout waiting for backend to respond"
-                exit 1
-              fi
-
-        # STEP 3: Verify key files are actually available
-        - name: wait-for-api-key
-          image: "{{ .Values.initContainerImage.repository }}:{{ .Values.initContainerImage.tag }}"
-          imagePullPolicy: {{ .Values.initContainerImage.pullPolicy }}
-          securityContext:
-            {{- toYaml .Values.frontend.securityContext | nindent 12 }}
-          resources:
-            {{- toYaml .Values.initContainerResources | nindent 12 }}
-          command:
-            - 'sh'
-            - '-c'
-            - |
-              echo "Verifying API key files are available..."
-              timeout=120  # Shorter timeout since backend should be ready
-              elapsed=0
-              ls -la /app/depictio/keys/ || echo "Keys directory not accessible"
-
-              while [ $elapsed -lt $timeout ]; do
-                if [ -f /app/depictio/keys/api_internal_key.pem ]; then
-                  echo "✅ API internal key file found"
-                  ls -la /app/depictio/keys/
-                  exit 0
-                fi
-                echo "⏳ Waiting for API key file... (${elapsed}s/${timeout}s)"
-                sleep 3
-                elapsed=$((elapsed + 3))
-              done
-
-              echo "❌ API key file not found after ${timeout} seconds"
-              echo "Contents of keys directory:"
-              ls -la /app/depictio/keys/ || echo "Keys directory not accessible"
-              exit 1
-          volumeMounts:
-          - name: depictio-keys
-            mountPath: /app/depictio/keys
-
-        # STEP 4: Wait for Redis to be available
-        {{- if .Values.redis.enabled }}
-        - name: wait-for-redis
-          image: "{{ .Values.initContainerImage.repository }}:{{ .Values.initContainerImage.tag }}"
-          imagePullPolicy: {{ .Values.initContainerImage.pullPolicy }}
-          securityContext:
-            {{- toYaml .Values.frontend.securityContext | nindent 12 }}
-          resources:
-            {{- toYaml .Values.initContainerResources | nindent 12 }}
-          command:
-            - 'sh'
-            - '-c'
-            - |
-              echo "Waiting for Redis to be available..."
-              timeout=120
-              elapsed=0
-
-              while [ $elapsed -lt $timeout ]; do
-                if nc -z {{ .Release.Name }}-redis {{ .Values.redis.service.port }}; then
-                  echo "✅ Redis is available"
-                  exit 0
-                fi
-                echo "⏳ Waiting for Redis... (${elapsed}s/${timeout}s)"
-                sleep 3
-                elapsed=$((elapsed + 3))
-              done
-
-              echo "❌ Timeout waiting for Redis"
-              exit 1
-        {{- end }}
-
       containers:
-        - name: depictio-frontend
-          image: "{{ .Values.frontend.image.repository }}:{{ .Values.frontend.image.tag }}"
-          imagePullPolicy: {{ .Values.frontend.image.pullPolicy }}
-          securityContext:
-            {{- toYaml .Values.frontend.securityContext | nindent 12 }}
-          envFrom:
-            - configMapRef:
-                name: {{ .Release.Name }}-frontend-config
+        - name: depictio-viewer
+          image: "{{ .Values.viewer.image.repository }}:{{ .Values.viewer.image.tag }}"
+          imagePullPolicy: {{ .Values.viewer.image.pullPolicy }}
           env:
-            {{- if .Values.minio.enabled }}
-            - name: DEPICTIO_MINIO_ROOT_USER
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Release.Name }}-depictio-secrets
-                  key: MINIO_ROOT_USER
-            - name: DEPICTIO_MINIO_ROOT_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Release.Name }}-depictio-secrets
-                  key: MINIO_ROOT_PASSWORD
-            {{- end }}
-          command:
-            - "/app/run_dash.sh"
+            # nginx upstream for the API proxy — points at the backend Service.
+            # Two k8s-specific requirements baked in here:
+            #  * Service PORT (httpPort, 80), not the pod targetPort (8058):
+            #    the ClusterIP only forwards declared service ports, so :8058
+            #    times out.
+            #  * Fully-qualified Service DNS name (.<ns>.svc.cluster.local):
+            #    nginx's `resolver` issues raw DNS queries and does NOT apply
+            #    the resolv.conf `search` domains, so a bare service name fails
+            #    with "could not be resolved (Host not found)".
+            - name: DEPICTIO_API_UPSTREAM
+              value: "{{ .Release.Name }}-depictio-backend.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.backend.service.httpPort }}"
           ports:
-            - containerPort: {{ .Values.frontend.service.targetPort }}
+            - containerPort: 80
           resources:
-            {{- toYaml .Values.frontend.resources | nindent 12 }}
-          volumeMounts:
-            - name: depictio-screenshots
-              mountPath: /app/depictio/dash/static/screenshots
-            - name: depictio-keys
-              mountPath: /app/depictio/keys
-            - name: depictio-config
-              mountPath: /app/depictio/.depictio
-            - name: depictio-uploads
-              mountPath: /tmp/depictio-uploads
-            {{- if .Values.local_development }}
-            # DEV ONLY: mount the depictio source code for development
-            ## Use minikube mount or similar to mount the local source code
-            - name: depictio-source
-              mountPath: /app
-            {{- end }}
-
-      volumes:
-        - name: depictio-screenshots
-          persistentVolumeClaim:
-            claimName: {{ .Release.Name }}-depictio-screenshots-pvc
-        - name: depictio-keys
-          persistentVolumeClaim:
-            claimName: {{ .Release.Name }}-depictio-keys-pvc
-        - name: depictio-config
-          persistentVolumeClaim:
-            claimName: {{ .Release.Name }}-depictio-config-pvc
-        - name: depictio-uploads
-          persistentVolumeClaim:
-            claimName: {{ .Release.Name }}-depictio-uploads-pvc
-        {{- if .Values.local_development }}
-        # DEV ONLY: mount the depictio source code for development
-        ## Use minikube mount or similar to mount the local source code
-        - name: depictio-source
-          hostPath:
-            path: /app
-            type: Directory
-        {{- end }}
+            {{- toYaml .Values.viewer.resources | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /dashboard-beta/
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
 ---
 # Celery Worker Deployment (background task processing)
 {{- if .Values.celery.enabled }}
@@ -1012,37 +733,6 @@ spec:
           volumeMounts:
             - name: depictio-keys
               mountPath: /app/depictio/keys
-        # STEP 5: Wait for frontend (Dash) service - required for screenshot generation
-        # Must wait for app to be FULLY ready (callbacks registered), not just port open
-        - name: wait-for-frontend
-          image: "{{ .Values.curlInitContainerImage.repository }}:{{ .Values.curlInitContainerImage.tag }}"
-          imagePullPolicy: {{ .Values.curlInitContainerImage.pullPolicy }}
-          command: ['sh', '-c']
-          args:
-            - |
-              echo "⏳ Waiting for frontend (Dash) service to be fully ready..."
-              echo "🎯 Target: http://{{ .Release.Name }}-depictio-frontend:{{ .Values.frontend.service.httpPort }}/_dash-dependencies"
-              timeout=300
-              elapsed=0
-              while [ $elapsed -lt $timeout ]; do
-                # Check if Dash app is fully loaded by requesting dependencies endpoint
-                if curl -sf "http://{{ .Release.Name }}-depictio-frontend:{{ .Values.frontend.service.httpPort }}/_dash-dependencies" > /dev/null 2>&1; then
-                  echo "✅ Frontend Dash app is fully ready (callbacks registered)"
-                  # Extra wait to ensure all workers have loaded
-                  echo "⏳ Waiting 10s for all gunicorn workers to initialize..."
-                  sleep 10
-                  exit 0
-                fi
-                echo "⏳ Frontend not ready... (${elapsed}s/${timeout}s)"
-                sleep 5
-                elapsed=$((elapsed + 5))
-              done
-              echo "❌ Timeout waiting for frontend service"
-              exit 1
-          securityContext:
-            {{- toYaml .Values.celery.securityContext | nindent 12 }}
-          resources:
-            {{- toYaml .Values.initContainerResources | nindent 12 }}
       containers:
         - name: celery-worker
           image: "{{ .Values.celery.image.repository | default .Values.backend.image.repository }}:{{ .Values.celery.image.tag | default .Values.backend.image.tag }}"
@@ -1079,7 +769,7 @@ spec:
             - name: depictio-uploads
               mountPath: /tmp/depictio-uploads
             - name: depictio-screenshots
-              mountPath: /app/depictio/dash/static/screenshots
+              mountPath: /app/depictio/api/static/screenshots
             {{- if .Values.local_development }}
             - name: depictio-source
               mountPath: /app

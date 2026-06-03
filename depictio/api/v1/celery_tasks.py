@@ -9,7 +9,7 @@ validate input cheaply, then `await offload_or_run(...)` to dispatch the task
 and unwrap its result.
 
 Tasks are auto-discovered when this module is imported by the Celery worker
-(see `depictio.dash.celery_worker`).
+(see `depictio.api.celery_worker`).
 """
 
 from __future__ import annotations
@@ -20,23 +20,17 @@ from typing import Any
 
 from bson import ObjectId
 
+from depictio.api.celery_app import celery_app
 from depictio.api.v1.configs.logging_init import logger
-from depictio.dash.celery_app import celery_app
 
 
 def _ensure_mantine_templates() -> None:
     """Worker-side Plotly template registration. Mirrors the helper in
     `figure_endpoints.routes`. Without this, plotly express raises
     ``KeyError: 'mantine_light'`` when Depictio's theme template lookup runs."""
-    import plotly.io as pio
+    from depictio.api.v1.services.figure.mantine_templates import ensure_mantine_templates
 
-    if "mantine_light" not in pio.templates or "mantine_dark" not in pio.templates:
-        try:
-            import dash_mantine_components as dmc
-
-            dmc.add_figure_templates()
-        except Exception as e:
-            logger.warning(f"celery_tasks: failed to register mantine templates: {e}")
+    ensure_mantine_templates()
 
 
 @celery_app.task(name="depictio.figure.build_preview", soft_time_limit=120, time_limit=180)
@@ -95,9 +89,9 @@ def build_figure_preview(payload: dict) -> dict:
 
     _ensure_mantine_templates()
 
-    from depictio.dash.modules.figure_component.callbacks.core import (
-        _create_figure_from_data,
-        _process_code_mode_figure,
+    from depictio.api.v1.services.figure.figure_builder import (
+        create_figure_from_data,
+        process_code_mode_figure,
     )
 
     visu_type = metadata.get("visu_type", "scatter")
@@ -110,9 +104,9 @@ def build_figure_preview(payload: dict) -> dict:
     build_started = time.monotonic()
     code_error: str | None = None
     if mode == "code":
-        ok, fig, detected = _process_code_mode_figure(code_content, df, theme, "viewer")
+        ok, fig, detected = process_code_mode_figure(code_content, df, theme, "viewer")
         if not ok:
-            # `_process_code_mode_figure` returns `(False, error_fig, None)` when
+            # `process_code_mode_figure` returns `(False, error_fig, None)` when
             # the user code raises (e.g. unknown column name). The error_fig
             # carries a user-facing annotation with the actual Plotly error.
             # Surface that to the preview rather than masking it as a generic
@@ -143,7 +137,7 @@ def build_figure_preview(payload: dict) -> dict:
         # Render path uses `selection_*`; preview path doesn't pass them. The
         # underlying helper takes both as kwargs with safe defaults, so always
         # forwarding is fine and keeps the call site type-checkable.
-        fig = _create_figure_from_data(
+        fig = create_figure_from_data(
             df=df,
             visu_type=visu_type,
             dict_kwargs=dict_kwargs,
@@ -180,7 +174,7 @@ def build_figure_preview(payload: dict) -> dict:
 @celery_app.task(name="depictio.figure.analyze_code", soft_time_limit=10, time_limit=20)
 def analyze_figure_code(code: str) -> dict:
     """Heavy body of `POST /figure/analyze_code` — wraps `analyze_constrained_code`."""
-    from depictio.dash.modules.figure_component.code_mode import analyze_constrained_code
+    from depictio.api.v1.services.figure.code_mode import analyze_constrained_code
 
     code = (code or "").strip()
     if not code:
@@ -226,7 +220,7 @@ def build_multiqc_preview(payload: dict) -> dict:
     """
     from depictio.api.cache import get_cache
     from depictio.api.v1.services import multiqc_prerender_store
-    from depictio.dash.modules.figure_component.multiqc_vis import (
+    from depictio.api.v1.services.multiqc.figures import (
         MULTIQC_CACHE_TTL_SECONDS,
         _generate_figure_cache_key,
         create_multiqc_plot,
@@ -296,8 +290,8 @@ def build_multiqc_preview(payload: dict) -> dict:
     # JSON payload and return its violin figure so the React preview renders
     # the same Plotly trace the runtime ``MultiQCGeneralStats`` shows.
     if module == "general_stats" or plot == "general_stats":
-        from depictio.dash.modules.figure_component.multiqc_vis import _get_local_path_for_s3
-        from depictio.dash.modules.multiqc_component.general_stats import (
+        from depictio.api.v1.services.multiqc.figures import _get_local_path_for_s3
+        from depictio.api.v1.services.multiqc.general_stats_payload import (
             build_general_stats_payload,
         )
 

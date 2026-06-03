@@ -71,38 +71,6 @@ backend:
     # (values-embl-demo.yaml, values-embl-demo-dev.yaml) to match the ingress host
 
 
-frontend:
-  replicas: 1  # Single replica for debugging
-  securityContext:
-    runAsNonRoot: true
-    runAsUser: 1000
-    runAsGroup: 1000
-    allowPrivilegeEscalation: false
-    capabilities:
-      drop: ["ALL"]
-    seccompProfile:
-      type: RuntimeDefault
-
-  resources:
-    requests:
-      memory: "2Gi"     # Balanced for multiple replicas
-      cpu: "500m"       # Balanced CPU allocation
-    limits:
-      memory: "4Gi"     # Reasonable limit for multiple replicas
-      cpu: "2"          # Balanced CPU limit
-
-  env:
-    # Enable demo mode (public access with guided tour tooltips)
-    DEPICTIO_AUTH_DEMO_MODE: "true"
-    DEPICTIO_AUTH_PUBLIC_MODE: "true"
-
-    # Anonymous user configuration
-    DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL: "anonymous@depict.io"
-    DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS: "1"
-
-    # Performance - Balanced workers for multiple replicas
-    DEPICTIO_DASH_WORKERS: "1"
-
 mongo:
   replicas: 1  # Temporarily single replica to get system working
   image:
@@ -198,7 +166,7 @@ ingress:
         - path: /
           pathType: Prefix
           service:
-            name: depictio-frontend
+            name: depictio-viewer
             portName: http
     - host: "dev.api.demo.depictio.embl.org"
       paths:

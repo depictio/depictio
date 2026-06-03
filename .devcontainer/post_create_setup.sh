@@ -116,8 +116,8 @@ wait_for_service minio 9000 "MinIO"
 # Wait for backend
 wait_for_service depictio-backend 8058 "FastAPI backend"
 
-# Wait for frontend
-wait_for_service depictio-frontend 5080 "Dash frontend"
+# Wait for the dev viewer (Vite HMR server)
+wait_for_service depictio-viewer-dev 5173 "Vite dev viewer"
 
 echo "All services are ready! Setting up development environment..."
 
@@ -219,14 +219,14 @@ echo "   MongoDB:      mongo:27018"
 echo "   Redis:        redis:6379"
 echo "   MinIO:        minio:9000"
 echo "   FastAPI:      depictio-backend:8058"
-echo "   Dash:         depictio-frontend:5080"
+echo "   Viewer:       depictio-viewer-dev:5173"
 echo ""
 echo "🌐 External Access:"
 echo ""
 echo "   ┌─────────────────────────────────────────────────────────┐"
 echo "   │  SERVICE          PORT    ADD TO VS CODE PORTS PANEL    │"
 echo "   ├─────────────────────────────────────────────────────────┤"
-echo "   │  Dash Frontend    ${DASH_PORT:-5080}                                     │"
+echo "   │  Viewer (Vite)    ${VIEWER_DEV_PORT:-5173}                                     │"
 echo "   │  FastAPI Backend  ${FASTAPI_PORT:-8058}                                     │"
 echo "   │  MinIO Console    ${MINIO_CONSOLE_PORT:-9001}                                     │"
 echo "   └─────────────────────────────────────────────────────────┘"

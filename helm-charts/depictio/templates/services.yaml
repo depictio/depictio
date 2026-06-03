@@ -107,23 +107,23 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ .Release.Name }}-depictio-frontend
+  name: {{ .Release.Name }}-depictio-viewer
   namespace: {{ .Release.Namespace }}
   # labels:
-  #   app: depictio-frontend
+  #   app: depictio-viewer
 spec:
-  type: {{ .Values.frontend.service.type }}
+  type: {{ .Values.viewer.service.type }}
   ports:
-    - port: {{ .Values.frontend.service.httpPort }}
-      targetPort: {{ .Values.frontend.service.targetPort }}
+    - port: {{ .Values.viewer.service.httpPort }}
+      targetPort: {{ .Values.viewer.service.targetPort }}
       protocol: TCP
       name: http
-    - port: {{ .Values.frontend.service.httpsPort }}
-      targetPort: {{ .Values.frontend.service.targetPort }}
+    - port: {{ .Values.viewer.service.httpsPort }}
+      targetPort: {{ .Values.viewer.service.targetPort }}
       protocol: TCP
       name: https
   selector:
     release: {{ .Release.Name }}
-    app: depictio-frontend
+    app: depictio-viewer
     project: {{ .Values.project.slug }}
     type: app

@@ -1,0 +1,124 @@
+name: Build images (api / worker / viewer)
+
+# Canonical image build pipeline. Builds the three per-service images
+# (see docker-images/Dockerfile.api / .worker / .viewer) on tag pushes
+# and validates them on PRs.
+#
+# Image namespaces: `depictio-api`, `depictio-worker`, `depictio-viewer`.
+
+on:
+  pull_request:
+    paths:
+      - "docker-images/Dockerfile.api"
+      - "docker-images/Dockerfile.worker"
+      - "docker-images/Dockerfile.viewer"
+      - "docker-images/nginx.conf.template"
+      - "docker-images/run_fastapi.sh"
+      - "docker-images/run_celery_worker.sh"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "pnpm-workspace.yaml"
+      - "pnpm-lock.yaml"
+      - "depictio/**"
+      - "packages/**"
+      - ".github/workflows/build-images.yaml"
+  push:
+    tags:
+      - "v[0-9]*.[0-9]*.[0-9]*"
+      - "v[0-9]*.[0-9]*.[0-9]*-b*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version tag to apply (e.g. 0.7.3-next). Required for manual dispatch."
+        required: true
+        type: string
+
+env:
+  REGISTRY: ghcr.io
+  # Per-service images use sibling repos under the same org owner so
+  # PAT scopes already in place keep working.
+  OWNER: ${{ github.repository_owner }}
+
+jobs:
+  build:
+    name: Build ${{ matrix.image }}
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: depictio-api
+            dockerfile: docker-images/Dockerfile.api
+          - image: depictio-worker
+            dockerfile: docker-images/Dockerfile.worker
+          - image: depictio-viewer
+            dockerfile: docker-images/Dockerfile.viewer
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Determine version + push policy
+        id: meta-vars
+        run: |
+          # PR builds validate the Dockerfile without pushing — keeps the
+          # registry clean and avoids needing write perms on fork PRs.
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "PUSH=false" >> "$GITHUB_OUTPUT"
+            echo "VERSION=pr-${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "PUSH=true" >> "$GITHUB_OUTPUT"
+            echo "VERSION=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            # Tag push: strip the leading `v`.
+            GIT_TAG=${GITHUB_REF#refs/tags/}
+            echo "PUSH=true" >> "$GITHUB_OUTPUT"
+            echo "VERSION=${GIT_TAG#v}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Log in to the Container registry
+        if: steps.meta-vars.outputs.PUSH == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ env.OWNER }}
+          password: ${{ secrets.GHCR_PAT }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: |
+            image=moby/buildkit:latest
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ matrix.image }}
+          # `next` is the moving pointer to the latest build off the
+          # default branch. Release tags get the explicit version tag.
+          tags: |
+            type=raw,value=${{ steps.meta-vars.outputs.VERSION }}
+            type=raw,value=next,enable=${{ steps.meta-vars.outputs.PUSH == 'true' }}
+
+      - name: Build and push ${{ matrix.image }}
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: ${{ steps.meta-vars.outputs.PUSH == 'true' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          platforms: linux/amd64
+          build-args: |
+            VERSION=${{ steps.meta-vars.outputs.VERSION }}
+          # Per-image cache ref so the api/worker/viewer builds don't
+          # poison each other's layer cache (different base images, very
+          # different dep sets). cache-to is push-gated because
+          # type=registry writes need GHCR auth, which we skip on PRs
+          # (fork PRs wouldn't have the secret anyway).
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.OWNER }}/${{ matrix.image }}:buildcache
+          cache-to: ${{ steps.meta-vars.outputs.PUSH == 'true' && format('type=registry,ref={0}/{1}/{2}:buildcache,mode=max', env.REGISTRY, env.OWNER, matrix.image) || '' }}

@@ -31,12 +31,12 @@ repos:
 # Type checking with ty (Astral)
 -   repo: local
     hooks:
-      - id: ty-check-models-api-dash-cli
-        name: ty check models, api, dash, cli and tests
-        description: 'Run ty type checker on models, api, dash, cli and tests folders (must pass)'
-        entry: uv run ty check depictio/models/ depictio/api/ depictio/dash/ depictio/cli/
+      - id: ty-check-models-api-cli
+        name: ty check models, api, cli and tests
+        description: 'Run ty type checker on models, api, cli and tests folders (must pass)'
+        entry: uv run ty check depictio/models/ depictio/api/ depictio/cli/
         language: system
-        files: ^depictio/(models|api|dash|cli|tests)/
+        files: ^depictio/(models|api|cli|tests)/
         pass_filenames: false
 
 # Lint helm chart

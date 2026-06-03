@@ -273,7 +273,7 @@ async def get_dashboard(
     )
     if has_multiqc:
         try:
-            from depictio.dash.celery_app import prewarm_multiqc_dashboard
+            from depictio.api.celery_app import prewarm_multiqc_dashboard
 
             prewarm_multiqc_dashboard.delay(str(dashboard_id))
         except Exception as e:
@@ -682,10 +682,10 @@ async def save_dashboard(
         # the 1h window and always regenerate.
         try:
             if force_screenshot or _should_enqueue_screenshot(dashboard_id_str):
-                # Lazy import keeps API startup independent of the Dash
-                # worker module; broad except so a Celery/broker outage
-                # never breaks the save response itself.
-                from depictio.dash.celery_app import generate_dashboard_screenshot_dual
+                # Lazy import keeps API startup independent of the worker
+                # module; broad except so a Celery/broker outage never
+                # breaks the save response itself.
+                from depictio.api.celery_app import generate_dashboard_screenshot_dual
 
                 user_id = str(getattr(current_user, "id", "") or "")
                 # `force=True` on explicit Save also bypasses the celery
@@ -731,7 +731,7 @@ async def screenshot_dashboard(
     """
     from playwright.async_api import async_playwright
 
-    output_folder = "/app/depictio/dash/static/screenshots"  # Directly set to the desired path
+    output_folder = "/app/depictio/api/static/screenshots"  # Directly set to the desired path
     logger.info(f"Output folder: {output_folder}")
     # try:
     async with async_playwright() as p:
@@ -746,8 +746,8 @@ async def screenshot_dashboard(
         page = await context.new_page()
 
         # Navigate to Dash service
-        logger.info(f"Navigating to Dash service at {settings.dash.internal_url}")
-        await page.goto(settings.dash.internal_url, timeout=90000)
+        logger.info(f"Navigating to Dash service at {settings.viewer.internal_url}")
+        await page.goto(settings.viewer.internal_url, timeout=90000)
 
         # Wait for page to load
         # await page.wait_for_load_state("networkidle")
@@ -802,7 +802,7 @@ async def screenshot_dashboard(
 
         await asyncio.sleep(3)  # Wait for the page to stabilize
         # dashboard_id = "6824cb3b89d2b72169309737"
-        await page.goto(f"{settings.dash.internal_url}/dashboard/{dashboard_id}", timeout=90000)
+        await page.goto(f"{settings.viewer.internal_url}/dashboard/{dashboard_id}", timeout=90000)
         # await page.wait_for_load_state("networkidle")
         await page.reload()
         await asyncio.sleep(10)  # Wait for dashboard to fully load
@@ -921,7 +921,7 @@ async def screenshot_dashboard(
 
         return {
             "success": True,
-            "url": settings.dash.internal_url,
+            "url": settings.viewer.internal_url,
             "message": "Screenshot taken successfully",
             "screenshot_path": output_file,
             # "token": convert_objectid_to_str(token_data),
@@ -931,7 +931,7 @@ async def screenshot_dashboard(
     # except Exception as e:
     #     return {
     #         "success": False,
-    #         "url": settings.dash.internal_url,
+    #         "url": settings.viewer.internal_url,
     #         "error": str(e),
     #         "message": "Failed to take screenshot",
     #     }
@@ -2492,7 +2492,7 @@ def render_map_endpoint(
     directly as `trigger_data`. `render_map` reads what it needs via `.get()`.
     """
     from depictio.api.v1.deltatables_utils import load_deltatable_lite
-    from depictio.dash.modules.map_component.utils import render_map
+    from depictio.api.v1.services.map.render import render_map
 
     filters = request.get("filters") or []
     theme = request.get("theme") or "light"
@@ -2560,12 +2560,9 @@ def render_map_endpoint(
     import plotly.io as pio
 
     if "mantine_light" not in pio.templates or "mantine_dark" not in pio.templates:
-        try:
-            import dash_mantine_components as dmc
+        from depictio.api.v1.services.figure.mantine_templates import ensure_mantine_templates
 
-            dmc.add_figure_templates()
-        except Exception as e:
-            logger.warning(f"render_map: failed to register mantine templates: {e}")
+        ensure_mantine_templates()
 
     selection_values = _own_selection_values(filters, component, source="map_selection")
 
@@ -2914,7 +2911,7 @@ def _resolve_multiqc_sample_filter(
     except Exception as e:
         logger.debug(f"_resolve_multiqc_sample_filter: sample_mappings fetch failed: {e}")
 
-    from depictio.dash.modules.multiqc_component.callbacks.core import (
+    from depictio.api.v1.services.multiqc.patching import (
         expand_canonical_samples_to_variants,
     )
 
@@ -3081,11 +3078,11 @@ def render_multiqc_endpoint(
     # than 400'ing the render — the snapshot is the only source then.
     s3_locations = component.get("s3_locations") or []
     if dc_id:
-        from depictio.dash.modules.multiqc_component.models import _fetch_s3_locations_from_dc
+        from depictio.api.v1.services.multiqc.dc_lookup import fetch_s3_locations_from_dc
 
-        live_locations = _fetch_s3_locations_from_dc(str(dc_id), str(project_id))
+        live_locations = fetch_s3_locations_from_dc(str(dc_id), str(project_id))
         logger.info(
-            f"render_multiqc: _fetch_s3_locations_from_dc"
+            f"render_multiqc: fetch_s3_locations_from_dc"
             f"(dc={dc_id!s}, project={project_id!s})"
             f" → {len(live_locations)} s3_location(s)"
         )
@@ -3116,12 +3113,9 @@ def render_multiqc_endpoint(
     import plotly.io as pio
 
     if "mantine_light" not in pio.templates or "mantine_dark" not in pio.templates:
-        try:
-            import dash_mantine_components as dmc
+        from depictio.api.v1.services.figure.mantine_templates import ensure_mantine_templates
 
-            dmc.add_figure_templates()
-        except Exception as e:
-            logger.warning(f"render_multiqc: failed to register mantine templates: {e}")
+        ensure_mantine_templates()
 
     # Per-stage timing instrumentation. Stripped to a single TIMING log line
     # so it's easy to grep `docker logs` for per-stage cost on warm vs cold
@@ -3129,7 +3123,7 @@ def render_multiqc_endpoint(
     import time as _time
 
     from depictio.api.cache import get_cache
-    from depictio.dash.modules.figure_component.multiqc_vis import (
+    from depictio.api.v1.services.multiqc.figures import (
         MULTIQC_CACHE_TTL_SECONDS,
         create_multiqc_plot,
         generate_figure_cache_key,
@@ -3213,7 +3207,7 @@ def render_multiqc_endpoint(
 
             if not prerender_ready or build_running:
                 if not build_running:
-                    from depictio.dash.celery_app import build_multiqc_prerender
+                    from depictio.api.celery_app import build_multiqc_prerender
 
                     try:
                         build_multiqc_prerender.delay(str(dc_id))
@@ -3313,7 +3307,7 @@ def render_multiqc_endpoint(
                 fig_dict["layout"].setdefault("uirevision", "persistent")
 
             if filter_applied:
-                from depictio.dash.modules.multiqc_component.callbacks.core import (
+                from depictio.api.v1.services.multiqc.patching import (
                     patch_multiqc_figures,
                 )
 
@@ -3406,9 +3400,9 @@ def render_multiqc_general_stats_endpoint(
     # YAML-imported example dashboards without per-report rows in
     # multiqc_collection).
     if dc_id:
-        from depictio.dash.modules.multiqc_component.models import _fetch_s3_locations_from_dc
+        from depictio.api.v1.services.multiqc.dc_lookup import fetch_s3_locations_from_dc
 
-        live_locations = _fetch_s3_locations_from_dc(str(dc_id), str(project_id))
+        live_locations = fetch_s3_locations_from_dc(str(dc_id), str(project_id))
         if live_locations:
             s3_locations = live_locations
 
@@ -3432,14 +3426,9 @@ def render_multiqc_general_stats_endpoint(
     import plotly.io as pio
 
     if "mantine_light" not in pio.templates or "mantine_dark" not in pio.templates:
-        try:
-            import dash_mantine_components as dmc
+        from depictio.api.v1.services.figure.mantine_templates import ensure_mantine_templates
 
-            dmc.add_figure_templates()
-        except Exception as e:
-            logger.warning(
-                f"render_multiqc_general_stats: failed to register mantine templates: {e}"
-            )
+        ensure_mantine_templates()
 
     import time as _time
 
@@ -3448,18 +3437,18 @@ def render_multiqc_general_stats_endpoint(
 
     try:
         from depictio.api.cache import get_cache
-        from depictio.dash.modules.figure_component.multiqc_vis import (
+        from depictio.api.v1.services.multiqc.figures import (
             MULTIQC_CACHE_TTL_SECONDS,
             _get_local_path_for_s3,
         )
-        from depictio.dash.modules.multiqc_component.callbacks.core import (
-            _normalize_multiqc_paths,
-        )
-        from depictio.dash.modules.multiqc_component.general_stats import (
+        from depictio.api.v1.services.multiqc.general_stats_payload import (
             build_general_stats_payload,
         )
+        from depictio.api.v1.services.multiqc.paths import (
+            normalize_multiqc_paths,
+        )
 
-        normalized = _normalize_multiqc_paths(s3_locations)
+        normalized = normalize_multiqc_paths(s3_locations)
 
         # React-side cache key — distinct from Dash's `multiqc:gs:` so the two
         # callers don't trample each other's payload shape. Filter signature is
@@ -3848,7 +3837,7 @@ def _import_multi_tab_dashboard(
         "title": main_dashboard.title,
         "project_id": str(project_id),
         "tabs": imported_tabs,
-        "dash_url": settings.dash.external_url,
+        "dash_url": settings.viewer.external_url,
     }
 
 
@@ -4065,7 +4054,7 @@ async def import_dashboard_from_yaml(
         "dashboard_id": str(new_dashboard_id),
         "title": dashboard.title,
         "project_id": str(project_id),
-        "dash_url": settings.dash.external_url,
+        "dash_url": settings.viewer.external_url,
     }
 
 

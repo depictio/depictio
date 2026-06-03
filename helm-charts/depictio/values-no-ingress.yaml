@@ -44,7 +44,7 @@ local_development:
   #       - path: /
   #         pathType: Prefix
   #         service:
-  #           name: depictio-frontend
+  #           name: depictio-viewer
   #           port: 80
   #       - path: /api
   #         pathType: Prefix

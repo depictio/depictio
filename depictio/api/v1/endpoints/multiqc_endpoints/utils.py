@@ -166,7 +166,7 @@ def _invalidate_and_prewarm_for_dc(dc_id: str) -> dict:
     _invalidate_multiqc_caches_for_dc(dc_id)
     enqueued_tasks: list[str] = []
     try:
-        from depictio.dash.celery_app import (
+        from depictio.api.celery_app import (
             build_multiqc_prerender,
             prewarm_multiqc_dc_all_plots,
         )

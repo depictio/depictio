@@ -2,22 +2,24 @@
 # DEPICTIO DOCKER COMPOSE - QUICK START
 # ============================================================================
 # This is the main docker-compose file for running Depictio with pre-built images.
-# MinIO (S3-compatible object storage) is bundled by default — no extra files needed.
+# MinIO (S3-compatible object storage) is bundled by default via the
+# `local-minio` profile, which .env activates (COMPOSE_PROFILES=local-minio).
 #
 # QUICK START (no git clone required):
 #   curl -LO https://raw.githubusercontent.com/depictio/depictio/main/docker-compose.yaml
-#   docker compose up -d
+#   docker compose --profile local-minio up -d     # (or copy .env.example → .env)
 #   → http://localhost:5080
 #
-# COMMANDS:
+# COMMANDS (with .env present — see CONFIGURATION below):
 #   Start:  docker compose up -d
 #   Stop:   docker compose down
 #   Logs:   docker compose logs -f
 #   Status: docker compose ps
 #
-# EXTERNAL S3 (advanced):
-#   Use docker-compose/docker-compose.no-minio.yaml if you bring your own S3/MinIO:
-#   docker compose -f docker-compose/docker-compose.no-minio.yaml up -d
+# EXTERNAL S3 (advanced) — bring your own S3/MinIO, don't start the bundled one.
+# Override COMPOSE_PROFILES so the `local-minio` profile is off, and set your
+# S3 credentials/endpoint in .env:
+#   COMPOSE_PROFILES=external-s3 docker compose up -d
 #
 # DEVELOPMENT:
 #   For local development with hot-reload, use docker-compose.dev.yaml instead.
@@ -63,6 +65,12 @@ services:
   minio:
     image: minio/minio:RELEASE.2025-01-20T14-49-07Z
     container_name: minio
+    # Bundled local object storage, gated behind the `local-minio` profile.
+    # `.env.example` ships COMPOSE_PROFILES=local-minio, so a plain
+    # `docker compose up -d` starts it (no flag needed). To bring your own
+    # external S3/MinIO instead, override the env var so this profile is off:
+    #   COMPOSE_PROFILES=external-s3 docker compose up -d
+    profiles: ["local-minio"]
     ports:
       - ${MINIO_PORT:-9000}:9000
       - ${MINIO_CONSOLE_PORT:-9001}:9001
@@ -80,40 +88,8 @@ services:
       start_period: 30s
     restart: unless-stopped
 
-  depictio-frontend:
-    image: ghcr.io/depictio/depictio:${DEPICTIO_VERSION:-latest}
-    container_name: depictio-frontend
-    ports:
-      - 5080:5080
-    volumes:
-      - depictio_keys:/app/depictio/keys
-    env_file:
-      - path: .env
-        required: false
-    environment:
-      DEPICTIO_AUTH_SINGLE_USER_MODE: "${DEPICTIO_AUTH_SINGLE_USER_MODE:-true}"
-      DEPICTIO_MINIO_ROOT_USER: "${DEPICTIO_MINIO_ROOT_USER:-minio}"
-      DEPICTIO_MINIO_ROOT_PASSWORD: "${DEPICTIO_MINIO_ROOT_PASSWORD:-minio123}"
-    command: ["/app/run_dash.sh"]
-    healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:5080/ > /dev/null"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 60s
-    restart: unless-stopped
-    depends_on:
-      mongo:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      depictio-backend:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
-
   depictio-backend:
-    image: ghcr.io/depictio/depictio:${DEPICTIO_VERSION:-latest}
+    image: ghcr.io/depictio/depictio-api:${DEPICTIO_VERSION:-next}
     container_name: depictio-backend
     ports:
       - 8058:8058
@@ -139,14 +115,27 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      # required:false so external-S3 mode (local-minio profile off) starts
+      # the backend without waiting for — or pulling in — the minio service.
       minio:
+        condition: service_healthy
+        required: false
+
+  depictio-viewer:
+    image: ghcr.io/depictio/depictio-viewer:${DEPICTIO_VERSION:-next}
+    container_name: depictio-viewer
+    ports:
+      - 5080:80
+    restart: unless-stopped
+    depends_on:
+      depictio-backend:
         condition: service_healthy
 
   depictio-celery-worker:
     container_name: depictio-celery-worker
     # Always enabled - required for design mode (stepper) to work
     # Dashboard editor will fail without Celery worker running
-    image: ghcr.io/depictio/depictio:${DEPICTIO_VERSION:-latest}
+    image: ghcr.io/depictio/depictio-worker:${DEPICTIO_VERSION:-next}
     volumes:
       - depictio_keys:/app/depictio/keys
     env_file:

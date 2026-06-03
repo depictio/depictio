@@ -48,7 +48,7 @@ def _project_id_for_dc(data_collection_id: str) -> str | None:
 
     Walks ``projects.workflows[].data_collections[]`` in Mongo to locate
     the workflow that owns the DC. The shape mirrors what the rest of
-    the codebase already does (see e.g. ``_fetch_s3_locations_from_dc``);
+    the codebase already does (see e.g. ``fetch_s3_locations_from_dc``);
     we don't have a flat dc → project index.
     """
     project = projects_collection.find_one(
@@ -533,7 +533,6 @@ async def multiqc_preview(
     from fastapi import HTTPException
 
     from depictio.api.v1.db import projects_collection
-    from depictio.dash.modules.multiqc_component.models import _fetch_s3_locations_from_dc
 
     dc_id = request.get("dc_id") or request.get("data_collection_id")
     selected_module = request.get("module") or request.get("selected_module")
@@ -561,8 +560,10 @@ async def multiqc_preview(
     if not project_doc:
         raise HTTPException(status_code=404, detail="Data collection not found or access denied.")
 
+    from depictio.api.v1.services.multiqc.dc_lookup import fetch_s3_locations_from_dc
+
     project_id = str(project_doc.get("_id"))
-    s3_locations = _fetch_s3_locations_from_dc(str(dc_id), project_id) or []
+    s3_locations = fetch_s3_locations_from_dc(str(dc_id), project_id) or []
     if not s3_locations:
         raise HTTPException(
             status_code=400,
@@ -580,7 +581,7 @@ async def multiqc_preview(
     # the freshness short-circuit no-ops if the doc is already ready with a
     # matching s3_locations_hash.
     try:
-        from depictio.dash.celery_app import prewarm_multiqc_dc_all_plots
+        from depictio.api.celery_app import prewarm_multiqc_dc_all_plots
 
         prewarm_multiqc_dc_all_plots.delay(str(dc_id))
     except Exception as exc:

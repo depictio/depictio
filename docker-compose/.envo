@@ -35,7 +35,7 @@ DEPICTIO_MONGODB_WIPE=true
 # Uncomment to customize service ports or public URLs
 # DEPICTIO_FASTAPI_PORT=8058
 # DEPICTIO_FASTAPI_PUBLIC_URL=http://localhost:8058
-# DEPICTIO_DASH_PORT=5080
+# DEPICTIO_VIEWER_PORT=5080
 
 # ----------------------------------------------------------------------------
 # Authentication (Optional)

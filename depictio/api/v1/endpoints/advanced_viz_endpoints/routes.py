@@ -523,8 +523,8 @@ def poll_compute_embedding(
 
     from celery.result import AsyncResult
 
+    from depictio.api.celery_app import celery_app
     from depictio.api.v1.db import db
-    from depictio.dash.celery_app import celery_app
 
     cache = db["compute_results"]
     doc = cache.find_one({"_id": job_id})
@@ -670,8 +670,8 @@ def poll_compute_complex_heatmap(
 
     from celery.result import AsyncResult
 
+    from depictio.api.celery_app import celery_app
     from depictio.api.v1.db import db
-    from depictio.dash.celery_app import celery_app
 
     cache = db["compute_results"]
     doc = cache.find_one({"_id": job_id})
@@ -797,8 +797,8 @@ def poll_compute_upset(
 
     from celery.result import AsyncResult
 
+    from depictio.api.celery_app import celery_app
     from depictio.api.v1.db import db
-    from depictio.dash.celery_app import celery_app
 
     cache = db["compute_results"]
     doc = cache.find_one({"_id": job_id})
@@ -918,8 +918,8 @@ def _poll_compute(job_id: str) -> dict[str, Any]:
 
     from celery.result import AsyncResult
 
+    from depictio.api.celery_app import celery_app
     from depictio.api.v1.db import db
-    from depictio.dash.celery_app import celery_app
 
     cache = db["compute_results"]
     doc = cache.find_one({"_id": job_id})

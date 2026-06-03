@@ -142,29 +142,27 @@ These credentials are also stored in the Kubernetes Secret named `<release-name>
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `frontend.enabled` | Enable frontend deployment | `true` |
-| `frontend.image.repository` | Frontend image repository | `registry.git.embl.de/tweber/depictio/depictio` |
-| `frontend.image.tag` | Frontend image tag | `v0.0.3` |
-| `frontend.image.pullPolicy` | Frontend image pull policy | `Always` |
-| `frontend.resources` | Frontend resource requests and limits | Check `values.yaml` |
-| `frontend.service.type` | Frontend service type | `ClusterIP` |
-| `frontend.service.httpPort` | Frontend HTTP service port | `80` |
-| `frontend.service.httpsPort` | Frontend HTTPS service port | `443` |
-| `frontend.service.targetPort` | Frontend container port | `5080` |
-| `frontend.env` | Frontend environment variables | Check `values.yaml` |
-| `frontend.command` | Frontend container command | `["python", "/app/depictio/dash/app.py"]` |
+| `viewer.replicas` | React viewer replica count | `1` |
+| `viewer.image.repository` | Viewer image repository | `ghcr.io/depictio/depictio-viewer` |
+| `viewer.image.tag` | Viewer image tag | Check `values.yaml` |
+| `viewer.image.pullPolicy` | Viewer image pull policy | `Always` |
+| `viewer.resources` | Viewer resource requests and limits | Check `values.yaml` |
+| `viewer.service.type` | Viewer service type | `ClusterIP` |
+| `viewer.service.httpPort` | Viewer HTTP service port | `80` |
+| `viewer.service.httpsPort` | Viewer HTTPS service port | `443` |
+| `viewer.service.targetPort` | Viewer container port (nginx) | `80` |
 
 ## Usage
 
 After deploying the chart, you can access the Depictio application:
 
-- If using ClusterIP (default), use port-forwarding to access the frontend service:
+- If using ClusterIP (default), use port-forwarding to access the viewer service:
 
 ```bash
-kubectl port-forward -n datasci-depictio-project service/depictio-frontend 5080:80
+kubectl port-forward -n datasci-depictio-project service/depictio-viewer 8080:80
 ```
 
-  Then visit <http://localhost:5080>
+  Then visit <http://localhost:8080>
 
 - If using LoadBalancer, wait for the external IP to be provisioned and then access the service at that IP.
 

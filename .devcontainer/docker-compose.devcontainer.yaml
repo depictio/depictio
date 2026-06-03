@@ -34,7 +34,7 @@ services:
         condition: service_started
       depictio-backend:
         condition: service_started
-      depictio-frontend:
+      depictio-viewer-dev:
         condition: service_started
       depictio-celery-worker:
         condition: service_started

@@ -14,7 +14,7 @@ ingress:
         - path: /
           pathType: Prefix
           service:
-            name: depictio-frontend
+            name: depictio-viewer
             portName: http
     - host: "api.demo.depictio.embl.org"
       paths:

@@ -47,7 +47,6 @@ echo -n "MinIO (9000): " && (curl -s http://localhost:9000/minio/health/live && 
 # =============================================================================
 install-browsers = "playwright install chromium"
 api = { cmd = "python depictio/api/run.py", depends-on = ["install-browsers"] }
-dash = "python depictio/dash/flask_dispatcher.py"
 celery = "celery -A depictio.api.celery_app worker --loglevel=info"
 
 # Start everything (infrastructure + app)
@@ -88,9 +87,6 @@ minio-server = "*"
 depictio = { path = ".", editable = true }
 plotly-complexheatmap = { path = "packages/plotly-complexheatmap", editable = true }
 plotly-upset = { path = "packages/plotly-upset", editable = true }
-# depictio-components is a path workspace; pixi doesn't honor [tool.uv.sources],
-# so we have to mirror the path here too.
-depictio-components = { path = "packages/depictio-components", editable = true }
 
 [feature.dev.dependencies]
 # Development tools that benefit from conda (faster installation)

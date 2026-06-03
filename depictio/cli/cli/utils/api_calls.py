@@ -26,10 +26,18 @@ def api_login(yaml_config_path: str = "~/.depictio/CLI.yaml") -> dict:
     logger.info(f"Depictio CLI configuration loaded: {depictio_CLI_config}")
     rich_print_checked_statement("Checking server accessibility...", "info")
 
-    # Connect to depictio API
+    # Connect to depictio API. Generous timeout because this is the CLI's
+    # first hit on the API — on a cold-started backend (gunicorn worker
+    # just forked, Beanie/Mongo connection pool establishing on first DB
+    # call, validators warming) the response can take noticeably longer
+    # than httpx's 5 s default. 120 s is well past any reasonable
+    # cold-path; the call still returns as soon as the server responds.
+    # 30 s wasn't enough in CI minikube/compose environments where the
+    # first Beanie query pays the full motor + driver init cost.
     response = httpx.post(
         f"{depictio_CLI_config['api_base_url']}/depictio/api/v1/cli/validate_cli_config",
         json=depictio_CLI_config,
+        timeout=120.0,
     )
     if response.status_code == 200:
         logger.info("Depictio CLI configuration is model-compliant.")
@@ -72,6 +80,7 @@ def api_get_project_from_id(project_id: PyObjectId, CLI_config: CLIConfig):
         f"{CLI_config.api_base_url}/depictio/api/v1/projects/get/from_id",
         params={"project_id": project_id},
         headers=generate_api_headers(CLI_config),
+        timeout=60.0,  # cold-start safety net (httpx default of 5 s is too aggressive)
     )
     return response
 
@@ -86,6 +95,7 @@ def api_get_project_from_name(project_name: str, CLI_config: CLIConfig):
         f"{CLI_config.api_base_url}/depictio/api/v1/projects/get/from_name/{project_name}",
         # params={"project_name": project_name},
         headers=generate_api_headers(CLI_config),
+        timeout=60.0,  # cold-start safety net (httpx default of 5 s is too aggressive)
     )
     return response
 
@@ -115,6 +125,7 @@ def api_create_project(project_config: dict, CLI_config: CLIConfig):
         f"{CLI_config.api_base_url}/depictio/api/v1/projects/create",
         json=project_config,
         headers=generate_api_headers(CLI_config),
+        timeout=60.0,  # cold-start safety net (httpx default of 5 s is too aggressive)
     )
 
     return response
@@ -132,6 +143,7 @@ def api_update_project(project_config: dict, CLI_config: CLIConfig):
         f"{CLI_config.api_base_url}/depictio/api/v1/projects/update",
         json=project_config,
         headers=generate_api_headers(CLI_config),
+        timeout=60.0,  # cold-start safety net (httpx default of 5 s is too aggressive)
     )
 
     return response
@@ -301,7 +313,7 @@ def api_get_runs_by_wf_id(wf_id: str, CLI_config: CLIConfig) -> httpx.Response:
     logger.info(f"Getting runs for workflow ID: {wf_id}")
 
     url = f"{CLI_config.api_base_url}/depictio/api/v1/runs/list/{wf_id}"
-    response = httpx.get(url, headers=generate_api_headers(CLI_config))
+    response = httpx.get(url, headers=generate_api_headers(CLI_config), timeout=60.0)
     return response
 
 
@@ -359,7 +371,7 @@ def api_delete_run(run_id: str, CLI_config: CLIConfig) -> httpx.Response:
     logger.info(f"Deleting run with ID: {run_id}")
 
     url = f"{CLI_config.api_base_url}/depictio/api/v1/runs/delete/{run_id}"
-    response = httpx.delete(url, headers=generate_api_headers(CLI_config))
+    response = httpx.delete(url, headers=generate_api_headers(CLI_config), timeout=60.0)
     return response
 
 
@@ -378,7 +390,7 @@ def api_get_run(run_id: str, CLI_config: CLIConfig) -> httpx.Response:
     logger.info(f"Getting run with ID: {run_id}")
 
     url = f"{CLI_config.api_base_url}/depictio/api/v1/runs/get/{run_id}"
-    response = httpx.get(url, headers=generate_api_headers(CLI_config))
+    response = httpx.get(url, headers=generate_api_headers(CLI_config), timeout=60.0)
     return response
 
 
@@ -397,7 +409,7 @@ def api_delete_file(file_id: str, CLI_config: CLIConfig) -> httpx.Response:
     logger.info(f"Deleting file with ID: {file_id}")
 
     url = f"{CLI_config.api_base_url}/depictio/api/v1/files/delete/{file_id}"
-    response = httpx.delete(url, headers=generate_api_headers(CLI_config))
+    response = httpx.delete(url, headers=generate_api_headers(CLI_config), timeout=60.0)
     return response
 
 
@@ -469,6 +481,7 @@ def api_get_deltatable_by_dc_id(dc_id: str, CLI_config: CLIConfig) -> httpx.Resp
     response = httpx.get(
         f"{CLI_config.api_base_url}/depictio/api/v1/deltatables/get/{dc_id}",
         headers=generate_api_headers(CLI_config),
+        timeout=60.0,  # cold-start safety net (httpx default of 5 s is too aggressive)
     )
     return response
 
@@ -488,7 +501,7 @@ def api_delete_deltatable(delta_table_id: str, CLI_config: CLIConfig) -> httpx.R
     logger.info(f"Deleting Delta Table with ID: {delta_table_id}")
 
     url = f"{CLI_config.api_base_url}/depictio/api/v1/deltatables/delete/{delta_table_id}"
-    response = httpx.delete(url, headers=generate_api_headers(CLI_config))
+    response = httpx.delete(url, headers=generate_api_headers(CLI_config), timeout=60.0)
     return response
 
 
@@ -594,6 +607,7 @@ def api_list_backups(CLI_config: CLIConfig) -> dict:
         response = httpx.get(
             url,
             headers=generate_api_headers(CLI_config),
+            timeout=60.0,  # cold-start safety net (httpx default of 5 s is too aggressive)
         )
 
         if response.status_code == 200:
@@ -630,6 +644,7 @@ def api_validate_backup(CLI_config: CLIConfig, backup_id: str) -> dict:
             url,
             json=payload,
             headers=generate_api_headers(CLI_config),
+            timeout=60.0,  # cold-start safety net (httpx default of 5 s is too aggressive)
         )
         logger.debug(f"Payload for backup validation: {payload}")
         logger.debug(f"Response status code: {response.status_code}")

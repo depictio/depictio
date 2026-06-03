@@ -175,7 +175,7 @@ async def get_admin_auth_token() -> dict[str, str]:
 
 async def generate_dual_theme_screenshots(
     dashboard_id: str,
-    output_folder: str = "/app/depictio/dash/static/screenshots",
+    output_folder: str = "/app/depictio/api/static/screenshots",
     user_id: str | None = None,
 ) -> ScreenshotResult:
     """
@@ -194,7 +194,7 @@ async def generate_dual_theme_screenshots(
 
     Args:
         dashboard_id: Dashboard ID to screenshot
-        output_folder: Directory to save screenshots (default: /app/depictio/dash/static/screenshots)
+        output_folder: Directory to save screenshots (default: /app/depictio/api/static/screenshots)
         user_id: Optional user ID for permission validation (recommended for security)
 
     Returns:
@@ -238,11 +238,11 @@ async def generate_dual_theme_screenshots(
         token_data = await get_admin_auth_token()
         token_data_json = json.dumps(token_data)
         # ``no-walkthrough=1`` tells the React viewer's ``WalkthroughHost`` to
-        # short-circuit before mounting either tour engine. The Dash legacy
+        # short-circuit before mounting either tour engine. The legacy
         # ``/dashboard/{id}`` route doesn't render the React walkthrough today,
         # so this is defensive — keeps the PNG clean if/when screenshots ever
         # target ``/dashboard-beta/{id}``.
-        dashboard_url = f"{settings.dash.internal_url}/dashboard/{dashboard_id}?no-walkthrough=1"
+        dashboard_url = f"{settings.viewer.internal_url}/dashboard/{dashboard_id}?no-walkthrough=1"
 
         logger.info(f"Starting dual-theme screenshot for dashboard {dashboard_id}")
 
@@ -251,19 +251,19 @@ async def generate_dual_theme_screenshots(
             page = await browser.new_page(viewport={"width": 1920, "height": 1080})
 
             # Set authentication token before navigation. The very first goto
-            # is also our probe: if the Dash frontend container isn't running
-            # in this compose project, Playwright surfaces ERR_NAME_NOT_RESOLVED
+            # is also our probe: if the viewer container isn't running in
+            # this compose project, Playwright surfaces ERR_NAME_NOT_RESOLVED
             # (or ERR_CONNECTION_*) — skip rather than failing the Celery task.
             try:
-                await page.goto(settings.dash.internal_url)
+                await page.goto(settings.viewer.internal_url)
             except Exception as nav_err:
                 msg = str(nav_err)
                 if any(m in msg for m in HOST_UNREACHABLE_MARKERS):
                     logger.warning(
-                        f"Dash frontend ({settings.dash.internal_url}) is unreachable "
+                        f"Viewer ({settings.viewer.internal_url}) is unreachable "
                         f"from this worker — skipping screenshot for {dashboard_id}. "
-                        "Start the depictio-frontend container or set "
-                        "DEPICTIO_DASH_SERVICE_NAME to a reachable host."
+                        "Start the depictio-viewer container or set "
+                        "DEPICTIO_VIEWER_SERVICE_NAME to a reachable host."
                     )
                     await browser.close()
                     skip_result: ScreenshotResult = {
@@ -383,7 +383,7 @@ def _react_output_paths(
 
 async def generate_react_dual_theme_screenshots(
     dashboard_id: str,
-    output_folder: str = "/app/depictio/dash/static/screenshots",
+    output_folder: str = "/app/depictio/api/static/screenshots",
     user_id: str | None = None,
     open_settings: bool = False,
     filename_prefix: str = "",
@@ -406,7 +406,11 @@ async def generate_react_dual_theme_screenshots(
     Because Mantine popovers portal to document.body, a popover-open
     capture switches from element.screenshot to a viewport capture.
     """
-    if user_id:
+    # Single-user mode has no per-user ownership — skip the check entirely,
+    # mirroring the Celery task (celery_app.py) and the HTTP screenshot route.
+    # Without this, seeded/dev dashboards (owned by the seed admin, not the
+    # anonymous single-user) get a spurious "not dashboard owner" rejection.
+    if user_id and not settings.auth.is_single_user_mode:
         is_owner = await check_dashboard_owner_permission(
             dashboard_id=dashboard_id, user_id=user_id
         )
@@ -422,11 +426,13 @@ async def generate_react_dual_theme_screenshots(
     Path(output_folder).mkdir(parents=True, exist_ok=True)
     light_path, dark_path = _react_output_paths(output_folder, dashboard_id, filename_prefix)
 
-    # The React SPA is served by the FastAPI process itself. Use `.url` so the
-    # property picks internal vs external based on DEPICTIO_CONTEXT — inside
-    # the API container this resolves to the docker DNS hostname, on a host
-    # invocation it falls back to the external port.
-    origin = settings.fastapi.url
+    # The React SPA is served by the viewer (nginx) container, not the API.
+    # Use the viewer's internal URL so the worker's headless browser loads
+    # the bundle from nginx; the SPA's relative /depictio/api/* calls are
+    # then proxied by that same nginx back to the backend. `.url` picks
+    # internal vs external by DEPICTIO_CONTEXT (server → docker/k8s DNS
+    # hostname; host invocation → external port).
+    origin = settings.viewer.url
     # `?no-walkthrough=1` tells the React SPA's WalkthroughHost to bail
     # before mounting either tour engine, so the captured PNG never
     # contains the popover, anchor, or dim backdrop — even when the

@@ -5,13 +5,19 @@ on:
     branches: [ main ]
     paths:
       - "helm-charts/depictio/**"
-      - "docker-images/Dockerfile_depictio_uv.dockerfile"
+      - "docker-images/Dockerfile.api"
+      - "docker-images/Dockerfile.worker"
+      - "docker-images/Dockerfile.viewer"
+      - "docker-images/nginx.conf.template"
       - ".github/workflows/test-and-package-helm-chart.yaml"
   pull_request:
     branches: [ main ]
     paths:
       - "helm-charts/depictio/**"
-      - "docker-images/Dockerfile_depictio_uv.dockerfile"
+      - "docker-images/Dockerfile.api"
+      - "docker-images/Dockerfile.worker"
+      - "docker-images/Dockerfile.viewer"
+      - "docker-images/nginx.conf.template"
       - ".github/workflows/test-and-package-helm-chart.yaml"
   workflow_dispatch:
 
@@ -83,44 +89,66 @@ jobs:
           fi
           echo "tag=${TAG}" >> $GITHUB_OUTPUT
           echo "repo=${REPO_LOWER}" >> $GITHUB_OUTPUT
-          echo "full-image=ghcr.io/${REPO_LOWER}:${TAG}" >> $GITHUB_OUTPUT
-
-      - name: Check if rebuild needed
-        id: check-rebuild
-        run: |
-          FULL_IMAGE="${{ steps.image-info.outputs.full-image }}"
-          if docker manifest inspect "${FULL_IMAGE}" > /dev/null 2>&1; then
-            echo "rebuild=false" >> $GITHUB_OUTPUT
-            echo "✅ Image ${FULL_IMAGE} already exists, skipping build"
-          else
-            echo "rebuild=true" >> $GITHUB_OUTPUT
-            echo "🔨 Image doesn't exist, will build ${FULL_IMAGE}"
-          fi
+          # Per-service images for the post-Dash split: api / worker / viewer.
+          echo "api-image=ghcr.io/${REPO_LOWER}-api:${TAG}" >> $GITHUB_OUTPUT
+          echo "worker-image=ghcr.io/${REPO_LOWER}-worker:${TAG}" >> $GITHUB_OUTPUT
+          echo "viewer-image=ghcr.io/${REPO_LOWER}-viewer:${TAG}" >> $GITHUB_OUTPUT
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build and push Docker image
-        id: build
-        if: steps.check-rebuild.outputs.rebuild == 'true'
+      - name: Build and push API image
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: docker-images/Dockerfile_depictio_uv.dockerfile
+          file: docker-images/Dockerfile.api
           platforms: linux/amd64
           push: true
           load: false
-          tags: ${{ steps.image-info.outputs.full-image }}
+          tags: ${{ steps.image-info.outputs.api-image }}
           cache-from: |
-            type=gha,scope=${{ github.ref_name }}
-            type=gha,scope=refs/heads/main
-          cache-to: type=gha,mode=max,scope=${{ github.ref_name }}
+            type=gha,scope=api-${{ github.ref_name }}
+            type=gha,scope=api-refs/heads/main
+          cache-to: type=gha,mode=max,scope=api-${{ github.ref_name }}
 
-      - name: Pull image to Minikube
+      - name: Build and push worker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker-images/Dockerfile.worker
+          platforms: linux/amd64
+          push: true
+          load: false
+          tags: ${{ steps.image-info.outputs.worker-image }}
+          cache-from: |
+            type=gha,scope=worker-${{ github.ref_name }}
+            type=gha,scope=worker-refs/heads/main
+          cache-to: type=gha,mode=max,scope=worker-${{ github.ref_name }}
+
+      - name: Build and push viewer image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker-images/Dockerfile.viewer
+          platforms: linux/amd64
+          push: true
+          load: false
+          tags: ${{ steps.image-info.outputs.viewer-image }}
+          cache-from: |
+            type=gha,scope=viewer-${{ github.ref_name }}
+            type=gha,scope=viewer-refs/heads/main
+          cache-to: type=gha,mode=max,scope=viewer-${{ github.ref_name }}
+
+      - name: Pull images to Minikube
         run: |
           eval $(minikube docker-env)
-          docker pull "${{ steps.image-info.outputs.full-image }}"
-          docker tag "${{ steps.image-info.outputs.full-image }}" "depictio:${{ steps.chart-info.outputs.app_version }}"
+          APP_VERSION="${{ steps.chart-info.outputs.app_version }}"
+          docker pull "${{ steps.image-info.outputs.api-image }}"
+          docker pull "${{ steps.image-info.outputs.worker-image }}"
+          docker pull "${{ steps.image-info.outputs.viewer-image }}"
+          docker tag "${{ steps.image-info.outputs.api-image }}" "depictio-api:${APP_VERSION}"
+          docker tag "${{ steps.image-info.outputs.worker-image }}" "depictio-worker:${APP_VERSION}"
+          docker tag "${{ steps.image-info.outputs.viewer-image }}" "depictio-viewer:${APP_VERSION}"
           docker images | grep depictio
 
       - name: Get Kubernetes cluster info
@@ -188,12 +216,15 @@ jobs:
           helm upgrade --install ${{ steps.release-info.outputs.release_name }} ./helm-charts/depictio \
             -f ./helm-charts/depictio/values.yaml \
             -f ./helm-charts/depictio/values-gh-actions.yaml \
-            --set backend.image.repository=depictio \
+            --set backend.image.repository=depictio-api \
             --set backend.image.tag=${{ steps.chart-info.outputs.app_version }} \
             --set backend.image.pullPolicy=Never \
-            --set frontend.image.repository=depictio \
-            --set frontend.image.tag=${{ steps.chart-info.outputs.app_version }} \
-            --set frontend.image.pullPolicy=Never \
+            --set celery.image.repository=depictio-worker \
+            --set celery.image.tag=${{ steps.chart-info.outputs.app_version }} \
+            --set celery.image.pullPolicy=Never \
+            --set viewer.image.repository=depictio-viewer \
+            --set viewer.image.tag=${{ steps.chart-info.outputs.app_version }} \
+            --set viewer.image.pullPolicy=Never \
             --debug
 
           echo "✅ Helm installation completed"
@@ -213,7 +244,7 @@ jobs:
           echo "🔍 Waiting for workloads to be created..."
           timeout=180  # 3 minutes total timeout
           elapsed=0
-          expected_deployments=4  # minio, backend, frontend, celery-worker
+          expected_deployments=4  # minio, backend, viewer, celery-worker
           expected_statefulsets=2  # mongo, redis
 
           while [ $elapsed -lt $timeout ]; do
@@ -258,7 +289,7 @@ jobs:
           kubectl get statefulsets --no-headers | grep "^${RELEASE_NAME}-" || echo "No statefulsets found"
 
           echo ""
-          echo "🔍 Detailed pod status monitoring for troubleshooting frontend..."
+          echo "🔍 Detailed pod status monitoring for troubleshooting viewer..."
 
           # Monitor pods every 30 seconds for 3 minutes to see what's happening
           monitor_timeout=180  # 3 minutes
@@ -275,7 +306,7 @@ jobs:
 
             echo ""
             echo "🔍 Frontend pod detailed status:"
-            FRONTEND_POD=$(kubectl get pods -l "release=${RELEASE_NAME},app=depictio-frontend" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+            FRONTEND_POD=$(kubectl get pods -l "release=${RELEASE_NAME},app=depictio-viewer" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
             if [ -n "$FRONTEND_POD" ]; then
               echo "📋 Frontend pod: $FRONTEND_POD"
               kubectl describe pod $FRONTEND_POD | grep -A 10 -E "(Conditions:|Init Containers:|Containers:)"
@@ -392,7 +423,7 @@ jobs:
           echo "📋 Frontend Pod Logs"
           echo "===================="
 
-          FRONTEND_POD=$(kubectl get pods -l "release=${RELEASE_NAME},app=depictio-frontend" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+          FRONTEND_POD=$(kubectl get pods -l "release=${RELEASE_NAME},app=depictio-viewer" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
           if [ -n "$FRONTEND_POD" ]; then
             echo "Pod: $FRONTEND_POD"
             echo ""
@@ -409,7 +440,7 @@ jobs:
             done
             echo ""
             echo "--- Main Container Logs ---"
-            kubectl logs $FRONTEND_POD -c depictio-frontend 2>/dev/null || echo "  (not available)"
+            kubectl logs $FRONTEND_POD -c depictio-viewer 2>/dev/null || echo "  (not available)"
           else
             echo "❌ Frontend pod not found"
           fi
@@ -470,10 +501,10 @@ jobs:
           }
 
           echo "⏳ Waiting for frontend pods to be ready..."
-          kubectl wait --for=condition=ready pod -l "release=${RELEASE_NAME},app=depictio-frontend" --timeout=300s || {
+          kubectl wait --for=condition=ready pod -l "release=${RELEASE_NAME},app=depictio-viewer" --timeout=300s || {
             echo "❌ Frontend pods failed to be ready"
             echo "📊 Frontend pod details:"
-            kubectl describe pods -l "release=${RELEASE_NAME},app=depictio-frontend"
+            kubectl describe pods -l "release=${RELEASE_NAME},app=depictio-viewer"
             exit 1
           }
 
@@ -511,9 +542,9 @@ jobs:
           fi
 
           echo "🔍 Finding frontend pod..."
-          FRONTEND_POD=$(kubectl get pods -l "release=${RELEASE_NAME},app=depictio-frontend" -o jsonpath='{.items[0].metadata.name}' || echo "")
+          FRONTEND_POD=$(kubectl get pods -l "release=${RELEASE_NAME},app=depictio-viewer" -o jsonpath='{.items[0].metadata.name}' || echo "")
           if [ -z "$FRONTEND_POD" ]; then
-            echo "❌ No frontend pod found with labels: release=${RELEASE_NAME},app=depictio-frontend"
+            echo "❌ No frontend pod found with labels: release=${RELEASE_NAME},app=depictio-viewer"
             echo "📊 Available pods:"
             kubectl get pods -l "release=${RELEASE_NAME}" --show-labels
             exit 1
@@ -648,13 +679,13 @@ jobs:
           echo ""
           echo "🔧 Service Endpoints Check:"
           kubectl get endpoints ${RELEASE_NAME}-depictio-backend
-          kubectl get endpoints ${RELEASE_NAME}-depictio-frontend
+          kubectl get endpoints ${RELEASE_NAME}-depictio-viewer
 
           echo ""
           echo "🌐 Services Details:"
           kubectl describe svc ${RELEASE_NAME}-depictio-backend
           echo ""
-          kubectl describe svc ${RELEASE_NAME}-depictio-frontend
+          kubectl describe svc ${RELEASE_NAME}-depictio-viewer
 
           echo ""
           echo "=============================="
@@ -666,7 +697,7 @@ jobs:
           REDIS_SERVICE="${RELEASE_NAME}-redis"
           MINIO_SERVICE="${RELEASE_NAME}-minio"
           BACKEND_SERVICE="${RELEASE_NAME}-depictio-backend"
-          FRONTEND_SERVICE="${RELEASE_NAME}-depictio-frontend"
+          FRONTEND_SERVICE="${RELEASE_NAME}-depictio-viewer"
 
           echo "📋 Service names:"
           echo "  MongoDB: $MONGODB_SERVICE"
@@ -1089,7 +1120,7 @@ jobs:
       - name: Test Basic Service Connectivity
         run: |
           RELEASE_NAME="${{ steps.release-info.outputs.release_name }}"
-          FRONTEND_SERVICE="${RELEASE_NAME}-depictio-frontend"
+          FRONTEND_SERVICE="${RELEASE_NAME}-depictio-viewer"
           BACKEND_SERVICE="${RELEASE_NAME}-depictio-backend"
 
           echo "🌐 Testing frontend service..."
@@ -1162,67 +1193,60 @@ jobs:
           BACKEND_POD=$(kubectl get pods -l "release=${RELEASE_NAME},app=depictio-backend" -o jsonpath='{.items[0].metadata.name}')
           echo "Backend pod: $BACKEND_POD"
 
-          # Log backend BEFORE the request
-          echo "📋 Backend logs BEFORE screenshot request:"
-          kubectl logs $BACKEND_POD --tail=200
+          # Get the Celery worker pod. The screenshot is rendered there
+          # (Playwright/chromium live only in the worker image) and written to
+          # the shared screenshots PVC — which the backend pod also mounts, so
+          # we can inspect the result via the backend pod below.
+          WORKER_POD=$(kubectl get pods -l "release=${RELEASE_NAME},app=celery-worker" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+          echo "Backend pod: $BACKEND_POD"
+          echo "Worker pod: ${WORKER_POD:-<none>}"
 
-          # Test screenshot endpoint
-          echo "🧪 Testing screenshot generation endpoint..."
-          DASHBOARD_ID="6824cb3b89d2b72169309737"
-
-          echo "📞 Making screenshot request (timeout: 90s)..."
-
-          # Add timeout for screenshot generation (it's slow)
-          # http://localhost:8083/depictio/api/v1/dashboards/screenshot/$DASHBOARD_ID)
-          set +e  # Don't exit on curl error
-          SCREENSHOT_RESPONSE=$(curl -s --max-time 90 -w "\n%{http_code}" \
-            http://localhost:8083/depictio/api/v1/utils/screenshot-dash-fixed/$DASHBOARD_ID)
-          CURL_EXIT_CODE=$?
-          set -e
-
-          # Log backend AFTER the request
-          echo "📋 Backend logs AFTER screenshot request:"
-          kubectl logs $BACKEND_POD --tail=200
-
-          if [ $CURL_EXIT_CODE -eq 0 ]; then
-            # Extract HTTP status code (last line)
-            HTTP_CODE=$(echo "$SCREENSHOT_RESPONSE" | tail -n1)
-            JSON_RESPONSE=$(echo "$SCREENSHOT_RESPONSE" | head -n -1)
-
-            echo "📊 HTTP Status: $HTTP_CODE"
-
-            if [ "$HTTP_CODE" = "200" ]; then
-              echo "✅ Screenshot endpoint responded successfully"
-
-              # Parse response safely
-              SUCCESS=$(echo "$JSON_RESPONSE" | jq -r '.success // false' 2>/dev/null || echo "false")
-              MESSAGE=$(echo "$JSON_RESPONSE" | jq -r '.message // "unknown"' 2>/dev/null || echo "unknown")
-
-              echo "📋 Success: $SUCCESS, Message: $MESSAGE"
-
-              if [ "$SUCCESS" = "true" ]; then
-                echo "✅ Screenshot generation successful"
-              else
-                echo "❌ Screenshot generation failed"
-                exit 1
-              fi
-
-            elif [ "$HTTP_CODE" = "404" ]; then
-              echo "⚠️  Dashboard not found (expected for dummy ID)"
-              echo "✅ Screenshot endpoint is accessible"
-            else
-              echo "❌ Screenshot endpoint failed with status: $HTTP_CODE"
-              exit 1
+          # Verify the screenshot pipeline end-to-end WITHOUT a synchronous
+          # endpoint call. On boot, seeding auto-enqueues the very same Celery
+          # task (generate_react_dual_theme_screenshots) the HTTP endpoint uses,
+          # so the meaningful integration check is simply that a real, non-empty
+          # PNG lands on the shared screenshots volume. That alone proves the
+          # whole chain is wired: worker + Playwright + viewer nginx proxy +
+          # auth-mode propagation.
+          #
+          # We deliberately do NOT block on the HTTP endpoint: with worker
+          # concurrency 1 (~22s/capture) a synchronous request queues behind the
+          # startup screenshot backlog and times out (500), which says nothing
+          # about whether screenshots actually work. We don't need the whole
+          # backlog to drain — one successful capture is enough.
+          echo "🧪 Verifying a screenshot PNG is generated on the shared volume..."
+          SHOT_DIR="/app/depictio/api/static/screenshots"
+          FOUND=""
+          for i in $(seq 1 48); do   # up to ~4 min ceiling; typically <1 min
+            COUNT=$(kubectl exec "$BACKEND_POD" -- sh -c "find $SHOT_DIR -name '*.png' -size +0c 2>/dev/null | wc -l" 2>/dev/null | tr -d '[:space:]')
+            COUNT=${COUNT:-0}
+            if [ "$COUNT" -gt 0 ]; then
+              FOUND="$COUNT"
+              echo "✅ $COUNT non-empty screenshot PNG(s) on disk (after ~$((i * 5))s)"
+              break
             fi
+            echo "  ...no screenshot yet (${i}/48)"
+            sleep 5
+          done
+
+          echo "📋 Backend logs (tail):"
+          kubectl logs "$BACKEND_POD" --tail=100 || true
+          if [ -n "$WORKER_POD" ]; then
+            echo "📋 Celery worker logs (tail):"
+            kubectl logs "$WORKER_POD" --tail=100 || true
           else
-            echo "❌ Curl failed with exit code: $CURL_EXIT_CODE"
-            case $CURL_EXIT_CODE in
-              7) echo "Failed to connect to server" ;;
-              28) echo "Request timed out after 90 seconds" ;;
-              52) echo "Server returned empty response" ;;
-            esac
+            echo "⚠️  No celery-worker pod found"
+          fi
+
+          if [ -z "$FOUND" ]; then
+            echo "❌ No screenshot PNG was generated within the wait window"
+            kubectl exec "$BACKEND_POD" -- sh -c "ls -la $SHOT_DIR" || true
             exit 1
           fi
+
+          echo "📸 Generated screenshots:"
+          kubectl exec "$BACKEND_POD" -- sh -c "ls -la $SHOT_DIR | head -20" || true
+          echo "✅ Screenshot generation pipeline verified"
 
           # Clean up
           kill $PID_BACKEND || true
@@ -1245,12 +1269,15 @@ jobs:
           # Install from packaged chart
           helm install $PACKAGE_RELEASE_NAME ./depictio-${{ steps.chart-info.outputs.chart_version }}.tgz \
             -f ./helm-charts/depictio/values-gh-actions.yaml \
-            --set backend.image.repository=depictio \
+            --set backend.image.repository=depictio-api \
             --set backend.image.tag=${{ steps.chart-info.outputs.app_version }} \
             --set backend.image.pullPolicy=Never \
-            --set frontend.image.repository=depictio \
-            --set frontend.image.tag=${{ steps.chart-info.outputs.app_version }} \
-            --set frontend.image.pullPolicy=Never
+            --set celery.image.repository=depictio-worker \
+            --set celery.image.tag=${{ steps.chart-info.outputs.app_version }} \
+            --set celery.image.pullPolicy=Never \
+            --set viewer.image.repository=depictio-viewer \
+            --set viewer.image.tag=${{ steps.chart-info.outputs.app_version }} \
+            --set viewer.image.pullPolicy=Never
 
           echo "✅ Successfully installed from packaged chart"
           kubectl get pods

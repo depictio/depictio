@@ -53,7 +53,7 @@ _DEFAULT_VIZ_FIELDS = frozenset(
 def _get_visualization_names_cached() -> frozenset[str]:
     """Get visualization names from figure component registry with caching."""
     try:
-        from depictio.dash.modules.figure_component.definitions import get_visualization_names
+        from depictio.api.v1.services.figure.definitions import get_visualization_names
 
         return frozenset(get_visualization_names())
     except Exception:
@@ -75,7 +75,7 @@ def get_allowed_visualization_fields(chart_type: str) -> set[str]:
         ensuring validation stays in sync with the actual implementation.
     """
     try:
-        from depictio.dash.modules.figure_component.definitions import get_visualization_definition
+        from depictio.api.v1.services.figure.definitions import get_visualization_definition
 
         viz_def = get_visualization_definition(chart_type)
         param_names = {param.name for param in viz_def.parameters}

@@ -1,16 +1,13 @@
 {
   "name": "depictio-components",
   "version": "0.1.0",
-  "description": "Shared React components for Depictio dashboards — consumed by both the Dash editor (via auto-generated Python wrappers) and the React viewer.",
+  "description": "Shared React components for Depictio dashboards — consumed by the React viewer.",
   "private": true,
-  "main": "depictio_components/depictio_components.min.js",
   "module": "src/lib/index.ts",
   "types": "src/lib/index.ts",
   "scripts": {
     "build:js": "webpack --mode production",
     "build:js-dev": "webpack --mode development",
-    "build:py": "node scripts/generate_python_wrappers.js",
-    "build": "npm run build:js && npm run build:py",
     "dev": "webpack --mode development --watch"
   },
   "peerDependencies": {

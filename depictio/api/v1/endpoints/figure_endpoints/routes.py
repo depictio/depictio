@@ -45,7 +45,7 @@ def list_visualizations(
     specs are still fetched lazily via `/figure/parameter-discovery/{viz_type}`.
     """
     try:
-        from depictio.dash.modules.figure_component.definitions import (
+        from depictio.api.v1.services.figure.definitions import (
             get_available_visualizations,
         )
     except Exception as e:
@@ -80,7 +80,7 @@ def parameter_discovery(
     Common / Specific / Advanced) without duplicating the spec in TS.
     """
     try:
-        from depictio.dash.modules.figure_component.definitions import (
+        from depictio.api.v1.services.figure.definitions import (
             get_visualization_definition,
         )
     except Exception as e:

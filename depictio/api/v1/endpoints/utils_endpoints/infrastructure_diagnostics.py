@@ -25,7 +25,7 @@ async def test_dns_resolution() -> dict[str, Any]:
 
     # Get actual service names from settings and environment
     services_to_test = [
-        f"{settings.dash.service_name}",
+        f"{settings.viewer.service_name}",
         f"{settings.fastapi.service_name}",
         f"{settings.mongodb.service_name}",
         f"{settings.minio.service_name}",
@@ -33,7 +33,7 @@ async def test_dns_resolution() -> dict[str, Any]:
 
     # Also try common service patterns in case settings are different
     additional_services = [
-        "depictio-frontend",
+        "depictio-viewer",
         "depictio-backend",
         "mongo",
         "minio",
@@ -72,7 +72,7 @@ async def test_network_latency() -> dict[str, Any]:
     latency_results = {}
 
     services_to_test = [
-        (settings.dash.internal_url, "frontend"),
+        (settings.viewer.internal_url, "frontend"),
         (settings.fastapi.internal_url, "backend"),
         ("http://mongo:27018", "mongodb"),
         ("http://minio:9000", "minio"),
