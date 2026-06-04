@@ -1,6 +1,6 @@
 #!/bin/bash
 # bump-with-helm.sh
-export SKIP=trailing-whitespace,ty-check-models-api-dash-cli
+export SKIP=trailing-whitespace,ty-check-models-api-cli
 
 # Parse arguments for dry-run flag
 DRY_RUN=false
