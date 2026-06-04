@@ -59,14 +59,26 @@ def test_client_context_skips_minio_check(monkeypatch):
     mod.Settings()  # no raise
 
 
-@pytest.mark.parametrize("weak_pw", ["changeme", "minio123", "short"])
+@pytest.mark.parametrize("weak_pw", ["minio123", "short"])
 def test_server_context_rejects_weak_bootstrap_admin_password(monkeypatch, weak_pw):
+    """minio123 is in _WEAK_PASSWORDS; passwords < 8 chars are rejected."""
     monkeypatch.setenv("DEPICTIO_CONTEXT", "server")
+    monkeypatch.setenv("DEPICTIO_AUTH_SINGLE_USER_MODE", "false")
     monkeypatch.setenv("DEPICTIO_MINIO_ROOT_PASSWORD", "a" * 32)
     monkeypatch.setenv("DEPICTIO_BOOTSTRAP_ADMIN_PASSWORD", weak_pw)
     mod = _reload_settings_module()
     with pytest.raises(Exception, match="DEPICTIO_BOOTSTRAP_ADMIN_PASSWORD"):
         mod.Settings()
+
+
+def test_server_context_allows_changeme_for_admin(monkeypatch):
+    """changeme is intentionally allowed for the bootstrap admin (local dev default)."""
+    monkeypatch.setenv("DEPICTIO_CONTEXT", "server")
+    monkeypatch.setenv("DEPICTIO_AUTH_SINGLE_USER_MODE", "false")
+    monkeypatch.setenv("DEPICTIO_MINIO_ROOT_PASSWORD", "a" * 32)
+    monkeypatch.setenv("DEPICTIO_BOOTSTRAP_ADMIN_PASSWORD", "changeme")
+    mod = _reload_settings_module()
+    mod.Settings()  # must not raise
 
 
 # ---------------------------------------------------------------------------

@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import AliasChoices, Field, SecretStr, computed_field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -13,8 +13,6 @@ _WEAK_PASSWORDS: frozenset[str] = frozenset(
         "minio123",
         "password",
         "passw0rd",
-        "changeme",
-        "change_me",
         "admin",
         "admin123",
         "depictio",
@@ -25,7 +23,10 @@ _WEAK_PASSWORDS: frozenset[str] = frozenset(
         "letmein",
     }
 )
-_MIN_SECRET_LEN = 16
+# "changeme" / "change_me" are intentionally NOT in _WEAK_PASSWORDS so they
+# remain usable as a dev/default admin password for quick local starts.
+_WEAK_PASSWORDS_MINIO: frozenset[str] = _WEAK_PASSWORDS | frozenset({"changeme", "change_me"})
+_MIN_SECRET_LEN = 8
 
 # ── Core Services ─────────────────────────────────────────────────────────────
 
@@ -184,7 +185,7 @@ class S3DepictioCLIConfig(ServiceConfig):
         description=(
             "MinIO/S3 root secret key. REQUIRED in server context — set via "
             "DEPICTIO_MINIO_ROOT_PASSWORD. The server refuses to start when this is unset, "
-            "shorter than 16 characters, or matches a well-known default."
+            "shorter than 8 characters, or matches a well-known default."
         ),
     )
     bucket: str = Field(
@@ -287,7 +288,7 @@ class AuthConfig(BaseSettings):
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_AUTH_", case_sensitive=False)
 
-    def __init__(self, **data: object) -> None:
+    def __init__(self, **data: Any) -> None:
         super().__init__(**data)
 
         import os
@@ -385,8 +386,8 @@ class AuthBootstrapConfig(BaseSettings):
     admin_password: SecretStr = Field(
         default=SecretStr(""),
         description=(
-            "Password for the bootstrap admin. REQUIRED, ≥16 characters, must not match "
-            "any well-known default. Set via DEPICTIO_BOOTSTRAP_ADMIN_PASSWORD."
+            "Password for the bootstrap admin. REQUIRED, ≥8 characters. "
+            "Set via DEPICTIO_BOOTSTRAP_ADMIN_PASSWORD."
         ),
     )
 
@@ -1048,12 +1049,16 @@ class Settings(BaseSettings):
         if self.context != "server":
             return self
 
+        # Single-user mode is for local development — no secret enforcement.
+        if self.auth.is_single_user_mode:
+            return self
+
         errors: list[str] = []
 
         # MinIO root password is consumed by API + worker, so it must always
         # be set on a server boot regardless of single-user / public mode.
         minio_pw = self.minio.root_password.get_secret_value()
-        if minio_pw.lower() in _WEAK_PASSWORDS:
+        if minio_pw.lower() in _WEAK_PASSWORDS_MINIO:
             errors.append(
                 "DEPICTIO_MINIO_ROOT_PASSWORD is unset or matches a known-default value. "
                 "Set it to a strong secret before starting the server."
@@ -1073,7 +1078,7 @@ class Settings(BaseSettings):
             if admin_pw.lower() in _WEAK_PASSWORDS:
                 errors.append(
                     "DEPICTIO_BOOTSTRAP_ADMIN_PASSWORD matches a known-default value; "
-                    "choose a strong secret."
+                    "choose a stronger secret."
                 )
             elif len(admin_pw) < _MIN_SECRET_LEN:
                 errors.append(
