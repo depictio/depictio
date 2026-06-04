@@ -2742,7 +2742,8 @@ jobs:
 
           echo "Waiting for Viewer..."
           for i in {1..60}; do
-            if curl -s -o /dev/null -w "%{http_code}" http://localhost:5080/ | grep -q "200"; then
+            # -L: the viewer 302-redirects / to /dashboards; follow it.
+            if curl -sL -o /dev/null -w "%{http_code}" http://localhost:5080/ | grep -q "200"; then
               echo "✅ Viewer ready"
               break
             fi
