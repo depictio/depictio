@@ -147,6 +147,10 @@ class MongoDBConfig(ServiceConfig):
     wipe: bool = Field(
         default=False, description="Wipe the database on startup (destructive — development only)"
     )
+    username: str | None = Field(default=None, description="MongoDB username (operator-managed RS auth)")
+    password: SecretStr | None = Field(default=None, description="MongoDB password (operator-managed RS auth)")
+    replica_set: str | None = Field(default=None, description="MongoDB replica set name, e.g. rs0")
+    auth_source: str = Field(default="admin", description="MongoDB authentication source database")
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_MONGODB_")
 

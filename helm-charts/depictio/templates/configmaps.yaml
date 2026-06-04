@@ -12,9 +12,15 @@ data:
   DEPICTIO_FASTAPI_PUBLIC_URL: {{ .Values.backend.env.DEPICTIO_FASTAPI_PUBLIC_URL | default (include "depictio.apiUrlWithProtocol" .) | quote }}
   DEPICTIO_VIEWER_SERVICE_PORT: {{ .Values.backend.env.DEPICTIO_VIEWER_SERVICE_PORT | quote }}
   DEPICTIO_VIEWER_SERVICE_NAME: {{ printf "%s-depictio-viewer" .Release.Name | quote }}
+  {{- if .Values.mongo.useOperator }}
+  DEPICTIO_MONGODB_SERVICE_NAME: {{ printf "%s-mongo-svc" .Release.Name | quote }}
+  DEPICTIO_MONGODB_SERVICE_PORT: "27017"
+  DEPICTIO_MONGODB_AUTH_SOURCE: "admin"
+  {{- else }}
   DEPICTIO_MONGODB_SERVICE_NAME: {{ printf "%s-mongo" .Release.Name | quote }}
-  DEPICTIO_MONGODB_WIPE: {{ .Values.backend.env.DEPICTIO_MONGODB_WIPE | quote }}
   DEPICTIO_MONGODB_SERVICE_PORT: {{ .Values.backend.env.DEPICTIO_MONGODB_SERVICE_PORT | quote }}
+  {{- end }}
+  DEPICTIO_MONGODB_WIPE: {{ .Values.backend.env.DEPICTIO_MONGODB_WIPE | quote }}
 
   # Redis Cache Configuration
   {{- if .Values.redis.enabled }}
@@ -137,8 +143,14 @@ data:
   {{- end }}
 
   # Service settings
+  {{- if .Values.mongo.useOperator }}
+  DEPICTIO_MONGODB_SERVICE_NAME: {{ printf "%s-mongo-svc" .Release.Name | quote }}
+  DEPICTIO_MONGODB_SERVICE_PORT: "27017"
+  DEPICTIO_MONGODB_AUTH_SOURCE: "admin"
+  {{- else }}
   DEPICTIO_MONGODB_SERVICE_NAME: {{ printf "%s-mongo" .Release.Name | quote }}
   DEPICTIO_MONGODB_SERVICE_PORT: {{ .Values.backend.env.DEPICTIO_MONGODB_SERVICE_PORT | quote }}
+  {{- end }}
   DEPICTIO_FASTAPI_SERVICE_NAME: {{ printf "%s-depictio-backend" .Release.Name | quote }}
   DEPICTIO_FASTAPI_SERVICE_PORT: {{ .Values.backend.env.DEPICTIO_FASTAPI_SERVICE_PORT | quote }}
   DEPICTIO_FASTAPI_PUBLIC_URL: {{ .Values.backend.env.DEPICTIO_FASTAPI_PUBLIC_URL | default (include "depictio.apiUrlWithProtocol" .) | quote }}

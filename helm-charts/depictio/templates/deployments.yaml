@@ -1,4 +1,5 @@
-# MongoDB StatefulSet (for high availability with replica set)
+# MongoDB StatefulSet (self-managed, used when mongo.useOperator is false)
+{{- if not (.Values.mongo.useOperator | default false) }}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -104,6 +105,7 @@ spec:
       resources:
         requests:
           storage: {{ .Values.persistence.mongo.size }}
+{{- end }}
 ---
 # Redis StatefulSet (for caching and Celery broker)
 {{- if .Values.redis.enabled }}
@@ -400,7 +402,11 @@ spec:
         - name: wait-for-mongo
           image: "{{ .Values.initContainerImage.repository }}:{{ .Values.initContainerImage.tag }}"
           imagePullPolicy: {{ .Values.initContainerImage.pullPolicy }}
+          {{- if .Values.mongo.useOperator }}
+          command: ['sh', '-c', 'until nc -z {{ .Release.Name }}-mongo-svc 27017; do echo "Waiting for mongo..."; sleep 2; done']
+          {{- else }}
           command: ['sh', '-c', 'until nc -z {{ .Release.Name }}-mongo {{ .Values.mongo.service.port }}; do echo "Waiting for mongo..."; sleep 2; done']
+          {{- end }}
           securityContext:
             {{- toYaml .Values.backend.securityContext | nindent 12 }}
           resources:
@@ -508,6 +514,17 @@ spec:
                   name: {{ .Release.Name }}-depictio-secrets
                   key: DEPICTIO_BOOTSTRAP_TEST_USER_PASSWORD
                   optional: true
+            {{- if .Values.mongo.useOperator }}
+            - name: DEPICTIO_MONGODB_USERNAME
+              value: {{ .Values.mongo.auth.username | quote }}
+            - name: DEPICTIO_MONGODB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-mongo-password
+                  key: password
+            - name: DEPICTIO_MONGODB_REPLICA_SET
+              value: "rs0"
+            {{- end }}
             - name: WATCHFILES_FORCE_POLLING
               value: "true"
             - name: PYTHONUNBUFFERED
@@ -608,6 +625,15 @@ spec:
       securityContext:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      initContainers:
+        - name: wait-for-backend
+          image: "{{ .Values.initContainerImage.repository }}:{{ .Values.initContainerImage.tag }}"
+          imagePullPolicy: {{ .Values.initContainerImage.pullPolicy }}
+          command: ['sh', '-c', 'until nc -z {{ .Release.Name }}-depictio-backend {{ .Values.backend.service.httpPort }}; do echo "Waiting for backend..."; sleep 2; done']
+          securityContext:
+            {{- toYaml .Values.viewer.securityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.initContainerResources | nindent 12 }}
       containers:
         - name: depictio-viewer
           image: "{{ .Values.viewer.image.repository }}:{{ .Values.viewer.image.tag }}"
@@ -709,7 +735,11 @@ spec:
         - name: wait-for-mongo
           image: "{{ .Values.initContainerImage.repository }}:{{ .Values.initContainerImage.tag }}"
           imagePullPolicy: {{ .Values.initContainerImage.pullPolicy }}
+          {{- if .Values.mongo.useOperator }}
+          command: ['sh', '-c', 'until nc -z {{ .Release.Name }}-mongo-svc 27017; do echo "Waiting for mongo..."; sleep 2; done']
+          {{- else }}
           command: ['sh', '-c', 'until nc -z {{ .Release.Name }}-mongo {{ .Values.mongo.service.port }}; do echo "Waiting for mongo..."; sleep 2; done']
+          {{- end }}
           securityContext:
             {{- toYaml .Values.celery.securityContext | nindent 12 }}
           resources:
@@ -800,6 +830,17 @@ spec:
                 secretKeyRef:
                   name: {{ .Release.Name }}-depictio-secrets
                   key: MINIO_ROOT_PASSWORD
+            {{- if .Values.mongo.useOperator }}
+            - name: DEPICTIO_MONGODB_USERNAME
+              value: {{ .Values.mongo.auth.username | quote }}
+            - name: DEPICTIO_MONGODB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-mongo-password
+                  key: password
+            - name: DEPICTIO_MONGODB_REPLICA_SET
+              value: "rs0"
+            {{- end }}
             - name: PYTHONUNBUFFERED
               value: "1"
           command:

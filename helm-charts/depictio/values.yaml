@@ -74,6 +74,15 @@ demo:
 
 # MongoDB settings
 mongo:
+  # useOperator: false = self-managed StatefulSet (default, no auth, single or multi-replica)
+  # useOperator: true  = MongoDB Community Operator manages the replica set (requires operator pre-installed)
+  useOperator: false
+  auth:
+    enabled: false      # Enable SCRAM auth (required when useOperator: true)
+    username: depictio
+    # password must be supplied via a separate secrets values file — never commit it.
+    # The operator reads it from the {release}-mongo-password Secret (key: password).
+    password: ""
   image:
     repository: mongo
     # Pinned to a specific 8.x release — :latest is mutable and was a CI/supply-chain
@@ -88,6 +97,15 @@ mongo:
     limits:
       memory: "1Gi"
       cpu: "1"
+  # Resources for the mongodb-agent sidecar injected by the Community Operator.
+  # Only used when mongo.useOperator: true.
+  agentResources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "200m"
+      memory: "512Mi"
   service:
     type: ClusterIP
     port: 27018
@@ -112,6 +130,9 @@ mongo:
 # Redis settings
 redis:
   enabled: true
+  # useOperator: false = self-managed StatefulSet (default)
+  # Reserved for future Sentinel/Cluster operator support.
+  useOperator: false
   image:
     repository: redis
     tag: "8.2.1"

@@ -78,7 +78,13 @@ backend:
 
 
 mongo:
-  replicas: 1  # Temporarily single replica to get system working
+  useOperator: true     # Use MongoDB Community Operator for HA replica set
+  replicas: 3           # 3-member replica set managed by the operator
+  auth:
+    enabled: true
+    username: depictio
+    # password must be set in values-embl-secrets.yaml (never commit)
+    password: ""
   image:
     pullPolicy: Always
   resources:
@@ -86,8 +92,20 @@ mongo:
       memory: "1Gi"
       cpu: "500m"
     limits:
-      memory: "2Gi"
-      cpu: "1"
+      memory: "1Gi"     # Reduced: demo data is small, keep budget for backend/celery
+      cpu: "500m"
+  agentResources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "200m"       # Reduced: agent sidecar is lightweight
+      memory: "512Mi"
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 999
+    runAsGroup: 999
+    fsGroup: 999
   securityContext:
     runAsNonRoot: true
     runAsUser: 999

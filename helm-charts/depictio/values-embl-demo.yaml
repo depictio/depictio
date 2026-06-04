@@ -18,10 +18,10 @@
 # bootstrapAdminPassword is unset — that's the fail-fast contract.
 #
 # Tenant quota: 32 CPU / 64 GiB / 30 pods, shared with values-embl-demo-dev.yaml
-# Per-env target: ~6 CPU / 12 GiB requests, ~14 CPU / 28 GiB limits — two
-# envs sum to ~28 / 56 limits with margin for mongo-init / wipe-job hooks.
-# Same rebalance rationale as the dev env values file — see header there
-# for details.
+# With MongoDB HA via Community Operator (3 replicas × 2 envs = 6 pods):
+#   MongoDB limits: 6 × (0.5 CPU + 0.2 agent) = 4.2 CPU / 9 GiB
+#   Both envs combined limits: ~28 CPU / ~53 GiB — within 32/64 quota.
+# See values-embl-demo-dev.yaml header for full budget breakdown.
 
 # Demo environment configuration - auto-wipe on upgrades
 demo:
@@ -41,19 +41,20 @@ podDisruptionBudget:
   enabled: true
   minAvailable: 1
 
-# Celery worker — biggest share of the budget because it's the
-# advanced-viz compute bottleneck. Threads pool so polars C-extension
-# compute scales past the GIL.
+# Celery worker — advanced-viz compute bottleneck (Playwright screenshots,
+# polars C-extension compute). Limits reduced from 8→5 CPU / 16→10Gi to fit
+# both demo+devdemo within the 32 CPU / 64 GiB tenant ResourceQuota when
+# MongoDB HA (3 replicas × 2 deployments = 6 pods) is running in parallel.
 celery:
   enabled: true
-  replicas: 1   # multi-replica celery not validated yet on this chart
+  replicas: 1
   resources:
     requests:
       memory: "6Gi"
       cpu: "3"
     limits:
-      memory: "16Gi"
-      cpu: "8"
+      memory: "10Gi"
+      cpu: "5"
   env:
     DEPICTIO_CELERY_WORKERS: "8"  # parallel tasks per worker
 
