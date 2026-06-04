@@ -151,7 +151,15 @@ export async function uiLogout(page: Page): Promise<void> {
 }
 
 /**
+ * Process-level token cache — one apiLogin call per user per test worker run.
+ * Avoids 429 rate-limiting when many tests log in as the same user in sequence.
+ * Tokens are valid for the duration of the run; no expiry tracking needed here.
+ */
+const _tokenCache = new Map<UserType, TokenBundle>();
+
+/**
  * Convenience: programmatic login + storage seed.
+ * Re-uses a cached token if already fetched in this worker to avoid rate limits.
  */
 export async function loginAsTestUser(
   page: Page,
@@ -159,7 +167,11 @@ export async function loginAsTestUser(
   userType: UserType = "testUser",
 ): Promise<TestUser> {
   const user = credentials[userType];
-  const tokens = await apiLogin(request, user.email, user.password);
+  let tokens = _tokenCache.get(userType);
+  if (!tokens) {
+    tokens = await apiLogin(request, user.email, user.password);
+    _tokenCache.set(userType, tokens);
+  }
   await seedTokenInStorage(page, tokens);
   return user;
 }
