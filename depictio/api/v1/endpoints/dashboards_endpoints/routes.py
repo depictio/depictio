@@ -36,7 +36,7 @@ dashboards_endpoint_router = APIRouter()
 
 # Screenshots PVC mount inside the backend container; bundled image ships
 # default PNGs here for the seeded reference dashboards.
-_SCREENSHOTS_DIR = "/app/depictio/dash/static/screenshots"
+_SCREENSHOTS_DIR = "/app/depictio/api/static/screenshots"
 # Mirrors the Dash auto-screenshot callback's 1h heuristic so the two
 # trigger sites agree on "stale".
 _SCREENSHOT_STALE_AFTER_S = 3600
