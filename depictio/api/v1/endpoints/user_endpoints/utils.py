@@ -8,8 +8,9 @@ from bson import ObjectId
 from fastapi import HTTPException
 from pydantic import validate_call
 
-from depictio.api.v1.configs.config import ALGORITHM, PRIVATE_KEY
+from depictio.api.v1.configs.config import ALGORITHM, PRIVATE_KEY_PATH
 from depictio.api.v1.configs.logging_init import logger
+from depictio.api.v1.key_utils import get_private_key
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 from depictio.models.models.users import (
     Group,
@@ -168,7 +169,7 @@ async def create_access_token(
     to_encode = token_data.model_dump()
     expire = datetime.now() + expires_delta
     to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, PRIVATE_KEY, algorithm=ALGORITHM)
+    encoded_jwt = jwt.encode(to_encode, get_private_key(PRIVATE_KEY_PATH), algorithm=ALGORITHM)
     return encoded_jwt, expire
 
 

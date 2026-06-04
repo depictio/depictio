@@ -1,11 +1,6 @@
 from depictio.api.v1.configs.logging_init import initialize_loggers
 from depictio.api.v1.configs.settings_models import Settings
-from depictio.api.v1.key_utils import (
-    check_and_generate_keys,
-    generate_keys,
-    load_private_key,
-    load_public_key,
-)
+from depictio.api.v1.key_utils import check_and_generate_keys
 
 # Explicitly load environment variables
 # load_dotenv(BASE_PATH.parent / ".env", override=False)
@@ -42,35 +37,18 @@ _KEYS_DIR = settings.auth.keys_dir
 # Algorithm used for signing
 ALGORITHM = settings.auth.keys_algorithm
 
-# Lazy-loaded settings and paths
-_KEYS_DIR = settings.auth.keys_dir
-DEFAULT_PRIVATE_KEY_PATH = None
-DEFAULT_PUBLIC_KEY_PATH = None
+# Generate keys only if missing (file-locked to avoid races between workers
+# sharing the keys volume). Key rotation is done by deleting the keys dir
+# (e.g. the Helm demo wipe-job removes the keys PVC pre-upgrade) — never by
+# wiping at import time: with >1 replica each pod would wipe the others' keys
+# and end up holding a different in-memory pair, so ~half of all JWTs would
+# be rejected with "Signature verification failed".
+check_and_generate_keys(keys_dir=_KEYS_DIR, algorithm=ALGORITHM)
 
-# Use check_and_generate_keys to avoid race conditions between workers
-# Only use generate_keys with wipe when explicitly requested
-if bool(settings.mongodb.wipe):
-    # When wiping, we need to regenerate keys
-    generate_keys(
-        private_key_path=DEFAULT_PRIVATE_KEY_PATH,
-        public_key_path=DEFAULT_PUBLIC_KEY_PATH,
-        keys_dir=_KEYS_DIR,
-        algorithm=ALGORITHM,
-        wipe=True,
-    )
-else:
-    # Normal case: only generate if keys don't exist (prevents race condition)
-    check_and_generate_keys(
-        private_key_path=DEFAULT_PRIVATE_KEY_PATH,
-        public_key_path=DEFAULT_PUBLIC_KEY_PATH,
-        keys_dir=_KEYS_DIR,
-        algorithm=ALGORITHM,
-    )
-
-PRIVATE_KEY = load_private_key(
-    settings.auth.keys_dir / "private_key.pem"
-)  # Load private key from file
-PUBLIC_KEY = load_public_key(settings.auth.keys_dir / "public_key.pem")  # Load public key from file
+# Canonical key file locations — consumers load keys via
+# key_utils.get_private_key / get_public_key, which re-read on file change.
+PRIVATE_KEY_PATH = _KEYS_DIR / "private_key.pem"
+PUBLIC_KEY_PATH = _KEYS_DIR / "public_key.pem"
 
 # Generate/load the internal API key during startup (creates api_internal_key.pem file)
 # This ensures the key file exists before other services (frontend, celery) need it
