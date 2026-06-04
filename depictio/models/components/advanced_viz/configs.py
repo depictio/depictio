@@ -247,6 +247,14 @@ class RarefactionConfig(_BaseVizConfig):
     sample_id_col: str = Field(default="sample_id", description="Sample identifier column")
     depth_col: str = Field(default="depth", description="Subsampling depth (x axis)")
     metric_col: str = Field(default="metric", description="Alpha-diversity metric value (y axis)")
+    metric_options: list[str] | None = Field(
+        default=None,
+        description=(
+            "Metric columns the renderer's tab-strip lets the user switch between "
+            "(each an alternative y-axis, e.g. shannon / observed_features / faith_pd). "
+            "Omit to show only metric_col."
+        ),
+    )
     iter_col: str | None = Field(
         default=None,
         description="Iteration column to aggregate over (mean / CI). Omit if already averaged.",

@@ -435,13 +435,9 @@ tabs:
     title: Evenness (distribution)
   - component_type: advanced_viz
     workflow_tag: ampliseq
-    viz_kind: rarefaction
+    use: qiime2/rarefaction
     data_collection_tag: rarefaction_canonical
     config:
-      viz_kind: rarefaction
-      sample_id_col: sample_id
-      depth_col: depth
-      metric_col: shannon
       iter_col: iter
       group_col: group
       metric_options:
