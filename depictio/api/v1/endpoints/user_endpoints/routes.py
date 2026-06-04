@@ -1,6 +1,6 @@
 import hmac
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Annotated, Any
 
 from beanie import PydanticObjectId
@@ -227,6 +227,26 @@ async def create_token(
     return token
 
 
+async def _rearm_temporary_user_expiry(user: UserBeanie | None) -> None:
+    """Slide a temporary (public/demo) user's TTL on each token refresh.
+
+    Public/demo visitors are minted a temporary user whose ``expiration_time``
+    governs when ``_cleanup_expired_temporary_users`` deletes them. Re-arming the
+    TTL whenever an active session refreshes its access token keeps a still-browsing
+    visitor authorized for the duration of their session, so they never lapse back
+    to the ``anonymous`` fallback identity mid-session. Abandoned sessions stop
+    refreshing and lapse after the window (bounded by the 7-day refresh token).
+    Non-temporary users are left untouched.
+    """
+    if user is None or not getattr(user, "is_temporary", False):
+        return
+    user.expiration_time = datetime.now() + timedelta(
+        hours=settings.auth.temporary_user_expiry_hours,
+        minutes=settings.auth.temporary_user_expiry_minutes,
+    )
+    await user.save()
+
+
 @auth_endpoint_router.post("/refresh", include_in_schema=True)
 async def refresh_token_browser(request: dict) -> dict:
     """Browser-safe refresh: uses the refresh token as the only credential.
@@ -269,6 +289,9 @@ async def refresh_token_browser(request: dict) -> dict:
     token_doc.access_token = new_access_token
     token_doc.expire_datetime = expire_datetime
     await token_doc.save()
+
+    # Keep an active public/demo visitor authorized for the duration of their session.
+    await _rearm_temporary_user_expiry(user)
 
     return {
         "access_token": new_access_token,
@@ -313,6 +336,9 @@ async def refresh_token_endpoint(
     token_doc.access_token = new_access_token
     token_doc.expire_datetime = expire_datetime
     await token_doc.save()
+
+    # Keep an active public/demo visitor authorized for the duration of their session.
+    await _rearm_temporary_user_expiry(user)
 
     return {"access_token": new_access_token, "expire_datetime": token_doc.expire_datetime}
 
