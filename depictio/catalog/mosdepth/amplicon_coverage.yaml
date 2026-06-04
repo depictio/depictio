@@ -12,5 +12,5 @@ columns:
   sample: String
 fixture: amplicon_coverage.tsv
 renders_as:
-  - { component: advanced_viz, id: coverage_track_amplicon, kind: coverage_track, roles: {chromosome: chrom, position: start, value: coverage} }
+  - { id: coverage_track_amplicon, component: advanced_viz, kind: coverage_track, roles: {chromosome: chrom, position: start, value: coverage} }
   - { component: card, column: coverage, aggregation: average } # mean amplicon depth

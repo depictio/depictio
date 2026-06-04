@@ -6,4 +6,4 @@ find: { path_glob: "**/qiime2/barplot/level-*.csv" }
 recipe: qiime2/taxonomy_composition.py
 fixture: taxa_barplot.tsv
 renders_as:
-  - { component: advanced_viz, id: stacked_taxonomy_barplot, kind: stacked_taxonomy, roles: {sample_id: sample, taxon: taxonomy, abundance: count} }
+  - { id: stacked_taxonomy_barplot, component: advanced_viz, kind: stacked_taxonomy, roles: {sample_id: sample, taxon: taxonomy, abundance: count} }
