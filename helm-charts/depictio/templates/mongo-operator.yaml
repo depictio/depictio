@@ -1,6 +1,6 @@
 {{- if .Values.mongo.useOperator }}
-# MongoDB password Secret — read by the Community Operator to generate SCRAM
-# credentials, and injected into backend/celery as DEPICTIO_MONGODB_PASSWORD.
+# MongoDB password Secret — read by the Percona PSMDB Operator to create the
+# database user, and injected into backend/celery as DEPICTIO_MONGODB_PASSWORD.
 apiVersion: v1
 kind: Secret
 metadata:
@@ -13,30 +13,50 @@ type: Opaque
 stringData:
   password: {{ required "mongo.auth.password is required when mongo.useOperator is true" .Values.mongo.auth.password | quote }}
 ---
-# MongoDBCommunity CR — reconciled by the MongoDB Community Kubernetes Operator.
-# Pre-requisite: install the operator namespace-scoped in this namespace:
-#   helm install community-operator mongodb/community-operator \
-#     --namespace <ns> --set operator.watchNamespace=<ns>
-apiVersion: mongodbcommunity.mongodb.com/v1
-kind: MongoDBCommunity
+# PerconaServerMongoDB CR — reconciled by the Percona PSMDB Kubernetes Operator.
+# Pre-requisite: operator must be installed by cluster admin (cluster-scoped or
+# namespace-scoped). Contact IT to confirm it is available in this namespace.
+apiVersion: psmdb.percona.com/v1
+kind: PerconaServerMongoDB
 metadata:
   name: {{ .Release.Name }}-mongo
   namespace: {{ .Release.Namespace }}
   labels:
     app: mongo
     release: {{ .Release.Name }}
+  finalizers:
+    - delete-psmdb-pods-in-order
 spec:
-  members: {{ .Values.mongo.replicas | default 3 }}
-  type: ReplicaSet
-  version: {{ .Values.mongo.image.tag | quote }}
-  security:
-    authentication:
-      modes: ["SCRAM"]
+  image: "{{ .Values.mongo.image.repository }}:{{ .Values.mongo.image.tag }}"
+  imagePullPolicy: {{ .Values.mongo.image.pullPolicy }}
+  clusterServiceDNSSuffix: {{ .Values.mongo.clusterServiceDNSSuffix | default "svc.cluster.local" | quote }}
+  allowUnsafeConfigurations: true
+  tls:
+    mode: disabled
+  replsets:
+    - name: rs0
+      size: {{ .Values.mongo.replicas | default 3 }}
+      resources:
+        requests:
+          cpu: {{ .Values.mongo.resources.requests.cpu | quote }}
+          memory: {{ .Values.mongo.resources.requests.memory | quote }}
+        limits:
+          cpu: {{ .Values.mongo.resources.limits.cpu | quote }}
+          memory: {{ .Values.mongo.resources.limits.memory | quote }}
+      volumeSpec:
+        persistentVolumeClaim:
+          storageClassName: {{ .Values.storageClass }}
+          resources:
+            requests:
+              storage: {{ .Values.persistence.mongo.size }}
+      podDisruptionBudget:
+        maxUnavailable: 1
   users:
     - name: {{ .Values.mongo.auth.username }}
       db: admin
       passwordSecretRef:
         name: {{ .Release.Name }}-mongo-password
+        key: password
       roles:
         - name: clusterAdmin
           db: admin
@@ -44,41 +64,9 @@ spec:
           db: admin
         - name: dbAdminAnyDatabase
           db: admin
-      scramCredentialsSecretName: {{ .Release.Name }}-mongo-scram
-  statefulSet:
-    spec:
-      selector: {}
-      template:
-        spec:
-          containers:
-            - name: mongod
-              resources:
-                requests:
-                  cpu: {{ .Values.mongo.resources.requests.cpu | quote }}
-                  memory: {{ .Values.mongo.resources.requests.memory | quote }}
-                limits:
-                  cpu: {{ .Values.mongo.resources.limits.cpu | quote }}
-                  memory: {{ .Values.mongo.resources.limits.memory | quote }}
-            - name: mongodb-agent
-              resources:
-                requests:
-                  cpu: {{ .Values.mongo.agentResources.requests.cpu | default "100m" | quote }}
-                  memory: {{ .Values.mongo.agentResources.requests.memory | default "256Mi" | quote }}
-                limits:
-                  cpu: {{ .Values.mongo.agentResources.limits.cpu | default "200m" | quote }}
-                  memory: {{ .Values.mongo.agentResources.limits.memory | default "512Mi" | quote }}
-          securityContext:
-            runAsNonRoot: {{ .Values.mongo.podSecurityContext.runAsNonRoot | default true }}
-            runAsUser: {{ .Values.mongo.podSecurityContext.runAsUser }}
-            runAsGroup: {{ .Values.mongo.podSecurityContext.runAsGroup }}
-            fsGroup: {{ .Values.mongo.podSecurityContext.fsGroup }}
-      volumeClaimTemplates:
-        - metadata:
-            name: data-volume
-          spec:
-            accessModes: ["ReadWriteOnce"]
-            storageClassName: {{ .Values.storageClass }}
-            resources:
-              requests:
-                storage: {{ .Values.persistence.mongo.size }}
+  backup:
+    enabled: false
+    image: "percona/percona-backup-mongodb:2.4.1"
+  sharding:
+    enabled: false
 {{- end }}
