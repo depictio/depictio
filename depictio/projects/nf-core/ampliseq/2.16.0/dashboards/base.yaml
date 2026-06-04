@@ -806,15 +806,13 @@ tabs:
     title: Stacked taxonomy (advanced)
   - component_type: advanced_viz
     workflow_tag: ampliseq
-    viz_kind: sunburst
+    use: qiime2/sunburst_taxonomy
     data_collection_tag: sunburst_canonical
     config:
-      viz_kind: sunburst
       rank_cols:
       - Kingdom
       - Phylum
       - Class
-      abundance_col: abundance
       category_palette:
         Riverwater: '#377EB8'
         Groundwater: '#4DAF4A'
