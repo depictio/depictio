@@ -35,6 +35,12 @@ export function formatLastSaved(raw: string): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+/** Generic placeholder shown when a dashboard has no screenshot yet (e.g. a
+ *  freshly created dashboard before the first auto-screenshot run). Shipped
+ *  with the backend image and served by the FastAPI /assets StaticFiles
+ *  mount; both the vite dev proxy and the prod nginx forward /assets/. */
+export const DEFAULT_THUMBNAIL_URL = '/assets/images/backgrounds/default_thumbnail.png';
+
 export function screenshotUrl(
   dashboardId: string,
   theme: 'light' | 'dark',

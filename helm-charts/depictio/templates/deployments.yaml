@@ -289,40 +289,6 @@ spec:
       securityContext:
         {{- toYaml .Values.backend.podSecurityContext | nindent 8 }}
       initContainers:
-        # Generate new ObjectId and create updated config files in writable volume
-        - name: update-iris-configs
-          image: "{{ .Values.backend.image.repository }}:{{ .Values.backend.image.tag }}"
-          imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
-          command: ["/bin/sh"]
-          args:
-          - -c
-          - |
-            echo "Creating updated iris dataset configs with new ObjectId..."
-
-            # Generate a new ObjectId to replace the hardcoded one
-            old_id="646b0f3c1e4a2d7f8e5b8c9c"
-            new_id=$(python3 -c "from bson import ObjectId; print(str(ObjectId()))")
-
-            echo "Replacing $old_id with $new_id"
-
-            # Copy the entire iris_dataset directory to writable volume
-            cp -r /app/depictio/api/v1/configs/iris_dataset /iris-config/
-
-            # Update the ObjectIds in the copied files
-            sed -i "s/$old_id/$new_id/g" /iris-config/iris_dataset/initial_dashboard.json
-            sed -i "s/$old_id/$new_id/g" /iris-config/iris_dataset/initial_project.yaml
-
-            echo "Updated iris configs created in /iris-config/ with ObjectId: $new_id"
-            echo "Files updated:"
-            echo "  - /iris-config/iris_dataset/initial_dashboard.json"
-            echo "  - /iris-config/iris_dataset/initial_project.yaml"
-          securityContext:
-            {{- toYaml .Values.backend.securityContext | nindent 12 }}
-          resources:
-            {{- toYaml .Values.initContainerResources | nindent 12 }}
-          volumeMounts:
-            - name: iris-config-volume
-              mountPath: /iris-config
         {{- if .Values.local_development }}
         - name: fix-permissions
           image: "{{ .Values.initContainerImage.repository }}:{{ .Values.initContainerImage.tag }}"
@@ -544,9 +510,6 @@ spec:
               mountPath: /app/depictio/.depictio
             - name: depictio-uploads
               mountPath: /tmp/depictio-uploads
-            - name: iris-config-volume
-              mountPath: /app/depictio/api/v1/configs/iris_dataset
-              subPath: iris_dataset
             {{- if .Values.local_development }}
             # DEV ONLY: mount the depictio source code for development
             ## Use minikube mount or similar to mount the local source code
@@ -566,8 +529,6 @@ spec:
         - name: depictio-uploads
           persistentVolumeClaim:
             claimName: {{ .Release.Name }}-depictio-uploads-pvc
-        - name: iris-config-volume
-          emptyDir: {}
         {{- if .Values.local_development }}
         # DEV ONLY: mount the depictio source code for development
         ## Use minikube mount or similar to mount the local source code

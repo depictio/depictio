@@ -7,9 +7,10 @@ from fastapi import HTTPException
 from jwt import ExpiredSignatureError, InvalidTokenError
 from pydantic import EmailStr, validate_call
 
-from depictio.api.v1.configs.config import ALGORITHM, PUBLIC_KEY, settings
+from depictio.api.v1.configs.config import ALGORITHM, PUBLIC_KEY_PATH, settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.endpoints.user_endpoints.utils import create_access_token
+from depictio.api.v1.key_utils import get_public_key
 from depictio.models.models.base import PyObjectId
 from depictio.models.models.users import TokenBase, TokenBeanie, TokenData, UserBeanie
 
@@ -328,7 +329,7 @@ async def _async_fetch_user_from_token(token: str) -> UserBeanie | None:
         # algorithm-confusion vulnerabilities.
         jwt.decode(
             token,
-            PUBLIC_KEY,
+            get_public_key(PUBLIC_KEY_PATH),
             algorithms=[ALGORITHM],
             options={"require": ["exp"]},
         )

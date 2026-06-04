@@ -318,6 +318,54 @@ def load_public_key(public_key_path: Path) -> RSAPublicKey:
         raise
 
 
+# Keys can live on a volume shared by several pods/workers. Module-level
+# constants snapshot whatever was on disk at import time, so a pod whose key
+# pair gets overwritten by a sibling (e.g. two replicas generating keys on an
+# empty shared volume) keeps signing/verifying with stale keys forever. These
+# accessors re-read the PEM file whenever its mtime changes, so every pod
+# converges on the on-disk pair.
+_private_key_cache: dict[str, tuple[float, RSAPrivateKey]] = {}
+_public_key_cache: dict[str, tuple[float, RSAPublicKey]] = {}
+
+
+def get_private_key(private_key_path: Path) -> RSAPrivateKey:
+    """Load a private key, re-reading from disk when the file changes."""
+    path = str(private_key_path)
+    cached = _private_key_cache.get(path)
+    try:
+        mtime = os.stat(path).st_mtime
+    except OSError:
+        # Transient volume hiccup (or a wipe-job mid-delete): keep serving
+        # the cached key rather than turning every request into a 500.
+        if cached is not None:
+            logger.warning(f"Private key file unreadable at {path}; using cached key")
+            return cached[1]
+        raise
+    if cached is None or cached[0] != mtime:
+        cached = (mtime, load_private_key(private_key_path))
+        _private_key_cache[path] = cached
+    return cached[1]
+
+
+def get_public_key(public_key_path: Path) -> RSAPublicKey:
+    """Load a public key, re-reading from disk when the file changes."""
+    path = str(public_key_path)
+    cached = _public_key_cache.get(path)
+    try:
+        mtime = os.stat(path).st_mtime
+    except OSError:
+        # Transient volume hiccup (or a wipe-job mid-delete): keep serving
+        # the cached key rather than turning every request into a 500.
+        if cached is not None:
+            logger.warning(f"Public key file unreadable at {path}; using cached key")
+            return cached[1]
+        raise
+    if cached is None or cached[0] != mtime:
+        cached = (mtime, load_public_key(public_key_path))
+        _public_key_cache[path] = cached
+    return cached[1]
+
+
 @validate_call(validate_return=True)
 def import_keys(
     private_key_content: str,

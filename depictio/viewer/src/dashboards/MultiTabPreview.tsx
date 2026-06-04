@@ -14,6 +14,7 @@ import { Icon } from '@iconify/react';
 
 import type { DashboardListEntry } from 'depictio-react-core';
 import { dashboardHref, dashboardLinkClickHandler } from './lib/dashboardLinks';
+import { DEFAULT_THUMBNAIL_URL } from './lib/format';
 
 interface MultiTabPreviewProps {
   parent: DashboardListEntry;
@@ -58,8 +59,10 @@ const SlideImage: React.FC<{
   theme: 'light' | 'dark';
   iconSize: number;
 }> = ({ slide, theme, iconSize }) => {
-  const [errored, setErrored] = useState(false);
-  if (errored) {
+  // Fallback chain: real screenshot → shared default thumbnail → icon
+  // (last resort if the default asset itself fails to load).
+  const [fallback, setFallback] = useState<'none' | 'default' | 'icon'>('none');
+  if (fallback === 'icon') {
     return (
       <Center h="100%" w="100%" bg="var(--mantine-color-default-hover)">
         <ThemeIcon size={iconSize} variant="light" color={slide.color} radius="md">
@@ -71,12 +74,16 @@ const SlideImage: React.FC<{
   const versionQuery = slide.version ? `?v=${encodeURIComponent(slide.version)}` : '';
   return (
     <img
-      key={`${theme}-${slide.version ?? ''}`}
-      src={`/static/screenshots/${slide.id}_${theme}.png${versionQuery}`}
+      key={`${theme}-${slide.version ?? ''}-${fallback}`}
+      src={
+        fallback === 'default'
+          ? DEFAULT_THUMBNAIL_URL
+          : `/static/screenshots/${slide.id}_${theme}.png${versionQuery}`
+      }
       alt={slide.title}
       loading="lazy"
       decoding="async"
-      onError={() => setErrored(true)}
+      onError={() => setFallback(fallback === 'none' ? 'default' : 'icon')}
       style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
     />
   );

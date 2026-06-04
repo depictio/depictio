@@ -24,6 +24,7 @@ import MultiTabPreview from './MultiTabPreview';
 import DashboardActionsMenu from './DashboardActionsMenu';
 import {
   coerceString,
+  DEFAULT_THUMBNAIL_URL,
   formatLastSaved,
   isImagePath,
   resolveAssetUrl,
@@ -56,11 +57,13 @@ const SingleThumbnail: React.FC<{
   dashboard: DashboardListEntry;
   theme: 'light' | 'dark';
 }> = ({ dashboard, theme }) => {
-  const [errored, setErrored] = useState(false);
+  // Fallback chain: real screenshot → shared default thumbnail → icon
+  // (last resort if the default asset itself fails to load).
+  const [fallback, setFallback] = useState<'none' | 'default' | 'icon'>('none');
   const icon = coerceString(dashboard.icon, 'mdi:view-dashboard');
   const color = coerceString(dashboard.icon_color, 'orange');
 
-  if (errored) {
+  if (fallback === 'icon') {
     return (
       <Center h="100%" w="100%" bg="var(--mantine-color-default-hover)">
         <ThemeIcon size={64} variant="light" color={color} radius="md">
@@ -71,12 +74,16 @@ const SingleThumbnail: React.FC<{
   }
   return (
     <img
-      key={`${theme}-${dashboard.last_saved_ts ?? ''}`}
-      src={screenshotUrl(dashboard.dashboard_id, theme, dashboard.last_saved_ts)}
+      key={`${theme}-${dashboard.last_saved_ts ?? ''}-${fallback}`}
+      src={
+        fallback === 'default'
+          ? DEFAULT_THUMBNAIL_URL
+          : screenshotUrl(dashboard.dashboard_id, theme, dashboard.last_saved_ts)
+      }
       alt={dashboard.title || dashboard.dashboard_id}
       loading="lazy"
       decoding="async"
-      onError={() => setErrored(true)}
+      onError={() => setFallback(fallback === 'none' ? 'default' : 'icon')}
       style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
     />
   );
@@ -144,6 +151,9 @@ const DashboardCard: React.FC<DashboardCardProps> = ({
     theme,
     dashboard.last_saved_ts,
   );
+  // Same fallback chain as SingleThumbnail for the hover-popover preview:
+  // real screenshot → default thumbnail → no popover image at all.
+  const [popoverFallback, setPopoverFallback] = useState<'none' | 'default' | 'hidden'>('none');
 
   return (
     <Card
@@ -232,24 +242,36 @@ const DashboardCard: React.FC<DashboardCardProps> = ({
                   <SingleThumbnail dashboard={dashboard} theme={theme} />
                 </UnstyledButton>
               </HoverCard.Target>
-              <HoverCard.Dropdown p={0} style={{ overflow: 'hidden' }}>
-                <Box w={720}>
-                  <AspectRatio ratio={16 / 10}>
-                    <img
-                      src={thumbnailSrc}
-                      alt=""
-                      loading="lazy"
-                      decoding="async"
-                      style={{
-                        width: '100%',
-                        height: '100%',
-                        objectFit: 'cover',
-                        display: 'block',
-                      }}
-                    />
-                  </AspectRatio>
-                </Box>
-              </HoverCard.Dropdown>
+              {popoverFallback !== 'hidden' && (
+                <HoverCard.Dropdown p={0} style={{ overflow: 'hidden' }}>
+                  <Box w={720}>
+                    <AspectRatio ratio={16 / 10}>
+                      <img
+                        key={`${thumbnailSrc}-${popoverFallback}`}
+                        src={
+                          popoverFallback === 'default'
+                            ? DEFAULT_THUMBNAIL_URL
+                            : thumbnailSrc
+                        }
+                        alt=""
+                        loading="lazy"
+                        decoding="async"
+                        onError={() =>
+                          setPopoverFallback(
+                            popoverFallback === 'none' ? 'default' : 'hidden',
+                          )
+                        }
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'cover',
+                          display: 'block',
+                        }}
+                      />
+                    </AspectRatio>
+                  </Box>
+                </HoverCard.Dropdown>
+              )}
             </HoverCard>
           )}
         </AspectRatio>
