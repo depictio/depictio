@@ -1,4 +1,3 @@
-version: 1
 main_dashboard:
   title: nf-core/ampliseq
   subtitle: MultiQC Analysis - Cutadapt & FastQC
@@ -11,94 +10,33 @@ main_dashboard:
   workflow_system: nf-core
   dashboard_id: 646b0f3c1e4a2d7f8e5b8ca2
   components:
-  - component_type: multiqc
+  - component_type: text
     workflow_tag: ampliseq
-    data_collection_tag: multiqc_data
-    selected_module: general_stats
-    selected_plot: general_stats
-    tag: multiqc-general_stats-table-a1c3f7
+    title_size: sm
+    title_align: left
+    order: 1
+    alignment: left
+    tag: text-multiqc-section-header-47c567
+    index: multiqc-section-header
     layout:
       x: 0
       y: 0
       w: 8
-      h: 5
-  - component_type: multiqc
-    workflow_tag: ampliseq
-    data_collection_tag: multiqc_data
-    selected_module: cutadapt
-    selected_plot: Filtered Reads
-    tag: multiqc-cutadapt_filtered-reads-d421ae
-    layout:
-      x: 0
-      y: 5
-      w: 8
-      h: 4
-  - component_type: multiqc
-    workflow_tag: ampliseq
-    data_collection_tag: multiqc_data
-    selected_module: fastqc
-    selected_plot: Sequence Counts
-    tag: multiqc-fastqc_sequence-counts-52bd04
-    layout:
-      x: 0
-      y: 9
-      w: 8
-      h: 4
-  - component_type: multiqc
-    workflow_tag: ampliseq
-    data_collection_tag: multiqc_data
-    selected_module: fastqc
-    selected_plot: Sequence Quality Histograms
-    tag: multiqc-fastqc_sequence-quality-histograms-ce2a02
-    layout:
-      x: 0
-      y: 13
-      w: 4
-      h: 5
-  - component_type: multiqc
-    workflow_tag: ampliseq
-    data_collection_tag: multiqc_data
-    selected_module: fastqc
-    selected_plot: Per Sequence GC Content
-    tag: multiqc-fastqc_per-sequence-gc-content-359f73
-    layout:
-      x: 4
-      y: 13
-      w: 4
-      h: 5
-  - component_type: multiqc
-    workflow_tag: ampliseq
-    data_collection_tag: multiqc_data
-    selected_module: fastqc
-    selected_plot: Adapter Content
-    tag: multiqc-fastqc_adapter-content-6dd1a9
-    layout:
-      x: 0
-      y: 18
-      w: 4
-      h: 5
-  - component_type: multiqc
-    workflow_tag: ampliseq
-    data_collection_tag: multiqc_data
-    selected_module: cutadapt
-    selected_plot: Trimmed Sequence Lengths (5')
-    tag: multiqc-cutadapt_trimmed-sequence-lengths-5-e5e50a
-    layout:
-      x: 4
-      y: 18
-      w: 4
-      h: 5
+      h: 1
+    title: QC Overview
   - component_type: interactive
     workflow_tag: ampliseq
-    data_collection_tag: samplesheet
+    data_collection_tag: metadata
     interactive_component_type: MultiSelect
-    column_name: sampleID
+    column_name: sample
     column_type: object
     display:
       title_size: md
       custom_color: '#45B8AC'
       icon_name: mdi:flask
-    tag: interactive-multiqc-sample-filter-base
+    title_align: left
+    placement: left
+    tag: interactive-multiqc-sample-filter-78c9c2
     index: multiqc-sample-filter
     layout:
       x: 0
@@ -106,22 +44,298 @@ main_dashboard:
       w: 1
       h: 3
     title: Sample ID
+  - component_type: interactive
+    workflow_tag: ampliseq
+    data_collection_tag: metadata
+    interactive_component_type: MultiSelect
+    column_name: habitat
+    column_type: object
+    display:
+      title_size: md
+      custom_color: '#984EA3'
+      icon_name: mdi:earth
+    title_align: left
+    placement: left
+    tag: interactive-multiqc-habitat-filter-d8ca83
+    index: multiqc-habitat-filter
+    layout:
+      x: 0
+      y: 3
+      w: 1
+      h: 2
+    title: Habitat Type
+  - component_type: interactive
+    workflow_tag: ampliseq
+    data_collection_tag: metadata
+    interactive_component_type: DateRangePicker
+    column_name: sampling_date
+    column_type: datetime
+    display:
+      title_size: md
+      custom_color: '#FF6B6B'
+      icon_name: mdi:calendar-range
+    title_align: left
+    placement: left
+    tag: interactive-multiqc-sampling-date-b9d091
+    index: multiqc-sampling-date
+    layout:
+      x: 0
+      y: 5
+      w: 1
+      h: 3
+    title: Sampling Period
+  - component_type: multiqc
+    workflow_tag: ampliseq
+    data_collection_tag: multiqc_data
+    selected_module: general_stats
+    selected_plot: general_stats
+    title_size: sm
+    title_align: left
+    tag: multiqc-general_stats_general_stats-7998d9
+    layout:
+      x: 0
+      y: 1
+      w: 8
+      h: 5
+  - component_type: multiqc
+    workflow_tag: ampliseq
+    data_collection_tag: multiqc_data
+    selected_module: cutadapt
+    selected_plot: Filtered Reads
+    title_size: sm
+    title_align: left
+    tag: multiqc-cutadapt_filtered-reads-d421ae
+    layout:
+      x: 0
+      y: 6
+      w: 8
+      h: 4
+  - component_type: multiqc
+    workflow_tag: ampliseq
+    data_collection_tag: multiqc_data
+    selected_module: fastqc
+    selected_plot: Sequence Counts
+    title_size: sm
+    title_align: left
+    tag: multiqc-fastqc_sequence-counts-52bd04
+    layout:
+      x: 0
+      y: 10
+      w: 8
+      h: 4
+  - component_type: multiqc
+    workflow_tag: ampliseq
+    data_collection_tag: multiqc_data
+    selected_module: fastqc
+    selected_plot: Sequence Quality Histograms
+    title_size: sm
+    title_align: left
+    tag: multiqc-fastqc_sequence-quality-histograms-ce2a02
+    layout:
+      x: 0
+      y: 14
+      w: 4
+      h: 5
+  - component_type: multiqc
+    workflow_tag: ampliseq
+    data_collection_tag: multiqc_data
+    selected_module: fastqc
+    selected_plot: Per Sequence GC Content
+    title_size: sm
+    title_align: left
+    tag: multiqc-fastqc_per-sequence-gc-content-359f73
+    layout:
+      x: 4
+      y: 14
+      w: 4
+      h: 5
+  - component_type: multiqc
+    workflow_tag: ampliseq
+    data_collection_tag: multiqc_data
+    selected_module: fastqc
+    selected_plot: Adapter Content
+    title_size: sm
+    title_align: left
+    tag: multiqc-fastqc_adapter-content-6dd1a9
+    layout:
+      x: 0
+      y: 19
+      w: 4
+      h: 5
+  - component_type: multiqc
+    workflow_tag: ampliseq
+    data_collection_tag: multiqc_data
+    selected_module: cutadapt
+    selected_plot: Trimmed Sequence Lengths (5')
+    title_size: sm
+    title_align: left
+    tag: multiqc-cutadapt_trimmed-sequence-lengths-5-e5e50a
+    layout:
+      x: 4
+      y: 19
+      w: 4
+      h: 5
+  - component_type: multiqc
+    workflow_tag: ampliseq
+    data_collection_tag: multiqc_data
+    selected_module: fastqc
+    selected_plot: Per Sequence Quality Scores
+    title_size: sm
+    title_align: left
+    tag: multiqc-fastqc_per-sequence-quality-scores-d5dc60
+    layout:
+      x: 0
+      y: 24
+      w: 4
+      h: 5
+  - component_type: multiqc
+    workflow_tag: ampliseq
+    data_collection_tag: multiqc_data
+    selected_module: fastqc
+    selected_plot: Sequence Duplication Levels
+    title_size: sm
+    title_align: left
+    tag: multiqc-fastqc_sequence-duplication-levels-0cb646
+    layout:
+      x: 4
+      y: 24
+      w: 4
+      h: 5
+  - component_type: multiqc
+    workflow_tag: ampliseq
+    data_collection_tag: multiqc_data
+    selected_module: fastqc
+    selected_plot: Sequence Length Distribution
+    title_size: sm
+    title_align: left
+    tag: multiqc-fastqc_sequence-length-distribution-bef5ab
+    layout:
+      x: 0
+      y: 29
+      w: 4
+      h: 5
+  - component_type: multiqc
+    workflow_tag: ampliseq
+    data_collection_tag: multiqc_data
+    selected_module: fastqc
+    selected_plot: Status Checks
+    title_size: sm
+    title_align: left
+    tag: multiqc-fastqc_status-checks-d33968
+    layout:
+      x: 0
+      y: 44
+      w: 8
+      h: 6
+  - component_type: multiqc
+    workflow_tag: ampliseq
+    data_collection_tag: multiqc_data
+    selected_module: fastqc
+    selected_plot: Per Base N Content
+    title_size: sm
+    title_align: left
+    tag: multiqc-fastqc_per-base-n-content-c4a783
+    layout:
+      x: 4
+      y: 34
+      w: 4
+      h: 5
+  - component_type: multiqc
+    workflow_tag: ampliseq
+    data_collection_tag: multiqc_data
+    selected_module: fastqc
+    selected_plot: Top overrepresented sequences
+    title_size: sm
+    title_align: left
+    tag: multiqc-fastqc_top-overrepresented-sequences-d870e3
+    layout:
+      x: 0
+      y: 39
+      w: 4
+      h: 5
+  - component_type: multiqc
+    workflow_tag: ampliseq
+    data_collection_tag: multiqc_data
+    selected_module: fastqc
+    selected_plot: Overrepresented sequences by sample
+    title_size: sm
+    title_align: left
+    tag: multiqc-fastqc_overrepresented-sequences-by-sample-687553
+    layout:
+      x: 4
+      y: 39
+      w: 4
+      h: 5
 tabs:
-- title: Community Analysis
-  subtitle: Taxonomic Composition
+- title: Alpha Diversity
+  subtitle: Within-sample richness, evenness, phylogenetic spread — rarefaction + per-habitat boxplots
   tab_order: 1
-  tab_icon: mdi:bacteria-outline
-  tab_icon_color: teal
+  tab_icon: mdi:chart-bell-curve
+  tab_icon_color: orange
   icon: /assets/images/workflows/nf-core.png
   icon_color: green
   workflow_system: nf-core
-  dashboard_id: 646b0f3c1e4a2d7f8e5b8cb5
+  dashboard_id: 646b0f3c1e4a2d7f8e5b8cbe
   components:
+  - component_type: text
+    workflow_tag: ampliseq
+    title_size: sm
+    title_align: left
+    order: 1
+    alignment: left
+    tag: text-alpha-section-header-78cb12
+    index: alpha-section-header
+    layout:
+      x: 0
+      y: 0
+      w: 8
+      h: 1
+    title: Within-Sample Diversity
+  - component_type: interactive
+    workflow_tag: ampliseq
+    data_collection_tag: alpha_diversity_multi_canonical
+    interactive_component_type: MultiSelect
+    column_name: sample_id
+    column_type: object
+    display:
+      title_size: md
+      custom_color: '#45B8AC'
+      icon_name: mdi:flask
+    title_align: left
+    placement: left
+    tag: interactive-alpha-sample-filter-235a5d
+    index: alpha-sample-filter
+    layout:
+      x: 0
+      y: 0
+      w: 1
+      h: 3
+    title: Sample ID
+  - component_type: interactive
+    workflow_tag: ampliseq
+    data_collection_tag: alpha_diversity_multi_canonical
+    interactive_component_type: MultiSelect
+    column_name: habitat
+    column_type: object
+    display:
+      title_size: md
+      custom_color: '#984EA3'
+      icon_name: mdi:earth
+    title_align: left
+    placement: left
+    tag: interactive-alpha-habitat-filter-f2247a
+    index: alpha-habitat-filter
+    layout:
+      x: 0
+      y: 3
+      w: 1
+      h: 2
+    title: Habitat
   - component_type: card
     workflow_tag: ampliseq
-    data_collection_tag: taxonomy_rel_abundance
+    data_collection_tag: alpha_diversity_multi_canonical
     aggregation: nunique
-    column_name: sample
+    column_name: sample_id
     column_type: object
     display:
       icon_name: mdi:flask
@@ -129,13 +343,229 @@ tabs:
       title_color: '#45B8AC'
       title_font_size: xl
       value_font_size: xl
-    tag: card-sample_nunique-base-a1b2c3
+    title_size: sm
+    title_align: left
+    secondary_layout: vertical
+    top_n_count: 3
+    tag: card-alpha-card-samples-fdaa66
+    index: alpha-card-samples
     layout:
       x: 0
-      y: 0
+      y: 1
       w: 2
       h: 2
     title: Total Samples
+  - component_type: card
+    workflow_tag: ampliseq
+    data_collection_tag: alpha_diversity_multi_canonical
+    aggregation: median
+    column_name: shannon
+    column_type: float64
+    display:
+      icon_name: mdi:chart-bell-curve
+      icon_color: '#F68B33'
+      title_color: '#F68B33'
+      title_font_size: xl
+      value_font_size: xl
+    title_size: sm
+    title_align: left
+    aggregations:
+    - box_plot_stats
+    secondary_layout: vertical
+    top_n_count: 3
+    tag: card-alpha-card-shannon-73f8df
+    index: alpha-card-shannon
+    layout:
+      x: 2
+      y: 1
+      w: 2
+      h: 2
+    title: Shannon (distribution)
+  - component_type: card
+    workflow_tag: ampliseq
+    data_collection_tag: alpha_diversity_multi_canonical
+    aggregation: median
+    column_name: faith_pd
+    column_type: float64
+    display:
+      icon_name: mdi:source-branch
+      icon_color: '#9C27B0'
+      title_color: '#9C27B0'
+      title_font_size: xl
+      value_font_size: xl
+    title_size: sm
+    title_align: left
+    aggregations:
+    - box_plot_stats
+    secondary_layout: vertical
+    top_n_count: 3
+    tag: card-alpha-card-faith-pd-0b1489
+    index: alpha-card-faith-pd
+    layout:
+      x: 4
+      y: 1
+      w: 2
+      h: 2
+    title: Faith PD (distribution)
+  - component_type: card
+    workflow_tag: ampliseq
+    data_collection_tag: alpha_diversity_multi_canonical
+    aggregation: median
+    column_name: evenness
+    column_type: float64
+    display:
+      icon_name: mdi:scale-balance
+      icon_color: '#00BCD4'
+      title_color: '#00BCD4'
+      title_font_size: xl
+      value_font_size: xl
+    title_size: sm
+    title_align: left
+    aggregations:
+    - box_plot_stats
+    secondary_layout: vertical
+    top_n_count: 3
+    tag: card-alpha-card-observed-af80c8
+    index: alpha-card-observed
+    layout:
+      x: 6
+      y: 1
+      w: 2
+      h: 2
+    title: Evenness (distribution)
+  - component_type: advanced_viz
+    workflow_tag: ampliseq
+    data_collection_tag: rarefaction_canonical
+    tag: advanced_viz-alpha-rarefaction-multi-f98922
+    index: alpha-rarefaction-multi
+    layout:
+      x: 0
+      y: 3
+      w: 8
+      h: 8
+    title: Rarefaction curves (multi-metric)
+    viz_kind: rarefaction
+    config:
+      viz_kind: rarefaction
+      sample_id_col: sample_id
+      depth_col: depth
+      metric_col: shannon
+      iter_col: iter
+      group_col: group
+      metric_options:
+      - shannon
+      - observed_features
+      - faith_pd
+      show_ci: true
+      category_palette:
+        Riverwater: '#377EB8'
+        Groundwater: '#4DAF4A'
+        Sediment: '#E41A1C'
+        Soil: '#FF7F00'
+  - component_type: figure
+    workflow_tag: ampliseq
+    data_collection_tag: alpha_diversity_multi_canonical
+    visu_type: box
+    figure_params:
+      title: Alpha diversity by habitat (per metric)
+    mode: code
+    code_content: "df_modified = df.unpivot(\n    on=['shannon', 'observed_features', 'faith_pd', 'evenness'],\n\
+      \    index=['sample_id', 'habitat'],\n    variable_name='metric',\n    value_name='value',\n).filter(pl.col('value').is_not_null())\n\
+      fig = px.box(\n    df_modified.to_pandas(),\n    x='habitat', y='value', color='habitat',\n    facet_col='metric',\
+      \ facet_col_wrap=2,\n    points='all',\n    color_discrete_map={'Riverwater': '#377EB8', 'Groundwater':\
+      \ '#4DAF4A', 'Sediment': '#E41A1C', 'Soil': '#FF7F00'},\n    labels={'habitat': 'Habitat', 'value':\
+      \ ''},\n)\nfig.update_yaxes(matches=None, showticklabels=True)\nfig.for_each_annotation(lambda a:\
+      \ a.update(text=a.text.split('=')[-1], font={'size': 15, 'weight': 'bold'}))\nfig.update_layout(showlegend=False,\
+      \ title=None, margin={'t': 32, 'l': 56, 'r': 16, 'b': 40})"
+    selection_enabled: false
+    title_size: sm
+    title_align: left
+    tag: figure-alpha-boxplot-by-habitat-ec8425
+    index: alpha-boxplot-by-habitat
+    layout:
+      x: 0
+      y: 12
+      w: 8
+      h: 6
+    title: Alpha diversity by habitat (per metric)
+  - component_type: table
+    workflow_tag: ampliseq
+    data_collection_tag: alpha_diversity_multi_canonical
+    page_size: 12
+    row_selection_enabled: false
+    title_size: sm
+    title_align: left
+    tag: table-alpha-table-summary-859b77
+    index: alpha-table-summary
+    layout:
+      x: 0
+      y: 18
+      w: 8
+      h: 6
+    title: Per-sample alpha diversity (one row per sample)
+  - component_type: text
+    workflow_tag: ampliseq
+    title_size: sm
+    title_align: left
+    order: 1
+    alignment: left
+    tag: text-alpha-section-boxplot-4d596d
+    index: alpha-section-boxplot
+    layout:
+      x: 0
+      y: 11
+      w: 8
+      h: 1
+    title: Per-Habitat Comparison
+- title: Community & Diversity
+  subtitle: Alpha diversity, rarefaction, taxonomic composition (sunburst + Sankey + stacked taxonomy)
+  tab_order: 2
+  tab_icon: mdi:bacteria-outline
+  tab_icon_color: teal
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  dashboard_id: 646b0f3c1e4a2d7f8e5b8cb3
+  components:
+  - component_type: text
+    workflow_tag: ampliseq
+    title_size: sm
+    title_align: left
+    order: 1
+    alignment: left
+    tag: text-community-section-header-28d771
+    index: community-section-header
+    layout:
+      x: 0
+      y: 0
+      w: 8
+      h: 1
+    title: Community Composition
+  - component_type: card
+    workflow_tag: ampliseq
+    data_collection_tag: taxonomy_rel_abundance
+    aggregation: median
+    column_name: rel_abundance
+    column_type: float64
+    display:
+      icon_name: mdi:chart-bell-curve-cumulative
+      icon_color: '#FF9800'
+      title_color: '#FF9800'
+      title_font_size: xl
+      value_font_size: xl
+    title_size: sm
+    title_align: left
+    aggregations:
+    - box_plot_stats
+    secondary_layout: vertical
+    top_n_count: 3
+    tag: card-rel_abundance_median-e4d729
+    layout:
+      x: 0
+      y: 1
+      w: 4
+      h: 2
+    title: Rel. abundance (distribution)
   - component_type: card
     workflow_tag: ampliseq
     data_collection_tag: taxonomy_rel_abundance
@@ -148,174 +578,98 @@ tabs:
       title_color: '#8BC34A'
       title_font_size: xl
       value_font_size: xl
-    tag: card-taxonomy_nunique-d2ba1c
+    title_size: sm
+    title_align: left
+    secondary_layout: vertical
+    top_n_count: 3
+    tag: card-taxonomy_nunique-7aa707
     layout:
-      x: 0
-      y: 2
+      x: 4
+      y: 1
       w: 2
       h: 2
-    title: Total Taxa
+    title: Total Phyla
   - component_type: card
     workflow_tag: ampliseq
-    data_collection_tag: taxonomy_rel_abundance
+    data_collection_tag: metadata
     aggregation: nunique
-    column_name: Kingdom
+    column_name: habitat
     column_type: object
     display:
-      icon_name: mdi:domain
-      icon_color: '#F8766D'
-      title_color: '#F8766D'
+      icon_name: mdi:earth
+      icon_color: '#984EA3'
+      title_color: '#984EA3'
       title_font_size: xl
       value_font_size: xl
-    tag: card-kingdom_nunique-base-d4e5f6
+    title_size: sm
+    title_align: left
+    secondary_layout: vertical
+    top_n_count: 3
+    tag: card-habitat_nunique-1fc891
     layout:
-      x: 0
-      y: 4
+      x: 6
+      y: 1
       w: 2
       h: 2
-    title: Kingdoms
-  - component_type: card
-    workflow_tag: ampliseq
-    data_collection_tag: taxonomy_rel_abundance
-    aggregation: nunique
-    column_name: Phylum
-    column_type: object
-    display:
-      icon_name: mdi:bacteria-outline
-      icon_color: '#377EB8'
-      title_color: '#377EB8'
-      title_font_size: xl
-      value_font_size: xl
-    tag: card-phylum_nunique-base-g7h8i9
-    layout:
-      x: 0
-      y: 6
-      w: 2
-      h: 2
-    title: Unique Phyla
-  - component_type: figure
-    workflow_tag: ampliseq
-    data_collection_tag: taxonomy_rel_abundance
-    visu_type: sunburst
-    figure_params:
-      path:
-      - Kingdom
-      - Phylum
-      values: rel_abundance
-      title: Taxonomic Composition - Hierarchical View (Relative Abundance)
-    mode: code
-    code_content: "df_modified = df.filter((pl.col('Phylum').is_not_null()) & (pl.col('Phylum')\
-      \ != '') & (pl.col('Phylum') != 'Unclassified')).group_by(['Kingdom', 'Phylum']).agg(pl.col('rel_abundance').mean())\n\
-      \nfig = px.sunburst(df_modified.to_dicts(), path=['Kingdom', 'Phylum'],\nvalues='rel_abundance',\n\
-      color='Kingdom',\ncolor_discrete_map={'Bacteria': '#F8766D', 'Archaea': '#00BFC4'},\n\
-      title='Taxonomic Composition - Hierarchical View (Relative Abundance)')"
-    selection_enabled: false
-    tag: figure-sunburst-e651a9
-    layout:
-      x: 2
-      y: 0
-      w: 6
-      h: 8
-    title: Taxonomic Hierarchy
+    title: Habitat Types
   - component_type: figure
     workflow_tag: ampliseq
     data_collection_tag: taxonomy_rel_abundance
     visu_type: bar
     figure_params:
+      color: Phylum
+      facet_row: habitat
+      labels:
+        Phylum: Phylum
+        habitat: Habitat
+        mean_rel_abundance: Mean Relative Abundance
+      title: Mean Relative Abundance by Habitat
       x: Phylum
       y: mean_rel_abundance
-      color: Phylum
-      title: Mean Relative Abundance by Phylum
-      labels:
-        Phylum: Phylum
-        mean_rel_abundance: Mean Relative Abundance
     mode: code
-    code_content: "df_stats = df.group_by(['Phylum']).agg([\n    pl.col('rel_abundance').mean().alias('mean_rel_abundance'),\n\
-      \    pl.col('rel_abundance').std().alias('std_rel_abundance')\n]).sort('Phylum')\n\
-      fig = px.bar(\n    df_stats.to_pandas(),\n    x='Phylum', y='mean_rel_abundance',\
-      \ color='Phylum',\n    error_y='std_rel_abundance',\n    title='Mean Relative\
-      \ Abundance by Phylum (± std)',\n    labels={'Phylum': 'Phylum', 'mean_rel_abundance':\
-      \ 'Mean Relative Abundance'}\n)\nfig.update_layout(xaxis={'categoryorder':\
-      \ 'category ascending'})\nfig.update_xaxes(tickangle=-45, tickfont={'size':\
-      \ 9})\nfig.update_layout(showlegend=False)"
+    code_content: "df_mean = df.group_by(['habitat', 'Phylum']).agg(pl.col('rel_abundance').mean().alias('mean_rel_abundance')).sort('Phylum')\n\
+      fig = px.bar(\n    df_mean.to_pandas(),\n    x='Phylum', y='mean_rel_abundance', color='Phylum',\n\
+      \    facet_row='habitat',\n    title='Mean Relative Abundance by Habitat',\n    labels={'Phylum':\
+      \ 'Phylum', 'mean_rel_abundance': 'Mean Relative Abundance'}\n)\nfig.update_layout(xaxis={'categoryorder':\
+      \ 'category ascending'})\nfig.update_xaxes(tickangle=-45, tickfont={'size': 9})\nfig.update_layout(showlegend=False)"
     selection_enabled: false
-    tag: figure-bar_phylum_rel_abundance-de4c39
+    title_size: sm
+    title_align: left
+    tag: figure-bar_phylum_mean_rel_abundance-281e64
     layout:
       x: 0
-      y: 8
-      w: 8
-      h: 7
-  - component_type: figure
-    workflow_tag: ampliseq
-    data_collection_tag: taxonomy_rel_abundance
-    visu_type: bar
-    figure_params:
-      x: sample
-      y: rel_abundance
-      color: Phylum
-      title: Taxonomic Composition by Sample (Relative Abundance)
-      labels:
-        sample: Sample ID
-        rel_abundance: Relative Abundance
-        Phylum: Phylum
-      barmode: stack
-    mode: code
-    code_content: "df_sorted = df.sort('sample')\nfig = px.bar(\n    df_sorted.to_pandas(),\n\
-      \    x='sample', y='rel_abundance', color='Phylum',\n    title='Taxonomic Composition\
-      \ by Sample (Relative Abundance)',\n    labels={'sample': 'Sample ID', 'rel_abundance':\
-      \ 'Relative Abundance', 'Phylum': 'Phylum'},\n    barmode='stack',\n    category_orders={'sample':\
-      \ sorted(df_sorted['sample'].unique().to_list())}\n)\nfig.update_xaxes(tickangle=-45,\
-      \ tickfont={'size': 9})"
-    selection_enabled: false
-    tag: figure-bar_sample_rel_abundance-de4c39
-    layout:
-      x: 0
-      y: 15
+      y: 3
       w: 8
       h: 8
   - component_type: table
     workflow_tag: ampliseq
-    data_collection_tag: taxonomy_rel_abundance
-    title: Taxonomy Relative Abundance
-    description: Phylum-level relative abundance per sample
-    title_size: h2
-    title_align: left
+    data_collection_tag: metadata
     row_selection_enabled: false
-    tag: table-table-02f050
+    title_size: sm
+    title_align: left
+    tag: table-table-16e587
     layout:
       x: 0
-      y: 30
+      y: 43
       w: 8
       h: 6
-  - component_type: figure
-    workflow_tag: ampliseq
-    data_collection_tag: taxonomy_heatmap
-    visu_type: heatmap
-    dict_kwargs:
-      index_column: Phylum
-      row_annotations: '{"Kingdom": {"type": "categorical", "colors": {"Bacteria": "#F8766D",
-        "Archaea": "#00BFC4"}}}'
-      cluster_rows: true
-      cluster_cols: true
-      normalize: row
-      colorscale: RdBu_r
-      name: z-score
-      width: 1000
-      height: 700
-    mode: ui
-    selection_enabled: false
-    tag: figure-heatmap-taxonomy-composition-base
-    title: Taxonomic Composition Heatmap
-    description: Row-normalized (z-score) relative abundance of phyla across samples,
-      clustered by similarity with Kingdom annotations
-    layout:
-      x: 0
-      y: 23
-      w: 8
-      h: 7
-  - component_type: interactive
+    title: Sample Metadata
+  - component_type: table
     workflow_tag: ampliseq
     data_collection_tag: taxonomy_rel_abundance
+    row_selection_enabled: false
+    title_size: sm
+    title_align: left
+    tag: table-table-e280c1
+    layout:
+      x: 0
+      y: 49
+      w: 8
+      h: 6
+    title: Taxonomy Relative Abundance
+  - component_type: interactive
+    workflow_tag: ampliseq
+    data_collection_tag: metadata
     interactive_component_type: MultiSelect
     column_name: sample
     column_type: object
@@ -323,14 +677,53 @@ tabs:
       title_size: md
       custom_color: '#45B8AC'
       icon_name: mdi:flask
-    tag: interactive-community-sample-filter-base
-    index: community-sample-filter
+    title_align: left
+    placement: left
+    tag: interactive-sample-78c9c2
     layout:
       x: 0
       y: 0
       w: 1
       h: 3
     title: Sample ID
+  - component_type: interactive
+    workflow_tag: ampliseq
+    data_collection_tag: metadata
+    interactive_component_type: MultiSelect
+    column_name: habitat
+    column_type: object
+    display:
+      title_size: md
+      custom_color: '#984EA3'
+      icon_name: mdi:earth
+    title_align: left
+    placement: left
+    tag: interactive-habitat-d8ca83
+    layout:
+      x: 0
+      y: 3
+      w: 1
+      h: 2
+    title: Habitat Type
+  - component_type: interactive
+    workflow_tag: ampliseq
+    data_collection_tag: metadata
+    interactive_component_type: DateRangePicker
+    column_name: sampling_date
+    column_type: datetime
+    display:
+      title_size: md
+      custom_color: '#45B8AC'
+      icon_name: mdi:calendar-range
+    title_align: left
+    placement: left
+    tag: interactive-sampling_date-b9d091
+    layout:
+      x: 0
+      y: 5
+      w: 1
+      h: 3
+    title: Sampling Period
   - component_type: interactive
     workflow_tag: ampliseq
     data_collection_tag: taxonomy_rel_abundance
@@ -341,10 +734,12 @@ tabs:
       title_size: md
       custom_color: '#377EB8'
       icon_name: mdi:bacteria
-    tag: interactive-kingdom-b112bb
+    title_align: left
+    placement: left
+    tag: interactive-kingdom-7ad029
     layout:
       x: 0
-      y: 3
+      y: 8
       w: 1
       h: 2
     title: Kingdom
@@ -358,10 +753,12 @@ tabs:
       title_size: md
       custom_color: '#8BC34A'
       icon_name: mdi:bacteria-outline
-    tag: interactive-phylum-f89384
+    title_align: left
+    placement: left
+    tag: interactive-phylum-e802cf
     layout:
       x: 0
-      y: 5
+      y: 10
       w: 1
       h: 3
     title: Phylum
@@ -375,11 +772,798 @@ tabs:
       title_size: md
       custom_color: '#FF9800'
       icon_name: mdi:counter
-    tag: interactive-range-rel-abundance-slider-7e70dc
+    title_align: left
+    placement: left
+    tag: interactive-range-rel-abundance-slider-b483fc
     index: range-rel-abundance-slider
     layout:
       x: 0
-      y: 8
+      y: 13
       w: 1
       h: 3
     title: Relative Abundance Range
+  - component_type: advanced_viz
+    workflow_tag: ampliseq
+    data_collection_tag: stacked_taxonomy_canonical
+    tag: advanced_viz-adv-stacked-taxonomy-46dad9
+    index: adv-stacked-taxonomy
+    layout:
+      x: 0
+      y: 11
+      w: 8
+      h: 8
+    title: Stacked taxonomy (advanced)
+    use: qiime2/stacked_taxonomy
+    config:
+      default_rank: Phylum
+      top_n: 15
+      sort_by: abundance
+      normalise_to_one: true
+      annotation_strips:
+      - column: habitat
+        label: Habitat
+        position: top
+        palette:
+          Riverwater: '#377EB8'
+          Groundwater: '#4DAF4A'
+          Sediment: '#E41A1C'
+          Soil: '#FF7F00'
+  - component_type: advanced_viz
+    workflow_tag: ampliseq
+    data_collection_tag: sunburst_canonical
+    tag: advanced_viz-adv-sunburst-8e75c7
+    index: adv-sunburst
+    layout:
+      x: 0
+      y: 19
+      w: 8
+      h: 8
+    title: Taxonomic hierarchy (sunburst)
+    viz_kind: sunburst
+    config:
+      viz_kind: sunburst
+      rank_cols:
+      - Kingdom
+      - Phylum
+      - Class
+      abundance_col: abundance
+      category_palette:
+        Riverwater: '#377EB8'
+        Groundwater: '#4DAF4A'
+        Sediment: '#E41A1C'
+        Soil: '#FF7F00'
+  - component_type: advanced_viz
+    workflow_tag: ampliseq
+    data_collection_tag: sankey_canonical
+    tag: advanced_viz-adv-sankey-cd4759
+    index: adv-sankey
+    layout:
+      x: 0
+      y: 27
+      w: 8
+      h: 8
+    title: Taxonomic flow (Kingdom → Phylum → taxon)
+    viz_kind: sankey
+    config:
+      viz_kind: sankey
+      step_cols:
+      - Kingdom
+      - Phylum
+      - Class
+      available_step_cols:
+      - Kingdom
+      - Phylum
+      - Class
+      - Order
+      - Family
+      - Genus
+      value_col: abundance
+      value_label: rel. abundance
+      value_format: fraction
+      sort_mode: total_flow
+      color_mode: source
+      link_opacity: 0.5
+      min_link_value: 0.005
+      show_node_labels: true
+  - component_type: advanced_viz
+    workflow_tag: ampliseq
+    data_collection_tag: upset_canonical
+    tag: advanced_viz-adv-upset-81bed0
+    index: adv-upset
+    layout:
+      x: 0
+      y: 35
+      w: 8
+      h: 8
+    title: Taxa shared across habitats (UpSet)
+    viz_kind: upset_plot
+    config:
+      viz_kind: upset_plot
+      matrix_wf_id: 646b0f3c1e4a2d7f8e5b8ca3
+      matrix_dc_id: 646b0f3c1e4a2d7f8e5b8cd6
+      sort_by: cardinality
+      sort_order: descending
+      min_size: 1
+      show_set_sizes: true
+      color_intersections_by: set
+      default_annotation_cols:
+      - taxon
+      set_colors:
+        Riverwater: '#377EB8'
+        Groundwater: '#4DAF4A'
+        Sediment: '#E41A1C'
+        Soil: '#FF7F00'
+- title: Ordination & Clustering
+  subtitle: 'Sample-relationship structure: PCoA on Bray-Curtis + clustered taxonomy heatmap'
+  tab_order: 3
+  tab_icon: mdi:chart-scatter-plot-hexbin
+  tab_icon_color: pink
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  dashboard_id: 646b0f3c1e4a2d7f8e5b8cc2
+  components:
+  - component_type: text
+    workflow_tag: ampliseq
+    title_size: sm
+    title_align: left
+    order: 1
+    alignment: left
+    tag: text-ord-section-header-aa2879
+    index: ord-section-header
+    layout:
+      x: 0
+      y: 0
+      w: 8
+      h: 1
+    title: Sample Relationships
+  - component_type: interactive
+    workflow_tag: ampliseq
+    data_collection_tag: metadata
+    interactive_component_type: MultiSelect
+    column_name: sample
+    column_type: object
+    display:
+      title_size: md
+      custom_color: '#45B8AC'
+      icon_name: mdi:flask
+    title_align: left
+    placement: left
+    tag: interactive-ord-sample-filter-78c9c2
+    index: ord-sample-filter
+    layout:
+      x: 0
+      y: 0
+      w: 1
+      h: 3
+    title: Sample ID
+  - component_type: interactive
+    workflow_tag: ampliseq
+    data_collection_tag: metadata
+    interactive_component_type: MultiSelect
+    column_name: habitat
+    column_type: object
+    display:
+      title_size: md
+      custom_color: '#984EA3'
+      icon_name: mdi:earth
+    title_align: left
+    placement: left
+    tag: interactive-ord-habitat-filter-7fd48c
+    index: ord-habitat-filter
+    layout:
+      x: 0
+      y: 3
+      w: 1
+      h: 2
+    title: Habitat
+  - component_type: advanced_viz
+    workflow_tag: ampliseq
+    data_collection_tag: embedding_pcoa
+    tag: advanced_viz-ord-embedding-531e5a
+    index: ord-embedding
+    layout:
+      x: 0
+      y: 1
+      w: 4
+      h: 6
+    title: Sample ordination (PCoA, Bray-Curtis)
+    viz_kind: embedding
+    config:
+      viz_kind: embedding
+      sample_id_col: sample_id
+      dim_1_col: dim_1
+      dim_2_col: dim_2
+      color_col: habitat
+      point_size: 10
+      show_density: false
+      category_palette:
+        Riverwater: '#377EB8'
+        Groundwater: '#4DAF4A'
+        Sediment: '#E41A1C'
+        Soil: '#FF7F00'
+  - component_type: advanced_viz
+    workflow_tag: ampliseq
+    data_collection_tag: complex_heatmap_canonical
+    tag: advanced_viz-ord-complex-heatmap-92c52d
+    index: ord-complex-heatmap
+    layout:
+      x: 0
+      y: 8
+      w: 8
+      h: 8
+    title: Taxonomy heatmap (clustered)
+    viz_kind: complex_heatmap
+    config:
+      viz_kind: complex_heatmap
+      matrix_wf_id: 646b0f3c1e4a2d7f8e5b8ca3
+      matrix_dc_id: 646b0f3c1e4a2d7f8e5b8cd2
+      index_column: Phylum
+      row_annotation_cols:
+      - Kingdom
+      cluster_rows: true
+      cluster_cols: true
+      cluster_method: ward
+      cluster_metric: euclidean
+      normalize: row_z
+      col_annotations:
+        habitat:
+          SRR10070130: Riverwater
+          SRR10070131: Riverwater
+          SRR10070132: Groundwater
+          SRR10070133: Groundwater
+          SRR10070134: Riverwater
+          SRR10070141: Groundwater
+          SRR10070149: Sediment
+          SRR10070150: Sediment
+          SRR10070151: Sediment
+          SRR10102392: Soil
+          SRR10102393: Soil
+          SRR10102394: Soil
+      col_annotation_colors:
+        habitat:
+          Riverwater: '#377EB8'
+          Groundwater: '#4DAF4A'
+          Sediment: '#E41A1C'
+          Soil: '#FF7F00'
+  - component_type: advanced_viz
+    workflow_tag: ampliseq
+    data_collection_tag: bray_curtis_canonical
+    tag: advanced_viz-ord-bray-curtis-f70a9e
+    index: ord-bray-curtis
+    layout:
+      x: 4
+      y: 1
+      w: 4
+      h: 6
+    title: Sample distances (Bray-Curtis)
+    viz_kind: complex_heatmap
+    config:
+      viz_kind: complex_heatmap
+      matrix_wf_id: 646b0f3c1e4a2d7f8e5b8ca3
+      matrix_dc_id: 646b0f3c1e4a2d7f8e5b8cd9
+      index_column: sample
+      row_annotation_cols: []
+      cluster_rows: true
+      cluster_cols: true
+      cluster_method: ward
+      cluster_metric: euclidean
+      normalize: none
+      colorscale: Viridis
+      col_annotations:
+        habitat:
+          SRR10070130: Riverwater
+          SRR10070131: Riverwater
+          SRR10070132: Groundwater
+          SRR10070133: Groundwater
+          SRR10070134: Riverwater
+          SRR10070141: Groundwater
+          SRR10070149: Sediment
+          SRR10070150: Sediment
+          SRR10070151: Sediment
+          SRR10102392: Soil
+          SRR10102393: Soil
+          SRR10102394: Soil
+      col_annotation_colors:
+        habitat:
+          Riverwater: '#377EB8'
+          Groundwater: '#4DAF4A'
+          Sediment: '#E41A1C'
+          Soil: '#FF7F00'
+- title: Differential Abundance
+  subtitle: ANCOM-BC volcano + DA-barplot per contrast
+  tab_order: 4
+  tab_icon: mdi:chart-scatter-plot
+  tab_icon_color: red
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  dashboard_id: 646b0f3c1e4a2d7f8e5b8cb4
+  components:
+  - component_type: text
+    workflow_tag: ampliseq
+    title_size: sm
+    title_align: left
+    order: 1
+    alignment: left
+    tag: text-diff-section-header-b63d9f
+    index: diff-section-header
+    layout:
+      x: 0
+      y: 0
+      w: 8
+      h: 1
+    title: ANCOM-BC Differentials
+  - component_type: interactive
+    workflow_tag: ampliseq
+    data_collection_tag: ancombc_results
+    interactive_component_type: MultiSelect
+    column_name: contrast
+    column_type: object
+    display:
+      title_size: md
+      custom_color: '#2196F3'
+      icon_name: mdi:compare-horizontal
+    title_align: left
+    placement: left
+    tag: interactive-diff-contrast-filter-245518
+    index: diff-contrast-filter
+    layout:
+      x: 0
+      y: 0
+      w: 1
+      h: 2
+    title: Contrast
+  - component_type: interactive
+    workflow_tag: ampliseq
+    data_collection_tag: ancombc_results
+    interactive_component_type: MultiSelect
+    column_name: Phylum
+    column_type: object
+    display:
+      title_size: md
+      custom_color: '#8BC34A'
+      icon_name: mdi:bacteria-outline
+    title_align: left
+    placement: left
+    tag: interactive-diff-filter-phylum-12e821
+    index: diff-filter-phylum
+    layout:
+      x: 0
+      y: 2
+      w: 1
+      h: 3
+    title: Phylum
+  - component_type: interactive
+    workflow_tag: ampliseq
+    data_collection_tag: ancombc_results
+    interactive_component_type: MultiSelect
+    column_name: Kingdom
+    column_type: object
+    display:
+      title_size: md
+      custom_color: '#377EB8'
+      icon_name: mdi:bacteria
+    title_align: left
+    placement: left
+    tag: interactive-diff-kingdom-filter-a4b2a0
+    index: diff-kingdom-filter
+    layout:
+      x: 0
+      y: 5
+      w: 1
+      h: 2
+    title: Kingdom
+  - component_type: interactive
+    workflow_tag: ampliseq
+    data_collection_tag: ancombc_results
+    interactive_component_type: RangeSlider
+    column_name: w
+    column_type: float64
+    display:
+      title_size: md
+      custom_color: '#E74C3C'
+      icon_name: mdi:chart-line
+    title_align: left
+    placement: left
+    tag: interactive-diff-w-slider-ba8ae2
+    index: diff-w-slider
+    layout:
+      x: 0
+      y: 7
+      w: 1
+      h: 3
+    title: W Statistic Range
+  - component_type: interactive
+    workflow_tag: ampliseq
+    data_collection_tag: ancombc_results
+    interactive_component_type: RangeSlider
+    column_name: lfc
+    column_type: float64
+    display:
+      title_size: md
+      custom_color: '#F68B33'
+      icon_name: mdi:chart-bell-curve
+    title_align: left
+    placement: left
+    tag: interactive-diff-lfc-slider-549ce8
+    index: diff-lfc-slider
+    layout:
+      x: 0
+      y: 10
+      w: 1
+      h: 3
+    title: Log-Fold Change Range
+  - component_type: card
+    workflow_tag: ampliseq
+    data_collection_tag: ancombc_results
+    aggregation: nunique
+    column_name: id
+    column_type: object
+    display:
+      icon_name: mdi:bacteria
+      icon_color: '#45B8AC'
+      title_color: '#45B8AC'
+      title_font_size: xl
+      value_font_size: xl
+    title_size: sm
+    title_align: left
+    secondary_layout: vertical
+    top_n_count: 3
+    tag: card-diff-card-total-taxa-365cd9
+    index: diff-card-total-taxa
+    layout:
+      x: 0
+      y: 1
+      w: 2
+      h: 2
+    title: Total Taxa Analyzed
+  - component_type: card
+    workflow_tag: ampliseq
+    data_collection_tag: ancombc_results
+    aggregation: nunique
+    column_name: id
+    column_type: object
+    display:
+      icon_name: mdi:alert-circle
+      icon_color: '#E74C3C'
+      title_color: '#E74C3C'
+      title_font_size: xl
+      value_font_size: xl
+    title_size: sm
+    title_align: left
+    filter_expr: col('q_val') < 0.05
+    secondary_layout: vertical
+    top_n_count: 3
+    tag: card-diff-card-significant-5f3a71
+    index: diff-card-significant
+    layout:
+      x: 2
+      y: 1
+      w: 2
+      h: 2
+    title: Significant Taxa (q<0.05)
+  - component_type: card
+    workflow_tag: ampliseq
+    data_collection_tag: ancombc_results
+    aggregation: nunique
+    column_name: Phylum
+    column_type: object
+    display:
+      icon_name: mdi:bacteria-outline
+      icon_color: '#8BC34A'
+      title_color: '#8BC34A'
+      title_font_size: xl
+      value_font_size: xl
+    title_size: sm
+    title_align: left
+    filter_expr: col('q_val') < 0.05
+    secondary_layout: vertical
+    top_n_count: 3
+    tag: card-diff-card-phyla-0b4a14
+    index: diff-card-phyla
+    layout:
+      x: 4
+      y: 1
+      w: 2
+      h: 2
+    title: Phyla with significant hits
+  - component_type: card
+    workflow_tag: ampliseq
+    data_collection_tag: ancombc_results
+    aggregation: median
+    column_name: lfc
+    column_type: float64
+    display:
+      icon_name: mdi:chart-line-variant
+      icon_color: '#F68B33'
+      title_color: '#F68B33'
+      title_font_size: xl
+      value_font_size: xl
+    title_size: sm
+    title_align: left
+    aggregations:
+    - box_plot_stats
+    secondary_layout: vertical
+    top_n_count: 3
+    tag: card-diff-card-max-effect-116cba
+    index: diff-card-max-effect
+    layout:
+      x: 6
+      y: 1
+      w: 2
+      h: 2
+    title: Log-Fold Change distribution
+  - component_type: table
+    workflow_tag: ampliseq
+    data_collection_tag: ancombc_results
+    row_selection_enabled: false
+    title_size: sm
+    title_align: left
+    tag: table-diff-table-results-f14daf
+    index: diff-table-results
+    layout:
+      x: 0
+      y: 19
+      w: 8
+      h: 6
+    title: ANCOM-BC differential abundance results
+  - component_type: advanced_viz
+    workflow_tag: ampliseq
+    data_collection_tag: ancombc_results
+    tag: advanced_viz-adv-volcano-eaac41
+    index: adv-volcano
+    layout:
+      x: 0
+      y: 3
+      w: 8
+      h: 8
+    title: Volcano (advanced viz)
+    use: qiime2/volcano
+    config:
+      label_col: Phylum
+      category_col: contrast
+      significance_is_neg_log10: false
+      significance_threshold: 0.05
+      effect_threshold: 1.0
+      top_n_labels: 6
+  - component_type: advanced_viz
+    workflow_tag: ampliseq
+    data_collection_tag: ancombc_results
+    tag: advanced_viz-adv-da-barplot-367b95
+    index: adv-da-barplot
+    layout:
+      x: 0
+      y: 11
+      w: 8
+      h: 8
+    title: Differential-abundance bars (per contrast)
+    use: qiime2/da_barplot
+    config:
+      significance_col: q_val
+      label_col: Phylum
+      significance_threshold: 0.05
+      top_n: 15
+      contrast_view: all
+- title: Phylogeny
+  subtitle: QIIME2 phylogenetic tree with ASV taxonomy annotation
+  tab_order: 5
+  tab_icon: mdi:family-tree
+  tab_icon_color: lime
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  dashboard_id: 646b0f3c1e4a2d7f8e5b8cbf
+  components:
+  - component_type: card
+    workflow_tag: ampliseq
+    data_collection_tag: phylogenetic_tree_metadata_canonical
+    aggregation: nunique
+    column_name: taxon
+    column_type: object
+    display:
+      icon_name: mdi:dna
+      icon_color: '#9C27B0'
+      title_color: '#9C27B0'
+      title_font_size: xl
+      value_font_size: xl
+    title_size: sm
+    title_align: left
+    secondary_layout: vertical
+    top_n_count: 3
+    tag: card-phylo-card-asvs-15ea34
+    index: phylo-card-asvs
+    layout:
+      x: 0
+      y: 1
+      w: 2
+      h: 2
+    title: Total ASVs
+  - component_type: card
+    workflow_tag: ampliseq
+    data_collection_tag: phylogenetic_tree_metadata_canonical
+    aggregation: average
+    column_name: confidence
+    column_type: float64
+    display:
+      icon_name: mdi:check-decagram
+      icon_color: '#1976D2'
+      title_color: '#1976D2'
+      title_font_size: xl
+      value_font_size: xl
+    title_size: sm
+    title_align: left
+    aggregations:
+    - box_plot_stats
+    secondary_layout: vertical
+    top_n_count: 3
+    tag: card-phylo-card-phyla-c8ba3b
+    index: phylo-card-phyla
+    layout:
+      x: 4
+      y: 1
+      w: 2
+      h: 2
+    title: Mean classifier confidence
+  - component_type: card
+    workflow_tag: ampliseq
+    data_collection_tag: phylogenetic_tree_metadata_canonical
+    aggregation: nunique
+    column_name: taxon
+    column_type: object
+    display:
+      icon_name: mdi:check-circle-outline
+      icon_color: '#2E7D32'
+      title_color: '#2E7D32'
+      title_font_size: xl
+      value_font_size: xl
+    title_size: sm
+    title_align: left
+    filter_expr: col('Phylum').is_not_null() & (col('Phylum') != '')
+    secondary_layout: vertical
+    top_n_count: 3
+    tag: card-phylo-card-classified-74050c
+    index: phylo-card-classified
+    layout:
+      x: 2
+      y: 1
+      w: 2
+      h: 2
+    title: Classified ASVs
+  - component_type: card
+    workflow_tag: ampliseq
+    data_collection_tag: phylogenetic_tree_metadata_canonical
+    aggregation: nunique
+    column_name: Genus
+    column_type: object
+    display:
+      icon_name: mdi:format-list-group
+      icon_color: '#7B1FA2'
+      title_color: '#7B1FA2'
+      title_font_size: xl
+      value_font_size: xl
+    title_size: sm
+    title_align: left
+    secondary_layout: vertical
+    top_n_count: 3
+    tag: card-phylo-card-genera-538642
+    index: phylo-card-genera
+    layout:
+      x: 6
+      y: 1
+      w: 2
+      h: 2
+    title: Unique Genera
+  - component_type: text
+    workflow_tag: ampliseq
+    title_size: sm
+    title_align: left
+    order: 1
+    alignment: left
+    tag: text-phylo-section-header-dbcd38
+    index: phylo-section-header
+    layout:
+      x: 0
+      y: 0
+      w: 8
+      h: 1
+    title: Tree Context
+  - component_type: interactive
+    workflow_tag: ampliseq
+    data_collection_tag: phylogenetic_tree_metadata_canonical
+    interactive_component_type: MultiSelect
+    column_name: Kingdom
+    column_type: object
+    display:
+      title_size: md
+      custom_color: '#377EB8'
+      icon_name: mdi:bacteria
+    title_align: left
+    placement: left
+    tag: interactive-phylo-kingdom-filter-cc8149
+    index: phylo-kingdom-filter
+    layout:
+      x: 0
+      y: 0
+      w: 1
+      h: 2
+    title: Kingdom
+  - component_type: interactive
+    workflow_tag: ampliseq
+    data_collection_tag: phylogenetic_tree_metadata_canonical
+    interactive_component_type: MultiSelect
+    column_name: Phylum
+    column_type: object
+    display:
+      title_size: md
+      custom_color: '#8BC34A'
+      icon_name: mdi:bacteria-outline
+    title_align: left
+    placement: left
+    tag: interactive-phylo-phylum-filter-b091ff
+    index: phylo-phylum-filter
+    layout:
+      x: 0
+      y: 2
+      w: 1
+      h: 3
+    title: Phylum
+  - component_type: advanced_viz
+    workflow_tag: ampliseq
+    data_collection_tag: phylogenetic_tree_canonical
+    tag: advanced_viz-phylo-tree-2f13e4
+    index: phylo-tree
+    layout:
+      x: 0
+      y: 3
+      w: 8
+      h: 12
+    title: ASV phylogenetic tree
+    viz_kind: phylogenetic
+    config:
+      viz_kind: phylogenetic
+      tree_wf_id: 646b0f3c1e4a2d7f8e5b8ca3
+      tree_dc_id: 646b0f3c1e4a2d7f8e5b8cdb
+      metadata_wf_id: 646b0f3c1e4a2d7f8e5b8ca3
+      metadata_dc_id: 646b0f3c1e4a2d7f8e5b8cdc
+      taxon_col: taxon
+      color_col: Phylum
+      label_col: null
+      default_layout: circular
+      ladderize: true
+      show_metadata_strip: false
+      show_branch_lengths: false
+      show_internal_labels: false
+      extra_color_cols:
+      - Kingdom
+      - Phylum
+      - Class
+      - Order
+      - Family
+      - Genus
+      - Species
+      - dominant_habitat
+      category_palettes:
+        dominant_habitat:
+          Riverwater: '#377EB8'
+          Groundwater: '#4DAF4A'
+          Sediment: '#E41A1C'
+          Soil: '#FF7F00'
+          Mixed: '#9E9E9E'
+          Rare: '#BDBDBD'
+          No abundance: '#ECEFF1'
+  - component_type: table
+    workflow_tag: ampliseq
+    data_collection_tag: phylogenetic_tree_metadata_canonical
+    page_size: 12
+    row_selection_enabled: false
+    title_size: sm
+    title_align: left
+    tag: table-phylo-table-metadata-c614d5
+    index: phylo-table-metadata
+    layout:
+      x: 0
+      y: 15
+      w: 8
+      h: 6
+    title: ASV taxonomy table
