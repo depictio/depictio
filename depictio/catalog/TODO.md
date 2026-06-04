@@ -63,6 +63,29 @@ pipeline-agnostic (see `docs/design/bioinformatics-catalog.md`).
   (`simple_code_executor.execute_code(code, df)`). The `fixture` field is the
   contract this builds on.
 
+## Catalog coverage of `use:` bindings (raise template adoption)
+After templatising the ampliseq + viralrecon dashboards, the catalog covers the
+advanced-viz tiles that bind a **tool output** (ivar variants → manhattan/
+lollipop; qiime2 ancombc → volcano/da_barplot; qiime2 taxonomy →
+stacked_taxonomy). The remaining tiles stay explicit (`viz_kind` + config); to
+push more onto `use:`:
+- **No catalog module for `sankey` / `embedding` / `upset_plot` / `phylogenetic`.**
+  These are **dashboard figure-builders chained on derived `*_canonical` DCs**,
+  not tool outputs — adding catalog modules for them is **dubious** (would blur
+  the catalog = tool-output-adapter boundary). Decide deliberately before doing
+  it; default is to leave them explicit.
+- **Strict config models are narrower than the seeds.** Some tiles fall back to
+  a stored dict because the authoring config (`extra="forbid"`) rejects rich
+  display fields the seeds use — e.g. `RarefactionConfig` lacks `metric_options`,
+  so `rarefaction` can't use `use: qiime2/rarefaction` without dropping it.
+  Extending the relevant `*Config` models (add the missing display fields) would
+  let those tiles bind via `use:` too.
+- **Export `to_yaml()` is lossy for advanced_viz** (drops `viz_kind`/`config`),
+  so an exported dashboard YAML can't be re-imported as-is — the ampliseq
+  `base.yaml` had to be reconstructed from the `.db_seeds`. Fix the exporter to
+  emit `viz_kind` + `config` (and collapse catalog-bindable tiles back to `use:`)
+  for clean round-trips.
+
 ## Validation / CI hardening
 - `match_run_dir` perf: single `os.walk` pass (currently one `rglob` per output)
   — only matters once the catalog/run grows.
