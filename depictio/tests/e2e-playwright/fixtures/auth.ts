@@ -99,36 +99,35 @@ export async function seedTokenInStorage(
   page: Page,
   tokens: TokenBundle,
 ): Promise<void> {
-  // Use "commit" (first byte received) so we don't wait for the React app
-  // to finish its auth redirect chain before setting localStorage.
-  await page.goto("/", { waitUntil: "commit" });
-  await page.evaluate(
-    ({ t, target }) => {
-      if (target === "react") {
-        window.localStorage.setItem(
-          "depictio-auth",
-          JSON.stringify({
-            state: { accessToken: t.access_token, refreshToken: t.refresh_token },
-            version: 0,
-          }),
-        );
-      } else {
-        // viewer + dash: flat local-store shape.
-        // `email` is required by the viewer's isOwner check (currentUserEmail).
-        window.localStorage.setItem(
-          "local-store",
-          JSON.stringify({
-            access_token: t.access_token,
-            refresh_token: t.refresh_token,
-            logged_in: true,
-            user_id: t.user_id,
-            email: t.email ?? "",
-          }),
-        );
-      }
-    },
-    { t: tokens, target: TARGET },
-  );
+  // Use addInitScript to inject localStorage BEFORE any page load rather than
+  // navigating to a seed URL. This avoids:
+  //   - the React SPA spinner (from "commit" navigations that never resolve)
+  //   - race conditions from navigating to JSON endpoints before the SPA
+  // The script runs on every subsequent page.goto() in this page context.
+  if (TARGET === "react") {
+    await page.addInitScript((t) => {
+      window.localStorage.setItem(
+        "depictio-auth",
+        JSON.stringify({
+          state: { accessToken: t.access_token, refreshToken: t.refresh_token },
+          version: 0,
+        }),
+      );
+    }, tokens);
+  } else {
+    await page.addInitScript((t) => {
+      window.localStorage.setItem(
+        "local-store",
+        JSON.stringify({
+          access_token: t.access_token,
+          refresh_token: t.refresh_token,
+          logged_in: true,
+          user_id: t.user_id,
+          email: t.email ?? "",
+        }),
+      );
+    }, tokens);
+  }
 }
 
 /**

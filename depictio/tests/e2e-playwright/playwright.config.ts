@@ -6,6 +6,9 @@ import { defineConfig, devices } from "@playwright/test";
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:5601";
 const API_URL = process.env.PLAYWRIGHT_API_URL ?? "http://localhost:8101";
 const IS_CI = !!process.env.CI;
+// Slow down every browser operation by N ms so headed runs are watchable:
+//   PLAYWRIGHT_SLOWMO=500 npx playwright test --headed --workers=1
+const SLOW_MO = Number(process.env.PLAYWRIGHT_SLOWMO ?? 0);
 
 export default defineConfig({
   testDir: "./tests",
@@ -27,7 +30,10 @@ export default defineConfig({
     actionTimeout: 10_000,
     navigationTimeout: 30_000,
     viewport: { width: 1920, height: 1080 },
-    trace: "retain-on-failure",
+    launchOptions: { slowMo: SLOW_MO },
+    // Always record traces locally so every run is inspectable in the trace
+    // viewer / UI mode timeline (CI keeps the cheaper retain-on-failure).
+    trace: IS_CI ? "retain-on-failure" : "on",
     screenshot: "only-on-failure",
     video: "retain-on-failure",
     extraHTTPHeaders: {

@@ -2624,31 +2624,54 @@ jobs:
           path: backup-${{ matrix.backup_strategy }}-logs.txt
           retention-days: 7
 
-  e2e-tests:
+  # ──────────────────────────────────────────────────────────────────────────
+  # E2E — Playwright against the React viewer (replaces the 4 Cypress jobs
+  # that exercised the deleted Dash UI). One suite, matrixed over the auth
+  # modes; specs self-skip incompatible tests by probing /auth/me/optional
+  # (see depictio/tests/e2e-playwright/fixtures/auth.ts).
+  # ──────────────────────────────────────────────────────────────────────────
+  e2e-playwright:
+    name: e2e-playwright (${{ matrix.auth_mode }})
     needs: [docker-build]
-    # SKIPPED: Cypress suite exercises the Dash UI (`/dashboard/{id}`) which
-    # the React-migration PR deleted. Needs a Cypress rewrite against
-    # `/dashboard-beta/{id}` in a follow-up. Until then, keep the job
-    # definition so re-enabling is a one-line change.
-    if: false
     runs-on: ubuntu-22.04
     permissions:
       contents: read
       packages: read
+    strategy:
+      # One failing mode must not cancel the others — each leg is independent.
+      fail-fast: false
+      matrix:
+        include:
+          - auth_mode: standard
+            single_user_mode: "false"
+            public_mode: "false"
+            demo_mode: "false"
+          # Public + demo share one leg: demo mode is a superset of public
+          # mode (DEMO_MODE requires PUBLIC_MODE=true), and the specs only
+          # branch on is_public_mode — one stack covers both.
+          - auth_mode: public-demo
+            single_user_mode: "false"
+            public_mode: "true"
+            demo_mode: "true"
+          - auth_mode: single-user
+            single_user_mode: "true"
+            public_mode: "false"
+            demo_mode: "false"
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup environment
+      - name: Setup environment (${{ matrix.auth_mode }} mode)
         run: |
           sudo chmod 666 /var/run/docker.sock
           echo "UID=$(id -u)" >> $GITHUB_ENV
           echo "GID=$(id -g)" >> $GITHUB_ENV
           cp .env.example .env
-          # Enable dev mode
-          sed -i 's/# DEPICTIO_DEV_MODE=false/DEPICTIO_DEV_MODE=true/' docker-compose/.env
-          # Disable all special auth modes for standard auth tests (requires login)
-          sed -i 's/DEPICTIO_AUTH_SINGLE_USER_MODE=true/DEPICTIO_AUTH_SINGLE_USER_MODE=false/' docker-compose/.env
-          # PUBLIC_MODE and DEMO_MODE are already false in defaults, no sed needed
+          # Force the exact auth flags for this matrix leg (idempotent
+          # regardless of the committed defaults in docker-compose/.env).
+          sed -i 's/^DEPICTIO_AUTH_SINGLE_USER_MODE=.*/DEPICTIO_AUTH_SINGLE_USER_MODE=${{ matrix.single_user_mode }}/' docker-compose/.env
+          sed -i 's/^DEPICTIO_AUTH_PUBLIC_MODE=.*/DEPICTIO_AUTH_PUBLIC_MODE=${{ matrix.public_mode }}/' docker-compose/.env
+          sed -i 's/^DEPICTIO_AUTH_DEMO_MODE=.*/DEPICTIO_AUTH_DEMO_MODE=${{ matrix.demo_mode }}/' docker-compose/.env
+          sed -i 's/^#* *DEPICTIO_DEV_MODE=.*/DEPICTIO_DEV_MODE=true/' docker-compose/.env
           mkdir -p data/depictioDB data/minio_data data/prof_files data/cache data/redis
           chmod 777 data data/depictioDB data/minio_data data/prof_files data/cache data/redis
 
@@ -2658,528 +2681,106 @@ jobs:
           export DEPICTIO_VERSION="${{ needs.docker-build.outputs.api-image }}"
           export DEPICTIO_WORKER_VERSION="${{ needs.docker-build.outputs.worker-image }}"
           export DEPICTIO_VIEWER_VERSION="${{ needs.docker-build.outputs.viewer-image }}"
-          docker pull "${DEPICTIO_VERSION}"
-          docker pull "${DEPICTIO_WORKER_VERSION}"
-          docker pull "${DEPICTIO_VIEWER_VERSION}"
+          docker pull "${DEPICTIO_VERSION}" &
+          docker pull "${DEPICTIO_WORKER_VERSION}" &
+          docker pull "${DEPICTIO_VIEWER_VERSION}" &
+          wait
           export DEPICTIO_FASTAPI_WORKERS=1  # Single worker to avoid boot race conditions
           docker compose -f docker-compose.dev.yaml --env-file docker-compose/.env --profile ci up -d mongo redis minio depictio-backend depictio-celery-worker depictio-viewer
-          sleep 15
 
+      # Node + Playwright setup runs while the docker stack boots; the
+      # explicit health gate below is the only wait.
       - name: Set up Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: "20"
+          cache: npm
+          cache-dependency-path: depictio/tests/e2e-playwright/package-lock.json
 
-      - name: Install Chrome
+      - name: Install Playwright dependencies
         run: |
-          wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
-          echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
-          sudo apt-get update
-          sudo apt-get install -y google-chrome-stable
+          cd depictio/tests/e2e-playwright
+          npm ci
 
-      - name: Install Cypress dependencies
+      - name: Resolve Playwright version
+        id: playwright-version
         run: |
-          cd depictio/tests/e2e-tests
-          if [ ! -f "package.json" ]; then
-            npm init -y
-            npm install cypress --save-dev
+          cd depictio/tests/e2e-playwright
+          echo "version=$(node -e "console.log(require('@playwright/test/package.json').version)")" >> $GITHUB_OUTPUT
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
+      - name: Install Playwright browsers
+        run: |
+          cd depictio/tests/e2e-playwright
+          if [ "${{ steps.playwright-cache.outputs.cache-hit }}" = "true" ]; then
+            npx playwright install-deps chromium
           else
-            npm ci
+            npx playwright install --with-deps chromium
           fi
-
-      - name: Run Cypress tests
-        run: |
-          cd depictio/tests/e2e-tests
-          # Set Chrome flags for better CI rendering and stability
-          export CYPRESS_BROWSER_ARGS="--disable-gpu --no-sandbox --disable-dev-shm-usage --disable-extensions --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows"
-          # Run Chrome in headless mode for CI with improved stability
-          npx cypress run \
-            --browser chrome \
-            --headless \
-            --config screenshotsFolder=cypress/screenshots,videosFolder=cypress/videos,trashAssetsBeforeRuns=false,video=true,screenshotOnRunFailure=true,viewportWidth=1920,viewportHeight=1080,chromeWebSecurity=false \
-            --spec "cypress/e2e/auth/standard/**/*.cy.js"
-
-      - name: Upload screenshots
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: cypress-screenshots
-          path: depictio/tests/e2e-tests/cypress/screenshots
-          retention-days: 30
-
-      - name: Upload videos on failure
-        uses: actions/upload-artifact@v4
-        if: failure()
-        with:
-          name: cypress-videos
-          path: depictio/tests/e2e-tests/cypress/videos
-          retention-days: 7
-
-  e2e-tests-public-mode:
-    needs: [docker-build]
-    # SKIPPED: Cypress against Dash UI. See `e2e-tests` for full reasoning.
-    if: false
-    runs-on: ubuntu-22.04
-    permissions:
-      contents: read
-      packages: read
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup environment
-        run: |
-          sudo chmod 666 /var/run/docker.sock
-          echo "UID=$(id -u)" >> $GITHUB_ENV
-          echo "GID=$(id -g)" >> $GITHUB_ENV
-          cp .env.example .env
-          # Enable PUBLIC_MODE for public mode tests (disable SINGLE_USER_MODE)
-          sed -i 's/DEPICTIO_AUTH_SINGLE_USER_MODE=true/DEPICTIO_AUTH_SINGLE_USER_MODE=false/' docker-compose/.env
-          sed -i 's/DEPICTIO_AUTH_PUBLIC_MODE=false/DEPICTIO_AUTH_PUBLIC_MODE=true/' docker-compose/.env
-          sed -i 's/# DEPICTIO_DEV_MODE=false/DEPICTIO_DEV_MODE=true/' docker-compose/.env
-          mkdir -p data/depictioDB data/minio_data data/prof_files data/cache data/redis
-          chmod 777 data data/depictioDB data/minio_data data/prof_files data/cache data/redis
-
-      - name: Log in and start services
-        run: |
-          echo ${{ secrets.GHCR_PAT }} | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin
-          export DEPICTIO_VERSION="${{ needs.docker-build.outputs.api-image }}"
-          export DEPICTIO_WORKER_VERSION="${{ needs.docker-build.outputs.worker-image }}"
-          export DEPICTIO_VIEWER_VERSION="${{ needs.docker-build.outputs.viewer-image }}"
-          docker pull "${DEPICTIO_VERSION}"
-          docker pull "${DEPICTIO_WORKER_VERSION}"
-          docker pull "${DEPICTIO_VIEWER_VERSION}"
-          export DEPICTIO_FASTAPI_WORKERS=1  # Single worker to avoid boot race conditions
-          docker compose -f docker-compose.dev.yaml --env-file docker-compose/.env --profile ci up -d mongo redis minio depictio-backend depictio-celery-worker depictio-viewer
 
       - name: Wait for services to be ready
         run: |
-          echo "⏳ Waiting for services to be ready..."
-
-          # Wait for MongoDB
-          echo "Waiting for MongoDB..."
-          for i in {1..30}; do
-            if docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "db.runCommand({ ping: 1 })" --quiet &>/dev/null; then
-              echo "✅ MongoDB ready"
-              break
-            fi
-            echo "MongoDB not ready yet, attempt $i/30..."
-            sleep 2
-          done
-
-          # Wait for Backend API
           echo "Waiting for Backend API..."
           for i in {1..60}; do
-            if curl -f http://localhost:8058/health &>/dev/null; then
+            if curl -fs http://localhost:8058/health &>/dev/null; then
               echo "✅ Backend API ready"
               break
             fi
-            echo "Backend API not ready yet, attempt $i/60..."
+            [ "$i" = "60" ] && { echo "❌ Backend API never became ready"; docker compose -f docker-compose.dev.yaml --env-file docker-compose/.env logs depictio-backend | tail -100; exit 1; }
             sleep 2
           done
 
-          # Wait for Viewer (nginx + SPA)
           echo "Waiting for Viewer..."
           for i in {1..60}; do
             if curl -s -o /dev/null -w "%{http_code}" http://localhost:5080/ | grep -q "200"; then
               echo "✅ Viewer ready"
               break
             fi
-            echo "Viewer not ready yet, attempt $i/60..."
+            [ "$i" = "60" ] && { echo "❌ Viewer never became ready"; docker compose -f docker-compose.dev.yaml --env-file docker-compose/.env logs depictio-viewer | tail -50; exit 1; }
             sleep 2
           done
 
-          echo "🔍 Final service status:"
-          docker compose ps
+          echo "🔍 Auth mode reported by API:"
+          curl -s http://localhost:8058/depictio/api/v1/auth/me/optional || true
 
-      - name: Show .env files
+      - name: Run Playwright tests (${{ matrix.auth_mode }})
         run: |
-          echo "📋 Environment variables in docker-compose/.env:"
-          cat docker-compose/.env || echo "❌ .env file not found"
+          cd depictio/tests/e2e-playwright
+          PLAYWRIGHT_BASE_URL=http://localhost:5080 \
+          PLAYWRIGHT_API_URL=http://localhost:8058 \
+          npx playwright test
 
-      - name: Log container status
-        run: |
-          echo "📊 Backend container status:"
-          docker compose ps depictio-backend || echo "❌ Backend container not running"
-          docker compose logs --tail=30 depictio-backend || echo "❌ Failed to get backend logs"
-
-          echo ""
-          echo "📊 Viewer container status:"
-          docker compose ps depictio-viewer || echo "❌ Viewer container not running"
-          docker compose logs --tail=30 depictio-viewer || echo "❌ Failed to get viewer logs"
-
-      - name: Verify public mode is working
-        run: |
-          echo "🔍 Verifying public mode functionality..."
-
-          # Verify PUBLIC_MODE is enabled in .env
-          if grep -q "DEPICTIO_AUTH_PUBLIC_MODE=true" docker-compose/.env; then
-            echo "✅ PUBLIC_MODE enabled in docker-compose/.env"
-          else
-            echo "❌ PUBLIC_MODE not enabled in .env"
-            exit 1
-          fi
-
-          # Check if at least one temporary user was created (validates PUBLIC_MODE is working)
-          echo "Checking for temporary user creation..."
-          for i in {1..10}; do
-            TMP_USER=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.users.find({email: {'\$regex': '^tmp_.*@depict\\.io$'}}).toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[0].email // empty')
-            if [ -n "$TMP_USER" ]; then
-              echo "✅ Temporary user found: $TMP_USER"
-              break
-            fi
-            echo "⚠️ No temporary user found yet, attempt $i/10"
-            sleep 3
-          done
-
-          if [ -z "$TMP_USER" ]; then
-            echo "⚠️ No temporary users created yet (this is OK if tests create them)"
-            echo "PUBLIC_MODE is enabled but no temporary users exist in DB"
-          fi
-
-          echo "✅ Public mode verified"
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: "20"
-
-      - name: Install Cypress dependencies
-        run: |
-          cd depictio/tests/e2e-tests
-          if [ ! -f "package.json" ]; then
-            npm init -y
-            npm install cypress --save-dev
-          else
-            npm ci
-          fi
-
-      - name: Install Chrome for public mode tests
-        run: |
-          wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
-          echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
-          sudo apt-get update
-          sudo apt-get install -y google-chrome-stable
-
-      - name: Run Cypress public mode tests
-        run: |
-          cd depictio/tests/e2e-tests
-          # Set environment variable for cypress to know it's public mode
-          export CYPRESS_PUBLIC_MODE=true
-          # Set Chrome flags for better CI rendering and stability
-          export CYPRESS_BROWSER_ARGS="--disable-gpu --no-sandbox --disable-dev-shm-usage --disable-extensions --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows"
-          npx cypress run \
-            --browser chrome \
-            --headless \
-            --config screenshotsFolder=cypress/screenshots-public-mode,videosFolder=cypress/videos-public-mode,trashAssetsBeforeRuns=false,video=true,screenshotOnRunFailure=true,viewportWidth=1920,viewportHeight=1080,chromeWebSecurity=false \
-            --spec "cypress/e2e/auth/public/**/*.cy.js"
-
-      - name: Upload screenshots
+      - name: Upload Playwright report
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: cypress-screenshots-public-mode
-          path: depictio/tests/e2e-tests/cypress/screenshots-public-mode
+          name: playwright-report-${{ matrix.auth_mode }}
+          path: depictio/tests/e2e-playwright/playwright-report
           retention-days: 30
 
-      - name: Upload videos on failure
+      - name: Upload traces and videos on failure
         uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: cypress-videos-public-mode
-          path: depictio/tests/e2e-tests/cypress/videos-public-mode
+          name: playwright-results-${{ matrix.auth_mode }}
+          path: depictio/tests/e2e-playwright/test-results
           retention-days: 7
 
-  e2e-tests-demo-mode:
-    needs: [docker-build]
-    # SKIPPED: Cypress against Dash UI. See `e2e-tests` for full reasoning.
-    if: false
-    runs-on: ubuntu-22.04
-    permissions:
-      contents: read
-      packages: read
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup environment
+      - name: Dump service logs on failure
+        if: failure()
         run: |
-          sudo chmod 666 /var/run/docker.sock
-          echo "UID=$(id -u)" >> $GITHUB_ENV
-          echo "GID=$(id -g)" >> $GITHUB_ENV
-          cp .env.example .env
-          # Enable PUBLIC_MODE and DEMO_MODE for demo tests
-          sed -i 's/DEPICTIO_AUTH_SINGLE_USER_MODE=true/DEPICTIO_AUTH_SINGLE_USER_MODE=false/' docker-compose/.env
-          sed -i 's/DEPICTIO_AUTH_PUBLIC_MODE=false/DEPICTIO_AUTH_PUBLIC_MODE=true/' docker-compose/.env
-          sed -i 's/DEPICTIO_AUTH_DEMO_MODE=false/DEPICTIO_AUTH_DEMO_MODE=true/' docker-compose/.env
-          sed -i 's/# DEPICTIO_DEV_MODE=false/DEPICTIO_DEV_MODE=true/' docker-compose/.env
-          mkdir -p data/depictioDB data/minio_data data/prof_files data/cache data/redis
-          chmod 777 data data/depictioDB data/minio_data data/prof_files data/cache data/redis
+          docker compose -f docker-compose.dev.yaml --env-file docker-compose/.env logs > e2e-${{ matrix.auth_mode }}-services.log 2>&1 || true
 
-      - name: Log in and start services
-        run: |
-          echo ${{ secrets.GHCR_PAT }} | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin
-          export DEPICTIO_VERSION="${{ needs.docker-build.outputs.api-image }}"
-          export DEPICTIO_WORKER_VERSION="${{ needs.docker-build.outputs.worker-image }}"
-          export DEPICTIO_VIEWER_VERSION="${{ needs.docker-build.outputs.viewer-image }}"
-          docker pull "${DEPICTIO_VERSION}"
-          docker pull "${DEPICTIO_WORKER_VERSION}"
-          docker pull "${DEPICTIO_VIEWER_VERSION}"
-          export DEPICTIO_FASTAPI_WORKERS=1  # Single worker to avoid boot race conditions
-          docker compose -f docker-compose.dev.yaml --env-file docker-compose/.env --profile ci up -d mongo redis minio depictio-backend depictio-celery-worker depictio-viewer
-
-      - name: Wait for services to be ready
-        run: |
-          echo "⏳ Waiting for services to be ready..."
-
-          # Wait for MongoDB
-          echo "Waiting for MongoDB..."
-          for i in {1..30}; do
-            if docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "db.runCommand({ ping: 1 })" --quiet &>/dev/null; then
-              echo "✅ MongoDB ready"
-              break
-            fi
-            echo "MongoDB not ready yet, attempt $i/30..."
-            sleep 2
-          done
-
-          # Wait for Backend API
-          echo "Waiting for Backend API..."
-          for i in {1..60}; do
-            if curl -f http://localhost:8058/health &>/dev/null; then
-              echo "✅ Backend API ready"
-              break
-            fi
-            echo "Backend API not ready yet, attempt $i/60..."
-            sleep 2
-          done
-
-          # Wait for Viewer (nginx + SPA)
-          echo "Waiting for Viewer..."
-          for i in {1..60}; do
-            if curl -s -o /dev/null -w "%{http_code}" http://localhost:5080/ | grep -q "200"; then
-              echo "✅ Viewer ready"
-              break
-            fi
-            echo "Viewer not ready yet, attempt $i/60..."
-            sleep 2
-          done
-
-          echo "🔍 Final service status:"
-          docker compose ps
-
-      - name: Verify demo mode is enabled
-        run: |
-          echo "🔍 Verifying demo mode configuration..."
-
-          # Verify DEMO_MODE is enabled in .env
-          if grep -q "DEPICTIO_AUTH_DEMO_MODE=true" docker-compose/.env && grep -q "DEPICTIO_AUTH_PUBLIC_MODE=true" docker-compose/.env; then
-            echo "✅ DEMO_MODE and PUBLIC_MODE enabled in docker-compose/.env"
-          else
-            echo "❌ DEMO_MODE or PUBLIC_MODE not enabled in .env"
-            exit 1
-          fi
-
-          echo "✅ Demo mode configuration verified"
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: "20"
-
-      - name: Install Cypress dependencies
-        run: |
-          cd depictio/tests/e2e-tests
-          if [ ! -f "package.json" ]; then
-            npm init -y
-            npm install cypress --save-dev
-          else
-            npm ci
-          fi
-
-      - name: Install Chrome for demo mode tests
-        run: |
-          wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
-          echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
-          sudo apt-get update
-          sudo apt-get install -y google-chrome-stable
-
-      - name: Run Cypress demo mode tests
-        run: |
-          cd depictio/tests/e2e-tests
-          export CYPRESS_DEMO_MODE=true
-          export CYPRESS_BROWSER_ARGS="--disable-gpu --no-sandbox --disable-dev-shm-usage --disable-extensions --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows"
-          npx cypress run \
-            --browser chrome \
-            --headless \
-            --config screenshotsFolder=cypress/screenshots-demo-mode,videosFolder=cypress/videos-demo-mode,trashAssetsBeforeRuns=false,video=true,screenshotOnRunFailure=true,viewportWidth=1920,viewportHeight=1080,chromeWebSecurity=false \
-            --spec "cypress/e2e/auth/demo/**/*.cy.js"
-
-      - name: Upload screenshots
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: cypress-screenshots-demo-mode
-          path: depictio/tests/e2e-tests/cypress/screenshots-demo-mode
-          retention-days: 30
-
-      - name: Upload videos on failure
+      - name: Upload service logs on failure
         uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: cypress-videos-demo-mode
-          path: depictio/tests/e2e-tests/cypress/videos-demo-mode
-          retention-days: 7
-
-  e2e-tests-single-user-mode:
-    needs: [docker-build]
-    # SKIPPED: Cypress against Dash UI. See `e2e-tests` for full reasoning.
-    if: false
-    runs-on: ubuntu-22.04
-    permissions:
-      contents: read
-      packages: read
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup environment
-        run: |
-          sudo chmod 666 /var/run/docker.sock
-          echo "UID=$(id -u)" >> $GITHUB_ENV
-          echo "GID=$(id -g)" >> $GITHUB_ENV
-          cp .env.example .env
-          # SINGLE_USER_MODE is already enabled in docker-compose/.env defaults (true)
-          # PUBLIC_MODE and DEMO_MODE are already disabled in defaults (false)
-          # No sed commands needed - defaults are correct for single-user mode
-          sed -i 's/# DEPICTIO_DEV_MODE=false/DEPICTIO_DEV_MODE=true/' docker-compose/.env
-          mkdir -p data/depictioDB data/minio_data data/prof_files data/cache data/redis
-          chmod 777 data data/depictioDB data/minio_data data/prof_files data/cache data/redis
-
-      - name: Log in and start services
-        run: |
-          echo ${{ secrets.GHCR_PAT }} | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin
-          export DEPICTIO_VERSION="${{ needs.docker-build.outputs.api-image }}"
-          export DEPICTIO_WORKER_VERSION="${{ needs.docker-build.outputs.worker-image }}"
-          export DEPICTIO_VIEWER_VERSION="${{ needs.docker-build.outputs.viewer-image }}"
-          docker pull "${DEPICTIO_VERSION}"
-          docker pull "${DEPICTIO_WORKER_VERSION}"
-          docker pull "${DEPICTIO_VIEWER_VERSION}"
-          export DEPICTIO_FASTAPI_WORKERS=1  # Single worker to avoid boot race conditions
-          docker compose -f docker-compose.dev.yaml --env-file docker-compose/.env --profile ci up -d mongo redis minio depictio-backend depictio-celery-worker depictio-viewer
-
-      - name: Wait for services to be ready
-        run: |
-          echo "⏳ Waiting for services to be ready..."
-
-          # Wait for MongoDB
-          echo "Waiting for MongoDB..."
-          for i in {1..30}; do
-            if docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "db.runCommand({ ping: 1 })" --quiet &>/dev/null; then
-              echo "✅ MongoDB ready"
-              break
-            fi
-            echo "MongoDB not ready yet, attempt $i/30..."
-            sleep 2
-          done
-
-          # Wait for Backend API
-          echo "Waiting for Backend API..."
-          for i in {1..60}; do
-            if curl -f http://localhost:8058/health &>/dev/null; then
-              echo "✅ Backend API ready"
-              break
-            fi
-            echo "Backend API not ready yet, attempt $i/60..."
-            sleep 2
-          done
-
-          # Wait for Viewer (nginx + SPA)
-          echo "Waiting for Viewer..."
-          for i in {1..60}; do
-            if curl -s -o /dev/null -w "%{http_code}" http://localhost:5080/ | grep -q "200"; then
-              echo "✅ Viewer ready"
-              break
-            fi
-            echo "Viewer not ready yet, attempt $i/60..."
-            sleep 2
-          done
-
-          echo "🔍 Final service status:"
-          docker compose ps
-
-      - name: Verify single-user mode is working
-        run: |
-          echo "🔍 Verifying single-user mode configuration..."
-
-          # Verify SINGLE_USER_MODE is enabled in .env
-          if grep -q "DEPICTIO_AUTH_SINGLE_USER_MODE=true" docker-compose/.env; then
-            echo "✅ SINGLE_USER_MODE enabled in docker-compose/.env"
-          else
-            echo "❌ SINGLE_USER_MODE not enabled in .env"
-            exit 1
-          fi
-
-          # Check if database has admin user
-          echo "Checking for admin user in database..."
-          for i in {1..10}; do
-            ADMIN_USER=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.users.find({is_admin: true}).toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[0].email // empty')
-            if [ -n "$ADMIN_USER" ]; then
-              echo "✅ Admin user found: $ADMIN_USER"
-              break
-            fi
-            echo "⚠️ No admin user found yet, attempt $i/10"
-            sleep 3
-          done
-
-          if [ -z "$ADMIN_USER" ]; then
-            echo "⚠️ No admin user created yet (will be created on first access)"
-          fi
-
-          echo "✅ Single-user mode verified"
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: "20"
-
-      - name: Install Cypress dependencies
-        run: |
-          cd depictio/tests/e2e-tests
-          if [ ! -f "package.json" ]; then
-            npm init -y
-            npm install cypress --save-dev
-          else
-            npm ci
-          fi
-
-      - name: Install Chrome for single-user mode tests
-        run: |
-          wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
-          echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
-          sudo apt-get update
-          sudo apt-get install -y google-chrome-stable
-
-      - name: Run Cypress single-user mode tests
-        run: |
-          cd depictio/tests/e2e-tests
-          export CYPRESS_SINGLE_USER_MODE=true
-          export CYPRESS_BROWSER_ARGS="--disable-gpu --no-sandbox --disable-dev-shm-usage --disable-extensions --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows"
-          npx cypress run \
-            --browser chrome \
-            --headless \
-            --config screenshotsFolder=cypress/screenshots-single-user-mode,videosFolder=cypress/videos-single-user-mode,trashAssetsBeforeRuns=false,video=true,screenshotOnRunFailure=true,viewportWidth=1920,viewportHeight=1080,chromeWebSecurity=false \
-            --spec "cypress/e2e/auth/single-user/**/*.cy.js"
-
-      - name: Upload screenshots
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: cypress-screenshots-single-user-mode
-          path: depictio/tests/e2e-tests/cypress/screenshots-single-user-mode
-          retention-days: 30
-
-      - name: Upload videos on failure
-        uses: actions/upload-artifact@v4
-        if: failure()
-        with:
-          name: cypress-videos-single-user-mode
-          path: depictio/tests/e2e-tests/cypress/videos-single-user-mode
+          name: e2e-services-logs-${{ matrix.auth_mode }}
+          path: e2e-${{ matrix.auth_mode }}-services.log
           retention-days: 7
