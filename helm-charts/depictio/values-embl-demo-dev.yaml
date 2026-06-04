@@ -7,15 +7,16 @@
 #   - values-embl-secrets.yaml (S3 credentials)
 #
 # Tenant quota: 32 CPU / 64 GiB / 30 pods, shared between this env and
-# values-embl-demo.yaml. Per-env target: ~6 CPU / 12 GiB requests,
-# ~14 CPU / 28 GiB limits — two envs sum to ~28 / 56 limits with margin
-# for mongo-init / wipe-job hooks.
+# values-embl-demo.yaml. Budget with MongoDB Community Operator HA (3 replicas
+# × 2 envs = 6 pods, ~4.2 CPU / 9 GiB limits for all MongoDB):
 #
-# Celery gets the largest share because it's the advanced-viz compute
-# bottleneck — concurrency bumped to 8 (`replicas: 1` kept; multi-replica
-# celery isn't supported yet on this chart). Dash frontend slimmed because
-# the React viewer (served as static assets by the backend at
-# /dashboard-beta) is taking over.
+#   Component         dev-demo limits    demo limits    Both envs
+#   Backend ×2        4 CPU / 8 GiB      4 CPU / 8 GiB  8 CPU / 16 GiB
+#   Celery            8 CPU / 16 GiB     5 CPU / 10 GiB 13 CPU / 26 GiB
+#   Viewer ×2         1 CPU / 512 Mi     1 CPU / 512 Mi  2 CPU / 1 GiB
+#   MongoDB ×3        2.1 CPU / 4.5 GiB  2.1 CPU / 4.5G  4.2 CPU / 9 GiB
+#   Redis             0.5 CPU / 512 Mi   0.5 CPU / 512M  1 CPU / 1 GiB
+#   TOTAL             ~15.6 CPU / ~29 G  ~12.6 CPU / ~24 ~28 CPU / ~53 GiB ✅
 
 # Demo environment configuration - auto-wipe on upgrades
 demo:
@@ -33,12 +34,9 @@ podDisruptionBudget:
   enabled: true
   minAvailable: 1
 
-# Celery worker — the advanced-viz compute bottleneck (volcano / heatmap /
-# coverage_track / sankey / upset / …). dev is where we VALIDATE multi-replica
-# celery before promoting to stable: Redis is a multi-consumer broker and the
-# screenshots PVC is ReadWriteMany, so 2 workers is architecturally sound.
-# Budget-neutral: per-pod halved, aggregate (3 CPU / 6 Gi requests, 8 CPU /
-# 16 Gi limits, 8 task slots) unchanged vs the old single pod.
+# Celery worker — advanced-viz compute bottleneck (Playwright screenshots,
+# polars C-extension). dev validates multi-replica celery before promoting to
+# stable. 4 CPU / 8 GiB limits per pod × 2 pods = 8 CPU / 16 GiB total.
 celery:
   enabled: true
   replicas: 2

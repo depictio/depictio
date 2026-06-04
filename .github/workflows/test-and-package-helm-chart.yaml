@@ -159,7 +159,10 @@ jobs:
 
       - name: Lint Helm chart
         run: |
+          # Lint with defaults (useOperator: false — validates self-managed StatefulSet path)
           helm lint ./helm-charts/depictio
+          # Lint with CI overrides to catch any values-gh-actions.yaml interaction
+          helm lint ./helm-charts/depictio -f ./helm-charts/depictio/values-gh-actions.yaml
 
       - name: Test chart packaging
         run: |
@@ -245,7 +248,7 @@ jobs:
           timeout=180  # 3 minutes total timeout
           elapsed=0
           expected_deployments=4  # minio, backend, viewer, celery-worker
-          expected_statefulsets=2  # mongo, redis
+          expected_statefulsets=2  # mongo (self-managed StatefulSet, useOperator: false in CI), redis
 
           while [ $elapsed -lt $timeout ]; do
             # Count deployments by their names
@@ -312,8 +315,10 @@ jobs:
               kubectl describe pod $FRONTEND_POD | grep -A 10 -E "(Conditions:|Init Containers:|Containers:)"
 
               echo ""
-              echo "📋 Frontend init container logs (last 20 lines):"
-              kubectl logs $FRONTEND_POD --all-containers=true --tail=20 2>/dev/null || echo "❌ No logs available yet"
+              echo "📋 Frontend init container logs (wait-for-backend — added in PR #788):"
+              kubectl logs $FRONTEND_POD -c wait-for-backend --tail=20 2>/dev/null || echo "  (not started or already completed)"
+              echo "📋 Frontend main container logs (last 20 lines):"
+              kubectl logs $FRONTEND_POD -c depictio-viewer --tail=20 2>/dev/null || echo "  (not started yet)"
 
               # Check if frontend is ready
               FRONTEND_READY=$(kubectl get pod $FRONTEND_POD -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || echo "Unknown")
@@ -500,11 +505,14 @@ jobs:
             exit 1
           }
 
-          echo "⏳ Waiting for frontend pods to be ready..."
+          echo "⏳ Waiting for frontend pods to be ready (viewer has wait-for-backend init container — starts after backend)..."
           kubectl wait --for=condition=ready pod -l "release=${RELEASE_NAME},app=depictio-viewer" --timeout=300s || {
             echo "❌ Frontend pods failed to be ready"
             echo "📊 Frontend pod details:"
             kubectl describe pods -l "release=${RELEASE_NAME},app=depictio-viewer"
+            echo "📋 wait-for-backend init container logs:"
+            VIEWER_POD=$(kubectl get pods -l "release=${RELEASE_NAME},app=depictio-viewer" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+            [ -n "$VIEWER_POD" ] && kubectl logs $VIEWER_POD -c wait-for-backend --tail=30 2>/dev/null || echo "  (not available)"
             exit 1
           }
 

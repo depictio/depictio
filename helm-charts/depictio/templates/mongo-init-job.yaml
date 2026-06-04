@@ -1,6 +1,7 @@
 # MongoDB Replica Set Initialization Job
-# Runs as a separate job after StatefulSet is ready
-{{- if gt (.Values.mongo.replicas | default 1 | int) 1 }}
+# Runs as a separate job after StatefulSet is ready (self-managed mode only).
+# When mongo.useOperator is true the operator handles RS initialization.
+{{- if and (gt (.Values.mongo.replicas | default 1 | int) 1) (not (.Values.mongo.useOperator | default false)) }}
 apiVersion: batch/v1
 kind: Job
 metadata:

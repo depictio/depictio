@@ -1,11 +1,10 @@
-# MongoDB Regular Service
+# MongoDB Services (self-managed StatefulSet only — operator creates its own services)
+{{- if not (.Values.mongo.useOperator | default false) }}
 apiVersion: v1
 kind: Service
 metadata:
   name: {{ .Release.Name }}-mongo
   namespace: {{ .Release.Namespace }}
-  # labels:
-  #   app: mongo
 spec:
   type: {{ .Values.mongo.service.type }}
   ports:
@@ -35,6 +34,7 @@ spec:
     app: mongo
     project: {{ .Values.project.slug }}
     type: app
+{{- end }}
 ---
 # Redis Service
 {{- if .Values.redis.enabled }}
