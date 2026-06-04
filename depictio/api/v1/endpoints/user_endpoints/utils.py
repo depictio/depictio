@@ -270,7 +270,7 @@ async def _get_admin_token_localstorage_payload() -> str:
     Used by the Playwright-driven screenshot endpoint and by the standalone
     docs-screenshot CLI to inject admin auth into a fresh browser context.
     """
-    admin_user = await UserBeanie.find_one({"email": "admin@example.com"})
+    admin_user = await UserBeanie.find_one({"is_admin": True, "is_anonymous": {"$ne": True}})
     if not admin_user:
         raise HTTPException(status_code=404, detail="Admin user not found")
 

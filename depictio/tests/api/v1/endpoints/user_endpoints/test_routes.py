@@ -15,6 +15,15 @@ from depictio.tests.api.v1.endpoints.user_endpoints.conftest import beanie_setup
 
 class TestGetCurrentUser:
     def setup_method(self):
+        # The fake test token is not a real JWT — bypass the signature check
+        # (run before any DB lookup since the security pass) so these tests
+        # keep exercising the lookup path.
+        self.jwt_decode_patcher = patch(
+            "depictio.api.v1.endpoints.user_endpoints.core_functions.jwt.decode",
+            return_value={"exp": 9999999999},
+        )
+        self.jwt_decode_patcher.start()
+
         # Mock TokenBeanie.find_one directly to prevent CollectionWasNotInitialized
         self.token_find_one_patcher = patch(
             "depictio.models.models.users.TokenBeanie.find_one", new_callable=AsyncMock
@@ -40,7 +49,7 @@ class TestGetCurrentUser:
 
     def teardown_method(self):
         # Stop all patches
-        for patcher_attr in ["token_find_one_patcher", "user_get_patcher"]:
+        for patcher_attr in ["jwt_decode_patcher", "token_find_one_patcher", "user_get_patcher"]:
             if hasattr(self, patcher_attr):
                 getattr(self, patcher_attr).stop()
 

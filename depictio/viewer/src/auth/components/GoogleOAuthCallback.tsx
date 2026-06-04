@@ -3,6 +3,28 @@ import { useEffect, useState } from 'react';
 import { handleGoogleCallback, persistSession } from 'depictio-react-core';
 import AuthCard from './AuthCard';
 
+const DEFAULT_POST_AUTH_PATH = '/dashboards';
+
+/**
+ * Same-origin redirect guard. The backend ultimately decides the
+ * post-auth destination, but a compromised / MITMed response could supply
+ * an off-origin URL (or a ``javascript:`` URL on older browsers) and turn
+ * this into an open-redirect / phishing primitive. Anything that doesn't
+ * normalise to a same-origin path is silently replaced with the safe
+ * dashboard landing.
+ */
+function safePostAuthTarget(candidate: string | null | undefined): string {
+  if (!candidate) return DEFAULT_POST_AUTH_PATH;
+  try {
+    const target = new URL(candidate, window.location.origin);
+    if (target.origin !== window.location.origin) return DEFAULT_POST_AUTH_PATH;
+    // Strip protocol/host so we never accidentally emit a fully-qualified URL.
+    return `${target.pathname}${target.search}${target.hash}`;
+  } catch {
+    return DEFAULT_POST_AUTH_PATH;
+  }
+}
+
 /**
  * Renders at /auth/google/callback?code=...&state=... after Google redirects
  * back. Calls the backend's /auth/google/callback to finalize the flow,
@@ -32,7 +54,7 @@ export default function GoogleOAuthCallback() {
       if (cancelled) return;
       if (result.success && result.session) {
         persistSession(result.session);
-        window.location.assign(result.redirect_url || '/dashboards');
+        window.location.assign(safePostAuthTarget(result.redirect_url));
         return;
       }
       setError(result.message || 'Google sign-in failed.');

@@ -8,9 +8,11 @@ and imports it into the target instance via upsert (never wipes other projects).
 
 import io
 import json
+import os
 import zipfile
 from datetime import datetime
 from typing import Any, Literal, cast
+from urllib.parse import urlsplit
 
 import boto3
 from botocore.exceptions import ClientError
@@ -35,7 +37,7 @@ from depictio.api.v1.db import (
     users_collection,
 )
 from depictio.api.v1.endpoints.backup_endpoints.routes import _convert_complex_objects_to_strings
-from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user, get_user_or_anonymous
+from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 from depictio.models.models.users import User
 
 migrate_endpoint_router = APIRouter()
@@ -146,6 +148,85 @@ def _collect_s3_locations_for_project(dc_ids: list[ObjectId], source_bucket: str
     return locations
 
 
+def _normalize_endpoint(url: str) -> str | None:
+    """Normalize an S3 endpoint URL to a comparable scheme://host:port form.
+
+    Lower-cases scheme and host, fills in the default port for the scheme when
+    absent, and drops any path / query / fragment. Returns None if the URL has
+    no usable host (so callers can reject it rather than match loosely).
+    """
+    try:
+        parts = urlsplit(url.strip())
+    except (ValueError, AttributeError):
+        return None
+    scheme = (parts.scheme or "").lower()
+    host = (parts.hostname or "").lower()
+    if not scheme or not host:
+        return None
+    port = parts.port
+    if port is None:
+        port = {"http": 80, "https": 443}.get(scheme)
+    return f"{scheme}://{host}:{port}"
+
+
+def _validate_target_s3_endpoint(target_config: dict) -> None:
+    """Guard against SSRF / data-exfiltration via a caller-supplied S3 endpoint.
+
+    A caller-supplied ``endpoint_url`` is handed to boto3, which makes the SERVER
+    connect to it. Without a gate an attacker could point migration at internal
+    hosts (cloud metadata, internal services) or exfiltrate exported project data
+    to an attacker-controlled bucket.
+
+    Policy (safe-by-default / opt-in):
+      * Always allow the deployment's own configured MinIO endpoint (self-migration).
+      * Otherwise require an exact normalized (scheme+host+port) match against the
+        operator-vetted allowlist ``settings.backup.migration_allowed_s3_endpoints``.
+      * The allowlist is empty by default, so all external endpoints are rejected
+        unless an operator has explicitly opted in.
+
+    Allowlist entries are operator-vetted, so we deliberately keep the logic simple
+    (own-endpoint OR allowlisted) and do not additionally resolve hostnames / probe
+    IP ranges — the empty default already rejects everything caller-supplied.
+    """
+    raw_endpoint = target_config.get("endpoint_url")
+    if not raw_endpoint or not isinstance(raw_endpoint, str):
+        raise HTTPException(
+            status_code=400,
+            detail="target_s3_config.endpoint_url is required and must be a string",
+        )
+
+    candidate = _normalize_endpoint(raw_endpoint)
+    if candidate is None:
+        raise HTTPException(
+            status_code=400, detail="target_s3_config.endpoint_url is not a valid URL"
+        )
+
+    own_endpoint = _normalize_endpoint(settings.minio.endpoint_url)
+    if own_endpoint is not None and candidate == own_endpoint:
+        return  # self-migration to this deployment's own MinIO
+
+    allowlist = {
+        normalized
+        for entry in settings.backup.migration_allowed_s3_endpoints
+        if (normalized := _normalize_endpoint(entry)) is not None
+    }
+    if candidate in allowlist:
+        return
+
+    logger.warning(
+        "migrate export: rejected target S3 endpoint not in allowlist (host=%s)",
+        urlsplit(raw_endpoint.strip()).hostname,
+    )
+    raise HTTPException(
+        status_code=403,
+        detail=(
+            "Target S3 endpoint is not permitted. Only this deployment's own MinIO "
+            "endpoint or an operator-allowlisted endpoint "
+            "(DEPICTIO_BACKUP_MIGRATION_ALLOWED_S3_ENDPOINTS) may be used for migration."
+        ),
+    )
+
+
 def _copy_s3_locations(
     s3_paths: list[str],
     source_config: dict,
@@ -159,7 +240,7 @@ def _copy_s3_locations(
         aws_access_key_id=source_config["aws_access_key_id"],
         aws_secret_access_key=source_config["aws_secret_access_key"],
         region_name=source_config.get("region_name", "us-east-1"),
-        verify=False,
+        verify=source_config.get("verify", settings.minio.verify_tls),
     )
     target_client = boto3.client(
         "s3",
@@ -167,7 +248,7 @@ def _copy_s3_locations(
         aws_access_key_id=target_config["aws_access_key_id"],
         aws_secret_access_key=target_config["aws_secret_access_key"],
         region_name=target_config.get("region_name", "us-east-1"),
-        verify=False,
+        verify=target_config.get("verify", settings.minio.verify_tls),
     )
 
     source_bucket = source_config["bucket"]
@@ -198,9 +279,11 @@ def _copy_s3_locations(
                                 },
                             )
                         except ClientError as e:
-                            error_msg = f"Failed to copy {key}: {e}"
-                            logger.error(error_msg)
-                            errors.append(error_msg)
+                            # Log full error internally; return a generic message to the
+                            # caller — boto3 ClientError text can include endpoint
+                            # hostnames/URLs we don't want to leak in the response.
+                            logger.error("Failed to copy %s: %s", key, e)
+                            errors.append(f"Failed to copy {key}")
                             continue
                     total_files += 1
                     total_bytes += obj["Size"]
@@ -212,9 +295,9 @@ def _copy_s3_locations(
                         key,
                     )
         except ClientError as e:
-            error_msg = f"Error listing {path_key}: {e}"
-            logger.error(error_msg)
-            errors.append(error_msg)
+            # See above: keep the detailed boto3 error in logs only.
+            logger.error("Error listing %s: %s", path_key, e)
+            errors.append(f"Error listing {path_key}")
 
     return {
         "locations_copied": len(s3_paths),
@@ -349,6 +432,12 @@ async def export_project(
         logger.info("Migrate: found %d S3 locations for project", len(s3_paths))
 
         if request.target_s3_config:
+            # SSRF / data-exfiltration guard: the target endpoint is caller-supplied and
+            # gets handed to boto3, so the server would otherwise connect to (and push
+            # exported project data to) any host the caller names. Validate before any
+            # boto3 client is constructed.
+            _validate_target_s3_endpoint(request.target_s3_config)
+
             # CLI path: copy between two S3 instances
             source_config = {
                 "bucket": settings.minio.bucket,
@@ -414,7 +503,7 @@ async def export_project(
                 aws_access_key_id=settings.minio.aws_access_key_id,
                 aws_secret_access_key=settings.minio.aws_secret_access_key,
                 region_name="us-east-1",
-                verify=False,
+                verify=settings.minio.verify_tls,
             )
             bundled_files = 0
             for path in s3_paths:
@@ -539,7 +628,7 @@ async def import_project(
                 logger.error("migrate import error for %s: %s", collection_name, e)
                 raise HTTPException(
                     status_code=500,
-                    detail=f"Import failed for {collection_name}: {e}",
+                    detail=f"Import failed for {collection_name}",
                 )
 
         upserted[collection_name] = len(ops)
@@ -564,7 +653,7 @@ async def import_project_zip(
     file: UploadFile = File(...),
     dry_run: bool = False,
     overwrite: bool = False,
-    current_user: User = Depends(get_user_or_anonymous),
+    current_user: User = Depends(get_current_user),
 ) -> MigrateImportResponse:
     """
     Import a project bundle from a ZIP file (for UI use).
@@ -572,8 +661,9 @@ async def import_project_zip(
     Accepts a .zip file containing bundle.json and migrate_metadata.json.
     Always remaps all owners to the calling user (force_owner_remap=True).
 
-    Tolerates missing tokens (single-user / public mode); the inline
-    ``is_admin`` gate below still rejects non-admin callers.
+    Requires an authenticated admin caller — previously this used
+    ``get_user_or_anonymous`` which let an anonymous (admin-flagged)
+    public-mode user import arbitrary project ZIPs.
     """
     if not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Only administrators can import projects")
@@ -594,12 +684,23 @@ async def import_project_zip(
                     aws_access_key_id=settings.minio.aws_access_key_id,
                     aws_secret_access_key=settings.minio.aws_secret_access_key,
                     region_name="us-east-1",
-                    verify=False,
+                    verify=settings.minio.verify_tls,
                 )
                 uploaded = 0
                 for zip_path in s3_keys:
                     s3_key = zip_path[len("s3_data/") :]  # strip prefix to get original path
                     if not s3_key:
+                        continue
+                    # Zip-slip guard: the ZIP can contain absolute paths or
+                    # ``..`` segments that would let an attacker upload arbitrary
+                    # objects outside the intended bundle prefix. Reject anything
+                    # that doesn't normalise to a clean relative S3 key.
+                    if (
+                        s3_key.startswith("/")
+                        or ".." in s3_key.split("/")
+                        or s3_key != os.path.normpath(s3_key).replace(os.sep, "/")
+                    ):
+                        logger.warning("Refusing to restore suspicious S3 key from ZIP: %s", s3_key)
                         continue
                     try:
                         s3_client.put_object(
@@ -613,7 +714,8 @@ async def import_project_zip(
                         logger.error("Failed to restore S3 object %s: %s", s3_key, e)
                 logger.info("Migrate import: restored %d S3 objects to MinIO", uploaded)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Invalid ZIP bundle: {e}")
+        logger.error("migrate import-zip: failed to parse/restore ZIP bundle: %s", e)
+        raise HTTPException(status_code=400, detail="Invalid ZIP bundle")
 
     bundle = {"data": bundle_data, "migrate_metadata": migrate_metadata}
     import_request = MigrateImportRequest(

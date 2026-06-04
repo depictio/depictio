@@ -279,13 +279,16 @@ class TestDisabledFeatures:
         mock_settings.auth.is_single_user_mode = False
         mock_settings.auth.is_public_mode = True
 
-        request = RequestUserRegistration(
+        registration = RequestUserRegistration(
             email="test@example.com", password="password123", is_admin=False
         )
+        # The mode check fires before rate limiting, so the request mock is never
+        # inspected — it only needs to satisfy the (now required) parameter.
+        mock_request = MagicMock()
 
         with patch("depictio.api.v1.endpoints.user_endpoints.routes.settings", mock_settings):
             with pytest.raises(HTTPException) as exc_info:
-                await register(request)
+                await register(registration, mock_request)
 
             assert exc_info.value.status_code == 403  # type: ignore[unresolved-attribute]
             assert "User registration disabled" in str(
@@ -492,8 +495,14 @@ class TestPublicModeAdminBypass:
             patch(
                 "depictio.api.v1.endpoints.user_endpoints.routes._generate_agent_config",
                 new_callable=AsyncMock,
-                return_value="OK-CONFIG",
+                return_value=MagicMock(),
             ) as mock_generate,
+            # The endpoint serializes via cli_config_to_payload (deliberate
+            # SecretStr unwrap) — stub it so the sentinel passes through.
+            patch(
+                "depictio.api.v1.endpoints.user_endpoints.routes.cli_config_to_payload",
+                return_value="OK-CONFIG",
+            ),
         ):
             result = await generate_agent_config_endpoint(token=MagicMock(), current_user=admin)
         assert result == "OK-CONFIG"

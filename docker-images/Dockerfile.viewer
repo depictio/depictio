@@ -10,7 +10,7 @@
 # _uv.dockerfile's viewer-builder stage.
 # -----------------------------
 
-FROM node:20-slim AS builder
+FROM node:20-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0 AS builder
 WORKDIR /build
 
 RUN corepack enable && corepack prepare pnpm@10 --activate
@@ -32,7 +32,12 @@ RUN VITE_NO_SOURCEMAP=true NODE_OPTIONS="--max-old-space-size=4096" \
 # -----------------------------
 # Runtime stage
 # -----------------------------
-FROM nginx:1.27-alpine
+# nginx-unprivileged: same nginx + entrypoint scripts as the stock image,
+# but runs as uid 101 (non-root) and listens on 8080 by default. Lets the
+# pod set runAsNonRoot:true + drop ALL capabilities and satisfy the
+# Kubernetes Pod Security Standards "restricted" profile — the stock
+# nginx image needs root to bind privileged port 80 and fails that gate.
+FROM nginxinc/nginx-unprivileged:1.27-alpine@sha256:65e3e85dbaed8ba248841d9d58a899b6197106c23cb0ff1a132b7bfe0547e4c0
 
 ARG VERSION=latest
 LABEL org.opencontainers.image.description="Depictio viewer — nginx-served React SPA."
@@ -63,6 +68,7 @@ ENV DEPICTIO_API_UPSTREAM=depictio-backend:8058
 # docker-compose (127.0.0.11) — see nginx.conf.template for the full why.
 ENV NGINX_ENTRYPOINT_LOCAL_RESOLVERS=1
 
-EXPOSE 80
+EXPOSE 8080
 
-# nginx:alpine's default CMD already runs in the foreground; no override needed.
+# nginx-unprivileged's default CMD already runs in the foreground as uid 101;
+# no override needed.

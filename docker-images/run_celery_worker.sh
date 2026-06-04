@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
 # IMPORTANT: Celery worker ALWAYS runs - it's required for:
 # - Component design mode (figure preview, interactive editing)

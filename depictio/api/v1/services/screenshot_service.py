@@ -145,7 +145,9 @@ async def get_admin_auth_token() -> dict[str, str]:
     Raises:
         ValueError: If admin user or valid token not found
     """
-    current_user = await UserBeanie.find_one({"email": "admin@example.com"})
+    # Resolve "the admin" by role rather than by hardcoded email so this
+    # works under any DEPICTIO_BOOTSTRAP_ADMIN_EMAIL.
+    current_user = await UserBeanie.find_one({"is_admin": True, "is_anonymous": {"$ne": True}})
     if not current_user:
         raise ValueError("Admin user not found")
 

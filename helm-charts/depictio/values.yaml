@@ -43,6 +43,22 @@ secrets:
   minioRootUser: ""
   # Optionally override the generated MinIO secret key
   minioRootPassword: ""
+  # First-boot admin bootstrap. Replaces the legacy initial_users.yaml file
+  # that shipped admin@example.com / changeme. Both REQUIRED for fresh
+  # installs — backend pods refuse to start when no admin exists in MongoDB
+  # and these are unset. Subsequent boots are no-ops, so password rotations
+  # done via the UI survive Helm upgrades and PVC wipes.
+  #   - bootstrapAdminEmail: any RFC-5321 email; doesn't need to be admin@example.com
+  #   - bootstrapAdminPassword: ≥16 chars, not in the well-known-default list
+  # In production, supply both via External Secrets Operator / SealedSecrets /
+  # `helm install --set-file secrets.bootstrapAdminPassword=./admin.pw`.
+  bootstrapAdminEmail: ""
+  bootstrapAdminPassword: ""
+  # Optional CI / Cypress fixture user. Leave seedTestUser=false in any
+  # public-facing deployment so a known-credentials account never ships.
+  seedTestUser: false
+  testUserEmail: "test_user@example.com"
+  testUserPassword: "test_pwd"
 
 local_development: false # Set to true for local development
 
@@ -53,8 +69,10 @@ demo:
 # MongoDB settings
 mongo:
   image:
-    repository: mongo # Added repository for MongoDB
-    tag: latest
+    repository: mongo
+    # Pinned to a specific 8.x release — :latest is mutable and was a CI/supply-chain
+    # risk. Override per-deployment if a different minor is required.
+    tag: "8.0.5"
     pullPolicy: IfNotPresent
   replicas: 1 # Set to 3 for high availability replica set
   resources:
@@ -67,10 +85,21 @@ mongo:
   service:
     type: ClusterIP
     port: 27018
+  # Run as the mongo image's non-root user (UID 999). The official image
+  # supports this via fsGroup; previous runAsNonRoot:false setting was a
+  # leftover from the bitnami image transition and isn't required.
+  podSecurityContext:
+    runAsUser: 999
+    runAsGroup: 999
+    fsGroup: 999
   securityContext:
-    runAsNonRoot: false # Default allows root for compatibility
-    allowPrivilegeEscalation: true
-    capabilities: {}
+    runAsNonRoot: true
+    runAsUser: 999
+    runAsGroup: 999
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+      - ALL
     seccompProfile:
       type: RuntimeDefault
 
@@ -111,7 +140,10 @@ minio:
   enabled: true
   image:
     repository: minio/minio
-    tag: latest
+    # Pin to a specific MinIO release. The :latest tag is mutable and was
+    # flagged as a supply-chain risk; override per-deployment when MinIO
+    # publishes a security update you want to roll out deliberately.
+    tag: "RELEASE.2024-12-18T13-15-44Z"
     pullPolicy: IfNotPresent
   resources:
     requests:
@@ -124,16 +156,28 @@ minio:
     type: ClusterIP
     httpPort: 9000
     consolePort: 9001
+  podSecurityContext:
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
   securityContext:
-    runAsNonRoot: false # Default allows root for compatibility
-    allowPrivilegeEscalation: true
-    capabilities: {}
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+      - ALL
     seccompProfile:
       type: RuntimeDefault
   env:
-    # Default MinIO credentials - these will be overridden by values-embl-secrets.yaml
-    DEPICTIO_MINIO_ROOT_USER: "minio"
-    DEPICTIO_MINIO_ROOT_PASSWORD: "minio123"
+    # No default credentials. Root user / password come from the
+    # ``{{ .Release.Name }}-depictio-secrets`` Kubernetes Secret (set via
+    # secrets.minioRootUser / secrets.minioRootPassword in this values file)
+    # and are injected into the pod via envFrom: secretRef in the MinIO
+    # Deployment template. Shipping `minio` / `minio123` as a baked default
+    # was a Critical finding — handing the bucket to anyone who could reach
+    # the service on the cluster network.
     DEPICTIO_MINIO_BUCKET: "depictio-bucket"
     DEPICTIO_MINIO_SERVICE_PORT: "9000"
   ingress:
@@ -310,7 +354,27 @@ viewer:
     type: ClusterIP
     httpPort: 80
     httpsPort: 443
-    targetPort: 80
+    # 8080: the viewer image is nginx-unprivileged (uid 101) listening on
+    # 8080. The Service port stays 80 for callers; only the pod target moved.
+    targetPort: 8080
+  # Non-root hardening so the viewer pod passes Pod Security Standards
+  # "restricted" — matches backend / celery / mongo / minio. The
+  # nginx-unprivileged image already runs as uid 101 on an unprivileged
+  # port, so no NET_BIND_SERVICE capability is required.
+  podSecurityContext:
+    runAsUser: 101
+    runAsGroup: 101
+    fsGroup: 101
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 101
+    runAsGroup: 101
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+      - ALL
+    seccompProfile:
+      type: RuntimeDefault
 
 # PodDisruptionBudget for the HA-critical workloads (backend, viewer, celery).
 # Opt-in and off by default so single-replica environments are unaffected: a

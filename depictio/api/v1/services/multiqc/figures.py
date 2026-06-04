@@ -35,8 +35,8 @@ def _get_s3_filesystem_config() -> Dict[str, Any]:
     """Get S3 filesystem configuration from settings."""
     return {
         "endpoint_url": settings.minio.endpoint_url,
-        "key": settings.minio.root_user,
-        "secret": settings.minio.root_password,
+        "key": settings.minio.aws_access_key_id,
+        "secret": settings.minio.aws_secret_access_key,
     }
 
 

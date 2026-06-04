@@ -60,7 +60,7 @@ class TestDeltaTableCleanupWithS3Models:
                 "s3",
                 endpoint_url=self.s3_config.endpoint_url,
                 aws_access_key_id=self.s3_config.root_user,
-                aws_secret_access_key=self.s3_config.root_password,
+                aws_secret_access_key=self.s3_config.aws_secret_access_key,
                 region_name="us-east-1",
             )
             mock_s3_client.list_objects_v2.assert_called_once_with(
@@ -145,12 +145,12 @@ class TestS3ProviderWithActualModels:
             assert s3_provider.bucket_name == self.s3_config.bucket
             assert s3_provider.endpoint_url == self.s3_config.endpoint_url
             assert s3_provider.access_key == self.s3_config.root_user
-            assert s3_provider.secret_key == self.s3_config.root_password
+            assert s3_provider.secret_key == self.s3_config.aws_secret_access_key
             mock_boto3.assert_called_once_with(
                 "s3",
                 endpoint_url=self.s3_config.endpoint_url,
                 aws_access_key_id=self.s3_config.root_user,
-                aws_secret_access_key=self.s3_config.root_password,
+                aws_secret_access_key=self.s3_config.aws_secret_access_key,
             )
 
     def test_s3_provider_check_accessibility_success_with_models(self):
@@ -196,7 +196,7 @@ class TestS3ProviderWithActualModels:
         # Assert
         assert storage_options.endpoint_url == self.s3_config.url
         assert storage_options.aws_access_key_id == self.s3_config.root_user
-        assert storage_options.aws_secret_access_key == self.s3_config.root_password
+        assert storage_options.aws_secret_access_key == self.s3_config.aws_secret_access_key
         assert storage_options.use_ssl == "false"
         assert storage_options.signature_version == "s3v4"
         assert storage_options.region == "us-east-1"
@@ -330,7 +330,7 @@ class TestS3ProviderWithActualModels:
         # Verify integration
         assert storage_options.endpoint_url == config.url
         assert storage_options.aws_access_key_id == config.root_user
-        assert storage_options.aws_secret_access_key == config.root_password
+        assert storage_options.aws_secret_access_key == config.aws_secret_access_key
 
         # Test S3Provider initialization
         with patch("depictio.models.s3_utils.boto3.client") as mock_boto3:

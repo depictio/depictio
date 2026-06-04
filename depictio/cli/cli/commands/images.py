@@ -318,8 +318,8 @@ def push(
     try:
         s3_client = boto3.client(
             "s3",
-            aws_access_key_id=CLI_config.s3_storage.root_user,
-            aws_secret_access_key=CLI_config.s3_storage.root_password,
+            aws_access_key_id=CLI_config.s3_storage.aws_access_key_id,
+            aws_secret_access_key=CLI_config.s3_storage.aws_secret_access_key,
             endpoint_url=CLI_config.s3_storage.url,
         )
     except Exception as e:
@@ -451,8 +451,8 @@ def list_bucket(
     try:
         s3_client = boto3.client(
             "s3",
-            aws_access_key_id=CLI_config.s3_storage.root_user,
-            aws_secret_access_key=CLI_config.s3_storage.root_password,
+            aws_access_key_id=CLI_config.s3_storage.aws_access_key_id,
+            aws_secret_access_key=CLI_config.s3_storage.aws_secret_access_key,
             endpoint_url=CLI_config.s3_storage.url,
         )
     except Exception as e:

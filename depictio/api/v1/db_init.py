@@ -22,6 +22,16 @@ from depictio.models.models.projects import ProjectBeanie
 from depictio.models.models.users import GroupBeanie, Permission, TokenBeanie, UserBase, UserBeanie
 from depictio.models.utils import get_config
 
+# Static ObjectIds preserved from the legacy initial_users.yaml. ~30 reference
+# dashboard seed JSONs hard-code the admin user id as the permissions owner, so
+# we keep these stable across deployments. The IDs are non-secret stable
+# identifiers; the credentials they used to ship with are no longer stored on
+# disk and now come from DEPICTIO_BOOTSTRAP_* env vars (see AuthBootstrapConfig).
+_ADMIN_USER_STATIC_ID = "67658ba033c8b59ad489d7c7"
+_TEST_USER_STATIC_ID = "67658ba033c8b59ad489d7c8"
+_ADMIN_GROUP_STATIC_ID = "67658ba033c8b59ad489d7c9"
+_USERS_GROUP_STATIC_ID = "67658ba033c8b59ad489d7d0"
+
 
 async def create_initial_project_legacy(
     admin_user: UserBeanie, token_payload: dict | None
@@ -378,11 +388,9 @@ async def create_dashboard_from_json(
         needs_update = False
         update_fields: dict = {}
 
-        # Ensure dashboard is public for reference dashboards
-        if not _check.get("is_public", False):
-            logger.info("Setting existing dashboard to public")
-            update_fields["is_public"] = True
-            needs_update = True
+        # Do NOT re-force is_public=True on existing dashboards. The bootstrap
+        # used to flip every reference dashboard back to public on each restart,
+        # which silently reverted any operator-driven privacy lockdown.
 
         # Only force static DC ID if specified (for single-DC dashboards like Iris)
         if static_dc_id:
@@ -481,8 +489,13 @@ async def create_dashboard_from_json(
         viewers=[],
     )
 
-    # Set reference dashboards as public by default for K8s demo environments
-    dashboard_data.is_public = True
+    # Reference dashboards are NOT public by default — anonymous browsing of
+    # the demo content would expose all stored_metadata to the internet on
+    # public-mode deployments. The EMBL demo values file (or any deployment
+    # that wants public reference dashboards) can opt in by toggling the
+    # ``is_public`` flag via the seed JSON or a post-init job. The dashboard
+    # owner (admin_user) always has full access.
+    dashboard_data.is_public = False
 
     # Create the dashboard object into the database
     response = await save_dashboard(
@@ -567,6 +580,110 @@ def _ensure_ampliseq_base_project(admin_user: UserBeanie) -> None:
     logger.info(f"Created ampliseq-base shell project with id {base_project_id}")
 
 
+async def _resolve_existing_admin_token(
+    admin_user: UserBeanie,
+) -> dict | None:
+    """Return the cached default-token payload for an existing admin, or None."""
+    token_beanie = await TokenBeanie.find_one({"user_id": admin_user.id, "name": "default_token"})
+    if not token_beanie:
+        return None
+    return {
+        "token": token_beanie.model_dump(),
+        "config_path": None,
+        "new_token_created": False,
+    }
+
+
+async def _bootstrap_admin_and_test_user() -> tuple[UserBeanie | None, dict | None]:
+    """Seed the admin (and optional CI test user) from env-driven bootstrap.
+
+    Idempotent: if an admin already exists, the existing user is returned and
+    nothing is overwritten. The bootstrap fails fast only when no admin exists
+    AND no DEPICTIO_BOOTSTRAP_ADMIN_* env vars are set — i.e. the operator has
+    not declared who the first admin should be. This replaces the legacy
+    initial_users.yaml file that shipped admin@example.com / changeme.
+    """
+    # Look up any non-anonymous admin; if one is in the DB we never touch
+    # their password, so operator-set rotations survive container restarts.
+    admin_user = await UserBeanie.find_one({"is_admin": True, "is_anonymous": {"$ne": True}})
+
+    if admin_user is None:
+        admin_email = settings.bootstrap.admin_email.strip()
+        admin_password = settings.bootstrap.admin_password.get_secret_value()
+        if not admin_email or not admin_password:
+            raise RuntimeError(
+                "No admin user exists in MongoDB and DEPICTIO_BOOTSTRAP_ADMIN_EMAIL / "
+                "DEPICTIO_BOOTSTRAP_ADMIN_PASSWORD are not set. Set both env vars (via a "
+                "Kubernetes Secret in production) so the first-boot admin can be created."
+            )
+
+        logger.info(
+            "No admin user found in MongoDB — seeding bootstrap admin %s from "
+            "DEPICTIO_BOOTSTRAP_ADMIN_* env vars",
+            admin_email,
+        )
+        payload = await _create_user_in_db(
+            id=_ADMIN_USER_STATIC_ID,  # type: ignore[invalid-argument-type]
+            email=admin_email,
+            password=admin_password,
+            is_admin=True,
+        )
+        if not payload or not payload.get("success"):
+            # Race: another worker won the create_user. Fall back to the
+            # already-stored admin and continue.
+            admin_user = await UserBeanie.find_one(
+                {"is_admin": True, "is_anonymous": {"$ne": True}}
+            )
+            if admin_user is None:
+                raise RuntimeError(
+                    f"Failed to seed bootstrap admin: {payload.get('message') if payload else 'unknown'}"
+                )
+        else:
+            admin_user = payload["user"]
+        logger.info("Bootstrap admin ready: %s", admin_user.email)
+    else:
+        logger.info(
+            "Existing admin user found in MongoDB — skipping bootstrap seed: %s",
+            admin_user.email,
+        )
+
+    # Optional: seed the CI / Cypress fixture user. Off by default; production
+    # values files leave seed_test_user=false so no known-credentials account
+    # ever ships to a public deployment.
+    if settings.bootstrap.seed_test_user:
+        test_email = settings.bootstrap.test_user_email.strip()
+        test_password = settings.bootstrap.test_user_password.get_secret_value()
+        if test_email and test_password:
+            existing = await UserBeanie.find_one({"email": test_email})
+            if existing is None:
+                test_payload = await _create_user_in_db(
+                    id=_TEST_USER_STATIC_ID,  # type: ignore[invalid-argument-type]
+                    email=test_email,
+                    password=test_password,
+                    is_admin=False,
+                )
+                if test_payload and test_payload.get("success"):
+                    logger.info("Seeded CI test user: %s", test_email)
+                else:
+                    logger.warning(
+                        "Failed to seed CI test user (%s): %s",
+                        test_email,
+                        test_payload.get("message") if test_payload else "unknown",
+                    )
+            else:
+                logger.info("CI test user already present, skipping seed: %s", test_email)
+
+    # Default token for the admin — create if missing so downstream
+    # reference-dataset seeding can authenticate as the admin.
+    token_payload = await _resolve_existing_admin_token(admin_user)
+    if token_payload is None:
+        token_payload = await create_default_token(admin_user)
+        if token_payload:
+            logger.info("Created default admin token")
+
+    return admin_user, token_payload
+
+
 async def initialize_db(wipe: bool = False) -> UserBeanie | None:
     """Initialize the database with default users and groups."""
 
@@ -601,79 +718,28 @@ async def initialize_db(wipe: bool = False) -> UserBeanie | None:
             # Don't fail initialization if S3 cleanup fails
             logger.warning("Continuing with initialization despite S3 cleanup failure")
 
-    # Load and validate configuration for initial users and groups
-    config_path = os.path.join(os.path.dirname(__file__), "configs", "initial_users.yaml")
-    initial_config = get_config(config_path)
-
     logger.info("Running initial database setup...")
 
-    # Create groups
-    for group_config in initial_config.get("groups", []):
+    # ── Groups (idempotent; non-credential bootstrap) ────────────────────────
+    for group_config in (
+        {
+            "id": _ADMIN_GROUP_STATIC_ID,
+            "name": "admin",
+            "description": "Admin group",
+            "users_ids": [_ADMIN_USER_STATIC_ID],
+        },
+        {
+            "id": _USERS_GROUP_STATIC_ID,
+            "name": "users",
+            "description": "Users group",
+            "users_ids": [_TEST_USER_STATIC_ID, _ADMIN_USER_STATIC_ID],
+        },
+    ):
         group = GroupBeanie(**group_config)  # type: ignore[missing-argument]
         payload = await create_group_helper_beanie(group)
-        logger.debug(f"Created group: {format_pydantic(payload['group'])}")
+        logger.debug(f"Ensured group: {format_pydantic(payload['group'])}")
 
-    admin_user = None
-    token_payload = None
-
-    # Create users
-    for user_config in initial_config.get("users", []):
-        # Validate user config
-        logger.debug(user_config)
-
-        user_payload = await _create_user_in_db(
-            id=user_config["id"],
-            email=user_config["email"],
-            password=user_config["password"],
-            is_admin=user_config.get("is_admin", False),
-        )
-        logger.debug(f"User payload: {user_payload}")
-
-        # # Create default token if user was just created
-        if user_payload["success"]:
-            token_payload = await create_default_token(user_payload["user"])
-            if token_payload:
-                logger.info("Created default token")
-
-            if user_payload["user"].is_admin:
-                admin_user = user_payload["user"]
-                logger.info(f"Admin user created: {admin_user.email}")
-                logger.debug(f"Admin token created: {token_payload}")
-        else:
-            token_beanie = await TokenBeanie.find_one(
-                {"user_id": user_payload["user"].id, "name": "default_token"}
-            )
-            logger.debug(f"Token beanie: {format_pydantic(token_beanie)}")
-            if token_beanie:
-                token_payload = {
-                    "token": token_beanie.model_dump(),
-                    "config_path": None,
-                    "new_token_created": False,
-                }
-                logger.debug(f"Token payload: {format_pydantic(token_payload)}")  # type: ignore[invalid-argument-type]
-                logger.info(f"Default token already exists for {user_payload['user'].email}")
-            else:
-                logger.warning(f"Failed to create default token for {user_payload['user'].email}")
-
-    # If no admin user was created through the loop, try to find one
-    if admin_user is None:
-        logger.debug("No admin user created during initialization, checking if one exists...")
-        admin_user = await UserBeanie.find_one({"is_admin": True})
-        if admin_user:
-            logger.info(f"Found existing admin user: {admin_user.email}")
-            token_beanie = await TokenBeanie.find_one(
-                {"user_id": admin_user.id, "name": "default_token"}
-            )
-
-            logger.debug(f"Token payload: {format_pydantic(token_beanie)}")
-
-            token_payload = {
-                "token": token_beanie.model_dump(),
-                "config_path": None,
-                "new_token_created": False,
-            }
-        else:
-            logger.warning("No admin user found in the database")
+    admin_user, token_payload = await _bootstrap_admin_and_test_user()
 
     if admin_user is None or token_payload is None:
         logger.error("Cannot proceed with project creation: admin_user or token_payload is None")

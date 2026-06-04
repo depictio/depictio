@@ -1,4 +1,3 @@
-import asyncio
 import json
 import uuid
 from datetime import datetime
@@ -30,7 +29,7 @@ from depictio.api.v1.endpoints.user_endpoints.routes import (
 from depictio.api.v1.filter_links import extend_filters_via_links
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 from depictio.models.models.dashboards import DashboardData, DashboardDataLite
-from depictio.models.models.users import TokenBeanie, User, UserBeanie
+from depictio.models.models.users import User
 
 dashboards_endpoint_router = APIRouter()
 
@@ -711,232 +710,6 @@ async def save_dashboard(
         raise HTTPException(status_code=404, detail="Failed to insert or update dashboard data.")
 
 
-# =============================================================================
-# DEPRECATED ENDPOINT - USE /utils/screenshot-dash-fixed/{dashboard_id} INSTEAD
-# =============================================================================
-# This endpoint is no longer used by production code.
-# The active screenshot endpoint is at /depictio/api/v1/utils/screenshot-dash-fixed/
-# which uses component-based composite screenshots for better results.
-# TODO: Remove in future cleanup PR after verifying no external dependencies
-# =============================================================================
-@dashboards_endpoint_router.get("/screenshot/{dashboard_id}")
-async def screenshot_dashboard(
-    dashboard_id: PyObjectId,
-    # current_user: User = Depends(get_current_user),
-):
-    """DEPRECATED: Take a screenshot of a dashboard.
-
-    This endpoint is deprecated. Use /utils/screenshot-dash-fixed/{dashboard_id}
-    instead, which provides better component-based screenshots.
-    """
-    from playwright.async_api import async_playwright
-
-    output_folder = "/app/depictio/api/static/screenshots"  # Directly set to the desired path
-    logger.info(f"Output folder: {output_folder}")
-    # try:
-    async with async_playwright() as p:
-        # Launch browser
-        browser = await p.chromium.launch(headless=True)
-        # Set viewport size
-        viewport_width = 1920
-        viewport_height = 1080
-        context = await browser.new_context(
-            viewport={"width": viewport_width, "height": viewport_height}
-        )
-        page = await context.new_page()
-
-        # Navigate to Dash service
-        logger.info(f"Navigating to Dash service at {settings.viewer.internal_url}")
-        await page.goto(settings.viewer.internal_url, timeout=90000)
-
-        # Wait for page to load
-        # await page.wait_for_load_state("networkidle")
-        logger.debug("Looking for user in the database...")
-        current_user = await UserBeanie.find_one({"email": "admin@example.com"})
-
-        # current_user = await UserBeanie.find_one({"email": "admin@example.com"})
-        logger.debug(f"Current user: {current_user}")
-
-        # Get all tokens for the current user
-        logger.debug("Fetching tokens for the current user...")
-        tokens = await TokenBeanie.find({"user_id": current_user.id}).to_list()
-        logger.debug(f"Tokens found: {tokens}")
-
-        # Log datetime.now() for debugging purposes
-        logger.debug(f"Current datetime: {datetime.now()}")
-
-        # Log refresh_expire_datetime for each token
-        for token in tokens:
-            logger.debug(
-                f"Token ID: {token.id}, refresh_expire_datetime: {token.refresh_expire_datetime}"
-            )
-
-        # get the current user a functional token
-        token = await TokenBeanie.find_one(
-            {
-                "user_id": current_user.id,
-                # "token_lifetime": "short-lived",
-                "refresh_expire_datetime": {"$gt": datetime.now()},
-            }
-        )
-        logger.debug(f"Token: {token}")
-
-        token_data = token.model_dump(exclude_none=True)
-        logger.debug(f"Token data: {token_data}")
-        token_data["_id"] = token_data.pop("id", None)
-        token_data["logged_in"] = True
-        logger.debug(f"Token: {token}")
-
-        token_data_json = json.dumps(token_data)
-        logger.debug(f"Token data: {token_data_json}")
-
-        # Set data in the local storage
-        await page.evaluate(
-            f"""() => {{
-            localStorage.setItem('local-store', '{token_data_json}');
-        }}"""
-        )
-        # await asyncio.sleep(3600)  # Keeps the browser open for 1 hour
-
-        await page.reload()
-
-        await asyncio.sleep(3)  # Wait for the page to stabilize
-        # dashboard_id = "6824cb3b89d2b72169309737"
-        await page.goto(f"{settings.viewer.internal_url}/dashboard/{dashboard_id}", timeout=90000)
-        # await page.wait_for_load_state("networkidle")
-        await page.reload()
-        await asyncio.sleep(10)  # Wait for dashboard to fully load
-
-        # Wait for dashboard components to render with proper dimensions
-        try:
-            await page.wait_for_function(
-                """
-                () => {
-                    const components = document.querySelectorAll('.react-grid-item');
-                    if (components.length === 0) return false;
-
-                    // Check if at least one component has meaningful dimensions
-                    for (let component of components) {
-                        const rect = component.getBoundingClientRect();
-                        if (rect.width > 0 && rect.height > 0) {
-                            return true;
-                        }
-                    }
-                    return false;
-                }
-            """,
-                timeout=10000,
-            )
-            logger.info("✅ Dashboard components rendered with proper dimensions")
-        except Exception as e:
-            logger.warning(f"⚠️ Timeout waiting for components to render: {e}")
-
-        # Component-based screenshot targeting (proven working approach)
-        output_file = f"{output_folder}/{str(dashboard_id)}.png"
-        try:
-            components = await page.query_selector_all(".react-grid-item")
-            logger.info(f"📸 Found {len(components)} dashboard components")
-
-            if components and len(components) > 0:
-                # Create composite view of all components
-                composite_element = await page.evaluate(
-                    """
-                    () => {
-                        const components = document.querySelectorAll('.react-grid-item');
-                        if (components.length === 0) return null;
-
-                        // Get bounding box of all components
-                        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-
-                        components.forEach(component => {
-                            const rect = component.getBoundingClientRect();
-                            minX = Math.min(minX, rect.left);
-                            minY = Math.min(minY, rect.top);
-                            maxX = Math.max(maxX, rect.right);
-                            maxY = Math.max(maxY, rect.bottom);
-                        });
-
-                        // Create an invisible div that encompasses all components
-                        const container = document.createElement('div');
-                        container.id = 'temp-screenshot-container';
-                        container.style.position = 'absolute';
-                        container.style.left = minX + 'px';
-                        container.style.top = minY + 'px';
-                        container.style.width = (maxX - minX) + 'px';
-                        container.style.height = (maxY - minY) + 'px';
-                        container.style.pointerEvents = 'none';
-                        container.style.border = '2px solid transparent';
-                        container.style.zIndex = '-1';
-
-                        document.body.appendChild(container);
-
-                        return {
-                            width: maxX - minX,
-                            height: maxY - minY,
-                            componentCount: components.length,
-                            bounds: { minX, minY, maxX, maxY }
-                        };
-                    }
-                """
-                )
-
-                if composite_element:
-                    logger.info(
-                        f"📸 Component composite: {composite_element['width']:.0f}x{composite_element['height']:.0f} with {composite_element['componentCount']} components"
-                    )
-
-                    # Screenshot the composite area with 16:9 constraint if needed
-                    temp_container = await page.query_selector("#temp-screenshot-container")
-                    if temp_container:
-                        await temp_container.screenshot(path=output_file)
-                        logger.info(f"📸 Component composite screenshot saved to {output_file}")
-
-                    # Clean up the temporary element
-                    await page.evaluate(
-                        "document.getElementById('temp-screenshot-container')?.remove()"
-                    )
-                else:
-                    raise Exception("Failed to create composite element")
-            else:
-                raise Exception("No dashboard components found")
-
-        except Exception as e:
-            logger.warning(f"Component-based screenshot failed: {e}, trying fallback")
-            # Fallback to AppShell main
-            try:
-                main_element = await page.query_selector(".mantine-AppShell-main")
-                if main_element:
-                    await main_element.screenshot(path=output_file)
-                    logger.info("📸 AppShell main screenshot taken (fallback)")
-                else:
-                    # Final fallback to full page
-                    await page.screenshot(path=output_file, full_page=True)
-                    logger.info("📸 Full page screenshot taken (final fallback)")
-            except Exception as fallback_e:
-                logger.warning(f"All screenshot methods failed: {fallback_e}")
-                await page.screenshot(path=output_file, full_page=True)
-
-        await browser.close()
-        logger.info(f"Screenshot saved to {output_file}")
-
-        return {
-            "success": True,
-            "url": settings.viewer.internal_url,
-            "message": "Screenshot taken successfully",
-            "screenshot_path": output_file,
-            # "token": convert_objectid_to_str(token_data),
-            # "user": current_user.model_dump(exclude_none=True),
-        }
-
-    # except Exception as e:
-    #     return {
-    #         "success": False,
-    #         "url": settings.viewer.internal_url,
-    #         "error": str(e),
-    #         "message": "Failed to take screenshot",
-    #     }
-
-
 @dashboards_endpoint_router.delete("/delete/{dashboard_id}")
 async def delete_dashboard(
     dashboard_id: PyObjectId,
@@ -947,14 +720,21 @@ async def delete_dashboard(
     If the dashboard is a main tab, also delete all child tabs.
     """
 
-    user_id = current_user.id
-
-    # First, check if the dashboard exists and user has permission
-    dashboard = dashboards_collection.find_one(
-        {"dashboard_id": dashboard_id, "permissions.owners._id": user_id}
-    )
+    # First, check if the dashboard exists
+    dashboard = dashboards_collection.find_one({"dashboard_id": dashboard_id})
 
     if not dashboard:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Dashboard with ID '{dashboard_id}' not found or access denied.",
+        )
+
+    # Authorize via the project-based permission model (owner level, with admin bypass)
+    project_id = dashboard.get("project_id")
+    if not project_id:
+        raise HTTPException(status_code=500, detail="Dashboard is not associated with a project.")
+
+    if not check_project_permission(project_id, current_user, "owner"):
         raise HTTPException(
             status_code=404,
             detail=f"Dashboard with ID '{dashboard_id}' not found or access denied.",
@@ -4099,12 +3879,23 @@ async def export_dashboard_as_yaml(
         project = projects_collection.find_one({"_id": ObjectId(project_id)})
         is_public = project.get("is_public", False) if project else False
         project_name = project.get("name", "") if project else ""
+        # Allow if the project is public, otherwise require at least viewer
+        # access on the project (admin bypass handled inside the check).
+        if not is_public and not check_project_permission(project_id, current_user, "viewer"):
+            raise HTTPException(
+                status_code=403,
+                detail="You don't have permission to export this dashboard.",
+            )
     else:
+        # Legacy standalone dashboard without an associated project: fall back
+        # to the dashboard-level public flag.
         is_public = dashboard_doc.get("is_public", False)
         project_name = ""
-
-    if not is_public and current_user is None:
-        raise HTTPException(status_code=401, detail="Authentication required")
+        if not is_public:
+            raise HTTPException(
+                status_code=403,
+                detail="You don't have permission to export this dashboard.",
+            )
 
     # Check if this is a main tab with child tabs
     is_main_tab = dashboard_doc.get("is_main_tab", True)

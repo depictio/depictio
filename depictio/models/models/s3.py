@@ -30,10 +30,13 @@ class PolarsStorageOptions(BaseModel):
         well as when the package is used externally (e.g. via ``depictio-cli``).
         """
 
+        # Use the computed accessors, not the raw fields: ``root_password`` is a
+        # ``SecretStr`` and must be unwrapped via ``aws_secret_access_key`` before
+        # it reaches this plain-``str`` model.
         return cls(
             endpoint_url=s3_config.url,
-            aws_access_key_id=s3_config.root_user,
-            aws_secret_access_key=s3_config.root_password,
+            aws_access_key_id=s3_config.aws_access_key_id,
+            aws_secret_access_key=s3_config.aws_secret_access_key,
         )
 
 

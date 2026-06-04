@@ -36,6 +36,21 @@ from depictio.tests.api.v1.endpoints.user_endpoints.conftest import beanie_setup
 
 
 class TestAsyncFetchUserFromToken:
+    @pytest.fixture(autouse=True)
+    def _bypass_jwt_verification(self):
+        """The fake tokens used here are not real JWTs.
+
+        Since the security pass, ``_async_fetch_user_from_token`` verifies the
+        JWT signature BEFORE any DB lookup, so an unsigned test token would be
+        rejected upfront. Bypass the crypto here — these tests exercise the
+        lookup / revocation logic, not the signature check.
+        """
+        with patch(
+            "depictio.api.v1.endpoints.user_endpoints.core_functions.jwt.decode",
+            return_value={"exp": 9999999999},
+        ):
+            yield
+
     @pytest.mark.asyncio
     @beanie_setup(models=[TokenBeanie, UserBeanie])
     async def test_fetch_user_from_token_success(self):

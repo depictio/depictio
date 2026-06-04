@@ -16,8 +16,12 @@ class S3ProviderBase(ABC):
         self.bucket_name = config.bucket
         self.endpoint_url = config.endpoint_url
         self.service_name = config.service_name
-        self.access_key = config.root_user
-        self.secret_key = config.root_password
+        # Use the computed accessors, not the raw fields: ``root_password`` is a
+        # ``SecretStr`` and must be unwrapped before boto3 — passing the raw
+        # field makes boto3 sign with the literal "**********" masking string
+        # (SignatureDoesNotMatch at boot).
+        self.access_key = config.aws_access_key_id
+        self.secret_key = config.aws_secret_access_key
         self.s3_client = boto3.client(
             "s3",
             endpoint_url=self.endpoint_url,

@@ -1,6 +1,7 @@
 import boto3
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import ValidationError
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
@@ -13,6 +14,7 @@ from depictio.api.v1.db import (
     multiqc_collection,
     projects_collection,
     runs_collection,
+    users_collection,
 )
 from depictio.api.v1.endpoints.migrate_endpoints.routes import _collect_s3_locations_for_project
 from depictio.api.v1.endpoints.projects_endpoints.utils import (
@@ -25,6 +27,7 @@ from depictio.api.v1.endpoints.projects_endpoints.utils import (
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user, get_user_or_anonymous
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 from depictio.models.models.projects import Project, ProjectPermissionRequest, ProjectResponse
+from depictio.models.models.users import Permission, UserBase
 
 projects_endpoint_router = APIRouter()
 
@@ -66,10 +69,10 @@ def _cascade_delete_project(project_id: PyObjectId, project_name: str) -> None:
                 s3_client = boto3.client(
                     "s3",
                     endpoint_url=settings.minio.endpoint_url,
-                    aws_access_key_id=settings.minio.root_user,
-                    aws_secret_access_key=settings.minio.root_password,
+                    aws_access_key_id=settings.minio.aws_access_key_id,
+                    aws_secret_access_key=settings.minio.aws_secret_access_key,
                     region_name="us-east-1",
-                    verify=False,
+                    verify=settings.minio.verify_tls,
                 )
                 for prefix in s3_paths:
                     paginator = s3_client.get_paginator("list_objects_v2")
@@ -388,7 +391,53 @@ async def add_or_update_permission(
             detail="User does not have permission to update permissions for this project.",
         )
 
-    project["permissions"] = permission_request.permissions
+    # Validate the incoming permissions through the Permission schema instead of
+    # writing the caller-supplied dict raw into the document (mass-assignment).
+    # ``Permission`` strips unknown keys per entry, resolves user references and
+    # enforces that no user is simultaneously owner/editor/viewer.
+    try:
+        validated_permissions = Permission.model_validate(permission_request.permissions)
+    except (ValidationError, ValueError) as exc:
+        logger.warning(
+            f"Rejected invalid permissions payload for project "
+            f"'{permission_request.project_id}': {exc}"
+        )
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid permissions payload: {exc}",
+        )
+
+    # A project must always keep at least one owner, otherwise it becomes
+    # orphaned / unmanageable.
+    if not validated_permissions.owners:
+        raise HTTPException(
+            status_code=400,
+            detail="A project must keep at least one owner.",
+        )
+
+    # Sanity-check that every referenced user (owners/editors and non-wildcard
+    # viewers) actually exists, so the caller cannot inject phantom principals.
+    referenced_user_ids = {
+        ObjectId(member.id)
+        for group in (
+            validated_permissions.owners,
+            validated_permissions.editors,
+            validated_permissions.viewers,
+        )
+        for member in group
+        if isinstance(member, UserBase)
+    }
+    if referenced_user_ids:
+        existing_count = users_collection.count_documents(
+            {"_id": {"$in": list(referenced_user_ids)}}
+        )
+        if existing_count != len(referenced_user_ids):
+            raise HTTPException(
+                status_code=400,
+                detail="Permissions reference one or more users that do not exist.",
+            )
+
+    project["permissions"] = validated_permissions.dict()
     project = ProjectResponse.from_mongo(project)
     project = project.mongo()
 

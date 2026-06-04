@@ -131,11 +131,17 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
             position: 'relative',
           }}
         >
+          {/* SECURITY: ``allow-same-origin`` is intentionally OMITTED. Combined
+              with ``allow-scripts`` it would grant the embedded JBrowse iframe
+              access to the parent window's localStorage (where the access token
+              currently lives) and cookies — a hostile JBrowse build or MITMed
+              script could exfiltrate the session in one line of JS. Forms and
+              popups still work for navigation. */}
           <iframe
             title={`jbrowse-${metadata.index}`}
             src={session.iframe_url}
             style={iframeStyle}
-            sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+            sandbox="allow-scripts allow-forms allow-popups"
           />
         </div>
       )}

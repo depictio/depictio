@@ -11,9 +11,8 @@ polars_s3_config = turn_S3_config_into_polars_storage_options(settings.minio).mo
 # Initialize your S3 client outside of your endpoint function
 s3_client = boto3.client(
     "s3",
-    aws_access_key_id=settings.minio.root_user,
-    aws_secret_access_key=settings.minio.root_password,
+    aws_access_key_id=settings.minio.aws_access_key_id,
+    aws_secret_access_key=settings.minio.aws_secret_access_key,
     endpoint_url=settings.minio.endpoint_url,
-    # aws_session_token=None,
-    # verify=False,
+    verify=settings.minio.verify_tls,
 )

@@ -2,20 +2,21 @@ import collections
 import hashlib
 import json
 import os
-from datetime import datetime
+from pathlib import Path
 
 from botocore.exceptions import NoCredentialsError
 from bson import ObjectId
+from bson.errors import InvalidId
 from fastapi import APIRouter, Depends, HTTPException
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
-from depictio.api.v1.db import files_collection, jbrowse_collection, workflows_collection
+from depictio.api.v1.db import files_collection, workflows_collection
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 from depictio.api.v1.endpoints.validators import validate_workflow_and_collection
 from depictio.api.v1.s3 import s3_client
 from depictio.models.models.files import File
-from depictio.models.models.jbrowse import LogData
+from depictio.models.models.users import User
 
 jbrowse_endpoints_router = APIRouter()
 
@@ -266,48 +267,9 @@ async def create_trackset(
     return {"message": "JBrowse configuration updated."}
 
 
-@jbrowse_endpoints_router.post("/log")
-async def log_message(log_data: LogData):
-    """Log JBrowse navigation data."""
-    current_timestamp = int(datetime.now().timestamp() * 1000)
-
-    if log_data.coarseDynamicBlocks and log_data.selectedTracks:
-        block = log_data.coarseDynamicBlocks[0][0]
-        tracks = [t for track in log_data.selectedTracks for t in track.tracks]
-
-        dict_jbrowse_url_args = {
-            "assembly": block.assemblyName,
-            "loc": f"chr{block.refName}:{round(int(block.start))}:{round(int(block.end))}",
-            "tracks": tracks,
-        }
-    else:
-        dict_jbrowse_url_args = {}
-
-    dict_jbrowse_url_args["timestamp"] = current_timestamp
-    dict_jbrowse_url_args["dashboard_id"] = "1"  # Replace with actual dashboard ID
-    # Update or insert the message into the database
-    if jbrowse_collection.find_one():
-        document = jbrowse_collection.find_one({"dashboard_id": "1"})
-        document.update(dict_jbrowse_url_args)  # type: ignore[union-attr]
-        jbrowse_collection.update_one(
-            {"_id": ObjectId(document["_id"])},  # type: ignore[non-subscriptable]
-            {"$set": document},
-            upsert=True,  # type: ignore[non-subscriptable]
-        )
-    else:
-        jbrowse_collection.insert_one(dict_jbrowse_url_args)
-
-    return {"Status": "Logged successfully."}
-
-
-@jbrowse_endpoints_router.get("/last_status")
-async def get_jbrowse_logs():
-    """Get the last JBrowse navigation status."""
-    log = jbrowse_collection.find_one()
-    if log:
-        log.pop("_id", None)
-        return log
-    return {"message": "No logs available."}
+# NOTE: the legacy unauthenticated /log and /last_status prototype routes were
+# removed in the security sweep — they wrote/read a hardcoded dashboard_id "1"
+# document with no auth and had no remaining callers in the repo.
 
 
 @jbrowse_endpoints_router.get("/map_tracks_using_wildcards/{workflow_id}/{data_collection_id}")
@@ -335,7 +297,7 @@ async def map_tracks_using_wildcards(
 @jbrowse_endpoints_router.post("/filter_config")
 async def filter_config(
     filter_params: dict,
-    current_user: str = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     """Filter JBrowse config to include only specified tracks."""
     tracks = filter_params.get("tracks", [])
@@ -343,17 +305,28 @@ async def filter_config(
     data_collection_oid = filter_params.get("data_collection_id")
     dashboard_id = filter_params.get("dashboard_id")
 
-    default_config_path = os.path.join(
-        jbrowse_config_dir,
-        f"{current_user.id}_{data_collection_oid}.json",  # type: ignore[possibly-unbound-attribute]
-    )
-
     if not tracks:
         return {"message": "No tracks provided.", "session": None}
-    if not default_config_path:
-        return {"message": "No default config provided.", "session": None}
+    if not data_collection_oid:
+        return {"message": "No data collection ID provided.", "session": None}
     if not dashboard_id:
         return {"message": "No dashboard ID provided."}
+
+    # ``data_collection_oid`` and ``dashboard_id`` are user-controlled and are
+    # concatenated into filesystem paths below. Validate them as strict
+    # ObjectIds so a value like ``../../`` can't escape the config dir, then
+    # assert the resolved paths stay inside ``jbrowse_config_dir``.
+    try:
+        data_collection_oid = str(ObjectId(data_collection_oid))
+        dashboard_id = str(ObjectId(dashboard_id))
+    except (InvalidId, TypeError):
+        raise HTTPException(
+            status_code=422,
+            detail="data_collection_id and dashboard_id must be valid ObjectIds.",
+        )
+
+    config_base = Path(jbrowse_config_dir).resolve()
+    default_config_path = str(config_base / f"{current_user.id}_{data_collection_oid}.json")
 
     config = json.load(open(default_config_path))
 
@@ -366,8 +339,16 @@ async def filter_config(
 
     config["tracks"] = filtered_tracks
 
-    output_path = default_config_path.replace(".json", f"_filtered_{dashboard_id}.json")
-    output_return_path = output_path.replace(f"{settings.jbrowse.config_dir}/", "")  # type: ignore[possibly-unbound-attribute]
+    output_path_resolved = (
+        config_base / f"{current_user.id}_{data_collection_oid}_filtered_{dashboard_id}.json"
+    ).resolve()
+    # Defence in depth: even with ObjectId validation above, refuse to write
+    # outside the configured jbrowse config directory.
+    if not output_path_resolved.is_relative_to(config_base):
+        raise HTTPException(status_code=400, detail="Resolved config path escapes config dir.")
+
+    output_path = str(output_path_resolved)
+    output_return_path = output_path_resolved.name
 
     with open(output_path, "w") as file:
         json.dump(config, file, indent=4)

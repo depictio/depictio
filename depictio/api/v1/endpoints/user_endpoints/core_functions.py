@@ -1,11 +1,13 @@
 from datetime import datetime, timedelta
 
 import bcrypt
+import jwt
 from beanie import PydanticObjectId
 from fastapi import HTTPException
+from jwt import ExpiredSignatureError, InvalidTokenError
 from pydantic import EmailStr, validate_call
 
-from depictio.api.v1.configs.config import settings
+from depictio.api.v1.configs.config import ALGORITHM, PUBLIC_KEY, settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.endpoints.user_endpoints.utils import create_access_token
 from depictio.models.models.base import PyObjectId
@@ -306,20 +308,41 @@ async def _cleanup_expired_temporary_users() -> dict:
 
 @validate_call(validate_return=True)
 async def _async_fetch_user_from_token(token: str) -> UserBeanie | None:
-    """
-    Fetch a user based on the provided access token by first querying TokenBeanie.
+    """Fetch a user by a JWT access token.
 
-    Args:
-        token: The access token to look up
+    Verifies the JWT signature with the API's public key BEFORE doing any
+    MongoDB work — a forged or unsigned token is rejected here, not just
+    looked-up-and-missed. The DB lookup that follows is used purely for
+    revocation: tokens removed from ``TokenBeanie`` (e.g. on logout) no
+    longer authenticate even if the JWT itself is still cryptographically
+    valid until its ``exp`` claim.
 
-    Returns:
-        The UserBeanie object if found, None otherwise
+    Returns ``None`` for any failure path so callers raise their own 401.
     """
     if not isinstance(token, str) or not token:
         return None
 
+    try:
+        # Pin ``algorithms`` to the single configured algorithm. Passing a
+        # broader list (or accepting "none") would reopen the classic JWT
+        # algorithm-confusion vulnerabilities.
+        jwt.decode(
+            token,
+            PUBLIC_KEY,
+            algorithms=[ALGORITHM],
+            options={"require": ["exp"]},
+        )
+    except ExpiredSignatureError:
+        logger.info("Rejected expired JWT")
+        return None
+    except InvalidTokenError as exc:
+        logger.warning("Rejected invalid JWT: %s", exc)
+        return None
+
     token_doc = await TokenBeanie.find_one({"access_token": token})
     if not token_doc:
+        # Revoked / unknown token — JWT was valid but no longer in the
+        # active-token store, so refuse it.
         return None
 
     user = await UserBeanie.get(token_doc.user_id)
@@ -449,10 +472,11 @@ async def _get_anonymous_user_session() -> dict:
     if settings.auth.is_single_user_mode:
         admin_user = await UserBeanie.find_one({"is_admin": True, "is_anonymous": {"$ne": True}})
         if not admin_user:
-            # Admin user doesn't exist yet - auto-create from initial_users.yaml
-            # This handles race conditions during startup and database wipes
+            # Admin user doesn't exist yet — try the env-driven bootstrap.
+            # This handles race conditions during startup and database wipes.
             logger.info(
-                "Admin user not found in single-user mode - initializing from initial_users.yaml"
+                "Admin user not found in single-user mode — running bootstrap from "
+                "DEPICTIO_BOOTSTRAP_ADMIN_* env vars"
             )
             from depictio.api.v1.db_init import initialize_db
 
@@ -461,7 +485,10 @@ async def _get_anonymous_user_session() -> dict:
                 if not admin_user:
                     raise HTTPException(
                         status_code=500,
-                        detail="Failed to create admin user from initial_users.yaml",
+                        detail=(
+                            "Failed to bootstrap admin user — set DEPICTIO_BOOTSTRAP_ADMIN_EMAIL "
+                            "and DEPICTIO_BOOTSTRAP_ADMIN_PASSWORD env vars."
+                        ),
                     )
                 logger.info(f"Admin user auto-created: {admin_user.email}")
             except Exception as e:

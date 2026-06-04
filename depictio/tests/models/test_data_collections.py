@@ -437,8 +437,14 @@ class TestDataCollection:
         assert data_collection.config.type == "table"
 
     def test_equality_comparison(self):
-        """Test __eq__ method for DataCollection."""
+        """Test __eq__ method for DataCollection.
+
+        The nested config carries an explicit id: each validation generates a
+        fresh ObjectId otherwise (``ensure_id`` no longer leaks the generated
+        id back into the shared input dict), and ``__eq__`` compares configs.
+        """
         config_dict = {
+            "id": "646b0f3c1e4a2d7f8e5b8c9c",
             "type": "table",
             "scan": {"mode": "single", "scan_parameters": {"filename": "test.txt"}},
             "dc_specific_properties": {"format": "csv"},

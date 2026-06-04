@@ -1,4 +1,5 @@
 import mimetypes
+import posixpath
 from urllib.parse import unquote
 
 from bson import ObjectId
@@ -83,8 +84,11 @@ async def create_file(payload: UpsertFilesBatchRequest, current_user=Depends(get
                 "existing_count": existing_count,
             }
     except BulkWriteError as bwe:
-        # Return detailed bulk write error information
-        raise HTTPException(status_code=500, detail=bwe.details)
+        # SECURITY: do not leak BulkWriteError internals (which can include raw
+        # documents / index details) to the client. Log internally, return a
+        # generic message.
+        logger.error(f"Bulk write error during batch upsert: {bwe.details}")
+        raise HTTPException(status_code=500, detail="Internal error during batch upsert")
 
 
 @files_endpoint_router.get("/list/{data_collection_id}")
@@ -107,18 +111,16 @@ async def list_registered_files(data_collection_id: str, current_user=Depends(ge
 
     user_oid = ObjectId(current_user.id)
     target_data_collection_id = ObjectId(data_collection_id)
+    # SECURITY: same predicate shape as delete_file below — admin status is
+    # a property of the *caller*, not of the file's owners. Keying off
+    # ``permissions.owners.is_admin`` previously let any caller list every
+    # file whose owner happened to be admin.
+    if current_user.is_admin:
+        permission_match: dict = {}
+    else:
+        permission_match = {"permissions.owners._id": user_oid}
     pipeline = [
-        {
-            "$match": {
-                "$or": [
-                    {"permissions.owners._id": user_oid},  # User is an owner
-                    {"permissions.owners.is_admin": True},  # User is an admin
-                ]
-            }
-        },
-        {
-            "$match": {"data_collection_id": target_data_collection_id}
-        },  # Match files with the specific data collection ID
+        {"$match": {**permission_match, "data_collection_id": target_data_collection_id}},
     ]
 
     result = files_collection.aggregate(pipeline)
@@ -146,13 +148,17 @@ async def delete_file(file_id: str, current_user=Depends(get_current_user)):
 
     user_oid = ObjectId(current_user.id)
     target_file_id = ObjectId(file_id)
-    query = {
-        "_id": target_file_id,
-        "$or": [
-            {"permissions.owners._id": user_oid},  # User is an owner
-            {"permissions.owners.is_admin": True},  # User is an admin
-        ],
-    }
+    # SECURITY: the previous predicate ``{"permissions.owners.is_admin": True}``
+    # matched any file whose owner happens to be an admin — meaning a
+    # non-admin user could delete *another* admin's files. The correct check
+    # is on the caller (``current_user.is_admin``), not on the file's owners.
+    if current_user.is_admin:
+        query: dict = {"_id": target_file_id}
+    else:
+        query = {
+            "_id": target_file_id,
+            "permissions.owners._id": user_oid,
+        }
 
     result = files_collection.delete_one(query)
     if result.deleted_count == 0:
@@ -193,10 +199,32 @@ def _get_mime_type(file_path: str) -> str:
 
 
 def _validate_image_path(key: str) -> bool:
-    """Validate path for security and supported image format."""
-    if ".." in key or key.startswith("/"):
+    """Validate an S3 key for traversal safety and supported image format.
+
+    S3 keys are POSIX-style, so normalization is done with ``posixpath``. The
+    raw key is rejected up front for any ``..`` segment or leading slash, then
+    the same assertions are re-run on the normalized form to catch sequences
+    that collapse into an escape (e.g. ``a/../../b``) or that resolve to an
+    absolute path after normalization.
+    """
+    # Reject empty keys and obvious traversal markers on the raw input.
+    if not key or ".." in key or key.startswith("/"):
         return False
-    lower_key = key.lower()
+
+    # Re-assert on the normalized form. normpath collapses ``.``/``..``
+    # segments and duplicate slashes; if the result escapes upward, becomes
+    # absolute, or differs from the (trailing-slash-stripped) original, reject.
+    normalized = posixpath.normpath(key)
+    if (
+        normalized.startswith("/")
+        or normalized == ".."
+        or normalized.startswith("../")
+        or "/../" in normalized
+        or normalized != key.rstrip("/")
+    ):
+        return False
+
+    lower_key = normalized.lower()
     return any(lower_key.endswith(ext) for ext in SUPPORTED_IMAGE_EXTENSIONS)
 
 
@@ -209,8 +237,12 @@ async def serve_image(
     """
     Serve images from S3/MinIO via streaming.
 
-    NOTE: Currently PUBLIC to allow HTML <img> tags to load images.
-    TODO: Implement presigned URLs for secure, time-limited access.
+    NOTE: Currently PUBLIC to allow HTML <img> tags to load images. Access is
+    bucket-locked to the configured MinIO/S3 bucket and the key is
+    traversal-hardened, so this endpoint can only stream objects from
+    Depictio's own bucket.
+    TODO: Presigned, time-limited URLs remain future work for per-object
+    access control.
     """
     decoded_path = unquote(s3_path)
 
@@ -219,6 +251,12 @@ async def serve_image(
     except ValueError as e:
         logger.error(f"Invalid S3 path: {decoded_path} - {e}")
         raise HTTPException(status_code=400, detail=f"Invalid S3 path format: {str(e)}")
+
+    # SECURITY: lock serving to Depictio's configured bucket. Without this an
+    # attacker could point s3_path at any bucket the S3 credentials can read.
+    if bucket != settings.minio.bucket:
+        logger.warning(f"Image request for disallowed bucket rejected: {bucket}")
+        raise HTTPException(status_code=403, detail="Access to the requested bucket is forbidden")
 
     if not _validate_image_path(key):
         logger.warning(f"Invalid image path rejected: {key}")
@@ -248,5 +286,7 @@ async def serve_image(
         logger.error(f"Bucket not found: {bucket}")
         raise HTTPException(status_code=404, detail="Storage bucket not found")
     except Exception as e:
+        # SECURITY: log the underlying error internally, but do not leak
+        # exception details (which may include S3 internals) to the client.
         logger.error(f"Error serving image {bucket}/{key}: {e}")
-        raise HTTPException(status_code=500, detail=f"Error retrieving image: {str(e)}")
+        raise HTTPException(status_code=500, detail="Error retrieving image")

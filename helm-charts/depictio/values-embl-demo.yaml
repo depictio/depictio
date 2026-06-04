@@ -4,7 +4,18 @@
 # Layered on top of:
 #   - values.yaml (base configuration)
 #   - values-embl-demo-base.yaml (EMBL infrastructure + demo mode)
-#   - values-embl-secrets.yaml (S3 credentials)
+#   - values-embl-secrets.yaml (S3 + admin bootstrap credentials)
+#
+# ⚠ REQUIRED in values-embl-secrets.yaml (never commit to git):
+#     secrets:
+#       minioRootPassword: <strong-secret>
+#       bootstrapAdminEmail:    <chosen-admin-email>
+#       bootstrapAdminPassword: <strong-secret, ≥16 chars>
+#
+# The chart used to ship admin@example.com / changeme as the seeded admin,
+# and the wipe-job below would silently reseed those defaults on every
+# upgrade. The API now refuses to boot if no admin exists in MongoDB AND
+# bootstrapAdminPassword is unset — that's the fail-fast contract.
 #
 # Tenant quota: 32 CPU / 64 GiB / 30 pods, shared with values-embl-demo-dev.yaml
 # Per-env target: ~6 CPU / 12 GiB requests, ~14 CPU / 28 GiB limits — two

@@ -545,18 +545,19 @@ async def multiqc_preview(
     if not selected_module or not selected_plot:
         raise HTTPException(status_code=400, detail="module and plot are required.")
 
-    # Permission check: piggyback on the project that owns the DC.
-    project_doc = projects_collection.find_one(
-        {
-            "workflows.data_collections._id": ObjectId(dc_id),
-            "$or": [
-                {"permissions.owners._id": current_user.id},  # type: ignore[possibly-unbound-attribute]
-                {"permissions.viewers._id": current_user.id},  # type: ignore[possibly-unbound-attribute]
-                {"permissions.viewers": "*"},
-                {"is_public": True},
-            ],
-        }
-    )
+    # Permission check: piggyback on the project that owns the DC. Admins
+    # (including the anonymous-admin used in single-user/public mode) wouldn't
+    # appear in the project's permissions list, so they skip the owner/viewer
+    # filter — otherwise they'd get a spurious 404 on previews they don't own.
+    permission_query: dict = {"workflows.data_collections._id": ObjectId(dc_id)}
+    if not current_user.is_admin:
+        permission_query["$or"] = [
+            {"permissions.owners._id": current_user.id},
+            {"permissions.viewers._id": current_user.id},
+            {"permissions.viewers": "*"},
+            {"is_public": True},
+        ]
+    project_doc = projects_collection.find_one(permission_query)
     if not project_doc:
         raise HTTPException(status_code=404, detail="Data collection not found or access denied.")
 

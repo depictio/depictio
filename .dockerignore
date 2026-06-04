@@ -82,3 +82,14 @@ node_modules/
 *.swp
 .DS_Store
 Thumbs.db
+
+# -----------------------------
+# Secrets / local env — never bake these into an image layer
+# -----------------------------
+# Keeps .env / .env.* files and any TLS keypairs/certs out of the build
+# context so they can't leak into image history. None of the api/worker/
+# viewer builds need these — config is injected at runtime via env vars.
+.env*
+*.pem
+*.key
+*.crt

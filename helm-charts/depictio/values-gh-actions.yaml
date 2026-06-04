@@ -2,6 +2,17 @@
 ingress:
   enabled: false
 
+# Bootstrap credentials for the throwaway CI minikube cluster ONLY — not
+# secrets in any meaningful sense (cluster lives minutes, no ingress, never
+# reachable). Required since the security pass: backend pods fail fast when
+# no admin exists in MongoDB and these are unset, which crash-looped every
+# CI deploy. Password must be >=16 chars and not on the weak-default list.
+secrets:
+  bootstrapAdminEmail: "admin@example.com"
+  bootstrapAdminPassword: "ci-only-bootstrap-admin-pw-1"
+  # The e2e/Cypress steps expect the fixture user to exist.
+  seedTestUser: true
+
 # Use standard storage class for Minikube
 storageClass: "standard"
 

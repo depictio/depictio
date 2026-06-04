@@ -134,7 +134,7 @@ class TestGetAllUsersEndpoint:
 
     @pytest.mark.asyncio
     async def test_get_all_users_non_admin_user(self, mock_mongodb_async):
-        """Test get_all_users raises 401 when user is not admin."""
+        """Test get_all_users raises 403 when user is not admin."""
         # Get regular user from the mock database
         regular_user = await UserBeanie.find_one({"email": "user1@example.com"})
         assert regular_user is not None
@@ -143,8 +143,9 @@ class TestGetAllUsersEndpoint:
         with pytest.raises(HTTPException) as exc_info:
             await get_all_users(current_user=regular_user)
 
-        assert exc_info.value.status_code == 401  # type: ignore[unresolved-attribute]
-        assert "Current user is not an admin" in exc_info.value.detail  # type: ignore[unresolved-attribute]
+        # 403 (not 401): the caller IS authenticated, just not privileged.
+        assert exc_info.value.status_code == 403  # type: ignore[unresolved-attribute]
+        assert "Admin privileges required" in exc_info.value.detail  # type: ignore[unresolved-attribute]
 
     @pytest.mark.asyncio
     async def test_get_all_users_empty_database(self):

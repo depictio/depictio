@@ -42,8 +42,14 @@ services:
       - DEPICTIO_CONTEXT=server
       - DEPICTIO_MONGODB_SERVICE_NAME=mongo
       - DEPICTIO_MONGODB_PORT=27018
-      - DEPICTIO_MINIO_ROOT_USER=minio
-      - DEPICTIO_MINIO_ROOT_PASSWORD=minio123
+      # Devcontainer dev creds — long enough to pass the Settings()
+      # weak-password validator. Override via Codespaces secrets in any
+      # network-accessible workspace.
+      - DEPICTIO_MINIO_ROOT_USER=depictio_devcontainer
+      - DEPICTIO_MINIO_ROOT_PASSWORD=devcontainer_minio_pw_x9aKqR
+      - DEPICTIO_BOOTSTRAP_ADMIN_EMAIL=admin@example.com
+      - DEPICTIO_BOOTSTRAP_ADMIN_PASSWORD=devcontainer_admin_pw_4Ks8r2qZ
+      - DEPICTIO_BOOTSTRAP_SEED_TEST_USER=true
       - DEPICTIO_MINIO_ENDPOINT_URL=http://minio:9000
       - CLAUDE_CONFIG_DIR=/home/vscode/.claude
       # Fix Docker API version mismatch in Codespaces

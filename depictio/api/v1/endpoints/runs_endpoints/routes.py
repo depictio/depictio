@@ -27,13 +27,18 @@ async def list_runs(workflow_id: str, current_user: User = Depends(get_current_u
     assert isinstance(workflow_oid, ObjectId)
     user_oid = ObjectId(current_user.id)
 
-    query = {
-        "workflow_id": workflow_oid,
-        "$or": [
+    query: dict = {"workflow_id": workflow_oid}
+    # Admins (including the anonymous-admin used in single-user mode) bypass the
+    # membership filter — they wouldn't appear in the run's permissions list.
+    # The previous ``permissions.owners.is_admin`` check inspected a document
+    # field instead of the caller, so it never reflected the real user.
+    if not current_user.is_admin:
+        query["$or"] = [
             {"permissions.owners._id": user_oid},  # User is an owner
-            {"permissions.owners.is_admin": True},  # User is an admin
-        ],
-    }
+            {"permissions.editors._id": user_oid},  # User is an editor
+            {"permissions.viewers._id": user_oid},  # User is a viewer
+            {"permissions.viewers": "*"},  # Publicly viewable
+        ]
 
     # If permission is granted, retrieve all runs for the given workflow.
     runs_cursor = runs_collection.find(query)
@@ -45,13 +50,18 @@ async def list_runs(workflow_id: str, current_user: User = Depends(get_current_u
 
 @runs_endpoint_router.get("/get/{run_id}", response_model=WorkflowRun)
 async def get_run(run_id: PyObjectId, current_user: User = Depends(get_current_user)):
-    query = {
-        "_id": run_id,
-        "$or": [
-            {"permissions.owners._id": current_user.id},  # User is an owner
-            {"permissions.owners.is_admin": True},  # User is an admin
-        ],
-    }
+    user_oid = ObjectId(current_user.id)
+
+    query: dict = {"_id": run_id}
+    # Admins bypass the membership filter; read-only access also extends to
+    # editors/viewers and publicly viewable runs.
+    if not current_user.is_admin:
+        query["$or"] = [
+            {"permissions.owners._id": user_oid},  # User is an owner
+            {"permissions.editors._id": user_oid},  # User is an editor
+            {"permissions.viewers._id": user_oid},  # User is a viewer
+            {"permissions.viewers": "*"},  # Publicly viewable
+        ]
 
     # Find the run by ID
     run = runs_collection.find_one(query)
@@ -72,13 +82,12 @@ async def delete_run(run_id: str, current_user: User = Depends(get_current_user)
 
     user_oid = ObjectId(current_user.id)
 
-    query = {
-        "_id": run_oid,
-        "$or": [
-            {"permissions.owners._id": user_oid},  # User is an owner
-            {"permissions.owners.is_admin": True},  # User is an admin
-        ],
-    }
+    # Deletion is a write operation: restrict to owners, with an admin bypass
+    # based on the *caller* (not a document field, which the previous
+    # ``permissions.owners.is_admin`` check incorrectly inspected).
+    query: dict = {"_id": run_oid}
+    if not current_user.is_admin:
+        query["permissions.owners._id"] = user_oid
 
     # Find the run by ID
     run = runs_collection.find_one(query)
@@ -127,15 +136,13 @@ async def create_run(
     # Notice that since workflows are stored as subdocuments,
     # we use "workflows._id" to match the workflow's ObjectId.
     workflow_oid = ObjectId(workflow_id)
-    project = projects_collection.find_one(
-        {
-            "workflows._id": workflow_oid,
-            "$or": [
-                {"permissions.owners._id": user_oid},
-                {"permissions.owners.is_admin": True},
-            ],
-        }
-    )
+    # Upserting runs is a write operation: require project ownership, with an
+    # admin bypass keyed on the *caller* (the previous ``permissions.owners.is_admin``
+    # check inspected a document field, not the current user).
+    project_query: dict = {"workflows._id": workflow_oid}
+    if not current_user.is_admin:
+        project_query["permissions.owners._id"] = user_oid
+    project = projects_collection.find_one(project_query)
 
     if not project:
         raise HTTPException(

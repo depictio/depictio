@@ -1,6 +1,8 @@
 """Analytics API endpoints."""
 
+import hmac
 from datetime import datetime, timedelta
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from pydantic import BaseModel
@@ -8,6 +10,10 @@ from pymongo import DESCENDING
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
+from depictio.api.v1.endpoints.user_endpoints.core_functions import (
+    _async_fetch_user_from_token,
+)
+from depictio.api.v1.endpoints.user_endpoints.routes import oauth2_scheme_optional
 from depictio.api.v1.services.analytics_data_service import AnalyticsDataService
 from depictio.api.v1.services.analytics_service import AnalyticsService
 from depictio.models.models.analytics import (
@@ -16,6 +22,7 @@ from depictio.models.models.analytics import (
     UserActivity,
     UserSession,
 )
+from depictio.models.models.users import User
 
 router = APIRouter()
 
@@ -40,17 +47,67 @@ def get_analytics_service() -> AnalyticsService:
     )
 
 
-def verify_internal_api_key(
-    x_api_key: str = Header(
-        ..., alias="X-Api-Key", description="Internal API key for authentication"
+def _is_valid_internal_api_key(x_api_key: str | None) -> bool:
+    """Constant-time check of a caller-supplied internal API key.
+
+    Returns ``False`` (rather than raising) when the header is absent or the
+    configured key is unset so callers can fall back to session-based admin
+    authentication.
+    """
+    configured_key = settings.auth.internal_api_key
+    if not x_api_key or not configured_key:
+        return False
+    return hmac.compare_digest(x_api_key, configured_key)
+
+
+async def require_analytics_admin(
+    token: Annotated[str | None, Depends(oauth2_scheme_optional)] = None,
+    x_api_key: str | None = Header(
+        default=None,
+        alias="X-Api-Key",
+        description="Internal API key (alternative to an authenticated admin session)",
     ),
 ) -> None:
-    """Dependency to verify internal API key for protected analytics endpoints."""
-    if x_api_key != settings.auth.internal_api_key:
-        raise HTTPException(
-            status_code=403,
-            detail="Invalid API key",
-        )
+    """Authorize access to protected analytics endpoints.
+
+    Analytics data (IPs, user IDs, request paths) is sensitive in multi-user /
+    public deployments. Access is granted if EITHER:
+
+    - a valid internal API key is supplied via ``X-Api-Key`` (for trusted
+      internal services / operators), OR
+    - the request carries an authenticated admin user session.
+
+    Non-admin authenticated users are rejected so they cannot read other
+    users' analytics.
+    """
+    # 1. Internal service path: constant-time API-key comparison.
+    if _is_valid_internal_api_key(x_api_key):
+        return
+
+    # 2. Authenticated admin session path.
+    if token is not None:
+        user = await _async_fetch_user_from_token(token)
+        if user is not None:
+            if user.is_admin:
+                return
+            logger.warning(
+                f"Non-admin user {user.id} denied access to protected analytics endpoint"
+            )
+            raise HTTPException(
+                status_code=403,
+                detail="Administrator privileges required to access analytics data",
+            )
+
+    raise HTTPException(
+        status_code=403,
+        detail="Invalid API key or insufficient privileges",
+    )
+
+
+# Backwards-compatible alias: existing callers (e.g. analytics-data routes)
+# depend on ``verify_internal_api_key``; route through the hardened combined
+# admin/API-key gate.
+verify_internal_api_key = require_analytics_admin
 
 
 @router.get("/summary", response_model=AnalyticsSummary)
@@ -351,6 +408,7 @@ async def get_activity_stats(
 async def track_client_pageview(
     pageview: ClientPageView,
     request: Request,
+    token: Annotated[str | None, Depends(oauth2_scheme_optional)] = None,
     analytics_service: AnalyticsService = Depends(get_analytics_service),
 ) -> dict:
     """
@@ -360,13 +418,18 @@ async def track_client_pageview(
         raise HTTPException(status_code=404, detail="Analytics not enabled")
 
     try:
-        # Get or create session
-        # Don't use random session_id from client as user_id - let the service determine proper user_id
-        user_id = (
-            pageview.user_id
-            if pageview.user_id and not pageview.user_id.startswith("anon_")
-            else None
-        )
+        # Derive the user identity server-side from the auth token. The
+        # client-supplied ``pageview.user_id`` is NEVER trusted (it is kept on
+        # the schema only for backward compatibility) — otherwise any client
+        # could attribute page views to another user's analytics.
+        authenticated_user: User | None = None
+        if token is not None:
+            authenticated_user = await _async_fetch_user_from_token(token)
+
+        user_id = str(authenticated_user.id) if authenticated_user else None
+
+        # Get or create session. When there is no authenticated user, pass
+        # ``None`` and let the service determine the proper (anonymous) user_id.
         session = await analytics_service.get_or_create_session(request, user_id)
 
         # Create a mock request object for the page view
