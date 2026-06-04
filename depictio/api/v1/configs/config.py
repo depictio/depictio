@@ -19,6 +19,8 @@ initialize_loggers(verbose_level=settings.logging.verbosity_level)
 
 API_BASE_URL = settings.fastapi.internal_url
 DASH_BASE_URL = settings.viewer.internal_url
+
+
 def _build_mongodb_url() -> str:
     cfg = settings.mongodb
     if cfg.username and cfg.password:
