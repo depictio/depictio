@@ -7,22 +7,22 @@
  */
 
 import { test, expect } from "@fixtures/auth";
-import { uiRegister, uiLogin } from "@fixtures/auth";
+import { uiRegister, uiLogin, getAuthMode } from "@fixtures/auth";
 import { credentials } from "@fixtures/credentials";
 
-const skipIfUnauth = () =>
-  test.skip(
-    process.env.UNAUTHENTICATED_MODE === "true" ||
-      process.env.PUBLIC_MODE === "true",
-    "Registration is disabled in unauthenticated / public mode.",
-  );
-
 test.describe("Authentication UI - Registration Flow", () => {
+  test.beforeEach(async () => {
+    const { is_single_user_mode, is_public_mode } = await getAuthMode();
+    test.skip(
+      is_single_user_mode || is_public_mode,
+      "Registration is disabled in single-user / public mode.",
+    );
+  });
+
   test.describe("Success scenarios", () => {
     test("registers a new user and shows a success message", async ({
       page,
     }) => {
-      skipIfUnauth();
       const email = `test_${Date.now()}@example.com`;
       await uiRegister(page, email, "test_password_123");
 
@@ -34,7 +34,6 @@ test.describe("Authentication UI - Registration Flow", () => {
     test("registers then logs in with the new credentials", async ({
       page,
     }) => {
-      skipIfUnauth();
       const email = `test_user_${Date.now()}@example.com`;
       const password = "SecurePassword123!";
 
@@ -54,7 +53,6 @@ test.describe("Authentication UI - Registration Flow", () => {
 
   test.describe("Failure scenarios", () => {
     test("shows an error for password mismatch", async ({ page }) => {
-      skipIfUnauth();
       const email = `test_user_${Date.now()}@example.com`;
       await uiRegister(page, email, "SecurePassword123!", "SecurePassword124!");
 
@@ -66,7 +64,6 @@ test.describe("Authentication UI - Registration Flow", () => {
     test("shows an error when registering an existing email", async ({
       page,
     }) => {
-      skipIfUnauth();
       await uiRegister(page, credentials.testUser.email, "SomePassword123!");
 
       await expect(

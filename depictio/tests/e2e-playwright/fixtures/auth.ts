@@ -1,8 +1,34 @@
 import { test as base, expect, Page, APIRequestContext } from "@playwright/test";
 import { credentials, TestUser, UserType } from "./credentials";
 
-const API_URL = process.env.PLAYWRIGHT_API_URL ?? "http://localhost:8058";
+const API_URL = process.env.PLAYWRIGHT_API_URL ?? "http://localhost:8101";
 const API_PREFIX = "/depictio/api/v1";
+
+interface AuthMode {
+  is_single_user_mode: boolean;
+  is_public_mode: boolean;
+}
+
+let _authModeCache: AuthMode | null = null;
+
+/**
+ * Fetches the backend auth mode once and caches it.
+ * Used to skip tests that are incompatible with single-user / public mode.
+ */
+export async function getAuthMode(): Promise<AuthMode> {
+  if (_authModeCache) return _authModeCache;
+  try {
+    const res = await fetch(`${API_URL}${API_PREFIX}/auth/me/optional`);
+    const data = (await res.json()) as Partial<AuthMode>;
+    _authModeCache = {
+      is_single_user_mode: data.is_single_user_mode ?? false,
+      is_public_mode: data.is_public_mode ?? false,
+    };
+  } catch {
+    _authModeCache = { is_single_user_mode: false, is_public_mode: false };
+  }
+  return _authModeCache;
+}
 
 export interface TokenBundle {
   access_token: string;
