@@ -466,7 +466,7 @@ async def get_current_user_info_optional(
 
     # Single-user mode: the data endpoints (`get_user_or_anonymous`) auto-resolve
     # to the admin even without a token. Mirror that here so the React
-    # `/dashboards-beta` page knows who owns the seed dashboards — otherwise
+    # `/dashboards` page knows who owns the seed dashboards — otherwise
     # everything not flagged public/example lands in "Accessed" because the
     # client thinks it's anonymous.
     if user_payload is None and settings.auth.is_single_user_mode:
@@ -877,8 +877,8 @@ async def delete_token(
 
 
 # ---------------------------------------------------------------------------
-# Bearer-authed, user-scoped token endpoints for the React /profile-beta and
-# /cli-agents-beta SPA. These mirror /create_token and /delete_token but use
+# Bearer-authed, user-scoped token endpoints for the React /profile and
+# /cli-agents SPA. These mirror /create_token and /delete_token but use
 # the caller's Bearer token instead of the internal API key — safe to call
 # from a browser. Only operate on the current user's tokens.
 # ---------------------------------------------------------------------------

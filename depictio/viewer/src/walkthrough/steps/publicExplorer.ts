@@ -23,9 +23,9 @@ function formatExpiry(hours: number, minutes: number): string {
  *  session if they want to tweak things.
  *
  *  Handles two entry points cleanly via auto-advance:
- *  - Lands on /dashboards-beta → welcome → pick a dashboard → tour resumes
- *    on /dashboard-beta/{id} with sidebar/filter/realtime.
- *  - Lands directly on /dashboard-beta/{id} → welcome → Next jumps past the
+ *  - Lands on /dashboards → welcome → pick a dashboard → tour resumes
+ *    on /dashboard/{id} with sidebar/filter/realtime.
+ *  - Lands directly on /dashboard/{id} → welcome → Next jumps past the
  *    list step (route guard doesn't match) → sidebar/filter/realtime.
  */
 export function buildPublicExplorerWalkthrough(
@@ -47,7 +47,7 @@ export function buildPublicExplorerWalkthrough(
         body: `👋 Welcome! This Depictio instance has been made public so the dashboards and datasets it contains can be shared. Open any dashboard below to explore it — or **duplicate** one to get your own editable copy in a temporary session (lasts ${ttl}). The tour walks you through both.`,
         position: 'bottom',
         image: {
-          src: '/dashboard-beta/favicon.svg',
+          src: '/dashboard/favicon.svg',
           alt: 'Depictio',
           height: 64,
         },
@@ -55,7 +55,7 @@ export function buildPublicExplorerWalkthrough(
       {
         id: 'dashboard-actions',
         target: 'dashboard-actions',
-        route: /^\/dashboards-beta\/?$/,
+        route: /^\/dashboards\/?$/,
         title: "Each dashboard's actions menu",
         body: 'Every dashboard has a menu here. Click it to see what you can do with this dashboard — including making your own copy.',
         position: 'left',
@@ -64,7 +64,7 @@ export function buildPublicExplorerWalkthrough(
       {
         id: 'dashboard-duplicate',
         target: 'dashboard-duplicate',
-        route: /^\/dashboards-beta\/?$/,
+        route: /^\/dashboards\/?$/,
         title: 'Duplicate to get your own copy',
         body: `Pick **Duplicate** to spin up your own editable copy in a temporary session (lasts ${ttl}). Tweak filters, rearrange components, save your view — the copy disappears when your session expires. Or hit Next to keep exploring without duplicating.`,
         position: 'left',
@@ -73,7 +73,7 @@ export function buildPublicExplorerWalkthrough(
       {
         id: 'pick-dashboard',
         target: 'dashboard-card',
-        route: /^\/dashboards-beta\/?$/,
+        route: /^\/dashboards\/?$/,
         title: 'Open a dashboard',
         body: 'Click any dashboard card to dive in — the tour resumes inside.',
         position: 'right',
@@ -82,7 +82,7 @@ export function buildPublicExplorerWalkthrough(
       {
         id: 'sidebar',
         target: 'sidebar',
-        route: /^\/dashboard-beta\//,
+        route: /^\/dashboard\//,
         title: 'Navigate dashboard tabs',
         body: 'Each dashboard can have multiple tabs. Switch between them from the sidebar.',
         position: 'right',
@@ -90,7 +90,7 @@ export function buildPublicExplorerWalkthrough(
       {
         id: 'filter-panel',
         target: 'filter-panel',
-        route: /^\/dashboard-beta\//,
+        route: /^\/dashboard\//,
         title: 'Filter the data',
         body: 'Use these interactive controls to narrow what every chart, card, and table shows. Selections propagate across the whole dashboard.',
         position: 'right',
@@ -98,7 +98,7 @@ export function buildPublicExplorerWalkthrough(
       {
         id: 'realtime',
         target: 'realtime-indicator',
-        route: /^\/dashboard-beta\//,
+        route: /^\/dashboard\//,
         title: 'Live updates',
         body: 'When upstream data changes, this pill lights up. Open Settings to switch on auto-refresh, or click to refresh manually.',
         position: 'bottom',

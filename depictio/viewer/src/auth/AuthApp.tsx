@@ -10,7 +10,7 @@ import RegisterForm from './components/RegisterForm';
 import { useAuthMode } from './hooks/useAuthMode';
 import './styles/auth.css';
 
-const POST_AUTH_REDIRECT = '/dashboards-beta';
+const POST_AUTH_REDIRECT = '/dashboards';
 
 type View = 'login' | 'register' | 'oauth-callback';
 

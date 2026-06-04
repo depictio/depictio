@@ -2,7 +2,7 @@ import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 
-// Dev-only: serve the SPA's index.html (under base /dashboard-beta/) for any
+// Dev-only: serve the SPA's index.html (under base /dashboard/) for any
 // non-asset SPA route so React routes get HMR. Production has the matching
 // FastAPI catch-alls in depictio/api/main.py — this plugin only runs when
 // `vite dev` is the server. The browser URL stays untouched, so main.tsx
@@ -12,13 +12,13 @@ import path from 'path';
 // (resolveTree) and the FastAPI mounts in depictio/api/main.py.
 const SPA_ROUTE_PREFIXES = [
   'auth',
-  'dashboards-beta',
-  'dashboard-beta-edit',
-  'projects-beta',
-  'about-beta',
-  'admin-beta',
-  'profile-beta',
-  'cli-agents-beta',
+  'dashboards',
+  'dashboard-edit',
+  'projects',
+  'about',
+  'admin',
+  'profile',
+  'cli-agents',
 ];
 const SPA_ROUTE_RE = new RegExp(
   `^/(?:${SPA_ROUTE_PREFIXES.join('|')})(/|$|\\?)`,
@@ -30,23 +30,23 @@ const authDevFallback = (): Plugin => ({
   configureServer(server) {
     server.middlewares.use((req, res, next) => {
       // Bare root → dashboards list, in one hop. Without this, Vite
-      // 302-redirects `/` to the SPA base `/dashboard-beta/` first, and only
-      // then does the app bounce to `/dashboards-beta` — a visible
+      // 302-redirects `/` to the SPA base `/dashboard/` first, and only
+      // then does the app bounce to `/dashboards` — a visible
       // singular→plural double redirect. Intercepting here (before Vite's
-      // base-redirect middleware) lands the user on `/dashboards-beta`
+      // base-redirect middleware) lands the user on `/dashboards`
       // directly. Mirrors the nginx `location = /` redirect in prod.
       if (
         req.url === '/' ||
-        req.url === '/dashboard-beta' ||
-        req.url === '/dashboard-beta/'
+        req.url === '/dashboard' ||
+        req.url === '/dashboard/'
       ) {
         res.statusCode = 302;
-        res.setHeader('Location', '/dashboards-beta');
+        res.setHeader('Location', '/dashboards');
         res.end();
         return;
       }
       if (req.url && SPA_ROUTE_RE.test(req.url)) {
-        req.url = '/dashboard-beta/';
+        req.url = '/dashboard/';
       }
       next();
     });
@@ -71,9 +71,9 @@ const HMR_CLIENT_PORT = process.env.VITE_HMR_CLIENT_PORT
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react(), authDevFallback()],
-  // SPA is mounted at /dashboard-beta/ by FastAPI in depictio/api/main.py.
+  // SPA is mounted at /dashboard/ by FastAPI in depictio/api/main.py.
   // The leading slash + trailing slash matter for bundle asset resolution.
-  base: '/dashboard-beta/',
+  base: '/dashboard/',
   build: {
     outDir: 'dist',
     emptyOutDir: true,
@@ -105,7 +105,7 @@ export default defineConfig({
       },
       // FastAPI serves these at :8058 (StaticFiles mounts in main.py for
       // dashboard thumbnails and Dash-shared assets like the nf-core /
-      // depictio logos). Vite owns /dashboard-beta/ but everything else
+      // depictio logos). Vite owns /dashboard/ but everything else
       // needs to forward to the backend.
       '/static': {
         target: API_TARGET,

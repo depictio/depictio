@@ -400,7 +400,7 @@ const ProjectTableView: React.FC<ProjectTableViewProps> = ({
                           color="cyan"
                           size="sm"
                           component="a"
-                          href={`/projects-beta/${r.id}`}
+                          href={`/projects/${r.id}`}
                           aria-label="Open data manager"
                           onClick={(e) => e.stopPropagation()}
                         >
@@ -413,7 +413,7 @@ const ProjectTableView: React.FC<ProjectTableViewProps> = ({
                           color="blue"
                           size="sm"
                           component="a"
-                          href={`/projects-beta/${r.id}/permissions`}
+                          href={`/projects/${r.id}/permissions`}
                           aria-label="Open permissions"
                           onClick={(e) => e.stopPropagation()}
                         >

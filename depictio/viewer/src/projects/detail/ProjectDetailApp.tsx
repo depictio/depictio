@@ -212,9 +212,9 @@ function engineDescription(wf: WorkflowShape): string | null {
   return name || null;
 }
 
-/** Read project ID from /projects-beta/{id}[/permissions] pathname. */
+/** Read project ID from /projects/{id}[/permissions] pathname. */
 function readProjectIdFromPath(): string | null {
-  const m = window.location.pathname.match(/^\/projects-beta\/([^/?#]+)/);
+  const m = window.location.pathname.match(/^\/projects\/([^/?#]+)/);
   return m?.[1] || null;
 }
 
@@ -427,7 +427,7 @@ const ProjectDetailApp: React.FC = () => {
           <Group gap="xs">
             <Button
               component="a"
-              href={`/projects-beta/${projectId}/permissions`}
+              href={`/projects/${projectId}/permissions`}
               variant="subtle"
               color="blue"
               leftSection={<Icon icon="mdi:shield-account-outline" width={16} />}
@@ -436,7 +436,7 @@ const ProjectDetailApp: React.FC = () => {
             </Button>
             <Button
               component="a"
-              href="/projects-beta"
+              href="/projects"
               variant="subtle"
               color="gray"
               leftSection={<Icon icon="mdi:arrow-left" width={16} />}
@@ -466,7 +466,7 @@ const ProjectDetailApp: React.FC = () => {
                   color="var(--mantine-color-red-6)"
                 />
                 <Text c="red">{loadError}</Text>
-                <Button component="a" href="/projects-beta" variant="light">
+                <Button component="a" href="/projects" variant="light">
                   Back to projects
                 </Button>
               </Stack>

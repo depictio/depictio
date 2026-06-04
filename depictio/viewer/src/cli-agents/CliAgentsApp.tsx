@@ -204,7 +204,7 @@ const CliAgentsApp: React.FC = () => {
           </Group>
           <Button
             component="a"
-            href="/profile-beta"
+            href="/profile"
             variant="subtle"
             color="gray"
             leftSection={<Icon icon="mdi:arrow-left" width={16} />}

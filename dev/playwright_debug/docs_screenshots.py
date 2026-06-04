@@ -132,7 +132,7 @@ async def _page_shot(ctx: ShotContext, route: str, name: str, wait_ms: int = 120
 @register("link_create_modal")
 async def _link_create(ctx: ShotContext) -> None:
     """Cross-DC link Create/Edit modal with resolver picker."""
-    await ctx.page.goto(f"{ctx.viewer_url}/projects-beta/{ctx.project_id}")
+    await ctx.page.goto(f"{ctx.viewer_url}/projects/{ctx.project_id}")
     await ctx.page.get_by_test_id("add-link-btn").click()
     await _shot(ctx, '[data-testid="link-edit-modal"]', "link_create_modal")
 
@@ -140,7 +140,7 @@ async def _link_create(ctx: ShotContext) -> None:
 @register("manage_dc_modal")
 async def _manage_dc(ctx: ShotContext) -> None:
     """Manage Data Collection modal (Modify / Clear tabs)."""
-    await ctx.page.goto(f"{ctx.viewer_url}/projects-beta/{ctx.project_id}")
+    await ctx.page.goto(f"{ctx.viewer_url}/projects/{ctx.project_id}")
     await ctx.page.get_by_test_id("manage-dc-btn").first.click()
     await _shot(ctx, '[data-testid="manage-dc-modal"]', "manage_dc_modal")
 
@@ -148,7 +148,7 @@ async def _manage_dc(ctx: ShotContext) -> None:
 @register("create_dc_modal_table")
 async def _create_dc_table(ctx: ShotContext) -> None:
     """Create DC modal on the Table tab (where coordinates lat/lon detection lives)."""
-    await ctx.page.goto(f"{ctx.viewer_url}/projects-beta/{ctx.project_id}")
+    await ctx.page.goto(f"{ctx.viewer_url}/projects/{ctx.project_id}")
     await ctx.page.get_by_test_id("create-dc-btn").click()
     # Tab is selected by default; click is a no-op safety in case order shifts.
     await ctx.page.get_by_role("tab", name="Table (CSV / TSV / Parquet)").click()
@@ -156,71 +156,71 @@ async def _create_dc_table(ctx: ShotContext) -> None:
 
 
 # ---- Full-page React (Beta) page shots ------------------------------------
-# Output to <version>/react-beta/ so they don't clash with legacy Dash images
+# Output to <version>/react/ so they don't clash with legacy Dash images
 # until the prose is rewritten to reference them.
 
 
 def _rb(name: str) -> str:
-    """Place page-level shots under a react-beta/ subdir within --version."""
-    return f"react-beta/{name}"
+    """Place page-level shots under a react/ subdir within --version."""
+    return f"react/{name}"
 
 
 @register("page_dashboards")
 async def _page_dashboards(ctx: ShotContext) -> None:
-    """React Beta /dashboards-beta landing — dashboard list."""
-    await _page_shot(ctx, "/dashboards-beta", _rb("page_dashboards"))
+    """React Beta /dashboards landing — dashboard list."""
+    await _page_shot(ctx, "/dashboards", _rb("page_dashboards"))
 
 
 @register("page_projects")
 async def _page_projects(ctx: ShotContext) -> None:
-    """React Beta /projects-beta — projects list."""
-    await _page_shot(ctx, "/projects-beta", _rb("page_projects"))
+    """React Beta /projects — projects list."""
+    await _page_shot(ctx, "/projects", _rb("page_projects"))
 
 
 @register("page_project_detail")
 async def _page_project_detail(ctx: ShotContext) -> None:
-    """React Beta /projects-beta/{id} — DC list + cross-DC links + joins graph."""
-    await _page_shot(ctx, f"/projects-beta/{ctx.project_id}", _rb("page_project_detail"))
+    """React Beta /projects/{id} — DC list + cross-DC links + joins graph."""
+    await _page_shot(ctx, f"/projects/{ctx.project_id}", _rb("page_project_detail"))
 
 
 @register("page_profile")
 async def _page_profile(ctx: ShotContext) -> None:
-    """React Beta /profile-beta — user profile."""
-    await _page_shot(ctx, "/profile-beta", _rb("page_profile"))
+    """React Beta /profile — user profile."""
+    await _page_shot(ctx, "/profile", _rb("page_profile"))
 
 
 @register("page_about")
 async def _page_about(ctx: ShotContext) -> None:
-    """React Beta /about-beta — about page."""
-    await _page_shot(ctx, "/about-beta", _rb("page_about"))
+    """React Beta /about — about page."""
+    await _page_shot(ctx, "/about", _rb("page_about"))
 
 
 @register("page_admin")
 async def _page_admin(ctx: ShotContext) -> None:
-    """React Beta /admin-beta — admin users page (admin role required)."""
-    await _page_shot(ctx, "/admin-beta", _rb("page_admin"))
+    """React Beta /admin — admin users page (admin role required)."""
+    await _page_shot(ctx, "/admin", _rb("page_admin"))
 
 
 @register("page_cli_agents")
 async def _page_cli_agents(ctx: ShotContext) -> None:
-    """React Beta /cli-agents-beta — CLI tokens / agents."""
-    await _page_shot(ctx, "/cli-agents-beta", _rb("page_cli_agents"))
+    """React Beta /cli-agents — CLI tokens / agents."""
+    await _page_shot(ctx, "/cli-agents", _rb("page_cli_agents"))
 
 
 @register("page_dashboard_viewer")
 async def _page_dashboard_viewer(ctx: ShotContext) -> None:
-    """React Beta /dashboard-beta/{id} — read-only dashboard view, settles after grid render."""
+    """React Beta /dashboard/{id} — read-only dashboard view, settles after grid render."""
     await _page_shot(
-        ctx, f"/dashboard-beta/{ctx.dashboard_id}", _rb("page_dashboard_viewer"), wait_ms=9_000
+        ctx, f"/dashboard/{ctx.dashboard_id}", _rb("page_dashboard_viewer"), wait_ms=9_000
     )
 
 
 @register("page_dashboard_editor")
 async def _page_dashboard_editor(ctx: ShotContext) -> None:
-    """React Beta /dashboard-beta-edit/{id} — design-mode editor."""
+    """React Beta /dashboard-edit/{id} — design-mode editor."""
     await _page_shot(
         ctx,
-        f"/dashboard-beta-edit/{ctx.dashboard_id}",
+        f"/dashboard-edit/{ctx.dashboard_id}",
         _rb("page_dashboard_editor"),
         wait_ms=4_000,
     )
@@ -231,8 +231,8 @@ async def _page_dashboard_editor(ctx: ShotContext) -> None:
 
 @register("cli_config_create_modal")
 async def _cli_config_create(ctx: ShotContext) -> None:
-    """Add New CLI Configuration modal opened on /cli-agents-beta."""
-    await ctx.page.goto(f"{ctx.viewer_url}/cli-agents-beta", wait_until="domcontentloaded")
+    """Add New CLI Configuration modal opened on /cli-agents."""
+    await ctx.page.goto(f"{ctx.viewer_url}/cli-agents", wait_until="domcontentloaded")
     await ctx.page.wait_for_timeout(800)
     await ctx.page.get_by_test_id("add-cli-config-btn").click()
     await _shot(ctx, '[data-testid="create-cli-token-modal"]', _rb("cli_config_create_modal"))
@@ -240,8 +240,8 @@ async def _cli_config_create(ctx: ShotContext) -> None:
 
 @register("new_dashboard_modal")
 async def _new_dashboard(ctx: ShotContext) -> None:
-    """+ New Dashboard modal opened on /dashboards-beta (project picker)."""
-    await ctx.page.goto(f"{ctx.viewer_url}/dashboards-beta", wait_until="domcontentloaded")
+    """+ New Dashboard modal opened on /dashboards (project picker)."""
+    await ctx.page.goto(f"{ctx.viewer_url}/dashboards", wait_until="domcontentloaded")
     await ctx.page.wait_for_timeout(800)
     await ctx.page.get_by_test_id("new-dashboard-btn").click()
     await _shot(ctx, '[data-testid="create-dashboard-modal"]', _rb("new_dashboard_modal"))

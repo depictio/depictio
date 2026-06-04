@@ -20,7 +20,7 @@ import { Icon } from '@iconify/react';
 
 import { AppSidebar } from '../chrome';
 
-const LOGO_BASE = '/dashboard-beta/logos';
+const LOGO_BASE = '/dashboard/logos';
 
 interface ResourceCardProps {
   icon: string;

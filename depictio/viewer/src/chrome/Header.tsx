@@ -22,8 +22,8 @@ function isMultiqcIcon(path: string | null | undefined): boolean {
 function rewriteMultiqcIcon(path: string, theme: 'light' | 'dark'): string {
   if (!isMultiqcIcon(path)) return path;
   return theme === 'dark'
-    ? '/dashboard-beta/logos/multiqc_icon_white.svg'
-    : '/dashboard-beta/logos/multiqc_icon_dark.svg';
+    ? '/dashboard/logos/multiqc_icon_white.svg'
+    : '/dashboard/logos/multiqc_icon_dark.svg';
 }
 
 /** Dash precedence: `tab.tab_icon || tab.icon`, `tab.tab_icon_color || tab.icon_color`. */
@@ -134,13 +134,13 @@ const Header: React.FC<HeaderProps> = ({
 
   const handleEdit = () => {
     if (dashboardId) {
-      window.location.assign(`/dashboard-beta-edit/${dashboardId}`);
+      window.location.assign(`/dashboard-edit/${dashboardId}`);
     }
   };
 
   const handleViewMode = () => {
     if (dashboardId) {
-      window.location.assign(`/dashboard-beta/${dashboardId}`);
+      window.location.assign(`/dashboard/${dashboardId}`);
     }
   };
 

@@ -189,12 +189,12 @@ const MultiQCFigureBody: React.FC<MultiQCFigureProps> = ({
           {/* MultiQC logo overlay — official icon set
             (https://github.com/MultiQC/logo). Dark icon on light backgrounds,
             white icon in dark mode. Asset shipped via the SPA's public/ folder
-            and served by the FastAPI mount at /dashboard-beta/logos/. */}
+            and served by the FastAPI mount at /dashboard/logos/. */}
           <img
             src={
               theme === 'dark'
-                ? '/dashboard-beta/logos/multiqc_icon_white.svg'
-                : '/dashboard-beta/logos/multiqc_icon_dark.svg'
+                ? '/dashboard/logos/multiqc_icon_white.svg'
+                : '/dashboard/logos/multiqc_icon_dark.svg'
             }
             title="Generated with MultiQC"
             alt="MultiQC"

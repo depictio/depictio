@@ -686,7 +686,7 @@ async def screenshot_react_dual(
     """Generate light + dark screenshots of the React beta viewer.
 
     Sibling of `/screenshot-dash-dual` but drives the SPA bundle at
-    `{settings.fastapi.url}/dashboard-beta/{dashboard_id}` (the React/Vite
+    `{settings.fastapi.url}/dashboard/{dashboard_id}` (the React/Vite
     build that FastAPI itself serves) instead of the Dash app on port 5080.
 
     Single-user mode skips auth; otherwise the caller must be a dashboard owner.

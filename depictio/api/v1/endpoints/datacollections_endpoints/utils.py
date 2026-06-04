@@ -875,7 +875,7 @@ async def _ensure_user_cli_token(current_user) -> None:
     `depictio data process` command, which authenticate back to FastAPI with
     a stored bearer token from the ``tokens`` collection. Browser-only users
     (signed in via session JWT) won't have one yet, so we mint one on demand
-    here — matching the behavior the React `/profile-beta` UI offers via
+    here — matching the behavior the React `/profile` UI offers via
     `POST /auth/me/tokens`, just transparent so first-time DC creation
     doesn't 401 before the user knows they need to click a button.
 

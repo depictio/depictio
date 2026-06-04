@@ -38,7 +38,7 @@ function isMultiqcIcon(path: string | null | undefined): boolean {
 
 /** Many legacy YAML/seed entries point at the old MultiQC PNG
  * (`/assets/images/logos/multiqc.png`). Swap those to the new official icon
- * (https://github.com/MultiQC/logo) served via the SPA's `/dashboard-beta/logos/`
+ * (https://github.com/MultiQC/logo) served via the SPA's `/dashboard/logos/`
  * mount.
  *
  *   - Active tab → always white SVG (sits on a filled gray background, white
@@ -51,10 +51,10 @@ function rewriteLegacyMultiqcIcon(
   isActive = false,
 ): string {
   if (!isMultiqcIcon(path)) return path;
-  if (isActive) return '/dashboard-beta/logos/multiqc_icon_white.svg';
+  if (isActive) return '/dashboard/logos/multiqc_icon_white.svg';
   return theme === 'dark'
-    ? '/dashboard-beta/logos/multiqc_icon_white.svg'
-    : '/dashboard-beta/logos/multiqc_icon_dark.svg';
+    ? '/dashboard/logos/multiqc_icon_white.svg'
+    : '/dashboard/logos/multiqc_icon_dark.svg';
 }
 
 /** Resolve a YAML asset path (e.g. `/assets/images/logos/multiqc.png`) to a
@@ -165,7 +165,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   // synthetic "+ Add tab" pill — regular tab switches just let the browser
   // follow the link.
   const linkMode: 'view' | 'edit' = window.location.pathname.startsWith(
-    '/dashboard-beta-edit/',
+    '/dashboard-edit/',
   )
     ? 'edit'
     : 'view';
@@ -183,7 +183,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       {/* Top region — centered, grey back link to match Dash sidebar */}
       <Stack gap="sm" align="stretch">
         <Anchor
-          href="/dashboards-beta"
+          href="/dashboards"
           size="sm"
           fw={500}
           underline="hover"
@@ -261,7 +261,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                     >
                       <img
                         src={
-                          yamlImage.startsWith('/dashboard-beta/')
+                          yamlImage.startsWith('/dashboard/')
                             ? yamlImage
                             : resolveAssetUrl(yamlImage)
                         }

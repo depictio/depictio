@@ -102,8 +102,8 @@ const MultiQCPreview: React.FC = () => {
           <img
             src={
               colorScheme === 'dark'
-                ? '/dashboard-beta/logos/multiqc_icon_white.svg'
-                : '/dashboard-beta/logos/multiqc_icon_dark.svg'
+                ? '/dashboard/logos/multiqc_icon_white.svg'
+                : '/dashboard/logos/multiqc_icon_dark.svg'
             }
             title="Generated with MultiQC"
             alt="MultiQC"

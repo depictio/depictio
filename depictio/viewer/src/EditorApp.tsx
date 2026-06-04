@@ -13,8 +13,8 @@
  * Cross-app navigation URLs:
  *   - Edit component:   /dashboard-edit/{dashboardId}/component/edit/{componentId}
  *   - Add component:    /dashboard-edit/{dashboardId}/component/add/{newUuid}
- *   - Read-only viewer: /dashboard-beta/{dashboardId}
- *   - Editor:           /dashboard-beta/{dashboardId}/edit
+ *   - Read-only viewer: /dashboard/{dashboardId}
+ *   - Editor:           /dashboard/{dashboardId}/edit
  *
  * TODO (post-MVP): factor shared data-loading into a `useDashboardState` hook
  * so App.tsx and EditorApp.tsx don't drift. For now we duplicate the
@@ -197,7 +197,7 @@ const EditorApp: React.FC = () => {
     if (userLoading) return;
     if (!dashboard || !dashboardId) return;
     if (!isOwner) {
-      window.location.replace(`/dashboard-beta/${dashboardId}`);
+      window.location.replace(`/dashboard/${dashboardId}`);
     }
   }, [userLoading, dashboard, dashboardId, isOwner]);
 
@@ -213,7 +213,7 @@ const EditorApp: React.FC = () => {
   // Fetch dashboard + tab list
   useEffect(() => {
     if (!dashboardId) {
-      setError('No dashboard ID in URL. Expected /dashboard-beta/<id>/edit.');
+      setError('No dashboard ID in URL. Expected /dashboard/<id>/edit.');
       setLoading(false);
       return;
     }
@@ -626,7 +626,7 @@ const EditorApp: React.FC = () => {
         : fallbackUuid();
     // React-side stepper page (was: cross-origin Dash editor).
     window.location.assign(
-      `/dashboard-beta-edit/${dashboardId}/component/add/${newId}`,
+      `/dashboard-edit/${dashboardId}/component/add/${newId}`,
     );
   }, [dashboardId]);
 
@@ -696,8 +696,8 @@ const EditorApp: React.FC = () => {
             submitting: false,
           });
           // Navigate to the new tab — preserves edit mode via the same
-          // `/dashboard-beta-edit/{id}` route we're already on.
-          window.location.assign(`/dashboard-beta-edit/${newId}`);
+          // `/dashboard-edit/{id}` route we're already on.
+          window.location.assign(`/dashboard-edit/${newId}`);
           return;
         }
 
@@ -768,7 +768,7 @@ const EditorApp: React.FC = () => {
         // sit on a now-deleted dashboard id.
         const parentId = tab.parent_dashboard_id;
         if (tab.dashboard_id === dashboardId && parentId) {
-          window.location.assign(`/dashboard-beta-edit/${parentId}`);
+          window.location.assign(`/dashboard-edit/${parentId}`);
         } else {
           await refreshTabList();
         }
@@ -1143,7 +1143,7 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
 
 function extractDashboardId(): string | null {
   const path = window.location.pathname;
-  const match = path.match(/\/dashboard-beta-edit\/([^/?#]+)/);
+  const match = path.match(/\/dashboard-edit\/([^/?#]+)/);
   return match?.[1] || null;
 }
 

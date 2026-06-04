@@ -15,8 +15,8 @@ interface Props {
 export default function AuthCard({ heading, children }: Props) {
   const { colorScheme } = useMantineColorScheme();
   const logoSrc = colorScheme === 'dark'
-    ? '/dashboard-beta/logos/logo_white.svg'
-    : '/dashboard-beta/logos/logo_black.svg';
+    ? '/dashboard/logos/logo_white.svg'
+    : '/dashboard/logos/logo_black.svg';
 
   return (
     <Paper

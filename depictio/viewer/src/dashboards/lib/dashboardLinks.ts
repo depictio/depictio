@@ -12,8 +12,8 @@ export function dashboardHref(
   mode: DashboardMode = 'view',
 ): string {
   return mode === 'edit'
-    ? `/dashboard-beta-edit/${dashboardId}`
-    : `/dashboard-beta/${dashboardId}`;
+    ? `/dashboard-edit/${dashboardId}`
+    : `/dashboard/${dashboardId}`;
 }
 
 export function dashboardHrefFor(d: DashboardListEntry, mode: DashboardMode = 'view'): string {

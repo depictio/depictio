@@ -72,7 +72,7 @@ const StepDesign: React.FC = () => {
       });
       setSavedRedirect(true);
       window.setTimeout(() => {
-        window.location.assign(`/dashboard-beta-edit/${state.dashboardId}`);
+        window.location.assign(`/dashboard-edit/${state.dashboardId}`);
       }, 600);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

@@ -66,7 +66,7 @@ const DataCollectionInfoCard: React.FC<Props> = ({ info }) => {
               isMultiQC ? (
                 <Stack gap={4} align="flex-start">
                   <img
-                    src="/dashboard-beta/logos/multiqc_icon_dark.svg"
+                    src="/dashboard/logos/multiqc_icon_dark.svg"
                     alt="MultiQC"
                     className="multiqc-icon-themed"
                     style={{ width: 24, height: 24, objectFit: 'contain' }}

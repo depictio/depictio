@@ -41,28 +41,28 @@ const NAV_ENTRIES: NavEntry[] = [
     key: 'dashboards',
     label: 'Dashboards',
     icon: 'material-symbols:dashboard',
-    href: '/dashboards-beta',
+    href: '/dashboards',
     color: 'orange',
   },
   {
     key: 'projects',
     label: 'Projects',
     icon: 'mdi:jira',
-    href: '/projects-beta',
+    href: '/projects',
     color: 'teal',
   },
   {
     key: 'admin',
     label: 'Administration',
     icon: 'material-symbols:settings',
-    href: '/admin-beta',
+    href: '/admin',
     color: 'blue',
   },
   {
     key: 'about',
     label: 'About',
     icon: 'mingcute:question-line',
-    href: '/about-beta',
+    href: '/about',
     color: 'gray',
   },
 ];
@@ -96,7 +96,7 @@ const AppSidebar: React.FC<AppSidebarProps> = ({ active }) => {
                 raster while preserving brand hues — same trick as
                 `PoweredBy.tsx`. */}
             <img
-              src="/dashboard-beta/logos/logo_black.svg"
+              src="/dashboard/logos/logo_black.svg"
               alt="depictio"
               style={{
                 width: 185,

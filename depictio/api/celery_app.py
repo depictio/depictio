@@ -78,7 +78,7 @@ def generate_dashboard_screenshot_dual(
     and permission validation.
 
     Captures both light and dark mode shots in a single browser session.
-    Now drives the **React SPA** at `{fastapi.url}/dashboard-beta/{id}`; the
+    Now drives the **React SPA** at `{fastapi.url}/dashboard/{id}`; the
     output filenames stay `{id}_light.png` / `{id}_dark.png` so existing
     dashboard-card consumers keep working unchanged.
 

@@ -90,5 +90,5 @@ echo "✓ Done. Open the dashboards:"
 for f in depictio/projects/init/nfcore_megatests_showcase/.db_seeds/dashboard_*.json; do
     id=$(python3 -c "import json,sys; print(json.load(open('$f'))['dashboard_id']['\$oid'])")
     viz=$(basename "$f" .json | sed 's/^dashboard_//')
-    echo "    $viz → http://localhost:8100/dashboard-beta/$id"
+    echo "    $viz → http://localhost:8100/dashboard/$id"
 done

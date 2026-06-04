@@ -162,7 +162,7 @@ app.include_router(router, prefix=api_prefix)
 
 
 # ---------------------------------------------------------------------------
-# React viewer SPA — served at /dashboard-beta/{id} alongside the API.
+# React viewer SPA — served at /dashboard/{id} alongside the API.
 #
 # Built artifact lives at depictio/viewer/dist/ (produced by `npm run build`
 # in that directory). FastAPI serves the static bundle and falls back to
@@ -199,19 +199,19 @@ if _STATIC_ASSETS_DIR.is_dir():
 # Require both index.html and assets/ — `dist/` alone may exist as an empty
 # leftover from an interrupted build and would crash StaticFiles at startup.
 if _VIEWER_DIST.is_dir() and _VIEWER_ASSETS.is_dir() and _VIEWER_INDEX.is_file():
-    # /dashboard-beta/assets/... → static bundle assets
+    # /dashboard/assets/... → static bundle assets
     app.mount(
-        "/dashboard-beta/assets",
+        "/dashboard/assets",
         StaticFiles(directory=str(_VIEWER_ASSETS)),
         name="viewer-assets",
     )
-    # /dashboard-beta/logos/... → SPA public/ assets (logos, etc.). Mounted
+    # /dashboard/logos/... → SPA public/ assets (logos, etc.). Mounted
     # only when the directory exists so the SPA still serves when public/ is
     # absent (e.g. older build).
     _viewer_logos = _VIEWER_DIST / "logos"
     if _viewer_logos.is_dir():
         app.mount(
-            "/dashboard-beta/logos",
+            "/dashboard/logos",
             StaticFiles(directory=str(_viewer_logos)),
             name="viewer-logos",
         )
@@ -232,21 +232,21 @@ if _VIEWER_DIST.is_dir() and _VIEWER_ASSETS.is_dir() and _VIEWER_INDEX.is_file()
     _viewer_favicon = _VIEWER_DIST / "favicon.svg"
     if _viewer_favicon.is_file():
 
-        @app.get("/dashboard-beta/favicon.svg")
+        @app.get("/dashboard/favicon.svg")
         async def _serve_viewer_favicon() -> FileResponse:
             return FileResponse(_viewer_favicon, media_type="image/svg+xml")
 
-    @app.get("/dashboard-beta/{_dashboard_id:path}")
+    @app.get("/dashboard/{_dashboard_id:path}")
     async def _serve_viewer_spa(_dashboard_id: str) -> FileResponse:
         """Serve the React viewer SPA. All sub-paths fall through to index.html
         so React's client-side router handles the dashboard ID segment."""
         return _spa_index()
 
-    @app.get("/dashboard-beta-edit/{_dashboard_id:path}")
+    @app.get("/dashboard-edit/{_dashboard_id:path}")
     async def _serve_editor_spa(_dashboard_id: str) -> FileResponse:
         """Serve the React editor SPA. Same bundle as the viewer; the SPA's
         boot routing inspects window.location.pathname to render EditorApp.
-        Asset paths in index.html still resolve via /dashboard-beta/assets/."""
+        Asset paths in index.html still resolve via /dashboard/assets/."""
         return _spa_index()
 
     # /auth and /auth/google/callback → same React bundle. The SPA's boot
@@ -260,74 +260,74 @@ if _VIEWER_DIST.is_dir() and _VIEWER_ASSETS.is_dir() and _VIEWER_INDEX.is_file()
     async def _serve_auth_spa(_auth_path: str) -> FileResponse:
         return _spa_index()
 
-    # /dashboards-beta → React management page (replaces the Dash /dashboards
+    # /dashboards → React management page (replaces the Dash /dashboards
     # listing). Same bundle as the viewer; main.tsx detects the path prefix
     # and renders <DashboardsApp/>. Asset paths in index.html still resolve
-    # via /dashboard-beta/assets/ because Vite stamps them with that base.
-    @app.get("/dashboards-beta")
+    # via /dashboard/assets/ because Vite stamps them with that base.
+    @app.get("/dashboards")
     async def _serve_dashboards_spa_root() -> FileResponse:
         return _spa_index()
 
-    @app.get("/dashboards-beta/{_path:path}")
+    @app.get("/dashboards/{_path:path}")
     async def _serve_dashboards_spa(_path: str) -> FileResponse:
         return _spa_index()
 
-    # /about-beta and /admin-beta → same React bundle. main.tsx detects the
+    # /about and /admin → same React bundle. main.tsx detects the
     # pathname prefix and renders <AboutApp/> or <AdminApp/>. Coexists with
     # the Dash /about and /admin pages until the sidebar is flipped.
-    @app.get("/about-beta")
+    @app.get("/about")
     async def _serve_about_spa_root() -> FileResponse:
         return _spa_index()
 
-    @app.get("/about-beta/{_path:path}")
+    @app.get("/about/{_path:path}")
     async def _serve_about_spa(_path: str) -> FileResponse:
         return _spa_index()
 
-    @app.get("/admin-beta")
+    @app.get("/admin")
     async def _serve_admin_spa_root() -> FileResponse:
         return _spa_index()
 
-    @app.get("/admin-beta/{_path:path}")
+    @app.get("/admin/{_path:path}")
     async def _serve_admin_spa(_path: str) -> FileResponse:
         return _spa_index()
 
-    # /projects-beta → React projects management page (replaces the Dash
+    # /projects → React projects management page (replaces the Dash
     # /projects listing + multi-step create modal + project/{id}/data detail).
     # Same bundle as the viewer; main.tsx detects the path prefix and renders
-    # <ProjectsApp/>. Sub-paths (/projects-beta/{id}, /projects-beta/{id}/permissions)
+    # <ProjectsApp/>. Sub-paths (/projects/{id}, /projects/{id}/permissions)
     # all fall through to index.html so the React app can route internally.
-    @app.get("/projects-beta")
+    @app.get("/projects")
     async def _serve_projects_spa_root() -> FileResponse:
         return _spa_index()
 
-    @app.get("/projects-beta/{_path:path}")
+    @app.get("/projects/{_path:path}")
     async def _serve_projects_spa(_path: str) -> FileResponse:
         return _spa_index()
 
-    # /profile-beta and /cli-agents-beta → React-based replacements for the
+    # /profile and /cli-agents → React-based replacements for the
     # Dash /profile and /cli_configs management pages. Same SPA bundle;
     # main.tsx detects the path prefix and renders <ProfileApp/> or
     # <CliAgentsApp/>. Coexists with the Dash routes during rollout.
-    @app.get("/profile-beta")
+    @app.get("/profile")
     async def _serve_profile_spa_root() -> FileResponse:
         return _spa_index()
 
-    @app.get("/profile-beta/{_path:path}")
+    @app.get("/profile/{_path:path}")
     async def _serve_profile_spa(_path: str) -> FileResponse:
         return _spa_index()
 
-    @app.get("/cli-agents-beta")
+    @app.get("/cli-agents")
     async def _serve_cli_agents_spa_root() -> FileResponse:
         return _spa_index()
 
-    @app.get("/cli-agents-beta/{_path:path}")
+    @app.get("/cli-agents/{_path:path}")
     async def _serve_cli_agents_spa(_path: str) -> FileResponse:
         return _spa_index()
 else:
     logger = logging.getLogger(__name__)
     logger.warning(
         "⚠️  React viewer bundle not built at %s (missing index.html or "
-        "assets/) — /dashboard-beta/ and /dashboard-beta-edit/ routes will "
+        "assets/) — /dashboard/ and /dashboard-edit/ routes will "
         "404 until `cd depictio/viewer && npm install && npm run build` "
         "is executed.",
         _VIEWER_DIST,
@@ -340,7 +340,7 @@ async def _redirect_root() -> RedirectResponse:
     hook handles the anonymous case by routing to /auth, so this single
     server-side redirect serves both signed-in and signed-out visitors and
     makes the sidebar logo's `href="/"` work as a "go home" affordance."""
-    return RedirectResponse("/dashboards-beta", status_code=307)
+    return RedirectResponse("/dashboards", status_code=307)
 
 
 @app.get("/health")

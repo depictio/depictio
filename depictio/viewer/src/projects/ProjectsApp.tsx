@@ -156,7 +156,7 @@ const ProjectsApp: React.FC = () => {
 
   const handleView = useCallback((project: ProjectListEntry) => {
     const projectId = (project._id ?? project.id) as string;
-    if (projectId) window.location.assign(`/projects-beta/${projectId}`);
+    if (projectId) window.location.assign(`/projects/${projectId}`);
   }, []);
 
   const handleDelete = useCallback(

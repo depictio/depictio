@@ -217,7 +217,7 @@ const AdminProjectsPanel: React.FC = () => {
                       {projectDashboards.map((entry) => (
                         <List.Item key={entry.main.dashboard_id}>
                           <Anchor
-                            href={`/dashboard-beta/${entry.main.dashboard_id}`}
+                            href={`/dashboard/${entry.main.dashboard_id}`}
                             size="sm"
                           >
                             {entry.main.title ??
@@ -229,7 +229,7 @@ const AdminProjectsPanel: React.FC = () => {
                               {entry.children.map((child) => (
                                 <List.Item key={child.dashboard_id}>
                                   <Anchor
-                                    href={`/dashboard-beta/${child.dashboard_id}`}
+                                    href={`/dashboard/${child.dashboard_id}`}
                                     size="xs"
                                     c="dimmed"
                                   >

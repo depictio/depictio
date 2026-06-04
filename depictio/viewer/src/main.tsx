@@ -46,37 +46,37 @@ import { depictioTheme } from './theme';
 import { WalkthroughHost } from './walkthrough';
 
 // Client-side route resolution. FastAPI serves index.html for all paths under
-// /dashboard-beta/, /dashboard-beta-edit/, /auth, /dashboards-beta,
-// /about-beta, and /admin-beta — we pick the right tree at boot.
+// /dashboard/, /dashboard-edit/, /auth, /dashboards,
+// /about, and /admin — we pick the right tree at boot.
 function resolveTree(): React.ReactElement {
   if (window.location.pathname.startsWith('/auth')) {
     return <AuthApp />;
   }
-  if (window.location.pathname.startsWith('/dashboards-beta')) {
+  if (window.location.pathname.startsWith('/dashboards')) {
     return <DashboardsApp />;
   }
-  if (window.location.pathname.startsWith('/projects-beta')) {
-    // /projects-beta                  → list page
-    // /projects-beta/{id}             → data-collections detail
-    // /projects-beta/{id}/permissions → permissions editor
+  if (window.location.pathname.startsWith('/projects')) {
+    // /projects                  → list page
+    // /projects/{id}             → data-collections detail
+    // /projects/{id}/permissions → permissions editor
     if (
-      /\/projects-beta\/[^/]+\/permissions(\/|$)/.test(window.location.pathname)
+      /\/projects\/[^/]+\/permissions(\/|$)/.test(window.location.pathname)
     ) {
       return <PermissionsApp />;
     }
-    const detailMatch = window.location.pathname.match(/^\/projects-beta\/[^/]+/);
+    const detailMatch = window.location.pathname.match(/^\/projects\/[^/]+/);
     return detailMatch ? <ProjectDetailApp /> : <ProjectsApp />;
   }
-  if (window.location.pathname.startsWith('/about-beta')) {
+  if (window.location.pathname.startsWith('/about')) {
     return <AboutApp />;
   }
-  if (window.location.pathname.startsWith('/admin-beta')) {
+  if (window.location.pathname.startsWith('/admin')) {
     return <AdminApp />;
   }
-  if (window.location.pathname.startsWith('/profile-beta')) {
+  if (window.location.pathname.startsWith('/profile')) {
     return <ProfileApp />;
   }
-  if (window.location.pathname.startsWith('/cli-agents-beta')) {
+  if (window.location.pathname.startsWith('/cli-agents')) {
     return <CliAgentsApp />;
   }
   const route = matchEditorRoute(window.location.pathname);
@@ -130,7 +130,7 @@ function readInitialColorScheme(): 'light' | 'dark' | 'auto' {
 //      asking ``/auth/me/optional`` and re-mint or redirect when the
 //      backend doesn't recognize the user.
 //   4. Standard mode without a valid session — redirect to /auth so the
-//      user lands on the login form instead of a broken /dashboards-beta
+//      user lands on the login form instead of a broken /dashboards
 //      where every API call 401s.
 /** Cross-origin hand-off: the Dash app's beta-switcher pill links here
  *  with a `#auth=<base64-utf8 JSON>` fragment carrying the session it
@@ -217,14 +217,14 @@ async function bootstrapSession(): Promise<void> {
 }
 
 // Bare SPA root → dashboards list. Vite/FastAPI mount the SPA at
-// `/dashboard-beta/` so asset URLs resolve correctly, but that path on its
+// `/dashboard/` so asset URLs resolve correctly, but that path on its
 // own has no dashboard id to render. Bounce unparameterized hits (`/`,
-// `/dashboard-beta`, `/dashboard-beta/`) to the list page; if the visitor
+// `/dashboard`, `/dashboard/`) to the list page; if the visitor
 // isn't logged in, `bootstrapSession` on the next load routes them through
 // `/auth`, and `AuthApp.POST_AUTH_REDIRECT` brings them back here.
-const isBareRoot = /^\/(dashboard-beta\/?)?$/.test(window.location.pathname);
+const isBareRoot = /^\/(dashboard\/?)?$/.test(window.location.pathname);
 if (isBareRoot) {
-  window.location.replace('/dashboards-beta');
+  window.location.replace('/dashboards');
 } else {
   bootstrapSession().finally(() => {
     ReactDOM.createRoot(document.getElementById('root')!).render(

@@ -48,7 +48,7 @@ interface UserRow {
 }
 
 function readProjectIdFromPath(): string | null {
-  const m = window.location.pathname.match(/^\/projects-beta\/([^/?#]+)/);
+  const m = window.location.pathname.match(/^\/projects\/([^/?#]+)/);
   return m?.[1] || null;
 }
 
@@ -527,7 +527,7 @@ const PermissionsApp: React.FC = () => {
           <Group gap="xs">
             <Button
               component="a"
-              href={`/projects-beta/${projectId}`}
+              href={`/projects/${projectId}`}
               variant="subtle"
               color="teal"
               leftSection={<Icon icon="mdi:database-outline" width={16} />}
@@ -536,7 +536,7 @@ const PermissionsApp: React.FC = () => {
             </Button>
             <Button
               component="a"
-              href="/projects-beta"
+              href="/projects"
               variant="subtle"
               color="gray"
               leftSection={<Icon icon="mdi:arrow-left" width={16} />}
@@ -566,7 +566,7 @@ const PermissionsApp: React.FC = () => {
                   color="var(--mantine-color-red-6)"
                 />
                 <Text c="red">{loadError}</Text>
-                <Button component="a" href="/projects-beta" variant="light">
+                <Button component="a" href="/projects" variant="light">
                   Back to projects
                 </Button>
               </Stack>
