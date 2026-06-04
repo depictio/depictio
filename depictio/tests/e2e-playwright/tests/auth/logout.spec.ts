@@ -7,10 +7,10 @@ import { getAuthMode } from "@fixtures/auth";
 
 test.describe("Logout flow", () => {
   test("logs out and returns to /auth", async ({ loginAsUser, page }) => {
-    const { is_single_user_mode } = await getAuthMode();
+    const { is_single_user_mode, is_public_mode } = await getAuthMode();
     test.skip(
-      is_single_user_mode,
-      "Single-user mode: logout button is disabled (no session concept).",
+      is_single_user_mode || is_public_mode,
+      "Single-user/public mode: logout button is disabled (no real session).",
     );
     await loginAsUser();
 

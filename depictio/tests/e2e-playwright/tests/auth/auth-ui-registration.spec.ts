@@ -19,31 +19,33 @@ test.describe("Authentication UI - Registration Flow", () => {
     );
   });
 
+  // React contract (RegisterForm.tsx): successful registration AUTO-LOGS-IN
+  // and navigates away — the success message only renders if the auto-login
+  // fails. The Cypress-era "shows a success message" expectation is gone.
+
   test.describe("Success scenarios", () => {
-    test("registers a new user and shows a success message", async ({
+    test("registers a new user and is auto-logged-in to /dashboards", async ({
       page,
     }) => {
       const email = `test_${Date.now()}@example.com`;
       await uiRegister(page, email, "test_password_123");
 
-      const feedback = page.locator("[data-testid='user-feedback-message-register']");
-      await expect(feedback).toBeVisible();
-      await expect(feedback).toContainText("Registration successful");
+      // Register → auto-login → onSuccess() navigates to the app.
+      await expect(page).toHaveURL(/\/dashboards/, { timeout: 15_000 });
+      await expect(page.locator("[data-testid='modal-content']")).toBeHidden();
     });
 
-    test("registers then logs in with the new credentials", async ({
+    test("registered credentials work for a fresh login", async ({
       page,
     }) => {
       const email = `test_user_${Date.now()}@example.com`;
       const password = "SecurePassword123!";
 
       await uiRegister(page, email, password);
-      await expect(
-        page.locator("[data-testid='user-feedback-message-register']"),
-      ).toContainText("Registration successful");
+      await expect(page).toHaveURL(/\/dashboards/, { timeout: 15_000 });
 
-      // Switch back to login and authenticate with the new account.
-      await page.locator("[data-testid='open-login-form']").click();
+      // Drop the auto-login session, then authenticate from scratch.
+      await page.evaluate(() => window.localStorage.clear());
       await uiLogin(page, email, password);
       await expect(page.locator("[data-testid='modal-content']")).toBeHidden({
         timeout: 10_000,
@@ -66,9 +68,10 @@ test.describe("Authentication UI - Registration Flow", () => {
     }) => {
       await uiRegister(page, credentials.testUser.email, "SomePassword123!");
 
+      // RegisterForm surfaces a generic failure message on any server error.
       await expect(
         page.locator("[data-testid='user-feedback-message-register']"),
-      ).toHaveText(/already.*exist|already.*register/i);
+      ).toHaveText(/registration failed/i);
     });
   });
 });

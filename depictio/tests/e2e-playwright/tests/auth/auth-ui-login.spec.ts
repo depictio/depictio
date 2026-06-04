@@ -11,10 +11,10 @@ test.describe("Authentication UI - Login Flow", () => {
     test("logs in successfully with valid credentials (UI flow)", async ({
       page,
     }) => {
-      const { is_single_user_mode } = await getAuthMode();
+      const { is_single_user_mode, is_public_mode } = await getAuthMode();
       test.skip(
-        is_single_user_mode,
-        "Single-user mode: /auth auto-redirects to /dashboards, no login form rendered.",
+        is_single_user_mode || is_public_mode,
+        "Single-user/public mode: /auth auto-redirects to /dashboards, no login form rendered.",
       );
       await uiLogin(page, credentials.testUser.email, credentials.testUser.password);
       await expect(page.locator("[data-testid='modal-content']")).toBeHidden({
@@ -34,10 +34,10 @@ test.describe("Authentication UI - Login Flow", () => {
 
   test.describe("Login Failure Scenarios", () => {
     test("shows error message for invalid credentials", async ({ page }) => {
-      const { is_single_user_mode } = await getAuthMode();
+      const { is_single_user_mode, is_public_mode } = await getAuthMode();
       test.skip(
-        is_single_user_mode,
-        "Single-user mode: backend accepts any credential, login errors never surface.",
+        is_single_user_mode || is_public_mode,
+        "Single-user mode accepts any credential; public mode never renders the form.",
       );
 
       await uiLogin(page, "invalid_user@example.com", "wrong_password");

@@ -18,7 +18,7 @@
  */
 
 import { test, expect } from "@fixtures/auth";
-import { apiLogin, getAuthMode } from "@fixtures/auth";
+import { apiLogin, getAuthMode, API_URL, API_PREFIX } from "@fixtures/auth";
 import { credentials } from "@fixtures/credentials";
 
 test.describe("Single-User Mode", () => {
@@ -30,7 +30,7 @@ test.describe("Single-User Mode", () => {
   test.describe("Mode detection", () => {
     test("backend reports single-user mode correctly", async ({ request }) => {
       const res = await request.get(
-        "http://localhost:8101/depictio/api/v1/auth/me/optional",
+        `${API_URL}${API_PREFIX}/auth/me/optional`,
       );
       expect(res.ok()).toBeTruthy();
       const body = await res.json() as {
@@ -49,7 +49,7 @@ test.describe("Single-User Mode", () => {
       request,
     }) => {
       const res = await request.get(
-        "http://localhost:8101/depictio/api/v1/auth/me/optional",
+        `${API_URL}${API_PREFIX}/auth/me/optional`,
       );
       const body = await res.json() as { user: { email: string; is_admin: boolean } };
       expect(body.user.email).toBe(credentials.adminUser.email);
@@ -70,7 +70,7 @@ test.describe("Single-User Mode", () => {
 
     test("registration endpoint is disabled", async ({ request }) => {
       const res = await request.post(
-        "http://localhost:8101/depictio/api/v1/auth/register",
+        `${API_URL}${API_PREFIX}/auth/register`,
         {
           data: { email: "new@example.com", password: "Test123!", is_admin: false },
           headers: { "Content-Type": "application/json" },
