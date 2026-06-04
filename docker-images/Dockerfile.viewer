@@ -46,9 +46,9 @@ LABEL org.opencontainers.image.version="${VERSION:-latest}"
 LABEL org.opencontainers.image.authors="Thomas Weber <thomas.weber@embl.de>"
 LABEL org.opencontainers.image.licenses="MIT"
 
-# Vite builds under base `/dashboard-beta/`, so the bundle lives there on
+# Vite builds under base `/dashboard/`, so the bundle lives there on
 # disk too — keeps nginx's `root` simple and asset URLs untouched.
-COPY --from=builder /build/depictio/viewer/dist /usr/share/nginx/html/dashboard-beta
+COPY --from=builder /build/depictio/viewer/dist /usr/share/nginx/html/dashboard
 
 # Ship the config as an envsubst template. The base image's entrypoint
 # (/docker-entrypoint.d/20-envsubst-on-templates.sh) renders every

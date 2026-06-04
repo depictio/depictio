@@ -1,6 +1,6 @@
 /**
  * URL parsing for the editor SPA. Single source of truth for all routes
- * served by /dashboard-beta-edit/. Plain regex — no router lib.
+ * served by /dashboard-edit/. Plain regex — no router lib.
  */
 
 export type EditorRoute =
@@ -9,10 +9,10 @@ export type EditorRoute =
   | { kind: 'edit'; dashboardId: string; componentId: string };
 
 const CREATE_RE =
-  /^\/dashboard-beta-edit\/([^/]+)\/component\/add\/([^/?#]+)/;
+  /^\/dashboard-edit\/([^/]+)\/component\/add\/([^/?#]+)/;
 const EDIT_RE =
-  /^\/dashboard-beta-edit\/([^/]+)\/component\/edit\/([^/?#]+)/;
-const EDITOR_RE = /^\/dashboard-beta-edit\/([^/?#]+)/;
+  /^\/dashboard-edit\/([^/]+)\/component\/edit\/([^/?#]+)/;
+const EDITOR_RE = /^\/dashboard-edit\/([^/?#]+)/;
 
 export function matchEditorRoute(pathname: string): EditorRoute | null {
   const create = pathname.match(CREATE_RE);

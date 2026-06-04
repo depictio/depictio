@@ -56,13 +56,13 @@ const CreateComponentPage: React.FC<CreateComponentPageProps> = ({
   const stepperActive = isText ? (step >= 2 ? 1 : 0) : step;
 
   const cancel = () => {
-    window.location.assign(`/dashboard-beta-edit/${dashboardId}`);
+    window.location.assign(`/dashboard-edit/${dashboardId}`);
   };
 
   const handleAddToDashboard = () => {
     // The Save action lives inside StepDesign; the completion page only links
     // back to the dashboard once the component has been persisted.
-    window.location.assign(`/dashboard-beta-edit/${dashboardId}`);
+    window.location.assign(`/dashboard-edit/${dashboardId}`);
   };
 
   return (

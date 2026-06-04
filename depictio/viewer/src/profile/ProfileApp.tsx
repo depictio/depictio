@@ -247,7 +247,7 @@ const ProfileApp: React.FC = () => {
 
                     <Button
                       component="a"
-                      href={states.cliAgentsDisabled ? undefined : '/cli-agents-beta'}
+                      href={states.cliAgentsDisabled ? undefined : '/cli-agents'}
                       variant="filled"
                       radius="md"
                       disabled={states.cliAgentsDisabled}

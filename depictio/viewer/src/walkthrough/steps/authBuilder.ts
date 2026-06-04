@@ -18,16 +18,16 @@ export const authBuilderWalkthrough: WalkthroughDefinition = {
       body: "👋 Your reads are processed, your dataframes are clean — now let's make them clickable. We start with a project — that's where the data lives.",
       position: 'bottom',
       image: {
-        src: '/dashboard-beta/favicon.svg',
+        src: '/dashboard/favicon.svg',
         alt: 'Depictio',
         height: 64,
       },
-      navigateTo: '/projects-beta',
+      navigateTo: '/projects',
     },
     {
       id: 'projects-page',
       target: 'projects-header',
-      route: /^\/projects-beta\/?$/,
+      route: /^\/projects\/?$/,
       title: 'Projects bundle your data',
       body: "A project groups the data collections your dashboards read from, the permissions controlling who sees them, and optionally one or more workflows that produced the data.",
       position: 'bottom',
@@ -35,7 +35,7 @@ export const authBuilderWalkthrough: WalkthroughDefinition = {
     {
       id: 'projects-create',
       target: 'projects-create',
-      route: /^\/projects-beta\/?$/,
+      route: /^\/projects\/?$/,
       title: 'Create your first project',
       body: "Click here to spin up a new project. You'll pick a name and attach the data collections it should hold — without data, a project doesn't do much. The tour resumes once you land on the project page.",
       position: 'left',
@@ -44,16 +44,16 @@ export const authBuilderWalkthrough: WalkthroughDefinition = {
     {
       id: 'project-detail',
       target: null,
-      route: /^\/projects-beta\/[^/]+\/?$/,
+      route: /^\/projects\/[^/]+\/?$/,
       title: 'Inside a project',
       body: "Here you can browse this project's data collections and the workflow runs that fed them. Permissions live on a separate page. Next we'll head to the Dashboards page and start visualizing this data.",
       position: 'bottom',
-      navigateTo: '/dashboards-beta',
+      navigateTo: '/dashboards',
     },
     {
       id: 'dashboards-page',
       target: null,
-      route: /^\/dashboards-beta\/?$/,
+      route: /^\/dashboards\/?$/,
       title: 'Dashboards live here',
       body: "A dashboard is a layout of components that read from a project's data. Each dashboard can have multiple tabs and multiple components — figures, cards, tables, interactive filters, MultiQC plots, and geomaps.",
       position: 'bottom',
@@ -61,7 +61,7 @@ export const authBuilderWalkthrough: WalkthroughDefinition = {
     {
       id: 'dashboards-create',
       target: 'dashboards-create',
-      route: /^\/dashboards-beta\/?$/,
+      route: /^\/dashboards\/?$/,
       title: 'Create a dashboard',
       body: "Click here to start a new dashboard. Pick the project you just made — the new dashboard will show up in the list, and the tour resumes once you open it.",
       position: 'left',
@@ -70,7 +70,7 @@ export const authBuilderWalkthrough: WalkthroughDefinition = {
     {
       id: 'enter-edit-mode',
       target: 'enter-edit-mode',
-      route: /^\/dashboard-beta\/[^/]+/,
+      route: /^\/dashboard\/[^/]+/,
       title: 'Open the editor',
       body: 'Your new dashboard opens in view mode. Click Edit to drop into the editor — that\'s where you add components.',
       position: 'bottom',
@@ -79,7 +79,7 @@ export const authBuilderWalkthrough: WalkthroughDefinition = {
     {
       id: 'editor-add',
       target: 'editor-add-component',
-      route: /^\/dashboard-beta-edit\//,
+      route: /^\/dashboard-edit\//,
       title: 'Add your first component',
       body: 'A dashboard is built from components. Click "Add component" to open the builder.',
       position: 'bottom',
@@ -114,7 +114,7 @@ export const authBuilderWalkthrough: WalkthroughDefinition = {
     {
       id: 'component-resize',
       target: 'editor-grid',
-      route: /^\/dashboard-beta-edit\//,
+      route: /^\/dashboard-edit\//,
       title: 'Arrange and resize',
       body: 'Drag your component from dedicated button to move it. Drag the bottom-right corner to resize. Add a few more components and lay them out however you like.',
       position: 'left',
@@ -122,7 +122,7 @@ export const authBuilderWalkthrough: WalkthroughDefinition = {
     {
       id: 'editor-save',
       target: 'editor-save',
-      route: /^\/dashboard-beta-edit\//,
+      route: /^\/dashboard-edit\//,
       title: 'Save the dashboard',
       body: 'Components are added on the dashboard, but the layout itself needs an explicit save. Hit Save to persist updated layout.',
       position: 'bottom',

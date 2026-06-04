@@ -1,7 +1,7 @@
 """
 Shared screenshot service for dashboard dual-theme screenshot generation.
 
-The active code path drives the React SPA at `{fastapi.url}/dashboard-beta/{id}`
+The active code path drives the React SPA at `{fastapi.url}/dashboard/{id}`
 via `generate_react_dual_theme_screenshots`. Dash-targeted captures
 (`generate_dual_theme_screenshots`) are kept for emergency rollback only —
 they log a deprecation warning on every call and should not run in normal
@@ -243,7 +243,7 @@ async def generate_dual_theme_screenshots(
         # short-circuit before mounting either tour engine. The legacy
         # ``/dashboard/{id}`` route doesn't render the React walkthrough today,
         # so this is defensive — keeps the PNG clean if/when screenshots ever
-        # target ``/dashboard-beta/{id}``.
+        # target ``/dashboard/{id}``.
         dashboard_url = f"{settings.viewer.internal_url}/dashboard/{dashboard_id}?no-walkthrough=1"
 
         logger.info(f"Starting dual-theme screenshot for dashboard {dashboard_id}")
@@ -393,7 +393,7 @@ async def generate_react_dual_theme_screenshots(
     """Generate light + dark screenshots of the React beta viewer.
 
     This is the canonical production path. Drives the SPA bundle FastAPI
-    serves at `{settings.fastapi.url}/dashboard-beta/{id}` (port 8100 by
+    serves at `{settings.fastapi.url}/dashboard/{id}` (port 8100 by
     default).
 
     Defaults to filenames `{id}_light.png` / `{id}_dark.png` for backward
@@ -440,7 +440,7 @@ async def generate_react_dual_theme_screenshots(
     # contains the popover, anchor, or dim backdrop — even when the
     # seeded admin's localStorage would otherwise auto-start the
     # builder walkthrough on first visit.
-    dashboard_url = f"{origin}/dashboard-beta/{dashboard_id}?no-walkthrough=1"
+    dashboard_url = f"{origin}/dashboard/{dashboard_id}?no-walkthrough=1"
 
     try:
         token_data = await get_admin_auth_token()

@@ -636,7 +636,7 @@ spec:
             {{- toYaml .Values.viewer.resources | nindent 12 }}
           readinessProbe:
             httpGet:
-              path: /dashboard-beta/
+              path: /dashboard/
               port: 8080
             initialDelaySeconds: 5
             periodSeconds: 5

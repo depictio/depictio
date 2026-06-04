@@ -18,7 +18,7 @@
 #                               payload digest.
 #
 # Watch the dashboard at:
-#   http://localhost:8055/dashboard-beta/69f899234da0b143a8538e0e
+#   http://localhost:8055/dashboard/69f899234da0b143a8538e0e
 
 set -euo pipefail
 
@@ -216,7 +216,7 @@ case "$MODE" in
     rows=$(current_data_rows)
     echo "CSV: $CSV"
     echo "Data rows: $rows"
-    echo "Dashboard: $API_URL/dashboard-beta/$DASHBOARD_ID"
+    echo "Dashboard: $API_URL/dashboard/$DASHBOARD_ID"
     echo "Last DC: $DC_ID"
     echo ""
     echo "Latest payload (test-trigger, no append):"

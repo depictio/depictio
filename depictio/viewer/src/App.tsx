@@ -94,7 +94,7 @@ const App: React.FC = () => {
   // Fetch dashboard + tab list in parallel
   useEffect(() => {
     if (!dashboardId) {
-      setError('No dashboard ID in URL. Expected /dashboard-beta/<id>.');
+      setError('No dashboard ID in URL. Expected /dashboard/<id>.');
       setLoading(false);
       return;
     }
@@ -512,7 +512,7 @@ export default App;
 
 function extractDashboardId(): string | null {
   const path = window.location.pathname;
-  const match = path.match(/\/dashboard-beta\/([^/?#]+)/);
+  const match = path.match(/\/dashboard\/([^/?#]+)/);
   return match?.[1] || null;
 }
 

@@ -1,6 +1,6 @@
 """Drive the /screenshot-react-dual endpoint for every advanced-viz dashboard.
 
-Hits the React-beta screenshot endpoint once per viz_kind, then converts the
+Hits the React screenshot endpoint once per viz_kind, then converts the
 resulting PNGs to WebP into the docs folder under their canonical viz_kind
 name so the `#only-light` / `#only-dark` refs in components.md resolve.
 

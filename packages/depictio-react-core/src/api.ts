@@ -1996,7 +1996,7 @@ export { authFetch, refreshAccessToken };
 
 // ---- Dashboard management (list / create / edit / delete / import / export)
 //
-// These back the React /dashboards-beta page. Mirrors the endpoints today's
+// These back the React /dashboards page. Mirrors the endpoints today's
 // Dash management page consumes (see depictio/dash/layouts/dashboards_management.py).
 
 /** Permissions block embedded in each dashboard list entry. Shapes match
@@ -2670,7 +2670,7 @@ export async function exportDashboardJson(
 
 // ---- Admin (system-wide) helpers ----------------------------------------
 //
-// These back the React /admin-beta page. Backend already enforces `is_admin`
+// These back the React /admin page. Backend already enforces `is_admin`
 // on every endpoint; the SPA just renders them when the current user passes
 // the same check. Mirrors the calls in `depictio/dash/layouts/admin_management.py`.
 
@@ -2789,7 +2789,7 @@ export async function cleanExampleProjects(): Promise<{ deleted: ExampleProject[
   return { deleted };
 }
 
-// ---- Profile + CLI token management (/profile-beta, /cli-agents-beta) -----
+// ---- Profile + CLI token management (/profile, /cli-agents) -----
 //
 // These wrap the FastAPI endpoints used by the React profile and CLI agents
 // pages. Token create/delete go through bearer-authed `/auth/me/tokens`

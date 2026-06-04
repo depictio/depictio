@@ -41,7 +41,7 @@ const PoweredBy: React.FC<PoweredByProps> = ({ withRightBorder = false }) => {
           Powered by
         </Text>
         <img
-          src="/dashboard-beta/logos/logo_black.svg"
+          src="/dashboard/logos/logo_black.svg"
           alt="Depictio"
           style={{
             height: 20,

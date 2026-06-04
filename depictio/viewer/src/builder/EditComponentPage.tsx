@@ -56,7 +56,7 @@ const EditComponentPage: React.FC<EditComponentPageProps> = ({
   }, [dashboardId, componentId, init, loadExisting, reset]);
 
   const cancel = () => {
-    window.location.assign(`/dashboard-beta-edit/${dashboardId}`);
+    window.location.assign(`/dashboard-edit/${dashboardId}`);
   };
 
   return (

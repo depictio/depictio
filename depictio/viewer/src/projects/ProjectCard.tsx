@@ -193,14 +193,14 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
               icon="mdi:database-outline"
               iconColor="var(--mantine-color-cyan-6)"
               label="Workflows & Data"
-              href={`/projects-beta/${projectId}`}
+              href={`/projects/${projectId}`}
             />
 
             <NavRow
               icon="mdi:shield-account-outline"
               iconColor="var(--mantine-color-blue-6)"
               label="Roles and permissions"
-              href={`/projects-beta/${projectId}/permissions`}
+              href={`/projects/${projectId}/permissions`}
             />
 
             <Accordion.Item value="management">

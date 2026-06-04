@@ -137,7 +137,7 @@ const TypeCard: React.FC<TypeCardProps> = ({
         >
           {meta.type === 'multiqc' ? (
             <img
-              src="/dashboard-beta/logos/multiqc_icon_dark.svg"
+              src="/dashboard/logos/multiqc_icon_dark.svg"
               alt="MultiQC"
               className="multiqc-icon-themed"
               style={{ width: 44, height: 44, objectFit: 'contain' }}

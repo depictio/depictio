@@ -268,7 +268,7 @@ spec:
           imagePullPolicy: IfNotPresent
           ports: [{ containerPort: 80 }]
           readinessProbe:
-            httpGet: { path: /dashboard-beta/, port: 80 }
+            httpGet: { path: /dashboard/, port: 80 }
             initialDelaySeconds: 5
             periodSeconds: 10
 ---

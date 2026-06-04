@@ -10,7 +10,7 @@ import { Icon } from '@iconify/react';
  * with Edit / Duplicate / Delete actions:
  *
  *   - Edit:      navigates to the React edit page at
- *                /dashboard-beta-edit/{id}/component/edit/{componentId}
+ *                /dashboard-edit/{id}/component/edit/{componentId}
  *   - Duplicate: fires `onDuplicate` — parent clones metadata + layout, POSTs /save
  *   - Delete:    fires `onDelete` — parent is responsible for the actual API call
  *
@@ -48,7 +48,7 @@ const GridItemEditOverlay: React.FC<GridItemEditOverlayProps> = ({
 
   const handleEdit = () => {
     window.location.assign(
-      `/dashboard-beta-edit/${dashboardId}/component/edit/${componentId}`,
+      `/dashboard-edit/${dashboardId}/component/edit/${componentId}`,
     );
   };
 

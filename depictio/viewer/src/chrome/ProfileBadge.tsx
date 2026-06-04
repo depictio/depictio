@@ -49,7 +49,7 @@ const ProfileBadge: React.FC = () => {
       <Menu.Dropdown>
         <Menu.Item
           component="a"
-          href="/profile-beta"
+          href="/profile"
           leftSection={<Icon icon="mdi:account-circle-outline" width={16} />}
         >
           Profile

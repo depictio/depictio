@@ -1,7 +1,7 @@
 # -----------------------------
 # Depictio viewer nginx config
 # -----------------------------
-# Serves the Vite-built React SPA (base `/dashboard-beta/`) and proxies
+# Serves the Vite-built React SPA (base `/dashboard/`) and proxies
 # everything else to the FastAPI backend. Mirrors the dev-server proxy
 # layout in depictio/viewer/vite.config.ts so client code sees the same
 # URL surface in dev and prod.
@@ -71,8 +71,8 @@ server {
     # Emit RELATIVE redirect Location headers. nginx listens on 80 inside the
     # container but is published on a different host port (e.g. 5100 in the
     # multi-instance dev setup, or behind an ingress in k8s). With the default
-    # `absolute_redirect on`, nginx rewrites `return 302 /dashboard-beta/` into
-    # an absolute `http://<host>/dashboard-beta/` using its OWN :80 — dropping
+    # `absolute_redirect on`, nginx rewrites `return 302 /dashboard/` into
+    # an absolute `http://<host>/dashboard/` using its OWN :80 — dropping
     # the real host port, so the browser lands on the wrong URL. Relative
     # redirects let the browser resolve against the address it actually used.
     absolute_redirect off;
@@ -80,7 +80,7 @@ server {
     # Hashed asset URLs (Vite emits `assets/<name>.<hash>.js`) are
     # immutable — long cache is safe. index.html and all other paths
     # stay no-cache so deploys are picked up on the next navigation.
-    location /dashboard-beta/assets/ {
+    location /dashboard/assets/ {
         root /usr/share/nginx/html;
         access_log off;
         expires 1y;
@@ -89,18 +89,18 @@ server {
     }
 
     # SPA shell. try_files falls back to index.html so client-side
-    # routing under /dashboard-beta/* works on hard refresh / deep links.
-    location /dashboard-beta/ {
+    # routing under /dashboard/* works on hard refresh / deep links.
+    location /dashboard/ {
         root /usr/share/nginx/html;
-        try_files $uri $uri/ /dashboard-beta/index.html;
+        try_files $uri $uri/ /dashboard/index.html;
         add_header Cache-Control "no-cache";
     }
 
     # Other React-owned route prefixes — same SPA shell, different entry
     # paths. Keeps the vite.config.ts dev fallback list in sync with prod.
-    location ~ ^/(auth|dashboards-beta|projects-beta|about-beta|admin-beta)(/|$) {
+    location ~ ^/(auth|dashboards|dashboard-edit|projects|about|admin|profile|cli-agents)(/|$) {
         root /usr/share/nginx/html;
-        try_files /dashboard-beta/index.html =404;
+        try_files /dashboard/index.html =404;
         add_header Cache-Control "no-cache";
     }
 
@@ -138,12 +138,12 @@ server {
     }
 
     # Bare `/` lands on the dashboards list. Redirect straight to
-    # /dashboards-beta (not the SPA base /dashboard-beta/) so there's no
+    # /dashboards (not the SPA base /dashboard/) so there's no
     # singular→plural double hop — the app's own bare-root bounce would
     # otherwise fire on top. Relative Location (absolute_redirect off above)
     # keeps the caller's host:port. Mirrors the Vite dev middleware.
     location = / {
-        return 302 /dashboards-beta;
+        return 302 /dashboards;
     }
 
     gzip on;

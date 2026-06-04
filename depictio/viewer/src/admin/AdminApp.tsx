@@ -85,7 +85,7 @@ const AdminApp: React.FC = () => {
             </Text>
             <Button
               component="a"
-              href="/dashboards-beta"
+              href="/dashboards"
               variant="light"
               leftSection={<Icon icon="material-symbols:dashboard" width={16} />}
             >

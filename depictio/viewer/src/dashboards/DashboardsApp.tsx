@@ -200,7 +200,7 @@ const DashboardsApp: React.FC = () => {
    *  Recently opened pile. localStorage-only — see lib/dashboardRecents.ts. */
   const handleView = useCallback((dashboard: DashboardListEntry) => {
     recordDashboardOpen(String(dashboard.dashboard_id));
-    window.location.assign(`/dashboard-beta/${dashboard.dashboard_id}`);
+    window.location.assign(`/dashboard/${dashboard.dashboard_id}`);
   }, []);
 
   const handleExport = useCallback(async (dashboard: DashboardListEntry) => {

@@ -422,7 +422,7 @@ async def list_all_dashboards(
 
     By default returns only main-tab dashboards (so multi-tab projects show
     up once). Pass ``?include_child_tabs=true`` to also surface every child
-    tab — used by the /admin-beta project panel to list the full dashboard
+    tab — used by the /admin project panel to list the full dashboard
     tree under each seed project.
     """
     if not current_user.is_admin:
@@ -673,7 +673,7 @@ async def save_dashboard(
         # Convert dashboard_id to string to ensure proper JSON serialization
         dashboard_id_str = str(dashboard_id)
 
-        # Auto-queue screenshot regeneration so /dashboards-beta and any
+        # Auto-queue screenshot regeneration so /dashboards and any
         # other listing surface picks up the latest dashboard state.
         # The `_should_enqueue_screenshot` debounce throttles implicit
         # auto-saves (drag/resize/rename produce a save burst each); an
