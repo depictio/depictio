@@ -1,5 +1,11 @@
 # EMBL Demo Mode Configuration (values-embl-demo-base.yaml)
 # Enables demo mode with guided tour tooltips for public Depictio demo instances
+
+# EMBL ops-k1 uses a custom cluster DNS domain (not cluster.local) — required
+# for the viewer nginx → backend proxy FQDN to resolve (nginx's resolver
+# ignores resolv.conf search domains).
+clusterDomain: "ops-k1.embl.de"
+
 ## Storage
 storageClass: basic-csi
 persistence:

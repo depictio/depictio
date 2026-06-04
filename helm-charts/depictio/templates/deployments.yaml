@@ -622,12 +622,14 @@ spec:
             #  * Service PORT (httpPort, 80), not the pod targetPort (8058):
             #    the ClusterIP only forwards declared service ports, so :8058
             #    times out.
-            #  * Fully-qualified Service DNS name (.<ns>.svc.cluster.local):
+            #  * Fully-qualified Service DNS name (.<ns>.svc.<clusterDomain>):
             #    nginx's `resolver` issues raw DNS queries and does NOT apply
             #    the resolv.conf `search` domains, so a bare service name fails
-            #    with "could not be resolved (Host not found)".
+            #    with "could not be resolved (Host not found)". The cluster
+            #    domain is configurable because not every cluster uses
+            #    cluster.local (EMBL ops-k1 uses ops-k1.embl.de).
             - name: DEPICTIO_API_UPSTREAM
-              value: "{{ .Release.Name }}-depictio-backend.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.backend.service.httpPort }}"
+              value: "{{ .Release.Name }}-depictio-backend.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain | default "cluster.local" }}:{{ .Values.backend.service.httpPort }}"
           ports:
             - containerPort: 8080
           resources:

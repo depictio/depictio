@@ -8,6 +8,12 @@
 nameOverride: ""
 fullnameOverride: ""
 
+# Kubernetes cluster DNS domain. Used to build fully-qualified Service DNS
+# names for the viewer's nginx proxy (its `resolver` does raw DNS queries and
+# ignores resolv.conf search domains). Most clusters use cluster.local, but
+# some (e.g. EMBL ops-k1: ops-k1.embl.de) customise it.
+clusterDomain: "cluster.local"
+
 # Application configuration
 appname: "depictio"
 
