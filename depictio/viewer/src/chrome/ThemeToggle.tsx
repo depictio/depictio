@@ -21,6 +21,7 @@ const ThemeToggle: React.FC = () => {
       onLabel={<Icon icon="ph:moon-fill" width={16} />}
       offLabel={<Icon icon="ph:sun-fill" width={16} />}
       aria-label="Toggle color scheme"
+      data-testid="theme-toggle"
     />
   );
 };

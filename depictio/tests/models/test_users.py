@@ -1013,34 +1013,37 @@ class TestRequestEditPassword:
 
     def test_valid_password_inputs(self):
         """Test valid password input combinations."""
-        # Valid scenario: old_password is hashed, new_password is plain
+        # Valid scenario: both passwords plaintext — the route verifies the
+        # old password with bcrypt.checkpw and hashes the new one server-side
+        # (a client-side bcrypt hash could never match the stored hash
+        # because of the random salt).
         valid_data = {
-            "old_password": "$2b$12$validhashedpassword",
+            "old_password": "plainoldpassword",
             "new_password": "newplainpassword123",
         }
 
         model = RequestEditPassword(**valid_data)  # type: ignore[missing-argument]
-        assert model.old_password == "$2b$12$validhashedpassword"
+        assert model.old_password == "plainoldpassword"
         assert model.new_password == "newplainpassword123"
 
-    def test_unhashed_old_password(self):
-        """Test that unhashed old_password raises validation error."""
+    def test_hashed_old_password(self):
+        """Test that a pre-hashed old_password raises validation error."""
         invalid_data = {
-            "old_password": "plainoldpassword",
+            "old_password": "$2b$12$validhashedpassword",
             "new_password": "newpassword123",
         }
 
         with pytest.raises(ValidationError) as exc_info:
             RequestEditPassword(**invalid_data)  # type: ignore[missing-argument]
 
-        # Check that the error message mentions hashing
+        # Check that the error message demands plaintext
         error_details = str(exc_info.value)
-        assert "Password must be hashed" in error_details
+        assert "plaintext" in error_details
 
     def test_hashed_new_password(self):
         """Test that hashed new_password raises validation error."""
         invalid_data = {
-            "old_password": "$2b$12$validhashedpassword",
+            "old_password": "plainoldpassword",
             "new_password": "$2b$12$anotheralreadyhashed",
         }
 
@@ -1059,7 +1062,7 @@ class TestRequestEditPassword:
 
         # Missing new_password
         with pytest.raises(ValidationError):
-            RequestEditPassword(old_password="$2b$12$validhashedpassword")  # type: ignore[missing-argument]
+            RequestEditPassword(old_password="plainoldpassword")  # type: ignore[missing-argument]
 
         # Empty dict (missing both)
         with pytest.raises(ValidationError):

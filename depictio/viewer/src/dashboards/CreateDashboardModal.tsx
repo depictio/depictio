@@ -265,6 +265,7 @@ const CreateDashboardModal: React.FC<CreateDashboardModalProps> = ({
                     required
                     leftSection={<Icon icon="mdi:text-box-outline" width={16} />}
                     data-autofocus
+                    data-testid="dashboard-title-input"
                   />
                   <Textarea
                     label="Dashboard Subtitle (Optional)"
@@ -286,6 +287,7 @@ const CreateDashboardModal: React.FC<CreateDashboardModalProps> = ({
                     required
                     comboboxProps={{ withinPortal: false }}
                     leftSection={<Icon icon="mdi:folder-outline" width={16} />}
+                    data-testid="dashboard-projects"
                   />
                   {titleConflict && (
                     <Alert color="red" icon={<Icon icon="mdi:alert" />} variant="light">
@@ -419,6 +421,7 @@ const CreateDashboardModal: React.FC<CreateDashboardModalProps> = ({
                 loading={createSubmitting}
                 disabled={!canCreate || titleConflict}
                 onClick={handleCreate}
+                data-testid="create-dashboard-submit"
               >
                 Create Dashboard
               </Button>

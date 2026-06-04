@@ -350,12 +350,14 @@ class RequestEditPassword(BaseModel):
     new_password: str
 
     @field_validator("old_password")
-    def hash_old_password(cls, v):
+    def validate_old_password(cls, v):
+        # The route verifies the old password with bcrypt.checkpw(plaintext,
+        # stored_hash) — a client-side bcrypt hash can never match (random
+        # salt), so requiring a pre-hashed value here made the endpoint
+        # unusable. Plaintext over TLS is the contract, same as login.
         if v.startswith("$2b$"):
-            return v
-        else:
-            # Raise an error if the password is not hashed
-            raise ValueError("Password must be hashed")
+            raise ValueError("Password must be sent in plaintext, not pre-hashed")
+        return v
 
     @field_validator("new_password")
     def hash_new_password(cls, v):

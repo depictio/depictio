@@ -72,6 +72,7 @@ const DashboardActionsMenu: React.FC<DashboardActionsMenuProps> = ({
         leftSection={<Icon icon="tabler:trash" width={14} />}
         disabled={!isOwner}
         onClick={() => onDelete(dashboard)}
+        data-testid="delete-dashboard-btn"
       >
         Delete
       </Menu.Item>

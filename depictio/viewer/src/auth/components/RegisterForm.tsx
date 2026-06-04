@@ -63,6 +63,7 @@ export default function RegisterForm({ onSwitchToLogin, onSuccess }: Props) {
         error={email.length > 0 && !emailValid ? 'Invalid email' : null}
         autoComplete="email"
         data-autofocus
+        data-testid="register-email"
       />
       <PasswordInput
         label="Password:"
@@ -70,19 +71,24 @@ export default function RegisterForm({ onSwitchToLogin, onSuccess }: Props) {
         value={password}
         onChange={(e) => setPassword(e.currentTarget.value)}
         autoComplete="new-password"
+        data-testid="register-password"
       />
       <PasswordInput
         label="Confirm Password:"
         placeholder="Confirm your password"
         value={confirm}
         onChange={(e) => setConfirm(e.currentTarget.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') handleSubmit();
-        }}
+        onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit(); }}
         autoComplete="new-password"
+        data-testid="register-confirm-password"
       />
       {feedback && (
-        <Text c={feedback.kind === 'error' ? 'red' : 'green'} size="sm" ta="center">
+        <Text
+          c={feedback.kind === 'error' ? 'red' : 'green'}
+          size="sm"
+          ta="center"
+          data-testid="user-feedback-message-register"
+        >
           {feedback.text}
         </Text>
       )}
@@ -94,6 +100,7 @@ export default function RegisterForm({ onSwitchToLogin, onSuccess }: Props) {
           disabled={!canSubmit}
           onClick={handleSubmit}
           style={{ width: 140 }}
+          data-testid="register-button"
         >
           Register
         </Button>
@@ -103,6 +110,7 @@ export default function RegisterForm({ onSwitchToLogin, onSuccess }: Props) {
           color="blue"
           onClick={onSwitchToLogin}
           style={{ width: 140 }}
+          data-testid="open-login-form"
         >
           Back to Login
         </Button>

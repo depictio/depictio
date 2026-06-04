@@ -21,6 +21,7 @@ export default function AuthCard({ heading, children }: Props) {
   return (
     <Paper
       className="auth-modal-content"
+      data-testid="modal-content"
       p="xl"
       radius="md"
       style={{ width: 480, maxWidth: '90vw' }}

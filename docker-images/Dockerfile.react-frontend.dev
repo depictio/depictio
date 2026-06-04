@@ -1,0 +1,28 @@
+# -----------------------------
+# Depictio react-frontend DEV image (Vite dev server with hot-module reload)
+# -----------------------------
+# Installs npm deps from the repo root context so node_modules live in the
+# image layer. The source tree is bind-mounted by docker-compose.override.yaml
+# at runtime so host-side edits hot-reload (VITE_USE_POLLING=true for Colima).
+#
+# Context: repo root (set in docker-compose.override.yaml)
+# -----------------------------
+
+FROM node:20-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0
+WORKDIR /app
+
+COPY depictio/react-frontend/package.json depictio/react-frontend/package-lock.json ./
+
+RUN npm install --no-audit --no-fund
+
+# Source tree is bind-mounted at runtime (see docker-compose.override.yaml).
+# Copy here only as a fallback when the bind-mount is absent.
+COPY depictio/react-frontend/src ./src
+COPY depictio/react-frontend/index.html .
+COPY depictio/react-frontend/vite.config.ts .
+COPY depictio/react-frontend/tsconfig*.json .
+COPY depictio/react-frontend/postcss.config.cjs .
+
+EXPOSE 5173
+
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]

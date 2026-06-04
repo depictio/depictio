@@ -219,6 +219,7 @@ const ProfileApp: React.FC = () => {
                       disabled={states.logoutDisabled}
                       onClick={handleLogout}
                       leftSection={<Icon icon="mdi:logout" width={20} />}
+                      data-testid="logout-button"
                       styles={{
                         root: {
                           backgroundColor: states.logoutDisabled ? undefined : brandColors.red,
@@ -234,6 +235,7 @@ const ProfileApp: React.FC = () => {
                       disabled={states.editPasswordDisabled}
                       onClick={openEditPassword}
                       leftSection={<Icon icon="mdi:lock-outline" width={20} />}
+                      data-testid="edit-password-button"
                       styles={{
                         root: {
                           backgroundColor: states.editPasswordDisabled
@@ -252,6 +254,7 @@ const ProfileApp: React.FC = () => {
                       radius="md"
                       disabled={states.cliAgentsDisabled}
                       leftSection={<Icon icon="mdi:console" width={20} />}
+                      data-testid="cli-agents-button"
                       styles={{
                         root: {
                           backgroundColor: states.cliAgentsDisabled
@@ -278,7 +281,12 @@ const ProfileApp: React.FC = () => {
 };
 
 const UserInfoRow: React.FC<{ label: string; value: string }> = ({ label, value }) => (
-  <Paper p="sm" radius="md" withBorder>
+  <Paper
+    p="sm"
+    radius="md"
+    withBorder
+    data-testid={`profile-info-${label.toLowerCase().replace(/\s+/g, '-')}`}
+  >
     <Group justify="space-between">
       <Text fw="bold" size="sm">
         {label}

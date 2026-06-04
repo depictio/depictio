@@ -1,0 +1,39 @@
+{
+  "name": "depictio-react-frontend",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "description": "Parallel React frontend for Depictio. Coexists with the Dash frontend; consumes the same FastAPI backend.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview --host 0.0.0.0 --port 5174",
+    "lint": "tsc --noEmit",
+    "format": "prettier --write \"src/**/*.{ts,tsx,css}\""
+  },
+  "dependencies": {
+    "@mantine/core": "^7.13.0",
+    "@mantine/form": "^7.13.0",
+    "@mantine/hooks": "^7.13.0",
+    "@mantine/notifications": "^7.13.0",
+    "@tabler/icons-react": "^3.17.0",
+    "@tanstack/react-query": "^5.56.0",
+    "axios": "^1.7.7",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.26.2",
+    "zustand": "^4.5.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20.16.5",
+    "@types/react": "^18.3.5",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "postcss": "^8.4.47",
+    "postcss-preset-mantine": "^1.17.0",
+    "postcss-simple-vars": "^7.0.1",
+    "prettier": "^3.3.3",
+    "typescript": "^5.5.4",
+    "vite": "^5.4.6"
+  }
+}
