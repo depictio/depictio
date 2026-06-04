@@ -1,0 +1,5 @@
+# Pangolin. Lightweight: identity is derived from the nf-core meta.yml that
+# `nf_core_url` points at (not duplicated). Override a field here only on drift.
+id: pangolin
+name: Pangolin
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/pangolin/run

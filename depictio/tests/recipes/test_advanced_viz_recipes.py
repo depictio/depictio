@@ -34,74 +34,40 @@ def _polars_schema_name(df: pl.DataFrame) -> dict[str, str]:
 
 
 # ---------------------------------------------------------------------------
-# ampliseq: volcano
-# ---------------------------------------------------------------------------
-
-
-def test_ampliseq_volcano_canonical(tmp_path: Path) -> None:
-    """Ampliseq volcano recipe rewrites ANCOM-BC columns to canonical schema."""
-    src = tmp_path / "ancombc_habitat_level2.tsv"
-    pl.DataFrame(
-        {
-            "id": ["k__Bacteria;p__Firmicutes", "k__Bacteria;p__Bacteroidetes"],
-            "contrast": ["A_vs_B", "A_vs_B"],
-            "lfc": [1.2, -0.7],
-            "p_val": [0.001, 0.04],
-            "q_val": [0.005, 0.06],
-            "w": [3.1, -1.4],
-            "Kingdom": ["Bacteria", "Bacteria"],
-            "Phylum": ["Firmicutes", "Bacteroidetes"],
-            "neg_log10_qval": [2.301, 1.222],
-            "significant": [True, False],
-        }
-    ).write_csv(src, separator="\t")
-
-    result = execute_recipe("nf-core/ampliseq/volcano_canonical.py", tmp_path)
-
-    # The recipe engine has already enforced EXPECTED_SCHEMA at this point.
-    assert not result.is_empty()
-    assert set(["feature_id", "effect_size", "significance"]).issubset(result.columns)
-
-    cfg = VolcanoConfig(
-        feature_id_col="feature_id",
-        effect_size_col="effect_size",
-        significance_col="significance",
-        label_col="label",
-        category_col="category",
-    )
-    errors = validate_binding(cfg, _polars_schema_name(result))
-    assert errors == [], f"binding errors: {errors}"
-
-
-# ---------------------------------------------------------------------------
 # ampliseq: stacked_taxonomy
 # ---------------------------------------------------------------------------
 
 
 def test_ampliseq_stacked_taxonomy_canonical(tmp_path: Path) -> None:
-    src = tmp_path / "taxonomy_rel_abundance_long.tsv"
-    pl.DataFrame(
+    # The recipe fans in QIIME2 rel-table-{2..6}.tsv (one wide table per rank,
+    # taxa × samples) via dc_ref sources — injected here as `extra_sources`.
+    # Only the Phylum level (rel-table-2) is supplied; the recipe tolerates the
+    # deeper levels being absent and derives a Kingdom level from the Phylum rows.
+    phylum = pl.DataFrame(
         {
-            "sample": ["S1", "S1", "S2", "S2"],
-            "taxonomy": [
-                "k__Bacteria;p__Firmicutes",
-                "k__Bacteria;p__Bacteroidetes",
-                "k__Bacteria;p__Firmicutes",
-                "k__Bacteria;p__Bacteroidetes",
-            ],
-            "rel_abundance": [0.55, 0.30, 0.40, 0.50],
-            "habitat": ["river", "river", "soil", "soil"],
-            "Kingdom": ["Bacteria"] * 4,
-            "Phylum": ["Firmicutes", "Bacteroidetes", "Firmicutes", "Bacteroidetes"],
+            "#OTU ID": ["k__Bacteria;p__Firmicutes", "k__Bacteria;p__Bacteroidetes"],
+            "S1": [0.55, 0.30],
+            "S2": [0.40, 0.50],
         }
-    ).write_csv(src, separator="\t")
+    )
+    empty = pl.DataFrame()
 
-    result = execute_recipe("nf-core/ampliseq/stacked_taxonomy_canonical.py", tmp_path)
+    result = execute_recipe(
+        "qiime2/stacked_taxonomy_canonical.py",
+        tmp_path,
+        extra_sources={
+            "phylum": phylum,
+            "class_": empty,
+            "order": empty,
+            "family": empty,
+            "genus": empty,
+        },
+    )
 
     assert not result.is_empty()
     assert set(["sample_id", "taxon", "rank", "abundance"]).issubset(result.columns)
-    # Both rows have 2-segment taxonomy ⇒ rank = "Phylum"
-    assert set(result["rank"].unique().to_list()) == {"Phylum"}
+    # Phylum rows plus a Kingdom level the recipe derives by summing Phylum.
+    assert set(result["rank"].unique().to_list()) == {"Kingdom", "Phylum"}
 
     cfg = StackedTaxonomyConfig(
         sample_id_col="sample_id",
@@ -119,20 +85,23 @@ def test_ampliseq_stacked_taxonomy_canonical(tmp_path: Path) -> None:
 
 
 def test_ampliseq_embedding_pcoa(tmp_path: Path) -> None:
-    src = tmp_path / "taxonomy_heatmap.tsv"
-    # 3 taxa x 4 samples; values are dummy relative abundances.
+    # The recipe consumes the derived `taxonomy_heatmap` DC (wide matrix:
+    # Phylum/Kingdom row-ids + per-sample columns) via a dc_ref source — injected
+    # here as `extra_sources`. 3 taxa x 4 samples of dummy relative abundances.
     rng = np.random.default_rng(seed=0)
     samples = ["S1", "S2", "S3", "S4"]
     matrix = rng.uniform(0, 1, size=(3, 4))
-    pl.DataFrame(
+    heatmap = pl.DataFrame(
         {
             "Phylum": ["Firmicutes", "Bacteroidetes", "Proteobacteria"],
             "Kingdom": ["Bacteria"] * 3,
             **{s: matrix[:, i].tolist() for i, s in enumerate(samples)},
         }
-    ).write_csv(src, separator="\t")
+    )
 
-    result = execute_recipe("nf-core/ampliseq/embedding_pcoa.py", tmp_path)
+    result = execute_recipe(
+        "qiime2/embedding_pcoa.py", tmp_path, extra_sources={"taxonomy_heatmap": heatmap}
+    )
 
     assert not result.is_empty()
     assert set(["sample_id", "dim_1", "dim_2"]).issubset(result.columns)
@@ -142,50 +111,6 @@ def test_ampliseq_embedding_pcoa(tmp_path: Path) -> None:
         sample_id_col="sample_id",
         dim_1_col="dim_1",
         dim_2_col="dim_2",
-    )
-    errors = validate_binding(cfg, _polars_schema_name(result))
-    assert errors == [], f"binding errors: {errors}"
-
-
-# ---------------------------------------------------------------------------
-# viralrecon: manhattan
-# ---------------------------------------------------------------------------
-
-
-def test_viralrecon_manhattan_variants_canonical(tmp_path: Path) -> None:
-    src_dir = tmp_path / "variants" / "ivar"
-    src_dir.mkdir(parents=True)
-    src = src_dir / "variants_long_table.csv"
-    pl.DataFrame(
-        {
-            "SAMPLE": ["sampleA", "sampleA", "sampleB"],
-            "CHROM": ["MN908947.3"] * 3,
-            "POS": [100, 200, 300],
-            "REF": ["A", "C", "G"],
-            "ALT": ["T", "T", "A"],
-            "FILTER": ["PASS", "PASS", "PASS"],
-            "DP": [50, 80, 30],
-            "REF_DP": [10, 5, 1],
-            "ALT_DP": [40, 75, 29],
-            "AF": [0.80, 0.94, 0.97],
-            "GENE": ["S", "S", "N"],
-            "EFFECT": ["missense_variant", "synonymous_variant", "missense_variant"],
-        }
-    ).write_csv(src)
-
-    result = execute_recipe("nf-core/viralrecon/manhattan_variants_canonical.py", tmp_path)
-
-    assert not result.is_empty()
-    assert set(["chr", "pos", "score"]).issubset(result.columns)
-    # score = -log10(1 - AF); for AF=0.8 → log10(0.2) ≈ -0.699 → score ≈ 0.699
-    af_80_score = result.filter(pl.col("pos") == 100)["score"].item()
-    assert 0.65 < af_80_score < 0.75
-
-    cfg = ManhattanConfig(
-        chr_col="chr",
-        pos_col="pos",
-        score_col="score",
-        feature_col="feature",
     )
     errors = validate_binding(cfg, _polars_schema_name(result))
     assert errors == [], f"binding errors: {errors}"

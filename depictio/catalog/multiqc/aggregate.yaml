@@ -1,0 +1,7 @@
+id: multiqc_report
+mode: report
+description: MultiQC aggregated metrics + plots (native parquet, multi-table).
+find: { path_glob: "**/multiqc/multiqc_data/multiqc.parquet" }
+# non-tabular aggregate → no columns, no recipe; rendered as the MultiQC report.
+renders_as:
+  - { component: multiqc, section: report }

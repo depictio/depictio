@@ -36,12 +36,16 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "depth": pl.Int64,
     "iter": pl.Int64,
-}
-
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {
+    # The three metric sources are required (non-optional RecipeSources) and the
+    # transform unconditionally unpivots all three, so these columns are always
+    # produced — guaranteed enough for an advanced_viz `metric` role to bind.
     "shannon": pl.Float64,
     "observed_features": pl.Float64,
     "faith_pd": pl.Float64,
+}
+
+OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {
+    # `group` is only present when the optional metadata source was supplied.
     "group": pl.Utf8,
 }
 

@@ -125,7 +125,7 @@ workflows:
           metatype: "Aggregated"
           source: "transformed"
           transform:
-            recipe: "nf-core/viralrecon/summary_metrics.py"
+            recipe: "multiqc/summary_metrics.py"
           dc_specific_properties:
             format: "CSV"
             columns_description:
@@ -147,7 +147,7 @@ workflows:
           metatype: "Aggregated"
           source: "transformed"
           transform:
-            recipe: "nf-core/viralrecon/variants_long.py"
+            recipe: "ivar/variants_long.py"
           dc_specific_properties:
             format: "CSV"
             columns_description:
@@ -167,24 +167,6 @@ workflows:
               "FUNCLASS": "Functional class (SILENT, MISSENSE, NONSENSE)"
               "mutation_label": "Formatted mutation label (GENE:REFposALT)"
 
-      - data_collection_tag: "manhattan_variants_canonical"
-        description: "Manhattan-ready variant calls (chr/pos/score) for the advanced viz family"
-        config:
-          type: "Table"
-          metatype: "Aggregated"
-          source: "transformed"
-          transform:
-            recipe: "nf-core/viralrecon/manhattan_variants_canonical.py"
-          dc_specific_properties:
-            format: "CSV"
-            columns_description:
-              "chr": "Chromosome / reference sequence (renamed from CHROM)"
-              "pos": "Genomic position"
-              "score": "-log10(1 - AF) clipped; high = high-AF variant"
-              "feature": "Gene annotation"
-              "effect": "Allele frequency (signed effect proxy)"
-              "sample": "Sample identifier"
-
       - data_collection_tag: "pangolin_lineages"
         description: "Pangolin lineage assignments for each sample"
         config:
@@ -192,7 +174,7 @@ workflows:
           metatype: "Aggregated"
           source: "transformed"
           transform:
-            recipe: "nf-core/viralrecon/pangolin_lineages.py"
+            recipe: "pangolin/pangolin_lineages.py"
           dc_specific_properties:
             format: "CSV"
             columns_description:
@@ -214,7 +196,7 @@ workflows:
           metatype: "Aggregated"
           source: "transformed"
           transform:
-            recipe: "nf-core/viralrecon/nextclade_results.py"
+            recipe: "nextclade/nextclade_results.py"
           dc_specific_properties:
             format: "CSV"
             columns_description:
@@ -296,22 +278,12 @@ workflows:
       # depictio/models/components/advanced_viz/schemas.py).
       # ----------------------------------------------------------------
 
-      - data_collection_tag: "lollipop_canonical"
-        description: "Lollipop-ready variant tracks (feature_id=GENE / position=POS / category=EFFECT)"
-        config:
-          type: "Table"
-          metatype: "Aggregated"
-          source: "transformed"
-          transform:
-            recipe: "nf-core/viralrecon/lollipop_canonical.py"
-          dc_specific_properties:
-            format: "CSV"
-            columns_description:
-              "feature_id": "Gene the variant is on"
-              "position": "Genomic position"
-              "category": "Variant effect class (missense / synonymous / nonsense / ...)"
-              "effect": "Allele frequency (size encoding)"
-
+      # KEPT intentionally (unlike volcano/qq/lollipop, which were retired as
+      # pure remappers). The recipe is a rename, but the SEPARATE DC earns its
+      # keep by isolating the oncoplot's "Mutation Type" filter from the shared
+      # variants_long scope — rebinding to variants_long would couple it to the
+      # lollipop / variants-table filters. catalog/ivar/variants_long.yaml also
+      # declares oncoplot as a render, so the relationship stays documented.
       - data_collection_tag: "oncoplot_canonical"
         description: "Oncoplot-ready variant matrix (sample_id × gene × mutation_type)"
         config:
@@ -335,7 +307,7 @@ workflows:
           metatype: "Aggregated"
           source: "transformed"
           transform:
-            recipe: "nf-core/viralrecon/complex_heatmap_canonical.py"
+            recipe: "mosdepth/complex_heatmap_canonical.py"
           dc_specific_properties:
             format: "TSV"
             columns_description:
@@ -348,7 +320,7 @@ workflows:
           metatype: "Aggregated"
           source: "transformed"
           transform:
-            recipe: "nf-core/viralrecon/coverage_track_canonical.py"
+            recipe: "mosdepth/coverage_track_canonical.py"
           dc_specific_properties:
             format: "TSV"
             columns_description:

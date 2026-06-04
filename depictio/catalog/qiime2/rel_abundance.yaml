@@ -1,0 +1,11 @@
+id: qiime2_rel_abundance
+mode: rel-abundance
+description: Per-sample relative-abundance table with taxonomy ranks.
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/qiime2/relativeabundancetables
+find: { path_glob: "**/qiime2/rel_abundance_tables/rel-table-*.tsv" }
+recipe: nf-core/ampliseq/taxonomy_rel_abundance.py
+fixture: rel_abundance.tsv
+renders_as:
+  - { id: stacked_taxonomy_rel_abundance, component: advanced_viz, kind: stacked_taxonomy, roles: {sample_id: sample, taxon: taxonomy, abundance: rel_abundance} }
+  - { id: sunburst, component: advanced_viz, kind: sunburst, roles: {abundance: rel_abundance} }
+  - { id: complex_heatmap, component: advanced_viz, kind: complex_heatmap, roles: {index: taxonomy} }

@@ -1,0 +1,58 @@
+name: catalog-ci
+
+# Dedicated CI for the bio-catalog. Runs only when the catalog, its model/CLI,
+# its tests, or the recipes it references change — fast, focused signal.
+on:
+  pull_request:
+    paths:
+      - "depictio/catalog/**"
+      - "depictio/models/components/advanced_viz/catalog.py"
+      - "depictio/cli/cli/commands/catalog.py"
+      - "depictio/tests/models/test_catalog.py"
+      - "depictio/projects/**/recipes/**"
+      - ".github/workflows/catalog-ci.yaml"
+  push:
+    branches: [main]
+    paths:
+      - "depictio/catalog/**"
+      - "depictio/models/components/advanced_viz/catalog.py"
+      - "depictio/cli/cli/commands/catalog.py"
+      - "depictio/tests/models/test_catalog.py"
+      - "depictio/projects/**/recipes/**"
+
+jobs:
+  catalog:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: "pyproject.toml"
+
+      - name: Install dependencies
+        run: |
+          uv venv --python 3.12.9 venv
+          source venv/bin/activate
+          uv pip install -e ".[dev]"
+          # MultiQC/recipes need polars-lts-cpu (same pin as the quality job)
+          uv pip uninstall -y polars polars-runtime-32 2>/dev/null || true
+          uv pip install --force-reinstall "polars-lts-cpu[numpy,pandas,pyarrow,excel,deltalake]==1.19.0"
+
+      - name: Validate bio-catalog
+        # schema + component/roles + renders grounded against fixtures/recipes +
+        # nf-core/EDAM existence + recipes resolve
+        run: |
+          source venv/bin/activate
+          depictio catalog validate
+
+      - name: Catalog tests
+        run: |
+          source venv/bin/activate
+          python -m pytest depictio/tests/models/test_catalog.py -q

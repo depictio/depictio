@@ -28,10 +28,22 @@ sys.path.insert(0, str(REPO_ROOT))
 
 DATA_ROOT = Path(__file__).resolve().parent
 RECIPES_DIR = DATA_ROOT.parent / "recipes"
+# Module-owned recipes now live in the catalog module folders (e.g. the qiime2
+# canonical reshapes), so look there too — pipeline-keyed recipes still win.
+CATALOG_DIR = REPO_ROOT / "depictio" / "catalog"
 
 
 def _load_recipe(name: str):
-    spec = importlib.util.spec_from_file_location(name, RECIPES_DIR / f"{name}.py")
+    path = RECIPES_DIR / f"{name}.py"
+    if not path.exists():
+        # Fall back to a module-owned recipe co-located in a catalog module folder.
+        matches = sorted(CATALOG_DIR.glob(f"*/{name}.py"))
+        if not matches:
+            raise FileNotFoundError(
+                f"Recipe '{name}' not found under {RECIPES_DIR} or {CATALOG_DIR}"
+            )
+        path = matches[0]
+    spec = importlib.util.spec_from_file_location(name, path)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
@@ -113,10 +125,8 @@ def main() -> None:
     print(f"  -> taxonomy_heatmap.tsv ({taxonomy_heatmap.shape})")
 
     # --- Tier 1: existing canonical DCs (pre-PR) ---------------------------
-    volcano_canonical = _load_recipe("volcano_canonical").transform({"ancombc": ancombc_results})
-    volcano_canonical.write_csv(DATA_ROOT / "volcano_canonical.tsv", separator="\t")
-    print(f"  -> volcano_canonical.tsv ({volcano_canonical.shape})")
-
+    # (volcano retired: the Volcano component binds directly to ancombc_results
+    # via role columns id/lfc/q_val — see catalog/qiime2/ancombc.yaml renders_as.)
     stacked_taxonomy_canonical = _load_recipe("stacked_taxonomy_canonical").transform(
         {
             "phylum": rel_phylum,
@@ -139,10 +149,6 @@ def main() -> None:
     print(f"  -> embedding_pcoa.tsv ({embedding_pcoa.shape})")
 
     # --- Tier 1 (this PR): new canonical DCs -------------------------------
-    da_barplot = _load_recipe("da_barplot_canonical").transform({"ancombc": ancombc_results})
-    da_barplot.write_csv(DATA_ROOT / "da_barplot_canonical.tsv", separator="\t")
-    print(f"  -> da_barplot_canonical.tsv ({da_barplot.shape})")
-
     rarefaction = _load_recipe("rarefaction_canonical").transform(
         {
             "shannon": rarefaction_shannon,
@@ -189,10 +195,6 @@ def main() -> None:
     )
     upset.write_csv(DATA_ROOT / "upset_canonical.tsv", separator="\t")
     print(f"  -> upset_canonical.tsv ({upset.shape})")
-
-    qq = _load_recipe("qq_canonical").transform({"ancombc": ancombc_results})
-    qq.write_csv(DATA_ROOT / "qq_canonical.tsv", separator="\t")
-    print(f"  -> qq_canonical.tsv ({qq.shape})")
 
     ma = _load_recipe("ma_canonical").transform(
         {"ancombc": ancombc_results, "composition": taxonomy_composition}

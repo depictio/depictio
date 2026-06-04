@@ -1,0 +1,9 @@
+id: qiime2_alpha_rarefaction
+mode: alpha-rarefaction
+description: Alpha-rarefaction curve (sample × depth × iteration × metric).
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/qiime2/diversityalphararefaction
+find: { path_glob: "**/qiime2/alpha-rarefaction/*.csv" }
+recipe: qiime2/alpha_rarefaction.py
+fixture: alpha_rarefaction.tsv
+renders_as:
+  - { id: rarefaction_alpha, component: advanced_viz, kind: rarefaction, roles: {sample_id: sample, depth: depth, metric: faith_pd} }

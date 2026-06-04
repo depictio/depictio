@@ -1,0 +1,7 @@
+# mosdepth — multi-output tool → a folder. Lightweight: identity is derived
+# from the nf-core meta.yml that `nf_core_url` points at (not duplicated).
+# NB: the `all_samples.mosdepth.*.tsv` files are depictio's per-run aggregations
+# of mosdepth's native per-sample output, attributed here for provenance.
+id: mosdepth
+name: mosdepth
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/mosdepth

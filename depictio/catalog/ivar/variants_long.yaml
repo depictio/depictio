@@ -1,0 +1,11 @@
+id: ivar_variants_long
+mode: variants
+description: Per-sample annotated variant calls (long table).
+find: { filename: "variants_long_table.csv" } # raw nf-core file
+recipe: ivar/variants_long.py # owns the output columns
+fixture: variants_long.tsv # co-located bindable sample
+renders_as:
+  - { id: lollipop, component: advanced_viz, kind: lollipop, roles: {feature_id: GENE, position: POS, category: EFFECT} }
+  - { id: oncoplot, component: advanced_viz, kind: oncoplot, roles: {sample_id: sample, gene: GENE, mutation_type: EFFECT} }
+  - { id: manhattan, component: advanced_viz, kind: manhattan, roles: {chr: CHROM, pos: POS, score: AF} }
+  - { component: figure, visu_type: histogram, dict_kwargs: {x: AF, color: EFFECT} } # allele-frequency distribution

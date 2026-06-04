@@ -1,0 +1,9 @@
+id: qiime2_stacked_taxonomy_canonical
+mode: stacked-taxonomy
+description: Long-format stacked-taxonomy abundance (sample × rank × taxon) fanned in from the per-rank QIIME2 rel-table-{2..6}.tsv collapses, with a derived Kingdom level.
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/qiime2/barplot
+find: { path_glob: "**/qiime2/rel_abundance_tables/rel-table-*.tsv" }
+recipe: qiime2/stacked_taxonomy_canonical.py
+fixture: stacked_taxonomy_canonical.tsv
+renders_as:
+  - { id: stacked_taxonomy, component: advanced_viz, kind: stacked_taxonomy, roles: {sample_id: sample_id, taxon: taxon, rank: rank, abundance: abundance} }

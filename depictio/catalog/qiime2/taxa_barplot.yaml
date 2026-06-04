@@ -1,0 +1,9 @@
+id: qiime2_taxa_barplot
+mode: taxa-barplot
+description: Relative-abundance barplot table at a taxonomic level (wide → long via recipe).
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/qiime2/barplot
+find: { path_glob: "**/qiime2/barplot/level-*.csv" }
+recipe: qiime2/taxonomy_composition.py
+fixture: taxa_barplot.tsv
+renders_as:
+  - { id: stacked_taxonomy_barplot, component: advanced_viz, kind: stacked_taxonomy, roles: {sample_id: sample, taxon: taxonomy, abundance: count} }

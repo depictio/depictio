@@ -6,6 +6,7 @@ import typer
 from typer.main import get_command
 
 from depictio.cli.cli.commands.backup import app as backup
+from depictio.cli.cli.commands.catalog import app as catalog
 from depictio.cli.cli.commands.config import app as config
 from depictio.cli.cli.commands.dashboard import app as dashboard
 from depictio.cli.cli.commands.data import app as data
@@ -52,6 +53,7 @@ def verbose_callback(
 
 
 app.add_typer(backup, name="backup", help="Backup commands")
+app.add_typer(catalog, name="catalog", help="Bioinformatics tool→viz catalog commands")
 app.add_typer(config, name="config", help="Configuration commands")
 app.add_typer(dashboard, name="dashboard", help="Dashboard validation commands")
 app.add_typer(data, name="data", help="Data management commands")

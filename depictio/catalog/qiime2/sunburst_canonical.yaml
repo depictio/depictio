@@ -1,0 +1,9 @@
+id: qiime2_sunburst_canonical
+mode: sunburst
+description: Hierarchical taxonomic composition (Kingdom→…→Genus with relative abundance) for a sunburst, collapsed per sample from the QIIME2 per-rank rel-abundance tables.
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/qiime2/barplot
+find: { path_glob: "**/qiime2/rel_abundance_tables/rel-table-*.tsv" }
+recipe: nf-core/ampliseq/sunburst_canonical.py
+fixture: sunburst_canonical.tsv
+renders_as:
+  - { id: sunburst_taxonomy, component: advanced_viz, kind: sunburst, roles: {abundance: abundance} }

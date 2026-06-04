@@ -1,0 +1,12 @@
+id: multiqc_summary_metrics
+mode: summary-variants-metrics
+description: >-
+  Per-sample variant-calling summary (reads mapped, coverage, SNP/indel/total
+  variant counts, lineage) parsed from MultiQC's summary_variants_metrics table.
+find: { path_glob: "**/multiqc/summary_variants_metrics_mqc.csv" }
+recipe: multiqc/summary_metrics.py
+fixture: summary_metrics.tsv
+renders_as:
+  - { component: card, column: pct_genome_covered_10x, aggregation: average } # mean ≥10× breadth
+  - { component: card, column: num_variants_total, aggregation: average } # mean variant load
+  - { component: table }

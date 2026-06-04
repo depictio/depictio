@@ -8,21 +8,23 @@ DESeq2's `results()` TSV, mosdepth's per-region BED) by:
       satisfy after a role→column rename (declared here);
     - a one-line description used in UI badges / docs.
 
-This is the in-repo alternative to an nf-core-modules-style install
-system: depictio's producer surface (~60 candidates across 18 viz kinds)
-is small enough that a single file works better than a package manager.
-Adding a new producer is one entry here + a test.
+`KNOWN_PRODUCERS` below is the hand-curated core. The bio-catalog
+(``depictio/catalog/``, loaded by ``advanced_viz/catalog.py``) is **separate
+and does not feed this registry** — it is a module→recipe→viz linking table,
+not a column-fingerprint engine. ``all_producers()`` returns `KNOWN_PRODUCERS`.
 
-Used by:
-    suggest_producers(dc_schema) -> list[(Producer, confidence)]
-        — Reverse lookup: "which known tool's output does this DC look
-        like?" Drives the React DC card's "Suggested visualisations"
-        chips and the component-creation flow's DC pre-filter.
+NOTE (direction v3): automatic column-fingerprint recognition
+(`suggest_producers`) proved unreliable (dtype-blind, tiny fingerprints, no
+ranking) and is being retired in favour of (a) free mode — the user maps
+columns to roles by hand, assisted by `suggest_viz_kinds`/`CANONICAL_SCHEMAS`;
+(b) guided mode — depictio-cli recognises module outputs at scan time
+(`catalog match`/`compose`). `suggest_viz_kinds` (role/dtype based) is kept.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from functools import lru_cache
 
 from depictio.models.components.types import AdvancedVizKind
 
@@ -464,7 +466,7 @@ KNOWN_PRODUCERS: tuple[Producer, ...] = (
             },
             "sunburst": {"abundance": "rel_abundance"},
         },
-        notes="Pivot to wide (Phylum × sample) for ComplexHeatmap — see recipes/taxonomy_heatmap.py.",
+        notes="Pivot to wide (Phylum × sample) for ComplexHeatmap — see catalog/qiime2/taxonomy_heatmap.py.",
     ),
     Producer(
         name="alpha_diversity_wide",
@@ -527,9 +529,22 @@ KNOWN_PRODUCERS: tuple[Producer, ...] = (
 )
 
 
+@lru_cache(maxsize=1)
+def all_producers() -> tuple[Producer, ...]:
+    """The producer surface consulted by the column→viz suggestion engine.
+
+    Currently just the hand-curated `KNOWN_PRODUCERS`. The bio-catalog
+    (``depictio/catalog/``) intentionally does **not** feed this path: it is a
+    file→recipe→component linking table (used at scan time), not a second
+    column-fingerprint registry, and the curated producers already cover the
+    canonical (post-recipe) shapes.
+    """
+    return KNOWN_PRODUCERS
+
+
 def get_producer(name: str) -> Producer | None:
     """Lookup a producer by its stable id."""
-    for p in KNOWN_PRODUCERS:
+    for p in all_producers():
         if p.name == name:
             return p
     return None

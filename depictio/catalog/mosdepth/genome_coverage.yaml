@@ -1,0 +1,9 @@
+id: mosdepth_genome_coverage
+mode: genome
+description: Genome-wide coverage in windows, aggregated across all samples.
+find: { path_glob: "**/mosdepth/genome/all_samples.mosdepth.coverage.tsv" }
+recipe: mosdepth/coverage_track_canonical.py
+fixture: genome_coverage.tsv
+renders_as:
+  - { id: coverage_track_genome, component: advanced_viz, kind: coverage_track, roles: {chromosome: chromosome, position: position, value: value} }
+  - { component: card, column: value, aggregation: average } # mean depth

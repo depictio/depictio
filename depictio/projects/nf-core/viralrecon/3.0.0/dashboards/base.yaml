@@ -16,8 +16,10 @@ main_dashboard:
     title: MultiQC Pipeline QC Overview
     order: 3
     alignment: left
-    body: Per-sample QC metrics aggregated from every stage of the nf-core/viralrecon pipeline. Start here to triage which samples to drill into. The tiles are grouped into **Read QC** (fastp + Kraken2),
-      **Alignment & Coverage** (bowtie2 + mosdepth), **Variants & Assembly** (iVar / snpEff / bcftools / QUAST), then **FastQC** sanity checks at the bottom.
+    body: Per-sample QC metrics aggregated from every stage of the nf-core/viralrecon pipeline. Start
+      here to triage which samples to drill into. The tiles are grouped into **Read QC** (fastp + Kraken2),
+      **Alignment & Coverage** (bowtie2 + mosdepth), **Variants & Assembly** (iVar / snpEff / bcftools
+      / QUAST), then **FastQC** sanity checks at the bottom.
     workflow_tag: viralrecon
     data_collection_tag: summary_metrics
     layout:
@@ -208,7 +210,8 @@ main_dashboard:
     selected_plot: Status Checks
     tag: multiqc-fastqc-status-checks-a1b2c3
     title: FastQC - status checks
-    description: Pass/Warn/Fail status per FastQC module per sample. Red columns flag systematic library / sequencing issues.
+    description: Pass/Warn/Fail status per FastQC module per sample. Red columns flag systematic library
+      / sequencing issues.
     title_size: h3
     layout:
       x: 0
@@ -231,8 +234,10 @@ tabs:
     title: Coverage & Depth - Amplicon and Genome Coverage
     order: 3
     alignment: left
-    body: Did each sample's amplicons get adequate sequencing depth? The **genome track** shows per-position coverage (log y-axis); look for systematic drop-outs across samples. The **clustered amplicon
-      heatmap** flags amplicons that consistently fail (dark rows). The tables below carry the underlying numbers for ad-hoc inspection.
+    body: Did each sample's amplicons get adequate sequencing depth? The **genome track** shows per-position
+      coverage (log y-axis); look for systematic drop-outs across samples. The **clustered amplicon heatmap**
+      flags amplicons that consistently fail (dark rows). The tables below carry the underlying numbers
+      for ad-hoc inspection.
     workflow_tag: viralrecon
     data_collection_tag: summary_metrics
     layout:
@@ -246,10 +251,6 @@ tabs:
     aggregation: nunique
     column_name: region
     column_type: object
-    # Coverage gauge: ARTIC v3 has 99 amplicons. Top-N by sample is degenerate
-    # here because every healthy sample sees all 99 — a bar chart would just
-    # show 99 / 99 / 99 with no Pareto signal. The gauge surfaces "% of
-    # primer scheme captured" directly.
     secondary_layout: coverage
     coverage_max: 99
     display:
@@ -321,28 +322,19 @@ tabs:
     title: Sample ID
   - component_type: advanced_viz
     workflow_tag: viralrecon
+    use: mosdepth/coverage_track_genome
     data_collection_tag: coverage_track_canonical
-    viz_kind: coverage_track
     config:
-      viz_kind: coverage_track
-      chromosome_col: chromosome
-      position_col: position
-      value_col: value
       end_col: end
       sample_col: sample
-      # Linear y-axis on a smoothed signal is more legible than log on raw bins —
-      # 200-bp bins × 5 ≈ 1 kb rolling window kills the high-frequency wiggle
-      # without flattening the amplicon dropouts.
       y_scale: linear
       smoothing_window: 5
-      # ``show_annotation_lane`` used to drive a per-position category strip
-      # (annotation_col-fed). The new renderer ignores it for SARS-CoV-2 and
-      # auto-renders the ORF gene strip from the bundled genome annotation.
       show_annotation_lane: false
     tag: adv-cov-genome-track-p6q7r8
     index: adv-cov-genome-track
     title: Genome coverage track per sample
-    description: Per-position genome coverage (log y-axis), one sub-track per sample. Drop-outs stand out as gaps.
+    description: Per-position genome coverage (log y-axis), one sub-track per sample. Drop-outs stand
+      out as gaps.
     title_size: h3
     layout:
       x: 0
@@ -400,8 +392,10 @@ tabs:
     title: Lineage & Clustering - Pangolin, Nextclade & Variant-Profile PCA
     order: 3
     alignment: left
-    body: Three complementary views of viral lineage. **Pangolin / Nextclade bar charts** show classification frequencies. The **Sankey** traces each sample's path QC -> Pangolin lineage -> Nextclade clade;
-      mismatched calls show up as crossing ribbons. The **PCA** clusters samples by their mutation profile - points are coloured by lineage, so well-defined lineage groups appear as distinct clusters.
+    body: Three complementary views of viral lineage. **Pangolin / Nextclade bar charts** show classification
+      frequencies. The **Sankey** traces each sample's path QC -> Pangolin lineage -> Nextclade clade;
+      mismatched calls show up as crossing ribbons. The **PCA** clusters samples by their mutation profile
+      - points are coloured by lineage, so well-defined lineage groups appear as distinct clusters.
     workflow_tag: viralrecon
     data_collection_tag: summary_metrics
     layout:
@@ -415,8 +409,6 @@ tabs:
     aggregation: nunique
     column_name: lineage
     column_type: object
-    # Pangolin lineages aren't bounded (thousands possible), so coverage
-    # doesn't fit. top_n shows the cohort's dominant lineages directly.
     secondary_layout: top_n
     breakdown_col: lineage
     top_n_count: 3
@@ -439,8 +431,6 @@ tabs:
     aggregation: nunique
     column_name: clade
     column_type: object
-    # Same story as lineages — top_n shows which Nextclade clades dominate
-    # the cohort, which is more useful than a count alone.
     secondary_layout: top_n
     breakdown_col: clade
     top_n_count: 3
@@ -516,7 +506,10 @@ tabs:
     data_collection_tag: pangolin_lineages
     visu_type: bar
     mode: code
-    code_content: "df_modified = df.group_by('lineage').agg(pl.count().alias('count')).sort('count', descending=True)\nfig = px.bar(df_modified.to_pandas(), x='lineage', y='count', color='lineage',\n    labels={'lineage': 'Lineage', 'count': 'Number of Samples'})\nfig.update_layout(xaxis={'categoryorder': 'total descending'}, showlegend=False)\nfig.update_xaxes(tickangle=-45)\n"
+    code_content: "df_modified = df.group_by('lineage').agg(pl.count().alias('count')).sort('count', descending=True)\n\
+      fig = px.bar(df_modified.to_pandas(), x='lineage', y='count', color='lineage',\n    labels={'lineage':\
+      \ 'Lineage', 'count': 'Number of Samples'})\nfig.update_layout(xaxis={'categoryorder': 'total descending'},\
+      \ showlegend=False)\nfig.update_xaxes(tickangle=-45)\n"
     selection_enabled: false
     tag: figure-lin-lineage-dist-b8c9d0
     title: Pangolin lineage distribution
@@ -532,7 +525,10 @@ tabs:
     data_collection_tag: nextclade_results
     visu_type: bar
     mode: code
-    code_content: "df_modified = df.group_by('clade').agg(pl.count().alias('count')).sort('count', descending=True)\nfig = px.bar(df_modified.to_pandas(), x='clade', y='count', color='clade',\n    labels={'clade': 'Clade', 'count': 'Number of Samples'})\nfig.update_layout(xaxis={'categoryorder': 'total descending'}, showlegend=False)\nfig.update_xaxes(tickangle=-45)\n"
+    code_content: "df_modified = df.group_by('clade').agg(pl.count().alias('count')).sort('count', descending=True)\n\
+      fig = px.bar(df_modified.to_pandas(), x='clade', y='count', color='clade',\n    labels={'clade':\
+      \ 'Clade', 'count': 'Number of Samples'})\nfig.update_layout(xaxis={'categoryorder': 'total descending'},\
+      \ showlegend=False)\nfig.update_xaxes(tickangle=-45)\n"
     selection_enabled: false
     tag: figure-lin-clade-dist-h4i5j6
     title: Nextclade clade distribution
@@ -562,7 +558,8 @@ tabs:
     tag: adv-lin-sankey
     index: adv-lin-sankey
     title: Classification sankey (QC -> lineage -> clade)
-    description: Ribbon width = samples on that path. Surfaces mismatched calls and dominant lineage->clade pairs.
+    description: Ribbon width = samples on that path. Surfaces mismatched calls and dominant lineage->clade
+      pairs.
     title_size: h3
     layout:
       x: 0
@@ -586,7 +583,8 @@ tabs:
     tag: adv-lin-embedding
     index: adv-lin-embedding
     title: Variant-profile PCA embedding (coloured by lineage)
-    description: 2D PCA of the sample x mutation binary matrix. Points coloured by Pangolin lineage, marker shape encodes Nextclade clade. Samples sharing variants cluster together.
+    description: 2D PCA of the sample x mutation binary matrix. Points coloured by Pangolin lineage, marker
+      shape encodes Nextclade clade. Samples sharing variants cluster together.
     title_size: h3
     layout:
       x: 0
@@ -634,9 +632,11 @@ tabs:
     title: Sample QC Diagnostics - Coverage vs Variant Yield
     order: 3
     alignment: left
-    body: Diagnostic plots to catch problematic samples before drawing biological conclusions. The **coverage-vs-variants scatter** flags low-coverage samples with inflated / deflated variant counts (usually
-      partial drop-out or contamination). The **substitutions-vs-deletions** plot surfaces clade-specific deletion patterns or assembly artefacts. The bar at the bottom shows the per-sample % >= 10x with
-      the 80% reliability cut-off.
+    body: Diagnostic plots to catch problematic samples before drawing biological conclusions. The **coverage-vs-variants
+      scatter** flags low-coverage samples with inflated / deflated variant counts (usually partial drop-out
+      or contamination). The **substitutions-vs-deletions** plot surfaces clade-specific deletion patterns
+      or assembly artefacts. The bar at the bottom shows the per-sample % >= 10x with the 80% reliability
+      cut-off.
     workflow_tag: viralrecon
     data_collection_tag: summary_metrics
     layout:
@@ -651,7 +651,7 @@ tabs:
     column_name: pct_genome_covered_10x
     column_type: float64
     aggregations:
-      - box_plot_stats
+    - box_plot_stats
     secondary_layout: box_plot
     display:
       icon_name: mdi:chart-line
@@ -673,7 +673,7 @@ tabs:
     column_name: num_variants_total
     column_type: float64
     aggregations:
-      - box_plot_stats
+    - box_plot_stats
     secondary_layout: box_plot
     display:
       icon_name: mdi:dna
@@ -729,7 +729,10 @@ tabs:
     data_collection_tag: summary_metrics
     visu_type: scatter
     mode: code
-    code_content: "fig = px.scatter(df.to_pandas(), x='coverage_median', y='num_variants_total',\n    color='lineage', hover_data=['sample', 'pct_genome_covered_10x'],\n    labels={'coverage_median': 'Median Coverage Depth', 'num_variants_total': 'Total Variants', 'lineage': 'Lineage'},\n    size_max=12)\nfig.update_traces(marker=dict(size=10, line=dict(width=1, color='DarkSlateGrey')))\n"
+    code_content: "fig = px.scatter(df.to_pandas(), x='coverage_median', y='num_variants_total',\n   \
+      \ color='lineage', hover_data=['sample', 'pct_genome_covered_10x'],\n    labels={'coverage_median':\
+      \ 'Median Coverage Depth', 'num_variants_total': 'Total Variants', 'lineage': 'Lineage'},\n    size_max=12)\n\
+      fig.update_traces(marker=dict(size=10, line=dict(width=1, color='DarkSlateGrey')))\n"
     selection_enabled: false
     tag: figure-qcdx-coverage-vs-variants-p6q7r8
     title: Median coverage vs total variants
@@ -745,7 +748,10 @@ tabs:
     data_collection_tag: nextclade_results
     visu_type: scatter
     mode: code
-    code_content: "fig = px.scatter(df.to_pandas(), x='totalSubstitutions', y='totalDeletions',\n    color='clade', hover_data=['sample', 'qc_overallStatus', 'coverage'],\n    labels={'totalSubstitutions': 'Total Substitutions', 'totalDeletions': 'Total Deletions', 'clade': 'Clade'},\n    opacity=0.8)\nfig.update_traces(marker=dict(size=10, line=dict(width=1, color='DarkSlateGrey')))\n"
+    code_content: "fig = px.scatter(df.to_pandas(), x='totalSubstitutions', y='totalDeletions',\n    color='clade',\
+      \ hover_data=['sample', 'qc_overallStatus', 'coverage'],\n    labels={'totalSubstitutions': 'Total\
+      \ Substitutions', 'totalDeletions': 'Total Deletions', 'clade': 'Clade'},\n    opacity=0.8)\nfig.update_traces(marker=dict(size=10,\
+      \ line=dict(width=1, color='DarkSlateGrey')))\n"
     selection_enabled: false
     tag: figure-qcdx-nextclade-scatter-s9t0u1
     title: Nextclade substitutions vs deletions
@@ -761,7 +767,11 @@ tabs:
     data_collection_tag: summary_metrics
     visu_type: bar
     mode: code
-    code_content: "df_modified = df.sort('pct_genome_covered_10x', descending=True)\nfig = px.bar(df_modified.to_pandas(), x='sample', y='pct_genome_covered_10x',\n    color='lineage',\n    labels={'sample': 'Sample', 'pct_genome_covered_10x': '% Genome >= 10x', 'lineage': 'Lineage'})\nfig.add_hline(y=80, line_dash='dash', line_color='red', annotation_text='80% threshold')\nfig.update_xaxes(tickangle=-45, tickfont={'size': 9})\n"
+    code_content: "df_modified = df.sort('pct_genome_covered_10x', descending=True)\nfig = px.bar(df_modified.to_pandas(),\
+      \ x='sample', y='pct_genome_covered_10x',\n    color='lineage',\n    labels={'sample': 'Sample',\
+      \ 'pct_genome_covered_10x': '% Genome >= 10x', 'lineage': 'Lineage'})\nfig.add_hline(y=80, line_dash='dash',\
+      \ line_color='red', annotation_text='80% threshold')\nfig.update_xaxes(tickangle=-45, tickfont={'size':\
+      \ 9})\n"
     selection_enabled: false
     tag: figure-qcdx-genome-coverage-v2w3x4
     title: Genome coverage per sample (>=10x)
@@ -778,7 +788,8 @@ tabs:
     row_selection_enabled: false
     tag: table-qcdx-summary-metrics-y5z6a7
     title: Summary metrics
-    description: Per-sample alignment, coverage, and variant calling summary - QC backbone for downstream tabs.
+    description: Per-sample alignment, coverage, and variant calling summary - QC backbone for downstream
+      tabs.
     title_size: h3
     layout:
       x: 0
@@ -795,13 +806,14 @@ tabs:
   workflow_system: nf-core
   dashboard_id: 746b0f3c1e4a2d7f8e5b9cb4
   components:
-  # Tab intro.
   - component_type: text
     tag: text-variants-intro
     title: Variants — per-call AF track, effect-class breakdowns, sample × gene matrix
     order: 3
     alignment: left
-    body: 'All variant analysis lives here. **Top**: per-call AF along the genome (Manhattan); **Middle**: per-gene / per-sample effect-class bars + lollipop; **Bottom**: sample × gene oncoplot (lineage signature).'
+    body: 'All variant analysis lives here. **Top**: per-call AF along the genome (Manhattan); **Middle**:
+      per-gene / per-sample effect-class bars + lollipop; **Bottom**: sample × gene oncoplot (lineage
+      signature).'
     workflow_tag: viralrecon
     data_collection_tag: summary_metrics
     layout:
@@ -809,19 +821,12 @@ tabs:
       y: 0
       w: 8
       h: 1
-  # Top row: 4 cards in 8-col layout, w=2 each. Each card surfaces a
-  # complementary multi-metric strip (top-N / coverage / box-plot) so the
-  # hero value isn't an isolated number.
   - component_type: card
     workflow_tag: viralrecon
     data_collection_tag: variants_long
     aggregation: count
     column_name: POS
     column_type: int64
-    # Volume card → break down by SAMPLE so the strip surfaces "who has the
-    # most variant calls?" — flags outlier-rich samples directly. The other
-    # two cardinality cards (Distinct Positions by GENE, Unique AA by EFFECT)
-    # cover the "where" and "what" angles, no redundancy.
     secondary_layout: top_n
     breakdown_col: sample
     top_n_count: 3
@@ -866,9 +871,6 @@ tabs:
     aggregation: nunique
     column_name: sample
     column_type: object
-    # Coverage gauge: 44 samples in the cohort. Top-N by gene here is marginal
-    # (each major gene has variants in ~all samples → bars all near max → no
-    # Pareto signal). The gauge directly answers "do all samples carry calls?".
     secondary_layout: coverage
     coverage_max: 44
     display:
@@ -890,10 +892,6 @@ tabs:
     aggregation: nunique
     column_name: AA
     column_type: object
-    # Protein-change diversity → break down by EFFECT so the strip answers
-    # "what KIND of protein changes dominate?" (missense vs synonymous vs
-    # stop_gained vs frameshift …). Complements the GENE breakdown on
-    # Distinct Positions — no overlap.
     secondary_layout: top_n
     breakdown_col: EFFECT
     top_n_count: 3
@@ -910,27 +908,18 @@ tabs:
       w: 2
       h: 2
     title: Unique AA Changes
-  # Hero: per-call AF track (Manhattan) along the full genome. Full-width
-  # row by itself — the Manhattan needs the full 8 columns to be legible at
-  # 30 kb resolution; left-rail filters apply tab-wide regardless of physical
-  # placement, so we put them under Manhattan with the bars/lollipop block.
   - component_type: advanced_viz
+    use: ivar/manhattan
     workflow_tag: viralrecon
-    data_collection_tag: manhattan_variants_canonical
-    viz_kind: manhattan
+    data_collection_tag: variants_long
     config:
-      viz_kind: manhattan
-      chr_col: chr
-      pos_col: pos
-      score_col: score
-      feature_col: variant_label
+      feature_col: mutation_label
       score_kind: Allele frequency (AF)
       score_threshold: 0.5
       color_by_columns:
-        - effect
-        - lineage
-        - sample
-      default_color_by: effect
+      - EFFECT
+      - sample
+      default_color_by: EFFECT
     tag: adv-manh-track
     index: adv-manh-track
     title: Variant frequencies along the genome
@@ -941,10 +930,6 @@ tabs:
       y: 3
       w: 8
       h: 5
-  # Hero: per-call AF track (Manhattan) along the full genome. Full-width row
-  # already declared above (y=4..9). Below, filters sit as a horizontal strip
-  # so every subsequent plot can span the full 8-col width without sharing
-  # the row with a left rail.
   - component_type: interactive
     workflow_tag: viralrecon
     data_collection_tag: variants_long
@@ -1017,13 +1002,15 @@ tabs:
       w: 2
       h: 3
     title: Allele Frequency
-  # Per-gene + per-sample effect-class summaries — side by side, full row.
   - component_type: figure
     workflow_tag: viralrecon
     data_collection_tag: variants_long
     visu_type: bar
     mode: code
-    code_content: "df_modified = df.group_by(['GENE', 'FUNCLASS']).agg(pl.count().alias('count')).sort('count', descending=True)\nfig = px.bar(df_modified.to_pandas(), x='GENE', y='count', color='FUNCLASS',\n    labels={'GENE': 'Gene', 'count': 'Number of Variants', 'FUNCLASS': 'Functional Class'},\n    barmode='stack')\nfig.update_layout(xaxis={'categoryorder': 'total descending'})\nfig.update_xaxes(tickangle=-45)\n"
+    code_content: "df_modified = df.group_by(['GENE', 'FUNCLASS']).agg(pl.count().alias('count')).sort('count',\
+      \ descending=True)\nfig = px.bar(df_modified.to_pandas(), x='GENE', y='count', color='FUNCLASS',\n\
+      \    labels={'GENE': 'Gene', 'count': 'Number of Variants', 'FUNCLASS': 'Functional Class'},\n \
+      \   barmode='stack')\nfig.update_layout(xaxis={'categoryorder': 'total descending'})\nfig.update_xaxes(tickangle=-45)\n"
     selection_enabled: false
     tag: figure-var-mutations-by-gene-j8k9l0
     title: Variant counts by gene & functional class
@@ -1039,7 +1026,10 @@ tabs:
     data_collection_tag: variants_long
     visu_type: bar
     mode: code
-    code_content: "df_modified = df.group_by(['sample', 'FUNCLASS']).agg(pl.count().alias('count')).sort('sample')\nfig = px.bar(df_modified.to_pandas(), x='sample', y='count', color='FUNCLASS',\n    labels={'sample': 'Sample', 'count': 'Number of Variants', 'FUNCLASS': 'Functional Class'},\n    barmode='stack')\nfig.update_xaxes(tickangle=-45, tickfont={'size': 9})\n"
+    code_content: "df_modified = df.group_by(['sample', 'FUNCLASS']).agg(pl.count().alias('count')).sort('sample')\n\
+      fig = px.bar(df_modified.to_pandas(), x='sample', y='count', color='FUNCLASS',\n    labels={'sample':\
+      \ 'Sample', 'count': 'Number of Variants', 'FUNCLASS': 'Functional Class'},\n    barmode='stack')\n\
+      fig.update_xaxes(tickangle=-45, tickfont={'size': 9})\n"
     selection_enabled: false
     tag: figure-var-per-sample-count-s7t8u9
     title: Variants per sample
@@ -1050,29 +1040,24 @@ tabs:
       y: 11
       w: 4
       h: 5
-  # Per-gene lollipop sub-panels — drill-into-gene view. Full width.
   - component_type: advanced_viz
+    use: ivar/lollipop
     workflow_tag: viralrecon
-    data_collection_tag: lollipop_canonical
-    viz_kind: lollipop
+    data_collection_tag: variants_long
     config:
-      viz_kind: lollipop
-      feature_id_col: feature_id
-      position_col: position
-      category_col: category
-      effect_col: effect
+      effect_col: AF
       max_subplot_genes: 6
     tag: adv-var-lollipop
     index: adv-var-lollipop
     title: Variant tracks per gene (lollipop)
-    description: One sub-panel per gene. Each lollipop = variant; colour = effect class; height = AF. Top 6 most-mutated genes.
+    description: One sub-panel per gene. Each lollipop = variant; colour = effect class; height = AF.
+      Top 6 most-mutated genes.
     title_size: h3
     layout:
       x: 0
       y: 16
       w: 8
       h: 6
-  # Variants table (all calls).
   - component_type: table
     workflow_tag: viralrecon
     data_collection_tag: variants_long
@@ -1086,18 +1071,13 @@ tabs:
       y: 22
       w: 8
       h: 5
-  # ============================================================
-  # Sample × gene co-occurrence section (merged from Variant Oncoplot tab).
-  # Bound to oncoplot_canonical DC (different from variants_long), so it
-  # carries its own Mutation Type filter; gene-level filtering is done via
-  # the oncoplot's interactive columns (click-on-column / hover).
-  # ============================================================
   - component_type: text
     tag: text-onco-section
     title: Sample × Gene mutation matrix
     order: 3
     alignment: left
-    body: 'Co-occurrence view — rows = samples, columns = genes, each cell encodes the variant effect class. Rows / columns reordered to surface shared mutation repertoires (lineage signature).'
+    body: Co-occurrence view — rows = samples, columns = genes, each cell encodes the variant effect class.
+      Rows / columns reordered to surface shared mutation repertoires (lineage signature).
     workflow_tag: viralrecon
     data_collection_tag: summary_metrics
     layout:
@@ -1177,7 +1157,8 @@ tabs:
     tag: adv-onco-matrix
     index: adv-onco-matrix
     title: Sample × gene mutation matrix
-    description: Each cell encodes the variant effect class. Rows / columns reordered to surface co-occurring mutations.
+    description: Each cell encodes the variant effect class. Rows / columns reordered to surface co-occurring
+      mutations.
     title_size: h3
     layout:
       x: 0

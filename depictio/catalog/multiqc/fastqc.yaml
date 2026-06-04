@@ -1,0 +1,11 @@
+id: fastqc
+# FastQC is its own tool, not a MultiQC "mode" — MultiQC merely re-surfaces its
+# section. The link to MultiQC is expressed by `find` (the multiqc_fastqc.txt
+# table) + `renders_as.section`, not by a mode.
+description: FastQC sequencing-QC metrics, surfaced via MultiQC's fastqc section.
+biotools_url: https://bio.tools/fastqc
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/fastqc
+find: { filename: "multiqc_fastqc.txt" }
+# surfaced as a MultiQC plot component (not column-bound) → no recipe, no columns.
+renders_as:
+  - { component: multiqc, section: fastqc }

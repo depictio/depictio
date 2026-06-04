@@ -167,6 +167,9 @@ dump.rdb
 !depictio/projects/nf-core/viralrecon/3.0.0/*.tsv
 # Allow advanced_viz_showcase synthetic fixtures
 !depictio/projects/init/advanced_viz_showcase/data/*.tsv
+# Allow catalog fixtures (small samples co-located in each module folder)
+!depictio/catalog/**/*.tsv
+!depictio/catalog/**/*.csv
 
 # Local-only projects (not version controlled)
 depictio/projects/reference/pools/

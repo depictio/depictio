@@ -1,0 +1,13 @@
+id: qiime2_ancombc
+mode: composition/ancombc
+description: >-
+  ANCOM-BC differential-abundance results. The tool writes one CSV per statistic
+  per contrast; the recipe joins + melts them into a long table.
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/qiime2/ancombc
+find: { path_glob: "**/qiime2/ancombc/differentials/*/lfc_slice.csv" }
+recipe: qiime2/ancombc.py
+fixture: ancombc.tsv
+renders_as:
+  - { id: volcano, component: advanced_viz, kind: volcano, roles: {feature_id: id, effect_size: lfc, significance: q_val} }
+  - { id: da_barplot, component: advanced_viz, kind: da_barplot, roles: {feature_id: id, contrast: contrast, lfc: lfc} }
+  - { id: qq, component: advanced_viz, kind: qq, roles: {p_value: p_val} }

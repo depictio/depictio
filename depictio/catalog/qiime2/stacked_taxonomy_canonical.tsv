@@ -1,0 +1,7 @@
+sample_id	taxon	rank	abundance	lineage	habitat
+SRR10070132	Gammaproteobacteria	Class	0.2946443800102337	Bacteria;Proteobacteria;Gammaproteobacteria	Groundwater
+SRR10070132	Brucellaceae	Family	0.0031980214907044177	Bacteria;Proteobacteria;Alphaproteobacteria;Rhizobiales;Brucellaceae	Groundwater
+SRR10070132	Flavobacterium	Genus	0.0013644891693672181	Bacteria;Bacteroidetes;Flavobacteriia;Flavobacteriales;Flavobacteriaceae;Flavobacterium	Groundwater
+SRR10070132	Bacteria	Kingdom	0.8862783557905511	Bacteria	Groundwater
+SRR10070132	Cytophagales	Order	0.0036670646426743988	Bacteria;Bacteroidetes;Cytophagia;Cytophagales	Groundwater
+SRR10070132	Nitrospirae	Phylum	0.0035391437830462223	Bacteria;Nitrospirae	Groundwater

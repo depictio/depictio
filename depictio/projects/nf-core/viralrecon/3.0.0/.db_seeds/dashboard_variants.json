@@ -222,21 +222,21 @@
       "component_type": "advanced_viz",
       "title": "Variant frequencies along the genome",
       "workflow_tag": "viralrecon",
-      "data_collection_tag": "manhattan_variants_canonical",
+      "data_collection_tag": "variants_long",
       "wf_id": {
         "$oid": "746b0f3c1e4a2d7f8e5b9c01"
       },
       "dc_id": {
-        "$oid": "746b0f3c1e4a2d7f8e5b9c13"
+        "$oid": "746b0f3c1e4a2d7f8e5b9c12"
       },
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "Manhattan-ready variant calls (chr/pos/score) for the advanced viz family",
-        "data_collection_tag": "manhattan_variants_canonical",
+        "description": "Per-sample annotated variant calls (long table).",
+        "data_collection_tag": "variants_long",
         "dc_specific_properties": null,
         "_id": {
-          "$oid": "746b0f3c1e4a2d7f8e5b9c13"
+          "$oid": "746b0f3c1e4a2d7f8e5b9c12"
         }
       },
       "cols_json": {},
@@ -248,10 +248,10 @@
       "viz_kind": "manhattan",
       "config": {
         "viz_kind": "manhattan",
-        "chr_col": "chr",
-        "pos_col": "pos",
-        "score_col": "score",
-        "feature_col": "variant_label",
+        "chr_col": "CHROM",
+        "pos_col": "POS",
+        "score_col": "AF",
+        "feature_col": "mutation_label",
         "effect_col": null,
         "score_kind": "Allele frequency (AF)",
         "score_threshold": 0.5,
@@ -260,11 +260,10 @@
         "marker_size_uniform": 5,
         "highlight": "above",
         "color_by_columns": [
-          "effect",
-          "lineage",
+          "EFFECT",
           "sample"
         ],
-        "default_color_by": "effect"
+        "default_color_by": "EFFECT"
       },
       "wf_tag": "nextflow/viralrecon"
     },
@@ -517,21 +516,21 @@
       "component_type": "advanced_viz",
       "title": "Variant tracks per gene (lollipop)",
       "workflow_tag": "viralrecon",
-      "data_collection_tag": "lollipop_canonical",
+      "data_collection_tag": "variants_long",
       "wf_id": {
         "$oid": "746b0f3c1e4a2d7f8e5b9c01"
       },
       "dc_id": {
-        "$oid": "746b0f3c1e4a2d7f8e5b9c19"
+        "$oid": "746b0f3c1e4a2d7f8e5b9c12"
       },
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "Lollipop-ready variant tracks (feature_id=GENE / position=POS / category=EFFECT)",
-        "data_collection_tag": "lollipop_canonical",
+        "description": "Per-sample annotated variant calls (long table).",
+        "data_collection_tag": "variants_long",
         "dc_specific_properties": null,
         "_id": {
-          "$oid": "746b0f3c1e4a2d7f8e5b9c19"
+          "$oid": "746b0f3c1e4a2d7f8e5b9c12"
         }
       },
       "cols_json": {},
@@ -543,10 +542,10 @@
       "viz_kind": "lollipop",
       "config": {
         "viz_kind": "lollipop",
-        "feature_id_col": "feature_id",
-        "position_col": "position",
-        "category_col": "category",
-        "effect_col": "effect",
+        "feature_id_col": "GENE",
+        "position_col": "POS",
+        "category_col": "EFFECT",
+        "effect_col": "AF",
         "max_subplot_genes": 6
       },
       "wf_tag": "nextflow/viralrecon"

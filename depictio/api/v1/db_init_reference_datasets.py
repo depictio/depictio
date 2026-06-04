@@ -62,10 +62,10 @@ STATIC_IDS = {
             "ancombc_results": "646b0f3c1e4a2d7f8e5b8caa",
             # Canonical-schema DCs feeding the advanced_viz components — see
             # depictio/projects/nf-core/ampliseq/recipes/*_canonical.py.
-            "volcano_canonical": "646b0f3c1e4a2d7f8e5b8cb0",
+            # (volcano retired: the Volcano component binds directly to
+            # ancombc_results via role columns id/lfc/q_val.)
             "stacked_taxonomy_canonical": "646b0f3c1e4a2d7f8e5b8cb1",
             "embedding_pcoa": "646b0f3c1e4a2d7f8e5b8cb2",
-            "da_barplot_canonical": "646b0f3c1e4a2d7f8e5b8cd0",
             "rarefaction_canonical": "646b0f3c1e4a2d7f8e5b8cd1",
             "complex_heatmap_canonical": "646b0f3c1e4a2d7f8e5b8cd2",
             "sunburst_canonical": "646b0f3c1e4a2d7f8e5b8cd3",
@@ -75,7 +75,8 @@ STATIC_IDS = {
             # entry below). Don't reuse it for a DC.
             # Tier 2 derivation DCs.
             "upset_canonical": "646b0f3c1e4a2d7f8e5b8cd6",
-            "qq_canonical": "646b0f3c1e4a2d7f8e5b8cd7",
+            # qq retired: no component rendered it; the catalog declares
+            # `qq` as a render of qiime2/ancombc (use: qiime2/ancombc, viz_kind: qq).
             "ma_canonical": "646b0f3c1e4a2d7f8e5b8cd8",
             # Phase D — Bray-Curtis sample-distance matrix (symmetric heatmap input).
             "bray_curtis_canonical": "646b0f3c1e4a2d7f8e5b8cd9",
@@ -194,13 +195,15 @@ STATIC_IDS = {
             "multiqc_data": "746b0f3c1e4a2d7f8e5b9c10",
             "summary_metrics": "746b0f3c1e4a2d7f8e5b9c11",
             "variants_long": "746b0f3c1e4a2d7f8e5b9c12",
-            "manhattan_variants_canonical": "746b0f3c1e4a2d7f8e5b9c13",
+            # manhattan retired: binds directly to variants_long via catalog
+            # roles (chr=CHROM/pos=POS/score=AF) — `use: ivar/variants_long`.
             "pangolin_lineages": "746b0f3c1e4a2d7f8e5b9c14",
             "nextclade_results": "746b0f3c1e4a2d7f8e5b9c15",
             "mosdepth_amplicon_coverage": "746b0f3c1e4a2d7f8e5b9c16",
             "mosdepth_genome_coverage": "746b0f3c1e4a2d7f8e5b9c17",
             "mosdepth_amplicon_heatmap": "746b0f3c1e4a2d7f8e5b9c18",
-            "lollipop_canonical": "746b0f3c1e4a2d7f8e5b9c19",
+            # lollipop retired: the Lollipop component binds directly to
+            # variants_long via catalog roles (GENE/POS/EFFECT) — `use: ivar/variants_long`.
             "oncoplot_canonical": "746b0f3c1e4a2d7f8e5b9c1a",
             "complex_heatmap_canonical": "746b0f3c1e4a2d7f8e5b9c1b",
             "coverage_track_canonical": "746b0f3c1e4a2d7f8e5b9c1c",
