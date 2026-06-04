@@ -1,10 +1,9 @@
 import { defineConfig, devices } from "@playwright/test";
 
-// Default target is the React frontend (Vite dev server on :5173).
-// Set PLAYWRIGHT_BASE_URL=http://localhost:5080 (+ PLAYWRIGHT_TARGET=dash) to
-// run the same specs against the legacy Dash app.
-const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:5173";
-const API_URL = process.env.PLAYWRIGHT_API_URL ?? "http://localhost:8058";
+// Default target: react-frontend-dev container on :5701 (compose override).
+// Override via env vars to target a different instance or the viewer on :5601.
+const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:5701";
+const API_URL = process.env.PLAYWRIGHT_API_URL ?? "http://localhost:8101";
 const IS_CI = !!process.env.CI;
 
 export default defineConfig({
