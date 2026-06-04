@@ -388,9 +388,14 @@ async def create_dashboard_from_json(
         needs_update = False
         update_fields: dict = {}
 
-        # Do NOT re-force is_public=True on existing dashboards. The bootstrap
-        # used to flip every reference dashboard back to public on each restart,
-        # which silently reverted any operator-driven privacy lockdown.
+        # In public/demo mode, ensure existing reference dashboards stay public so
+        # a pod restart (without a DB wipe) doesn't leave them private and invisible
+        # to anonymous/temporary visitors. We do NOT force this in standard mode —
+        # that would silently revert an operator-driven privacy lockdown (the #779
+        # concern).
+        if settings.auth.is_public_mode and not _check.get("is_public", False):
+            update_fields["is_public"] = True
+            needs_update = True
 
         # Only force static DC ID if specified (for single-DC dashboards like Iris)
         if static_dc_id:
@@ -489,13 +494,14 @@ async def create_dashboard_from_json(
         viewers=[],
     )
 
-    # Reference dashboards are NOT public by default — anonymous browsing of
-    # the demo content would expose all stored_metadata to the internet on
-    # public-mode deployments. The EMBL demo values file (or any deployment
-    # that wants public reference dashboards) can opt in by toggling the
-    # ``is_public`` flag via the seed JSON or a post-init job. The dashboard
-    # owner (admin_user) always has full access.
-    dashboard_data.is_public = False
+    # Reference dashboards are public ONLY when the server runs in public/demo
+    # mode — anonymous/temporary visitors must be able to browse the curated demo
+    # content. On standard deployments they stay private, preserving the #779
+    # security fix (anonymous browsing would otherwise expose all stored_metadata
+    # to the internet). Demo mode implies public mode, so gating on
+    # ``is_public_mode`` covers it. The dashboard owner (admin_user) always has
+    # full access regardless.
+    dashboard_data.is_public = settings.auth.is_public_mode
 
     # Create the dashboard object into the database
     response = await save_dashboard(
