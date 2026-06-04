@@ -1457,13 +1457,11 @@ jobs:
             $PROJ/run_1/variants/bowtie2/mosdepth/amplicon/all_samples.mosdepth.heatmap.tsv \
             $PROJ/summary_metrics.tsv \
             $PROJ/variants_long.tsv \
-            $PROJ/manhattan_variants_canonical.tsv \
             $PROJ/pangolin_lineages.tsv \
             $PROJ/nextclade_results.tsv \
             $PROJ/mosdepth_amplicon_coverage.tsv \
             $PROJ/mosdepth_genome_coverage.tsv \
             $PROJ/mosdepth_amplicon_heatmap.tsv \
-            $PROJ/lollipop_canonical.tsv \
             $PROJ/oncoplot_canonical.tsv \
             $PROJ/complex_heatmap_canonical.tsv \
             $PROJ/coverage_track_canonical.tsv \
