@@ -68,10 +68,12 @@ test.describe("Authentication UI - Registration Flow", () => {
     }) => {
       await uiRegister(page, credentials.testUser.email, "SomePassword123!");
 
-      // RegisterForm surfaces a generic failure message on any server error.
+      // The backend answers existing-email registrations with a deliberately
+      // generic message (anti-enumeration, routes.py "Registration could not
+      // be completed…"); the form may also fall back to its own generic text.
       await expect(
         page.locator("[data-testid='user-feedback-message-register']"),
-      ).toHaveText(/registration failed/i);
+      ).toHaveText(/could not be completed|registration failed/i);
     });
   });
 });
