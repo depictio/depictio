@@ -64,6 +64,43 @@ The golden rule for schemas — **one home, no duplication**:
 Don't know a recipe's output column names while writing `roles`?
 `depictio catalog columns <recipe>` prints them.
 
+## Catalog vs `projects/` — where a reshape lives
+
+A reshape is **tool-domain logic** the moment it depends only on a tool's
+output vocabulary (not on one pipeline version's quirks). Those belong in the
+catalog so the tool owns them once and every pipeline emitting that tool reuses
+them. Use this rule when deciding where a reshape goes:
+
+| The reshape… | Lives in | Why |
+|---|---|---|
+| reshapes a tool output and is **version-stable** (same logic across pipeline versions) | `catalog/<tool>/<name>.py` (+ an output YAML if it should be auto-discovered) | tool-owned, reusable, version-agnostic |
+| has **version-specific behaviour** (a `{version}/recipes/` override exists) | `projects/<pipeline>/recipes/<name>.py` | the catalog is version-agnostic; a version override must win |
+| is just a **column rename** with no real transform | **nothing** — no recipe, no DC | bind the tool output directly via `use: <tool>/<output>` + the catalog `roles` |
+
+"Second-layer" is not the deciding factor: a recipe that reads another DC's
+columns (e.g. `embedding_pcoa` consuming `taxonomy_heatmap`) is still
+tool-domain logic and belongs in the catalog. What forces a recipe to stay
+under `projects/` is a real **version override**, nothing else.
+
+The resolver (`depictio.recipes.resolve_recipe_path`) encodes exactly this
+order, so a `qiime2/foo.py` ref and a `nf-core/ampliseq/foo.py` ref both resolve
+correctly:
+
+```
+1. projects/<pipeline>/<version>/recipes/<name>   # version override wins
+2. catalog/<module>/<name>                         # tool-owned reshape
+3. projects/<pipeline>/recipes/<name>              # pipeline-keyed shared fallback
+```
+
+Live exceptions that prove the rule:
+
+- **`taxonomy_rel_abundance`** stays pipeline-keyed: ampliseq 2.14.0 ships a
+  real override (hard-coded `habitat`, mandatory metadata) that differs from
+  2.16.0's generic optional join. (`test_legacy_pipeline_keyed_recipe_still_resolves`)
+- **volcano / qq / lollipop / manhattan / da_barplot** carry **no recipe**:
+  they were pure renames, so the component binds the tool output directly via
+  `use:` + roles instead of materialising a remapper DC.
+
 ## Commands
 
 ```bash
