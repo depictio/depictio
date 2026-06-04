@@ -15,7 +15,7 @@
  * and demo modes (ProfileApp.buttonStates).
  */
 
-import { test, expect, getAuthMode, apiLogin, seedTokenInStorage, API_URL, API_PREFIX } from "@fixtures/auth";
+import { test, expect, getAuthMode, apiLogin, loginStatus, seedTokenInStorage, API_URL, API_PREFIX } from "@fixtures/auth";
 
 const OLD_PASSWORD = "Test123!old";
 const NEW_PASSWORD = "Test123!new";
@@ -72,12 +72,10 @@ test.describe("Edit Password", () => {
       { timeout: 10_000 },
     );
 
-    // The old password no longer works; the new one does.
-    const oldLogin = await request.post(`${API_URL}${API_PREFIX}/auth/login`, {
-      form: { username: email, password: OLD_PASSWORD },
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    });
-    expect(oldLogin.status()).toBe(401);
+    // The old password no longer works; the new one does. loginStatus rides
+    // out 429s — under parallel workers the limiter can throttle this probe,
+    // and a 429 says nothing about the credentials (CI flake source).
+    expect(await loginStatus(request, email, OLD_PASSWORD)).toBe(401);
 
     const newTokens = await apiLogin(request, email, NEW_PASSWORD);
     expect(newTokens.access_token).toBeTruthy();

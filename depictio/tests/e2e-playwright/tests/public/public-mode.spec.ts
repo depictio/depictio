@@ -130,28 +130,45 @@ test.describe("Public Mode", () => {
       );
     }
 
-    test("rejects dashboard creation from anonymous users", async ({
+    test("dashboard creation API matches the mode contract", async ({
       page,
       request,
     }) => {
+      const { is_demo_mode } = await getAuthMode();
       const token = await tempUserToken(page);
+      // Unique ObjectId-shaped id per attempt — each retry mints a NEW temp
+      // user, who couldn't save over (or delete) a dashboard left behind by
+      // the previous attempt's owner.
+      const dashboardId = `507f1f77bcf86cd7${Date.now().toString(16).slice(-8)}`;
       const res = await request.post(
-        `${API_URL}${API_PREFIX}/dashboards/save/507f1f77bcf86cd799439011`,
+        `${API_URL}${API_PREFIX}/dashboards/save/${dashboardId}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
           },
           data: {
-            id: "507f1f77bcf86cd799439011",
+            id: dashboardId,
             title: "Test Dashboard",
-            dashboard_id: "507f1f77bcf86cd799439011",
+            dashboard_id: dashboardId,
             project_id: "507f1f77bcf86cd799439012",
             permissions: { owners: [], viewers: [] },
           },
         },
       );
-      expect([401, 403, 422]).toContain(res.status());
+      if (is_demo_mode) {
+        // Demo mode INTENTIONALLY lets temporary users create dashboards
+        // (24h retention) — creation succeeds. Clean up so retries and
+        // subsequent runs see a fresh state.
+        expect([200, 201]).toContain(res.status());
+        await request.delete(
+          `${API_URL}${API_PREFIX}/dashboards/delete/${dashboardId}`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+      } else {
+        // Pure public mode: anonymous/temporary users cannot create.
+        expect([401, 403, 422]).toContain(res.status());
+      }
     });
 
     test("allows anonymous users to list public dashboards", async ({

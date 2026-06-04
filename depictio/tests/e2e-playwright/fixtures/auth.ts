@@ -72,6 +72,29 @@ export async function apiLogin(
 }
 
 /**
+ * Probe the login endpoint and return its final status, riding out 429s.
+ * Use when a test asserts a login *outcome* (e.g. 401 after a password
+ * change) — a rate-limited 429 says nothing about the credentials.
+ */
+export async function loginStatus(
+  request: APIRequestContext,
+  email: string,
+  password: string,
+): Promise<number> {
+  let status = 0;
+  for (const delay of [0, 2000, 5000, 15000, 30000]) {
+    if (delay) await new Promise((r) => setTimeout(r, delay));
+    const response = await request.post(`${API_URL}${API_PREFIX}/auth/login`, {
+      form: { username: email, password },
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    });
+    status = response.status();
+    if (status !== 429) return status;
+  }
+  return status;
+}
+
+/**
  * UI login: opens /auth, fills the modal, submits.
  * Equivalent to Cypress `cy.loginUser`.
  */
