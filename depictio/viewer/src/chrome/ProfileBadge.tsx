@@ -20,7 +20,7 @@ const ProfileBadge: React.FC = () => {
     return <Loader size="xs" />;
   }
 
-  if (!user && authMode === 'standard') {
+  if (!user && authMode === 'standard' && !isPublicMode && !isDemoMode) {
     return (
       <Button
         component="a"
