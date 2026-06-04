@@ -6,4 +6,4 @@ find: { path_glob: "**/qiime2/alpha-rarefaction/*.csv" }
 recipe: qiime2/alpha_rarefaction.py
 fixture: alpha_rarefaction.tsv
 renders_as:
-  - { component: advanced_viz, kind: rarefaction, roles: {sample_id: sample, depth: depth, metric: faith_pd} }
+  - { component: advanced_viz, id: rarefaction_alpha, kind: rarefaction, roles: {sample_id: sample, depth: depth, metric: faith_pd} }

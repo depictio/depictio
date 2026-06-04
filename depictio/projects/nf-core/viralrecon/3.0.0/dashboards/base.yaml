@@ -915,13 +915,13 @@ tabs:
   # 30 kb resolution; left-rail filters apply tab-wide regardless of physical
   # placement, so we put them under Manhattan with the bars/lollipop block.
   - component_type: advanced_viz
-    # Catalog-bound: `use` inherits chr=CHROM / pos=POS / score=AF from
-    # catalog/ivar/variants_long.yaml's manhattan render. Label + colour-by
-    # map onto variants_long's own columns (lineage isn't in variants_long).
-    use: ivar/variants_long
+    # Catalog-bound via render id: `use: ivar/manhattan` inherits viz_kind +
+    # chr=CHROM / pos=POS / score=AF from catalog/ivar/variants_long.yaml's
+    # manhattan render. Label + colour-by map onto variants_long's own columns
+    # (lineage isn't in variants_long).
+    use: ivar/manhattan
     workflow_tag: viralrecon
     data_collection_tag: variants_long
-    viz_kind: manhattan
     config:
       feature_col: mutation_label
       score_kind: Allele frequency (AF)
@@ -1051,13 +1051,13 @@ tabs:
       h: 5
   # Per-gene lollipop sub-panels — drill-into-gene view. Full width.
   - component_type: advanced_viz
-    # Catalog-bound: `use` inherits viz_kind + role columns (feature_id=GENE,
-    # position=POS, category=EFFECT) from catalog/ivar/variants_long.yaml's
-    # lollipop render. Only the optional effect column + display knob are local.
-    use: ivar/variants_long
+    # Catalog-bound via render id: `use: ivar/lollipop` inherits viz_kind +
+    # role columns (feature_id=GENE, position=POS, category=EFFECT) from
+    # catalog/ivar/variants_long.yaml's lollipop render. Only the optional
+    # effect column + display knob are local.
+    use: ivar/lollipop
     workflow_tag: viralrecon
     data_collection_tag: variants_long
-    viz_kind: lollipop
     config:
       effect_col: AF
       max_subplot_genes: 6

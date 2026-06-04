@@ -131,8 +131,16 @@ class Render(BaseModel):
       figure `code_content`).
     - `card` → `column` + `aggregation` (a metric/KPI).
     - `multiqc`/`table`/… → no extra binding.
+
+    An optional `id` makes the render a first-class, tool-unique handle so a
+    dashboard can address it directly with ``use: <tool>/<render-id>`` — no need
+    to name the output and disambiguate with ``viz_kind``. Ids only need to be
+    unique within a tool (enforced on the entry), and a render binds to its
+    parent output's columns, so the id lives here, never in ``module.yaml``.
     """
 
+    # Optional tool-unique handle for `use: <tool>/<id>` (advanced_viz renders).
+    id: str | None = None
     component: ComponentKind
     # advanced_viz
     kind: AdvancedVizKind | None = None
@@ -343,6 +351,25 @@ class CatalogEntry(CatalogTool):
         dupes = {i for i in ids if ids.count(i) > 1}
         if dupes:
             raise ValueError(f"duplicate output ids in tool {self.id!r}: {sorted(dupes)}")
+        return self
+
+    @model_validator(mode="after")
+    def _unique_render_ids(self) -> CatalogEntry:
+        # Render ids are the `use: <tool>/<id>` handles — unique within a tool.
+        ids = [r.id for o in self.outputs for r in o.renders_as if r.id]
+        dupes = {i for i in ids if ids.count(i) > 1}
+        if dupes:
+            raise ValueError(f"duplicate render ids in tool {self.id!r}: {sorted(dupes)}")
+        # A render id must not shadow an output's short id (would make
+        # `use: <tool>/<x>` ambiguous between a render and an output).
+        output_short = {o.id.removeprefix(f"{self.id}_") for o in self.outputs} | {
+            o.id for o in self.outputs
+        }
+        clash = set(ids) & output_short
+        if clash:
+            raise ValueError(
+                f"render id(s) {sorted(clash)} in tool {self.id!r} collide with an output id"
+            )
         return self
 
 

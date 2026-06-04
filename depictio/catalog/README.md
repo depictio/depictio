@@ -61,6 +61,24 @@ The golden rule for schemas — **one home, no duplication**:
 | **has a recipe** | the recipe (`EXPECTED_SCHEMA`). The YAML does **not** repeat them; `roles` are grounded against the recipe at validation time. |
 | **no recipe** (raw is bindable) | the YAML, via a `columns:` block; `roles` bind to those. |
 
+Each advanced_viz render can carry an **`id`** — a tool-unique handle a
+dashboard addresses directly:
+
+```yaml
+renders_as:
+  - { id: manhattan, component: advanced_viz, kind: manhattan, roles: {chr: CHROM, pos: POS, score: AF} }
+```
+```yaml
+use: ivar/manhattan        # render id → viz_kind + roles, no viz_kind to guess
+```
+
+`use: <tool>/<ref>` resolves `<ref>` as a render id first, then falls back to an
+output id (`use: qiime2/ancombc` + `viz_kind:` to disambiguate). Ids stay in the
+output (a render binds to *its* columns), never in `module.yaml`, and must be
+unique within a tool — so when the same `kind` is rendered by several outputs
+(e.g. `rarefaction` from both `alpha_rarefaction` and `rarefaction_canonical`)
+each gets a distinct handle (`rarefaction_alpha` vs `rarefaction`).
+
 Don't know a recipe's output column names while writing `roles`?
 `depictio catalog columns <recipe>` prints them.
 

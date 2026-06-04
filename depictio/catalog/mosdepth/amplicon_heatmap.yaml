@@ -5,4 +5,4 @@ find: { path_glob: "**/mosdepth/amplicon/all_samples.mosdepth.heatmap.tsv" }
 recipe: mosdepth/complex_heatmap_canonical.py
 fixture: amplicon_heatmap.tsv
 renders_as:
-  - { component: advanced_viz, kind: complex_heatmap, roles: {index: sample} }
+  - { component: advanced_viz, id: complex_heatmap, kind: complex_heatmap, roles: {index: sample} }

@@ -8,6 +8,6 @@ find: { path_glob: "**/qiime2/ancombc/differentials/*/lfc_slice.csv" }
 recipe: qiime2/ancombc.py
 fixture: ancombc.tsv
 renders_as:
-  - { component: advanced_viz, kind: volcano, roles: {feature_id: id, effect_size: lfc, significance: q_val} }
-  - { component: advanced_viz, kind: da_barplot, roles: {feature_id: id, contrast: contrast, lfc: lfc} }
-  - { component: advanced_viz, kind: qq, roles: {p_value: p_val} }
+  - { component: advanced_viz, id: volcano, kind: volcano, roles: {feature_id: id, effect_size: lfc, significance: q_val} }
+  - { component: advanced_viz, id: da_barplot, kind: da_barplot, roles: {feature_id: id, contrast: contrast, lfc: lfc} }
+  - { component: advanced_viz, id: qq, kind: qq, roles: {p_value: p_val} }

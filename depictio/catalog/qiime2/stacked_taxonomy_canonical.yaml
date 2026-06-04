@@ -6,4 +6,4 @@ find: { path_glob: "**/qiime2/rel_abundance_tables/rel-table-*.tsv" }
 recipe: qiime2/stacked_taxonomy_canonical.py
 fixture: stacked_taxonomy_canonical.tsv
 renders_as:
-  - { component: advanced_viz, kind: stacked_taxonomy, roles: {sample_id: sample_id, taxon: taxon, rank: rank, abundance: abundance} }
+  - { component: advanced_viz, id: stacked_taxonomy, kind: stacked_taxonomy, roles: {sample_id: sample_id, taxon: taxon, rank: rank, abundance: abundance} }

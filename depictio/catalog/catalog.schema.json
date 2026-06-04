@@ -146,8 +146,20 @@
     },
     "Render": {
       "additionalProperties": false,
-      "description": "One render target for an output: a dashboard component + its binding.\n\n- `advanced_viz` \u2192 `kind` + `roles` (role \u2192 column).\n- `figure` \u2192 either UI mode (`visu_type` + `dict_kwargs`, plotly-express) or\n  code mode (`code`: an inline snippet that sets `fig`, depictio's\n  figure `code_content`).\n- `card` \u2192 `column` + `aggregation` (a metric/KPI).\n- `multiqc`/`table`/\u2026 \u2192 no extra binding.",
+      "description": "One render target for an output: a dashboard component + its binding.\n\n- `advanced_viz` \u2192 `kind` + `roles` (role \u2192 column).\n- `figure` \u2192 either UI mode (`visu_type` + `dict_kwargs`, plotly-express) or\n  code mode (`code`: an inline snippet that sets `fig`, depictio's\n  figure `code_content`).\n- `card` \u2192 `column` + `aggregation` (a metric/KPI).\n- `multiqc`/`table`/\u2026 \u2192 no extra binding.\n\nAn optional `id` makes the render a first-class, tool-unique handle so a\ndashboard can address it directly with ``use: <tool>/<render-id>`` \u2014 no need\nto name the output and disambiguate with ``viz_kind``. Ids only need to be\nunique within a tool (enforced on the entry), and a render binds to its\nparent output's columns, so the id lives here, never in ``module.yaml``.",
       "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
         "component": {
           "anyOf": [
             {
