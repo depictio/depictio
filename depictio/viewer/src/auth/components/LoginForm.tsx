@@ -58,18 +58,22 @@ export default function LoginForm({ googleEnabled, onSwitchToRegister, onSuccess
         error={email.length > 0 && !emailValid ? 'Invalid email' : null}
         autoComplete="email"
         data-autofocus
+        data-testid="login-email"
       />
       <PasswordInput
         label="Password:"
         placeholder="Enter your password"
         value={password}
         onChange={(e) => setPassword(e.currentTarget.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') handleSubmit();
-        }}
+        onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit(); }}
         autoComplete="current-password"
+        data-testid="login-password"
       />
-      {error && <Text c="red" size="sm" ta="center">{error}</Text>}
+      {error && (
+        <Text c="red" size="sm" ta="center" data-testid="user-feedback-message-login">
+          {error}
+        </Text>
+      )}
       <Group justify="center" gap="sm" mt="sm">
         <Button
           radius="md"
@@ -78,6 +82,7 @@ export default function LoginForm({ googleEnabled, onSwitchToRegister, onSuccess
           disabled={!canSubmit}
           onClick={handleSubmit}
           style={{ width: 120 }}
+          data-testid="login-button"
         >
           Login
         </Button>
@@ -86,6 +91,7 @@ export default function LoginForm({ googleEnabled, onSwitchToRegister, onSuccess
           type="button"
           onClick={onSwitchToRegister}
           underline="never"
+          data-testid="open-register-form"
         >
           <Button radius="md" variant="outline" color="blue" style={{ width: 120 }}>
             Register

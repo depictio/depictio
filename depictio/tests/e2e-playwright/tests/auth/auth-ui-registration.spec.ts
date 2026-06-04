@@ -3,7 +3,7 @@
  * Target: React frontend.
  *
  * cy.registerUser(...) -> uiRegister(page, email, password, confirmPassword?)
- * Feedback assertions read #user-feedback-message-register, same as Cypress.
+ * Feedback assertions read [data-testid='user-feedback-message-register'], same as Cypress.
  */
 
 import { test, expect } from "@fixtures/auth";
@@ -26,7 +26,7 @@ test.describe("Authentication UI - Registration Flow", () => {
       const email = `test_${Date.now()}@example.com`;
       await uiRegister(page, email, "test_password_123");
 
-      const feedback = page.locator("#user-feedback-message-register");
+      const feedback = page.locator("[data-testid='user-feedback-message-register']");
       await expect(feedback).toBeVisible();
       await expect(feedback).toContainText("Registration successful");
     });
@@ -39,13 +39,13 @@ test.describe("Authentication UI - Registration Flow", () => {
 
       await uiRegister(page, email, password);
       await expect(
-        page.locator("#user-feedback-message-register"),
+        page.locator("[data-testid='user-feedback-message-register']"),
       ).toContainText("Registration successful");
 
       // Switch back to login and authenticate with the new account.
-      await page.locator("#open-login-form").click();
+      await page.locator("[data-testid='open-login-form']").click();
       await uiLogin(page, email, password);
-      await expect(page.locator("#modal-content")).toBeHidden({
+      await expect(page.locator("[data-testid='modal-content']")).toBeHidden({
         timeout: 10_000,
       });
     });
@@ -57,7 +57,7 @@ test.describe("Authentication UI - Registration Flow", () => {
       await uiRegister(page, email, "SecurePassword123!", "SecurePassword124!");
 
       await expect(
-        page.locator("#user-feedback-message-register"),
+        page.locator("[data-testid='user-feedback-message-register']"),
       ).toHaveText(/password.*match/i);
     });
 
@@ -67,7 +67,7 @@ test.describe("Authentication UI - Registration Flow", () => {
       await uiRegister(page, credentials.testUser.email, "SomePassword123!");
 
       await expect(
-        page.locator("#user-feedback-message-register"),
+        page.locator("[data-testid='user-feedback-message-register']"),
       ).toHaveText(/already.*exist|already.*register/i);
     });
   });

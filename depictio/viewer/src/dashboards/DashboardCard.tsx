@@ -153,6 +153,8 @@ const DashboardCard: React.FC<DashboardCardProps> = ({
       withBorder
       style={{ position: 'relative' }}
       data-tour-id="dashboard-card"
+      data-testid="dashboard-card"
+      data-dashboard-title={dashboard.title}
     >
       {onTogglePin && (
         <Tooltip

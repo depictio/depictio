@@ -219,6 +219,7 @@ const ProfileApp: React.FC = () => {
                       disabled={states.logoutDisabled}
                       onClick={handleLogout}
                       leftSection={<Icon icon="mdi:logout" width={20} />}
+                      data-testid="logout-button"
                       styles={{
                         root: {
                           backgroundColor: states.logoutDisabled ? undefined : brandColors.red,

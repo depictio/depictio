@@ -1,6 +1,6 @@
 /**
  * Port of depictio/tests/e2e-tests/cypress/e2e/dashboards/create-dashboard-extended.cy.js
- * Target: React frontend.
+ * Target: depictio-viewer on :5601.
  *
  * The original Cypress spec is named "extended" but only exercises
  * create + verify-in-list + delete. This port adds a reload to confirm the
@@ -8,7 +8,7 @@
  */
 
 import { test, expect } from "@fixtures/auth";
-import { IRIS_PROJECT_LABEL } from "@fixtures/projects";
+import { createDashboard, deleteDashboard } from "@fixtures/dashboard";
 
 test.describe("Create dashboard and verify it persists", () => {
   test.skip(
@@ -23,32 +23,21 @@ test.describe("Create dashboard and verify it persists", () => {
     await loginAsAdmin();
     await page.goto("/dashboards");
 
-    await page.getByText("+ New Dashboard").click();
-
     const uniqueTitle = `Test Dashboard ${new Date()
       .toISOString()
       .replace(/:/g, "-")}`;
-    await page.getByPlaceholder("Enter dashboard title").fill(uniqueTitle);
-    await page.locator("#dashboard-projects").click();
-    await page.getByText(IRIS_PROJECT_LABEL).click();
-    await page.locator("#create-dashboard-submit").click();
 
-    const card = page
-      .locator(".mantine-Card-root")
-      .filter({ hasText: uniqueTitle })
-      .first();
-    await expect(card).toBeVisible({ timeout: 15_000 });
+    await createDashboard(page, uniqueTitle);
 
-    // Reload to confirm the dashboard was persisted server-side.
-    await page.reload();
-    const cardAfterReload = page
-      .locator(".mantine-Card-root")
-      .filter({ hasText: uniqueTitle })
-      .first();
-    await expect(cardAfterReload).toBeVisible({ timeout: 15_000 });
+    // Navigate away and back to confirm server-side persistence.
+    // (page.reload() leaves the viewer in a session-loading state which
+    // temporarily disables ownership-gated actions like Delete.)
+    await page.goto("/profile");
+    await page.goto("/dashboards");
+    await expect(
+      page.locator("[data-testid='dashboard-card']").filter({ hasText: uniqueTitle }).first(),
+    ).toBeVisible({ timeout: 15_000 });
 
-    // Cleanup.
-    await cardAfterReload.getByRole("button", { name: "Delete" }).click();
-    await expect(page.getByText(uniqueTitle)).toBeHidden({ timeout: 15_000 });
+    await deleteDashboard(page, uniqueTitle);
   });
 });

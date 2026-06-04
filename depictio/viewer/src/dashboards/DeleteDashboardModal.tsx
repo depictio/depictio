@@ -85,6 +85,7 @@ const DeleteDashboardModal: React.FC<DeleteDashboardModalProps> = ({
             onClick={handleConfirm}
             loading={submitting}
             disabled={!dashboard || submitting}
+            data-testid="confirm-delete-btn"
           >
             Delete
           </Button>

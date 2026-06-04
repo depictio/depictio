@@ -34,6 +34,10 @@ export interface TokenBundle {
   access_token: string;
   refresh_token: string;
   user_id: string;
+  /** Populated by loginAsTestUser from the credentials table — not returned by
+   *  the login endpoint but required by the viewer's local-store session shape
+   *  so the ownership check (isOwner) works correctly. */
+  email?: string;
 }
 
 /**
@@ -45,12 +49,18 @@ export async function apiLogin(
   email: string,
   password: string,
 ): Promise<TokenBundle> {
-  const response = await request.post(`${API_URL}${API_PREFIX}/auth/login`, {
-    form: { username: email, password },
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-  });
-  expect(response.ok(), `Login failed: ${response.status()}`).toBeTruthy();
-  return (await response.json()) as TokenBundle;
+  const delays = [0, 1500, 3000];
+  for (let i = 0; i < delays.length; i++) {
+    if (delays[i]) await new Promise((r) => setTimeout(r, delays[i]));
+    const response = await request.post(`${API_URL}${API_PREFIX}/auth/login`, {
+      form: { username: email, password },
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    });
+    if (response.status() === 429) continue;
+    expect(response.ok(), `Login failed: ${response.status()}`).toBeTruthy();
+    return (await response.json()) as TokenBundle;
+  }
+  throw new Error("Login rate-limited after 3 retries");
 }
 
 /**
@@ -63,34 +73,48 @@ export async function uiLogin(
   password: string,
 ): Promise<void> {
   await page.goto("/auth");
-  const modal = page.locator("#modal-content");
+  const modal = page.locator("[data-testid='modal-content']");
   await expect(modal).toBeVisible({ timeout: 10_000 });
 
-  await modal.locator("#login-email").fill(email);
-  await modal.locator("#login-password").fill(password);
-  await modal.locator("#login-button").click();
+  // In Mantine v7, data-testid is spread onto the <input> element directly.
+  await modal.locator("[data-testid='login-email']").fill(email);
+  await modal.locator("[data-testid='login-password']").fill(password);
+  await modal.locator("[data-testid='login-button']").click();
 }
 
 /**
  * Seed the browser with auth tokens so subsequent navigations are logged in
  * without hitting the UI. Mirrors Cypress `cy.loginWithToken` end-state.
  *
- * Two storage shapes are supported, selected by PLAYWRIGHT_TARGET:
- *   - "react" (default): the React app's Zustand `persist` store under the
- *     `depictio-auth` key, shape `{ state: { accessToken, refreshToken }, version: 0 }`.
- *   - "dash": the Dash app's `local-store` dcc.Store, shape
- *     `{ access_token, refresh_token, logged_in, user_id }`.
+ * The viewer (depictio/viewer/) and the legacy Dash app both use the
+ * `local-store` localStorage key with a flat JSON shape.
+ * The minimal react-frontend scaffold (depictio/react-frontend/) uses the
+ * Zustand `depictio-auth` key instead.
+ * Select via PLAYWRIGHT_TARGET: "viewer" | "dash" (default) → local-store,
+ *                               "react"                     → depictio-auth.
  */
-const TARGET = (process.env.PLAYWRIGHT_TARGET ?? "react").toLowerCase();
+const TARGET = (process.env.PLAYWRIGHT_TARGET ?? "viewer").toLowerCase();
 
 export async function seedTokenInStorage(
   page: Page,
   tokens: TokenBundle,
 ): Promise<void> {
-  await page.goto("/");
+  // Use "commit" (first byte received) so we don't wait for the React app
+  // to finish its auth redirect chain before setting localStorage.
+  await page.goto("/", { waitUntil: "commit" });
   await page.evaluate(
     ({ t, target }) => {
-      if (target === "dash") {
+      if (target === "react") {
+        window.localStorage.setItem(
+          "depictio-auth",
+          JSON.stringify({
+            state: { accessToken: t.access_token, refreshToken: t.refresh_token },
+            version: 0,
+          }),
+        );
+      } else {
+        // viewer + dash: flat local-store shape.
+        // `email` is required by the viewer's isOwner check (currentUserEmail).
         window.localStorage.setItem(
           "local-store",
           JSON.stringify({
@@ -98,17 +122,7 @@ export async function seedTokenInStorage(
             refresh_token: t.refresh_token,
             logged_in: true,
             user_id: t.user_id,
-          }),
-        );
-      } else {
-        window.localStorage.setItem(
-          "depictio-auth",
-          JSON.stringify({
-            state: {
-              accessToken: t.access_token,
-              refreshToken: t.refresh_token,
-            },
-            version: 0,
+            email: t.email ?? "",
           }),
         );
       }
@@ -128,16 +142,14 @@ export async function uiRegister(
   confirmPassword?: string,
 ): Promise<void> {
   await page.goto("/auth");
-  const modal = page.locator("#modal-content");
+  const modal = page.locator("[data-testid='modal-content']");
   await expect(modal).toBeVisible({ timeout: 10_000 });
 
-  await modal.locator("#open-register-form").click();
-  await modal.locator("#register-email").fill(email);
-  await modal.locator("#register-password").fill(password);
-  await modal
-    .locator("#register-confirm-password")
-    .fill(confirmPassword ?? password);
-  await modal.locator("#register-button").click();
+  await modal.locator("[data-testid='open-register-form']").click();
+  await modal.locator("[data-testid='register-email']").fill(email);
+  await modal.locator("[data-testid='register-password']").fill(password);
+  await modal.locator("[data-testid='register-confirm-password']").fill(confirmPassword ?? password);
+  await modal.locator("[data-testid='register-button']").click();
 }
 
 /**
@@ -146,8 +158,8 @@ export async function uiRegister(
  */
 export async function uiLogout(page: Page): Promise<void> {
   await page.goto("/profile");
-  await page.locator("#logout-button").click();
-  await expect(page.locator("#modal-content")).toBeVisible({ timeout: 10_000 });
+  await page.locator("[data-testid='logout-button']").click();
+  await expect(page.locator("[data-testid='modal-content']")).toBeVisible({ timeout: 10_000 });
 }
 
 /**
@@ -170,6 +182,9 @@ export async function loginAsTestUser(
   let tokens = _tokenCache.get(userType);
   if (!tokens) {
     tokens = await apiLogin(request, user.email, user.password);
+    // Inject email into the bundle so seedTokenInStorage can include it in
+    // the local-store payload (required for the viewer's isOwner checks).
+    tokens.email = user.email;
     _tokenCache.set(userType, tokens);
   }
   await seedTokenInStorage(page, tokens);

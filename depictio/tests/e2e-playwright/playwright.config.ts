@@ -1,8 +1,9 @@
 import { defineConfig, devices } from "@playwright/test";
 
-// Default target: react-frontend-dev container on :5701 (compose override).
-// Override via env vars to target a different instance or the viewer on :5601.
-const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:5701";
+// Default target: depictio-viewer-dev on :5601 (the real Depictio UI).
+// Set PLAYWRIGHT_BASE_URL=http://localhost:5701 to run against the minimal
+// react-frontend scaffold instead.
+const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:5601";
 const API_URL = process.env.PLAYWRIGHT_API_URL ?? "http://localhost:8101";
 const IS_CI = !!process.env.CI;
 
@@ -11,7 +12,8 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: IS_CI,
   retries: IS_CI ? 2 : 0,
-  workers: IS_CI ? 2 : undefined,
+  // Limit local workers to 2 to avoid bursting the login rate-limiter.
+  workers: IS_CI ? 2 : 2,
   timeout: 60_000,
   expect: { timeout: 10_000 },
 

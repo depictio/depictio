@@ -11,9 +11,13 @@ test.describe("Authentication UI - Login Flow", () => {
     test("logs in successfully with valid credentials (UI flow)", async ({
       page,
     }) => {
+      const { is_single_user_mode } = await getAuthMode();
+      test.skip(
+        is_single_user_mode,
+        "Single-user mode: /auth auto-redirects to /dashboards, no login form rendered.",
+      );
       await uiLogin(page, credentials.testUser.email, credentials.testUser.password);
-      // Successful login closes the modal and redirects away from /auth.
-      await expect(page.locator("#modal-content")).toBeHidden({
+      await expect(page.locator("[data-testid='modal-content']")).toBeHidden({
         timeout: 10_000,
       });
     });
@@ -38,9 +42,9 @@ test.describe("Authentication UI - Login Flow", () => {
 
       await uiLogin(page, "invalid_user@example.com", "wrong_password");
 
-      const feedback = page.locator("#user-feedback-message-login");
+      const feedback = page.locator("[data-testid='user-feedback-message-login']");
       await expect(feedback).toBeVisible();
-      await expect(feedback).toContainText("User not found. Please register first.");
+      await expect(feedback).toContainText("Invalid email or password.");
     });
   });
 

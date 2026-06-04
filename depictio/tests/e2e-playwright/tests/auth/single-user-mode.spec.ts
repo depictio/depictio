@@ -91,7 +91,7 @@ test.describe("Single-User Mode", () => {
       await page.goto("/dashboards");
       await expect(page).toHaveURL(/\/dashboards/);
 
-      const btn = page.getByRole("button", { name: /New Dashboard/i });
+      const btn = page.locator("[data-testid='new-dashboard-btn']");
       await expect(btn).toBeVisible();
       await expect(btn).toBeEnabled();
     });
@@ -103,8 +103,8 @@ test.describe("Single-User Mode", () => {
       await loginAsAdmin();
       await page.goto("/dashboards");
 
-      // App shell is visible
-      await expect(page.locator("#app-shell")).toBeVisible();
+      // App shell is visible (Mantine AppShell root)
+      await expect(page.locator(".mantine-AppShell-root")).toBeVisible();
       // No error alert
       await expect(page.locator("[role=alert]").filter({ hasText: /error/i })).toHaveCount(0);
     });
@@ -123,39 +123,16 @@ test.describe("Single-User Mode", () => {
     });
   });
 
-  test.describe("Registration UI blocked", () => {
-    test("register form shows disabled-mode error", async ({ page }) => {
-      // Navigate to /auth and try to open the register form.
-      await page.goto("/auth");
-      await expect(page.locator("#modal-content")).toBeVisible();
-      await page.locator("#open-register-form").click();
+  // Registration UI test is not possible in single-user mode because the
+  // viewer's /auth page auto-redirects to /dashboards without rendering the
+  // login form. The API-level test above (`registration endpoint is disabled`)
+  // already covers this contract via direct HTTP.
 
-      // Fill and submit — backend will reject with 403.
-      await page.locator("#register-email").fill("blocked@example.com");
-      await page.locator("#register-password").fill("AnyPassword1!");
-      await page.locator("#register-confirm-password").fill("AnyPassword1!");
-      await page.locator("#register-button").click();
-
-      await expect(page.locator("#user-feedback-message-register")).toContainText(
-        /single-user|disabled/i,
-      );
-    });
-  });
-
-  // ── Future: auto-auth without token ──────────────────────────────────────
-  // The React ProtectedRoute currently redirects to /auth if no token is
-  // present in localStorage, even in single-user mode. The Dash frontend
-  // handled this server-side. This test documents the gap and will pass once
-  // ProtectedRoute calls /auth/me/optional at boot and auto-seeds the token.
-  test("TODO: direct access to /dashboards without prior login", async ({
-    page,
-  }) => {
-    test.fail(
-      true,
-      "React ProtectedRoute does not yet auto-authenticate in single-user mode.",
-    );
+  test("direct access to /dashboards without prior login", async ({ page }) => {
+    // The viewer auto-authenticates in single-user mode via /auth/me/optional
+    // (see depictio/viewer/src/auth/AuthApp.tsx). No token seeding required.
     await page.goto("/dashboards");
-    await expect(page).toHaveURL(/\/dashboards/);
+    await expect(page).toHaveURL(/\/dashboards/, { timeout: 10_000 });
     await expect(page).not.toHaveURL(/\/auth/);
   });
 });
