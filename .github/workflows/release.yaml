@@ -85,9 +85,11 @@ jobs:
 
       - name: Update CHANGELOG.md
         # if: ${{ needs.changelog.outputs.is_beta != 'true' }}
+        env:
+          CHANGELOG_CONTENT: ${{ needs.changelog.outputs.changelog }}
         run: |
           # Only update for stable releases
-          echo "${{ needs.changelog.outputs.changelog }}" > /tmp/changelog_clean.md
+          echo "$CHANGELOG_CONTENT" > /tmp/changelog_clean.md
 
           # Pull latest changes from main branch to avoid conflicts
           git config user.name "GitHub Actions Bot"
@@ -96,15 +98,18 @@ jobs:
           git checkout main
           git pull origin main
 
-          # Read existing changelog
-          if [ -f CHANGELOG.md ]; then
-            EXISTING_CHANGELOG=$(cat CHANGELOG.md)
-          else
-            EXISTING_CHANGELOG="# Changelog\n\n"
-          fi
-
           # Create new changelog with the latest changes at the top
-          echo -e "# Changelog\n\n$(cat /tmp/changelog_clean.md)\n\n${EXISTING_CHANGELOG#*#*\n\n}" > CHANGELOG.md
+          {
+            echo "# Changelog"
+            echo ""
+            cat /tmp/changelog_clean.md
+            echo ""
+            if [ -f CHANGELOG.md ]; then
+              # Skip the existing "# Changelog" header line
+              tail -n +3 CHANGELOG.md
+            fi
+          } > /tmp/new_changelog.md
+          mv /tmp/new_changelog.md CHANGELOG.md
 
           # Commit and push the updated changelog
           git add CHANGELOG.md
