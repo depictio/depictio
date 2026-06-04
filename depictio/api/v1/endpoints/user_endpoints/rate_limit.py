@@ -109,7 +109,14 @@ def enforce_rate_limit(request: Request, endpoint: str) -> None:
     FAIL-OPEN: any Redis error (unreachable, timeout) allows the request through
     so an outage cannot lock everyone out of auth.
     """
-    client_ip = request.client.host if request.client else "unknown"
+    # Prefer X-Real-IP forwarded by the nginx reverse-proxy over the raw TCP
+    # connection source, which would be the nginx pod IP in k8s (causing all
+    # visitors to share one rate-limit bucket).
+    client_ip = (
+        request.headers.get("x-real-ip")
+        or (request.client.host if request.client else None)
+        or "unknown"
+    )
     client = _get_redis_client()
     if client is None:
         # Fail open — Redis unavailable.
