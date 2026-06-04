@@ -1,0 +1,9 @@
+id: qiime2_rarefaction_canonical
+mode: rarefaction
+description: Multi-metric alpha-rarefaction curves (sample × depth × iteration; shannon, observed_features, faith_pd), fanned in from the per-metric QIIME2 rarefaction CSVs.
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/qiime2/diversityalphararefaction
+find: { path_glob: "**/qiime2/alpha-rarefaction/*.csv" }
+recipe: qiime2/rarefaction_canonical.py
+fixture: rarefaction_canonical.tsv
+renders_as:
+  - { component: advanced_viz, kind: rarefaction, roles: {sample_id: sample_id, depth: depth, metric: shannon} }
