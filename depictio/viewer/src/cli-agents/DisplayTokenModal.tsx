@@ -115,7 +115,9 @@ const DisplayTokenModal: React.FC<DisplayTokenModalProps> = ({ opened, onClose, 
                 silently fails — disable it via withCopyButton={false} and
                 rely on the explicit "Copy YAML" button above which falls
                 back to document.execCommand('copy'). */}
-            <CodeHighlight code={yamlText} language="yaml" withCopyButton={false} />
+            <div data-testid="agent-config-yaml">
+              <CodeHighlight code={yamlText} language="yaml" withCopyButton={false} />
+            </div>
           </>
         )}
       </Stack>

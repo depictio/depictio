@@ -95,6 +95,7 @@ const CreateTokenModal: React.FC<CreateTokenModalProps> = ({
           value={name}
           onChange={(e) => setName(e.currentTarget.value)}
           disabled={submitting}
+          data-testid="cli-config-name-input"
         />
 
         {error && (
@@ -116,6 +117,7 @@ const CreateTokenModal: React.FC<CreateTokenModalProps> = ({
             onClick={handleSave}
             loading={submitting}
             styles={{ root: { backgroundColor: brandColors.green } }}
+            data-testid="save-cli-config-btn"
           >
             Save
           </Button>

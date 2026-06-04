@@ -55,6 +55,7 @@ const DeleteTokenModal: React.FC<DeleteTokenModalProps> = ({ opened, onClose, on
           onChange={(e) => setConfirmInput(e.currentTarget.value)}
           leftSection={<Icon icon="mdi:delete-alert" width={18} />}
           disabled={submitting}
+          data-testid="delete-confirm-input"
         />
         <Group justify="flex-end" mt="xl">
           <Button variant="subtle" color="gray" radius="md" onClick={onClose} disabled={submitting}>
@@ -65,6 +66,7 @@ const DeleteTokenModal: React.FC<DeleteTokenModalProps> = ({ opened, onClose, on
             disabled={!canConfirm}
             loading={submitting}
             onClick={handleConfirm}
+            data-testid="confirm-delete-token-btn"
             styles={{ root: { backgroundColor: brandColors.red } }}
           >
             Confirm Delete

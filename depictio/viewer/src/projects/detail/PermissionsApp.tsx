@@ -614,6 +614,7 @@ const PermissionsApp: React.FC = () => {
                       }}
                       onChange={(e) => setPendingPublic(e.currentTarget.checked)}
                       disabled={!canManage || visibilityBusy}
+                      data-testid="project-visibility-switch"
                     />
                   </Group>
                   <Text size="sm" c="dimmed">
@@ -699,6 +700,7 @@ const PermissionsApp: React.FC = () => {
                         ]}
                         limit={20}
                         comboboxProps={{ withinPortal: true }}
+                        data-testid="permissions-add-user-input"
                       />
                       <Button
                         size="sm"
@@ -707,6 +709,7 @@ const PermissionsApp: React.FC = () => {
                         onClick={handleAdd}
                         disabled={!emailInput.trim()}
                         leftSection={<Icon icon="mdi:plus" width={14} />}
+                        data-testid="permissions-add-user-btn"
                       >
                         Add user
                       </Button>
@@ -761,6 +764,7 @@ const PermissionsApp: React.FC = () => {
               }
               onClick={confirmToggleVisibility}
               loading={visibilityBusy}
+              data-testid="confirm-visibility-btn"
             >
               {pendingPublic ? 'Make Public' : 'Make Private'}
             </Button>

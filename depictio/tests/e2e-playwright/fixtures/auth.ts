@@ -1,12 +1,13 @@
 import { test as base, expect, Page, APIRequestContext } from "@playwright/test";
 import { credentials, TestUser, UserType } from "./credentials";
 
-const API_URL = process.env.PLAYWRIGHT_API_URL ?? "http://localhost:8101";
-const API_PREFIX = "/depictio/api/v1";
+export const API_URL = process.env.PLAYWRIGHT_API_URL ?? "http://localhost:8101";
+export const API_PREFIX = "/depictio/api/v1";
 
 interface AuthMode {
   is_single_user_mode: boolean;
   is_public_mode: boolean;
+  is_demo_mode: boolean;
 }
 
 let _authModeCache: AuthMode | null = null;
@@ -23,9 +24,14 @@ export async function getAuthMode(): Promise<AuthMode> {
     _authModeCache = {
       is_single_user_mode: data.is_single_user_mode ?? false,
       is_public_mode: data.is_public_mode ?? false,
+      is_demo_mode: data.is_demo_mode ?? false,
     };
   } catch {
-    _authModeCache = { is_single_user_mode: false, is_public_mode: false };
+    _authModeCache = {
+      is_single_user_mode: false,
+      is_public_mode: false,
+      is_demo_mode: false,
+    };
   }
   return _authModeCache;
 }
@@ -49,7 +55,9 @@ export async function apiLogin(
   email: string,
   password: string,
 ): Promise<TokenBundle> {
-  const delays = [0, 1500, 3000];
+  // Backoff long enough to ride out the per-minute login rate-limit window
+  // when several workers (or consecutive local runs) hammer /auth/login.
+  const delays = [0, 2000, 5000, 15000, 30000];
   for (let i = 0; i < delays.length; i++) {
     if (delays[i]) await new Promise((r) => setTimeout(r, delays[i]));
     const response = await request.post(`${API_URL}${API_PREFIX}/auth/login`, {

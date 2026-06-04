@@ -81,6 +81,7 @@ const EditPasswordModal: React.FC<EditPasswordModalProps> = ({ opened, onClose }
     >
       <Stack
         gap="md"
+        data-testid="edit-password-modal"
         onKeyDown={(e) => {
           if (e.key === 'Enter' && !submitting) {
             e.preventDefault();
@@ -100,6 +101,7 @@ const EditPasswordModal: React.FC<EditPasswordModalProps> = ({ opened, onClose }
           placeholder="Old Password"
           required
           radius="md"
+          data-testid="old-password"
           value={oldPassword}
           onChange={(e) => setOldPassword(e.currentTarget.value)}
           disabled={submitting}
@@ -109,6 +111,7 @@ const EditPasswordModal: React.FC<EditPasswordModalProps> = ({ opened, onClose }
           placeholder="New Password"
           required
           radius="md"
+          data-testid="new-password"
           value={newPassword}
           onChange={(e) => setNewPassword(e.currentTarget.value)}
           disabled={submitting}
@@ -118,12 +121,17 @@ const EditPasswordModal: React.FC<EditPasswordModalProps> = ({ opened, onClose }
           placeholder="Confirm Password"
           required
           radius="md"
+          data-testid="confirm-new-password"
           value={confirmPassword}
           onChange={(e) => setConfirmPassword(e.currentTarget.value)}
           disabled={submitting}
         />
         {message && (
-          <Text size="sm" c={message.tone === 'success' ? 'green' : 'red'}>
+          <Text
+            size="sm"
+            c={message.tone === 'success' ? 'green' : 'red'}
+            data-testid="password-message"
+          >
             {message.text}
           </Text>
         )}
@@ -134,6 +142,7 @@ const EditPasswordModal: React.FC<EditPasswordModalProps> = ({ opened, onClose }
             onClick={handleSubmit}
             loading={submitting}
             leftSection={<Icon icon="mdi:content-save" width={16} />}
+            data-testid="save-password-btn"
           >
             Save
           </Button>

@@ -2633,6 +2633,10 @@ jobs:
   e2e-playwright:
     name: e2e-playwright (${{ matrix.auth_mode }})
     needs: [docker-build]
+    # `quality` upstream may be skipped on cache hits, which makes the default
+    # success() condition skip this job too — same guard as the other
+    # docker-build consumers in this workflow.
+    if: always() && needs.docker-build.result == 'success'
     runs-on: ubuntu-22.04
     permissions:
       contents: read
