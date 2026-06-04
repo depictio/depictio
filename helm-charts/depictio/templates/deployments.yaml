@@ -461,7 +461,10 @@ spec:
             - configMapRef:
                 name: {{ .Release.Name }}-backend-config
           env:
-            {{- if .Values.minio.enabled }}
+            # Always injected (no minio.enabled guard): with the bundled MinIO
+            # the Secret carries the generated creds; with an external S3
+            # (minio.enabled=false, e.g. EMBL) the Secret carries the
+            # operator-supplied minio.env.DEPICTIO_MINIO_ROOT_* values.
             - name: DEPICTIO_MINIO_ROOT_USER
               valueFrom:
                 secretKeyRef:
@@ -472,7 +475,6 @@ spec:
                 secretKeyRef:
                   name: {{ .Release.Name }}-depictio-secrets
                   key: MINIO_ROOT_PASSWORD
-            {{- end }}
             # Bootstrap admin / optional CI test user. Sourced from the
             # Secret (not the ConfigMap) so the password never appears in
             # `kubectl describe configmap` output.
@@ -784,7 +786,8 @@ spec:
             - configMapRef:
                 name: {{ .Release.Name }}-celery-config
           env:
-            {{- if .Values.minio.enabled }}
+            # Always injected — see the backend env block for the rationale
+            # (external-S3 deployments need these too).
             - name: DEPICTIO_MINIO_ROOT_USER
               valueFrom:
                 secretKeyRef:
@@ -795,7 +798,6 @@ spec:
                 secretKeyRef:
                   name: {{ .Release.Name }}-depictio-secrets
                   key: MINIO_ROOT_PASSWORD
-            {{- end }}
             - name: PYTHONUNBUFFERED
               value: "1"
           command:
