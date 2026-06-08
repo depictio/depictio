@@ -978,7 +978,7 @@ tabs:
     title: Sample ordination (PCoA, Bray-Curtis)
   - component_type: advanced_viz
     workflow_tag: ampliseq
-    viz_kind: complex_heatmap
+    use: qiime2/complex_heatmap
     data_collection_tag: complex_heatmap_canonical
     config:
       viz_kind: complex_heatmap
@@ -1022,7 +1022,7 @@ tabs:
     title: Taxonomy heatmap (clustered)
   - component_type: advanced_viz
     workflow_tag: ampliseq
-    viz_kind: complex_heatmap
+    use: qiime2/complex_heatmap
     data_collection_tag: bray_curtis_canonical
     config:
       viz_kind: complex_heatmap
