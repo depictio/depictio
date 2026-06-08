@@ -506,48 +506,6 @@ async def make_dashboard_public(
     }
 
 
-@dashboards_endpoint_router.post("/edit_name/{dashboard_id}")
-async def edit_dashboard_name(
-    dashboard_id: PyObjectId,
-    data: dict,
-    current_user: User = Depends(get_current_user),
-):
-    """
-    Edit the name of a dashboard with the given dashboard ID.
-    Now uses project-based permissions (editor level required).
-    Deprecated: Use /edit/{dashboard_id} instead.
-    """
-    new_name = data.get("new_name", None)
-    if not new_name:
-        raise HTTPException(status_code=400, detail="No new name provided.")
-
-    dashboard = dashboards_collection.find_one({"dashboard_id": dashboard_id})
-    if not dashboard:
-        raise HTTPException(
-            status_code=404, detail=f"Dashboard with ID '{dashboard_id}' not found."
-        )
-
-    project_id = dashboard.get("project_id")
-    if not project_id:
-        raise HTTPException(status_code=500, detail="Dashboard is not associated with a project.")
-
-    if not check_project_permission(project_id, current_user, "editor"):
-        raise HTTPException(
-            status_code=403, detail="You don't have permission to edit this dashboard."
-        )
-
-    result = dashboards_collection.find_one_and_update(
-        {"dashboard_id": dashboard_id},
-        {"$set": {"title": new_name}},
-        return_document=True,
-    )
-
-    if result:
-        return {"message": f"Dashboard name updated successfully to '{new_name}'."}
-    else:
-        raise HTTPException(status_code=500, detail="Failed to update dashboard name.")
-
-
 @dashboards_endpoint_router.post("/edit/{dashboard_id}")
 async def edit_dashboard(
     dashboard_id: PyObjectId,

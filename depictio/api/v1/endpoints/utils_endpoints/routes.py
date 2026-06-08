@@ -16,7 +16,6 @@ from depictio.api.v1.db import (
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 from depictio.api.v1.endpoints.utils_endpoints.core_functions import (
     cleanup_orphaned_s3_files,
-    create_bucket,
 )
 from depictio.api.v1.endpoints.utils_endpoints.infrastructure_diagnostics import (
     run_comprehensive_diagnostics,
@@ -30,15 +29,6 @@ from depictio.version import get_version
 
 # Define the router
 utils_endpoint_router = APIRouter()
-
-
-@utils_endpoint_router.get("/create_bucket")
-async def create_bucket_endpoint(current_user=Depends(get_current_user)):
-    """Create an S3 bucket for the application."""
-    if not current_user:
-        raise HTTPException(status_code=401, detail="Current user not found.")
-
-    return create_bucket(current_user)
 
 
 # TODO - remove this endpoint - only for testing purposes in order to drop the S3 bucket content & the DB collections
@@ -617,63 +607,6 @@ async def navigate_with_hybrid_strategy(page, url: str, max_retries: int = 2) ->
 
     logger.error(f"❌ All navigation strategies (optimized + proven) failed for {url}")
     return False, "all_strategies_failed"
-
-
-@utils_endpoint_router.get("/screenshot-dash-fixed/{dashboard_id}", deprecated=True)
-async def screenshot_dash_fixed(
-    dashboard_id: str = "6824cb3b89d2b72169309737",
-    authorization: str | None = Header(None),
-):
-    """
-    Minimal screenshot endpoint - just take a full page screenshot.
-    Only dashboard owners can generate screenshots (except in single user mode).
-
-    DEPRECATED: removed in the React migration. This Dash-targeted endpoint
-    drove the deleted Dash UI and ran Playwright in-process inside the API
-    container (which no longer ships chromium).
-    """
-    raise HTTPException(
-        status_code=410,
-        detail=(
-            "This Dash screenshot endpoint was removed in the React migration. "
-            "Use /depictio/api/v1/utils/screenshot-react-dual/{dashboard_id}."
-        ),
-    )
-
-
-@utils_endpoint_router.get("/screenshot-dash-dual/{dashboard_id}", deprecated=True)
-async def screenshot_dash_dual(dashboard_id: str, current_user=Depends(get_current_user)):
-    """
-    Generate both light and dark mode screenshots in single browser call.
-    Only dashboard owners can generate screenshots.
-
-    **DEPRECATED**: This endpoint is deprecated. Use the Celery task
-    `generate_dashboard_screenshot_dual.delay(dashboard_id, user_id)` directly for
-    production use. This endpoint is maintained for backward compatibility
-    and testing/debugging purposes only.
-
-    **Migration Note**: The screenshot logic has been moved to
-    `depictio.api.v1.services.screenshot_service` for code reuse between
-    API and Celery tasks. This eliminates HTTP indirection and improves
-    performance by ~200-500ms.
-
-    Args:
-        dashboard_id: Dashboard ID to screenshot
-        current_user: Current authenticated user (for permission check)
-
-    Returns:
-        dict: Status and paths to both screenshots
-
-    Raises:
-        HTTPException: Always 410 — removed in the React migration.
-    """
-    raise HTTPException(
-        status_code=410,
-        detail=(
-            "This Dash screenshot endpoint was removed in the React migration. "
-            "Use /depictio/api/v1/utils/screenshot-react-dual/{dashboard_id}."
-        ),
-    )
 
 
 @utils_endpoint_router.get("/screenshot-react-dual/{dashboard_id}")

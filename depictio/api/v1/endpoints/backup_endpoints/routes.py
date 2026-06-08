@@ -363,21 +363,6 @@ async def create_backup(
         raise HTTPException(status_code=500, detail="Backup creation failed.")
 
 
-@backup_endpoint_router.post("/create-enhanced", response_model=BackupResponse, deprecated=True)
-async def create_enhanced_backup(
-    request: BackupRequest,
-    current_user: User = Depends(get_current_user),
-):
-    """
-    DEPRECATED: Use /create endpoint instead.
-
-    Create an enhanced backup including optional S3 deltatable data.
-    This endpoint is deprecated and redirects to the unified /create endpoint.
-    """
-    # Simply call the unified create_backup endpoint
-    return await create_backup(request, current_user)
-
-
 class BackupListResponse(BaseModel):
     success: bool
     backups: list
