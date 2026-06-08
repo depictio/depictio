@@ -293,8 +293,6 @@
         "colorscale": "Viridis",
         "index_column": "sample",
         "normalize": "none",
-        "show_col_dendrogram": false,
-        "show_row_dendrogram": true,
         "viz_kind": "complex_heatmap"
       },
       "wf_tag": "nextflow/viralrecon"

@@ -345,8 +345,18 @@ class ComplexHeatmapConfig(_BaseVizConfig):
 
     viz_kind: Literal["complex_heatmap"] = "complex_heatmap"
 
-    matrix_wf_id: str = Field(..., description="Workflow id of the matrix DC")
-    matrix_dc_id: str = Field(..., description="DC id — wide matrix (row id + numeric cols)")
+    matrix_wf_id: str | None = Field(
+        default=None,
+        description=(
+            "Deprecated/unused: the renderer loads data from the component's "
+            "resolved dc_id (data_collection_tag), not from this field. Kept "
+            "optional for backward compatibility with older seeds."
+        ),
+    )
+    matrix_dc_id: str | None = Field(
+        default=None,
+        description="Deprecated/unused (see matrix_wf_id). Kept optional for back-compat.",
+    )
     index_column: str = Field(default="sample_id", description="Row-label column in the DC")
     value_columns: list[str] | None = Field(
         default=None,
@@ -398,8 +408,18 @@ class UpsetPlotConfig(_BaseVizConfig):
 
     viz_kind: Literal["upset_plot"] = "upset_plot"
 
-    matrix_wf_id: str = Field(..., description="Workflow id of the membership DC")
-    matrix_dc_id: str = Field(..., description="DC id — binary membership table")
+    matrix_wf_id: str | None = Field(
+        default=None,
+        description=(
+            "Deprecated/unused: the renderer loads data from the component's "
+            "resolved dc_id (data_collection_tag), not from this field. Kept "
+            "optional for backward compatibility with older seeds."
+        ),
+    )
+    matrix_dc_id: str | None = Field(
+        default=None,
+        description="Deprecated/unused (see matrix_wf_id). Kept optional for back-compat.",
+    )
     set_columns: list[str] | None = Field(
         default=None,
         description="Explicit list of set columns. None → auto-detect binary columns.",
