@@ -43,6 +43,7 @@ from depictio.models.yaml_serialization.export import (
 from depictio.models.yaml_serialization.loader import (
     delete_dashboard_yaml,
     ensure_yaml_directory,
+    import_dashboard_from_file,
     import_dashboard_from_yaml_dir,
     list_yaml_dashboards,
     sync_status,
@@ -84,6 +85,7 @@ __all__ = [
     # Loader functions
     "delete_dashboard_yaml",
     "ensure_yaml_directory",
+    "import_dashboard_from_file",
     "import_dashboard_from_yaml_dir",
     "list_yaml_dashboards",
     "sync_status",

@@ -151,7 +151,7 @@ def get_project_permissions_for_dashboard(dashboard_id: PyObjectId) -> dict | No
 
 
 def check_project_permission(
-    project_id: PyObjectId, user: User, required_permission: str = "viewer"
+    project_id: PyObjectId | str, user: User, required_permission: str = "viewer"
 ) -> bool:
     """
     Check if user has required permission on project.

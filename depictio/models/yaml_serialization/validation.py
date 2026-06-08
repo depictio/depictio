@@ -11,7 +11,7 @@ from typing import Literal, TypedDict
 import yaml
 from pydantic import ValidationError as PydanticValidationError
 
-from depictio.models.yaml_serialization.mvp_models import MVPDashboard
+from depictio.models.yaml_serialization.mvp_models import DashboardDataLite
 
 
 class ValidationError(TypedDict):
@@ -495,7 +495,7 @@ def _create_empty_result() -> ValidationResult:
 
 
 def _validate_component_types(
-    dashboard: MVPDashboard,
+    dashboard: DashboardDataLite,
     result: ValidationResult,
 ) -> None:
     """Validate component-specific types (chart, aggregation, filter)."""
@@ -507,7 +507,7 @@ def _validate_component_types(
 
 
 def _validate_component_columns_for_dashboard(
-    dashboard: MVPDashboard,
+    dashboard: DashboardDataLite,
     result: ValidationResult,
 ) -> None:
     """Validate column references for all components in the dashboard."""
@@ -570,7 +570,7 @@ def validate_yaml_file(
 
     # Validate using Pydantic model
     try:
-        dashboard = MVPDashboard.model_validate(data)
+        dashboard = DashboardDataLite.model_validate(data)
 
         if len(dashboard.components) == 0:
             result["warnings"].append(

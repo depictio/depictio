@@ -211,10 +211,14 @@ def add_filter(
                 # us tz-aware datetimes (DateRangePicker historically sent
                 # date-only strings, but Timeline now emits ISO with `Z`).
                 start_naive = (
-                    start_dt.replace(tzinfo=None) if getattr(start_dt, "tzinfo", None) else start_dt
+                    start_dt.replace(tzinfo=None)
+                    if isinstance(start_dt, _dt) and start_dt.tzinfo
+                    else start_dt
                 )
                 end_naive = (
-                    end_dt.replace(tzinfo=None) if getattr(end_dt, "tzinfo", None) else end_dt
+                    end_dt.replace(tzinfo=None)
+                    if isinstance(end_dt, _dt) and end_dt.tzinfo
+                    else end_dt
                 )
                 filter_list.append(
                     (date_col >= pl.lit(start_naive)) & (date_col <= pl.lit(end_naive))
