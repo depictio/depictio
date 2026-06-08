@@ -8,6 +8,13 @@ name: Build images (api / worker / viewer)
 
 on:
   pull_request:
+    # PR runs are a dress-rehearsal for the release build recipe (registry
+    # buildcache + VERSION arg + metadata tags) — not a general code check.
+    # The full CI workflow (depictio-ci.yaml) already builds + boots the
+    # api/worker/viewer images for every code PR, so we deliberately do NOT
+    # trigger on broad source paths (depictio/**, packages/**) here. We only
+    # run when files that change the *build recipe itself* are touched, which
+    # is what could break the release pipeline at tag time.
     paths:
       - "docker-images/Dockerfile.api"
       - "docker-images/Dockerfile.worker"
@@ -19,8 +26,7 @@ on:
       - "uv.lock"
       - "pnpm-workspace.yaml"
       - "pnpm-lock.yaml"
-      - "depictio/**"
-      - "packages/**"
+      - ".dockerignore"
       - ".github/workflows/build-images.yaml"
   push:
     tags:
