@@ -109,10 +109,10 @@ jobs:
         run: |
           source venv/bin/activate
           ty version
-          # Scoped to models/ + api/ (the CLAUDE.md contract). depictio/dash/
-          # was removed in the React migration; depictio/cli/ still has known
-          # ty findings tracked separately, so it is not gated here yet.
-          ty check depictio/models/ depictio/api/
+          # Scoped to models/ + api/ + cli/ (matches the pre-commit ty hook).
+          # depictio/dash/ was removed in the React migration; depictio/tests/
+          # is not gated yet.
+          ty check depictio/models/ depictio/api/ depictio/cli/
 
       # - name: Run pre-commit hooks
       #   run: |
