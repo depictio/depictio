@@ -105,11 +105,14 @@ jobs:
           source venv/bin/activate
           ruff check depictio
 
-      # - name: Run ty type checker (must pass)
-      #   run: |
-      #     source venv/bin/activate
-      #     ty version
-      #     ty check depictio/models/ depictio/api/ depictio/dash/ depictio/cli/ depictio/tests/
+      - name: Run ty type checker (must pass)
+        run: |
+          source venv/bin/activate
+          ty version
+          # Scoped to models/ + api/ (the CLAUDE.md contract). depictio/dash/
+          # was removed in the React migration; depictio/cli/ still has known
+          # ty findings tracked separately, so it is not gated here yet.
+          ty check depictio/models/ depictio/api/
 
       # - name: Run pre-commit hooks
       #   run: |

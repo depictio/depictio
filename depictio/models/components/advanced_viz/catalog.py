@@ -393,7 +393,7 @@ def _load_tool_dir(directory: Path) -> CatalogEntry:
         outputs.append(CatalogOutput.model_validate(yaml.safe_load(path.read_text())))
     if not outputs:
         raise ValueError(f"tool folder {directory} has no output files")
-    entry = CatalogEntry(**tool.model_dump(), outputs=outputs)
+    entry = CatalogEntry(**tool.model_dump(), outputs=outputs)  # ty: ignore[missing-argument]
     for out in entry.outputs:
         out._source_dir = directory  # fixtures are co-located in the module folder
     return entry
@@ -503,7 +503,7 @@ def recipe_output_columns(recipe_ref: str) -> list[str]:
     from depictio.recipes import load_recipe
 
     module = load_recipe(recipe_ref)
-    return list(module.EXPECTED_SCHEMA.keys())
+    return list(module.EXPECTED_SCHEMA.keys())  # ty: ignore[unresolved-attribute]
 
 
 # ---------------------------------------------------------------------------

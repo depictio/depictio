@@ -221,7 +221,7 @@ async def generate_dual_theme_screenshots(
             logger.warning(
                 f"Screenshot denied: user {user_id} is not owner of dashboard {dashboard_id}"
             )
-            error_result: ScreenshotResult = {
+            error_result: ScreenshotResult = {  # ty: ignore[invalid-assignment]
                 "status": "forbidden",
                 "dashboard_id": dashboard_id,
                 "light_screenshot": None,
@@ -268,7 +268,7 @@ async def generate_dual_theme_screenshots(
                         "DEPICTIO_VIEWER_SERVICE_NAME to a reachable host."
                     )
                     await browser.close()
-                    skip_result: ScreenshotResult = {
+                    skip_result: ScreenshotResult = {  # ty: ignore[invalid-assignment]
                         "status": "skipped",
                         "light_screenshot": None,
                         "dark_screenshot": None,
@@ -321,7 +321,7 @@ async def generate_dual_theme_screenshots(
             await browser.close()
             logger.info(f"Dual-theme screenshots completed for dashboard {dashboard_id}")
 
-        result: ScreenshotResult = {
+        result: ScreenshotResult = {  # ty: ignore[invalid-assignment]
             "status": "success",
             "light_screenshot": light_path,
             "dark_screenshot": dark_path,
@@ -332,7 +332,7 @@ async def generate_dual_theme_screenshots(
 
     except Exception as e:
         logger.error(f"Dual-theme screenshot error for {dashboard_id}: {e}")
-        error_result: ScreenshotResult = {
+        error_result: ScreenshotResult = {  # ty: ignore[invalid-assignment]
             "status": "error",
             "dashboard_id": dashboard_id,
             "light_screenshot": None,
@@ -417,7 +417,7 @@ async def generate_react_dual_theme_screenshots(
             dashboard_id=dashboard_id, user_id=user_id
         )
         if not is_owner:
-            return {
+            return {  # ty: ignore[invalid-return-type]
                 "status": "forbidden",
                 "dashboard_id": dashboard_id,
                 "light_screenshot": None,
@@ -485,7 +485,7 @@ async def generate_react_dual_theme_screenshots(
                         )
                         await context.close()
                         await browser.close()
-                        return {
+                        return {  # ty: ignore[invalid-return-type]
                             "status": "skipped",
                             "light_screenshot": None,
                             "dark_screenshot": None,
@@ -571,7 +571,7 @@ async def generate_react_dual_theme_screenshots(
             await browser.close()
             logger.info(f"React dual-theme screenshots completed for {dashboard_id}")
 
-        return {
+        return {  # ty: ignore[invalid-return-type]
             "status": "success",
             "light_screenshot": light_path,
             "dark_screenshot": dark_path,
@@ -581,7 +581,7 @@ async def generate_react_dual_theme_screenshots(
 
     except Exception as e:
         logger.error(f"React dual-theme screenshot error for {dashboard_id}: {e}")
-        return {
+        return {  # ty: ignore[invalid-return-type]
             "status": "error",
             "dashboard_id": dashboard_id,
             "light_screenshot": None,

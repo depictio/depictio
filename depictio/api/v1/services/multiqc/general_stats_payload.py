@@ -426,7 +426,7 @@ def _create_violin_plot(
     df_general_stats: pd.DataFrame,
     reformatted_column_metadata: dict,
     display_to_original_mapping: dict | None = None,
-) -> go.Figure:
+) -> go.Figure:  # ty: ignore[unresolved-attribute]
     """Create MultiQC-style violin plot from general stats DataFrame."""
     VIOLIN_HEIGHT = 70
     EXTRA_HEIGHT = 63
@@ -434,7 +434,7 @@ def _create_violin_plot(
     metrics = [col for col in df_general_stats.columns if col != "Sample Name"]
     if not metrics:
         return (
-            go.Figure()
+            go.Figure()  # ty: ignore[unresolved-attribute]
             .add_annotation(
                 text="No metrics available for violin plot",
                 xref="paper",
@@ -466,7 +466,7 @@ def _create_violin_plot(
         )
 
     num_samples = len(df_general_stats)
-    layout = go.Layout(
+    layout = go.Layout(  # ty: ignore[unresolved-attribute]
         title={
             "text": f"General Statistics<br><span style='font-size: 12px;'>{num_samples} samples</span>",
             "x": 0.5,
@@ -496,7 +496,7 @@ def _create_violin_plot(
         },
         violingap=0,
     )
-    fig = go.Figure(layout=layout)
+    fig = go.Figure(layout=layout)  # ty: ignore[unresolved-attribute]
 
     for metric_idx, metric_data in enumerate(metric_info):
         metric = metric_data["display_name"]
@@ -546,7 +546,7 @@ def _create_violin_plot(
         }
 
         fig.add_trace(
-            go.Violin(
+            go.Violin(  # ty: ignore[unresolved-attribute]
                 x=values,
                 y=[metric_idx] * len(values),
                 name=metric,
@@ -566,7 +566,7 @@ def _create_violin_plot(
             )
         )
         fig.add_trace(
-            go.Scatter(
+            go.Scatter(  # ty: ignore[unresolved-attribute]
                 x=values,
                 y=[metric_idx] * len(values),
                 mode="markers",

@@ -22,7 +22,7 @@ def process_code_mode_figure(
     df: Any,
     current_theme: str,
     task_id: str,
-) -> tuple[bool, go.Figure | None, str | None]:
+) -> tuple[bool, go.Figure | None, str | None]:  # ty: ignore[unresolved-attribute]
     """
     Process a figure in code mode by executing user-provided code.
 
@@ -72,7 +72,7 @@ def create_figure_from_data(
     theme: str = "light",
     selection_enabled: bool = False,
     selection_column: str | None = None,
-) -> go.Figure:
+) -> go.Figure:  # ty: ignore[unresolved-attribute]
     """
     Create Plotly figure from DataFrame and parameters.
 

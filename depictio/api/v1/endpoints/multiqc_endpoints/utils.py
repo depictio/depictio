@@ -640,7 +640,7 @@ def _load_workflow_and_dc(project_doc: dict, dc_id: str):
             current_id = dc_dict.get("id") or dc_dict.get("_id")
             if current_id and str(current_id) == str(dc_id):
                 try:
-                    workflow = Workflow(**wf_dict)
+                    workflow = Workflow(**wf_dict)  # ty: ignore[missing-argument]
                 except Exception as exc:
                     logger.error(f"Failed to parse workflow for DC {dc_id}: {exc}")
                     return None, None

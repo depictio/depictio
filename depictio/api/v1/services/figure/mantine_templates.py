@@ -58,9 +58,9 @@ _SEQUENTIAL_COLORS = [
 _SEQUENTIAL = [[i / (len(_SEQUENTIAL_COLORS) - 1), c] for i, c in enumerate(_SEQUENTIAL_COLORS)]
 
 
-def _build(colorway: list[str], bg: str, grid: str) -> go.layout.Template:
+def _build(colorway: list[str], bg: str, grid: str) -> go.layout.Template:  # ty: ignore[unresolved-attribute]
     axis = dict(gridcolor=grid, gridwidth=0.5, zerolinecolor=grid)
-    return go.layout.Template(
+    return go.layout.Template(  # ty: ignore[unresolved-attribute]
         layout=dict(
             colorway=colorway,
             paper_bgcolor=bg,
