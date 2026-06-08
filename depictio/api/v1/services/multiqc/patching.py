@@ -6,6 +6,54 @@ without dragging in Dash callback machinery.
 """
 
 import copy
+import re
+
+# Strip read-pair / lane / replicate suffixes (HG001_R1 -> HG001) so a base
+# sample name selected in an interactive component still matches MultiQC's
+# suffixed mapping keys.
+_SAMPLE_SUFFIX_RE = re.compile(r"_(?:R\d+|L\d+|REP\d+|TECH\d+)$", re.IGNORECASE)
+
+
+def expand_canonical_samples_to_variants(
+    canonical_samples: list[str], sample_mappings: dict[str, list[str]]
+) -> list[str]:
+    """Expand canonical sample IDs to all their MultiQC variants using stored mappings.
+
+    Lookup tries exact key first, then falls back to base-name match
+    (stripping ``_R1`` / ``_R2`` / ``_REP1`` / ``_L001`` style suffixes from
+    the mapping keys). Without the fallback, an interactive MultiSelect on
+    a sample column emitting a base name like ``HG001`` matches nothing in
+    a mapping keyed by ``HG001_R1`` / ``HG001_R2`` (MultiQC's own keying
+    when read-pair suffixes are present), so plot patching shows nothing.
+
+    When no mappings are available, returns canonical samples unchanged.
+    """
+    if not sample_mappings:
+        return canonical_samples
+
+    # Pre-bucket keys by suffix-stripped base. Mappings come pre-aggregated
+    # across reports, so the same base can show up in multiple suffixed
+    # keys (HG001_R1 + HG001_R2) — union their variants.
+    base_to_variants: dict[str, list[str]] = {}
+    for key, variants in sample_mappings.items():
+        base = _SAMPLE_SUFFIX_RE.sub("", key).lower()
+        base_to_variants.setdefault(base, []).extend(variants)
+
+    expanded_samples: list[str] = []
+    for canonical_id in canonical_samples:
+        variants = sample_mappings.get(canonical_id)
+        if variants:
+            expanded_samples.extend(variants)
+            continue
+
+        fallback = base_to_variants.get(canonical_id.lower())
+        if fallback:
+            expanded_samples.extend(dict.fromkeys(fallback))
+            continue
+
+        expanded_samples.append(canonical_id)
+
+    return expanded_samples
 
 
 def patch_multiqc_figures(

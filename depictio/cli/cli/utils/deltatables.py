@@ -833,6 +833,8 @@ def process_recipe_data_collection(
 
         _recipes_init = pathlib.Path(__file__).resolve().parents[3] / "recipes" / "__init__.py"
         _spec = importlib.util.spec_from_file_location("depictio.recipes", _recipes_init)
+        if _spec is None or _spec.loader is None:
+            raise ImportError(f"Could not load depictio.recipes from {_recipes_init}")
         _mod = importlib.util.module_from_spec(_spec)
         _spec.loader.exec_module(_mod)
         RecipeError = _mod.RecipeError

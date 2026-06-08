@@ -4,6 +4,7 @@ from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException
 from pymongo import ReturnDocument
 
+from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import projects_collection, workflows_collection
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user, get_user_or_anonymous
 from depictio.api.v1.endpoints.workflow_endpoints.utils import compare_models
@@ -199,9 +200,15 @@ async def get_workflow_tag_from_id(
     return workflow["workflow_tag"]
 
 
-@workflows_endpoint_router.post("/create")
+@workflows_endpoint_router.post("/create", deprecated=True)
 async def create_workflow(workflow: dict, current_user: User = Depends(get_current_user)):
-    """Create a new workflow."""
+    """Create a new workflow.
+
+    Deprecated: workflows are created/updated as part of a project via
+    projects/create and projects/update. This standalone route is scheduled
+    for removal and has no remaining callers.
+    """
+    logger.warning("DEPRECATED endpoint workflows/create called; scheduled for removal.")
     if not current_user:
         raise HTTPException(status_code=401, detail="User not found.")
 
@@ -235,9 +242,14 @@ async def create_workflow(workflow: dict, current_user: User = Depends(get_curre
     return convert_objectid_to_str(workflow)
 
 
-@workflows_endpoint_router.put("/update")
+@workflows_endpoint_router.put("/update", deprecated=True)
 async def update_workflow(workflow: Workflow, current_user: User = Depends(get_current_user)):
-    """Update an existing workflow."""
+    """Update an existing workflow.
+
+    Deprecated: workflows are updated via projects/update. Scheduled for
+    removal; no remaining callers.
+    """
+    logger.warning("DEPRECATED endpoint workflows/update called; scheduled for removal.")
     if not current_user:
         raise HTTPException(status_code=401, detail="Token is required to update a workflow.")
 
@@ -277,9 +289,14 @@ async def update_workflow(workflow: Workflow, current_user: User = Depends(get_c
     return convert_objectid_to_str(updated_workflow_data)
 
 
-@workflows_endpoint_router.delete("/delete/{workflow_id}")
+@workflows_endpoint_router.delete("/delete/{workflow_id}", deprecated=True)
 async def delete_workflow(workflow_id: str, current_user: User = Depends(get_current_user)):
-    """Delete a workflow by ID."""
+    """Delete a workflow by ID.
+
+    Deprecated: workflow lifecycle is managed through the owning project.
+    Scheduled for removal; no remaining callers.
+    """
+    logger.warning("DEPRECATED endpoint workflows/delete called; scheduled for removal.")
     workflow_oid = ObjectId(workflow_id)
     existing_workflow = workflows_collection.find_one({"_id": workflow_oid})
 
@@ -307,13 +324,19 @@ async def delete_workflow(workflow_id: str, current_user: User = Depends(get_cur
     return {"message": f"Workflow {workflow_tag} with ID '{workflow_id}' deleted successfully"}
 
 
-@workflows_endpoint_router.post("/compare_workflow_models")
+@workflows_endpoint_router.post("/compare_workflow_models", deprecated=True)
 async def compare_models_endpoint(
     new_workflow: Workflow,
     existing_workflow: Workflow,
     current_user=Depends(get_current_user),
 ):
-    """Compare two workflow models for equality."""
+    """Compare two workflow models for equality.
+
+    Deprecated: scheduled for removal; no remaining callers.
+    """
+    logger.warning(
+        "DEPRECATED endpoint workflows/compare_workflow_models called; scheduled for removal."
+    )
     if not current_user:
         raise HTTPException(status_code=401, detail="Current user not found.")
     if not new_workflow or not existing_workflow:

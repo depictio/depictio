@@ -35,9 +35,9 @@ shots from the same folder — no frontend lookup change was needed.
   `generate_dashboard_screenshot_dual` (active task; signature preserved
   for existing callers; body now calls the React variant).
 - **`depictio/api/v1/endpoints/utils_endpoints/routes.py`** —
-  `/screenshot-react-dual/{id}` (active), `/screenshot-dash-fixed/{id}`
-  and `/screenshot-dash-dual/{id}` (both **deprecated**, marked
-  `deprecated=True`, log warnings on call).
+  `/screenshot-react-dual/{id}` (active). The legacy Dash-targeted
+  `/screenshot-dash-fixed/{id}` and `/screenshot-dash-dual/{id}` routes were
+  removed after the React migration (they only returned HTTP 410).
 
 ## Why React over Dash
 

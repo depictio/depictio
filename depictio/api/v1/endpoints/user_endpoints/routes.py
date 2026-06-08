@@ -37,12 +37,8 @@ from depictio.api.v1.endpoints.user_endpoints.core_functions import (
 from depictio.api.v1.endpoints.user_endpoints.rate_limit import enforce_rate_limit
 from depictio.api.v1.endpoints.user_endpoints.utils import (
     create_access_token,
-    delete_group_helper,
-    update_group_in_users_helper,
 )
-from depictio.models.models.base import convert_objectid_to_str
 from depictio.models.models.users import (
-    GroupBeanie,
     RequestEditPassword,
     RequestUserRegistration,
     TokenBeanie,
@@ -52,7 +48,6 @@ from depictio.models.models.users import (
     UserBaseUI,
     UserBeanie,
 )
-from depictio.models.utils import convert_model_to_dict
 
 auth_endpoint_router = APIRouter()
 
@@ -194,12 +189,15 @@ async def login(
     return token
 
 
-@auth_endpoint_router.post("/create_token", include_in_schema=True)
+@auth_endpoint_router.post("/create_token", include_in_schema=True, deprecated=True)
 async def create_token(
     token_data: TokenData,
     api_key: str = Header(..., description="Internal API key for authentication"),
 ) -> TokenBeanie:
     """Create a new API token for a user.
+
+    Deprecated: api-key-gated provisioning endpoint with no remaining callers
+    (clients use the user-scoped /auth/me/tokens). Scheduled for removal.
 
     Internal endpoint that requires API key authentication.
 
@@ -214,6 +212,7 @@ async def create_token(
         HTTPException: 403 if API key is invalid.
         HTTPException: 400 if token with same name already exists.
     """
+    logger.warning("DEPRECATED endpoint auth/create_token called; scheduled for removal.")
     if not _is_valid_internal_api_key(api_key):
         raise HTTPException(status_code=403, detail="Invalid API key")
 
@@ -300,12 +299,15 @@ async def refresh_token_browser(request: dict) -> dict:
     }
 
 
-@auth_endpoint_router.post("/refresh_token", include_in_schema=True)
+@auth_endpoint_router.post("/refresh_token", include_in_schema=True, deprecated=True)
 async def refresh_token_endpoint(
     request: dict,
     api_key: str = Header(..., description="Internal API key for authentication"),
 ) -> dict:
     """Refresh an access token using a valid refresh token.
+
+    Deprecated: api-key-gated mirror of /auth/refresh (which clients use)
+    with no remaining callers. Scheduled for removal.
 
     Args:
         request: Dict containing 'refresh_token' key.
@@ -318,6 +320,7 @@ async def refresh_token_endpoint(
         HTTPException: 403 if API key is invalid.
         HTTPException: 401 if refresh token is invalid or expired.
     """
+    logger.warning("DEPRECATED endpoint auth/refresh_token called; scheduled for removal.")
     if not _is_valid_internal_api_key(api_key):
         raise HTTPException(status_code=403, detail="Invalid API key")
 
@@ -399,12 +402,15 @@ async def api_fetch_user_from_email(
     return user
 
 
-@auth_endpoint_router.get("/fetch_user/from_id", include_in_schema=True)
+@auth_endpoint_router.get("/fetch_user/from_id", include_in_schema=True, deprecated=True)
 async def api_fetch_user_from_id(
     user_id: PydanticObjectId,
     api_key: str = Header(..., description="Internal API key for authentication"),
 ) -> User:
     """Fetch user by ID.
+
+    Deprecated: api-key-gated lookup with no remaining callers (internal code
+    uses the _async_fetch_user_from_id helper directly). Scheduled for removal.
 
     Args:
         user_id: MongoDB ObjectId of the user to fetch.
@@ -417,6 +423,7 @@ async def api_fetch_user_from_id(
         HTTPException: 403 if API key is invalid.
         HTTPException: 404 if user not found for the ID.
     """
+    logger.warning("DEPRECATED endpoint auth/fetch_user/from_id called; scheduled for removal.")
     if not _is_valid_internal_api_key(api_key):
         raise HTTPException(status_code=403, detail="Invalid API key")
 
@@ -537,11 +544,18 @@ async def get_current_user_info_optional(
     }
 
 
-@auth_endpoint_router.get("/get_anonymous_user_session", include_in_schema=True)
+@auth_endpoint_router.get("/get_anonymous_user_session", include_in_schema=True, deprecated=True)
 async def api_get_anonymous_user_session(
     api_key: str = Header(..., description="Internal API key for authentication"),
 ) -> dict:
-    """Get the anonymous user session data for unauthenticated mode."""
+    """Get the anonymous user session data for unauthenticated mode.
+
+    Deprecated: api-key-gated variant with no remaining callers (clients use
+    /auth/public/get_anonymous_user_session). Scheduled for removal.
+    """
+    logger.warning(
+        "DEPRECATED endpoint auth/get_anonymous_user_session called; scheduled for removal."
+    )
     logger.debug("Fetching anonymous user session")
 
     if not _is_valid_internal_api_key(api_key):
@@ -562,13 +576,16 @@ async def api_get_anonymous_user_session(
     return session_data
 
 
-@auth_endpoint_router.post("/create_temporary_user", include_in_schema=True)
+@auth_endpoint_router.post("/create_temporary_user", include_in_schema=True, deprecated=True)
 async def create_temporary_user_endpoint(
     expiry_hours: int = 24,
     expiry_minutes: int = 0,
     api_key: str = Header(..., description="Internal API key for authentication"),
 ) -> dict:
     """Create a temporary user with automatic expiration.
+
+    Deprecated: api-key-gated variant with no remaining callers (clients use
+    /auth/public/create_temporary_user). Scheduled for removal.
 
     Args:
         expiry_hours: Number of hours until the user expires (default: 24)
@@ -577,6 +594,7 @@ async def create_temporary_user_endpoint(
     Returns:
         Session data for the temporary user
     """
+    logger.warning("DEPRECATED endpoint auth/create_temporary_user called; scheduled for removal.")
     logger.debug(f"Creating temporary user with expiry: {expiry_hours} hours")
 
     if not _is_valid_internal_api_key(api_key):
@@ -605,11 +623,15 @@ async def create_temporary_user_endpoint(
     return session_data
 
 
-@auth_endpoint_router.post("/cleanup_expired_temporary_users", include_in_schema=True)
+@auth_endpoint_router.post(
+    "/cleanup_expired_temporary_users", include_in_schema=True, deprecated=True
+)
 async def cleanup_expired_temporary_users_endpoint(
     api_key: str = Header(..., description="Internal API key for authentication"),
 ) -> dict:
     """Clean up expired temporary users and their tokens.
+
+    Deprecated: no remaining callers. Scheduled for removal.
 
     Args:
         api_key: Internal API key for authentication
@@ -617,6 +639,9 @@ async def cleanup_expired_temporary_users_endpoint(
     Returns:
         Cleanup results
     """
+    logger.warning(
+        "DEPRECATED endpoint auth/cleanup_expired_temporary_users called; scheduled for removal."
+    )
     logger.debug("Cleaning up expired temporary users")
 
     if not _is_valid_internal_api_key(api_key):
@@ -754,68 +779,13 @@ async def register(
     return result
 
 
-# DISABLED: Group management endpoints disabled for user-only permissions
-# @auth_endpoint_router.get("/get_all_groups", include_in_schema=False)
-# async def get_all_groups(current_user=Depends(get_current_user)):
-#     if not current_user:
-#         raise HTTPException(status_code=401, detail="Current user not found.")
-#     if not current_user.is_admin:
-#         raise HTTPException(status_code=401, detail="Current user is not an admin.")
-#     from depictio.api.v1.db import groups_collection
-#
-#     groups = groups_collection.find()
-#     groups = [convert_objectid_to_str(group) for group in groups]
-#     return groups
-
-
-# @auth_endpoint_router.get("/get_all_groups_including_users", include_in_schema=False)
-# async def get_all_groups_with_users(current_user=Depends(get_current_user)):
-#     if not current_user:
-#         raise HTTPException(status_code=401, detail="Current user not found.")
-#     if not current_user.is_admin:
-#         raise HTTPException(status_code=401, detail="Current user is not an admin.")
-#     from depictio.api.v1.db import groups_collection, users_collection
-#
-#     groups = groups_collection.find()
-#     groups = [convert_objectid_to_str(group) for group in groups]
-#
-#     for group in groups:
-#         group_id = ObjectId(group["_id"])
-#         logger.debug(f"Finding users for group: {group_id}")
-#
-#         # Based on the actual user document structure where groups is an array of objects
-#         # with _id field that contains a $oid field
-#         users = list(users_collection.find({"groups._id": ObjectId(group_id)}))
-#         logger.debug(f"users found: {users}")
-#
-#         if users:
-#             users = [
-#                 convert_objectid_to_str(
-#                     UserBase(
-#                         id=user["_id"],
-#                         email=user["email"],
-#                         is_admin=user["is_admin"],
-#                     ).model_dump(exclude_none=True)
-#                 )
-#                 for user in users
-#             ]
-#             # # drop groups field from users
-#             # for user in users:
-#             #     user.pop("groups", None)
-#             group["users"] = users
-#     from depictio.models.models.users import GroupWithUsers
-#
-#     groups = [GroupWithUsers.from_mongo(group) for group in groups]
-#     groups = [convert_model_to_dict(group, exclude_none=True) for group in groups]
-#
-#     logger.debug(f"Groups with users: {groups}")
-#     return groups
-
-
-@auth_endpoint_router.get("/get_all_users", include_in_schema=False)
+@auth_endpoint_router.get("/get_all_users", include_in_schema=False, deprecated=True)
 async def get_all_users(current_user=Depends(get_current_user)):
     """
     Get all users in the system for user management purposes.
+
+    Deprecated: duplicate of /auth/list (which clients use). Scheduled for
+    removal; no remaining callers.
 
     Args:
         current_user: Currently authenticated user (must be admin)
@@ -826,6 +796,7 @@ async def get_all_users(current_user=Depends(get_current_user)):
     Raises:
         HTTPException: If user is not authenticated or not an admin
     """
+    logger.warning("DEPRECATED endpoint auth/get_all_users called; scheduled for removal.")
     if not current_user:
         raise HTTPException(status_code=401, detail="Current user not found.")
     if not current_user.is_admin:
@@ -848,9 +819,11 @@ async def get_all_users(current_user=Depends(get_current_user)):
     return users_list
 
 
-# NOTE: the unauthenticated /get_users_group route was removed in the security
-# sweep — group management endpoints are disabled (see the commented blocks
-# below) and the route had no remaining callers in the repo.
+# NOTE: group-management endpoints (get_all_groups, get_group, get_group_with_users,
+# delete_group, update_group_in_users, get_users_group) were removed because the
+# product is user-only and none had any remaining callers in the repo. Groups still
+# exist as a data concept (seeded at init, attached to users) — only the HTTP routes
+# were dropped.
 
 
 @auth_endpoint_router.post("/edit_password", include_in_schema=True)
@@ -886,11 +859,17 @@ async def edit_password(
         return {"success": False, "message": "Failed to update password"}
 
 
-@auth_endpoint_router.post("/delete_token", include_in_schema=True)
+@auth_endpoint_router.post("/delete_token", include_in_schema=True, deprecated=True)
 async def delete_token(
     token_id: PydanticObjectId,
     api_key: str = Header(..., description="Internal API key for authentication"),
 ):
+    """Delete a token via the internal API key.
+
+    Deprecated: clients use the user-scoped DELETE /auth/me/tokens/{id}.
+    Scheduled for removal; no remaining callers.
+    """
+    logger.warning("DEPRECATED endpoint auth/delete_token called; scheduled for removal.")
     if not _is_valid_internal_api_key(api_key):
         raise HTTPException(
             status_code=403,
@@ -1211,207 +1190,3 @@ async def turn_sysadmin(user_id: str, is_admin: bool, current_user=Depends(get_c
         return {"success": True}
     else:
         return {"success": False}
-
-
-@auth_endpoint_router.delete("/delete_group/{group_id}", include_in_schema=False)
-def delete_group(group_id: str, current_user=Depends(get_current_user)):
-    if not current_user:
-        raise HTTPException(status_code=401, detail="Current user not found.")
-    # Check if the current user is an admin
-    if not current_user.is_admin:
-        raise HTTPException(status_code=403, detail="Admin privileges required.")
-
-    # Ensure group_id is an ObjectId
-    if isinstance(group_id, str):
-        group_id = ObjectId(group_id)  # type: ignore[invalid-assignment]
-    elif isinstance(group_id, dict) and "$oid" in group_id:
-        group_id = ObjectId(group_id["$oid"])  # type: ignore[invalid-assignment]
-    elif isinstance(group_id, ObjectId):
-        # Already an ObjectId, no conversion needed
-        pass
-    else:
-        # Convert to string first, then to ObjectId
-        group_id = ObjectId(str(group_id))  # type: ignore[invalid-assignment]
-
-    response = delete_group_helper(group_id)
-    return response
-
-
-@auth_endpoint_router.post("/update_group_in_users/{group_id}")
-def update_group_in_users(group_id: str, request: dict, current_user=Depends(get_current_user)):
-    if not current_user:
-        raise HTTPException(status_code=401, detail="Current user not found.")
-    # Check if the current user is an admin
-    if not current_user.is_admin:
-        raise HTTPException(status_code=403, detail="Admin privileges required.")
-
-    if not request:
-        raise HTTPException(status_code=400, detail="No request provided")
-
-    if not group_id:
-        raise HTTPException(status_code=400, detail="No group_id provided")
-
-    if "users" not in request:
-        raise HTTPException(status_code=400, detail="No users provided in request")
-
-    logger.debug(f"Request: {request}")
-
-    # Convert user dicts to UserBase objects
-    users = [UserBase(**user) for user in request["users"]]  # type: ignore[missing-argument]
-
-    logger.debug(f"Users: {users}")
-
-    # Ensure group_id is an ObjectId
-    group_id_obj = (
-        ObjectId(group_id["$oid"])
-        if isinstance(group_id, dict) and "$oid" in group_id
-        else (
-            ObjectId(group_id)
-            if isinstance(group_id, str)
-            else group_id
-            if isinstance(group_id, ObjectId)
-            else ObjectId(str(group_id))
-        )
-    )
-    logger.debug(f"Group ID: {group_id_obj}")
-
-    response = update_group_in_users_helper(group_id_obj, users)
-    return response
-
-
-@auth_endpoint_router.get("/get_group_with_users/{group_id}")
-def get_group_with_users(group_id: str, current_user=Depends(get_current_user)):
-    if not current_user:
-        raise HTTPException(status_code=401, detail="Current user not found.")
-    # Check if the current user is an admin
-    if not current_user.is_admin:
-        raise HTTPException(status_code=403, detail="Admin privileges required.")
-
-    # Ensure group_id is an ObjectId
-    if isinstance(group_id, str):
-        group_id = ObjectId(group_id)  # type: ignore[invalid-assignment]
-    elif isinstance(group_id, dict) and "$oid" in group_id:
-        group_id = ObjectId(group_id["$oid"])  # type: ignore[invalid-assignment]
-    elif isinstance(group_id, ObjectId):
-        # Already an ObjectId, no conversion needed
-        pass
-    else:
-        # Convert to string first, then to ObjectId
-        group_id = ObjectId(str(group_id))  # type: ignore[invalid-assignment]
-
-    from depictio.api.v1.db import groups_collection
-
-    group = groups_collection.find_one({"_id": group_id})
-
-    if group:
-        # find users in the group by querying the users collection
-        from depictio.api.v1.db import users_collection
-
-        users = list(users_collection.find({"groups._id": ObjectId(group_id)}))
-        logger.debug(f"users found: {users}")
-
-        if users:
-            users = [
-                convert_objectid_to_str(
-                    UserBase(
-                        id=user["_id"],
-                        email=user["email"],
-                        is_admin=user["is_admin"],
-                    ).model_dump(exclude_none=True)
-                )
-                for user in users
-            ]
-            group["users"] = users
-
-            # Check if group can be converted to GroupWithUsers
-            # TODO: GroupWithUsers not implemented yet
-            # from depictio.models.models.users import GroupWithUsers  # type: ignore[unresolved-import]
-            # group_with_users = GroupWithUsers.from_mongo(group)
-            # return convert_model_to_dict(group_with_users)
-            return convert_model_to_dict(group)
-        else:
-            return convert_model_to_dict(group)
-    else:
-        raise HTTPException(status_code=404, detail="Group not found")
-
-
-@auth_endpoint_router.get("/get_group/{group_id}")
-async def get_group(group_id: str):
-    group = await GroupBeanie.get(group_id)
-    if not group:
-        return {
-            "message": "Group not found",
-            "success": False,
-        }
-
-    logger.debug(group)
-    await group.fetch_all_links()
-    logger.debug(group)
-
-    return {
-        "message": "Group found",
-        "success": True,
-        "group": group,
-    }
-
-
-# @auth_endpoint_router.get("/get_all_groups_including_users")
-# async def get_all_groups_including_users(current_user=Depends(get_current_user)):
-#     if not current_user:
-#         raise HTTPException(status_code=401, detail="Current user not found.")
-#     if not current_user.is_admin:
-#         raise HTTPException(status_code=401, detail="Current user is not an admin.")
-#     from depictio.api.v1.db import groups_collection
-
-#     groups = groups_collection.find()
-
-#     # for group in groups leverage the existing function to get users
-#     new_groups = []
-#     for group in groups:
-#         group_id = ObjectId(group["_id"])
-#         logger.debug(f"Finding users for group: {group_id}")
-#         group_data = await get_group_with_users(group_id, current_user)
-#         logger.debug(f"Group data: {group_data}")
-#         new_groups.append(group_data)
-#     new_groups = [convert_model_to_dict(group) for group in new_groups]
-
-#     # groups = [convert_model_to_dict(group) for group in groups]
-#     return new_groups
-
-
-# @auth_endpoint_router.post("/create_group")
-# async def create_group(
-#     group: GroupBeanie, current_user=Depends(get_current_user)
-# ) -> Dict:
-#     if not current_user:
-#         raise HTTPException(status_code=401, detail="Current user not found.")
-#     # Check if the current user is an admin
-#     if not current_user.is_admin:
-#         raise HTTPException(status_code=401, detail="Current user is not an admin.")
-
-#     if not group:
-#         raise HTTPException(status_code=400, detail="No group provided")
-
-#     if not group.name:
-#         raise HTTPException(status_code=400, detail="No group name provided")
-
-#     response = await create_group_helper(group)
-#     return response  # The CustomJSONResponse will handle serialization
-
-
-# # @auth_endpoint_router.post("/create_group")
-# # def create_group(group: Group, current_user=Depends(get_current_user)):
-# #     if not current_user:
-# #         raise HTTPException(status_code=401, detail="Current user not found.")
-# #     # Check if the current user is an admin
-# #     if not current_user.is_admin:
-# #         raise HTTPException(status_code=401, detail="Current user is not an admin.")
-
-# #     if not group:
-# #         raise HTTPException(status_code=400, detail="No group provided")
-
-# #     if not group.name:
-# #         raise HTTPException(status_code=400, detail="No group name provided")
-
-# #     response = create_group_helper(group)
-# #     return response
