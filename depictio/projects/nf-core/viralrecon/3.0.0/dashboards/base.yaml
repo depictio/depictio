@@ -344,7 +344,7 @@ tabs:
   - component_type: advanced_viz
     workflow_tag: viralrecon
     data_collection_tag: complex_heatmap_canonical
-    viz_kind: complex_heatmap
+    use: mosdepth/complex_heatmap
     config:
       viz_kind: complex_heatmap
       index_column: sample
@@ -352,8 +352,6 @@ tabs:
       cluster_cols: false
       normalize: none
       colorscale: Viridis
-      show_row_dendrogram: true
-      show_col_dendrogram: false
     tag: adv-cov-heatmap-v2w3x4
     index: adv-cov-heatmap
     title: Amplicon coverage heatmap (clustered)

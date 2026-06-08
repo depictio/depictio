@@ -8,4 +8,4 @@ fixture: rel_abundance.tsv
 renders_as:
   - { id: stacked_taxonomy_rel_abundance, component: advanced_viz, kind: stacked_taxonomy, roles: {sample_id: sample, taxon: taxonomy, abundance: rel_abundance} }
   - { id: sunburst, component: advanced_viz, kind: sunburst, roles: {abundance: rel_abundance} }
-  - { id: complex_heatmap, component: advanced_viz, kind: complex_heatmap, roles: {index: taxonomy} }
+  - { id: complex_heatmap, component: advanced_viz, kind: complex_heatmap, roles: {} }

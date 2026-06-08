@@ -139,9 +139,9 @@ CANONICAL_SCHEMAS: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
 #
 # Aliases are matched case-insensitively. Each set contains the literal role
 # name plus common real-world variants (nf-core / QIIME2 / DESeq2 outputs,
-# typical short forms). When adding a producer to producers.py whose columns
-# map to a viz role, mirror those column names here so the dtype-aware
-# suggester surfaces the same viz kind the producer fingerprint does.
+# typical short forms). When adding support for a new tool output whose columns
+# map to a viz role, mirror those column names here so the dtype-aware suggester
+# surfaces the matching viz kind.
 ROLE_NAMES: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
     "volcano": {
         "feature_id": frozenset(
@@ -528,7 +528,6 @@ class VizSuggestion:
     viz_kind: AdvancedVizKind
     confidence: float
     role_candidates: dict[str, list[str]]
-    producer_name: str | None = None  # populated when a Producer fingerprint matches
 
 
 def suggest_viz_kinds(
@@ -558,10 +557,9 @@ def suggest_viz_kinds(
     suggestions: list[VizSuggestion] = []
     for kind, required in CANONICAL_SCHEMAS.items():
         if not required:
-            # Schemas with no required roles (sankey, upset_plot) match
-            # via producer fingerprints in producers.py instead — the
-            # suggestion engine can't say anything useful about them from
-            # schema alone.
+            # Schemas with no required roles (sankey, upset_plot) bind derived
+            # DCs and are authored via `use:`; the schema-only suggester can't
+            # say anything useful about them, so skip.
             continue
         role_aliases = ROLE_NAMES.get(kind, {})
         role_candidates: dict[str, list[str]] = {}
@@ -581,41 +579,6 @@ def suggest_viz_kinds(
     return suggestions
 
 
-def suggest_producers(dc_schema: dict[str, str]) -> list[tuple[str, float]]:
-    """Identify known tool outputs whose required_columns fingerprint matches.
-
-    DEPRECATED / being retired (catalog direction v3): this column-name
-    fingerprinting is unreliable — it ignores dtypes, tiny fingerprints (1-2
-    cols) cause false positives, and there is no specificity ranking. It is kept
-    only because the API + React "suggested producer" chips still call it;
-    removal is a pending frontend PR. Prefer `suggest_viz_kinds` (role/dtype
-    based) for the free-mode mapping assist, and `catalog match`/`compose` for
-    scan-time module recognition.
-
-    Producer fingerprints look at column NAMES (case-sensitive), not dtypes.
-
-    Returns:
-        Sorted list of (producer_name, match_ratio). match_ratio = fraction
-        of the producer's required_columns present in dc_schema. Only
-        producers with match_ratio == 1.0 (full fingerprint match) are
-        meaningful — anything less is coincidence.
-    """
-    # Lazy import to keep schemas.py import-cheap.
-    from depictio.models.components.advanced_viz.producers import all_producers
-
-    matches: list[tuple[str, float]] = []
-    cols = set(dc_schema.keys())
-    for p in all_producers():
-        if not p.required_columns:
-            continue  # non-tabular producers (e.g. Newick) don't fingerprint
-        present = len(p.required_columns & cols)
-        ratio = present / len(p.required_columns)
-        if ratio == 1.0:
-            matches.append((p.name, ratio))
-    matches.sort(key=lambda m: (-m[1], m[0]))
-    return matches
-
-
 __all__ = [
     "BindingError",
     "CANONICAL_SCHEMAS",
@@ -625,7 +588,6 @@ __all__ = [
     "StackedTaxonomyConfig",
     "VizSuggestion",
     "VolcanoConfig",
-    "suggest_producers",
     "suggest_viz_kinds",
     "validate_binding",
 ]

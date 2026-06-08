@@ -24,8 +24,10 @@ import AdvancedVizFrame from './AdvancedVizFrame';
 import { applyDataTheme, applyLayoutTheme } from './plotlyTheme';
 
 interface ComplexHeatmapConfig {
-  matrix_wf_id: string;
-  matrix_dc_id: string;
+  /** Deprecated/unused: data comes from the component's resolved dc_id
+   *  (metadata.dc_id), not these fields. Optional for back-compat. */
+  matrix_wf_id?: string;
+  matrix_dc_id?: string;
   index_column: string;
   value_columns?: string[] | null;
   row_annotation_cols?: string[];

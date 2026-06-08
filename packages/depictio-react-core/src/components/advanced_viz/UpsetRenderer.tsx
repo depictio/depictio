@@ -25,8 +25,10 @@ import AdvancedVizFrame from './AdvancedVizFrame';
 import { applyDataTheme, applyLayoutTheme } from './plotlyTheme';
 
 interface UpsetPlotConfig {
-  matrix_wf_id: string;
-  matrix_dc_id: string;
+  /** Deprecated/unused: data comes from the component's resolved dc_id
+   *  (metadata.dc_id), not these fields. Optional for back-compat. */
+  matrix_wf_id?: string;
+  matrix_dc_id?: string;
   set_columns?: string[] | null;
   /** Optional per-set colour overrides (set name → hex). Forwarded to the
    *  plotly-upset library so set-size bars + dots + intersection bars use

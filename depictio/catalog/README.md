@@ -9,8 +9,9 @@ raw nf-core file  ──find──▶  recipe (.py)  ──▶  bindable columns
                                             anchored on bio.tools + nf-core + EDAM
 ```
 
-It is **not** a second column→viz suggestion engine (`producers.py` already does
-that). It is the map used to **build / assist dashboards when scanning a run**.
+It is **not** a runtime column→viz suggestion engine (`schemas.suggest_viz_kinds`
+does that from a DC's inferred schema). It is the map used to **build / assist
+dashboards when scanning a run**.
 
 ## Layout
 

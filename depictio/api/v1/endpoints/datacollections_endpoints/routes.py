@@ -57,49 +57,30 @@ async def viz_suggestions(
     min_confidence: float = 1.0,
     current_user: str = Depends(get_user_or_anonymous),
 ) -> dict:
-    """Reverse-lookup viz kinds + known producers compatible with this DC.
+    """Reverse-lookup viz kinds compatible with this DC.
 
     Drives the React DC card's "Suggested visualisations" chip row and the
-    component-creation flow's DC pre-filter. Both surfaces share the same
-    pure-Python suggestion engine in
-    `depictio/models/components/advanced_viz/schemas.py`:
+    component-creation flow's DC pre-filter via the pure-Python suggestion
+    engine in `depictio/models/components/advanced_viz/schemas.py`:
 
       - `viz_kinds`: every AdvancedVizKind whose required role schema can be
         satisfied by some column-dtype combination in this DC. Each entry
         carries per-role candidate columns the UI uses to pre-fill bindings.
-      - `producers`: known tool outputs (DESeq2 results, mosdepth coverage,
-        Bracken, …) whose column-name fingerprint matches this DC. When a
-        producer matches, the UI can pre-fill bindings exactly rather than
-        guessing.
+      - `producers`: always empty. The column-fingerprint suggestion engine
+        (`producers.py`) was retired (dtype-blind, unreliable); the key is
+        kept so existing clients keep deserialising. Removal of the React
+        producer chips is a follow-up frontend change.
 
     Query params:
         min_confidence: 0.0-1.0 — minimum fraction of required roles that
             must have a candidate column for a viz kind to appear in the
             suggestions list. Default 1.0 = strict (only full matches).
     """
-    from depictio.models.components.advanced_viz.producers import get_producer
-    from depictio.models.components.advanced_viz.schemas import (
-        suggest_producers,
-        suggest_viz_kinds,
-    )
+    from depictio.models.components.advanced_viz.schemas import suggest_viz_kinds
 
     schema = await _get_data_collection_polars_schema(data_collection_id, current_user)
 
     viz = suggest_viz_kinds(schema, min_confidence=min_confidence)
-    producer_hits = suggest_producers(schema)
-
-    producers = []
-    for name, ratio in producer_hits:
-        p = get_producer(name)
-        producers.append(
-            {
-                "name": name,
-                "confidence": ratio,
-                "tool": p.tool if p else name,
-                "description": p.description if p else "",
-                "feeds_viz": list(p.feeds_viz) if p else [],
-            }
-        )
 
     return {
         "data_collection_id": str(data_collection_id),
@@ -112,7 +93,7 @@ async def viz_suggestions(
             }
             for s in viz
         ],
-        "producers": producers,
+        "producers": [],
     }
 
 
@@ -120,9 +101,7 @@ class SuggestFromColumnsRequest(BaseModel):
     """Body for the pre-DC viz suggestion endpoint.
 
     The DC creation modal calls this with just column names parsed from the
-    file header — before the file is uploaded. Producer fingerprints match on
-    column names alone, so name-only input is enough to detect DESeq2 results,
-    mosdepth, Bracken, QIIME2, etc.
+    file header — before the file is uploaded.
     """
 
     columns: list[str] = Field(..., min_length=1)
@@ -133,34 +112,16 @@ async def suggest_from_columns(
     body: SuggestFromColumnsRequest,
     current_user: str = Depends(get_user_or_anonymous),
 ) -> dict:
-    """Run the producer suggestion engine on a bare column list (no DC required).
+    """Pre-DC suggestion from a bare column list (no DC required).
 
-    Used by the DC-creation modal to decide whether to surface a passive
-    "looks like X" hint vs. the coordinates fallback toggle. Only producer
-    fingerprints run here — viz-kind reverse lookup needs dtype info that
-    isn't available until the file is parsed server-side.
+    Always returns an empty `producers` list: the column-fingerprint engine
+    (`producers.py`) was retired (dtype-blind, unreliable), and the viz-kind
+    reverse lookup needs dtype info that isn't available until the file is
+    parsed server-side. The endpoint and response shape are kept so the DC
+    creation modal keeps working; removing the React "looks like X" hint is a
+    follow-up frontend change.
     """
-    from depictio.models.components.advanced_viz.producers import get_producer
-    from depictio.models.components.advanced_viz.schemas import suggest_producers
-
-    # suggest_producers only inspects schema keys; the dtype values are unused
-    # by the fingerprint path, so a sentinel value is fine.
-    producer_hits = suggest_producers({c: "" for c in body.columns})
-
-    producers: list[dict] = []
-    for name, ratio in producer_hits:
-        p = get_producer(name)
-        producers.append(
-            {
-                "name": name,
-                "confidence": ratio,
-                "tool": p.tool if p else name,
-                "description": p.description if p else "",
-                "feeds_viz": list(p.feeds_viz) if p else [],
-            }
-        )
-
-    return {"producers": producers}
+    return {"producers": []}
 
 
 @datacollections_endpoint_router.delete("/delete/{workflow_id}/{data_collection_id}")

@@ -13,8 +13,8 @@ For each tool output, one catalog entry links:
   - identity      — bio.tools / nf-core / EDAM URLs (robust anchors).
 
 Anchored on bio.tools & nf-core for robustness, and consumed at **scan time**
-to build or assist dashboards. This catalog is *not* a second column→viz
-suggestion engine (`producers.py` already does that on canonical shapes); it is
+to build or assist dashboards. This catalog is *not* a runtime column→viz
+suggestion engine (`schemas.suggest_viz_kinds` does that from a DC schema); it is
 the file → recipe → component map.
 
 The model layer stays offline + import-cheap: it never imports recipe `.py`

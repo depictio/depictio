@@ -427,17 +427,6 @@ def test_existence_check_flags_unknown_module_and_edam():
 
 
 # ---------------------------------------------------------------------------
-# The catalog does NOT feed the column→viz suggestion engine (decoupled)
-# ---------------------------------------------------------------------------
-
-
-def test_catalog_is_decoupled_from_suggestion_engine():
-    from depictio.models.components.advanced_viz.producers import KNOWN_PRODUCERS, all_producers
-
-    assert all_producers() == KNOWN_PRODUCERS  # catalog is not merged in
-
-
-# ---------------------------------------------------------------------------
 # Fixture aspect: every fixture reads + grounds its renders; recipes resolve
 # ---------------------------------------------------------------------------
 
