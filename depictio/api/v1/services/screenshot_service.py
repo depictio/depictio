@@ -521,6 +521,18 @@ async def generate_react_dual_theme_screenshots(
                         f"{dashboard_id} — capturing anyway"
                     )
 
+                # `.plot-container` mounting only means the figure frame exists;
+                # traces, axes and glyphs are still painting. Give Plotly a
+                # settle window (env-tunable via screenshot_stabilization_wait)
+                # and block on font readiness so text isn't captured mid-swap —
+                # without this, heavy dashboards screenshot with half-drawn
+                # plots and (on a cold font cache) fallback glyphs.
+                await page.wait_for_timeout(settings.performance.screenshot_stabilization_wait)
+                try:
+                    await page.evaluate("document.fonts.ready")
+                except Exception:
+                    logger.debug("React: document.fonts.ready unavailable; continuing")
+
                 await hide_ui_chrome(page)
 
                 popover_open = False
