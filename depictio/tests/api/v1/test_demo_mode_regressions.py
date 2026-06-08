@@ -108,3 +108,120 @@ async def test_rearm_temporary_user_expiry_skips_regular_and_missing_user() -> N
 
     # No user resolved (revoked token edge case) is a safe no-op.
     await routes._rearm_temporary_user_expiry(None)
+
+
+# ---------------------------------------------------------------------------
+# Regression C — project export usable by public/demo-mode (non-admin) visitors
+# ---------------------------------------------------------------------------
+
+
+def _export_request(**overrides):
+    """Build a MigrateExportRequest with sensible UI-flow defaults."""
+    from depictio.api.v1.endpoints.migrate_endpoints.routes import MigrateExportRequest
+
+    params = {"project_id": str(PyObjectId()), "mode": "all"}
+    params.update(overrides)
+    return MigrateExportRequest(**params)
+
+
+def _user(is_admin: bool):
+    user = MagicMock()
+    user.id = PyObjectId()
+    user.is_admin = is_admin
+    return user
+
+
+@pytest.mark.asyncio
+async def test_export_blocked_for_non_admin_on_standard_instance() -> None:
+    """On a standard (non-public) deployment, export stays admin-only."""
+    from fastapi import HTTPException
+
+    from depictio.api.v1.endpoints.migrate_endpoints import routes
+
+    mock_settings = MagicMock()
+    mock_settings.auth.is_public_mode = False
+
+    with patch.object(routes, "settings", mock_settings):
+        with pytest.raises(HTTPException) as exc_info:
+            await routes.export_project(_export_request(), current_user=_user(is_admin=False))
+
+    assert exc_info.value.status_code == 403
+    assert "administrators" in str(exc_info.value.detail).lower()
+
+
+@pytest.mark.asyncio
+async def test_export_rejects_non_admin_target_s3_config_in_public_mode() -> None:
+    """Public-mode visitors may export, but never via the server-to-server S3
+    copy path (an exfiltration vector) — only the in-ZIP bundling UI flow."""
+    from fastapi import HTTPException
+
+    from depictio.api.v1.endpoints.migrate_endpoints import routes
+
+    mock_settings = MagicMock()
+    mock_settings.auth.is_public_mode = True
+
+    with patch.object(routes, "settings", mock_settings):
+        with pytest.raises(HTTPException) as exc_info:
+            await routes.export_project(
+                _export_request(target_s3_config={"endpoint_url": "http://evil:9000"}),
+                current_user=_user(is_admin=False),
+            )
+
+    assert exc_info.value.status_code == 403
+    assert "target s3" in str(exc_info.value.detail).lower()
+
+
+@pytest.mark.asyncio
+async def test_export_in_public_mode_scopes_query_to_readable_projects() -> None:
+    """A non-admin public-mode caller clears the admin gate and the project
+    lookup is permission-scoped: the Mongo query carries the owner/editor/viewer
+    /``is_public`` ``$or`` filter, so a private project they can't read 404s."""
+    from fastapi import HTTPException
+
+    from depictio.api.v1.endpoints.migrate_endpoints import routes
+
+    mock_settings = MagicMock()
+    mock_settings.auth.is_public_mode = True
+
+    mock_projects = MagicMock()
+    mock_projects.find_one.return_value = None  # not readable by this visitor
+
+    visitor = _user(is_admin=False)
+
+    with (
+        patch.object(routes, "settings", mock_settings),
+        patch.object(routes, "projects_collection", mock_projects),
+    ):
+        with pytest.raises(HTTPException) as exc_info:
+            await routes.export_project(_export_request(), current_user=visitor)
+
+    assert exc_info.value.status_code == 404
+    query = mock_projects.find_one.call_args.args[0]
+    assert "$or" in query
+    assert {"is_public": True} in query["$or"]
+
+
+@pytest.mark.asyncio
+async def test_export_admin_query_is_not_permission_scoped() -> None:
+    """Admins keep full reach: the lookup is keyed on the project id alone,
+    with no permission ``$or`` filter, in every mode."""
+    from fastapi import HTTPException
+
+    from depictio.api.v1.endpoints.migrate_endpoints import routes
+
+    mock_settings = MagicMock()
+    mock_settings.auth.is_public_mode = False
+
+    mock_projects = MagicMock()
+    mock_projects.find_one.return_value = None
+
+    with (
+        patch.object(routes, "settings", mock_settings),
+        patch.object(routes, "projects_collection", mock_projects),
+    ):
+        with pytest.raises(HTTPException) as exc_info:
+            await routes.export_project(_export_request(), current_user=_user(is_admin=True))
+
+    assert exc_info.value.status_code == 404
+    query = mock_projects.find_one.call_args.args[0]
+    assert "$or" not in query

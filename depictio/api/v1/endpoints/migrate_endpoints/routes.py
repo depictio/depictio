@@ -37,7 +37,10 @@ from depictio.api.v1.db import (
     users_collection,
 )
 from depictio.api.v1.endpoints.backup_endpoints.routes import _convert_complex_objects_to_strings
-from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
+from depictio.api.v1.endpoints.user_endpoints.routes import (
+    get_current_user,
+    get_user_or_anonymous,
+)
 from depictio.models.models.users import User
 
 migrate_endpoint_router = APIRouter()
@@ -316,7 +319,7 @@ def _copy_s3_locations(
 @migrate_endpoint_router.post("/export-project")
 async def export_project(
     request: MigrateExportRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_user_or_anonymous),
 ) -> StreamingResponse:
     """
     Export a project bundle from this instance.
@@ -324,17 +327,51 @@ async def export_project(
     Scoped to one project: cascades through workflows → data_collections →
     files / deltatables / runs → dashboards.  Optionally copies S3 data to
     a target MinIO (modes all / files).
+
+    Access rules:
+    - Admins can export any project, in every mode.
+    - In public/demo mode the anonymous and temporary visitors are non-admin,
+      so they're allowed to export too — but only projects they can actually
+      read (public projects or ones shared with them), never arbitrary private
+      projects. Uses ``get_user_or_anonymous`` so tokenless public-mode
+      visitors resolve to the anonymous user instead of 401-ing.
+    - On standard (non-public) instances export stays admin-only.
+
+    Non-admin callers may not supply ``target_s3_config``: that triggers the
+    server-to-server S3 copy path (an exfiltration vector gated by
+    ``_validate_target_s3_endpoint``), which has no place in the UI export flow
+    that bundles S3 objects straight into the ZIP.
     """
     if not current_user.is_admin:
-        raise HTTPException(status_code=403, detail="Only administrators can export projects")
+        if not settings.auth.is_public_mode:
+            raise HTTPException(status_code=403, detail="Only administrators can export projects")
+        if request.target_s3_config:
+            raise HTTPException(
+                status_code=403,
+                detail="Non-admin users cannot specify a target S3 config for export",
+            )
 
-    # Resolve project
+    # Resolve project (permission-scoped for non-admin callers)
+    query: dict[str, Any]
     if request.project_id:
-        project = projects_collection.find_one({"_id": ObjectId(request.project_id)})
+        query = {"_id": ObjectId(request.project_id)}
     elif request.project_name:
-        project = projects_collection.find_one({"name": request.project_name})
+        query = {"name": request.project_name}
     else:
         raise HTTPException(status_code=400, detail="Provide project_id or project_name")
+
+    if not current_user.is_admin:
+        # Mirror _async_get_project_from_id: a non-admin may only reach projects
+        # they own/edit/view or that are explicitly public.
+        user_oid = ObjectId(current_user.id)
+        query["$or"] = [
+            {"permissions.owners._id": user_oid},
+            {"permissions.editors._id": user_oid},
+            {"permissions.viewers._id": user_oid},
+            {"is_public": True},
+        ]
+
+    project = projects_collection.find_one(query)
 
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
