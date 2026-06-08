@@ -54,6 +54,49 @@ uvicorn_access_logger.addFilter(TokenMaskingFilter())
 dev_mode = os.environ.get("DEPICTIO_DEV_MODE", "false").lower() == "true"
 
 
+# OpenAPI tag metadata — clarifies which endpoint groups are operator/admin
+# surfaces rather than part of the user-facing client API. These groups are not
+# called by the React frontend or the CLI; they exist for monitoring, ops
+# tooling, and feature-gated subsystems.
+_OPENAPI_TAGS: list[dict[str, Any]] = [
+    {
+        "name": "Celery",
+        "description": (
+            "Admin/ops: Celery worker health and task stats. Not called by the "
+            "frontend or CLI — intended for monitoring/diagnostics."
+        ),
+    },
+    {
+        "name": "Analytics",
+        "description": (
+            "Admin/ops: usage analytics. Feature-gated by DEPICTIO_ANALYTICS_ENABLED "
+            "and has no frontend client yet (kept pending a product decision)."
+        ),
+    },
+    {
+        "name": "Analytics Data",
+        "description": (
+            "Admin/ops: analytics data maintenance. Feature-gated by DEPICTIO_ANALYTICS_ENABLED."
+        ),
+    },
+    {
+        "name": "Real-time Events",
+        "description": (
+            "WebSocket event stream plus an admin status endpoint. Feature-gated by "
+            "DEPICTIO_EVENTS_ENABLED."
+        ),
+    },
+    {
+        "name": "Utils",
+        "description": (
+            "Mixed: public server status/health plus admin-only ops endpoints "
+            "(orphaned-S3 cleanup, infrastructure diagnostics, screenshots). The "
+            "destructive dev helpers require DEPICTIO_ENABLE_DEV_ENDPOINTS."
+        ),
+    },
+]
+
+
 # Create FastAPI application
 app = FastAPI(
     title="Depictio API",
@@ -61,6 +104,7 @@ app = FastAPI(
     debug=dev_mode,
     lifespan=lifespan,
     default_response_class=CustomJSONResponse,
+    openapi_tags=_OPENAPI_TAGS,
 )
 
 _logger = logging.getLogger(__name__)
