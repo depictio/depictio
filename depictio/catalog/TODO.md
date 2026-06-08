@@ -40,11 +40,13 @@ pipeline-agnostic (see `docs/design/bioinformatics-catalog.md`).
   wiring the scan). This is what lets one module own *N* reshape variants keyed
   by input shape, instead of duplicating a recipe per pipeline.
 
-## Retire `suggest_producers` (frontend PR)
-- Column-fingerprint recognition is unreliable; currently only de-scoped in
-  docs. Actual removal touches the API (`/viz-suggestions`,
-  `/suggest-from-columns`) + the React "suggested producer" chips. Keep
-  `suggest_viz_kinds` (role/dtype based).
+## Retire `suggest_producers` — DONE (backend), frontend cleanup pending
+- Column-fingerprint recognition was unreliable; `producers.py` +
+  `suggest_producers` are **removed**. The API (`/viz-suggestions`,
+  `/suggest-from-columns`) now always returns `producers: []` (shape kept so
+  clients keep deserialising). Remaining: remove the React "suggested producer"
+  chips + the `producers` field/types in a frontend PR. `suggest_viz_kinds`
+  (role/dtype based) is the runtime suggestion engine.
 
 ## Render enrichment + preview
 - `renders_as` now supports `figure` (UI `visu_type`/`dict_kwargs` **and** code

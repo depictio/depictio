@@ -10,9 +10,10 @@
 > "compile-to-Producer suggestion layer" into a **decoupled linking table**:
 > `raw file (find) → recipe → bindable columns → dashboard component (renders_as)`,
 > anchored on bio.tools/nf-core/EDAM, consumed at **scan time** to build/assist
-> dashboards. It no longer feeds the column→viz suggestion engine (`producers.py`
-> already covers that on canonical shapes). Schema-ownership rule: **the recipe
-> owns output columns; the YAML declares `columns` only when there is no recipe.**
+> dashboards. The runtime column→viz suggestion engine is `suggest_viz_kinds`
+> (role/dtype based); the old column-fingerprint engine (`producers.py`) has been
+> **removed** (see DIRECTION v3 below). Schema-ownership rule: **the recipe owns
+> output columns; the YAML declares `columns` only when there is no recipe.**
 >
 > **The current, authoritative model is `depictio/catalog/README.md` +
 > `SCHEMA.md` + `catalog.schema.json`.** Sections 3–5 below describe the original
@@ -26,12 +27,12 @@
 >
 > - **Free mode:** the user browses the catalog's modules and **maps columns to
 >   roles by hand** (assisted by `suggest_viz_kinds` / `CANONICAL_SCHEMAS`, which
->   match candidate columns to a viz's roles by dtype). The target is **no
->   automatic column-fingerprint recognition** — `producers.py`'s
->   `suggest_producers` proved unreliable (dtype-blind, tiny fingerprints, no
->   ranking) and is **being retired** (its path is still wired into the API +
->   React chips today; actual removal is a pending frontend PR);
->   `suggest_viz_kinds` (role/dtype based) is kept.
+>   match candidate columns to a viz's roles by dtype). There is **no automatic
+>   column-fingerprint recognition** — `producers.py` / `suggest_producers` proved
+>   unreliable (dtype-blind, tiny fingerprints, no ranking) and have been
+>   **removed** (backend); the API still returns `producers: []` for client
+>   compatibility, and removing the React producer chips is a pending frontend PR.
+>   `suggest_viz_kinds` (role/dtype based) is the suggestion engine.
 > - **Guided mode:** depictio-cli recognises **module outputs** in a run
 >   (`find`, optionally scoped/confirmed by the run's `software_versions.yml`)
 >   and composes a starter dashboard. This is **pipeline-agnostic**: it works for
