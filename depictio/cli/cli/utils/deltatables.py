@@ -837,11 +837,11 @@ def process_recipe_data_collection(
             raise ImportError(f"Could not load depictio.recipes from {_recipes_init}")
         _mod = importlib.util.module_from_spec(_spec)
         _spec.loader.exec_module(_mod)
-        RecipeError = _mod.RecipeError  # ty: ignore[unresolved-attribute]
-        execute_recipe = _mod.execute_recipe  # ty: ignore[unresolved-attribute]
-        _load_recipe = _mod.load_recipe  # ty: ignore[unresolved-attribute]
-        _resolve_sources = _mod.resolve_sources  # ty: ignore[unresolved-attribute]
-        _validate_schema = _mod.validate_schema  # ty: ignore[unresolved-attribute]
+        RecipeError = _mod.RecipeError
+        execute_recipe = _mod.execute_recipe
+        _load_recipe = _mod.load_recipe
+        _resolve_sources = _mod.resolve_sources
+        _validate_schema = _mod.validate_schema
 
     transform_config = data_collection.config.transform
     if transform_config is None:
@@ -894,7 +894,7 @@ def process_recipe_data_collection(
     extra_sources: dict[str, pl.DataFrame] | None = None
     try:
         recipe_module = _load_recipe(recipe_name, pipeline_version)
-        dc_ref_sources = [s for s in recipe_module.SOURCES if s.dc_ref is not None]  # ty: ignore[possibly-unbound-attribute]
+        dc_ref_sources = [s for s in recipe_module.SOURCES if s.dc_ref is not None]
 
         if dc_ref_sources and workflow is not None:
             storage_options = turn_S3_config_into_polars_storage_options(CLI_config.s3_storage)
@@ -945,10 +945,10 @@ def process_recipe_data_collection(
             sources = _resolve_sources(recipe_module, data_dir, overrides)
             if extra_sources:
                 sources.update(extra_sources)
-            result_df = recipe_module.transform(sources)  # ty: ignore[possibly-unbound-attribute]
+            result_df = recipe_module.transform(sources)
             if not isinstance(result_df, pl.DataFrame):
                 return {"result": "error", "message": "transform() did not return a DataFrame"}
-            _validate_schema(result_df, recipe_module.EXPECTED_SCHEMA, recipe_name)  # ty: ignore[possibly-unbound-attribute]
+            _validate_schema(result_df, recipe_module.EXPECTED_SCHEMA, recipe_name)
             _print_recipe_preview(recipe_name, sources, result_df)
         except RecipeError as e:
             return {"result": "error", "message": f"Recipe failed: {e}"}

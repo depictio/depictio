@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 from depictio.api.v1.services.multiqc.themes import get_theme_template
 
 
-def create_error_figure(error_message: str, theme: str = "light") -> go.Figure:  # ty: ignore[unresolved-attribute]
+def create_error_figure(error_message: str, theme: str = "light") -> go.Figure:
     """
     Create error figure with message.
 

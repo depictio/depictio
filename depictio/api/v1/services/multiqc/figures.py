@@ -372,7 +372,7 @@ def create_multiqc_plot(
     use_s3_cache: bool = True,
     theme: str = "light",
     dc_id: Optional[str] = None,
-) -> go.Figure:  # ty: ignore[unresolved-attribute]
+) -> go.Figure:
     """Create a Plotly figure from MultiQC data with figure-level Redis caching.
 
     Cache layers: Redis figure cache -> in-memory report cache -> full parse.
@@ -412,7 +412,7 @@ def create_multiqc_plot(
     )
     cached_fig_dict = cache.get(fig_cache_key)
     if cached_fig_dict is not None:
-        return go.Figure(cached_fig_dict)  # ty: ignore[unresolved-attribute]
+        return go.Figure(cached_fig_dict)
 
     # Hold _multiqc_lock across BOTH parse and get_plot so concurrent renders
     # of different DCs don't trample each other's `multiqc.report` global
@@ -524,7 +524,7 @@ def _filter_categorical_trace(trace, samples_set: set) -> None:
         trace.y = filtered_values
 
 
-def filter_samples_in_plot(fig: go.Figure, samples_to_show: List[str]) -> go.Figure:  # ty: ignore[unresolved-attribute]
+def filter_samples_in_plot(fig: go.Figure, samples_to_show: List[str]) -> go.Figure:
     """Filter which samples are visible in a MultiQC plot."""
     try:
         samples_set = set(str(s) for s in samples_to_show)

@@ -23,9 +23,9 @@ def compare_models(workflow_yaml: dict, workflow_db: dict) -> bool:
     for dc_yaml, dc_db in zip(
         workflow_yaml_only["data_collections"], workflow_db_only["data_collections"]
     ):
-        dc_yaml = DataCollection(**dc_yaml)  # ty: ignore[missing-argument]
+        dc_yaml = DataCollection(**dc_yaml)
         dc_yaml_only = dc_yaml.model_dump(exclude={"registration_time"})
-        dc_db = DataCollection(**dc_db)  # ty: ignore[missing-argument]
+        dc_db = DataCollection(**dc_db)
         dc_db_only = dc_db.model_dump(exclude={"registration_time"})
         set_checks.append(dc_yaml_only == dc_db_only)
 

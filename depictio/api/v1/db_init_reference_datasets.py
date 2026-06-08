@@ -634,7 +634,7 @@ class ReferenceDatasetRegistry:
         from depictio.api.v1.endpoints.projects_endpoints.utils import _helper_create_project_beanie
         from depictio.models.models.projects import ProjectBeanie
 
-        project = ProjectBeanie(**project_config)  # ty: ignore[missing-argument]
+        project = ProjectBeanie(**project_config)
 
         # Restore original IDs using integer indices (required by _helper_create_project_beanie)
         original_ids = {

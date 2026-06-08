@@ -75,7 +75,7 @@ def _resolve_key_paths(
     return priv_path, pub_path
 
 
-@validate_call(config={"arbitrary_types_allowed": True})  # ty: ignore[invalid-argument-type]
+@validate_call(config={"arbitrary_types_allowed": True})
 def _generate_rsa_private_key(key_size: int = 2048) -> RSAPrivateKey:
     """Generate an RSA private key with the specified key size.
 
@@ -92,7 +92,7 @@ def _generate_rsa_private_key(key_size: int = 2048) -> RSAPrivateKey:
     )
 
 
-@validate_call(config={"arbitrary_types_allowed": True})  # ty: ignore[invalid-argument-type]
+@validate_call(config={"arbitrary_types_allowed": True})
 def _save_private_key(private_key: Any, path: str) -> None:
     """Save private key to file.
 
@@ -112,7 +112,7 @@ def _save_private_key(private_key: Any, path: str) -> None:
         )
 
 
-@validate_call(config={"arbitrary_types_allowed": True})  # ty: ignore[invalid-argument-type]
+@validate_call(config={"arbitrary_types_allowed": True})
 def _save_public_key(public_key: Any, path: str) -> None:
     """Save public key to file.
 
@@ -202,7 +202,7 @@ def generate_keys(
         raise KeyGenerationError(f"Failed to generate keys: {e}") from e
 
 
-@validate_call(validate_return=True, config={"arbitrary_types_allowed": True})  # ty: ignore[invalid-argument-type]
+@validate_call(validate_return=True, config={"arbitrary_types_allowed": True})
 def check_and_generate_keys(
     private_key_path: str | None = None,
     public_key_path: str | None = None,
@@ -264,7 +264,7 @@ def check_and_generate_keys(
             fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
 
-@validate_call(validate_return=True, config={"arbitrary_types_allowed": True})  # ty: ignore[invalid-argument-type]
+@validate_call(validate_return=True, config={"arbitrary_types_allowed": True})
 def load_private_key(private_key_path: Path) -> RSAPrivateKey:
     """Load a private key from a file.
 
@@ -292,7 +292,7 @@ def load_private_key(private_key_path: Path) -> RSAPrivateKey:
         raise
 
 
-@validate_call(validate_return=True, config={"arbitrary_types_allowed": True})  # ty: ignore[invalid-argument-type]
+@validate_call(validate_return=True, config={"arbitrary_types_allowed": True})
 def load_public_key(public_key_path: Path) -> RSAPublicKey:
     """Load a public key from a file.
 

@@ -397,7 +397,7 @@ def scan_run_for_multiple_data_collections(
                 # try matching against the relative path from the run directory
                 if "/" in full_regex:
                     rel_path = os.path.relpath(file_location, run_location)
-                    match, _ = regex_match(rel_path, full_regex)  # ty: ignore[invalid-argument-type]
+                    match, _ = regex_match(rel_path, full_regex)
                 if not match:
                     continue
 

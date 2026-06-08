@@ -47,7 +47,7 @@ def recipe_run(
     try:
         # Checkpoint 1: load
         module = load_recipe(recipe_name, pipeline_version)
-        source_count = len(module.SOURCES)  # ty: ignore[unresolved-attribute]
+        source_count = len(module.SOURCES)
         typer.echo(f"  Loaded recipe: {recipe_name} ({source_count} source(s))")
 
         # Checkpoint 2: resolve
@@ -56,7 +56,7 @@ def recipe_run(
             typer.echo(f"  Resolved source '{ref}': {df.height} rows x {df.width} columns")
 
         # Check for unresolved dc_ref sources
-        dc_ref_sources = [s for s in module.SOURCES if s.dc_ref is not None]  # ty: ignore[unresolved-attribute]
+        dc_ref_sources = [s for s in module.SOURCES if s.dc_ref is not None]
         if dc_ref_sources:
             refs = ", ".join(s.ref for s in dc_ref_sources)
             typer.echo(f"  Skipped dc_ref sources (not available standalone): {refs}")
@@ -64,7 +64,7 @@ def recipe_run(
             raise typer.Exit(code=0)
 
         # Checkpoint 3: transform
-        result = module.transform(sources)  # ty: ignore[unresolved-attribute]
+        result = module.transform(sources)
         if not isinstance(result, pl.DataFrame):
             typer.echo(f"  ERROR: transform() returned {type(result).__name__}, expected DataFrame")
             raise typer.Exit(code=1)
@@ -74,8 +74,8 @@ def recipe_run(
         typer.echo(f"  Transform produced {result.height} rows x {result.width} columns")
 
         # Checkpoint 4: schema
-        validate_schema(result, module.EXPECTED_SCHEMA, recipe_name)  # ty: ignore[unresolved-attribute]
-        schema_str = ", ".join(f"{c}({t})" for c, t in module.EXPECTED_SCHEMA.items())  # ty: ignore[unresolved-attribute]
+        validate_schema(result, module.EXPECTED_SCHEMA, recipe_name)
+        schema_str = ", ".join(f"{c}({t})" for c, t in module.EXPECTED_SCHEMA.items())
         typer.echo(f"  Schema valid: {schema_str}")
 
         # Display result
@@ -151,14 +151,14 @@ def recipe_info(
     typer.echo(f"Description: {doc.strip()}")
 
     # Sources
-    typer.echo(f"\nSources ({len(module.SOURCES)}):")  # ty: ignore[unresolved-attribute]
-    for s in module.SOURCES:  # ty: ignore[unresolved-attribute]
+    typer.echo(f"\nSources ({len(module.SOURCES)}):")
+    for s in module.SOURCES:
         if s.dc_ref:
             typer.echo(f"  {s.ref}: dc_ref={s.dc_ref}")
         else:
             typer.echo(f"  {s.ref}: {s.path} ({s.format})")
 
     # Schema
-    typer.echo(f"\nExpected output schema ({len(module.EXPECTED_SCHEMA)} columns):")  # ty: ignore[unresolved-attribute]
-    for col, dtype in module.EXPECTED_SCHEMA.items():  # ty: ignore[unresolved-attribute]
+    typer.echo(f"\nExpected output schema ({len(module.EXPECTED_SCHEMA)} columns):")
+    for col, dtype in module.EXPECTED_SCHEMA.items():
         typer.echo(f"  {col}: {dtype}")

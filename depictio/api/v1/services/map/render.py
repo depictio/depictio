@@ -332,7 +332,7 @@ def render_map(
     except Exception as e:
         logger.error(f"Map rendering failed: {e}", exc_info=True)
         template = get_theme_template(theme)
-        fig = go.Figure()  # ty: ignore[unresolved-attribute]
+        fig = go.Figure()
         fig.update_layout(template=template)
         fig.add_annotation(
             text=f"Map error: {e}",

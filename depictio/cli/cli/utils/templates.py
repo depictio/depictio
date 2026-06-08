@@ -266,7 +266,7 @@ def _check_dc_source_files(
                     ref: so.get("path", "") if isinstance(so, dict) else so
                     for ref, so in transform["source_overrides"].items()
                 }
-            for src in module.SOURCES:  # ty: ignore[unresolved-attribute]
+            for src in module.SOURCES:
                 if src.dc_ref is not None:
                     continue  # dc_ref sources checked via cascade
                 if src.optional:
@@ -344,7 +344,7 @@ def _remove_dcs_with_missing_files(
                     from depictio.recipes import load_recipe
 
                     module = load_recipe(recipe_name)
-                    for src in module.SOURCES:  # ty: ignore[unresolved-attribute]
+                    for src in module.SOURCES:
                         if src.dc_ref and not src.optional and src.dc_ref in removed_tags:
                             removed_tags.add(tag)
                             removal_report.append(

@@ -339,7 +339,7 @@ def process_multiqc_data_collection(
                 region_name=storage_options.region,
                 config=BotoConfig(
                     signature_version="s3v4",
-                    s3={"addressing_style": "path"},  # ty: ignore[invalid-argument-type]
+                    s3={"addressing_style": "path"},
                 ),
             )
 
