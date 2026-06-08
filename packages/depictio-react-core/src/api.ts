@@ -2435,6 +2435,7 @@ export interface CreateDashboardInput {
   project_id: string;
   icon?: string;
   icon_color?: string;
+  workflow_system?: string;
 }
 
 export async function createDashboard(input: CreateDashboardInput): Promise<string> {
@@ -2455,7 +2456,7 @@ export async function createDashboard(input: CreateDashboardInput): Promise<stri
     icon: input.icon || 'mdi:view-dashboard',
     icon_color: input.icon_color || 'orange',
     icon_variant: 'filled',
-    workflow_system: 'none',
+    workflow_system: input.workflow_system || 'none',
     notes_content: '',
     permissions: { owners: [ownerEntry], editors: [], viewers: [] },
     is_public: false,

@@ -237,13 +237,22 @@ const Sidebar: React.FC<SidebarProps> = ({
                   const label = isParent
                     ? d.main_tab_name || d.title || d.dashboard_id
                     : d.title || d.dashboard_id;
-                  // Use a YAML-supplied image ONLY when it's explicitly set on
-                  // tab_icon. Don't fall back to `icon` for child tabs because
-                  // children inherit the dashboard `icon` (a generic favicon),
-                  // which would override their per-tab Iconify defaults and
-                  // strip their distinct color.
+                  // Resolve a YAML-supplied image. For the parent (main) tab,
+                  // mirror the Header's `tab_icon || icon` precedence so a
+                  // dashboard-level favicon (stored on `icon`, the common
+                  // single-tab case) shows the SAME image in the sidebar pill
+                  // as in the header — otherwise the two disagree (header shows
+                  // the favicon, sidebar falls through to a keyword default).
+                  // Child tabs deliberately do NOT fall back to `icon`: they
+                  // inherit the dashboard's generic favicon, which would
+                  // override their per-tab Iconify defaults and strip their
+                  // distinct color.
                   const yamlImageRaw =
-                    d.tab_icon && isImagePath(d.tab_icon) ? d.tab_icon : null;
+                    d.tab_icon && isImagePath(d.tab_icon)
+                      ? d.tab_icon
+                      : isParent && d.icon && isImagePath(d.icon)
+                        ? d.icon
+                        : null;
                   const yamlImage = yamlImageRaw
                     ? rewriteLegacyMultiqcIcon(yamlImageRaw, theme, isActive)
                     : null;
@@ -409,13 +418,21 @@ const TabMenu: React.FC<TabMenuProps> = ({
   onDeleteTab,
   onMoveTab,
 }) => {
-  const stop = (e: React.SyntheticEvent) => e.stopPropagation();
+  const stop = (e: React.SyntheticEvent) => {
+    // Stop the click bubbling to the Tabs.Tab (which would switch tab) AND
+    // cancel the default action: `renderRoot` renders the tab as an
+    // `<a href>` for native open-in-new-tab support, so without
+    // `preventDefault` clicking "..." follows the href and refreshes the URL
+    // instead of opening the menu.
+    e.stopPropagation();
+    e.preventDefault();
+  };
 
   return (
     <Box
       // The Tabs.Tab parent treats any click as a navigation request — wrap
-      // the trigger in a stopPropagation guard so opening the menu doesn't
-      // also switch tab.
+      // the trigger in a stopPropagation + preventDefault guard so opening the
+      // menu doesn't also switch tab or trigger the anchor navigation.
       onClick={stop}
       onMouseDown={stop}
       style={{ display: 'inline-flex', alignItems: 'center' }}
