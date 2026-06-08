@@ -1,15 +1,30 @@
 import React, { useEffect, useState } from 'react';
 import {
+  Anchor,
   Button,
   Group,
   Modal,
   Select,
   Stack,
   TextInput,
+  Title,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import type { DashboardSummary } from 'depictio-react-core';
+
+/** True for path-like icon values (asset URLs such as
+ *  `/assets/images/icons/favicon.png`) rather than Iconify names. Mirrors the
+ *  same check in `chrome/Sidebar.tsx` / `chrome/Header.tsx`. */
+function isImagePath(s: string | null | undefined): boolean {
+  if (!s) return false;
+  return /^(\/|https?:\/\/|data:)/.test(s) || /\.(png|svg|jpe?g|webp)$/i.test(s);
+}
+
+/** Material Design Icons (`mdi:`) browser — prefix any icon name shown there
+ *  with `mdi:` to use it here. Same target as the dashboard create/edit
+ *  modals for consistency. */
+const MDI_BROWSER_URL = 'https://pictogrammers.com/library/mdi/';
 
 /** Mirrors the icon-color options in Dash's tab modal (`tab_modal.py:206-362`).
  *  "Auto" leaves the field empty so the parent's auto-resolution kicks in. */
@@ -113,15 +128,49 @@ const TabModal: React.FC<TabModalProps> = ({
     await onSubmit(payload);
   };
 
+  // Live preview matching how the sidebar/header render the icon:
+  //   - image path (asset URL)  → <img> (Iconify can't load file paths)
+  //   - Iconify name            → <Icon> tinted with the selected color
+  //     (empty color = neutral preview, mirroring "Auto")
+  const trimmedIcon = tabIcon.trim();
+  const previewColor = tabIconColor
+    ? `var(--mantine-color-${tabIconColor}-6)`
+    : undefined;
+  const previewIcon = !trimmedIcon ? (
+    <Icon icon="mdi:tab" width={20} style={{ opacity: 0.3 }} />
+  ) : isImagePath(trimmedIcon) ? (
+    <img
+      src={trimmedIcon}
+      alt=""
+      style={{ maxWidth: 20, maxHeight: 20, objectFit: 'contain' }}
+    />
+  ) : (
+    <Icon icon={trimmedIcon} width={20} style={{ color: previewColor }} />
+  );
+
   return (
     <Modal
       opened={opened}
       onClose={onClose}
-      title={mode === 'create' ? 'Add tab' : 'Edit tab'}
+      withCloseButton
       size="md"
       centered
     >
       <Stack gap="sm">
+        {/* Header — consistent with the dashboard create/edit modals:
+            centered orange icon + title. */}
+        <Group justify="center" gap="sm" mb="xs">
+          <Icon
+            icon={mode === 'create' ? 'mdi:tab-plus' : 'mdi:square-edit-outline'}
+            width={28}
+            height={28}
+            color="var(--mantine-color-orange-6)"
+          />
+          <Title order={3} c="orange" m={0}>
+            {mode === 'create' ? 'Add Tab' : 'Edit Tab'}
+          </Title>
+        </Group>
+
         <TextInput
           label="Tab name"
           placeholder="Variants"
@@ -144,7 +193,19 @@ const TabModal: React.FC<TabModalProps> = ({
         <Group align="flex-end" gap="xs" wrap="nowrap">
           <TextInput
             label="Icon"
-            description="Iconify name, e.g. mdi:chart-bar"
+            description={
+              <>
+                Iconify name, e.g. mdi:chart-bar —{' '}
+                <Anchor
+                  href={MDI_BROWSER_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  inherit
+                >
+                  browse icons
+                </Anchor>
+              </>
+            }
             placeholder="mdi:chart-bar"
             value={tabIcon}
             onChange={(e) => setTabIcon(e.currentTarget.value)}
@@ -164,11 +225,7 @@ const TabModal: React.FC<TabModalProps> = ({
             }}
             aria-label="Icon preview"
           >
-            {tabIcon.trim() ? (
-              <Icon icon={tabIcon.trim()} width={20} />
-            ) : (
-              <Icon icon="mdi:tab" width={20} style={{ opacity: 0.3 }} />
-            )}
+            {previewIcon}
           </div>
         </Group>
 
@@ -180,16 +237,30 @@ const TabModal: React.FC<TabModalProps> = ({
           allowDeselect={false}
         />
 
-        <Group justify="flex-end" gap="xs" mt="sm">
-          <Button variant="subtle" onClick={onClose} disabled={submitting}>
+        <Group justify="flex-end" gap="md" mt="sm">
+          <Button
+            variant="outline"
+            color="gray"
+            radius="md"
+            onClick={onClose}
+            disabled={submitting}
+          >
             Cancel
           </Button>
           <Button
+            color="orange"
+            radius="md"
+            leftSection={
+              <Icon
+                icon={mode === 'create' ? 'mdi:plus' : 'mdi:content-save'}
+                width={16}
+              />
+            }
             onClick={handleSubmit}
             loading={submitting}
             disabled={!title.trim()}
           >
-            Save
+            {mode === 'create' ? 'Add Tab' : 'Save Changes'}
           </Button>
         </Group>
       </Stack>

@@ -28,6 +28,12 @@ import type {
 } from 'depictio-react-core';
 
 import { UnstyledDropZone } from '../components/UnstyledDropZone';
+import {
+  WORKFLOW_SYSTEM_OPTIONS,
+  WORKFLOW_ICON_MAP,
+  WORKFLOW_COLOR_MAP,
+  isWorkflowSelected,
+} from './lib/workflowIcons';
 
 const COLOR_OPTIONS: { value: string; label: string }[] = [
   { value: 'gray', label: 'Gray' },
@@ -44,16 +50,6 @@ const COLOR_OPTIONS: { value: string; label: string }[] = [
   { value: 'yellow', label: 'Yellow' },
   { value: 'orange', label: 'Orange' },
   { value: 'dark', label: 'Dark' },
-];
-
-const WORKFLOW_SYSTEM_OPTIONS: { value: string; label: string }[] = [
-  { value: 'none', label: 'None' },
-  { value: 'snakemake', label: 'Snakemake' },
-  { value: 'nextflow', label: 'Nextflow' },
-  { value: 'galaxy', label: 'Galaxy' },
-  { value: 'cwl', label: 'CWL' },
-  { value: 'smk_wrapper', label: 'Snakemake wrapper' },
-  { value: 'python', label: 'Python' },
 ];
 
 const DEFAULT_ICON = 'mdi:view-dashboard';
@@ -135,6 +131,14 @@ const CreateDashboardModal: React.FC<CreateDashboardModalProps> = ({
   const canCreate =
     trimmedTitle.length > 0 && projectId.length > 0 && !createSubmitting;
 
+  // When a workflow system is selected, its logo + brand color override the
+  // custom icon/color (mirrors Dash's `build_icon_preview`).
+  const workflowActive = isWorkflowSelected(workflowSystem);
+  const effectiveIcon = workflowActive ? WORKFLOW_ICON_MAP[workflowSystem] : icon;
+  const effectiveColor = workflowActive
+    ? WORKFLOW_COLOR_MAP[workflowSystem]
+    : iconColor || DEFAULT_COLOR;
+
   const handleCreate = async () => {
     if (!canCreate) return;
     setCreateSubmitting(true);
@@ -144,8 +148,9 @@ const CreateDashboardModal: React.FC<CreateDashboardModalProps> = ({
         title: trimmedTitle,
         subtitle: subtitle.trim() || undefined,
         project_id: projectId,
-        icon: icon.trim() || undefined,
-        icon_color: iconColor || undefined,
+        icon: workflowActive ? effectiveIcon : icon.trim() || undefined,
+        icon_color: workflowActive ? effectiveColor : iconColor || undefined,
+        workflow_system: workflowSystem,
       });
     } catch (err) {
       setCreateError(err instanceof Error ? err.message : 'Failed to create dashboard');
@@ -189,8 +194,9 @@ const CreateDashboardModal: React.FC<CreateDashboardModalProps> = ({
   };
 
   const previewIsImage =
-    !!icon &&
-    (/^(\/|https?:\/\/|data:)/.test(icon) || /\.(png|svg|jpe?g|webp)$/i.test(icon));
+    !!effectiveIcon &&
+    (/^(\/|https?:\/\/|data:)/.test(effectiveIcon) ||
+      /\.(png|svg|jpe?g|webp)$/i.test(effectiveIcon));
 
   return (
     <Modal
@@ -319,7 +325,7 @@ const CreateDashboardModal: React.FC<CreateDashboardModalProps> = ({
                       </Text>
                       {previewIsImage ? (
                         <img
-                          src={icon}
+                          src={effectiveIcon}
                           alt=""
                           style={{
                             width: 48,
@@ -330,13 +336,17 @@ const CreateDashboardModal: React.FC<CreateDashboardModalProps> = ({
                         />
                       ) : (
                         <ActionIcon
-                          color={iconColor || 'orange'}
+                          color={effectiveColor}
                           radius="xl"
                           size="lg"
                           variant="filled"
                           aria-hidden
                         >
-                          <Icon icon={icon || DEFAULT_ICON} width={24} height={24} />
+                          <Icon
+                            icon={effectiveIcon || DEFAULT_ICON}
+                            width={24}
+                            height={24}
+                          />
                         </ActionIcon>
                       )}
                     </Stack>
@@ -351,6 +361,7 @@ const CreateDashboardModal: React.FC<CreateDashboardModalProps> = ({
                       onChange={(e) => setIcon(e.currentTarget.value)}
                       leftSection={<Icon icon="mdi:emoticon-outline" width={16} />}
                       size="sm"
+                      disabled={workflowActive}
                     />
                     <Box mt={-8}>
                       <a
@@ -378,6 +389,7 @@ const CreateDashboardModal: React.FC<CreateDashboardModalProps> = ({
                       size="sm"
                       allowDeselect={false}
                       comboboxProps={{ withinPortal: false }}
+                      disabled={workflowActive}
                     />
 
                     <Divider

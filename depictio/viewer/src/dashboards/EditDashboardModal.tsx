@@ -1,19 +1,31 @@
 import React, { useEffect, useState } from 'react';
 import {
+  ActionIcon,
   Alert,
+  Box,
   Button,
+  Divider,
+  Grid,
   Group,
   Modal,
+  Paper,
   Select,
-  SimpleGrid,
   Stack,
   Text,
   Textarea,
   TextInput,
+  Title,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import type { DashboardListEntry, EditDashboardInput } from 'depictio-react-core';
+
+import {
+  WORKFLOW_SYSTEM_OPTIONS,
+  WORKFLOW_ICON_MAP,
+  WORKFLOW_COLOR_MAP,
+  isWorkflowSelected,
+} from './lib/workflowIcons';
 
 /** Mantine palette options — empty string = "no override" / inherit. */
 const COLOR_OPTIONS: { value: string; label: string }[] = [
@@ -34,16 +46,8 @@ const COLOR_OPTIONS: { value: string; label: string }[] = [
   { value: 'dark', label: 'Dark' },
 ];
 
-/** Mirrors the backend's accepted `workflow_system` values. */
-const WORKFLOW_SYSTEM_OPTIONS: { value: string; label: string }[] = [
-  { value: 'none', label: 'None' },
-  { value: 'snakemake', label: 'Snakemake' },
-  { value: 'nextflow', label: 'Nextflow' },
-  { value: 'galaxy', label: 'Galaxy' },
-  { value: 'cwl', label: 'CWL' },
-  { value: 'smk_wrapper', label: 'Snakemake wrapper' },
-  { value: 'python', label: 'Python' },
-];
+const DEFAULT_ICON = 'mdi:view-dashboard';
+const DEFAULT_COLOR = 'orange';
 
 interface EditDashboardModalProps {
   opened: boolean;
@@ -89,6 +93,14 @@ const EditDashboardModal: React.FC<EditDashboardModalProps> = ({
   const trimmedTitle = title.trim();
   const canSubmit = !!dashboard && trimmedTitle.length > 0 && !submitting;
 
+  // When a workflow system is selected, its logo + brand color override the
+  // custom icon/color (mirrors Dash's `build_icon_preview`).
+  const workflowActive = isWorkflowSelected(workflowSystem);
+  const effectiveIcon = workflowActive ? WORKFLOW_ICON_MAP[workflowSystem] : icon.trim();
+  const effectiveColor = workflowActive
+    ? WORKFLOW_COLOR_MAP[workflowSystem]
+    : iconColor || DEFAULT_COLOR;
+
   const handleSubmit = async () => {
     if (!dashboard || !trimmedTitle) return;
     setSubmitting(true);
@@ -97,8 +109,8 @@ const EditDashboardModal: React.FC<EditDashboardModalProps> = ({
       await onSubmit(dashboard.dashboard_id, {
         title: trimmedTitle || undefined,
         subtitle: subtitle,
-        icon: icon.trim() || undefined,
-        icon_color: iconColor || undefined,
+        icon: workflowActive ? effectiveIcon : icon.trim() || undefined,
+        icon_color: workflowActive ? effectiveColor : iconColor || undefined,
         workflow_system: workflowSystem || undefined,
       });
     } catch (err) {
@@ -107,121 +119,192 @@ const EditDashboardModal: React.FC<EditDashboardModalProps> = ({
     }
   };
 
-  const previewIcon = icon.trim();
   const previewIsImage =
-    !!previewIcon &&
-    (/^(\/|https?:\/\/|data:)/.test(previewIcon) ||
-      /\.(png|svg|jpe?g|webp)$/i.test(previewIcon));
-  const previewColorVar = iconColor
-    ? `var(--mantine-color-${iconColor}-6)`
-    : 'var(--mantine-color-dimmed)';
-  const resolvedImageSrc = previewIsImage
-    ? previewIcon.startsWith('/') &&
-      typeof window !== 'undefined' &&
-      window.location.port === '8122'
-      ? `${window.location.protocol}//${window.location.hostname}:5122${previewIcon}`
-      : previewIcon
-    : null;
+    !!effectiveIcon &&
+    (/^(\/|https?:\/\/|data:)/.test(effectiveIcon) ||
+      /\.(png|svg|jpe?g|webp)$/i.test(effectiveIcon));
 
   return (
     <Modal
       opened={opened}
       onClose={onClose}
-      title={`Edit "${dashboard?.title || 'dashboard'}"`}
-      size="lg"
+      withCloseButton
       centered
+      shadow="xl"
+      radius="md"
+      size={1000}
+      padding={28}
+      overlayProps={{ blur: 3, backgroundOpacity: 0.55 }}
     >
-      <Stack gap="sm">
-        {errorMessage && (
-          <Alert color="red" variant="light" icon={<Icon icon="mdi:alert-circle" />}>
-            {errorMessage}
-          </Alert>
-        )}
-
-        <TextInput
-          label="Title"
-          placeholder="My dashboard"
-          value={title}
-          onChange={(e) => setTitle(e.currentTarget.value)}
-          required
-          data-autofocus
-        />
-
-        <Textarea
-          label="Subtitle"
-          placeholder="Short description shown under the title"
-          value={subtitle}
-          onChange={(e) => setSubtitle(e.currentTarget.value)}
-          autosize
-          minRows={2}
-          maxRows={4}
-        />
-
-        <Select
-          label="Workflow system"
-          data={WORKFLOW_SYSTEM_OPTIONS}
-          value={workflowSystem || 'none'}
-          onChange={(v) => setWorkflowSystem(v ?? '')}
-          allowDeselect={false}
-        />
-
-        <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
-          <TextInput
-            label="Icon"
-            description="Iconify name, e.g. mdi:view-dashboard"
-            placeholder="mdi:view-dashboard"
-            value={icon}
-            onChange={(e) => setIcon(e.currentTarget.value)}
+      <Stack gap="lg" data-testid="edit-dashboard-modal">
+        {/* Header — mirrors CreateDashboardModal's centered orange title. */}
+        <Group justify="center" gap="sm">
+          <Icon
+            icon="mdi:square-edit-outline"
+            width={40}
+            height={40}
+            color="var(--mantine-color-orange-6)"
           />
-          <Select
-            label="Icon color"
-            data={COLOR_OPTIONS}
-            value={iconColor}
-            onChange={(v) => setIconColor(v ?? '')}
-            allowDeselect={false}
-          />
-        </SimpleGrid>
+          <Title order={1} c="orange" m={0}>
+            Edit Dashboard
+          </Title>
+        </Group>
 
-        <Stack gap={4} align="center" mt="xs">
-          <div
-            style={{
-              width: 64,
-              height: 64,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              borderRadius: 8,
-              border: '1px solid var(--mantine-color-default-border)',
-            }}
-            aria-label="Icon preview"
+        <Grid gutter="xl">
+          <Grid.Col span={{ base: 12, sm: 7 }}>
+            <Stack gap="md">
+              <TextInput
+                label="Dashboard Title"
+                description="Give your dashboard a descriptive name"
+                placeholder="Enter dashboard title"
+                value={title}
+                onChange={(e) => setTitle(e.currentTarget.value)}
+                required
+                leftSection={<Icon icon="mdi:text-box-outline" width={16} />}
+                data-autofocus
+              />
+              <Textarea
+                label="Dashboard Subtitle (Optional)"
+                description="Add a brief description for your dashboard"
+                placeholder="Enter subtitle (optional)"
+                value={subtitle}
+                onChange={(e) => setSubtitle(e.currentTarget.value)}
+                autosize
+                minRows={2}
+                maxRows={4}
+              />
+              {errorMessage && (
+                <Alert
+                  color="red"
+                  variant="light"
+                  icon={<Icon icon="mdi:alert-circle" />}
+                >
+                  {errorMessage}
+                </Alert>
+              )}
+            </Stack>
+          </Grid.Col>
+
+          <Grid.Col span={{ base: 12, sm: 5 }}>
+            <Paper shadow="sm" radius="md" withBorder p="md" h="100%">
+              <Stack gap="md">
+                <Text size="sm" fw={700} c="dimmed">
+                  Icon Customization
+                </Text>
+
+                <Stack gap={4} align="center">
+                  <Text size="xs" c="dimmed">
+                    Preview
+                  </Text>
+                  {previewIsImage ? (
+                    <img
+                      src={effectiveIcon}
+                      alt=""
+                      style={{
+                        width: 48,
+                        height: 48,
+                        objectFit: 'contain',
+                        borderRadius: '50%',
+                      }}
+                    />
+                  ) : (
+                    <ActionIcon
+                      color={effectiveColor}
+                      radius="xl"
+                      size="lg"
+                      variant="filled"
+                      aria-hidden
+                    >
+                      <Icon
+                        icon={effectiveIcon || DEFAULT_ICON}
+                        width={24}
+                        height={24}
+                      />
+                    </ActionIcon>
+                  )}
+                </Stack>
+
+                <Divider />
+
+                <TextInput
+                  label="Dashboard Icon"
+                  description="Icon from Iconify (e.g., mdi:chart-line)"
+                  placeholder="mdi:view-dashboard"
+                  value={icon}
+                  onChange={(e) => setIcon(e.currentTarget.value)}
+                  leftSection={<Icon icon="mdi:emoticon-outline" width={16} />}
+                  size="sm"
+                  disabled={workflowActive}
+                />
+                <Box mt={-8}>
+                  <a
+                    href="https://pictogrammers.com/library/mdi/"
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{ textDecoration: 'none' }}
+                  >
+                    <Group gap={4}>
+                      <Icon icon="mdi:open-in-new" width={14} />
+                      <Text size="xs" c="blue">
+                        Browse MDI icons
+                      </Text>
+                    </Group>
+                  </a>
+                </Box>
+
+                <Select
+                  label="Icon Color"
+                  description="Color for the dashboard icon"
+                  data={COLOR_OPTIONS}
+                  value={iconColor}
+                  onChange={(v) => setIconColor(v ?? '')}
+                  leftSection={<Icon icon="mdi:palette" width={16} />}
+                  size="sm"
+                  allowDeselect={false}
+                  comboboxProps={{ withinPortal: false }}
+                  disabled={workflowActive}
+                />
+
+                <Divider
+                  label="Workflow System (Optional)"
+                  labelPosition="center"
+                  mt="xs"
+                />
+                <Select
+                  label="Workflow System"
+                  description="Auto-set icon based on workflow"
+                  data={WORKFLOW_SYSTEM_OPTIONS}
+                  value={workflowSystem || 'none'}
+                  onChange={(v) => setWorkflowSystem(v ?? '')}
+                  leftSection={<Icon icon="mdi:cog-outline" width={16} />}
+                  size="sm"
+                  allowDeselect={false}
+                  comboboxProps={{ withinPortal: false }}
+                />
+              </Stack>
+            </Paper>
+          </Grid.Col>
+        </Grid>
+
+        <Group justify="flex-end" gap="md" mt="md">
+          <Button
+            variant="outline"
+            color="gray"
+            radius="md"
+            onClick={onClose}
+            disabled={submitting}
           >
-            {resolvedImageSrc ? (
-              <img
-                src={resolvedImageSrc}
-                alt="icon preview"
-                style={{ width: 48, height: 48, objectFit: 'contain' }}
-              />
-            ) : previewIcon ? (
-              <Icon icon={previewIcon} width={48} color={previewColorVar} />
-            ) : (
-              <Icon
-                icon="mdi:view-dashboard"
-                width={48}
-                style={{ opacity: 0.3 }}
-              />
-            )}
-          </div>
-          <Text size="xs" c="dimmed">
-            Preview
-          </Text>
-        </Stack>
-
-        <Group justify="flex-end" gap="xs" mt="sm">
-          <Button variant="subtle" onClick={onClose} disabled={submitting}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit} loading={submitting} disabled={!canSubmit}>
-            Save
+          <Button
+            color="orange"
+            radius="md"
+            leftSection={<Icon icon="mdi:content-save" width={16} />}
+            onClick={handleSubmit}
+            loading={submitting}
+            disabled={!canSubmit}
+          >
+            Save Changes
           </Button>
         </Group>
       </Stack>
