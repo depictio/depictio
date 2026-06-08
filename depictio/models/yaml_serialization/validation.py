@@ -500,10 +500,13 @@ def _validate_component_types(
 ) -> None:
     """Validate component-specific types (chart, aggregation, filter)."""
     for comp in dashboard.components:
-        comp_dict = comp.model_dump()
-        result["errors"].extend(_validate_chart_type(comp_dict, comp.id))
-        result["errors"].extend(_validate_aggregation_function(comp_dict, comp.id))
-        result["errors"].extend(_validate_filter_type(comp_dict, comp.id))
+        # ``components`` is a ``LiteComponent | dict`` union — components that
+        # fell through Pydantic's union validation stay as raw dicts.
+        comp_dict = comp if isinstance(comp, dict) else comp.model_dump()
+        comp_id = comp_dict.get("index") or comp_dict.get("tag") or ""
+        result["errors"].extend(_validate_chart_type(comp_dict, comp_id))
+        result["errors"].extend(_validate_aggregation_function(comp_dict, comp_id))
+        result["errors"].extend(_validate_filter_type(comp_dict, comp_id))
 
 
 def _validate_component_columns_for_dashboard(
@@ -512,17 +515,18 @@ def _validate_component_columns_for_dashboard(
 ) -> None:
     """Validate column references for all components in the dashboard."""
     for comp in dashboard.components:
-        comp_dict = comp.model_dump()
+        comp_dict = comp if isinstance(comp, dict) else comp.model_dump()
+        comp_id = comp_dict.get("index") or comp_dict.get("tag") or ""
         columns, error = _get_data_collection_columns(
-            workflow_tag=comp.workflow,
-            data_collection_tag=comp.data_collection,
+            workflow_tag=comp_dict.get("workflow_tag", ""),
+            data_collection_tag=comp_dict.get("data_collection_tag", ""),
         )
 
         if error:
             result["warnings"].append(
                 _create_validation_error(
                     f"Cannot validate columns: {error}",
-                    component_id=comp.id,
+                    component_id=comp_id,
                     severity="warning",
                 )
             )
@@ -532,7 +536,7 @@ def _validate_component_columns_for_dashboard(
             _validate_component_columns(
                 component=comp_dict,
                 available_columns=columns,
-                component_id=comp.id,
+                component_id=comp_id,
             )
         )
 
