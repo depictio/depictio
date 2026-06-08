@@ -1092,7 +1092,7 @@ async def get_component_data_endpoint(
     return component_metadata
 
 
-@dashboards_endpoint_router.post("/bulk_component_data/{dashboard_id}")
+@dashboards_endpoint_router.post("/bulk_component_data/{dashboard_id}", deprecated=True)
 def bulk_get_component_data_endpoint(
     dashboard_id: PyObjectId,
     request: dict,  # {"component_ids": [uuid1, uuid2, ...]}
@@ -1100,6 +1100,10 @@ def bulk_get_component_data_endpoint(
 ):
     """
     PERFORMANCE OPTIMIZATION: Fetch multiple component data in a single request.
+
+    Deprecated: the React viewer uses bulk_compute_cards and the per-component
+    get_component_data endpoint; this batch variant has no remaining callers
+    and is scheduled for removal.
 
     Reduces HTTP overhead from N individual requests to 1 batch request.
     Expected performance improvement: ~70% for dashboard loading.
@@ -1112,6 +1116,9 @@ def bulk_get_component_data_endpoint(
     Returns:
         Dict mapping component_id -> component_metadata
     """
+    logger.warning(
+        "DEPRECATED endpoint dashboards/bulk_component_data called; scheduled for removal."
+    )
     component_ids = request.get("component_ids", [])
 
     if not component_ids:
@@ -3931,12 +3938,15 @@ async def export_dashboard_as_yaml(
     )
 
 
-@dashboards_endpoint_router.get("/{dashboard_id}/yaml/family")
+@dashboards_endpoint_router.get("/{dashboard_id}/yaml/family", deprecated=True)
 async def export_dashboard_family_as_yaml(
     dashboard_id: PyObjectId,
     current_user: User = Depends(get_user_or_anonymous),
 ) -> Response:
     """Export dashboard family (main tab + all child tabs) as ZIP archive.
+
+    Deprecated: no remaining callers (clients use the JSON export and the
+    single-dashboard YAML export). Scheduled for removal.
 
     Returns a ZIP file containing YAML files for the main dashboard and
     all its child tabs, preserving the tab hierarchy for re-import.
@@ -3947,6 +3957,7 @@ async def export_dashboard_family_as_yaml(
     Returns:
         ZIP file containing YAML files
     """
+    logger.warning("DEPRECATED endpoint dashboards/{id}/yaml/family called; scheduled for removal.")
     import io
     import zipfile
 
@@ -4014,12 +4025,15 @@ async def export_dashboard_family_as_yaml(
     )
 
 
-@dashboards_endpoint_router.post("/yaml/validate")
+@dashboards_endpoint_router.post("/yaml/validate", deprecated=True)
 async def validate_yaml_content(
     yaml_content: str = Body(..., media_type="text/plain"),
     current_user: User = Depends(get_current_user),
 ) -> dict[str, Any]:
     """Validate YAML content against DashboardDataLite schema.
+
+    Deprecated: no remaining callers (the React clients validate via the
+    JSON endpoint). Scheduled for removal.
 
     Uses Pydantic validation to check if the YAML content is valid.
 
@@ -4029,6 +4043,7 @@ async def validate_yaml_content(
     Returns:
         Validation result with is_valid flag and any errors
     """
+    logger.warning("DEPRECATED endpoint dashboards/yaml/validate called; scheduled for removal.")
     is_valid, errors = DashboardDataLite.validate_yaml(yaml_content)
 
     return {
@@ -4037,9 +4052,11 @@ async def validate_yaml_content(
     }
 
 
-@dashboards_endpoint_router.get("/yaml/schema")
+@dashboards_endpoint_router.get("/yaml/schema", deprecated=True)
 async def get_yaml_schema() -> dict[str, Any]:
     """Get JSON Schema for YAML validation.
+
+    Deprecated: no remaining callers. Scheduled for removal.
 
     Returns the JSON Schema that describes valid dashboard YAML structure.
     Can be used for IDE autocompletion and external validation tools.
@@ -4047,6 +4064,7 @@ async def get_yaml_schema() -> dict[str, Any]:
     Returns:
         JSON Schema for DashboardDataLite
     """
+    logger.warning("DEPRECATED endpoint dashboards/yaml/schema called; scheduled for removal.")
     return DashboardDataLite.model_json_schema()
 
 

@@ -189,12 +189,15 @@ async def login(
     return token
 
 
-@auth_endpoint_router.post("/create_token", include_in_schema=True)
+@auth_endpoint_router.post("/create_token", include_in_schema=True, deprecated=True)
 async def create_token(
     token_data: TokenData,
     api_key: str = Header(..., description="Internal API key for authentication"),
 ) -> TokenBeanie:
     """Create a new API token for a user.
+
+    Deprecated: api-key-gated provisioning endpoint with no remaining callers
+    (clients use the user-scoped /auth/me/tokens). Scheduled for removal.
 
     Internal endpoint that requires API key authentication.
 
@@ -209,6 +212,7 @@ async def create_token(
         HTTPException: 403 if API key is invalid.
         HTTPException: 400 if token with same name already exists.
     """
+    logger.warning("DEPRECATED endpoint auth/create_token called; scheduled for removal.")
     if not _is_valid_internal_api_key(api_key):
         raise HTTPException(status_code=403, detail="Invalid API key")
 
@@ -295,12 +299,15 @@ async def refresh_token_browser(request: dict) -> dict:
     }
 
 
-@auth_endpoint_router.post("/refresh_token", include_in_schema=True)
+@auth_endpoint_router.post("/refresh_token", include_in_schema=True, deprecated=True)
 async def refresh_token_endpoint(
     request: dict,
     api_key: str = Header(..., description="Internal API key for authentication"),
 ) -> dict:
     """Refresh an access token using a valid refresh token.
+
+    Deprecated: api-key-gated mirror of /auth/refresh (which clients use)
+    with no remaining callers. Scheduled for removal.
 
     Args:
         request: Dict containing 'refresh_token' key.
@@ -313,6 +320,7 @@ async def refresh_token_endpoint(
         HTTPException: 403 if API key is invalid.
         HTTPException: 401 if refresh token is invalid or expired.
     """
+    logger.warning("DEPRECATED endpoint auth/refresh_token called; scheduled for removal.")
     if not _is_valid_internal_api_key(api_key):
         raise HTTPException(status_code=403, detail="Invalid API key")
 
@@ -394,12 +402,15 @@ async def api_fetch_user_from_email(
     return user
 
 
-@auth_endpoint_router.get("/fetch_user/from_id", include_in_schema=True)
+@auth_endpoint_router.get("/fetch_user/from_id", include_in_schema=True, deprecated=True)
 async def api_fetch_user_from_id(
     user_id: PydanticObjectId,
     api_key: str = Header(..., description="Internal API key for authentication"),
 ) -> User:
     """Fetch user by ID.
+
+    Deprecated: api-key-gated lookup with no remaining callers (internal code
+    uses the _async_fetch_user_from_id helper directly). Scheduled for removal.
 
     Args:
         user_id: MongoDB ObjectId of the user to fetch.
@@ -412,6 +423,7 @@ async def api_fetch_user_from_id(
         HTTPException: 403 if API key is invalid.
         HTTPException: 404 if user not found for the ID.
     """
+    logger.warning("DEPRECATED endpoint auth/fetch_user/from_id called; scheduled for removal.")
     if not _is_valid_internal_api_key(api_key):
         raise HTTPException(status_code=403, detail="Invalid API key")
 
@@ -532,11 +544,18 @@ async def get_current_user_info_optional(
     }
 
 
-@auth_endpoint_router.get("/get_anonymous_user_session", include_in_schema=True)
+@auth_endpoint_router.get("/get_anonymous_user_session", include_in_schema=True, deprecated=True)
 async def api_get_anonymous_user_session(
     api_key: str = Header(..., description="Internal API key for authentication"),
 ) -> dict:
-    """Get the anonymous user session data for unauthenticated mode."""
+    """Get the anonymous user session data for unauthenticated mode.
+
+    Deprecated: api-key-gated variant with no remaining callers (clients use
+    /auth/public/get_anonymous_user_session). Scheduled for removal.
+    """
+    logger.warning(
+        "DEPRECATED endpoint auth/get_anonymous_user_session called; scheduled for removal."
+    )
     logger.debug("Fetching anonymous user session")
 
     if not _is_valid_internal_api_key(api_key):
@@ -557,13 +576,16 @@ async def api_get_anonymous_user_session(
     return session_data
 
 
-@auth_endpoint_router.post("/create_temporary_user", include_in_schema=True)
+@auth_endpoint_router.post("/create_temporary_user", include_in_schema=True, deprecated=True)
 async def create_temporary_user_endpoint(
     expiry_hours: int = 24,
     expiry_minutes: int = 0,
     api_key: str = Header(..., description="Internal API key for authentication"),
 ) -> dict:
     """Create a temporary user with automatic expiration.
+
+    Deprecated: api-key-gated variant with no remaining callers (clients use
+    /auth/public/create_temporary_user). Scheduled for removal.
 
     Args:
         expiry_hours: Number of hours until the user expires (default: 24)
@@ -572,6 +594,7 @@ async def create_temporary_user_endpoint(
     Returns:
         Session data for the temporary user
     """
+    logger.warning("DEPRECATED endpoint auth/create_temporary_user called; scheduled for removal.")
     logger.debug(f"Creating temporary user with expiry: {expiry_hours} hours")
 
     if not _is_valid_internal_api_key(api_key):
@@ -600,11 +623,15 @@ async def create_temporary_user_endpoint(
     return session_data
 
 
-@auth_endpoint_router.post("/cleanup_expired_temporary_users", include_in_schema=True)
+@auth_endpoint_router.post(
+    "/cleanup_expired_temporary_users", include_in_schema=True, deprecated=True
+)
 async def cleanup_expired_temporary_users_endpoint(
     api_key: str = Header(..., description="Internal API key for authentication"),
 ) -> dict:
     """Clean up expired temporary users and their tokens.
+
+    Deprecated: no remaining callers. Scheduled for removal.
 
     Args:
         api_key: Internal API key for authentication
@@ -612,6 +639,9 @@ async def cleanup_expired_temporary_users_endpoint(
     Returns:
         Cleanup results
     """
+    logger.warning(
+        "DEPRECATED endpoint auth/cleanup_expired_temporary_users called; scheduled for removal."
+    )
     logger.debug("Cleaning up expired temporary users")
 
     if not _is_valid_internal_api_key(api_key):
@@ -749,10 +779,13 @@ async def register(
     return result
 
 
-@auth_endpoint_router.get("/get_all_users", include_in_schema=False)
+@auth_endpoint_router.get("/get_all_users", include_in_schema=False, deprecated=True)
 async def get_all_users(current_user=Depends(get_current_user)):
     """
     Get all users in the system for user management purposes.
+
+    Deprecated: duplicate of /auth/list (which clients use). Scheduled for
+    removal; no remaining callers.
 
     Args:
         current_user: Currently authenticated user (must be admin)
@@ -763,6 +796,7 @@ async def get_all_users(current_user=Depends(get_current_user)):
     Raises:
         HTTPException: If user is not authenticated or not an admin
     """
+    logger.warning("DEPRECATED endpoint auth/get_all_users called; scheduled for removal.")
     if not current_user:
         raise HTTPException(status_code=401, detail="Current user not found.")
     if not current_user.is_admin:
@@ -825,11 +859,17 @@ async def edit_password(
         return {"success": False, "message": "Failed to update password"}
 
 
-@auth_endpoint_router.post("/delete_token", include_in_schema=True)
+@auth_endpoint_router.post("/delete_token", include_in_schema=True, deprecated=True)
 async def delete_token(
     token_id: PydanticObjectId,
     api_key: str = Header(..., description="Internal API key for authentication"),
 ):
+    """Delete a token via the internal API key.
+
+    Deprecated: clients use the user-scoped DELETE /auth/me/tokens/{id}.
+    Scheduled for removal; no remaining callers.
+    """
+    logger.warning("DEPRECATED endpoint auth/delete_token called; scheduled for removal.")
     if not _is_valid_internal_api_key(api_key):
         raise HTTPException(
             status_code=403,
