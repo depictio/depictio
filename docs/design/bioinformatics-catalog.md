@@ -47,6 +47,48 @@
 
 ---
 
+## 0. Glossary — the 7 concepts
+
+The system is best understood as a **generic template** (the catalog, shared and
+community-extensible) plus a per-dashboard **instance** (the dashboard authoring
+handle + the real dataset):
+
+```
+   TEMPLATE (catalog, shared)                 INSTANCE (one dashboard)
+   module ─ output ─ render ─ role ─ recipe    use:  +  DC
+```
+
+| Concept | What it is | Example |
+|---|---|---|
+| **module** | One bioinformatics **tool** (a folder under `depictio/catalog/`). Holds identity only (id, name, nf-core/bio.tools/EDAM anchors). | `catalog/qiime2/module.yaml` |
+| **output** | One **file the tool emits**, with `find` (how to recognise it in a run) + optional `recipe`. | `qiime2_rel_abundance` — `find: rel-table-*.tsv` |
+| **render** | One **way to visualise** an output (`renders_as[*]`); its `id` is the `use:` handle. An output can have several. | under `rel_abundance`: `stacked_taxonomy` / `sunburst` / `complex_heatmap` |
+| **role** | A viz's **semantic column slot**, mapped to a column; expands to `<role>_col`. Empty `roles: {}` = a pure "render as <kind>" handle (binding stays per-tile). | volcano `{feature_id: id, effect_size: lfc, significance: q_val}` |
+| **recipe** | A `.py` **reshape** (`SOURCES` + `EXPECTED_SCHEMA` + `transform`) turning a raw file (or another DC) into a bindable shape. Optional — omitted when the raw file is already bindable. | `qiime2/ancombc.py` (join + melt) |
+| **use:** | The dashboard authoring handle `use: <module>/<render-id>` — inherits `viz_kind` + role bindings from the catalog render; the tile's `config:` overrides. | `use: qiime2/complex_heatmap` + `data_collection_tag` + `config` |
+| **DC** (data collection) | The **real dataset** a tile binds (`data_collection_tag` → `dc_id`). The render says *how* to view; the DC says *what*. | `complex_heatmap_canonical`, `bray_curtis_canonical` |
+
+End-to-end:
+
+```
+  module qiime2
+    └─ output qiime2_rel_abundance        (find: rel-table-*.tsv)   ← TEMPLATE
+         └─ render "complex_heatmap"       (kind + roles:{})
+                        ▲
+                        │ use: qiime2/complex_heatmap                ← INSTANCE
+    tile dashboard ─────┘
+        data_collection_tag: complex_heatmap_canonical  ──►  DC (real dc_id)
+        config: { index_column: Phylum, ... }
+                        │
+                        ▼  the renderer loads the DC and draws the heatmap
+```
+
+(An 8th, non-authoring concept: the **recipe resolver** — version override →
+catalog/builtin → pipeline fallback. Implementation detail, not part of the
+authoring vocabulary.)
+
+---
+
 ## 1. Goal
 
 Automatically associate the **output of a bioinformatics tool** with the
@@ -71,8 +113,8 @@ just hand-maintained and blind to upstream tool identity.
 | Layer | File | Role |
 |---|---|---|
 | **Viz contract** | `models/components/advanced_viz/schemas.py` → `CANONICAL_SCHEMAS` | Per-viz required **roles** → accepted dtypes (volcano, manhattan, oncoplot, stacked_taxonomy, sunburst, da_barplot, lollipop, rarefaction, complex_heatmap, embedding, …). The "beyond-QC" surface. |
-| **Tool→viz registry** | `models/components/advanced_viz/producers.py` → `KNOWN_PRODUCERS` | ~25 `Producer`s. Each fingerprints a tool output by **column names**, declares `feeds_viz`, and a role→column `role_mapping`. |
-| **Auto-mapping** | `schemas.py` → `suggest_producers()` / `suggest_viz_kinds()` | Reverse lookup from a DC's schema. Wired into the API (`/datacollections/suggest`, `/suggest-from-columns`) and the React DC card's "Suggested visualisations" chips. |
+| **Tool→viz registry** | ~~`producers.py` → `KNOWN_PRODUCERS`~~ **(removed)** | Was a column-name fingerprint registry. Retired (dtype-blind, unreliable); see §0 and the status note above. |
+| **Auto-mapping** | `schemas.py` → `suggest_viz_kinds()` | Runtime reverse lookup from a DC's `{col: dtype}` schema (role-name aliases + dtype). Wired into the API (`/datacollections/viz-suggestions`) and the React DC card's "Suggested visualisations" chips. `suggest_producers()` was removed; the API still returns `producers: []` for client compatibility. |
 | **Reshape engine** | `recipes/__init__.py` + `projects/nf-core/*/recipes/*.py` | A 2-tier DAG: raw tool file → typed DC → canonical-schema DC. Each recipe declares `SOURCES` (glob/path/dc_ref), `EXPECTED_SCHEMA`, `transform()`. |
 
 **The four gaps**, mapped to the asks:
