@@ -31,9 +31,13 @@ from depictio.version import get_version
 utils_endpoint_router = APIRouter()
 
 
-# TODO - remove this endpoint - only for testing purposes in order to drop the S3 bucket content & the DB collections
+# Destructive dev-only endpoint: drops the S3 bucket content. Gated behind
+# settings.enable_dev_endpoints so it 404s in production even for admins.
 @utils_endpoint_router.get("/drop_S3_content")
 async def drop_S3_content(current_user=Depends(get_current_user)):
+    if not settings.enable_dev_endpoints:
+        raise HTTPException(status_code=404, detail="Not found")
+
     if not current_user:
         raise HTTPException(status_code=401, detail="Current user not found.")
 
@@ -63,8 +67,13 @@ async def drop_S3_content(current_user=Depends(get_current_user)):
     return {"message": "S3 bucket content dropped"}
 
 
+# Destructive dev-only endpoint: drops all MongoDB collections. Gated behind
+# settings.enable_dev_endpoints so it 404s in production even for admins.
 @utils_endpoint_router.get("/drop_all_collections")
 async def drop_all_collections(current_user=Depends(get_current_user)):
+    if not settings.enable_dev_endpoints:
+        raise HTTPException(status_code=404, detail="Not found")
+
     if not current_user:
         raise HTTPException(status_code=401, detail="Current user not found.")
 
