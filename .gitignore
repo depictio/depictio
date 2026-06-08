@@ -215,8 +215,11 @@ screenshot_*.png
 # Ignore all screenshots recursively
 depictio/dash/**/screenshots/**
 # Dashboard screenshots are generated at runtime by the worker and served from
-# here; the backend mkdir's the dir at boot (depictio/api/main.py). Not tracked.
-depictio/api/static/screenshots/
+# here; the backend mkdir's the dir at boot (depictio/api/main.py). Not tracked
+# by default — but the reference-dashboard thumbnails below are allow-listed so
+# fresh deployments ship good cards (seeded onto the PVC by the helm
+# copy-screenshot-files init container).
+depictio/api/static/screenshots/**
 
 # Allow reference dashboard screenshots (iris, penguins, ampliseq)
 # Iris dashboard (6824cb3b89d2b72169309737)
@@ -233,6 +236,14 @@ depictio/api/static/screenshots/
 # Ampliseq Analysis dashboard (646b0f3c1e4a2d7f8e5b8ca6)
 !depictio/dash/static/screenshots/646b0f3c1e4a2d7f8e5b8ca6_light.png
 !depictio/dash/static/screenshots/646b0f3c1e4a2d7f8e5b8ca6_dark.png
+
+# Allow reference dashboard screenshots served by the API (React viewer cards).
+# These are regenerated against real reference data and committed so fresh
+# deploys / rebuilt images carry correct thumbnails. Reference dashboards use
+# deterministic seed IDs sharing the body `46b0f3c1e4a2d7f8e5b` (ampliseq
+# 646b0f3c1e4a2d7f8e5b8..., viralrecon 746b0f3c1e4a2d7f8e5b9...); runtime
+# dashboards get random ObjectIds and stay ignored.
+!depictio/api/static/screenshots/?46b0f3c1e4a2d7f8e5b*.png
 
 # Ensure parent directories are also un-ignored
 !depictio/

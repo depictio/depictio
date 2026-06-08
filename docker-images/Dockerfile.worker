@@ -20,10 +20,22 @@ WORKDIR /app
 # System deps cover Playwright's chromium runtime libs. All screenshot
 # code paths use headless=True (zero xvfb/Xvfb/DISPLAY references in the
 # tree), so the X virtual framebuffer isn't needed — drops ~20 MB.
+#
+# Fonts: the React viewer uses a pure system-font stack
+# (`-apple-system, ..., Roboto, ..., sans-serif`; see viewer/src/theme.ts)
+# and bundles no web font. Without a sans-serif installed here, headless
+# chromium falls back to its built-in *serif* face and every dashboard
+# screenshot renders in Times. `fonts-roboto` matches the stack's named
+# family, `fonts-liberation` covers Arial-metric text (Plotly's default
+# `arial, sans-serif`), and `fontconfig` builds the cache so the generic
+# `sans-serif` keyword also resolves to a real sans face.
 RUN apt-get update && apt-get install --no-install-recommends -y \
         curl \
         netcat-openbsd \
         ca-certificates \
+        fontconfig \
+        fonts-roboto \
+        fonts-liberation \
         libnss3 \
         libnspr4 \
         libatk1.0-0 \
@@ -40,6 +52,7 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
         libasound2 \
         libpango-1.0-0 \
         libcairo2 \
+    && fc-cache -f \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
