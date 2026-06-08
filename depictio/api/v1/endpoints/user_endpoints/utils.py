@@ -11,13 +11,12 @@ from pydantic import validate_call
 from depictio.api.v1.configs.config import ALGORITHM, PRIVATE_KEY_PATH
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.key_utils import get_private_key
-from depictio.models.models.base import PyObjectId, convert_objectid_to_str
+from depictio.models.models.base import PyObjectId
 from depictio.models.models.users import (
     Group,
     GroupBeanie,
     TokenBeanie,
     TokenData,
-    UserBase,
     UserBeanie,
 )
 
@@ -131,22 +130,6 @@ def create_group_helper(group: Group) -> dict[str, bool | str | Group | None]:
 
 
 @validate_call(validate_return=True)
-def delete_group_helper(group_id: PyObjectId) -> dict[str, bool | str]:
-    """Delete a group by ID, protecting system groups."""
-    from depictio.api.v1.db import groups_collection
-
-    groups = [convert_objectid_to_str(group) for group in groups_collection.find()]
-    for group in groups:
-        if group["name"] in ["users", "admin"] and group_id == group["_id"]:
-            return {"success": False, "message": f"Cannot delete group {group['name']}"}
-
-    result = groups_collection.delete_one({"_id": group_id})
-    if result.deleted_count == 1:
-        return {"success": True, "message": "Group deleted successfully"}
-    return {"success": False, "message": "Group not found"}
-
-
-@validate_call(validate_return=True)
 async def create_access_token(
     token_data: TokenData,
     expiry_hours: int = None,  # type: ignore[invalid-parameter-default]
@@ -221,48 +204,6 @@ def login_user(email: str):
 def logout_user():
     """Return logout payload."""
     return {"logged_in": False, "access_token": None}
-
-
-def update_group_in_users_helper(group_id: ObjectId, group_users: list[UserBase]) -> dict:
-    """Update group membership for users, adding and removing as needed."""
-    from depictio.api.v1.db import groups_collection, users_collection
-
-    group = groups_collection.find_one({"_id": group_id})
-    if not group:
-        return {"success": False, "error": "Group not found."}
-
-    group_str = convert_objectid_to_str(group)
-    group_user_ids = [ObjectId(user.id) for user in group_users]
-    updated_users = []
-
-    group_info = Group(
-        id=ObjectId(group_id),  # type: ignore[invalid-argument-type]
-        name=group_str["name"],
-    )
-    group_info = group_info.mongo()
-
-    current_users = list(users_collection.find({"groups._id": group_id}))
-    current_user_ids = [user["_id"] for user in current_users]
-
-    # Add or update group for users in group_user_ids
-    for user_id in group_user_ids:
-        users_collection.update_one({"_id": user_id}, {"$addToSet": {"groups": group_info}})
-        updated_users.append(str(user_id))
-
-    # Remove group from users no longer in the group
-    users_to_remove_from = [uid for uid in current_user_ids if uid not in group_user_ids]
-    if users_to_remove_from:
-        users_collection.update_many(
-            {"_id": {"$in": users_to_remove_from}},
-            {"$pull": {"groups": {"_id": group_id}}},
-        )
-        updated_users.extend([str(uid) for uid in users_to_remove_from])
-
-    return {
-        "success": True,
-        "message": f"Updated group membership for users: {updated_users}",
-        "updated_users": updated_users,
-    }
 
 
 async def _get_admin_token_localstorage_payload() -> str:
