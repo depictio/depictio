@@ -280,7 +280,7 @@ class TestDisabledFeatures:
         mock_settings.auth.is_public_mode = True
 
         registration = RequestUserRegistration(
-            email="test@example.com", password="password123", is_admin=False
+            email="test@example.com", password="password123"
         )
         # The mode check fires before rate limiting, so the request mock is never
         # inspected — it only needs to satisfy the (now required) parameter.
