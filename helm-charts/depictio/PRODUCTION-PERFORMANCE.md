@@ -190,7 +190,7 @@ Test screenshot performance after deployment:
 
 ```bash
 # Test screenshot endpoint
-curl -X GET "https://api.demo.depictio.embl.org/depictio/api/v1/utils/screenshot-dash-fixed/6824cb3b89d2b72169309737"
+curl -X GET "https://api.demo.depictio.embl.org/depictio/api/v1/utils/screenshot-react-dual/6824cb3b89d2b72169309737"
 
 # Monitor logs for performance metrics
 kubectl logs -f deployment/depictio-backend -n depictio | grep "screenshot_optimized"

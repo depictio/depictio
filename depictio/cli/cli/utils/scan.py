@@ -345,7 +345,7 @@ def scan_run_for_multiple_data_collections(
         )
 
     # Scan all files in the run directory
-    all_files_in_run = []
+    all_files_in_run: list[str] = []
     if os.path.isdir(run_location):
         for root, _, files in os.walk(run_location):
             for file in files:

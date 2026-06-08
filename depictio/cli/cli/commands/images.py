@@ -508,7 +508,7 @@ def list_bucket(
         raise typer.Exit(code=1)
 
 
-def _format_size(size_bytes: int) -> str:
+def _format_size(size_bytes: float) -> str:
     """Format file size in human-readable format."""
     for unit in ["B", "KB", "MB", "GB"]:
         if size_bytes < 1024:

@@ -1039,6 +1039,16 @@ class Settings(BaseSettings):
         ),
     )
 
+    enable_dev_endpoints: bool = Field(
+        default=False,
+        description=(
+            "Expose destructive/test-only dev endpoints (utils/drop_S3_content, "
+            "utils/drop_all_collections, events/test-trigger). Off by default so "
+            "they 404 in production even for admins; enable only for local "
+            "development and integration scripts."
+        ),
+    )
+
     model_config = SettingsConfigDict(
         env_prefix="DEPICTIO_",
         env_file=".env",

@@ -327,13 +327,16 @@ async def get_deltatable(
     return convert_objectid_to_str(sanitize_for_json(deltatable_cursor[-1]))
 
 
-@deltatables_endpoint_router.post("/batch/exists")
+@deltatables_endpoint_router.post("/batch/exists", deprecated=True)
 async def batch_check_deltatables_exist(
     data_collection_ids: list[PyObjectId],
     current_user: User = Depends(get_user_or_anonymous),
 ):
     """
     Check existence of multiple deltatables in a single call.
+
+    Deprecated: this batch helper served the old Dash design_draggable()
+    flow and has no remaining callers. Scheduled for removal.
 
     This endpoint eliminates the N+1 query pattern in design_draggable()
     by allowing batch checking of deltatable existence.
@@ -349,6 +352,7 @@ async def batch_check_deltatables_exist(
     Returns:
         Dict mapping data collection ID to existence status and location.
     """
+    logger.warning("DEPRECATED endpoint deltatables/batch/exists called; scheduled for removal.")
     # Restrict to the DCs the caller is allowed to see. Build a single
     # permission $match across all requested ids (mirrors the per-id filter in
     # ``_build_permission_pipeline``) so inaccessible DCs never surface.

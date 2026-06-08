@@ -385,8 +385,12 @@ async def test_trigger_event(
     POST to this endpoint to see the live-update flow end-to-end.
 
     Admin-only: this is a test/debug endpoint that broadcasts arbitrary DC
-    update events to all connected clients.
+    update events to all connected clients. Gated behind
+    ``settings.enable_dev_endpoints`` so it 404s in production.
     """
+    if not settings.enable_dev_endpoints:
+        raise HTTPException(status_code=404, detail="Not found")
+
     if not current_user.is_admin:
         logger.warning(
             f"Denied test-trigger: non-admin user {current_user.id} ({current_user.email})"

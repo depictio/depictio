@@ -5,6 +5,10 @@
 # WebSocket subscribers receive a `data_collection_updated` event with
 # row_delta + new_ids in the payload.
 #
+# NOTE: /events/test-trigger is a dev-only endpoint gated behind
+# DEPICTIO_ENABLE_DEV_ENDPOINTS — start the API with that set to true,
+# otherwise the POST below returns 404.
+#
 # Modes:
 #   reset                       Wipe CSV down to 2 seed rows, run CLI.
 #   bump [N]                    Append N rows (default 1) once, no pause

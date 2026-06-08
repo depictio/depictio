@@ -105,11 +105,15 @@ jobs:
           source venv/bin/activate
           ruff check depictio
 
-      # - name: Run ty type checker (must pass)
-      #   run: |
-      #     source venv/bin/activate
-      #     ty version
-      #     ty check depictio/models/ depictio/api/ depictio/dash/ depictio/cli/ depictio/tests/
+      - name: Run ty type checker (must pass)
+        run: |
+          source venv/bin/activate
+          ty version
+          # Scoped to depictio/models/ to match the pre-commit ty hook after the
+          # Phase A tooling bump (ty 0.0.1-alpha.12 -> 0.0.44). The new ty surfaces
+          # ~280 diagnostics in api/ and cli/ that are deferred to a dedicated
+          # type-debt cleanup (Phase B); gating those here would be red.
+          ty check depictio/models/
 
       # - name: Run pre-commit hooks
       #   run: |

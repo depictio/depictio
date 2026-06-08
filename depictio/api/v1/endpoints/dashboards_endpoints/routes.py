@@ -151,7 +151,7 @@ def get_project_permissions_for_dashboard(dashboard_id: PyObjectId) -> dict | No
 
 
 def check_project_permission(
-    project_id: PyObjectId, user: User, required_permission: str = "viewer"
+    project_id: PyObjectId | str, user: User, required_permission: str = "viewer"
 ) -> bool:
     """
     Check if user has required permission on project.
@@ -504,48 +504,6 @@ async def make_dashboard_public(
         "dashboards_updated": dashboards_update_result.modified_count,
         "child_tabs_updated": child_tabs_updated,
     }
-
-
-@dashboards_endpoint_router.post("/edit_name/{dashboard_id}")
-async def edit_dashboard_name(
-    dashboard_id: PyObjectId,
-    data: dict,
-    current_user: User = Depends(get_current_user),
-):
-    """
-    Edit the name of a dashboard with the given dashboard ID.
-    Now uses project-based permissions (editor level required).
-    Deprecated: Use /edit/{dashboard_id} instead.
-    """
-    new_name = data.get("new_name", None)
-    if not new_name:
-        raise HTTPException(status_code=400, detail="No new name provided.")
-
-    dashboard = dashboards_collection.find_one({"dashboard_id": dashboard_id})
-    if not dashboard:
-        raise HTTPException(
-            status_code=404, detail=f"Dashboard with ID '{dashboard_id}' not found."
-        )
-
-    project_id = dashboard.get("project_id")
-    if not project_id:
-        raise HTTPException(status_code=500, detail="Dashboard is not associated with a project.")
-
-    if not check_project_permission(project_id, current_user, "editor"):
-        raise HTTPException(
-            status_code=403, detail="You don't have permission to edit this dashboard."
-        )
-
-    result = dashboards_collection.find_one_and_update(
-        {"dashboard_id": dashboard_id},
-        {"$set": {"title": new_name}},
-        return_document=True,
-    )
-
-    if result:
-        return {"message": f"Dashboard name updated successfully to '{new_name}'."}
-    else:
-        raise HTTPException(status_code=500, detail="Failed to update dashboard name.")
 
 
 @dashboards_endpoint_router.post("/edit/{dashboard_id}")
@@ -1134,7 +1092,7 @@ async def get_component_data_endpoint(
     return component_metadata
 
 
-@dashboards_endpoint_router.post("/bulk_component_data/{dashboard_id}")
+@dashboards_endpoint_router.post("/bulk_component_data/{dashboard_id}", deprecated=True)
 def bulk_get_component_data_endpoint(
     dashboard_id: PyObjectId,
     request: dict,  # {"component_ids": [uuid1, uuid2, ...]}
@@ -1142,6 +1100,10 @@ def bulk_get_component_data_endpoint(
 ):
     """
     PERFORMANCE OPTIMIZATION: Fetch multiple component data in a single request.
+
+    Deprecated: the React viewer uses bulk_compute_cards and the per-component
+    get_component_data endpoint; this batch variant has no remaining callers
+    and is scheduled for removal.
 
     Reduces HTTP overhead from N individual requests to 1 batch request.
     Expected performance improvement: ~70% for dashboard loading.
@@ -1154,6 +1116,9 @@ def bulk_get_component_data_endpoint(
     Returns:
         Dict mapping component_id -> component_metadata
     """
+    logger.warning(
+        "DEPRECATED endpoint dashboards/bulk_component_data called; scheduled for removal."
+    )
     component_ids = request.get("component_ids", [])
 
     if not component_ids:
@@ -2448,18 +2413,6 @@ async def render_jbrowse_endpoint(
 
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            try:
-                last_status_resp = await client.get(
-                    f"{API_BASE_URL}/depictio/api/v1/jbrowse/last_status"
-                )
-                if last_status_resp.status_code == 200:
-                    last_status = last_status_resp.json()
-                    assembly = last_status.get("assembly") or assembly
-                    if last_status.get("loc"):
-                        default_loc = last_status["loc"]
-            except httpx.HTTPError as e:
-                logger.warning(f"render_jbrowse: last_status unreachable: {e}")
-
             if filters:
                 try:
                     map_resp = await client.get(
@@ -3985,12 +3938,15 @@ async def export_dashboard_as_yaml(
     )
 
 
-@dashboards_endpoint_router.get("/{dashboard_id}/yaml/family")
+@dashboards_endpoint_router.get("/{dashboard_id}/yaml/family", deprecated=True)
 async def export_dashboard_family_as_yaml(
     dashboard_id: PyObjectId,
     current_user: User = Depends(get_user_or_anonymous),
 ) -> Response:
     """Export dashboard family (main tab + all child tabs) as ZIP archive.
+
+    Deprecated: no remaining callers (clients use the JSON export and the
+    single-dashboard YAML export). Scheduled for removal.
 
     Returns a ZIP file containing YAML files for the main dashboard and
     all its child tabs, preserving the tab hierarchy for re-import.
@@ -4001,6 +3957,7 @@ async def export_dashboard_family_as_yaml(
     Returns:
         ZIP file containing YAML files
     """
+    logger.warning("DEPRECATED endpoint dashboards/{id}/yaml/family called; scheduled for removal.")
     import io
     import zipfile
 
@@ -4068,12 +4025,15 @@ async def export_dashboard_family_as_yaml(
     )
 
 
-@dashboards_endpoint_router.post("/yaml/validate")
+@dashboards_endpoint_router.post("/yaml/validate", deprecated=True)
 async def validate_yaml_content(
     yaml_content: str = Body(..., media_type="text/plain"),
     current_user: User = Depends(get_current_user),
 ) -> dict[str, Any]:
     """Validate YAML content against DashboardDataLite schema.
+
+    Deprecated: no remaining callers (the React clients validate via the
+    JSON endpoint). Scheduled for removal.
 
     Uses Pydantic validation to check if the YAML content is valid.
 
@@ -4083,6 +4043,7 @@ async def validate_yaml_content(
     Returns:
         Validation result with is_valid flag and any errors
     """
+    logger.warning("DEPRECATED endpoint dashboards/yaml/validate called; scheduled for removal.")
     is_valid, errors = DashboardDataLite.validate_yaml(yaml_content)
 
     return {
@@ -4091,9 +4052,11 @@ async def validate_yaml_content(
     }
 
 
-@dashboards_endpoint_router.get("/yaml/schema")
+@dashboards_endpoint_router.get("/yaml/schema", deprecated=True)
 async def get_yaml_schema() -> dict[str, Any]:
     """Get JSON Schema for YAML validation.
+
+    Deprecated: no remaining callers. Scheduled for removal.
 
     Returns the JSON Schema that describes valid dashboard YAML structure.
     Can be used for IDE autocompletion and external validation tools.
@@ -4101,6 +4064,7 @@ async def get_yaml_schema() -> dict[str, Any]:
     Returns:
         JSON Schema for DashboardDataLite
     """
+    logger.warning("DEPRECATED endpoint dashboards/yaml/schema called; scheduled for removal.")
     return DashboardDataLite.model_json_schema()
 
 

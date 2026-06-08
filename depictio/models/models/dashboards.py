@@ -195,7 +195,7 @@ class DashboardDataLite(BaseModel):
     )
 
     # Map component_type string → typed Lite model for domain validation
-    _COMPONENT_TYPE_MAP: ClassVar[dict[str, type]] = {
+    _COMPONENT_TYPE_MAP: ClassVar[dict[str, type[BaseModel]]] = {
         "figure": FigureLiteComponent,
         "card": CardLiteComponent,
         "interactive": InteractiveLiteComponent,
@@ -1194,11 +1194,8 @@ class DashboardDataLite(BaseModel):
         right_auto_y = 0
 
         for idx, comp in enumerate(full_components):
-            comp_dict = (
-                self.components[idx]
-                if isinstance(self.components[idx], dict)
-                else self.components[idx].model_dump()
-            )
+            comp_obj = self.components[idx]
+            comp_dict = comp_obj if isinstance(comp_obj, dict) else comp_obj.model_dump()
             comp_type = comp.get("component_type", "figure")
 
             # Extract x/y/w/h from nested layout (new format), flat fields (legacy), or auto-generate
