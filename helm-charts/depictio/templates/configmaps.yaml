@@ -13,7 +13,7 @@ data:
   DEPICTIO_VIEWER_SERVICE_PORT: {{ .Values.backend.env.DEPICTIO_VIEWER_SERVICE_PORT | quote }}
   DEPICTIO_VIEWER_SERVICE_NAME: {{ printf "%s-depictio-viewer" .Release.Name | quote }}
   {{- if .Values.mongo.useOperator }}
-  DEPICTIO_MONGODB_SERVICE_NAME: {{ printf "%s-mongo-svc" .Release.Name | quote }}
+  DEPICTIO_MONGODB_SERVICE_NAME: {{ printf "%s-mongo-rs0" .Release.Name | quote }}
   DEPICTIO_MONGODB_SERVICE_PORT: "27017"
   DEPICTIO_MONGODB_AUTH_SOURCE: "admin"
   {{- else }}
@@ -144,7 +144,7 @@ data:
 
   # Service settings
   {{- if .Values.mongo.useOperator }}
-  DEPICTIO_MONGODB_SERVICE_NAME: {{ printf "%s-mongo-svc" .Release.Name | quote }}
+  DEPICTIO_MONGODB_SERVICE_NAME: {{ printf "%s-mongo-rs0" .Release.Name | quote }}
   DEPICTIO_MONGODB_SERVICE_PORT: "27017"
   DEPICTIO_MONGODB_AUTH_SOURCE: "admin"
   {{- else }}

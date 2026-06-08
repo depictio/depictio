@@ -78,7 +78,7 @@ backend:
 
 
 mongo:
-  useOperator: true     # Use MongoDB Community Operator for HA replica set
+  useOperator: true     # Use Percona PSMDB Operator for HA replica set
   replicas: 3           # 3-member replica set managed by the operator
   auth:
     enabled: true
@@ -86,7 +86,10 @@ mongo:
     # password must be set in values-embl-secrets.yaml (never commit)
     password: ""
   image:
+    repository: percona/percona-server-mongodb
+    tag: "6.0.9-7"
     pullPolicy: Always
+  clusterServiceDNSSuffix: "svc.ops-k1.embl.de"
   resources:
     requests:
       memory: "1Gi"
@@ -94,13 +97,6 @@ mongo:
     limits:
       memory: "1Gi"     # Reduced: demo data is small, keep budget for backend/celery
       cpu: "500m"
-  agentResources:
-    requests:
-      cpu: "100m"
-      memory: "256Mi"
-    limits:
-      cpu: "200m"       # Reduced: agent sidecar is lightweight
-      memory: "512Mi"
   podSecurityContext:
     runAsNonRoot: true
     runAsUser: 999

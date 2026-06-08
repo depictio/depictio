@@ -75,7 +75,7 @@ demo:
 # MongoDB settings
 mongo:
   # useOperator: false = self-managed StatefulSet (default, no auth, single or multi-replica)
-  # useOperator: true  = MongoDB Community Operator manages the replica set (requires operator pre-installed)
+  # useOperator: true  = Percona PSMDB Operator manages the replica set (requires operator pre-installed by cluster admin)
   useOperator: false
   auth:
     enabled: false      # Enable SCRAM auth (required when useOperator: true)
@@ -87,9 +87,14 @@ mongo:
     repository: mongo
     # Pinned to a specific 8.x release — :latest is mutable and was a CI/supply-chain
     # risk. Override per-deployment if a different minor is required.
+    # When useOperator: true, set repository to percona/percona-server-mongodb and tag to 6.x.
     tag: "8.0.5"
     pullPolicy: IfNotPresent
   replicas: 1 # Set to 3 for high availability replica set
+  # Cluster DNS suffix used by the Percona operator to build replica set member hostnames.
+  # Only used when mongo.useOperator: true. Override per-cluster if the cluster DNS suffix
+  # differs from the default (e.g. "svc.ops-k1.embl.de" for EMBL ops cluster).
+  clusterServiceDNSSuffix: "svc.cluster.local"
   resources:
     requests:
       memory: "1Gi"
@@ -97,15 +102,6 @@ mongo:
     limits:
       memory: "1Gi"
       cpu: "1"
-  # Resources for the mongodb-agent sidecar injected by the Community Operator.
-  # Only used when mongo.useOperator: true.
-  agentResources:
-    requests:
-      cpu: "100m"
-      memory: "256Mi"
-    limits:
-      cpu: "200m"
-      memory: "512Mi"
   service:
     type: ClusterIP
     port: 27018

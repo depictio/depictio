@@ -369,7 +369,7 @@ spec:
           image: "{{ .Values.initContainerImage.repository }}:{{ .Values.initContainerImage.tag }}"
           imagePullPolicy: {{ .Values.initContainerImage.pullPolicy }}
           {{- if .Values.mongo.useOperator }}
-          command: ['sh', '-c', 'until nc -z {{ .Release.Name }}-mongo-svc 27017; do echo "Waiting for mongo..."; sleep 2; done']
+          command: ['sh', '-c', 'until nc -z {{ .Release.Name }}-mongo-rs0 27017; do echo "Waiting for mongo..."; sleep 2; done']
           {{- else }}
           command: ['sh', '-c', 'until nc -z {{ .Release.Name }}-mongo {{ .Values.mongo.service.port }}; do echo "Waiting for mongo..."; sleep 2; done']
           {{- end }}
@@ -697,7 +697,7 @@ spec:
           image: "{{ .Values.initContainerImage.repository }}:{{ .Values.initContainerImage.tag }}"
           imagePullPolicy: {{ .Values.initContainerImage.pullPolicy }}
           {{- if .Values.mongo.useOperator }}
-          command: ['sh', '-c', 'until nc -z {{ .Release.Name }}-mongo-svc 27017; do echo "Waiting for mongo..."; sleep 2; done']
+          command: ['sh', '-c', 'until nc -z {{ .Release.Name }}-mongo-rs0 27017; do echo "Waiting for mongo..."; sleep 2; done']
           {{- else }}
           command: ['sh', '-c', 'until nc -z {{ .Release.Name }}-mongo {{ .Values.mongo.service.port }}; do echo "Waiting for mongo..."; sleep 2; done']
           {{- end }}
