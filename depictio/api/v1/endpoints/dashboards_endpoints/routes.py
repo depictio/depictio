@@ -2406,18 +2406,6 @@ async def render_jbrowse_endpoint(
 
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            try:
-                last_status_resp = await client.get(
-                    f"{API_BASE_URL}/depictio/api/v1/jbrowse/last_status"
-                )
-                if last_status_resp.status_code == 200:
-                    last_status = last_status_resp.json()
-                    assembly = last_status.get("assembly") or assembly
-                    if last_status.get("loc"):
-                        default_loc = last_status["loc"]
-            except httpx.HTTPError as e:
-                logger.warning(f"render_jbrowse: last_status unreachable: {e}")
-
             if filters:
                 try:
                     map_resp = await client.get(
