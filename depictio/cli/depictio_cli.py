@@ -349,12 +349,6 @@ def display_depictio_cli_logo(compact: bool = False):
             ),
             Text("Interactive dashboards for bioinformatics data", style="dim"),
             Text(cwd, style="dim"),
-            Text(""),
-            Text.assemble(
-                ("Tip: ", "dim"),
-                ("depictio catalog list", DEPICTIO_COLORS["blue"]),
-                (" · browse the tool→viz catalog", "dim"),
-            ),
         ]
 
         # Concatenate each row by hand (fixed-width favicon gutter + text)
