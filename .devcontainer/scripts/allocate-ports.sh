@@ -119,6 +119,21 @@ echo ""
 # Development auth settings (default: single-user mode for devcontainers)
 DEPICTIO_AUTH_SINGLE_USER_MODE=${DEPICTIO_AUTH_SINGLE_USER_MODE:-true}
 
+# MinIO credentials: single source of truth is docker-compose/.env (committed).
+# Read them here so the generated .env.instance — which feeds docker compose
+# ${VAR} interpolation for the `minio` container — matches what the backend
+# loads via `env_file: docker-compose/.env`. Hardcoding minio/minio123 here had
+# drifted from docker-compose/.env (depictio_dev), so the minio container booted
+# with one credential while the backend authenticated with another → S3
+# `InvalidAccessKeyId` and a failed startup.
+_DC_ENV="docker-compose/.env"
+DEPICTIO_MINIO_ROOT_USER="$(sed -n 's/^DEPICTIO_MINIO_ROOT_USER=//p' "$_DC_ENV" 2>/dev/null | tail -1)"
+DEPICTIO_MINIO_ROOT_PASSWORD="$(sed -n 's/^DEPICTIO_MINIO_ROOT_PASSWORD=//p' "$_DC_ENV" 2>/dev/null | tail -1)"
+# Fallbacks mirror the defaults pre_create_setup.sh writes when docker-compose/.env
+# is absent, so a bare checkout still gets a usable (matching) pair.
+DEPICTIO_MINIO_ROOT_USER="${DEPICTIO_MINIO_ROOT_USER:-minio}"
+DEPICTIO_MINIO_ROOT_PASSWORD="${DEPICTIO_MINIO_ROOT_PASSWORD:-minio123}"
+
 # Save configuration to .env.instance for persistence
 cat > .env.instance <<EOF
 # Auto-generated instance configuration
@@ -154,9 +169,10 @@ DEPICTIO_MINIO_EXTERNAL_PORT=${MINIO_PORT}
 DEPICTIO_MINIO_EXTERNAL_HOST=localhost
 DEPICTIO_FASTAPI_EXTERNAL_HOST=localhost
 
-# MinIO credentials (match docker-compose/.env)
-DEPICTIO_MINIO_ROOT_USER=minio
-DEPICTIO_MINIO_ROOT_PASSWORD=minio123
+# MinIO credentials — single source of truth: docker-compose/.env (read above).
+# These MUST equal what the backend loads via env_file: docker-compose/.env.
+DEPICTIO_MINIO_ROOT_USER=${DEPICTIO_MINIO_ROOT_USER}
+DEPICTIO_MINIO_ROOT_PASSWORD=${DEPICTIO_MINIO_ROOT_PASSWORD}
 
 # Development settings
 DEPICTIO_DEV_MODE=true
@@ -226,3 +242,18 @@ export MINIO_CONSOLE_PORT
 export VIEWER_DEV_PORT
 export FLOWER_PORT
 export DATA_DIR="data/${COMPOSE_PROJECT_NAME}"
+
+# Dev/auth settings must also be exported so `docker compose -f docker-compose.dev.yaml up`
+# (run in this sourced shell) picks them up via ${VAR:-default} interpolation. Unlike the
+# port vars these are NOT auto-loaded: .env.instance is not a plain `.env`, and the override
+# file is not auto-merged when -f is passed explicitly. Without these exports the compose
+# file falls back to DEPICTIO_AUTH_SINGLE_USER_MODE=false → instance starts in multi-user mode.
+export DEPICTIO_DEV_MODE=true
+export DEPICTIO_AUTH_SINGLE_USER_MODE
+export DEPICTIO_MONGODB_WIPE="${MONGODB_WIPE}"
+# MinIO creds (sourced from docker-compose/.env above) — export so the `minio`
+# container's ${DEPICTIO_MINIO_ROOT_USER} interpolation resolves to the same
+# value the backend loads via env_file, regardless of whether compose reads the
+# sourced shell or .env.instance for interpolation.
+export DEPICTIO_MINIO_ROOT_USER
+export DEPICTIO_MINIO_ROOT_PASSWORD
