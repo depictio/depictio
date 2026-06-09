@@ -158,7 +158,7 @@ _KIND_METADATA: dict[AdvancedVizKind, dict[str, Any]] = {
         "icon": "tabler:atom",
     },
     "manhattan": {
-        "label": "GWAS Manhattan (tool)",
+        "label": "Manhattan plot",
         "description": "chr / pos / score scatter — works for true GWAS, peak qvalues, and variant AF.",
         "icon": "tabler:chart-histogram",
         "category": "tool",

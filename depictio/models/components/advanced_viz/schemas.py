@@ -795,19 +795,77 @@ def suggest_viz_kinds(
     return suggestions
 
 
-def role_dtype_specs(kind: AdvancedVizKind) -> dict[str, dict[str, object]]:
-    """Per-role accepted dtypes for a viz kind, required first then optional.
+# Short human descriptions per role, keyed by role name (roles are reused
+# across viz kinds). Surfaced in the builder's per-binding tooltip alongside the
+# accepted dtypes. Roles without an entry fall back to an empty description.
+_ROLE_DESCRIPTIONS: dict[str, str] = {
+    "feature_id": "Identifier for each feature / gene / row (e.g. gene_id, ENSEMBL id).",
+    "effect_size": "Magnitude of change, typically log2 fold change.",
+    "significance": "Statistical significance — p-value or adjusted p / FDR.",
+    "sample_id": "Identifier for each sample / observation.",
+    "dim_1": "First embedding coordinate (PC1 / UMAP1 / tSNE1).",
+    "dim_2": "Second embedding coordinate (PC2 / UMAP2 / tSNE2).",
+    "dim_3": "Optional third embedding coordinate for 3D plots.",
+    "chr": "Chromosome / contig name.",
+    "chromosome": "Chromosome / contig name.",
+    "pos": "Genomic or sequence position (integer).",
+    "position": "Genomic or sequence position (integer).",
+    "score": "Value plotted on the y-axis (e.g. -log10 p, signal).",
+    "taxon": "Taxon / lineage name, or tree tip label.",
+    "rank": "Taxonomic rank / level (e.g. Phylum, Genus).",
+    "abundance": "Abundance / count / relative frequency.",
+    "depth": "Sequencing / sampling depth.",
+    "metric": "Diversity or summary metric value.",
+    "contrast": "Comparison / contrast label (group vs group).",
+    "lfc": "Log2 fold change.",
+    "term": "Pathway / GO term / gene-set name.",
+    "nes": "Normalised enrichment score.",
+    "padj": "Adjusted p-value / FDR.",
+    "gene_count": "Number of genes in the set.",
+    "index": "Row identifier used as the heatmap index.",
+    "avg_log_intensity": "Average log intensity — MA-plot x-axis (e.g. baseMean).",
+    "log2_fold_change": "Log2 fold change — MA-plot y-axis.",
+    "cluster": "Cluster / cell-type label.",
+    "gene": "Gene / feature name.",
+    "mean_expression": "Mean expression level (dot colour).",
+    "frac_expressing": "Fraction of cells expressing (dot size).",
+    "category": "Categorical grouping / annotation.",
+    "p_value": "P-value for the QQ distribution.",
+    "mutation_type": "Mutation class / variant consequence.",
+    "value": "Numeric value plotted (e.g. coverage).",
+    "label": "Optional text label for points.",
+    "color": "Optional column mapped to point colour.",
+    "feature": "Optional feature annotation.",
+    "effect": "Optional effect-size column.",
+    "iter": "Rarefaction iteration index.",
+    "group": "Grouping column for colouring / faceting.",
+    "source": "Source / database of the term.",
+    "end": "End coordinate of the interval.",
+    "sample": "Optional sample column for faceting.",
+}
 
-    Returns ``{role: {"required": bool, "dtypes": sorted([...])}}``. Exposed via
-    the `/advanced_viz/kinds` descriptor so the React builder drives its binding
-    dropdowns + dtype validation from the backend instead of duplicating the
-    dtype tables in TypeScript.
+
+def role_dtype_specs(kind: AdvancedVizKind) -> dict[str, dict[str, object]]:
+    """Per-role spec for a viz kind, required first then optional.
+
+    Returns ``{role: {"required": bool, "dtypes": sorted([...]), "description": str}}``.
+    Exposed via the `/advanced_viz/kinds` descriptor so the React builder drives
+    its binding dropdowns, dtype validation and per-binding tooltips from the
+    backend instead of duplicating the dtype tables in TypeScript.
     """
     specs: dict[str, dict[str, object]] = {}
     for role, accepted in CANONICAL_SCHEMAS[kind].items():
-        specs[role] = {"required": True, "dtypes": sorted(accepted)}
+        specs[role] = {
+            "required": True,
+            "dtypes": sorted(accepted),
+            "description": _ROLE_DESCRIPTIONS.get(role, ""),
+        }
     for role, accepted in _OPTIONAL_ROLES.get(kind, {}).items():
-        specs[role] = {"required": False, "dtypes": sorted(accepted)}
+        specs[role] = {
+            "required": False,
+            "dtypes": sorted(accepted),
+            "description": _ROLE_DESCRIPTIONS.get(role, ""),
+        }
     return specs
 
 

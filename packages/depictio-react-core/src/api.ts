@@ -496,6 +496,8 @@ export type AdvancedVizKind =
 export interface RoleDtypeSpec {
   required: boolean;
   dtypes: string[];
+  /** Short human description of the role, shown in the builder's binding tooltip. */
+  description: string;
 }
 
 export interface AdvancedVizKindDescriptor {

@@ -7,9 +7,9 @@
  * one path serialises a new role differently from the other.
  *
  * Mirrors depictio/models/components/advanced_viz/configs.py: most roles
- * serialise as `<role>_col`; sunburst's hierarchical `ranks` is list-typed
- * (→ `rank_cols`); embedding's `compute_method` is a scalar pick
- * (pca/umap/tsne/pcoa), not a column reference.
+ * serialise as `<role>_col`; sunburst's hierarchical `ranks` and sankey's
+ * ordered `steps` are list-typed (→ `rank_cols` / `step_cols`); embedding's
+ * `compute_method` is a scalar pick (pca/umap/tsne/pcoa), not a column reference.
  */
 export function buildAdvancedVizConfigBlob(
   vizKind: string | undefined,
@@ -19,6 +19,16 @@ export function buildAdvancedVizConfigBlob(
   for (const [role, value] of Object.entries(columnMapping)) {
     if (vizKind === 'sunburst' && role === 'ranks') {
       blob.rank_cols = value;
+    } else if (vizKind === 'sankey' && role === 'steps') {
+      blob.step_cols = value;
+    } else if (vizKind === 'complex_heatmap' && role === 'index') {
+      // ComplexHeatmapConfig's row-id field is `index_column`, NOT the generic
+      // `<role>_col` — emitting `index_col` would be dropped and the compute
+      // task would fall back to its "sample_id" default and fail the select.
+      blob.index_column = value;
+    } else if (role === 'value_columns' || role === 'row_annotation_cols') {
+      // List-typed config fields whose key already matches the model field.
+      blob[role] = value;
     } else if (role === 'compute_method') {
       blob.compute_method = value;
     } else {

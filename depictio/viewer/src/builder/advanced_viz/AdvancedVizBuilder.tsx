@@ -79,6 +79,25 @@ function dtypeMatch(actual: string, accepted: string[]): DtypeMatch {
   return 'none';
 }
 
+// Colour scheme shared by the bindings table + tooltip so required/optional
+// reads consistently. Required uses a warm accent, optional stays muted.
+const REQUIRED_COLOR = 'red';
+const OPTIONAL_COLOR = 'gray';
+
+/** Friendly one-word category for a role's accepted polars dtypes, so the
+ *  bindings overview reads "text"/"number" instead of "String / Utf8". */
+function simplifyDtypes(dtypes: string[]): string {
+  if (dtypes.length === 0) return 'any';
+  const allIn = (arr: string[]) => dtypes.every((d) => arr.includes(d));
+  const some = (arr: string[]) => dtypes.some((d) => arr.includes(d));
+  if (allIn(STRING_LIKE)) return 'text';
+  if (allIn(NUMERIC_FLOAT)) return 'decimal';
+  if (allIn(NUMERIC_INT)) return 'integer';
+  if (allIn(NUMERIC_ANY)) return 'number';
+  if (some(STRING_LIKE) && some(NUMERIC_ANY)) return 'text / number';
+  return dtypes.join(' / ');
+}
+
 /** Live-compute embedding gate — wide feature-matrix DCs (sample_id + many
  *  numeric features) should make Embedding available so the renderer can
  *  dispatch a Celery PCA/UMAP/t-SNE/PCoA task. Without this, embedding_features
@@ -110,6 +129,84 @@ function detectEmbeddingMode(
     NUMERIC_ANY.includes(d),
   ).length;
   return numericCount >= EMBEDDING_LIVE_MIN_NUMERIC ? 'live' : null;
+}
+
+/** Compact binding label: just the role name, with an info icon whose rich
+ *  tooltip carries required/optional, accepted dtypes and the role description.
+ *  Keeps each binding row scannable instead of a verbose inline label. */
+function roleBindingLabel(
+  role: string,
+  dtypes: string[],
+  description: string,
+  required: boolean,
+): React.ReactNode {
+  return (
+    <Text
+      span
+      size="sm"
+      fw={500}
+      style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
+    >
+      {role}
+      {required ? (
+        <Text span size="xs" c={REQUIRED_COLOR}>
+          *
+        </Text>
+      ) : null}
+      <Tooltip
+        withinPortal
+        multiline
+        w={260}
+        label={
+          <Stack gap={2}>
+            <Text size="xs" fw={600} c={required ? REQUIRED_COLOR : OPTIONAL_COLOR}>
+              {required ? 'Required' : 'Optional'}
+            </Text>
+            {description ? <Text size="xs">{description}</Text> : null}
+            <Text size="xs" c="dimmed">
+              {dtypes.length ? `Accepts: ${dtypes.join(', ')}` : 'Accepts: any column'}
+            </Text>
+          </Stack>
+        }
+      >
+        <Text span c="dimmed" style={{ display: 'inline-flex', cursor: 'help' }}>
+          <Icon icon="mdi:information-outline" width={14} height={14} />
+        </Text>
+      </Tooltip>
+    </Text>
+  );
+}
+
+/** One row of the "Bindings overview" table: role name + a colour-coded
+ *  required/optional badge, a simplified type, and the role description. */
+function exampleInputRow(
+  role: string,
+  typeLabel: string,
+  description: string,
+  required: boolean,
+): React.ReactNode {
+  return (
+    <Table.Tr key={`${required ? 'req' : 'opt'}-${role}`}>
+      {/* Role + Type never wrap, so they always fit their content; Description
+          is the only wrapping column and absorbs the remaining width. */}
+      <Table.Td style={{ whiteSpace: 'nowrap', width: '1%' }}>
+        <Group gap={6} wrap="nowrap">
+          <Text size="xs" fw={500}>
+            {role}
+          </Text>
+          <Badge size="xs" variant="light" color={required ? REQUIRED_COLOR : OPTIONAL_COLOR}>
+            {required ? 'required' : 'optional'}
+          </Badge>
+        </Group>
+      </Table.Td>
+      <Table.Td style={{ whiteSpace: 'nowrap', width: '1%' }}>{typeLabel}</Table.Td>
+      <Table.Td>
+        <Text size="xs" c="dimmed">
+          {description || '—'}
+        </Text>
+      </Table.Td>
+    </Table.Tr>
+  );
 }
 
 const AdvancedVizBuilder: React.FC = () => {
@@ -204,22 +301,23 @@ const AdvancedVizBuilder: React.FC = () => {
     [suggestions],
   );
   const descriptor = selectedKind ? (kindMap.get(selectedKind) ?? null) : null;
-  // [role, acceptedDtypes][] for the selected kind, split required vs optional.
-  const requiredRoles = useMemo<[string, string[]][]>(
+  // [role, acceptedDtypes, description][] for the selected kind, split required
+  // vs optional. Description feeds each binding's rich tooltip.
+  const requiredRoles = useMemo<[string, string[], string][]>(
     () =>
       descriptor
         ? Object.entries(descriptor.roles)
             .filter(([, spec]) => spec.required)
-            .map(([role, spec]) => [role, spec.dtypes])
+            .map(([role, spec]) => [role, spec.dtypes, spec.description ?? ''])
         : [],
     [descriptor],
   );
-  const optionalRoles = useMemo<[string, string[]][]>(
+  const optionalRoles = useMemo<[string, string[], string][]>(
     () =>
       descriptor
         ? Object.entries(descriptor.roles)
             .filter(([, spec]) => !spec.required)
-            .map(([role, spec]) => [role, spec.dtypes])
+            .map(([role, spec]) => [role, spec.dtypes, spec.description ?? ''])
         : [],
     [descriptor],
   );
@@ -241,6 +339,12 @@ const AdvancedVizBuilder: React.FC = () => {
     for (const [k, v] of Object.entries(persistedConfig)) {
       if (k === 'rank_cols' && Array.isArray(v)) {
         recovered.ranks = v as string[];
+      } else if (k === 'step_cols' && Array.isArray(v)) {
+        recovered.steps = v as string[];
+      } else if (k === 'index_column' && typeof v === 'string') {
+        recovered.index = v;
+      } else if ((k === 'value_columns' || k === 'row_annotation_cols') && Array.isArray(v)) {
+        recovered[k] = v as string[];
       } else if (k === 'compute_method' && typeof v === 'string') {
         recovered.compute_method = v;
       } else if (k.endsWith('_col') && typeof v === 'string') {
@@ -352,6 +456,13 @@ const AdvancedVizBuilder: React.FC = () => {
       const ranks = columnMapping.ranks;
       if (!Array.isArray(ranks) || ranks.length < 2) {
         errors.push('Sunburst needs at least 2 rank columns');
+      }
+    }
+    // Sankey: step_cols must have at least 2 ordered categorical columns.
+    if (selectedKind === 'sankey') {
+      const steps = columnMapping.steps;
+      if (!Array.isArray(steps) || steps.length < 2) {
+        errors.push('Sankey needs at least 2 step columns');
       }
     }
     for (const [role, accepted] of optionalRoles) {
@@ -538,16 +649,16 @@ const AdvancedVizBuilder: React.FC = () => {
             <Text fw={600}>Column bindings</Text>
             <Paper withBorder p="xs" radius="sm">
               <Stack gap={4}>
-                <Text size="xs" fw={500}>Example input columns</Text>
+                <Text size="xs" fw={500}>Bindings overview</Text>
                 <Text size="xs" c="dimmed">
-                  Your data collection needs at least these columns (any accepted dtype works).
+                  The roles this visualization binds. Hover a binding below for full details.
                 </Text>
-                <Table withTableBorder withColumnBorders striped fz="xs">
+                <Table withTableBorder withColumnBorders striped fz="xs" layout="auto">
                   <Table.Thead>
                     <Table.Tr>
-                      <Table.Th>Role</Table.Th>
-                      <Table.Th>Accepted dtypes</Table.Th>
-                      <Table.Th>Required?</Table.Th>
+                      <Table.Th style={{ whiteSpace: 'nowrap', width: '1%' }}>Role</Table.Th>
+                      <Table.Th style={{ whiteSpace: 'nowrap', width: '1%' }}>Type</Table.Th>
+                      <Table.Th>Description</Table.Th>
                     </Table.Tr>
                   </Table.Thead>
                   <Table.Tbody>
@@ -556,27 +667,36 @@ const AdvancedVizBuilder: React.FC = () => {
                         ([role]) =>
                           !liveEmbedding || (role !== 'dim_1' && role !== 'dim_2'),
                       )
-                      .map(([role, accepted]) => (
-                      <Table.Tr key={`req-${role}`}>
-                        <Table.Td>{role}</Table.Td>
-                        <Table.Td>{accepted.join(' / ')}</Table.Td>
-                        <Table.Td>required</Table.Td>
-                      </Table.Tr>
-                    ))}
-                    {liveEmbedding ? (
-                      <Table.Tr key="req-compute_method">
-                        <Table.Td>compute_method</Table.Td>
-                        <Table.Td>pca / umap / tsne / pcoa</Table.Td>
-                        <Table.Td>required</Table.Td>
-                      </Table.Tr>
-                    ) : null}
-                    {optionalRoles.map(([role, accepted]) => (
-                      <Table.Tr key={`opt-${role}`}>
-                        <Table.Td>{role}</Table.Td>
-                        <Table.Td>{accepted.join(' / ')}</Table.Td>
-                        <Table.Td>optional</Table.Td>
-                      </Table.Tr>
-                    ))}
+                      .map(([role, accepted, description]) =>
+                        exampleInputRow(role, simplifyDtypes(accepted), description, true),
+                      )}
+                    {selectedKind === 'sunburst'
+                      ? exampleInputRow(
+                          'ranks',
+                          'any (≥2, ordered)',
+                          'Hierarchy columns from root to leaf.',
+                          true,
+                        )
+                      : null}
+                    {selectedKind === 'sankey'
+                      ? exampleInputRow(
+                          'step columns',
+                          'any (≥2, ordered)',
+                          'Ordered categorical levels the flow passes through.',
+                          true,
+                        )
+                      : null}
+                    {liveEmbedding
+                      ? exampleInputRow(
+                          'compute_method',
+                          'choice',
+                          'Dimensionality reduction: pca / umap / tsne / pcoa.',
+                          true,
+                        )
+                      : null}
+                    {optionalRoles.map(([role, accepted, description]) =>
+                      exampleInputRow(role, simplifyDtypes(accepted), description, false),
+                    )}
                   </Table.Tbody>
                 </Table>
               </Stack>
@@ -597,7 +717,12 @@ const AdvancedVizBuilder: React.FC = () => {
                     the kind supports a list binding. */}
                 {selectedKind === 'sunburst' ? (
                   <MultiSelect
-                    label="ranks (required, hierarchy root→leaf)"
+                    label={roleBindingLabel(
+                      'ranks',
+                      [],
+                      'Hierarchy columns from root to leaf — pick at least 2, in order.',
+                      true,
+                    )}
                     placeholder="Pick rank columns in order"
                     value={
                       Array.isArray(columnMapping.ranks)
@@ -609,6 +734,73 @@ const AdvancedVizBuilder: React.FC = () => {
                     searchable
                     clearable
                   />
+                ) : null}
+                {/* Sankey has no single <role>_col schema — it binds an ordered
+                    list of categorical columns (step_cols). Without this block
+                    the kind was selectable but unbindable, so the renderer
+                    failed with "≥2 step columns required". */}
+                {selectedKind === 'sankey' ? (
+                  <MultiSelect
+                    label={roleBindingLabel(
+                      'step columns',
+                      [],
+                      'Ordered categorical levels the flow passes through (e.g. sample → lineage → clade). Pick at least 2, in order.',
+                      true,
+                    )}
+                    placeholder="Pick step columns in order"
+                    value={
+                      Array.isArray(columnMapping.steps)
+                        ? (columnMapping.steps as string[])
+                        : []
+                    }
+                    onChange={(v) => setRole('steps', v)}
+                    data={allColumnOptions()}
+                    searchable
+                    clearable
+                  />
+                ) : null}
+                {/* ComplexHeatmap: beyond the index row-id, let the user choose
+                    which numeric columns form the matrix (excluding the rest)
+                    and which categorical columns annotate the rows. */}
+                {selectedKind === 'complex_heatmap' ? (
+                  <>
+                    <MultiSelect
+                      label={roleBindingLabel(
+                        'value columns',
+                        NUMERIC_ANY,
+                        'Numeric columns that form the heatmap matrix. Leave empty to use every numeric column; pick a subset to exclude the rest.',
+                        false,
+                      )}
+                      placeholder="All numeric columns (pick to restrict / exclude)"
+                      value={
+                        Array.isArray(columnMapping.value_columns)
+                          ? (columnMapping.value_columns as string[])
+                          : []
+                      }
+                      onChange={(v) => setRole('value_columns', v)}
+                      data={columnOptions(NUMERIC_ANY)}
+                      searchable
+                      clearable
+                    />
+                    <MultiSelect
+                      label={roleBindingLabel(
+                        'row annotation columns',
+                        STRING_LIKE,
+                        'Categorical columns drawn as a colour strip beside the rows (e.g. Kingdom / taxonomy level). Excluded from the matrix.',
+                        false,
+                      )}
+                      placeholder="Pick categorical columns to annotate rows"
+                      value={
+                        Array.isArray(columnMapping.row_annotation_cols)
+                          ? (columnMapping.row_annotation_cols as string[])
+                          : []
+                      }
+                      onChange={(v) => setRole('row_annotation_cols', v)}
+                      data={columnOptions(STRING_LIKE)}
+                      searchable
+                      clearable
+                    />
+                  </>
                 ) : null}
                 {/* Embedding live-compute mode: surface compute_method Select
                     in place of dim_1/dim_2 pickers. Renderer dispatches the
@@ -646,10 +838,10 @@ const AdvancedVizBuilder: React.FC = () => {
                     ([role]) =>
                       !liveEmbedding || (role !== 'dim_1' && role !== 'dim_2'),
                   )
-                  .map(([role, accepted]) => (
+                  .map(([role, accepted, description]) => (
                   <Select
                     key={role}
-                    label={`${role} (required, ${accepted.join('/')})`}
+                    label={roleBindingLabel(role, accepted, description, true)}
                     placeholder="Pick a column"
                     value={
                       typeof columnMapping[role] === 'string'
@@ -663,10 +855,10 @@ const AdvancedVizBuilder: React.FC = () => {
                     nothingFoundMessage="No column with a compatible dtype"
                   />
                 ))}
-                {optionalRoles.map(([role, accepted]) => (
+                {optionalRoles.map(([role, accepted, description]) => (
                   <Select
                     key={role}
-                    label={`${role} (optional, ${accepted.join('/')})`}
+                    label={roleBindingLabel(role, accepted, description, false)}
                     placeholder="Pick a column"
                     value={
                       typeof columnMapping[role] === 'string'
