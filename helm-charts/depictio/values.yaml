@@ -215,7 +215,7 @@ minio:
 backend:
   image:
     repository: ghcr.io/depictio/depictio-api # FastAPI backend image (post-Dash split)
-    tag: "1.0.0-b7"
+    tag: "1.0.0-b8"
     pullPolicy: Always
   replicas: 1 # Balanced for stability and performance
   resources:
@@ -323,7 +323,7 @@ celery:
   image:
     # Distinct worker image (Celery + Playwright/chromium for screenshots).
     repository: ghcr.io/depictio/depictio-worker
-    tag: "1.0.0-b7"
+    tag: "1.0.0-b8"
     pullPolicy: Always
   replicas: 1
   resources:
@@ -358,7 +358,7 @@ celery:
 viewer:
   image:
     repository: ghcr.io/depictio/depictio-viewer # nginx + built React SPA
-    tag: "1.0.0-b7"
+    tag: "1.0.0-b8"
     pullPolicy: Always
   replicas: 1 # Balanced for stability and performance
   # Deployment update strategy. Default "Recreate" matches the other
