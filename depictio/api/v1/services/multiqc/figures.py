@@ -23,6 +23,14 @@ from depictio.api.v1.services.multiqc.themes import get_theme_template
 # Global lock to prevent concurrent MultiQC operations (MultiQC global state is not thread-safe)
 _multiqc_lock = threading.RLock()
 
+# Tracks which DC's report (keyed by ``_generate_cache_key(s3_locations)``) is
+# currently resident in this process's ``multiqc.report`` global. Lets
+# ``_get_or_parse_multiqc_logs`` skip the Redis fetch + full ``cloudpickle.loads``
+# of the entire report when it's already loaded — the dominant per-combo cost in
+# the prewarm fan-out (build one DC's 80+ plot/theme combos with a single
+# deserialize instead of one per combo). Mutated only under ``_multiqc_lock``.
+_resident_report_key: str | None = None
+
 # Multi-day TTL: explicit `_invalidate_multiqc_caches_for_dc` on append/replace
 # is the source of truth for staleness. The previous 2 h TTL caused silent
 # re-parses every two hours under no real change, which masked the prewarm
@@ -235,6 +243,8 @@ def _get_or_parse_multiqc_logs(s3_locations: List[str], use_s3_cache: bool = Tru
     """
     import multiqc
 
+    global _resident_report_key
+
     cache_key = _generate_cache_key(s3_locations)
     cache = get_cache()
 
@@ -243,6 +253,7 @@ def _get_or_parse_multiqc_logs(s3_locations: List[str], use_s3_cache: bool = Tru
         in-memory shape (raw report object) and the new cloudpickle envelope
         produced below — `{"__cloudpickle__": <bytes>}`.
         """
+        global _resident_report_key
         try:
             if isinstance(value, dict) and "__cloudpickle__" in value:
                 import cloudpickle  # noqa: PLC0415
@@ -250,24 +261,40 @@ def _get_or_parse_multiqc_logs(s3_locations: List[str], use_s3_cache: bool = Tru
                 multiqc.report = cloudpickle.loads(value["__cloudpickle__"])
             else:
                 multiqc.report = value
+            _resident_report_key = cache_key
             return True
         except Exception as e:
             logger.warning(f"Failed to restore cached multiqc.report: {e}")
             return False
 
+    # Fast path: the report for these s3_locations is already resident in this
+    # process (e.g. the previous plot in a prewarm loop, or a sibling component
+    # on the same DC). Skip the Redis GET + full cloudpickle.loads of the entire
+    # report — that round-trip costs ~1-3s for a many-report DC and was being
+    # paid once per plot/theme combo. Callers hold the reentrant ``_multiqc_lock``
+    # across parse+get_plot, and every mutation of ``multiqc.report`` below
+    # updates ``_resident_report_key``, so this marker is authoritative.
+    if _resident_report_key == cache_key and getattr(multiqc, "report", None) is not None:
+        return True
+
     cached_report = cache.get(cache_key)
     if cached_report is not None:
         with _multiqc_lock:
+            if _resident_report_key == cache_key and getattr(multiqc, "report", None) is not None:
+                return True
             if _restore_from_cache_value(cached_report):
                 return True
 
     with _multiqc_lock:
-        # Double-check cache inside lock (another thread may have parsed while we waited)
+        # Double-check inside lock (another thread may have parsed while we waited)
+        if _resident_report_key == cache_key and getattr(multiqc, "report", None) is not None:
+            return True
         cached_report = cache.get(cache_key)
         if cached_report is not None and _restore_from_cache_value(cached_report):
             return True
 
         multiqc.reset()
+        _resident_report_key = None
 
         parsed_files = 0
         for s3_location in s3_locations:
@@ -282,6 +309,10 @@ def _get_or_parse_multiqc_logs(s3_locations: List[str], use_s3_cache: bool = Tru
         if parsed_files == 0:
             logger.error("No files could be parsed")
             return False
+
+        # Freshly parsed report is now resident — mark it so sibling combos skip
+        # the cache restore.
+        _resident_report_key = cache_key
 
         # Try to persist `multiqc.report` to Redis (or whatever backend
         # cache.set() points at) via cloudpickle, which tolerates the module
@@ -331,6 +362,8 @@ def _force_reparse(
     """
     import multiqc
 
+    global _resident_report_key
+
     cache = get_cache()
     state_cache_key = _generate_cache_key(s3_locations)
     try:
@@ -338,6 +371,9 @@ def _force_reparse(
     except Exception as del_err:
         logger.debug(f"cache.delete failed (non-fatal): {del_err}")
     multiqc.reset()
+    # The resident report is being torn down — invalidate the marker so the
+    # fast-path guard in ``_get_or_parse_multiqc_logs`` can't return a stale hit.
+    _resident_report_key = None
     parsed = 0
     for loc in s3_locations:
         try:
@@ -348,6 +384,8 @@ def _force_reparse(
             logger.warning(f"Re-parse error for {loc}: {e}")
     if parsed == 0:
         raise ValueError("Failed to parse any MultiQC data files") from ve
+    # Freshly re-parsed report is now resident.
+    _resident_report_key = state_cache_key
     # Persist the freshly parsed report under the same cache key the original
     # parse used, so the next request lands a hit. Without this, every request
     # for this DC re-takes the lock and re-parses until the underlying
