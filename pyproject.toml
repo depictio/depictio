@@ -25,17 +25,14 @@ dependencies = [
   "plotly-complexheatmap",
   "plotly-upset",
   # Data processing
-  # NOTE: deltalake (0.24->1.x) and pandas (2.2->3.0) majors are intentionally
-  # held back; they require a dedicated migration phase (Copy-on-Write, Delta
-  # API rewrite) with full e2e validation. Bump them in their own phase.
-  "deltalake==0.24.0",
+  "deltalake==1.6.0",
   "fastparquet==2026.5.0",
   "numpy==2.4.6",
   "orjson==3.11.9",
-  "pandas==2.2.3",
-  # Held at 1.30.0: polars 1.31+ deltalake extra requires deltalake>=1.0.0, which
-  # is part of the deferred data-layer major bump. Move with deltalake/pandas.
-  "polars-lts-cpu[numpy,pandas,pyarrow,excel,deltalake]==1.30.0",
+  "pandas==3.0.3",
+  # polars-lts-cpu is legacy; the modern LTS/older-CPU build is polars[rtcompat]
+  # (-> polars-runtime-compat). rtcompat also matches multiqc 1.35's requirement.
+  "polars[rtcompat,numpy,pandas,pyarrow,excel,deltalake]==1.41.2",
   # API and web
   "devtools==0.12.2",
   "diskcache==5.6.3",
@@ -57,9 +54,7 @@ dependencies = [
   # Playwright for screenshots (pure Python - installs its own browsers)
   "playwright==1.60.0",
   # Utilities
-  # Held at 1.34: multiqc 1.35 switched to polars[rtcompat]>=1.34, which forces
-  # the regular polars frontend past our deltalake-0.24-compatible 1.30 cap.
-  "multiqc==1.34",
+  "multiqc==1.35",
   "mypy-boto3-s3==1.43.14",
   "psutil==7.2.2",
   "python-dotenv==1.2.2",
