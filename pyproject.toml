@@ -59,7 +59,11 @@ dependencies = [
   "psutil==7.2.2",
   "python-dotenv==1.2.2",
   "pyyaml>=6.0.2",
-  "redis==8.0.0",
+  # Held at 5.2.1 (main's pin): redis-py 8.0 regressed the real-time pub/sub
+  # event listener (connection_manager) — it starves the API event loop, so
+  # internal HTTP self-calls time out and reference-dataset ingestion never
+  # writes deltatables. Bisecting via CI; bump again once that's resolved.
+  "redis==5.2.1",
   "tomli==2.2.1",
   "types-requests==2.33.0.20260518",
   "umap-learn==0.5.12",
