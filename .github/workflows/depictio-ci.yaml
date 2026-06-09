@@ -17,7 +17,7 @@ jobs:
       cache-hit: ${{ steps.cache-quality.outputs.cache-hit }}
       code-hash: ${{ steps.hash.outputs.hash }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0  # Need full history to compare with previous commit
 
@@ -42,7 +42,7 @@ jobs:
 
       - name: Check quality cache
         id: cache-quality
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: .quality-passed
           key: quality-${{ steps.hash.outputs.hash }}
@@ -60,15 +60,15 @@ jobs:
     needs: check-quality-cache
     if: needs.check-quality-cache.outputs.cache-hit != 'true'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
 
       - name: "Set up Python"
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version-file: "pyproject.toml"
           cache-dependency-path: "pyproject.toml"
@@ -133,7 +133,7 @@ jobs:
 
       - name: Update quality cache
         if: success()
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v5
         with:
           path: .quality-passed
           key: quality-${{ needs.check-quality-cache.outputs.code-hash }}
@@ -143,10 +143,10 @@ jobs:
     runs-on: ubuntu-22.04
     needs: check-quality-cache
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install pixi
-        uses: prefix-dev/setup-pixi@v0.9.3
+        uses: prefix-dev/setup-pixi@v0.9.6
         with:
           pixi-version: v0.39.5
           # Disable cache until pixi.lock is committed to the repo
@@ -235,7 +235,7 @@ jobs:
       worker-image: ${{ steps.image-info.outputs.worker-image }}
       viewer-image: ${{ steps.image-info.outputs.viewer-image }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Configure Docker Permissions
         run: |
@@ -254,11 +254,11 @@ jobs:
           chmod 777 data data/depictioDB data/minio_data
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Log in to Container Registry
         if: env.ACT != 'true' # Skip login when using act
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
@@ -356,7 +356,7 @@ jobs:
       # (node + nginx base) cache and vice versa.
       - name: Build and push depictio-api
         if: steps.check-rebuild.outputs.rebuild == 'true'
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: docker-images/Dockerfile.api
@@ -371,7 +371,7 @@ jobs:
 
       - name: Build and push depictio-worker
         if: steps.check-rebuild.outputs.rebuild == 'true'
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: docker-images/Dockerfile.worker
@@ -386,7 +386,7 @@ jobs:
 
       - name: Build and push depictio-viewer
         if: steps.check-rebuild.outputs.rebuild == 'true'
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: docker-images/Dockerfile.viewer
@@ -439,10 +439,10 @@ jobs:
     outputs:
       services-ready: ${{ steps.health.outputs.ready }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Log in to Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
@@ -889,15 +889,15 @@ jobs:
       contents: read
       packages: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version-file: "pyproject.toml"
           cache-dependency-path: "pyproject.toml"
@@ -1677,7 +1677,7 @@ jobs:
 
       - name: Upload artifacts on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: cli-comprehensive-logs
           path: cli-comprehensive-logs.txt
@@ -1711,15 +1711,15 @@ jobs:
             expected_local_files: true
             expected_s3_files: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
 
       - name: "Set up Python"
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version-file: "pyproject.toml"
           cache-dependency-path: "pyproject.toml"
@@ -2629,7 +2629,7 @@ jobs:
 
       - name: Upload artifacts on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: backup-${{ matrix.backup_strategy }}-logs
           path: backup-${{ matrix.backup_strategy }}-logs.txt
@@ -2673,7 +2673,7 @@ jobs:
             public_mode: "false"
             demo_mode: "false"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup environment (${{ matrix.auth_mode }} mode)
         run: |
@@ -2706,7 +2706,7 @@ jobs:
       # Node + Playwright setup runs while the docker stack boots; the
       # explicit health gate below is the only wait.
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: "20"
           cache: npm
@@ -2725,7 +2725,7 @@ jobs:
 
       - name: Cache Playwright browsers
         id: playwright-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
@@ -2773,7 +2773,7 @@ jobs:
           npx playwright test
 
       - name: Upload Playwright report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: playwright-report-${{ matrix.auth_mode }}
@@ -2781,7 +2781,7 @@ jobs:
           retention-days: 30
 
       - name: Upload traces and videos on failure
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: playwright-results-${{ matrix.auth_mode }}
@@ -2794,7 +2794,7 @@ jobs:
           docker compose -f docker-compose.dev.yaml --env-file docker-compose/.env logs > e2e-${{ matrix.auth_mode }}-services.log 2>&1 || true
 
       - name: Upload service logs on failure
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: e2e-services-logs-${{ matrix.auth_mode }}

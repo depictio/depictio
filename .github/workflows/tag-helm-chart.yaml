@@ -25,7 +25,7 @@ jobs:
 
     steps:
       - name: Set up oras
-        uses: oras-project/setup-oras@v1
+        uses: oras-project/setup-oras@v2
 
       - name: Log in to Container Registry
         run: |
