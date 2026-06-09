@@ -1182,7 +1182,13 @@ def load_deltatable_lite(
 _dataframe_memory_cache = {}
 _cache_metadata = {}  # Track size and timestamp for each cached DataFrame
 _total_memory_usage = 0
-MEMORY_THRESHOLD_BYTES = 1024 * 1024 * 1024  # 1GB threshold
+MEMORY_THRESHOLD_BYTES = 1024 * 1024 * 1024  # 1GB threshold (total in-process cache)
+# Per-item cap: a single large DataFrame must not be able to consume most of the
+# in-process cache and evict every smaller, frequently-reused frame. Above this
+# it still lives in Redis (subject to its own cap) but is re-materialised on a
+# process-local miss instead of pinning RAM here. Also bounds per-worker RSS,
+# which matters now that the worker runs multiple prefork processes.
+MEMORY_PER_ITEM_MAX_BYTES = 256 * 1024 * 1024  # 256 MB
 
 
 def get_deltatable_size_from_db(data_collection_id: ObjectId) -> int:
@@ -1287,8 +1293,12 @@ def load_and_cache_dataframe(cache_key: str, size_bytes: int, delta_scan) -> pl.
     except Exception:
         pass
 
-    # Also cache in memory if under threshold (faster access during session)
-    if _total_memory_usage + actual_size <= MEMORY_THRESHOLD_BYTES:
+    # Also cache in memory if it fits the per-item cap AND the total threshold
+    # (faster access during session). Oversized frames stay in Redis only.
+    if (
+        actual_size <= MEMORY_PER_ITEM_MAX_BYTES
+        and _total_memory_usage + actual_size <= MEMORY_THRESHOLD_BYTES
+    ):
         _dataframe_memory_cache[cache_key] = df
         _cache_metadata[cache_key] = {
             "size_bytes": actual_size,

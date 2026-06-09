@@ -16,6 +16,16 @@ from depictio.api.v1.services.figure.error_figure import create_error_figure
 from depictio.api.v1.services.figure.heatmap import collect_heatmap_kwargs
 from depictio.api.v1.services.multiqc.themes import get_theme_template
 
+# Above this row count, per-marker scatter plots are downsampled before being
+# handed to Plotly: a 1M-row scatter serialises to tens of MB of trace JSON that
+# stalls the browser, and beyond ~50k markers the extra points are visually
+# indistinguishable. Only applied to per-row marker plots (scatter family) —
+# never to line/bar/box/histogram where every row matters or is aggregated.
+FIGURE_MAX_POINTS = 50_000
+_POINT_PLOT_TYPES = frozenset(
+    {"scatter", "scatter_3d", "scatter_ternary", "scatter_polar", "strip"}
+)
+
 
 def process_code_mode_figure(
     code_content: str,
@@ -89,11 +99,21 @@ def create_figure_from_data(
     """
     import json
 
+    import polars as pl
+
     try:
-        if hasattr(df, "to_pandas"):
-            pandas_df = df.to_pandas()
+        # Modern plotly.express consumes Polars natively (via narwhals), so we
+        # keep the frame in Polars and skip the full pandas copy that used to
+        # happen on every figure. plotly-complexheatmap (the heatmap branch
+        # below) also accepts Polars now, so no conversion is needed there either.
+        if isinstance(df, pl.DataFrame):
+            plot_df = df
+        elif hasattr(df, "to_pandas"):
+            # e.g. a pyarrow Table — normalise to Polars once.
+            plot_df = pl.from_pandas(df.to_pandas())
         else:
-            pandas_df = df
+            # Legacy pandas input.
+            plot_df = pl.from_pandas(df)
 
         # `mantine_light`/`mantine_dark` Plotly templates are registered
         # natively now that Dash/dmc is gone. Ensure they exist before px
@@ -146,7 +166,7 @@ def create_figure_from_data(
 
         cleaned_kwargs["template"] = template
 
-        if selection_enabled and selection_column and selection_column in pandas_df.columns:
+        if selection_enabled and selection_column and selection_column in plot_df.columns:
             existing_custom_data = cleaned_kwargs.get("custom_data", [])
             if isinstance(existing_custom_data, str):
                 # If it's a single column name, convert to list
@@ -162,19 +182,19 @@ def create_figure_from_data(
             from plotly_complexheatmap import ComplexHeatmap
 
             # Extract dynamic column annotations from recipe-generated column
-            if "_col_annotations_json" in pandas_df.columns:
+            if "_col_annotations_json" in plot_df.columns:
                 if "col_annotations" not in cleaned_kwargs or not cleaned_kwargs.get(
                     "col_annotations"
                 ):
                     try:
-                        raw_val = pandas_df["_col_annotations_json"].iloc[0]
+                        raw_val = plot_df["_col_annotations_json"][0]
                         if isinstance(raw_val, str):
                             cleaned_kwargs["col_annotations"] = raw_val
                         elif isinstance(raw_val, dict):
                             cleaned_kwargs["col_annotations"] = raw_val
                     except Exception as e:
                         logger.error(f"Failed to extract _col_annotations_json: {e}")
-                pandas_df = pandas_df.drop(columns=["_col_annotations_json"])
+                plot_df = plot_df.drop("_col_annotations_json")
 
             heatmap_kwargs = collect_heatmap_kwargs(cleaned_kwargs)
 
@@ -189,7 +209,7 @@ def create_figure_from_data(
                     if not any(val is None or val == "" for val in v.get("values", []))
                 }
 
-            hm = ComplexHeatmap.from_dataframe(pandas_df, **heatmap_kwargs)
+            hm = ComplexHeatmap.from_dataframe(plot_df, **heatmap_kwargs)
             fig = hm.to_plotly()
             fig.update_layout(
                 autosize=True,
@@ -224,15 +244,35 @@ def create_figure_from_data(
         # samples have null variant counts), drop those rows so the rest of
         # the dataset still renders.
         size_col = cleaned_kwargs.get("size")
-        if isinstance(size_col, str) and size_col in pandas_df.columns:
-            nan_mask = pandas_df[size_col].isna()
-            if nan_mask.any():
-                dropped = int(nan_mask.sum())
-                pandas_df = pandas_df.loc[~nan_mask]
+        if isinstance(size_col, str) and size_col in plot_df.columns:
+            # Drop both null and (for float columns) NaN — Plotly rejects either
+            # in marker.size. ``is_not_nan`` is only valid on float dtypes.
+            keep = pl.col(size_col).is_not_null()
+            if plot_df[size_col].dtype in (pl.Float32, pl.Float64):
+                keep = keep & pl.col(size_col).is_not_nan()
+            before = plot_df.height
+            plot_df = plot_df.filter(keep)
+            dropped = before - plot_df.height
+            if dropped:
                 logger.info(
                     f"create_figure_from_data: dropped {dropped} row(s) with "
                     f"NaN in size column '{size_col}'"
                 )
+
+        # Downsample very large point-style scatters and prefer WebGL so the
+        # serialised figure stays small and the browser stays responsive.
+        if visu_type in _POINT_PLOT_TYPES and plot_df.height > FIGURE_MAX_POINTS:
+            original_height = plot_df.height
+            plot_df = plot_df.sample(n=FIGURE_MAX_POINTS, seed=0)
+            logger.info(
+                f"create_figure_from_data: downsampled {visu_type} from "
+                f"{original_height} to {FIGURE_MAX_POINTS} points to cap payload size"
+            )
+        if visu_type == "scatter":
+            # px.scatter renders SVG by default for small N; force WebGL so even
+            # the capped point count draws on the GPU instead of as DOM/SVG nodes.
+            # (Unsupported kwargs are dropped by the signature filter below.)
+            cleaned_kwargs.setdefault("render_mode", "webgl")
 
         plot_func = getattr(px, visu_type)
 
@@ -267,7 +307,7 @@ def create_figure_from_data(
                 f"px.{visu_type}: {sig_err}"
             )
 
-        fig = plot_func(pandas_df, **cleaned_kwargs)
+        fig = plot_func(plot_df, **cleaned_kwargs)
 
         layout_updates: dict[str, Any] = {
             "paper_bgcolor": "rgba(0,0,0,0)",

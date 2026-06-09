@@ -5,6 +5,7 @@ Provides persistent caching across page refreshes using Redis,
 with fallback to in-memory caching.
 """
 
+import io
 import pickle
 import time
 from typing import Any, Optional, cast
@@ -59,6 +60,34 @@ class SimpleCache:
             logger.warning(f"❌ Redis connection failed: {e}")
             self._redis_available = False
 
+    # Serialization envelope markers (4 bytes). Pickle protocol >=2 streams
+    # always start with 0x80, so these ASCII prefixes can never collide with a
+    # legacy plain-pickle payload — letting ``_deserialize`` stay backward
+    # compatible with entries written before this format existed.
+    _IPC_MARKER = b"IPC1"
+    _PKL_MARKER = b"PKL1"
+
+    def _serialize(self, data: Any) -> bytes:
+        """Serialize a value for Redis. Polars DataFrames use Arrow IPC (LZ4) —
+        far faster and more compact than pickle for columnar data; everything
+        else falls back to pickle.
+        """
+        if isinstance(data, pl.DataFrame):
+            buf = io.BytesIO()
+            data.write_ipc(buf, compression="lz4")
+            return self._IPC_MARKER + buf.getvalue()
+        return self._PKL_MARKER + pickle.dumps(data)
+
+    def _deserialize(self, raw: bytes) -> Any:
+        """Inverse of :meth:`_serialize`; tolerates legacy unmarked pickle."""
+        marker = raw[:4]
+        if marker == self._IPC_MARKER:
+            return pl.read_ipc(io.BytesIO(raw[4:]))
+        if marker == self._PKL_MARKER:
+            return pickle.loads(raw[4:])
+        # Legacy entry written as plain pickle before the envelope existed.
+        return pickle.loads(raw)
+
     def set(self, key: str, data: Any, ttl: Optional[int] = None) -> bool:
         """Cache data with optional TTL."""
         if ttl is None:
@@ -70,16 +99,33 @@ class SimpleCache:
 
         cache_key = f"{self.cache_config.cache_key_prefix}{key}"
 
+        try:
+            serialized = self._serialize(data)
+        except Exception as e:
+            logger.warning(f"❌ Cache serialization failed: {key} - {e}")
+            return False
+
+        # Enforce the per-DataFrame size cap so one oversized frame can't evict
+        # everything else / blow Redis memory. Non-DataFrame values (figure
+        # dicts, locks) are small and exempt.
+        if isinstance(data, pl.DataFrame):
+            max_bytes = self.cache_config.max_dataframe_size_mb * 1024 * 1024
+            if len(serialized) > max_bytes:
+                logger.info(
+                    f"Skip caching DataFrame '{key}': {len(serialized) / 1024 / 1024:.1f} MB "
+                    f"exceeds cap ({self.cache_config.max_dataframe_size_mb} MB)"
+                )
+                return False
+
         # Try Redis first
         if self._redis_available:
             try:
-                serialized = pickle.dumps(data)
                 self._redis.setex(cache_key, ttl, serialized)
                 return True
             except Exception as e:
                 logger.warning(f"❌ Redis cache failed: {key} - {e}")
 
-        # Fallback to memory
+        # Fallback to memory (store the live object — no serialization needed)
         self._memory_cache[key] = {"data": data, "cached_at": time.time(), "ttl": ttl}
         return True
 
@@ -92,7 +138,7 @@ class SimpleCache:
             try:
                 data = self._redis.get(cache_key)
                 if data is not None:
-                    return pickle.loads(data)  # type: ignore[arg-type]
+                    return self._deserialize(cast(bytes, data))
             except Exception as e:
                 logger.warning(f"❌ Redis get failed: {key} - {e}")
 
