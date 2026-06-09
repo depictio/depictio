@@ -540,30 +540,39 @@ def test_card_coverage_requires_coverage_max():
 def _cli():
     from typer.testing import CliRunner
 
-    from depictio.cli.cli.commands.catalog import app
+    # `app` holds the user-facing commands (list/info); `dev_app` holds the
+    # maintainer/CI commands (validate/columns/schema/refresh-index/match/compose)
+    # that live under the hidden `depictio dev catalog` group.
+    from depictio.cli.cli.commands.catalog import app, dev_app
 
-    return CliRunner(), app
+    return CliRunner(), app, dev_app
 
 
 def test_cli_validate_exits_zero_on_bundled_catalog():
-    runner, app = _cli()
-    result = runner.invoke(app, ["validate"])
+    runner, _app, dev_app = _cli()
+    result = runner.invoke(dev_app, ["validate"])
     assert result.exit_code == 0, result.stdout
 
 
 def test_cli_commands_smoke():
-    runner, app = _cli()
+    runner, app, dev_app = _cli()
     run = REPO_ROOT / "depictio" / "projects" / "nf-core" / "viralrecon" / "3.0.0" / "run_1"
-    for args in (
+    user_facing = (
         ["list"],
         ["info", "qiime2"],
+    )
+    maintainer = (
         ["columns", "qiime2/ancombc.py"],  # module-owned recipe (co-located in catalog/qiime2/)
         ["schema"],
         ["match", str(run)],
         ["compose", str(run)],
-    ):
+    )
+    for args in user_facing:
         result = runner.invoke(app, args)
         assert result.exit_code == 0, f"{args} → {result.stdout}"
+    for args in maintainer:
+        result = runner.invoke(dev_app, args)
+        assert result.exit_code == 0, f"dev {args} → {result.stdout}"
 
 
 # ---------------------------------------------------------------------------
