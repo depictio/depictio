@@ -186,7 +186,7 @@ def catalog_validate(
     typer.echo(f"  OK: {len(entries)} catalog tool(s) valid in {target}")
 
 
-@app.command("match")
+@dev_app.command("match")
 def catalog_match(
     run_dir: Annotated[str, typer.Argument(help="A pipeline run directory to scan")],
 ) -> None:
@@ -204,7 +204,7 @@ def catalog_match(
     )
 
 
-@app.command("compose")
+@dev_app.command("compose")
 def catalog_compose(
     run_dir: Annotated[str, typer.Argument(help="A run directory to compose a dashboard from")],
     confirm_versions: Annotated[
