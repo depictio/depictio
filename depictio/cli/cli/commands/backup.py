@@ -12,6 +12,11 @@ from depictio.cli.cli.utils.rich_utils import (
 
 app = typer.Typer()
 
+# Maintainer / CI command. Mounted under the hidden top-level `dev` group —
+# kept out of the user-facing `backup` help, but still callable as
+# `depictio dev backup check-coverage`.
+dev_app = typer.Typer()
+
 
 @app.command()
 def create(
@@ -239,7 +244,7 @@ def validate(
         raise typer.Exit(1)
 
 
-@app.command()
+@dev_app.command("check-coverage")
 def check_coverage(
     CLI_config_path: Annotated[
         str, typer.Option("--CLI-config-path", help="Path to the configuration file")

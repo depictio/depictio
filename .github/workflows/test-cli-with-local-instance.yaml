@@ -45,7 +45,7 @@ jobs:
         run: |
           cd depictio/cli
           source venv/bin/activate
-          depictio-cli --verbose -vl ERROR config validate-project-config \
+          depictio-cli --verbose -vl ERROR config check \
                               --project-config-path ../projects/init/iris/project.yaml \
                               --CLI-config-path ../.depictio/admin_config.yaml
 
@@ -53,14 +53,14 @@ jobs:
         run: |
           cd depictio/cli
           source venv/bin/activate
-          depictio-cli --verbose -vl ERROR config check-s3-storage \
+          depictio-cli --verbose -vl ERROR config check \
                               --CLI-config-path ../.depictio/admin_config.yaml
 
       - name: Iris CLI - Show Project on server
         run: |
           cd depictio/cli
           source venv/bin/activate
-          depictio-cli --verbose -vl ERROR config show-depictio-project-metadata-on-server \
+          depictio-cli --verbose -vl ERROR config show \
                               --project-name "Iris Dataset Project Data Analysis" \
                               --CLI-config-path ../.depictio/admin_config.yaml
 
@@ -68,7 +68,7 @@ jobs:
         run: |
           cd depictio/cli
           source venv/bin/activate
-          depictio-cli --verbose -vl ERROR config sync-project-config-to-server \
+          depictio-cli --verbose -vl ERROR config sync \
                               --update \
                               --project-config-path ../projects/init/iris/project.yaml \
                               --CLI-config-path ../.depictio/admin_config.yaml
@@ -95,7 +95,7 @@ jobs:
         run: |
           cd depictio/cli
           source venv/bin/activate
-          depictio-cli --verbose -vl ERROR config validate-project-config \
+          depictio-cli --verbose -vl ERROR config check \
                               --project-config-path ../projects/init/penguins/project.yaml \
                               --CLI-config-path ../.depictio/admin_config.yaml
 
@@ -103,14 +103,14 @@ jobs:
         run: |
           cd depictio/cli
           source venv/bin/activate
-          depictio-cli --verbose -vl ERROR config check-s3-storage \
+          depictio-cli --verbose -vl ERROR config check \
                               --CLI-config-path ../.depictio/admin_config.yaml
 
       - name: Penguin - Show Project on server
         run: |
           cd depictio/cli
           source venv/bin/activate
-          depictio-cli --verbose -vl ERROR config show-depictio-project-metadata-on-server \
+          depictio-cli --verbose -vl ERROR config show \
                               --project-name "Palmer Penguins Species Comparison" \
                               --CLI-config-path ../.depictio/admin_config.yaml
 
@@ -118,7 +118,7 @@ jobs:
         run: |
           cd depictio/cli
           source venv/bin/activate
-          depictio-cli --verbose -vl ERROR config sync-project-config-to-server \
+          depictio-cli --verbose -vl ERROR config sync \
                               --update \
                               --project-config-path ../projects/init/penguins/project.yaml \
                               --CLI-config-path ../.depictio/admin_config.yaml

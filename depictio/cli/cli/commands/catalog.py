@@ -14,6 +14,11 @@ import typer
 
 app = typer.Typer()
 
+# Maintainer / CI commands (catalog authoring, index maintenance, schema export).
+# Mounted under the hidden top-level `dev` group — kept out of the user-facing
+# `catalog` help, but still callable as `depictio dev catalog <cmd>`.
+dev_app = typer.Typer()
+
 
 @app.command("list")
 def catalog_list() -> None:
@@ -84,7 +89,7 @@ def catalog_info(
             console.print(f"     [dim]render:[/dim]  {tgt}{roles}")
 
 
-@app.command("columns")
+@dev_app.command("columns")
 def catalog_columns(
     recipe: Annotated[str, typer.Argument(help="Recipe ref, e.g. qiime2/ancombc.py")],
 ) -> None:
@@ -100,7 +105,7 @@ def catalog_columns(
     render_records_table([{"Column": c} for c in cols], title=f"Output columns of {recipe}")
 
 
-@app.command("validate")
+@dev_app.command("validate")
 def catalog_validate(
     path: Annotated[
         str | None,
@@ -181,7 +186,7 @@ def catalog_validate(
     typer.echo(f"  OK: {len(entries)} catalog tool(s) valid in {target}")
 
 
-@app.command("match")
+@dev_app.command("match")
 def catalog_match(
     run_dir: Annotated[str, typer.Argument(help="A pipeline run directory to scan")],
 ) -> None:
@@ -199,7 +204,7 @@ def catalog_match(
     )
 
 
-@app.command("compose")
+@dev_app.command("compose")
 def catalog_compose(
     run_dir: Annotated[str, typer.Argument(help="A run directory to compose a dashboard from")],
     confirm_versions: Annotated[
@@ -234,7 +239,7 @@ def catalog_compose(
             console.print(f"      {m.output_id}  ([dim]{m.path}[/dim])  → {renders}")
 
 
-@app.command("refresh-index")
+@dev_app.command("refresh-index")
 def catalog_refresh_index() -> None:
     """Regenerate the vendored existence indices from authoritative sources.
 
@@ -299,7 +304,7 @@ def catalog_refresh_index() -> None:
         raise typer.Exit(code=1)
 
 
-@app.command("schema")
+@dev_app.command("schema")
 def catalog_schema(
     output: Annotated[
         str | None,

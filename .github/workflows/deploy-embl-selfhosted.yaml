@@ -237,7 +237,7 @@ jobs:
           source venv/bin/activate
 
           echo "📊 Registering Iris demo project..."
-          depictio-cli config validate-project-config \
+          depictio-cli config check \
             --project-config-path ../api/v1/configs/iris_dataset/initial_project_cli.yaml \
             --CLI-config-path ../../admin_config.yaml || true
 
@@ -412,7 +412,7 @@ jobs:
           source venv/bin/activate
 
           echo "📊 Registering Iris demo project..."
-          depictio-cli config validate-project-config \
+          depictio-cli config check \
             --project-config-path ../api/v1/configs/iris_dataset/initial_project_cli.yaml \
             --CLI-config-path ../../admin_config.yaml || true
 

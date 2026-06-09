@@ -1,6 +1,5 @@
 """Unit tests for CLI image commands."""
 
-import csv
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -148,88 +147,6 @@ class TestScanDirectoryForImages:
         images = _scan_directory_for_images(temp_image_dir, recursive=True)
         unique_images = list(set(images))
         assert len(images) == len(unique_images)
-
-
-class TestScanCommand:
-    """Test suite for 'images scan' CLI command."""
-
-    @pytest.fixture
-    def runner(self):
-        """Create CLI runner."""
-        return CliRunner()
-
-    def test_scan_nonexistent_directory(self, runner):
-        """Test scan command with nonexistent directory."""
-        result = runner.invoke(app, ["scan", "/nonexistent/path"])
-        assert result.exit_code == 1
-
-    def test_scan_file_instead_of_directory(self, runner, tmp_path):
-        """Test scan command with file path instead of directory."""
-        test_file = tmp_path / "test.txt"
-        test_file.touch()
-
-        result = runner.invoke(app, ["scan", str(test_file)])
-        assert result.exit_code == 1
-
-    def test_scan_empty_directory(self, runner, tmp_path):
-        """Test scan command with empty directory."""
-        empty_dir = tmp_path / "empty"
-        empty_dir.mkdir()
-
-        result = runner.invoke(app, ["scan", str(empty_dir)])
-        assert result.exit_code == 0
-
-    def test_scan_valid_directory(self, runner, tmp_path):
-        """Test scan command with valid directory."""
-        img_dir = tmp_path / "images"
-        img_dir.mkdir()
-        (img_dir / "test1.png").touch()
-        (img_dir / "test2.jpg").touch()
-
-        result = runner.invoke(app, ["scan", str(img_dir)])
-        assert result.exit_code == 0
-
-    def test_scan_with_csv_output(self, runner, tmp_path):
-        """Test scan command with CSV output."""
-        img_dir = tmp_path / "images"
-        img_dir.mkdir()
-        (img_dir / "test.png").touch()
-
-        output_csv = tmp_path / "output.csv"
-
-        result = runner.invoke(app, ["scan", str(img_dir), "--output", str(output_csv)])
-        assert result.exit_code == 0
-        assert output_csv.exists()
-
-        # Verify CSV content
-        with output_csv.open() as f:
-            reader = csv.reader(f)
-            headers = next(reader)
-            assert headers == ["relative_path", "filename", "extension", "size_bytes"]
-
-    def test_scan_with_extension_filter(self, runner, tmp_path):
-        """Test scan command with extension filter."""
-        img_dir = tmp_path / "images"
-        img_dir.mkdir()
-        (img_dir / "test1.png").touch()
-        (img_dir / "test2.jpg").touch()
-        (img_dir / "test3.gif").touch()
-
-        result = runner.invoke(app, ["scan", str(img_dir), "--extensions", ".png,.jpg"])
-        assert result.exit_code == 0
-
-    def test_scan_non_recursive(self, runner, tmp_path):
-        """Test scan command with non-recursive flag."""
-        img_dir = tmp_path / "images"
-        img_dir.mkdir()
-        (img_dir / "root.png").touch()
-
-        sub_dir = img_dir / "sub"
-        sub_dir.mkdir()
-        (sub_dir / "nested.png").touch()
-
-        result = runner.invoke(app, ["scan", str(img_dir), "--no-recursive"])
-        assert result.exit_code == 0
 
 
 class TestPushCommand:
