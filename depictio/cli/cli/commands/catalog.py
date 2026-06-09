@@ -25,9 +25,12 @@ def catalog_list() -> None:
     if not entries:
         console.print("[yellow]No catalog entries found.[/yellow]")
         return
+    # "Tool" is the id you pass to `catalog info <Tool>`; "Name" is the display
+    # name. Keeping them in separate columns avoids the ambiguous "id (Name)".
     records = [
         {
-            "Tool": f"{entry.id} ({entry.name})",
+            "Tool": entry.id,
+            "Name": entry.name,
             "Output": f"{out.id}{f'/{out.mode}' if out.mode else ''}",
             "Source": out.recipe or ("columns" if out.columns else "—"),
             "Renders as": ", ".join(r.kind or r.component for r in out.renders_as) or "—",
@@ -36,6 +39,11 @@ def catalog_list() -> None:
         for out in entry.outputs
     ]
     render_records_table(records, title=f"Catalog tools ({len(entries)})")
+    example = entries[0].id
+    console.print(
+        f"\n[dim]Details for one tool:[/dim] [cyan]depictio catalog info <Tool>[/cyan]"
+        f"  [dim](e.g. depictio catalog info {example})[/dim]"
+    )
 
 
 @app.command("info")
