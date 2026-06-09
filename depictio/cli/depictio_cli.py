@@ -63,11 +63,17 @@ app.add_typer(recipe, name="recipe", help="Recipe management and testing command
 depictiocli = get_command(app)
 
 
-def display_depictio_cli_logo():
-    """Display the Depictio CLI logo at startup."""
+def display_depictio_cli_logo(compact: bool = False):
+    """Display the Depictio CLI logo.
+
+    ``compact=True`` renders a small one-row banner — the favicon mark beside
+    the brand ``depictio-CLI`` wordmark, no panel — for use at startup. The
+    default renders the full favicon + ASCII wordmark (the ``--logo`` art).
+    """
     from rich.columns import Columns
     from rich.console import Console
     from rich.panel import Panel
+    from rich.style import Style
     from rich.text import Text
 
     # Depictio brand colors
@@ -277,6 +283,95 @@ def display_depictio_cli_logo():
         return padded_text
 
     console = Console()
+
+    if compact:
+        # Claude Code-style startup banner: a small colour rendition of the
+        # depictio favicon (the 8-wedge pinwheel), then name + version, a
+        # tagline, and the current directory, with a tip line below.
+        from importlib.metadata import PackageNotFoundError
+        from importlib.metadata import version as _pkg_version
+
+        try:
+            cli_version = _pkg_version("depictio-cli")
+        except PackageNotFoundError:
+            cli_version = "dev"
+
+        # Pre-rendered favicon (20×8 chars), generated offline from the logo PNG
+        # by snapping each pixel to the nearest brand colour — sharp wedge edges
+        # without a Pillow/raster dependency at runtime. Each row is
+        # (top_pixels, bottom_pixels); every char is a palette index or "."=empty.
+        mini_palette = [
+            DEPICTIO_COLORS["violet"],  # 0
+            DEPICTIO_COLORS["blue"],  # 1
+            DEPICTIO_COLORS["orange"],  # 2
+            DEPICTIO_COLORS["yellow"],  # 3
+            DEPICTIO_COLORS["green"],  # 4
+            DEPICTIO_COLORS["teal"],  # 5
+            DEPICTIO_COLORS["pink"],  # 6
+            DEPICTIO_COLORS["purple"],  # 7
+        ]
+        favicon_art = [
+            (".............0000000", ".............0000000"),
+            (".......7777..0000000", "......77777..00000.."),
+            (".......7777..0000...", "........777..000..11"),
+            (".........77..0...111", "......66........1111"),
+            ("......666......11111", "...................."),
+            ("555555555......22222", "55555555........2222"),
+            ("5555555...4..3...222", "555555..444..33...22"),
+            ("5555...4444.........", "555...44444........."),
+        ]
+
+        def mini_color(index: str):
+            return None if index == "." else mini_palette[int(index)]
+
+        favicon_rows = []
+        for top_pixels, bottom_pixels in favicon_art:
+            row_text = Text()
+            for top_idx, bottom_idx in zip(top_pixels, bottom_pixels):
+                top = mini_color(top_idx)
+                bottom = mini_color(bottom_idx)
+                if top and bottom:
+                    row_text.append("▀", style=Style(color=top, bgcolor=bottom))
+                elif top:
+                    row_text.append("▀", style=Style(color=top))
+                elif bottom:
+                    row_text.append("▄", style=Style(color=bottom))
+                else:
+                    row_text.append(" ")
+            favicon_rows.append(row_text)
+
+        cwd = os.getcwd().replace(os.path.expanduser("~"), "~")
+
+        info_lines = [
+            Text.assemble(
+                ("depictio-cli", f"bold {DEPICTIO_COLORS['purple']}"),
+                (f"  v{cli_version}", "dim"),
+            ),
+            Text("Interactive dashboards for bioinformatics data", style="dim"),
+            Text(cwd, style="dim"),
+            Text(""),
+            Text.assemble(
+                ("Tip: ", "dim"),
+                ("depictio catalog list", DEPICTIO_COLORS["blue"]),
+                (" · browse the tool→viz catalog", "dim"),
+            ),
+        ]
+
+        # Concatenate each row by hand (fixed-width favicon gutter + text)
+        # rather than using a Table, so a long path is shown in full instead of
+        # being cropped to the column width.
+        gutter = len(favicon_art[0][0])
+        console.print()
+        for i in range(max(len(favicon_rows), len(info_lines))):
+            line = Text()
+            line.append_text(favicon_rows[i] if i < len(favicon_rows) else Text(" " * gutter))
+            line.append("   ")
+            if i < len(info_lines):
+                line.append_text(info_lines[i])
+            console.print(line)
+        console.print()
+        return
+
     favicon = create_colored_favicon()
     name = create_colored_name()
 
@@ -305,16 +400,11 @@ def main():
     # Add rich display support for Polars DataFrames
     add_rich_display_to_polars()
 
-    # Minimal indication that depictio-cli is running (reuse existing title)
-    from rich.console import Console
-    from rich.panel import Panel
+    # Branded startup banner — only on an interactive terminal, so piped /
+    # redirected output (scripts, CI greps, ``| jq``) stays clean.
+    import sys
 
-    console = Console()
-
-    panel = Panel("🎨 DEPICTIO-CLI", border_style="bright_blue", padding=(0, 1), expand=False)
-
-    console.print()  # Space above
-    console.print(panel)
-    console.print()  # Space below
+    if sys.stdout.isatty():
+        display_depictio_cli_logo(compact=True)
 
     app()
