@@ -1,0 +1,59 @@
+# Monthly automated dependency-update health-check.
+#
+# Dependabot bumps the `==` pins in pyproject.toml (+ uv.lock) and opens
+# grouped PRs; the existing CI (depictio-ci.yaml) then runs on each PR and
+# tells us whether a full update is feasible (green) or what breaks (red).
+#
+# The two deps groups mirror the manual Phase A/B split:
+#   - static-tooling : dev/test/lint tooling — safe, usually mergeable fast
+#   - runtime        : production dependencies — higher risk, isolated
+#
+# Known runtime deps that are currently pinned back on purpose (redis,
+# beanie — see the inline notes in pyproject.toml) are intentionally NOT
+# ignored here: the monthly runtime PR re-checks whether the upstream
+# blocker has been resolved. Expect that PR to stay red until it is.
+#
+# Note: Dependabot does not update .pre-commit-config.yaml hook revs — run
+# `pre-commit autoupdate` manually (or via a separate job) for those.
+version: 2
+updates:
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      static-tooling:
+        patterns:
+          - "ruff"
+          - "ty"
+          - "pre-commit"
+          - "bandit"
+          - "pytest*"
+          - "mongomock*"
+          - "bump2version"
+          - "testcontainers*"
+          - "types-*"
+      runtime:
+        patterns:
+          - "*"
+
+  # Keep CI action versions current (e.g. the Node 20 -> 24 runner deprecation).
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "chore(ci)"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
