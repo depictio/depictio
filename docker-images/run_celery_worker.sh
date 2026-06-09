@@ -10,7 +10,11 @@ set -euo pipefail
 # uses background callbacks. Design mode always uses background callbacks regardless.
 
 # Set default values if environment variables are not set
-CELERY_WORKERS=${DEPICTIO_CELERY_WORKERS:-2}
+# Default raised from 2 → 4: figure/MultiQC builds are CPU-bound and run on the
+# default prefork pool, so each extra worker is a real parallel build slot.
+# Tune per host RAM (each prefork process holds its own DataFrame/multiqc.report
+# copies) via DEPICTIO_CELERY_WORKERS.
+CELERY_WORKERS=${DEPICTIO_CELERY_WORKERS:-4}
 
 echo "✅ CELERY WORKER: Starting Celery worker (required for design mode)"
 echo "🔧 CELERY WORKER: Workers = $CELERY_WORKERS"

@@ -2858,7 +2858,6 @@ def render_multiqc_endpoint(
     from depictio.api.cache import get_cache
     from depictio.api.v1.services.multiqc.figures import (
         MULTIQC_CACHE_TTL_SECONDS,
-        create_multiqc_plot,
         generate_figure_cache_key,
     )
 
@@ -3017,24 +3016,39 @@ def render_multiqc_endpoint(
                             f"render_multiqc: bare cache warm-from-disk failed: {cache_err}"
                         )
                 else:
-                    t2 = _time.perf_counter()
-                    fig = create_multiqc_plot(
-                        s3_locations=s3_locations,
-                        module=selected_module,
-                        plot=selected_plot,
-                        dataset_id=selected_dataset,
-                        theme=theme,
-                        dc_id=str(dc_id) if dc_id else None,
-                    )
-                    timings["create_plot_ms"] = (_time.perf_counter() - t2) * 1000
+                    # True cold miss for a figure the prerender ledger marked
+                    # "ready" (partial/stale prerender, a plot that failed during
+                    # prewarm, or disk cleared without resetting the ledger).
+                    # Never build inline here — ``create_multiqc_plot`` would
+                    # block this API worker on ``_multiqc_lock`` for the full
+                    # 30-75s parse+build. Re-enqueue the idempotent,
+                    # ``set_nx``-locked prerender task and 202 so the React poll
+                    # loop retries once the figure lands on disk/Redis.
+                    rebuild_lock_key = f"multiqc:prerender_build_lock:dc={dc_id}"
+                    if dc_id and cache.get(rebuild_lock_key) is None:
+                        from depictio.api.celery_app import build_multiqc_prerender
 
-                    t3 = _time.perf_counter()
-                    if hasattr(fig, "to_json"):
-                        fig_dict = json.loads(fig.to_json())
-                    else:
-                        fig_dict = fig
-                    timings["to_json_ms"] = (_time.perf_counter() - t3) * 1000
-                    hit_kind = "build"
+                        try:
+                            build_multiqc_prerender.delay(str(dc_id))
+                            logger.info(
+                                f"render_multiqc cid={component_id} dc={dc_id}: "
+                                f"ready-but-missing figure → re-enqueued "
+                                f"build_multiqc_prerender({dc_id})"
+                            )
+                        except Exception as exc:
+                            logger.warning(
+                                f"render_multiqc: failed to re-enqueue build task "
+                                f"for dc={dc_id}: {exc}"
+                            )
+                    return JSONResponse(
+                        status_code=202,
+                        content={
+                            "status": "preparing",
+                            "dc_id": str(dc_id) if dc_id else None,
+                            "component_id": component_id,
+                            "message": "MultiQC figure is being prepared.",
+                        },
+                    )
 
             if isinstance(fig_dict, dict) and "layout" in fig_dict:
                 fig_dict["layout"].setdefault("uirevision", "persistent")
