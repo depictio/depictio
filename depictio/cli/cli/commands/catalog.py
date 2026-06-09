@@ -43,35 +43,38 @@ def catalog_info(
     tool_id: Annotated[str, typer.Argument(help="Tool id, e.g. qiime2 or pangolin")],
 ) -> None:
     """Show one tool's identity (clickable URLs) + every output in detail."""
+    from depictio.cli.cli.utils.rich_utils import console
     from depictio.models.components.advanced_viz.catalog import load_catalog_entries
 
     entry = next((e for e in load_catalog_entries() if e.id == tool_id), None)
     if entry is None:
-        typer.echo(f"No tool '{tool_id}'. Try `depictio catalog list`.")
+        console.print(f"[red]No tool '{tool_id}'.[/red] Try [bold]depictio catalog list[/bold].")
         raise typer.Exit(code=1)
-    typer.echo(f"{entry.name}  ({entry.id})")
-    typer.echo(f"  {entry.description}")
+    console.print(f"[bold magenta]{entry.name}[/bold magenta]  ([cyan]{entry.id}[/cyan])")
+    console.print(f"  {entry.description}")
     if entry.homepage:
-        typer.echo(f"  homepage:  {entry.homepage}")
+        console.print(f"  [dim]homepage:[/dim]  {entry.homepage}")
     if entry.biotools_url:
-        typer.echo(f"  bio.tools: {entry.biotools_url}")
+        console.print(f"  [dim]bio.tools:[/dim] {entry.biotools_url}")
     if entry.nf_core_url:
-        typer.echo(f"  nf-core:   {entry.nf_core_url}")
+        console.print(f"  [dim]nf-core:[/dim]   {entry.nf_core_url}")
     for t in entry.edam_topics:
-        typer.echo(f"  EDAM:      {t}")
+        console.print(f"  [dim]EDAM:[/dim]      {t}")
     for out in entry.outputs:
         mode = f"  [{out.mode}]" if out.mode else ""
-        typer.echo(f"\n  ── {out.id}{mode}")
-        typer.echo(f"     {out.description}")
-        typer.echo(f"     find:    {out.find.model_dump(exclude_none=True)}")
+        console.print(f"\n  [bold]── {out.id}{mode}[/bold]")
+        console.print(f"     {out.description}")
+        console.print(f"     [dim]find:[/dim]    {out.find.model_dump(exclude_none=True)}")
         if out.recipe:
-            typer.echo(f"     recipe:  {out.recipe}")
+            console.print(f"     [dim]recipe:[/dim]  {out.recipe}")
         if out.columns:
-            typer.echo(f"     columns: {', '.join(f'{c}:{t}' for c, t in out.columns.items())}")
+            console.print(
+                f"     [dim]columns:[/dim] {', '.join(f'{c}:{t}' for c, t in out.columns.items())}"
+            )
         for r in out.renders_as:
             tgt = f"{r.component}:{r.kind}" if r.kind else r.component
             roles = f"  roles={r.roles}" if r.roles else ""
-            typer.echo(f"     render:  {tgt}{roles}")
+            console.print(f"     [dim]render:[/dim]  {tgt}{roles}")
 
 
 @app.command("columns")
@@ -79,16 +82,15 @@ def catalog_columns(
     recipe: Annotated[str, typer.Argument(help="Recipe ref, e.g. qiime2/ancombc.py")],
 ) -> None:
     """Print the output columns a recipe produces (to help write `roles`)."""
+    from depictio.cli.cli.utils.rich_utils import console, render_records_table
     from depictio.models.components.advanced_viz.catalog import recipe_output_columns
 
     try:
         cols = recipe_output_columns(recipe)
     except Exception as exc:
-        typer.echo(f"  could not read recipe {recipe!r}: {exc}")
+        console.print(f"[red]:x: could not read recipe {recipe!r}: {exc}[/red]")
         raise typer.Exit(code=1)
-    typer.echo(f"Output columns of {recipe}:")
-    for c in cols:
-        typer.echo(f"  - {c}")
+    render_records_table([{"Column": c} for c in cols], title=f"Output columns of {recipe}")
 
 
 @app.command("validate")
@@ -177,15 +179,17 @@ def catalog_match(
     run_dir: Annotated[str, typer.Argument(help="A pipeline run directory to scan")],
 ) -> None:
     """Recognise which catalog outputs are present in a run directory."""
+    from depictio.cli.cli.utils.rich_utils import console, render_records_table
     from depictio.models.components.advanced_viz.catalog import match_run_dir
 
     matches = match_run_dir(run_dir)
     if not matches:
-        typer.echo(f"No catalogued tool outputs found under {run_dir}")
+        console.print(f"[yellow]No catalogued tool outputs found under {run_dir}[/yellow]")
         return
-    typer.echo(f"Recognised {len(matches)} file(s) in {run_dir}:")
-    for hit in matches:
-        typer.echo(f"  {hit.path}  →  {hit.tool_id} / {hit.output_id}")
+    render_records_table(
+        [{"File": str(hit.path), "Tool": hit.tool_id, "Output": hit.output_id} for hit in matches],
+        title=f"Recognised {len(matches)} file(s) in {run_dir}",
+    )
 
 
 @app.command("compose")
@@ -205,19 +209,22 @@ def catalog_compose(
     that reuses nf-core modules. Groups recognised module outputs by tool and
     shows the viz building blocks — a proposal, not a built dashboard.
     """
+    from depictio.cli.cli.utils.rich_utils import console
     from depictio.models.components.advanced_viz.catalog import compose_run_dir
 
     by_tool = compose_run_dir(run_dir, confirm_with_versions=confirm_versions)
     if not by_tool:
-        typer.echo(f"No catalogued module outputs found under {run_dir}")
+        console.print(f"[yellow]No catalogued module outputs found under {run_dir}[/yellow]")
         return
     n_viz = sum(len(m.renders) for ms in by_tool.values() for m in ms)
-    typer.echo(f"Proposed dashboard from {run_dir}: {len(by_tool)} module(s), {n_viz} viz block(s)")
+    console.print(
+        f"[bold]Proposed dashboard from {run_dir}:[/bold] {len(by_tool)} module(s), {n_viz} viz block(s)"
+    )
     for tool_id, matches in sorted(by_tool.items()):
-        typer.echo(f"\n  {tool_id}")
+        console.print(f"\n  [cyan]{tool_id}[/cyan]")
         for m in matches:
             renders = ", ".join(m.renders) if m.renders else "—"
-            typer.echo(f"      {m.output_id}  ({m.path})  → {renders}")
+            console.print(f"      {m.output_id}  ([dim]{m.path}[/dim])  → {renders}")
 
 
 @app.command("refresh-index")
