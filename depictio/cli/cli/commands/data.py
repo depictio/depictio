@@ -365,9 +365,13 @@ def join(
     rich_print_checked_statement("Join processing complete", "success")
 
 
-# Link subcommands
-link_app = typer.Typer(help="Manage DC links for cross-DC filtering")
-app.add_typer(link_app, name="link")
+# DC link subcommands. Links are authored declaratively in the project YAML
+# (`links:`) and pushed via `config sync` / `run`; these commands only inspect
+# the live server state (`list`), test resolution (`resolve`), or imperatively
+# tweak it (`create`/`delete`). They are mounted under the hidden top-level `dev`
+# group (see commands/dev.py) — callable as `depictio dev link <cmd>` — rather
+# than on the user-facing `data` group.
+link_app = typer.Typer(help="Inspect & test DC links (authored in the project YAML)")
 
 
 @link_app.command("list")

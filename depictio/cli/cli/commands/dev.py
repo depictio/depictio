@@ -13,6 +13,7 @@ import typer
 
 from depictio.cli.cli.commands.backup import dev_app as backup_dev
 from depictio.cli.cli.commands.catalog import dev_app as catalog_dev
+from depictio.cli.cli.commands.data import link_app
 from depictio.cli.cli.commands.recipe import app as recipe
 
 app = typer.Typer(help="Maintainer / CI tooling (not needed for day-to-day use).")
@@ -20,3 +21,4 @@ app = typer.Typer(help="Maintainer / CI tooling (not needed for day-to-day use).
 app.add_typer(recipe, name="recipe", help="Recipe authoring & standalone test harness")
 app.add_typer(catalog_dev, name="catalog", help="Catalog validation, schema & index maintenance")
 app.add_typer(backup_dev, name="backup", help="Backup validation-coverage audit")
+app.add_typer(link_app, name="link", help="DC link inspection & resolution testing")
