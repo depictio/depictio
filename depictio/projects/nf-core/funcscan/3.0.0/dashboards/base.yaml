@@ -1,0 +1,110 @@
+version: 1
+main_dashboard:
+  title: nf-core/funcscan
+  subtitle: AMR / BGC / Virulence Screening
+  project_tag: Funcscan — AMR / BGC Screening
+  main_tab_name: MultiQC
+  tab_icon: /assets/images/logos/multiqc.png
+  tab_icon_color: orange
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  dashboard_id: 0000000000000000000fcs0a01
+  components:
+    - component_type: multiqc
+      workflow_tag: funcscan
+      data_collection_tag: multiqc_data
+      selected_module: general_stats
+      selected_plot: general_stats
+      tag: fcs-multiqc-general
+      layout: { x: 0, y: 0, w: 8, h: 5 }
+
+tabs:
+  - title: AMR Tool Overlap
+    tab_order: 1
+    tab_icon: mdi:set-merge
+    tab_icon_color: violet
+    icon: /assets/images/workflows/nf-core.png
+    icon_color: green
+    workflow_system: nf-core
+    dashboard_id: 0000000000000000000fcs0a02
+    components:
+      - component_type: advanced_viz
+        workflow_tag: funcscan
+        data_collection_tag: amr_tool_overlap_upset_canonical
+        viz_kind: upset_plot
+        config:
+          viz_kind: upset_plot
+          matrix_wf_id: "TODO_WF_ID"
+          matrix_dc_id: "TODO_DC_ID"
+        tag: fcs-upset
+        index: fcs-upset
+        title: AMR Hits per Tool (UpSet)
+        layout: { x: 0, y: 0, w: 8, h: 7 }
+
+  - title: AMR per Sample
+    tab_order: 2
+    tab_icon: mdi:grid
+    tab_icon_color: blue
+    icon: /assets/images/workflows/nf-core.png
+    icon_color: green
+    workflow_system: nf-core
+    dashboard_id: 0000000000000000000fcs0a03
+    components:
+      - component_type: advanced_viz
+        workflow_tag: funcscan
+        data_collection_tag: amr_sample_heatmap_canonical
+        viz_kind: complex_heatmap
+        config:
+          viz_kind: complex_heatmap
+          matrix_wf_id: "TODO_WF_ID"
+          matrix_dc_id: "TODO_DC_ID"
+          index_column: gene_id
+          cluster_rows: true
+          cluster_cols: true
+        tag: fcs-heatmap
+        index: fcs-heatmap
+        title: Sample × AMR Gene Heatmap
+        layout: { x: 0, y: 0, w: 8, h: 8 }
+
+  - title: AMR Drug Classes
+    tab_order: 3
+    tab_icon: mdi:pill
+    tab_icon_color: teal
+    icon: /assets/images/workflows/nf-core.png
+    icon_color: green
+    workflow_system: nf-core
+    dashboard_id: 0000000000000000000fcs0a04
+    components:
+      - component_type: advanced_viz
+        workflow_tag: funcscan
+        data_collection_tag: amr_classes_sunburst_canonical
+        viz_kind: sunburst
+        config:
+          viz_kind: sunburst
+          rank_cols: [drug_class, subclass, gene]
+          abundance_col: abundance
+        tag: fcs-sunburst
+        index: fcs-sunburst
+        title: AMR Drug-Class Hierarchy
+        layout: { x: 0, y: 0, w: 8, h: 8 }
+
+  # PROPOSED viz_kind: gene_context_map — see PROPOSED_COMPONENTS.md
+  - title: Gene Context Map
+    tab_order: 4
+    tab_icon: mdi:dna
+    tab_icon_color: red
+    icon: /assets/images/workflows/nf-core.png
+    icon_color: green
+    workflow_system: nf-core
+    dashboard_id: 0000000000000000000fcs0a05
+    components:
+      - component_type: text
+        tag: fcs-genecontext-placeholder
+        layout: { x: 0, y: 0, w: 8, h: 4 }
+        title: PROPOSED — gene_context_map viz
+        # PROPOSED: gene_context_map (see PROPOSED_COMPONENTS.md)
+        markdown_content: |
+          ### PROPOSED component: `gene_context_map`
+          DC: `gene_context_canonical` (contig_id × gene_id × start/end × strand × category).
+          Linear contig map with coloured strand arrows for AMR/BGC hits.

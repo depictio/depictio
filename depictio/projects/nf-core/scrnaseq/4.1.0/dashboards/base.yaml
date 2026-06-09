@@ -1,0 +1,95 @@
+version: 1
+main_dashboard:
+  title: nf-core/scrnaseq
+  subtitle: Single-Cell QC + Marker Genes
+  project_tag: scRNA-seq — Per-cell QC + Marker Genes
+  main_tab_name: MultiQC
+  tab_icon: /assets/images/logos/multiqc.png
+  tab_icon_color: orange
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  dashboard_id: 0000000000000000000scr0a01
+  components:
+    - component_type: multiqc
+      workflow_tag: scrnaseq
+      data_collection_tag: multiqc_data
+      selected_module: general_stats
+      selected_plot: general_stats
+      tag: sc-multiqc-general
+      layout: { x: 0, y: 0, w: 8, h: 5 }
+
+tabs:
+  # PROPOSED viz_kind: knee_qc — see PROPOSED_COMPONENTS.md.
+  # When the component lands, swap the placeholder for:
+  #   - component_type: advanced_viz
+  #     viz_kind: knee_qc
+  #     config: { viz_kind: knee_qc, sample_id_col: sample_id, ... }
+  - title: Cell QC
+    tab_order: 1
+    tab_icon: mdi:filter-variant
+    tab_icon_color: red
+    icon: /assets/images/workflows/nf-core.png
+    icon_color: green
+    workflow_system: nf-core
+    dashboard_id: 0000000000000000000scr0a02
+    components:
+      - component_type: text
+        tag: sc-knee-placeholder
+        layout: { x: 0, y: 0, w: 8, h: 4 }
+        title: PROPOSED — knee_qc viz
+        # PROPOSED: knee_qc (see PROPOSED_COMPONENTS.md)
+        markdown_content: |
+          ### PROPOSED component: `knee_qc`
+          This tile will host the barcode-rank knee + per-cell QC scatter once
+          `knee_qc` lands in `depictio/models/components/advanced_viz/configs.py`.
+          DC: `knee_qc_canonical` (columns: sample_id, barcode, total_counts, n_genes, pct_mito).
+
+  - title: Embedding
+    tab_order: 2
+    tab_icon: mdi:axis-arrow
+    tab_icon_color: blue
+    icon: /assets/images/workflows/nf-core.png
+    icon_color: green
+    workflow_system: nf-core
+    dashboard_id: 0000000000000000000scr0a03
+    components:
+      - component_type: advanced_viz
+        workflow_tag: scrnaseq
+        data_collection_tag: embedding_umap
+        viz_kind: embedding
+        config:
+          viz_kind: embedding
+          sample_id_col: sample_id
+          dim_1_col: dim_1
+          dim_2_col: dim_2
+          cluster_col: cluster
+          color_col: cluster
+        tag: sc-umap
+        index: sc-umap
+        title: UMAP
+        layout: { x: 0, y: 0, w: 8, h: 8 }
+
+  - title: Marker Genes
+    tab_order: 3
+    tab_icon: mdi:dots-grid
+    tab_icon_color: teal
+    icon: /assets/images/workflows/nf-core.png
+    icon_color: green
+    workflow_system: nf-core
+    dashboard_id: 0000000000000000000scr0a04
+    components:
+      - component_type: advanced_viz
+        workflow_tag: scrnaseq
+        data_collection_tag: marker_dotplot_canonical
+        viz_kind: dot_plot
+        config:
+          viz_kind: dot_plot
+          cluster_col: cluster
+          gene_col: gene
+          mean_expression_col: mean_expression
+          frac_expressing_col: frac_expressing
+        tag: sc-dotplot
+        index: sc-dotplot
+        title: Marker Dot Plot
+        layout: { x: 0, y: 0, w: 8, h: 8 }

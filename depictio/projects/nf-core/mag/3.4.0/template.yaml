@@ -1,0 +1,138 @@
+# nf-core/mag Template v3.4.0 — Assembly & MAG binning
+# ============================================================================
+# Tested against: s3://nf-core-awsmegatests/mag/results-<sha>/
+# Docs: https://nf-co.re/mag/3.4.0/docs/output
+# ============================================================================
+# Tier-2 SKELETON. `bin_qc_scatter` is PROPOSED — see PROPOSED_COMPONENTS.md.
+# Existing-viz tiles (Stacked taxonomy, Sunburst, Embedding, Phylogenetic) ready.
+# ============================================================================
+
+template:
+  template_id: "nf-core/mag/3.4.0"
+  description: "nf-core/mag metagenomic assembly + MAG binning report"
+  version: "0.1.0"
+  variables:
+    - name: "DATA_ROOT"
+      required: true
+      description: "Root directory containing mag pipeline output"
+    - name: "SAMPLESHEET_FILE"
+      required: true
+      description: "Path to mag samplesheet CSV"
+  dashboards: ["dashboards/base.yaml"]
+  reference:
+    vars:
+      SAMPLESHEET_FILE: "{DATA_ROOT}/samplesheet/samplesheet.csv"
+
+name: "MAG — Assembly + Binning"
+project_type: "advanced"
+is_public: true
+workflows:
+  - name: "mag"
+    version: "3.4.0"
+    engine: { name: "nextflow" }
+    catalog: { name: "nf-core", url: "https://nf-co.re" }
+    repository_url: "https://github.com/nf-core/mag"
+    data_location: { structure: "flat", locations: ["{DATA_ROOT}"] }
+    data_collections:
+      - data_collection_tag: "multiqc_data"
+        config:
+          type: "MultiQC"
+          scan:
+            mode: "recursive"
+            scan_parameters: { regex_config: { pattern: "multiqc/multiqc_data/multiqc.parquet" } }
+          dc_specific_properties:
+            modules: ["fastqc", "fastp", "quast", "busco"]
+
+      - data_collection_tag: "samplesheet"
+        config:
+          type: "Table"
+          scan: { mode: "single", scan_parameters: { filename: "{SAMPLESHEET_FILE}" } }
+          dc_specific_properties:
+            format: "CSV"
+            columns_description: { sample: "Sample identifier" }
+
+      - data_collection_tag: "stacked_taxonomy_canonical"
+        description: "Per-sample bin taxonomy in stacked_taxonomy schema"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform: { recipe: "nf-core/mag/stacked_taxonomy_canonical.py" }
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              sample_id: "Sample identifier"
+              taxon: "GTDB-Tk taxon"
+              rank: "Taxonomic rank"
+              abundance: "Bin relative abundance"
+
+      - data_collection_tag: "sunburst_canonical"
+        description: "Hierarchical bin taxonomy (Domain → Species)"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform: { recipe: "nf-core/mag/sunburst_canonical.py" }
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              Domain: "Top rank"
+              Phylum: "Phylum"
+              Class: "Class"
+              Order: "Order"
+              Family: "Family"
+              Genus: "Genus"
+              Species: "Species"
+              abundance: "Leaf weight"
+              sample_id: "Sample identifier"
+
+      - data_collection_tag: "phylogenetic_tree_canonical"
+        description: "GTDB-Tk phylogenetic tree (Newick) — tips are MAGs"
+        config:
+          type: "phylogeny"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "{DATA_ROOT}/gtdbtk/gtdbtk.bac120.classify.tree"
+          dc_specific_properties:
+            format: "newick"
+            ladderize: true
+            metadata_dc_tag: "phylogenetic_tree_metadata_canonical"
+            metadata_taxon_column: "taxon"
+
+      - data_collection_tag: "phylogenetic_tree_metadata_canonical"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform: { recipe: "nf-core/mag/tree_metadata_canonical.py" }
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              taxon: "Tip label (MAG bin id)"
+              Domain: "Domain"
+              Phylum: "Phylum"
+
+      # PROPOSED viz_kind: bin_qc_scatter — see PROPOSED_COMPONENTS.md
+      - data_collection_tag: "bin_qc_canonical"
+        description: "Per-bin completeness/contamination for the PROPOSED bin_qc_scatter"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform: { recipe: "nf-core/mag/bin_qc_canonical.py" }
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              sample_id: "Sample"
+              bin_id: "Bin identifier"
+              completeness: "CheckM completeness (%)"
+              contamination: "CheckM contamination (%)"
+              bin_size_bp: "Bin size (bp)"
+              n50: "N50 (bp)"
+              tool: "Binning tool"
+
+links:
+  - source_dc_tag: "samplesheet"
+    source_column: "sample"
+    target_dc_tag: "stacked_taxonomy_canonical"
+    target_type: "table"
+    link_config: { resolver: "direct", target_field: "sample_id" }
+    enabled: true

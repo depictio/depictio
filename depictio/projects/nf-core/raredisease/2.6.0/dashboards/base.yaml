@@ -1,0 +1,140 @@
+version: 1
+main_dashboard:
+  title: nf-core/raredisease
+  subtitle: Clinical WGS/WES + Ranking
+  project_tag: Rare Disease — WGS/WES + Ranking
+  main_tab_name: MultiQC
+  tab_icon: /assets/images/logos/multiqc.png
+  tab_icon_color: orange
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  dashboard_id: 0000000000000000000rdr0a01
+  components:
+    - component_type: multiqc
+      workflow_tag: raredisease
+      data_collection_tag: multiqc_data
+      selected_module: general_stats
+      selected_plot: general_stats
+      tag: rd-multiqc-general
+      layout: { x: 0, y: 0, w: 8, h: 5 }
+
+tabs:
+  - title: SNV Manhattan
+    tab_order: 1
+    tab_icon: mdi:chart-bell-curve
+    tab_icon_color: red
+    icon: /assets/images/workflows/nf-core.png
+    icon_color: green
+    workflow_system: nf-core
+    dashboard_id: 0000000000000000000rdr0a02
+    components:
+      - component_type: advanced_viz
+        workflow_tag: raredisease
+        data_collection_tag: variants_manhattan_canonical
+        viz_kind: manhattan
+        config:
+          viz_kind: manhattan
+          chr_col: chr
+          pos_col: pos
+          score_col: score
+          feature_col: feature
+          score_kind: "Rank Score"
+          score_threshold: 15.0
+          color_by_columns: [sample]
+        tag: rd-manhattan
+        index: rd-manhattan
+        title: Variant Rank-Score Manhattan
+        layout: { x: 0, y: 0, w: 8, h: 7 }
+
+  - title: Coverage
+    tab_order: 2
+    tab_icon: mdi:chart-areaspline
+    tab_icon_color: blue
+    icon: /assets/images/workflows/nf-core.png
+    icon_color: green
+    workflow_system: nf-core
+    dashboard_id: 0000000000000000000rdr0a03
+    components:
+      - component_type: advanced_viz
+        workflow_tag: raredisease
+        data_collection_tag: coverage_canonical
+        viz_kind: coverage_track
+        config:
+          viz_kind: coverage_track
+          chromosome_col: chromosome
+          position_col: position
+          end_col: end
+          value_col: value
+          sample_col: sample
+          y_scale: log
+        tag: rd-coverage
+        index: rd-coverage
+        title: Mosdepth Coverage
+        layout: { x: 0, y: 0, w: 8, h: 7 }
+
+  - title: Gene Lollipop
+    tab_order: 3
+    tab_icon: mdi:chart-scatter-plot
+    tab_icon_color: teal
+    icon: /assets/images/workflows/nf-core.png
+    icon_color: green
+    workflow_system: nf-core
+    dashboard_id: 0000000000000000000rdr0a04
+    components:
+      - component_type: advanced_viz
+        workflow_tag: raredisease
+        data_collection_tag: lollipop_canonical
+        viz_kind: lollipop
+        config:
+          viz_kind: lollipop
+          feature_id_col: feature_id
+          position_col: position
+          category_col: category
+        tag: rd-lollipop
+        index: rd-lollipop
+        title: Per-Gene Variant Lollipop
+        layout: { x: 0, y: 0, w: 8, h: 6 }
+
+  - title: Oncoplot
+    tab_order: 4
+    tab_icon: mdi:grid-large
+    tab_icon_color: violet
+    icon: /assets/images/workflows/nf-core.png
+    icon_color: green
+    workflow_system: nf-core
+    dashboard_id: 0000000000000000000rdr0a05
+    components:
+      - component_type: advanced_viz
+        workflow_tag: raredisease
+        data_collection_tag: oncoplot_canonical
+        viz_kind: oncoplot
+        config:
+          viz_kind: oncoplot
+          sample_id_col: sample_id
+          gene_col: gene
+          mutation_type_col: mutation_type
+        tag: rd-oncoplot
+        index: rd-oncoplot
+        title: Sample × Gene Rare-Variant Matrix
+        layout: { x: 0, y: 0, w: 8, h: 7 }
+
+  # PROPOSED viz_kind: cnv_ideogram — see PROPOSED_COMPONENTS.md
+  - title: CNV / ROH Ideogram
+    tab_order: 5
+    tab_icon: mdi:dna
+    tab_icon_color: orange
+    icon: /assets/images/workflows/nf-core.png
+    icon_color: green
+    workflow_system: nf-core
+    dashboard_id: 0000000000000000000rdr0a06
+    components:
+      - component_type: text
+        tag: rd-cnv-placeholder
+        layout: { x: 0, y: 0, w: 8, h: 4 }
+        title: PROPOSED — cnv_ideogram viz
+        # PROPOSED: cnv_ideogram (see PROPOSED_COMPONENTS.md)
+        markdown_content: |
+          ### PROPOSED component: `cnv_ideogram`
+          DC: `cnv_canonical` (sample × chr × start/end × event_type).
+          Chromosome ideogram with CNV gains/losses + ROH bands.

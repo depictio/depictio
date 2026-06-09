@@ -1,0 +1,103 @@
+# nf-core/funcscan Template v3.0.0 — AMR / BGC / virulence-factor screening
+# ============================================================================
+# Tested against: s3://nf-core-awsmegatests/funcscan/results-<sha>/
+# Docs: https://nf-co.re/funcscan/3.0.0/docs/output
+# ============================================================================
+# Tier-2 SKELETON. `gene_context_map` is PROPOSED — see PROPOSED_COMPONENTS.md.
+# Existing-viz tiles (UpSet, Complex heatmap, Sunburst) ready to wire.
+# ============================================================================
+
+template:
+  template_id: "nf-core/funcscan/3.0.0"
+  description: "nf-core/funcscan AMR / BGC / virulence-factor screening report"
+  version: "0.1.0"
+  variables:
+    - name: "DATA_ROOT"
+      required: true
+    - name: "SAMPLESHEET_FILE"
+      required: true
+  dashboards: ["dashboards/base.yaml"]
+  reference:
+    vars:
+      SAMPLESHEET_FILE: "{DATA_ROOT}/samplesheet/samplesheet.csv"
+
+name: "Funcscan — AMR / BGC Screening"
+project_type: "advanced"
+is_public: true
+workflows:
+  - name: "funcscan"
+    version: "3.0.0"
+    engine: { name: "nextflow" }
+    catalog: { name: "nf-core", url: "https://nf-co.re" }
+    repository_url: "https://github.com/nf-core/funcscan"
+    data_location: { structure: "flat", locations: ["{DATA_ROOT}"] }
+    data_collections:
+      - data_collection_tag: "multiqc_data"
+        config:
+          type: "MultiQC"
+          scan:
+            mode: "recursive"
+            scan_parameters: { regex_config: { pattern: "multiqc/multiqc_data/multiqc.parquet" } }
+          dc_specific_properties:
+            modules: ["fastqc", "prokka", "amrfinderplus"]
+
+      - data_collection_tag: "samplesheet"
+        config:
+          type: "Table"
+          scan: { mode: "single", scan_parameters: { filename: "{SAMPLESHEET_FILE}" } }
+          dc_specific_properties:
+            format: "CSV"
+            columns_description: { sample: "Sample identifier" }
+
+      - data_collection_tag: "amr_tool_overlap_upset_canonical"
+        description: "AMR gene × tool binary detection matrix"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform: { recipe: "nf-core/funcscan/amr_tool_overlap_upset_canonical.py" }
+          dc_specific_properties:
+            format: "TSV"
+            columns_description: { gene_id: "AMR gene id" }
+
+      - data_collection_tag: "amr_sample_heatmap_canonical"
+        description: "Sample × AMR gene presence/absence heatmap"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform: { recipe: "nf-core/funcscan/amr_sample_heatmap_canonical.py" }
+          dc_specific_properties:
+            format: "TSV"
+            columns_description: { gene_id: "AMR gene id (row index)" }
+
+      - data_collection_tag: "amr_classes_sunburst_canonical"
+        description: "AMR drug-class hierarchy for the sunburst"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform: { recipe: "nf-core/funcscan/amr_classes_sunburst_canonical.py" }
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              drug_class: "Top-level drug class"
+              subclass: "Subclass"
+              gene: "AMR gene (leaf)"
+              abundance: "Hit count"
+
+      # PROPOSED viz_kind: gene_context_map — see PROPOSED_COMPONENTS.md
+      - data_collection_tag: "gene_context_canonical"
+        description: "Per-contig gene-hit positions (PROPOSED gene_context_map)"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform: { recipe: "nf-core/funcscan/gene_context_canonical.py" }
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              contig_id: "Contig identifier"
+              gene_id: "Gene id"
+              start: "Start bp on contig"
+              end: "End bp on contig"
+              strand: "+ / -"
+              category: "AMR class / BGC type"
+
+links: []

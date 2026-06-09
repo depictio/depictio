@@ -1,0 +1,138 @@
+version: 1
+main_dashboard:
+  title: nf-core/atacseq
+  subtitle: ATAC-seq Peak Calling
+  project_tag: ATAC-seq — Peak Calling
+  main_tab_name: MultiQC
+  tab_icon: /assets/images/logos/multiqc.png
+  tab_icon_color: orange
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  dashboard_id: 0000000000000000000atc0a01
+  components:
+    - component_type: multiqc
+      workflow_tag: atacseq
+      data_collection_tag: multiqc_data
+      selected_module: general_stats
+      selected_plot: general_stats
+      tag: atc-multiqc-general
+      layout: { x: 0, y: 0, w: 8, h: 5 }
+    - component_type: multiqc
+      workflow_tag: atacseq
+      data_collection_tag: multiqc_data
+      selected_module: macs2
+      selected_plot: Peak Counts
+      tag: atc-multiqc-macs2
+      layout: { x: 0, y: 5, w: 8, h: 4 }
+
+tabs:
+  - title: Coverage
+    tab_order: 1
+    tab_icon: mdi:chart-areaspline
+    tab_icon_color: blue
+    icon: /assets/images/workflows/nf-core.png
+    icon_color: green
+    workflow_system: nf-core
+    dashboard_id: 0000000000000000000atc0a02
+    components:
+      - component_type: advanced_viz
+        workflow_tag: atacseq
+        data_collection_tag: coverage_canonical
+        viz_kind: coverage_track
+        config:
+          viz_kind: coverage_track
+          chromosome_col: chromosome
+          position_col: position
+          end_col: end
+          value_col: value
+          sample_col: sample
+        tag: atc-coverage
+        index: atc-coverage
+        title: BigWig Signal Coverage
+        layout: { x: 0, y: 0, w: 8, h: 7 }
+
+  - title: Peak Significance
+    tab_order: 2
+    tab_icon: mdi:chart-bell-curve
+    tab_icon_color: red
+    icon: /assets/images/workflows/nf-core.png
+    icon_color: green
+    workflow_system: nf-core
+    dashboard_id: 0000000000000000000atc0a03
+    components:
+      - component_type: advanced_viz
+        workflow_tag: atacseq
+        data_collection_tag: peaks_manhattan_canonical
+        viz_kind: manhattan
+        config:
+          viz_kind: manhattan
+          chr_col: chr
+          pos_col: pos
+          score_col: score
+          feature_col: feature
+          score_kind: "-log10(q)"
+          score_threshold: 5.0
+        tag: atc-manhattan
+        index: atc-manhattan
+        title: Peak Significance
+        layout: { x: 0, y: 0, w: 8, h: 7 }
+
+  - title: Consensus Peaks
+    tab_order: 3
+    tab_icon: mdi:set-merge
+    tab_icon_color: violet
+    icon: /assets/images/workflows/nf-core.png
+    icon_color: green
+    workflow_system: nf-core
+    dashboard_id: 0000000000000000000atc0a04
+    components:
+      - component_type: advanced_viz
+        workflow_tag: atacseq
+        data_collection_tag: consensus_peaks_upset_canonical
+        viz_kind: upset_plot
+        config:
+          viz_kind: upset_plot
+          matrix_wf_id: "TODO_WF_ID"
+          matrix_dc_id: "TODO_DC_ID"
+        tag: atc-upset
+        index: atc-upset
+        title: Consensus Peaks (UpSet)
+        layout: { x: 0, y: 0, w: 8, h: 7 }
+
+      - component_type: advanced_viz
+        workflow_tag: atacseq
+        data_collection_tag: peak_signal_heatmap_canonical
+        viz_kind: complex_heatmap
+        config:
+          viz_kind: complex_heatmap
+          matrix_wf_id: "TODO_WF_ID"
+          matrix_dc_id: "TODO_DC_ID"
+          index_column: peak_id
+          cluster_rows: true
+          cluster_cols: true
+          normalize: row_z
+        tag: atc-heatmap
+        index: atc-heatmap
+        title: Peak × Sample Signal Heatmap
+        layout: { x: 0, y: 7, w: 8, h: 8 }
+
+  # PROPOSED viz_kind: signal_profile — see PROPOSED_COMPONENTS.md
+  - title: TSS Enrichment
+    tab_order: 4
+    tab_icon: mdi:chart-multiple
+    tab_icon_color: teal
+    icon: /assets/images/workflows/nf-core.png
+    icon_color: green
+    workflow_system: nf-core
+    dashboard_id: 0000000000000000000atc0a05
+    components:
+      - component_type: text
+        tag: atc-signal-placeholder
+        layout: { x: 0, y: 0, w: 8, h: 4 }
+        title: PROPOSED — signal_profile viz
+        # PROPOSED: signal_profile (see PROPOSED_COMPONENTS.md)
+        markdown_content: |
+          ### PROPOSED component: `signal_profile`
+          DC: `tss_profile_canonical` (sample_id × feature_id × bin × signal).
+          deepTools-style mean profile + region × bin heatmap around TSS.

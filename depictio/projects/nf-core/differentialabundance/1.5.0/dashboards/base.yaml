@@ -1,0 +1,184 @@
+version: 1
+main_dashboard:
+  title: nf-core/differentialabundance
+  subtitle: DE + GSEA Report
+  project_tag: Differential Abundance — DE + GSEA
+  main_tab_name: MultiQC
+  tab_icon: /assets/images/logos/multiqc.png
+  tab_icon_color: orange
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  # TODO: assign a static dashboard_id when registering in STATIC_IDS
+  dashboard_id: 0000000000000000000ddaa01
+  components:
+    - component_type: multiqc
+      workflow_tag: differentialabundance
+      data_collection_tag: multiqc_data
+      selected_module: general_stats
+      selected_plot: general_stats
+      tag: da-multiqc-general-stats
+      layout: { x: 0, y: 0, w: 8, h: 5 }
+    - component_type: multiqc
+      workflow_tag: differentialabundance
+      data_collection_tag: multiqc_data
+      selected_module: fastqc
+      selected_plot: Sequence Counts
+      tag: da-multiqc-fastqc-counts
+      layout: { x: 0, y: 5, w: 8, h: 4 }
+
+tabs:
+  - title: Differential Expression
+    subtitle: DESeq2/limma per-contrast results
+    tab_order: 1
+    tab_icon: mdi:chart-scatter-plot
+    tab_icon_color: red
+    icon: /assets/images/workflows/nf-core.png
+    icon_color: green
+    workflow_system: nf-core
+    dashboard_id: 0000000000000000000ddaa02
+    components:
+      - component_type: card
+        workflow_tag: differentialabundance
+        data_collection_tag: volcano_canonical
+        aggregation: nunique
+        column_name: feature_id
+        column_type: object
+        display:
+          icon_name: mdi:dna
+          title_font_size: xl
+          value_font_size: xl
+        tag: da-card-genes-tested
+        layout: { x: 0, y: 0, w: 2, h: 2 }
+        title: Genes Tested
+
+      - component_type: interactive
+        workflow_tag: differentialabundance
+        data_collection_tag: contrasts
+        interactive_component_type: Select
+        column_name: id
+        column_type: object
+        display:
+          title_size: md
+          custom_color: '#E64B3C'
+        tag: da-contrast-picker
+        index: da-contrast-picker
+        layout: { x: 0, y: 2, w: 2, h: 2 }
+        title: Contrast
+
+      - component_type: advanced_viz
+        workflow_tag: differentialabundance
+        data_collection_tag: volcano_canonical
+        viz_kind: volcano
+        config:
+          viz_kind: volcano
+          feature_id_col: feature_id
+          effect_size_col: effect_size
+          significance_col: significance
+          label_col: label
+          category_col: category
+          significance_threshold: 0.05
+          effect_threshold: 1.0
+          top_n_labels: 20
+        tag: da-volcano
+        index: da-volcano
+        title: Volcano
+        layout: { x: 2, y: 0, w: 6, h: 8 }
+
+      - component_type: advanced_viz
+        workflow_tag: differentialabundance
+        data_collection_tag: ma_canonical
+        viz_kind: ma
+        config:
+          viz_kind: ma
+          feature_id_col: feature_id
+          avg_log_intensity_col: avg_log_intensity
+          log2_fold_change_col: log2_fold_change
+          significance_col: significance
+          label_col: label
+          significance_threshold: 0.05
+          fold_change_threshold: 1.0
+          top_n_labels: 15
+        tag: da-ma
+        index: da-ma
+        title: MA plot
+        layout: { x: 0, y: 8, w: 8, h: 7 }
+
+  - title: Expression Heatmap
+    tab_order: 2
+    tab_icon: mdi:grid
+    tab_icon_color: violet
+    icon: /assets/images/workflows/nf-core.png
+    icon_color: green
+    workflow_system: nf-core
+    dashboard_id: 0000000000000000000ddaa03
+    components:
+      - component_type: advanced_viz
+        workflow_tag: differentialabundance
+        data_collection_tag: vst_matrix_canonical
+        viz_kind: complex_heatmap
+        config:
+          viz_kind: complex_heatmap
+          # matrix_wf_id / matrix_dc_id resolved by reseed from STATIC_IDS
+          matrix_wf_id: "TODO_WF_ID"
+          matrix_dc_id: "TODO_DC_ID"
+          index_column: feature_id
+          row_annotation_cols: [gene_symbol]
+          cluster_rows: true
+          cluster_cols: true
+          normalize: row_z
+        tag: da-heatmap
+        index: da-heatmap
+        title: VST Expression Heatmap
+        layout: { x: 0, y: 0, w: 8, h: 10 }
+
+  - title: Pathway Enrichment
+    tab_order: 3
+    tab_icon: mdi:scatter-plot
+    tab_icon_color: teal
+    icon: /assets/images/workflows/nf-core.png
+    icon_color: green
+    workflow_system: nf-core
+    dashboard_id: 0000000000000000000ddaa04
+    components:
+      - component_type: advanced_viz
+        workflow_tag: differentialabundance
+        data_collection_tag: enrichment_canonical
+        viz_kind: enrichment
+        config:
+          viz_kind: enrichment
+          term_col: term
+          nes_col: nes
+          padj_col: padj
+          gene_count_col: gene_count
+          source_col: source
+          padj_threshold: 0.05
+          top_n: 20
+        tag: da-enrichment
+        index: da-enrichment
+        title: Pathway Enrichment
+        layout: { x: 0, y: 0, w: 8, h: 8 }
+
+  - title: Sample Embedding
+    tab_order: 4
+    tab_icon: mdi:axis-arrow
+    tab_icon_color: blue
+    icon: /assets/images/workflows/nf-core.png
+    icon_color: green
+    workflow_system: nf-core
+    dashboard_id: 0000000000000000000ddaa05
+    components:
+      - component_type: advanced_viz
+        workflow_tag: differentialabundance
+        data_collection_tag: embedding_pca
+        viz_kind: embedding
+        config:
+          viz_kind: embedding
+          sample_id_col: sample_id
+          dim_1_col: dim_1
+          dim_2_col: dim_2
+          color_col: condition
+        tag: da-pca
+        index: da-pca
+        title: Sample PCA
+        layout: { x: 0, y: 0, w: 6, h: 6 }

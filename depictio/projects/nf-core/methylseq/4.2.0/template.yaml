@@ -1,0 +1,107 @@
+# nf-core/methylseq Template v4.2.0 — Bisulfite-seq methylation calling
+# ============================================================================
+# Tested against: s3://nf-core-awsmegatests/methylseq/results-<sha>/
+# Docs: https://nf-co.re/methylseq/4.2.0/docs/output
+# ============================================================================
+# Tier-2 SKELETON. `signal_profile` is PROPOSED — see PROPOSED_COMPONENTS.md
+# (shared with atacseq + chipseq).
+# Existing-viz tiles (Coverage track, Manhattan) ready to wire.
+# ============================================================================
+
+template:
+  template_id: "nf-core/methylseq/4.2.0"
+  description: "nf-core/methylseq BS-seq methylation report"
+  version: "0.1.0"
+  variables:
+    - name: "DATA_ROOT"
+      required: true
+    - name: "SAMPLESHEET_FILE"
+      required: true
+  dashboards: ["dashboards/base.yaml"]
+  reference:
+    vars:
+      SAMPLESHEET_FILE: "{DATA_ROOT}/samplesheet/samplesheet.csv"
+
+name: "Methylseq — Methylation Calling"
+project_type: "advanced"
+is_public: true
+workflows:
+  - name: "methylseq"
+    version: "4.2.0"
+    engine: { name: "nextflow" }
+    catalog: { name: "nf-core", url: "https://nf-co.re" }
+    repository_url: "https://github.com/nf-core/methylseq"
+    data_location: { structure: "flat", locations: ["{DATA_ROOT}"] }
+    data_collections:
+      - data_collection_tag: "multiqc_data"
+        config:
+          type: "MultiQC"
+          scan:
+            mode: "recursive"
+            scan_parameters: { regex_config: { pattern: "multiqc/multiqc_data/multiqc.parquet" } }
+          dc_specific_properties:
+            modules: ["fastqc", "bismark", "qualimap", "preseq"]
+
+      - data_collection_tag: "samplesheet"
+        config:
+          type: "Table"
+          scan: { mode: "single", scan_parameters: { filename: "{SAMPLESHEET_FILE}" } }
+          dc_specific_properties:
+            format: "CSV"
+            columns_description: { sample: "Sample identifier" }
+
+      # Existing viz: coverage_track from per-CpG methylation level treated as signal
+      - data_collection_tag: "methylation_coverage_canonical"
+        description: "Per-region methylation level (signal-along-coordinate)"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform: { recipe: "nf-core/methylseq/methylation_coverage_canonical.py" }
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              chromosome: "Chromosome"
+              position: "CpG / region start (bp)"
+              end: "Region end (bp)"
+              value: "% methylation (0–100)"
+              sample: "Sample identifier"
+              category: "Methylation context (CpG / CHG / CHH)"
+
+      # Existing viz: manhattan from differential methylation regions
+      - data_collection_tag: "dmr_manhattan_canonical"
+        description: "Differentially methylated regions → Manhattan"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform: { recipe: "nf-core/methylseq/dmr_manhattan_canonical.py" }
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              chr: "Chromosome"
+              pos: "Region start (bp)"
+              score: "-log10(p) from methyl-comparison"
+              feature: "Region label (optional)"
+
+      # PROPOSED viz_kind: signal_profile — see PROPOSED_COMPONENTS.md
+      - data_collection_tag: "methylation_profile_canonical"
+        description: "Region-anchored methylation profile (PROPOSED signal_profile)"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform: { recipe: "nf-core/methylseq/methylation_profile_canonical.py" }
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              sample_id: "Sample identifier"
+              feature_id: "Region (TSS / CpG island / gene body)"
+              bin: "Bp offset from region center"
+              signal: "Mean % methylation in bin"
+              category: "Region class"
+
+links:
+  - source_dc_tag: "samplesheet"
+    source_column: "sample"
+    target_dc_tag: "methylation_coverage_canonical"
+    target_type: "table"
+    link_config: { resolver: "direct", target_field: "sample" }
+    enabled: true

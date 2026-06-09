@@ -1,0 +1,124 @@
+# nf-core/atacseq Template v2.1.2 — ATAC-seq peak calling
+# ============================================================================
+# Tested against: s3://nf-core-awsmegatests/atacseq/results-<sha>/
+# Docs: https://nf-co.re/atacseq/2.1.2/docs/output
+# ============================================================================
+# Tier-2 SKELETON. `signal_profile` is PROPOSED (shared w/ chipseq + methylseq).
+# Existing-viz tiles (Coverage track, Manhattan, UpSet, Complex heatmap) ready.
+# ============================================================================
+
+template:
+  template_id: "nf-core/atacseq/2.1.2"
+  description: "nf-core/atacseq peak calling report"
+  version: "0.1.0"
+  variables:
+    - name: "DATA_ROOT"
+      required: true
+    - name: "SAMPLESHEET_FILE"
+      required: true
+  dashboards: ["dashboards/base.yaml"]
+  reference:
+    vars:
+      SAMPLESHEET_FILE: "{DATA_ROOT}/samplesheet/samplesheet.csv"
+
+name: "ATAC-seq — Peak Calling"
+project_type: "advanced"
+is_public: true
+workflows:
+  - name: "atacseq"
+    version: "2.1.2"
+    engine: { name: "nextflow" }
+    catalog: { name: "nf-core", url: "https://nf-co.re" }
+    repository_url: "https://github.com/nf-core/atacseq"
+    data_location: { structure: "flat", locations: ["{DATA_ROOT}"] }
+    data_collections:
+      - data_collection_tag: "multiqc_data"
+        config:
+          type: "MultiQC"
+          scan:
+            mode: "recursive"
+            scan_parameters: { regex_config: { pattern: "multiqc/multiqc_data/multiqc.parquet" } }
+          dc_specific_properties:
+            modules: ["fastqc", "samtools", "macs2", "homer"]
+
+      - data_collection_tag: "samplesheet"
+        config:
+          type: "Table"
+          scan: { mode: "single", scan_parameters: { filename: "{SAMPLESHEET_FILE}" } }
+          dc_specific_properties:
+            format: "CSV"
+            columns_description: { sample: "Sample identifier" }
+
+      - data_collection_tag: "coverage_canonical"
+        description: "BigWig-derived per-bin signal coverage"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform: { recipe: "nf-core/atacseq/coverage_canonical.py" }
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              chromosome: "Chromosome"
+              position: "Bin start (bp)"
+              end: "Bin end (bp)"
+              value: "Mean signal in bin"
+              sample: "Sample identifier"
+
+      - data_collection_tag: "peaks_manhattan_canonical"
+        description: "Peak significance (-log10 q) as a Manhattan track"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform: { recipe: "nf-core/atacseq/peaks_manhattan_canonical.py" }
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              chr: "Chromosome"
+              pos: "Peak summit (bp)"
+              score: "-log10(q) from MACS2"
+              feature: "Peak id"
+
+      - data_collection_tag: "consensus_peaks_upset_canonical"
+        description: "Consensus-peak × sample binary membership for UpSet"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform: { recipe: "nf-core/atacseq/consensus_peaks_upset_canonical.py" }
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              peak_id: "Consensus peak id"
+
+      - data_collection_tag: "peak_signal_heatmap_canonical"
+        description: "Peaks × samples mean-signal matrix for ComplexHeatmap"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform: { recipe: "nf-core/atacseq/peak_signal_heatmap_canonical.py" }
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              peak_id: "Row index"
+
+      # PROPOSED viz_kind: signal_profile — see PROPOSED_COMPONENTS.md
+      - data_collection_tag: "tss_profile_canonical"
+        description: "TSS-anchored ATAC signal profile (PROPOSED signal_profile)"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform: { recipe: "nf-core/atacseq/tss_profile_canonical.py" }
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              sample_id: "Sample identifier"
+              feature_id: "TSS region id"
+              bin: "Bp offset from TSS"
+              signal: "Mean signal in bin"
+
+links:
+  - source_dc_tag: "samplesheet"
+    source_column: "sample"
+    target_dc_tag: "coverage_canonical"
+    target_type: "table"
+    link_config: { resolver: "direct", target_field: "sample" }
+    enabled: true

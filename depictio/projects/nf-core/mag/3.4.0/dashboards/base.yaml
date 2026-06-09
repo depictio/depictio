@@ -1,0 +1,107 @@
+version: 1
+main_dashboard:
+  title: nf-core/mag
+  subtitle: Assembly + Binning
+  project_tag: MAG — Assembly + Binning
+  main_tab_name: MultiQC
+  tab_icon: /assets/images/logos/multiqc.png
+  tab_icon_color: orange
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  dashboard_id: 0000000000000000000mag0a01
+  components:
+    - component_type: multiqc
+      workflow_tag: mag
+      data_collection_tag: multiqc_data
+      selected_module: general_stats
+      selected_plot: general_stats
+      tag: mag-multiqc-general
+      layout: { x: 0, y: 0, w: 8, h: 5 }
+
+tabs:
+  - title: Taxonomy
+    tab_order: 1
+    tab_icon: mdi:bacteria
+    tab_icon_color: teal
+    icon: /assets/images/workflows/nf-core.png
+    icon_color: green
+    workflow_system: nf-core
+    dashboard_id: 0000000000000000000mag0a02
+    components:
+      - component_type: advanced_viz
+        workflow_tag: mag
+        data_collection_tag: stacked_taxonomy_canonical
+        viz_kind: stacked_taxonomy
+        config:
+          viz_kind: stacked_taxonomy
+          sample_id_col: sample_id
+          taxon_col: taxon
+          rank_col: rank
+          abundance_col: abundance
+          default_rank: genus
+        tag: mag-stacked
+        index: mag-stacked
+        title: Bin Taxonomy per Sample
+        layout: { x: 0, y: 0, w: 8, h: 7 }
+
+      - component_type: advanced_viz
+        workflow_tag: mag
+        data_collection_tag: sunburst_canonical
+        viz_kind: sunburst
+        config:
+          viz_kind: sunburst
+          rank_cols: [Domain, Phylum, Class, Order, Family, Genus, Species]
+          abundance_col: abundance
+        tag: mag-sunburst
+        index: mag-sunburst
+        title: Hierarchical Taxonomy
+        layout: { x: 0, y: 7, w: 8, h: 7 }
+
+  - title: MAG Tree
+    tab_order: 2
+    tab_icon: mdi:family-tree
+    tab_icon_color: green
+    icon: /assets/images/workflows/nf-core.png
+    icon_color: green
+    workflow_system: nf-core
+    dashboard_id: 0000000000000000000mag0a03
+    components:
+      - component_type: advanced_viz
+        workflow_tag: mag
+        data_collection_tag: phylogenetic_tree_canonical
+        viz_kind: phylogenetic
+        config:
+          viz_kind: phylogenetic
+          tree_wf_id: "TODO_WF_ID"
+          tree_dc_id: "TODO_TREE_DC_ID"
+          metadata_wf_id: "TODO_WF_ID"
+          metadata_dc_id: "TODO_META_DC_ID"
+          taxon_col: taxon
+          color_col: Phylum
+          default_layout: rectangular
+          ladderize: true
+        tag: mag-tree
+        index: mag-tree
+        title: GTDB-Tk Phylogenetic Tree
+        layout: { x: 0, y: 0, w: 8, h: 9 }
+
+  # PROPOSED viz_kind: bin_qc_scatter — see PROPOSED_COMPONENTS.md
+  - title: Bin QC
+    tab_order: 3
+    tab_icon: mdi:scatter-plot
+    tab_icon_color: red
+    icon: /assets/images/workflows/nf-core.png
+    icon_color: green
+    workflow_system: nf-core
+    dashboard_id: 0000000000000000000mag0a04
+    components:
+      - component_type: text
+        tag: mag-binqc-placeholder
+        layout: { x: 0, y: 0, w: 8, h: 4 }
+        title: PROPOSED — bin_qc_scatter viz
+        # PROPOSED: bin_qc_scatter (see PROPOSED_COMPONENTS.md)
+        markdown_content: |
+          ### PROPOSED component: `bin_qc_scatter`
+          DC: `bin_qc_canonical` (completeness × contamination, dot size = bin size,
+          colour = N50, shape = tool). MIMAG thresholds drawn as reference lines.

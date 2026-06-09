@@ -1,0 +1,107 @@
+# nf-core/scrnaseq Template v4.1.0 — Single-cell RNA-seq quantification
+# ============================================================================
+# Tested against: s3://nf-core-awsmegatests/scrnaseq/results-<sha>/
+# Docs: https://nf-co.re/scrnaseq/4.1.0/docs/output
+# ============================================================================
+# Tier-2 SKELETON. The `knee_qc` advanced-viz kind is PROPOSED but not yet
+# implemented — see depictio/models/components/advanced_viz/PROPOSED_COMPONENTS.md.
+# Existing-viz tiles (Embedding, Dot plot, Complex heatmap) are ready to wire.
+# ============================================================================
+
+template:
+  template_id: "nf-core/scrnaseq/4.1.0"
+  description: "nf-core/scrnaseq single-cell RNA-seq quantification report"
+  version: "0.1.0"
+  variables:
+    - name: "DATA_ROOT"
+      required: true
+      description: "Root directory containing scrnaseq pipeline output"
+    - name: "SAMPLESHEET_FILE"
+      required: true
+      description: "Path to scrnaseq samplesheet CSV"
+  dashboards:
+    - "dashboards/base.yaml"
+  reference:
+    vars:
+      SAMPLESHEET_FILE: "{DATA_ROOT}/samplesheet/samplesheet.csv"
+
+name: "scRNA-seq — Per-cell QC + Marker Genes"
+project_type: "advanced"
+is_public: true
+workflows:
+  - name: "scrnaseq"
+    version: "4.1.0"
+    engine: { name: "nextflow" }
+    catalog: { name: "nf-core", url: "https://nf-co.re" }
+    repository_url: "https://github.com/nf-core/scrnaseq"
+    data_location: { structure: "flat", locations: ["{DATA_ROOT}"] }
+    data_collections:
+      - data_collection_tag: "multiqc_data"
+        config:
+          type: "MultiQC"
+          scan:
+            mode: "recursive"
+            scan_parameters: { regex_config: { pattern: "multiqc/multiqc_data/multiqc.parquet" } }
+          dc_specific_properties:
+            modules: ["fastqc", "starsolo", "salmon"]
+
+      - data_collection_tag: "samplesheet"
+        config:
+          type: "Table"
+          scan: { mode: "single", scan_parameters: { filename: "{SAMPLESHEET_FILE}" } }
+          dc_specific_properties:
+            format: "CSV"
+            columns_description: { sample: "Sample identifier" }
+
+      # Canonical DCs for existing viz_kinds
+      - data_collection_tag: "embedding_umap"
+        description: "Per-cell UMAP coordinates (precomputed)"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform: { recipe: "nf-core/scrnaseq/embedding_umap.py" }
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              sample_id: "Sample identifier"
+              dim_1: "UMAP1"
+              dim_2: "UMAP2"
+              cluster: "Cluster assignment"
+
+      - data_collection_tag: "marker_dotplot_canonical"
+        description: "Cluster × gene marker dot plot input"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform: { recipe: "nf-core/scrnaseq/marker_dotplot_canonical.py" }
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              cluster: "Cluster identifier"
+              gene: "Gene symbol"
+              mean_expression: "Mean expression in cluster"
+              frac_expressing: "Fraction of cells expressing"
+
+      # PROPOSED: knee_qc — see PROPOSED_COMPONENTS.md
+      - data_collection_tag: "knee_qc_canonical"
+        description: "Per-cell QC + barcode-rank knee data (PROPOSED viz_kind: knee_qc)"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform: { recipe: "nf-core/scrnaseq/knee_qc_canonical.py" }
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              sample_id: "Sample identifier"
+              barcode: "Cell barcode"
+              total_counts: "Total UMI counts"
+              n_genes: "Genes detected"
+              pct_mito: "% mitochondrial reads"
+
+links:
+  - source_dc_tag: "samplesheet"
+    source_column: "sample"
+    target_dc_tag: "embedding_umap"
+    target_type: "table"
+    link_config: { resolver: "direct", target_field: "sample_id" }
+    enabled: true

@@ -1,0 +1,186 @@
+# nf-core/taxprofiler Template v2.0.0 "Crazy Corgi" — Metagenomic profiling
+# ============================================================================
+# Tested against: s3://nf-core-awsmegatests/taxprofiler/results-<sha>/
+# Docs: https://nf-co.re/taxprofiler/2.0.0/docs/output
+# ============================================================================
+# This is a **scaffold**: column names below are the canonical role names
+# the advanced-viz schemas expect. Per-pipeline recipes need to land before
+# this template can be reseeded. See README.md.
+# ============================================================================
+
+template:
+  template_id: "nf-core/taxprofiler/2.0.0"
+  description: "nf-core/taxprofiler multi-profiler metagenomics report"
+  version: "0.1.0"
+  variables:
+    - name: "DATA_ROOT"
+      description: "Root directory containing taxprofiler pipeline output"
+      required: true
+    - name: "SAMPLESHEET_FILE"
+      description: "Path to taxprofiler samplesheet CSV"
+      required: true
+  dashboards:
+    - "dashboards/base.yaml"
+  reference:
+    vars:
+      SAMPLESHEET_FILE: "{DATA_ROOT}/samplesheet/samplesheet.csv"
+
+name: "Taxprofiler — Multi-Profiler Metagenomics"
+project_type: "advanced"
+is_public: true
+workflows:
+  - name: "taxprofiler"
+    version: "2.0.0"
+    engine:
+      name: "nextflow"
+    catalog:
+      name: "nf-core"
+      url: "https://nf-co.re"
+    repository_url: "https://github.com/nf-core/taxprofiler"
+    data_location:
+      structure: "flat"
+      locations:
+        - "{DATA_ROOT}"
+    data_collections:
+      - data_collection_tag: "multiqc_data"
+        description: "MultiQC report data"
+        config:
+          type: "MultiQC"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "multiqc/multiqc_data/multiqc.parquet"
+          dc_specific_properties:
+            modules: ["fastqc", "fastp", "kraken", "bracken"]
+            plots:
+              fastqc: ["Sequence Counts", "Per Sequence Quality Scores"]
+
+      - data_collection_tag: "samplesheet"
+        description: "Pipeline samplesheet"
+        config:
+          type: "Table"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "{SAMPLESHEET_FILE}"
+          dc_specific_properties:
+            format: "CSV"
+            columns_description:
+              "sample": "Sample identifier"
+
+      # ====================================================================
+      # TAXPASTA standardised profile → canonical advanced-viz DCs
+      # ====================================================================
+
+      - data_collection_tag: "stacked_taxonomy_canonical"
+        description: "Standardised TAXPASTA profile in stacked_taxonomy schema"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/taxprofiler/stacked_taxonomy_canonical.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample_id": "Sample identifier"
+              "taxon": "Taxon name (lineage leaf)"
+              "rank": "Taxonomic rank (species / genus / family / ...)"
+              "abundance": "Relative abundance (0–1)"
+              "tool": "Profiler tool name (Kraken2 / Centrifuge / ...) for cross-profiler facet"
+
+      - data_collection_tag: "sunburst_canonical"
+        description: "Hierarchical taxonomy from Kraken kreport for the sunburst"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/taxprofiler/sunburst_canonical.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "Domain": "Top-level rank"
+              "Phylum": "Second-level rank"
+              "Class": "Third-level rank"
+              "Order": "Fourth-level rank"
+              "Family": "Fifth-level rank"
+              "Genus": "Sixth-level rank"
+              "Species": "Leaf rank"
+              "abundance": "Leaf weight"
+              "sample_id": "Sample identifier (facet)"
+
+      - data_collection_tag: "rarefaction_canonical"
+        description: "Per-sample rarefaction curves (subsampled Shannon)"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/taxprofiler/rarefaction_canonical.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample_id": "Sample identifier"
+              "depth": "Subsampling depth"
+              "iter": "Iteration"
+              "shannon": "Shannon entropy"
+              "observed_features": "Observed taxa"
+
+      - data_collection_tag: "embedding_pcoa"
+        description: "PCoA embedding on Bray-Curtis distances between samples"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/taxprofiler/embedding_pcoa.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample_id": "Sample identifier"
+              "dim_1": "PCoA axis 1"
+              "dim_2": "PCoA axis 2"
+              "group": "Sample grouping (colour)"
+
+      - data_collection_tag: "upset_canonical"
+        description: "Taxon × profiler binary detection matrix for the UpSet"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/taxprofiler/upset_canonical.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "taxon": "Taxon identifier"
+
+links:
+  - source_dc_tag: "samplesheet"
+    source_column: "sample"
+    target_dc_tag: "multiqc_data"
+    target_type: "multiqc"
+    link_config: { resolver: "sample_mapping", target_field: "sample_name" }
+    enabled: true
+    description: "Filter MultiQC by samplesheet samples"
+
+  - source_dc_tag: "samplesheet"
+    source_column: "sample"
+    target_dc_tag: "stacked_taxonomy_canonical"
+    target_type: "table"
+    link_config: { resolver: "direct", target_field: "sample_id" }
+    enabled: true
+    description: "Filter stacked taxonomy by sample"
+
+  - source_dc_tag: "samplesheet"
+    source_column: "sample"
+    target_dc_tag: "embedding_pcoa"
+    target_type: "table"
+    link_config: { resolver: "direct", target_field: "sample_id" }
+    enabled: true
+    description: "Filter PCoA by sample"
+
+  - source_dc_tag: "samplesheet"
+    source_column: "sample"
+    target_dc_tag: "rarefaction_canonical"
+    target_type: "table"
+    link_config: { resolver: "direct", target_field: "sample_id" }
+    enabled: true
+    description: "Filter rarefaction by sample"

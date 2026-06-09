@@ -1,0 +1,122 @@
+# nf-core/chipseq Template v2.1.0 — ChIP-seq peak calling
+# ============================================================================
+# Tested against: s3://nf-core-awsmegatests/chipseq/results-<sha>/
+# Docs: https://nf-co.re/chipseq/2.1.0/docs/output
+# ============================================================================
+# Tier-2 SKELETON. `signal_profile` is PROPOSED (shared w/ atacseq + methylseq).
+# Existing-viz tiles (Coverage track, Manhattan, UpSet, Complex heatmap) ready.
+# ============================================================================
+
+template:
+  template_id: "nf-core/chipseq/2.1.0"
+  description: "nf-core/chipseq peak-calling report"
+  version: "0.1.0"
+  variables:
+    - name: "DATA_ROOT"
+      required: true
+    - name: "SAMPLESHEET_FILE"
+      required: true
+  dashboards: ["dashboards/base.yaml"]
+  reference:
+    vars:
+      SAMPLESHEET_FILE: "{DATA_ROOT}/samplesheet/samplesheet.csv"
+
+name: "ChIP-seq — Peak Calling"
+project_type: "advanced"
+is_public: true
+workflows:
+  - name: "chipseq"
+    version: "2.1.0"
+    engine: { name: "nextflow" }
+    catalog: { name: "nf-core", url: "https://nf-co.re" }
+    repository_url: "https://github.com/nf-core/chipseq"
+    data_location: { structure: "flat", locations: ["{DATA_ROOT}"] }
+    data_collections:
+      - data_collection_tag: "multiqc_data"
+        config:
+          type: "MultiQC"
+          scan:
+            mode: "recursive"
+            scan_parameters: { regex_config: { pattern: "multiqc/multiqc_data/multiqc.parquet" } }
+          dc_specific_properties:
+            modules: ["fastqc", "samtools", "macs2", "homer", "deeptools"]
+
+      - data_collection_tag: "samplesheet"
+        config:
+          type: "Table"
+          scan: { mode: "single", scan_parameters: { filename: "{SAMPLESHEET_FILE}" } }
+          dc_specific_properties:
+            format: "CSV"
+            columns_description: { sample: "Sample identifier" }
+
+      - data_collection_tag: "coverage_canonical"
+        description: "BigWig-derived per-bin signal (ChIP IP vs input)"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform: { recipe: "nf-core/chipseq/coverage_canonical.py" }
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              chromosome: "Chromosome"
+              position: "Bin start (bp)"
+              end: "Bin end (bp)"
+              value: "Mean signal in bin (fold-enrichment vs input)"
+              sample: "Sample identifier"
+              category: "IP / Input flag"
+
+      - data_collection_tag: "peaks_manhattan_canonical"
+        description: "Peak qvalues as a Manhattan track"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform: { recipe: "nf-core/chipseq/peaks_manhattan_canonical.py" }
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              chr: "Chromosome"
+              pos: "Peak summit (bp)"
+              score: "-log10(q) from MACS2"
+
+      - data_collection_tag: "consensus_peaks_upset_canonical"
+        description: "Consensus-peak × sample binary membership for UpSet"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform: { recipe: "nf-core/chipseq/consensus_peaks_upset_canonical.py" }
+          dc_specific_properties:
+            format: "TSV"
+            columns_description: { peak_id: "Consensus peak id" }
+
+      - data_collection_tag: "peak_signal_heatmap_canonical"
+        description: "Peaks × samples mean signal matrix for ComplexHeatmap"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform: { recipe: "nf-core/chipseq/peak_signal_heatmap_canonical.py" }
+          dc_specific_properties:
+            format: "TSV"
+            columns_description: { peak_id: "Row index" }
+
+      # PROPOSED viz_kind: signal_profile — see PROPOSED_COMPONENTS.md
+      - data_collection_tag: "peak_center_profile_canonical"
+        description: "Peak-center signal profile (PROPOSED signal_profile)"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform: { recipe: "nf-core/chipseq/peak_center_profile_canonical.py" }
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              sample_id: "Sample identifier"
+              feature_id: "Peak identifier"
+              bin: "Bp offset from peak center"
+              signal: "Mean signal in bin"
+
+links:
+  - source_dc_tag: "samplesheet"
+    source_column: "sample"
+    target_dc_tag: "coverage_canonical"
+    target_type: "table"
+    link_config: { resolver: "direct", target_field: "sample" }
+    enabled: true

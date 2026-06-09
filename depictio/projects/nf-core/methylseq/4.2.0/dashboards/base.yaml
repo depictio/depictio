@@ -1,0 +1,100 @@
+version: 1
+main_dashboard:
+  title: nf-core/methylseq
+  subtitle: BS-seq Methylation Calling
+  project_tag: Methylseq — Methylation Calling
+  main_tab_name: MultiQC
+  tab_icon: /assets/images/logos/multiqc.png
+  tab_icon_color: orange
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  dashboard_id: 0000000000000000000mtl0a01
+  components:
+    - component_type: multiqc
+      workflow_tag: methylseq
+      data_collection_tag: multiqc_data
+      selected_module: general_stats
+      selected_plot: general_stats
+      tag: mtl-multiqc-general
+      layout: { x: 0, y: 0, w: 8, h: 5 }
+    - component_type: multiqc
+      workflow_tag: methylseq
+      data_collection_tag: multiqc_data
+      selected_module: bismark
+      selected_plot: Methylation Coverage
+      tag: mtl-multiqc-bismark
+      layout: { x: 0, y: 5, w: 8, h: 4 }
+
+tabs:
+  - title: Methylation Track
+    tab_order: 1
+    tab_icon: mdi:chart-areaspline
+    tab_icon_color: blue
+    icon: /assets/images/workflows/nf-core.png
+    icon_color: green
+    workflow_system: nf-core
+    dashboard_id: 0000000000000000000mtl0a02
+    components:
+      - component_type: advanced_viz
+        workflow_tag: methylseq
+        data_collection_tag: methylation_coverage_canonical
+        viz_kind: coverage_track
+        config:
+          viz_kind: coverage_track
+          chromosome_col: chromosome
+          position_col: position
+          end_col: end
+          value_col: value
+          sample_col: sample
+          category_col: category
+        tag: mtl-coverage
+        index: mtl-coverage
+        title: Per-Region Methylation Level
+        layout: { x: 0, y: 0, w: 8, h: 8 }
+
+  - title: DMR Manhattan
+    tab_order: 2
+    tab_icon: mdi:chart-bell-curve
+    tab_icon_color: red
+    icon: /assets/images/workflows/nf-core.png
+    icon_color: green
+    workflow_system: nf-core
+    dashboard_id: 0000000000000000000mtl0a03
+    components:
+      - component_type: advanced_viz
+        workflow_tag: methylseq
+        data_collection_tag: dmr_manhattan_canonical
+        viz_kind: manhattan
+        config:
+          viz_kind: manhattan
+          chr_col: chr
+          pos_col: pos
+          score_col: score
+          feature_col: feature
+          score_kind: "-log10(p)"
+          score_threshold: 4.0
+        tag: mtl-manhattan
+        index: mtl-manhattan
+        title: Differentially Methylated Regions
+        layout: { x: 0, y: 0, w: 8, h: 7 }
+
+  # PROPOSED viz_kind: signal_profile — see PROPOSED_COMPONENTS.md
+  - title: TSS Profile
+    tab_order: 3
+    tab_icon: mdi:chart-multiple
+    tab_icon_color: teal
+    icon: /assets/images/workflows/nf-core.png
+    icon_color: green
+    workflow_system: nf-core
+    dashboard_id: 0000000000000000000mtl0a04
+    components:
+      - component_type: text
+        tag: mtl-signal-placeholder
+        layout: { x: 0, y: 0, w: 8, h: 4 }
+        title: PROPOSED — signal_profile viz
+        # PROPOSED: signal_profile (see PROPOSED_COMPONENTS.md)
+        markdown_content: |
+          ### PROPOSED component: `signal_profile`
+          DC: `methylation_profile_canonical` (sample_id × feature_id × bin × %methylation).
+          Top panel: mean methylation profile around TSS; bottom panel: region × bin heatmap.

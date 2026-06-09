@@ -1,0 +1,156 @@
+version: 1
+main_dashboard:
+  title: nf-core/sarek
+  subtitle: Germline & Somatic Variant Calling
+  project_tag: Sarek — Germline & Somatic Variants
+  main_tab_name: MultiQC
+  tab_icon: /assets/images/logos/multiqc.png
+  tab_icon_color: orange
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  dashboard_id: 0000000000000000000sar0a01
+  components:
+    - component_type: multiqc
+      workflow_tag: sarek
+      data_collection_tag: multiqc_data
+      selected_module: general_stats
+      selected_plot: general_stats
+      tag: sarek-multiqc-general
+      layout: { x: 0, y: 0, w: 8, h: 5 }
+    - component_type: multiqc
+      workflow_tag: sarek
+      data_collection_tag: multiqc_data
+      selected_module: mosdepth
+      selected_plot: Coverage
+      tag: sarek-multiqc-mosdepth
+      layout: { x: 0, y: 5, w: 8, h: 4 }
+    - component_type: interactive
+      workflow_tag: sarek
+      data_collection_tag: samplesheet
+      interactive_component_type: MultiSelect
+      column_name: sample
+      column_type: object
+      display: { title_size: md, custom_color: '#377EB8', icon_name: 'mdi:dna' }
+      tag: sarek-sample-filter
+      index: sarek-sample-filter
+      layout: { x: 0, y: 0, w: 1, h: 3 }
+      title: Sample
+
+tabs:
+  - title: Variant Manhattan
+    tab_order: 1
+    tab_icon: mdi:chart-bell-curve
+    tab_icon_color: red
+    icon: /assets/images/workflows/nf-core.png
+    icon_color: green
+    workflow_system: nf-core
+    dashboard_id: 0000000000000000000sar0a02
+    components:
+      - component_type: advanced_viz
+        workflow_tag: sarek
+        data_collection_tag: variants_manhattan_canonical
+        viz_kind: manhattan
+        config:
+          viz_kind: manhattan
+          chr_col: chr
+          pos_col: pos
+          score_col: score
+          feature_col: feature
+          effect_col: effect
+          score_kind: "-log10(p)"
+          score_threshold: 5.0
+          color_by_columns: [sample]
+        tag: sarek-manhattan
+        index: sarek-manhattan
+        title: Variant Manhattan
+        layout: { x: 0, y: 0, w: 8, h: 7 }
+
+      - component_type: advanced_viz
+        workflow_tag: sarek
+        data_collection_tag: qq_canonical
+        viz_kind: qq
+        config:
+          viz_kind: qq
+          p_value_col: p_value
+          feature_id_col: feature_id
+          category_col: category
+        tag: sarek-qq
+        index: sarek-qq
+        title: QQ-plot (per-sample p-value diagnostic)
+        layout: { x: 0, y: 7, w: 5, h: 5 }
+
+  - title: Coverage Track
+    tab_order: 2
+    tab_icon: mdi:chart-areaspline
+    tab_icon_color: blue
+    icon: /assets/images/workflows/nf-core.png
+    icon_color: green
+    workflow_system: nf-core
+    dashboard_id: 0000000000000000000sar0a03
+    components:
+      - component_type: advanced_viz
+        workflow_tag: sarek
+        data_collection_tag: coverage_canonical
+        viz_kind: coverage_track
+        config:
+          viz_kind: coverage_track
+          chromosome_col: chromosome
+          position_col: position
+          value_col: value
+          end_col: end
+          sample_col: sample
+          y_scale: log
+          smoothing_window: 5
+        tag: sarek-coverage
+        index: sarek-coverage
+        title: Mosdepth Coverage
+        layout: { x: 0, y: 0, w: 8, h: 8 }
+
+  - title: Variant Lollipop
+    tab_order: 3
+    tab_icon: mdi:chart-scatter-plot
+    tab_icon_color: teal
+    icon: /assets/images/workflows/nf-core.png
+    icon_color: green
+    workflow_system: nf-core
+    dashboard_id: 0000000000000000000sar0a04
+    components:
+      - component_type: advanced_viz
+        workflow_tag: sarek
+        data_collection_tag: lollipop_canonical
+        viz_kind: lollipop
+        config:
+          viz_kind: lollipop
+          feature_id_col: feature_id
+          position_col: position
+          category_col: category
+          effect_col: effect
+          max_subplot_genes: 6
+        tag: sarek-lollipop
+        index: sarek-lollipop
+        title: Per-Gene Variant Lollipop
+        layout: { x: 0, y: 0, w: 8, h: 7 }
+
+  - title: Oncoplot
+    tab_order: 4
+    tab_icon: mdi:grid-large
+    tab_icon_color: violet
+    icon: /assets/images/workflows/nf-core.png
+    icon_color: green
+    workflow_system: nf-core
+    dashboard_id: 0000000000000000000sar0a05
+    components:
+      - component_type: advanced_viz
+        workflow_tag: sarek
+        data_collection_tag: oncoplot_canonical
+        viz_kind: oncoplot
+        config:
+          viz_kind: oncoplot
+          sample_id_col: sample_id
+          gene_col: gene
+          mutation_type_col: mutation_type
+        tag: sarek-oncoplot
+        index: sarek-oncoplot
+        title: Sample × Gene Mutation Matrix
+        layout: { x: 0, y: 0, w: 8, h: 8 }

@@ -1,0 +1,134 @@
+version: 1
+main_dashboard:
+  title: nf-core/taxprofiler
+  subtitle: Multi-Profiler Metagenomics
+  project_tag: Taxprofiler — Multi-Profiler Metagenomics
+  main_tab_name: MultiQC
+  tab_icon: /assets/images/logos/multiqc.png
+  tab_icon_color: orange
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  dashboard_id: 0000000000000000000txp0a01
+  components:
+    - component_type: multiqc
+      workflow_tag: taxprofiler
+      data_collection_tag: multiqc_data
+      selected_module: general_stats
+      selected_plot: general_stats
+      tag: tx-multiqc-general
+      layout: { x: 0, y: 0, w: 8, h: 5 }
+    - component_type: interactive
+      workflow_tag: taxprofiler
+      data_collection_tag: samplesheet
+      interactive_component_type: MultiSelect
+      column_name: sample
+      column_type: object
+      display: { title_size: md, custom_color: '#1F8FFF', icon_name: 'mdi:bacteria' }
+      tag: tx-sample-filter
+      index: tx-sample-filter
+      layout: { x: 0, y: 0, w: 1, h: 3 }
+      title: Sample
+
+tabs:
+  - title: Composition
+    tab_order: 1
+    tab_icon: mdi:chart-bar-stacked
+    tab_icon_color: teal
+    icon: /assets/images/workflows/nf-core.png
+    icon_color: green
+    workflow_system: nf-core
+    dashboard_id: 0000000000000000000txp0a02
+    components:
+      - component_type: advanced_viz
+        workflow_tag: taxprofiler
+        data_collection_tag: stacked_taxonomy_canonical
+        viz_kind: stacked_taxonomy
+        config:
+          viz_kind: stacked_taxonomy
+          sample_id_col: sample_id
+          taxon_col: taxon
+          rank_col: rank
+          abundance_col: abundance
+          default_rank: genus
+          top_n: 20
+        tag: tx-stacked
+        index: tx-stacked
+        title: Stacked Taxonomy by Sample
+        layout: { x: 0, y: 0, w: 8, h: 8 }
+
+      - component_type: advanced_viz
+        workflow_tag: taxprofiler
+        data_collection_tag: sunburst_canonical
+        viz_kind: sunburst
+        config:
+          viz_kind: sunburst
+          rank_cols: [Domain, Phylum, Class, Order, Family, Genus, Species]
+          abundance_col: abundance
+        tag: tx-sunburst
+        index: tx-sunburst
+        title: Hierarchical Taxonomy (Sunburst)
+        layout: { x: 0, y: 8, w: 8, h: 8 }
+
+  - title: Diversity
+    tab_order: 2
+    tab_icon: mdi:chart-line-variant
+    tab_icon_color: green
+    icon: /assets/images/workflows/nf-core.png
+    icon_color: green
+    workflow_system: nf-core
+    dashboard_id: 0000000000000000000txp0a03
+    components:
+      - component_type: advanced_viz
+        workflow_tag: taxprofiler
+        data_collection_tag: rarefaction_canonical
+        viz_kind: rarefaction
+        config:
+          viz_kind: rarefaction
+          sample_id_col: sample_id
+          depth_col: depth
+          metric_col: shannon
+          iter_col: iter
+        tag: tx-rarefaction
+        index: tx-rarefaction
+        title: Alpha-Diversity Rarefaction
+        layout: { x: 0, y: 0, w: 6, h: 6 }
+
+      - component_type: advanced_viz
+        workflow_tag: taxprofiler
+        data_collection_tag: embedding_pcoa
+        viz_kind: embedding
+        config:
+          viz_kind: embedding
+          sample_id_col: sample_id
+          dim_1_col: dim_1
+          dim_2_col: dim_2
+          color_col: group
+        tag: tx-pcoa
+        index: tx-pcoa
+        title: Sample PCoA (Bray-Curtis)
+        layout: { x: 0, y: 6, w: 6, h: 6 }
+
+  - title: Cross-Profiler Overlap
+    tab_order: 3
+    tab_icon: mdi:set-merge
+    tab_icon_color: violet
+    icon: /assets/images/workflows/nf-core.png
+    icon_color: green
+    workflow_system: nf-core
+    dashboard_id: 0000000000000000000txp0a04
+    components:
+      - component_type: advanced_viz
+        workflow_tag: taxprofiler
+        data_collection_tag: upset_canonical
+        viz_kind: upset_plot
+        config:
+          viz_kind: upset_plot
+          matrix_wf_id: "TODO_WF_ID"
+          matrix_dc_id: "TODO_DC_ID"
+          sort_by: cardinality
+          sort_order: descending
+        tag: tx-upset
+        index: tx-upset
+        title: Profiler Overlap (UpSet)
+        layout: { x: 0, y: 0, w: 8, h: 7 }

@@ -1,0 +1,137 @@
+# nf-core/raredisease Template v2.6.0 — Clinical WGS/WES rare-disease pipeline
+# ============================================================================
+# Tested against: s3://nf-core-awsmegatests/raredisease/results-<sha>/
+# Docs: https://nf-co.re/raredisease/2.6.0/docs/output
+# ============================================================================
+# Tier-2 SKELETON. `cnv_ideogram` is PROPOSED — see PROPOSED_COMPONENTS.md.
+# Existing-viz tiles (Manhattan, Lollipop, Coverage track, Oncoplot) ready to wire.
+# ============================================================================
+
+template:
+  template_id: "nf-core/raredisease/2.6.0"
+  description: "nf-core/raredisease clinical WGS/WES variant + ranking report"
+  version: "0.1.0"
+  variables:
+    - name: "DATA_ROOT"
+      required: true
+    - name: "SAMPLESHEET_FILE"
+      required: true
+  dashboards: ["dashboards/base.yaml"]
+  reference:
+    vars:
+      SAMPLESHEET_FILE: "{DATA_ROOT}/samplesheet/samplesheet.csv"
+
+name: "Rare Disease — WGS/WES + Ranking"
+project_type: "advanced"
+is_public: true
+workflows:
+  - name: "raredisease"
+    version: "2.6.0"
+    engine: { name: "nextflow" }
+    catalog: { name: "nf-core", url: "https://nf-co.re" }
+    repository_url: "https://github.com/nf-core/raredisease"
+    data_location: { structure: "flat", locations: ["{DATA_ROOT}"] }
+    data_collections:
+      - data_collection_tag: "multiqc_data"
+        config:
+          type: "MultiQC"
+          scan:
+            mode: "recursive"
+            scan_parameters: { regex_config: { pattern: "multiqc/multiqc_data/multiqc.parquet" } }
+          dc_specific_properties:
+            modules: ["fastqc", "samtools", "mosdepth", "peddy"]
+
+      - data_collection_tag: "samplesheet"
+        config:
+          type: "Table"
+          scan: { mode: "single", scan_parameters: { filename: "{SAMPLESHEET_FILE}" } }
+          dc_specific_properties:
+            format: "CSV"
+            columns_description: { sample: "Sample identifier" }
+
+      - data_collection_tag: "variants_manhattan_canonical"
+        description: "Per-sample variant Manhattan track (rank score)"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform: { recipe: "nf-core/raredisease/variants_manhattan_canonical.py" }
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              chr: "Chromosome"
+              pos: "Position"
+              score: "Genmod rank score"
+              feature: "Variant id"
+              sample: "Sample identifier"
+
+      - data_collection_tag: "lollipop_canonical"
+        description: "Per-gene aa-level variants (snpEff/VEP annotated)"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform: { recipe: "nf-core/raredisease/lollipop_canonical.py" }
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              feature_id: "Gene symbol"
+              position: "Protein-level position (aa)"
+              category: "Consequence (missense / stop / splice / ...)"
+
+      - data_collection_tag: "coverage_canonical"
+        description: "Mosdepth per-bin coverage"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform: { recipe: "nf-core/raredisease/coverage_canonical.py" }
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              chromosome: "Chromosome"
+              position: "Bin start (bp)"
+              end: "Bin end (bp)"
+              value: "Mean coverage"
+              sample: "Sample identifier"
+
+      - data_collection_tag: "oncoplot_canonical"
+        description: "Sample × gene rare-variant matrix (clinically actionable)"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform: { recipe: "nf-core/raredisease/oncoplot_canonical.py" }
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              sample_id: "Sample identifier"
+              gene: "Gene symbol"
+              mutation_type: "Variant_Classification"
+
+      # PROPOSED viz_kind: cnv_ideogram — see PROPOSED_COMPONENTS.md
+      - data_collection_tag: "cnv_canonical"
+        description: "CNV + ROH intervals for the PROPOSED cnv_ideogram"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform: { recipe: "nf-core/raredisease/cnv_canonical.py" }
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              sample_id: "Sample identifier"
+              chr: "Chromosome"
+              start: "Interval start (bp)"
+              end: "Interval end (bp)"
+              event_type: "gain / loss / roh / neutral"
+              effect: "Optional log2 ratio / copy number"
+
+links:
+  - source_dc_tag: "samplesheet"
+    source_column: "sample"
+    target_dc_tag: "variants_manhattan_canonical"
+    target_type: "table"
+    link_config: { resolver: "direct", target_field: "sample" }
+    enabled: true
+  - source_dc_tag: "samplesheet"
+    source_column: "sample"
+    target_dc_tag: "coverage_canonical"
+    target_type: "table"
+    link_config: { resolver: "direct", target_field: "sample" }
+    enabled: true

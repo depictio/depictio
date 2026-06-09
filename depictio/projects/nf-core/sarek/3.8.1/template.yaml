@@ -1,0 +1,190 @@
+# nf-core/sarek Template v3.8.1 "Laitaure" — Germline & somatic variant calling
+# ============================================================================
+# Tested against: s3://nf-core-awsmegatests/sarek/results-<sha>/
+# Docs: https://nf-co.re/sarek/3.8.1/docs/output
+# ============================================================================
+# This is a **scaffold**: column names below are the canonical role names
+# the advanced-viz schemas expect (see
+# depictio/models/components/advanced_viz/schemas.py). Per-pipeline recipes
+# need to land before this template can be reseeded. See README.md.
+# ============================================================================
+
+template:
+  template_id: "nf-core/sarek/3.8.1"
+  description: "nf-core/sarek germline + somatic variant calling report"
+  version: "0.1.0"
+  variables:
+    - name: "DATA_ROOT"
+      description: "Root directory containing sarek pipeline output"
+      required: true
+    - name: "SAMPLESHEET_FILE"
+      description: "Path to sarek samplesheet CSV"
+      required: true
+  dashboards:
+    - "dashboards/base.yaml"
+  reference:
+    vars:
+      SAMPLESHEET_FILE: "{DATA_ROOT}/samplesheet/samplesheet.csv"
+
+name: "Sarek — Germline & Somatic Variants"
+project_type: "advanced"
+is_public: true
+workflows:
+  - name: "sarek"
+    version: "3.8.1"
+    engine:
+      name: "nextflow"
+    catalog:
+      name: "nf-core"
+      url: "https://nf-co.re"
+    repository_url: "https://github.com/nf-core/sarek"
+    data_location:
+      structure: "flat"
+      locations:
+        - "{DATA_ROOT}"
+    data_collections:
+      - data_collection_tag: "multiqc_data"
+        description: "MultiQC report data"
+        config:
+          type: "MultiQC"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "multiqc/multiqc_data/multiqc.parquet"
+          dc_specific_properties:
+            modules: ["fastqc", "samtools", "mosdepth", "bcftools", "vcftools"]
+            plots:
+              fastqc: ["Sequence Counts", "Per Sequence Quality Scores"]
+              samtools: ["Mapped reads", "Insert Size"]
+              mosdepth: ["Coverage", "Cumulative coverage"]
+
+      - data_collection_tag: "samplesheet"
+        description: "Sarek samplesheet (patient → sample → lane mapping)"
+        config:
+          type: "Table"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "{SAMPLESHEET_FILE}"
+          dc_specific_properties:
+            format: "CSV"
+            columns_description:
+              "sample": "Sample identifier"
+              "patient": "Patient identifier"
+              "status": "Normal (0) / Tumor (1)"
+
+      # ====================================================================
+      # Recipe-transformed canonical DCs — all use existing viz_kinds
+      # ====================================================================
+
+      - data_collection_tag: "variants_manhattan_canonical"
+        description: "Per-sample variant track — chr/pos/score for the Manhattan plot"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/sarek/variants_manhattan_canonical.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "chr": "Chromosome label"
+              "pos": "Variant position (1-based)"
+              "score": "Score (e.g. -log10(QUAL/100) or VAF)"
+              "feature": "Variant id / dbSNP id"
+              "effect": "Optional signed effect (impact score)"
+              "sample": "Sample identifier"
+
+      - data_collection_tag: "qq_canonical"
+        description: "QQ-plot input: variant p-value / QUAL distribution"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/sarek/qq_canonical.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "p_value": "Raw p-value (e.g. from QUAL → p, or strand-bias test)"
+              "feature_id": "Variant id"
+              "category": "Sample identifier (stratification)"
+
+      - data_collection_tag: "coverage_canonical"
+        description: "Mosdepth per-bin coverage in canonical schema"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/sarek/coverage_canonical.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "chromosome": "Chromosome / contig"
+              "position": "Bin center (1-based)"
+              "value": "Mean coverage in bin"
+              "end": "Bin end position (interval mode)"
+              "sample": "Sample identifier"
+
+      - data_collection_tag: "lollipop_canonical"
+        description: "Per-gene variant lollipop (snpEff/VEP annotated coding changes)"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/sarek/lollipop_canonical.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "feature_id": "Gene symbol"
+              "position": "Protein-level position (1-based aa)"
+              "category": "Variant consequence (missense / stop / synonymous / ...)"
+              "effect": "Optional effect score (SIFT/PolyPhen)"
+
+      - data_collection_tag: "oncoplot_canonical"
+        description: "Sample × gene mutation matrix for the oncoplot"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/sarek/oncoplot_canonical.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample_id": "Tumor sample identifier"
+              "gene": "Hugo symbol"
+              "mutation_type": "Variant_Classification (Missense / Nonsense / Splice / ...)"
+
+links:
+  - source_dc_tag: "samplesheet"
+    source_column: "sample"
+    target_dc_tag: "multiqc_data"
+    target_type: "multiqc"
+    link_config:
+      resolver: "sample_mapping"
+      target_field: "sample_name"
+    enabled: true
+    description: "Filter MultiQC by samplesheet samples"
+
+  - source_dc_tag: "samplesheet"
+    source_column: "sample"
+    target_dc_tag: "variants_manhattan_canonical"
+    target_type: "table"
+    link_config: { resolver: "direct", target_field: "sample" }
+    enabled: true
+    description: "Filter Manhattan track by sample"
+
+  - source_dc_tag: "samplesheet"
+    source_column: "sample"
+    target_dc_tag: "coverage_canonical"
+    target_type: "table"
+    link_config: { resolver: "direct", target_field: "sample" }
+    enabled: true
+    description: "Filter coverage track by sample"
+
+  - source_dc_tag: "samplesheet"
+    source_column: "sample"
+    target_dc_tag: "oncoplot_canonical"
+    target_type: "table"
+    link_config: { resolver: "direct", target_field: "sample_id" }
+    enabled: true
+    description: "Filter oncoplot by sample"

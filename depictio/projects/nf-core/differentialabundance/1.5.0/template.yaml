@@ -1,0 +1,219 @@
+# nf-core/differentialabundance Template v1.5.0 — DE + GSEA report
+# ============================================================================
+# Tested against nf-core/differentialabundance AWS megatest results:
+#   s3://nf-core-awsmegatests/differentialabundance/results-<sha>/
+# Docs: https://nf-co.re/differentialabundance/1.5.0/docs/output
+# ============================================================================
+# This is a **scaffold**: column names below are the canonical role names
+# the advanced-viz schemas expect (see
+# depictio/models/components/advanced_viz/schemas.py). Per-pipeline recipes
+# need to land before this template can be reseeded. See README.md.
+# ============================================================================
+
+template:
+  template_id: "nf-core/differentialabundance/1.5.0"
+  description: "nf-core/differentialabundance — DESeq2/limma + gprofiler2/GSEA report"
+  version: "0.1.0"
+  variables:
+    - name: "DATA_ROOT"
+      description: "Root directory containing differentialabundance pipeline output"
+      required: true
+    - name: "SAMPLESHEET_FILE"
+      description: "Path to the differentialabundance samplesheet CSV"
+      required: true
+    - name: "CONTRAST_FILE"
+      description: "Path to the contrasts CSV (defines treatment vs control comparisons)"
+      required: true
+  dashboards:
+    - "dashboards/base.yaml"
+  reference:
+    vars:
+      SAMPLESHEET_FILE: "{DATA_ROOT}/samplesheet/samplesheet.csv"
+      CONTRAST_FILE: "{DATA_ROOT}/samplesheet/contrasts.csv"
+
+# ============================================================================
+# PROJECT CONFIGURATION
+# ============================================================================
+
+name: "Differential Abundance — DE + GSEA"
+project_type: "advanced"
+is_public: true
+workflows:
+  - name: "differentialabundance"
+    version: "1.5.0"
+    engine:
+      name: "nextflow"
+    catalog:
+      name: "nf-core"
+      url: "https://nf-co.re"
+    repository_url: "https://github.com/nf-core/differentialabundance"
+    data_location:
+      structure: "flat"
+      locations:
+        - "{DATA_ROOT}"
+    data_collections:
+      # --------------------------------------------------------------------
+      # MultiQC + samplesheet (always present)
+      # --------------------------------------------------------------------
+      - data_collection_tag: "multiqc_data"
+        description: "MultiQC report data"
+        config:
+          type: "MultiQC"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "multiqc/multiqc_data/multiqc.parquet"
+          dc_specific_properties:
+            modules: ["fastqc", "salmon"]
+            plots:
+              fastqc:
+                - "Sequence Counts"
+                - "Per Sequence Quality Scores"
+                - "Per Sequence GC Content"
+
+      - data_collection_tag: "samplesheet"
+        description: "Pipeline samplesheet (sample → condition mapping)"
+        config:
+          type: "Table"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "{SAMPLESHEET_FILE}"
+          dc_specific_properties:
+            format: "CSV"
+            columns_description:
+              "sample": "Sample identifier (joined to DE columns)"
+              "condition": "Sample condition / treatment group"
+
+      - data_collection_tag: "contrasts"
+        description: "Contrasts CSV (one row per treatment vs reference comparison)"
+        config:
+          type: "Table"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "{CONTRAST_FILE}"
+          dc_specific_properties:
+            format: "CSV"
+            columns_description:
+              "id": "Contrast identifier"
+              "variable": "Design variable"
+              "reference": "Reference level"
+              "target": "Target / treatment level"
+
+      # ====================================================================
+      # Recipe-transformed canonical DCs
+      # All role-column names match the canonical schemas in
+      # depictio/models/components/advanced_viz/schemas.py
+      # ====================================================================
+
+      - data_collection_tag: "volcano_canonical"
+        description: "Per-contrast DE results in volcano-canonical schema"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/differentialabundance/volcano_canonical.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "feature_id": "Gene identifier (Ensembl / symbol)"
+              "effect_size": "log2FoldChange"
+              "significance": "padj (FDR)"
+              "label": "Gene symbol for hover"
+              "category": "Contrast id"
+
+      - data_collection_tag: "ma_canonical"
+        description: "Per-contrast DE results in MA-canonical schema"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/differentialabundance/ma_canonical.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "feature_id": "Gene identifier"
+              "avg_log_intensity": "log10(baseMean + 1)"
+              "log2_fold_change": "log2FoldChange"
+              "significance": "padj"
+              "label": "Gene symbol"
+
+      - data_collection_tag: "vst_matrix_canonical"
+        description: "VST-normalised gene × sample matrix for ComplexHeatmap"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/differentialabundance/vst_matrix_canonical.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "feature_id": "Gene identifier (row index_column)"
+              "gene_symbol": "Display label (row annotation)"
+
+      - data_collection_tag: "enrichment_canonical"
+        description: "gprofiler2 / GSEA enrichment in canonical schema"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/differentialabundance/enrichment_canonical.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "term": "Pathway / GO term"
+              "nes": "Normalised enrichment score (signed)"
+              "padj": "FDR-adjusted p-value"
+              "gene_count": "Gene-set size"
+              "source": "Ontology source (GO_BP / KEGG / Reactome / Hallmark)"
+
+      - data_collection_tag: "embedding_pca"
+        description: "PCA embedding (precomputed sample coordinates from DESeq2 rlog)"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/differentialabundance/embedding_pca.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample_id": "Sample identifier"
+              "dim_1": "PC1"
+              "dim_2": "PC2"
+              "condition": "Sample condition (colour)"
+
+# ============================================================================
+# RUNTIME LINKS
+# ============================================================================
+links:
+  - source_dc_tag: "samplesheet"
+    source_column: "sample"
+    target_dc_tag: "embedding_pca"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Filter PCA by samplesheet samples"
+    enabled: true
+
+  - source_dc_tag: "contrasts"
+    source_column: "id"
+    target_dc_tag: "volcano_canonical"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "category"
+    description: "Filter volcano to selected contrast"
+    enabled: true
+
+  - source_dc_tag: "contrasts"
+    source_column: "id"
+    target_dc_tag: "ma_canonical"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "contrast"
+    description: "Filter MA-plot to selected contrast"
+    enabled: true
