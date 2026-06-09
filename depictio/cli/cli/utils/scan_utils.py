@@ -1,21 +1,34 @@
 import collections
 import hashlib
 import re
+from functools import lru_cache
 from typing import Any, DefaultDict
 
-from depictio.api.v1.configs.logging_init import logger
+from depictio.cli.cli_logging import logger
 from depictio.models.models.data_collections import Regex
 from depictio.models.models.files import File
 from depictio.models.models.workflows import WorkflowRun
 
 
+@lru_cache(maxsize=512)
+def _compiled_normalized_regex(full_regex: str) -> re.Pattern[str]:
+    """Compile (and cache) the path-normalized regex.
+
+    Normalizes ``/`` to ``\\/`` so a pattern matches regardless of how the
+    separator was escaped, then compiles once. Compilation is cached because
+    the same data-collection pattern is matched against every file in a run
+    (the scan hot loop), so recompiling per call is pure waste.
+    """
+    return re.compile(full_regex.replace("/", "\\/"))
+
+
 def regex_match(file_name: str, full_regex: str):
-    # Normalize the regex pattern to match both types of path separators
-    normalized_regex = full_regex.replace("/", "\\/")
-    # logger.debug(f"File: {file_name}, Full Regex: {full_regex}")
-    if re.match(normalized_regex, file_name):
+    # Match once against the cached compiled pattern (was matching twice +
+    # rebuilding the pattern on every call).
+    match = _compiled_normalized_regex(full_regex).match(file_name)
+    if match:
         logger.debug(f"Matched file - file-based: {file_name}")
-        return True, re.match(normalized_regex, file_name)
+        return True, match
     return False, None
 
 

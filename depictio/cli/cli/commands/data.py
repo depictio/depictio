@@ -405,7 +405,7 @@ def link_list(
         api_get_project_links,
         format_link_for_display,
     )
-    from depictio.cli.cli.utils.rich_utils import console
+    from depictio.cli.cli.utils.rich_utils import console, render_records_table
 
     rich_print_command_usage("link list")
 
@@ -441,32 +441,21 @@ def link_list(
         raise typer.Exit(code=0)
 
     # Display links
-    console.print(f"\n[bold]DC Links for project '{project_config.name}':[/bold]\n")
-
-    from rich.table import Table
-
-    table = Table(show_header=True, header_style="bold cyan")
-    table.add_column("ID", style="dim", width=24)
-    table.add_column("Source DC")
-    table.add_column("Source Column")
-    table.add_column("Target DC")
-    table.add_column("Target Type")
-    table.add_column("Resolver")
-    table.add_column("Enabled")
-
+    records = []
     for link in links:
         formatted = format_link_for_display(link)
-        table.add_row(
-            formatted["id"][:24],
-            formatted["source_dc_id"][:20],
-            formatted["source_column"],
-            formatted["target_dc_id"][:20],
-            formatted["target_type"],
-            formatted["resolver"],
-            "✓" if formatted["enabled"] else "✗",
+        records.append(
+            {
+                "ID": formatted["id"][:24],
+                "Source DC": formatted["source_dc_id"][:20],
+                "Source Column": formatted["source_column"],
+                "Target DC": formatted["target_dc_id"][:20],
+                "Target Type": formatted["target_type"],
+                "Resolver": formatted["resolver"],
+                "Enabled": "✓" if formatted["enabled"] else "✗",
+            }
         )
-
-    console.print(table)
+    render_records_table(records, title=f"DC Links for project '{project_config.name}'")
     console.print(f"\n[dim]Total: {len(links)} link(s)[/dim]")
 
 

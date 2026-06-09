@@ -236,9 +236,11 @@ def align_lazy_schemas(lazy_frames: list) -> list:
     # Adjust each lazy frame: for missing columns, add a literal null; for existing columns, cast.
     aligned_lfs = []
     for lf in lazy_frames:
+        # Resolve the frame's columns once (was re-collecting the schema for
+        # every column in the inner loop) and use a set for O(1) membership.
+        column_names = set(lf.collect_schema().names())
         exprs = []
         for col, dtype in unified_schema.items():
-            column_names = lf.collect_schema().names()
             if col in column_names:
                 exprs.append(pl.col(col).cast(dtype).alias(col))
             else:

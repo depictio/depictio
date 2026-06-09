@@ -228,6 +228,9 @@ def push(
         False, "--dry-run", "-n", help="Show what would be uploaded without actually uploading"
     ),
     overwrite: bool = typer.Option(False, "--overwrite", help="Overwrite existing files in S3"),
+    concurrency: int = typer.Option(
+        8, "--concurrency", "-c", min=1, help="Number of parallel uploads"
+    ),
     CLI_config_path: Annotated[
         str,
         typer.Option("--CLI-config-path", help="Path to the CLI configuration file"),
@@ -326,12 +329,37 @@ def push(
         rich_print_checked_statement(f"Failed to initialize S3 client: {e}", "error")
         raise typer.Exit(code=1)
 
-    # Upload images with progress
+    # Upload images concurrently (uploads are independent and network-bound).
+    # boto3 low-level clients are thread-safe, so one client is shared.
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
     from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn
 
-    uploaded = 0
-    skipped = 0
-    errors = 0
+    def _upload_one(img: Path) -> str:
+        rel_path = img.relative_to(source_path)
+        s3_key = f"{prefix}{rel_path}".replace("\\", "/")
+        try:
+            # Check if file exists (unless overwrite is set)
+            if not overwrite:
+                try:
+                    s3_client.head_object(Bucket=bucket, Key=s3_key)
+                    return "skipped"
+                except s3_client.exceptions.ClientError:
+                    pass  # File doesn't exist, proceed with upload
+
+            s3_client.upload_file(
+                str(img),
+                bucket,
+                s3_key,
+                ExtraArgs={"ContentType": _get_content_type(img)},
+            )
+            logger.debug(f"Uploaded: {rel_path} → s3://{bucket}/{s3_key}")
+            return "uploaded"
+        except Exception as e:
+            logger.error(f"Failed to upload {rel_path}: {e}")
+            return "error"
+
+    counts = {"uploaded": 0, "skipped": 0, "error": 0}
 
     with Progress(
         SpinnerColumn(),
@@ -341,37 +369,15 @@ def push(
         console=console,
     ) as progress:
         task = progress.add_task("Uploading images...", total=len(images))
+        with ThreadPoolExecutor(max_workers=concurrency) as executor:
+            futures = [executor.submit(_upload_one, img) for img in images]
+            for future in as_completed(futures):
+                counts[future.result()] += 1
+                progress.update(task, advance=1)
 
-        for img in images:
-            rel_path = img.relative_to(source_path)
-            s3_key = f"{prefix}{rel_path}".replace("\\", "/")
-
-            try:
-                # Check if file exists (unless overwrite is set)
-                if not overwrite:
-                    try:
-                        s3_client.head_object(Bucket=bucket, Key=s3_key)
-                        skipped += 1
-                        progress.update(task, advance=1)
-                        continue
-                    except s3_client.exceptions.ClientError:
-                        pass  # File doesn't exist, proceed with upload
-
-                # Upload the file
-                s3_client.upload_file(
-                    str(img),
-                    bucket,
-                    s3_key,
-                    ExtraArgs={"ContentType": _get_content_type(img)},
-                )
-                uploaded += 1
-                logger.debug(f"Uploaded: {rel_path} → s3://{bucket}/{s3_key}")
-
-            except Exception as e:
-                errors += 1
-                logger.error(f"Failed to upload {rel_path}: {e}")
-
-            progress.update(task, advance=1)
+    uploaded = counts["uploaded"]
+    skipped = counts["skipped"]
+    errors = counts["error"]
 
     # Print summary
     console.print()

@@ -10,6 +10,10 @@ from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import format_pydantic, logger
 from depictio.api.v1.endpoints.dashboards_endpoints.routes import save_dashboard
 from depictio.api.v1.endpoints.projects_endpoints.utils import _helper_create_project_beanie
+from depictio.api.v1.endpoints.user_endpoints.agent_config_utils import (
+    _generate_agent_config,
+    export_agent_config,
+)
 from depictio.api.v1.endpoints.user_endpoints.core_functions import _create_user_in_db
 from depictio.api.v1.endpoints.user_endpoints.token_utils import create_default_token
 from depictio.api.v1.endpoints.user_endpoints.utils import (
@@ -686,6 +690,18 @@ async def _bootstrap_admin_and_test_user() -> tuple[UserBeanie | None, dict | No
         token_payload = await create_default_token(admin_user)
         if token_payload:
             logger.info("Created default admin token")
+    elif os.environ.get("DEPICTIO_DEV_MODE", "false").lower() == "true":
+        # In dev mode the DB persists across restarts (wipe=false), so the admin
+        # token already exists and create_default_token() would skip the export.
+        # Re-export the on-disk agent config anyway so local debugging always has
+        # up-to-date CLI credentials at `cli_config_dir/<user>_config.yaml`.
+        existing_token = await TokenBeanie.find_one(
+            {"user_id": admin_user.id, "name": "default_token"}
+        )
+        if existing_token:
+            cli_config = await _generate_agent_config(admin_user, existing_token)
+            await export_agent_config(cli_config=cli_config, email=admin_user.email, wipe=True)
+            logger.info("Dev mode: refreshed admin agent config on disk")
 
     return admin_user, token_payload
 
