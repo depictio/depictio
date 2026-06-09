@@ -13,6 +13,7 @@ from typing import Any, cast
 from fastapi import FastAPI, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -159,6 +160,11 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 
 app.add_middleware(cast(Any, SecurityHeadersMiddleware))
+
+# Compress large JSON payloads (figure/table data can be tens of MB before
+# downsampling lands). compresslevel=5 balances CPU vs ratio; minimum_size skips
+# tiny responses where framing overhead outweighs the gain.
+app.add_middleware(cast(Any, GZipMiddleware), minimum_size=1024, compresslevel=5)
 
 
 # ---------------------------------------------------------------------------
