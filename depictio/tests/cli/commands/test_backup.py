@@ -8,6 +8,7 @@ import yaml
 from typer.testing import CliRunner
 
 from depictio.cli.cli.commands.backup import app
+from depictio.cli.cli.commands.dev import app as dev_app
 
 
 @pytest.fixture
@@ -296,7 +297,9 @@ class TestBackupCLI:
             with open(config_file, "w") as f:
                 yaml.dump(mock_cli_config, f)
 
-            result = runner.invoke(app, ["check-coverage", "--CLI-config-path", config_file])
+            result = runner.invoke(
+                dev_app, ["backup", "check-coverage", "--CLI-config-path", config_file]
+            )
 
         assert result.exit_code == 0
         assert "All expected collections have backup coverage" in result.stdout
@@ -324,7 +327,9 @@ class TestBackupCLI:
             with open(config_file, "w") as f:
                 yaml.dump(mock_cli_config, f)
 
-            result = runner.invoke(app, ["check-coverage", "--CLI-config-path", config_file])
+            result = runner.invoke(
+                dev_app, ["backup", "check-coverage", "--CLI-config-path", config_file]
+            )
 
         assert result.exit_code == 1
         assert "Missing backup coverage detected" in result.stdout
@@ -340,7 +345,7 @@ class TestBackupCLI:
             "errors": ["Unable to check collection coverage - settings not available"],
         }
 
-        result = runner.invoke(app, ["check-coverage"])
+        result = runner.invoke(dev_app, ["backup", "check-coverage"])
 
         assert result.exit_code == 1
         assert "Coverage check failed" in result.stdout

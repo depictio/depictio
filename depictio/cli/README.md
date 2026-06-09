@@ -32,18 +32,23 @@ The Depictio CLI provides commands for managing projects, scanning data, and pro
 
 ```bash
 # Sync a project configuration to the server
-depictio-cli config sync-project-config-to-server \
-  --agent-config-path ~/.depictio/admin_config.yaml \
+depictio-cli config sync \
+  --CLI-config-path ~/.depictio/admin_config.yaml \
   --project-config-path path/to/project_config.yaml \
   --update
 
 # Show CLI configuration
-depictio-cli config show-cli-config \
+depictio-cli config show \
   --CLI-config-path ~/.depictio/admin_config.yaml
 
-# Check S3 storage configuration
-depictio-cli config check-s3-storage \
+# Run preflight checks (server accessibility + S3 storage)
+depictio-cli config check \
   --CLI-config-path ~/.depictio/admin_config.yaml
+
+# Validate a project configuration
+depictio-cli config check \
+  --CLI-config-path ~/.depictio/admin_config.yaml \
+  --project-config-path path/to/project_config.yaml
 ```
 
 ### Data Commands
@@ -51,12 +56,12 @@ depictio-cli config check-s3-storage \
 ```bash
 # Scan data files
 depictio-cli data scan \
-  --agent-config-path ~/.depictio/admin_config.yaml \
+  --CLI-config-path ~/.depictio/admin_config.yaml \
   --project-config-path path/to/project_config.yaml
 
 # Process data
 depictio-cli data process \
-  --agent-config-path ~/.depictio/admin_config.yaml \
+  --CLI-config-path ~/.depictio/admin_config.yaml \
   --project-config-path path/to/project_config.yaml
 ```
 

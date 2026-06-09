@@ -100,12 +100,12 @@ class TestConfigCommands:
 
     # Test classes for each command
 
-    class TestShowCliConfig:
-        """Tests for show_cli_config command"""
+    class TestShow:
+        """Tests for the `config show` command"""
 
         def test_success(self, command, cli_config_path, mock_load_config, base_patches):
             """Test successful execution"""
-            result = command.run("show-cli-config", cli_config=cli_config_path)
+            result = command.run("show", cli_config=cli_config_path)
             assert result.exit_code == 0
             # mock_load_config.assert_called_once()
 
@@ -115,44 +115,37 @@ class TestConfigCommands:
                 "depictio.cli.cli.utils.common.load_depictio_config",
                 side_effect=Exception("Test error"),
             ):
-                result = command.run("show-cli-config", cli_config=cli_config_path)
+                result = command.run("show", cli_config=cli_config_path)
                 assert result.exit_code == 0
 
-    class TestCheckS3Storage:
-        """Tests for check_s3_storage command"""
-
-        def test_success(self, command, cli_config_path, mock_load_config, base_patches):
-            """Test successful execution"""
-            with patch("depictio.cli.cli.commands.config.S3_storage_checks"):
-                result = command.run("check-s3-storage", cli_config=cli_config_path)
-                assert result.exit_code == 0
-
-        def test_error(self, command, cli_config_path, base_patches):
-            """Test error handling"""
-            with patch(
-                "depictio.cli.cli.utils.common.load_depictio_config",
-                side_effect=Exception("Test error"),
-            ):
-                result = command.run("check-s3-storage", cli_config=cli_config_path)
-                assert result.exit_code == 0
-
-    class TestShowDepictioProjectMetadataOnServer:
-        """Tests for show_depictio_project_metadata_on_server command"""
-
-        def test_success(self, command, cli_config_path, mock_load_config, base_patches):
-            """Test successful execution"""
-            # Create a mock for the project metadata
+        def test_with_project_name(self, runner, cli_config_path, mock_load_config, base_patches):
+            """`config show --project-name` also fetches server metadata."""
             mock_project_metadata = MagicMock()
             mock_project_metadata.json.return_value = {"name": "test-project"}
 
             with patch(
-                "depictio.cli.cli.utils.api_calls.api_get_project_from_name",
+                "depictio.cli.cli.commands.config.api_get_project_from_name",
                 return_value=mock_project_metadata,
             ):
-                result = command.run(
-                    "show-depictio-project-metadata-on-server",
-                    cli_config=cli_config_path,
+                result = runner.invoke(
+                    app,
+                    [
+                        "show",
+                        "--CLI-config-path",
+                        cli_config_path,
+                        "--project-name",
+                        "test-project",
+                    ],
                 )
+                assert result.exit_code == 0
+
+    class TestCheck:
+        """Tests for the `config check` command (environment doctor)"""
+
+        def test_success(self, command, cli_config_path, mock_load_config, base_patches):
+            """Test successful execution"""
+            with patch("depictio.cli.cli.commands.config.S3_storage_checks"):
+                result = command.run("check", cli_config=cli_config_path)
                 assert result.exit_code == 0
 
         def test_error(self, command, cli_config_path, base_patches):
@@ -161,8 +154,17 @@ class TestConfigCommands:
                 "depictio.cli.cli.utils.common.load_depictio_config",
                 side_effect=Exception("Test error"),
             ):
-                result = command.run(
-                    "show-depictio-project-metadata-on-server",
-                    cli_config=cli_config_path,
-                )
+                result = command.run("check", cli_config=cli_config_path)
+                assert result.exit_code == 0
+
+    class TestSync:
+        """Tests for the `config sync` command"""
+
+        def test_invalid_config(self, command, cli_config_path, base_patches):
+            """A failed validation reports the error and exits cleanly."""
+            with patch(
+                "depictio.cli.cli.commands.config.validate_project_config_and_check_S3_storage",
+                return_value=(MagicMock(), {"success": False}),
+            ):
+                result = command.run("sync", cli_config=cli_config_path)
                 assert result.exit_code == 0

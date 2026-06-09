@@ -10,9 +10,9 @@ from depictio.cli.cli.commands.catalog import app as catalog
 from depictio.cli.cli.commands.config import app as config
 from depictio.cli.cli.commands.dashboard import app as dashboard
 from depictio.cli.cli.commands.data import app as data
+from depictio.cli.cli.commands.dev import app as dev
 from depictio.cli.cli.commands.images import app as images
 from depictio.cli.cli.commands.migrate import app as migrate
-from depictio.cli.cli.commands.recipe import app as recipe
 from depictio.cli.cli.commands.run import register_run_command
 from depictio.cli.cli.commands.standalone import register_standalone_commands
 from depictio.cli.cli.utils.rich_utils import add_rich_display_to_polars
@@ -40,16 +40,11 @@ def verbose_callback(
         help="Set verbose logging level",
         is_eager=True,
     ),
-    logo: bool = typer.Option(False, "--logo", help="Display the Depictio CLI logo", is_eager=True),
 ):
     # """Set up logging for all commands"""
     # Set up both CLI and models logging with the same verbose settings
     setup_cli_logging(verbose, verbose_level)
     setup_models_logging(verbose, verbose_level)
-
-    # Display logo if flag is provided
-    if logo:
-        display_depictio_cli_logo()
 
 
 app.add_typer(backup, name="backup", help="Backup commands")
@@ -59,334 +54,111 @@ app.add_typer(dashboard, name="dashboard", help="Dashboard validation commands")
 app.add_typer(data, name="data", help="Data management commands")
 app.add_typer(images, name="images", help="Image management commands")
 app.add_typer(migrate, name="migrate", help="Cross-instance project migration")
-app.add_typer(recipe, name="recipe", help="Recipe management and testing commands")
+# Maintainer / CI tooling (catalog authoring, recipe test harness, backup
+# coverage). Hidden from the user-facing help; still callable as `depictio dev …`.
+app.add_typer(dev, name="dev", hidden=True)
 depictiocli = get_command(app)
 
 
-def display_depictio_cli_logo(compact: bool = False):
-    """Display the Depictio CLI logo.
+def display_depictio_cli_logo() -> None:
+    """Render the compact startup banner.
 
-    ``compact=True`` renders a small one-row banner — the favicon mark beside
-    the brand ``depictio-CLI`` wordmark, no panel — for use at startup. The
-    default renders the full favicon + ASCII wordmark (the ``--logo`` art).
+    A small colour rendition of the depictio favicon (the 8-wedge pinwheel)
+    beside the brand name + version, a tagline, and the current directory —
+    no panel. Shown once at startup on an interactive terminal.
     """
-    from rich.columns import Columns
     from rich.console import Console
-    from rich.panel import Panel
     from rich.style import Style
     from rich.text import Text
 
-    # Depictio brand colors
+    # Depictio brand colours used by the mini favicon.
     DEPICTIO_COLORS = {
         "purple": "#9966CC",
         "violet": "#7A5DC7",
         "blue": "#6495ED",
-        "teal": "#45B8AC",
-        "green": "#8BC34A",
-        "yellow": "#F9CB40",
         "orange": "#F68B33",
+        "yellow": "#F9CB40",
+        "green": "#8BC34A",
+        "teal": "#45B8AC",
         "pink": "#E6779F",
     }
 
-    # Character to color mapping for the favicon
-    ASCII_TO_COLOR = {
-        "*": DEPICTIO_COLORS["violet"],
-        "+": DEPICTIO_COLORS["blue"],
-        "_": DEPICTIO_COLORS["orange"],
-        ".": DEPICTIO_COLORS["yellow"],
-        ":": DEPICTIO_COLORS["green"],
-        "-": DEPICTIO_COLORS["teal"],
-        "~": DEPICTIO_COLORS["pink"],
-        "=": DEPICTIO_COLORS["purple"],
-    }
+    from importlib.metadata import PackageNotFoundError
+    from importlib.metadata import version as _pkg_version
 
-    # Original favicon ASCII art
-    FAVICON_ASCII_FINAL = """
-                                                        *******
-                                                        ***********
-                                                       ****************
-                                                       ********************
-                                                       ***********************
-                                                       **************************
-                                                       ****************************
-                                                       ******************************
-                                                       *********************************
-                                        ==========     *******************************
-                                   ===============     *****************************
-                                ==================     ****************************
-                             =====================     **************************
-                            ======================     ************************
-                             =====================     **********************
-                              ====================     ********************
-                                ==================     ******************        ++
-                                  ================     *****************       +++++
-                                    ==============     ***************       +++++++++
-                                      ============     ************         +++++++++++
-                                        ==========     ***********       +++++++++++++++
-                                          ========     *********       ++++++++++++++++++
-                                 ~~~       =======     *******       +++++++++++++++++++++
-                                ~~~~~~       =====     *****        ++++++++++++++++++++++
-                               ~~~~~~~~~       ===     ***        +++++++++++++++++++++++++
-                              ~~~~~~~~~~~~      ==              +++++++++++++++++++++++++++
-                             ~~~~~~~~~~~~~~~     =            +++++++++++++++++++++++++++++
-                             ~~~~~~~~~~~~~~~~               +++++++++++++++++++++++++++++++
+    try:
+        cli_version = _pkg_version("depictio-cli")
+    except PackageNotFoundError:
+        cli_version = "dev"
 
+    # Pre-rendered favicon (20x8 chars), generated offline from the logo PNG by
+    # snapping each pixel to the nearest brand colour - sharp wedge edges without
+    # a Pillow/raster dependency at runtime. Each row is (top_pixels,
+    # bottom_pixels); every char is a palette index or "."=empty.
+    mini_palette = [
+        DEPICTIO_COLORS["violet"],  # 0
+        DEPICTIO_COLORS["blue"],  # 1
+        DEPICTIO_COLORS["orange"],  # 2
+        DEPICTIO_COLORS["yellow"],  # 3
+        DEPICTIO_COLORS["green"],  # 4
+        DEPICTIO_COLORS["teal"],  # 5
+        DEPICTIO_COLORS["pink"],  # 6
+        DEPICTIO_COLORS["purple"],  # 7
+    ]
+    favicon_art = [
+        (".............0000000", ".............0000000"),
+        (".......7777..0000000", "......77777..00000.."),
+        (".......7777..0000...", "........777..000..11"),
+        (".........77..0...111", "......66........1111"),
+        ("......666......11111", "...................."),
+        ("555555555......22222", "55555555........2222"),
+        ("5555555...4..3...222", "555555..444..33...22"),
+        ("5555...4444.........", "555...44444........."),
+    ]
 
-
----------------------------------------------               ________________________________
--------------------------------------------                   ______________________________
-------------------------------------------                      ___________________________
-----------------------------------------       :::     ...        _________________________
- -------------------------------------       :::::     .....        _______________________
- -----------------------------------       :::::::     .......       _____________________
- ---------------------------------        ::::::::     .........       ___________________
-  -------------------------------       ::::::::::     ...........       ________________
-  -----------------------------       ::::::::::::     ............        _____________
-   --------------------------       ::::::::::::::     .............         __________
-    -----------------------       ::::::::::::::::     ..............          ______
-     --------------------        :::::::::::::::::                              ____
-      -----------------        :::::::::::::::::::
-       --------------        :::::::::::::::::::::
-        -----------         ::::::::::::::::::::::
-          -------             ::::::::::::::::::::
-           -----                 :::::::::::::::::
-                                    ::::::::::::::
-                                         :::::::::
-"""
-
-    # Original CLI ASCII art
-    NAME_CLI_ASCII = """
-      ██████████████████           ██████████████████████    ███████████████████        ██████           ████████████        ████████████████████████   ██████            █████████████                                       ██████████      █████               ████████████████
-      █████████████████████        ███████████████████████   █████████████████████     ███████        ██████████████████     ████████████████████████  ███████         ███████████████████                                 ██████████████    ███████              █████████████████
-      ███████████████████████      ███████████████████████   ██████████████████████    ███████      ██████████████████████   ████████████████████████  ███████       ██████████████████████                              ████████████████    ███████              █████████████████
-                    ██████████     ███████                   ███████        ████████   ███████     ███████████   ██████████           ███████          ███████      ███████████   ██████████                            █████████     ███    ███████                   ███████
-                       ████████    ███████                   ██████           ███████  ███████    ████████           ███████          ██████           ███████     ████████          ████████                          ████████              ███████                   ███████
-                        ████████   ███████                   ██████           ███████  ███████    ██████              ██████          ██████           ███████    ███████              ███████                         ███████               ███████                   ███████
-                         ███████   █████████████████████     ██████          ███████   ███████   ███████                              ██████           ███████    ███████               ███████                        ██████                ███████                   ███████
-                         ███████   █████████████████████     ███████████████████████   ███████   ███████                              ██████           ███████    ██████                ███████      █████████████     ██████                ███████                   ███████
-                         ███████   █████████████████████     ██████████████████████    ███████   ███████                              ██████           ███████    ██████                ███████      █████████████     ██████                ███████                   ███████
-                        ████████   ███████                   ████████████████████      ███████   ███████               ███            ██████           ███████    ███████               ██████       █████████████     ███████               ███████                   ███████
-                       ████████    ███████                   ██████████████            ███████    ███████             ██████          ██████           ███████    ████████             ███████                         ███████               ███████                   ███████
-                      ████████     ███████                   ██████                    ███████     ████████         ████████          ██████           ███████     █████████        █████████                           ████████      ███    ███████                   ███████
-      ███████████████████████      ██████████████████████    ██████                    ███████      ███████████████████████           ██████           ███████      ████████████████████████                             ████████████████    ██████████████████   █████████████████
-      ██████████████████████       ███████████████████████   ██████                    ███████       ████████████████████             ██████           ███████        █████████████████████                               ███████████████    ██████████████████   █████████████████
-      ███████████████████          ███████████████████████   ██████                    ███████         ████████████████               ██████           ███████          ████████████████                                     ██████████       ████████████████    ████████████████
-"""
-
-    def scale_ascii_art(ascii_art: str, scale: float = 1.0) -> str:
-        """Scale ASCII art by removing lines and characters based on scale factor."""
-        if scale >= 1.0:
-            return ascii_art
-
-        lines = ascii_art.split("\n")
-
-        # Skip lines based on scale factor
-        line_step = max(1, int(1 / scale))
-        scaled_lines = lines[::line_step]
-
-        # Skip characters within each line based on scale factor
-        char_step = max(1, int(1 / scale))
-        scaled_art_lines = []
-
-        for line in scaled_lines:
-            if scale <= 0.5:
-                # For very small scales, take every nth character
-                scaled_line = line[::char_step]
-            else:
-                # For moderate scaling, just use line scaling
-                scaled_line = line
-            scaled_art_lines.append(scaled_line)
-
-        return "\n".join(scaled_art_lines)
-
-    def create_colored_favicon() -> Text:
-        """Create the colored favicon with proper scaling."""
-        # Scale to small size (0.33)
-        scaled_art = scale_ascii_art(FAVICON_ASCII_FINAL, 0.33)
-
-        logo_text = Text()
-        for line in scaled_art.split("\n"):
-            line_text = Text()
-            for char in line:
-                if char in ASCII_TO_COLOR:
-                    line_text.append(char, style=ASCII_TO_COLOR[char])
-                else:
-                    line_text.append(char)
-            line_text.append("\n")
-            logo_text.append_text(line_text)
-        return logo_text
-
-    def create_colored_name() -> Text:
-        """Create the colored CLI name with proper scaling."""
-        # Scale to small size (0.33)
-        scaled_art = scale_ascii_art(NAME_CLI_ASCII, 0.33)
-
-        name_text = Text()
-        colors = [
-            DEPICTIO_COLORS["violet"],
-            DEPICTIO_COLORS["blue"],
-            DEPICTIO_COLORS["teal"],
-            DEPICTIO_COLORS["green"],
-            DEPICTIO_COLORS["yellow"],
-            DEPICTIO_COLORS["orange"],
-            DEPICTIO_COLORS["pink"],
-            DEPICTIO_COLORS["purple"],
-        ]
-
-        lines = scaled_art.split("\n")
-        for line in lines:
-            line_text = Text()
-            if line.strip():
-                char_count = len(line.replace(" ", ""))
-                if char_count > 0:
-                    chars_per_color = max(1, char_count // len(colors))
-                    color_index = 0
-                    char_index = 0
-
-                    for char in line:
-                        if char != " ":
-                            if (
-                                char_index > 0
-                                and char_index % chars_per_color == 0
-                                and color_index < len(colors) - 1
-                            ):
-                                color_index += 1
-                            line_text.append(char, style=colors[color_index])
-                            char_index += 1
-                        else:
-                            line_text.append(char)
-                else:
-                    line_text.append(line)
-            else:
-                line_text.append(line)
-            line_text.append("\n")
-            name_text.append_text(line_text)
-        return name_text
-
-    def _get_text_height(text: Text) -> int:
-        """Get the height (number of lines) of a Rich Text object."""
-        return len(text.plain.split("\n"))
-
-    def _pad_text_vertically(text: Text, target_height: int) -> Text:
-        """Add vertical padding to center text within target height."""
-        current_height = _get_text_height(text)
-        if current_height >= target_height:
-            return text
-
-        padding_needed = target_height - current_height
-        top_padding = padding_needed // 2
-
-        padded_text = Text()
-        for _ in range(top_padding):
-            padded_text.append("\n")
-        padded_text.append_text(text)
-        return padded_text
+    def mini_color(index: str):
+        return None if index == "." else mini_palette[int(index)]
 
     console = Console()
+    favicon_rows = []
+    for top_pixels, bottom_pixels in favicon_art:
+        row_text = Text()
+        for top_idx, bottom_idx in zip(top_pixels, bottom_pixels):
+            top = mini_color(top_idx)
+            bottom = mini_color(bottom_idx)
+            if top and bottom:
+                row_text.append("▀", style=Style(color=top, bgcolor=bottom))
+            elif top:
+                row_text.append("▀", style=Style(color=top))
+            elif bottom:
+                row_text.append("▄", style=Style(color=bottom))
+            else:
+                row_text.append(" ")
+        favicon_rows.append(row_text)
 
-    if compact:
-        # Claude Code-style startup banner: a small colour rendition of the
-        # depictio favicon (the 8-wedge pinwheel), then name + version, a
-        # tagline, and the current directory, with a tip line below.
-        from importlib.metadata import PackageNotFoundError
-        from importlib.metadata import version as _pkg_version
+    cwd = os.getcwd().replace(os.path.expanduser("~"), "~")
 
-        try:
-            cli_version = _pkg_version("depictio-cli")
-        except PackageNotFoundError:
-            cli_version = "dev"
+    info_lines = [
+        Text.assemble(
+            ("depictio-cli", f"bold {DEPICTIO_COLORS['purple']}"),
+            (f"  v{cli_version}", "dim"),
+        ),
+        Text("Interactive dashboards for bioinformatics data", style="dim"),
+        Text(cwd, style="dim"),
+    ]
 
-        # Pre-rendered favicon (20×8 chars), generated offline from the logo PNG
-        # by snapping each pixel to the nearest brand colour — sharp wedge edges
-        # without a Pillow/raster dependency at runtime. Each row is
-        # (top_pixels, bottom_pixels); every char is a palette index or "."=empty.
-        mini_palette = [
-            DEPICTIO_COLORS["violet"],  # 0
-            DEPICTIO_COLORS["blue"],  # 1
-            DEPICTIO_COLORS["orange"],  # 2
-            DEPICTIO_COLORS["yellow"],  # 3
-            DEPICTIO_COLORS["green"],  # 4
-            DEPICTIO_COLORS["teal"],  # 5
-            DEPICTIO_COLORS["pink"],  # 6
-            DEPICTIO_COLORS["purple"],  # 7
-        ]
-        favicon_art = [
-            (".............0000000", ".............0000000"),
-            (".......7777..0000000", "......77777..00000.."),
-            (".......7777..0000...", "........777..000..11"),
-            (".........77..0...111", "......66........1111"),
-            ("......666......11111", "...................."),
-            ("555555555......22222", "55555555........2222"),
-            ("5555555...4..3...222", "555555..444..33...22"),
-            ("5555...4444.........", "555...44444........."),
-        ]
-
-        def mini_color(index: str):
-            return None if index == "." else mini_palette[int(index)]
-
-        favicon_rows = []
-        for top_pixels, bottom_pixels in favicon_art:
-            row_text = Text()
-            for top_idx, bottom_idx in zip(top_pixels, bottom_pixels):
-                top = mini_color(top_idx)
-                bottom = mini_color(bottom_idx)
-                if top and bottom:
-                    row_text.append("▀", style=Style(color=top, bgcolor=bottom))
-                elif top:
-                    row_text.append("▀", style=Style(color=top))
-                elif bottom:
-                    row_text.append("▄", style=Style(color=bottom))
-                else:
-                    row_text.append(" ")
-            favicon_rows.append(row_text)
-
-        cwd = os.getcwd().replace(os.path.expanduser("~"), "~")
-
-        info_lines = [
-            Text.assemble(
-                ("depictio-cli", f"bold {DEPICTIO_COLORS['purple']}"),
-                (f"  v{cli_version}", "dim"),
-            ),
-            Text("Interactive dashboards for bioinformatics data", style="dim"),
-            Text(cwd, style="dim"),
-        ]
-
-        # Concatenate each row by hand (fixed-width favicon gutter + text)
-        # rather than using a Table, so a long path is shown in full instead of
-        # being cropped to the column width.
-        gutter = len(favicon_art[0][0])
-        console.print()
-        for i in range(max(len(favicon_rows), len(info_lines))):
-            line = Text()
-            line.append_text(favicon_rows[i] if i < len(favicon_rows) else Text(" " * gutter))
-            line.append("   ")
-            if i < len(info_lines):
-                line.append_text(info_lines[i])
-            console.print(line)
-        console.print()
-        return
-
-    favicon = create_colored_favicon()
-    name = create_colored_name()
-
-    # Center both vertically
-    favicon_height = _get_text_height(favicon)
-    name_height = _get_text_height(name)
-    max_height = max(favicon_height, name_height)
-
-    centered_favicon = _pad_text_vertically(favicon, max_height)
-    centered_name = _pad_text_vertically(name, max_height)
-
-    content = Columns([centered_favicon, centered_name], align="left", expand=False)
-
-    panel = Panel(
-        content,
-        title="🎨 DEPICTIO-CLI",
-        title_align="center",
-        border_style="bright_blue",
-        padding=(1, 2),
-    )
-    console.print(panel)
+    # Concatenate each row by hand (fixed-width favicon gutter + text) rather than
+    # using a Table, so a long path is shown in full instead of being cropped to
+    # the column width.
+    gutter = len(favicon_art[0][0])
+    console.print()
+    for i in range(max(len(favicon_rows), len(info_lines))):
+        line = Text()
+        line.append_text(favicon_rows[i] if i < len(favicon_rows) else Text(" " * gutter))
+        line.append("   ")
+        if i < len(info_lines):
+            line.append_text(info_lines[i])
+        console.print(line)
     console.print()
 
 
@@ -399,6 +171,6 @@ def main():
     import sys
 
     if sys.stdout.isatty():
-        display_depictio_cli_logo(compact=True)
+        display_depictio_cli_logo()
 
     app()

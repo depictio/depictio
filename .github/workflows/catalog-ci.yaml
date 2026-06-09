@@ -50,7 +50,7 @@ jobs:
         # nf-core/EDAM existence + recipes resolve
         run: |
           source venv/bin/activate
-          depictio catalog validate
+          depictio dev catalog validate
 
       - name: Catalog tests
         run: |
