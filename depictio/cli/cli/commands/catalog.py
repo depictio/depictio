@@ -25,12 +25,11 @@ def catalog_list() -> None:
     if not entries:
         console.print("[yellow]No catalog entries found.[/yellow]")
         return
-    # "Tool" is the id you pass to `catalog info <Tool>`; "Name" is the display
-    # name. Keeping them in separate columns avoids the ambiguous "id (Name)".
+    # "Tool" is the id you pass to `catalog info <Tool>` (the display name adds
+    # nothing — id and name are near-identical — so it's dropped).
     records = [
         {
             "Tool": entry.id,
-            "Name": entry.name,
             "Output": f"{out.id}{f'/{out.mode}' if out.mode else ''}",
             "Source": out.recipe or ("columns" if out.columns else "—"),
             "Renders as": ", ".join(r.kind or r.component for r in out.renders_as) or "—",
