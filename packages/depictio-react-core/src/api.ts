@@ -490,12 +490,25 @@ export type AdvancedVizKind =
   | 'coverage_track'
   | 'sankey';
 
+/** Accepted dtypes for one role, plus whether the role is required. Sourced
+ *  from the backend canonical schema so the builder never duplicates the
+ *  dtype tables in TS. */
+export interface RoleDtypeSpec {
+  required: boolean;
+  dtypes: string[];
+  /** Short human description of the role, shown in the builder's binding tooltip. */
+  description: string;
+}
+
 export interface AdvancedVizKindDescriptor {
   viz_kind: AdvancedVizKind;
   label: string;
   description: string;
   icon: string;
   required_roles: string[];
+  /** Per-role accepted dtypes (required + optional), keyed by role name.
+   *  Drives the builder's binding dropdowns + dtype validation. */
+  roles: Record<string, RoleDtypeSpec>;
   /** "plot" for pure visualisations, "tool" for statistical methods that
    *  compute then plot (GSEA, GWAS, ANCOM-BC, DA barplot per contrast). */
   category: 'plot' | 'tool';
@@ -519,35 +532,29 @@ export async function fetchPolarsSchema(dcId: string): Promise<Record<string, st
   return res.json();
 }
 
-export interface ProducerSuggestion {
-  name: string;
-  confidence: number;
-  tool: string;
-  description: string;
-  feeds_viz: string[];
-}
-
+/** One viz kind scored against a DC schema by the backend suggestion engine.
+ *  `score` is a graded 0-1 fit (dtype compatibility × column-name similarity).
+ *  `role_candidates` lists dtype-compatible columns per required role, ranked
+ *  best-first, for pre-filling bindings. `unmet_roles` / `weak_roles` drive the
+ *  builder's inline guidance. */
 export interface VizKindSuggestion {
   viz_kind: string;
-  confidence: number;
+  score: number;
   role_candidates: Record<string, string[]>;
-}
-
-export interface SuggestFromColumnsResponse {
-  producers: ProducerSuggestion[];
+  unmet_roles: string[];
+  weak_roles: string[];
 }
 
 export interface VizSuggestionsResponse {
   data_collection_id: string;
   schema: Record<string, string>;
   viz_kinds: VizKindSuggestion[];
-  producers: ProducerSuggestion[];
 }
 
-/** Full producer + viz-kind suggestions for an existing DC. Reads the DC's
- *  inferred polars schema server-side, then runs the same suggestion
- *  engine as the modal — but with dtypes available, so the viz_kinds list
- *  is populated too. */
+/** Ranked viz-kind suggestions for an existing DC. Reads the DC's inferred
+ *  polars schema server-side and runs the graded scoring engine, returning
+ *  every kind scored (best-first) so the builder can present a "suggest but
+ *  tolerate" picker. */
 export async function fetchVizSuggestions(
   dcId: string,
 ): Promise<VizSuggestionsResponse> {
@@ -556,29 +563,6 @@ export async function fetchVizSuggestions(
     { headers: authHeaders() },
   );
   if (!res.ok) throw new Error(`Failed to fetch viz suggestions: ${res.status}`);
-  return res.json();
-}
-
-/** Run the producer suggestion engine on a bare column list (no DC required).
- *  Used by the DC-creation modal to decide whether to surface a passive
- *  "looks like X" hint vs. the coordinates fallback toggle. Producers are
- *  matched on column names alone — dtype info isn't available until the
- *  file is parsed server-side.
- *
- *  `signal` lets callers abort superseded requests (e.g. the user editing
- *  the CSV separator quickly enough to dispatch two fetches back-to-back).
- *  Without it the slower response can stomp the newer state. */
-export async function suggestFromColumns(
-  columns: string[],
-  signal?: AbortSignal,
-): Promise<SuggestFromColumnsResponse> {
-  const res = await fetch(`${API_BASE}/datacollections/suggest-from-columns`, {
-    method: 'POST',
-    headers: authHeaders(),
-    body: JSON.stringify({ columns }),
-    signal,
-  });
-  if (!res.ok) throw new Error(`Failed to fetch suggestions: ${res.status}`);
   return res.json();
 }
 

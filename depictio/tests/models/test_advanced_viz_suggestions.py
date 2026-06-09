@@ -18,7 +18,7 @@ from pathlib import Path
 import polars as pl
 import pytest
 
-from depictio.models.components.advanced_viz.schemas import suggest_viz_kinds
+from depictio.models.components.advanced_viz.schemas import RECOMMENDED_SCORE, suggest_viz_kinds
 
 FIXTURES_DIR = (
     Path(__file__).resolve().parents[3] / "dev" / "advanced_viz_docs_screenshots" / "fixtures"
@@ -41,9 +41,10 @@ def _read_schema(path: Path, **read_kwargs) -> dict[str, str]:
 
 
 # (fixture_path, expected_viz_kinds, read_kwargs)
-# expected_viz_kinds is a subset assertion — the function may surface
-# additional kinds that coincidentally match dtype shapes. The fixture
-# *must* at minimum return everything in this list.
+# The graded suggester ranks *every* kind, so we assert that each promised kind
+# scores well (>= _EXPECTED_SCORE) rather than that it's the only one returned.
+_EXPECTED_SCORE = 0.5
+
 CASES: list[tuple[str, set[str], dict]] = [
     (
         "volcano/deseq2_results.tsv",
@@ -88,10 +89,11 @@ def test_suggestions_against_nfcore_fixtures(
         )
     schema = _read_schema(path, **read_kwargs)
     viz = suggest_viz_kinds(schema)
-    suggested_kinds = {s.viz_kind for s in viz}
-    missing = expected_kinds - suggested_kinds
+    scored = {s.viz_kind: s.score for s in viz}
+    well_scored = {k for k, score in scored.items() if score >= _EXPECTED_SCORE}
+    missing = expected_kinds - well_scored
     assert not missing, (
-        f"{rel_path}: schema {schema} did not suggest {missing}; got {suggested_kinds}"
+        f"{rel_path}: schema {schema} did not score {missing} >= {_EXPECTED_SCORE}; scores={scored}"
     )
 
 
@@ -99,23 +101,33 @@ def test_suggestions_against_nfcore_fixtures(
 # suggestion engine with synthetic schemas to lock down edge-case behaviour.
 
 
-def test_suggest_viz_kinds_returns_empty_on_unfitting_schema() -> None:
-    # Pure-string schema with a column that doesn't match any role's
-    # name-alias set — the suggester should reject everything, including
-    # phylogenetic (whose `taxon` role no longer matches an arbitrary
-    # String column under the name-aware rules).
+def test_suggest_viz_kinds_returns_all_kinds_ranked() -> None:
+    # The graded suggester always returns every kind, sorted by score desc.
+    schema = {"gene_id": "String", "log2FoldChange": "Float64", "padj": "Float64"}
+    viz = suggest_viz_kinds(schema)
+    scores = [s.score for s in viz]
+    assert len(viz) == len({s.viz_kind for s in viz})  # one entry per kind
+    assert scores == sorted(scores, reverse=True)  # ranked
+    assert 0.0 <= min(scores) and max(scores) <= 1.0
+
+
+def test_unfitting_schema_recommends_nothing() -> None:
+    # A lone String column with a name that matches no role alias should leave
+    # nothing in the "recommended" band — every kind is at most a weak,
+    # dtype-only match.
     schema = {"only_string_col": "String"}
-    suggestions = suggest_viz_kinds(schema)
-    kinds = {s.viz_kind for s in suggestions}
-    assert kinds == set(), f"expected no suggestions, got {kinds}"
+    recommended = [s for s in suggest_viz_kinds(schema) if s.score >= RECOMMENDED_SCORE]
+    assert recommended == [], f"expected nothing recommended, got {recommended}"
 
 
 def test_phylogenetic_matches_on_taxon_aliases() -> None:
     # A String column whose name IS in the phylogenetic taxon alias set
-    # (e.g. `taxon`, `tip_label`, `label`) should light up phylogenetic.
+    # (e.g. `taxon`, `tip_label`, `label`) should score phylogenetic highly.
     for col_name in ("taxon", "tip_label", "label"):
-        kinds = {s.viz_kind for s in suggest_viz_kinds({col_name: "String"})}
-        assert "phylogenetic" in kinds, f"{col_name}: phylogenetic missing from {kinds}"
+        [phylo] = [
+            s for s in suggest_viz_kinds({col_name: "String"}) if s.viz_kind == "phylogenetic"
+        ]
+        assert phylo.score >= RECOMMENDED_SCORE, f"{col_name}: phylogenetic score {phylo.score}"
 
 
 def test_suggest_viz_kinds_role_candidates_populated() -> None:
@@ -125,21 +137,52 @@ def test_suggest_viz_kinds_role_candidates_populated() -> None:
         "padj": "Float64",
     }
     [vol] = [s for s in suggest_viz_kinds(schema) if s.viz_kind == "volcano"]
-    assert vol.confidence == 1.0
+    assert vol.score == 1.0
+    assert vol.unmet_roles == []
+    assert vol.weak_roles == []
     # Every required volcano role has at least one candidate column from
-    # the schema (dtype-compatible). The UI uses this to pre-fill bindings.
+    # the schema (dtype-compatible), ranked best-first. The UI uses this to
+    # pre-fill bindings.
     assert vol.role_candidates["feature_id"] == ["gene_id"]
     assert set(vol.role_candidates["effect_size"]) == {"log2FoldChange", "padj"}
     assert set(vol.role_candidates["significance"]) == {"log2FoldChange", "padj"}
+    # The best-named candidate ranks first for each numeric role.
+    assert vol.role_candidates["effect_size"][0] == "log2FoldChange"
+    assert vol.role_candidates["significance"][0] == "padj"
 
 
 def test_suggest_viz_kinds_min_confidence_filters() -> None:
     # Only feature_id is satisfied (String); effect_size + significance are
-    # both Float but the schema has no Float column at all.
+    # both Float but the schema has no Float column at all → volcano scores low.
     schema = {"feature_id": "String"}
-    strict = suggest_viz_kinds(schema, min_confidence=1.0)
-    relaxed = suggest_viz_kinds(schema, min_confidence=0.3)
-    strict_kinds = {s.viz_kind for s in strict}
-    relaxed_kinds = {s.viz_kind for s in relaxed}
-    assert "volcano" not in strict_kinds
-    assert "volcano" in relaxed_kinds  # 1/3 roles satisfied → conf ≈ 0.33
+    strict_kinds = {s.viz_kind for s in suggest_viz_kinds(schema, min_confidence=1.0)}
+    relaxed_kinds = {s.viz_kind for s in suggest_viz_kinds(schema, min_confidence=0.3)}
+    assert "volcano" not in strict_kinds  # ~0.38 < 1.0
+    assert "volcano" in relaxed_kinds  # 1/3 roles satisfied → score ≈ 0.38
+
+
+def test_castable_dtype_scores_below_exact() -> None:
+    # An Int column feeds a Float role (manhattan score) as a castable match —
+    # it should rank, but below a schema with the exact Float dtype.
+    exact = {"chr": "String", "pos": "Int64", "score": "Float64"}
+    castable = {"chr": "String", "pos": "Int64", "score": "Int64"}
+    [exact_man] = [s for s in suggest_viz_kinds(exact) if s.viz_kind == "manhattan"]
+    [cast_man] = [s for s in suggest_viz_kinds(castable) if s.viz_kind == "manhattan"]
+    assert exact_man.score > cast_man.score > 0.0
+
+
+def test_short_aliases_do_not_cause_substring_false_positives() -> None:
+    # Regression: a 1-2 char alias ("p", "x", "y") must NOT match a column that
+    # merely contains that letter. A generic penguin morphometrics table scored
+    # qq ~0.99 (via "p" inside "bill_depth_mm") and embedding ~0.80 (via the
+    # "x"/"y" dim aliases) before the fix — pure false positives.
+    schema = {
+        "individual_id": "String",
+        "bill_length_mm": "Float64",
+        "bill_depth_mm": "Float64",
+        "flipper_length_mm": "Float64",
+        "body_mass_g": "Float64",
+    }
+    by = {s.viz_kind: s.score for s in suggest_viz_kinds(schema)}
+    assert by["qq"] < 0.6, f"qq still spuriously high via short-alias substring: {by['qq']}"
+    assert by["embedding"] < RECOMMENDED_SCORE, f"embedding still recommended: {by['embedding']}"

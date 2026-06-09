@@ -28,7 +28,10 @@ from depictio.api.v1.endpoints.user_endpoints.routes import (
     get_user_or_anonymous,
     oauth2_scheme_optional,
 )
-from depictio.models.components.advanced_viz.schemas import CANONICAL_SCHEMAS
+from depictio.models.components.advanced_viz.schemas import (
+    CANONICAL_SCHEMAS,
+    role_dtype_specs,
+)
 from depictio.models.components.types import AdvancedVizKind
 from depictio.models.models.base import PyObjectId
 
@@ -155,7 +158,7 @@ _KIND_METADATA: dict[AdvancedVizKind, dict[str, Any]] = {
         "icon": "tabler:atom",
     },
     "manhattan": {
-        "label": "GWAS Manhattan (tool)",
+        "label": "Manhattan plot",
         "description": "chr / pos / score scatter — works for true GWAS, peak qvalues, and variant AF.",
         "icon": "tabler:chart-histogram",
         "category": "tool",
@@ -241,7 +244,13 @@ _KIND_METADATA: dict[AdvancedVizKind, dict[str, Any]] = {
 
 @advanced_viz_endpoint_router.get("/kinds")
 def list_kinds(current_user=Depends(get_user_or_anonymous)) -> list[dict[str, Any]]:
-    """Return the metadata payload the React builder uses to populate the viz_kind picker."""
+    """Return the metadata payload the React builder uses to populate the viz_kind picker.
+
+    `roles` carries the per-role accepted dtypes (required + optional) so the
+    builder drives its binding dropdowns + validation from the backend instead
+    of duplicating the dtype tables in TypeScript. `required_roles` is kept for
+    backwards compatibility.
+    """
     return [
         {
             "viz_kind": kind,
@@ -249,6 +258,7 @@ def list_kinds(current_user=Depends(get_user_or_anonymous)) -> list[dict[str, An
             "description": meta["description"],
             "icon": meta["icon"],
             "required_roles": list(CANONICAL_SCHEMAS[kind].keys()),
+            "roles": role_dtype_specs(kind),
             # Entries without an explicit category are pure visualisations.
             "category": meta.get("category", "plot"),
         }
