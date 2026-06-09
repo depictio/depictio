@@ -150,6 +150,9 @@ dump.rdb
 !depictio/projects/nf-core/ampliseq/2.16.0/multiqc/multiqc_data/multiqc.parquet
 # Allow nf-core viralrecon bundled run_1 (multiqc.parquet only — TSVs allow-listed below)
 !depictio/projects/nf-core/viralrecon/3.0.0/run_1/multiqc/multiqc_data/multiqc.parquet
+# Allow catalog multiqc fixtures (plot_input_data rows only, ~3MB total)
+!depictio/catalog/multiqc/aggregate.parquet
+!depictio/catalog/multiqc/fastqc.parquet
 *.gz
 *.csv
 *.tsv
@@ -384,3 +387,6 @@ dev/advanced_viz_docs_screenshots/fixtures/
 # Generated CLI configs (emitted by upload.sh on the fly)
 **/.cli_config.generated.yaml
 .depictio-instance-CLI.yaml
+
+# Generated catalog-preview single-file bundle (built via pnpm run build:catalog-preview)
+depictio/viewer/dist-catalog-preview/
