@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Annotated
 
-import click.exceptions
 import polars as pl
 import typer
 
@@ -109,8 +108,11 @@ def recipe_run(
     except RecipeError as e:
         console.print(f"  [red]:x: FAILED: {e}[/red]")
         raise typer.Exit(code=1)
-    except click.exceptions.Exit:
-        raise  # Re-raise typer.Exit / click.Exit (e.g. dc_ref skip with code=0)
+    except typer.Exit:
+        # Re-raise control-flow exits (e.g. dc_ref skip with code=0) so they
+        # aren't swallowed by the broad handler below. typer 0.26 vendors its
+        # own click, so typer.Exit is no longer a click.exceptions.Exit.
+        raise
     except Exception as e:
         logger.exception("Recipe execution failed")
         console.print(f"  [red]:x: ERROR: {e}[/red]")

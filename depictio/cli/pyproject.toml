@@ -6,25 +6,30 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
 dependencies = [
+  # Held at 1.36.21: the CLI has no s3fs/aiobotocore chain, so the root's
+  # boto3==1.43.0 cap doesn't apply here — kept pinned to the current version.
   "boto3==1.36.21",
-  "colorlog==6.9.0",
+  "colorlog==6.10.1",
   "httpx==0.28.1",
   "devtools==0.12.2",
-  "polars-lts-cpu[numpy,pandas,pyarrow,excel,deltalake]==1.19.0",
-  "deltalake==0.24.0",
-  "python-jose==3.3.0",
-  "pyyaml==6.0.2",
-  "typer==0.16.0",
-  "click==8.2.0",
+  # polars-lts-cpu is legacy; the modern LTS/older-CPU build is polars[rtcompat]
+  # (-> polars-runtime-compat). rtcompat also matches multiqc 1.35's requirement.
+  "polars[rtcompat,numpy,pandas,pyarrow,excel,deltalake]==1.41.2",
+  "deltalake==1.6.0",
+  "python-jose==3.5.0",
+  "pyyaml>=6.0.2",
+  "typer==0.26.7",
   # "typeguard",
   "tomli==2.2.1",
-  "rich==14.2.0",
-  "pydantic[email]==2.10.6",
-  "pydantic-settings==2.7.1",
+  "rich==15.0.0",
+  "pydantic[email]==2.13.4",
+  "pydantic-settings==2.14.1",
+  # Held at 2.0.0: beanie 2.1.0 calls list_collection_names(authorizedCollections=
+  # True) during init, which the latest mongomock (4.3.0) test double doesn't
+  # accept, breaking the unit suite. Bump once mongomock supports the kwarg.
   "beanie==2.0.0",
-  "python-dotenv==1.1.0",
-  "bleach==6.2.0",
-  "packaging==25.0",
+  "python-dotenv==1.2.2",
+  "bleach==6.4.0",
 ]
 authors = [{ name = "Thomas Weber", email = "thomas.weber@embl.de" }]
 urls = { Homepage = "http://github.com/depictio/depictio" }
@@ -34,8 +39,7 @@ classifiers = [
 ]
 
 [project.optional-dependencies]
-lts-cpu = ["polars-lts-cpu==1.19.0"]
-multiqc = ["multiqc==1.31.0"]
+multiqc = ["multiqc==1.35"]
 
 [project.scripts]
 depictio-cli = "depictio.cli.depictio_cli:main"
