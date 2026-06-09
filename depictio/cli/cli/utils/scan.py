@@ -385,6 +385,22 @@ def scan_run_for_multiple_data_collections(
         )
         logger.debug(f"Regex for DC {dc.data_collection_tag}: {full_regex}")
 
+        # A temporary run used only for file association — invariant across
+        # every file in this run, so build it once here instead of
+        # reallocating an identical WorkflowRun inside the per-file loop.
+        temp_run = WorkflowRun(
+            id=workflow_run.id,
+            workflow_id=PyObjectId(workflow_id),
+            run_tag=run_tag,
+            files_id=[],
+            workflow_config_id=workflow_config.id,
+            run_location=run_location,
+            creation_time=creation_time,
+            last_modification_time=last_modification_time,
+            run_hash="",
+            permissions=permissions,
+        )
+
         # Process files that match this data collection's regex
         dc_file_scan_results = []
         for file_location in all_files_in_run:
@@ -402,20 +418,6 @@ def scan_run_for_multiple_data_collections(
                     continue
 
             logger.debug(f"File {file_name} matches DC {dc.data_collection_tag}")
-
-            # Create a temporary run for this DC (needed for file association)
-            temp_run = WorkflowRun(
-                id=workflow_run.id,
-                workflow_id=PyObjectId(workflow_id),
-                run_tag=run_tag,
-                files_id=[],
-                workflow_config_id=workflow_config.id,
-                run_location=run_location,
-                creation_time=creation_time,
-                last_modification_time=last_modification_time,
-                run_hash="",
-                permissions=permissions,
-            )
 
             # skip_regex=True because we already matched in the loop above
             file_scan_result = scan_single_file(

@@ -13,7 +13,7 @@ from typing import Any
 import httpx
 from pydantic import validate_call
 
-from depictio.cli.cli.utils.common import generate_api_headers
+from depictio.cli.cli.utils.common import generate_api_headers, get_http_client
 from depictio.cli.cli_logging import logger
 from depictio.models.models.cli import CLIConfig
 
@@ -33,7 +33,7 @@ def api_get_project_links(project_id: str, CLI_config: CLIConfig) -> httpx.Respo
     logger.info(f"Getting links for project ID: {project_id}")
 
     url = f"{CLI_config.api_base_url}/depictio/api/v1/links/{project_id}"
-    response = httpx.get(url, headers=generate_api_headers(CLI_config), timeout=30.0)
+    response = get_http_client().get(url, headers=generate_api_headers(CLI_config), timeout=30.0)
     return response
 
 
@@ -55,7 +55,7 @@ def api_get_links_for_target_dc(
     logger.info(f"Getting links targeting DC: {dc_id}")
 
     url = f"{CLI_config.api_base_url}/depictio/api/v1/links/{project_id}/target/{dc_id}"
-    response = httpx.get(url, headers=generate_api_headers(CLI_config), timeout=30.0)
+    response = get_http_client().get(url, headers=generate_api_headers(CLI_config), timeout=30.0)
     return response
 
 
@@ -77,7 +77,7 @@ def api_get_links_for_source_dc(
     logger.info(f"Getting links from source DC: {dc_id}")
 
     url = f"{CLI_config.api_base_url}/depictio/api/v1/links/{project_id}/source/{dc_id}"
-    response = httpx.get(url, headers=generate_api_headers(CLI_config), timeout=30.0)
+    response = get_http_client().get(url, headers=generate_api_headers(CLI_config), timeout=30.0)
     return response
 
 
@@ -100,7 +100,7 @@ def api_create_link(
     logger.debug(f"Link data: {link_data}")
 
     url = f"{CLI_config.api_base_url}/depictio/api/v1/links/{project_id}"
-    response = httpx.post(
+    response = get_http_client().post(
         url, json=link_data, headers=generate_api_headers(CLI_config), timeout=30.0
     )
     return response
@@ -126,7 +126,7 @@ def api_update_link(
     logger.debug(f"Link data: {link_data}")
 
     url = f"{CLI_config.api_base_url}/depictio/api/v1/links/{project_id}/{link_id}"
-    response = httpx.put(
+    response = get_http_client().put(
         url, json=link_data, headers=generate_api_headers(CLI_config), timeout=30.0
     )
     return response
@@ -148,7 +148,7 @@ def api_delete_link(project_id: str, link_id: str, CLI_config: CLIConfig) -> htt
     logger.info(f"Deleting link {link_id} for project ID: {project_id}")
 
     url = f"{CLI_config.api_base_url}/depictio/api/v1/links/{project_id}/{link_id}"
-    response = httpx.delete(url, headers=generate_api_headers(CLI_config), timeout=30.0)
+    response = get_http_client().delete(url, headers=generate_api_headers(CLI_config), timeout=30.0)
     return response
 
 
@@ -185,7 +185,9 @@ def api_resolve_link(
         "filter_values": filter_values,
         "target_dc_id": target_dc_id,
     }
-    response = httpx.post(url, json=payload, headers=generate_api_headers(CLI_config), timeout=30.0)
+    response = get_http_client().post(
+        url, json=payload, headers=generate_api_headers(CLI_config), timeout=30.0
+    )
     return response
 
 

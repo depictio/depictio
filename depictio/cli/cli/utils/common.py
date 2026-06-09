@@ -1,6 +1,8 @@
+import atexit
 import os
 from datetime import datetime
 
+import httpx
 import typer
 from pydantic import validate_call
 
@@ -8,6 +10,21 @@ from depictio.cli.cli.utils.rich_utils import rich_print_checked_statement
 from depictio.cli.cli_logging import logger
 from depictio.models.models.cli import CLIConfig
 from depictio.models.utils import get_config
+
+# Process-wide pooled HTTP client. A single CLI invocation (scan/process/sync)
+# fires many sequential requests to the same API host; reusing one client keeps
+# the TCP/TLS connection alive across them instead of paying a fresh handshake
+# per call. Per-request timeouts/headers are still passed at each call site.
+_http_client: httpx.Client | None = None
+
+
+def get_http_client() -> httpx.Client:
+    """Return the shared, lazily-created :class:`httpx.Client`."""
+    global _http_client
+    if _http_client is None:
+        _http_client = httpx.Client()
+        atexit.register(_http_client.close)
+    return _http_client
 
 
 @validate_call(validate_return=True)
@@ -57,8 +74,6 @@ def validate_depictio_cli_config(depictio_cli_config: dict) -> CLIConfig:
         s3_storage=depictio_cli_config.get("s3_storage", depictio_cli_config.get("s3")),
     )
     logger.info(f"Depictio CLI configuration validated: {config}")
-    # config = convert_model_to_dict(config)
-
     return config
 
 

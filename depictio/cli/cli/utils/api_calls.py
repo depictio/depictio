@@ -6,7 +6,11 @@ import httpx
 import typer
 from pydantic import validate_call
 
-from depictio.cli.cli.utils.common import generate_api_headers, load_depictio_config
+from depictio.cli.cli.utils.common import (
+    generate_api_headers,
+    get_http_client,
+    load_depictio_config,
+)
 from depictio.cli.cli.utils.rich_utils import rich_print_checked_statement
 from depictio.cli.cli_logging import logger
 from depictio.models.models.base import BaseModel, PyObjectId
@@ -42,7 +46,7 @@ def api_login(yaml_config_path: str = "~/.depictio/CLI.yaml") -> dict:
     # cold-path; the call still returns as soon as the server responds.
     # 30 s wasn't enough in CI minikube/compose environments where the
     # first Beanie query pays the full motor + driver init cost.
-    response = httpx.post(
+    response = get_http_client().post(
         f"{depictio_CLI_config['api_base_url']}/depictio/api/v1/cli/validate_cli_config",
         json=depictio_CLI_config,
         # /validate_cli_config now requires a bearer token (was unauthenticated);
@@ -87,7 +91,7 @@ def api_get_project_from_id(project_id: PyObjectId, CLI_config: CLIConfig):
     """
     # First check if the project exists on the server DB for existing IDs and if the same metadata hash is used
     logger.info(f"Getting project with ID: {project_id}")
-    response = httpx.get(
+    response = get_http_client().get(
         f"{CLI_config.api_base_url}/depictio/api/v1/projects/get/from_id",
         params={"project_id": project_id},
         headers=generate_api_headers(CLI_config),
@@ -102,7 +106,7 @@ def api_get_project_from_name(project_name: str, CLI_config: CLIConfig):
     Get a project from the server using the project ID.
     """
     # First check if the project exists on the server DB for existing IDs and if the same metadata hash is used
-    response = httpx.get(
+    response = get_http_client().get(
         f"{CLI_config.api_base_url}/depictio/api/v1/projects/get/from_name/{project_name}",
         # params={"project_name": project_name},
         headers=generate_api_headers(CLI_config),
@@ -116,7 +120,7 @@ def api_update_dc_specific_properties(
     data_collection_id: str, properties: dict, CLI_config: CLIConfig
 ):
     """Update dc_specific_properties for a data collection via the API."""
-    response = httpx.patch(
+    response = get_http_client().patch(
         f"{CLI_config.api_base_url}/depictio/api/v1/datacollections/{data_collection_id}/dc_specific_properties",
         json=properties,
         headers=generate_api_headers(CLI_config),
@@ -132,7 +136,7 @@ def api_create_project(project_config: dict, CLI_config: CLIConfig):
     """
     logger.info("Creating project on server...")
 
-    response = httpx.post(
+    response = get_http_client().post(
         f"{CLI_config.api_base_url}/depictio/api/v1/projects/create",
         json=project_config,
         headers=generate_api_headers(CLI_config),
@@ -150,7 +154,7 @@ def api_update_project(project_config: dict, CLI_config: CLIConfig):
     logger.info("Updating project on server...")
     logger.debug(f"Project configuration: {project_config}")
 
-    response = httpx.put(
+    response = get_http_client().put(
         f"{CLI_config.api_base_url}/depictio/api/v1/projects/update",
         json=project_config,
         headers=generate_api_headers(CLI_config),
@@ -273,7 +277,7 @@ def api_create_files(
 
     logger.debug(f"Payload: {payload}")
 
-    response = httpx.post(
+    response = get_http_client().post(
         url,
         json=payload,
         headers=generate_api_headers(CLI_config),
@@ -298,7 +302,7 @@ def api_get_files_by_dc_id(dc_id: str, CLI_config: CLIConfig) -> httpx.Response:
     logger.debug(f"CLI Config: {CLI_config}")
     logger.info(f"{CLI_config.api_base_url}/depictio/api/v1/files/list/{dc_id}")
     logger.info(generate_api_headers(CLI_config))
-    response = httpx.get(
+    response = get_http_client().get(
         f"{CLI_config.api_base_url}/depictio/api/v1/files/list/{dc_id}",
         headers=generate_api_headers(CLI_config),
         timeout=60.0,  # Increase timeout to 60 seconds
@@ -324,7 +328,7 @@ def api_get_runs_by_wf_id(wf_id: str, CLI_config: CLIConfig) -> httpx.Response:
     logger.info(f"Getting runs for workflow ID: {wf_id}")
 
     url = f"{CLI_config.api_base_url}/depictio/api/v1/runs/list/{wf_id}"
-    response = httpx.get(url, headers=generate_api_headers(CLI_config), timeout=60.0)
+    response = get_http_client().get(url, headers=generate_api_headers(CLI_config), timeout=60.0)
     return response
 
 
@@ -358,7 +362,7 @@ def api_upsert_runs_batch(
     logger.debug(f"Payload runs upsert batch: {payload}")
     url = f"{CLI_config.api_base_url}/depictio/api/v1/runs/upsert_batch"
 
-    response = httpx.post(
+    response = get_http_client().post(
         url,
         json=payload,
         headers=generate_api_headers(CLI_config),
@@ -382,7 +386,7 @@ def api_delete_run(run_id: str, CLI_config: CLIConfig) -> httpx.Response:
     logger.info(f"Deleting run with ID: {run_id}")
 
     url = f"{CLI_config.api_base_url}/depictio/api/v1/runs/delete/{run_id}"
-    response = httpx.delete(url, headers=generate_api_headers(CLI_config), timeout=60.0)
+    response = get_http_client().delete(url, headers=generate_api_headers(CLI_config), timeout=60.0)
     return response
 
 
@@ -401,7 +405,7 @@ def api_get_run(run_id: str, CLI_config: CLIConfig) -> httpx.Response:
     logger.info(f"Getting run with ID: {run_id}")
 
     url = f"{CLI_config.api_base_url}/depictio/api/v1/runs/get/{run_id}"
-    response = httpx.get(url, headers=generate_api_headers(CLI_config), timeout=60.0)
+    response = get_http_client().get(url, headers=generate_api_headers(CLI_config), timeout=60.0)
     return response
 
 
@@ -420,7 +424,7 @@ def api_delete_file(file_id: str, CLI_config: CLIConfig) -> httpx.Response:
     logger.info(f"Deleting file with ID: {file_id}")
 
     url = f"{CLI_config.api_base_url}/depictio/api/v1/files/delete/{file_id}"
-    response = httpx.delete(url, headers=generate_api_headers(CLI_config), timeout=60.0)
+    response = get_http_client().delete(url, headers=generate_api_headers(CLI_config), timeout=60.0)
     return response
 
 
@@ -460,7 +464,7 @@ def api_upsert_deltatable(
     logger.debug(f"Payload: {payload}")
 
     try:
-        response = httpx.post(
+        response = get_http_client().post(
             url,
             json=payload,
             headers=generate_api_headers(CLI_config),
@@ -489,7 +493,7 @@ def api_get_deltatable_by_dc_id(dc_id: str, CLI_config: CLIConfig) -> httpx.Resp
     """
     logger.info(f"Getting Delta Table for data collection ID: {dc_id}")
 
-    response = httpx.get(
+    response = get_http_client().get(
         f"{CLI_config.api_base_url}/depictio/api/v1/deltatables/get/{dc_id}",
         headers=generate_api_headers(CLI_config),
         timeout=60.0,  # cold-start safety net (httpx default of 5 s is too aggressive)
@@ -512,7 +516,7 @@ def api_delete_deltatable(delta_table_id: str, CLI_config: CLIConfig) -> httpx.R
     logger.info(f"Deleting Delta Table with ID: {delta_table_id}")
 
     url = f"{CLI_config.api_base_url}/depictio/api/v1/deltatables/delete/{delta_table_id}"
-    response = httpx.delete(url, headers=generate_api_headers(CLI_config), timeout=60.0)
+    response = get_http_client().delete(url, headers=generate_api_headers(CLI_config), timeout=60.0)
     return response
 
 
@@ -570,7 +574,7 @@ def api_create_backup(
             "dry_run": dry_run,
         }
 
-        response = httpx.post(
+        response = get_http_client().post(
             url,
             headers=generate_api_headers(CLI_config),
             json=payload,
@@ -615,7 +619,7 @@ def api_list_backups(CLI_config: CLIConfig) -> dict:
     url = f"{CLI_config.api_base_url}/depictio/api/v1/backup/list"
 
     try:
-        response = httpx.get(
+        response = get_http_client().get(
             url,
             headers=generate_api_headers(CLI_config),
             timeout=60.0,  # cold-start safety net (httpx default of 5 s is too aggressive)
@@ -651,7 +655,7 @@ def api_validate_backup(CLI_config: CLIConfig, backup_id: str) -> dict:
     payload = {"backup_id": backup_id}
 
     try:
-        response = httpx.post(
+        response = get_http_client().post(
             url,
             json=payload,
             headers=generate_api_headers(CLI_config),
@@ -698,7 +702,7 @@ def api_restore_backup(
         payload["collections"] = collections
 
     try:
-        response = httpx.post(
+        response = get_http_client().post(
             url,
             json=payload,
             headers=generate_api_headers(CLI_config),
@@ -750,7 +754,7 @@ def api_check_duplicate_multiqc_report(
     headers = generate_api_headers(CLI_config)
 
     try:
-        response = httpx.get(
+        response = get_http_client().get(
             url,
             params={
                 "data_collection_id": data_collection_id,
@@ -799,7 +803,7 @@ def api_delete_multiqc_report(
     headers = generate_api_headers(CLI_config)
 
     try:
-        response = httpx.delete(
+        response = get_http_client().delete(
             url,
             params={"delete_s3_file": delete_s3_file},
             headers=headers,
@@ -841,7 +845,7 @@ def api_create_multiqc_report(multiqc_report: dict, CLI_config: "CLIConfig"):
     )
 
     try:
-        response = httpx.post(
+        response = get_http_client().post(
             url,
             json=multiqc_report,
             headers=headers,
@@ -884,7 +888,7 @@ def api_update_multiqc_report(report_id: str, multiqc_report: dict, CLI_config: 
     )
 
     try:
-        response = httpx.put(
+        response = get_http_client().put(
             url,
             json=multiqc_report,
             headers=headers,
@@ -908,7 +912,7 @@ def _post_migrate_endpoint(
 ) -> dict:
     """Shared helper for migrate POST endpoints with consistent error handling."""
     try:
-        response = httpx.post(
+        response = get_http_client().post(
             url,
             json=payload,
             headers=generate_api_headers(CLI_config),
@@ -947,7 +951,7 @@ def api_export_project(
         payload["target_s3_config"] = target_s3_config
 
     try:
-        response = httpx.post(
+        response = get_http_client().post(
             url,
             json=payload,
             headers=generate_api_headers(CLI_config),

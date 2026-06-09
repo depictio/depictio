@@ -6,20 +6,24 @@ from typing import Optional
 
 import polars as pl
 from pydantic import validate_call
-from rich import box, print, print_json
+from rich import box
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
 from depictio.models.models.workflows import Workflow, WorkflowRun
 
+# Single shared console for the whole CLI. Everything routes through this so
+# styling/width stays consistent and we never shadow the builtin ``print``.
 console = Console(force_terminal=True)
+# Stable reference for helpers whose ``console`` parameter shadows the global.
+_DEFAULT_CONSOLE = console
 
 
 @validate_call
 def handle_error(message: str, exit: bool = False):
     """Print an error message and raise a ValueError."""
-    print(f"• [bold red]:x: {message}[/bold red]")
+    console.print(f"• [bold red]:x: {message}[/bold red]")
     if exit:
         sys.exit()
 
@@ -61,8 +65,8 @@ def rich_print_json(statement: str, json_obj: dict | list[dict]):
     """
     Pretty print JSON object.
     """
-    print(f"• [bold magenta]{statement}[/]")
-    print_json(json.dumps(json_obj, indent=4))
+    console.print(f"• [bold magenta]{statement}[/]")
+    console.print_json(json.dumps(json_obj, indent=4))
 
 
 @validate_call
@@ -73,15 +77,40 @@ def rich_print_checked_statement(statement: str, mode: str, exit: bool = False):
     if mode not in ["loading", "success", "error", "info", "warning"]:
         handle_error(f"Invalid mode: {mode}", exit=exit)
     if mode == "loading":
-        print(f"• [bold yellow]:hourglass: {statement}[/bold yellow]")
+        console.print(f"• [bold yellow]:hourglass: {statement}[/bold yellow]")
     elif mode == "success":
-        print(f"• [bold green]:white_check_mark: {statement}[/bold green]")
+        console.print(f"• [bold green]:white_check_mark: {statement}[/bold green]")
     elif mode == "error":
-        print(f"• [bold red]:x: {statement}[/bold red]")
+        console.print(f"• [bold red]:x: {statement}[/bold red]")
     elif mode == "info":
-        print(f"• [bold blue]:blue_book: {statement}[/bold blue]")
+        console.print(f"• [bold blue]:blue_book: {statement}[/bold blue]")
     elif mode == "warning":
-        print(f"• [bold orange1]:warning: {statement}[/bold orange1]")
+        console.print(f"• [bold orange1]:warning: {statement}[/bold orange1]")
+
+
+def render_records_table(
+    records: list[dict],
+    columns: Optional[list[str]] = None,
+    title: Optional[str] = None,
+    column_styles: Optional[dict[str, str]] = None,
+) -> None:
+    """Render a list of uniform dict records as a styled Rich table.
+
+    A single reusable replacement for the hand-rolled ``Table`` construction
+    duplicated across commands. ``columns`` selects/orders the fields to show
+    (defaults to the keys of the first record); missing keys render empty.
+    """
+    if not records:
+        console.print("[dim]No records to display.[/dim]")
+        return
+    cols = columns or list(records[0].keys())
+    styles = column_styles or {}
+    table = Table(title=title, box=box.ROUNDED, show_header=True, header_style="bold magenta")
+    for col in cols:
+        table.add_column(col, style=styles.get(col, "cyan"))
+    for record in records:
+        table.add_row(*[str(record.get(col, "")) for col in cols])
+    console.print(table)
 
 
 def print_polars_with_rich(
@@ -104,9 +133,9 @@ def print_polars_with_rich(
         console: Rich Console instance (creates new one if None)
     """
     if console is None:
-        console = Console()
+        console = _DEFAULT_CONSOLE
 
-    print("\n")
+    console.print("\n")
 
     # Limit rows and columns for display
     display_df = df.head(max_rows)
@@ -179,7 +208,7 @@ def print_polars_info_with_rich(
     Print DataFrame info (like df.describe()) using Rich.
     """
     if console is None:
-        console = Console()
+        console = _DEFAULT_CONSOLE
 
     # Create info table
     info_table = Table(box=box.SIMPLE, show_header=True, header_style="bold blue")
@@ -223,10 +252,10 @@ def print_polars_describe_with_rich(df: pl.DataFrame, console: Optional[Console]
     Print DataFrame description statistics using Rich.
     """
     if console is None:
-        console = Console()
+        console = _DEFAULT_CONSOLE
 
     try:
-        print("\n")
+        console.print("\n")
         desc_df = df.describe()
         print_polars_with_rich(
             desc_df, title="Descriptive Statistics", max_rows=50, show_dtypes=False, console=console
@@ -242,7 +271,7 @@ def print_polars_head_tail_with_rich(
     Print head and tail of DataFrame side by side using Rich.
     """
     if console is None:
-        console = Console()
+        console = _DEFAULT_CONSOLE
 
     # Create layout with panels
     head_df = df.head(n)
@@ -345,12 +374,7 @@ def add_rich_display_to_polars():
 def rich_print_summary_scan_table_enhanced(
     runs: list[WorkflowRun], workflow: Workflow, show_totals: bool = True
 ) -> None:
-    from rich import box
-    from rich.console import Console
-    from rich.table import Table
-
-    print("\n")
-    console = Console()
+    console.print("\n")
 
     # Debug: Check what we received
     # console.print(f"[dim]Debug: Processing {len(runs)} runs[/dim]")
@@ -528,11 +552,7 @@ def rich_print_summary_scan_table_enhanced(
 
 
 def rich_print_summary_scan_table_by_dc(runs: list[WorkflowRun]) -> None:
-    from rich import box
-    from rich.console import Console
-    from rich.table import Table
-
-    print("\n")
+    console.print("\n")
 
     # Collect all data collections and their stats across runs
     dc_data: dict[str, list[tuple[str, dict]]] = defaultdict(list)
@@ -621,7 +641,6 @@ def rich_print_summary_scan_table_by_dc(runs: list[WorkflowRun]) -> None:
         if dc_idx < len(dc_data) - 1:
             table.add_section()
 
-    console = Console()
     console.print(table)
 
 
@@ -632,8 +651,6 @@ def rich_print_data_collection_light(runs: list[WorkflowRun], workflow: Workflow
     Args:
         runs: List of WorkflowRun objects with dc_stats
     """
-
-    console = Console()
 
     # Aggregate all stats by data collection
     dc_detailed: dict[str, dict[str, int]] = defaultdict(
@@ -667,7 +684,7 @@ def rich_print_data_collection_light(runs: list[WorkflowRun], workflow: Workflow
             for dc in workflow.data_collections
         }
 
-    print("\n")
+    console.print("\n")
 
     # ============= SIMPLE SUMMARY TABLE =============
     simple_table = Table(
@@ -697,7 +714,7 @@ def rich_print_data_collection_light(runs: list[WorkflowRun], workflow: Workflow
         f"[dim]Summary: {len(dc_detailed)} data collections, {total_files} total files processed[/dim]"
     )
 
-    print("\n")
+    console.print("\n")
 
 
 def rich_print_multiqc_processing_summary(
@@ -719,12 +736,6 @@ def rich_print_multiqc_processing_summary(
         file_paths: List of processed file paths
         data_collection_tag: Name of the data collection
     """
-    from rich import box
-    from rich.console import Console
-    from rich.table import Table
-
-    console = Console()
-
     # Create summary table
     summary_table = Table(
         title=f"MultiQC Processing Summary - {data_collection_tag}",
@@ -775,7 +786,7 @@ def rich_print_multiqc_processing_summary(
 
     # Create files table if there are multiple files
     if processed_files > 1:
-        print("\n")
+        console.print("\n")
         files_table = Table(
             title="Processed Files Details",
             show_header=True,
@@ -810,4 +821,4 @@ def rich_print_multiqc_processing_summary(
 
         console.print(files_table)
 
-    print("\n")
+    console.print("\n")

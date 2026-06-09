@@ -18,20 +18,24 @@ app = typer.Typer()
 @app.command("list")
 def catalog_list() -> None:
     """List every tool + output with its recipe and render targets."""
+    from depictio.cli.cli.utils.rich_utils import console, render_records_table
     from depictio.models.components.advanced_viz.catalog import load_catalog_entries
 
     entries = load_catalog_entries()
     if not entries:
-        typer.echo("No catalog entries found.")
+        console.print("[yellow]No catalog entries found.[/yellow]")
         return
-    typer.echo(f"Catalog tools ({len(entries)}):")
-    for entry in entries:
-        typer.echo(f"\n  {entry.id}  ({entry.name})  [{len(entry.outputs)} output(s)]")
-        for out in entry.outputs:
-            mode = f"/{out.mode}" if out.mode else ""
-            renders = ", ".join(r.kind or r.component for r in out.renders_as) or "—"
-            src = out.recipe or ("columns" if out.columns else "—")
-            typer.echo(f"      - {out.id}{mode}  [{src}]  → {renders}")
+    records = [
+        {
+            "Tool": f"{entry.id} ({entry.name})",
+            "Output": f"{out.id}{f'/{out.mode}' if out.mode else ''}",
+            "Source": out.recipe or ("columns" if out.columns else "—"),
+            "Renders as": ", ".join(r.kind or r.component for r in out.renders_as) or "—",
+        }
+        for entry in entries
+        for out in entry.outputs
+    ]
+    render_records_table(records, title=f"Catalog tools ({len(entries)})")
 
 
 @app.command("info")
