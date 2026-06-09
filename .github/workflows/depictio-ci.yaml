@@ -675,8 +675,15 @@ jobs:
             fi
             sleep 2
           done
-
-      - name: Verify users and initial data
+          # If nothing landed, the background ingestion task failed silently —
+          # surface the full backend (and worker) logs so the traceback is
+          # visible directly in the job output instead of only in artifacts.
+          if [ "${COUNT:-0}" -eq 0 ]; then
+            echo "❌ No deltatables after ingestion — dumping full backend logs:"
+            docker compose logs depictio-backend
+            echo "----- celery worker logs -----"
+            docker compose logs depictio-celery-worker || true
+          fi
         run: |
           # Verify admin user
           ADMIN_USER=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.users.find().toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[] | select(.email == "admin@example.com" and .is_admin == true) | .email')
