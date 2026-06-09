@@ -15,7 +15,10 @@ from depictio.models.models.workflows import Workflow, WorkflowRun
 
 # Single shared console for the whole CLI. Everything routes through this so
 # styling/width stays consistent and we never shadow the builtin ``print``.
-console = Console(force_terminal=True)
+# No ``force_terminal``: the console auto-detects a TTY, so interactive runs are
+# coloured while piped/redirected output (CI greps, ``| jq``, scripts) stays
+# plain — forcing ANSI here would inject escape codes into machine-parsed JSON.
+console = Console()
 # Stable reference for helpers whose ``console`` parameter shadows the global.
 _DEFAULT_CONSOLE = console
 

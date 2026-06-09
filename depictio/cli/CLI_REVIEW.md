@@ -135,7 +135,7 @@ Ordered by value/effort. Several were explicitly scoped out of this pass.
   it is a deep change touching every `api_*` function and Typer command. Only
   worth it if profiling shows network round-trips dominate runtime; the shared
   client (C3) captures most of the easy win first.
-- **`force_terminal=True` reconsideration** — the shared console forces ANSI
-  even when output is piped/redirected. Consider gating on `sys.stdout.isatty()`
-  (or a `--color/--no-color` flag) so logs/redirects stay clean. Left as-is here
-  because changing it is a user-visible behaviour change.
+- **`force_terminal=True` removed** — the shared console previously forced ANSI
+  even when output was piped/redirected, which injected escape codes into the
+  JSON that CI/scripts parse (it broke `depictio backup list | grep backup_id`).
+  The console now auto-detects the TTY: coloured interactively, plain when piped.
