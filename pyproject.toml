@@ -7,61 +7,72 @@ requires-python = ">=3.11"
 license = { text = "MIT" }
 dependencies = [
   # Core dependencies
-  "bcrypt==4.2.1",
-  "bleach==6.2.0",
+  "bcrypt==5.0.0",
+  "bleach==6.4.0",
+  # Held at 2.0.0: beanie 2.1.0 calls list_collection_names(authorizedCollections=
+  # True) during init, which the latest mongomock (4.3.0) test double doesn't
+  # accept, breaking the unit suite. Bump once mongomock supports the kwarg.
   "beanie==2.0.0",
-  "boto3==1.36.21",
-  "celery==5.5.3",
-  "cloudpickle==3.1.1",
-  "cryptography==45.0.2",
-  "colorlog==6.9.0",
+  # Capped at 1.43.0: s3fs 2026.4.0 -> aiobotocore caps botocore<1.43.1, so this
+  # is the highest boto3 compatible with the pinned s3fs/aiobotocore chain.
+  "boto3==1.43.0",
+  "celery==5.6.3",
+  "cloudpickle==3.1.2",
+  "cryptography==48.0.0",
+  "colorlog==6.10.1",
   # Visualization
   "plotly-express==0.4.1",
   "plotly-complexheatmap",
   "plotly-upset",
   # Data processing
-  "deltalake==0.24.0",
-  "fastparquet==2024.11.0",
-  "numpy==2.2.3",
-  "orjson==3.11.5",
-  "pandas==2.2.3",
-  "polars-lts-cpu[numpy,pandas,pyarrow,excel,deltalake]==1.19.0",
+  "deltalake==1.6.0",
+  "fastparquet==2026.5.0",
+  "numpy==2.4.6",
+  "orjson==3.11.9",
+  "pandas==3.0.3",
+  # polars-lts-cpu is legacy; the modern LTS/older-CPU build is polars[rtcompat]
+  # (-> polars-runtime-compat). rtcompat also matches multiqc 1.35's requirement.
+  "polars[rtcompat,numpy,pandas,pyarrow,excel,deltalake]==1.41.2",
   # API and web
   "devtools==0.12.2",
   "diskcache==5.6.3",
-  "fastapi==0.115.8",
-  "gunicorn==23.0.0",
+  "fastapi==0.136.3",
+  "gunicorn==26.0.0",
   "httpx==0.28.1",
-  "uvicorn==0.34.0",
-  "websockets==14.2",
+  "uvicorn==0.49.0",
+  "websockets==16.0",
   # Database
   "motor==3.7.1",
-  "pymongo==4.13.0",
+  "pymongo==4.17.0",
   # Authentication and security
-  "pydantic[email]==2.10.6",
-  "pydantic-settings==2.7.1",
-  "pyjwt==2.10.1",
-  "python-jose==3.3.0",
-  "python-multipart==0.0.20",
-  "restrictedpython==8.0",
+  "pydantic[email]==2.13.4",
+  "pydantic-settings==2.14.1",
+  "pyjwt==2.13.0",
+  "python-jose==3.5.0",
+  "python-multipart==0.0.32",
+  "restrictedpython==8.2",
   # Playwright for screenshots (pure Python - installs its own browsers)
-  "playwright==1.52.0",
+  "playwright==1.60.0",
   # Utilities
-  "multiqc==1.31.0",
-  "mypy-boto3-s3==1.38.0",
-  "psutil==7.0.0",
-  "python-dotenv==1.1.0",
+  "multiqc==1.35",
+  "mypy-boto3-s3==1.43.14",
+  "psutil==7.2.2",
+  "python-dotenv==1.2.2",
   "pyyaml>=6.0.2",
+  # Held at 5.2.1 (main's pin): redis-py 8.0 regressed the real-time pub/sub
+  # event listener (connection_manager) — it starves the API event loop, so
+  # internal HTTP self-calls time out and reference-dataset ingestion never
+  # writes deltatables. Bisecting via CI; bump again once that's resolved.
   "redis==5.2.1",
   "tomli==2.2.1",
   "types-requests==2.33.0.20260518",
-  "umap-learn==0.5.9.post2",
+  "umap-learn==0.5.12",
   # Storage
-  "s3fs==2025.12.0",
-  "fsspec==2025.12.0",
+  "s3fs==2026.4.0",
+  "fsspec==2026.4.0",
   # CLI utilities (required by API code that imports CLI helpers)
-  "typer==0.16.0",
-  "rich==14.2.0",
+  "typer==0.26.7",
+  "rich==15.0.0",
   # Dev-only file watcher for live-reloading the Celery worker. run_celery_worker.sh
   # wraps celery in `watchmedo auto-restart` when DEPICTIO_DEV_MODE=true; in prod
   # it's installed (~1 MB) but never invoked. Celery has no built-in reloader.
@@ -88,8 +99,8 @@ dev = [
   "mongomock-motor==0.0.36",
   "bump2version==1.0.1",
   "testcontainers[minio]==4.14.2",
-  "types-bleach==6.3.0.20260508",
-  "types-boto3==1.38.46",
+  "types-bleach==6.4.0.20260607",
+  "types-boto3==1.43.24",
 ]
 
 

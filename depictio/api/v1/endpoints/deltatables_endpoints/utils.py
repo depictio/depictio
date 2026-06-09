@@ -148,6 +148,12 @@ def precompute_columns_specs(aggregated_df: pl.DataFrame, agg_functions: dict, d
             normalized_type = "float64"
         elif col_type in ["bool", "boolean"]:
             normalized_type = "bool"
+        elif col_type == "str" or col_type.startswith("string") or col_type == "large_string":
+            # pandas 3.0 infers a dedicated string dtype (str(dtype) == "str");
+            # pandas <3 represented strings as object. Normalize to "object" so
+            # the validator, agg_functions lookup and downstream type maps behave
+            # exactly as they did on pandas 2.x.
+            normalized_type = "object"
         else:
             normalized_type = col_type.lower()
 

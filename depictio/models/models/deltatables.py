@@ -29,7 +29,13 @@ class DeltaTableColumn(BaseModel):
             "time",
             "category",
         ]
-        if v.lower() not in allowed_values:
+        normalized = v.lower()
+        # pandas 3.0 reports string columns with a dedicated dtype whose
+        # str(dtype) == "str" (pandas <3 used "object"). Treat any string-like
+        # dtype as "object" so type metadata stays consistent across the bump.
+        if normalized == "str" or normalized.startswith("string") or normalized == "large_string":
+            return "object"
+        if normalized not in allowed_values:
             raise ValueError(f"column_type must be one of {allowed_values}")
         return v
 
