@@ -12,7 +12,7 @@ dependencies = [
   # Held at 2.0.0: beanie 2.1.0 calls list_collection_names(authorizedCollections=
   # True) during init, which the latest mongomock (4.3.0) test double doesn't
   # accept, breaking the unit suite. Bump once mongomock supports the kwarg.
-  "beanie==2.0.0",
+  "beanie==2.1.0",
   # Capped at 1.43.0: s3fs 2026.4.0 -> aiobotocore caps botocore<1.43.1, so this
   # is the highest boto3 compatible with the pinned s3fs/aiobotocore chain.
   "boto3==1.43.0",
@@ -58,13 +58,13 @@ dependencies = [
   "mypy-boto3-s3==1.43.14",
   "psutil==7.2.2",
   "python-dotenv==1.2.2",
-  "pyyaml>=6.0.2",
+  "pyyaml>=6.0.3",
   # Held at 5.2.1 (main's pin): redis-py 8.0 regressed the real-time pub/sub
   # event listener (connection_manager) — it starves the API event loop, so
   # internal HTTP self-calls time out and reference-dataset ingestion never
   # writes deltatables. Bisecting via CI; bump again once that's resolved.
-  "redis==5.2.1",
-  "tomli==2.2.1",
+  "redis==8.0.0",
+  "tomli==2.4.1",
   "types-requests==2.33.0.20260518",
   "umap-learn==0.5.12",
   # Storage
@@ -114,7 +114,7 @@ plotly-complexheatmap = { path = "packages/plotly-complexheatmap", editable = tr
 plotly-upset = { path = "packages/plotly-upset", editable = true }
 
 [build-system]
-requires = ["setuptools>=61", "wheel"]
+requires = ["setuptools>=82.0.1", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
