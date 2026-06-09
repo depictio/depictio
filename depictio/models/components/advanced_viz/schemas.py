@@ -12,7 +12,10 @@ column names + dtypes (see depictio/recipes/__init__.py:validate_schema).
 
 from __future__ import annotations
 
+import difflib
+import re
 from dataclasses import dataclass
+from typing import Literal
 
 from depictio.models.components.advanced_viz.configs import (
     EmbeddingConfig,
@@ -430,16 +433,136 @@ _OPTIONAL_ROLES: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
 }
 
 
+# ---------------------------------------------------------------------------
+# Graded dtype / name compatibility scoring.
+#
+# These pure helpers turn the old binary "does column X satisfy role Y?" check
+# into a graded score in [0, 1], so the suggester can RANK every viz kind
+# instead of filtering down to perfect matches. Both `validate_binding` and
+# `suggest_viz_kinds` share them, keeping the backend the single source of
+# truth for compatibility (the React builder consumes the scores instead of
+# re-deriving them).
+# ---------------------------------------------------------------------------
+
+_NON_ALNUM_RE = re.compile(r"[^a-z0-9]+")
+
+# A column whose dtype isn't an exact member of a role's accepted set may still
+# be *castable* into it. Castable matches score below exact ones so the
+# suggester prefers exact dtypes but tolerates close shapes.
+_CASTABLE_INT_TO_FLOAT = 0.6
+_CASTABLE_CATEGORICAL = 0.8
+
+
+def _normalize_name(name: str) -> str:
+    """Lowercase a column name and collapse separators to ``_`` (snake_case).
+
+    Mirrors the builder's normalisation so ``sample-id`` / ``Sample ID`` /
+    ``sample.id`` all align with the snake_case alias sets.
+    """
+    return _NON_ALNUM_RE.sub("_", name.lower()).strip("_")
+
+
+def _dtype_score(actual: str, accepted: frozenset[str]) -> float:
+    """Graded dtype compatibility: 1.0 exact, castable < 1.0, 0.0 incompatible."""
+    if actual in accepted:
+        return 1.0
+    # Int widens losslessly into a Float role (Int64 → Float64).
+    if actual in _INT and accepted <= _FLOAT:
+        return _CASTABLE_INT_TO_FLOAT
+    # Categorical is interchangeable with String for label/id roles.
+    if actual == "Categorical" and accepted & _STRING:
+        return _CASTABLE_CATEGORICAL
+    return 0.0
+
+
+def _name_score(col: str, aliases: frozenset[str]) -> float:
+    """Fuzzy column-name match against a role's aliases, in [0, 1].
+
+    1.0 = exact alias hit. Otherwise a graded fuzzy score (substring
+    containment, shared snake_case tokens, or `difflib` ratio), capped below
+    1.0 so a fuzzy hit never outranks an exact one. 0.0 = no name signal.
+    """
+    norm_aliases = {_normalize_name(a) for a in aliases if a}
+    if not norm_aliases:
+        return 0.0
+    n = _normalize_name(col)
+    if n in norm_aliases:
+        return 1.0
+    n_tokens = {t for t in n.split("_") if t}
+    best = 0.0
+    for alias in norm_aliases:
+        a_tokens = {t for t in alias.split("_") if t}
+        shared = n_tokens & a_tokens
+        if shared:
+            overlap = len(shared) / max(len(n_tokens), len(a_tokens))
+            best = max(best, 0.5 + 0.35 * overlap)
+        # Substring / fuzzy matching only for aliases long enough to be
+        # meaningful. A 1-2 char alias ("p", "x", "fc", "bp", "es") otherwise
+        # matches any column that merely *contains* that letter, flooding the
+        # picker with false positives (e.g. qq scored ~1.0 on a penguin
+        # morphometrics table because "bill_depth_mm" contains "p"). Such short
+        # aliases still match a column named exactly that, via the exact-hit and
+        # shared-token branches above.
+        if len(alias) >= 3:
+            if alias in n or n in alias:
+                best = max(best, 0.85)
+            ratio = difflib.SequenceMatcher(None, n, alias).ratio()
+            if ratio > 0.8:
+                best = max(best, 0.6 + (ratio - 0.8))
+    return min(best, 0.9)
+
+
+def _score_role(
+    dc_schema: dict[str, str],
+    aliases: frozenset[str],
+    accepted: frozenset[str],
+) -> tuple[float, list[str]]:
+    """Score a single role against the DC schema.
+
+    Returns ``(role_score, candidates)`` where role_score is the best
+    column's combined score ``dtype × (0.5 + 0.5 × name)`` and candidates is
+    the list of dtype-compatible columns ranked best-first (used by the UI to
+    pre-fill the binding dropdown).
+    """
+    scored: list[tuple[float, str]] = []
+    for col, dtype in dc_schema.items():
+        d = _dtype_score(dtype, accepted)
+        if d == 0.0:
+            continue
+        scored.append((d * (0.5 + 0.5 * _name_score(col, aliases)), col))
+    scored.sort(key=lambda sc: (-sc[0], sc[1]))
+    role_score = scored[0][0] if scored else 0.0
+    return role_score, [col for _, col in scored]
+
+
 @dataclass(frozen=True)
 class BindingError:
     role: str
     column: str | None
     reason: str  # e.g. "column not in DC", "wrong dtype: got Int64 expected Float64"
+    # "error" blocks the render; "warning" is a tolerant heads-up (e.g. a
+    # castable dtype mismatch the renderer can coerce) that the editor surfaces
+    # without disabling save.
+    severity: Literal["error", "warning"] = "error"
 
 
 def _role_to_config_field(role: str) -> str:
     """Roles map to ``<role>_col`` fields on each VizConfig submodel."""
     return f"{role}_col"
+
+
+def _dtype_binding_error(
+    role: str, col: str, actual: str, accepted: frozenset[str], *, optional: bool
+) -> BindingError:
+    """Build a dtype-mismatch BindingError, downgrading castable cases to a warning."""
+    castable = _dtype_score(actual, accepted) > 0.0
+    prefix = "optional column" if optional else "column"
+    return BindingError(
+        role=role,
+        column=col,
+        reason=(f"{prefix} '{col}' has dtype {actual!r}, expected one of {sorted(accepted)}"),
+        severity="warning" if castable else "error",
+    )
 
 
 def validate_binding(config: VizConfig, dc_schema: dict[str, str]) -> list[BindingError]:
@@ -451,7 +574,9 @@ def validate_binding(config: VizConfig, dc_schema: dict[str, str]) -> list[Bindi
                    Dtype names are the strings polars produces via ``str(dtype)``.
 
     Returns:
-        List of BindingError. Empty list = valid.
+        List of BindingError (each tagged with ``severity``). A castable dtype
+        mismatch (e.g. an Int column for a Float role) is reported as a
+        ``warning`` rather than a blocking ``error``. Empty list = valid.
     """
     kind: AdvancedVizKind = config.viz_kind
     errors: list[BindingError] = []
@@ -469,16 +594,7 @@ def validate_binding(config: VizConfig, dc_schema: dict[str, str]) -> list[Bindi
             continue
         actual = dc_schema[col]
         if actual not in accepted_dtypes:
-            errors.append(
-                BindingError(
-                    role=role,
-                    column=col,
-                    reason=(
-                        f"column '{col}' has dtype {actual!r}, "
-                        f"expected one of {sorted(accepted_dtypes)}"
-                    ),
-                )
-            )
+            errors.append(_dtype_binding_error(role, col, actual, accepted_dtypes, optional=False))
 
     for role, accepted_dtypes in optional.items():
         col = getattr(config, _role_to_config_field(role), None)
@@ -489,94 +605,210 @@ def validate_binding(config: VizConfig, dc_schema: dict[str, str]) -> list[Bindi
             continue
         actual = dc_schema[col]
         if actual not in accepted_dtypes:
-            errors.append(
-                BindingError(
-                    role=role,
-                    column=col,
-                    reason=(
-                        f"optional column '{col}' has dtype {actual!r}, "
-                        f"expected one of {sorted(accepted_dtypes)}"
-                    ),
-                )
-            )
+            errors.append(_dtype_binding_error(role, col, actual, accepted_dtypes, optional=True))
 
     return errors
 
 
 # ---------------------------------------------------------------------------
-# Reverse-lookup: "given a DC schema, which viz kinds / producers fit?"
+# Reverse-lookup: "given a DC schema, how well does each viz kind fit?"
 #
-# Drives the React DC card "Suggested visualisations" chips and the
-# component-creation flow's DC pre-filter. Pure functions — no DB, no IO,
-# no DC mutation. Testable against any (col → dtype) dict.
+# Drives the React builder's ranked viz-kind picker (Recommended vs. the rest)
+# and the DC card's suggestion chips. Pure functions — no DB, no IO, no DC
+# mutation. Testable against any (col → dtype) dict.
+#
+# Every kind is scored and returned (ranked); nothing is filtered out by
+# default, so the builder can present a "suggest but tolerate" picker where the
+# user may still pick a low-scoring kind and bind columns manually.
 # ---------------------------------------------------------------------------
+
+# Structural gates ported from the builder so the backend stays the single
+# source of truth. Kinds whose Pydantic config has a permissive role schema but
+# whose renderer needs a wide matrix / many set columns get a structural floor;
+# falling short multiplies the score down rather than hiding the kind.
+_MIN_FLOAT_COLS: dict[AdvancedVizKind, int] = {"complex_heatmap": 8}
+_MIN_INT_COLS: dict[AdvancedVizKind, int] = {"upset_plot": 3}
+_MIN_STRING_COLS: dict[AdvancedVizKind, int] = {"sankey": 2}
+_KIND_REQUIRES_DC_TYPE: dict[AdvancedVizKind, str] = {"phylogenetic": "phylogeny"}
+_EMBEDDING_LIVE_MIN_NUMERIC = 10
+
+# Float columns whose name is purely a statistic (DESeq2-style results) — used
+# to reject complex_heatmap / sankey, which want a sample matrix / categorical
+# flow, not a stats table.
+_STAT_LIKE_FLOAT_RE = re.compile(
+    r"^(basemean|log2foldchange|lfcse|stat|pvalue|padj|qvalue|p_?val|fdr|"
+    r"log2fc|effect_size|significance|nes|es|score)$"
+)
+
+# Multiplier applied when a structural gate isn't met: the kind stays in the
+# ranked list but drops well below the "recommended" threshold.
+_GATE_PENALTY = 0.25
+
+# A required role scoring at/above this counts as a strong (name-aware) match;
+# below it the role is "weak" (satisfied by dtype/cast only).
+_STRONG_ROLE_SCORE = 0.75
+
+# Score at/above which the builder surfaces a kind under "Recommended".
+RECOMMENDED_SCORE = 0.8
 
 
 @dataclass(frozen=True)
 class VizSuggestion:
-    """A viz kind that a DC could feasibly satisfy plus the matching detail.
+    """How well a viz kind fits a DC schema, plus the matching detail.
 
-    confidence is 0.0 - 1.0 = fraction of required roles satisfied.
-    A confidence of 1.0 means every required role has at least one
-    candidate column with a compatible dtype.
+    score is 0.0 - 1.0 (graded): a weighted blend of per-role dtype
+    compatibility and column-name similarity across the kind's required roles,
+    nudged by optional-role matches and structural gates. ~1.0 means every
+    required role has a strongly-named, dtype-exact column.
 
-    role_candidates maps each required role → list of column names whose
-    dtype is in the role's accepted set. The UI uses this to pre-fill
-    the binding dropdowns at component-creation time.
+    role_candidates maps each required role → dtype-compatible column names,
+    ranked best-first. The UI uses this to pre-fill the binding dropdowns.
+
+    unmet_roles are required roles with no compatible column at all; weak_roles
+    are satisfied only by dtype/cast (no strong name match). Both drive the
+    builder's inline guidance.
     """
 
     viz_kind: AdvancedVizKind
-    confidence: float
+    score: float
     role_candidates: dict[str, list[str]]
+    unmet_roles: list[str]
+    weak_roles: list[str]
+
+
+def _count_dtypes(dc_schema: dict[str, str], dtypes: frozenset[str]) -> int:
+    return sum(1 for d in dc_schema.values() if d in dtypes)
+
+
+def _apply_structural_gates(
+    kind: AdvancedVizKind, dc_schema: dict[str, str], score: float, dc_type: str | None
+) -> float:
+    """Adjust a kind's base score for renderer-level structural requirements."""
+    min_float = _MIN_FLOAT_COLS.get(kind)
+    if min_float is not None:
+        float_cols = [c for c, d in dc_schema.items() if d in _FLOAT]
+        if len(float_cols) < min_float:
+            score *= _GATE_PENALTY
+        elif float_cols and all(_STAT_LIKE_FLOAT_RE.match(_normalize_name(c)) for c in float_cols):
+            # Structurally a wide matrix but semantically a stats table.
+            score *= _GATE_PENALTY
+
+    min_int = _MIN_INT_COLS.get(kind)
+    if min_int is not None:
+        # upset_plot has no required roles — derive its score from the count of
+        # binary (Int) set-membership columns.
+        ints = _count_dtypes(dc_schema, _INT)
+        score = 0.8 if ints >= min_int else _GATE_PENALTY * min(ints / min_int, 1.0)
+
+    min_string = _MIN_STRING_COLS.get(kind)
+    if min_string is not None:
+        # sankey has no required roles — needs ≥N categorical columns and no
+        # statistic-looking floats (those are results tables, not flows).
+        strings = _count_dtypes(dc_schema, _STRING)
+        stat_floats = any(
+            _STAT_LIKE_FLOAT_RE.match(_normalize_name(c))
+            for c, d in dc_schema.items()
+            if d in _FLOAT
+        )
+        score = 0.8 if (strings >= min_string and not stat_floats) else _GATE_PENALTY
+
+    required_dc_type = _KIND_REQUIRES_DC_TYPE.get(kind)
+    if required_dc_type is not None and dc_type is not None and dc_type != required_dc_type:
+        score *= _GATE_PENALTY
+
+    return min(score, 1.0)
+
+
+def _score_kind(
+    kind: AdvancedVizKind, dc_schema: dict[str, str], dc_type: str | None
+) -> VizSuggestion:
+    """Score one viz kind against the DC schema."""
+    required = CANONICAL_SCHEMAS[kind]
+    role_aliases = ROLE_NAMES.get(kind, {})
+    role_scores: dict[str, float] = {}
+    role_candidates: dict[str, list[str]] = {}
+    for role, accepted in required.items():
+        aliases = role_aliases.get(role, frozenset({role}))
+        role_scores[role], role_candidates[role] = _score_role(dc_schema, aliases, accepted)
+
+    base = sum(role_scores.values()) / len(required) if required else 0.0
+
+    # Optional-role matches nudge an already-matching kind upward (capped).
+    optional = _OPTIONAL_ROLES.get(kind, {})
+    if base > 0 and optional:
+        opt = sum(
+            _score_role(dc_schema, frozenset({role}), accepted)[0]
+            for role, accepted in optional.items()
+        )
+        base = base + 0.1 * (opt / len(optional))
+
+    # Live-compute embedding: a wide numeric matrix with a sample_id column is a
+    # valid embedding even without precomputed dim_1/dim_2.
+    if kind == "embedding":
+        sample_score, _ = _score_role(
+            dc_schema, role_aliases.get("sample_id", frozenset({"sample_id"})), _STRING
+        )
+        if sample_score > 0 and _count_dtypes(dc_schema, _NUMERIC) >= _EMBEDDING_LIVE_MIN_NUMERIC:
+            base = max(base, 0.5 + 0.35 * sample_score)
+
+    score = _apply_structural_gates(kind, dc_schema, base, dc_type)
+
+    unmet = [r for r, s in role_scores.items() if s == 0.0]
+    weak = [r for r, s in role_scores.items() if 0.0 < s < _STRONG_ROLE_SCORE]
+    return VizSuggestion(
+        viz_kind=kind,
+        score=round(score, 4),
+        role_candidates=role_candidates,
+        unmet_roles=unmet,
+        weak_roles=weak,
+    )
 
 
 def suggest_viz_kinds(
     dc_schema: dict[str, str],
-    min_confidence: float = 1.0,
+    min_confidence: float = 0.0,
+    dc_type: str | None = None,
 ) -> list[VizSuggestion]:
-    """Return viz kinds whose required roles can be satisfied by `dc_schema`.
+    """Rank every viz kind by how well `dc_schema` fits it.
 
-    A role is "satisfied" when the DC has a column whose NAME is in the
-    role's `ROLE_NAMES` alias set AND whose dtype is in the role's accepted
-    dtype set. Dtype-only matches still appear in `role_candidates` so the
-    binding UI can offer them as fallback choices, but they don't count
-    toward confidence — otherwise every Numeric+String DC matches every viz.
+    Each kind gets a graded `score` in [0, 1] blending per-role dtype
+    compatibility (exact > castable) and column-name similarity (exact alias >
+    fuzzy), plus optional-role nudges and structural gates (e.g. heatmap needs
+    a wide float matrix, phylogenetic needs a phylogeny-type DC). Unlike the
+    old binary matcher, NO kind is dropped by default — the builder presents a
+    ranked "suggest but tolerate" picker.
 
     Args:
-        dc_schema: Map of column name → polars dtype name (the strings
-            polars emits via `str(dtype)`).
-        min_confidence: Minimum fraction of required roles that must have
-            a name+dtype match. Default 1.0 = only return viz kinds where
-            every required role has a named candidate. Drop to ~0.7 to
-            surface "almost a match" viz kinds in an exploratory UI.
+        dc_schema: Map of column name → polars dtype name (the strings polars
+            emits via `str(dtype)`).
+        min_confidence: Optional score floor. Default 0.0 returns every kind,
+            ranked. Raise it (e.g. 0.8) to keep only confident matches.
+        dc_type: The DC's `config.type` (e.g. "table", "phylogeny"), used by
+            kinds with a hard DC-type requirement. None = unknown (no gate).
 
     Returns:
-        Sorted (by confidence desc, then viz_kind asc) list of
-        VizSuggestion. Empty when nothing fits.
+        List of VizSuggestion sorted by score desc, then viz_kind asc.
     """
-    suggestions: list[VizSuggestion] = []
-    for kind, required in CANONICAL_SCHEMAS.items():
-        if not required:
-            # Schemas with no required roles (sankey, upset_plot) bind derived
-            # DCs and are authored via `use:`; the schema-only suggester can't
-            # say anything useful about them, so skip.
-            continue
-        role_aliases = ROLE_NAMES.get(kind, {})
-        role_candidates: dict[str, list[str]] = {}
-        satisfied = 0
-        for role, accepted in required.items():
-            dtype_matches = [col for col, dtype in dc_schema.items() if dtype in accepted]
-            role_candidates[role] = dtype_matches
-            aliases = {a.lower() for a in role_aliases.get(role, frozenset({role}))}
-            if any(col.lower() in aliases for col in dtype_matches):
-                satisfied += 1
-        confidence = satisfied / len(required)
-        if confidence >= min_confidence:
-            suggestions.append(
-                VizSuggestion(viz_kind=kind, confidence=confidence, role_candidates=role_candidates)
-            )
-    suggestions.sort(key=lambda s: (-s.confidence, s.viz_kind))
+    suggestions = [_score_kind(kind, dc_schema, dc_type) for kind in CANONICAL_SCHEMAS]
+    suggestions = [s for s in suggestions if s.score >= min_confidence]
+    suggestions.sort(key=lambda s: (-s.score, s.viz_kind))
     return suggestions
+
+
+def role_dtype_specs(kind: AdvancedVizKind) -> dict[str, dict[str, object]]:
+    """Per-role accepted dtypes for a viz kind, required first then optional.
+
+    Returns ``{role: {"required": bool, "dtypes": sorted([...])}}``. Exposed via
+    the `/advanced_viz/kinds` descriptor so the React builder drives its binding
+    dropdowns + dtype validation from the backend instead of duplicating the
+    dtype tables in TypeScript.
+    """
+    specs: dict[str, dict[str, object]] = {}
+    for role, accepted in CANONICAL_SCHEMAS[kind].items():
+        specs[role] = {"required": True, "dtypes": sorted(accepted)}
+    for role, accepted in _OPTIONAL_ROLES.get(kind, {}).items():
+        specs[role] = {"required": False, "dtypes": sorted(accepted)}
+    return specs
 
 
 __all__ = [
@@ -584,10 +816,12 @@ __all__ = [
     "CANONICAL_SCHEMAS",
     "EmbeddingConfig",
     "ManhattanConfig",
+    "RECOMMENDED_SCORE",
     "ROLE_NAMES",
     "StackedTaxonomyConfig",
     "VizSuggestion",
     "VolcanoConfig",
+    "role_dtype_specs",
     "suggest_viz_kinds",
     "validate_binding",
 ]

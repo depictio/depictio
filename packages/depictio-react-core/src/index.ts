@@ -175,7 +175,6 @@ export {
   fetchAdvancedVizKinds,
   fetchAdvancedVizData,
   fetchPolarsSchema,
-  suggestFromColumns,
   fetchVizSuggestions,
   fetchPhylogenyNewick,
   dispatchComputeEmbedding,
@@ -187,8 +186,7 @@ export {
 } from './api';
 export type {
   TableMutationResult,
-  ProducerSuggestion,
-  SuggestFromColumnsResponse,
+  RoleDtypeSpec,
   VizKindSuggestion,
   VizSuggestionsResponse,
 } from './api';

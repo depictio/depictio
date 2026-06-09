@@ -2,7 +2,6 @@ import asyncio
 
 from bson import ObjectId
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from pydantic import BaseModel, Field
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
@@ -54,33 +53,37 @@ async def polars_schema(
 @datacollections_endpoint_router.get("/viz-suggestions/{data_collection_id}")
 async def viz_suggestions(
     data_collection_id: PyObjectId,
-    min_confidence: float = 1.0,
+    min_confidence: float = 0.0,
     current_user: str = Depends(get_user_or_anonymous),
 ) -> dict:
-    """Reverse-lookup viz kinds compatible with this DC.
+    """Rank advanced-viz kinds by how well they fit this DC.
 
-    Drives the React DC card's "Suggested visualisations" chip row and the
-    component-creation flow's DC pre-filter via the pure-Python suggestion
-    engine in `depictio/models/components/advanced_viz/schemas.py`:
+    Drives the React builder's "suggest but tolerate" picker (Recommended vs.
+    the rest) and the DC card's suggestion chips via the graded scoring engine
+    in `depictio/models/components/advanced_viz/schemas.py`. Every viz kind is
+    scored and returned (ranked) — nothing is filtered out by default — so the
+    builder can still let the user pick a low-scoring kind and bind columns
+    manually. Each entry carries:
 
-      - `viz_kinds`: every AdvancedVizKind whose required role schema can be
-        satisfied by some column-dtype combination in this DC. Each entry
-        carries per-role candidate columns the UI uses to pre-fill bindings.
-      - `producers`: always empty. The column-fingerprint suggestion engine
-        (`producers.py`) was retired (dtype-blind, unreliable); the key is
-        kept so existing clients keep deserialising. Removal of the React
-        producer chips is a follow-up frontend change.
+      - `score`: 0.0-1.0 graded fit (dtype compatibility × column-name
+        similarity across required roles, plus optional-role and structural
+        nudges).
+      - `role_candidates`: per required role, dtype-compatible columns ranked
+        best-first — the UI uses these to pre-fill bindings.
+      - `unmet_roles` / `weak_roles`: required roles with no candidate, or
+        satisfied only by dtype/cast — drive the builder's inline guidance.
 
     Query params:
-        min_confidence: 0.0-1.0 — minimum fraction of required roles that
-            must have a candidate column for a viz kind to appear in the
-            suggestions list. Default 1.0 = strict (only full matches).
+        min_confidence: optional score floor (0.0-1.0). Default 0.0 returns
+            every kind ranked; raise it to keep only confident matches.
     """
     from depictio.models.components.advanced_viz.schemas import suggest_viz_kinds
 
+    specs = await _get_data_collection_specs(data_collection_id, current_user)
+    dc_type = (specs.get("config") or {}).get("type")
     schema = await _get_data_collection_polars_schema(data_collection_id, current_user)
 
-    viz = suggest_viz_kinds(schema, min_confidence=min_confidence)
+    viz = suggest_viz_kinds(schema, min_confidence=min_confidence, dc_type=dc_type)
 
     return {
         "data_collection_id": str(data_collection_id),
@@ -88,40 +91,14 @@ async def viz_suggestions(
         "viz_kinds": [
             {
                 "viz_kind": s.viz_kind,
-                "confidence": s.confidence,
+                "score": s.score,
                 "role_candidates": s.role_candidates,
+                "unmet_roles": s.unmet_roles,
+                "weak_roles": s.weak_roles,
             }
             for s in viz
         ],
-        "producers": [],
     }
-
-
-class SuggestFromColumnsRequest(BaseModel):
-    """Body for the pre-DC viz suggestion endpoint.
-
-    The DC creation modal calls this with just column names parsed from the
-    file header — before the file is uploaded.
-    """
-
-    columns: list[str] = Field(..., min_length=1)
-
-
-@datacollections_endpoint_router.post("/suggest-from-columns")
-async def suggest_from_columns(
-    body: SuggestFromColumnsRequest,
-    current_user: str = Depends(get_user_or_anonymous),
-) -> dict:
-    """Pre-DC suggestion from a bare column list (no DC required).
-
-    Always returns an empty `producers` list: the column-fingerprint engine
-    (`producers.py`) was retired (dtype-blind, unreliable), and the viz-kind
-    reverse lookup needs dtype info that isn't available until the file is
-    parsed server-side. The endpoint and response shape are kept so the DC
-    creation modal keeps working; removing the React "looks like X" hint is a
-    follow-up frontend change.
-    """
-    return {"producers": []}
 
 
 @datacollections_endpoint_router.delete("/delete/{workflow_id}/{data_collection_id}")

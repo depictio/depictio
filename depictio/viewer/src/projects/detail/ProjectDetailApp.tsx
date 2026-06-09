@@ -46,7 +46,6 @@ import {
   createDataCollectionFromUpload,
   createMultiQCDataCollection,
   checkMultiQCUniformity,
-  suggestFromColumns,
   fetchVizSuggestions,
 } from 'depictio-react-core';
 import type {
@@ -54,7 +53,6 @@ import type {
   PreviewResult,
   MultiQCReportSummary,
   DCLink,
-  SuggestFromColumnsResponse,
   VizSuggestionsResponse,
 } from 'depictio-react-core';
 import LinksSection from './LinksSection';
@@ -1015,12 +1013,6 @@ const CreateDataCollectionModal: React.FC<{
   // (DCTableCoordinatesConfig). Auto-flips on when detection succeeds; can be
   // toggled manually for non-delimited formats where we can't peek the header.
   const [coordsConfirmed, setCoordsConfirmed] = useState(false);
-  // Suggestion engine match for the parsed header — producers (DESeq2,
-  // mosdepth, Bracken, …) fingerprinted on column names alone. When a
-  // match lands, the coordinates fallback gets demoted and a passive
-  // "looks like X" Alert takes its place. See
-  // POST /datacollections/suggest-from-columns.
-  const [suggestions, setSuggestions] = useState<SuggestFromColumnsResponse | null>(null);
 
   // MultiQC folder dropzone — owned by the modal so close-and-reopen clears it.
   const multiqcDropzone = useFolderDropzone({
@@ -1092,55 +1084,13 @@ const CreateDataCollectionModal: React.FC<{
     [csvColumns],
   );
 
-  // Call the suggestion engine whenever the parsed header changes. The
-  // backend matches known producer fingerprints on column names alone —
-  // no dtype inference needed — so this works as soon as we have the
-  // CSV/TSV header. AbortController prevents a slow earlier response from
-  // stomping a newer one if the user thrashes the separator field.
-  // Failures are silent: missing suggestions just falls back to the
-  // coordinates toggle.
-  useEffect(() => {
-    if (!csvColumns.length) {
-      setSuggestions(null);
-      return;
-    }
-    const controller = new AbortController();
-    suggestFromColumns(csvColumns, controller.signal)
-      .then(setSuggestions)
-      .catch((err) => {
-        if (err?.name !== 'AbortError') setSuggestions(null);
-      });
-    return () => controller.abort();
-  }, [csvColumns]);
-
-  // When a producer fingerprint matches, the coordinates fallback is
-  // demoted. Coords stays available as an explicit alternative only when
-  // nothing else is detected (or when the header is unreadable, e.g.
-  // Parquet).
-  const hasVizMatch = Boolean(suggestions && suggestions.producers.length > 0);
-
-  // Auto-confirm coords on lat/lon header detection — UNLESS the producer
-  // engine matched, in which case we don't want to ship lat/lon metadata
-  // on, say, a DESeq2 results table whose columns happened to fuzzy-match.
-  // Both branches are gated by per-file refs so:
-  //   - a user who toggles the switch off doesn't have it flipped back on
-  //   - a user who manually picked lat/lon doesn't see them wiped on every
-  //     re-render after the producer match resolves (the reset fires once
-  //     per file, then stays out of the way).
+  // Auto-confirm coords on lat/lon header detection. Gated by a per-file ref
+  // so a user who toggles the switch off doesn't have it flipped back on by
+  // this effect (the auto-fill fires once per file, then stays out of the way).
   const autoConfirmedForFileRef = useRef<File | null>(null);
-  const vizResetForFileRef = useRef<File | null>(null);
   useEffect(() => {
     if (!file) {
       autoConfirmedForFileRef.current = null;
-      vizResetForFileRef.current = null;
-      return;
-    }
-    if (hasVizMatch) {
-      if (vizResetForFileRef.current === file) return;
-      vizResetForFileRef.current = file;
-      setCoordsConfirmed(false);
-      setLatColumn(null);
-      setLonColumn(null);
       return;
     }
     if (!coordsGuess) return;
@@ -1149,7 +1099,7 @@ const CreateDataCollectionModal: React.FC<{
     setLatColumn(coordsGuess.latColumn);
     setLonColumn(coordsGuess.lonColumn);
     setCoordsConfirmed(true);
-  }, [file, coordsGuess, hasVizMatch]);
+  }, [file, coordsGuess]);
 
   // Reset everything when the modal closes — otherwise re-opening shows stale
   // state from the previous attempt.
@@ -1171,7 +1121,6 @@ const CreateDataCollectionModal: React.FC<{
       setLonColumn(null);
       setCoordsConfirmed(false);
       setParsingHeader(false);
-      setSuggestions(null);
       multiqcDropzone.clear();
       tableDropzone.clear();
     }
@@ -1456,40 +1405,7 @@ const CreateDataCollectionModal: React.FC<{
                   tableDropzone.clear();
                 }}
               />
-              {file && hasVizMatch && suggestions && (
-                <Alert
-                  color="violet"
-                  variant="light"
-                  icon={<Icon icon="mdi:auto-fix" width={18} />}
-                  title="Looks like a known tool output"
-                >
-                  <Stack gap={4}>
-                    {suggestions.producers.slice(0, 2).map((p) => (
-                      <Text size="sm" key={p.name}>
-                        <Text span fw={600}>
-                          {p.tool}
-                        </Text>
-                        {' — '}
-                        {p.description}
-                        {p.feeds_viz.length > 0 && (
-                          <>
-                            {' '}
-                            <Text span c="dimmed" size="xs">
-                              (feeds: {p.feeds_viz.join(', ')})
-                            </Text>
-                          </>
-                        )}
-                      </Text>
-                    ))}
-                    <Text size="xs" c="dimmed">
-                      Detected from the column header — no action needed. The
-                      hint is saved with the data collection so the component
-                      builder can pre-fill bindings.
-                    </Text>
-                  </Stack>
-                </Alert>
-              )}
-              {file && !hasVizMatch && (
+              {file && (
                 <Paper p="sm" withBorder radius="sm" bg="var(--mantine-color-default-hover)">
                   <Stack gap="xs">
                     <Switch
@@ -2470,10 +2386,9 @@ const DataCollectionViewer: React.FC<{
   const isCoordTable = dcHasCoordinates(dc);
   const isAggregate = isTable && (metatype || '').toLowerCase() !== 'metadata';
 
-  // Detected producer / viz-kind suggestions for this DC. Mirrors the
-  // modal's passive "Looks like a known tool output" badge — surfaced in
-  // the viewer so users can discover the affinity post-creation.
-  // Only tables make sense to fingerprint; MultiQC has its own viewer.
+  // Ranked viz-kind fit scores for this DC — surfaced in the viewer as
+  // "compatible advanced visualizations" chips so users discover the affinity
+  // post-creation. Only tables are scored; MultiQC has its own viewer.
   const [vizSuggestions, setVizSuggestions] =
     useState<VizSuggestionsResponse | null>(null);
   useEffect(() => {
@@ -2493,8 +2408,9 @@ const DataCollectionViewer: React.FC<{
       cancelled = true;
     };
   }, [dcId, isTable]);
-  const detectedProducer = vizSuggestions?.producers?.[0] ?? null;
-  const detectedVizKinds = vizSuggestions?.viz_kinds ?? [];
+  // Only surface strong matches as "compatible" chips — mirrors the builder's
+  // recommended threshold (RECOMMENDED_SCORE in schemas.py).
+  const detectedVizKinds = (vizSuggestions?.viz_kinds ?? []).filter((v) => v.score >= 0.8);
 
   return (
     <Paper withBorder radius="md" p="lg">
@@ -2539,40 +2455,8 @@ const DataCollectionViewer: React.FC<{
               COORDINATES
             </Badge>
           )}
-          {detectedProducer && (
-            <Badge
-              color="violet"
-              variant="light"
-              size="sm"
-              radius="sm"
-              leftSection={<Icon icon="mdi:auto-fix" width={12} />}
-              title={detectedProducer.description}
-            >
-              {detectedProducer.tool.toUpperCase()}
-            </Badge>
-          )}
         </Group>
-        {detectedProducer && (
-          <Alert
-            color="violet"
-            variant="light"
-            icon={<Icon icon="mdi:auto-fix" width={18} />}
-            title={`Detected as ${detectedProducer.tool}`}
-          >
-            <Stack gap={4}>
-              <Text size="sm">{detectedProducer.description}</Text>
-              {detectedProducer.feeds_viz.length > 0 && (
-                <Text size="xs" c="dimmed">
-                  Feeds advanced viz:{' '}
-                  <Text span fw={600}>
-                    {detectedProducer.feeds_viz.join(', ')}
-                  </Text>
-                </Text>
-              )}
-            </Stack>
-          </Alert>
-        )}
-        {!detectedProducer && detectedVizKinds.length > 0 && (
+        {detectedVizKinds.length > 0 && (
           <Alert
             color="violet"
             variant="light"

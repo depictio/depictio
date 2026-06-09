@@ -5,15 +5,14 @@ preview (`catalog match`/`compose` + `software_versions.yml` scoping) are done
 and on `claude/optimistic-mayer-iQrTO`. Direction v3 = module-granular,
 pipeline-agnostic (see `docs/design/bioinformatics-catalog.md`).
 
-## Free mode (UI — frontend PR)
-- **Do not gate the UI.** The user must always be able to map an advanced viz
-  directly onto a file's columns (role → column) **by hand, with no condition**
-  — even when nothing is recognised/suggested.
-- Applies in **two places**: the **project data manager** and the
-  **advanced viz section**.
-- Suggestions may *pre-fill* the binding, but must never *block* manual mapping.
-- Check/relax gating in `ProjectDetailApp.tsx` (`hasVizMatch`) and
-  `AdvancedVizBuilder.tsx` (producer-driven pre-selection).
+## Free mode (UI) — DONE
+- **The UI is no longer gated.** The advanced-viz builder ranks every kind by a
+  graded backend fit score and presents a "suggest but tolerate" picker
+  (Recommended + Other visualisations, nothing hidden/disabled); the user can
+  pick any kind and bind columns by hand. Validation is tolerant — a castable
+  dtype is a warning, not a blocker.
+- The `ProjectDetailApp.tsx` `hasVizMatch` coords gating and the
+  `AdvancedVizBuilder.tsx` producer-driven pre-selection are **removed**.
 
 ## Guided mode
 - Wire `compose_run_dir()` into the real ingestion/scan path so it actually
@@ -40,13 +39,13 @@ pipeline-agnostic (see `docs/design/bioinformatics-catalog.md`).
   wiring the scan). This is what lets one module own *N* reshape variants keyed
   by input shape, instead of duplicating a recipe per pipeline.
 
-## Retire `suggest_producers` — DONE (backend), frontend cleanup pending
+## Retire `suggest_producers` — DONE (backend + frontend)
 - Column-fingerprint recognition was unreliable; `producers.py` +
-  `suggest_producers` are **removed**. The API (`/viz-suggestions`,
-  `/suggest-from-columns`) now always returns `producers: []` (shape kept so
-  clients keep deserialising). Remaining: remove the React "suggested producer"
-  chips + the `producers` field/types in a frontend PR. `suggest_viz_kinds`
-  (role/dtype based) is the runtime suggestion engine.
+  `suggest_producers` are **removed**. The React producer chips, the
+  `producers` field/types, and the `/suggest-from-columns` endpoint are now
+  **gone** too. `suggest_viz_kinds` (role/dtype based, now graded 0-1 scoring)
+  is the single runtime suggestion engine; `/viz-suggestions` returns a ranked
+  `viz_kinds` list with per-kind `score` + `role_candidates`.
 
 ## Render enrichment + preview
 - `renders_as` now supports `figure` (UI `visu_type`/`dict_kwargs` **and** code
