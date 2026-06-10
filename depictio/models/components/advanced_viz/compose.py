@@ -26,7 +26,7 @@ from depictio.models.components.advanced_viz.catalog import (
 
 if TYPE_CHECKING:
     from depictio.models.models.dashboards import DashboardDataLite
-    from depictio.models.models.nextflow import NextflowRunInfo
+    from depictio.models.models.run_info import WorkflowRunInfo
 
 # 8-column grid (matches the real nf-core dashboards, e.g. ampliseq base.yaml).
 GRID_WIDTH = 8
@@ -195,7 +195,7 @@ def _build_lite_component(comp: dict[str, Any]):
 def build_dashboard_from_run_dir(
     run_dir: str | Path,
     *,
-    info: NextflowRunInfo | None = None,
+    info: WorkflowRunInfo | None = None,
     workflow_tag: str = "",
     project_tag: str | None = None,
     title: str | None = None,
@@ -204,9 +204,11 @@ def build_dashboard_from_run_dir(
 ) -> DashboardDataLite:
     """Compose a ``DashboardDataLite`` from the catalog outputs present in ``run_dir``.
 
-    ``info`` (Nextflow provenance) drives the title and ``workflow_tag`` when not
-    given explicitly. ``confirm_with_versions`` scopes recognition to the tools the
-    run actually executed (``software_versions.yml``) when present.
+    Engine-agnostic: ``info`` (any ``WorkflowRunInfo`` — Nextflow, Snakemake, …)
+    drives the title and ``workflow_tag`` when not given explicitly, and scopes
+    recognition to the tools the run executed (``info.tools_executed``). With no
+    ``info``, ``confirm_with_versions`` falls back to the nf-core
+    ``software_versions.yml`` when present.
     """
     from depictio.models.models.dashboards import DashboardDataLite
 
@@ -216,7 +218,13 @@ def build_dashboard_from_run_dir(
     if not workflow_tag and info is not None and info.pipeline_name:
         workflow_tag = info.pipeline_name
 
-    matches = match_run_dir(run_dir, entries, confirm_with_versions=confirm_with_versions)
+    executed_tools = info.tools_executed if info is not None and info.tools_executed else None
+    matches = match_run_dir(
+        run_dir,
+        entries,
+        confirm_with_versions=confirm_with_versions,
+        executed_tools=executed_tools,
+    )
     present: set[tuple[str, str]] = {(m.tool_id, m.output_id) for m in matches}
 
     entry_by_id = {e.id: e for e in entries}
@@ -257,6 +265,6 @@ def build_dashboard_from_run_dir(
         title=title,
         subtitle=subtitle,
         project_tag=project_tag,
-        workflow_system="nf-core",
+        workflow_system=(info.engine if info is not None and info.engine else None),
         components=components,
     )

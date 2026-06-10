@@ -125,17 +125,18 @@ def _list_pipeline_versions(pipeline_name: str) -> list[str]:
 
 
 def detect_template_from_run_dir(run_dir: str | Path) -> tuple[str | None, Any]:
-    """Detect the template matching a Nextflow run directory.
+    """Detect the template matching a workflow run directory (any engine).
 
-    Reads the run's ``pipeline_info/`` provenance, then resolves a template id:
-    the exact ``<pipeline>/<version>`` if present, otherwise the closest available
+    Reads the run's provenance via the engine-agnostic registry
+    (``read_run_info`` — nf-core, Snakemake, …), then resolves a template id: the
+    exact ``<pipeline>/<version>`` if present, otherwise the closest available
     version of the same pipeline (with a warning). Returns ``(template_id, info)``
     where ``template_id`` is ``None`` when no template matches (caller falls back
-    to catalog auto-composition) and ``info`` is the ``NextflowRunInfo`` (or None).
+    to catalog auto-composition) and ``info`` is the ``WorkflowRunInfo`` (or None).
     """
-    from depictio.models.models.nextflow import read_nextflow_run_info
+    from depictio.models.models.run_info import read_run_info
 
-    info = read_nextflow_run_info(run_dir)
+    info = read_run_info(run_dir)
     if info is None or not info.pipeline_name:
         return None, info
 

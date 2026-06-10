@@ -5,7 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from depictio.models.models.nextflow import NextflowRunInfo, read_nextflow_run_info
+from depictio.models.models.nextflow import read_nextflow_run_info
+from depictio.models.models.run_info import WorkflowRunInfo
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -34,9 +35,10 @@ def test_reads_full_pipeline_info(tmp_path):
     _write_pipeline_info(tmp_path)
     info = read_nextflow_run_info(tmp_path)
     assert info is not None
+    assert info.engine == "nextflow"
     assert info.pipeline_name == "nf-core/ampliseq"
     assert info.pipeline_version == "2.16.0"
-    assert info.nextflow_version == "24.04.4"
+    assert info.engine_version == "24.04.4"
     assert info.short_name == "ampliseq"
     assert info.tools_executed == {"fastqc", "qiime2"}
     assert info.params["input"] == "samplesheet.csv"
@@ -46,9 +48,9 @@ def test_reads_full_pipeline_info(tmp_path):
 
 
 def test_template_ids_offers_both_version_spellings():
-    info = NextflowRunInfo(pipeline_name="nf-core/rnaseq", pipeline_version="v3.16.0")
+    info = WorkflowRunInfo(pipeline_name="nf-core/rnaseq", pipeline_version="v3.16.0")
     assert info.template_ids() == ["nf-core/rnaseq/3.16.0", "nf-core/rnaseq/v3.16.0"]
-    plain = NextflowRunInfo(pipeline_name="nf-core/ampliseq", pipeline_version="2.16.0")
+    plain = WorkflowRunInfo(pipeline_name="nf-core/ampliseq", pipeline_version="2.16.0")
     assert plain.template_ids() == ["nf-core/ampliseq/2.16.0"]
 
 

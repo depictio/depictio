@@ -1,12 +1,7 @@
-"""Read a Nextflow / nf-core run's provenance from its ``pipeline_info/`` artefacts.
+"""nf-core / Nextflow connector: read a run's provenance from ``pipeline_info/``.
 
-Pure + offline (mirrors ``catalog.read_software_versions``): given a run directory,
-extract the pipeline identity, version, Nextflow version, run parameters and the
-set of executed tools, plus the paths of the standard execution reports. Used to:
-
-  - detect which template (if any) matches a run (``detect_template_from_run_dir``),
-  - enrich a generated dashboard (title / workflow_tag / version),
-  - persist provenance per run (``WorkflowConfig``).
+Registers itself with the generic run-info registry (``run_info.py``) so callers
+go through ``read_run_info`` and never depend on this engine directly.
 
 Source priority (formats grounded on real nf-core runs):
   1. ``pipeline_info/nf_core_*_software_mqc_versions.yml`` — its ``Workflow:``
@@ -27,55 +22,13 @@ import json
 import re
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, Field
+from depictio.models.models.run_info import WorkflowRunInfo, register_run_info_reader
 
-# Default Nextflow execution-trace columns (parsed in a later increment).
 _MANIFEST_RE = {
     "name": re.compile(r"""name\s*=\s*['"]([^'"]+)['"]"""),
     "version": re.compile(r"""version\s*=\s*['"]([^'"]+)['"]"""),
     "homePage": re.compile(r"""homePage\s*=\s*['"]([^'"]+)['"]"""),
 }
-
-
-class NextflowRunInfo(BaseModel):
-    """Provenance extracted from a Nextflow/nf-core run directory."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    pipeline_name: str | None = None  # e.g. "nf-core/ampliseq"
-    pipeline_version: str | None = None  # e.g. "2.16.0" (leading "v" stripped)
-    nextflow_version: str | None = None  # runtime Nextflow version, e.g. "24.04.4"
-    run_name: str | None = None
-    homepage: str | None = None
-    params: dict = Field(default_factory=dict)
-    tools_executed: set[str] = Field(default_factory=set)
-
-    # Artefact paths kept for reference / later provenance parsing.
-    software_versions_path: str | None = None
-    params_json_path: str | None = None
-    execution_report_path: str | None = None
-    execution_trace_path: str | None = None
-    pipeline_dag_path: str | None = None
-
-    @property
-    def short_name(self) -> str | None:
-        """Pipeline name without the catalog prefix (``nf-core/ampliseq`` → ``ampliseq``)."""
-        if self.pipeline_name and "/" in self.pipeline_name:
-            return self.pipeline_name.split("/", 1)[1]
-        return self.pipeline_name
-
-    def template_ids(self) -> list[str]:
-        """Candidate template ids to try, most specific first.
-
-        nf-core versions.yml may carry a leading ``v`` (``v3.16.0``) while template
-        folders are unprefixed (``2.16.0``), so both forms are offered.
-        """
-        if not (self.pipeline_name and self.pipeline_version):
-            return []
-        raw = self.pipeline_version
-        stripped = raw.lstrip("v")
-        versions = [raw] if raw == stripped else [stripped, raw]
-        return [f"{self.pipeline_name}/{v}" for v in versions]
 
 
 def _find_first(run_dir: Path, *globs: str) -> Path | None:
@@ -87,7 +40,7 @@ def _find_first(run_dir: Path, *globs: str) -> Path | None:
     return None
 
 
-def _parse_versions_yaml(path: Path, info: NextflowRunInfo) -> None:
+def _parse_versions_yaml(path: Path, info: WorkflowRunInfo) -> None:
     """Fill identity / Nextflow version / tools from a *_software_mqc_versions.yml."""
     import yaml
 
@@ -105,7 +58,7 @@ def _parse_versions_yaml(path: Path, info: NextflowRunInfo) -> None:
         if str(section).lower() == "workflow":
             for key, value in versions.items():
                 if str(key).lower() == "nextflow":
-                    info.nextflow_version = str(value)
+                    info.engine_version = str(value)
                 else:
                     info.pipeline_name = str(key)
                     info.pipeline_version = str(value).lstrip("v")
@@ -115,7 +68,7 @@ def _parse_versions_yaml(path: Path, info: NextflowRunInfo) -> None:
         info.tools_executed = tools
 
 
-def _parse_params_json(path: Path, info: NextflowRunInfo) -> None:
+def _parse_params_json(path: Path, info: WorkflowRunInfo) -> None:
     """Fill the run parameters from a params_*.json / nf-params.json."""
     try:
         data = json.loads(path.read_text())
@@ -126,7 +79,7 @@ def _parse_params_json(path: Path, info: NextflowRunInfo) -> None:
         info.params_json_path = str(path)
 
 
-def _parse_manifest(run_dir: Path, info: NextflowRunInfo) -> None:
+def _parse_manifest(run_dir: Path, info: WorkflowRunInfo) -> None:
     """Fallback identity from a ``nextflow.config`` manifest block (checkout only).
 
     ``nextflowVersion`` is intentionally ignored — it is a constraint
@@ -147,13 +100,13 @@ def _parse_manifest(run_dir: Path, info: NextflowRunInfo) -> None:
         info.homepage = m.group(1)
 
 
-def read_nextflow_run_info(run_dir: str | Path) -> NextflowRunInfo | None:
-    """Read a run's Nextflow provenance, or None if no artefact is recognised."""
+def read_nextflow_run_info(run_dir: str | Path) -> WorkflowRunInfo | None:
+    """Read an nf-core/Nextflow run's provenance, or None if nothing recognised."""
     run_dir = Path(run_dir)
     if not run_dir.is_dir():
         return None
 
-    info = NextflowRunInfo()
+    info = WorkflowRunInfo(engine="nextflow")
 
     versions = _find_first(
         run_dir, "nf_core_*_software_mqc_versions.yml", "*_software_mqc_versions.yml"
@@ -186,7 +139,7 @@ def read_nextflow_run_info(run_dir: str | Path) -> NextflowRunInfo | None:
     has_signal = any(
         (
             info.pipeline_name,
-            info.nextflow_version,
+            info.engine_version,
             info.tools_executed,
             info.params,
             info.execution_report_path,
@@ -194,3 +147,16 @@ def read_nextflow_run_info(run_dir: str | Path) -> NextflowRunInfo | None:
         )
     )
     return info if has_signal else None
+
+
+class _NextflowReader:
+    """Connector entry for the run-info registry."""
+
+    name = "nextflow"
+    priority = 100  # most specific / self-describing → tried first
+
+    def read(self, run_dir: Path) -> WorkflowRunInfo | None:
+        return read_nextflow_run_info(run_dir)
+
+
+register_run_info_reader(_NextflowReader())

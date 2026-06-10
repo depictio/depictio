@@ -183,8 +183,14 @@ def register_run_command(app: typer.Typer):
                 template = detected_template
                 rich_print_checked_statement(f"Auto-selected template: {template}", "info")
                 # Pre-fill template variables from run params (never override user --var).
+                # Mapping is per engine (param name → template variable).
                 provided_keys = {v.split("=", 1)[0] for v in var if "=" in v}
-                param_to_var = {"input": "SAMPLESHEET_FILE", "metadata": "METADATA_FILE"}
+                param_to_var_by_engine = {
+                    "nextflow": {"input": "SAMPLESHEET_FILE", "metadata": "METADATA_FILE"},
+                    "snakemake": {"samples": "SAMPLESHEET_FILE", "metadata": "METADATA_FILE"},
+                }
+                engine = autodetect_info.engine if autodetect_info else None
+                param_to_var = param_to_var_by_engine.get(engine or "", {})
                 for param_key, var_key in param_to_var.items():
                     value = autodetect_info.params.get(param_key) if autodetect_info else None
                     if value and var_key not in provided_keys:
@@ -293,13 +299,17 @@ def register_run_command(app: typer.Typer):
                     "success",
                 )
 
-                # Persist Nextflow provenance on each workflow's config when the
-                # template was auto-detected from a real run directory.
+                # Persist workflow-run provenance on each workflow's config when the
+                # template was auto-detected from a real run directory (any engine).
                 if autodetect_info is not None:
                     provenance = {
-                        "engine_name": "nextflow",
+                        "engine_name": autodetect_info.engine,
                         "pipeline_version": autodetect_info.pipeline_version,
-                        "nextflow_version": autodetect_info.nextflow_version,
+                        "nextflow_version": (
+                            autodetect_info.engine_version
+                            if autodetect_info.engine == "nextflow"
+                            else None
+                        ),
                         "tools_executed": sorted(autodetect_info.tools_executed),
                         "workflow_parameters": autodetect_info.params or None,
                     }
