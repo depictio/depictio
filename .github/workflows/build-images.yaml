@@ -328,6 +328,34 @@ jobs:
           echo "All six services running."
           echo "::endgroup::"
 
+      - name: Verify bootstrap admin + iris dashboard were seeded
+        run: |
+          set -euo pipefail
+          # Mongo is internal-only (not published to the host), so query it from
+          # inside the container. mongosh ships in the mongo image.
+          mq() { docker exec mongo mongosh --quiet --port 27018 depictioDB --eval "$1" 2>/dev/null | tr -dc '0-9'; }
+          # Non-anonymous admin = the single-user auto-seed (db_init) actually ran.
+          q_admin='db.users.countDocuments({is_admin:true, is_anonymous:{$ne:true}})'
+          # Match the iris reference dashboard case-insensitively (robust to the
+          # exact title wording).
+          q_dash='db.dashboards.countDocuments({title:/iris/i})'
+
+          echo "::group::Wait for first-boot seeding"
+          admins=0; dashes=0
+          for i in $(seq 1 24); do  # up to ~2 min after the API is healthy
+            admins="$(mq "$q_admin")"; admins="${admins:-0}"
+            dashes="$(mq "$q_dash")"; dashes="${dashes:-0}"
+            echo "[$i] admin users: $admins | iris dashboards: $dashes"
+            if [ "$admins" -ge 1 ] && [ "$dashes" -ge 1 ]; then break; fi
+            sleep 5
+          done
+          echo "::endgroup::"
+
+          [ "$admins" -ge 1 ] || { echo "::error::no non-anonymous admin user seeded — single-user bootstrap did not run"; exit 1; }
+          echo "Admin user created (single-user auto-seed works)."
+          [ "$dashes" -ge 1 ] || { echo "::error::no iris reference dashboard found in MongoDB"; exit 1; }
+          echo "Iris reference dashboard seeded and available."
+
       - name: Dump compose logs on failure
         if: failure()
         run: docker compose -f "$RUNNER_TEMP/quickstart/docker-compose.yaml" logs --no-color || true
