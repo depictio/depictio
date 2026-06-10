@@ -2,12 +2,15 @@ id: metaphlan_profile
 mode: profile
 description: Per-sample taxonomic relative-abundance profile.
 find: { filename: "*_profile.txt" }
-# no recipe → bindable as-is; declare the columns so roles can bind (no bundled fixture):
+# no recipe → bindable as-is; declare the columns so roles can bind.
 columns:
   clade_name: String
   NCBI_tax_id: String
   relative_abundance: Float64
   additional_species: String
+fixture: profile.tsv # co-located bundled sample (grounds the preview)
 renders_as:
-  - { id: stacked_taxonomy, component: advanced_viz, kind: stacked_taxonomy, roles: {taxon: clade_name, abundance: relative_abundance} }
-  - { id: sunburst, component: advanced_viz, kind: sunburst, roles: {abundance: relative_abundance} }
+  # long-format (sample_id/taxon/rank/abundance) → stacked_taxonomy fits; a
+  # sunburst would need wide per-rank columns this profile doesn't carry.
+  - { id: stacked_taxonomy, component: advanced_viz, kind: stacked_taxonomy, roles: {sample_id: sample_id, taxon: taxon, rank: rank, abundance: relative_abundance} }
+  - { component: table }

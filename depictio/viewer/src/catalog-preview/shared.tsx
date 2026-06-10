@@ -178,6 +178,8 @@ export interface ToolEntry {
 export interface CatalogGlobal {
   theme?: 'light' | 'dark';
   initialOutputId?: string | null;
+  /** When set, the viewer skips all catalog chrome and renders only this render. */
+  initialRenderId?: string | null;
   tools: ToolEntry[];
   data: unknown;
 }

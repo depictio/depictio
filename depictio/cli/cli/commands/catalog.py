@@ -35,7 +35,8 @@ def catalog_list() -> None:
     records = [
         {
             "Tool": entry.id,
-            "Output": f"{out.id}{f'/{out.mode}' if out.mode else ''}",
+            "Output": out.id,
+            "Keyword": out.mode or "—",
             "Source": out.recipe or ("columns" if out.columns else "—"),
             "Renders as": ", ".join(r.kind or r.component for r in out.renders_as) or "—",
         }
@@ -76,6 +77,8 @@ def catalog_info(
         mode = f"  [{out.mode}]" if out.mode else ""
         console.print(f"\n  [bold]── {out.id}{mode}[/bold]")
         console.print(f"     {out.description}")
+        if out.mode:
+            console.print(f"     [dim]keyword:[/dim] {out.mode}")
         console.print(f"     [dim]find:[/dim]    {out.find.model_dump(exclude_none=True)}")
         if out.recipe:
             console.print(f"     [dim]recipe:[/dim]  {out.recipe}")
@@ -87,6 +90,102 @@ def catalog_info(
             tgt = f"{r.component}:{r.kind}" if r.kind else r.component
             roles = f"  roles={r.roles}" if r.roles else ""
             console.print(f"     [dim]render:[/dim]  {tgt}{roles}")
+
+
+def _emit_html(html: str, out_path: Path, message: str, no_open: bool) -> None:
+    """Write a self-contained HTML file, report it, and open it in a browser tab."""
+    import webbrowser
+
+    out_path.write_text(html)
+    typer.echo(message)
+    if not no_open:
+        webbrowser.open(out_path.resolve().as_uri())
+
+
+@app.command("preview")
+def catalog_preview(
+    output_id: Annotated[str, typer.Argument(help="Output id, e.g. qiime2_alpha_diversity")],
+    theme: Annotated[str, typer.Option("--theme", "-t", help="Theme: light or dark")] = "light",
+    out: Annotated[
+        str | None,
+        typer.Option("--out", "-o", help="Write the HTML here (default: a temp file)"),
+    ] = None,
+    no_open: Annotated[bool, typer.Option("--no-open", help="Do not open a browser tab")] = False,
+) -> None:
+    """Preview an output's components on its fixture → self-contained HTML.
+
+    Renders every ``renders_as`` target through the depictio **React viewer's**
+    real ``ComponentRenderer`` (figure/card/table today), embedded in one
+    offline, self-contained HTML file — no running stack. The data is computed
+    Dash-free from the output's bundled ``fixture``. Needs the prebuilt bundle
+    (``cd depictio/viewer && pnpm run build:catalog-preview``).
+    """
+    import tempfile
+
+    from depictio.catalog.payload import CatalogPayloadError, render_html
+    from depictio.models.components.advanced_viz.catalog import load_catalog_entries
+
+    pair = next(
+        ((e, o) for e in load_catalog_entries() for o in e.outputs if o.id == output_id),
+        None,
+    )
+    if pair is None:
+        typer.echo(f"No output '{output_id}'. Try `depictio catalog list`.")
+        raise typer.Exit(code=1)
+    entry, output = pair
+
+    try:
+        html = render_html(output, theme, tool=entry)
+    except CatalogPayloadError as exc:
+        typer.echo(f"  could not preview {output_id!r}: {exc}")
+        raise typer.Exit(code=1)
+
+    out_path = (
+        Path(out) if out else Path(tempfile.gettempdir()) / f"catalog_preview_{output_id}.html"
+    )
+    _emit_html(html, out_path, f"  Wrote preview to {out_path}", no_open)
+
+
+@app.command("gallery")
+def catalog_gallery(
+    theme: Annotated[str, typer.Option("--theme", "-t", help="Theme: light or dark")] = "light",
+    out: Annotated[
+        str | None,
+        typer.Option("--out", "-o", help="Write the HTML here (default: a temp file)"),
+    ] = None,
+    no_open: Annotated[bool, typer.Option("--no-open", help="Do not open a browser tab")] = False,
+) -> None:
+    """Browse the whole catalog on one page: every tool's outputs, grouped, with
+    component-type badges, fixture chips, search/filter, and copyable ``renders_as``.
+
+    Clicking an output opens its full live preview (same renderer as
+    ``catalog preview``). Self-contained, offline HTML; needs the prebuilt bundle
+    (``cd depictio/viewer && pnpm run build:catalog-preview``).
+    """
+    import tempfile
+
+    from depictio.catalog.payload import CatalogPayloadError, render_gallery_html
+    from depictio.models.components.advanced_viz.catalog import load_catalog_entries
+
+    entries = load_catalog_entries()
+    if not entries:
+        typer.echo("No catalog entries found.")
+        raise typer.Exit(code=1)
+
+    try:
+        html = render_gallery_html(entries, theme)
+    except CatalogPayloadError as exc:
+        typer.echo(f"  could not build catalog gallery: {exc}")
+        raise typer.Exit(code=1)
+
+    out_path = Path(out) if out else Path(tempfile.gettempdir()) / "catalog_gallery.html"
+    n_out = sum(len(e.outputs) for e in entries)
+    _emit_html(
+        html,
+        out_path,
+        f"  Wrote catalog gallery ({len(entries)} tools, {n_out} outputs) to {out_path}",
+        no_open,
+    )
 
 
 @dev_app.command("columns")

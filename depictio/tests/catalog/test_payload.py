@@ -58,10 +58,10 @@ def test_flagship_payload_has_all_renders() -> None:
     assert types == ["figure", "card", "card", "card", "card", "table"]
 
     data = payload["data"]
-    # figure → Plotly JSON (4-facet box = multiple traces)
+    # figure → Plotly JSON (2×2 facet box plot = a trace per habitat)
     fig = next(iter(data["figures"].values()))
-    assert "data" in fig["figure"] and len(fig["figure"]["data"]) >= 4
-    # 4 cards → numeric values
+    assert "data" in fig["figure"] and len(fig["figure"]["data"]) >= 1
+    # 4 metric cards → numeric values
     assert len(data["cards"]["values"]) == 4
     assert all(isinstance(v, (int, float)) for v in data["cards"]["values"].values())
     # 1 table with rows

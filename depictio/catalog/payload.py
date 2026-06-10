@@ -240,6 +240,16 @@ def _advanced_viz_config_and_data(df, render) -> tuple[dict[str, Any], dict[str,
             config[f"{role}_col"] = col
             columns.append(col)
 
+    # Sunburst needs ≥2 hierarchical rank columns. Catalog cards bind only
+    # `abundance` and let the runtime auto-bind the taxonomy ranks by name;
+    # mirror that here so the offline preview has its hierarchy.
+    if render.kind == "sunburst" and "rank_cols" not in config:
+        _TAXO_RANKS = ("Domain", "Kingdom", "Phylum", "Class", "Order", "Family", "Genus", "Species")
+        inferred = [c for c in _TAXO_RANKS if c in df.columns]
+        if len(inferred) >= 2:
+            config["rank_cols"] = inferred
+            columns.extend(inferred)
+
     present = [c for c in dict.fromkeys(columns) if c in df.columns]
     missing = [c for c in dict.fromkeys(columns) if c not in df.columns]
     if missing:
@@ -307,28 +317,19 @@ def _coverage_track_payload(df, render) -> tuple[dict[str, Any], dict[str, Any]]
 # MultiQC (pre-compute Plotly figures from the parquet plot_input_data column)
 # ---------------------------------------------------------------------------
 
-# Per-section: anchors to render in priority order (first N that succeed).
-_MULTIQC_SECTION_ANCHORS: dict[str, list[str]] = {
-    "fastqc": [
-        "fastqc_per_base_sequence_quality_plot",
-        "fastqc_sequence_counts_plot",
-        "fastqc_per_sequence_quality_scores_plot",
-        "fastqc_per_sequence_gc_content_plot",
-        "fastqc_sequence_duplication_levels_plot",
-        "fastqc_adapter_content_plot",
-    ],
-    # report: prefer anchors exclusive to full pipeline reports (not in fastqc-only parquet)
-    "report": [
-        "bowtie2_pe_plot",
-        "ivar_variants-section-plot",
-        "mosdepth-coverage-per-contig-single",
-        "kraken-top-n-plot",
-        "snpeff_effects",
-        "summary_variants_metrics_plot",
-        "fastqc_per_base_sequence_quality_plot",  # fallback if pipeline-specific not found
-    ],
-}
 _MULTIQC_MAX_PLOTS = 3
+
+
+def _multiqc_module(anchor: str) -> str:
+    """MultiQC module that owns a plot anchor — its leading token.
+
+    Anchors are prefixed by the producing module: ``fastqc_*``, ``samtools-*``,
+    ``bcftools_stats_*``, ``mosdepth-*``, … One catalog output per module keys
+    off this so each ``section: <module>`` card surfaces only that tool's plots.
+    """
+    import re
+
+    return re.split(r"[-_]", anchor or "")[0]
 
 
 def _multiqc_payload(df, render) -> list[dict[str, Any]]:
@@ -343,15 +344,15 @@ def _multiqc_payload(df, render) -> list[dict[str, Any]]:
     from multiqc.core.special_case_modules.load_multiqc_data import load_plot_input
 
     section = render.section or "report"
-    preferred = _MULTIQC_SECTION_ANCHORS.get(section, [])
 
-    # Rows with plot_input_data, in preferred order then the rest
+    # Rows with renderable plot data; for a per-module card keep only the plots
+    # whose anchor belongs to that module ("report" = the whole parquet).
     plot_rows = df.filter(df["plot_input_data"].is_not_null())
-    anchor_order = {a: i for i, a in enumerate(preferred)}
-    rows_sorted = sorted(
-        plot_rows.iter_rows(named=True),
-        key=lambda r: anchor_order.get(r["anchor"], len(preferred)),
-    )
+    rows_sorted = [
+        r
+        for r in plot_rows.iter_rows(named=True)
+        if section == "report" or _multiqc_module(r["anchor"]) == section
+    ]
 
     results = []
     for row in rows_sorted:
@@ -360,6 +361,8 @@ def _multiqc_payload(df, render) -> list[dict[str, Any]]:
         try:
             pid = _json.loads(row["plot_input_data"])
             _, plot = load_plot_input(pid)
+            if plot is None or isinstance(plot, str) or not hasattr(plot, "get_figure"):
+                continue  # not a renderable Plot (table/raw section)
             fig = plot.get_figure(0)
             fig.update_layout(
                 template="plotly_white",
@@ -391,17 +394,46 @@ def _complex_heatmap_payload(df, render) -> dict[str, Any]:
     import polars as pl
     from plotly_complexheatmap import ComplexHeatmap
 
+    _NUMERIC = (
+        pl.Float32,
+        pl.Float64,
+        pl.Int8,
+        pl.Int16,
+        pl.Int32,
+        pl.Int64,
+        pl.UInt8,
+        pl.UInt16,
+        pl.UInt32,
+        pl.UInt64,
+    )
+
     roles = render.roles or {}
     index_col = roles.get("index")
+    pivot_col = roles.get("column")
+    value_col = roles.get("value")
+
+    # Main's catalog binds complex_heatmap with `roles: {}` and lets the live
+    # backend infer structure from the DC. Replicate that inference so the
+    # offline preview renders: index = first string column; if the rest is a
+    # single numeric value + extra category columns it's long-format (pivot
+    # index×highest-cardinality-category → value), else it's a wide numeric matrix.
     if not index_col:
-        raise CatalogPayloadError("complex_heatmap: role 'index' is required")
+        str_cols = [c for c in df.columns if df[c].dtype in (pl.Utf8, pl.Categorical)]
+        num_cols = [c for c in df.columns if df[c].dtype in _NUMERIC]
+        if not str_cols:
+            raise CatalogPayloadError(
+                f"complex_heatmap: cannot infer index — no string column in {list(df.columns)}"
+            )
+        index_col = str_cols[0]
+        other_str = [c for c in str_cols if c != index_col]
+        if len(num_cols) == 1 and other_str:
+            pivot_col = max(other_str, key=lambda c: df[c].n_unique())
+            value_col = num_cols[0]
+
     if index_col not in df.columns:
         raise CatalogPayloadError(
             f"complex_heatmap: index column {index_col!r} absent from fixture {list(df.columns)}"
         )
-
-    pivot_col = roles.get("column")
-    value_col = roles.get("value")
 
     if pivot_col and value_col:
         for c in (pivot_col, value_col):
@@ -701,15 +733,20 @@ def build_payload(output: Any, theme: str = "light", tool: Any = None) -> dict[s
             elif comp == "card":
                 meta["column_name"] = render.column
                 meta["icon_color"] = _CARD_ACCENTS[i % len(_CARD_ACCENTS)]
-                if render.aggregation == "box_plot_stats":
-                    # Tukey box-plot card: hero = median, distribution in the strip.
+                if render.secondary_layout == "box_plot":
+                    # Tukey box-plot card: hero = declared aggregation (defaults to
+                    # median), distribution in the strip.
                     stats = _box_plot_stats(df, render.column)
                     meta["title"] = render.column
-                    meta["aggregation"] = "median"
+                    meta["aggregation"] = render.aggregation or "median"
                     meta["aggregations"] = ["box_plot_stats"]
                     meta["secondary_layout"] = "box_plot"
                     meta["icon_name"] = "mdi:chart-box-outline"
-                    data["cards"]["values"][index] = stats["median"]
+                    data["cards"]["values"][index] = (
+                        _aggregate(df, render.column, render.aggregation)
+                        if render.aggregation
+                        else stats["median"]
+                    )
                     data["cards"]["secondary"][index] = {"box_plot_stats": stats}
                     data["cards"]["aggregations"][index] = ["box_plot_stats"]
                 else:
@@ -873,6 +910,27 @@ def _logo_data_uris() -> dict[str, str]:
     return result
 
 
+def _json_safe(o: Any) -> Any:
+    """Replace non-finite floats (NaN / ±Infinity) with ``None``.
+
+    Plotly figures and computed stats can carry NaN/Inf; Python's ``json`` emits
+    them as bare ``NaN``/``Infinity`` tokens, which are valid for ``json.loads``
+    but make the browser's ``JSON.parse`` throw — blanking the embedded bundle.
+    """
+    if isinstance(o, dict):
+        return {k: _json_safe(v) for k, v in o.items()}
+    if isinstance(o, (list, tuple)):
+        return [_json_safe(v) for v in o]
+    # numpy arrays / scalars — Plotly UI-mode figures (px.* on a pandas frame)
+    # keep numpy in their traces; json.dumps(default=str) would stringify an
+    # ndarray into a useless "['a' 'b']" blob. Convert to plain Python first.
+    if hasattr(o, "dtype") and hasattr(o, "tolist"):
+        return _json_safe(o.tolist())
+    if isinstance(o, float):
+        return o if math.isfinite(o) else None
+    return o
+
+
 def _inject(payload: dict[str, Any]) -> str:
     """Embed a computed payload into the prebuilt single-file bundle."""
     if not TEMPLATE_PATH.exists():
@@ -880,7 +938,7 @@ def _inject(payload: dict[str, Any]) -> str:
             f"catalog-preview bundle not built: {TEMPLATE_PATH} is missing — run "
             f"`cd depictio/viewer && pnpm run build:catalog-preview`"
         )
-    blob = json.dumps(payload, default=str).replace("</", "<\\/")
+    blob = json.dumps(_json_safe(payload), default=str).replace("</", "<\\/")
     html = TEMPLATE_PATH.read_text().replace("__CATALOG_PAYLOAD__", blob)
     # Patch server-relative logo paths → inline data URIs so they render offline.
     for server_path, data_uri in _logo_data_uris().items():

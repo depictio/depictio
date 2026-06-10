@@ -7,18 +7,32 @@ recipe: qiime2/alpha_diversity_multi_canonical.py
 # bindable sample (recipe declares only sample_id/habitat; metric cols are dynamic)
 fixture: alpha_diversity.tsv
 renders_as:
-  # code-mode figure: multi-facet box plot of the metrics by habitat
+  # code-mode figure: 2×2 facet of the four alpha-diversity metrics by habitat,
+  # each panel with its own y-scale (metrics span very different ranges).
   - component: figure
     code: |
-      m = df.to_pandas().melt(
-          id_vars=["sample_id", "habitat"],
-          value_vars=["shannon", "evenness", "faith_pd"],
-          var_name="metric", value_name="value",
+      # reshape wide -> long so each metric becomes a facet panel (stays polars)
+      df_modified = df.unpivot(
+          index=["sample_id", "habitat"],
+          on=["shannon", "observed_features", "faith_pd", "evenness"],
+          variable_name="metric",
+          value_name="value",
       )
-      fig = px.box(m, x="habitat", y="value", color="habitat",
-                   facet_col="metric", title="Alpha diversity by habitat")
-  # one multi-metric card per index: hero average + a Tukey box-and-whisker
-  - { component: card, column: shannon,  aggregation: average, secondary_layout: box_plot }
-  - { component: card, column: evenness, aggregation: average, secondary_layout: box_plot }
-  - { component: card, column: faith_pd, aggregation: average, secondary_layout: box_plot }
+
+      fig = px.box(
+          df_modified,
+          x="habitat", y="value", color="habitat",
+          facet_col="metric", facet_col_wrap=2, points="all",
+          category_orders={"metric": ["shannon", "observed_features", "faith_pd", "evenness"]},
+          title="Alpha diversity by habitat",
+      )
+
+      fig.update_yaxes(matches=None)  # each panel keeps its own scale
+      fig.for_each_annotation(lambda a: a.update(text=a.text.split("=")[-1]))
+      fig.update_layout(showlegend=True, legend_title_text="habitat", boxmode="group")
+  # one Tukey box-plot distribution card per metric (hero average + box-plot strip)
+  - { component: card, column: shannon,           aggregation: average, secondary_layout: box_plot }
+  - { component: card, column: observed_features, aggregation: average, secondary_layout: box_plot }
+  - { component: card, column: faith_pd,          aggregation: average, secondary_layout: box_plot }
+  - { component: card, column: evenness,          aggregation: average, secondary_layout: box_plot }
   - { component: table }

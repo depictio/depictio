@@ -37,4 +37,3 @@ NC_003977.2	RefSeq	gene	2850	4019	.	+	.	ID=gene-HBVgp2;Dbxref=GeneID:944569;Name
 NC_003977.2	RefSeq	CDS	2850	4019	.	+	0	ID=cds-YP_009173869.1;Parent=gene-HBVgp2;Dbxref=GenBank:YP_009173869.1,GeneID:944569;Name=YP_009173869.1;gbkey=CDS;gene=S;locus_tag=HBVgp2;product=large envelope protein;protein_id=YP_009173869.1
 NC_003977.2	RefSeq	CDS	3174	4019	.	+	0	ID=cds-YP_009173870.1;Parent=gene-HBVgp2;Dbxref=GenBank:YP_009173870.1,GeneID:944569;Name=YP_009173870.1;gbkey=CDS;gene=S;locus_tag=HBVgp2;product=middle envelope protein;protein_id=YP_009173870.1
 NC_003977.2	RefSeq	CDS	157	837	.	+	0	ID=cds-YP_009173871.1;Parent=gene-HBVgp2;Dbxref=GenBank:YP_009173871.1,GeneID:944569;Name=YP_009173871.1;gbkey=CDS;gene=S;locus_tag=HBVgp2;product=small envelope protein;protein_id=YP_009173871.1
-

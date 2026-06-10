@@ -89,6 +89,14 @@ export interface BuilderState {
   // Existing component snapshot (edit mode only)
   existing: StoredMetadata | null;
 
+  // 'unset' = mode choice screen; 'manual' = stepper; 'catalog' = catalog browser or pre-fill
+  sourceMode: 'unset' | 'manual' | 'catalog';
+  // Set true when the builder was initiated from a catalog suggestion. Steps
+  // 0 and 1 are skipped; the design step shows a dismissable catalog banner.
+  catalogMode: boolean;
+  // When catalogMode, the tool+output that supplied the pre-fill (for the banner).
+  catalogSource: { toolName: string; outputId: string; description?: string } | null;
+
   // UI status flags
   saving: boolean;
   saveError: string | null;
@@ -126,6 +134,15 @@ export interface BuilderActions {
     fig: { data: unknown[]; layout: Record<string, unknown> } | null,
   ) => void;
   setCodeStatus: (s: { title: string; color: string; message: string }) => void;
+  setSourceMode: (mode: 'unset' | 'manual' | 'catalog') => void;
+  initFromCatalog: (patch: {
+    componentType: ComponentType;
+    wfId: string;
+    dcId: string;
+    projectId: string;
+    config: Record<string, unknown>;
+    source: { toolName: string; outputId: string; description?: string };
+  }) => void;
   loadExisting: (m: StoredMetadata) => void;
   setSaving: (b: boolean) => void;
   setSaveError: (e: string | null) => void;
@@ -159,6 +176,9 @@ const INITIAL: BuilderState = {
       "Enter code and click 'Execute Code' to see preview on the left.",
   },
   existing: null,
+  sourceMode: 'unset',
+  catalogMode: false,
+  catalogSource: null,
   saving: false,
   saveError: null,
   previewReady: true,
@@ -226,6 +246,39 @@ export const useBuilderStore = create<BuilderState & BuilderActions>((set) => ({
   setFigureVisualizationList: (list) => set({ figureVisualizationList: list }),
   setLastCodeFigure: (fig) => set({ lastCodeFigure: fig }),
   setCodeStatus: (status) => set({ codeStatus: status }),
+  setSourceMode: (mode) => set({ sourceMode: mode }),
+  initFromCatalog: ({ componentType, wfId, dcId, projectId, config, source }) => {
+    // Figure has separate top-level store fields (visuType, figureMode, …) that
+    // must be set alongside config — mirrors loadExisting's hydration.
+    const cfg = config as Record<string, unknown>;
+    const figureFields =
+      componentType === 'figure'
+        ? {
+            figureMode: (cfg.mode as FigureMode) === 'code' ? 'code' as FigureMode : 'ui' as FigureMode,
+            visuType: (cfg.visu_type as string) || 'scatter',
+            dictKwargs: (cfg.dict_kwargs as Record<string, unknown>) || {},
+            codeContent: (cfg.code_content as string) || '',
+          }
+        : {};
+    set((s) => ({
+      ...INITIAL,
+      mode: 'create',
+      dashboardId: s.dashboardId,
+      componentId: s.componentId,
+      componentType,
+      wfId,
+      dcId,
+      projectId,
+      config,
+      step: 2,
+      sourceMode: 'catalog',
+      catalogMode: true,
+      catalogSource: source,
+      previewReady: true,
+      dcConfigType: 'table',
+      ...figureFields,
+    }));
+  },
   loadExisting: (m) => {
     const ct = String(m.component_type) as ComponentType;
     // Legacy Map components saved before the rename used `lat`/`lon`/`color`/`size`.

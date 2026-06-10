@@ -34,6 +34,9 @@ interface CoverageTrackConfig {
   smoothing_window?: number;
   color_by?: 'single' | 'category' | 'sample';
   show_annotation_lane?: boolean;
+  /** Persisted initial view mode. When set, skips sample-count auto-detection
+   *  so the component renders consistently across catalog add and dashboard. */
+  view_mode?: 'aggregate' | 'facet' | 'overlay';
   /** Optional bundled-annotation override. Falls back to chromosome-name
    *  auto-detection when null. See ``genome_annotations/index.ts``. */
   annotation_id?: string | null;
@@ -81,9 +84,10 @@ const CoverageTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTick
   const [colorBy, setColorBy] = useState<NonNullable<CoverageTrackConfig['color_by']>>(
     config.color_by ?? (config.category_col ? 'category' : 'sample'),
   );
-  // ``viewMode`` is initialised lazily after data arrives (we need the sample
-  // count to choose aggregate-by-default). Until then, hold null.
-  const [viewMode, setViewMode] = useState<ViewMode | null>(null);
+  // When a view_mode is persisted in config (e.g. set at catalog-add time),
+  // use it directly — no auto-detection needed. Otherwise hold null until data
+  // arrives so the sample count can drive the sensible default.
+  const [viewMode, setViewMode] = useState<ViewMode | null>(config.view_mode ?? null);
   const [showAnnotationStrip, setShowAnnotationStrip] = useState<boolean>(true);
   const [showIndividuals, setShowIndividuals] = useState<boolean>(true);
   const [selectedChromosomes, setSelectedChromosomes] = useState<string[]>(

@@ -47,4 +47,3 @@ NC_038235.1	RefSeq	mRNA	8489	15067	.	+	.	ID=rna-DZD21_gp10;Parent=gene-DZD21_gp1
 NC_038235.1	RefSeq	exon	8489	15067	.	+	.	ID=exon-DZD21_gp10-1;Parent=rna-DZD21_gp10;Dbxref=GeneID:37607645;function=viral polymerase;gbkey=mRNA;gene=L;locus_tag=DZD21_gp10
 NC_038235.1	RefSeq	CDS	8498	14995	.	+	0	ID=cds-YP_009518860.1;Parent=rna-DZD21_gp10;Dbxref=GenBank:YP_009518860.1,GeneID:37607645;Name=YP_009518860.1;Note=RNA dependant RNA polymerase%3B RdRp;gbkey=CDS;gene=L;locus_tag=DZD21_gp10;product=polymerase protein;protein_id=YP_009518860.1
 NC_038235.1	RefSeq	three_prime_UTR	15068	15222	.	+	.	ID=id-NC_038235.1:15068..15222;function=Trailer region 3'UTR;gbkey=3'UTR
-

@@ -49,6 +49,12 @@ interface CatalogPreviewGlobal {
   // (keys are globally unique), which is the only field this offline shim reads.
   tools: unknown[];
   data: CatalogPreviewData;
+  // Single-output preview mode (built by `catalog preview`): these live at the
+  // top level alongside `data`. Gallery mode omits them (they're nested inside
+  // tools[].outputs[] instead).
+  output?: unknown;
+  renders?: unknown[];
+  fixturePreview?: unknown;
 }
 
 declare global {

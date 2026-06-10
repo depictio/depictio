@@ -3,3 +3,4 @@
 id: pangolin
 name: Pangolin
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/pangolin/run
+biotools_url: https://bio.tools/pangolin_cov-lineages # from nf-core meta.yml identifier

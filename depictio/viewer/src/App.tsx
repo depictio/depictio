@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import {
   AppShell,
   Button,
+  Center,
   Group,
   Text,
   Loader,
@@ -469,20 +470,60 @@ const App: React.FC = () => {
                 />
               )}
               <Box style={{ flex: 1, minHeight: 0 }}>
-                <DashboardGrid
-                  dashboardId={dashboardId!}
-                  metadataList={rightComponents}
-                  layoutData={dashboard.right_panel_layout_data}
-                  filters={filters}
-                  onFilterChange={handleFilterChange}
-                  cardValues={cardValues}
-                  cardSecondaryValues={cardSecondaryValues}
-                  cardValuesLoading={cardsLoading}
-                  refreshTick={refreshTick}
-                  isDraggable={false}
-                  isResizable={false}
-                  editMode={false}
-                />
+                {rightComponents.length === 0 ? (
+                  <Center style={{ height: '100%', minHeight: 320 }}>
+                    <Stack align="center" gap="md" maw={420}>
+                      <Box
+                        style={{
+                          width: 72,
+                          height: 72,
+                          borderRadius: '50%',
+                          background: 'var(--mantine-color-gray-1)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        <Icon icon="mdi:view-dashboard-outline" width={36} color="var(--mantine-color-gray-5)" />
+                      </Box>
+                      <Stack gap={4} align="center">
+                        <Title order={4} fw={700} ta="center">
+                          This dashboard is empty
+                        </Title>
+                        <Text size="sm" c="dimmed" ta="center">
+                          No components have been added yet.
+                          {isOwner && ' Start editing to add visualizations, tables, and more.'}
+                        </Text>
+                      </Stack>
+                      {isOwner && (
+                        <Button
+                          component="a"
+                          href={`/dashboard-beta-edit/${dashboardId}`}
+                          leftSection={<Icon icon="mdi:pencil" width={16} />}
+                          size="md"
+                          variant="filled"
+                        >
+                          Start editing
+                        </Button>
+                      )}
+                    </Stack>
+                  </Center>
+                ) : (
+                  <DashboardGrid
+                    dashboardId={dashboardId!}
+                    metadataList={rightComponents}
+                    layoutData={dashboard.right_panel_layout_data}
+                    filters={filters}
+                    onFilterChange={handleFilterChange}
+                    cardValues={cardValues}
+                    cardSecondaryValues={cardSecondaryValues}
+                    cardValuesLoading={cardsLoading}
+                    refreshTick={refreshTick}
+                    isDraggable={false}
+                    isResizable={false}
+                    editMode={false}
+                  />
+                )}
               </Box>
             </Box>
           </div>
