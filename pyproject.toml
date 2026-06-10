@@ -1,6 +1,6 @@
 [project]
 name = "depictio"
-version = "1.0.1-b2"
+version = "1.0.1-b3"
 description = "Depictio — FastAPI backend + Celery worker for the React viewer SPA"
 readme = "README.md"
 requires-python = ">=3.11"
