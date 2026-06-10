@@ -44,7 +44,11 @@ services:
     # Not published to the host to avoid exposing the DB.
     volumes:
       - mongo_data:/data/db
+    # The stock mongo image starts as root and drops to the `mongodb` user
+    # (chown the data dir + gosu). cap_drop:[ALL] removes the capabilities that
+    # needs, so add back only those — keeping a minimal, hardened cap set.
     cap_drop: [ALL]
+    cap_add: [CHOWN, SETGID, SETUID, DAC_OVERRIDE]
     security_opt: ["no-new-privileges:true"]
     deploy:
       resources:
