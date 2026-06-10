@@ -5,11 +5,11 @@ name: Build images (api / worker / viewer)
 # and validates them on PRs.
 #
 # Architectures (resolved by the `setup` job):
-#   - PRs and beta/pre-release tags (1.0.0-b9, *-next): linux/amd64 only — fast.
-#   - Stable releases (pure X.Y.Z) and matching workflow_dispatch: linux/amd64
-#     AND linux/arm64, each built on a NATIVE runner (no QEMU emulation), pushed
-#     by digest, then stitched into one multi-arch manifest by the `merge` job.
-# arm64 is reserved for production releases so it never runs on every PR/commit.
+#   - PRs: linux/amd64 only — fast validation, no arm64 on every commit/PR.
+#   - Any published version (tag push, beta or stable, + workflow_dispatch):
+#     linux/amd64 AND linux/arm64, each built on a NATIVE runner (no QEMU
+#     emulation), pushed by digest, then stitched into one multi-arch manifest by
+#     the `merge` job. So every released version runs natively on Apple Silicon.
 #
 # Image namespaces: `depictio-api`, `depictio-worker`, `depictio-viewer`.
 
@@ -66,24 +66,15 @@ jobs:
           AMD='{"name":"linux/amd64","arch":"amd64","runner":"ubuntu-22.04"}'
           ARM='{"name":"linux/arm64","arch":"arm64","runner":"ubuntu-24.04-arm"}'
 
+          # PRs validate amd64 only — no arm64 on every PR/commit. Every
+          # published version (tag push, beta or stable, or workflow_dispatch)
+          # builds amd64 + arm64 so each release runs natively on Apple Silicon.
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            VERSION=""
-          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            VERSION="${{ inputs.version }}"
-          else
-            GIT_TAG=${GITHUB_REF#refs/tags/}
-            VERSION="${GIT_TAG#v}"
-          fi
-
-          # arm64 is reserved for STABLE production releases (pure X.Y.Z, no
-          # -bN / -next suffix). PRs and pre-release tags stay amd64-only so arm
-          # never builds on every PR/commit.
-          if [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "platforms=[$AMD,$ARM]" >> "$GITHUB_OUTPUT"
-            echo "Stable release '$VERSION' → amd64 + arm64"
-          else
             echo "platforms=[$AMD]" >> "$GITHUB_OUTPUT"
-            echo "PR / pre-release '${VERSION:-PR}' → amd64 only"
+            echo "PR → amd64 only"
+          else
+            echo "platforms=[$AMD,$ARM]" >> "$GITHUB_OUTPUT"
+            echo "Published build → amd64 + arm64"
           fi
 
   build:
