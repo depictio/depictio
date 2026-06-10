@@ -2,24 +2,29 @@
 # DEPICTIO DOCKER COMPOSE - QUICK START
 # ============================================================================
 # This is the main docker-compose file for running Depictio with pre-built images.
-# MinIO (S3-compatible object storage) is bundled by default via the
-# `local-minio` profile, which .env activates (COMPOSE_PROFILES=local-minio).
+# MinIO (S3-compatible object storage) is bundled and starts by default — no
+# profile flag and no .env are required for the single-user quick start.
 #
-# QUICK START (no git clone required):
+# QUICK START (no git clone, no .env required):
 #   curl -LO https://raw.githubusercontent.com/depictio/depictio/main/docker-compose.yaml
-#   docker compose --profile local-minio up -d     # (or copy .env.example → .env)
-#   → http://localhost:5080
+#   docker compose up -d
+#   → http://localhost:5080   (single-user mode, no login)
 #
-# COMMANDS (with .env present — see CONFIGURATION below):
+# COMMANDS:
 #   Start:  docker compose up -d
 #   Stop:   docker compose down
 #   Logs:   docker compose logs -f
 #   Status: docker compose ps
 #
-# EXTERNAL S3 (advanced) — bring your own S3/MinIO, don't start the bundled one.
-# Override COMPOSE_PROFILES so the `local-minio` profile is off, and set your
-# S3 credentials/endpoint in .env:
-#   COMPOSE_PROFILES=external-s3 docker compose up -d
+# MULTI-USER / EXPOSED DEPLOYMENTS: the defaults below (minio/minio123) are for
+# local single-user use only. Set DEPICTIO_AUTH_SINGLE_USER_MODE=false and the
+# server refuses to boot until you provide strong DEPICTIO_MINIO_ROOT_PASSWORD
+# and DEPICTIO_BOOTSTRAP_ADMIN_PASSWORD values — see .env.example.
+#
+# EXTERNAL S3 (advanced) — bring your own S3/MinIO instead of the bundled one:
+# set DEPICTIO_MINIO_* to your endpoint/credentials and
+# DEPICTIO_MINIO_EXTERNAL_SERVICE=true in .env (the bundled minio container can
+# be left stopped with `docker compose up -d --scale minio=0`).
 #
 # DEVELOPMENT:
 #   For local development with hot-reload, use docker-compose.dev.yaml instead.
@@ -77,19 +82,19 @@ services:
   minio:
     image: minio/minio:RELEASE.2025-01-20T14-49-07Z
     container_name: minio
-    # Bundled local object storage, gated behind the `local-minio` profile.
-    # `.env.example` ships COMPOSE_PROFILES=local-minio, so a plain
-    # `docker compose up -d` starts it (no flag needed). To bring your own
-    # external S3/MinIO instead, override the env var so this profile is off:
-    #   COMPOSE_PROFILES=external-s3 docker compose up -d
-    profiles: ["local-minio"]
+    # Bundled local object storage, started by default. For an external
+    # S3/MinIO instead, point DEPICTIO_MINIO_* at your endpoint and leave this
+    # container stopped (`docker compose up -d --scale minio=0`).
     # Internal-only: the backend/worker reach MinIO over the compose network.
     # Neither the S3 API nor the console is published to the host.
     volumes:
       - minio_data:/data
     environment:
-      MINIO_ROOT_USER: ${DEPICTIO_MINIO_ROOT_USER:?DEPICTIO_MINIO_ROOT_USER must be set in .env}
-      MINIO_ROOT_PASSWORD: ${DEPICTIO_MINIO_ROOT_PASSWORD:?DEPICTIO_MINIO_ROOT_PASSWORD must be set in .env (>=16 chars)}
+      # Local single-user defaults. Override with strong secrets for any
+      # multi-user / exposed deployment (the server enforces this — minio123 is
+      # rejected as weak when single-user mode is off).
+      MINIO_ROOT_USER: ${DEPICTIO_MINIO_ROOT_USER:-minio}
+      MINIO_ROOT_PASSWORD: ${DEPICTIO_MINIO_ROOT_PASSWORD:-minio123}
     command: server /data --console-address :9001
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
@@ -106,7 +111,7 @@ services:
     restart: unless-stopped
 
   depictio-backend:
-    image: ghcr.io/depictio/depictio-api:${DEPICTIO_VERSION:-next}
+    image: ghcr.io/depictio/depictio-api:${DEPICTIO_VERSION:-1.0.0}
     container_name: depictio-backend
     ports:
       # Loopback-only: front this with a reverse proxy / TLS terminator for
@@ -130,8 +135,8 @@ services:
         required: false
     environment:
       DEPICTIO_AUTH_SINGLE_USER_MODE: "${DEPICTIO_AUTH_SINGLE_USER_MODE:-true}"
-      DEPICTIO_MINIO_ROOT_USER: "${DEPICTIO_MINIO_ROOT_USER:?DEPICTIO_MINIO_ROOT_USER must be set in .env}"
-      DEPICTIO_MINIO_ROOT_PASSWORD: "${DEPICTIO_MINIO_ROOT_PASSWORD:?DEPICTIO_MINIO_ROOT_PASSWORD must be set in .env (>=16 chars)}"
+      DEPICTIO_MINIO_ROOT_USER: "${DEPICTIO_MINIO_ROOT_USER:-minio}"
+      DEPICTIO_MINIO_ROOT_PASSWORD: "${DEPICTIO_MINIO_ROOT_PASSWORD:-minio123}"
       DEPICTIO_BOOTSTRAP_ADMIN_EMAIL: "${DEPICTIO_BOOTSTRAP_ADMIN_EMAIL:-}"
       DEPICTIO_BOOTSTRAP_ADMIN_PASSWORD: "${DEPICTIO_BOOTSTRAP_ADMIN_PASSWORD:-}"
       DEPICTIO_BOOTSTRAP_SEED_TEST_USER: "${DEPICTIO_BOOTSTRAP_SEED_TEST_USER:-false}"
@@ -150,14 +155,14 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      # required:false so external-S3 mode (local-minio profile off) starts
-      # the backend without waiting for — or pulling in — the minio service.
+      # required:false so external-S3 mode (minio scaled to 0) still starts the
+      # backend without waiting for the bundled minio service.
       minio:
         condition: service_healthy
         required: false
 
   depictio-viewer:
-    image: ghcr.io/depictio/depictio-viewer:${DEPICTIO_VERSION:-next}
+    image: ghcr.io/depictio/depictio-viewer:${DEPICTIO_VERSION:-1.0.0}
     container_name: depictio-viewer
     ports:
       # Container now listens on 8080 (nginx-unprivileged / non-root); the
@@ -192,7 +197,7 @@ services:
     container_name: depictio-celery-worker
     # Always enabled - required for design mode (stepper) to work
     # Dashboard editor will fail without Celery worker running
-    image: ghcr.io/depictio/depictio-worker:${DEPICTIO_VERSION:-next}
+    image: ghcr.io/depictio/depictio-worker:${DEPICTIO_VERSION:-1.0.0}
     volumes:
       - depictio_keys:/app/depictio/keys
     env_file:
@@ -201,8 +206,8 @@ services:
     environment:
       DEPICTIO_CONTEXT: "server"
       DEPICTIO_AUTH_SINGLE_USER_MODE: "${DEPICTIO_AUTH_SINGLE_USER_MODE:-true}"
-      DEPICTIO_MINIO_ROOT_USER: "${DEPICTIO_MINIO_ROOT_USER:?DEPICTIO_MINIO_ROOT_USER must be set in .env}"
-      DEPICTIO_MINIO_ROOT_PASSWORD: "${DEPICTIO_MINIO_ROOT_PASSWORD:?DEPICTIO_MINIO_ROOT_PASSWORD must be set in .env (>=16 chars)}"
+      DEPICTIO_MINIO_ROOT_USER: "${DEPICTIO_MINIO_ROOT_USER:-minio}"
+      DEPICTIO_MINIO_ROOT_PASSWORD: "${DEPICTIO_MINIO_ROOT_PASSWORD:-minio123}"
     command: ["/app/run_celery_worker.sh"]
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]

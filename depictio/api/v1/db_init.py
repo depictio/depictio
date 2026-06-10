@@ -1,5 +1,6 @@
 import json
 import os
+import secrets
 from datetime import datetime, timezone
 from typing import Any
 
@@ -621,11 +622,25 @@ async def _bootstrap_admin_and_test_user() -> tuple[UserBeanie | None, dict | No
         admin_email = settings.bootstrap.admin_email.strip()
         admin_password = settings.bootstrap.admin_password.get_secret_value()
         if not admin_email or not admin_password:
-            raise RuntimeError(
-                "No admin user exists in MongoDB and DEPICTIO_BOOTSTRAP_ADMIN_EMAIL / "
-                "DEPICTIO_BOOTSTRAP_ADMIN_PASSWORD are not set. Set both env vars (via a "
-                "Kubernetes Secret in production) so the first-boot admin can be created."
-            )
+            if settings.auth.is_single_user_mode:
+                # Single-user mode has no login UI — the anonymous auto-login
+                # session maps to this admin (see _get_anonymous_user_session).
+                # Seed a default local admin so the zero-config quick start needs
+                # no secrets. The password is random (never used to log in) and
+                # is never logged. Multi-user mode still fails fast below.
+                admin_email = admin_email or "admin@example.com"
+                admin_password = admin_password or secrets.token_urlsafe(32)
+                logger.info(
+                    "Single-user mode: seeding default local admin '%s' "
+                    "(no DEPICTIO_BOOTSTRAP_ADMIN_* set)",
+                    admin_email,
+                )
+            else:
+                raise RuntimeError(
+                    "No admin user exists in MongoDB and DEPICTIO_BOOTSTRAP_ADMIN_EMAIL / "
+                    "DEPICTIO_BOOTSTRAP_ADMIN_PASSWORD are not set. Set both env vars (via a "
+                    "Kubernetes Secret in production) so the first-boot admin can be created."
+                )
 
         logger.info(
             "No admin user found in MongoDB — seeding bootstrap admin %s from "
