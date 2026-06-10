@@ -102,26 +102,58 @@ def _emit_html(html: str, out_path: Path, message: str, no_open: bool) -> None:
         webbrowser.open(out_path.resolve().as_uri())
 
 
+def _serve_html(html: str, label: str, no_open: bool, port: int) -> None:
+    """Serve the page from an ephemeral localhost server, open it, and tear down
+    on Ctrl-C. Nothing is written to disk — use `--out` to export a file instead."""
+    import http.server
+    import socketserver
+    import webbrowser
+
+    body = html.encode("utf-8")
+
+    class _Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self) -> None:  # noqa: N802 — http.server API
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *_args) -> None:  # silence per-request logging
+            return
+
+    socketserver.TCPServer.allow_reuse_address = True
+    with socketserver.TCPServer(("127.0.0.1", port), _Handler) as httpd:
+        url = f"http://127.0.0.1:{httpd.server_address[1]}/"
+        typer.echo(f"  {label}\n  Serving at {url} — Ctrl-C to stop (use --out to export a file).")
+        if not no_open:
+            webbrowser.open(url)
+        try:
+            httpd.serve_forever()
+        except KeyboardInterrupt:
+            typer.echo("\n  stopped.")
+
+
 @app.command("preview")
 def catalog_preview(
     output_id: Annotated[str, typer.Argument(help="Output id, e.g. qiime2_alpha_diversity")],
     theme: Annotated[str, typer.Option("--theme", "-t", help="Theme: light or dark")] = "light",
     out: Annotated[
         str | None,
-        typer.Option("--out", "-o", help="Write the HTML here (default: a temp file)"),
+        typer.Option("--out", "-o", help="Export the self-contained HTML here instead of serving it"),
     ] = None,
+    port: Annotated[int, typer.Option("--port", help="Port for the ephemeral server (0 = auto)")] = 0,
     no_open: Annotated[bool, typer.Option("--no-open", help="Do not open a browser tab")] = False,
 ) -> None:
-    """Preview an output's components on its fixture → self-contained HTML.
+    """Preview an output's components on its fixture, served on an ephemeral
+    localhost server (Ctrl-C to stop); pass ``--out FILE`` to export a portable,
+    self-contained HTML instead.
 
     Renders every ``renders_as`` target through the depictio **React viewer's**
-    real ``ComponentRenderer`` (figure/card/table today), embedded in one
-    offline, self-contained HTML file — no running stack. The data is computed
+    real ``ComponentRenderer`` (figure/card/table today). The data is computed
     Dash-free from the output's bundled ``fixture``. Needs the prebuilt bundle
     (``cd depictio/viewer && pnpm run build:catalog-preview``).
     """
-    import tempfile
-
     from depictio.catalog.payload import CatalogPayloadError, render_html
     from depictio.models.components.advanced_viz.catalog import load_catalog_entries
 
@@ -140,10 +172,10 @@ def catalog_preview(
         typer.echo(f"  could not preview {output_id!r}: {exc}")
         raise typer.Exit(code=1)
 
-    out_path = (
-        Path(out) if out else Path(tempfile.gettempdir()) / f"catalog_preview_{output_id}.html"
-    )
-    _emit_html(html, out_path, f"  Wrote preview to {out_path}", no_open)
+    if out:
+        _emit_html(html, Path(out), f"  Wrote preview to {out}", no_open)
+    else:
+        _serve_html(html, f"catalog preview: {output_id}", no_open, port)
 
 
 @app.command("gallery")
@@ -151,19 +183,20 @@ def catalog_gallery(
     theme: Annotated[str, typer.Option("--theme", "-t", help="Theme: light or dark")] = "light",
     out: Annotated[
         str | None,
-        typer.Option("--out", "-o", help="Write the HTML here (default: a temp file)"),
+        typer.Option("--out", "-o", help="Export the self-contained HTML here instead of serving it"),
     ] = None,
+    port: Annotated[int, typer.Option("--port", help="Port for the ephemeral server (0 = auto)")] = 0,
     no_open: Annotated[bool, typer.Option("--no-open", help="Do not open a browser tab")] = False,
 ) -> None:
-    """Browse the whole catalog on one page: every tool's outputs, grouped, with
-    component-type badges, fixture chips, search/filter, and copyable ``renders_as``.
+    """Browse the whole catalog on one page (every tool's outputs, grouped, with
+    component-type badges, fixture chips, search/filter, copyable ``renders_as``),
+    served on an ephemeral localhost server (Ctrl-C to stop).
 
     Clicking an output opens its full live preview (same renderer as
-    ``catalog preview``). Self-contained, offline HTML; needs the prebuilt bundle
+    ``catalog preview``). Pass ``--out FILE`` to export a portable, self-contained
+    HTML instead; needs the prebuilt bundle
     (``cd depictio/viewer && pnpm run build:catalog-preview``).
     """
-    import tempfile
-
     from depictio.catalog.payload import CatalogPayloadError, render_gallery_html
     from depictio.models.components.advanced_viz.catalog import load_catalog_entries
 
@@ -178,14 +211,12 @@ def catalog_gallery(
         typer.echo(f"  could not build catalog gallery: {exc}")
         raise typer.Exit(code=1)
 
-    out_path = Path(out) if out else Path(tempfile.gettempdir()) / "catalog_gallery.html"
     n_out = sum(len(e.outputs) for e in entries)
-    _emit_html(
-        html,
-        out_path,
-        f"  Wrote catalog gallery ({len(entries)} tools, {n_out} outputs) to {out_path}",
-        no_open,
-    )
+    label = f"catalog gallery ({len(entries)} tools, {n_out} outputs)"
+    if out:
+        _emit_html(html, Path(out), f"  Wrote {label} to {out}", no_open)
+    else:
+        _serve_html(html, label, no_open, port)
 
 
 @dev_app.command("columns")
