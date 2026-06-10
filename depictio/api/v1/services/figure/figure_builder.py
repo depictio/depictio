@@ -26,6 +26,81 @@ _POINT_PLOT_TYPES = frozenset(
     {"scatter", "scatter_3d", "scatter_ternary", "scatter_polar", "strip"}
 )
 
+# Plotly Express keyword args whose value is a single DataFrame column name.
+_PX_COLUMN_PARAMS: frozenset[str] = frozenset(
+    {
+        "x", "y", "z", "color", "size", "symbol", "line_dash", "line_group",
+        "pattern_shape", "hover_name", "names", "values", "facet_col", "facet_row",
+        "animation_frame", "animation_group", "base", "r", "theta", "a", "b", "c",
+        "error_x", "error_y", "error_z",
+    }
+)  # fmt: skip
+
+# Plotly Express keyword args whose value is a list (or ``{col: bool}`` dict) of
+# column names.
+_PX_COLUMN_LIST_PARAMS: frozenset[str] = frozenset({"hover_data", "custom_data", "dimensions"})
+
+# Visualisations that read the whole frame (or a column set we can't reliably
+# enumerate from dict_kwargs): projecting them risks dropping needed columns, so
+# signal a full load instead.
+_WHOLE_FRAME_VISU: frozenset[str] = frozenset(
+    {
+        "heatmap", "scatter_matrix", "parallel_coordinates",
+        "parallel_categories", "imshow", "scatter_geo", "choropleth",
+    }
+)  # fmt: skip
+
+
+def referenced_columns(visu_type: str, dict_kwargs: dict) -> set[str] | None:
+    """Columns a UI-mode figure references, for scan-level column projection (#7).
+
+    Returns the set of column names the Plotly Express call will read from the
+    DataFrame, so the loader can project the Delta scan to just those columns
+    (it folds in any filter columns and schema-guards the result). Returns
+    ``None`` whenever projection is unsafe — a whole-frame visualisation
+    (heatmap, scatter_matrix, …), a column list we can't parse, or a non-dict
+    spec — so the caller falls back to a full load. Missing a referenced column
+    would silently break the figure, so this errs toward ``None`` on any
+    uncertainty.
+
+    Code-mode figures must never be projected via this helper — arbitrary user
+    code can reference any column — so callers gate on ``mode != "code"``.
+    """
+    import json
+
+    if not isinstance(dict_kwargs, dict):
+        return None
+    if (visu_type or "").lower() in _WHOLE_FRAME_VISU:
+        return None
+
+    cols: set[str] = set()
+    for key, value in dict_kwargs.items():
+        if value is None or value == "" or value == []:
+            continue
+        if key in _PX_COLUMN_PARAMS:
+            # error_x/y/z may be a dict config carrying no column — only a bare
+            # string names a column.
+            if isinstance(value, str):
+                cols.add(value)
+        elif key in _PX_COLUMN_LIST_PARAMS:
+            parsed = value
+            if isinstance(parsed, str):
+                try:
+                    parsed = json.loads(parsed)
+                except (json.JSONDecodeError, ValueError):
+                    # Opaque string we can't decompose into column names — don't
+                    # risk projecting away a column it might reference.
+                    return None
+            if isinstance(parsed, dict):
+                cols.update(k for k in parsed if isinstance(k, str))
+            elif isinstance(parsed, (list, tuple)):
+                cols.update(v for v in parsed if isinstance(v, str))
+            else:
+                return None
+        # Unknown keys are Plotly styling params (templates, colour maps, …)
+        # that take literal values, not column names — safe to ignore.
+    return cols or None
+
 
 def process_code_mode_figure(
     code_content: str,

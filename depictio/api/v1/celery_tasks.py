@@ -78,11 +78,33 @@ def build_figure_preview(payload: dict) -> dict:
             "size_bytes": dc_config.get("size_bytes", 0),
         }
 
+    visu_type = metadata.get("visu_type", "scatter")
+    dict_kwargs = metadata.get("dict_kwargs") or {}
+    mode = metadata.get("mode", "ui")
+    code_content = metadata.get("code_content", "")
+    selection_enabled = bool(metadata.get("selection_enabled", False))
+    selection_column = metadata.get("selection_column")
+
+    # Column projection (#7): in UI mode the figure spec tells us exactly which
+    # columns Plotly Express will read, so load only those — the loader folds in
+    # filter columns and schema-guards the set. Code mode can reference any
+    # column via arbitrary user code, so it always loads the full frame.
+    select_columns: list[str] | None = None
+    if mode != "code":
+        from depictio.api.v1.services.figure.figure_builder import referenced_columns
+
+        cols = referenced_columns(visu_type, dict_kwargs)
+        if cols is not None:
+            if selection_enabled and selection_column:
+                cols = cols | {selection_column}
+            select_columns = sorted(cols)
+
     started = time.monotonic()
     df = load_deltatable_lite(
         workflow_id=ObjectId(str(wf_id)) if not isinstance(wf_id, ObjectId) else wf_id,
         data_collection_id=str(dc_id),
         metadata=filter_metadata or None,
+        select_columns=select_columns,
         init_data=init_data,
     )
     load_ms = int((time.monotonic() - started) * 1000)
@@ -93,13 +115,6 @@ def build_figure_preview(payload: dict) -> dict:
         create_figure_from_data,
         process_code_mode_figure,
     )
-
-    visu_type = metadata.get("visu_type", "scatter")
-    dict_kwargs = metadata.get("dict_kwargs") or {}
-    mode = metadata.get("mode", "ui")
-    code_content = metadata.get("code_content", "")
-    selection_enabled = bool(metadata.get("selection_enabled", False))
-    selection_column = metadata.get("selection_column")
 
     build_started = time.monotonic()
     code_error: str | None = None
