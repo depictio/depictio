@@ -309,7 +309,14 @@ jobs:
 
           echo "Asserting published endpoints..."
           curl -fsS http://localhost:8058/health >/dev/null && echo "API /health: OK"
-          code="$(curl -s -o /dev/null -w '%{http_code}' http://localhost:5080/)"
+          # The viewer starts only after the backend is healthy, so nginx may not
+          # be listening yet — poll (tolerating connection-refused) until it serves.
+          code=000
+          for i in $(seq 1 30); do
+            code="$(curl -s -o /dev/null -w '%{http_code}' http://localhost:5080/ || echo 000)"
+            [ "$code" = "200" ] && break
+            sleep 3
+          done
           echo "viewer / -> HTTP $code"
           [ "$code" = "200" ] || { echo "::error::viewer not serving on 5080"; exit 1; }
           echo "Quick start booted cleanly with no .env on ${{ matrix.arch }}."
