@@ -4,10 +4,12 @@ name: Build images (api / worker / viewer)
 # (see docker-images/Dockerfile.api / .worker / .viewer) on tag pushes
 # and validates them on PRs.
 #
-# Multi-arch: each image is built for linux/amd64 AND linux/arm64 on NATIVE
-# runners (no QEMU emulation), pushed by digest, then stitched into a single
-# multi-arch manifest by the `merge` job. amd64 builds at full speed on its own
-# runner and is never gated behind the arm64 build.
+# Architectures (resolved by the `setup` job):
+#   - PRs and beta/pre-release tags (1.0.0-b9, *-next): linux/amd64 only — fast.
+#   - Stable releases (pure X.Y.Z) and matching workflow_dispatch: linux/amd64
+#     AND linux/arm64, each built on a NATIVE runner (no QEMU emulation), pushed
+#     by digest, then stitched into one multi-arch manifest by the `merge` job.
+# arm64 is reserved for production releases so it never runs on every PR/commit.
 #
 # Image namespaces: `depictio-api`, `depictio-worker`, `depictio-viewer`.
 
@@ -51,8 +53,42 @@ env:
   OWNER: ${{ github.repository_owner }}
 
 jobs:
+  setup:
+    name: Resolve build platforms
+    runs-on: ubuntu-latest
+    outputs:
+      # JSON array of {name, arch, runner} — consumed by `build` and `smoke-test`.
+      platforms: ${{ steps.set.outputs.platforms }}
+    steps:
+      - name: Decide architectures
+        id: set
+        run: |
+          AMD='{"name":"linux/amd64","arch":"amd64","runner":"ubuntu-22.04"}'
+          ARM='{"name":"linux/arm64","arch":"arm64","runner":"ubuntu-24.04-arm"}'
+
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            VERSION=""
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            GIT_TAG=${GITHUB_REF#refs/tags/}
+            VERSION="${GIT_TAG#v}"
+          fi
+
+          # arm64 is reserved for STABLE production releases (pure X.Y.Z, no
+          # -bN / -next suffix). PRs and pre-release tags stay amd64-only so arm
+          # never builds on every PR/commit.
+          if [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "platforms=[$AMD,$ARM]" >> "$GITHUB_OUTPUT"
+            echo "Stable release '$VERSION' → amd64 + arm64"
+          else
+            echo "platforms=[$AMD]" >> "$GITHUB_OUTPUT"
+            echo "PR / pre-release '${VERSION:-PR}' → amd64 only"
+          fi
+
   build:
     name: Build ${{ matrix.image.name }} (${{ matrix.platform.arch }})
+    needs: setup
     runs-on: ${{ matrix.platform.runner }}
     permissions:
       contents: read
@@ -64,10 +100,8 @@ jobs:
           - { name: depictio-api, dockerfile: docker-images/Dockerfile.api }
           - { name: depictio-worker, dockerfile: docker-images/Dockerfile.worker }
           - { name: depictio-viewer, dockerfile: docker-images/Dockerfile.viewer }
-        platform:
-          # Native runners — no QEMU. amd64 ships independently of arm64.
-          - { name: linux/amd64, arch: amd64, runner: ubuntu-22.04 }
-          - { name: linux/arm64, arch: arm64, runner: ubuntu-24.04-arm }
+        # amd64 always; arm64 added only for stable releases (see `setup`).
+        platform: ${{ fromJSON(needs.setup.outputs.platforms) }}
 
     steps:
       - name: Checkout repository
@@ -217,7 +251,7 @@ jobs:
     # (no .env, no flags) — the exact thing a docs-following user runs. Runs on
     # both arches so the multi-arch images are validated end-to-end at runtime.
     name: Quick-start smoke test (${{ matrix.arch }})
-    needs: merge
+    needs: [setup, merge]
     if: github.event_name != 'pull_request'
     runs-on: ${{ matrix.runner }}
     permissions:
@@ -226,9 +260,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - { arch: amd64, runner: ubuntu-22.04 }
-          - { arch: arm64, runner: ubuntu-24.04-arm }
+        # Same arches that were actually built+published (amd64, plus arm64 on
+        # stable releases) — so the arm64 smoke test only runs when arm64 exists.
+        include: ${{ fromJSON(needs.setup.outputs.platforms) }}
 
     steps:
       - name: Checkout repository
