@@ -81,6 +81,18 @@ def register_run_command(app: typer.Typer):
             "--skip-dashboard-import",
             help="Skip automatic dashboard import from template.",
         ),
+        nextflow_manifest: Annotated[
+            str | None,
+            typer.Option(
+                "--nextflow-manifest",
+                help=(
+                    "Nextflow manifest as '<name>/<version>' (e.g. 'nf-core/rnaseq/3.18.0'). "
+                    "When neither --template nor --project-config-path is given, the CLI "
+                    "auto-resolves a bundled depictio template matching this manifest. "
+                    "Intended for automated triggering from a Nextflow pipeline."
+                ),
+            ),
+        ] = None,
         # Existing options
         workflow_name: Annotated[
             str | None,
@@ -159,6 +171,28 @@ def register_run_command(app: typer.Typer):
             depictio-cli run --template nf-core/ampliseq/2.16.0 --data-root /path/to/data
         """
         rich_print_command_usage("run")
+
+        # Auto-resolve a bundled template from a Nextflow manifest. Lets pipeline
+        # triggers (the nextflow.config snippet) forward the raw manifest and let
+        # the CLI decide the mode — explicit --template/--project-config-path win.
+        if nextflow_manifest and not template and not project_config_path:
+            from depictio.cli.cli.utils.templates import locate_template
+
+            try:
+                locate_template(nextflow_manifest)
+            except FileNotFoundError:
+                rich_print_checked_statement(
+                    f"No bundled depictio template matches Nextflow manifest "
+                    f"'{nextflow_manifest}'. Provide --project-config-path with a depictio "
+                    f"project YAML for this pipeline (or --template for a known one).",
+                    "error",
+                )
+                raise typer.Exit(code=1)
+            template = nextflow_manifest
+            rich_print_checked_statement(
+                f"Resolved Nextflow manifest '{nextflow_manifest}' to bundled template.",
+                "success",
+            )
 
         # Validate template/project-config-path mutual exclusivity
         if template and project_config_path:

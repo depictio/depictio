@@ -77,6 +77,37 @@ def validate_depictio_cli_config(depictio_cli_config: dict) -> CLIConfig:
     return config
 
 
+# CLI config paths considered "default" — only these are overridden by
+# DEPICTIO_CLI_CONFIG_PATH so an explicit --CLI-config-path is never clobbered.
+_DEFAULT_CLI_CONFIG_PATHS = ("~/.depictio/cli.yaml", "~/.depictio/CLI.yaml")
+
+
+def _apply_env_overrides(config: dict) -> dict:
+    """Apply environment-variable overrides to a loaded CLI config dict.
+
+    Lets a ``CLI.yaml`` be committed **without secrets** and have the token (and
+    optionally the API URL) injected at runtime — the mechanism that makes
+    automated triggering (e.g. from a Nextflow pipeline in CI/cluster) practical.
+
+    Recognised variables:
+      - ``DEPICTIO_CLI_TOKEN``        → ``user.token.access_token``
+      - ``DEPICTIO_CLI_API_BASE_URL`` → ``api_base_url``
+
+    (``DEPICTIO_CLI_CONFIG_PATH`` is handled in :func:`load_depictio_config`
+    since it selects the file to load before this runs.)
+    """
+    token = os.environ.get("DEPICTIO_CLI_TOKEN")
+    if token:
+        user = config.setdefault("user", {})
+        user.setdefault("token", {})["access_token"] = token
+
+    api_base_url = os.environ.get("DEPICTIO_CLI_API_BASE_URL")
+    if api_base_url:
+        config["api_base_url"] = api_base_url
+
+    return config
+
+
 @validate_call(validate_return=True)
 def load_depictio_config(yaml_config_path: str = "~/.depictio/cli.yaml") -> CLIConfig:
     """
@@ -84,7 +115,13 @@ def load_depictio_config(yaml_config_path: str = "~/.depictio/cli.yaml") -> CLIC
     """
     try:
         rich_print_checked_statement("Loading Depictio configuration...", "loading")
+        # DEPICTIO_CLI_CONFIG_PATH overrides the path only when the caller left it
+        # at a default — an explicit --CLI-config-path always wins.
+        env_path = os.environ.get("DEPICTIO_CLI_CONFIG_PATH")
+        if env_path and yaml_config_path in _DEFAULT_CLI_CONFIG_PATHS:
+            yaml_config_path = env_path
         config = get_config(os.path.expanduser(yaml_config_path))
+        config = _apply_env_overrides(config)
         config = validate_depictio_cli_config(config)
         return config
     except FileNotFoundError:
