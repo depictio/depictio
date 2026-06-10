@@ -11,16 +11,36 @@ import json
 import re
 from typing import Any
 
-import matplotlib.colors as mcolors
-import matplotlib.pyplot as plt
 import pandas as pd
+import plotly.colors as pc
 import plotly.graph_objects as go
 import polars as pl
-from matplotlib import colormaps
+
+# Plotly colorscales standing in for the matplotlib colormaps the general-stats
+# table used before the Dash → React migration. matplotlib is no longer a
+# dependency, and plotly (already required) provides equivalent scales with the
+# same low→high orientation (Red→Green, Red→Blue, light→dark Blue).
+_CMAP_ALIASES = {
+    "RdYlGn": pc.diverging.RdYlGn,
+    "RdYlBu": pc.diverging.RdYlBu,
+    "Blues": pc.sequential.Blues,
+}
+_FALLBACK_CMAP = pc.diverging.RdYlGn
 
 
 def _get_colormap(name: str):
-    return colormaps[name]
+    return _CMAP_ALIASES.get(name, _FALLBACK_CMAP)
+
+
+def _sample_colormap(cmap, norm_value: float) -> tuple[float, float, float]:
+    """Sample a plotly colorscale at a normalised value, returning (r, g, b) in 0-1.
+
+    Mirrors the matplotlib ``cmap(norm_value)`` call this replaced, including the
+    implicit clamping matplotlib applied to out-of-range values.
+    """
+    clamped = min(1.0, max(0.0, norm_value))
+    r, g, b = pc.sample_colorscale(cmap, [clamped], colortype="tuple")[0]
+    return r, g, b
 
 
 def _sanitize_column_name(name: str) -> str:
@@ -350,7 +370,7 @@ def _multiqc_data_bars_colormap(
     fixed_scale: tuple | None = None,
     reverse_colors: bool = False,
 ) -> list[dict]:
-    """Create data bars with matplotlib colormap."""
+    """Create data bars coloured with a plotly colorscale."""
     n_bins = 100
     bounds = [i * (1.0 / n_bins) for i in range(n_bins + 1)]
     col_data = pd.to_numeric(df[column], errors="coerce")
@@ -367,10 +387,7 @@ def _multiqc_data_bars_colormap(
     ranges = [((col_max - col_min) * i) + col_min for i in bounds]
     col_id = column.replace("(", "\\(").replace(")", "\\)").replace("%", "\\%")
 
-    try:
-        cmap = plt.colormaps[cmap_name]
-    except KeyError:
-        cmap = _get_colormap(cmap_name)
+    cmap = _get_colormap(cmap_name)
 
     styles: list[dict] = []
     for i in range(1, len(bounds)):
@@ -386,12 +403,11 @@ def _multiqc_data_bars_colormap(
         if reverse_colors:
             norm_value = 1.0 - norm_value
 
-        rgba = cmap(norm_value)
-        r, g, b, _ = rgba
+        r, g, b = _sample_colormap(cmap, norm_value)
         r = r * opacity + (1 - opacity) * 1.0
         g = g * opacity + (1 - opacity) * 1.0
         b = b * opacity + (1 - opacity) * 1.0
-        bar_color = mcolors.to_hex((r, g, b, 1.0))
+        bar_color = "#{:02x}{:02x}{:02x}".format(round(r * 255), round(g * 255), round(b * 255))
 
         styles.append(
             {
