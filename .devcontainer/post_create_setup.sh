@@ -91,14 +91,27 @@ fi
 
 echo "Waiting for services to become ready..."
 
-# Function to wait for a service using bash built-in TCP connection
+# Wait for a TCP service, but ONLY up to a bounded number of attempts.
+# Container creation must never hang forever on an unhealthy service
+# (e.g. a backend that failed to boot) — postCreateCommand blocking is what
+# leaves Codespaces stuck on the "Running postCreateCommand..." spinner.
+# On timeout we warn and continue; the service may still come up later, and
+# port forwarding / the rest of setup should not be held hostage by it.
 wait_for_service() {
     local host=$1
     local port=$2
     local service_name=$3
+    local max_attempts=${4:-30}   # ~60s at 2s/attempt
+    local attempt=0
 
     until timeout 1 bash -c "cat < /dev/null > /dev/tcp/${host}/${port}" 2>/dev/null; do
-        echo "⏳ Waiting for ${service_name}..."
+        attempt=$((attempt + 1))
+        if [ "$attempt" -ge "$max_attempts" ]; then
+            echo "⚠️  ${service_name} not ready after ${max_attempts} attempts — continuing without it."
+            echo "    (check 'docker logs ${host}' or 'docker compose ps' if it never comes up)"
+            return 1
+        fi
+        echo "⏳ Waiting for ${service_name}... (${attempt}/${max_attempts})"
         sleep 2
     done
     echo "✓ ${service_name} is ready"
@@ -119,7 +132,7 @@ wait_for_service depictio-backend 8058 "FastAPI backend"
 # Wait for the dev viewer (Vite HMR server)
 wait_for_service depictio-viewer-dev 5173 "Vite dev viewer"
 
-echo "All services are ready! Setting up development environment..."
+echo "Service readiness check complete. Setting up development environment..."
 
 # Install depictio in development mode with dev dependencies
 cd /workspace || exit
