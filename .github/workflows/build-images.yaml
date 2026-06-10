@@ -289,6 +289,45 @@ jobs:
           [ "$code" = "200" ] || { echo "::error::viewer not serving on 5080"; exit 1; }
           echo "Quick start booted cleanly with no .env on ${{ matrix.arch }}."
 
+      - name: Sanity checks (status, version, schema, containers)
+        env:
+          DEPICTIO_VERSION: ${{ steps.meta-vars.outputs.VERSION }}
+        run: |
+          set -euo pipefail
+
+          echo "::group::API status + version"
+          # /depictio/api/v1/utils/status -> {"status": "online", "version": ...}
+          status_json="$(curl -fsS http://localhost:8058/depictio/api/v1/utils/status)"
+          echo "$status_json"
+          api_status="$(echo "$status_json" | jq -r '.status // "unknown"')"
+          api_version="$(echo "$status_json" | jq -r '.version // "unknown"')"
+          [ "$api_status" = "online" ] || { echo "::error::API status is '$api_status', expected 'online'"; exit 1; }
+          # The API reports the VERSION file verbatim; tolerate PEP 440 beta
+          # normalization (1.0.0-b9 -> 1.0.0b9) just in case.
+          want="$(echo "$DEPICTIO_VERSION" | tr -d '-')"
+          got="$(echo "$api_version" | tr -d '-')"
+          [ "$want" = "$got" ] || { echo "::error::API reports version '$api_version', expected '$DEPICTIO_VERSION' (the built image)"; exit 1; }
+          echo "API online and serving version $api_version (matches the built image)."
+          echo "::endgroup::"
+
+          echo "::group::FastAPI OpenAPI schema"
+          openapi_code="$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8058/openapi.json)"
+          [ "$openapi_code" = "200" ] || { echo "::error::/openapi.json -> HTTP $openapi_code"; exit 1; }
+          echo "/openapi.json: 200"
+          echo "::endgroup::"
+
+          echo "::group::All services running"
+          # The bundled MinIO must be up (the dropped profile / default creds) and
+          # the worker must be up (required for design mode) — assert no container
+          # exited or crash-looped.
+          for c in mongo redis minio depictio-backend depictio-viewer depictio-celery-worker; do
+            state="$(docker inspect -f '{{ .State.Status }}' "$c" 2>/dev/null || echo missing)"
+            echo "  $c: $state"
+            [ "$state" = "running" ] || { echo "::error::container '$c' is '$state', expected 'running'"; exit 1; }
+          done
+          echo "All six services running."
+          echo "::endgroup::"
+
       - name: Dump compose logs on failure
         if: failure()
         run: docker compose -f "$RUNNER_TEMP/quickstart/docker-compose.yaml" logs --no-color || true
