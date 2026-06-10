@@ -211,3 +211,88 @@ jobs:
         run: |
           docker buildx imagetools inspect \
             ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ matrix.image }}:${{ steps.meta-vars.outputs.VERSION }}
+
+  smoke-test:
+    # Prove the published quick start actually boots from JUST the compose file
+    # (no .env, no flags) — the exact thing a docs-following user runs. Runs on
+    # both arches so the multi-arch images are validated end-to-end at runtime.
+    name: Quick-start smoke test (${{ matrix.arch }})
+    needs: merge
+    if: github.event_name != 'pull_request'
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: amd64, runner: ubuntu-22.04 }
+          - { arch: arm64, runner: ubuntu-24.04-arm }
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Determine version
+        id: meta-vars
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "VERSION=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            GIT_TAG=${GITHUB_REF#refs/tags/}
+            echo "VERSION=${GIT_TAG#v}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ env.OWNER }}
+          password: ${{ secrets.GHCR_PAT }}
+
+      - name: Boot the quick start from docker-compose.yaml alone (no .env)
+        env:
+          # Pin to the images this run just built + merged, so the smoke test
+          # validates the exact release artifacts (works for betas too, whose
+          # compose pin still points at the previous stable).
+          DEPICTIO_VERSION: ${{ steps.meta-vars.outputs.VERSION }}
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/quickstart"
+          mkdir -p "$work"
+          # Isolate exactly what a docs-following user has: the compose file,
+          # nothing else. No .env, no COMPOSE_PROFILES, no extra args.
+          cp docker-compose.yaml "$work/docker-compose.yaml"
+          cd "$work"
+          docker compose up -d
+
+          echo "::group::Wait for backend health"
+          ok=false
+          # First boot seeds the reference datasets, so allow a generous window.
+          for i in $(seq 1 90); do
+            status="$(docker inspect -f '{{ .State.Health.Status }}' depictio-backend 2>/dev/null || echo missing)"
+            echo "[$i] backend: $status"
+            case "$status" in
+              healthy) ok=true; break ;;
+              unhealthy) echo "backend reported unhealthy"; break ;;
+            esac
+            sleep 5
+          done
+          echo "::endgroup::"
+          $ok || { echo "::error::backend did not become healthy"; exit 1; }
+
+          echo "Asserting published endpoints..."
+          curl -fsS http://localhost:8058/health >/dev/null && echo "API /health: OK"
+          code="$(curl -s -o /dev/null -w '%{http_code}' http://localhost:5080/)"
+          echo "viewer / -> HTTP $code"
+          [ "$code" = "200" ] || { echo "::error::viewer not serving on 5080"; exit 1; }
+          echo "Quick start booted cleanly with no .env on ${{ matrix.arch }}."
+
+      - name: Dump compose logs on failure
+        if: failure()
+        run: docker compose -f "$RUNNER_TEMP/quickstart/docker-compose.yaml" logs --no-color || true
+
+      - name: Tear down
+        if: always()
+        run: docker compose -f "$RUNNER_TEMP/quickstart/docker-compose.yaml" down -v || true
