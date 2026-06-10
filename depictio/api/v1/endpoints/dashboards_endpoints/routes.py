@@ -1605,6 +1605,43 @@ def bulk_compute_cards(
         specs_cache[dc_id_str] = flat
         return flat
 
+    def _card_cache_key(wf_id: Any, dc_id: Any) -> tuple:
+        """``(wf_id, dc_id, filter signature)`` — the dedupe key for a card's
+        Delta load. Cards sharing it share one loaded frame (via ``df_cache``),
+        so a projected load must carry the union of their columns."""
+        card_filters = _resolved_filters_for(str(dc_id))
+        filter_sig = tuple(
+            sorted(
+                (
+                    str(fm.get("column_name")),
+                    str(fm.get("interactive_component_type")),
+                    repr(fm.get("value")),
+                )
+                for fm in card_filters
+            )
+        )
+        return (str(wf_id), str(dc_id), filter_sig)
+
+    # Column projection (#7) pre-pass: the slow Delta load is shared across
+    # every card with the same (wf_id, dc_id, filter) signature, so the
+    # projected load must carry the union of all sibling cards' referenced
+    # columns — otherwise a sibling reusing the cached frame would find its
+    # column missing and report null. The loader folds in filter columns and
+    # schema-guards the set; over-inclusion only costs a little extra I/O.
+    needed_cols_by_key: dict[tuple, set[str]] = {}
+    for card in cards:
+        wf_id = card.get("wf_id")
+        dc_id = card.get("dc_id")
+        column = card.get("column_name")
+        aggregation = card.get("aggregation")
+        if not (wf_id and dc_id and column and aggregation):
+            continue
+        key_cols = needed_cols_by_key.setdefault(_card_cache_key(wf_id, dc_id), set())
+        key_cols.add(column)
+        breakdown_col = card.get("breakdown_col")
+        if breakdown_col:
+            key_cols.add(breakdown_col)
+
     for card in cards:
         idx = str(card.get("index"))
         wf_id = card.get("wf_id")
@@ -1673,24 +1710,16 @@ def bulk_compute_cards(
         # Cache key includes the filter signature so two cards on the same DC
         # with different (link-resolved) filter sets don't collide.
         card_filters = _resolved_filters_for(str(dc_id))
-        filter_sig = tuple(
-            sorted(
-                (
-                    str(fm.get("column_name")),
-                    str(fm.get("interactive_component_type")),
-                    repr(fm.get("value")),
-                )
-                for fm in card_filters
-            )
-        )
-        cache_key = (str(wf_id), str(dc_id), filter_sig)
+        cache_key = _card_cache_key(wf_id, dc_id)
         df = df_cache.get(cache_key)
         if df is None:
             try:
+                project_cols = sorted(needed_cols_by_key.get(cache_key, set())) or None
                 df = load_deltatable_lite(
                     workflow_id=ObjectId(str(wf_id)) if not isinstance(wf_id, ObjectId) else wf_id,
                     data_collection_id=str(dc_id),
                     metadata=card_filters if card_filters else None,
+                    select_columns=project_cols,
                     init_data=init_data,
                 )
                 logger.debug(
