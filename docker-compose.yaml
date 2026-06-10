@@ -174,12 +174,14 @@ services:
       - 5080:8080
     # read_only root FS: nginx-unprivileged only needs writable scratch dirs,
     # provided as tmpfs below (pid → /tmp, caches → /var/cache/nginx,
-    # runtime sockets → /var/run).
+    # runtime sockets → /var/run, and /etc/nginx/conf.d where the entrypoint
+    # renders default.conf.template via envsubst at startup).
     read_only: true
     tmpfs:
       - /tmp
       - /var/cache/nginx
       - /var/run
+      - /etc/nginx/conf.d
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
     deploy:
