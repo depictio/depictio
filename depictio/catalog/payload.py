@@ -244,7 +244,16 @@ def _advanced_viz_config_and_data(df, render) -> tuple[dict[str, Any], dict[str,
     # `abundance` and let the runtime auto-bind the taxonomy ranks by name;
     # mirror that here so the offline preview has its hierarchy.
     if render.kind == "sunburst" and "rank_cols" not in config:
-        _TAXO_RANKS = ("Domain", "Kingdom", "Phylum", "Class", "Order", "Family", "Genus", "Species")
+        _TAXO_RANKS = (
+            "Domain",
+            "Kingdom",
+            "Phylum",
+            "Class",
+            "Order",
+            "Family",
+            "Genus",
+            "Species",
+        )
         inferred = [c for c in _TAXO_RANKS if c in df.columns]
         if len(inferred) >= 2:
             config["rank_cols"] = inferred

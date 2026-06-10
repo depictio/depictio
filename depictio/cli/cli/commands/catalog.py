@@ -140,9 +140,13 @@ def catalog_preview(
     theme: Annotated[str, typer.Option("--theme", "-t", help="Theme: light or dark")] = "light",
     out: Annotated[
         str | None,
-        typer.Option("--out", "-o", help="Export the self-contained HTML here instead of serving it"),
+        typer.Option(
+            "--out", "-o", help="Export the self-contained HTML here instead of serving it"
+        ),
     ] = None,
-    port: Annotated[int, typer.Option("--port", help="Port for the ephemeral server (0 = auto)")] = 0,
+    port: Annotated[
+        int, typer.Option("--port", help="Port for the ephemeral server (0 = auto)")
+    ] = 0,
     no_open: Annotated[bool, typer.Option("--no-open", help="Do not open a browser tab")] = False,
 ) -> None:
     """Preview an output's components on its fixture, served on an ephemeral
@@ -183,9 +187,13 @@ def catalog_gallery(
     theme: Annotated[str, typer.Option("--theme", "-t", help="Theme: light or dark")] = "light",
     out: Annotated[
         str | None,
-        typer.Option("--out", "-o", help="Export the self-contained HTML here instead of serving it"),
+        typer.Option(
+            "--out", "-o", help="Export the self-contained HTML here instead of serving it"
+        ),
     ] = None,
-    port: Annotated[int, typer.Option("--port", help="Port for the ephemeral server (0 = auto)")] = 0,
+    port: Annotated[
+        int, typer.Option("--port", help="Port for the ephemeral server (0 = auto)")
+    ] = 0,
     no_open: Annotated[bool, typer.Option("--no-open", help="Do not open a browser tab")] = False,
 ) -> None:
     """Browse the whole catalog on one page (every tool's outputs, grouped, with
