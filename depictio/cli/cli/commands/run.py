@@ -160,6 +160,66 @@ def register_run_command(app: typer.Typer):
         """
         rich_print_command_usage("run")
 
+        # Step 0a: Auto-detect from a Nextflow run directory.
+        # `depictio run --data-root X` (no --template / --project-config-path) reads
+        # the run's pipeline_info/ to identify the pipeline+version, picks a matching
+        # template, and pre-fills --var from params.json. With no matching template it
+        # auto-composes a dashboard from the catalog-recognised module outputs.
+        autodetect_info = None
+        autodetect_dashboard_path: Path | None = None
+        if template is None and not project_config_path and data_root and Path(data_root).is_dir():
+            from depictio.cli.cli.utils.templates import detect_template_from_run_dir
+
+            detected_template, autodetect_info = detect_template_from_run_dir(data_root)
+            if autodetect_info is not None:
+                rich_print_checked_statement(
+                    f"Detected {autodetect_info.pipeline_name or 'unknown pipeline'} "
+                    f"{autodetect_info.pipeline_version or ''} "
+                    f"(Nextflow {autodetect_info.nextflow_version or '?'}, "
+                    f"{len(autodetect_info.tools_executed)} tool(s))".strip(),
+                    "info",
+                )
+            if detected_template:
+                template = detected_template
+                rich_print_checked_statement(f"Auto-selected template: {template}", "info")
+                # Pre-fill template variables from run params (never override user --var).
+                provided_keys = {v.split("=", 1)[0] for v in var if "=" in v}
+                param_to_var = {"input": "SAMPLESHEET_FILE", "metadata": "METADATA_FILE"}
+                for param_key, var_key in param_to_var.items():
+                    value = autodetect_info.params.get(param_key) if autodetect_info else None
+                    if value and var_key not in provided_keys:
+                        var = list(var) + [f"{var_key}={value}"]
+                        rich_print_checked_statement(
+                            f"Pre-filled {var_key} from run params", "info"
+                        )
+            elif autodetect_info is not None:
+                # No template → auto-compose a dashboard from the catalog.
+                from depictio.models.components.advanced_viz.compose import (
+                    build_dashboard_from_run_dir,
+                )
+
+                composed = build_dashboard_from_run_dir(data_root, info=autodetect_info)
+                if composed.components:
+                    autodetect_dashboard_path = (
+                        Path(data_root) / "depictio_dashboard.generated.yaml"
+                    )
+                    autodetect_dashboard_path.write_text(composed.to_yaml(), encoding="utf-8")
+                    rich_print_checked_statement(
+                        f"Auto-composed dashboard with {len(composed.components)} component(s) → "
+                        f"{autodetect_dashboard_path}",
+                        "success",
+                    )
+                    rich_print_checked_statement(
+                        "No template matched: review the generated dashboard, then ingest its "
+                        "data collections (template or --project-config-path) before importing it.",
+                        "info",
+                    )
+                else:
+                    rich_print_checked_statement(
+                        "No template matched and no catalogued module outputs were recognised.",
+                        "warning",
+                    )
+
         # Validate template/project-config-path mutual exclusivity
         if template and project_config_path:
             rich_print_checked_statement(
@@ -232,6 +292,20 @@ def register_run_command(app: typer.Typer):
                     f"Template '{template_metadata.template_id}' loaded successfully",
                     "success",
                 )
+
+                # Persist Nextflow provenance on each workflow's config when the
+                # template was auto-detected from a real run directory.
+                if autodetect_info is not None:
+                    provenance = {
+                        "engine_name": "nextflow",
+                        "pipeline_version": autodetect_info.pipeline_version,
+                        "nextflow_version": autodetect_info.nextflow_version,
+                        "tools_executed": sorted(autodetect_info.tools_executed),
+                        "workflow_parameters": autodetect_info.params or None,
+                    }
+                    provenance = {k: v for k, v in provenance.items() if v}
+                    for wf in resolved_config.get("workflows", []):
+                        wf.setdefault("config", {}).update(provenance)
 
                 template_resolved_config = resolved_config
 
