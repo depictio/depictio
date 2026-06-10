@@ -4,6 +4,11 @@ name: Build images (api / worker / viewer)
 # (see docker-images/Dockerfile.api / .worker / .viewer) on tag pushes
 # and validates them on PRs.
 #
+# Multi-arch: each image is built for linux/amd64 AND linux/arm64 on NATIVE
+# runners (no QEMU emulation), pushed by digest, then stitched into a single
+# multi-arch manifest by the `merge` job. amd64 builds at full speed on its own
+# runner and is never gated behind the arm64 build.
+#
 # Image namespaces: `depictio-api`, `depictio-worker`, `depictio-viewer`.
 
 on:
@@ -47,21 +52,22 @@ env:
 
 jobs:
   build:
-    name: Build ${{ matrix.image }}
-    runs-on: ubuntu-22.04
+    name: Build ${{ matrix.image.name }} (${{ matrix.platform.arch }})
+    runs-on: ${{ matrix.platform.runner }}
     permissions:
       contents: read
       packages: write
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - image: depictio-api
-            dockerfile: docker-images/Dockerfile.api
-          - image: depictio-worker
-            dockerfile: docker-images/Dockerfile.worker
-          - image: depictio-viewer
-            dockerfile: docker-images/Dockerfile.viewer
+        image:
+          - { name: depictio-api, dockerfile: docker-images/Dockerfile.api }
+          - { name: depictio-worker, dockerfile: docker-images/Dockerfile.worker }
+          - { name: depictio-viewer, dockerfile: docker-images/Dockerfile.viewer }
+        platform:
+          # Native runners — no QEMU. amd64 ships independently of arm64.
+          - { name: linux/amd64, arch: amd64, runner: ubuntu-22.04 }
+          - { name: linux/arm64, arch: arm64, runner: ubuntu-24.04-arm }
 
     steps:
       - name: Checkout repository
@@ -99,32 +105,109 @@ jobs:
           driver-opts: |
             image=moby/buildkit:latest
 
-      - name: Extract metadata (tags, labels) for Docker
+      - name: Extract labels for Docker
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ matrix.image.name }}
+
+      - name: Build ${{ matrix.image.name }} (${{ matrix.platform.arch }})
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ${{ matrix.image.dockerfile }}
+          platforms: ${{ matrix.platform.name }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ steps.meta-vars.outputs.VERSION }}
+          # On push: emit a tag-less image and push by digest, so the two
+          # per-arch builds can be merged into one manifest later. On PRs:
+          # empty outputs → build-only validation (no load, no push).
+          outputs: ${{ steps.meta-vars.outputs.PUSH == 'true' && format('type=image,name={0}/{1}/{2},push-by-digest=true,name-canonical=true,push=true', env.REGISTRY, env.OWNER, matrix.image.name) || '' }}
+          # Per-image AND per-arch cache ref so api/worker/viewer and amd64/arm64
+          # builds never poison each other's layer cache. cache-to is push-gated
+          # because type=registry writes need GHCR auth (skipped on fork PRs).
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.OWNER }}/${{ matrix.image.name }}:buildcache-${{ matrix.platform.arch }}
+          cache-to: ${{ steps.meta-vars.outputs.PUSH == 'true' && format('type=registry,ref={0}/{1}/{2}:buildcache-{3},mode=max', env.REGISTRY, env.OWNER, matrix.image.name, matrix.platform.arch) || '' }}
+
+      - name: Export digest
+        if: steps.meta-vars.outputs.PUSH == 'true'
+        run: |
+          mkdir -p /tmp/digests
+          digest="${{ steps.build.outputs.digest }}"
+          touch "/tmp/digests/${digest#sha256:}"
+
+      - name: Upload digest
+        if: steps.meta-vars.outputs.PUSH == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ matrix.image.name }}-${{ matrix.platform.arch }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    name: Merge ${{ matrix.image }} manifest
+    needs: build
+    # Only the push path publishes — PRs stop at per-arch validation builds.
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [depictio-api, depictio-worker, depictio-viewer]
+
+    steps:
+      - name: Determine version
+        id: meta-vars
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "VERSION=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            GIT_TAG=${GITHUB_REF#refs/tags/}
+            echo "VERSION=${GIT_TAG#v}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests
+          pattern: digests-${{ matrix.image }}-*
+          merge-multiple: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ env.OWNER }}
+          password: ${{ secrets.GHCR_PAT }}
+
+      - name: Extract metadata (tags) for Docker
         id: meta
         uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ matrix.image }}
-          # `next` is the moving pointer to the latest build off the
-          # default branch. Release tags get the explicit version tag.
+          # `next` is the moving pointer to the latest build; release tags also
+          # get their explicit version tag (e.g. 1.0.0).
           tags: |
             type=raw,value=${{ steps.meta-vars.outputs.VERSION }}
-            type=raw,value=next,enable=${{ steps.meta-vars.outputs.PUSH == 'true' }}
+            type=raw,value=next
 
-      - name: Build and push ${{ matrix.image }}
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: ${{ matrix.dockerfile }}
-          push: ${{ steps.meta-vars.outputs.PUSH == 'true' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          platforms: linux/amd64
-          build-args: |
-            VERSION=${{ steps.meta-vars.outputs.VERSION }}
-          # Per-image cache ref so the api/worker/viewer builds don't
-          # poison each other's layer cache (different base images, very
-          # different dep sets). cache-to is push-gated because
-          # type=registry writes need GHCR auth, which we skip on PRs
-          # (fork PRs wouldn't have the secret anyway).
-          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.OWNER }}/${{ matrix.image }}:buildcache
-          cache-to: ${{ steps.meta-vars.outputs.PUSH == 'true' && format('type=registry,ref={0}/{1}/{2}:buildcache,mode=max', env.REGISTRY, env.OWNER, matrix.image) || '' }}
+      - name: Create multi-arch manifest list and push
+        working-directory: /tmp/digests
+        run: |
+          docker buildx imagetools create \
+            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf '${{ env.REGISTRY }}/${{ env.OWNER }}/${{ matrix.image }}@sha256:%s ' *)
+
+      - name: Inspect merged image
+        run: |
+          docker buildx imagetools inspect \
+            ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ matrix.image }}:${{ steps.meta-vars.outputs.VERSION }}
