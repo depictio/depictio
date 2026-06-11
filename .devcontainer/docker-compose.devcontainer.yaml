@@ -55,6 +55,28 @@ services:
       # Fix Docker API version mismatch in Codespaces
       - DOCKER_API_VERSION=1.43
 
+  # Force single-user auth mode for the devcontainer/Codespaces stack.
+  #
+  # docker-compose.dev.yaml declares DEPICTIO_AUTH_SINGLE_USER_MODE under the
+  # backend's `environment:` as "${DEPICTIO_AUTH_SINGLE_USER_MODE:-false}", and
+  # Compose's `environment:` ALWAYS overrides `env_file:` — so the `=true` in
+  # docker-compose/.env gets clobbered to `false` whenever that variable isn't
+  # present in the interpolation context (a git-ignored, init-generated .env /
+  # override that easily goes missing on Codespaces). This file is committed and
+  # loaded AFTER both dev.yaml and the generated override, so pinning the value
+  # here makes single-user mode deterministic regardless of that chain.
+  depictio-backend:
+    environment:
+      - DEPICTIO_AUTH_SINGLE_USER_MODE=true
+      - DEPICTIO_AUTH_PUBLIC_MODE=false
+      - DEPICTIO_AUTH_UNAUTHENTICATED_MODE=false
+
+  depictio-celery-worker:
+    environment:
+      - DEPICTIO_AUTH_SINGLE_USER_MODE=true
+      - DEPICTIO_AUTH_PUBLIC_MODE=false
+      - DEPICTIO_AUTH_UNAUTHENTICATED_MODE=false
+
 volumes:
   claude-code-config:
   uv-cache:
