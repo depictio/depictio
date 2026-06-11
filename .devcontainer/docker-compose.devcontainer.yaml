@@ -70,12 +70,18 @@ services:
       - DEPICTIO_AUTH_SINGLE_USER_MODE=true
       - DEPICTIO_AUTH_PUBLIC_MODE=false
       - DEPICTIO_AUTH_UNAUTHENTICATED_MODE=false
+      # Seed only the lightweight iris reference project in Codespaces so the
+      # stack comes up fast. Set DEPICTIO_SEED_PROJECTS to a CSV (e.g.
+      # "iris,penguins") for more, or DEPICTIO_DISABLE_EXAMPLE_DASHBOARDS=true
+      # for none.
+      - DEPICTIO_SEED_PROJECTS=iris
 
   depictio-celery-worker:
     environment:
       - DEPICTIO_AUTH_SINGLE_USER_MODE=true
       - DEPICTIO_AUTH_PUBLIC_MODE=false
       - DEPICTIO_AUTH_UNAUTHENTICATED_MODE=false
+      - DEPICTIO_SEED_PROJECTS=iris
 
 volumes:
   claude-code-config:
