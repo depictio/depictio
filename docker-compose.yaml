@@ -65,6 +65,8 @@ services:
       - 127.0.0.1:8058:8058
     volumes:
       - depictio_keys:/app/depictio/keys
+      # Shared worker→backend: worker writes screenshots, backend serves them.
+      - depictio_screenshots:/app/depictio/api/static/screenshots
     env_file:
       - path: .env
         required: false
@@ -117,6 +119,8 @@ services:
     image: ghcr.io/depictio/depictio-worker:${DEPICTIO_VERSION:-1.0.1}
     volumes:
       - depictio_keys:/app/depictio/keys
+      # Shared with the backend (see above) — worker writes screenshots here.
+      - depictio_screenshots:/app/depictio/api/static/screenshots
     env_file:
       - path: .env
         required: false
@@ -149,4 +153,6 @@ volumes:
   minio_data:
     driver: local
   depictio_keys:
+    driver: local
+  depictio_screenshots:
     driver: local
