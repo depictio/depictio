@@ -310,15 +310,23 @@ jobs:
           echo "Asserting published endpoints..."
           curl -fsS http://localhost:8058/health >/dev/null && echo "API /health: OK"
           # The viewer starts only after the backend is healthy, so nginx may not
-          # be listening yet — poll (tolerating connection-refused) until it serves.
+          # be listening yet — poll (tolerating connection-refused) until it
+          # serves. Bare `/` is a deliberate 302 -> /dashboards (see the
+          # nginx.conf.template `location = /`), so any 2xx/3xx means nginx
+          # rendered its config and is serving; 000 is connection-refused.
           code=000
           for i in $(seq 1 30); do
             code="$(curl -s -o /dev/null -w '%{http_code}' http://localhost:5080/ || echo 000)"
-            [ "$code" = "200" ] && break
+            case "$code" in 2??|3??) break ;; esac
             sleep 3
           done
           echo "viewer / -> HTTP $code"
-          [ "$code" = "200" ] || { echo "::error::viewer not serving on 5080"; exit 1; }
+          case "$code" in 2??|3??) : ;; *) echo "::error::viewer not serving on 5080 (HTTP $code)"; exit 1 ;; esac
+          # Follow through to the SPA shell to prove the built bundle is served,
+          # not just that nginx is up.
+          shell_code="$(curl -s -o /dev/null -w '%{http_code}' http://localhost:5080/dashboards/ || echo 000)"
+          echo "viewer /dashboards/ -> HTTP $shell_code"
+          [ "$shell_code" = "200" ] || { echo "::error::viewer SPA shell not served (/dashboards/ -> HTTP $shell_code)"; exit 1; }
           echo "Quick start booted cleanly with no .env on ${{ matrix.arch }}."
 
       - name: Sanity checks (status, version, schema, containers)
