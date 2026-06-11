@@ -9,7 +9,7 @@ from bson import ObjectId
 from fastapi import APIRouter, Body, Depends, HTTPException
 from fastapi.responses import JSONResponse, Response
 
-from depictio.api.v1.celery_dispatch import offload_or_run
+from depictio.api.v1.celery_dispatch import offload_or_run, should_offload_render
 from depictio.api.v1.celery_tasks import build_figure_preview as build_figure_preview_task
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
@@ -1830,8 +1830,11 @@ async def render_figure_endpoint(
     (UI mode) or `_process_code_mode_figure` (code mode), and returns the
     Plotly figure dict ready for ``react-plotly.js``.
 
-    Heavy work (delta load + Plotly build) runs on Celery when
-    `settings.celery.offload_rendering` is true. Reuses the
+    Heavy work (delta load + Plotly build) runs on Celery when the render is
+    actually heavy — code mode, or a source frame at/above
+    `offload_size_threshold_bytes` — or unconditionally if
+    `offload_rendering` is forced on (see `should_offload_render`). Cheap
+    interactive figures build inline to skip the broker round-trip. Reuses the
     `build_figure_preview` task — preview and render share the exact same
     code path on the worker.
 
@@ -1880,19 +1883,33 @@ async def render_figure_endpoint(
     # Build a JSON-safe payload for the task. ObjectIds in the component dict
     # are normalized to strings so the JSON serializer doesn't choke; the task
     # body re-coerces wf_id back to ObjectId for `load_deltatable_lite`.
+    dc_config = component.get("dc_config") or {}
+    mode = component.get("mode", "ui")
     metadata = {
         "wf_id": str(wf_id),
         "dc_id": str(dc_id),
-        "dc_config": convert_objectid_to_str(component.get("dc_config") or {}),
+        "dc_config": convert_objectid_to_str(dc_config),
         "visu_type": component.get("visu_type", "scatter"),
         "dict_kwargs": component.get("dict_kwargs") or {},
-        "mode": component.get("mode", "ui"),
+        "mode": mode,
         "code_content": component.get("code_content", ""),
         "selection_enabled": bool(component.get("selection_enabled", False)),
         "selection_column": component.get("selection_column"),
     }
 
-    offload = settings.celery.offload_rendering
+    # Offload to Celery only when the render is actually heavy. A blanket
+    # offload taxes cheap interactive figures with the broker + result-backend
+    # round-trip and poll-loop latency for no benefit; see should_offload_render.
+    try:
+        size_bytes = int(dc_config.get("size_bytes") or 0)
+    except (TypeError, ValueError):
+        size_bytes = 0
+    offload = should_offload_render(
+        force=settings.celery.offload_rendering,
+        code_mode=(mode == "code"),
+        size_bytes=size_bytes,
+        threshold_bytes=settings.celery.offload_size_threshold_bytes,
+    )
     response.headers["X-Celery-Path"] = "offloaded" if offload else "inline"
 
     payload = {"metadata": metadata, "filter_metadata": filter_metadata, "theme": theme}

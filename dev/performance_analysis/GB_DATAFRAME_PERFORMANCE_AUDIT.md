@@ -40,8 +40,12 @@ Severity = impact at 10–100M rows. All paths verified against source.
    `settings_models.py:523` → `offload_rendering=False`. So `/dashboards/render_figure/*`
    builds Polars+Plotly **on the API worker thread**. An 8-figure dashboard on multi-Gb data
    pins API workers for tens of seconds; a few concurrent users make the API unresponsive.
-   **Fix:** default `offload_rendering=True` (already plumbed through
-   `dashboards_endpoints/routes.py:1895` + `celery_dispatch.offload_or_run`). Effort: **S**.
+   **Fix:** offload *adaptively* — heavy renders (code mode, or source frame ≥
+   `offload_size_threshold_bytes`) go to Celery via `should_offload_render`; cheap
+   interactive figures stay inline so they don't pay the broker + result-backend round-trip
+   and poll-loop latency. A blanket `offload_rendering=True` was rejected: it taxes every
+   small figure and funnels them through the same small worker pool as slow builds. The
+   threshold is a coarse proxy pending the #4 benchmark. Effort: **S**.
 
 2. **No downsampling / WebGL before Plotly — full DataFrame becomes trace JSON.**
    `figure_builder.py:93-96` does `df.to_pandas()` on the *entire* filtered frame and passes
@@ -179,7 +183,9 @@ reports") is in the **build/prewarm/cold path**, where the same expensive work r
 ## Implementation status (this branch)
 
 **Shipped** (validated with ruff + ty + py_compile; full pytest/pre-commit pending a dev env):
-- #1 `offload_rendering` default → True.
+- #1 adaptive render offload via `should_offload_render` — heavy renders (code mode or
+  source frame ≥ `offload_size_threshold_bytes`, default 50 MB) go to Celery; cheap figures
+  stay inline. `offload_rendering` kept as an opt-in force-all override (default off).
 - #3 worker concurrency default 2 → 4; dead `worker_pool`/`worker_concurrency` settings
   realigned to `prefork`.
 - #2b figure path Polars-native (no blanket `to_pandas`; idioms ported; heatmap passes Polars).
