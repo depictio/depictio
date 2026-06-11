@@ -6,7 +6,7 @@
 # profile flag and no .env are required for the single-user quick start.
 #
 # QUICK START (no git clone, no .env required):
-#   curl -LO https://raw.githubusercontent.com/depictio/depictio/main/docker-compose.yaml
+#   curl -LO https://raw.githubusercontent.com/depictio/depictio/stable/docker-compose.yaml
 #   docker compose up -d
 #   → http://localhost:5080   (single-user mode, no login)
 #
@@ -93,7 +93,7 @@ services:
     restart: unless-stopped
 
   depictio-backend:
-    image: ghcr.io/depictio/depictio-api:${DEPICTIO_VERSION:-1.0.0}
+    image: ghcr.io/depictio/depictio-api:${DEPICTIO_VERSION:-1.0.1-b7}
     container_name: depictio-backend
     ports:
       # Loopback-only: front this with a reverse proxy / TLS terminator for
@@ -142,7 +142,7 @@ services:
         required: false
 
   depictio-viewer:
-    image: ghcr.io/depictio/depictio-viewer:${DEPICTIO_VERSION:-1.0.0}
+    image: ghcr.io/depictio/depictio-viewer:${DEPICTIO_VERSION:-1.0.1-b7}
     container_name: depictio-viewer
     ports:
       # Container now listens on 8080 (nginx-unprivileged / non-root); the
@@ -173,7 +173,7 @@ services:
     container_name: depictio-celery-worker
     # Always enabled - required for design mode (stepper) to work
     # Dashboard editor will fail without Celery worker running
-    image: ghcr.io/depictio/depictio-worker:${DEPICTIO_VERSION:-1.0.0}
+    image: ghcr.io/depictio/depictio-worker:${DEPICTIO_VERSION:-1.0.1-b7}
     volumes:
       - depictio_keys:/app/depictio/keys
     env_file:
