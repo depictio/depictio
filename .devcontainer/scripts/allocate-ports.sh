@@ -116,7 +116,9 @@ else
 fi
 echo ""
 
-# Development auth settings (default: single-user mode for devcontainers)
+# Development auth settings: devcontainers default to single-user mode so the
+# stack is usable immediately without a login flow. Force it on unless the
+# caller has explicitly opted out by exporting DEPICTIO_AUTH_SINGLE_USER_MODE=false.
 DEPICTIO_AUTH_SINGLE_USER_MODE=${DEPICTIO_AUTH_SINGLE_USER_MODE:-true}
 
 # MinIO credentials: single source of truth is docker-compose/.env (committed).

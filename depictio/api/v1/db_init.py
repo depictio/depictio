@@ -173,11 +173,33 @@ async def create_initial_project_legacy(
         }
 
 
-async def create_initial_dashboards(admin_user: UserBeanie) -> list[dict | None]:
+def _dataset_of_dashboard(name: str) -> str:
+    """Map a reference dashboard name to its parent dataset (for seed filtering).
+
+    Dashboard names are consistently prefixed by their dataset, e.g.
+    ``ampliseq_multiqc`` → ``ampliseq``, ``advanced_viz_volcano`` →
+    ``advanced_viz_showcase``, ``viralrecon_variants`` → ``viralrecon``.
+    """
+    if name in ("iris", "penguins"):
+        return name
+    if name.startswith("ampliseq"):
+        return "ampliseq"
+    if name.startswith("advanced_viz"):
+        return "advanced_viz_showcase"
+    if name.startswith("viralrecon"):
+        return "viralrecon"
+    return name
+
+
+async def create_initial_dashboards(
+    admin_user: UserBeanie, only: set[str] | None = None
+) -> list[dict | None]:
     """Create all initial demo dashboards for reference datasets.
 
     Args:
         admin_user: Admin user to set as dashboard owner
+        only: Optional allowlist of dataset names (from DEPICTIO_SEED_PROJECTS).
+            ``None`` creates dashboards for all datasets.
 
     Returns:
         List of dashboard creation responses
@@ -339,6 +361,11 @@ async def create_initial_dashboards(admin_user: UserBeanie) -> list[dict | None]
             )
         ),
     ]
+
+    if only is not None:
+        dashboards_config = [
+            cfg for cfg in dashboards_config if _dataset_of_dashboard(str(cfg["name"])) in only
+        ]
 
     results = []
     for dashboard_config in dashboards_config:
@@ -785,11 +812,15 @@ async def initialize_db(wipe: bool = False) -> UserBeanie | None:
     if settings.disable_example_dashboards:
         logger.info("Skipping example dashboard seeding (DEPICTIO_DISABLE_EXAMPLE_DASHBOARDS=true)")
     else:
-        # Create all reference datasets (replaces hardcoded iris logic)
+        # Create all reference datasets (replaces hardcoded iris logic).
+        # DEPICTIO_SEED_PROJECTS optionally narrows this to an allowlist
+        # (e.g. "iris"); None seeds everything.
         from depictio.api.v1.db_init_reference_datasets import create_reference_datasets
 
+        seed_filter = settings.seed_projects_filter
+
         created_projects = await create_reference_datasets(
-            admin_user=admin_user, token_payload=token_payload
+            admin_user=admin_user, token_payload=token_payload, only=seed_filter
         )
 
         # Note: ampliseq-base shell project removed — only the extended (full) variant is loaded
@@ -809,8 +840,10 @@ async def initialize_db(wipe: bool = False) -> UserBeanie | None:
 
         logger.info(f"Created {len(created_projects)} reference datasets")
 
-        # Create dashboards for all reference datasets
-        dashboard_payloads = await create_initial_dashboards(admin_user=admin_user)
+        # Create dashboards for all reference datasets (same allowlist filter)
+        dashboard_payloads = await create_initial_dashboards(
+            admin_user=admin_user, only=seed_filter
+        )
         logger.info(f"Created {len([p for p in dashboard_payloads if p])} dashboards")
 
     logger.info("Database initialization completed successfully.")

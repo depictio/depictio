@@ -1039,6 +1039,17 @@ class Settings(BaseSettings):
         ),
     )
 
+    seed_projects: str = Field(
+        default="",
+        description=(
+            "Comma-separated allowlist of reference projects to seed on API "
+            "startup, e.g. 'iris' or 'iris,penguins'. Empty (the default) seeds "
+            "all of them. Ignored when DEPICTIO_DISABLE_EXAMPLE_DASHBOARDS is "
+            "true (that takes precedence and seeds nothing). Valid names: "
+            "iris, penguins, ampliseq, advanced_viz_showcase, viralrecon."
+        ),
+    )
+
     enable_dev_endpoints: bool = Field(
         default=False,
         description=(
@@ -1056,6 +1067,16 @@ class Settings(BaseSettings):
         case_sensitive=False,
         extra="ignore",  # Ignore extra fields in .env that aren't in the model
     )
+
+    @property
+    def seed_projects_filter(self) -> set[str] | None:
+        """Allowlist of reference projects to seed, or None to seed all.
+
+        Parses the ``DEPICTIO_SEED_PROJECTS`` CSV into a set. An empty/blank
+        value yields ``None``, which callers treat as "seed everything".
+        """
+        names = {name.strip() for name in self.seed_projects.split(",") if name.strip()}
+        return names or None
 
     @model_validator(mode="after")
     def _enforce_server_secrets(self) -> "Settings":

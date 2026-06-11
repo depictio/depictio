@@ -30,12 +30,16 @@
   "initializeCommand": ".devcontainer/pre_create_setup.sh",
   "postStartCommand": "bash /workspace/.devcontainer/fix_git_worktree.sh && bash /workspace/.devcontainer/scripts/forward-ports.sh",
   "postCreateCommand": "post_create_setup.sh", // script to run after the containers are started
-  // Port forwarding - ports are dynamically assigned based on branch name
-  // VS Code will auto-detect listening ports and prompt to forward them
+  // Port forwarding - ports are dynamically assigned based on branch name.
+  // forward-ports.sh (postStartCommand) creates socat listeners inside this
+  // container so Codespaces auto-detects them; the ranges below cover the
+  // bases allocated in allocate-ports.sh (viewer 5500+, minio console 9500+).
+  // The viewer opens in the browser automatically once it is forwarded.
   "portsAttributes": {
-    "5000-5200": {"label": "Dash Frontend", "onAutoForward": "notify"},
+    "5500-5700": {"label": "Depictio Viewer", "onAutoForward": "openBrowser"},
     "8000-8200": {"label": "FastAPI Backend", "onAutoForward": "notify"},
-    "9000-9200": {"label": "MinIO", "onAutoForward": "silent"},
+    "9000-9200": {"label": "MinIO API", "onAutoForward": "silent"},
+    "9500-9700": {"label": "MinIO Console", "onAutoForward": "silent"},
     "27000-27200": {"label": "MongoDB", "onAutoForward": "silent"},
     "6000-6200": {"label": "Redis", "onAutoForward": "silent"}
   },
@@ -54,6 +58,7 @@
     "DEPICTIO_MINIO_ENDPOINT_URL": "http://minio:9000",
     "DEPICTIO_LOGGING_VERBOSITY_LEVEL": "DEBUG",
     "DEV_MODE": "true",
+    "DEPICTIO_AUTH_SINGLE_USER_MODE": "true",
     "DEPICTIO_MONGODB_WIPE": "false"
   },
   "containerEnv": {
@@ -69,6 +74,7 @@
     "DEPICTIO_MINIO_ENDPOINT_URL": "http://minio:9000",
     "DEPICTIO_LOGGING_VERBOSITY_LEVEL": "DEBUG",
     "DEV_MODE": "true",
+    "DEPICTIO_AUTH_SINGLE_USER_MODE": "true",
     "DEPICTIO_MONGODB_WIPE": "false"
   },
 	"features": {
