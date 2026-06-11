@@ -151,10 +151,19 @@ jobs:
           # empty outputs → build-only validation (no load, no push).
           outputs: ${{ steps.meta-vars.outputs.PUSH == 'true' && format('type=image,name={0}/{1}/{2},push-by-digest=true,name-canonical=true,push=true', env.REGISTRY, env.OWNER, matrix.image.name) || '' }}
           # Per-image AND per-arch cache ref so api/worker/viewer and amd64/arm64
-          # builds never poison each other's layer cache. cache-to is push-gated
-          # because type=registry writes need GHCR auth (skipped on fork PRs).
-          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.OWNER }}/${{ matrix.image.name }}:buildcache-${{ matrix.platform.arch }}
-          cache-to: ${{ steps.meta-vars.outputs.PUSH == 'true' && format('type=registry,ref={0}/{1}/{2}:buildcache-{3},mode=max', env.REGISTRY, env.OWNER, matrix.image.name, matrix.platform.arch) || '' }}
+          # builds never poison each other's layer cache.
+          #  - registry buildcache: shared across runs, but its write (cache-to)
+          #    is push-gated because type=registry needs GHCR auth (skipped on
+          #    fork PRs), so PR runs can only READ it.
+          #  - GitHub Actions cache (type=gha): writable on PRs too (no registry
+          #    auth), so an unchanged build on a PR or a rerun reuses cached
+          #    layers instead of rebuilding from scratch.
+          cache-from: |
+            type=registry,ref=${{ env.REGISTRY }}/${{ env.OWNER }}/${{ matrix.image.name }}:buildcache-${{ matrix.platform.arch }}
+            type=gha,scope=${{ matrix.image.name }}-${{ matrix.platform.arch }}
+          cache-to: |
+            ${{ steps.meta-vars.outputs.PUSH == 'true' && format('type=registry,ref={0}/{1}/{2}:buildcache-{3},mode=max', env.REGISTRY, env.OWNER, matrix.image.name, matrix.platform.arch) || '' }}
+            type=gha,scope=${{ matrix.image.name }}-${{ matrix.platform.arch }},mode=max
 
       - name: Export digest
         if: steps.meta-vars.outputs.PUSH == 'true'
@@ -310,15 +319,23 @@ jobs:
           echo "Asserting published endpoints..."
           curl -fsS http://localhost:8058/health >/dev/null && echo "API /health: OK"
           # The viewer starts only after the backend is healthy, so nginx may not
-          # be listening yet — poll (tolerating connection-refused) until it serves.
+          # be listening yet — poll (tolerating connection-refused) until it
+          # serves. Bare `/` is a deliberate 302 -> /dashboards (see the
+          # nginx.conf.template `location = /`), so any 2xx/3xx means nginx
+          # rendered its config and is serving; 000 is connection-refused.
           code=000
           for i in $(seq 1 30); do
             code="$(curl -s -o /dev/null -w '%{http_code}' http://localhost:5080/ || echo 000)"
-            [ "$code" = "200" ] && break
+            case "$code" in 2??|3??) break ;; esac
             sleep 3
           done
           echo "viewer / -> HTTP $code"
-          [ "$code" = "200" ] || { echo "::error::viewer not serving on 5080"; exit 1; }
+          case "$code" in 2??|3??) : ;; *) echo "::error::viewer not serving on 5080 (HTTP $code)"; exit 1 ;; esac
+          # Follow through to the SPA shell to prove the built bundle is served,
+          # not just that nginx is up.
+          shell_code="$(curl -s -o /dev/null -w '%{http_code}' http://localhost:5080/dashboards/ || echo 000)"
+          echo "viewer /dashboards/ -> HTTP $shell_code"
+          [ "$shell_code" = "200" ] || { echo "::error::viewer SPA shell not served (/dashboards/ -> HTTP $shell_code)"; exit 1; }
           echo "Quick start booted cleanly with no .env on ${{ matrix.arch }}."
 
       - name: Sanity checks (status, version, schema, containers)
