@@ -412,3 +412,41 @@ jobs:
       - name: Tear down
         if: always()
         run: docker compose -f "$RUNNER_TEMP/quickstart/docker-compose.yaml" down -v || true
+
+  # Tell depictio-docs a new version shipped so it regenerates the OpenAPI
+  # reference + opens a docs-update PR (listener: depictio-docs
+  # .github/workflows/update-on-release.yaml, on repository_dispatch:new-release).
+  # This restores the notify step that lived in the old multi-arch-build.yaml /
+  # amd64-build.yaml pipelines before they were consolidated into this file.
+  # Gated to real tag pushes only (not PRs or manual workflow_dispatch validation
+  # runs) and gated behind a green smoke test, so docs only hears about a
+  # release whose images actually boot.
+  notify-docs:
+    name: Notify docs repository
+    needs: smoke-test
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve tag + prerelease
+        id: rel
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"            # e.g. v1.0.1 or v1.0.1-b7
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          # Betas (…-b<N>) are prereleases; bare semver tags are stable.
+          case "$TAG" in
+            *-b*) echo "prerelease=true"  >> "$GITHUB_OUTPUT" ;;
+            *)    echo "prerelease=false" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      - name: Notify docs repository
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.GHCR_PAT }}
+          repository: depictio/depictio-docs
+          event-type: new-release
+          client-payload: |
+            {
+              "version": "${{ steps.rel.outputs.tag }}",
+              "release_url": "https://github.com/${{ github.repository }}/releases/tag/${{ steps.rel.outputs.tag }}",
+              "prerelease": "${{ steps.rel.outputs.prerelease }}"
+            }
