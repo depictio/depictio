@@ -14,7 +14,7 @@ import { Icon } from '@iconify/react';
 
 import type { DashboardListEntry } from 'depictio-react-core';
 import { dashboardHref, dashboardLinkClickHandler } from './lib/dashboardLinks';
-import { DEFAULT_THUMBNAIL_URL } from './lib/format';
+import { isImagePath, resolveAssetUrl } from './lib/format';
 
 interface MultiTabPreviewProps {
   parent: DashboardListEntry;
@@ -59,10 +59,30 @@ const SlideImage: React.FC<{
   theme: 'light' | 'dark';
   iconSize: number;
 }> = ({ slide, theme, iconSize }) => {
-  // Fallback chain: real screenshot → shared default thumbnail → icon
-  // (last resort if the default asset itself fails to load).
-  const [fallback, setFallback] = useState<'none' | 'default' | 'icon'>('none');
+  // No real screenshot yet → fall straight back to the tab's colored icon.
+  // No generic placeholder image in between.
+  const [fallback, setFallback] = useState<'none' | 'icon'>('none');
   if (fallback === 'icon') {
+    // An image-logo `icon` can't be rendered as an Iconify glyph — show the
+    // logo image itself instead of an empty/broken ThemeIcon.
+    if (isImagePath(slide.icon)) {
+      return (
+        <Center h="100%" w="100%" bg="var(--mantine-color-default-hover)">
+          <img
+            src={resolveAssetUrl(slide.icon)}
+            alt={slide.title}
+            loading="lazy"
+            decoding="async"
+            style={{
+              maxWidth: '60%',
+              maxHeight: '60%',
+              objectFit: 'contain',
+              display: 'block',
+            }}
+          />
+        </Center>
+      );
+    }
     return (
       <Center h="100%" w="100%" bg="var(--mantine-color-default-hover)">
         <ThemeIcon size={iconSize} variant="light" color={slide.color} radius="md">
@@ -75,15 +95,11 @@ const SlideImage: React.FC<{
   return (
     <img
       key={`${theme}-${slide.version ?? ''}-${fallback}`}
-      src={
-        fallback === 'default'
-          ? DEFAULT_THUMBNAIL_URL
-          : `/static/screenshots/${slide.id}_${theme}.png${versionQuery}`
-      }
+      src={`/static/screenshots/${slide.id}_${theme}.png${versionQuery}`}
       alt={slide.title}
       loading="lazy"
       decoding="async"
-      onError={() => setFallback(fallback === 'none' ? 'default' : 'icon')}
+      onError={() => setFallback('icon')}
       style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
     />
   );

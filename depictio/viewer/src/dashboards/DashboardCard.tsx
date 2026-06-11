@@ -24,7 +24,6 @@ import MultiTabPreview from './MultiTabPreview';
 import DashboardActionsMenu from './DashboardActionsMenu';
 import {
   coerceString,
-  DEFAULT_THUMBNAIL_URL,
   formatLastSaved,
   isImagePath,
   resolveAssetUrl,
@@ -57,17 +56,41 @@ const SingleThumbnail: React.FC<{
   dashboard: DashboardListEntry;
   theme: 'light' | 'dark';
 }> = ({ dashboard, theme }) => {
-  // Fallback chain: real screenshot → shared default thumbnail → icon
-  // (last resort if the default asset itself fails to load).
-  const [fallback, setFallback] = useState<'none' | 'default' | 'icon'>('none');
+  // No real screenshot yet (freshly created dashboard, or capture failed) →
+  // fall straight back to the dashboard's own colored icon. No generic
+  // placeholder image in between.
+  const [fallback, setFallback] = useState<'none' | 'icon'>('none');
   const icon = coerceString(dashboard.icon, 'mdi:view-dashboard');
   const color = coerceString(dashboard.icon_color, 'orange');
 
   if (fallback === 'icon') {
+    // When the dashboard's "icon" is actually an image logo, show that logo as
+    // the thumbnail rather than the generic dashboard glyph. Previously this
+    // branch swapped any image path for `mdi:view-dashboard`, so a logo'd
+    // dashboard with no screenshot fell back to the default placeholder even
+    // though a perfectly good logo was available — render the logo instead.
+    if (isImagePath(icon)) {
+      return (
+        <Center h="100%" w="100%" bg="var(--mantine-color-default-hover)">
+          <img
+            src={resolveAssetUrl(icon)}
+            alt={dashboard.title || dashboard.dashboard_id}
+            loading="lazy"
+            decoding="async"
+            style={{
+              maxWidth: '60%',
+              maxHeight: '60%',
+              objectFit: 'contain',
+              display: 'block',
+            }}
+          />
+        </Center>
+      );
+    }
     return (
       <Center h="100%" w="100%" bg="var(--mantine-color-default-hover)">
         <ThemeIcon size={64} variant="light" color={color} radius="md">
-          <Icon icon={isImagePath(icon) ? 'mdi:view-dashboard' : icon} width={36} />
+          <Icon icon={icon} width={36} />
         </ThemeIcon>
       </Center>
     );
@@ -75,15 +98,11 @@ const SingleThumbnail: React.FC<{
   return (
     <img
       key={`${theme}-${dashboard.last_saved_ts ?? ''}-${fallback}`}
-      src={
-        fallback === 'default'
-          ? DEFAULT_THUMBNAIL_URL
-          : screenshotUrl(dashboard.dashboard_id, theme, dashboard.last_saved_ts)
-      }
+      src={screenshotUrl(dashboard.dashboard_id, theme, dashboard.last_saved_ts)}
       alt={dashboard.title || dashboard.dashboard_id}
       loading="lazy"
       decoding="async"
-      onError={() => setFallback(fallback === 'none' ? 'default' : 'icon')}
+      onError={() => setFallback('icon')}
       style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
     />
   );
@@ -151,9 +170,10 @@ const DashboardCard: React.FC<DashboardCardProps> = ({
     theme,
     dashboard.last_saved_ts,
   );
-  // Same fallback chain as SingleThumbnail for the hover-popover preview:
-  // real screenshot → default thumbnail → no popover image at all.
-  const [popoverFallback, setPopoverFallback] = useState<'none' | 'default' | 'hidden'>('none');
+  // Hover-popover preview only makes sense with a real screenshot — when the
+  // card itself is showing the icon fallback there's nothing to enlarge, so we
+  // just suppress the popover image rather than blow up a placeholder.
+  const [popoverFallback, setPopoverFallback] = useState<'none' | 'hidden'>('none');
 
   return (
     <Card
@@ -248,19 +268,11 @@ const DashboardCard: React.FC<DashboardCardProps> = ({
                     <AspectRatio ratio={16 / 10}>
                       <img
                         key={`${thumbnailSrc}-${popoverFallback}`}
-                        src={
-                          popoverFallback === 'default'
-                            ? DEFAULT_THUMBNAIL_URL
-                            : thumbnailSrc
-                        }
+                        src={thumbnailSrc}
                         alt=""
                         loading="lazy"
                         decoding="async"
-                        onError={() =>
-                          setPopoverFallback(
-                            popoverFallback === 'none' ? 'default' : 'hidden',
-                          )
-                        }
+                        onError={() => setPopoverFallback('hidden')}
                         style={{
                           width: '100%',
                           height: '100%',
