@@ -181,7 +181,18 @@ services:
       - /tmp
       - /var/cache/nginx
       - /var/run
-      - /etc/nginx/conf.d
+    volumes:
+      # conf.d must be writable by the non-root nginx user (uid 101) so the
+      # entrypoint can render default.conf.template via envsubst at startup.
+      # A bare `tmpfs:` short-form mount lands root-owned 0755, so uid 101
+      # fails the entrypoint's writability check ("conf.d is not writable")
+      # and nginx starts with no server block → HTTP 000. The long-form mount
+      # sets an explicit world-writable (sticky) mode. With read_only root,
+      # this tmpfs is the only way to give the entrypoint a writable conf.d.
+      - type: tmpfs
+        target: /etc/nginx/conf.d
+        tmpfs:
+          mode: 1777
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
     deploy:
