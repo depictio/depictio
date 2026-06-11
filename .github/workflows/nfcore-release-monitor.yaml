@@ -1,0 +1,98 @@
+name: nf-core release monitor
+
+# Weekly check: has nf-core shipped a newer version for any pipeline we template
+# under depictio/projects/nf-core/? If so, list that release's AWS megatest
+# results and report which of our recipe source paths no longer resolve, then
+# open a concise draft PR carrying the drift report.
+on:
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC
+  workflow_dispatch:
+    inputs:
+      force_report_pipeline:
+        description: "Run the drift report for this pipeline even if no update is detected (dry-run)."
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  monitor:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version-file: "pyproject.toml"
+
+      - name: Install dependencies
+        run: |
+          uv venv --python 3.12.9 venv
+          source venv/bin/activate
+          uv pip install -e ".[dev]"
+          # Recipes need polars-lts-cpu (same pin as the quality/catalog jobs)
+          uv pip uninstall -y polars polars-runtime-32 2>/dev/null || true
+          uv pip install --force-reinstall "polars-lts-cpu[numpy,pandas,pyarrow,excel,deltalake]==1.19.0"
+
+      - name: Check for new nf-core releases
+        id: check
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          source venv/bin/activate
+          python scripts/nfcore_monitor.py check --json > updates.json
+          {
+            echo "## nf-core release check"
+            echo '```'
+            python scripts/nfcore_monitor.py check
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Generate megatest drift reports
+        id: report
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FORCE_PIPELINE: ${{ github.event.inputs.force_report_pipeline }}
+        run: |
+          source venv/bin/activate
+          mkdir -p .nfcore-monitor
+          # Pipelines with a newer release ("<pipeline> <remote-version>" per line)...
+          jq -r '.[] | select(.update_available) | "\(.pipeline) \(.remote)"' updates.json > to_report.txt
+          # ...plus an optional forced dry-run pipeline.
+          if [ -n "$FORCE_PIPELINE" ]; then echo "$FORCE_PIPELINE forced" >> to_report.txt; fi
+
+          has=0
+          body=pr_body.md
+          echo "## nf-core megatest drift reports" > "$body"
+          while read -r pipeline version; do
+            [ -n "$pipeline" ] || continue
+            out=".nfcore-monitor/${pipeline}-${version}.md"
+            if python scripts/nfcore_monitor.py report --pipeline "$pipeline" --out "$out"; then
+              { echo; cat "$out"; } >> "$body"
+              cat "$out" >> "$GITHUB_STEP_SUMMARY"
+              has=1
+            fi
+          done < to_report.txt
+          echo "has_updates=$has" >> "$GITHUB_OUTPUT"
+
+      - name: Open draft PR with drift report
+        if: steps.report.outputs.has_updates == '1'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: nfcore-monitor/updates
+          draft: true
+          add-paths: .nfcore-monitor/*.md
+          commit-message: "chore(nf-core): megatest drift report for new release(s)"
+          title: "chore(nf-core): new nf-core release(s) — megatest drift report"
+          labels: nf-core
+          body-path: pr_body.md
