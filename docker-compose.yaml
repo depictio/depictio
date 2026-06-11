@@ -123,11 +123,16 @@ services:
       - 127.0.0.1:8058:8058
     volumes:
       - depictio_keys:/app/depictio/keys
-    # read_only root FS: the only writable runtime paths are the depictio_keys
-    # volume above and the /tmp tmpfs below.
-    read_only: true
-    tmpfs:
-      - /tmp
+    # No read_only root FS here. The backend writes several runtime paths as
+    # the non-root app user (uid 1000) — the default-token / agent-config
+    # export under /app/depictio/.depictio, gunicorn's control dir under
+    # /home/depictio/.gunicorn, and scratch under /tmp. A read_only root broke
+    # the admin bootstrap ("Read-only file system: '/app/depictio/.depictio'")
+    # and crash-looped the first worker boot. tmpfs overlays don't help: they
+    # land root-owned and uid 1000 can't write them. This mirrors the
+    # production k8s backend Deployment, which also does NOT set
+    # readOnlyRootFilesystem. The container stays hardened: non-root uid 1000,
+    # all caps dropped, no privilege escalation.
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
     deploy:
