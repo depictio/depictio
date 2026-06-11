@@ -528,8 +528,22 @@ class CeleryConfig(BaseSettings):
         description="Always offload component-design preview endpoints (/figure/preview etc.) to Celery",
     )
     offload_rendering: bool = Field(
-        default=True,
-        description="Offload dashboard render endpoints (/dashboards/render_*) to Celery",
+        default=False,
+        description=(
+            "Force-offload ALL dashboard render endpoints (/dashboards/render_*) to "
+            "Celery regardless of cost. Off by default: renders offload adaptively by "
+            "size/type (see offload_size_threshold_bytes) so cheap interactive figures "
+            "stay inline and skip the broker + result-backend round-trip."
+        ),
+    )
+    offload_size_threshold_bytes: int = Field(
+        default=50 * 1024 * 1024,
+        description=(
+            "Source Delta-table size (bytes) at/above which a dashboard render is "
+            "offloaded to Celery even when offload_rendering is off; below it renders "
+            "run inline. Coarse proxy for build cost pending the #4 render benchmark. "
+            "Set to 0 to disable size-based offload."
+        ),
     )
     offload_timeout_seconds: float = Field(
         default=30.0,
