@@ -1,49 +1,22 @@
-# ============================================================================
-# DEPICTIO DOCKER COMPOSE - QUICK START
-# ============================================================================
-# This is the main docker-compose file for running Depictio with pre-built images.
-# MinIO (S3-compatible object storage) is bundled and starts by default — no
-# profile flag and no .env are required for the single-user quick start.
+# Depictio — quick start (single-user, no .env, no clone):
+#   curl -LO https://raw.githubusercontent.com/depictio/depictio/stable/docker-compose.yaml
+#   docker compose up -d        →  http://localhost:5080
+# Stop: docker compose down · Logs: docker compose logs -f · Status: docker compose ps
 #
-# QUICK START (no git clone, no .env required):
-#   curl -LO https://raw.githubusercontent.com/depictio/depictio/main/docker-compose.yaml
-#   docker compose up -d
-#   → http://localhost:5080   (single-user mode, no login)
-#
-# COMMANDS:
-#   Start:  docker compose up -d
-#   Stop:   docker compose down
-#   Logs:   docker compose logs -f
-#   Status: docker compose ps
-#
-# MULTI-USER / EXPOSED DEPLOYMENTS: the defaults below (minio/minio123) are for
-# local single-user use only. Set DEPICTIO_AUTH_SINGLE_USER_MODE=false and the
-# server refuses to boot until you provide strong DEPICTIO_MINIO_ROOT_PASSWORD
-# and DEPICTIO_BOOTSTRAP_ADMIN_PASSWORD values — see .env.example.
-#
-# EXTERNAL S3 (advanced) — bring your own S3/MinIO instead of the bundled one:
-# set DEPICTIO_MINIO_* to your endpoint/credentials and
-# DEPICTIO_MINIO_EXTERNAL_SERVICE=true in .env (the bundled minio container can
-# be left stopped with `docker compose up -d --scale minio=0`).
-#
-# DEVELOPMENT:
-#   For local development with hot-reload, use docker-compose.dev.yaml instead.
-#
-# CONFIGURATION:
-#   - Minimal config: .env.example (copy to .env to override credentials)
-#   - Complete reference: .env.complete.example
-#   - Documentation: https://depictio.github.io/depictio/installation/configuration
-# ============================================================================
+# The minio/minio123 defaults below are for LOCAL single-user use only. For a
+# multi-user / exposed deployment set DEPICTIO_AUTH_SINGLE_USER_MODE=false (the
+# server then rejects weak secrets) — see .env.example. External S3, hot-reload
+# dev (docker-compose.dev.yaml) and full config reference:
+#   https://depictio.github.io/depictio/installation/configuration
 
 services:
   mongo:
     image: mongo:8.0.14
     container_name: mongo
     command: mongod --port 27018
-    # Internal-only: reachable by other services over the compose network.
-    # Not published to the host to avoid exposing the DB.
     volumes:
       - mongo_data:/data/db
+    # Internal-only: no host port — don't publish the DB.
     healthcheck:
       test: ["CMD-SHELL", "mongosh --port 27018 --eval 'db.adminCommand(\"ping\")'"]
       interval: 30s
@@ -55,8 +28,6 @@ services:
   redis:
     image: redis:8.2.1
     container_name: redis
-    # Internal-only: reachable by other services over the compose network.
-    # Not published to the host to avoid exposing the broker/cache.
     volumes:
       - redis_data:/data
     command: redis-server
@@ -70,17 +41,11 @@ services:
   minio:
     image: minio/minio:RELEASE.2025-01-20T14-49-07Z
     container_name: minio
-    # Bundled local object storage, started by default. For an external
-    # S3/MinIO instead, point DEPICTIO_MINIO_* at your endpoint and leave this
-    # container stopped (`docker compose up -d --scale minio=0`).
-    # Internal-only: the backend/worker reach MinIO over the compose network.
-    # Neither the S3 API nor the console is published to the host.
+    # Bundled local object storage (internal-only, no host port). For external
+    # S3, point DEPICTIO_MINIO_* at your endpoint and `docker compose up -d --scale minio=0`.
     volumes:
       - minio_data:/data
     environment:
-      # Local single-user defaults. Override with strong secrets for any
-      # multi-user / exposed deployment (the server enforces this — minio123 is
-      # rejected as weak when single-user mode is off).
       MINIO_ROOT_USER: ${DEPICTIO_MINIO_ROOT_USER:-minio}
       MINIO_ROOT_PASSWORD: ${DEPICTIO_MINIO_ROOT_PASSWORD:-minio123}
     command: server /data --console-address :9001
@@ -93,23 +58,13 @@ services:
     restart: unless-stopped
 
   depictio-backend:
-    image: ghcr.io/depictio/depictio-api:${DEPICTIO_VERSION:-1.0.0}
+    image: ghcr.io/depictio/depictio-api:${DEPICTIO_VERSION:-1.0.1-b7}
     container_name: depictio-backend
     ports:
-      # Loopback-only: front this with a reverse proxy / TLS terminator for
-      # external access rather than publishing the API on all interfaces.
+      # Loopback-only: front with a TLS proxy for external access.
       - 127.0.0.1:8058:8058
     volumes:
       - depictio_keys:/app/depictio/keys
-    # No read_only root FS here. The backend writes several runtime paths as
-    # the non-root app user (uid 1000) — the default-token / agent-config
-    # export under /app/depictio/.depictio, gunicorn's control dir under
-    # /home/depictio/.gunicorn, and scratch under /tmp. A read_only root broke
-    # the admin bootstrap ("Read-only file system: '/app/depictio/.depictio'")
-    # and crash-looped the first worker boot. tmpfs overlays don't help: they
-    # land root-owned and uid 1000 can't write them. This mirrors the
-    # production k8s backend Deployment, which also does NOT set
-    # readOnlyRootFilesystem. The container still runs as non-root uid 1000.
     env_file:
       - path: .env
         required: false
@@ -135,29 +90,16 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      # required:false so external-S3 mode (minio scaled to 0) still starts the
-      # backend without waiting for the bundled minio service.
       minio:
+        # required:false so external-S3 mode (minio scaled to 0) still boots.
         condition: service_healthy
         required: false
 
   depictio-viewer:
-    image: ghcr.io/depictio/depictio-viewer:${DEPICTIO_VERSION:-1.0.0}
+    image: ghcr.io/depictio/depictio-viewer:${DEPICTIO_VERSION:-1.0.1-b7}
     container_name: depictio-viewer
     ports:
-      # Container now listens on 8080 (nginx-unprivileged / non-root); the
-      # published host port is unchanged at 5080.
       - 5080:8080
-    # No read_only root FS here — unlike the backend/worker. The
-    # nginx-unprivileged entrypoint renders default.conf.template via envsubst
-    # into /etc/nginx/conf.d at startup (the API upstream + the DNS resolver
-    # are resolved at runtime), which needs a writable rootfs. The image owns
-    # conf.d as uid 101 so the render just works. This mirrors the production
-    # k8s viewer Deployment, which likewise does NOT set readOnlyRootFilesystem
-    # for exactly this reason. (A read_only root + a tmpfs overlay on conf.d
-    # was tried and fails: the overlay lands root-owned and uid 101 can't write
-    # it — "conf.d is not writable" — so nginx starts with no server block.)
-    # The container still runs as non-root uid 101.
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/ || exit 1"]
       interval: 30s
@@ -171,9 +113,8 @@ services:
 
   depictio-celery-worker:
     container_name: depictio-celery-worker
-    # Always enabled - required for design mode (stepper) to work
-    # Dashboard editor will fail without Celery worker running
-    image: ghcr.io/depictio/depictio-worker:${DEPICTIO_VERSION:-1.0.0}
+    # Always enabled — the dashboard editor (stepper / design mode) needs it.
+    image: ghcr.io/depictio/depictio-worker:${DEPICTIO_VERSION:-1.0.1-b7}
     volumes:
       - depictio_keys:/app/depictio/keys
     env_file:

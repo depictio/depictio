@@ -32,20 +32,14 @@ uv lock
 
 NEW_VERSION=$(cat VERSION)
 
-# Pin the public docker-compose.yaml to the released version on STABLE releases
-# only, so a fresh `docker compose up -d` (no .env) pulls the exact release.
-# Betas intentionally keep the previous stable pin — the quick start stays on
-# stable while beta images are published under their own version tags.
-PIN_COMPOSE=false
-if [[ "$NEW_VERSION" != *-b* ]]; then
-    sed -i '' -E "s#(ghcr\.io/depictio/depictio-[a-z]+:\\\$\{DEPICTIO_VERSION:-)[^}]*(\})#\1${NEW_VERSION}\2#g" docker-compose.yaml
-    PIN_COMPOSE=true
-fi
+# Note: docker-compose.yaml is pinned to the new version by bump2version
+# itself (see [bumpversion:file:docker-compose.yaml] in .bumpversion.cfg), so
+# every bump — betas included — self-pins the compose. The get-started docs
+# source the file from the `stable` tag, so end users still land on stable.
 
 # Add and amend commit if bump2version created one
 if git log -1 --pretty=%B | grep -q "Bump version"; then
     git add helm-charts/depictio/Chart.yaml uv.lock
-    [[ "$PIN_COMPOSE" == "true" ]] && git add docker-compose.yaml
     git commit --amend --no-edit
     # git push && git push --tags
 fi
