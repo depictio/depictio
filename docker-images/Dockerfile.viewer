@@ -15,12 +15,22 @@ WORKDIR /build
 
 RUN corepack enable && corepack prepare pnpm@10 --activate
 
+# ---- Dependency layer (cached across viewer source changes) ----
+# Copy only the workspace manifests + lockfile so `pnpm install` is keyed on
+# dependencies, not source: a viewer code edit no longer reinstalls
+# node_modules — install only re-runs when a package.json or the lockfile
+# changes. node_modules is .dockerignored, so copying source afterwards can't
+# clobber the installed store.
 COPY pnpm-workspace.yaml pnpm-lock.yaml ./
-COPY packages ./packages/
-COPY depictio/viewer ./depictio/viewer/
-
+COPY packages/depictio-components/package.json ./packages/depictio-components/
+COPY packages/depictio-react-core/package.json ./packages/depictio-react-core/
+COPY depictio/viewer/package.json ./depictio/viewer/
 RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
     pnpm install --frozen-lockfile
+
+# ---- Source + build ----
+COPY packages ./packages/
+COPY depictio/viewer ./depictio/viewer/
 
 # Memory caps for typical 6 GB container limits: sourcemaps off (peak-mem
 # win, not shipped to users anyway), heap capped at 4 GB to leave cgroup

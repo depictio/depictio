@@ -61,12 +61,16 @@ ARG GID=1000
 RUN groupadd -g ${GID} depictio && \
     useradd -m -u ${UID} -g ${GID} -s /bin/bash depictio
 
-COPY --chown=depictio:depictio pyproject.toml uv.lock* VERSION ./
+# ---- Dependency layer (cached across code + version changes) ----
+# Deps + editable in-tree packages WITHOUT the depictio project itself
+# (--no-install-project), so a source edit or the per-release version churn in
+# pyproject/VERSION doesn't reinstall everything — see Dockerfile.api for the
+# full rationale.
+COPY --chown=depictio:depictio pyproject.toml uv.lock* ./
 COPY --chown=depictio:depictio packages ./packages/
-COPY --chown=depictio:depictio depictio ./depictio/
-
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev || uv sync --no-dev
+    uv sync --frozen --no-install-project --no-dev \
+    || uv sync --no-install-project --no-dev
 
 # Browser bundle target inside the image. We download into a BuildKit
 # cache mount and copy out — caches the chromium payload across rebuilds
@@ -80,13 +84,23 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 #
 # We also drop `--with-deps`: every shared library the shell needs is already
 # apt-installed above, and `--with-deps` would re-run apt over the same set.
+# Installed off the dependency layer (playwright is a dep), so the chromium
+# download only re-runs when deps change — not on source/version edits.
+# --no-sync runs from the already-synced env without pulling in the
+# not-yet-installed project (its source isn't copied until the layer below).
 ENV PLAYWRIGHT_BROWSERS_PATH=/usr/local/share/playwright-browsers
 RUN --mount=type=cache,target=/var/cache/playwright,sharing=locked \
     mkdir -p ${PLAYWRIGHT_BROWSERS_PATH} && \
     PLAYWRIGHT_BROWSERS_PATH=/var/cache/playwright \
-        uv run playwright install --only-shell && \
+        uv run --no-sync playwright install --only-shell && \
     cp -a /var/cache/playwright/. ${PLAYWRIGHT_BROWSERS_PATH}/ && \
     chmod -R 755 ${PLAYWRIGHT_BROWSERS_PATH}
+
+# ---- Project layer (source + VERSION last) ----
+COPY --chown=depictio:depictio VERSION ./
+COPY --chown=depictio:depictio depictio ./depictio/
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev || uv sync --no-dev
 
 COPY --chown=depictio:depictio docker-images/run_celery_worker.sh /app/run_celery_worker.sh
 RUN chmod +x /app/run_celery_worker.sh

@@ -29,10 +29,24 @@ ARG GID=1000
 RUN groupadd -g ${GID} depictio && \
     useradd -m -u ${UID} -g ${GID} -s /bin/bash depictio
 
-COPY --chown=depictio:depictio pyproject.toml uv.lock* VERSION ./
+# ---- Dependency layer (cached across code + version changes) ----
+# Install third-party deps + the editable in-tree packages WITHOUT the
+# depictio project itself (--no-install-project). This expensive layer is
+# keyed only on the lockfile + packages/, so editing application source — or
+# the per-release version churn in pyproject/VERSION — no longer reinstalls
+# every dependency. packages/ rarely changes, so it stays cached too.
+COPY --chown=depictio:depictio pyproject.toml uv.lock* ./
 COPY --chown=depictio:depictio packages ./packages/
-COPY --chown=depictio:depictio depictio ./depictio/
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-install-project --no-dev \
+    || uv sync --no-install-project --no-dev
 
+# ---- Project layer (source + VERSION last) ----
+# Install the depictio project on top of the cached deps; cheap because every
+# dependency is already present. Copied last so source/version changes only
+# re-run this fast step, not the dependency install above.
+COPY --chown=depictio:depictio VERSION ./
+COPY --chown=depictio:depictio depictio ./depictio/
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev || uv sync --no-dev
 
