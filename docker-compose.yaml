@@ -44,16 +44,6 @@ services:
     # Not published to the host to avoid exposing the DB.
     volumes:
       - mongo_data:/data/db
-    # The stock mongo image starts as root and drops to the `mongodb` user
-    # (chown the data dir + gosu). cap_drop:[ALL] removes the capabilities that
-    # needs, so add back only those — keeping a minimal, hardened cap set.
-    cap_drop: [ALL]
-    cap_add: [CHOWN, SETGID, SETUID, DAC_OVERRIDE]
-    security_opt: ["no-new-privileges:true"]
-    deploy:
-      resources:
-        limits:
-          memory: 1G
     healthcheck:
       test: ["CMD-SHELL", "mongosh --port 27018 --eval 'db.adminCommand(\"ping\")'"]
       interval: 30s
@@ -70,12 +60,6 @@ services:
     volumes:
       - redis_data:/data
     command: redis-server
-    cap_drop: [ALL]
-    security_opt: ["no-new-privileges:true"]
-    deploy:
-      resources:
-        limits:
-          memory: 512M
     healthcheck:
       test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
       interval: 30s
@@ -100,12 +84,6 @@ services:
       MINIO_ROOT_USER: ${DEPICTIO_MINIO_ROOT_USER:-minio}
       MINIO_ROOT_PASSWORD: ${DEPICTIO_MINIO_ROOT_PASSWORD:-minio123}
     command: server /data --console-address :9001
-    cap_drop: [ALL]
-    security_opt: ["no-new-privileges:true"]
-    deploy:
-      resources:
-        limits:
-          memory: 2G
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:9000/minio/health/live || exit 1"]
       interval: 30s
@@ -131,14 +109,7 @@ services:
     # and crash-looped the first worker boot. tmpfs overlays don't help: they
     # land root-owned and uid 1000 can't write them. This mirrors the
     # production k8s backend Deployment, which also does NOT set
-    # readOnlyRootFilesystem. The container stays hardened: non-root uid 1000,
-    # all caps dropped, no privilege escalation.
-    cap_drop: [ALL]
-    security_opt: ["no-new-privileges:true"]
-    deploy:
-      resources:
-        limits:
-          memory: 2G
+    # readOnlyRootFilesystem. The container still runs as non-root uid 1000.
     env_file:
       - path: .env
         required: false
@@ -186,14 +157,7 @@ services:
     # for exactly this reason. (A read_only root + a tmpfs overlay on conf.d
     # was tried and fails: the overlay lands root-owned and uid 101 can't write
     # it — "conf.d is not writable" — so nginx starts with no server block.)
-    # The container is still hardened: non-root uid 101, all caps dropped, no
-    # privilege escalation.
-    cap_drop: [ALL]
-    security_opt: ["no-new-privileges:true"]
-    deploy:
-      resources:
-        limits:
-          memory: 256M
+    # The container still runs as non-root uid 101.
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/ || exit 1"]
       interval: 30s
@@ -221,12 +185,6 @@ services:
       DEPICTIO_MINIO_ROOT_USER: "${DEPICTIO_MINIO_ROOT_USER:-minio}"
       DEPICTIO_MINIO_ROOT_PASSWORD: "${DEPICTIO_MINIO_ROOT_PASSWORD:-minio123}"
     command: ["/app/run_celery_worker.sh"]
-    cap_drop: [ALL]
-    security_opt: ["no-new-privileges:true"]
-    deploy:
-      resources:
-        limits:
-          memory: 1G
     healthcheck:
       test: ["CMD-SHELL", "celery -A depictio.api.celery_worker:celery_app inspect ping -d celery@$$HOSTNAME || exit 1"]
       interval: 30s

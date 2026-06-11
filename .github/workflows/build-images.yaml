@@ -151,10 +151,19 @@ jobs:
           # empty outputs → build-only validation (no load, no push).
           outputs: ${{ steps.meta-vars.outputs.PUSH == 'true' && format('type=image,name={0}/{1}/{2},push-by-digest=true,name-canonical=true,push=true', env.REGISTRY, env.OWNER, matrix.image.name) || '' }}
           # Per-image AND per-arch cache ref so api/worker/viewer and amd64/arm64
-          # builds never poison each other's layer cache. cache-to is push-gated
-          # because type=registry writes need GHCR auth (skipped on fork PRs).
-          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.OWNER }}/${{ matrix.image.name }}:buildcache-${{ matrix.platform.arch }}
-          cache-to: ${{ steps.meta-vars.outputs.PUSH == 'true' && format('type=registry,ref={0}/{1}/{2}:buildcache-{3},mode=max', env.REGISTRY, env.OWNER, matrix.image.name, matrix.platform.arch) || '' }}
+          # builds never poison each other's layer cache.
+          #  - registry buildcache: shared across runs, but its write (cache-to)
+          #    is push-gated because type=registry needs GHCR auth (skipped on
+          #    fork PRs), so PR runs can only READ it.
+          #  - GitHub Actions cache (type=gha): writable on PRs too (no registry
+          #    auth), so an unchanged build on a PR or a rerun reuses cached
+          #    layers instead of rebuilding from scratch.
+          cache-from: |
+            type=registry,ref=${{ env.REGISTRY }}/${{ env.OWNER }}/${{ matrix.image.name }}:buildcache-${{ matrix.platform.arch }}
+            type=gha,scope=${{ matrix.image.name }}-${{ matrix.platform.arch }}
+          cache-to: |
+            ${{ steps.meta-vars.outputs.PUSH == 'true' && format('type=registry,ref={0}/{1}/{2}:buildcache-{3},mode=max', env.REGISTRY, env.OWNER, matrix.image.name, matrix.platform.arch) || '' }}
+            type=gha,scope=${{ matrix.image.name }}-${{ matrix.platform.arch }},mode=max
 
       - name: Export digest
         if: steps.meta-vars.outputs.PUSH == 'true'
