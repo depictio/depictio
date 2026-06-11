@@ -710,9 +710,17 @@ class ReferenceDatasetRegistry:
 
 
 async def create_reference_datasets(
-    admin_user: UserBeanie, token_payload: dict[str, Any]
+    admin_user: UserBeanie,
+    token_payload: dict[str, Any],
+    only: set[str] | None = None,
 ) -> list[dict[str, Any]]:
     """Create all reference datasets (iris, penguins, ampliseq).
+
+    Args:
+        admin_user: Admin user set as project owner.
+        token_payload: Default admin token payload for authenticated creation.
+        only: Optional allowlist of dataset names to seed (from
+            ``DEPICTIO_SEED_PROJECTS``). ``None`` seeds all of them.
 
     Note: ampliseq dataset uses 16S rRNA microbiome data from nf-core/ampliseq.
     Data files are included under depictio/projects/nf-core/ampliseq/2.16.0/.
@@ -726,13 +734,32 @@ async def create_reference_datasets(
     # `resolve_template_for_init`. Run
     # `depictio/projects/nf-core/viralrecon/3.0.0/generate_seeds.sh` against a
     # local viralrecon run to populate `.db_seeds/` and the canonical TSVs.
-    for dataset_name in [
+    all_datasets = [
         "iris",
         "penguins",
         "ampliseq",
         "advanced_viz_showcase",
         "viralrecon",
-    ]:
+    ]
+
+    if only is not None:
+        unknown = only - set(all_datasets)
+        if unknown:
+            logger.warning(
+                "DEPICTIO_SEED_PROJECTS lists unknown project(s) %s — ignoring them. "
+                "Valid names: %s",
+                sorted(unknown),
+                ", ".join(all_datasets),
+            )
+        datasets_to_create = [name for name in all_datasets if name in only]
+        logger.info(
+            "DEPICTIO_SEED_PROJECTS set — seeding only: %s",
+            ", ".join(datasets_to_create) or "(none matched)",
+        )
+    else:
+        datasets_to_create = all_datasets
+
+    for dataset_name in datasets_to_create:
         logger.info(f"Creating reference dataset: {dataset_name}")
 
         try:
