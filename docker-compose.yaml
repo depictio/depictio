@@ -172,27 +172,17 @@ services:
       # Container now listens on 8080 (nginx-unprivileged / non-root); the
       # published host port is unchanged at 5080.
       - 5080:8080
-    # read_only root FS: nginx-unprivileged only needs writable scratch dirs,
-    # provided as tmpfs below (pid → /tmp, caches → /var/cache/nginx,
-    # runtime sockets → /var/run, and /etc/nginx/conf.d where the entrypoint
-    # renders default.conf.template via envsubst at startup).
-    read_only: true
-    tmpfs:
-      - /tmp
-      - /var/cache/nginx
-      - /var/run
-    volumes:
-      # conf.d must be writable by the non-root nginx user (uid 101) so the
-      # entrypoint can render default.conf.template via envsubst at startup.
-      # A bare `tmpfs:` short-form mount lands root-owned 0755, so uid 101
-      # fails the entrypoint's writability check ("conf.d is not writable")
-      # and nginx starts with no server block → HTTP 000. The long-form mount
-      # sets an explicit world-writable (sticky) mode. With read_only root,
-      # this tmpfs is the only way to give the entrypoint a writable conf.d.
-      - type: tmpfs
-        target: /etc/nginx/conf.d
-        tmpfs:
-          mode: 1777
+    # No read_only root FS here — unlike the backend/worker. The
+    # nginx-unprivileged entrypoint renders default.conf.template via envsubst
+    # into /etc/nginx/conf.d at startup (the API upstream + the DNS resolver
+    # are resolved at runtime), which needs a writable rootfs. The image owns
+    # conf.d as uid 101 so the render just works. This mirrors the production
+    # k8s viewer Deployment, which likewise does NOT set readOnlyRootFilesystem
+    # for exactly this reason. (A read_only root + a tmpfs overlay on conf.d
+    # was tried and fails: the overlay lands root-owned and uid 101 can't write
+    # it — "conf.d is not writable" — so nginx starts with no server block.)
+    # The container is still hardened: non-root uid 101, all caps dropped, no
+    # privilege escalation.
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
     deploy:
