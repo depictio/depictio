@@ -51,4 +51,3 @@ NC_001802.1	RefSeq	CDS	8343	8963	.	+	0	ID=cds-NP_057857.2;Parent=gene-HIV1gp9;Db
 NC_001802.1	RefSeq	three_prime_UTR	8631	9085	.	+	.	ID=id-NC_001802.1:8631..9085;gbkey=3'UTR
 NC_001802.1	RefSeq	biological_region	9086	9181	.	+	.	ID=id-NC_001802.1:9086..9181;Name=R;Note=repeat%3B positions of RNA transcription initialization and polyadenylation;gbkey=Region
 NC_001802.1	RefSeq	polyA_signal_sequence	9158	9163	.	+	.	ID=id-NC_001802.1:9158..9163;Note=both 5' and 3' poly A signals are transcribed into RNA%2C but the 5' one is suppressed;gbkey=regulatory;regulatory_class=polyA_signal_sequence
-
