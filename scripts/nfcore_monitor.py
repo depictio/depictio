@@ -598,20 +598,17 @@ def cmd_report(args: argparse.Namespace) -> int:
         recipe_results,
         catalog_result,
     )
+    status = "✅ valid" if n_problems == 0 else f"⚠️ {n_problems} issue(s)"
     if args.out:
         out = Path(args.out)
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(report)
         print(f"Report written to {out}", file=sys.stderr)
+        # The only stdout line: the short status, for the workflow to put in the PR title.
+        print(status)
     else:
         print(report)
-
-    print(
-        f"{'✗' if n_problems else '✓'} {n_problems} problem(s) found"
-        if n_problems
-        else "✓ no problems — template still valid for the new release",
-        file=sys.stderr,
-    )
+        print(f"\n{status}", file=sys.stderr)
     return 0
 
 
