@@ -71,13 +71,39 @@ def test_build_drift_report_counts_missing_and_resolved(nfm: ModuleType) -> None
         ("ancombc", "lfc", "qiime2/ancombc/gone.csv", False),  # missing
         ("opt", "x", "qiime2/whatever/optional.csv", True),  # optional -> not missing
     ]
-    report, n_missing = nfm.build_drift_report(
+    report, n_problems = nfm.build_drift_report(
         "ampliseq", "2.16.0", "2.17.0", "ampliseq/results-abc/", source_paths, keys
     )
-    assert n_missing == 1
-    assert "Missing" in report and "qiime2/ancombc/gone.csv" in report
-    assert "Resolved (2)" in report  # the resolving one + the optional one
+    assert n_problems == 1
+    assert "qiime2/ancombc/gone.csv" in report
+    assert "2 resolved, 1 missing" in report
     assert "2.16.0 → 2.17.0" in report
+    assert "action needed" in report  # overall status reflects the missing path
+
+
+def test_build_drift_report_includes_recipe_and_catalog_layers(nfm: ModuleType) -> None:
+    keys = ["qiime2/barplot/level-2.csv"]
+    source_paths = [("taxonomy", "barplot", "qiime2/barplot/level-2.csv", False)]
+    recipe_results = [
+        nfm.RecipeCheck("taxonomy", "qiime2/x.py", "PASS", "10 rows × 3 cols"),
+        nfm.RecipeCheck("ancombc", "qiime2/y.py", "FAIL", "missing output column 'lfc'"),
+        nfm.RecipeCheck("sunburst", "qiime2/z.py", "SKIPPED", "consumes upstream DCs (dc_ref)"),
+    ]
+    report, n_problems = nfm.build_drift_report(
+        "ampliseq",
+        "2.16.0",
+        "2.17.0",
+        "ampliseq/results-abc/",
+        source_paths,
+        keys,
+        recipe_results,
+        ("PASS", "OK: 12 catalog tool(s) valid"),
+    )
+    # one recipe FAIL drives the problem count even though all paths resolve
+    assert n_problems == 1
+    assert "Recipe execution — 1 pass, 1 fail, 1 skipped" in report
+    assert "missing output column 'lfc'" in report
+    assert "Catalog validate — ✅ PASS" in report
 
 
 def test_check_updates_flags_newer_release(
@@ -91,6 +117,29 @@ def test_check_updates_flags_newer_release(
     assert by_pipeline["ampliseq"]["update_available"] is True
     # A failed (None) lookup must never report an update.
     assert by_pipeline["viralrecon"]["update_available"] is False
+
+
+def test_validate_one_recipe_skips_dc_ref_recipes(nfm: ModuleType, tmp_path: Path) -> None:
+    # A recipe consuming an upstream DC (dc_ref) reads no megatest file, so it is
+    # skipped before any download/execution — no network needed.
+    pytest.importorskip("depictio.recipes")  # needs the editable install (present in CI)
+    from types import SimpleNamespace
+
+    module = SimpleNamespace(SOURCES=[SimpleNamespace(dc_ref="variants_long", path=None)])
+    result = nfm._validate_one_recipe(
+        "upset",
+        "nf-core/viralrecon/upset.py",
+        module,
+        {},
+        {},
+        "viralrecon/results-x/",
+        {},
+        tmp_path,
+        "3.0.0",
+        50.0,
+    )
+    assert result.status == "SKIPPED"
+    assert "dc_ref" in result.detail
 
 
 def test_resolve_results_prefix_with_explicit_hash(nfm: ModuleType) -> None:

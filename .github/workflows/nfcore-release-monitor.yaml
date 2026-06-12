@@ -110,9 +110,11 @@ jobs:
           source venv/bin/activate
           mkdir -p .nfcore-monitor
           out=".nfcore-monitor/${{ matrix.pipeline }}-${{ matrix.version }}.md"
-          python scripts/nfcore_monitor.py report --pipeline "${{ matrix.pipeline }}" --out "$out"
+          # stdout is the short status (✅ valid / ⚠️ N issue(s)) for the PR title
+          status=$(python scripts/nfcore_monitor.py report --pipeline "${{ matrix.pipeline }}" --out "$out")
           cat "$out" >> "$GITHUB_STEP_SUMMARY"
           echo "report_file=$out" >> "$GITHUB_OUTPUT"
+          echo "status=$status" >> "$GITHUB_OUTPUT"
 
       - name: Open draft PR with drift report
         uses: peter-evans/create-pull-request@v6
@@ -121,7 +123,7 @@ jobs:
           branch: nfcore-monitor/${{ matrix.pipeline }}-${{ matrix.version }}
           draft: true
           add-paths: ${{ steps.gen.outputs.report_file }}
-          commit-message: "chore(nf-core): ${{ matrix.pipeline }} ${{ matrix.version }} megatest drift report"
-          title: "chore(nf-core): ${{ matrix.pipeline }} ${{ matrix.version }} — megatest drift report"
+          commit-message: "chore(nf-core): validate ${{ matrix.pipeline }} ${{ matrix.version }} against megatest"
+          title: "nf-core/${{ matrix.pipeline }} ${{ matrix.version }} — megatest: ${{ steps.gen.outputs.status }}"
           labels: nf-core
           body-path: ${{ steps.gen.outputs.report_file }}
