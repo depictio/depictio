@@ -69,6 +69,8 @@ verify_run() {
 
     echo "--- File verification: $label ($amplicon_type) ---"
 
+    # Redefine to avoid stale closure from a prior call under set -e.
+    unset -f check_required
     # Check a required file: print OK, else MISSING and bump the counter.
     check_required() {
         local f="$1"
@@ -122,10 +124,14 @@ echo ">>> [1/3] run_16s_pe (test profile, 16S paired-end)"
 echo "    Output: $RUN1"
 echo ""
 
+set +e
 nextflow run nf-core/ampliseq \
     -r 2.16.0 \
     -profile test,docker \
     --outdir "$RUN1"
+NF1_EXIT=$?
+set -e
+[ $NF1_EXIT -ne 0 ] && echo "WARNING: run_16s_pe exited $NF1_EXIT — verify output below"
 
 echo ""
 verify_run "$RUN1" "run_16s_pe" "16s"
@@ -140,10 +146,14 @@ echo ">>> [2/3] run_16s_multi (test_multi profile, 16S multi-region)"
 echo "    Output: $RUN2"
 echo ""
 
+set +e
 nextflow run nf-core/ampliseq \
     -r 2.16.0 \
     -profile test_multi,docker \
     --outdir "$RUN2"
+NF2_EXIT=$?
+set -e
+[ $NF2_EXIT -ne 0 ] && echo "WARNING: run_16s_multi exited $NF2_EXIT — verify output below"
 
 echo ""
 verify_run "$RUN2" "run_16s_multi" "16s"
@@ -160,10 +170,14 @@ echo "    Output: $RUN3"
 echo "    NOTE: qiime2/barplot/level-2.csv may be absent for ITS — this is expected."
 echo ""
 
+set +e
 nextflow run nf-core/ampliseq \
     -r 2.16.0 \
     -profile test_pacbio_its,docker \
     --outdir "$RUN3"
+NF3_EXIT=$?
+set -e
+[ $NF3_EXIT -ne 0 ] && echo "WARNING: run_its_pacbio exited $NF3_EXIT — verify output below"
 
 echo ""
 verify_run "$RUN3" "run_its_pacbio" "its"
@@ -201,17 +215,17 @@ echo "# Use /import-template skill (worktree-aware, auto-picks config + ports):"
 echo ""
 echo "/import-template $TEMPLATE \\"
 echo "  --data-root $RUN1 \\"
-[ -n "$GROUP_COL_RUN1" ] && echo "  --var GROUP_COL=$GROUP_COL_RUN1 \\" || echo "  # --var GROUP_COL=<col>  (no metadata detected — omit or set manually) \\"
+[ -n "$GROUP_COL_RUN1" ] && echo "  --var GROUP_COL=\"$GROUP_COL_RUN1\" \\" || echo "  # --var GROUP_COL=<col>  (no metadata detected — omit or set manually) \\"
 echo "  --project-name \"ampliseq — 16S paired-end\""
 echo ""
 echo "/import-template $TEMPLATE \\"
 echo "  --data-root $RUN2 \\"
-[ -n "$GROUP_COL_RUN2" ] && echo "  --var GROUP_COL=$GROUP_COL_RUN2 \\" || echo "  # --var GROUP_COL=<col>  (no metadata detected) \\"
+[ -n "$GROUP_COL_RUN2" ] && echo "  --var GROUP_COL=\"$GROUP_COL_RUN2\" \\" || echo "  # --var GROUP_COL=<col>  (no metadata detected) \\"
 echo "  --project-name \"ampliseq — 16S multi\""
 echo ""
 echo "/import-template $TEMPLATE \\"
 echo "  --data-root $RUN3 \\"
-[ -n "$GROUP_COL_RUN3" ] && echo "  --var GROUP_COL=$GROUP_COL_RUN3 \\" || echo "  # --var GROUP_COL=<col>  (no metadata detected) \\"
+[ -n "$GROUP_COL_RUN3" ] && echo "  --var GROUP_COL=\"$GROUP_COL_RUN3\" \\" || echo "  # --var GROUP_COL=<col>  (no metadata detected) \\"
 echo "  --project-name \"ampliseq — ITS PacBio\""
 echo ""
 echo "=== Aggregated ingestion (all 3 runs under one project) ==="
@@ -226,7 +240,7 @@ for i in 0 1 2; do
     run_dir="${agg_runs[$i]}"
     gcol="${agg_gcols[$i]}"
     if [ -n "$gcol" ]; then
-        echo "/import-template $TEMPLATE --data-root $run_dir --var GROUP_COL=$gcol --project-name \"$APROJECT\" --overwrite"
+        echo "/import-template $TEMPLATE --data-root $run_dir --var GROUP_COL=\"$gcol\" --project-name \"$APROJECT\" --overwrite"
     else
         echo "/import-template $TEMPLATE --data-root $run_dir --project-name \"$APROJECT\" --overwrite  # add --var GROUP_COL=<col> if metadata present"
     fi

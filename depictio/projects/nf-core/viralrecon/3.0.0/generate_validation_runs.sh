@@ -49,6 +49,8 @@ verify_run() {
 
     echo "--- File verification: $label ($protocol) ---"
 
+    # Redefine to avoid stale closure from a prior call under set -e.
+    unset -f check_required
     # Check a required file: print OK, else MISSING and bump the counter.
     check_required() {
         local f="$1"
@@ -117,11 +119,15 @@ echo ">>> [1/3] run_illumina_amplicon (test_illumina profile, ivar)"
 echo "    Output: $RUN1"
 echo ""
 
+set +e
 nextflow run nf-core/viralrecon \
     -r 3.0.0 \
     -profile test_illumina,docker \
     --variant_caller ivar \
     --outdir "$RUN1"
+NF1_EXIT=$?
+set -e
+[ $NF1_EXIT -ne 0 ] && echo "WARNING: run_illumina_amplicon exited $NF1_EXIT — verify output below"
 
 echo ""
 verify_run "$RUN1" "run_illumina_amplicon" "amplicon"
@@ -140,12 +146,13 @@ echo "    Samplesheet: $CUSTOM_SAMPLESHEET"
 echo "    Output: $RUN2"
 echo ""
 
-if ! curl --silent --head --fail "$CUSTOM_SAMPLESHEET" > /dev/null 2>&1; then
+if ! curl --silent --head --fail --location --max-time 10 "$CUSTOM_SAMPLESHEET" > /dev/null 2>&1; then
     echo "WARNING: samplesheet URL not reachable — skipping run_amplicon_custom"
     echo "         Check https://github.com/nf-core/test-datasets/tree/viralrecon/samplesheet"
     echo "         and update CUSTOM_SAMPLESHEET in this script."
     echo ""
 else
+    set +e
     nextflow run nf-core/viralrecon \
         -r 3.0.0 \
         -profile docker \
@@ -155,6 +162,9 @@ else
         --variant_caller ivar \
         --genome 'MN908947.3' \
         --outdir "$RUN2"
+    NF2_EXIT=$?
+    set -e
+    [ $NF2_EXIT -ne 0 ] && echo "WARNING: run_amplicon_custom exited $NF2_EXIT — verify output below"
 
     echo ""
     verify_run "$RUN2" "run_amplicon_custom" "amplicon"
@@ -170,10 +180,14 @@ echo "    Output: $RUN3"
 echo "    NOTE: ivar / bowtie2 / mosdepth files will be absent — this is expected."
 echo ""
 
+set +e
 nextflow run nf-core/viralrecon \
     -r 3.0.0 \
     -profile test_nanopore,docker \
     --outdir "$RUN3"
+NF3_EXIT=$?
+set -e
+[ $NF3_EXIT -ne 0 ] && echo "WARNING: run_nanopore exited $NF3_EXIT — verify output below"
 
 echo ""
 verify_run "$RUN3" "run_nanopore" "nanopore"
