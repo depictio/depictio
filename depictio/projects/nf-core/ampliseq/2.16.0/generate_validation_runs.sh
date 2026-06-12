@@ -41,6 +41,22 @@ echo "nextflow $(nextflow -version 2>&1 | head -1)"
 echo ""
 
 # ---------------------------------------------------------------------------
+# Helper: run nextflow tolerantly, warning (not aborting) on non-zero exit.
+# Keeps the set +e / NF_EXIT / set -e sandwich so a failed run still verifies.
+# $1 = run label; remaining args = nextflow command + args
+# ---------------------------------------------------------------------------
+run_nextflow() {
+    local label="$1"
+    shift
+    set +e
+    "$@"
+    local nf_exit=$?
+    set -e
+    [ $nf_exit -ne 0 ] && echo "WARNING: $label exited $nf_exit — verify output below"
+    echo ""
+}
+
+# ---------------------------------------------------------------------------
 # Helper: detect first non-ID column from a metadata TSV
 # $1 = run dir
 # Returns the column name (or empty string if no metadata / no extra columns)
@@ -124,16 +140,12 @@ echo ">>> [1/3] run_16s_pe (test profile, 16S paired-end)"
 echo "    Output: $RUN1"
 echo ""
 
-set +e
-nextflow run nf-core/ampliseq \
+run_nextflow "run_16s_pe" \
+    nextflow run nf-core/ampliseq \
     -r 2.16.0 \
     -profile test,docker \
     --outdir "$RUN1"
-NF1_EXIT=$?
-set -e
-[ $NF1_EXIT -ne 0 ] && echo "WARNING: run_16s_pe exited $NF1_EXIT — verify output below"
 
-echo ""
 verify_run "$RUN1" "run_16s_pe" "16s"
 
 GROUP_COL_RUN1=$(detect_group_col "$RUN1")
@@ -146,16 +158,12 @@ echo ">>> [2/3] run_16s_multi (test_multi profile, 16S multi-region)"
 echo "    Output: $RUN2"
 echo ""
 
-set +e
-nextflow run nf-core/ampliseq \
+run_nextflow "run_16s_multi" \
+    nextflow run nf-core/ampliseq \
     -r 2.16.0 \
     -profile test_multi,docker \
     --outdir "$RUN2"
-NF2_EXIT=$?
-set -e
-[ $NF2_EXIT -ne 0 ] && echo "WARNING: run_16s_multi exited $NF2_EXIT — verify output below"
 
-echo ""
 verify_run "$RUN2" "run_16s_multi" "16s"
 
 GROUP_COL_RUN2=$(detect_group_col "$RUN2")
@@ -170,16 +178,12 @@ echo "    Output: $RUN3"
 echo "    NOTE: qiime2/barplot/level-2.csv may be absent for ITS — this is expected."
 echo ""
 
-set +e
-nextflow run nf-core/ampliseq \
+run_nextflow "run_its_pacbio" \
+    nextflow run nf-core/ampliseq \
     -r 2.16.0 \
     -profile test_pacbio_its,docker \
     --outdir "$RUN3"
-NF3_EXIT=$?
-set -e
-[ $NF3_EXIT -ne 0 ] && echo "WARNING: run_its_pacbio exited $NF3_EXIT — verify output below"
 
-echo ""
 verify_run "$RUN3" "run_its_pacbio" "its"
 
 GROUP_COL_RUN3=$(detect_group_col "$RUN3")

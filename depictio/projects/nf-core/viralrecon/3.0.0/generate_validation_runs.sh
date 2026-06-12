@@ -36,6 +36,22 @@ echo "nextflow $(nextflow -version 2>&1 | head -1)"
 echo ""
 
 # ---------------------------------------------------------------------------
+# Helper: run nextflow tolerantly, warning (not aborting) on non-zero exit.
+# Keeps the set +e / NF_EXIT / set -e sandwich so a failed run still verifies.
+# $1 = run label; remaining args = nextflow command + args
+# ---------------------------------------------------------------------------
+run_nextflow() {
+    local label="$1"
+    shift
+    set +e
+    "$@"
+    local nf_exit=$?
+    set -e
+    [ $nf_exit -ne 0 ] && echo "WARNING: $label exited $nf_exit — verify output below"
+    echo ""
+}
+
+# ---------------------------------------------------------------------------
 # Helper: verify template-expected files for a completed run
 # $1 = run dir
 # $2 = run label
@@ -119,17 +135,13 @@ echo ">>> [1/3] run_illumina_amplicon (test_illumina profile, ivar)"
 echo "    Output: $RUN1"
 echo ""
 
-set +e
-nextflow run nf-core/viralrecon \
+run_nextflow "run_illumina_amplicon" \
+    nextflow run nf-core/viralrecon \
     -r 3.0.0 \
     -profile test_illumina,docker \
     --variant_caller ivar \
     --outdir "$RUN1"
-NF1_EXIT=$?
-set -e
-[ $NF1_EXIT -ne 0 ] && echo "WARNING: run_illumina_amplicon exited $NF1_EXIT — verify output below"
 
-echo ""
 verify_run "$RUN1" "run_illumina_amplicon" "amplicon"
 
 # ---------------------------------------------------------------------------
@@ -152,8 +164,8 @@ if ! curl --silent --head --fail --location --max-time 10 "$CUSTOM_SAMPLESHEET" 
     echo "         and update CUSTOM_SAMPLESHEET in this script."
     echo ""
 else
-    set +e
-    nextflow run nf-core/viralrecon \
+    run_nextflow "run_amplicon_custom" \
+        nextflow run nf-core/viralrecon \
         -r 3.0.0 \
         -profile docker \
         --input "$CUSTOM_SAMPLESHEET" \
@@ -162,11 +174,7 @@ else
         --variant_caller ivar \
         --genome 'MN908947.3' \
         --outdir "$RUN2"
-    NF2_EXIT=$?
-    set -e
-    [ $NF2_EXIT -ne 0 ] && echo "WARNING: run_amplicon_custom exited $NF2_EXIT — verify output below"
 
-    echo ""
     verify_run "$RUN2" "run_amplicon_custom" "amplicon"
 fi
 
@@ -180,16 +188,12 @@ echo "    Output: $RUN3"
 echo "    NOTE: ivar / bowtie2 / mosdepth files will be absent — this is expected."
 echo ""
 
-set +e
-nextflow run nf-core/viralrecon \
+run_nextflow "run_nanopore" \
+    nextflow run nf-core/viralrecon \
     -r 3.0.0 \
     -profile test_nanopore,docker \
     --outdir "$RUN3"
-NF3_EXIT=$?
-set -e
-[ $NF3_EXIT -ne 0 ] && echo "WARNING: run_nanopore exited $NF3_EXIT — verify output below"
 
-echo ""
 verify_run "$RUN3" "run_nanopore" "nanopore"
 
 # ---------------------------------------------------------------------------
