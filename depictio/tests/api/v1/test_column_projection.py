@@ -204,6 +204,18 @@ class TestProjectScanAndSchemaCache:
         assert _get_cached_schema(bad, "dcX", "v1") is None
         assert ("dcX", "v1") not in dtu._DELTA_SCHEMA_CACHE
 
+    def test_unreadable_schema_skips_projection_instead_of_selecting(self):
+        # When the schema can't be read, _project_scan must NOT pass the
+        # (unverified) requested columns to .select — an absent column (e.g. a
+        # cross-DC filter column) would raise ColumnNotFoundError at collect,
+        # turning a transient schema-read failure into a hard render failure.
+        # Safe fallback: load the full frame, leaving the scan untouched.
+        bad = MagicMock()
+        bad.collect_schema.side_effect = RuntimeError("boom")
+        out = _project_scan(bad, ["individual_id", "x"], "dcX", "v1")
+        assert out is bad
+        bad.select.assert_not_called()
+
     def test_schema_cache_is_bounded(self, monkeypatch):
         monkeypatch.setattr(dtu, "_DELTA_SCHEMA_CACHE_MAX", 2)
         for i in range(3):
