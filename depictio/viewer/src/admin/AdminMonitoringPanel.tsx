@@ -590,11 +590,12 @@ const HealthPane: React.FC = () => {
 // ── Panel shell ──────────────────────────────────────────────────────────────
 
 const AdminMonitoringPanel: React.FC = () => {
-  const { isPublicMode, isDemoMode } = useCurrentUser();
+  const { isPublicMode, isDemoMode, isSingleUserMode } = useCurrentUser();
   const [pane, setPane] = useState<Pane>('tasks');
   const [liveSignal, setLiveSignal] = useState(0);
 
-  const visible = !isPublicMode && !isDemoMode;
+  // Match AdminApp's gate: single-user always allowed; only pure public/demo hides.
+  const visible = isSingleUserMode || (!isPublicMode && !isDemoMode);
 
   // Live push: bump a signal on each task/ingestion event so the active pane
   // refreshes instantly. No-op (socket never delivers) when events are disabled.

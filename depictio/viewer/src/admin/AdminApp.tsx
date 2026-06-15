@@ -47,8 +47,11 @@ function readInitialTab(): AdminTab {
 }
 
 const AdminApp: React.FC = () => {
-  const { user, loading, isPublicMode, isDemoMode } = useCurrentUser();
-  const showMonitoring = !isPublicMode && !isDemoMode;
+  const { user, loading, isPublicMode, isDemoMode, isSingleUserMode } = useCurrentUser();
+  // Monitoring is for single- & multi-user (trusted) deployments. Single-user
+  // always wins — it's a personal admin instance even if public_mode is also
+  // set; only pure public/demo instances hide it.
+  const showMonitoring = isSingleUserMode || (!isPublicMode && !isDemoMode);
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure(false);
   const [desktopOpened, { toggle: toggleDesktop }] = useDisclosure(true);
   const [activeTab, setActiveTab] = useState<AdminTab>(readInitialTab);

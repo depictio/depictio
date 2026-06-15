@@ -57,7 +57,9 @@ def _user_can_access_dashboard(user: User | None, dashboard_id: str) -> bool:
     # Admin monitoring channel is not a real dashboard — gate it on is_admin and
     # refuse in public/demo mode (no real admin surface there).
     if dashboard_id == ADMIN_MONITORING_CHANNEL:
-        if settings.auth.is_public_mode or settings.auth.is_demo_mode:
+        if (
+            settings.auth.is_public_mode or settings.auth.is_demo_mode
+        ) and not settings.auth.is_single_user_mode:
             return False
         return bool(user is not None and getattr(user, "is_admin", False))
 
