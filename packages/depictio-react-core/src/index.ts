@@ -134,6 +134,7 @@ export {
   updateProjectPermissions,
   importProjectZip,
   exportProjectZip,
+  exportProjectTemplate,
   fetchUserByEmail,
   fetchMultiQCByDataCollection,
   renameDataCollection,

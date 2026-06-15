@@ -2268,6 +2268,52 @@ export async function exportProjectZip(projectId: string): Promise<void> {
   URL.revokeObjectURL(url);
 }
 
+/** Options for exporting a project as a reusable template. */
+export interface ExportTemplateOptions {
+  /** Template version (semver). Defaults to "1.0.0". */
+  version?: string;
+  /** Human-readable template description. */
+  description?: string;
+  /** Template id (defaults server-side to "user/<slug>/<version>"). */
+  templateId?: string;
+}
+
+/** Export a project as a template ZIP (config + dashboards, no data; data paths
+ *  re-parameterized to {DATA_ROOT}). Backend returns binary content; we wrap it
+ *  in a Blob and trigger a browser download. Hits `/templates/export`. */
+export async function exportProjectTemplate(
+  projectId: string,
+  opts: ExportTemplateOptions = {},
+): Promise<void> {
+  const body: Record<string, unknown> = {
+    project_id: projectId,
+    version: opts.version ?? '1.0.0',
+  };
+  if (opts.description) body.description = opts.description;
+  if (opts.templateId) body.template_id = opts.templateId;
+
+  const res = await fetch(`${API_BASE}/templates/export`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) await throwHttpError(res, 'Failed to export template');
+
+  const blob = await res.blob();
+  const disposition = res.headers.get('content-disposition') ?? '';
+  const match = disposition.match(/filename="?([^"]+)"?/);
+  const filename = match ? match[1] : `depictio_template_${projectId}.zip`;
+
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 /** MultiQC report list response shape — used to render the DC viewer panel
  *  for multiqc-typed data collections. The backend stamps everything inside
  *  `report` (the embedded MultiQCReport doc) so callers should always read
