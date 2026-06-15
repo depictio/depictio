@@ -156,8 +156,20 @@ def read_single_file_lazy(file_info: File, file_format: str, polars_kwargs: dict
     try:
         if file_format in ["csv", "tsv", "txt"]:
             effective_kwargs = dict(polars_kwargs)
-            if file_format == "tsv" and "separator" not in effective_kwargs:
-                effective_kwargs["separator"] = "\t"
+            if "separator" not in effective_kwargs:
+                # Pick the delimiter from the on-disk extension first, falling
+                # back to the declared format when the extension is ambiguous.
+                # nf-core pipelines emit samplesheets/metadata as either .csv or
+                # .tsv depending on the user's input, so a DC declared "CSV" may
+                # actually point at a tab-separated file — without this a .tsv
+                # lands as one comma-joined column. A `.csv` extension keeps the
+                # comma default; an extensionless path uses the declared format.
+                path_str = str(file_path)
+                suffix = path_str.rsplit(".", 1)[-1].lower() if "." in path_str else ""
+                if suffix in ("tsv", "tab"):
+                    effective_kwargs["separator"] = "\t"
+                elif suffix != "csv" and file_format == "tsv":
+                    effective_kwargs["separator"] = "\t"
             lf = pl.scan_csv(file_path, **effective_kwargs)
         elif file_format == "parquet":
             lf = pl.scan_parquet(file_path, **polars_kwargs)

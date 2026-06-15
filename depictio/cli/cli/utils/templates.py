@@ -136,6 +136,50 @@ def substitute_template_variables(config: Any, variables: dict[str, str]) -> Any
         return config
 
 
+def _prune_missing_optional_single_file_dcs(
+    config: dict[str, Any],
+) -> tuple[dict[str, Any], list[str]]:
+    """Drop optional single-file DCs whose (already-substituted) file is absent.
+
+    The Project model validates single-file (``scan.mode == "single"``) DCs by
+    checking the file exists. Some pipeline outputs are produced only by certain
+    sub-workflows (e.g. the QIIME2 phylogenetic tree is absent for ITS / IonTorrent
+    / multi-region ampliseq runs). When such a DC is flagged ``optional: true`` and
+    its file is missing, prune it (and any links referencing it) so the run ingests
+    everything else instead of failing validation outright.
+
+    Scoped deliberately: only DCs that are BOTH ``optional`` AND single-file scans
+    are considered. Required DCs and recipe/glob DCs are left untouched so genuine
+    gaps still raise.
+    """
+    removed: set[str] = set()
+    for workflow in config.get("workflows", []):
+        for dc in workflow.get("data_collections", []):
+            if not dc.get("optional"):
+                continue
+            scan = dc.get("config", {}).get("scan", {})
+            if scan.get("mode") != "single":
+                continue
+            filename = scan.get("scan_parameters", {}).get("filename")
+            if filename and not Path(filename).is_file():
+                removed.add(dc["data_collection_tag"])
+
+    if removed:
+        for workflow in config.get("workflows", []):
+            workflow["data_collections"] = [
+                dc
+                for dc in workflow.get("data_collections", [])
+                if dc.get("data_collection_tag") not in removed
+            ]
+        config["links"] = [
+            link
+            for link in config.get("links", [])
+            if link.get("source_dc_tag") not in removed
+            and link.get("target_dc_tag") not in removed
+        ]
+    return config, sorted(removed)
+
+
 def _strip_ids(config: Any) -> Any:
     """Remove hardcoded 'id' fields from config so fresh IDs are generated.
 
@@ -408,7 +452,11 @@ def _auto_detect_metadata_columns(metadata_path: Path, variables: dict[str, str]
         cols = [c.strip() for c in header_line.split(sep)]
         if len(cols) < 2:
             return
-        # First column is always the sample ID; the rest are annotations
+        # First column is always the sample ID; the rest are annotations.
+        # The ID column name is pipeline/user dependent (nf-core test data uses
+        # "ID", the megatest metadata uses "sample"), so expose it as a variable
+        # that the metadata→* link source columns substitute against.
+        variables.setdefault("METADATA_ID_COL", cols[0])
         annotation_cols = [c for c in cols[1:] if c]
         if annotation_cols:
             variables.setdefault("GROUP_COL", annotation_cols[0])
@@ -492,6 +540,30 @@ def resolve_template(
         if metadata_path.is_file():
             _auto_detect_metadata_columns(metadata_path, variables)
 
+    # 3c. Auto-resolve SAMPLESHEET_FILE from the run's input/ directory when not
+    # supplied. nf-core/ampliseq copies the input samplesheet into <run>/input/
+    # under a pipeline/user dependent name (e.g. "Samplesheet.tsv",
+    # "samplesheet.csv"), so locate it case-insensitively rather than forcing the
+    # caller to pass an explicit path.
+    if "SAMPLESHEET_FILE" not in variables:
+        input_dir = Path(data_root_abs) / "input"
+        if input_dir.is_dir():
+            candidates = sorted(
+                p
+                for p in input_dir.iterdir()
+                if p.is_file()
+                and "samplesheet" in p.name.lower()
+                and p.suffix.lower() in (".csv", ".tsv", ".tab", ".txt")
+            )
+            if candidates:
+                variables["SAMPLESHEET_FILE"] = str(candidates[0])
+                logger.info(f"Samplesheet auto-detected: {candidates[0]}")
+
+    # Metadata ID column defaults to "sample" (megatest convention) when no
+    # metadata file is present; the metadata→* links are pruned in that case, so
+    # the placeholder simply resolves harmlessly.
+    variables.setdefault("METADATA_ID_COL", "sample")
+
     provided_vars: set[str] = set(variables.keys())
 
     # 4. Validate required variables; warn about unknown extras
@@ -520,13 +592,18 @@ def resolve_template(
         template_dir,
     )
 
-    # 6b. File scanning for missing source files (disabled for now —
-    # conditionals handle base vs extended split; file scanning is too
-    # aggressive with pre-computed reference data).
-    # TODO: Re-enable when running against real pipeline output directories.
-    # resolved_config, removal_report = _remove_dcs_with_missing_files(resolved_config, data_root_abs)
-    # if removal_report:
-    #     _log_removal_report(removal_report)
+    # 6b. Prune optional single-file DCs whose file is absent. Scoped strictly to
+    # DCs flagged optional with a `single` scan (e.g. the phylogenetic tree, only
+    # produced by some ampliseq sub-workflows) so a legitimate run that simply
+    # lacks that output ingests the rest instead of failing the Project model's
+    # ScanSingle existence check. Required DCs and recipe/glob DCs are untouched —
+    # their absence still surfaces as a loud error.
+    resolved_config, pruned_optional = _prune_missing_optional_single_file_dcs(resolved_config)
+    if pruned_optional:
+        logger.info(
+            f"Pruned {len(pruned_optional)} optional DC(s) with missing source files: "
+            f"{', '.join(pruned_optional)}"
+        )
 
     # 7. Strip hardcoded IDs (fresh project gets new ones)
     resolved_config = _strip_ids(resolved_config)

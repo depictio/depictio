@@ -141,6 +141,7 @@ workflows:
               "lineage": "Pangolin lineage assignment"
 
       - data_collection_tag: "variants_long"
+        optional: true  # ivar variants_long_table.csv absent when consensus is empty / --skip_variants_long_table
         description: "Per-sample variant calls with functional annotations"
         config:
           type: "Table"
@@ -168,6 +169,7 @@ workflows:
               "mutation_label": "Formatted mutation label (GENE:REFposALT)"
 
       - data_collection_tag: "pangolin_lineages"
+        optional: true  # no *.pangolin.csv (non-SARS pathogen, --skip_pangolin, or empty consensus)
         description: "Pangolin lineage assignments for each sample"
         config:
           type: "Table"
@@ -190,6 +192,7 @@ workflows:
               "qc_status": "QC status (pass/fail)"
 
       - data_collection_tag: "nextclade_results"
+        optional: true  # no nextclade output (non-SARS pathogen, --skip_nextclade, or empty consensus)
         description: "Nextclade clade assignments and sequence quality metrics"
         config:
           type: "Table"
@@ -285,6 +288,7 @@ workflows:
       # lollipop / variants-table filters. catalog/ivar/variants_long.yaml also
       # declares oncoplot as a render, so the relationship stays documented.
       - data_collection_tag: "oncoplot_canonical"
+        optional: true  # dc_ref variants_long
         description: "Oncoplot-ready variant matrix (sample_id × gene × mutation_type)"
         config:
           type: "Table"
@@ -331,6 +335,7 @@ workflows:
               "sample": "Sample identifier (faceting)"
 
       - data_collection_tag: "sankey_canonical"
+        optional: true  # dc_ref pangolin_lineages + nextclade_results
         description: "Sankey-ready classification funnel (qc_status → lineage → clade)"
         config:
           type: "Table"
@@ -348,6 +353,7 @@ workflows:
 
       # Tier 2 derivations — UpSet (mutation × lineage) + live PCA feature matrix.
       - data_collection_tag: "upset_canonical"
+        optional: true  # dc_ref variants_long
         description: "UpSet-ready mutation × lineage binary membership matrix"
         config:
           type: "Table"
@@ -361,6 +367,7 @@ workflows:
               "mutation_label": "Variant identifier (formatted GENE:REFposALT)"
 
       - data_collection_tag: "variant_feature_matrix_canonical"
+        optional: true  # dc_ref variants_long
         description: "Sample × mutation binary matrix for live PCA / UMAP embedding"
         config:
           type: "Table"

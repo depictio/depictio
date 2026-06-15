@@ -4,7 +4,7 @@
 # Produces 3 runs under TARGET_ROOT to test whether the viralrecon Depictio template
 # generalizes beyond the single reference dataset it was authored against:
 #
-#   run_illumina_amplicon/  — baseline amplicon run (same profile as download_test_data.sh)
+#   run_illumina_amplicon/  — baseline amplicon run (test profile, ivar)
 #   run_amplicon_custom/    — 2nd amplicon run using the full nf-core test samplesheet
 #   run_nanopore/           — divergent run (nanopore protocol; ivar/bowtie2 files absent)
 #
@@ -131,14 +131,14 @@ verify_run() {
 # Run 1: run_illumina_amplicon — baseline amplicon (same as download_test_data.sh)
 # ---------------------------------------------------------------------------
 RUN1="$TARGET_ROOT/run_illumina_amplicon"
-echo ">>> [1/3] run_illumina_amplicon (test_illumina profile, ivar)"
+echo ">>> [1/3] run_illumina_amplicon (test profile, ivar)"
 echo "    Output: $RUN1"
 echo ""
 
 run_nextflow "run_illumina_amplicon" \
     nextflow run nf-core/viralrecon \
     -r 3.0.0 \
-    -profile test_illumina,docker \
+    -profile test,docker \
     --variant_caller ivar \
     --outdir "$RUN1"
 
