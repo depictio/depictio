@@ -83,7 +83,7 @@ truncates after ~2 lines.
 >
 > What "1.0.0" means:
 > ✅ Stable, production-ready core — deploy it with Docker or Kubernetes
-> ✅ Built on solid open foundations (FastAPI, Plotly/Dash, Polars, Delta Lake)
+> ✅ Built on solid open foundations (React, FastAPI, Plotly.js, Polars, Delta Lake)
 > ✅ Self-hostable — your data stays yours
 > ✅ Ready for real labs, core facilities, and consortia
 >

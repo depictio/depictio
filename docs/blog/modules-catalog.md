@@ -17,9 +17,10 @@ and PNGs. To explore it interactively you either pay for a SaaS platform or
 spend a week hand-building a Shiny/Dash app that you'll maintain forever.
 
 Depictio exists to close that gap. It's an open-source platform that turns
-bioinformatics workflow outputs into **interactive dashboards** — built on
-FastAPI, Dash/Plotly, Polars and Delta Lake, deployable with Docker Compose or
-Helm/Kubernetes. You point it at your pipeline outputs; it serves dashboards.
+bioinformatics workflow outputs into **interactive dashboards** — a
+React/TypeScript front end (Plotly.js for the charts) backed by FastAPI, Polars
+and Delta Lake, deployable with Docker Compose or Helm/Kubernetes. You point it
+at your pipeline outputs; it serves dashboards.
 
 The piece we're writing about today is what connects the two ends: the
 **modules catalog**.
