@@ -60,4 +60,7 @@ initialization_collection = db[settings.mongodb.collections.initialization_colle
 projects_collection = db[settings.mongodb.collections.projects_collection]
 multiqc_collection = db[settings.mongodb.collections.multiqc_collection]
 multiqc_prerender_collection = db[settings.mongodb.collections.multiqc_prerender_collection]
+task_events_collection = db[settings.mongodb.collections.task_events_collection]
+ingestion_runs_collection = db[settings.mongodb.collections.ingestion_runs_collection]
+app_logs_collection = db[settings.mongodb.collections.app_logs_collection]
 test_collection = db[settings.mongodb.collections.test_collection]
