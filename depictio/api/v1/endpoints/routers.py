@@ -32,6 +32,7 @@ from depictio.api.v1.endpoints.migrate_endpoints.routes import migrate_endpoint_
 from depictio.api.v1.endpoints.multiqc_endpoints.routes import router as multiqc_router
 from depictio.api.v1.endpoints.projects_endpoints.routes import projects_endpoint_router
 from depictio.api.v1.endpoints.runs_endpoints.routes import runs_endpoint_router
+from depictio.api.v1.endpoints.templates_endpoints.routes import templates_endpoint_router
 from depictio.api.v1.endpoints.user_endpoints.routes import auth_endpoint_router
 from depictio.api.v1.endpoints.utils_endpoints.routes import utils_endpoint_router
 from depictio.api.v1.endpoints.workflow_endpoints.routes import workflows_endpoint_router
@@ -101,6 +102,12 @@ router.include_router(
     migrate_endpoint_router,
     prefix="/migrate",
     tags=["Migrate"],
+)
+
+router.include_router(
+    templates_endpoint_router,
+    prefix="/templates",
+    tags=["Templates"],
 )
 
 router.include_router(

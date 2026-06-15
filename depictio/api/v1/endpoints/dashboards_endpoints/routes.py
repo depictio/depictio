@@ -3797,6 +3797,73 @@ async def import_dashboard_from_yaml(
 # ============================================================================
 
 
+def build_dashboard_yaml_content(dashboard_doc: dict, project_name: str) -> str:
+    """Serialize a dashboard (single or multi-tab) to a YAML string.
+
+    For a main tab with child tabs, returns a nested multi-tab YAML
+    (``main_dashboard`` + ``tabs``). For a standalone or child dashboard,
+    returns a single-dashboard YAML. Shared by the dashboard YAML export
+    endpoint and the project-as-template export.
+    """
+    from depictio.models.yaml_serialization.utils import enrich_dashboard_with_tags
+
+    main_id = dashboard_doc.get("dashboard_id")
+    is_main_tab = dashboard_doc.get("is_main_tab", True)
+    child_tabs: list[dict] = []
+    if is_main_tab and main_id is not None:
+        child_tabs = list(
+            dashboards_collection.find({"parent_dashboard_id": ObjectId(main_id)}).sort(
+                "tab_order", 1
+            )
+        )
+
+    # Single dashboard export (no children or is a child tab itself)
+    if not child_tabs and is_main_tab:
+        enriched_dashboard = enrich_dashboard_with_tags(dashboard_doc)
+        lite = DashboardDataLite.from_full(enriched_dashboard)
+        lite.project_tag = project_name
+        return lite.to_yaml()
+
+    # Multi-tab export: main dashboard + child tabs in single YAML
+    multi_tab_dict: dict[str, Any] = {}
+
+    enriched_main_dashboard = enrich_dashboard_with_tags(dashboard_doc)
+    main_lite = DashboardDataLite.from_full(enriched_main_dashboard)
+    main_lite.project_tag = project_name
+    main_dict = main_lite.model_dump(exclude_none=True, mode="json")
+    DashboardDataLite._strip_dashboard_defaults(main_dict)
+    for field in ["is_main_tab", "tab_order", "parent_dashboard_tag"]:
+        main_dict.pop(field, None)
+    if "components" in main_dict:
+        main_dict["components"] = [
+            DashboardDataLite._clean_component_for_yaml(c) for c in main_dict["components"]
+        ]
+    multi_tab_dict["main_dashboard"] = DashboardDataLite._build_ordered_dashboard_dict(main_dict)
+
+    tabs_list = []
+    for child_doc in child_tabs:
+        enriched_child = enrich_dashboard_with_tags(child_doc)
+        child_lite = DashboardDataLite.from_full(enriched_child)
+        child_lite.project_tag = project_name
+        child_dict = child_lite.model_dump(exclude_none=True, mode="json")
+        DashboardDataLite._strip_dashboard_defaults(child_dict)
+        for field in ["is_main_tab", "parent_dashboard_tag", "project_tag"]:
+            child_dict.pop(field, None)
+        if "components" in child_dict:
+            child_dict["components"] = [
+                DashboardDataLite._clean_component_for_yaml(c) for c in child_dict["components"]
+            ]
+        tabs_list.append(DashboardDataLite._build_ordered_dashboard_dict(child_dict))
+
+    if tabs_list:
+        multi_tab_dict["tabs"] = tabs_list
+
+    raw_yaml = yaml.dump(
+        multi_tab_dict, default_flow_style=False, sort_keys=False, allow_unicode=True, indent=4
+    )
+    return DashboardDataLite._apply_section_comments(raw_yaml)
+
+
 @dashboards_endpoint_router.get("/{dashboard_id}/yaml")
 async def export_dashboard_as_yaml(
     dashboard_id: PyObjectId,
@@ -3850,84 +3917,7 @@ async def export_dashboard_as_yaml(
                 detail="You don't have permission to export this dashboard.",
             )
 
-    # Check if this is a main tab with child tabs
-    is_main_tab = dashboard_doc.get("is_main_tab", True)
-    child_tabs = []
-    if is_main_tab:
-        child_tabs_docs = list(
-            dashboards_collection.find({"parent_dashboard_id": ObjectId(dashboard_id)}).sort(
-                "tab_order", 1
-            )
-        )
-        child_tabs = child_tabs_docs
-
-    # Single dashboard export (no children or is a child tab itself)
-    if not child_tabs and is_main_tab:
-        # Enrich dashboard with workflow and data collection tags from MongoDB
-        from depictio.models.yaml_serialization.utils import enrich_dashboard_with_tags
-
-        enriched_dashboard = enrich_dashboard_with_tags(dashboard_doc)
-
-        # Convert to DashboardDataLite for export
-        lite = DashboardDataLite.from_full(enriched_dashboard)
-        lite.project_tag = project_name
-        yaml_content = lite.to_yaml()
-
-        return Response(
-            content=yaml_content,
-            media_type="application/x-yaml",
-            headers={
-                "Content-Disposition": f'attachment; filename="{dashboard_doc.get("title", "dashboard")}.yaml"'
-            },
-        )
-
-    # Multi-tab export: main dashboard + child tabs in single YAML
-    multi_tab_dict: dict[str, Any] = {}
-
-    # Enrich main dashboard with workflow and data collection tags
-    from depictio.models.yaml_serialization.utils import enrich_dashboard_with_tags
-
-    enriched_main_dashboard = enrich_dashboard_with_tags(dashboard_doc)
-
-    # Export main dashboard — apply ordering, default stripping, and section sentinels
-    main_lite = DashboardDataLite.from_full(enriched_main_dashboard)
-    main_lite.project_tag = project_name
-    main_dict = main_lite.model_dump(exclude_none=True, mode="json")
-    DashboardDataLite._strip_dashboard_defaults(main_dict)
-    for field in ["is_main_tab", "tab_order", "parent_dashboard_tag"]:
-        main_dict.pop(field, None)
-    if "components" in main_dict:
-        main_dict["components"] = [
-            DashboardDataLite._clean_component_for_yaml(c) for c in main_dict["components"]
-        ]
-    multi_tab_dict["main_dashboard"] = DashboardDataLite._build_ordered_dashboard_dict(main_dict)
-
-    # Export child tabs
-    tabs_list = []
-    for child_doc in child_tabs:
-        # Enrich child tab with workflow and data collection tags
-        enriched_child = enrich_dashboard_with_tags(child_doc)
-
-        child_lite = DashboardDataLite.from_full(enriched_child)
-        child_lite.project_tag = project_name
-        child_dict = child_lite.model_dump(exclude_none=True, mode="json")
-        DashboardDataLite._strip_dashboard_defaults(child_dict)
-        for field in ["is_main_tab", "parent_dashboard_tag", "project_tag"]:
-            child_dict.pop(field, None)
-        if "components" in child_dict:
-            child_dict["components"] = [
-                DashboardDataLite._clean_component_for_yaml(c) for c in child_dict["components"]
-            ]
-        tabs_list.append(DashboardDataLite._build_ordered_dashboard_dict(child_dict))
-
-    if tabs_list:
-        multi_tab_dict["tabs"] = tabs_list
-
-    # Convert to YAML and inject section comment separators
-    raw_yaml = yaml.dump(
-        multi_tab_dict, default_flow_style=False, sort_keys=False, allow_unicode=True, indent=4
-    )
-    yaml_content = DashboardDataLite._apply_section_comments(raw_yaml)
+    yaml_content = build_dashboard_yaml_content(dashboard_doc, project_name)
 
     return Response(
         content=yaml_content,
