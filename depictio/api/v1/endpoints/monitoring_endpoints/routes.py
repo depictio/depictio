@@ -128,6 +128,9 @@ def start_ingestion(
         status="running",
     )
     store.create_ingestion_run(run)
+    from depictio.api.v1.monitoring.publish import publish_ingestion_event
+
+    publish_ingestion_event(run_id, "running", x_depictio_cli_instance or x_depictio_cli_host)
     return {"run_id": run_id}
 
 
@@ -149,6 +152,9 @@ def finish_ingestion(
     )
     if not matched:
         raise HTTPException(status_code=404, detail="Ingestion run not found.")
+    from depictio.api.v1.monitoring.publish import publish_ingestion_event
+
+    publish_ingestion_event(run_id, body.status, None)
     return {"run_id": run_id, "status": body.status}
 
 

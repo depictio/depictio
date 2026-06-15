@@ -43,8 +43,18 @@ export type RealtimeEvent =
       data_collection_id?: string;
       payload?: Record<string, unknown>;
     }
+  | {
+      event_type: 'task_event' | 'ingestion_event';
+      timestamp?: string;
+      dashboard_id?: string;
+      payload?: Record<string, unknown>;
+    }
   | { event_type: 'heartbeat'; timestamp?: string }
   | { type: 'subscribed' | 'unsubscribed' | 'pong'; dashboard_id?: string };
+
+/** Pseudo dashboard id the backend uses as the admin monitoring pub/sub
+ *  channel. Must match ``ADMIN_MONITORING_CHANNEL`` in the Python models. */
+export const ADMIN_MONITORING_CHANNEL = '__admin_monitoring__';
 
 interface UseDataCollectionUpdatesOptions {
   /** Whether the host wants to receive update events. Defaults to true. */
@@ -254,4 +264,127 @@ export function useDataCollectionUpdates(
   }, [paused]);
 
   return { status, pendingUpdate, acknowledgePending };
+}
+
+export type MonitoringLiveEvent = Extract<
+  RealtimeEvent,
+  { event_type: 'task_event' | 'ingestion_event' }
+>;
+
+interface UseMonitoringEventsOptions {
+  /** Subscribe only when true (e.g. the panel is mounted/visible). */
+  enabled?: boolean;
+  /** Fired on each task_event / ingestion_event push. */
+  onEvent?: (event: MonitoringLiveEvent) => void;
+}
+
+/**
+ * Subscribe to the admin monitoring channel for live task/ingestion status
+ * pushes. Mirrors {@link useDataCollectionUpdates} (same socket URL builder,
+ * JWT-in-query auth, capped-backoff reconnect) but targets the
+ * ``__admin_monitoring__`` pseudo-dashboard the backend gates on ``is_admin``.
+ *
+ * If real-time events are disabled server-side the socket simply never delivers
+ * (or closes immediately) and the panel keeps working off its polling baseline.
+ */
+export function useMonitoringEvents(
+  opts: UseMonitoringEventsOptions = {},
+): { status: RealtimeStatus } {
+  const { enabled = true, onEvent } = opts;
+
+  const [status, setStatus] = useState<RealtimeStatus>('disconnected');
+  const onEventRef = useRef(onEvent);
+  onEventRef.current = onEvent;
+
+  const wsRef = useRef<WebSocket | null>(null);
+  const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reconnectAttempts = useRef(0);
+
+  useEffect(() => {
+    if (!enabled) {
+      setStatus('disconnected');
+      return undefined;
+    }
+
+    let disposed = false;
+
+    const connect = () => {
+      if (disposed) return;
+      const token = readToken();
+      const url = buildWebSocketUrl(token, ADMIN_MONITORING_CHANNEL);
+      setStatus('connecting');
+
+      let ws: WebSocket;
+      try {
+        ws = new WebSocket(url);
+      } catch (err) {
+        console.warn('[monitoring] WebSocket constructor failed:', err);
+        scheduleReconnect();
+        return;
+      }
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        if (disposed) return;
+        reconnectAttempts.current = 0;
+        setStatus('connected');
+        try {
+          ws.send(JSON.stringify({ type: 'subscribe', dashboard_id: ADMIN_MONITORING_CHANNEL }));
+        } catch {
+          // ignore
+        }
+      };
+
+      ws.onmessage = (ev) => {
+        if (disposed) return;
+        let parsed: RealtimeEvent;
+        try {
+          parsed = JSON.parse(ev.data);
+        } catch {
+          return;
+        }
+        if (
+          'event_type' in parsed &&
+          (parsed.event_type === 'task_event' || parsed.event_type === 'ingestion_event')
+        ) {
+          onEventRef.current?.(parsed);
+        }
+      };
+
+      ws.onclose = () => {
+        if (disposed) return;
+        setStatus('disconnected');
+        scheduleReconnect();
+      };
+    };
+
+    const scheduleReconnect = () => {
+      if (disposed) return;
+      const attempt = reconnectAttempts.current++;
+      const delay = Math.min(30_000, 1_000 * 2 ** Math.min(attempt, 5));
+      if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
+      reconnectTimer.current = setTimeout(connect, delay);
+    };
+
+    connect();
+
+    return () => {
+      disposed = true;
+      if (reconnectTimer.current) {
+        clearTimeout(reconnectTimer.current);
+        reconnectTimer.current = null;
+      }
+      if (wsRef.current) {
+        try {
+          wsRef.current.close();
+        } catch {
+          // ignore
+        }
+        wsRef.current = null;
+      }
+      setStatus('disconnected');
+    };
+  }, [enabled]);
+
+  return { status };
 }

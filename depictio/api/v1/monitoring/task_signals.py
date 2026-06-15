@@ -112,6 +112,12 @@ def _on_prerun(task_id=None, task=None, args=None, kwargs=None, **_extra):
     fields.update(_extract_refs(kwargs, args))
     store.upsert_task_event(task_id, **fields)
 
+    from depictio.api.v1.monitoring.publish import publish_task_event
+    from depictio.models.models.monitoring import derive_task_kind
+
+    task_name = fields["task_name"]
+    publish_task_event(task_id, task_name, derive_task_kind(task_name), "started")
+
 
 @task_postrun.connect
 @_safe
@@ -149,6 +155,12 @@ def _on_postrun(task_id=None, task=None, retval=None, state=None, **_extra):
     except Exception:
         fields["result_summary"] = None
     store.upsert_task_event(task_id, **fields)
+
+    from depictio.api.v1.monitoring.publish import publish_task_event
+
+    task_name = (existing or {}).get("task_name", "") or getattr(task, "name", "") or ""
+    kind = (existing or {}).get("kind", "other")
+    publish_task_event(task_id, task_name, kind, fields["status"])
 
 
 @task_failure.connect
