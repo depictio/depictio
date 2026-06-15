@@ -16,7 +16,7 @@
 ## We rely on
 
 [![FastAPI](https://img.shields.io/badge/FastAPI-latest?style=flat-square&logo=fastapi&color=66C2B2)](https://fastapi.tiangolo.com/)
-[![React](https://img.shields.io/badge/React-latest?style=flat-square&logo=react&color=61DAFB)](https://react.dev/)
+[![React](https://img.shields.io/badge/React-latest?style=flat-square&logo=react&color=7DBEFF)](https://react.dev/)
 [![MongoDB](https://img.shields.io/badge/MongoDB-latest?style=flat-square&logo=mongodb&color=8FCA82)](https://www.mongodb.com/)
 [![MinIO](https://img.shields.io/badge/MinIO-latest?style=flat-square&logo=minio&color=E88A97)](https://min.io/)
 [![Pydantic](https://img.shields.io/badge/Pydantic-latest?style=flat-square&logo=pydantic&color=F18AAF)](https://pydantic-docs.helpmanual.io/)
