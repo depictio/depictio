@@ -371,6 +371,51 @@ def api_upsert_runs_batch(
     return response
 
 
+def api_monitoring_ingestion_start(
+    CLI_config: CLIConfig,
+    command: str = "run",
+    project_id: str | None = None,
+    project_name: str | None = None,
+) -> str | None:
+    """Open a server-side ingestion-run record. Best-effort.
+
+    Returns the server-assigned ``run_id`` on success, or ``None`` if monitoring
+    is disabled/unreachable — the caller must never let this abort the ingestion.
+    """
+    try:
+        url = f"{CLI_config.api_base_url}/depictio/api/v1/monitoring/ingestion/start"
+        payload = {"command": command, "project_id": project_id, "project_name": project_name}
+        response = get_http_client().post(
+            url, json=payload, headers=generate_api_headers(CLI_config), timeout=30.0
+        )
+        if response.status_code == 200:
+            return response.json().get("run_id")
+        logger.debug(f"Monitoring ingestion start skipped (HTTP {response.status_code})")
+    except Exception as exc:
+        logger.debug(f"Monitoring ingestion start failed (non-fatal): {exc}")
+    return None
+
+
+def api_monitoring_ingestion_finish(
+    CLI_config: CLIConfig,
+    run_id: str,
+    status: str = "success",
+    steps: list[dict] | None = None,
+    error: str | None = None,
+) -> None:
+    """Close a server-side ingestion-run record. Best-effort; never raises."""
+    if not run_id:
+        return
+    try:
+        url = f"{CLI_config.api_base_url}/depictio/api/v1/monitoring/ingestion/{run_id}/finish"
+        payload = {"status": status, "steps": steps or [], "error": error}
+        get_http_client().post(
+            url, json=payload, headers=generate_api_headers(CLI_config), timeout=30.0
+        )
+    except Exception as exc:
+        logger.debug(f"Monitoring ingestion finish failed (non-fatal): {exc}")
+
+
 @validate_call
 def api_delete_run(run_id: str, CLI_config: CLIConfig) -> httpx.Response:
     """

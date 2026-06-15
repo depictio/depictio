@@ -6,6 +6,8 @@ import typer
 from depictio.cli.cli.utils.api_calls import (
     api_get_project_from_name,
     api_login,
+    api_monitoring_ingestion_finish,
+    api_monitoring_ingestion_start,
     api_sync_project_config_to_server,
 )
 from depictio.cli.cli.utils.common import generate_api_headers, load_depictio_config
@@ -189,6 +191,9 @@ def register_run_command(app: typer.Typer):
         success_count = 0
         total_steps = 8 if is_template_mode else 7
 
+        # Server-side monitoring record for this ingestion run (best-effort).
+        ingestion_run_id: str | None = None
+
         # Step 0 (template only): Resolve template and validate data
         if is_template_mode:
             rich_print_section_separator("Step 0: Resolving project template")
@@ -342,6 +347,19 @@ def register_run_command(app: typer.Typer):
             rich_print_checked_statement(f"{e}", "error")
             if not continue_on_error:
                 return
+
+        # Open the monitoring ingestion record now that CLI_config is validated.
+        # Best-effort: a monitoring outage must never affect the ingestion.
+        if not dry_run:
+            try:
+                _proj = locals().get("project_config")
+                ingestion_run_id = api_monitoring_ingestion_start(
+                    CLI_config=CLI_config,
+                    command="run",
+                    project_name=getattr(_proj, "name", None),
+                )
+            except Exception:
+                ingestion_run_id = None
 
         # Step 4: Sync project configuration to server
         if not skip_sync:
@@ -643,4 +661,20 @@ def register_run_command(app: typer.Typer):
             rich_print_checked_statement(
                 f"Depictio-CLI run completed with some issues ({success_count}/{total_steps} steps)",
                 "warning",
+            )
+
+        # Close the monitoring ingestion record (best-effort).
+        if ingestion_run_id:
+            final_status = "success" if success_count == total_steps else "partial"
+            api_monitoring_ingestion_finish(
+                CLI_config=CLI_config,
+                run_id=ingestion_run_id,
+                status=final_status,
+                steps=[
+                    {
+                        "name": "run",
+                        "status": final_status,
+                        "detail": f"{success_count}/{total_steps} steps",
+                    }
+                ],
             )

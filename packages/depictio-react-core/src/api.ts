@@ -2774,6 +2774,151 @@ export async function cleanExampleProjects(): Promise<{ deleted: ExampleProject[
   return { deleted };
 }
 
+// ---- Admin "Log & Task" monitoring (/monitoring) ------------------------
+//
+// Back the admin Monitoring tab. All read endpoints are admin-gated server
+// side and 404 in public/demo mode; the SPA hides the tab in those modes too.
+
+/** A persisted Celery task lifecycle record. */
+export interface MonitoringTaskEvent {
+  task_id: string;
+  task_name: string;
+  kind: 'figure' | 'screenshot' | 'multiqc' | 'advanced_viz' | 'deltatable' | 'other';
+  status: 'pending' | 'started' | 'success' | 'failure' | 'retry' | 'revoked';
+  args_repr?: string;
+  dashboard_id?: string | null;
+  dc_id?: string | null;
+  queue?: string | null;
+  worker?: string | null;
+  started_at?: string | null;
+  finished_at?: string | null;
+  duration_ms?: number | null;
+  error?: string | null;
+  traceback?: string | null;
+  result_summary?: string | null;
+  logs?: string[];
+  created_at?: string;
+  updated_at?: string;
+}
+
+/** A CLI ingestion-run record. */
+export interface MonitoringIngestionRun {
+  run_id: string;
+  cli_instance_label?: string | null;
+  cli_hostname?: string | null;
+  user_id?: string | null;
+  email?: string | null;
+  project_id?: string | null;
+  project_name?: string | null;
+  command: string;
+  status: 'running' | 'success' | 'partial' | 'failed';
+  steps?: { name: string; status: string; detail?: string | null }[];
+  error?: string | null;
+  started_at?: string;
+  finished_at?: string | null;
+}
+
+/** A recent application log line from the capped collection. */
+export interface MonitoringAppLog {
+  ts: string;
+  level: string;
+  logger: string;
+  source: 'api' | 'celery';
+  message: string;
+  pathname?: string | null;
+  lineno?: number | null;
+}
+
+/** Live worker/broker health snapshot. */
+export interface MonitoringHealth {
+  status: string;
+  hostname?: string;
+  workers: string[];
+  worker_count: number;
+  active_count: number;
+  events_enabled: boolean;
+  live_updates: boolean;
+}
+
+function monitoringQuery(params: Record<string, string | number | undefined>): string {
+  const qs = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== '') qs.set(key, String(value));
+  }
+  const s = qs.toString();
+  return s ? `?${s}` : '';
+}
+
+export async function fetchMonitoringTasks(opts: {
+  status?: string;
+  kind?: string;
+  sinceSeconds?: number;
+  limit?: number;
+  skip?: number;
+} = {}): Promise<MonitoringTaskEvent[]> {
+  const qs = monitoringQuery({
+    status: opts.status,
+    kind: opts.kind,
+    since_seconds: opts.sinceSeconds,
+    limit: opts.limit,
+    skip: opts.skip,
+  });
+  const res = await fetch(`${API_BASE}/monitoring/tasks${qs}`, { headers: authHeaders() });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to load tasks');
+  const data = await res.json();
+  return Array.isArray(data?.tasks) ? (data.tasks as MonitoringTaskEvent[]) : [];
+}
+
+export async function fetchMonitoringTask(taskId: string): Promise<MonitoringTaskEvent> {
+  const res = await fetch(`${API_BASE}/monitoring/tasks/${taskId}`, { headers: authHeaders() });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to load task');
+  return (await res.json()) as MonitoringTaskEvent;
+}
+
+export async function fetchIngestionRuns(opts: {
+  instance?: string;
+  status?: string;
+  projectId?: string;
+  limit?: number;
+  skip?: number;
+} = {}): Promise<MonitoringIngestionRun[]> {
+  const qs = monitoringQuery({
+    instance: opts.instance,
+    status: opts.status,
+    project_id: opts.projectId,
+    limit: opts.limit,
+    skip: opts.skip,
+  });
+  const res = await fetch(`${API_BASE}/monitoring/ingestion${qs}`, { headers: authHeaders() });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to load ingestion runs');
+  const data = await res.json();
+  return Array.isArray(data?.runs) ? (data.runs as MonitoringIngestionRun[]) : [];
+}
+
+export async function fetchIngestionRun(runId: string): Promise<MonitoringIngestionRun> {
+  const res = await fetch(`${API_BASE}/monitoring/ingestion/${runId}`, { headers: authHeaders() });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to load ingestion run');
+  return (await res.json()) as MonitoringIngestionRun;
+}
+
+export async function fetchAppLogs(opts: {
+  level?: string;
+  source?: string;
+  limit?: number;
+} = {}): Promise<MonitoringAppLog[]> {
+  const qs = monitoringQuery({ level: opts.level, source: opts.source, limit: opts.limit });
+  const res = await fetch(`${API_BASE}/monitoring/logs${qs}`, { headers: authHeaders() });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to load logs');
+  const data = await res.json();
+  return Array.isArray(data?.logs) ? (data.logs as MonitoringAppLog[]) : [];
+}
+
+export async function fetchMonitoringHealth(): Promise<MonitoringHealth> {
+  const res = await fetch(`${API_BASE}/monitoring/health`, { headers: authHeaders() });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to load monitoring health');
+  return (await res.json()) as MonitoringHealth;
+}
+
 // ---- Profile + CLI token management (/profile, /cli-agents) -----
 //
 // These wrap the FastAPI endpoints used by the React profile and CLI agents

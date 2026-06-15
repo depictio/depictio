@@ -21,8 +21,9 @@ import AdminUsersPanel from './AdminUsersPanel';
 import AdminProjectsPanel from './AdminProjectsPanel';
 import AdminDashboardsPanel from './AdminDashboardsPanel';
 import AdminMaintenancePanel from './AdminMaintenancePanel';
+import AdminMonitoringPanel from './AdminMonitoringPanel';
 
-type AdminTab = 'users' | 'projects' | 'dashboards' | 'maintenance';
+type AdminTab = 'users' | 'projects' | 'dashboards' | 'monitoring' | 'maintenance';
 
 /** Persist the active tab so a refresh keeps the admin where they left off. */
 const TAB_KEY = 'admin-active-tab';
@@ -34,6 +35,7 @@ function readInitialTab(): AdminTab {
       raw === 'users' ||
       raw === 'projects' ||
       raw === 'dashboards' ||
+      raw === 'monitoring' ||
       raw === 'maintenance'
     ) {
       return raw;
@@ -45,7 +47,8 @@ function readInitialTab(): AdminTab {
 }
 
 const AdminApp: React.FC = () => {
-  const { user, loading } = useCurrentUser();
+  const { user, loading, isPublicMode, isDemoMode } = useCurrentUser();
+  const showMonitoring = !isPublicMode && !isDemoMode;
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure(false);
   const [desktopOpened, { toggle: toggleDesktop }] = useDisclosure(true);
   const [activeTab, setActiveTab] = useState<AdminTab>(readInitialTab);
@@ -114,6 +117,14 @@ const AdminApp: React.FC = () => {
           >
             Dashboards
           </Tabs.Tab>
+          {showMonitoring && (
+            <Tabs.Tab
+              value="monitoring"
+              leftSection={<Icon icon="mdi:chart-timeline-variant" width={16} />}
+            >
+              Log &amp; Task
+            </Tabs.Tab>
+          )}
           <Tabs.Tab value="maintenance" leftSection={<Icon icon="mdi:broom" width={16} />}>
             Maintenance
           </Tabs.Tab>
@@ -128,6 +139,11 @@ const AdminApp: React.FC = () => {
         <Tabs.Panel value="dashboards" pt="md">
           <AdminDashboardsPanel />
         </Tabs.Panel>
+        {showMonitoring && (
+          <Tabs.Panel value="monitoring" pt="md">
+            <AdminMonitoringPanel />
+          </Tabs.Panel>
+        )}
         <Tabs.Panel value="maintenance" pt="md">
           <AdminMaintenancePanel />
         </Tabs.Panel>

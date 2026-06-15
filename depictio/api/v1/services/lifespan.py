@@ -205,6 +205,27 @@ async def stop_event_services() -> None:
         await event_service.stop()
 
 
+def start_monitoring_storage(should_initialize: bool) -> None:
+    """Set up the monitoring ledger.
+
+    Index + capped-collection creation runs only on the initializing worker (no
+    need for N workers to race), but the app-log handler attaches in every API
+    worker so each process's logs are captured. Never fails boot.
+    """
+    if not settings.monitoring.enabled:
+        return
+    try:
+        from depictio.api.v1.monitoring.log_handler import install_app_log_handler
+        from depictio.api.v1.monitoring.store import ensure_monitoring_storage
+
+        if should_initialize:
+            ensure_monitoring_storage()
+        install_app_log_handler(source="api")
+        logger.info(f"Worker {WORKER_ID}: Monitoring storage ready")
+    except Exception as exc:
+        logger.warning(f"Worker {WORKER_ID}: Monitoring storage setup failed: {exc}")
+
+
 def start_multiqc_prewarm(should_initialize: bool) -> None:
     """Fire-and-forget MultiQC prewarm for every dashboard at startup.
 
@@ -295,6 +316,7 @@ async def lifespan(_app: FastAPI):
     background_task = start_background_services(should_initialize)
     start_yaml_services(should_initialize)
     await start_event_services(should_initialize)
+    start_monitoring_storage(should_initialize)
     start_multiqc_prewarm(should_initialize)
 
     yield
