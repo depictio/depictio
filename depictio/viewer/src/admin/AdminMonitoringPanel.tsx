@@ -27,6 +27,7 @@ import {
   fetchIngestionRuns,
   fetchMonitoringHealth,
   fetchMonitoringTasks,
+  useMonitoringEvents,
   type MonitoringAppLog,
   type MonitoringHealth,
   type MonitoringIngestionRun,
@@ -145,10 +146,13 @@ const PaneHeader: React.FC<{
   </Group>
 );
 
-/** Generic polling hook: runs `load` immediately and (when `auto`) every interval. */
+/** Generic polling hook: runs `load` immediately and (when `auto`) every
+ *  interval. Also refreshes whenever `liveSignal` increments — the panel bumps
+ *  it on each live WebSocket push so the active pane updates instantly. */
 function usePolling<T>(
   load: () => Promise<T>,
   auto: boolean,
+  liveSignal = 0,
 ): { data: T | null; loading: boolean; error: string | null; refresh: () => void } {
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(true);
@@ -176,12 +180,18 @@ function usePolling<T>(
     return () => clearInterval(id);
   }, [auto, refresh]);
 
+  // Live push: refresh on each signal bump (skip the initial 0 to avoid a
+  // duplicate of the mount fetch above).
+  useEffect(() => {
+    if (liveSignal > 0) void refresh();
+  }, [liveSignal, refresh]);
+
   return { data, loading, error, refresh };
 }
 
 // ── Tasks pane ────────────────────────────────────────────────────────────
 
-const TasksPane: React.FC = () => {
+const TasksPane: React.FC<{ liveSignal: number }> = ({ liveSignal }) => {
   const [auto, setAuto] = useState(true);
   const [status, setStatus] = useState<string | null>(null);
   const [kind, setKind] = useState<string | null>(null);
@@ -194,7 +204,7 @@ const TasksPane: React.FC = () => {
       }),
     [status, kind],
   );
-  const { data, loading, error, refresh } = usePolling<MonitoringTaskEvent[]>(load, auto);
+  const { data, loading, error, refresh } = usePolling<MonitoringTaskEvent[]>(load, auto, liveSignal);
   const tasks = data ?? [];
 
   return (
@@ -308,10 +318,14 @@ const TasksPane: React.FC = () => {
 
 // ── Ingestion pane ──────────────────────────────────────────────────────────
 
-const IngestionPane: React.FC = () => {
+const IngestionPane: React.FC<{ liveSignal: number }> = ({ liveSignal }) => {
   const [auto, setAuto] = useState(true);
   const load = useCallback(() => fetchIngestionRuns({ limit: 200 }), []);
-  const { data, loading, error, refresh } = usePolling<MonitoringIngestionRun[]>(load, auto);
+  const { data, loading, error, refresh } = usePolling<MonitoringIngestionRun[]>(
+    load,
+    auto,
+    liveSignal,
+  );
   const runs = data ?? [];
 
   return (
@@ -578,21 +592,31 @@ const HealthPane: React.FC = () => {
 const AdminMonitoringPanel: React.FC = () => {
   const { isPublicMode, isDemoMode } = useCurrentUser();
   const [pane, setPane] = useState<Pane>('tasks');
+  const [liveSignal, setLiveSignal] = useState(0);
+
+  const visible = !isPublicMode && !isDemoMode;
+
+  // Live push: bump a signal on each task/ingestion event so the active pane
+  // refreshes instantly. No-op (socket never delivers) when events are disabled.
+  const { status: liveStatus } = useMonitoringEvents({
+    enabled: visible,
+    onEvent: useCallback(() => setLiveSignal((n) => n + 1), []),
+  });
 
   const body = useMemo(() => {
     switch (pane) {
       case 'ingestion':
-        return <IngestionPane />;
+        return <IngestionPane liveSignal={liveSignal} />;
       case 'logs':
         return <LogsPane />;
       case 'health':
         return <HealthPane />;
       default:
-        return <TasksPane />;
+        return <TasksPane liveSignal={liveSignal} />;
     }
-  }, [pane]);
+  }, [pane, liveSignal]);
 
-  if (isPublicMode || isDemoMode) {
+  if (!visible) {
     return (
       <Text size="sm" c="dimmed">
         Monitoring is not available in this deployment mode.
@@ -602,17 +626,24 @@ const AdminMonitoringPanel: React.FC = () => {
 
   return (
     <Stack gap="md">
-      <SegmentedControl
-        size="xs"
-        value={pane}
-        onChange={(v) => setPane(v as Pane)}
-        data={[
-          { value: 'tasks', label: 'Tasks' },
-          { value: 'ingestion', label: 'Ingestion' },
-          { value: 'logs', label: 'Logs' },
-          { value: 'health', label: 'Health' },
-        ]}
-      />
+      <Group justify="space-between" wrap="nowrap">
+        <SegmentedControl
+          size="xs"
+          value={pane}
+          onChange={(v) => setPane(v as Pane)}
+          data={[
+            { value: 'tasks', label: 'Tasks' },
+            { value: 'ingestion', label: 'Ingestion' },
+            { value: 'logs', label: 'Logs' },
+            { value: 'health', label: 'Health' },
+          ]}
+        />
+        {liveStatus === 'connected' && (
+          <Badge size="xs" color="green" variant="dot">
+            Live
+          </Badge>
+        )}
+      </Group>
       <Card withBorder radius="md" p="md">
         {body}
       </Card>
