@@ -1,0 +1,93 @@
+name: "Template feature CI (share-project-as-template)"
+
+# Focused, fast CI for the project-as-template export feature. Runs the
+# quality gates and the export-logic unit tests without the heavy docker /
+# integration stack, so the feature branch gets quick feedback. The full
+# CI (depictio-ci.yaml) still runs on PRs to main.
+
+on:
+  push:
+    branches:
+      - "feat/share-project-as-template"
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "depictio/api/v1/endpoints/templates_endpoints/**"
+      - "depictio/api/v1/endpoints/dashboards_endpoints/routes.py"
+      - "depictio/api/v1/endpoints/routers.py"
+      - "depictio/cli/cli/commands/template.py"
+      - "depictio/cli/cli/utils/api_calls.py"
+      - "depictio/cli/depictio_cli.py"
+      - "depictio/tests/api/v1/endpoints/templates_endpoints/**"
+      - "packages/depictio-react-core/src/**"
+      - "depictio/viewer/src/projects/ProjectActionsMenu.tsx"
+      - ".github/workflows/template-feature-ci.yaml"
+
+jobs:
+  validate:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version-file: "pyproject.toml"
+          cache-dependency-path: "pyproject.toml"
+
+      - name: Install dependencies
+        run: |
+          uv venv --python 3.12.9 venv
+          source venv/bin/activate
+          uv pip install --upgrade pip
+          uv pip install -e ".[dev]"
+
+      - name: Ruff format check (changed feature files)
+        run: |
+          source venv/bin/activate
+          ruff format --check \
+            depictio/api/v1/endpoints/templates_endpoints \
+            depictio/api/v1/endpoints/dashboards_endpoints/routes.py \
+            depictio/api/v1/endpoints/routers.py \
+            depictio/cli/cli/commands/template.py \
+            depictio/cli/cli/utils/api_calls.py \
+            depictio/tests/api/v1/endpoints/templates_endpoints
+
+      - name: Ruff lint (changed feature files)
+        run: |
+          source venv/bin/activate
+          ruff check \
+            depictio/api/v1/endpoints/templates_endpoints \
+            depictio/api/v1/endpoints/dashboards_endpoints/routes.py \
+            depictio/api/v1/endpoints/routers.py \
+            depictio/cli/cli/commands/template.py \
+            depictio/cli/cli/utils/api_calls.py \
+            depictio/tests/api/v1/endpoints/templates_endpoints
+
+      - name: ty type check (models)
+        run: |
+          source venv/bin/activate
+          ty check depictio/models/
+
+      - name: Templates export unit tests
+        run: |
+          source venv/bin/activate
+          python -m pytest depictio/tests/api/v1/endpoints/templates_endpoints -v
+
+      - name: CLI command wiring smoke check
+        run: |
+          source venv/bin/activate
+          python - <<'PY'
+          # The template export command must import and register cleanly.
+          from depictio.cli.cli.commands.template import app
+          from depictio.cli.cli.utils.api_calls import api_export_template  # noqa: F401
+
+          subcommands = [c.callback.__name__ for c in app.registered_commands]
+          assert "export" in subcommands, f"export subcommand missing: {subcommands}"
+          print("CLI template command OK:", subcommands)
+          PY
