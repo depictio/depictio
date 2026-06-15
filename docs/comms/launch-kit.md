@@ -309,3 +309,46 @@ to every question. Post in the right channel, once.
 Adjust pace to your bandwidth — consistency beats volume. The two highest-leverage
 moves are a strong **launch visual** (Post 1) and landing a **bytesize talk**
 (Post C).
+
+---
+
+## 6. Formatting on LinkedIn (bold / italic)
+
+LinkedIn has **no native formatting** — no bold/italic button, and Markdown
+(`**bold**`, `*italic*`) shows the literal asterisks. Two options:
+
+### Native, accessible emphasis (preferred)
+
+Works everywhere, stays screen-reader friendly:
+
+- short one-line paragraphs + blank lines for rhythm
+- emoji anchors (✅ 🔒 🌋) and `→`/`•` (already used in the posts above)
+- ONE word in CAPS, or "quotes" around a key phrase
+
+### Unicode "fake" bold/italic (use sparingly)
+
+Swaps normal letters for look-alike Unicode math characters. Looks bold/italic in
+posts, comments, and headlines.
+
+- 𝗕𝗼𝗹𝗱 → "Depictio is now 𝗩𝟭.𝟬.𝟬"
+- 𝘐𝘵𝘢𝘭𝘪𝘤 → "𝘥𝘢𝘵𝘢 𝘯𝘦𝘷𝘦𝘳 𝘭𝘦𝘢𝘷𝘦𝘴 𝘺𝘰𝘶𝘳 𝘴𝘦𝘳𝘷𝘦𝘳𝘴"
+
+> ⚠️ **Trade-offs:** screen readers often read these as gibberish or skip them;
+> LinkedIn search/hashtags may not index them; some devices show boxes. For an
+> open-source / academic audience, use it for **at most one hook line or word** —
+> never whole paragraphs, never a hashtag, never load-bearing text.
+
+**How to make it yourself:**
+
+- **Website (fastest):** paste your text into a free "LinkedIn text formatter" /
+  "Unicode bold generator" (Typegrow, Taplio's free tool, coolsymbol, YayText),
+  copy the styled version back into the post.
+- **Do it by hand:** the glyphs live in the Unicode "Mathematical Alphanumeric
+  Symbols" block. On macOS open the Character Viewer (Ctrl+Cmd+Space, search
+  "mathematical bold"); on Windows use Character Map / `Win+.` emoji-and-symbols
+  panel. Copy the bold/italic letters you need.
+- **Reusable snippet:** keep a pre-styled version of your standing hook (e.g.
+  𝗗𝗲𝗽𝗶𝗰𝘁𝗶𝗼 𝗶𝘀 𝟭.𝟬.𝟬) in a notes file and paste it when needed.
+- **Reality check:** type your draft in a normal editor first, format last. The
+  Unicode characters aren't editable as text (no spell-check, hard to fix typos),
+  so style only after the words are final.
