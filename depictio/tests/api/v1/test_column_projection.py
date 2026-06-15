@@ -120,6 +120,44 @@ class TestEffectiveProjection:
         assert _effective_projection(["x", "y"], [{"column_name": "x"}], False) == ["x", "y"]
 
 
+class TestCrossDcLinkProjection:
+    """Projection must not break cross-DC linked filters.
+
+    A cross-DC link turns a filter on a *source* DC into a synthetic filter on
+    the *target* DC's join column (see ``_resolve_link_filters`` ->
+    ``extend_filters_via_links``). That join column is typically NOT one of the
+    figure's plotted columns, and may not even exist in the target DC's schema.
+    Projection must therefore (a) fold the link filter's column into the scan so
+    the filter actually applies, and (b) schema-guard it so a column absent from
+    the target never reaches ``.select`` and raises ColumnNotFoundError.
+
+    Neither perf PR touches the link-resolution code itself; this guards the one
+    way projection could regress cross-DC filtering.
+    """
+
+    def setup_method(self):
+        dtu._DELTA_SCHEMA_CACHE.clear()
+
+    def test_link_filter_column_folded_into_projection(self):
+        # Figure plots {x, y}; the link injects a filter on the join column
+        # "individual_id" (a non-plotted column). It must survive projection,
+        # else the cross-DC filter would silently no-op.
+        figure_cols = ["x", "y"]
+        link_filter_metadata = [{"column_name": "individual_id"}]
+        proj = _effective_projection(figure_cols, link_filter_metadata, False)
+        assert "individual_id" in proj
+        assert proj == ["individual_id", "x", "y"]
+
+    def test_link_filter_column_absent_from_target_is_dropped_not_crashed(self):
+        # If the link's join column doesn't exist on the target DC's real schema,
+        # _project_scan drops it instead of passing it to .select (which would
+        # raise ColumnNotFoundError at collect). The load still succeeds.
+        target_scan = pl.LazyFrame({"x": [1, 2], "y": [3, 4]})  # no individual_id
+        out = _project_scan(target_scan, ["individual_id", "x", "y"], "dc_target", "v1")
+        assert out.collect_schema().names() == ["x", "y"]
+        assert out.collect().height == 2
+
+
 class TestProjectScanAndSchemaCache:
     """`_project_scan` is schema-guarded; `_get_cached_schema` memoizes columns."""
 
