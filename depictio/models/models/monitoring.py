@@ -22,6 +22,12 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+# Pseudo "dashboard id" used as the admin monitoring pub/sub channel. Reuses the
+# existing dashboard-scoped events plumbing (Redis channel
+# ``depictio:events:dashboard:__admin_monitoring__``) without a real dashboard;
+# the WebSocket route gates subscription to this channel on ``is_admin``.
+ADMIN_MONITORING_CHANNEL = "__admin_monitoring__"
+
 # ── Celery task ledger ──────────────────────────────────────────────────────
 
 TaskStatus = Literal["pending", "started", "success", "failure", "retry", "revoked"]
