@@ -40,7 +40,11 @@ def _require_admin(current_user: User) -> None:
     args, tracebacks and host logs — admin-only, and meaningless in public/demo
     mode (no real admin user), so we refuse there outright.
     """
-    if settings.auth.is_public_mode or settings.auth.is_demo_mode:
+    # Single-user is a trusted personal admin instance — always allowed, even if
+    # public_mode is also set. Only pure public/demo deployments are refused.
+    if (
+        settings.auth.is_public_mode or settings.auth.is_demo_mode
+    ) and not settings.auth.is_single_user_mode:
         raise HTTPException(status_code=404, detail="Monitoring is not available in this mode.")
     if not getattr(current_user, "is_admin", False):
         logger.warning(
