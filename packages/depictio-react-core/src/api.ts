@@ -3257,3 +3257,120 @@ export async function clearTableDC(dcId: string): Promise<TableMutationResult> {
   if (!res.ok) await throwHttpDetailError(res, 'Failed to clear Table DC');
   return (await res.json()) as TableMutationResult;
 }
+
+// =============================================================================
+// Catalog compose — matches ingested DCs against catalog entries
+// =============================================================================
+
+export interface CatalogRender {
+  component: string;
+  kind?: string;
+  roles?: Record<string, string>;
+  visu_type?: string;
+  dict_kwargs?: Record<string, string>;
+  column?: string;
+  aggregation?: string;
+  code?: string;
+  /** advanced_viz only: the pre-computed config blob (role bindings + data-derived
+   *  viz-control defaults like manhattan `score_threshold`) the catalog preview
+   *  rendered with. Persisting it verbatim makes the added component match its
+   *  preview. Absent when the render isn't grounded against a fixture. */
+  config?: Record<string, unknown>;
+}
+
+export interface CatalogOutputMatch {
+  output_id: string;
+  description: string;
+  dc_id: string;
+  wf_id: string;
+  dc_tag: string;
+  renders_as: CatalogRender[];
+}
+
+export interface CatalogModule {
+  tool_id: string;
+  tool_name: string;
+  matches: CatalogOutputMatch[];
+}
+
+export interface CatalogComposeResponse {
+  modules: CatalogModule[];
+}
+
+export async function fetchCatalogCompose(
+  projectId: string,
+): Promise<CatalogComposeResponse> {
+  const res = await authFetch(`${API_BASE}/catalog/project/${projectId}/compose`);
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to fetch catalog compose');
+  return (await res.json()) as CatalogComposeResponse;
+}
+
+// ---------------------------------------------------------------------------
+// Catalog output preview payload (pre-computed from fixture)
+// ---------------------------------------------------------------------------
+
+export interface CatalogPreviewRender {
+  index: string;
+  component_type: string;
+  wf_id: string;
+  dc_id: string;
+  _variant?: string;
+  _yaml?: string;
+  _binds?: Record<string, string>;
+  _error?: string;
+  _unsupported?: string;
+  _preview_height?: number;
+  // figure
+  visu_type?: string;
+  mode?: string;
+  // card
+  column_name?: string;
+  aggregation?: string;
+  aggregations?: string[];
+  secondary_layout?: string;
+  icon_name?: string;
+  icon_color?: string;
+  title?: string;
+  // advanced_viz
+  viz_kind?: string;
+  config?: Record<string, unknown>;
+  // multiqc
+  _multiqc_anchor?: string;
+}
+
+export interface CatalogPreviewPayload {
+  output: {
+    id: string;
+    description: string;
+    mode?: string;
+    recipe?: string;
+    fixture?: string;
+    nf_core_url?: string;
+    n_rows?: number;
+    n_cols?: number;
+    columns?: string[];
+  };
+  fixturePreview: { columns: string[]; rows: Record<string, unknown>[]; total: number } | null;
+  theme: string;
+  renders: CatalogPreviewRender[];
+  data: {
+    figures: Record<string, { figure: { data: unknown[]; layout: Record<string, unknown> } }>;
+    tables: Record<string, { columns: Array<{ field: string; headerName: string; type: string }>; rows: Record<string, unknown>[]; total: number }>;
+    cards: {
+      values: Record<string, number | null>;
+      secondary: Record<string, Record<string, unknown>>;
+      aggregations: Record<string, string[]>;
+    };
+    compute: Record<string, unknown>;
+    advancedVizData: Record<string, unknown>;
+    multiqc: Record<string, unknown>;
+  };
+}
+
+export async function fetchCatalogPreviewPayload(
+  outputId: string,
+): Promise<CatalogPreviewPayload> {
+  const res = await authFetch(`${API_BASE}/catalog/output/${outputId}/preview-payload`);
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to fetch catalog preview');
+  return (await res.json()) as CatalogPreviewPayload;
+}

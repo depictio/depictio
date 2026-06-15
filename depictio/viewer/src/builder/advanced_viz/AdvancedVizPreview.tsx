@@ -27,6 +27,9 @@ interface Props {
   dcId: string;
   bindingsValid: boolean;
   onReady?: (ready: boolean) => void;
+  /** Catalog/saved preset whose viz-control extras (threshold, top-N…) the
+   *  preview should reflect, so Edit & Add matches the catalog preview. */
+  presetConfig?: Record<string, unknown> | null;
 }
 
 const DEBOUNCE_MS = 300;
@@ -38,8 +41,10 @@ const AdvancedVizPreview: React.FC<Props> = ({
   dcId,
   bindingsValid,
   onReady,
+  presetConfig,
 }) => {
   const cmKey = JSON.stringify(columnMapping);
+  const presetKey = JSON.stringify(presetConfig ?? null);
   const [debouncedConfig, setDebouncedConfig] = useState<Record<string, unknown> | null>(
     null,
   );
@@ -51,14 +56,14 @@ const AdvancedVizPreview: React.FC<Props> = ({
       return;
     }
     const t = window.setTimeout(() => {
-      setDebouncedConfig(buildAdvancedVizConfigBlob(vizKind, columnMapping));
+      setDebouncedConfig(buildAdvancedVizConfigBlob(vizKind, columnMapping, presetConfig));
       onReady?.(true);
     }, DEBOUNCE_MS);
     return () => window.clearTimeout(t);
-    // cmKey collapses columnMapping identity into a stable string so we don't
+    // cmKey/presetKey collapse object identity into stable strings so we don't
     // re-debounce on every parent render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [vizKind, cmKey, wfId, dcId, bindingsValid]);
+  }, [vizKind, cmKey, presetKey, wfId, dcId, bindingsValid]);
 
   const metadata: StoredMetadata | null = useMemo(() => {
     if (!debouncedConfig) return null;

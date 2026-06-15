@@ -29,6 +29,8 @@ import React, {
 } from 'react';
 import {
   AppShell,
+  Button,
+  Center,
   Group,
   Text,
   Loader,
@@ -39,6 +41,7 @@ import {
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
+import { Icon } from '@iconify/react';
 import { useSidebarOpen } from './hooks/useSidebarOpen';
 import { useCurrentUser } from './hooks/useCurrentUser';
 import { isDashboardOwner } from './lib/dashboardOwnership';
@@ -1014,6 +1017,7 @@ const EditorApp: React.FC = () => {
                 onLayoutChange={handleRightLayoutChange}
                 onDeleteComponent={handleDeleteComponent}
                 onDuplicateComponent={handleDuplicateComponent}
+                onAddComponent={handleAddComponent}
               />
             </Box>
           </div>
@@ -1065,6 +1069,7 @@ interface RightComponentGridProps {
   onLayoutChange: (newLayout: Layout[]) => void;
   onDeleteComponent: (componentId: string) => void;
   onDuplicateComponent: (componentId: string) => void;
+  onAddComponent: () => void;
 }
 
 /**
@@ -1088,24 +1093,47 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
   onLayoutChange,
   onDeleteComponent,
   onDuplicateComponent,
+  onAddComponent,
 }) => {
   const allComponents = useMemo(
     () => [...cardComponents, ...otherComponents],
     [cardComponents, otherComponents],
   );
 
-  // Empty-state fallback so users see SOMETHING before any layout is saved.
   if (allComponents.length === 0) {
     return (
-      <Paper p="md" withBorder radius="md" style={{ height: '100%' }}>
-        <Stack gap="sm">
-          <Title order={5}>Components</Title>
-          <Text size="sm" c="dimmed">
-            No components yet. Click "Add component" in the header to get
-            started.
-          </Text>
+      <Center style={{ height: '100%', minHeight: 320 }}>
+        <Stack align="center" gap="md" maw={400}>
+          <Box
+            style={{
+              width: 72,
+              height: 72,
+              borderRadius: '50%',
+              background: 'var(--mantine-color-gray-1)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Icon icon="mdi:view-dashboard-outline" width={36} color="var(--mantine-color-gray-5)" />
+          </Box>
+          <Stack gap={4} align="center">
+            <Title order={4} fw={700} ta="center">No components yet</Title>
+            <Text size="sm" c="dimmed" ta="center">
+              Add your first component to start building this dashboard.
+            </Text>
+          </Stack>
+          <Button
+            leftSection={<Icon icon="mdi:plus-circle" width={18} />}
+            color="green"
+            variant="filled"
+            size="md"
+            onClick={onAddComponent}
+          >
+            Add component
+          </Button>
         </Stack>
-      </Paper>
+      </Center>
     );
   }
 

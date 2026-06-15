@@ -183,12 +183,21 @@ export {
   pollComplexHeatmap,
   dispatchUpset,
   pollUpset,
+  // Catalog compose + preview
+  fetchCatalogCompose,
+  fetchCatalogPreviewPayload,
 } from './api';
 export type {
   TableMutationResult,
   RoleDtypeSpec,
   VizKindSuggestion,
   VizSuggestionsResponse,
+  CatalogRender,
+  CatalogOutputMatch,
+  CatalogModule,
+  CatalogComposeResponse,
+  CatalogPreviewRender,
+  CatalogPreviewPayload,
 } from './api';
 // Selection-as-filter helpers (Plotly/AG Grid → InteractiveFilter)
 export {

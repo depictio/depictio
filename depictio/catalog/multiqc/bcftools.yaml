@@ -1,0 +1,9 @@
+id: multiqc_bcftools
+mode: bcftools
+description: Variant-call statistics (substitution types, indel lengths, variant-quality counts) — bcftools stats, via MultiQC.
+find: { path_glob: "**/multiqc/multiqc_data/multiqc.parquet" }
+# reuse the bundled nf-core pipeline MultiQC parquet (not a per-module copy);
+# `section` selects this module's plot anchors out of the shared report.
+fixture: ../../projects/nf-core/viralrecon/3.0.0/run_1/multiqc/multiqc_data/multiqc.parquet
+renders_as:
+  - { component: multiqc, section: bcftools }

@@ -25,6 +25,9 @@ export function buildMetadata(state: BuilderState): StoredMetadata {
     dc_id: state.dcId || undefined,
     project_id: state.projectId || undefined,
     last_updated: new Date().toISOString(),
+    // Persist catalog origin so the dashboard can show a "from catalog" badge.
+    // Preserved through edits via the ...existing spread in per-type builders.
+    ...(state.catalogSource ? { catalog_source: state.catalogSource } : {}),
   };
   // For edit mode, preserve any existing keys we don't explicitly set
   // (e.g. parent_index, panel, dc_config caches).
@@ -298,12 +301,18 @@ function buildAdvancedViz(
   const c = as<{
     viz_kind?: string;
     column_mapping?: Record<string, string | string[]>;
+    preset_config?: Record<string, unknown> | null;
+    config?: Record<string, unknown> | null;
   }>(state.config);
+  // `preset_config` (catalog add) and `config` (edit-mode rehydration of a saved
+  // component) both carry viz-control extras the role mapping can't express;
+  // overlay them so the threshold/top-N/etc. survive Add and re-Save.
+  const preset = c.preset_config ?? c.config ?? null;
   return {
     ...existing,
     ...base,
     viz_kind: c.viz_kind,
-    config: buildAdvancedVizConfigBlob(c.viz_kind, c.column_mapping || {}),
+    config: buildAdvancedVizConfigBlob(c.viz_kind, c.column_mapping || {}, preset),
   };
 }
 

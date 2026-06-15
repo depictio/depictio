@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Depictio — Catalog preview</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <!-- Payload injected by `depictio catalog preview` (replaces __CATALOG_PAYLOAD__). -->
+    <script id="catalog-payload" type="application/json">__CATALOG_PAYLOAD__</script>
+    <script type="module" src="/src/catalog-preview/main.tsx"></script>
+  </body>
+</html>
