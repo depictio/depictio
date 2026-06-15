@@ -1,8 +1,10 @@
 # Depictio launch & visibility kit
 
-Copy-paste-ready content + the strategy behind it, for promoting Depictio and
-recruiting both **users** (run nf-core → get dashboards) and **contributors**
-(extend the modules catalog). Built around the modules-catalog announcement.
+Copy-paste-ready content + the strategy behind it, for promoting Depictio around
+the **v1.0.0** release and recruiting both **users** (run a pipeline → get a
+dashboard) and **contributors** (extend the catalog / build templates). Tone is
+deliberately broad and accessible — written to reach PIs, core-facility leads and
+students, not only framework engineers.
 
 ---
 
@@ -10,312 +12,286 @@ recruiting both **users** (run nf-core → get dashboards) and **contributors**
 
 ### Positioning (the one-liner)
 
-> **Depictio turns bioinformatics workflow outputs into interactive dashboards —
-> open-source, self-hostable, and community-extensible. Think MultiQC, but for
-> everything *past* QC.**
+> **Depictio turns your bioinformatics results into interactive dashboards —
+> free, open-source, and self-hosted. No front-end code, no SaaS, no data leaving
+> your servers.**
 
-That MultiQC analogy is your most powerful asset with the nf-core crowd: it
-instantly conveys *what* and *why*, and it's accurate (search-pattern recognition
-+ extensible per-tool modules, applied to analysis viz instead of QC metrics).
+For the nf-core crowd, the sharper framing *"MultiQC, but for everything past
+QC"* still works well — keep it for technical channels (Slack), soften it for the
+broad LinkedIn feed.
 
 ### Two audiences, two messages
 
 | | **Users** | **Contributors** |
 |---|---|---|
-| Who | Bioinformaticians, core-facility staff, PIs running nf-core | nf-core module authors, tool devs, viz-minded contributors |
+| Who | Bioinformaticians, core-facility staff, PIs running pipelines | nf-core module authors, tool devs, viz-minded contributors |
 | Pain | "Pipeline's done — now I hand-build a Shiny app or pay for SaaS" | "My tool's output deserves better than a static PNG" |
-| Hook | Guided mode: point CLI at a run → starter dashboard | Add a tool = one YAML file, no Python, CI-validated |
-| CTA | Try in Codespaces / read docs | `depictio catalog import-meta` → PR |
+| Hook | v1.0.0 stable · templates · pre-built omics viz | Add a tool / template = one config file, CI-validated |
+| CTA | Try in Codespaces / read docs | Contribute a template or catalog entry → PR |
 
 Don't blur them. Each post should clearly serve one. Alternate across the series.
 
 ### Channels & cadence
 
-- **LinkedIn** — the visibility engine. Aim for **1 post / week** in a coherent
-  arc (the 6-post series below). Tue–Thu mornings (CET) land best for science/eng
-  audiences. Always lead with a hook line + one visual (GIF > screenshot > text).
+- **LinkedIn** — the visibility engine. ~1 post / week in the arc below. Tue–Thu
+  mornings (CET) land best. Lead with a hook line + one visual (GIF > screenshot
+  > text).
 - **nf-core Slack** — the *contributor* funnel. High-trust, low-tolerance for
-  marketing. Post sparingly, humbly, with substance. Pick the right channel
-  (`#general` for the intro, a viz/tooling channel for the catalog deep-dive).
-  Consider proposing an nf-core **bytesize** talk — that's the highest-leverage
-  single move you can make in this community.
-- **Docs blog** (`docs/blog/modules-catalog.md`) — the canonical, linkable
-  artefact every post points back to. Owned media, no algorithm.
-- **Secondary**: Bluesky/Mastodon (bioinformatics has migrated heavily there),
-  the nf-core Slack `#announcements` only if invited, and a short Show-HN-style
-  post if you want a traffic spike.
+  marketing. Post sparingly, humbly, with substance. The highest-leverage single
+  move is proposing an nf-core **bytesize** talk.
+- **Docs blog** — the canonical, linkable artefact every post points back to.
+- **Secondary**: Bluesky/Mastodon (bioinformatics is active there), a Show-HN-style
+  post for a traffic spike.
 
 ### Mechanics that compound
 
 - **One link, always**: the docs. Everything funnels there.
-- **Build in public**: post the catalog coverage count as it grows ("we now map
-  N tools across M pipelines"). A visible, climbing number recruits contributors.
-- **Make contribution legible**: pin a "good first module" issue list. People
-  contribute when the next step is obvious.
-- **Show, don't tell**: every viz post needs a real GIF of the interaction
-  (volcano threshold drag, click-gene-recolour-embedding). The cross-component
-  coordination is the wow moment — static images undersell it.
-- **Hashtags (LinkedIn, 3–5 max)**: #bioinformatics #nfcore #opensource
-  #datavisualization #computationalbiology
-- **Tag thoughtfully**: nf-core, relevant tool authors, your institute. Don't
-  spray.
+- **Show, don't tell**: every feature post needs a real GIF. The before/after and
+  the cross-component interactivity are the wow moments — static images undersell
+  them.
+- **End with a question**: each post below closes with a prompt ("which plot is
+  *the* plot in your field?") to drive comments and reach.
+- **Hashtags (3–5 max)**: #bioinformatics #nfcore #opensource #datavisualization
+  #computationalbiology
+- **Tag thoughtfully**: nf-core, relevant tool authors, your institute. Don't spray.
 
 ### Light metrics to watch
 
-Docs uniques · GitHub stars/forks · Codespaces opens · catalog PRs from
-non-core contributors · bytesize talk accepted (y/n). The last two are the real
-signal that the contributor flywheel is turning.
+Docs uniques · GitHub stars/forks · Codespaces opens · template/catalog PRs from
+non-core contributors · bytesize talk accepted (y/n).
 
 ---
 
-## 2. LinkedIn series (6-post arc)
+## 2. LinkedIn series (v1.0.0 arc)
 
-Each is ready to post. `[VISUAL]` notes what to attach. Keep the first line as a
-standalone hook — LinkedIn truncates after ~2 lines.
+Five ready-to-post entries: the launch, then four feature/angle posts. `[VISUAL]`
+notes what to attach. Keep the first line as a standalone hook — LinkedIn
+truncates after ~2 lines.
 
-### Post 1 — The problem & the vision (audience: users)
+### Post 1 — Depictio hits v1.0.0 🎉 (the launch)
 
-> Your nf-core pipeline turns green. MultiQC gives you a gorgeous QC report.
-> And then… everything *past* QC lands as static CSVs and PNGs. 📉
+> **Depictio is 1.0.0.** After years of building in the open, it's officially a
+> stable major release. 🚀
 >
-> The DESeq2 table. The taxonomy profile. The differential-abundance results —
-> the actual biology — sits there, un-explorable, until someone spends a week
-> hand-building a Shiny app (and maintaining it forever).
+> Depictio is a free, open-source platform that turns your bioinformatics results
+> into **interactive dashboards** — no front-end code, no SaaS subscription, no
+> data leaving your servers.
 >
-> That's the gap I've been building Depictio to close.
+> You run your pipeline. Depictio gives your collaborators a dashboard they can
+> actually click through: filter samples, zoom into a gene, explore the biology —
+> instead of squinting at a folder full of CSVs and static PNGs.
 >
-> Depictio is an open-source platform that turns bioinformatics workflow outputs
-> into **interactive dashboards**. Point it at your pipeline results; it serves
-> dashboards you can filter, brush, and drill into. Self-hostable (Docker /
-> Kubernetes), built on FastAPI + Dash + Polars + Delta Lake. No SaaS lock-in.
+> What "1.0.0" means:
+> ✅ Stable, production-ready core — deploy it with Docker or Kubernetes
+> ✅ Built on solid open foundations (FastAPI, Plotly/Dash, Polars, Delta Lake)
+> ✅ Self-hostable — your data stays yours
+> ✅ Ready for real labs, core facilities, and consortia
 >
-> Think MultiQC — but for everything that comes *after* QC.
+> This is a milestone I'm genuinely proud of — and it's just the foundation. Big
+> things coming on top of it (interactive omics visualisations and one-click
+> dashboard templates for nf-core pipelines — more soon 👀).
 >
-> Over the next few weeks I'll share how it works, starting with the piece I'm
-> most excited about: a community-extensible catalog that maps each tool's output
-> to the right interactive visualisation.
+> ⭐ Star it, try it, break it, tell me what you think. Links in the comments.
 >
-> ⭐ Repo & docs in comments. Curious what *your* "post-QC wall" looks like —
-> tell me below.
+> Huge thanks to everyone who tested, filed issues, and pushed me to ship. 🙏
 >
-> #bioinformatics #nfcore #opensource #datavisualization #computationalbiology
+> #bioinformatics #opensource #nfcore #datavisualization #computationalbiology
 >
-> *[VISUAL: split-screen GIF — static PNG/CSV on the left, the same data live and
-> interactive in Depictio on the right.]*
+> *[VISUAL: a polished dashboard hero shot or a "1.0.0" badge over a short
+> dashboard tour clip. This is your reach moment — make the visual count.]*
 
-### Post 2 — The modules catalog reveal (audience: both)
+### Post 2 — The visualisation catalog 🌋 (feature)
 
-> How do you get from "an nf-core module produced a file" to "here's the right
-> interactive chart for it"? 🧩
+> Every omics field has *that one plot*. 🌋
 >
-> In Depictio, it's one composable building block:
+> RNA-seq has the volcano. Single-cell has the UMAP. GWAS has the Manhattan.
+> Expression studies have the heatmap. You know them the instant you see them.
 >
-> **module output → find → (recipe?) → renders_as (viz)**
+> Depictio ships them as a **catalog of ready-made, interactive visualisations** —
+> not static images, but living panels:
 >
-> • **find** — recognise the file in a run (like MultiQC's search patterns)
-> • **recipe** — *optionally* reshape it when the raw output isn't chart-ready
-> • **renders_as** — bind it to a visualisation, columns pre-mapped to roles
+> 🌋 **Volcano** — drag your fold-change and significance thresholds, search a
+> gene, watch it light up
+> 🔥 **Heatmap / clustergram** — cluster, rescale, zoom into a block of
+> co-expressed genes
+> 🔬 **UMAP / embeddings** — colour cells by cluster or by any gene, lasso a
+> population
+> 📊 **Manhattan** — slide your significance line, jump to a locus
 >
-> The key design call: the catalog is keyed by **module, not pipeline**. A
-> pipeline is just a list of modules that picks from the catalog. So it works for
-> a brand-new nf-core pipeline *and* for your custom Nextflow that reuses nf-core
-> modules — same recognition either way.
+> And they're **connected**: click a gene in the volcano and your embedding
+> recolours by it. Pick the chart that fits your data; Depictio wires up the
+> interactivity.
 >
-> Volcano, heatmap, UMAP, stacked taxonomy, OncoPrint, Manhattan… each tool
-> output finds its home.
+> Which plot is *the* plot in your field? 👇
 >
-> Full write-up in comments 👇
+> #bioinformatics #datavisualization #singlecell #genomics #opensource
 >
-> #bioinformatics #nfcore #opensource #datavisualization
->
-> *[VISUAL: a clean diagram of the module output → find → recipe → renders_as
-> pipeline, with a real example (e.g. DESeq2 results → volcano).]*
+> *[VISUAL: a 4-panel grid (volcano / heatmap / UMAP / Manhattan), ideally one
+> short GIF showing the volcano-click → embedding-recolour link.]*
 
-### Post 3 — Viz spotlight: cross-component coordination (audience: users)
+### Post 3 — The template system 📦 (feature)
 
-> A volcano plot is nice. A volcano plot wired to the rest of your dashboard is a
-> different thing entirely. 🌋
+> What if a standardised pipeline came with a standardised dashboard? 📦
 >
-> In Depictio, advanced visualisations aren't static images — they're panels that
-> talk to each other:
+> If you run nf-core pipelines, your outputs already follow a known structure. So
+> why rebuild a dashboard from scratch every single time?
 >
-> • Drag a fold-change / FDR threshold → labels and selection update live
-> • Click a gene in the volcano → the UMAP embedding recolours by that gene
-> • Lasso cells in the embedding → publish the selection back as a dashboard
->   filter → every panel re-fetches on that subset
+> Depictio's **template system** lets you:
+> 1. Pick a pre-defined dashboard template for your pipeline
+> 2. Point it at your run's results
+> 3. Get a populated, interactive dashboard in minutes — no manual wiring
 >
-> This cross-component coordination is the part that's almost impossible to
-> convey in a screenshot — so here's it in motion 👇
+> Run the same pipeline next week on new samples? Same template, new data, instant
+> dashboard. Reproducible by design, shareable with your PI or collaborators by
+> link.
 >
-> Built on Plotly, with heavy compute (UMAP/PCA/clustering) offloaded to a worker
-> so the browser stays snappy.
+> Templates are reusable and extensible — build one for your lab's standard
+> analysis once, and everyone benefits. We're growing a library of them for common
+> nf-core pipelines, and you can contribute your own.
 >
-> #bioinformatics #datavisualization #singlecell #opensource
+> Standardised pipeline in → standardised dashboard out. 📈
 >
-> *[VISUAL: the money GIF — click gene in volcano → embedding recolours → lasso →
-> filter propagates. This is your single best recruiting asset.]*
+> Which nf-core pipeline should get a template first? Tell me 👇
+>
+> #nfcore #bioinformatics #reproducibility #opensource #datavisualization
+>
+> *[VISUAL: a 3-step GIF — choose template → point at results → dashboard
+> populates. Show the "minutes" speed.]*
 
-### Post 4 — Contributor call: add a tool in one YAML (audience: contributors)
+### Post 4 — Folder-of-CSVs → dashboard 📁 (angle)
 
-> Maintain an nf-core module? Have a tool whose output deserves better than a
-> static PNG? This one's for you. 🛠️
+> Be honest: how many analysis results are buried in a `results/` folder nobody's
+> opened since the pipeline finished? 📁
 >
-> Extending Depictio's visualisation catalog does **not** mean learning the
-> codebase internals. It's a YAML file:
+> That's the quiet tragedy of bioinformatics. Weeks of compute, brilliant biology
+> in there somewhere — delivered as a pile of CSVs and static PNGs that only the
+> person who made them can read.
 >
-> ```
-> depictio catalog import-meta path/to/meta.yml -o catalog/<tool>.yaml
-> # fill in: find, file_schema, recipe (if needed), feeds_viz, role_mapping
-> depictio catalog validate     # CI-friendly, fails fast
-> # add a one-line test → open a PR
-> ```
+> Depictio turns that folder into something people actually use:
 >
-> It scaffolds straight from your module's existing `meta.yml` (offline — works on
-> locked-down networks). Identity is anchored on nf-core, bio.tools and EDAM, all
-> of which `meta.yml` already publishes.
+> 📁 Before → a directory of `deseq2_results.csv`, `counts.tsv`, twelve `.png` files
+> 📊 After → one interactive dashboard: filter, search, zoom, explore the biology
 >
-> The barrier is "write a YAML and a one-line test", not "understand the engine."
+> No front-end code. No copying numbers into a slide deck. No "can you re-run it
+> but colour the other condition?" emails. Your collaborators just open a link and
+> dig in themselves.
 >
-> I'm collecting "good first module" candidates — if there's a tool you'd love to
-> see rendered interactively, drop it in the comments and I'll help you map it.
+> The results were always there. Depictio makes them explorable.
 >
-> #nfcore #bioinformatics #opensource #contributing
+> What's sitting in *your* unopened results folder? 👇
 >
-> *[VISUAL: a short carousel — slide 1 the 4-step workflow, slide 2 a real filled
-> YAML, slide 3 the resulting chart.]*
+> #bioinformatics #datavisualization #opensource #computationalbiology #nfcore
+>
+> *[VISUAL: literal before/after — a file-browser screenshot of a messy results
+> folder on the left, the live dashboard built from it on the right.]*
 
-### Post 5 — The hard case: many-mode tools (audience: contributors / credibility)
+### Post 5 — Self-hosted / data sovereignty 🔒 (angle)
 
-> Most "tool → chart" mappings are easy. Then there's QIIME 2. 🧬
+> The fastest way to turn your data into a dashboard is to upload it to someone
+> else's cloud. It's also, for a lot of us, completely off the table. 🔒
 >
-> One tool, dozens of differently-shaped outputs depending on the subcommand —
-> taxonomy bars, diversity, rarefaction, ANCOM-BC differentials, phylogeny. A flat
-> "columns → viz" table would drown in near-duplicate fingerprints.
+> Patient genomes. Unpublished results. Consortium data under a DUA. You can't
+> just paste that into a SaaS tool and click "share publicly."
 >
-> Depictio's catalog models heavyweight tools the way the ecosystem already does:
-> **one module, many outputs, each tagged with its mode** — exactly how nf-core
-> models output channels and bio.tools models EDAM operations.
+> Depictio is **self-hosted by design**. You run it on your own infrastructure —
+> your laptop, your institute's servers, your cluster, your private cloud. Your
+> data never leaves your control. There's no vendor account, no usage tracking, no
+> per-seat bill, no "we updated our terms" email.
 >
-> Adding QIIME 2's next mode is adding one file to a folder, not touching code.
-> The same shape scales to bcftools, samtools, seqkit — any multi-subcommand tool.
+> 🔒 Your data stays on your servers
+> 🐳 Deploy with Docker or Kubernetes
+> 🆓 Open-source — audit every line if you want to
+> 🤝 Share dashboards internally without sharing data externally
 >
-> Designing for the hard case from day one is how you avoid a catalog that rots.
+> Interactive dashboards and data sovereignty shouldn't be a trade-off. With
+> Depictio they aren't.
 >
-> #bioinformatics #nfcore #metagenomics #opensource
+> #bioinformatics #datasovereignty #opensource #clinicalgenomics #privacy
 >
-> *[VISUAL: the qiime2/ folder layout (one file per output) next to the dashboard
-> assembled from those outputs.]*
+> *[VISUAL: a simple diagram — data + Depictio inside your institute's walls,
+> nothing flowing out to a cloud. Or a clean "your data never leaves your servers"
+> text card.]*
 
-### Post 6 — Ecosystem & invitation (audience: both)
+### Bench of other angles (draft when you want variety)
 
-> A quick recap of what Depictio is, now that the picture's complete. 🧭
->
-> Open-source, self-hostable dashboards for bioinformatics workflow outputs —
-> everything past QC, made interactive:
->
-> ✅ Guided mode: point the CLI at an nf-core run → a starter dashboard
-> ✅ Free mode: map columns to viz roles by hand, with dtype-aware suggestions
-> ✅ A community catalog mapping tool outputs → volcano / heatmap / UMAP / taxonomy
-> ✅ Pipeline-agnostic: official nf-core pipelines *and* your custom workflows
-> ✅ FastAPI + Dash + Polars + Delta Lake; Docker or Kubernetes; no lock-in
->
-> Two ways to get involved:
-> → **Use it**: try it in GitHub Codespaces in one click (link in comments)
-> → **Extend it**: contribute a tool mapping in a single YAML file
->
-> I'd love feedback from anyone living the "pipeline's done, now what?" problem.
-> Stars, issues, and especially first-time catalog PRs all very welcome. 🙏
->
-> #bioinformatics #nfcore #opensource #datavisualization #computationalbiology
->
-> *[VISUAL: a polished dashboard hero shot, or a 20s tour video.]*
+- **Share with your PI, not a notebook** — send a link, not a Jupyter file. High
+  relatability, reaches wet-lab collaborators and PIs.
+- **Build-in-public / founder story** — the road to 1.0.0; builds personal brand
+  and trust.
+- **One-click try (Codespaces)** — "try it in your browser in 60 seconds, nothing
+  to install." Great recurring CTA, lowers the barrier for everyone.
+- **Performance on big data** — Polars + Delta Lake handling large cohorts
+  smoothly. For power users.
+- **Open-source & community** — free forever, extend it yourself. The contributor
+  funnel.
 
 ---
 
 ## 3. nf-core Slack posts
 
-nf-core Slack is high-trust and allergic to marketing. Rules of engagement:
-lead with substance, be humble, make it about *their* workflow, never hard-sell,
-and reply to every question. Post in the right channel, once — don't cross-post.
+nf-core Slack is high-trust and allergic to marketing. Rules of engagement: lead
+with substance, be humble, make it about *their* workflow, never hard-sell, reply
+to every question. Post in the right channel, once.
 
 ### Post A — Introduction (channel: `#general` or `#tools`)
 
-> 👋 Hi all — I'm Thomas, building **Depictio**, an open-source, self-hostable
-> platform that turns pipeline outputs into interactive dashboards. The short
-> pitch: *MultiQC, but for everything past QC* — volcano plots, heatmaps,
-> UMAP/PCoA embeddings, taxonomy bars, OncoPrint, etc., all interactive and
-> cross-linked.
+> 👋 Hi all — I'm Thomas. I just released **Depictio v1.0.0**, an open-source,
+> self-hostable platform that turns pipeline outputs into interactive dashboards.
+> The short pitch: *MultiQC, but for everything past QC* — volcano plots, heatmaps,
+> UMAP embeddings, taxonomy bars, etc., all interactive and cross-linked.
 >
-> It's deliberately built around the nf-core ecosystem: recognition is keyed by
-> **module** (not pipeline), so it works for any nf-core pipeline *and* for custom
-> workflows that reuse nf-core modules. A `depictio-cli` guided mode can point at
-> a run directory and assemble a starter dashboard.
+> It's built around the nf-core ecosystem: there's a **template system** so a
+> standardised pipeline can get a standardised dashboard (pick a template → point
+> at your run → populated dashboard), and it works for custom workflows too.
 >
 > Repo: https://github.com/depictio/depictio · Docs:
 > https://depictio.github.io/depictio-docs/latest/ · one-click try via Codespaces
 > in the README.
 >
-> Very much in active development and I'd genuinely value feedback from people who
-> live the "pipeline finished, now I hand-build a viz app" problem. Happy to
-> answer anything here. 🙏
+> I'd genuinely value feedback from people who live the "pipeline finished, now I
+> hand-build a viz app" problem. Happy to answer anything here. 🙏
 
-### Post B — Catalog / contributor call (channel: a viz, modules, or tooling channel)
+### Post B — Templates / contributor call (channel: a viz, modules, or tooling channel)
 
 > Following up on Depictio with something concretely contributable. We're building
-> a **modules catalog** that maps a tool's output → the right interactive viz, on
-> this atom:
+> a library of **dashboard templates** for nf-core pipelines: a template maps a
+> pipeline's known outputs to a ready-made interactive dashboard, so users go from
+> a run directory to a populated dashboard in minutes — no manual wiring.
 >
-> `module output → find → (recipe?) → renders_as (viz)`
+> Under the hood it's a catalog mapping each tool's output → the right viz (e.g.
+> DESeq2 → volcano), recognised by MultiQC-style search patterns and bound to a
+> visualisation's roles. Contribution is a config file, not a Python PR.
 >
-> `find` is essentially MultiQC-style search patterns; `renders_as` binds the
-> output's columns to a viz's roles (e.g. DESeq2 → volcano). It's keyed by module
-> and indexed the way you already model things — identity stored as nf-core /
-> bio.tools / EDAM, all of which your `meta.yml` already publishes per channel.
->
-> The contribution path is intentionally a *YAML file, not a Python PR*:
->
-> ```
-> depictio catalog import-meta path/to/meta.yml -o catalog/<tool>.yaml
-> depictio catalog validate
-> ```
->
-> `import-meta` scaffolds straight from an existing module `meta.yml` (offline).
-> Multi-mode tools (QIIME 2 is the stress test) are modelled as one module with
-> many outputs, each tagged by mode — so heavyweight tools don't explode the
-> registry.
->
-> If you maintain a module and would like its output to render as a proper
-> interactive chart, I'd love to help you map it — reply here or open an issue.
-> Design write-up: https://depictio.github.io/depictio-docs/latest/ (blog →
-> modules catalog).
+> If you maintain a pipeline or a module and would like its outputs to render as
+> proper interactive charts, I'd love to help you build the template — reply here
+> or open an issue. Design write-up in the docs (blog → modules catalog).
 
 ### Post C — bytesize talk pitch (DM to nf-core outreach / `#bytesize`)
 
 > Hi! Would a Depictio walkthrough fit a future **nf-core/bytesize**? It's an
-> open-source tool for turning pipeline outputs into interactive dashboards
-> ("MultiQC for everything past QC"), built around nf-core modules — guided
-> dashboard assembly from a run, plus a community catalog that maps module outputs
-> to advanced visualisations via a YAML contribution path. I'd cover the design,
-> a live demo, and how people can contribute a tool mapping. ~15–20 min + Q&A.
-> Happy to fit your schedule.
+> open-source tool (just hit v1.0.0) for turning pipeline outputs into interactive
+> dashboards — "MultiQC for everything past QC" — with a template system for
+> nf-core pipelines and a catalog of omics visualisations. I'd cover a live demo
+> and how people can contribute a template. ~15–20 min + Q&A. Happy to fit your
+> schedule.
 
 ---
 
 ## 4. Reusable snippets
 
 **GitHub repo description (≤120 chars):**
-> Interactive dashboards from bioinformatics workflow outputs. MultiQC, but for
-> everything past QC. Self-hostable, extensible.
+> Interactive dashboards from bioinformatics workflow outputs. Free, open-source,
+> self-hosted. No front-end code, no SaaS.
 
 **One-liner for talks/bios:**
-> Depictio — open-source, self-hostable interactive dashboards for nf-core and
+> Depictio — open-source, self-hosted interactive dashboards for nf-core and
 > bioinformatics workflow outputs.
 
 **Bluesky / Mastodon (short):**
 > Pipeline's green, MultiQC's done… and the actual biology is still a static CSV.
-> Depictio turns bioinformatics workflow outputs into interactive dashboards —
-> open-source, self-hostable, MultiQC-but-past-QC. Volcano, heatmap, UMAP,
-> taxonomy, all cross-linked. 🧬 [link] #bioinformatics #nfcore
+> Depictio (now v1.0.0) turns bioinformatics results into interactive dashboards —
+> open-source, self-hosted. Volcano, heatmap, UMAP, all cross-linked. 🧬 [link]
+> #bioinformatics #nfcore
 
 ---
 
@@ -323,13 +299,13 @@ and reply to every question. Post in the right channel, once — don't cross-pos
 
 | Week | LinkedIn | nf-core Slack | Other |
 |---|---|---|---|
-| 1 | Post 1 (problem/vision) | — | Publish docs blog post |
-| 2 | Post 2 (catalog reveal) | Post A (intro) | — |
-| 3 | Post 3 (viz coordination GIF) | — | Bluesky/Mastodon cross-post |
-| 4 | Post 4 (contributor call) | Post B (catalog) + pin "good first module" issues | — |
-| 5 | Post 5 (many-mode tools) | — | DM Post C (bytesize pitch) |
-| 6 | Post 6 (recap/invite) | answer threads, share coverage count | Consider Show HN |
+| 1 | Post 1 (v1.0.0 launch) | Post A (intro) | Publish docs blog post |
+| 2 | Post 2 (visualisation catalog) | — | Bluesky/Mastodon cross-post |
+| 3 | Post 3 (template system) | Post B (templates) + pin "good first template" issues | — |
+| 4 | Post 4 (folder → dashboard) | — | DM Post C (bytesize pitch) |
+| 5 | Post 5 (self-hosted / sovereignty) | — | — |
+| 6 | a bench angle (PI-share / build-in-public) | answer threads | Consider Show HN |
 
 Adjust pace to your bandwidth — consistency beats volume. The two highest-leverage
-moves are the **cross-component-coordination GIF** (Post 3) and landing a
-**bytesize talk** (Post C).
+moves are a strong **launch visual** (Post 1) and landing a **bytesize talk**
+(Post C).
