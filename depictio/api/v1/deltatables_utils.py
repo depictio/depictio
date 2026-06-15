@@ -698,14 +698,18 @@ def _project_scan(
     cross-DC filter pruning the large path already does. Projection therefore
     never changes which rows or columns a load would otherwise return; it only
     avoids reading columns nothing needs.
+
+    If the schema can't be read (``_get_cached_schema`` returns ``None``), we
+    skip projection entirely and load the full frame — passing an unverified
+    ``effective_cols`` to ``.select`` could include a column absent from this DC
+    (e.g. a cross-DC filter column) and turn a transient schema-read failure
+    into a hard ``ColumnNotFoundError`` at ``collect``.
     """
     if not effective_cols:
         return delta_scan
     schema_names = _get_cached_schema(delta_scan, data_collection_id_str, version_salt)
     projection = (
-        [c for c in effective_cols if c in schema_names]
-        if schema_names is not None
-        else effective_cols
+        [c for c in effective_cols if c in schema_names] if schema_names is not None else None
     )
     if projection:
         delta_scan = delta_scan.select(projection)
