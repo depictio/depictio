@@ -991,3 +991,53 @@ def api_import_project(
     if owner_user_id:
         payload["owner_user_id"] = owner_user_id
     return _post_migrate_endpoint(CLI_config, url, payload, "Import")
+
+
+def api_export_template(
+    CLI_config: CLIConfig,
+    project_name: str | None = None,
+    project_id: str | None = None,
+    template_id: str | None = None,
+    version: str = "1.0.0",
+    description: str | None = None,
+) -> dict:
+    """Export a project as a template ZIP from the source instance.
+
+    Returns ``{"success": True, "content": <zip bytes>, "filename": <str>}`` on
+    success, or ``{"success": False, "message": <str>}`` on failure.
+    """
+    url = f"{CLI_config.api_base_url}/depictio/api/v1/templates/export"
+    payload: dict = {"version": version}
+    if project_name:
+        payload["project_name"] = project_name
+    if project_id:
+        payload["project_id"] = project_id
+    if template_id:
+        payload["template_id"] = template_id
+    if description:
+        payload["description"] = description
+
+    try:
+        response = get_http_client().post(
+            url,
+            json=payload,
+            headers=generate_api_headers(CLI_config),
+            timeout=600.0,
+        )
+        if response.status_code != 200:
+            logger.error(f"Template export failed: {response.text}")
+            return {
+                "success": False,
+                "message": f"API request failed with status {response.status_code}: {response.text}",
+            }
+
+        content_disposition = response.headers.get("content-disposition", "")
+        filename = "template.zip"
+        if "filename=" in content_disposition:
+            parsed = content_disposition.split("filename=")[-1].strip().strip('"')
+            filename = parsed or filename
+        return {"success": True, "content": response.content, "filename": filename}
+    except httpx.TimeoutException:
+        return {"success": False, "message": "Template export request timed out"}
+    except Exception as e:
+        return {"success": False, "message": f"Template export failed: {str(e)}"}

@@ -15,6 +15,7 @@ from depictio.cli.cli.commands.images import app as images
 from depictio.cli.cli.commands.migrate import app as migrate
 from depictio.cli.cli.commands.run import register_run_command
 from depictio.cli.cli.commands.standalone import register_standalone_commands
+from depictio.cli.cli.commands.template import app as template
 from depictio.cli.cli.utils.rich_utils import add_rich_display_to_polars
 from depictio.cli.cli_logging import setup_logging as setup_cli_logging
 from depictio.models.logging import setup_logging as setup_models_logging
@@ -54,6 +55,7 @@ app.add_typer(dashboard, name="dashboard", help="Dashboard validation commands")
 app.add_typer(data, name="data", help="Data management commands")
 app.add_typer(images, name="images", help="Image management commands")
 app.add_typer(migrate, name="migrate", help="Cross-instance project migration")
+app.add_typer(template, name="template", help="Export a project as a reusable template")
 # Maintainer / CI tooling (catalog authoring, recipe test harness, backup
 # coverage). Hidden from the user-facing help; still callable as `depictio dev …`.
 app.add_typer(dev, name="dev", hidden=True)
