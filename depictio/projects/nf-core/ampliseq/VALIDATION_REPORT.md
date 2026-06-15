@@ -197,3 +197,30 @@ unavailable on the test data (D7).
 - **S1** (metadata): 14 DCs processed, 6 skipped-optional, 0 failures, **exit 0**.
 - **S2** (no metadata): 10 DCs processed (4 metadata-gated removed), 6 skipped-optional, **exit 0**.
 - **S3** (incomplete): fails loudly at validation with a clear message, **exit 1**.
+
+## Self-adapting dashboards (Layer 1 + Layer 2)
+
+After the discrepancy fixes, two further layers make one template + one dashboard adapt to whatever
+a run produced (instead of a dashboard full of red "Figure failed" boxes):
+
+- **Layer 1 — import-time hiding** (`api/.../dashboards_endpoints/routes.py:_filter_unresolved_components`):
+  a dashboard component bound to an absent DC (removed by a conditional) or to an *optional* Table DC
+  that was skipped (no `deltatables` record) is dropped at import; a child tab left with no
+  visualisation components is not created. **Gated**: a missing *non-optional* DC is kept (renders a
+  visible error) — graceful hiding never masks a broken pipeline (verified: `run_iontorrent` without
+  the SKIP_QIIME path exits 1, dashboard never imported).
+- **Layer 2 — params.json introspection** (`cli/.../templates.py:_introspect_pipeline_params`):
+  reads `pipeline_info/params*.json` and auto-fills `METADATA_FILE` (no more `--var` for metadata
+  runs) and sets `SKIP_QIIME` for sintax/ITS runs. A new `if_var_present: SKIP_QIIME` conditional
+  drops all QIIME2-derived DCs, so `run_iontorrent`/`run_its_pacbio` ingest their MultiQC + samplesheet
+  cleanly (MultiQC-only dashboard) instead of hard-failing — while normal 16S runs keep those DCs
+  required.
+
+### Final 5-run matrix (self-adapting)
+| Run | Exit | Outcome |
+|-----|------|---------|
+| `run_16s_pe` (16S + metadata) | 0 | full dashboard (14 DCs); metadata auto-detected, no `--var` |
+| `run_16s_multi` (16S, no metadata, no tree) | 0 | Alpha-Diversity / Differential-Abundance / Phylogeny tabs hidden |
+| `run_iontorrent` (ITS/IonTorrent, skip_qiime) | 0 | MultiQC-only (QIIME2 DCs removed via SKIP_QIIME) |
+| `run_its_pacbio` (ITS/PacBio, skip_qiime) | 0 | MultiQC + metadata (QIIME2 DCs removed) |
+| `run_multiregion` (16S SIDLE) | 1 | **out of scope** — SIDLE emits a different QIIME2 layout the recipes don't match; fails loud (needs dedicated SIDLE recipes) |

@@ -222,6 +222,7 @@ workflows:
       # ----------------------------------------------------------------
 
       - data_collection_tag: "mosdepth_amplicon_coverage"
+        optional: true  # amplicon coverage absent without a primer panel (metagenomic/non-SARS)
         description: "Per-amplicon coverage depth across all samples (from mosdepth)"
         config:
           type: "Table"
@@ -242,6 +243,7 @@ workflows:
               "sample": "Sample identifier"
 
       - data_collection_tag: "mosdepth_genome_coverage"
+        optional: true  # genome coverage absent when no bowtie2 alignment (nanopore/artic)
         description: "Genome-wide coverage in 200bp windows across all samples (from mosdepth)"
         config:
           type: "Table"
@@ -261,6 +263,7 @@ workflows:
               "sample": "Sample identifier"
 
       - data_collection_tag: "mosdepth_amplicon_heatmap"
+        optional: true  # amplicon heatmap absent without a primer panel
         description: "Log10 amplicon coverage heatmap matrix (samples × amplicons, from mosdepth)"
         config:
           type: "Table"
@@ -305,6 +308,7 @@ workflows:
               "mutation_label": "Formatted mutation label (hover)"
 
       - data_collection_tag: "complex_heatmap_canonical"
+        optional: true  # dc_ref mosdepth_amplicon_heatmap
         description: "ComplexHeatmap-ready amplicon-coverage matrix (samples × amplicons)"
         config:
           type: "Table"
@@ -318,6 +322,7 @@ workflows:
               "sample": "Sample identifier (use as index_column)"
 
       - data_collection_tag: "coverage_track_canonical"
+        optional: true  # dc_ref mosdepth_genome_coverage
         description: "Coverage-track-ready genome-coverage tracks (chromosome / position / value)"
         config:
           type: "Table"

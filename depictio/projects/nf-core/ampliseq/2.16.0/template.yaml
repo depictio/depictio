@@ -50,6 +50,20 @@ template:
       dashboards: ["dashboards/base.yaml"]
     - if_var_present: "METADATA_FILE"
       dashboards: ["dashboards/base.yaml"]
+    # ITS / IonTorrent / PacBio runs use sintax (--skip_qiime) and produce NO QIIME2
+    # outputs. SKIP_QIIME is auto-set from the run's params.json; when present, drop
+    # every QIIME2-derived DC so the run ingests its MultiQC + samplesheet cleanly
+    # instead of hard-failing. Normal 16S runs (no skip_qiime) keep these DCs
+    # required, so a genuinely missing QIIME2 output still surfaces loudly.
+    - if_var_present: "SKIP_QIIME"
+      remove_dc_tags:
+        ["alpha_rarefaction", "taxonomy_composition", "taxonomy_rel_abundance",
+         "taxonomy_heatmap", "ancombc_results", "stacked_taxonomy_canonical",
+         "embedding_pcoa", "rarefaction_canonical", "alpha_diversity_multi_canonical",
+         "complex_heatmap_canonical", "sunburst_canonical", "sankey_canonical",
+         "upset_canonical", "ma_canonical", "bray_curtis_canonical",
+         "phylogenetic_tree_canonical", "phylogenetic_tree_metadata_canonical"]
+      dashboards: ["dashboards/base.yaml"]
 
 # ============================================================================
 # PROJECT CONFIGURATION

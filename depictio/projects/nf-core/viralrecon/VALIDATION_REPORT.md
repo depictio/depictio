@@ -92,3 +92,24 @@ globs, so it contributed nothing without error — graceful multi-run handling.
 ## Changes made for viralrecon
 - `template.yaml`: marked 7 data-dependent DCs `optional: true` (VR-D1). No CLI code changes were
   needed — the ampliseq-pass CLI fixes already cover viralrecon.
+
+## Self-adapting dashboards + non-SARS/nanopore (Layer 1 + Layer 2)
+
+The shared Layer 1 import-time hiding (`_filter_unresolved_components`) + the mosdepth-derived DCs
+also marked `optional` (`mosdepth_amplicon_coverage/genome_coverage/amplicon_heatmap`,
+`complex_heatmap_canonical`, `coverage_track_canonical`) make non-SARS / poor-consensus runs
+self-adapt: components/tabs without data are hidden, the rest render. `summary_metrics` + `multiqc`
+stay **required** as the safety net.
+
+### Final 5-run matrix (self-adapting)
+| Run | Exit | Outcome |
+|-----|------|---------|
+| `run_amplicon_custom` (full SARS) | 0 | full dashboard — all 13 DCs populated |
+| `run_illumina_amplicon` (SARS, poor consensus) | 0 | Lineage & Variants tabs hidden (no lineage/variant data); Coverage + Sample-QC + MultiQC kept |
+| `run_hiv` (non-SARS metagenomic) | 0 | MultiQC + Coverage (genome only) + Sample-QC; lineage/amplicon tabs hidden |
+| `run_ev` (non-SARS metagenomic) | 0 | MultiQC + summary_metrics; coverage/lineage hidden |
+| `run_nanopore` (artic/medaka) | 1 | **out of scope** — ARTIC produces none of the ivar/mosdepth outputs and no `summary_variants_metrics_mqc.csv`; fails loud (a curated nanopore view needs new `artic_minion/` DCs) |
+
+Note: `summary_metrics`/`multiqc` are deliberately **not** optional, so `run_nanopore` fails loudly
+rather than silently producing an empty project — the honest signal that this ivar template doesn't
+fit an ARTIC run.

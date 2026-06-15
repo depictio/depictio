@@ -9,6 +9,7 @@ Usage:
 """
 
 import copy
+import json
 import re
 from datetime import datetime
 from pathlib import Path
@@ -174,8 +175,7 @@ def _prune_missing_optional_single_file_dcs(
         config["links"] = [
             link
             for link in config.get("links", [])
-            if link.get("source_dc_tag") not in removed
-            and link.get("target_dc_tag") not in removed
+            if link.get("source_dc_tag") not in removed and link.get("target_dc_tag") not in removed
         ]
     return config, sorted(removed)
 
@@ -240,8 +240,16 @@ def _apply_conditionals(
             removed_dc_tags.add(tag)
             logger.info(f"Conditional rule: removing DC tag '{tag}'")
 
-        # Override active dashboards
+        # Override active dashboards. Multiple firing rules are last-write-wins;
+        # warn if a later rule replaces a *different* selection so a future
+        # multi-dashboard template (e.g. per-protocol variants) can't silently
+        # pick the wrong one based on rule order.
         if rule.dashboards:
+            if active_dashboards and active_dashboards != rule.dashboards:
+                logger.warning(
+                    f"Conditional dashboards override: {active_dashboards} → {rule.dashboards} "
+                    f"(rule {rule.if_var_present or rule.if_var_absent})"
+                )
             active_dashboards = rule.dashboards
             logger.info(f"Conditional rule: using dashboards {rule.dashboards}")
 
@@ -432,6 +440,61 @@ def _log_removal_report(report: list[dict[str, str]]) -> None:
     logger.warning("Dashboard components referencing these will be excluded.")
 
 
+def _introspect_pipeline_params(data_root: str, variables: dict[str, str]) -> None:
+    """Read the run's nf-core ``params.json`` and set synthesized template flags.
+
+    nf-core pipelines write ``pipeline_info/params*.json``. We translate a few fields
+    into present/absent flag variables so they compose with the existing
+    ``if_var_present``/``if_var_absent`` conditionals (no model change), and auto-fill
+    ``METADATA_FILE`` when the run shipped a metadata file — so the common cases need
+    no ``--var``. Best-effort: silently no-ops when no params file is found/parseable.
+
+    Flags set (only when applicable; never overrides an explicit ``--var``):
+      - ``SKIP_QIIME``     — ampliseq ITS/sintax runs without QIIME2 outputs
+      - ``IS_METAGENOMIC`` — viralrecon metagenomic (non-amplicon) runs
+      - ``IS_NANOPORE``    — viralrecon nanopore/artic runs
+    """
+    # Only read params at the DATA_ROOT level. For "flat" projects (e.g. ampliseq,
+    # one run = one DATA_ROOT) this is the run's params. For "sequencing-runs"
+    # projects (e.g. viralrecon, DATA_ROOT aggregates many run_*/), there is no
+    # single canonical params file — picking one run's would be ambiguous — so
+    # introspection is intentionally a no-op there (those templates don't rely on it).
+    candidates = sorted(Path(data_root).glob("pipeline_info/params*.json"))
+    params: dict = {}
+    for c in candidates:
+        try:
+            with open(c) as fh:
+                params = json.load(fh)
+            break
+        except (OSError, ValueError):
+            continue
+    if not params:
+        return
+
+    if (params.get("platform") or "").lower() == "nanopore":
+        variables.setdefault("IS_NANOPORE", "true")
+    if (params.get("protocol") or "").lower() == "metagenomic":
+        variables.setdefault("IS_METAGENOMIC", "true")
+    if params.get("skip_qiime") is True:
+        variables.setdefault("SKIP_QIIME", "true")
+
+    # Auto-fill METADATA_FILE from the run's input/ when the run used metadata
+    # (params 'metadata' is the source URL; the local copy lands in input/).
+    if "METADATA_FILE" not in variables and params.get("metadata"):
+        input_dir = Path(data_root) / "input"
+        if input_dir.is_dir():
+            metas = sorted(
+                p
+                for p in input_dir.iterdir()
+                if p.is_file()
+                and "metadata" in p.name.lower()
+                and p.suffix.lower() in (".tsv", ".csv", ".txt")
+            )
+            if metas:
+                variables["METADATA_FILE"] = str(metas[0])
+                logger.info(f"METADATA_FILE auto-detected from params + input/: {metas[0]}")
+
+
 def _auto_detect_metadata_columns(metadata_path: Path, variables: dict[str, str]) -> None:
     """Read metadata file headers and auto-populate GROUP_COL and ANNOTATION_COLS.
 
@@ -527,6 +590,10 @@ def resolve_template(
     variables: dict[str, str] = {"DATA_ROOT": data_root_abs}
     if extra_vars:
         variables.update(extra_vars)
+
+    # 3a. Introspect the run's params.json to set protocol/skip flags + auto-fill
+    # METADATA_FILE (does not override explicit --var values).
+    _introspect_pipeline_params(data_root_abs, variables)
 
     # 3b. Auto-detect metadata annotation columns when METADATA_FILE is provided
     if "METADATA_FILE" in variables:

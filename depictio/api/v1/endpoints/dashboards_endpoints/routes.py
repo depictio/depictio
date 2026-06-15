@@ -3378,16 +3378,103 @@ def _regenerate_component_indices(dashboard_dict: dict) -> None:
                     layout_item["i"] = f"box-{new_index}"
 
 
-def _filter_unresolved_components(dashboard_dict: dict) -> None:
-    """Remove components whose DC could not be resolved.
+# Component types that carry a visualisation — a tab needs at least one of these
+# to be worth showing. Interactive filters and text/headers don't count on their own.
+_DATA_COMPONENT_TYPES = {"figure", "card", "table", "multiqc", "advanced_viz"}
 
-    Disabled for now: the file scanner (which removes DCs) is disabled,
-    and the aggressive dc_id check was stripping valid components whose
-    tags hadn't been resolved yet (the frontend resolves them at render time).
+
+def _build_dc_meta(project_id: PyObjectId | None) -> dict[str, dict]:
+    """Map data_collection_tag -> {type, optional} for the target project."""
+    meta: dict[str, dict] = {}
+    if not project_id:
+        return meta
+    proj = projects_collection.find_one({"_id": ObjectId(project_id)})
+    if not proj:
+        return meta
+    for wf in proj.get("workflows", []):
+        for dc in wf.get("data_collections", []):
+            tag = dc.get("data_collection_tag")
+            if tag:
+                meta[tag] = {
+                    "type": dc.get("config", {}).get("type"),
+                    "optional": dc.get("optional", False),
+                }
+    return meta
+
+
+def _component_has_data(component: dict, dc_meta: dict[str, dict]) -> bool:
+    """Whether a component's data collection is present in the project and populated.
+
+    Self-adapting-dashboard gating (hide only *authorized* gaps):
+      - No data_collection_tag (text/header) -> always kept.
+      - DC tag did not resolve (dc_id unset) -> DC was removed by template
+        conditionals / optional-file pruning -> absent -> DROP.
+      - DC present but declared `optional` AND a delta-backed Table AND has no
+        deltatables record (processing skipped it, no data) -> DROP.
+      - Otherwise KEEP. In particular a NON-optional DC is always kept so a genuine
+        gap renders a visible error instead of being silently hidden, and
+        MultiQC / phylogeny DCs (which don't register a delta table) are kept.
     """
-    # TODO: Re-enable when file scanner is active, but use dc_tag validation
-    # against the project instead of dc_id presence check.
-    pass
+    dc_tag = component.get("data_collection_tag")
+    if not dc_tag:
+        return True
+    if not component.get("dc_id"):
+        return False
+
+    info = dc_meta.get(dc_tag, {})
+    # Stored config.type is normalised lower-case (e.g. "table"); MultiQC/phylogeny
+    # types don't register delta tables, so only delta-backed Table DCs are checked.
+    if not info.get("optional") or (info.get("type") or "").lower() != "table":
+        return True
+
+    from depictio.api.v1.db import deltatables_collection
+
+    return (
+        deltatables_collection.find_one({"data_collection_id": ObjectId(component["dc_id"])})
+        is not None
+    )
+
+
+def _filter_unresolved_components(
+    dashboard_dict: dict, project_id: PyObjectId | None = None
+) -> None:
+    """Drop components whose DC is absent or (optional &) unpopulated; prune their layout.
+
+    Implements self-adapting dashboards: a run that produced a subset of outputs
+    renders only the components it can back with data. Gated by `_component_has_data`
+    so it never hides a missing *non-optional* DC (that still surfaces loudly).
+    """
+    components = dashboard_dict.get("stored_metadata")
+    if not components:
+        return
+    dc_meta = _build_dc_meta(project_id)
+    kept, dropped = [], []
+    for component in components:
+        if _component_has_data(component, dc_meta):
+            kept.append(component)
+        else:
+            dropped.append(component.get("index"))
+            logger.info(
+                f"Hiding dashboard component (dc_tag='{component.get('data_collection_tag')}', "
+                f"index='{component.get('index')}'): data collection absent or unpopulated"
+            )
+    if not dropped:
+        return
+    dashboard_dict["stored_metadata"] = kept
+    drop_keys = {f"box-{idx}" for idx in dropped}
+    for layout_key in ("left_panel_layout_data", "right_panel_layout_data", "stored_layout_data"):
+        if layout_key in dashboard_dict:
+            dashboard_dict[layout_key] = [
+                item for item in dashboard_dict[layout_key] if item.get("i") not in drop_keys
+            ]
+
+
+def _tab_has_visualization_components(dashboard_dict: dict) -> bool:
+    """True if the (already-filtered) tab still has at least one visualisation component."""
+    return any(
+        c.get("component_type") in _DATA_COMPONENT_TYPES
+        for c in dashboard_dict.get("stored_metadata", [])
+    )
 
 
 def _import_multi_tab_dashboard(
@@ -3460,8 +3547,8 @@ def _import_multi_tab_dashboard(
     for component in main_dashboard_dict.get("stored_metadata", []):
         _resolve_workflow_tags(component, project_id=project_id)
         _regenerate_component_fields(component)
-    # Remove components whose DC was not found in the project (e.g. removed by file scanner)
-    _filter_unresolved_components(main_dashboard_dict)
+    # Hide components whose DC is absent/unpopulated (self-adapting dashboard)
+    _filter_unresolved_components(main_dashboard_dict, project_id=project_id)
     _regenerate_component_indices(main_dashboard_dict)
 
     # Validate and insert/update main dashboard
@@ -3530,8 +3617,21 @@ def _import_multi_tab_dashboard(
         for component in tab_dashboard_dict.get("stored_metadata", []):
             _resolve_workflow_tags(component, project_id=project_id)
             _regenerate_component_fields(component)
-        _filter_unresolved_components(tab_dashboard_dict)
+        _filter_unresolved_components(tab_dashboard_dict, project_id=project_id)
         _regenerate_component_indices(tab_dashboard_dict)
+
+        # Self-adapting dashboard: if filtering left this tab with no visualisation
+        # components (all its DCs were absent/unpopulated for this run), don't create
+        # the tab. Tabs are separate docs, so "hidden" = "not inserted"; drop any
+        # stale existing copy on overwrite so re-imports stay idempotent.
+        if not _tab_has_visualization_components(tab_dashboard_dict):
+            logger.info(
+                f"Skipping tab '{tab_lite.title}': no data components remain after filtering "
+                "(its data collections are absent/unpopulated for this run)"
+            )
+            if existing_tab is not None:
+                dashboards_collection.delete_one({"_id": existing_tab["_id"]})
+            continue
 
         # Validate and insert/update tab
         try:
@@ -3752,7 +3852,7 @@ async def import_dashboard_from_yaml(
         _regenerate_component_fields(
             component
         )  # Regenerate s3_base_folder, etc. after dc_config is populated
-    _filter_unresolved_components(dashboard_dict)
+    _filter_unresolved_components(dashboard_dict, project_id=project_id)
     _regenerate_component_indices(dashboard_dict)
 
     try:
