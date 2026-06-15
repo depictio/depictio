@@ -188,14 +188,13 @@ def load_dashboards_from_db(owner, admin_mode=False, user=None, include_child_ta
                     )
                 )
             else:
-                # Anonymous users can only access admin-owned public projects
-                # (reference/demo projects), not user-created public projects
+                # Anonymous users can access dashboards in any public project,
+                # consistent with how projects are listed (_async_get_all_projects).
+                # The dashboard-level filter below still restricts results to
+                # public dashboards, so private dashboards do not leak.
                 accessible_projects = list(
                     projects_collection.find(
-                        {
-                            "is_public": True,
-                            "permissions.owners.is_admin": True,
-                        },
+                        {"is_public": True},
                         {"_id": 1},
                     )
                 )
