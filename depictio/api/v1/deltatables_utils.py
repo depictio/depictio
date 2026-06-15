@@ -19,6 +19,15 @@ ENABLE_CACHING = True  # Global toggle for caching system
 USE_LOCAL_FILES = os.getenv("DEPICTIO_USE_LOCAL_FILES", "false").lower() == "true"
 DELTA_CACHE_DIR = os.getenv("DEPICTIO_DELTA_CACHE_DIR", "/app/cache/delta_cache")
 
+# Delta schema cache (#12). ``collect_schema()`` reads the Delta log; on the hot
+# render path (a card grid re-computing on every filter change, or a projected
+# figure load) that's a repeated round-trip for a schema that only changes when
+# ingest bumps the aggregation version. Cache the column names per
+# (data_collection_id, aggregation_version) so a new ingest naturally
+# invalidates the entry — the same discriminator the dataframe cache keys use.
+_DELTA_SCHEMA_CACHE: dict[tuple[str, str], frozenset[str]] = {}
+_DELTA_SCHEMA_CACHE_MAX = 512  # bounded; the version salt churns keys over time
+
 
 def get_local_cache_path(s3_path: str) -> str:
     """
@@ -601,28 +610,109 @@ def _create_delta_scan(file_id: str, dc_type: str | None = None) -> pl.LazyFrame
     return pl.scan_delta(file_id, storage_options=polars_s3_config)
 
 
-def _apply_scan_options(
+def _get_cached_schema(
     delta_scan: pl.LazyFrame,
+    data_collection_id_str: str,
+    version_salt: str | int | None,
+) -> frozenset[str] | None:
+    """Return a DC's Delta column names, cached per (collection, version) (#12).
+
+    On cache miss, reads the lazy schema once (a Delta-log round-trip, no data)
+    and memoizes it. Returns ``None`` if the schema can't be read, so callers
+    fall back to their pre-cache behaviour (no projection / no filter pruning).
+    """
+    cache_key = (data_collection_id_str, str(version_salt))
+    cached = _DELTA_SCHEMA_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+    try:
+        names = frozenset(delta_scan.collect_schema().names())
+    except Exception as e:
+        logger.debug(f"_get_cached_schema: schema read failed for {data_collection_id_str}: {e}")
+        return None
+    # Simple bound: a schema is cheap to re-read, so clearing on overflow is
+    # fine and avoids tracking per-entry recency.
+    if len(_DELTA_SCHEMA_CACHE) >= _DELTA_SCHEMA_CACHE_MAX:
+        _DELTA_SCHEMA_CACHE.clear()
+    _DELTA_SCHEMA_CACHE[cache_key] = names
+    return names
+
+
+def _filter_columns(metadata: list[dict] | None) -> set[str]:
+    """Column names referenced by a filter metadata list.
+
+    Mirrors the column extraction used by ``apply_runtime_filters`` and the
+    large-path filter pruning: a filter component carries its column either at
+    the top level or under a nested ``metadata`` dict.
+    """
+    cols: set[str] = set()
+    for component in metadata or []:
+        if not isinstance(component, dict):
+            continue
+        nested = component.get("metadata") if isinstance(component.get("metadata"), dict) else None
+        col = component.get("column_name") or (nested.get("column_name") if nested else None)
+        if col:
+            cols.add(col)
+    return cols
+
+
+def _effective_projection(
     select_columns: list[str] | None,
-    limit_rows: int | None,
+    metadata: list[dict] | None,
+    load_for_options: bool,
+) -> list[str] | None:
+    """Resolve the column set a projected load must actually scan (#7).
+
+    Returns ``None`` (full load) when no projection was requested, preserving
+    today's behaviour for every caller that doesn't opt in.
+
+    When a projection *is* requested, the columns the pending filters reference
+    are folded in: projection happens at scan level *before* filtering, and
+    ``apply_runtime_filters`` silently skips a filter whose column is missing —
+    so dropping a filter column would quietly change results, not just error.
+    Folding filter columns into the returned set also means the cache key
+    (derived from this list) reflects the exact columns of the cached frame, so
+    two requests sharing a projection but filtering on different columns can't
+    collide on the same base entry.
+    """
+    if not select_columns:
+        return None
+    cols = set(select_columns)
+    if metadata and not load_for_options:
+        cols |= _filter_columns(metadata)
+    return sorted(cols)
+
+
+def _project_scan(
+    delta_scan: pl.LazyFrame,
+    effective_cols: list[str] | None,
+    data_collection_id_str: str,
+    version_salt: str | int | None,
 ) -> pl.LazyFrame:
+    """Apply scan-level column projection, intersected with the real schema.
+
+    ``effective_cols`` already unions the requested columns with the columns
+    the pending filters reference (see ``_effective_projection``). Columns not
+    on this DC's schema are dropped here rather than passed to ``.select`` —
+    which would raise ``ColumnNotFoundError`` at ``collect`` — mirroring the
+    cross-DC filter pruning the large path already does. Projection therefore
+    never changes which rows or columns a load would otherwise return; it only
+    avoids reading columns nothing needs.
+
+    If the schema can't be read (``_get_cached_schema`` returns ``None``), we
+    skip projection entirely and load the full frame — passing an unverified
+    ``effective_cols`` to ``.select`` could include a column absent from this DC
+    (e.g. a cross-DC filter column) and turn a transient schema-read failure
+    into a hard ``ColumnNotFoundError`` at ``collect``.
     """
-    Apply column projection and row limit to a LazyFrame scan.
-
-    Args:
-        delta_scan: Polars LazyFrame to modify.
-        select_columns: Optional list of columns to select.
-        limit_rows: Optional row limit.
-
-    Returns:
-        Modified LazyFrame with projections/limits applied.
-    """
-    if select_columns:
-        delta_scan = delta_scan.select(select_columns)
-
-    if limit_rows:
-        delta_scan = delta_scan.limit(limit_rows)
-
+    if not effective_cols:
+        return delta_scan
+    schema_names = _get_cached_schema(delta_scan, data_collection_id_str, version_salt)
+    projection = (
+        [c for c in effective_cols if c in schema_names] if schema_names is not None else None
+    )
+    if projection:
+        delta_scan = delta_scan.select(projection)
     return delta_scan
 
 
@@ -875,6 +965,7 @@ def _load_large_dataframe(
     load_for_options: bool,
     limit_rows: int | None,
     size_bytes: int,
+    version_salt: str | int | None = None,
 ) -> pl.DataFrame:
     """
     Load a large DataFrame using lazy evaluation with filters applied at scan time.
@@ -886,6 +977,7 @@ def _load_large_dataframe(
         load_for_options: If True, skip filtering.
         limit_rows: Optional row limit.
         size_bytes: Size for logging.
+        version_salt: Aggregation version for the schema cache key (#12).
 
     Returns:
         Loaded DataFrame.
@@ -899,10 +991,8 @@ def _load_large_dataframe(
         # appends the translated sample_id filter, so we can safely drop the
         # untranslated habitat filter here instead of failing the whole load
         # with a polars ColumnNotFoundError.
-        try:
-            available_cols = set(delta_scan.collect_schema().names())
-        except Exception:
-            available_cols = None
+        schema_names = _get_cached_schema(delta_scan, data_collection_id_str, version_salt)
+        available_cols = set(schema_names) if schema_names is not None else None
 
         usable_metadata = metadata
         if available_cols is not None:
@@ -1054,6 +1144,13 @@ def load_deltatable_lite(
             "See get_result_dc_for_workflow() in depictio/dash/utils.py."
         )
 
+    # Resolve the effective projection once, up front (no I/O): the requested
+    # columns plus any columns the pending filters reference. Used for the
+    # cache key, the cache lookups, and the scan so they all agree on the exact
+    # column set of the (cached) frame. ``None`` when no projection was asked
+    # for, which keeps every non-opted-in caller on today's full-load path.
+    effective_cols = _effective_projection(select_columns, metadata, load_for_options)
+
     # CACHING DISABLED PATH - load directly from storage
     if not ENABLE_CACHING:
         file_id = _get_delta_location(data_collection_id_str, workflow_id_str, init_data, TOKEN)
@@ -1069,7 +1166,9 @@ def load_deltatable_lite(
             )
             dc_type = _get_dc_type_from_db(data_collection_id_obj)
         delta_scan = _create_delta_scan(file_id, dc_type)
-        delta_scan = _apply_scan_options(delta_scan, select_columns, limit_rows)
+        delta_scan = _project_scan(delta_scan, effective_cols, data_collection_id_str, None)
+        if limit_rows:
+            delta_scan = delta_scan.limit(limit_rows)
         df = delta_scan.collect()
         return _finalize_dataframe(df, metadata, load_for_options, None)
 
@@ -1089,7 +1188,7 @@ def load_deltatable_lite(
         workflow_id_str,
         data_collection_id_str,
         load_for_preview,
-        select_columns,
+        effective_cols,
         metadata,
         load_for_options,
         version_salt=version_salt,
@@ -1102,7 +1201,7 @@ def load_deltatable_lite(
         filter_hash,
         metadata,
         load_for_options,
-        select_columns,
+        effective_cols,
         limit_rows,
     )
     if cached_df is not None:
@@ -1115,7 +1214,7 @@ def load_deltatable_lite(
         filter_hash,
         metadata,
         load_for_options,
-        select_columns,
+        effective_cols,
         limit_rows,
     )
     if cached_df is not None:
@@ -1140,9 +1239,8 @@ def load_deltatable_lite(
     file_id = _get_delta_location(data_collection_id_str, workflow_id_str, init_data, TOKEN)
     delta_scan = _create_delta_scan(file_id, dc_type)
 
-    # Apply column projection at scan level
-    if select_columns:
-        delta_scan = delta_scan.select(select_columns)
+    # Apply column projection at scan level (schema-guarded; see _project_scan)
+    delta_scan = _project_scan(delta_scan, effective_cols, data_collection_id_str, version_salt)
 
     # ADAPTIVE LOADING STRATEGY
     if size_bytes == -1 or size_bytes <= MEMORY_THRESHOLD_BYTES:
@@ -1169,6 +1267,7 @@ def load_deltatable_lite(
             load_for_options,
             limit_rows,
             size_bytes,
+            version_salt,
         )
 
     # Final cleanup (drop aggregation column)
