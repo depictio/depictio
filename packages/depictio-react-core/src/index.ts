@@ -147,6 +147,13 @@ export {
   listAllDashboards,
   listExampleProjects,
   cleanExampleProjects,
+  // Admin monitoring (Log & Task)
+  fetchMonitoringTasks,
+  fetchMonitoringTask,
+  fetchIngestionRuns,
+  fetchIngestionRun,
+  fetchAppLogs,
+  fetchMonitoringHealth,
   // Profile + CLI tokens
   fetchCurrentUserFull,
   editPassword,
@@ -271,6 +278,11 @@ export type {
   AdminProject,
   AdminDashboard,
   ExampleProject,
+  // Admin monitoring types
+  MonitoringTaskEvent,
+  MonitoringIngestionRun,
+  MonitoringAppLog,
+  MonitoringHealth,
   // Profile + CLI token types
   ProfileUser,
   CliToken,

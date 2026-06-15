@@ -67,6 +67,14 @@ _OPENAPI_TAGS: list[dict[str, Any]] = [
         ),
     },
     {
+        "name": "Monitoring",
+        "description": (
+            "Admin-only 'Log & Task' monitoring: Celery task history, CLI ingestion "
+            "runs, recent application logs, and worker health. Feature-gated by "
+            "DEPICTIO_MONITORING_ENABLED; hidden in public/demo mode."
+        ),
+    },
+    {
         "name": "Analytics",
         "description": (
             "Admin/ops: usage analytics. Feature-gated by DEPICTIO_ANALYTICS_ENABLED "

@@ -84,6 +84,7 @@ class CLIConfig(BaseModel):
     api_base_url: str
     user: UserBaseCLIConfig
     s3_storage: S3DepictioCLIConfig
+    instance_label: str | None = None  # Friendly CLI instance name for server-side monitoring
 
     class ConfigDict:
         extra = "forbid"  # Reject unexpected fields
