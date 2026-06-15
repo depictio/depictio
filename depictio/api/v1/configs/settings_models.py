@@ -173,6 +173,9 @@ class MongoDBConfig(ServiceConfig):
         projects_collection: str = Field(default="projects")
         multiqc_collection: str = Field(default="multiqc")
         multiqc_prerender_collection: str = Field(default="multiqc_prerender")
+        task_events_collection: str = Field(default="task_events")
+        ingestion_runs_collection: str = Field(default="ingestion_runs")
+        app_logs_collection: str = Field(default="app_logs")
         test_collection: str = Field(default="test")
 
     collections: Collections = Field(default_factory=Collections)
@@ -760,6 +763,34 @@ class EventsConfig(BaseSettings):
         return f"redis://{self.redis_host}:{self.redis_port}/{self.redis_db}"
 
 
+class MonitoringConfig(BaseSettings):
+    """Configuration for the admin "Log & Task" monitoring feature.
+
+    Backs the admin-only monitoring tab that surfaces Celery task history, CLI
+    ingestion runs, and recent application logs. Persistence is a durable
+    MongoDB ledger; live updates ride the real-time events WebSocket when
+    ``settings.events.enabled`` is also true.
+    """
+
+    enabled: bool = Field(default=True, description="Enable the admin monitoring feature")
+    retention_days: int = Field(
+        default=14, description="TTL (days) for task_events records before automatic expiry"
+    )
+    app_log_min_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = Field(
+        default="WARNING", description="Minimum level captured into the app_logs collection"
+    )
+    app_log_capped_mb: int = Field(
+        default=64, description="Size cap (MB) of the capped app_logs collection"
+    )
+    live_updates: bool = Field(
+        default=True,
+        description="Push live task/ingestion status changes over the events WebSocket "
+        "(only active when events.enabled is also true)",
+    )
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_MONITORING_")
+
+
 class DashboardYAMLConfig(BaseSettings):
     """Configuration for YAML-based dashboard management.
 
@@ -1042,6 +1073,7 @@ class Settings(BaseSettings):
     jbrowse: JBrowseConfig = Field(default_factory=JBrowseConfig)
     backup: BackupConfig = Field(default_factory=BackupConfig)
     events: EventsConfig = Field(default_factory=EventsConfig)
+    monitoring: MonitoringConfig = Field(default_factory=MonitoringConfig)
     dashboard_yaml: DashboardYAMLConfig = Field(default_factory=DashboardYAMLConfig)
 
     # Observability & development

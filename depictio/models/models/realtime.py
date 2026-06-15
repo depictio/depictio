@@ -43,6 +43,10 @@ class EventType(str, Enum):
     DASHBOARD_UPDATED = "dashboard_updated"
     DASHBOARD_COMPONENT_UPDATED = "dashboard_component_updated"
 
+    # Admin monitoring events (Log & Task tab live push)
+    TASK_EVENT = "task_event"
+    INGESTION_EVENT = "ingestion_event"
+
     # System events
     CONNECTION_ESTABLISHED = "connection_established"
     HEARTBEAT = "heartbeat"

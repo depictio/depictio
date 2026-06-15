@@ -52,6 +52,16 @@ def _user_can_access_dashboard(user: User | None, dashboard_id: str) -> bool:
 
     from depictio.api.v1.db import dashboards_collection, projects_collection
     from depictio.api.v1.endpoints.dashboards_endpoints.routes import check_project_permission
+    from depictio.models.models.monitoring import ADMIN_MONITORING_CHANNEL
+
+    # Admin monitoring channel is not a real dashboard — gate it on is_admin and
+    # refuse in public/demo mode (no real admin surface there).
+    if dashboard_id == ADMIN_MONITORING_CHANNEL:
+        if (
+            settings.auth.is_public_mode or settings.auth.is_demo_mode
+        ) and not settings.auth.is_single_user_mode:
+            return False
+        return bool(user is not None and getattr(user, "is_admin", False))
 
     try:
         dashboard = dashboards_collection.find_one({"dashboard_id": dashboard_id})

@@ -47,7 +47,18 @@ def generate_api_headers(CLI_config: CLIConfig | dict) -> dict:
     # Get the token from the CLI configuration
     token = cli_config_dict["user"]["token"]["access_token"]
 
-    return {"Authorization": f"Bearer {token}"}
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # Tag every request with the CLI instance identity so the server can
+    # distinguish multiple CLIs talking to one instance (admin monitoring).
+    import socket
+
+    headers["X-Depictio-CLI-Host"] = socket.gethostname()
+    instance_label = cli_config_dict.get("instance_label")
+    if instance_label:
+        headers["X-Depictio-CLI-Instance"] = str(instance_label)
+
+    return headers
 
 
 @validate_call(validate_return=True)
