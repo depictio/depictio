@@ -61,20 +61,35 @@ class TestCommon:
         """Tests for generate_api_headers function"""
 
         def test_with_dict(self, sample_cli_config):
-            """Test generate_api_headers with dictionary input"""
-            headers = generate_api_headers(sample_cli_config)
-            assert headers == {
-                "Authorization": "Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWV9.EkN-DOsnsuRjRO6BxXemmJDm3HbxrbRzXglbN2S4sOkopdU4IsDxTI8jO19W_A4K8ZPJijNLis4EZsHeY559a4DFOd50_OqgHs3O2GWl5JQ6TyYHdMKoGNAHnm8l"
-            }
-            assert len(headers) == 1
-            assert "Authorization" in headers
+            """Test generate_api_headers with dictionary input.
 
-        def test_with_object(self, sample_cli_config_object):
+            Besides the bearer token, every request now carries the CLI instance
+            identity (hostname always; label only when set in the config) so the
+            server's monitoring can distinguish multiple CLIs.
+            """
+            import socket
+
+            expected_token = f"Bearer {sample_cli_config['user']['token']['access_token']}"
+            headers = generate_api_headers(sample_cli_config)
+            assert headers["Authorization"] == expected_token
+            assert headers["X-Depictio-CLI-Host"] == socket.gethostname()
+            # No instance_label in the sample config → header omitted.
+            assert "X-Depictio-CLI-Instance" not in headers
+
+        def test_with_object(self, sample_cli_config, sample_cli_config_object):
             """Test generate_api_headers with CLIConfig object input"""
+            import socket
+
+            expected_token = f"Bearer {sample_cli_config['user']['token']['access_token']}"
             headers = generate_api_headers(sample_cli_config_object)
-            assert headers == {
-                "Authorization": "Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWV9.EkN-DOsnsuRjRO6BxXemmJDm3HbxrbRzXglbN2S4sOkopdU4IsDxTI8jO19W_A4K8ZPJijNLis4EZsHeY559a4DFOd50_OqgHs3O2GWl5JQ6TyYHdMKoGNAHnm8l"
-            }
+            assert headers["Authorization"] == expected_token
+            assert headers["X-Depictio-CLI-Host"] == socket.gethostname()
+
+        def test_includes_instance_label_when_set(self, sample_cli_config):
+            """When instance_label is set in the CLI config, it is sent as a header."""
+            sample_cli_config["instance_label"] = "lab-workstation-1"
+            headers = generate_api_headers(sample_cli_config)
+            assert headers["X-Depictio-CLI-Instance"] == "lab-workstation-1"
 
         def test_with_invalid_input(self):
             """Test generate_api_headers with invalid input type"""
