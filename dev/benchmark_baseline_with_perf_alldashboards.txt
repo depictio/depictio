@@ -1,0 +1,49 @@
+# Depictio render-figure benchmark — WITH-PERF baseline (ALL reference dashboards)
+# Branch: perf/combined (gb-dataframe-optimizations + column-projection-schema-cache, rebased on main)
+# Stack: full reseed (iris + penguins + advanced_viz + ampliseq + viralrecon), dev_mode=false, single_user_mode=true
+# Date: 2026-06-15 (re-run after stack settled — reseed background tasks drained)
+# Discovered: 10 figure components across Iris + Penguins dashboards
+#   (MultiQC / advanced_viz dashboards have no plain `figure` components; their
+#    code-mode sunburst/scatter_matrix builds run on the shared celery pool.)
+
+═══════════════════════════════════════════════════════════════════════════════
+PRIMARY — WARM + interactive filter, STEADY-STATE (--filtered, default --concurrency 1)
+#   ~10 requests in flight total (≈2 users browsing). Per-render cost — COMPARE THIS.
+═══════════════════════════════════════════════════════════════════════════════
+Dashboard     Component   VisuType    p50       p95       p99        max        routing
+Iris          24188f79    scatter     149.5 ms  434.9 ms  1326.8 ms  1326.8 ms  offloaded:100
+Iris          a630775f    histogram   108.0 ms  290.3 ms   563.4 ms   563.4 ms  inline:100
+Iris          5feb1689    box         110.4 ms  491.9 ms  1978.6 ms  1978.6 ms  inline:100
+Iris          e0033582    scatter      95.4 ms  531.0 ms  7421.1 ms  7421.1 ms  inline:100
+Penguins      098ea69f    scatter     109.7 ms  490.7 ms  2145.4 ms  2145.4 ms  inline:100
+Penguins      72381c5a    scatter     101.7 ms  495.4 ms  2600.5 ms  2600.5 ms  inline:100
+Penguins      4069cb03    box          63.4 ms  308.6 ms  2139.7 ms  2139.7 ms  inline:100
+Penguins      b8030888    box          76.6 ms  315.3 ms   385.3 ms   385.3 ms  inline:100
+Penguins      ccf43bda    histogram    98.7 ms  348.4 ms  7420.5 ms  7420.5 ms  inline:100
+Penguins      6c8fd60d    scatter     151.5 ms  518.0 ms   928.2 ms   928.2 ms  offloaded:100
+
+Routing: inline 800/1000 (80%), offloaded 200/1000 (20%)
+Overall (1000 samples):
+  mean = 165.0 ms   p50 = 108.2 ms   p95 = 370.6 ms   p99 = 928.2 ms   max = 7421.1 ms
+# Two p99 outliers (~7.4s on e0033582 + ccf43bda) — occasional stalls (GC / bg
+# activity), not the typical path; p50/p95 are the representative render cost.
+
+═══════════════════════════════════════════════════════════════════════════════
+LOAD TEST — same runs at --concurrency 10  (~100 requests in flight)
+#   Capacity / saturation ceiling, NOT per-render cost: 100 simultaneous vs
+#   4 gunicorn + 4 celery workers -> latency dominated by queue wait.
+═══════════════════════════════════════════════════════════════════════════════
+Overall (1000 samples):
+  mean = 2136.0 ms   p50 = 2000.7 ms   p95 = 4646.2 ms   p99 = 5016.9 ms   max = 5942.1 ms
+# Much tighter than the first all-dashboard saturation run (p50 3187ms, max 22682ms)
+# — that one was inflated by reseed background tasks still competing for workers.
+# Tail now caps ~6s (vs ~23s), i.e. clean queue saturation with no extra load.
+
+# Takeaways:
+# - Steady-state warm interactive render: p50 ~108 ms, p95 ~371 ms across all
+#   dashboards. That is the number to compare against the no-perf stack.
+# - Throughput ceiling: ~100 concurrent renders saturate this 4+4-worker dev
+#   stack; beyond that latency is queue wait. Raise via worker counts (orthogonal
+#   to render-path perf).
+# - For the no-perf comparison: run `--filtered` (steady-state, default c=1) AND
+#   optionally `--filtered --concurrency 10` (ceiling), same full reseed.

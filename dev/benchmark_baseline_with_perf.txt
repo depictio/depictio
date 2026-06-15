@@ -1,0 +1,48 @@
+# Depictio render-figure benchmark — WITH-PERF baseline
+# Branch: perf/combined (gb-dataframe-optimizations + column-projection-schema-cache, rebased on main)
+# Stack: iris only (DEPICTIO_SEED_PROJECTS=iris), dev_mode=false, single_user_mode=true
+# Date: 2026-06-12
+# Config: 100 reps x 10 concurrency per component, 4 figure components, 400 samples
+
+═══════════════════════════════════════════════════════════════════════════════
+RUN A — COLD→WARM, no filter   (python dev/benchmark_render.py)
+═══════════════════════════════════════════════════════════════════════════════
+Component                                VisuType   flt   p50        p95        p99        max         routing
+24188f79-2d9c-4330-87ad-3d02d7834802     scatter    —     468.6 ms   1279.7 ms  4712.2 ms  4712.2 ms   offloaded:100
+a630775f-0f9c-4ac9-9ce6-b5da5988d90a     histogram  —     503.1 ms   1082.5 ms  1268.2 ms  1268.2 ms   inline:100
+5feb1689-2e93-4f20-8327-1367462a4610     box        —     473.0 ms   1268.1 ms  1281.0 ms  1281.0 ms   inline:100
+e0033582-c466-4806-ab68-a30a05c4ba37     scatter    —     468.6 ms   1093.4 ms  1284.0 ms  1284.0 ms   inline:100
+
+Routing: inline 300/400 (75%), offloaded 100/400 (25%)
+Overall (400 samples):
+  mean = 528.4 ms   p50 = 476.8 ms   p95 = 1106.3 ms   p99 = 1284.0 ms   max = 4712.2 ms
+
+═══════════════════════════════════════════════════════════════════════════════
+RUN B — WARM + interactive filter   (python dev/benchmark_render.py --filtered)
+#   warm-up = 5 discarded reps/component; each measured rep applies a different
+#   RangeSlider value on sepal.length (the filter-column-union projection path)
+═══════════════════════════════════════════════════════════════════════════════
+Component                                VisuType   flt   p50        p95        p99        max         routing
+24188f79-2d9c-4330-87ad-3d02d7834802     scatter    yes   393.8 ms   766.8 ms   804.5 ms   804.5 ms    offloaded:100
+a630775f-0f9c-4ac9-9ce6-b5da5988d90a     histogram  yes   295.3 ms   847.9 ms   894.4 ms   894.4 ms    inline:100
+5feb1689-2e93-4f20-8327-1367462a4610     box        yes   264.7 ms   844.7 ms   898.1 ms   898.1 ms    inline:100
+e0033582-c466-4806-ab68-a30a05c4ba37     scatter    yes   286.2 ms   844.8 ms   879.0 ms   879.0 ms    inline:100
+
+Routing: inline 300/400 (75%), offloaded 100/400 (25%)
+Overall (400 samples):
+  mean = 350.2 ms   p50 = 310.6 ms   p95 = 800.0 ms   p99 = 889.4 ms   max = 898.1 ms
+
+═══════════════════════════════════════════════════════════════════════════════
+COLD vs WARM+filter delta (perf/combined):
+  p50   476.8 -> 310.6 ms   (-35%)
+  p95  1106.3 -> 800.0 ms   (-28%)
+  p99  1284.0 -> 889.4 ms   (-31%)
+  max  4712.2 -> 898.1 ms   (-81%, cold offload tail absorbed by warm-up)
+
+# Notes:
+# - Filter applied on all 4 figures (sepal.length RangeSlider); 0 errors -> the
+#   filter-column-union projection correctly keeps the filter column even when
+#   it's not a plotted axis (no silent no-op, no ColumnNotFoundError).
+# - 1 scatter (24188f79) routes 100% offloaded -> code-mode or DC >= 50MB.
+# - To compare: run BOTH the same way on a stack WITHOUT the perf optimizations
+#   (same iris seed, --reps 100 --concurrency 10, plain + --filtered) and diff.
