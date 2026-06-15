@@ -21,6 +21,47 @@ from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 
 
+def should_offload_render(
+    *,
+    force: bool,
+    code_mode: bool = False,
+    size_bytes: int | None = None,
+    threshold_bytes: int | None = None,
+) -> bool:
+    """Decide whether a render runs on Celery (heavy) or inline (cheap).
+
+    Blanket offload is a poor default for interactive renders: the broker +
+    result-backend round-trip and the poll-loop latency floor in
+    ``offload_or_run`` add tens-to-hundreds of ms to renders that build inline
+    in a few ms, and funnel every cheap figure through the same small worker
+    pool as slow code/MultiQC builds. So offload only when the work is actually
+    heavy:
+
+    - ``force``: explicit per-deployment override (``offload_rendering``) for
+      operators who want every render off the API process regardless of size.
+    - ``code_mode``: arbitrary user code of unknown cost — isolate it in a
+      worker process instead of running it on the API event loop.
+    - ``size_bytes >= threshold_bytes``: large source frames, where
+      cross-process parallelism and not pinning an API worker outweigh the
+      round-trip.
+
+    Everything else runs inline. The thresholds are coarse proxies pending the
+    #4 render benchmark, which should calibrate the crossover empirically.
+    """
+    if force:
+        return True
+    if code_mode:
+        return True
+    if (
+        threshold_bytes is not None
+        and threshold_bytes > 0
+        and size_bytes is not None
+        and size_bytes >= threshold_bytes
+    ):
+        return True
+    return False
+
+
 async def offload_or_run(
     task: Any,
     args: tuple | list,

@@ -492,8 +492,15 @@ class CeleryConfig(BaseSettings):
     result_backend_db: int = Field(default=2, description="Redis database for Celery results")
 
     # Worker settings
-    worker_concurrency: int = Field(default=2, description="Number of concurrent worker processes")
-    worker_pool: str = Field(default="threads", description="Worker pool type (threads, processes)")
+    # NOTE: these two fields document the intended worker topology but are NOT
+    # currently wired into worker startup — ``docker-images/run_celery_worker.sh``
+    # passes ``--concurrency=$DEPICTIO_CELERY_WORKERS`` and no ``--pool`` (so the
+    # worker runs Celery's default ``prefork``). Defaults are kept aligned with
+    # that reality; raise throughput via ``DEPICTIO_CELERY_WORKERS``.
+    worker_concurrency: int = Field(default=4, description="Number of concurrent worker processes")
+    worker_pool: str = Field(
+        default="prefork", description="Worker pool type (prefork, threads, processes)"
+    )
     worker_prefetch_multiplier: int = Field(default=1, description="Worker prefetch multiplier")
     worker_max_tasks_per_child: int = Field(
         default=50, description="Max tasks per worker before restart"
@@ -522,7 +529,21 @@ class CeleryConfig(BaseSettings):
     )
     offload_rendering: bool = Field(
         default=False,
-        description="Offload dashboard render endpoints (/dashboards/render_*) to Celery",
+        description=(
+            "Force-offload ALL dashboard render endpoints (/dashboards/render_*) to "
+            "Celery regardless of cost. Off by default: renders offload adaptively by "
+            "size/type (see offload_size_threshold_bytes) so cheap interactive figures "
+            "stay inline and skip the broker + result-backend round-trip."
+        ),
+    )
+    offload_size_threshold_bytes: int = Field(
+        default=50 * 1024 * 1024,
+        description=(
+            "Source Delta-table size (bytes) at/above which a dashboard render is "
+            "offloaded to Celery even when offload_rendering is off; below it renders "
+            "run inline. Coarse proxy for build cost pending the #4 render benchmark. "
+            "Set to 0 to disable size-based offload."
+        ),
     )
     offload_timeout_seconds: float = Field(
         default=30.0,
