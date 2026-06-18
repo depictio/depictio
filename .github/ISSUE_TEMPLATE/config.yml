@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Documentation
+    url: https://depictio.github.io/depictio-docs/
+    about: Check the docs before opening an issue.
+  - name: Questions & Discussions
+    url: https://github.com/depictio/depictio/discussions
+    about: Ask questions and share ideas with the community.
