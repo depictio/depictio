@@ -21,10 +21,40 @@ template:
     - name: "DATA_ROOT"
       description: "Root directory containing viralrecon pipeline output (multiqc/, variants/)"
       required: true
+    - name: "IS_NANOPORE"
+      description: "Auto-set from params.json (platform=nanopore). Repoints coverage/lineage DCs at the artic_minion/ layout and drops illumina-only variant DCs."
+      required: false
   dashboards:
     - "dashboards/base.yaml"
   # No reference.vars needed — DATA_ROOT is resolved by db_init to the
   # bundled project directory (/app/depictio/projects/nf-core/viralrecon/3.0.0).
+  conditional:
+    # nanopore/ARTIC runs call variants with clair3 (not ivar/bowtie2): coverage and
+    # lineage live under artic_minion/, and the MultiQC parquet lacks the ivar/bowtie2
+    # columns the required summary_metrics recipe reads. IS_NANOPORE is auto-set from
+    # the run's params.json. When present:
+    #   - repoint the shared coverage/lineage DCs at the artic_minion/ layout (same
+    #     tags → coverage_track / complex_heatmap / sankey canonicals keep working);
+    #   - drop summary_metrics (the loud-failure point — no nanopore recipe yet) and
+    #     the illumina-only ivar variant DCs (no variants_long_table.csv on ARTIC).
+    # Illumina runs (no IS_NANOPORE) keep the default illumina bindings untouched.
+    - if_var_present: "IS_NANOPORE"
+      remove_dc_tags:
+        ["summary_metrics", "variants_long", "oncoplot_canonical",
+         "upset_canonical", "variant_feature_matrix_canonical"]
+      override_dcs:
+        - data_collection_tag: "mosdepth_amplicon_coverage"
+          scan_pattern: "artic_minion/mosdepth/amplicon/all_samples.mosdepth.coverage.tsv"
+        - data_collection_tag: "mosdepth_genome_coverage"
+          scan_pattern: "artic_minion/mosdepth/genome/all_samples.mosdepth.coverage.tsv"
+        - data_collection_tag: "mosdepth_amplicon_heatmap"
+          scan_pattern: "artic_minion/mosdepth/amplicon/all_samples.mosdepth.heatmap.tsv"
+        - data_collection_tag: "pangolin_lineages"
+          source_overrides:
+            pangolin_raw: {glob_pattern: "artic_minion/pangolin/*.pangolin.csv"}
+        - data_collection_tag: "nextclade_results"
+          source_overrides:
+            nextclade_raw: {glob_pattern: "artic_minion/nextclade/*.csv"}
 
 # ============================================================================
 # PROJECT CONFIGURATION

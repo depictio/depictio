@@ -251,11 +251,15 @@ def _process_multiqc_data(
     df_general_stats = df_raw.filter(pl.col("anchor") == "general_stats_table")
     df_metrics_pl = df_general_stats.filter(pl.col("type") == "plot_input_row")
 
-    # Fallback: try summary_variants_metrics_plot (nf-core/viralrecon style)
+    # Fallback: try summary_variants_metrics_plot (nf-core/viralrecon style). The
+    # illumina route emits the bare `..._plot` anchor; the nanopore/ARTIC route emits
+    # the same table under a `..._plot_table` anchor — accept both.
     if len(df_metrics_pl) == 0:
         for fallback_anchor in [
             "summary_variants_metrics_plot",
             "summary_assembly_metrics_plot",
+            "summary_variants_metrics_plot_table",
+            "summary_assembly_metrics_plot_table",
         ]:
             df_fallback = df_raw.filter(pl.col("anchor") == fallback_anchor)
             df_fallback_metrics = df_fallback.filter(pl.col("type") == "plot_input_row")
