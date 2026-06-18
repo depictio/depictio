@@ -17,6 +17,11 @@ from depictio.api.v1.db import (
     users_collection,
 )
 from depictio.api.v1.endpoints.migrate_endpoints.routes import _collect_s3_locations_for_project
+from depictio.api.v1.endpoints.projects_endpoints.ingestion_report import (
+    IngestionReport,
+    IngestionSummary,
+    build_ingestion_report,
+)
 from depictio.api.v1.endpoints.projects_endpoints.utils import (
     _async_get_all_projects,
     _async_get_project_from_id,
@@ -221,6 +226,29 @@ async def get_project_from_dashboard_id(
         "project": project,
         "delta_locations": delta_locations,
     }
+
+
+@projects_endpoint_router.get("/ingestion-report/{project_id}", response_model=IngestionReport)
+async def get_ingestion_report(project_id: PyObjectId, current_user=Depends(get_user_or_anonymous)):
+    """Traceable summary of what a template execution ingested vs. what it expected.
+
+    Compares the project's frozen expected-DC manifest (required + optional, with
+    gating reasons) against the latest scan stats and aggregation state, so the UI
+    can show which data collections were identified, found-empty, or gated out.
+    """
+    if not current_user:
+        raise HTTPException(status_code=401, detail="User not found.")
+    project = _async_get_project_from_id(project_id, current_user, projects_collection)
+    return build_ingestion_report(project)
+
+
+@projects_endpoint_router.get("/ingestion-health/{project_id}", response_model=IngestionSummary)
+async def get_ingestion_health(project_id: PyObjectId, current_user=Depends(get_user_or_anonymous)):
+    """Lightweight ingestion health summary (counts + health flag) for the dashboard banner."""
+    if not current_user:
+        raise HTTPException(status_code=401, detail="User not found.")
+    project = _async_get_project_from_id(project_id, current_user, projects_collection)
+    return build_ingestion_report(project).summary
 
 
 @projects_endpoint_router.post("/create")
