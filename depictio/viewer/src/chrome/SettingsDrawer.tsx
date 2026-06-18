@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
+  Anchor,
   Badge,
   Code,
   CopyButton,
@@ -164,6 +165,18 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
               iconColor="var(--mantine-color-green-6)"
               label="Template"
               value={<TemplateChip parsed={parsedTemplate} verbose />}
+            />
+          )}
+          {parsedTemplate && projectId && (
+            <MetaRow
+              icon="mdi:clipboard-check-outline"
+              iconColor="var(--mantine-color-indigo-6)"
+              label="Ingestion"
+              value={
+                <Anchor href={`/projects/${projectId}#ingestion`} size="sm" fw={500}>
+                  View ingestion report
+                </Anchor>
+              }
             />
           )}
           {ownerEmail && (
