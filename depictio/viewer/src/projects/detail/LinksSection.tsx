@@ -2,16 +2,22 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActionIcon,
   Badge,
+  Box,
   Button,
+  Collapse,
   Group,
   Paper,
+  ScrollArea,
   Stack,
   Switch,
   Table,
   Text,
+  TextInput,
   Title,
   Tooltip,
+  UnstyledButton,
 } from '@mantine/core';
+import { useDisclosure } from '@mantine/hooks';
 import { Icon } from '@iconify/react';
 import { notifications } from '@mantine/notifications';
 
@@ -41,6 +47,37 @@ interface LinksSectionProps {
   onLinksChange?: (links: DCLink[]) => void;
 }
 
+/** Sortable column header for the links table. */
+const LinkSortTh: React.FC<{
+  label: string;
+  k: 'source' | 'target' | 'resolver';
+  sortKey: string;
+  dir: 'asc' | 'desc';
+  onSort: (k: 'source' | 'target' | 'resolver') => void;
+}> = ({ label, k, sortKey, dir, onSort }) => (
+  <Table.Th
+    style={{ cursor: 'pointer', whiteSpace: 'nowrap', userSelect: 'none' }}
+    onClick={() => onSort(k)}
+  >
+    <Group gap={2} wrap="nowrap">
+      <Text size="sm" fw={600}>
+        {label}
+      </Text>
+      <Icon
+        icon={
+          sortKey === k
+            ? dir === 'asc'
+              ? 'mdi:menu-up'
+              : 'mdi:menu-down'
+            : 'mdi:unfold-more-horizontal'
+        }
+        width={14}
+        color={sortKey === k ? undefined : 'var(--mantine-color-gray-5)'}
+      />
+    </Group>
+  </Table.Th>
+);
+
 const LinksSection: React.FC<LinksSectionProps> = ({
   projectId,
   dataCollections,
@@ -59,12 +96,56 @@ const LinksSection: React.FC<LinksSectionProps> = ({
   // guarantees "Target data collection" (and every other field) starts blank
   // when the user clicks Add link a second time.
   const [modalKey, setModalKey] = useState(0);
+  // Collapsed by default to keep the Overview tab compact.
+  const [opened, { toggle }] = useDisclosure(false);
+  const [filter, setFilter] = useState('');
+  const [sortKey, setSortKey] = useState<'source' | 'target' | 'resolver'>('source');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const onSort = (k: 'source' | 'target' | 'resolver') => {
+    if (k === sortKey) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    else {
+      setSortKey(k);
+      setSortDir('asc');
+    }
+  };
 
   const dcById = useMemo(() => {
     const map = new Map<string, DataCollectionOption>();
     dataCollections.forEach((d) => map.set(d.id, d));
     return map;
   }, [dataCollections]);
+
+  // Resolve a link endpoint to a display tag, handling `tag:<tag>` placeholders
+  // (template-imported links) and falling back to the stored tag / stripped id.
+  const endpointTag = (idRef?: string, tagRef?: string) =>
+    (idRef && dcById.get(idRef)?.tag) ||
+    tagRef ||
+    (idRef || '').replace(/^tag:/, '') ||
+    '—';
+  const srcTag = (l: DCLink) =>
+    endpointTag(l.source_dc_id, (l as { source_dc_tag?: string }).source_dc_tag);
+  const tgtTag = (l: DCLink) =>
+    endpointTag(l.target_dc_id, (l as { target_dc_tag?: string }).target_dc_tag);
+  const resolverOf = (l: DCLink) => l.link_config?.resolver || 'direct';
+
+  const visibleLinks = useMemo(() => {
+    const q = filter.trim().toLowerCase();
+    const list = links.filter(
+      (l) =>
+        !q ||
+        srcTag(l).toLowerCase().includes(q) ||
+        tgtTag(l).toLowerCase().includes(q) ||
+        resolverOf(l).toLowerCase().includes(q) ||
+        (l.description || '').toLowerCase().includes(q),
+    );
+    const cmp = (a: DCLink, b: DCLink) => {
+      if (sortKey === 'target') return tgtTag(a).localeCompare(tgtTag(b));
+      if (sortKey === 'resolver') return resolverOf(a).localeCompare(resolverOf(b));
+      return srcTag(a).localeCompare(srcTag(b));
+    };
+    return [...list].sort((a, b) => (sortDir === 'asc' ? cmp(a, b) : -cmp(a, b)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [links, filter, sortKey, sortDir, dcById]);
 
   useEffect(() => {
     setLoading(true);
@@ -149,15 +230,19 @@ const LinksSection: React.FC<LinksSectionProps> = ({
   const disabledTip = canMutate ? undefined : 'Disabled in public/demo mode';
 
   return (
-    <Paper withBorder radius="md" p="md">
-      <Group justify="space-between" mb="sm">
-        <Group gap="xs">
-          <Icon icon="mdi:link-variant" width={20} />
-          <Title order={4}>Cross-DC links</Title>
-          <Badge variant="light" size="sm">
-            {links.length}
-          </Badge>
-        </Group>
+    <Paper withBorder radius="md" p="sm">
+      <Group justify="space-between" wrap="nowrap">
+        <UnstyledButton onClick={toggle} style={{ flex: 1, minWidth: 0 }}>
+          <Group gap="xs" wrap="nowrap">
+            <Icon icon="mdi:link-variant" width={20} />
+            <Title order={4}>Cross-DC links</Title>
+            <Badge variant="light" size="sm">
+              {links.length}
+            </Badge>
+            <Box style={{ flex: 1 }} />
+            <Icon icon={opened ? 'mdi:chevron-up' : 'mdi:chevron-down'} width={22} />
+          </Group>
+        </UnstyledButton>
         <Tooltip label={disabledTip} disabled={canMutate}>
           <Button
             data-testid="add-link-btn"
@@ -171,42 +256,59 @@ const LinksSection: React.FC<LinksSectionProps> = ({
         </Tooltip>
       </Group>
 
-      {loading && <Text size="sm">Loading…</Text>}
+      <Collapse in={opened}>
+        <ScrollArea.Autosize mah={460} type="auto" offsetScrollbars pt="sm">
+          {loading && <Text size="sm">Loading…</Text>}
 
-      {!loading && links.length === 0 && (
-        <Text size="sm" c="dimmed">
-          No cross-DC links defined. Add one to connect a column in one data
-          collection to rows in another via a resolver (direct, sample
-          mapping, pattern, regex, or wildcard).
-        </Text>
-      )}
+          {!loading && links.length === 0 && (
+            <Text size="sm" c="dimmed">
+              No cross-DC links defined. Add one to connect a column in one data
+              collection to rows in another via a resolver (direct, sample
+              mapping, pattern, regex, or wildcard).
+            </Text>
+          )}
 
-      {!loading && links.length > 0 && (
-        <Table verticalSpacing="xs" striped highlightOnHover fz="sm">
+          {!loading && links.length > 0 && (
+            <Stack gap="sm">
+              <TextInput
+                placeholder="Filter links…"
+                leftSection={<Icon icon="mdi:magnify" width={16} />}
+                value={filter}
+                onChange={(e) => setFilter(e.currentTarget.value)}
+                size="xs"
+              />
+              <Table verticalSpacing="xs" striped highlightOnHover fz="sm">
           <Table.Thead>
             <Table.Tr>
-              <Table.Th>Source DC</Table.Th>
+              <LinkSortTh label="Source DC" k="source" sortKey={sortKey} dir={sortDir} onSort={onSort} />
               <Table.Th>Source column</Table.Th>
-              <Table.Th>Target DC</Table.Th>
-              <Table.Th>Resolver</Table.Th>
+              <LinkSortTh label="Target DC" k="target" sortKey={sortKey} dir={sortDir} onSort={onSort} />
+              <LinkSortTh label="Resolver" k="resolver" sortKey={sortKey} dir={sortDir} onSort={onSort} />
               <Table.Th>Enabled</Table.Th>
               <Table.Th>Description</Table.Th>
               <Table.Th />
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
-            {links.map((link) => {
-              const src = dcById.get(link.source_dc_id);
-              const tgt = dcById.get(link.target_dc_id);
+            {visibleLinks.length === 0 && (
+              <Table.Tr>
+                <Table.Td colSpan={7}>
+                  <Text size="sm" c="dimmed" ta="center" py="sm">
+                    No links match “{filter}”.
+                  </Text>
+                </Table.Td>
+              </Table.Tr>
+            )}
+            {visibleLinks.map((link) => {
               return (
                 <Table.Tr key={link.id}>
-                  <Table.Td>{src?.tag || link.source_dc_id}</Table.Td>
+                  <Table.Td>{srcTag(link)}</Table.Td>
                   <Table.Td>
                     <Text fz="xs" ff="monospace">
                       {link.source_column}
                     </Text>
                   </Table.Td>
-                  <Table.Td>{tgt?.tag || link.target_dc_id}</Table.Td>
+                  <Table.Td>{tgtTag(link)}</Table.Td>
                   <Table.Td>
                     <Badge size="sm" variant="light">
                       {link.link_config?.resolver || 'direct'}
@@ -257,7 +359,10 @@ const LinksSection: React.FC<LinksSectionProps> = ({
             })}
           </Table.Tbody>
         </Table>
-      )}
+            </Stack>
+          )}
+        </ScrollArea.Autosize>
+      </Collapse>
 
       <LinkEditModal
         key={modalKey}

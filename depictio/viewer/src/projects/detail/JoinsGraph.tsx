@@ -343,8 +343,12 @@ function buildElements(
     const srcId = l.source_dc_id;
     const tgtId = l.target_dc_id;
     if (!srcId || !tgtId) return;
-    const srcDc = dcById.get(srcId);
-    const tgtDc = dcById.get(tgtId);
+    // Links may reference DCs by real id OR by a `tag:<tag>` placeholder
+    // (template-imported links store the latter); resolve both.
+    const resolveDc = (ref: string) =>
+      dcById.get(ref) || dcByTag.get(ref.replace(/^tag:/, ''));
+    const srcDc = resolveDc(srcId);
+    const tgtDc = resolveDc(tgtId);
     if (!srcDc || !tgtDc) return;
 
     const sourceNodeId = `${srcDc.tag}_${l.source_column || ''}`;

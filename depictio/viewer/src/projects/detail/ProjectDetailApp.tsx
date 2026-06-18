@@ -8,15 +8,18 @@ import {
   Button,
   Card,
   Center,
+  Collapse,
   Group,
   Loader,
   Paper,
   ScrollArea,
   SimpleGrid,
   Stack,
+  Table,
   Tabs,
   Text,
   Title,
+  UnstyledButton,
   useMantineColorScheme,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
@@ -68,7 +71,9 @@ import { useFolderDropzone } from '../../hooks/useFolderDropzone';
 import { useCurrentUser } from '../../hooks/useCurrentUser';
 import { AppSidebar } from '../../chrome';
 import JoinsGraph from './JoinsGraph';
+import IngestionReportPanel from './IngestionReportPanel';
 import { parseTemplate, TemplateChip, templateDocsUrl } from '../template';
+import { DcTypeIcon } from '../dcTypeIcon';
 
 interface DataCollectionShape {
   _id?: string;
@@ -278,7 +283,19 @@ const ProjectDetailApp: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedDcId, setSelectedDcId] = useState<string | null>(null);
+  // Active project-detail tab. Honors `#ingestion` deep links (e.g. from the
+  // dashboard banner / settings drawer) and is controlled so the ingestion
+  // report can switch back to Overview when previewing a data collection.
+  const [activeTab, setActiveTab] = useState<string | null>(
+    typeof window !== 'undefined' && window.location.hash === '#ingestion'
+      ? 'ingestion'
+      : 'overview',
+  );
   const [refreshKey, setRefreshKey] = useState(0);
+  // Scroll-to + auto-open the DC viewer when a preview was requested from the
+  // ingestion report (set when onPreviewDc fires, consumed once the viewer mounts).
+  const dcViewerRef = useRef<HTMLDivElement>(null);
+  const scrollToDcRef = useRef(false);
   const [renameTarget, setRenameTarget] = useState<DataCollectionShape | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DataCollectionShape | null>(null);
   const [manageTarget, setManageTarget] = useState<DataCollectionShape | null>(null);
@@ -360,6 +377,32 @@ const ProjectDetailApp: React.FC = () => {
 
   const projectType: 'basic' | 'advanced' =
     project?.project_type === 'advanced' ? 'advanced' : 'basic';
+
+  // The ingestion report only makes sense for template-instantiated projects
+  // (it compares against the frozen expected-DC manifest). Surface a tab when so.
+  const hasTemplate = useMemo(() => !!(project && parseTemplate(project)), [project]);
+
+  // Tag → DC id, so identified ingestion rows can lazily list their files.
+  const dcIdByTag = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const d of allDataCollections) {
+      const id = (d._id ?? d.id) as string | undefined;
+      const tag = d.data_collection_tag;
+      if (id && tag) map[tag] = id;
+    }
+    return map;
+  }, [allDataCollections]);
+
+  // After an ingestion-report "preview" jumps to Overview with a DC selected,
+  // scroll the DC viewer (which renders the table preview) into view.
+  useEffect(() => {
+    if (scrollToDcRef.current && activeTab === 'overview' && selectedDcId) {
+      scrollToDcRef.current = false;
+      requestAnimationFrame(() => {
+        dcViewerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    }
+  }, [activeTab, selectedDcId]);
 
   // Aggregate metrics for the 3 stat cards. Backend stamps `metatype` with
   // mixed casing — basic projects use "Metadata", advanced ones "Aggregated".
@@ -470,61 +513,107 @@ const ProjectDetailApp: React.FC = () => {
               </Stack>
             </Center>
           ) : !project ? null : (
-            <Stack gap="lg">
-              <ProjectHeader project={project} projectType={projectType} />
-              {projectType === 'advanced' && workflows.length > 0 && (
-                <WorkflowsPanel
-                  workflows={workflows}
-                  templateSource={parseTemplate(project)?.source.toLowerCase() || null}
-                  selectedWorkflowId={selectedWorkflowId}
-                  onSelect={(id) => {
-                    setSelectedWorkflowId(id);
-                    setSelectedDcId(null);
-                  }}
-                />
-              )}
-              <DataCollectionsManagerSection
-                projectType={projectType}
-                stats={stats}
-                dataCollections={dataCollections}
-                selectedDcId={selectedDcId}
-                canMutate={canMutate}
-                onSelect={setSelectedDcId}
-                onRename={setRenameTarget}
-                onDelete={setDeleteTarget}
-                onManage={setManageTarget}
-                onCreate={() => setCreateDcOpened(true)}
-              />
-              {projectId && (
-                <LinksSection
-                  projectId={projectId}
-                  dataCollections={allDataCollections.map((d) => ({
-                    id: (d._id ?? d.id) as string,
-                    tag: d.data_collection_tag || ((d._id ?? d.id) as string),
-                    type: (d.config?.type as string | undefined) || 'unknown',
-                  }))}
-                  canMutate={canMutate}
-                  onLinksChange={setProjectLinks}
-                />
-              )}
-              {selectedDc && (
-                <DataCollectionViewer
-                  dc={selectedDc}
-                  projectType={projectType}
-                  allDataCollections={dataCollections}
-                  joins={
-                    ((project as Record<string, unknown>).joins as
-                      | Array<{
-                          dc1?: string;
-                          dc2?: string;
-                          on_columns?: string[];
-                        }>
-                      | undefined) || []
-                  }
-                  links={projectLinks}
-                />
-              )}
-            </Stack>
+            (() => {
+              const overviewSections = (
+                <Stack gap="lg">
+                  {projectType === 'advanced' && workflows.length > 0 && (
+                    <WorkflowsPanel
+                      workflows={workflows}
+                      templateSource={parseTemplate(project)?.source.toLowerCase() || null}
+                      selectedWorkflowId={selectedWorkflowId}
+                      onSelect={(id) => {
+                        setSelectedWorkflowId(id);
+                        setSelectedDcId(null);
+                      }}
+                    />
+                  )}
+                  <DataCollectionsManagerSection
+                    projectType={projectType}
+                    stats={stats}
+                    dataCollections={dataCollections}
+                    selectedDcId={selectedDcId}
+                    canMutate={canMutate}
+                    onSelect={setSelectedDcId}
+                    onRename={setRenameTarget}
+                    onDelete={setDeleteTarget}
+                    onManage={setManageTarget}
+                    onCreate={() => setCreateDcOpened(true)}
+                  />
+                  {projectId && (
+                    <LinksSection
+                      projectId={projectId}
+                      dataCollections={allDataCollections.map((d) => ({
+                        id: (d._id ?? d.id) as string,
+                        tag: d.data_collection_tag || ((d._id ?? d.id) as string),
+                        type: (d.config?.type as string | undefined) || 'unknown',
+                      }))}
+                      canMutate={canMutate}
+                      onLinksChange={setProjectLinks}
+                    />
+                  )}
+                  <Box ref={dcViewerRef}>
+                    {selectedDc && (
+                      <DataCollectionViewer
+                        dc={selectedDc}
+                        projectType={projectType}
+                        allDataCollections={dataCollections}
+                        joins={
+                          ((project as Record<string, unknown>).joins as
+                            | Array<{
+                                dc1?: string;
+                                dc2?: string;
+                                on_columns?: string[];
+                              }>
+                            | undefined) || []
+                        }
+                        links={projectLinks}
+                      />
+                    )}
+                  </Box>
+                </Stack>
+              );
+              return (
+                <Stack gap="lg">
+                  <ProjectHeader project={project} projectType={projectType} />
+                  {hasTemplate && projectId ? (
+                    <Tabs value={activeTab} onChange={setActiveTab} keepMounted={false}>
+                      <Tabs.List mb="md">
+                        <Tabs.Tab
+                          value="overview"
+                          leftSection={<Icon icon="mdi:table-cog" width={16} />}
+                        >
+                          Data collections
+                        </Tabs.Tab>
+                        <Tabs.Tab
+                          value="ingestion"
+                          leftSection={<Icon icon="mdi:clipboard-check-outline" width={16} />}
+                        >
+                          Ingestion
+                        </Tabs.Tab>
+                      </Tabs.List>
+                      <Tabs.Panel value="overview">{overviewSections}</Tabs.Panel>
+                      <Tabs.Panel value="ingestion">
+                        <IngestionReportPanel
+                          projectId={projectId}
+                          dcIdByTag={dcIdByTag}
+                          onPreviewDc={(dcId) => {
+                            // Jump to the Overview tab with this DC selected so
+                            // its table/preview shows in the DataCollectionViewer,
+                            // then scroll it into view (see the effect above).
+                            scrollToDcRef.current = true;
+                            setSelectedWorkflowId(null);
+                            setSelectedDcId(dcId);
+                            setActiveTab('overview');
+                          }}
+                        />
+                      </Tabs.Panel>
+                    </Tabs>
+                  ) : (
+                    overviewSections
+                  )}
+                </Stack>
+              );
+            })()
           )}
         </Box>
       </AppShell.Main>
@@ -2069,29 +2158,43 @@ const DataCollectionsManagerSection: React.FC<{
   onManage,
   onCreate,
 }) => {
+  // Collapsed by default to keep the Overview tab compact; expands into a
+  // height-capped scroll area so a long DC list never dominates the page.
+  const [opened, { toggle }] = useDisclosure(false);
   return (
-    <Stack gap="md">
-      <Group gap="xs">
-        <Icon
-          icon="mdi:database-outline"
-          width={22}
-          color="var(--mantine-color-dark-6)"
-        />
-        <Title order={4}>Data Collections Manager</Title>
-        <Badge
-          color={projectType === 'advanced' ? 'orange' : 'cyan'}
-          variant="light"
-          radius="sm"
-          size="sm"
-        >
-          {projectType === 'advanced' ? 'Advanced Project' : 'Basic Project'}
-        </Badge>
-      </Group>
-      <Text size="sm" c="dimmed">
-        Managing data collections for this {projectType} project
-      </Text>
+    <Card withBorder radius="md" p="sm">
+      <UnstyledButton onClick={toggle} w="100%">
+        <Group gap="xs" wrap="nowrap">
+          <Icon
+            icon="mdi:database-outline"
+            width={22}
+            color="var(--mantine-color-dark-6)"
+          />
+          <Title order={4}>Data Collections Manager</Title>
+          <Badge
+            color={projectType === 'advanced' ? 'orange' : 'cyan'}
+            variant="light"
+            radius="sm"
+            size="sm"
+          >
+            {projectType === 'advanced' ? 'Advanced Project' : 'Basic Project'}
+          </Badge>
+          <Badge variant="light" color="dark" size="sm">
+            {dataCollections.length}
+          </Badge>
+          <Box style={{ flex: 1 }} />
+          <Icon icon={opened ? 'mdi:chevron-up' : 'mdi:chevron-down'} width={22} />
+        </Group>
+      </UnstyledButton>
 
-      <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
+      <Collapse in={opened}>
+        <ScrollArea.Autosize mah={640} type="auto" offsetScrollbars pt="sm">
+          <Stack gap="md" pr="sm">
+            <Text size="sm" c="dimmed">
+              Managing data collections for this {projectType} project
+            </Text>
+
+            <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
         <StatCard
           icon="mdi:database-outline"
           iconColor="var(--mantine-color-cyan-6)"
@@ -2147,32 +2250,21 @@ const DataCollectionsManagerSection: React.FC<{
             Create Data Collection
           </Button>
         </Group>
-        <Stack gap="xs">
-          {dataCollections.length === 0 && (
-            <Text size="sm" c="dimmed" ta="center" py="md">
-              No data collections defined for this project.
-            </Text>
-          )}
-          {dataCollections.map((dc) => {
-            const id = (dc._id ?? dc.id) as string;
-            const isSelected = id === selectedDcId;
-            return (
-              <DataCollectionRow
-                key={id}
-                dc={dc}
-                projectType={projectType}
-                selected={isSelected}
-                canMutate={canMutate}
-                onClick={() => onSelect(isSelected ? null : id)}
-                onRename={() => onRename(dc)}
-                onDelete={() => onDelete(dc)}
-                onManage={onManage ? () => onManage(dc) : undefined}
-              />
-            );
-          })}
-        </Stack>
+        <DataCollectionsTable
+          projectType={projectType}
+          dataCollections={dataCollections}
+          selectedDcId={selectedDcId}
+          canMutate={canMutate}
+          onSelect={onSelect}
+          onRename={onRename}
+          onDelete={onDelete}
+          onManage={onManage}
+        />
       </Paper>
-    </Stack>
+          </Stack>
+        </ScrollArea.Autosize>
+      </Collapse>
+    </Card>
   );
 };
 
@@ -2219,137 +2311,287 @@ const StatCard: React.FC<{
   </Card>
 );
 
-const DataCollectionRow: React.FC<{
-  dc: DataCollectionShape;
+/** Sortable column header — click to toggle asc/desc; shows the active arrow. */
+const SortableTh: React.FC<{
+  label: string;
+  sortKey: string;
+  activeKey: string;
+  dir: 'asc' | 'desc';
+  onSort: (k: string) => void;
+  w?: number | string;
+}> = ({ label, sortKey, activeKey, dir, onSort, w }) => (
+  <Table.Th
+    w={w}
+    style={{ cursor: 'pointer', whiteSpace: 'nowrap', userSelect: 'none' }}
+    onClick={() => onSort(sortKey)}
+  >
+    <Group gap={2} wrap="nowrap">
+      <Text size="sm" fw={600}>
+        {label}
+      </Text>
+      <Icon
+        icon={
+          activeKey === sortKey
+            ? dir === 'asc'
+              ? 'mdi:menu-up'
+              : 'mdi:menu-down'
+            : 'mdi:unfold-more-horizontal'
+        }
+        width={14}
+        color={activeKey === sortKey ? undefined : 'var(--mantine-color-gray-5)'}
+      />
+    </Group>
+  </Table.Th>
+);
+
+type DcSortKey = 'tag' | 'type' | 'size' | 'updated';
+
+/** Sortable + filterable table of a project's data collections. Replaces the
+ *  former card list; row click selects the DC (drives the detail viewer). */
+const DataCollectionsTable: React.FC<{
   projectType: 'basic' | 'advanced';
-  selected: boolean;
+  dataCollections: DataCollectionShape[];
+  selectedDcId: string | null;
   canMutate: boolean;
-  onClick: () => void;
-  onRename: () => void;
-  onDelete: () => void;
-  /** Set for both MultiQC and Table DCs — opens the unified Manage Data modal. */
-  onManage?: () => void;
-}> = ({ dc, projectType, selected, canMutate, onClick, onRename, onDelete, onManage }) => {
-  const type = (dc.config?.type as string | undefined) || 'unknown';
-  const metatype = (dc.config?.metatype as string | undefined) || null;
-  const isTable = type === 'table';
-  const isMultiQC = type.toLowerCase() === 'multiqc';
-  const isCoordTable = dcHasCoordinates(dc);
-  // Tables that aren't metadata are aggregates — surface that with a badge so
-  // the user can tell at a glance which collection is the joined fact table.
-  const isAggregate = isTable && (metatype || '').toLowerCase() !== 'metadata';
-  // Stop propagation on action-icon clicks so the row's onClick doesn't toggle
-  // selection underneath the modal trigger.
+  onSelect: (id: string | null) => void;
+  onRename: (dc: DataCollectionShape) => void;
+  onDelete: (dc: DataCollectionShape) => void;
+  onManage?: (dc: DataCollectionShape) => void;
+}> = ({
+  projectType,
+  dataCollections,
+  selectedDcId,
+  canMutate,
+  onSelect,
+  onRename,
+  onDelete,
+  onManage,
+}) => {
+  const [filter, setFilter] = useState('');
+  const [sortKey, setSortKey] = useState<DcSortKey>('tag');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const onSort = (k: string) => {
+    const key = k as DcSortKey;
+    if (key === sortKey) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    else {
+      setSortKey(key);
+      setSortDir('asc');
+    }
+  };
+
+  const rows = useMemo(() => {
+    const q = filter.trim().toLowerCase();
+    const dcType = (dc: DataCollectionShape) =>
+      ((dc.config?.type as string | undefined) || '').toLowerCase();
+    const list = dataCollections.filter(
+      (dc) =>
+        !q ||
+        (dc.data_collection_tag || '').toLowerCase().includes(q) ||
+        dcType(dc).includes(q),
+    );
+    const cmp = (a: DataCollectionShape, b: DataCollectionShape) => {
+      switch (sortKey) {
+        case 'type':
+          return dcType(a).localeCompare(dcType(b));
+        case 'size':
+          return getDcSizeBytes(a) - getDcSizeBytes(b);
+        case 'updated':
+          return getDcLastAggregated(a).localeCompare(getDcLastAggregated(b));
+        default:
+          return (a.data_collection_tag || '').localeCompare(b.data_collection_tag || '');
+      }
+    };
+    return [...list].sort((a, b) => (sortDir === 'asc' ? cmp(a, b) : -cmp(a, b)));
+  }, [dataCollections, filter, sortKey, sortDir]);
+
   const guard = (fn: () => void) => (e: React.MouseEvent) => {
     e.stopPropagation();
     fn();
   };
+
+  if (dataCollections.length === 0) {
+    return (
+      <Text size="sm" c="dimmed" ta="center" py="md">
+        No data collections defined for this project.
+      </Text>
+    );
+  }
+
   return (
-    <Paper
-      withBorder
-      radius="sm"
-      p="sm"
-      onClick={onClick}
-      style={{
-        cursor: 'pointer',
-        borderColor: selected ? 'var(--mantine-color-teal-6)' : undefined,
-        background: selected ? 'var(--mantine-color-teal-0)' : undefined,
-        transition: 'background 120ms ease, border-color 120ms ease',
-      }}
-    >
-      <Group justify="space-between" wrap="nowrap">
-        <Group gap="sm" wrap="nowrap" style={{ flex: 1, minWidth: 0 }}>
-          {isMultiQC ? (
-            <img
-              src={`${import.meta.env.BASE_URL}logos/multiqc_icon_color.svg`}
-              alt="MultiQC"
-              width={20}
-              height={20}
-              style={{ objectFit: 'contain', display: 'block' }}
+    <Stack gap="sm">
+      <TextInput
+        placeholder="Filter by name or type…"
+        leftSection={<Icon icon="mdi:magnify" width={16} />}
+        value={filter}
+        onChange={(e) => setFilter(e.currentTarget.value)}
+        size="xs"
+      />
+      <Table
+        verticalSpacing="xs"
+        striped
+        highlightOnHover
+        stickyHeader
+        layout="fixed"
+        miw={760}
+      >
+        <Table.Thead>
+          <Table.Tr>
+            <SortableTh
+              label="Type"
+              sortKey="type"
+              activeKey={sortKey}
+              dir={sortDir}
+              onSort={onSort}
+              w={120}
             />
-          ) : (
-            <Icon
-              icon={
-                isCoordTable
-                  ? 'mdi:map-marker-radius-outline'
-                  : isTable
-                    ? 'mdi:table'
-                    : 'mdi:file-document-outline'
-              }
-              width={20}
-              color={
-                isCoordTable
-                  ? 'var(--mantine-color-grape-6)'
-                  : 'var(--mantine-color-teal-6)'
-              }
+            <SortableTh
+              label="Data collection"
+              sortKey="tag"
+              activeKey={sortKey}
+              dir={sortDir}
+              onSort={onSort}
             />
+            <Table.Th w={130}>Kind</Table.Th>
+            <SortableTh
+              label="Size"
+              sortKey="size"
+              activeKey={sortKey}
+              dir={sortDir}
+              onSort={onSort}
+              w={90}
+            />
+            <SortableTh
+              label="Last aggregated"
+              sortKey="updated"
+              activeKey={sortKey}
+              dir={sortDir}
+              onSort={onSort}
+              w={160}
+            />
+            <Table.Th w={100} />
+          </Table.Tr>
+        </Table.Thead>
+        <Table.Tbody>
+          {rows.length === 0 && (
+            <Table.Tr>
+              <Table.Td colSpan={6}>
+                <Text size="sm" c="dimmed" ta="center" py="sm">
+                  No data collections match “{filter}”.
+                </Text>
+              </Table.Td>
+            </Table.Tr>
           )}
-          {type && (
-            <Badge color="blue" variant="filled" size="sm" radius="sm">
-              {type.toUpperCase()}
-            </Badge>
-          )}
-          {isCoordTable && (
-            <Badge color="grape" variant="light" size="sm" radius="sm">
-              COORDINATES
-            </Badge>
-          )}
-          {/* Metatype badges only mean something for advanced (CLI) projects
-           *  that fan multiple files into one DC. Basic projects upload one
-           *  file per DC, so suppress the noise. */}
-          {projectType === 'advanced' && metatype && (
-            <Badge color="gray" variant="light" size="sm" radius="sm">
-              {metatype.toUpperCase()}
-            </Badge>
-          )}
-          {projectType === 'advanced' && isAggregate && !metatype && !isCoordTable && (
-            <Badge color="orange" variant="light" size="sm" radius="sm">
-              AGGREGATE
-            </Badge>
-          )}
-          <Text fw={500} truncate>
-            {dc.data_collection_tag || (dc._id ?? dc.id)}
-          </Text>
-        </Group>
-        <Group gap={4}>
-          {onManage && (
-            <ActionIcon
-              data-testid="manage-dc-btn"
-              variant="subtle"
-              color="teal"
-              size="sm"
-              disabled={!canMutate}
-              onClick={guard(onManage)}
-              title={
-                canMutate ? 'Manage data (append / replace / clear)' : 'Owner permission required'
-              }
-            >
-              <Icon icon="mdi:database-cog-outline" width={16} />
-            </ActionIcon>
-          )}
-          <ActionIcon
-            variant="subtle"
-            color="blue"
-            size="sm"
-            disabled={!canMutate}
-            onClick={guard(onRename)}
-            title={canMutate ? 'Rename' : 'Owner permission required'}
-          >
-            <Icon icon="mdi:pencil" width={16} />
-          </ActionIcon>
-          <ActionIcon
-            variant="subtle"
-            color="red"
-            size="sm"
-            disabled={!canMutate}
-            onClick={guard(onDelete)}
-            title={canMutate ? 'Delete' : 'Owner permission required'}
-          >
-            <Icon icon="mdi:delete" width={16} />
-          </ActionIcon>
-        </Group>
-      </Group>
-    </Paper>
+          {rows.map((dc) => {
+            const id = (dc._id ?? dc.id) as string;
+            const isSelected = id === selectedDcId;
+            const type = (dc.config?.type as string | undefined) || 'unknown';
+            const isMultiQC = type.toLowerCase() === 'multiqc';
+            const isTable = type.toLowerCase() === 'table';
+            const isCoord = dcHasCoordinates(dc);
+            const metatype = (dc.config?.metatype as string | undefined) || null;
+            const sizeBytes = getDcSizeBytes(dc);
+            // One consistent classification per DC. An aggregate table looks the
+            // same whether the backend stamped metatype="Aggregated" or left it null
+            // (inferred) — fixes the old grey "AGGREGATED" vs orange "AGGREGATE"
+            // split for what is the same thing.
+            const kind = isCoord
+              ? { label: 'Coordinates', color: 'grape' }
+              : (metatype || '').toLowerCase().startsWith('metadat')
+                ? { label: 'Metadata', color: 'gray' }
+                : projectType === 'advanced' && isTable
+                  ? { label: 'Aggregate', color: 'orange' }
+                  : null;
+            return (
+              <Table.Tr
+                key={id}
+                onClick={() => onSelect(isSelected ? null : id)}
+                style={{
+                  cursor: 'pointer',
+                  background: isSelected ? 'var(--mantine-color-teal-light)' : undefined,
+                }}
+              >
+                <Table.Td>
+                  <Group gap={6} wrap="nowrap">
+                    <DcTypeIcon type={type} isCoord={isCoord} withTooltip={false} />
+                    <Text size="xs" c="dimmed">
+                      {type}
+                    </Text>
+                  </Group>
+                </Table.Td>
+                <Table.Td>
+                  <Text fw={600} size="sm" style={{ wordBreak: 'break-word' }}>
+                    {dc.data_collection_tag || id}
+                  </Text>
+                </Table.Td>
+                <Table.Td>
+                  {kind ? (
+                    <Badge color={kind.color} variant="light" size="sm">
+                      {kind.label}
+                    </Badge>
+                  ) : (
+                    <Text size="xs" c="dimmed">
+                      —
+                    </Text>
+                  )}
+                </Table.Td>
+                <Table.Td>
+                  <Text size="sm">{sizeBytes > 0 ? formatBytes(sizeBytes) : '—'}</Text>
+                </Table.Td>
+                <Table.Td>
+                  {/* MultiQC DCs aren't delta-aggregated, so "Never" would be
+                      misleading — show n/a. Table DCs with no aggregation show
+                      "Never" (genuinely not aggregated, e.g. not produced). */}
+                  <Text size="xs" c={isMultiQC ? 'dimmed' : undefined}>
+                    {isMultiQC ? '—' : getDcLastAggregated(dc)}
+                  </Text>
+                </Table.Td>
+                <Table.Td>
+                  <Group gap={2} wrap="nowrap" justify="flex-end">
+                    {onManage && (
+                      <ActionIcon
+                        data-testid="manage-dc-btn"
+                        variant="subtle"
+                        color="teal"
+                        size="sm"
+                        disabled={!canMutate}
+                        onClick={guard(() => onManage(dc))}
+                        title={
+                          canMutate
+                            ? 'Manage data (append / replace / clear)'
+                            : 'Owner permission required'
+                        }
+                      >
+                        <Icon icon="mdi:database-cog-outline" width={16} />
+                      </ActionIcon>
+                    )}
+                    <ActionIcon
+                      variant="subtle"
+                      color="blue"
+                      size="sm"
+                      disabled={!canMutate}
+                      onClick={guard(() => onRename(dc))}
+                      title={canMutate ? 'Rename' : 'Owner permission required'}
+                    >
+                      <Icon icon="mdi:pencil" width={16} />
+                    </ActionIcon>
+                    <ActionIcon
+                      variant="subtle"
+                      color="red"
+                      size="sm"
+                      disabled={!canMutate}
+                      onClick={guard(() => onDelete(dc))}
+                      title={canMutate ? 'Delete' : 'Owner permission required'}
+                    >
+                      <Icon icon="mdi:delete" width={16} />
+                    </ActionIcon>
+                  </Group>
+                </Table.Td>
+              </Table.Tr>
+            );
+          })}
+        </Table.Tbody>
+      </Table>
+    </Stack>
   );
 };
 
