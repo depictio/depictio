@@ -1,9 +1,11 @@
 """Canonical-schema UpSet DC for ampliseq.
 
-Derives a habitat × taxon presence-absence matrix from the long-format
+Derives a group × taxon presence-absence matrix from the long-format
 ``taxonomy_rel_abundance`` DC. Each row is one taxon; each column (one per
-habitat) is a binary indicator (1 = present above ``presence_threshold`` in
-any sample of that habitat).
+value of the grouping column — the dashboard's ``GROUP_COL``, e.g.
+``habitat`` / ``treatment1``) is a binary indicator (1 = present above
+``presence_threshold`` in any sample of that group). When metadata is absent
+it falls back to a per-sample presence matrix.
 
 Schema for ``upset_plot`` is permissive — the renderer picks up binary set
 columns at compute time (``set_columns`` config field can override).
@@ -46,7 +48,14 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         and "sample" in metadata.columns
     ):
         metadata = metadata.rename({"sample": _METADATA_ID_COL})
-    if metadata is None or "habitat" not in metadata.columns:
+    # GROUP_COL = first annotation column (first non-ID column), matching the CLI's
+    # _auto_detect_metadata_columns convention; keep its real name as set labels.
+    group_col = (
+        next((c for c in metadata.columns if c != _METADATA_ID_COL), None)
+        if metadata is not None
+        else None
+    )
+    if metadata is None or group_col is None:
         # Fall back to per-sample presence/absence when metadata is unavailable.
         wide = df.filter(pl.col("rel_abundance") > _PRESENCE_THRESHOLD).pivot(
             values="rel_abundance",
@@ -59,17 +68,17 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             [pl.col(c).fill_null(0).cast(pl.Int8) for c in set_cols]
         ).with_columns([(pl.col(c) > 0).cast(pl.Int8) for c in set_cols])
 
-    sample_to_habitat = metadata.rename({_METADATA_ID_COL: "sample_id"}).select(
-        "sample_id", "habitat"
+    sample_to_group = metadata.rename({_METADATA_ID_COL: "sample_id"}).select(
+        "sample_id", group_col
     )
-    df = df.join(sample_to_habitat, on="sample_id", how="left")
+    df = df.join(sample_to_group, on="sample_id", how="left")
 
     presence = (
         df.filter(pl.col("rel_abundance") > _PRESENCE_THRESHOLD)
-        .group_by(["taxon", "habitat"])
+        .group_by(["taxon", group_col])
         .agg(pl.lit(1, dtype=pl.Int8).alias("present"))
     )
 
-    wide = presence.pivot(values="present", index="taxon", on="habitat", aggregate_function="max")
+    wide = presence.pivot(values="present", index="taxon", on=group_col, aggregate_function="max")
     set_cols = [c for c in wide.columns if c != "taxon"]
     return wide.with_columns([pl.col(c).fill_null(0).cast(pl.Int8) for c in set_cols])

@@ -11,8 +11,11 @@ Canonical schema (see advanced_viz/schemas.py):
     dim_2 : Float64
 
 Optional roles (when metadata source is available):
-    habitat : Utf8 — sample habitat, used as ``color_col`` so the PCoA tile
-        gets a legend coloured by habitat.
+    <group_col> : Utf8 — the first metadata annotation column (the dashboard's
+        ``GROUP_COL``, e.g. ``habitat`` / ``treatment1``), used as ``color_col``
+        so the PCoA tile gets a legend coloured by that grouping. The column
+        keeps its original name so the parameterised dashboard's
+        ``color_col: '{GROUP_COL}'`` resolves against it.
 """
 
 import polars as pl
@@ -31,9 +34,9 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "dim_2": pl.Float64,
 }
 
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {
-    "habitat": pl.Utf8,
-}
+# The grouping column name is run-dependent (the dashboard's GROUP_COL), so the
+# optional colour column is validated dynamically rather than against a fixed name.
+OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 _METADATA_ID_COL = "ID"
 
@@ -65,15 +68,20 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
 
     metadata = sources.get("metadata")
     if metadata is not None:
-        sample_id_col = next(
-            (c for c in (_METADATA_ID_COL, "sample") if c in metadata.columns), None
-        )
-        if sample_id_col is not None and "habitat" in metadata.columns:
+        cols = metadata.columns
+        sample_id_col = next((c for c in (_METADATA_ID_COL, "sample") if c in cols), None)
+        if sample_id_col is None and cols:
+            sample_id_col = cols[0]
+        # GROUP_COL = first annotation column (first non-ID column), matching the
+        # CLI's _auto_detect_metadata_columns convention. Keep its real name so the
+        # dashboard's `color_col: '{GROUP_COL}'` resolves against it.
+        group_col = next((c for c in cols if c != sample_id_col), None)
+        if sample_id_col is not None and group_col is not None:
             meta_slim = (
-                metadata.select(sample_id_col, "habitat")
+                metadata.select(sample_id_col, group_col)
                 .unique(subset=[sample_id_col])
                 .rename({sample_id_col: "sample_id"})
-                .with_columns(pl.col("habitat").cast(pl.Utf8))
+                .with_columns(pl.col(group_col).cast(pl.Utf8))
             )
             coords = coords.join(meta_slim, on="sample_id", how="left")
 

@@ -39,6 +39,9 @@ template:
     - name: "ANNOTATION_COLS"
       description: "Auto-populated: comma-separated list of all annotation columns discovered from metadata file."
       required: false
+    - name: "IS_MULTIREGION"
+      description: "Auto-set from params.json (multiregion + sidle_ref_taxonomy). Prunes the QIIME2 diversity/phylogeny/ANCOM-BC DCs absent on the SIDLE route; the sidle_* DCs supply the reconstructed-community view."
+      required: false
   dashboards:
     - "dashboards/base.yaml"
   conditional:
@@ -60,6 +63,29 @@ template:
         ["alpha_rarefaction", "taxonomy_composition", "taxonomy_rel_abundance",
          "taxonomy_heatmap", "ancombc_results", "stacked_taxonomy_canonical",
          "embedding_pcoa", "rarefaction_canonical", "alpha_diversity_multi_canonical",
+         "complex_heatmap_canonical", "sunburst_canonical", "sankey_canonical",
+         "upset_canonical", "ma_canonical", "bray_curtis_canonical",
+         "phylogenetic_tree_canonical", "phylogenetic_tree_metadata_canonical"]
+      dashboards: ["dashboards/base.yaml"]
+    # sintax_rel_abundance is the skip_qiime counterpart of the QIIME2
+    # taxonomy_rel_abundance DC — built from sintax/ + dada2/ outputs that only
+    # exist on --skip_qiime runs. Prune it on normal (QIIME2) runs so its absent
+    # source files don't surface as a gap.
+    - if_var_absent: "SKIP_QIIME"
+      remove_dc_tags: ["sintax_rel_abundance"]
+      dashboards: ["dashboards/base.yaml"]
+    # multiregion/SIDLE runs reconstruct one cross-region feature table under sidle/
+    # and emit only a SUBSET of qiime2/ — qiime2/barplot is present (taxonomy_composition
+    # works), but there is no diversity, phylogenetic tree, matching rel_abundance, or
+    # ANCOM-BC. IS_MULTIREGION is auto-set from params.json (multiregion +
+    # sidle_ref_taxonomy). When present, drop the diversity/phylogeny/rel-abundance/
+    # ANCOM-BC-derived DCs (the SKIP_QIIME set minus taxonomy_composition); the
+    # sidle_reconstructed / sidle_reconstruction_qc DCs supply the route's signature view.
+    - if_var_present: "IS_MULTIREGION"
+      remove_dc_tags:
+        ["alpha_rarefaction", "taxonomy_rel_abundance", "taxonomy_heatmap",
+         "ancombc_results", "stacked_taxonomy_canonical", "embedding_pcoa",
+         "rarefaction_canonical", "alpha_diversity_multi_canonical",
          "complex_heatmap_canonical", "sunburst_canonical", "sankey_canonical",
          "upset_canonical", "ma_canonical", "bray_curtis_canonical",
          "phylogenetic_tree_canonical", "phylogenetic_tree_metadata_canonical"]
@@ -192,6 +218,23 @@ workflows:
           source: "transformed"
           transform:
             recipe: "nf-core/ampliseq/taxonomy_rel_abundance.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample identifier"
+              "taxonomy": "Taxonomic classification (Kingdom;Phylum)"
+              "rel_abundance": "Relative abundance (0-1)"
+              "Kingdom": "Kingdom level"
+              "Phylum": "Phylum level"
+
+      - data_collection_tag: "sintax_rel_abundance"
+        optional: true  # only produced by --skip_qiime runs (ITS/PacBio/IonTorrent); QIIME2 runs prune it
+        description: "Phylum-level relative abundance from sintax + DADA2 ASV counts (--skip_qiime path)"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/ampliseq/sintax_rel_abundance.py"
           dc_specific_properties:
             format: "TSV"
             columns_description:
@@ -448,6 +491,51 @@ workflows:
               "confidence": "Classifier confidence (0–1)"
               "label": "Short display label (Phylum if known)"
 
+      # ----------------------------------------------------------------
+      # SIDLE / multiregion route DCs. Only the multiregion sub-workflow
+      # produces sidle/, so these are optional: on standard runs their source
+      # files are absent and they prune cleanly; on a multiregion run the
+      # IS_MULTIREGION conditional prunes the QIIME2 diversity/phylogeny DCs
+      # that SIDLE never produces, and these supply the reconstructed view.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "sidle_reconstructed"
+        optional: true  # multiregion/SIDLE route only (sidle/ absent on standard runs)
+        description: "SIDLE cross-region reconstructed community (per-sample taxonomy counts)"
+        config:
+          type: "Table"
+          metatype: "Aggregated"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/ampliseq/sidle_reconstructed.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "feature_id": "Reconstructed feature ID (may be 'a|b' merged)"
+              "sample": "Sample identifier"
+              "count": "Reconstructed feature count for the sample"
+              "taxonomy": "Full taxonomic lineage"
+              "Kingdom": "Kingdom-level taxon"
+              "Phylum": "Phylum-level taxon"
+
+      - data_collection_tag: "sidle_reconstruction_qc"
+        optional: true  # multiregion/SIDLE route only (sidle/ absent on standard runs)
+        description: "SIDLE per-feature reconstruction confidence (regions mapped, kmer support)"
+        config:
+          type: "Table"
+          metatype: "Aggregated"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/ampliseq/sidle_reconstruction_qc.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "feature_id": "Reconstructed feature ID"
+              "num_regions": "Number of amplified regions that mapped this feature"
+              "total_kmers_mapped": "Total kmers mapped across regions"
+              "mean_kmer_per_region": "Mean kmers mapped per region"
+              "stdv_kmer_per_region": "Std-dev of kmers per region"
+              "mapped_asvs": "Representative mapped ASV hash"
+
 # ============================================================================
 # RUNTIME LINKS CONFIGURATION
 # ============================================================================
@@ -513,6 +601,29 @@ links:
       resolver: "direct"
       target_field: "sample"
     description: "Filter taxonomy rel abundance by metadata samples"
+    enabled: true
+
+  # Link 5b/5c: Samplesheet + Metadata -> sintax_rel_abundance (skip_qiime path).
+  # Mirror the QIIME2 taxonomy_rel_abundance links so the Community tab's sample /
+  # group filters narrow the sintax-derived bars/table on --skip_qiime runs.
+  - source_dc_tag: "samplesheet"
+    source_column: "sampleID"
+    target_dc_tag: "sintax_rel_abundance"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter sintax rel abundance by samplesheet samples"
+    enabled: true
+
+  - source_dc_tag: "metadata"
+    source_column: "{METADATA_ID_COL}"
+    target_dc_tag: "sintax_rel_abundance"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter sintax rel abundance by metadata samples"
     enabled: true
 
   # Link 6: Samplesheet -> Taxonomy Heatmap (always present, base filtering)
