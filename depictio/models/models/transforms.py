@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 
 class RecipeSource(BaseModel):
@@ -35,11 +35,26 @@ class RecipeSource(BaseModel):
 
 
 class SourceOverride(BaseModel):
-    """Override a recipe source path in project.yaml."""
+    """Override a recipe source binding in project.yaml.
 
-    path: str
+    Repoints a recipe source at a different file without editing the recipe — used
+    by route conditionals (e.g. nanopore) to point the same recipe at a divergent
+    sub-workflow's output layout. Set ``path`` for single-file sources or
+    ``glob_pattern`` for multi-file (glob) sources; exactly one is required.
+    """
+
+    path: str | None = None
+    glob_pattern: str | None = None
 
     model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def _exactly_one(self) -> SourceOverride:
+        # Match the `is not None` selection the consumers use (deltatables.py,
+        # recipes.resolve_sources) so an empty-string path can't disagree.
+        if (self.path is None) == (self.glob_pattern is None):
+            raise ValueError("SourceOverride requires exactly one of 'path' or 'glob_pattern'")
+        return self
 
 
 class TransformConfig(BaseModel):

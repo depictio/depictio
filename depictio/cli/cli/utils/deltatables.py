@@ -868,10 +868,15 @@ def process_recipe_data_collection(
     pipeline_version: str | None = getattr(workflow, "version", None)
     rich_print_checked_statement(f"Running recipe: {recipe_name}", "info")
 
-    # Build source overrides dict
+    # Build source overrides dict. A SourceOverride carries either a single-file
+    # 'path' or a multi-file 'glob_pattern'; resolve_sources interprets the value
+    # by source type, so collapse to whichever was provided.
     overrides = None
     if transform_config.source_overrides:
-        overrides = {ref: so.path for ref, so in transform_config.source_overrides.items()}
+        overrides = {
+            ref: (so.path if so.path is not None else so.glob_pattern)
+            for ref, so in transform_config.source_overrides.items()
+        }
 
     # Resolve data directory from workflow's data_location
     # For sequencing-runs structure, collect all run directories

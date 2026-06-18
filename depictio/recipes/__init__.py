@@ -134,9 +134,16 @@ def _read_source_file(file_path: Path, source: RecipeSource) -> pl.DataFrame:
         raise RecipeError(f"Unsupported format: {source.format}")
 
 
-def _resolve_glob_source(data_dir: Path, source: RecipeSource) -> pl.DataFrame:
-    """Glob for multiple files and concatenate into a single DataFrame."""
-    pattern = source.glob_pattern
+def _resolve_glob_source(
+    data_dir: Path, source: RecipeSource, pattern_override: str | None = None
+) -> pl.DataFrame:
+    """Glob for multiple files and concatenate into a single DataFrame.
+
+    ``pattern_override`` (from a DC's ``source_overrides``) repoints the source at a
+    different glob — e.g. a route conditional pointing the lineage recipes at the
+    nanopore ``artic_minion/`` layout instead of the illumina default.
+    """
+    pattern = pattern_override or source.glob_pattern
     if pattern is None:
         raise RecipeError(f"Source '{source.ref}' has no glob_pattern")
 
@@ -168,7 +175,8 @@ def resolve_sources(
     Args:
         module: Loaded recipe module.
         data_dir: Root directory containing workflow output files.
-        overrides: Optional dict mapping source ref -> override path.
+        overrides: Optional dict mapping source ref -> override path (file sources)
+            or glob pattern (glob sources).
 
     Returns:
         Dict mapping source ref names to DataFrames.
@@ -182,9 +190,11 @@ def resolve_sources(
             # Skip here — caller must inject these
             continue
 
-        # Glob-based source: match multiple files and concatenate
+        # Glob-based source: match multiple files and concatenate. An override (if
+        # present) repoints the glob pattern for this source.
         if source.glob_pattern is not None:
-            sources[source.ref] = _resolve_glob_source(data_dir, source)
+            pattern_override = overrides.get(source.ref) if overrides else None
+            sources[source.ref] = _resolve_glob_source(data_dir, source, pattern_override)
             continue
 
         # Determine file path (apply override if present)

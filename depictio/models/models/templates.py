@@ -51,11 +51,47 @@ class TemplateVariable(BaseModel):
         return v
 
 
+class DCOverride(BaseModel):
+    """Repoint an existing DC's source binding when a route conditional fires.
+
+    Lets a route IF (e.g. ``if_var_present: IS_NANOPORE``) point an existing DC at the
+    route's divergent file layout *without duplicating the DC* — so downstream
+    canonicals and dashboards that reference the tag keep working unchanged. Scan DCs
+    override the scan regex / filename / format; recipe DCs override the recipe and/or
+    its source globs/paths (see SourceOverride).
+
+    Example YAML:
+        override_dcs:
+          - data_collection_tag: "mosdepth_genome_coverage"
+            scan_pattern: "artic_minion/mosdepth/genome/all_samples.mosdepth.coverage.tsv"
+          - data_collection_tag: "pangolin_lineages"
+            source_overrides:
+              pangolin_raw: {glob_pattern: "artic_minion/pangolin/*.pangolin.csv"}
+    """
+
+    data_collection_tag: str = Field(..., description="Tag of the DC to repoint")
+    scan_pattern: str | None = Field(
+        default=None, description="New scan regex_config.pattern (scan DCs)"
+    )
+    scan_filename: str | None = Field(
+        default=None, description="New scan_parameters.filename (single-file scan DCs)"
+    )
+    format: str | None = Field(
+        default=None, description="New dc_specific_properties.format (e.g. TSV/CSV)"
+    )
+    recipe: str | None = Field(default=None, description="New transform.recipe (recipe DCs)")
+    source_overrides: dict[str, dict] | None = Field(
+        default=None,
+        description="Recipe source overrides: ref -> {path: ...} or {glob_pattern: ...}",
+    )
+
+
 class TemplateConditional(BaseModel):
     """A conditional rule applied during template resolution based on variable presence.
 
     Rules fire when the named optional variable is absent or present. Matching rules
-    remove listed DCs (and links that reference them) and override the dashboard list.
+    remove listed DCs (and links that reference them), repoint surviving DCs at a
+    route's file layout (override_dcs), and override the dashboard list.
 
     Example YAML:
         conditional:
@@ -77,6 +113,10 @@ class TemplateConditional(BaseModel):
     remove_dc_tags: list[str] = Field(
         default_factory=list,
         description="DC tags to remove from all workflows when this rule fires",
+    )
+    override_dcs: list[DCOverride] = Field(
+        default_factory=list,
+        description="DC source-binding overrides applied to surviving DCs when this rule fires",
     )
     dashboards: list[str] = Field(
         default_factory=list,
@@ -161,6 +201,30 @@ class TemplateMetadata(BaseModel):
         return [var.name for var in self.variables if var.required]
 
 
+class ExpectedDataCollection(BaseModel):
+    """One entry in a project's frozen expected-DC manifest (see TemplateOrigin).
+
+    Records the *full* template DC superset at resolution time — including DCs that
+    were conditionally gated out — so the ingestion report can show what the template
+    expected vs. what was actually identified, faithful to the template version used.
+    """
+
+    data_collection_tag: str = Field(..., description="DC tag as declared in the template")
+    type: str | None = Field(
+        default=None, description="DC type (table, multiqc, jbrowse2, ...) if known"
+    )
+    optional: bool = Field(default=False, description="False = required/mandatory; True = optional")
+    included: bool = Field(
+        default=True,
+        description="Whether this DC survived conditional + missing-file pruning",
+    )
+    removal_reason: str | None = Field(
+        default=None,
+        description="Why an excluded DC was dropped "
+        "(e.g. 'gated: METADATA_FILE absent (if_var_absent)')",
+    )
+
+
 class TemplateOrigin(BaseModel):
     """Stored on Project model to track that a template was used to create the project.
 
@@ -184,6 +248,11 @@ class TemplateOrigin(BaseModel):
     config_snapshot: dict[str, Any] = Field(
         default_factory=dict,
         description="Frozen copy of the resolved template config (for reproducibility)",
+    )
+    expected_data_collections: list[ExpectedDataCollection] = Field(
+        default_factory=list,
+        description="Full template DC superset at resolution time (required + optional), "
+        "each marked included/excluded with a removal reason — drives the ingestion report",
     )
 
     @field_validator("config_snapshot", mode="before")

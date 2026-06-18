@@ -19,7 +19,12 @@ import httpx
 import yaml
 
 from depictio.cli.cli_logging import logger
-from depictio.models.models.templates import TemplateConditional, TemplateMetadata, TemplateOrigin
+from depictio.models.models.templates import (
+    ExpectedDataCollection,
+    TemplateConditional,
+    TemplateMetadata,
+    TemplateOrigin,
+)
 
 _TEMPLATE_VAR_RE = re.compile(r"\{([A-Z0-9_]+)\}")
 
@@ -180,6 +185,63 @@ def _prune_missing_optional_single_file_dcs(
     return config, sorted(removed)
 
 
+def _collect_dc_superset(config: dict[str, Any]) -> list[dict[str, Any]]:
+    """Snapshot every DC across all workflows as {tag, type, optional}.
+
+    Captured before any conditional/missing-file pruning so the expected-DC manifest
+    records the full template superset (substitution does not add/remove DCs, so the
+    timing within resolution is not sensitive).
+    """
+    superset: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for workflow in config.get("workflows", []):
+        for dc in workflow.get("data_collections", []):
+            tag = dc.get("data_collection_tag")
+            if not tag or tag in seen:
+                continue
+            seen.add(tag)
+            superset.append(
+                {
+                    "data_collection_tag": tag,
+                    "type": dc.get("config", {}).get("type"),
+                    "optional": bool(dc.get("optional", False)),
+                }
+            )
+    return superset
+
+
+def _build_expected_dcs(
+    superset: list[dict[str, Any]],
+    final_config: dict[str, Any],
+    removal_reasons: dict[str, str],
+) -> list[ExpectedDataCollection]:
+    """Combine the pre-pruning DC superset with what survived into the final config.
+
+    Each entry is marked ``included`` (still present after all pruning) with a
+    ``removal_reason`` for excluded DCs. Used to populate
+    ``TemplateOrigin.expected_data_collections``.
+    """
+    surviving: set[str] = {
+        dc.get("data_collection_tag")
+        for workflow in final_config.get("workflows", [])
+        for dc in workflow.get("data_collections", [])
+    }
+    expected: list[ExpectedDataCollection] = []
+    for entry in superset:
+        tag = entry["data_collection_tag"]
+        included = tag in surviving
+        expected.append(
+            ExpectedDataCollection(
+                data_collection_tag=tag,
+                type=entry["type"],
+                optional=entry["optional"],
+                included=included,
+                removal_reason=None if included else removal_reasons.get(tag),
+            )
+        )
+    return expected
+
+
 def _strip_ids(config: Any) -> Any:
     """Remove hardcoded 'id' fields from config so fresh IDs are generated.
 
@@ -205,12 +267,13 @@ def _apply_conditionals(
     conditionals: list[TemplateConditional],
     provided_vars: set[str],
     template_dir: Path,
-) -> tuple[dict[str, Any], list[str]]:
+) -> tuple[dict[str, Any], list[str], dict[str, str]]:
     """Apply conditional rules based on which optional variables were provided.
 
     For each conditional that fires:
     - Removes DCs listed in remove_dc_tags from all workflows
     - Prunes links whose source_dc_tag or target_dc_tag references a removed DC
+    - Repoints surviving DCs listed in override_dcs at the route's file layout
     - Overrides the active dashboard list
 
     Args:
@@ -220,17 +283,24 @@ def _apply_conditionals(
         template_dir: Template directory for resolving dashboard paths.
 
     Returns:
-        Tuple of (modified_config, active_dashboard_rel_paths).
+        Tuple of (modified_config, active_dashboard_rel_paths, removal_reasons),
+        where removal_reasons maps each removed DC tag to a human-readable reason
+        (used to build the project's expected-DC manifest).
     """
     removed_dc_tags: set[str] = set()
+    removal_reasons: dict[str, str] = {}
     active_dashboards: list[str] = []
+    overrides_by_tag: dict[str, Any] = {}
 
     for rule in conditionals:
         fires = False
+        reason = ""
         if rule.if_var_absent and rule.if_var_absent not in provided_vars:
             fires = True
+            reason = f"gated: {rule.if_var_absent} absent (if_var_absent)"
         elif rule.if_var_present and rule.if_var_present in provided_vars:
             fires = True
+            reason = f"gated: {rule.if_var_present} present (if_var_present)"
 
         if not fires:
             continue
@@ -238,7 +308,13 @@ def _apply_conditionals(
         # Collect DC tags to remove
         for tag in rule.remove_dc_tags:
             removed_dc_tags.add(tag)
+            removal_reasons.setdefault(tag, reason)
             logger.info(f"Conditional rule: removing DC tag '{tag}'")
+
+        # Collect DC source-binding overrides (last-write-wins per tag)
+        for ov in rule.override_dcs:
+            overrides_by_tag[ov.data_collection_tag] = ov
+            logger.info(f"Conditional rule: overriding DC source '{ov.data_collection_tag}'")
 
         # Override active dashboards. Multiple firing rules are last-write-wins;
         # warn if a later rule replaces a *different* selection so a future
@@ -279,7 +355,32 @@ def _apply_conditionals(
                 surviving_links.append(link)
         config["links"] = surviving_links
 
-    return config, active_dashboards
+    # Repoint surviving DCs at the route's file layout. Applied after removal so a
+    # removed DC is never overridden; mutates the DC config in place so downstream
+    # consumers (canonicals, dashboards) keep referencing the same tag.
+    if overrides_by_tag:
+        for workflow in config.get("workflows", []):
+            for dc in workflow.get("data_collections", []):
+                ov = overrides_by_tag.get(dc.get("data_collection_tag"))
+                if ov is None:
+                    continue
+                cfg = dc.setdefault("config", {})
+                if ov.scan_pattern is not None or ov.scan_filename is not None:
+                    params = cfg.setdefault("scan", {}).setdefault("scan_parameters", {})
+                    if ov.scan_pattern is not None:
+                        params.setdefault("regex_config", {})["pattern"] = ov.scan_pattern
+                    if ov.scan_filename is not None:
+                        params["filename"] = ov.scan_filename
+                if ov.format is not None:
+                    cfg.setdefault("dc_specific_properties", {})["format"] = ov.format
+                if ov.recipe is not None:
+                    cfg.setdefault("transform", {})["recipe"] = ov.recipe
+                if ov.source_overrides is not None:
+                    so = cfg.setdefault("transform", {}).setdefault("source_overrides", {})
+                    so.update(ov.source_overrides)
+                logger.info(f"Repointed DC '{dc.get('data_collection_tag')}' for route")
+
+    return config, active_dashboards, removal_reasons
 
 
 def _file_exists_any(filepath: str, data_root: str) -> bool:
@@ -666,14 +767,20 @@ def resolve_template(
     # 5. Substitute template variables in all paths
     resolved_config = substitute_template_variables(raw_config, variables)
 
+    # 5b. Snapshot the full DC superset before any pruning, so the expected-DC
+    # manifest can record what the template expected (incl. gated-out optionals).
+    dc_superset = _collect_dc_superset(resolved_config)
+    removal_reasons: dict[str, str] = {}
+
     # 6. Apply conditional rules based on which optional vars were provided
     template_dir = template_path.parent
-    resolved_config, conditional_dashboards = _apply_conditionals(
+    resolved_config, conditional_dashboards, conditional_reasons = _apply_conditionals(
         resolved_config,
         template_metadata.conditional,
         provided_vars,
         template_dir,
     )
+    removal_reasons.update(conditional_reasons)
 
     # 6b. Prune optional single-file DCs whose file is absent. Scoped strictly to
     # DCs flagged optional with a `single` scan (e.g. the phylogenetic tree, only
@@ -687,6 +794,8 @@ def resolve_template(
             f"Pruned {len(pruned_optional)} optional DC(s) with missing source files: "
             f"{', '.join(pruned_optional)}"
         )
+        for tag in pruned_optional:
+            removal_reasons.setdefault(tag, "optional source file not found")
 
     # 7. Strip hardcoded IDs (fresh project gets new ones)
     resolved_config = _strip_ids(resolved_config)
@@ -698,6 +807,7 @@ def resolve_template(
         resolved_config["name"] = f"{template_id} - {Path(data_root).name}"
 
     # 9. Build TemplateOrigin for DB tracking
+    expected_dcs = _build_expected_dcs(dc_superset, resolved_config, removal_reasons)
     template_origin = TemplateOrigin(
         template_id=template_metadata.template_id,
         template_version=template_metadata.version,
@@ -705,6 +815,7 @@ def resolve_template(
         variables=dict(variables),
         applied_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         config_snapshot=copy.deepcopy(resolved_config),
+        expected_data_collections=expected_dcs,
     )
 
     # 10. Inject template_origin into config
