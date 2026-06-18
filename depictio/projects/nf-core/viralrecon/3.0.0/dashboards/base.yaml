@@ -269,7 +269,7 @@ tabs:
   - component_type: card
     workflow_tag: viralrecon
     data_collection_tag: mosdepth_amplicon_coverage
-    aggregation: median
+    aggregation: average
     aggregations:
     - box_plot_stats
     column_name: coverage
@@ -287,7 +287,7 @@ tabs:
   - component_type: card
     workflow_tag: viralrecon
     data_collection_tag: mosdepth_genome_coverage
-    aggregation: median
+    aggregation: average
     aggregations:
     - box_plot_stats
     column_name: coverage
