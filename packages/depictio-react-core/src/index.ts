@@ -127,6 +127,9 @@ export {
   exportDashboardJson,
   // Project management
   fetchProject,
+  fetchIngestionReport,
+  fetchIngestionHealth,
+  fetchDataCollectionFiles,
   createProject,
   updateProject,
   deleteProject,
@@ -190,6 +193,11 @@ export {
 export type {
   TableMutationResult,
   RoleDtypeSpec,
+  IngestionReport,
+  IngestionDataCollection,
+  IngestionRun,
+  IngestionSummary,
+  RegisteredFile,
   VizKindSuggestion,
   VizSuggestionsResponse,
   CatalogRender,
