@@ -4,8 +4,10 @@ Pure data processing — produces Plotly figure dicts the React viewer renders
 client-side. No Dash UI dependencies.
 """
 
+import contextlib
 import hashlib
 import os
+import re
 import tempfile
 import threading
 import time
@@ -22,6 +24,63 @@ from depictio.api.v1.services.multiqc.themes import get_theme_template
 
 # Global lock to prevent concurrent MultiQC operations (MultiQC global state is not thread-safe)
 _multiqc_lock = threading.RLock()
+
+# 8-digit hex (#rrggbbaa). Some MultiQC heatmaps (e.g. FastQC "Status Checks")
+# emit an alpha-bearing hex for "no-data" cells; Plotly's heatmap `colorscale`
+# property rejects 8-digit hex at assignment time, so the figure can't even be
+# built. We normalise such colors to rgba() (see _patch_colorscale_alpha).
+_HEX8_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{8}$")
+
+
+def _hex8_to_rgba(color: object) -> object:
+    """Convert a #rrggbbaa hex string to an rgba() string; pass anything else through."""
+    if isinstance(color, str) and _HEX8_COLOR_RE.match(color):
+        r, g, b, a = (int(color[i : i + 2], 16) for i in (1, 3, 5, 7))
+        return f"rgba({r}, {g}, {b}, {round(a / 255, 4)})"
+    return color
+
+
+def _sanitize_colorscale(value: object) -> object:
+    """Rewrite 8-digit-hex colors inside a [[pos, color], ...] colorscale to rgba()."""
+    if not isinstance(value, (list, tuple)):
+        return value
+    out = []
+    for entry in value:
+        if isinstance(entry, (list, tuple)) and len(entry) == 2:
+            out.append([entry[0], _hex8_to_rgba(entry[1])])
+        else:
+            out.append(entry)
+    return out
+
+
+@contextlib.contextmanager
+def _patch_colorscale_alpha():
+    """Temporarily tolerate 8-digit-hex colorscales during figure construction.
+
+    Plotly validates the `colorscale` property on assignment and raises on
+    8-digit hex, which would abort MultiQC's ``get_figure``. We wrap the
+    validator so that, *only* when the original validation fails, the colorscale
+    is retried with its alpha-hex colors converted to rgba(). Valid colorscales
+    are untouched, and the original validator is always restored.
+    """
+    from _plotly_utils.basevalidators import ColorscaleValidator
+
+    original = ColorscaleValidator.validate_coerce
+
+    def patched(self, v):
+        try:
+            return original(self, v)
+        except ValueError:
+            return original(self, _sanitize_colorscale(v))
+
+    # setattr (not direct assignment) so the temporary method swap on this
+    # third-party validator class doesn't trip static method-type checks.
+    setattr(ColorscaleValidator, "validate_coerce", patched)
+    try:
+        yield
+    finally:
+        setattr(ColorscaleValidator, "validate_coerce", original)
+
 
 # Multi-day TTL: explicit `_invalidate_multiqc_caches_for_dc` on append/replace
 # is the source of truth for staleness. The previous 2 h TTL caused silent
@@ -459,7 +518,10 @@ def create_multiqc_plot(
         if not plot_obj or not hasattr(plot_obj, "get_figure"):
             raise ValueError(f"Failed to get plot object for {module}/{plot}")
 
-        fig = plot_obj.get_figure(dataset_id=dataset_id if dataset_id else 0)
+        # Tolerate alpha-hex colorscales (e.g. FastQC "Status Checks") that
+        # Plotly would otherwise reject when the heatmap trace is constructed.
+        with _patch_colorscale_alpha():
+            fig = plot_obj.get_figure(dataset_id=dataset_id if dataset_id else 0)
 
     fig.update_layout(
         title=f"{module.upper()}: {plot}",
