@@ -3382,9 +3382,33 @@ def _regenerate_component_indices(dashboard_dict: dict) -> None:
 # to be worth showing. Interactive filters and text/headers don't count on their own.
 _DATA_COMPONENT_TYPES = {"figure", "card", "table", "multiqc", "advanced_viz"}
 
+# MultiQC sections that always exist when any module parsed but are NOT listed in a
+# report's stored `modules` array — exempt from the module-presence check so the
+# general-statistics component is never wrongly hidden.
+_MULTIQC_SYNTHETIC_MODULES = {"general_stats"}
+
+
+def _parsed_multiqc_modules(dc_id: PyObjectId | None) -> set[str] | None:
+    """Modules that actually parsed for a MultiQC DC, from its ingestion record.
+
+    Returns None when no record exists, so callers keep module-pinned components
+    rather than hiding them on missing metadata (a genuine gap still surfaces).
+    """
+    if not dc_id:
+        return None
+    from depictio.api.v1.db import multiqc_collection
+
+    doc = multiqc_collection.find_one(
+        {"data_collection_id": {"$in": [ObjectId(str(dc_id)), str(dc_id)]}}
+    )
+    if not doc:
+        return None
+    modules = (doc.get("metadata") or {}).get("modules")
+    return set(modules) if modules else None
+
 
 def _build_dc_meta(project_id: PyObjectId | None) -> dict[str, dict]:
-    """Map data_collection_tag -> {type, optional} for the target project."""
+    """Map data_collection_tag -> {type, optional[, mqc_modules]} for the project."""
     meta: dict[str, dict] = {}
     if not project_id:
         return meta
@@ -3394,11 +3418,18 @@ def _build_dc_meta(project_id: PyObjectId | None) -> dict[str, dict]:
     for wf in proj.get("workflows", []):
         for dc in wf.get("data_collections", []):
             tag = dc.get("data_collection_tag")
-            if tag:
-                meta[tag] = {
-                    "type": dc.get("config", {}).get("type"),
-                    "optional": dc.get("optional", False),
-                }
+            if not tag:
+                continue
+            entry = {
+                "type": dc.get("config", {}).get("type"),
+                "metatype": dc.get("config", {}).get("metatype"),
+                "optional": dc.get("optional", False),
+            }
+            # MultiQC DCs: record which modules actually parsed at ingestion so
+            # module-pinned components for absent modules can be hidden below.
+            if (entry["type"] or "").lower() == "multiqc":
+                entry["mqc_modules"] = _parsed_multiqc_modules(dc.get("_id") or dc.get("id"))
+            meta[tag] = entry
     return meta
 
 
@@ -3422,6 +3453,22 @@ def _component_has_data(component: dict, dc_meta: dict[str, dict]) -> bool:
         return False
 
     info = dc_meta.get(dc_tag, {})
+
+    # MultiQC module-pinned components: hide when the pinned module is absent from
+    # the run's actually-parsed report (e.g. `ivar_variants` on a run that called
+    # no iVar variants), mirroring DC/tab pruning. Synthetic sections such as
+    # `general_stats` are always available, so they are exempt; an unknown module
+    # set (no ingestion record) keeps the component so a genuine gap still shows.
+    if component.get("component_type") == "multiqc":
+        module = component.get("selected_module")
+        modules = info.get("mqc_modules")
+        return not (
+            module
+            and module not in _MULTIQC_SYNTHETIC_MODULES
+            and modules is not None
+            and module not in modules
+        )
+
     # Stored config.type is normalised lower-case (e.g. "table"); MultiQC/phylogeny
     # types don't register delta tables, so only delta-backed Table DCs are checked.
     if not info.get("optional") or (info.get("type") or "").lower() != "table":
@@ -3469,12 +3516,25 @@ def _filter_unresolved_components(
             ]
 
 
-def _tab_has_visualization_components(dashboard_dict: dict) -> bool:
-    """True if the (already-filtered) tab still has at least one visualisation component."""
-    return any(
-        c.get("component_type") in _DATA_COMPONENT_TYPES
-        for c in dashboard_dict.get("stored_metadata", [])
-    )
+def _tab_has_visualization_components(
+    dashboard_dict: dict, dc_meta: dict[str, dict] | None = None
+) -> bool:
+    """True if the (already-filtered) tab still has a *non-metadata* visualisation component.
+
+    A tab kept alive solely by metadata cards/tables (e.g. a taxonomy tab whose
+    taxonomy DCs were all pruned for a skip_qiime run, leaving only the sample
+    metadata table/card) is treated as empty — the surviving metadata viz is not
+    the tab's purpose. DCs whose `metatype` is `Metadata` therefore don't count
+    toward keeping the tab; everything else (MultiQC, taxonomy, phylogeny, …) does.
+    """
+    dc_meta = dc_meta or {}
+    for c in dashboard_dict.get("stored_metadata", []):
+        if c.get("component_type") not in _DATA_COMPONENT_TYPES:
+            continue
+        metatype = dc_meta.get(c.get("data_collection_tag"), {}).get("metatype") or ""
+        if metatype.lower() != "metadata":
+            return True
+    return False
 
 
 def _import_multi_tab_dashboard(
@@ -3571,6 +3631,7 @@ def _import_multi_tab_dashboard(
 
     # Import child tabs
     imported_tabs = []
+    dc_meta = _build_dc_meta(project_id)
     for idx, tab_data in enumerate(tabs_data):
         tab_yaml = yaml.dump(tab_data, default_flow_style=False, allow_unicode=True)
         tab_lite = DashboardDataLite.from_yaml(tab_yaml)
@@ -3620,11 +3681,13 @@ def _import_multi_tab_dashboard(
         _filter_unresolved_components(tab_dashboard_dict, project_id=project_id)
         _regenerate_component_indices(tab_dashboard_dict)
 
-        # Self-adapting dashboard: if filtering left this tab with no visualisation
-        # components (all its DCs were absent/unpopulated for this run), don't create
-        # the tab. Tabs are separate docs, so "hidden" = "not inserted"; drop any
-        # stale existing copy on overwrite so re-imports stay idempotent.
-        if not _tab_has_visualization_components(tab_dashboard_dict):
+        # Self-adapting dashboard: if filtering left this tab with no *non-metadata*
+        # visualisation component (all its purpose-built DCs were absent/unpopulated
+        # for this run — e.g. a taxonomy tab on a skip_qiime run reduced to just the
+        # sample metadata table), don't create the tab. Tabs are separate docs, so
+        # "hidden" = "not inserted"; drop any stale existing copy on overwrite so
+        # re-imports stay idempotent.
+        if not _tab_has_visualization_components(tab_dashboard_dict, dc_meta):
             logger.info(
                 f"Skipping tab '{tab_lite.title}': no data components remain after filtering "
                 "(its data collections are absent/unpopulated for this run)"
