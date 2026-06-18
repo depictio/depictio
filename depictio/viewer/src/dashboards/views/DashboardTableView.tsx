@@ -431,9 +431,22 @@ const DashboardTableView: React.FC<DashboardTableViewProps> = ({
                   )}
                   <Table.Td>
                     {r.projectName ? (
-                      <Badge color="teal" variant="light" size="sm">
-                        {r.projectName}
-                      </Badge>
+                      (() => {
+                        const pid = (r.dashboard.project_id as string | undefined) || null;
+                        return (
+                          <Badge
+                            color="teal"
+                            variant="light"
+                            size="sm"
+                            component={pid ? 'a' : 'div'}
+                            href={pid ? `/projects/${pid}` : undefined}
+                            onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                            style={{ cursor: pid ? 'pointer' : undefined, maxWidth: '100%' }}
+                          >
+                            {r.projectName}
+                          </Badge>
+                        );
+                      })()
                     ) : (
                       <Text size="xs" c="dimmed">
                         —
