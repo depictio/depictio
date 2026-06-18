@@ -138,6 +138,14 @@ def scan_single_file(
         Optional[File]: A File instance if the file is valid; otherwise, None.
     """
 
+    # Record the real on-disk path, resolving any symlinks in the scanned path.
+    # Runs can be scanned through an intermediate symlink (e.g. per-run isolation
+    # that points --data-root at a temporary symlink tree), and the stored path
+    # should be the original target, not the transient symlink. file_hash is
+    # derived from basename + size + mtime (not the path), so this does not affect
+    # change detection or hash-based dedup.
+    file_location = os.path.realpath(file_location)
+
     file_name = os.path.basename(file_location)
     if not skip_regex:
         if full_regex is None:

@@ -55,6 +55,14 @@ def register_run_command(app: typer.Typer):
                 help="Custom project name (auto-generated from template if omitted).",
             ),
         ] = None,
+        dashboard_name: Annotated[
+            str | None,
+            typer.Option(
+                "--dashboard-name",
+                help="Custom title for the template's main dashboard "
+                "(defaults to the title defined in the dashboard YAML). Child tabs keep their titles.",
+            ),
+        ] = None,
         var: Annotated[
             list[str],
             typer.Option(
@@ -598,6 +606,7 @@ def register_run_command(app: typer.Typer):
                         project_id=project_id,
                         overwrite=overwrite,
                         variables=template_variables,
+                        dashboard_name=dashboard_name,
                     )
 
                     imported, failed = [], []

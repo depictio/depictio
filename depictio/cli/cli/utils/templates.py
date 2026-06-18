@@ -453,13 +453,25 @@ def _introspect_pipeline_params(data_root: str, variables: dict[str, str]) -> No
       - ``SKIP_QIIME``     — ampliseq ITS/sintax runs without QIIME2 outputs
       - ``IS_METAGENOMIC`` — viralrecon metagenomic (non-amplicon) runs
       - ``IS_NANOPORE``    — viralrecon nanopore/artic runs
+      - ``IS_MULTIREGION`` — ampliseq multiregion/SIDLE runs (per-region ASVs
+        reconstructed into one cross-region feature table under ``sidle/``)
     """
-    # Only read params at the DATA_ROOT level. For "flat" projects (e.g. ampliseq,
-    # one run = one DATA_ROOT) this is the run's params. For "sequencing-runs"
-    # projects (e.g. viralrecon, DATA_ROOT aggregates many run_*/), there is no
-    # single canonical params file — picking one run's would be ambiguous — so
-    # introspection is intentionally a no-op there (those templates don't rely on it).
+    # Locate the run's params.json. For "flat" projects (e.g. ampliseq, one run =
+    # one DATA_ROOT) it sits directly under DATA_ROOT. For "sequencing-runs" projects
+    # (e.g. viralrecon, DATA_ROOT aggregates run_*/ subdirs — incl. the per-run
+    # symlink-parent validation convention) it sits one level down in a run subdir;
+    # all runs of a project share a platform/protocol, so the first run's params is
+    # representative for these route flags.
     candidates = sorted(Path(data_root).glob("pipeline_info/params*.json"))
+    if not candidates:
+        candidates = sorted(Path(data_root).glob("*/pipeline_info/params*.json"))
+        if candidates:
+            logger.warning(
+                f"params.json not found at DATA_ROOT; using a run subdir's params "
+                f"({candidates[0].parent.parent.name}) for route flags. If this DATA_ROOT "
+                f"mixes platforms (e.g. nanopore + illumina runs), pass the route flag "
+                f"explicitly via --var."
+            )
     params: dict = {}
     for c in candidates:
         try:
@@ -477,6 +489,10 @@ def _introspect_pipeline_params(data_root: str, variables: dict[str, str]) -> No
         variables.setdefault("IS_METAGENOMIC", "true")
     if params.get("skip_qiime") is True:
         variables.setdefault("SKIP_QIIME", "true")
+    # ampliseq multiregion/SIDLE: the route is keyed by a regions reference AND a
+    # SIDLE reference taxonomy (standard runs leave 'multiregion' null).
+    if params.get("multiregion") and params.get("sidle_ref_taxonomy"):
+        variables.setdefault("IS_MULTIREGION", "true")
 
     # Auto-fill METADATA_FILE from the run's input/ when the run used metadata
     # (params 'metadata' is the source URL; the local copy lands in input/).
@@ -716,6 +732,7 @@ def import_dashboards_from_template(
     project_id: str | None = None,
     overwrite: bool = True,
     variables: dict[str, str] | None = None,
+    dashboard_name: str | None = None,
 ) -> list[dict[str, Any]]:
     """Import dashboard YAML files from a template into the server.
 
@@ -731,6 +748,8 @@ def import_dashboards_from_template(
         overwrite: If True, update existing dashboards with the same title.
         variables: Template variables to substitute in dashboard YAML
             (e.g., ``{GROUP_COL}`` placeholders).
+        dashboard_name: When provided, overrides the main dashboard's title
+            (child tabs keep their own titles).
 
     Returns:
         List of result dicts, one per dashboard file.  Each contains
@@ -744,10 +763,18 @@ def import_dashboards_from_template(
         try:
             yaml_content = path.read_text(encoding="utf-8")
 
-            # Substitute template variables in dashboard YAML
-            if variables:
+            # Substitute template variables and/or override the dashboard title.
+            if variables or dashboard_name:
                 parsed = yaml.safe_load(yaml_content)
-                parsed = substitute_template_variables(parsed, variables)
+                if variables:
+                    parsed = substitute_template_variables(parsed, variables)
+                if dashboard_name and isinstance(parsed, dict):
+                    # Override only the main dashboard's title; child-tab files
+                    # (which carry their own top-level `title`) keep theirs.
+                    if isinstance(parsed.get("main_dashboard"), dict):
+                        parsed["main_dashboard"]["title"] = dashboard_name
+                    elif "title" in parsed:
+                        parsed["title"] = dashboard_name
                 yaml_content = yaml.dump(parsed, default_flow_style=False, allow_unicode=True)
 
             params: dict[str, str | bool] = {}
