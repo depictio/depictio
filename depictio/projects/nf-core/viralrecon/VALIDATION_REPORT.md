@@ -113,3 +113,44 @@ stay **required** as the safety net.
 Note: `summary_metrics`/`multiqc` are deliberately **not** optional, so `run_nanopore` fails loudly
 rather than silently producing an empty project — the honest signal that this ivar template doesn't
 fit an ARTIC run.
+
+## Dashboard-review pass (2026-06-18)
+
+Live review of each per-run dashboard in the dev stack, fixing rendering/layout rough edges. The
+engine-level fixes are shared with ampliseq (see that report); viralrecon-specific notes:
+
+### Enterovirus (`run_ev`) renders empty — expected, the test dataset is degenerate
+The EV dashboard showing "everything empty or at 0" is **not** a bug. The nf-core run itself produced
+almost no data:
+- `pipeline_info/params*.json` has `"primer_set": null` → the pipeline runs in **whole-genome /
+  metagenomic mode**, not amplicon mode, so **no `variants/bowtie2/mosdepth/` directory is produced**
+  (contrast `run_illumina_amplicon`, which has amplicon + genome mosdepth TSVs with 450+ rows).
+- Only **~4.6 %** of reads map to the reference (759 / 20 000); `summary_variants_metrics_mqc.csv`
+  carries a single sample with coverage median / coverage-≥10x / variant counts all `NA`.
+- With no depth there is nothing for mosdepth, ivar, or consensus to emit.
+
+Decision: handle gracefully + document, do **not** fabricate data. The self-adapting layout work
+(below) lets the EV dashboard render cleanly — empty/degraded components and tabs drop out instead of
+showing error cards or half-empty rows. If a meaningful EV validation is wanted later, it needs a
+test dataset that actually maps and calls variants (a new nf-core run), not a template change.
+
+### Self-adapting layout — no orphaned half-width cards, minimum-useful tabs
+Shared engine fixes (in `depictio/api/v1/endpoints/dashboards_endpoints/routes.py` and the React
+`DashboardGrid.tsx`) address the HIV / Illumina "median-coverage card alone on a row", the HIV
+Coverage "genome-coverage card alone + no filters", and the HIV/nanopore MultiQC orphaning:
+- **`_recompact_main_grid`** re-packs the main grid after components are dropped, widening any card
+  left alone on a row so dropped plots/cards never leave a half-empty row; the React
+  `widenLoneRows` pass mirrors this for layouts already stored / hidden only at render.
+- **`_tab_meets_minimum`** enforces the mandatory minimum: every surviving tab keeps **≥1 filter
+  AND ≥1 non-metadata visualisation**. A tab reduced below that (e.g. nanopore Sample-QC once its
+  `summary_metrics`-bound components are gone) is dropped.
+
+### Mandatory per-tab filter — MultiQC-DC sample filter
+Every tab (incl. the never-dropped **main MultiQC tab**) must carry a working filter on every route.
+The main tab's sample filter previously bound to `summary_metrics`, which is pruned on genome-only /
+nanopore runs, leaving the tab filter-less. Fix:
+- `GET /deltatables/unique_values/{dc}` now serves a MultiQC DC's sample list (from the ingested
+  `canonical_samples`) instead of querying a (non-existent) Delta table.
+- The main-tab sample filter is rebound to the always-present `multiqc_data` DC; the picked sample is
+  expanded to its per-report variants by `_resolve_multiqc_sample_filter`. Verified: nanopore / HIV /
+  enterovirus main tabs now carry a populated `multiqc_data/sample` filter.

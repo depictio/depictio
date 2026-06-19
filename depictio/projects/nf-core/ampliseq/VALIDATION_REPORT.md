@@ -224,3 +224,63 @@ a run produced (instead of a dashboard full of red "Figure failed" boxes):
 | `run_iontorrent` (ITS/IonTorrent, skip_qiime) | 0 | MultiQC-only (QIIME2 DCs removed via SKIP_QIIME) |
 | `run_its_pacbio` (ITS/PacBio, skip_qiime) | 0 | MultiQC + metadata (QIIME2 DCs removed) |
 | `run_multiregion` (16S SIDLE) | 1 | **out of scope** — SIDLE emits a different QIIME2 layout the recipes don't match; fails loud (needs dedicated SIDLE recipes) |
+
+## Dashboard-review pass (2026-06-18)
+
+Live review of each per-run dashboard, fixing rendering/layout rough edges surfaced in the dev stack.
+
+### D-R1 — `group_col is not defined` in the relative-abundance bars (all metadata routes)  ✅ FIXED
+The Community/Alpha figures used an `if group_col in df.columns: … else: …` block in code-mode. The
+code-mode parser (`api/.../figure/code_mode.py`) is a **line classifier**: it strips indentation and
+keeps only `fig = …`, `fig.…`, and `df_`/`df_modified` lines — it silently **drops** plain
+assignments (`group_col = '{GROUP_COL}'`) and `if/else` control flow. The dropped assignment left
+`df_mean = df.group_by([group_col, …])` referencing an undefined name → `name 'group_col' is not
+defined` at execution (the reported error), independent of whether `{GROUP_COL}` was substituted.
+
+**Fix:** rewrote the two rel-abundance bars + the alpha-diversity box plot to **flat, parser-safe**
+code using a single-line ternary that synthesises a facet/group column and falls back when the group
+column is absent:
+```python
+df_grp = df.with_columns(pl.col('{GROUP_COL}').alias('_facet')) if '{GROUP_COL}' in df.columns else df.with_columns(pl.lit('All samples').alias('_facet'))
+df_modified = df_grp.group_by(['_facet', 'Phylum']).agg(...)
+fig = px.bar(df_modified.to_pandas(), ..., facet_row='_facet', ...)
+```
+Verified through `SimpleCodeExecutor` with the group column present (faceted) and absent (single
+"All samples" facet) — both succeed.
+
+### D-R2 — placeholder leak + degenerate grouping on no-metadata runs (`run_16s_multi`)  ✅ FIXED
+- `resolve_template` now always sets `GROUP_COL` (sentinel `__no_group__`) and `GROUP_COL_DISPLAY`
+  (`Group`), so the `{GROUP_COL}` / `{GROUP_COL_DISPLAY}` placeholders never leak into seeded
+  dashboards; the sentinel makes the ternary above fall to the ungrouped branch.
+- `upset_canonical` is a taxa × `GROUP_COL` presence matrix — with no metadata it collapses to a
+  single useless bar, so it is now pruned in the `if_var_absent: METADATA_FILE` conditional (it was
+  already pruned for skip_qiime / multiregion).
+
+### D-R3 — SIDLE "Reconstructed Community" tab had no filter  ✅ FIXED
+Added a `Phylum` `MultiSelect` (bound to `sidle_reconstructed`) so the SIDLE tab has a real filter
+to slice the reconstructed composition. (The `_tab_meets_minimum` rule keeps a tab when it has a
+filter+viz **or** ≥2 visualisations, so the three-viz SIDLE tab would survive regardless — but a
+route-signature tab deserves an actual filter.)
+
+### D-R4 — self-adapting layout (shared engine, also benefits viralrecon)
+- **`_recompact_main_grid`** re-packs the main grid after drops so no half-width card is left alone
+  on a row (the "var1 groups card alone" / orphaned-MultiQC cases); React `widenLoneRows` mirrors it.
+- **`_tab_meets_minimum`** enforces the mandatory minimum — every surviving tab keeps **≥1 filter
+  AND ≥1 non-metadata visualisation**. To satisfy this on every route, tab filters are curated to
+  bind to route-surviving DCs:
+  - **Main MultiQC tab** sample filter → the always-present `multiqc_data` DC (options served from the
+    ingested sample list via `GET /deltatables/unique_values`, which now handles MultiQC DCs); so
+    no-metadata runs (16S-Multi, IonTorrent) keep a working sample filter.
+  - **Ordination** gains a `Phylum` filter on `complex_heatmap_canonical` (non-metadata, present on
+    every QIIME2 route) so it keeps a filter when the metadata-bound sample/group filters prune away.
+  - **SIDLE** Phylum filter (above). Verified: across all 10 per-run projects, **every** tab (main +
+    secondary) has ≥1 filter + ≥1 right-panel component.
+
+### Answer: which tree feeds the Phylogeny tab (PE route)?
+`phylogenetic_tree_canonical` scans `{DATA_ROOT}/qiime2/phylogenetic_tree/tree.nwk` — the QIIME2
+ASV-level tree (MAFFT alignment → FastTree), tips = ASV identifiers, taxonomy joined via
+`phylogenetic_tree_metadata_canonical` (`tree_metadata_canonical.py`).
+
+### Still to verify live (needs the running stack + ingested data)
+- `run_16s_multi` Ordination "tax heatmap failed to render" (`complex_heatmap_canonical`) — a
+  render-time failure; repro against the ingested delta table and fix the data-shape/empty case.
