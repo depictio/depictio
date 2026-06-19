@@ -1557,8 +1557,16 @@ const CreateDataCollectionModal: React.FC<{
                 ref={multiqcDropzone.inputRef}
                 type="file"
                 multiple
-                accept=".parquet"
                 style={{ display: 'none' }}
+                // Click-to-pick must open a *folder* picker so the run-folder
+                // structure (<run>/multiqc_data/multiqc.parquet) reaches the
+                // hook via webkitRelativePath — parity with drag-drop. Without
+                // it, click-selected files carry no path and the upload silently
+                // does nothing (#847). `accept` is dropped because browsers
+                // ignore it for directory selection; the hook's
+                // filterFilename:'multiqc.parquet' does the real filtering.
+                // @ts-expect-error — webkitdirectory is non-standard but widely supported.
+                webkitdirectory=""
               />
             </div>
             {multiqcDropzone.error && (
