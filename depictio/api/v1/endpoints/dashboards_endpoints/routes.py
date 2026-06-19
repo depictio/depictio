@@ -3438,16 +3438,271 @@ def _regenerate_component_indices(dashboard_dict: dict) -> None:
                     layout_item["i"] = f"box-{new_index}"
 
 
-def _filter_unresolved_components(dashboard_dict: dict) -> None:
-    """Remove components whose DC could not be resolved.
+# Component types that carry a visualisation — a tab needs at least one of these
+# to be worth showing. Interactive filters and text/headers don't count on their own.
+_DATA_COMPONENT_TYPES = {"figure", "card", "table", "multiqc", "advanced_viz"}
 
-    Disabled for now: the file scanner (which removes DCs) is disabled,
-    and the aggressive dc_id check was stripping valid components whose
-    tags hadn't been resolved yet (the frontend resolves them at render time).
+# Main-grid width (matches the React viewer's react-grid-layout cols=8).
+_GRID_COLS = 8
+
+# MultiQC sections that always exist when any module parsed but are NOT listed in a
+# report's stored `modules` array — exempt from the module-presence check so the
+# general-statistics component is never wrongly hidden.
+_MULTIQC_SYNTHETIC_MODULES = {"general_stats"}
+
+
+def _parsed_multiqc_report(
+    dc_id: PyObjectId | None,
+) -> tuple[set[str] | None, dict[str, set[str]] | None]:
+    """Modules + per-module plot names that parsed for a MultiQC DC, from its record.
+
+    Returns ``(modules, plots)`` where ``plots`` maps each module to the set of
+    renderable plot/section names that ingestion recorded. Either element is
+    ``None`` when no record exists, so callers keep module/plot-pinned components
+    rather than hiding them on missing metadata (a genuine gap still surfaces).
     """
-    # TODO: Re-enable when file scanner is active, but use dc_tag validation
-    # against the project instead of dc_id presence check.
-    pass
+    if not dc_id:
+        return None, None
+    from depictio.api.v1.db import multiqc_collection
+
+    doc = multiqc_collection.find_one(
+        {"data_collection_id": {"$in": [ObjectId(str(dc_id)), str(dc_id)]}}
+    )
+    if not doc:
+        return None, None
+    md = doc.get("metadata") or {}
+    modules = md.get("modules")
+    plots: dict[str, set[str]] = {}
+    for mod, items in (md.get("plots") or {}).items():
+        names: set[str] = set()
+        for item in items or []:
+            if isinstance(item, str):
+                names.add(item)
+            elif isinstance(item, dict):
+                names.update(item.keys())
+        plots[mod] = names
+    return (set(modules) if modules else None), (plots or None)
+
+
+def _build_dc_meta(project_id: PyObjectId | None) -> dict[str, dict]:
+    """Map data_collection_tag -> {type, optional[, mqc_modules]} for the project."""
+    meta: dict[str, dict] = {}
+    if not project_id:
+        return meta
+    proj = projects_collection.find_one({"_id": ObjectId(project_id)})
+    if not proj:
+        return meta
+    for wf in proj.get("workflows", []):
+        for dc in wf.get("data_collections", []):
+            tag = dc.get("data_collection_tag")
+            if not tag:
+                continue
+            entry = {
+                "type": dc.get("config", {}).get("type"),
+                "metatype": dc.get("config", {}).get("metatype"),
+                "optional": dc.get("optional", False),
+            }
+            # MultiQC DCs: record which modules + plots actually parsed at
+            # ingestion so module/plot-pinned components for absent modules or
+            # absent plots can be hidden below.
+            if (entry["type"] or "").lower() == "multiqc":
+                mods, plots = _parsed_multiqc_report(dc.get("_id") or dc.get("id"))
+                entry["mqc_modules"] = mods
+                entry["mqc_plots"] = plots
+            meta[tag] = entry
+    return meta
+
+
+def _component_has_data(component: dict, dc_meta: dict[str, dict]) -> bool:
+    """Whether a component's data collection is present in the project and populated.
+
+    Self-adapting-dashboard gating (hide only *authorized* gaps):
+      - No data_collection_tag (text/header) -> always kept.
+      - DC tag did not resolve (dc_id unset) -> DC was removed by template
+        conditionals / optional-file pruning -> absent -> DROP.
+      - DC present but declared `optional` AND a delta-backed Table AND has no
+        deltatables record (processing skipped it, no data) -> DROP.
+      - Otherwise KEEP. In particular a NON-optional DC is always kept so a genuine
+        gap renders a visible error instead of being silently hidden, and
+        MultiQC / phylogeny DCs (which don't register a delta table) are kept.
+    """
+    dc_tag = component.get("data_collection_tag")
+    if not dc_tag:
+        return True
+    if not component.get("dc_id"):
+        return False
+
+    info = dc_meta.get(dc_tag, {})
+
+    # MultiQC module/plot-pinned components: hide when the pinned module is absent
+    # from the run's actually-parsed report (e.g. `ivar_variants` on a run that
+    # called no iVar variants), OR the module is present but the pinned plot/section
+    # produced no renderable plot for this run (e.g. nanopore's `snpeff` module
+    # exists but has no "Variant Effects by Impact" plot — it would otherwise error
+    # at render). Mirrors DC/tab pruning. Synthetic sections such as `general_stats`
+    # are always available, so they are exempt; an unknown module/plot set (no
+    # ingestion record) keeps the component so a genuine gap still shows.
+    if component.get("component_type") == "multiqc":
+        module = component.get("selected_module")
+        if not module or module in _MULTIQC_SYNTHETIC_MODULES:
+            return True
+        modules = info.get("mqc_modules")
+        if modules is not None and module not in modules:
+            return False
+        plot = component.get("selected_plot")
+        module_plots = (info.get("mqc_plots") or {}).get(module)
+        if plot and module_plots is not None and plot not in module_plots:
+            return False
+        return True
+
+    # Stored config.type is normalised lower-case (e.g. "table"); MultiQC/phylogeny
+    # types don't register delta tables, so only delta-backed Table DCs are checked.
+    if not info.get("optional") or (info.get("type") or "").lower() != "table":
+        return True
+
+    from depictio.api.v1.db import deltatables_collection
+
+    return (
+        deltatables_collection.find_one({"data_collection_id": ObjectId(component["dc_id"])})
+        is not None
+    )
+
+
+def _recompact_main_grid(items: list[dict]) -> list[dict]:
+    """Re-pack main-grid layout items after components were dropped.
+
+    Dropping a component leaves a hole in the grid: react-grid-layout's vertical
+    compaction closes *vertical* gaps but never widens a survivor or fills the
+    *horizontal* gap, so a w:4 card whose row-mate was removed sits alone on a
+    half-empty row. This re-flows the survivors deterministically:
+
+      1. walk items in reading order (top-to-bottom, left-to-right),
+      2. shelf-pack them left-to-right into the ``_GRID_COLS``-wide grid,
+         preserving each item's width/height — so two survivors that no longer
+         have a partner pack onto one row instead of each sitting alone,
+      3. widen any row whose sole occupant is narrower than the full grid so no
+         half-width card is ever left alone on a row.
+
+    Only ``x``/``y``/``w``/``h`` are rewritten; every other key (``i``,
+    ``static``, ``resizeHandles``, …) is preserved.
+    """
+    if not items:
+        return items
+    ordered = sorted(items, key=lambda it: (it.get("y", 0), it.get("x", 0)))
+    rows: list[list[dict]] = []
+    current: list[dict] = []
+    current_w = 0
+    for item in ordered:
+        w = max(1, min(int(item.get("w", 1)), _GRID_COLS))
+        if current and current_w + w > _GRID_COLS:
+            rows.append(current)
+            current, current_w = [], 0
+        current.append(item)
+        current_w += w
+    if current:
+        rows.append(current)
+
+    repacked: list[dict] = []
+    y = 0
+    for row in rows:
+        # A lone sub-full-width occupant would leave a half-empty row — widen it.
+        if len(row) == 1:
+            w0 = max(1, min(int(row[0].get("w", 1)), _GRID_COLS))
+            if w0 < _GRID_COLS:
+                row[0] = {**row[0], "w": _GRID_COLS}
+        x = 0
+        row_h = 0
+        for item in row:
+            w = max(1, min(int(item.get("w", 1)), _GRID_COLS))
+            h = max(1, int(item.get("h", 1)))
+            repacked.append({**item, "x": x, "y": y, "w": w, "h": h})
+            x += w
+            row_h = max(row_h, h)
+        y += row_h
+    return repacked
+
+
+def _filter_unresolved_components(
+    dashboard_dict: dict, project_id: PyObjectId | None = None
+) -> None:
+    """Drop components whose DC is absent or (optional &) unpopulated; prune their layout.
+
+    Implements self-adapting dashboards: a run that produced a subset of outputs
+    renders only the components it can back with data. Gated by `_component_has_data`
+    so it never hides a missing *non-optional* DC (that still surfaces loudly).
+
+    After pruning, the main grid (`right_panel_layout_data`) is re-compacted so a
+    dropped component never leaves a half-width card alone on a row.
+    """
+    components = dashboard_dict.get("stored_metadata")
+    if not components:
+        return
+    dc_meta = _build_dc_meta(project_id)
+    kept, dropped = [], []
+    for component in components:
+        if _component_has_data(component, dc_meta):
+            kept.append(component)
+        else:
+            dropped.append(component.get("index"))
+            logger.info(
+                f"Hiding dashboard component (dc_tag='{component.get('data_collection_tag')}', "
+                f"index='{component.get('index')}'): data collection absent or unpopulated"
+            )
+    if not dropped:
+        return
+    dashboard_dict["stored_metadata"] = kept
+    drop_keys = {f"box-{idx}" for idx in dropped}
+    for layout_key in ("left_panel_layout_data", "right_panel_layout_data", "stored_layout_data"):
+        if layout_key in dashboard_dict:
+            dashboard_dict[layout_key] = [
+                item for item in dashboard_dict[layout_key] if item.get("i") not in drop_keys
+            ]
+    # Re-flow the main grid only (the left rail is a vertical filter stack and the
+    # legacy unified `stored_layout_data` mixes filters with content, so neither is
+    # safe to horizontally re-pack).
+    if dashboard_dict.get("right_panel_layout_data"):
+        dashboard_dict["right_panel_layout_data"] = _recompact_main_grid(
+            dashboard_dict["right_panel_layout_data"]
+        )
+
+
+def _tab_has_visualization_components(
+    dashboard_dict: dict, dc_meta: dict[str, dict] | None = None
+) -> bool:
+    """True if the (already-filtered) tab still has a *non-metadata* visualisation component.
+
+    A tab kept alive solely by metadata cards/tables (e.g. a taxonomy tab whose
+    taxonomy DCs were all pruned for a skip_qiime run, leaving only the sample
+    metadata table/card) is treated as empty — the surviving metadata viz is not
+    the tab's purpose. DCs whose `metatype` is `Metadata` therefore don't count
+    toward keeping the tab; everything else (MultiQC, taxonomy, phylogeny, …) does.
+    """
+    dc_meta = dc_meta or {}
+    for c in dashboard_dict.get("stored_metadata", []):
+        if c.get("component_type") not in _DATA_COMPONENT_TYPES:
+            continue
+        metatype = dc_meta.get(c.get("data_collection_tag"), {}).get("metatype") or ""
+        if metatype.lower() != "metadata":
+            return True
+    return False
+
+
+def _tab_meets_minimum(dashboard_dict: dict, dc_meta: dict[str, dict] | None = None) -> bool:
+    """True if a (filtered) tab keeps at least one filter AND one standard component.
+
+    Mandatory minimum for any surviving tab: a user can both *slice* (≥1 surviving
+    interactive component) and *see* (≥1 surviving non-metadata visualisation).
+    Every tab's template is curated so at least one of its filters binds to a DC
+    that survives the run's route (e.g. the MultiQC tab's sample filter binds to
+    the always-present `multiqc_data` DC, Ordination carries a Phylum filter on
+    the heatmap DC), so this gate only drops a tab whose purpose-built data is
+    genuinely absent — never a tab that still has analysis to show.
+    """
+    dc_meta = dc_meta or {}
+    has_filter = any(
+        c.get("component_type") == "interactive" for c in dashboard_dict.get("stored_metadata", [])
+    )
+    return has_filter and _tab_has_visualization_components(dashboard_dict, dc_meta)
 
 
 def _import_multi_tab_dashboard(
@@ -3520,8 +3775,8 @@ def _import_multi_tab_dashboard(
     for component in main_dashboard_dict.get("stored_metadata", []):
         _resolve_workflow_tags(component, project_id=project_id)
         _regenerate_component_fields(component)
-    # Remove components whose DC was not found in the project (e.g. removed by file scanner)
-    _filter_unresolved_components(main_dashboard_dict)
+    # Hide components whose DC is absent/unpopulated (self-adapting dashboard)
+    _filter_unresolved_components(main_dashboard_dict, project_id=project_id)
     _regenerate_component_indices(main_dashboard_dict)
 
     # Validate and insert/update main dashboard
@@ -3544,6 +3799,7 @@ def _import_multi_tab_dashboard(
 
     # Import child tabs
     imported_tabs = []
+    dc_meta = _build_dc_meta(project_id)
     for idx, tab_data in enumerate(tabs_data):
         tab_yaml = yaml.dump(tab_data, default_flow_style=False, allow_unicode=True)
         tab_lite = DashboardDataLite.from_yaml(tab_yaml)
@@ -3590,8 +3846,26 @@ def _import_multi_tab_dashboard(
         for component in tab_dashboard_dict.get("stored_metadata", []):
             _resolve_workflow_tags(component, project_id=project_id)
             _regenerate_component_fields(component)
-        _filter_unresolved_components(tab_dashboard_dict)
+        _filter_unresolved_components(tab_dashboard_dict, project_id=project_id)
         _regenerate_component_indices(tab_dashboard_dict)
+
+        # Self-adapting dashboard: a tab is only worth showing if filtering left it
+        # with at least one filter AND one non-metadata visualisation (its minimum
+        # useful form). A tab reduced below that — all its purpose-built DCs
+        # absent/unpopulated for this run (e.g. a taxonomy tab on a skip_qiime run
+        # reduced to the sample metadata table, or a QC tab left with one lonely
+        # plot and no filter) — is dropped. Tabs are separate docs, so "hidden" =
+        # "not inserted"; drop any stale existing copy on overwrite so re-imports
+        # stay idempotent.
+        if not _tab_meets_minimum(tab_dashboard_dict, dc_meta):
+            logger.info(
+                f"Skipping tab '{tab_lite.title}': below minimum (needs ≥1 filter + ≥1 "
+                "non-metadata component) after filtering — its data collections are "
+                "absent/unpopulated for this run"
+            )
+            if existing_tab is not None:
+                dashboards_collection.delete_one({"_id": existing_tab["_id"]})
+            continue
 
         # Validate and insert/update tab
         try:
@@ -3812,7 +4086,7 @@ async def import_dashboard_from_yaml(
         _regenerate_component_fields(
             component
         )  # Regenerate s3_base_folder, etc. after dc_config is populated
-    _filter_unresolved_components(dashboard_dict)
+    _filter_unresolved_components(dashboard_dict, project_id=project_id)
     _regenerate_component_indices(dashboard_dict)
 
     try:

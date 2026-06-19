@@ -9,6 +9,7 @@ Usage:
 """
 
 import copy
+import json
 import re
 from datetime import datetime
 from pathlib import Path
@@ -18,7 +19,12 @@ import httpx
 import yaml
 
 from depictio.cli.cli_logging import logger
-from depictio.models.models.templates import TemplateConditional, TemplateMetadata, TemplateOrigin
+from depictio.models.models.templates import (
+    ExpectedDataCollection,
+    TemplateConditional,
+    TemplateMetadata,
+    TemplateOrigin,
+)
 
 _TEMPLATE_VAR_RE = re.compile(r"\{([A-Z0-9_]+)\}")
 
@@ -136,6 +142,106 @@ def substitute_template_variables(config: Any, variables: dict[str, str]) -> Any
         return config
 
 
+def _prune_missing_optional_single_file_dcs(
+    config: dict[str, Any],
+) -> tuple[dict[str, Any], list[str]]:
+    """Drop optional single-file DCs whose (already-substituted) file is absent.
+
+    The Project model validates single-file (``scan.mode == "single"``) DCs by
+    checking the file exists. Some pipeline outputs are produced only by certain
+    sub-workflows (e.g. the QIIME2 phylogenetic tree is absent for ITS / IonTorrent
+    / multi-region ampliseq runs). When such a DC is flagged ``optional: true`` and
+    its file is missing, prune it (and any links referencing it) so the run ingests
+    everything else instead of failing validation outright.
+
+    Scoped deliberately: only DCs that are BOTH ``optional`` AND single-file scans
+    are considered. Required DCs and recipe/glob DCs are left untouched so genuine
+    gaps still raise.
+    """
+    removed: set[str] = set()
+    for workflow in config.get("workflows", []):
+        for dc in workflow.get("data_collections", []):
+            if not dc.get("optional"):
+                continue
+            scan = dc.get("config", {}).get("scan", {})
+            if scan.get("mode") != "single":
+                continue
+            filename = scan.get("scan_parameters", {}).get("filename")
+            if filename and not Path(filename).is_file():
+                removed.add(dc["data_collection_tag"])
+
+    if removed:
+        for workflow in config.get("workflows", []):
+            workflow["data_collections"] = [
+                dc
+                for dc in workflow.get("data_collections", [])
+                if dc.get("data_collection_tag") not in removed
+            ]
+        config["links"] = [
+            link
+            for link in config.get("links", [])
+            if link.get("source_dc_tag") not in removed and link.get("target_dc_tag") not in removed
+        ]
+    return config, sorted(removed)
+
+
+def _collect_dc_superset(config: dict[str, Any]) -> list[dict[str, Any]]:
+    """Snapshot every DC across all workflows as {tag, type, optional}.
+
+    Captured before any conditional/missing-file pruning so the expected-DC manifest
+    records the full template superset (substitution does not add/remove DCs, so the
+    timing within resolution is not sensitive).
+    """
+    superset: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for workflow in config.get("workflows", []):
+        for dc in workflow.get("data_collections", []):
+            tag = dc.get("data_collection_tag")
+            if not tag or tag in seen:
+                continue
+            seen.add(tag)
+            superset.append(
+                {
+                    "data_collection_tag": tag,
+                    "type": dc.get("config", {}).get("type"),
+                    "optional": bool(dc.get("optional", False)),
+                }
+            )
+    return superset
+
+
+def _build_expected_dcs(
+    superset: list[dict[str, Any]],
+    final_config: dict[str, Any],
+    removal_reasons: dict[str, str],
+) -> list[ExpectedDataCollection]:
+    """Combine the pre-pruning DC superset with what survived into the final config.
+
+    Each entry is marked ``included`` (still present after all pruning) with a
+    ``removal_reason`` for excluded DCs. Used to populate
+    ``TemplateOrigin.expected_data_collections``.
+    """
+    surviving: set[str] = {
+        dc.get("data_collection_tag")
+        for workflow in final_config.get("workflows", [])
+        for dc in workflow.get("data_collections", [])
+    }
+    expected: list[ExpectedDataCollection] = []
+    for entry in superset:
+        tag = entry["data_collection_tag"]
+        included = tag in surviving
+        expected.append(
+            ExpectedDataCollection(
+                data_collection_tag=tag,
+                type=entry["type"],
+                optional=entry["optional"],
+                included=included,
+                removal_reason=None if included else removal_reasons.get(tag),
+            )
+        )
+    return expected
+
+
 def _strip_ids(config: Any) -> Any:
     """Remove hardcoded 'id' fields from config so fresh IDs are generated.
 
@@ -161,12 +267,13 @@ def _apply_conditionals(
     conditionals: list[TemplateConditional],
     provided_vars: set[str],
     template_dir: Path,
-) -> tuple[dict[str, Any], list[str]]:
+) -> tuple[dict[str, Any], list[str], dict[str, str]]:
     """Apply conditional rules based on which optional variables were provided.
 
     For each conditional that fires:
     - Removes DCs listed in remove_dc_tags from all workflows
     - Prunes links whose source_dc_tag or target_dc_tag references a removed DC
+    - Repoints surviving DCs listed in override_dcs at the route's file layout
     - Overrides the active dashboard list
 
     Args:
@@ -176,17 +283,24 @@ def _apply_conditionals(
         template_dir: Template directory for resolving dashboard paths.
 
     Returns:
-        Tuple of (modified_config, active_dashboard_rel_paths).
+        Tuple of (modified_config, active_dashboard_rel_paths, removal_reasons),
+        where removal_reasons maps each removed DC tag to a human-readable reason
+        (used to build the project's expected-DC manifest).
     """
     removed_dc_tags: set[str] = set()
+    removal_reasons: dict[str, str] = {}
     active_dashboards: list[str] = []
+    overrides_by_tag: dict[str, Any] = {}
 
     for rule in conditionals:
         fires = False
+        reason = ""
         if rule.if_var_absent and rule.if_var_absent not in provided_vars:
             fires = True
+            reason = f"gated: {rule.if_var_absent} absent (if_var_absent)"
         elif rule.if_var_present and rule.if_var_present in provided_vars:
             fires = True
+            reason = f"gated: {rule.if_var_present} present (if_var_present)"
 
         if not fires:
             continue
@@ -194,10 +308,24 @@ def _apply_conditionals(
         # Collect DC tags to remove
         for tag in rule.remove_dc_tags:
             removed_dc_tags.add(tag)
+            removal_reasons.setdefault(tag, reason)
             logger.info(f"Conditional rule: removing DC tag '{tag}'")
 
-        # Override active dashboards
+        # Collect DC source-binding overrides (last-write-wins per tag)
+        for ov in rule.override_dcs:
+            overrides_by_tag[ov.data_collection_tag] = ov
+            logger.info(f"Conditional rule: overriding DC source '{ov.data_collection_tag}'")
+
+        # Override active dashboards. Multiple firing rules are last-write-wins;
+        # warn if a later rule replaces a *different* selection so a future
+        # multi-dashboard template (e.g. per-protocol variants) can't silently
+        # pick the wrong one based on rule order.
         if rule.dashboards:
+            if active_dashboards and active_dashboards != rule.dashboards:
+                logger.warning(
+                    f"Conditional dashboards override: {active_dashboards} → {rule.dashboards} "
+                    f"(rule {rule.if_var_present or rule.if_var_absent})"
+                )
             active_dashboards = rule.dashboards
             logger.info(f"Conditional rule: using dashboards {rule.dashboards}")
 
@@ -227,7 +355,32 @@ def _apply_conditionals(
                 surviving_links.append(link)
         config["links"] = surviving_links
 
-    return config, active_dashboards
+    # Repoint surviving DCs at the route's file layout. Applied after removal so a
+    # removed DC is never overridden; mutates the DC config in place so downstream
+    # consumers (canonicals, dashboards) keep referencing the same tag.
+    if overrides_by_tag:
+        for workflow in config.get("workflows", []):
+            for dc in workflow.get("data_collections", []):
+                ov = overrides_by_tag.get(dc.get("data_collection_tag"))
+                if ov is None:
+                    continue
+                cfg = dc.setdefault("config", {})
+                if ov.scan_pattern is not None or ov.scan_filename is not None:
+                    params = cfg.setdefault("scan", {}).setdefault("scan_parameters", {})
+                    if ov.scan_pattern is not None:
+                        params.setdefault("regex_config", {})["pattern"] = ov.scan_pattern
+                    if ov.scan_filename is not None:
+                        params["filename"] = ov.scan_filename
+                if ov.format is not None:
+                    cfg.setdefault("dc_specific_properties", {})["format"] = ov.format
+                if ov.recipe is not None:
+                    cfg.setdefault("transform", {})["recipe"] = ov.recipe
+                if ov.source_overrides is not None:
+                    so = cfg.setdefault("transform", {}).setdefault("source_overrides", {})
+                    so.update(ov.source_overrides)
+                logger.info(f"Repointed DC '{dc.get('data_collection_tag')}' for route")
+
+    return config, active_dashboards, removal_reasons
 
 
 def _file_exists_any(filepath: str, data_root: str) -> bool:
@@ -388,6 +541,93 @@ def _log_removal_report(report: list[dict[str, str]]) -> None:
     logger.warning("Dashboard components referencing these will be excluded.")
 
 
+def _introspect_pipeline_params(data_root: str, variables: dict[str, str]) -> None:
+    """Read the run's nf-core ``params.json`` and set synthesized template flags.
+
+    nf-core pipelines write ``pipeline_info/params*.json``. We translate a few fields
+    into present/absent flag variables so they compose with the existing
+    ``if_var_present``/``if_var_absent`` conditionals (no model change), and auto-fill
+    ``METADATA_FILE`` when the run shipped a metadata file — so the common cases need
+    no ``--var``. Best-effort: silently no-ops when no params file is found/parseable.
+
+    Flags set (only when applicable; never overrides an explicit ``--var``):
+      - ``SKIP_QIIME``     — ampliseq ITS/sintax runs without QIIME2 outputs
+      - ``SKIP_TAXONOMY`` / ``SKIP_ALPHA_RAREFACTION`` — ampliseq runs that suppress
+        a qiime2/ output subtree via the matching --skip_* flag
+      - ``SKIP_ANCOM`` — ampliseq runs where ANCOM-BC was not opted into (no
+        ``--ancombc``), so qiime2/ancombc/ is absent
+      - ``IS_METAGENOMIC`` — viralrecon metagenomic (non-amplicon) runs
+      - ``IS_NANOPORE``    — viralrecon nanopore/artic runs
+      - ``IS_MULTIREGION`` — ampliseq multiregion/SIDLE runs (per-region ASVs
+        reconstructed into one cross-region feature table under ``sidle/``)
+    """
+    # Locate the run's params.json. For "flat" projects (e.g. ampliseq, one run =
+    # one DATA_ROOT) it sits directly under DATA_ROOT. For "sequencing-runs" projects
+    # (e.g. viralrecon, DATA_ROOT aggregates run_*/ subdirs — incl. the per-run
+    # symlink-parent validation convention) it sits one level down in a run subdir;
+    # all runs of a project share a platform/protocol, so the first run's params is
+    # representative for these route flags.
+    candidates = sorted(Path(data_root).glob("pipeline_info/params*.json"))
+    if not candidates:
+        candidates = sorted(Path(data_root).glob("*/pipeline_info/params*.json"))
+        if candidates:
+            logger.warning(
+                f"params.json not found at DATA_ROOT; using a run subdir's params "
+                f"({candidates[0].parent.parent.name}) for route flags. If this DATA_ROOT "
+                f"mixes platforms (e.g. nanopore + illumina runs), pass the route flag "
+                f"explicitly via --var."
+            )
+    params: dict = {}
+    for c in candidates:
+        try:
+            with open(c) as fh:
+                params = json.load(fh)
+            break
+        except (OSError, ValueError):
+            continue
+    if not params:
+        return
+
+    if (params.get("platform") or "").lower() == "nanopore":
+        variables.setdefault("IS_NANOPORE", "true")
+    if (params.get("protocol") or "").lower() == "metagenomic":
+        variables.setdefault("IS_METAGENOMIC", "true")
+    if params.get("skip_qiime") is True:
+        variables.setdefault("SKIP_QIIME", "true")
+    # ampliseq output-suppressing skip flags: each removes a subtree of qiime2/
+    # outputs. Surface them as flags so the template prunes the dependent DCs
+    # (otherwise a REQUIRED DC's missing source aborts ingestion on a valid run).
+    if params.get("skip_taxonomy") is True:
+        variables.setdefault("SKIP_TAXONOMY", "true")
+    if params.get("skip_alpha_rarefaction") is True:
+        variables.setdefault("SKIP_ALPHA_RAREFACTION", "true")
+    # ANCOM-BC is opt-in (positive `ancombc` flag, default false) — there is no
+    # `skip_ancom` param. When it didn't run, no qiime2/ancombc/ output exists, so
+    # prune the differential-abundance DCs.
+    if params.get("ancombc") is not True:
+        variables.setdefault("SKIP_ANCOM", "true")
+    # ampliseq multiregion/SIDLE: the route is keyed by a regions reference AND a
+    # SIDLE reference taxonomy (standard runs leave 'multiregion' null).
+    if params.get("multiregion") and params.get("sidle_ref_taxonomy"):
+        variables.setdefault("IS_MULTIREGION", "true")
+
+    # Auto-fill METADATA_FILE from the run's input/ when the run used metadata
+    # (params 'metadata' is the source URL; the local copy lands in input/).
+    if "METADATA_FILE" not in variables and params.get("metadata"):
+        input_dir = Path(data_root) / "input"
+        if input_dir.is_dir():
+            metas = sorted(
+                p
+                for p in input_dir.iterdir()
+                if p.is_file()
+                and "metadata" in p.name.lower()
+                and p.suffix.lower() in (".tsv", ".csv", ".txt")
+            )
+            if metas:
+                variables["METADATA_FILE"] = str(metas[0])
+                logger.info(f"METADATA_FILE auto-detected from params + input/: {metas[0]}")
+
+
 def _auto_detect_metadata_columns(metadata_path: Path, variables: dict[str, str]) -> None:
     """Read metadata file headers and auto-populate GROUP_COL and ANNOTATION_COLS.
 
@@ -408,7 +648,11 @@ def _auto_detect_metadata_columns(metadata_path: Path, variables: dict[str, str]
         cols = [c.strip() for c in header_line.split(sep)]
         if len(cols) < 2:
             return
-        # First column is always the sample ID; the rest are annotations
+        # First column is always the sample ID; the rest are annotations.
+        # The ID column name is pipeline/user dependent (nf-core test data uses
+        # "ID", the megatest metadata uses "sample"), so expose it as a variable
+        # that the metadata→* link source columns substitute against.
+        variables.setdefault("METADATA_ID_COL", cols[0])
         annotation_cols = [c for c in cols[1:] if c]
         if annotation_cols:
             variables.setdefault("GROUP_COL", annotation_cols[0])
@@ -480,6 +724,10 @@ def resolve_template(
     if extra_vars:
         variables.update(extra_vars)
 
+    # 3a. Introspect the run's params.json to set protocol/skip flags + auto-fill
+    # METADATA_FILE (does not override explicit --var values).
+    _introspect_pipeline_params(data_root_abs, variables)
+
     # 3b. Auto-detect metadata annotation columns when METADATA_FILE is provided
     if "METADATA_FILE" in variables:
         metadata_path = Path(variables["METADATA_FILE"])
@@ -491,6 +739,39 @@ def resolve_template(
             # else keep as-is (relative to CWD)
         if metadata_path.is_file():
             _auto_detect_metadata_columns(metadata_path, variables)
+
+    # 3c. Auto-resolve SAMPLESHEET_FILE from the run's input/ directory when not
+    # supplied. nf-core/ampliseq copies the input samplesheet into <run>/input/
+    # under a pipeline/user dependent name (e.g. "Samplesheet.tsv",
+    # "samplesheet.csv"), so locate it case-insensitively rather than forcing the
+    # caller to pass an explicit path.
+    if "SAMPLESHEET_FILE" not in variables:
+        input_dir = Path(data_root_abs) / "input"
+        if input_dir.is_dir():
+            candidates = sorted(
+                p
+                for p in input_dir.iterdir()
+                if p.is_file()
+                and "samplesheet" in p.name.lower()
+                and p.suffix.lower() in (".csv", ".tsv", ".tab", ".txt")
+            )
+            if candidates:
+                variables["SAMPLESHEET_FILE"] = str(candidates[0])
+                logger.info(f"Samplesheet auto-detected: {candidates[0]}")
+
+    # Metadata ID column defaults to "sample" (megatest convention) when no
+    # metadata file is present; the metadata→* links are pruned in that case, so
+    # the placeholder simply resolves harmlessly.
+    variables.setdefault("METADATA_ID_COL", "sample")
+
+    # GROUP_COL drives per-group faceting/colouring in dashboards. When no
+    # metadata (or no annotation column) is available it cannot resolve to a real
+    # data column, so default it to a sentinel that no column matches: group-aware
+    # figures test `'{GROUP_COL}' in df.columns` and fall back to an ungrouped
+    # view, and the display label keeps titles readable instead of leaking the
+    # raw `{GROUP_COL_DISPLAY}` placeholder.
+    variables.setdefault("GROUP_COL", "__no_group__")
+    variables.setdefault("GROUP_COL_DISPLAY", "Group")
 
     provided_vars: set[str] = set(variables.keys())
 
@@ -511,22 +792,35 @@ def resolve_template(
     # 5. Substitute template variables in all paths
     resolved_config = substitute_template_variables(raw_config, variables)
 
+    # 5b. Snapshot the full DC superset before any pruning, so the expected-DC
+    # manifest can record what the template expected (incl. gated-out optionals).
+    dc_superset = _collect_dc_superset(resolved_config)
+    removal_reasons: dict[str, str] = {}
+
     # 6. Apply conditional rules based on which optional vars were provided
     template_dir = template_path.parent
-    resolved_config, conditional_dashboards = _apply_conditionals(
+    resolved_config, conditional_dashboards, conditional_reasons = _apply_conditionals(
         resolved_config,
         template_metadata.conditional,
         provided_vars,
         template_dir,
     )
+    removal_reasons.update(conditional_reasons)
 
-    # 6b. File scanning for missing source files (disabled for now —
-    # conditionals handle base vs extended split; file scanning is too
-    # aggressive with pre-computed reference data).
-    # TODO: Re-enable when running against real pipeline output directories.
-    # resolved_config, removal_report = _remove_dcs_with_missing_files(resolved_config, data_root_abs)
-    # if removal_report:
-    #     _log_removal_report(removal_report)
+    # 6b. Prune optional single-file DCs whose file is absent. Scoped strictly to
+    # DCs flagged optional with a `single` scan (e.g. the phylogenetic tree, only
+    # produced by some ampliseq sub-workflows) so a legitimate run that simply
+    # lacks that output ingests the rest instead of failing the Project model's
+    # ScanSingle existence check. Required DCs and recipe/glob DCs are untouched —
+    # their absence still surfaces as a loud error.
+    resolved_config, pruned_optional = _prune_missing_optional_single_file_dcs(resolved_config)
+    if pruned_optional:
+        logger.info(
+            f"Pruned {len(pruned_optional)} optional DC(s) with missing source files: "
+            f"{', '.join(pruned_optional)}"
+        )
+        for tag in pruned_optional:
+            removal_reasons.setdefault(tag, "optional source file not found")
 
     # 7. Strip hardcoded IDs (fresh project gets new ones)
     resolved_config = _strip_ids(resolved_config)
@@ -538,6 +832,7 @@ def resolve_template(
         resolved_config["name"] = f"{template_id} - {Path(data_root).name}"
 
     # 9. Build TemplateOrigin for DB tracking
+    expected_dcs = _build_expected_dcs(dc_superset, resolved_config, removal_reasons)
     template_origin = TemplateOrigin(
         template_id=template_metadata.template_id,
         template_version=template_metadata.version,
@@ -545,6 +840,7 @@ def resolve_template(
         variables=dict(variables),
         applied_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         config_snapshot=copy.deepcopy(resolved_config),
+        expected_data_collections=expected_dcs,
     )
 
     # 10. Inject template_origin into config
@@ -572,6 +868,7 @@ def import_dashboards_from_template(
     project_id: str | None = None,
     overwrite: bool = True,
     variables: dict[str, str] | None = None,
+    dashboard_name: str | None = None,
 ) -> list[dict[str, Any]]:
     """Import dashboard YAML files from a template into the server.
 
@@ -587,6 +884,8 @@ def import_dashboards_from_template(
         overwrite: If True, update existing dashboards with the same title.
         variables: Template variables to substitute in dashboard YAML
             (e.g., ``{GROUP_COL}`` placeholders).
+        dashboard_name: When provided, overrides the main dashboard's title
+            (child tabs keep their own titles).
 
     Returns:
         List of result dicts, one per dashboard file.  Each contains
@@ -600,10 +899,18 @@ def import_dashboards_from_template(
         try:
             yaml_content = path.read_text(encoding="utf-8")
 
-            # Substitute template variables in dashboard YAML
-            if variables:
+            # Substitute template variables and/or override the dashboard title.
+            if variables or dashboard_name:
                 parsed = yaml.safe_load(yaml_content)
-                parsed = substitute_template_variables(parsed, variables)
+                if variables:
+                    parsed = substitute_template_variables(parsed, variables)
+                if dashboard_name and isinstance(parsed, dict):
+                    # Override only the main dashboard's title; child-tab files
+                    # (which carry their own top-level `title`) keep theirs.
+                    if isinstance(parsed.get("main_dashboard"), dict):
+                        parsed["main_dashboard"]["title"] = dashboard_name
+                    elif "title" in parsed:
+                        parsed["title"] = dashboard_name
                 yaml_content = yaml.dump(parsed, default_flow_style=False, allow_unicode=True)
 
             params: dict[str, str | bool] = {}

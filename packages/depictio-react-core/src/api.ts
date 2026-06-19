@@ -2078,6 +2078,113 @@ export async function fetchProject(
   return { project: data as ProjectListEntry, delta_locations: {} };
 }
 
+/** One row of the ingestion report's expected-vs-identified DC table.
+ *  Mirrors `IngestionDataCollection` in the backend ingestion_report module. */
+export interface IngestionDataCollection {
+  data_collection_tag: string;
+  type: string | null;
+  optional: boolean;
+  /** 'identified' | 'found_zero' | 'gated_out' */
+  status: string;
+  removal_reason: string | null;
+  files_found: number;
+  files_new: number;
+  files_skipped: number;
+  files_failed: number;
+  ingested: boolean;
+  /** Delta-table storage path for aggregated/recipe DCs (no source files). */
+  table_location: string | null;
+  /** For recipe-derived DCs: the input paths / upstream collections it aggregates from. */
+  source_inputs: string[];
+  /** Recipe reference for transformed/derived DCs (e.g. "qiime2/taxonomy_composition.py"). */
+  recipe: string | null;
+  /** GitHub link to the recipe source file. */
+  recipe_url: string | null;
+}
+
+export interface IngestionRun {
+  run_tag: string;
+  run_location: string | null;
+  scan_time: string | null;
+  /** 'ok' | 'partial' | 'no_scan' */
+  status: string;
+}
+
+export interface IngestionSummary {
+  required_total: number;
+  required_identified: number;
+  required_missing: number;
+  optional_total: number;
+  optional_identified: number;
+  optional_missing: number;
+  /** DCs (required or optional) excluded by a template condition / prune. */
+  gated: number;
+  /** 'ok' | 'partial' | 'missing_required' */
+  health: string;
+}
+
+export interface IngestionReport {
+  project: { id: string; name: string; project_type: string | null };
+  template: {
+    template_id: string | null;
+    template_version: string | null;
+    applied_at: string | null;
+    data_root: string | null;
+  } | null;
+  /** 'template_manifest' (faithful) | 'live_project' (legacy fallback) */
+  manifest_source: string;
+  variables: Array<{ name: string; value: string }>;
+  data_collections: IngestionDataCollection[];
+  runs: IngestionRun[];
+  summary: IngestionSummary;
+  scanned_at: string | null;
+}
+
+/** Full ingestion report: what the template execution expected vs. what was
+ *  identified per data collection. Backend: GET /projects/ingestion-report/{id}. */
+export async function fetchIngestionReport(
+  projectId: string,
+): Promise<IngestionReport> {
+  const res = await fetch(`${API_BASE}/projects/ingestion-report/${projectId}`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) await throwHttpError(res, `Failed to fetch ingestion report ${projectId}`);
+  return (await res.json()) as IngestionReport;
+}
+
+/** Lightweight ingestion-health summary for the dashboard banner. Backend:
+ *  GET /projects/ingestion-health/{id}. */
+export async function fetchIngestionHealth(
+  projectId: string,
+): Promise<IngestionSummary> {
+  const res = await fetch(`${API_BASE}/projects/ingestion-health/${projectId}`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) await throwHttpError(res, `Failed to fetch ingestion health ${projectId}`);
+  return (await res.json()) as IngestionSummary;
+}
+
+/** A file registered under a data collection (subset of the backend File doc). */
+export interface RegisteredFile {
+  filename?: string;
+  file_location?: string;
+  filesize?: number;
+  run_tag?: string | null;
+}
+
+/** List the files registered for a data collection. Backend:
+ *  GET /files/list/{data_collection_id}. Used to expand a DC row in the
+ *  ingestion report into its identified file names. */
+export async function fetchDataCollectionFiles(
+  dataCollectionId: string,
+): Promise<RegisteredFile[]> {
+  const res = await fetch(`${API_BASE}/files/list/${dataCollectionId}`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) await throwHttpError(res, `Failed to list files for ${dataCollectionId}`);
+  return (await res.json()) as RegisteredFile[];
+}
+
 /** Fields the projects management Create-modal collects. The backend's
  *  POST /projects/create expects a full Project payload — `createProject`
  *  builds the rest from these inputs (current user as sole owner, empty
@@ -3256,4 +3363,121 @@ export async function clearTableDC(dcId: string): Promise<TableMutationResult> {
   });
   if (!res.ok) await throwHttpDetailError(res, 'Failed to clear Table DC');
   return (await res.json()) as TableMutationResult;
+}
+
+// =============================================================================
+// Catalog compose — matches ingested DCs against catalog entries
+// =============================================================================
+
+export interface CatalogRender {
+  component: string;
+  kind?: string;
+  roles?: Record<string, string>;
+  visu_type?: string;
+  dict_kwargs?: Record<string, string>;
+  column?: string;
+  aggregation?: string;
+  code?: string;
+  /** advanced_viz only: the pre-computed config blob (role bindings + data-derived
+   *  viz-control defaults like manhattan `score_threshold`) the catalog preview
+   *  rendered with. Persisting it verbatim makes the added component match its
+   *  preview. Absent when the render isn't grounded against a fixture. */
+  config?: Record<string, unknown>;
+}
+
+export interface CatalogOutputMatch {
+  output_id: string;
+  description: string;
+  dc_id: string;
+  wf_id: string;
+  dc_tag: string;
+  renders_as: CatalogRender[];
+}
+
+export interface CatalogModule {
+  tool_id: string;
+  tool_name: string;
+  matches: CatalogOutputMatch[];
+}
+
+export interface CatalogComposeResponse {
+  modules: CatalogModule[];
+}
+
+export async function fetchCatalogCompose(
+  projectId: string,
+): Promise<CatalogComposeResponse> {
+  const res = await authFetch(`${API_BASE}/catalog/project/${projectId}/compose`);
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to fetch catalog compose');
+  return (await res.json()) as CatalogComposeResponse;
+}
+
+// ---------------------------------------------------------------------------
+// Catalog output preview payload (pre-computed from fixture)
+// ---------------------------------------------------------------------------
+
+export interface CatalogPreviewRender {
+  index: string;
+  component_type: string;
+  wf_id: string;
+  dc_id: string;
+  _variant?: string;
+  _yaml?: string;
+  _binds?: Record<string, string>;
+  _error?: string;
+  _unsupported?: string;
+  _preview_height?: number;
+  // figure
+  visu_type?: string;
+  mode?: string;
+  // card
+  column_name?: string;
+  aggregation?: string;
+  aggregations?: string[];
+  secondary_layout?: string;
+  icon_name?: string;
+  icon_color?: string;
+  title?: string;
+  // advanced_viz
+  viz_kind?: string;
+  config?: Record<string, unknown>;
+  // multiqc
+  _multiqc_anchor?: string;
+}
+
+export interface CatalogPreviewPayload {
+  output: {
+    id: string;
+    description: string;
+    mode?: string;
+    recipe?: string;
+    fixture?: string;
+    nf_core_url?: string;
+    n_rows?: number;
+    n_cols?: number;
+    columns?: string[];
+  };
+  fixturePreview: { columns: string[]; rows: Record<string, unknown>[]; total: number } | null;
+  theme: string;
+  renders: CatalogPreviewRender[];
+  data: {
+    figures: Record<string, { figure: { data: unknown[]; layout: Record<string, unknown> } }>;
+    tables: Record<string, { columns: Array<{ field: string; headerName: string; type: string }>; rows: Record<string, unknown>[]; total: number }>;
+    cards: {
+      values: Record<string, number | null>;
+      secondary: Record<string, Record<string, unknown>>;
+      aggregations: Record<string, string[]>;
+    };
+    compute: Record<string, unknown>;
+    advancedVizData: Record<string, unknown>;
+    multiqc: Record<string, unknown>;
+  };
+}
+
+export async function fetchCatalogPreviewPayload(
+  outputId: string,
+): Promise<CatalogPreviewPayload> {
+  const res = await authFetch(`${API_BASE}/catalog/output/${outputId}/preview-payload`);
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to fetch catalog preview');
+  return (await res.json()) as CatalogPreviewPayload;
 }

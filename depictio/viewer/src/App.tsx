@@ -1,7 +1,9 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import {
+  ActionIcon,
   AppShell,
   Button,
+  Center,
   Group,
   Text,
   Loader,
@@ -30,6 +32,8 @@ import {
   useDataCollectionUpdates,
   RealtimeIndicator,
   useRealtimeJournal,
+  fetchProjectFromDashboard,
+  fetchIngestionHealth,
 } from 'depictio-react-core';
 import type {
   DashboardData,
@@ -37,7 +41,14 @@ import type {
   DashboardSummary,
   InteractiveFilter,
   RealtimeMode,
+  IngestionSummary,
 } from 'depictio-react-core';
+import { parseTemplateOrigin } from './projects/template';
+
+/** localStorage key for the dismissed ingestion banner, scoped per project so
+ *  the dismissal sticks across the dashboard's sibling tabs. */
+const ingestionBannerKey = (projectId: string) =>
+  `depictio:ingestion-banner-dismissed:${projectId}`;
 import { notifications } from '@mantine/notifications';
 import { Header, Sidebar, SettingsDrawer } from './chrome';
 import { useSidebarOpen } from './hooks/useSidebarOpen';
@@ -82,6 +93,13 @@ const App: React.FC = () => {
   const dashboardId = extractDashboardId();
   const bulkCtrl = useRef<AbortController | null>(null);
 
+  // Ingestion-health banner: for template-derived dashboards, surface a
+  // prominent prompt when a required data collection was not found during
+  // ingestion (or things came in partial). Best-effort — never blocks the view.
+  const [ingestionHealth, setIngestionHealth] = useState<IngestionSummary | null>(null);
+  const [ingestionProjectId, setIngestionProjectId] = useState<string | null>(null);
+  const [ingestionBannerDismissed, setIngestionBannerDismissed] = useState(false);
+
   // Keep the browser tab title in sync with the dashboard name.
   useEffect(() => {
     if (dashboard?.title) {
@@ -107,6 +125,43 @@ const App: React.FC = () => {
         setError(`Failed to load dashboard: ${err.message || err}`);
       })
       .finally(() => setLoading(false));
+  }, [dashboardId]);
+
+  // Resolve the parent project and its ingestion health (template projects only).
+  useEffect(() => {
+    if (!dashboardId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { project } = await fetchProjectFromDashboard(dashboardId);
+        if (cancelled || !project) return;
+        // Only template-instantiated projects have an expected-DC manifest worth
+        // reporting against; skip the banner entirely otherwise.
+        if (!parseTemplateOrigin((project as { template_origin?: unknown }).template_origin)) {
+          return;
+        }
+        const pid = String(project._id || '');
+        if (!pid) return;
+        const health = await fetchIngestionHealth(pid);
+        if (cancelled) return;
+        setIngestionProjectId(pid);
+        setIngestionHealth(health);
+        // Dismissal is remembered per project so it stays hidden across the
+        // dashboard's sibling tabs (which share one project_id).
+        let dismissed = false;
+        try {
+          dismissed = localStorage.getItem(ingestionBannerKey(pid)) === '1';
+        } catch {
+          /* private mode / disabled storage — treat as not dismissed */
+        }
+        setIngestionBannerDismissed(dismissed);
+      } catch {
+        // Banner is non-critical: swallow lookup/permission errors silently.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [dashboardId]);
 
   // Bumping a counter is the only signal effects can key off — every
@@ -364,6 +419,77 @@ const App: React.FC = () => {
       </AppShell.Navbar>
 
       <AppShell.Main style={{ height: 'calc(100vh - 50px)' }}>
+        {ingestionHealth &&
+          ingestionProjectId &&
+          !ingestionBannerDismissed &&
+          (ingestionHealth.health === 'missing_required' ||
+            ingestionHealth.health === 'partial') &&
+          (() => {
+            const critical = ingestionHealth.health === 'missing_required';
+            const color = critical ? 'red' : 'yellow';
+            const dismiss = () => {
+              setIngestionBannerDismissed(true);
+              try {
+                localStorage.setItem(ingestionBannerKey(ingestionProjectId), '1');
+              } catch {
+                /* storage unavailable — dismissal is in-memory only this session */
+              }
+            };
+            // Compact one-line bar: softer for "partial", stronger for the
+            // critical "missing required" case. Uses Mantine color tokens so it
+            // tracks the theme (no hardcoded literals).
+            return (
+              <Paper
+                m="sm"
+                py={6}
+                px="sm"
+                radius="md"
+                withBorder
+                style={{ backgroundColor: `var(--mantine-color-${color}-light)` }}
+              >
+                <Group justify="space-between" align="center" wrap="nowrap" gap="sm">
+                  <Group gap={8} wrap="nowrap" style={{ minWidth: 0 }}>
+                    <Icon
+                      icon={critical ? 'mdi:alert-octagon' : 'mdi:alert'}
+                      width={18}
+                      color={`var(--mantine-color-${color}-7)`}
+                    />
+                    <Text size="sm" fw={500} truncate>
+                      {critical
+                        ? `${ingestionHealth.required_missing} required data collection(s) were not ingested.`
+                        : 'Ingestion partial — some optional data collections are missing.'}
+                    </Text>
+                  </Group>
+                  <Group gap={8} wrap="nowrap" style={{ flexShrink: 0 }}>
+                    <Button
+                      component="a"
+                      href={`/projects/${ingestionProjectId}#ingestion`}
+                      size="xs"
+                      radius="xl"
+                      variant="white"
+                      color={color}
+                      leftSection={
+                        <Icon icon="mdi:clipboard-text-search-outline" width={15} />
+                      }
+                      rightSection={<Icon icon="mdi:arrow-right" width={15} />}
+                    >
+                      View report
+                    </Button>
+                    <ActionIcon
+                      variant="filled"
+                      color={color}
+                      radius="xl"
+                      size="md"
+                      onClick={dismiss}
+                      aria-label="Dismiss"
+                    >
+                      <Icon icon="mdi:close" width={16} />
+                    </ActionIcon>
+                  </Group>
+                </Group>
+              </Paper>
+            );
+          })()}
         {loading && (
           <Group p="lg">
             <Loader size="sm" />
@@ -469,20 +595,60 @@ const App: React.FC = () => {
                 />
               )}
               <Box style={{ flex: 1, minHeight: 0 }}>
-                <DashboardGrid
-                  dashboardId={dashboardId!}
-                  metadataList={rightComponents}
-                  layoutData={dashboard.right_panel_layout_data}
-                  filters={filters}
-                  onFilterChange={handleFilterChange}
-                  cardValues={cardValues}
-                  cardSecondaryValues={cardSecondaryValues}
-                  cardValuesLoading={cardsLoading}
-                  refreshTick={refreshTick}
-                  isDraggable={false}
-                  isResizable={false}
-                  editMode={false}
-                />
+                {rightComponents.length === 0 ? (
+                  <Center style={{ height: '100%', minHeight: 320 }}>
+                    <Stack align="center" gap="md" maw={420}>
+                      <Box
+                        style={{
+                          width: 72,
+                          height: 72,
+                          borderRadius: '50%',
+                          background: 'var(--mantine-color-gray-1)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        <Icon icon="mdi:view-dashboard-outline" width={36} color="var(--mantine-color-gray-5)" />
+                      </Box>
+                      <Stack gap={4} align="center">
+                        <Title order={4} fw={700} ta="center">
+                          This dashboard is empty
+                        </Title>
+                        <Text size="sm" c="dimmed" ta="center">
+                          No components have been added yet.
+                          {isOwner && ' Start editing to add visualizations, tables, and more.'}
+                        </Text>
+                      </Stack>
+                      {isOwner && (
+                        <Button
+                          component="a"
+                          href={`/dashboard-beta-edit/${dashboardId}`}
+                          leftSection={<Icon icon="mdi:pencil" width={16} />}
+                          size="md"
+                          variant="filled"
+                        >
+                          Start editing
+                        </Button>
+                      )}
+                    </Stack>
+                  </Center>
+                ) : (
+                  <DashboardGrid
+                    dashboardId={dashboardId!}
+                    metadataList={rightComponents}
+                    layoutData={dashboard.right_panel_layout_data}
+                    filters={filters}
+                    onFilterChange={handleFilterChange}
+                    cardValues={cardValues}
+                    cardSecondaryValues={cardSecondaryValues}
+                    cardValuesLoading={cardsLoading}
+                    refreshTick={refreshTick}
+                    isDraggable={false}
+                    isResizable={false}
+                    editMode={false}
+                  />
+                )}
               </Box>
             </Box>
           </div>

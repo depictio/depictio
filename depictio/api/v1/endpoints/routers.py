@@ -16,6 +16,7 @@ from depictio.api.v1.endpoints.analytics_data_endpoints.routes import (
 from depictio.api.v1.endpoints.analytics_endpoints.routes import router as analytics_router
 from depictio.api.v1.endpoints.auth_endpoints.google_oauth_routes import google_oauth_router
 from depictio.api.v1.endpoints.backup_endpoints.routes import backup_endpoint_router
+from depictio.api.v1.endpoints.catalog_endpoints.routes import catalog_endpoint_router
 from depictio.api.v1.endpoints.celery_endpoints.routes import celery_endpoint_router
 from depictio.api.v1.endpoints.cli_endpoints.routes import cli_endpoint_router
 from depictio.api.v1.endpoints.dashboards_endpoints.routes import dashboards_endpoint_router
@@ -125,6 +126,12 @@ router.include_router(
     advanced_viz_endpoint_router,
     prefix="/advanced_viz",
     tags=["Advanced Viz"],
+)
+
+router.include_router(
+    catalog_endpoint_router,
+    prefix="/catalog",
+    tags=["Catalog"],
 )
 
 router.include_router(

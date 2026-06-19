@@ -28,19 +28,15 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     """Clean Pangolin CSV: extract sample name from taxon, cast types."""
     df = sources["pangolin_raw"]
 
-    # The 'taxon' column contains sample names (consensus FASTA headers)
-    # Extract clean sample name: strip reference genome suffix and consensus suffixes
-    if "taxon" in df.columns:
+    # The 'taxon' column contains sample names (consensus FASTA headers).
+    # Extract clean sample name: nanopore/ARTIC headers are path-like
+    # ("SAMPLE_01/MN908947.3/ARTIC/clair3…") so strip from the first '/' (no-op on
+    # the illumina form), then strip whitespace and consensus suffixes.
+    col = next((c for c in ("taxon", "Taxon") if c in df.columns), None)
+    if col is not None:
         df = df.with_columns(
-            pl.col("taxon")
-            .str.replace(r"\s+.*$", "")
-            .str.replace(r"\.consensus.*$", "")
-            .str.replace(r"\.primertrimmed.*$", "")
-            .alias("sample")
-        )
-    elif "Taxon" in df.columns:
-        df = df.with_columns(
-            pl.col("Taxon")
+            pl.col(col)
+            .str.replace(r"/.*$", "")
             .str.replace(r"\s+.*$", "")
             .str.replace(r"\.consensus.*$", "")
             .str.replace(r"\.primertrimmed.*$", "")

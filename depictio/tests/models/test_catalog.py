@@ -46,11 +46,12 @@ def test_every_tool_is_a_folder_with_module_yaml():
 
 def test_identity_is_stored_as_urls():
     entries = {e.id: e for e in load_catalog_entries()}
-    # nf-core-backed module → lightweight: only the nf_core_url pointer is kept,
-    # the rest of the identity is derived from the module's meta.yml.
+    # nf-core-backed module keeps its nf_core_url pointer; the bio.tools id is
+    # declared explicitly (sourced from the nf-core meta.yml `identifier:`), since
+    # nothing fetches the meta.yml at runtime to derive it.
     ivar = entries["ivar"]
     assert ivar.nf_core_url.endswith("/modules/nf-core/ivar/variants")
-    assert ivar.biotools_url is None  # not duplicated; lives in nf-core meta.yml
+    assert ivar.biotools_url == "https://bio.tools/andersen-lab_ivar"
     # QIIME 2 has no single nf-core module → identity stays declared in full,
     # and when declared it must be a full URL (not a bare id).
     qiime2 = entries["qiime2"]
@@ -297,7 +298,7 @@ def test_alpha_diversity_has_code_figure_and_metric_cards():
         if o.id == "qiime2_alpha_diversity"
     )
     components = [r.component for r in out.renders_as]
-    assert components.count("card") == 3 and "figure" in components
+    assert components.count("card") == 4 and "figure" in components
     fig = next(r for r in out.renders_as if r.component == "figure")
     assert fig.code and "fig = px.box" in fig.code  # code-mode figure
     card = next(r for r in out.renders_as if r.component == "card")
@@ -357,7 +358,8 @@ def test_match_run_dir_recognises_bundled_viralrecon_files():
         pytest.skip("bundled viralrecon run_1 not present")
     by_output = {m.output_id: m for m in match_run_dir(run)}
     assert "mosdepth_genome_coverage" in by_output
-    assert "multiqc_report" in by_output
+    # MultiQC is surfaced as one output per module (multiqc_fastqc, multiqc_samtools…)
+    assert any(oid.startswith("multiqc_") for oid in by_output)
     # matches carry the viz they render (the dashboard building blocks)
     assert "advanced_viz:coverage_track" in by_output["mosdepth_genome_coverage"].renders
 
@@ -488,14 +490,21 @@ def test_legacy_pipeline_keyed_recipe_still_resolves():
 
 
 def test_fixtures_are_co_located_with_their_module():
-    # each fixture is a bare filename, resolved inside its module's folder
+    # each fixture is a bare filename, resolved inside its module's folder —
+    # EXCEPT multiqc, which reuses the bundled nf-core pipeline multiqc.parquet
+    # under projects/ via a relative path (no per-module copy).
     for entry in load_catalog_entries():
         for out in entry.outputs:
-            if out.fixture:
-                assert "/" not in out.fixture  # bare filename, not a path
+            if not out.fixture:
+                continue
+            if "/" in out.fixture:  # escaping fixture (multiqc → projects/ parquet)
                 fx = out.fixture_file()
                 assert fx is not None and fx.exists()
-                assert fx.parent.name == entry.id  # lives in the module folder
+                continue
+            assert "/" not in out.fixture  # bare filename, not a path
+            fx = out.fixture_file()
+            assert fx is not None and fx.exists()
+            assert fx.parent.name == entry.id  # lives in the module folder
 
 
 def test_card_top_n_requires_breakdown_col():

@@ -331,17 +331,35 @@ const DashboardCard: React.FC<DashboardCardProps> = ({
       <Space h={10} />
 
       <Stack gap={4} align="flex-start">
-        {projectName && (
-          <Tooltip label={`Project: ${projectName}`} withinPortal>
-            <Badge
-              color="teal"
-              leftSection={<Icon icon="mdi:jira" width={14} color="white" />}
-              style={{ maxWidth: '100%' }}
-            >
-              Project: {projectName}
-            </Badge>
-          </Tooltip>
-        )}
+        {projectName &&
+          (() => {
+            const projectId = (dashboard.project_id as string | undefined) || null;
+            const badge = (
+              <Badge
+                color="teal"
+                component={projectId ? 'a' : 'div'}
+                href={projectId ? `/projects/${projectId}` : undefined}
+                onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                leftSection={<Icon icon="mdi:jira" width={14} color="white" />}
+                rightSection={
+                  projectId ? (
+                    <Icon icon="mdi:open-in-new" width={11} color="white" />
+                  ) : undefined
+                }
+                style={{ maxWidth: '100%', cursor: projectId ? 'pointer' : undefined }}
+              >
+                Project: {projectName}
+              </Badge>
+            );
+            return (
+              <Tooltip
+                label={projectId ? `Open project: ${projectName}` : `Project: ${projectName}`}
+                withinPortal
+              >
+                {badge}
+              </Tooltip>
+            );
+          })()}
         {parsedTemplate && (
           <TemplateChip parsed={parsedTemplate} verbose />
         )}

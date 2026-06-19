@@ -22,10 +22,13 @@ template:
       description: "Root directory containing ampliseq pipeline output (multiqc/, qiime2/)"
       required: true
     - name: "SAMPLESHEET_FILE"
-      description: "Path to ampliseq samplesheet CSV (always produced by the pipeline)"
-      required: true
+      description: "Path to the ampliseq samplesheet. Auto-detected from {DATA_ROOT}/input/ (CSV or TSV) when omitted."
+      required: false
     - name: "METADATA_FILE"
       description: "Path to sample metadata TSV (--metadata in ampliseq run). Optional. All non-ID columns become annotations."
+      required: false
+    - name: "METADATA_ID_COL"
+      description: "Metadata sample-ID column name (links join on it). Auto-detected as the first metadata column; defaults to 'sample'."
       required: false
     - name: "GROUP_COL"
       description: "Metadata column for grouping/facetting in dashboards. Auto-detected as first annotation column if not provided."
@@ -36,19 +39,90 @@ template:
     - name: "ANNOTATION_COLS"
       description: "Auto-populated: comma-separated list of all annotation columns discovered from metadata file."
       required: false
+    - name: "IS_MULTIREGION"
+      description: "Auto-set from params.json (multiregion + sidle_ref_taxonomy). Prunes the QIIME2 diversity/phylogeny/ANCOM-BC DCs absent on the SIDLE route; the sidle_* DCs supply the reconstructed-community view."
+      required: false
+    - name: "SKIP_TAXONOMY"
+      description: "Auto-set from params.json (skip_taxonomy). Prunes the taxonomy/ordination/differential DCs (qiime2/{barplot,rel_abundance_tables,taxonomy}/ are absent)."
+      required: false
+    - name: "SKIP_ALPHA_RAREFACTION"
+      description: "Auto-set from params.json (skip_alpha_rarefaction). Prunes the alpha-rarefaction DCs (qiime2/alpha-rarefaction/ is absent)."
+      required: false
+    - name: "SKIP_ANCOM"
+      description: "Auto-set from params.json (skip_ancom). Prunes the ANCOM-BC differential-abundance DCs (qiime2/ancombc/ is absent)."
+      required: false
   dashboards:
     - "dashboards/base.yaml"
   conditional:
     - if_var_absent: "METADATA_FILE"
-      remove_dc_tags: ["metadata", "alpha_rarefaction", "ancombc_results"]
+      # ma_canonical derives from ancombc_results (itself metadata-gated), so it
+      # must be pruned together with the metadata-dependent DCs — otherwise its
+      # dc_ref to the removed ancombc_results DC fails when no metadata is given.
+      # upset_canonical is a taxa × GROUP_COL presence matrix: with no metadata
+      # there is only one group, so it degenerates to a single useless bar — drop it.
+      remove_dc_tags:
+        ["metadata", "alpha_rarefaction", "ancombc_results", "ma_canonical",
+         "upset_canonical"]
       dashboards: ["dashboards/base.yaml"]
     - if_var_present: "METADATA_FILE"
       dashboards: ["dashboards/base.yaml"]
-  reference:
-    vars:
-      SAMPLESHEET_FILE: "{DATA_ROOT}/input/samplesheet.csv"
-      METADATA_FILE: "{DATA_ROOT}/input/Metadata_full.tsv"
-      GROUP_COL: "habitat"
+    # ITS / IonTorrent / PacBio runs use sintax (--skip_qiime) and produce NO QIIME2
+    # outputs. SKIP_QIIME is auto-set from the run's params.json; when present, drop
+    # every QIIME2-derived DC so the run ingests its MultiQC + samplesheet cleanly
+    # instead of hard-failing. Normal 16S runs (no skip_qiime) keep these DCs
+    # required, so a genuinely missing QIIME2 output still surfaces loudly.
+    - if_var_present: "SKIP_QIIME"
+      remove_dc_tags:
+        ["alpha_rarefaction", "taxonomy_composition", "taxonomy_rel_abundance",
+         "taxonomy_heatmap", "ancombc_results", "stacked_taxonomy_canonical",
+         "embedding_pcoa", "rarefaction_canonical", "alpha_diversity_multi_canonical",
+         "complex_heatmap_canonical", "sunburst_canonical", "sankey_canonical",
+         "upset_canonical", "ma_canonical", "bray_curtis_canonical",
+         "phylogenetic_tree_canonical", "phylogenetic_tree_metadata_canonical"]
+      dashboards: ["dashboards/base.yaml"]
+    # sintax_rel_abundance is the skip_qiime counterpart of the QIIME2
+    # taxonomy_rel_abundance DC — built from sintax/ + dada2/ outputs that only
+    # exist on --skip_qiime runs. Prune it on normal (QIIME2) runs so its absent
+    # source files don't surface as a gap.
+    - if_var_absent: "SKIP_QIIME"
+      remove_dc_tags: ["sintax_rel_abundance"]
+      dashboards: ["dashboards/base.yaml"]
+    # multiregion/SIDLE runs reconstruct one cross-region feature table under sidle/
+    # and emit only a SUBSET of qiime2/ — qiime2/barplot is present (taxonomy_composition
+    # works), but there is no diversity, phylogenetic tree, matching rel_abundance, or
+    # ANCOM-BC. IS_MULTIREGION is auto-set from params.json (multiregion +
+    # sidle_ref_taxonomy). When present, drop the diversity/phylogeny/rel-abundance/
+    # ANCOM-BC-derived DCs (the SKIP_QIIME set minus taxonomy_composition); the
+    # sidle_reconstructed / sidle_reconstruction_qc DCs supply the route's signature view.
+    - if_var_present: "IS_MULTIREGION"
+      remove_dc_tags:
+        ["alpha_rarefaction", "taxonomy_rel_abundance", "taxonomy_heatmap",
+         "ancombc_results", "stacked_taxonomy_canonical", "embedding_pcoa",
+         "rarefaction_canonical", "alpha_diversity_multi_canonical",
+         "complex_heatmap_canonical", "sunburst_canonical", "sankey_canonical",
+         "upset_canonical", "ma_canonical", "bray_curtis_canonical",
+         "phylogenetic_tree_canonical", "phylogenetic_tree_metadata_canonical"]
+      dashboards: ["dashboards/base.yaml"]
+    # --skip_taxonomy suppresses qiime2/{barplot,rel_abundance_tables,taxonomy}/, so
+    # every taxonomy/ordination/differential DC loses its source. Drop the whole chain
+    # (keep MultiQC, alpha-diversity, phylogeny) so the run ingests instead of aborting.
+    - if_var_present: "SKIP_TAXONOMY"
+      remove_dc_tags:
+        ["taxonomy_composition", "taxonomy_rel_abundance", "taxonomy_heatmap",
+         "ancombc_results", "ma_canonical", "stacked_taxonomy_canonical",
+         "embedding_pcoa", "complex_heatmap_canonical", "sunburst_canonical",
+         "sankey_canonical", "upset_canonical", "bray_curtis_canonical"]
+      dashboards: ["dashboards/base.yaml"]
+    # --skip_alpha_rarefaction suppresses qiime2/alpha-rarefaction/. Drop the
+    # rarefaction + alpha-diversity DCs that read it.
+    - if_var_present: "SKIP_ALPHA_RAREFACTION"
+      remove_dc_tags:
+        ["alpha_rarefaction", "rarefaction_canonical", "alpha_diversity_multi_canonical"]
+      dashboards: ["dashboards/base.yaml"]
+    # --skip_ancom suppresses qiime2/ancombc/. Drop the differential-abundance DCs.
+    - if_var_present: "SKIP_ANCOM"
+      remove_dc_tags: ["ancombc_results", "ma_canonical"]
+      dashboards: ["dashboards/base.yaml"]
 
 # ============================================================================
 # PROJECT CONFIGURATION
@@ -186,6 +260,23 @@ workflows:
               "Kingdom": "Kingdom level"
               "Phylum": "Phylum level"
 
+      - data_collection_tag: "sintax_rel_abundance"
+        optional: true  # only produced by --skip_qiime runs (ITS/PacBio/IonTorrent); QIIME2 runs prune it
+        description: "Phylum-level relative abundance from sintax + DADA2 ASV counts (--skip_qiime path)"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/ampliseq/sintax_rel_abundance.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample identifier"
+              "taxonomy": "Taxonomic classification (Kingdom;Phylum)"
+              "rel_abundance": "Relative abundance (0-1)"
+              "Kingdom": "Kingdom level"
+              "Phylum": "Phylum level"
+
       - data_collection_tag: "taxonomy_heatmap"
         description: "Taxonomic relative abundance matrix in wide format (Phylum × sample) for heatmap visualisation"
         config:
@@ -200,6 +291,12 @@ workflows:
               "Kingdom": "Kingdom-level classification (row annotation)"
 
       - data_collection_tag: "ancombc_results"
+        # Optional: ampliseq computes ANCOM-BC only for *categorical* metadata
+        # columns, so the Category-{GROUP_COL}-level-2/ dir is absent when GROUP_COL
+        # auto-resolved to a non-categorical column (e.g. a per-sample label) or
+        # ANCOM-BC simply didn't run for it. Skip the Differential tab rather than
+        # aborting ingestion; the import-time prune drops the now-empty components.
+        optional: true
         description: "ANCOM-BC differential abundance at Phylum level (from 5 raw CSV slices)"
         config:
           type: "Table"
@@ -237,6 +334,7 @@ workflows:
       # ====================================================================
 
       - data_collection_tag: "stacked_taxonomy_canonical"
+        optional: true  # seed-only: depends on intermediate DCs not produced by plain CLI ingestion
         description: "Stacked-taxonomy-ready relative abundance (sample/taxon/rank/abundance)"
         config:
           type: "Table"
@@ -268,6 +366,7 @@ workflows:
               "habitat": "Sample habitat (used as colour grouping)"
 
       - data_collection_tag: "rarefaction_canonical"
+        optional: true  # seed-only: depends on intermediate DCs not produced by plain CLI ingestion
         description: "Multi-metric rarefaction curves (sample_id/depth/iter + per-metric cols)"
         config:
           type: "Table"
@@ -286,6 +385,7 @@ workflows:
               "group": "Sample grouping column (habitat) — when metadata present"
 
       - data_collection_tag: "alpha_diversity_multi_canonical"
+        optional: true  # seed-only: depends on intermediate DCs not produced by plain CLI ingestion
         description: "Per-sample multi-metric alpha-diversity (Shannon/Observed/Faith PD/Evenness)"
         config:
           type: "Table"
@@ -316,6 +416,7 @@ workflows:
               "Kingdom": "Row annotation (use as row_annotation_cols)"
 
       - data_collection_tag: "sunburst_canonical"
+        optional: true  # seed-only: depends on intermediate DCs not produced by plain CLI ingestion
         description: "Sunburst-ready hierarchical taxonomy (Kingdom/Phylum/taxon + abundance)"
         config:
           type: "Table"
@@ -332,6 +433,7 @@ workflows:
               "sample_id": "Sample identifier (optional facet)"
 
       - data_collection_tag: "sankey_canonical"
+        optional: true  # seed-only: depends on intermediate DCs not produced by plain CLI ingestion
         description: "Sankey-ready hierarchical flow (Kingdom → Phylum → taxon, weight=abundance)"
         config:
           type: "Table"
@@ -391,6 +493,7 @@ workflows:
       # Phase E — QIIME2 phylogenetic tree (tree.nwk) + tip-level taxonomy
       # metadata derived from the run's taxonomy.tsv.
       - data_collection_tag: "phylogenetic_tree_canonical"
+        optional: true  # tree.nwk absent for ITS / IonTorrent / multi-region / skip_qiime runs
         description: "QIIME2 phylogenetic tree (Newick) — tips are ASV identifiers"
         config:
           type: "phylogeny"
@@ -398,7 +501,7 @@ workflows:
           scan:
             mode: "single"
             scan_parameters:
-              filename: "{DATA_ROOT}/data/qiime2/phylogenetic_tree/tree.nwk"
+              filename: "{DATA_ROOT}/qiime2/phylogenetic_tree/tree.nwk"
           dc_specific_properties:
             format: "newick"
             ladderize: true
@@ -406,6 +509,7 @@ workflows:
             metadata_taxon_column: "taxon"
 
       - data_collection_tag: "phylogenetic_tree_metadata_canonical"
+        optional: true  # seed-only: depends on intermediate DCs not produced by plain CLI ingestion
         description: "ASV → taxonomy mapping for the phylogenetic tree tips"
         config:
           type: "Table"
@@ -425,6 +529,51 @@ workflows:
               "Species": "Species"
               "confidence": "Classifier confidence (0–1)"
               "label": "Short display label (Phylum if known)"
+
+      # ----------------------------------------------------------------
+      # SIDLE / multiregion route DCs. Only the multiregion sub-workflow
+      # produces sidle/, so these are optional: on standard runs their source
+      # files are absent and they prune cleanly; on a multiregion run the
+      # IS_MULTIREGION conditional prunes the QIIME2 diversity/phylogeny DCs
+      # that SIDLE never produces, and these supply the reconstructed view.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "sidle_reconstructed"
+        optional: true  # multiregion/SIDLE route only (sidle/ absent on standard runs)
+        description: "SIDLE cross-region reconstructed community (per-sample taxonomy counts)"
+        config:
+          type: "Table"
+          metatype: "Aggregated"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/ampliseq/sidle_reconstructed.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "feature_id": "Reconstructed feature ID (may be 'a|b' merged)"
+              "sample": "Sample identifier"
+              "count": "Reconstructed feature count for the sample"
+              "taxonomy": "Full taxonomic lineage"
+              "Kingdom": "Kingdom-level taxon"
+              "Phylum": "Phylum-level taxon"
+
+      - data_collection_tag: "sidle_reconstruction_qc"
+        optional: true  # multiregion/SIDLE route only (sidle/ absent on standard runs)
+        description: "SIDLE per-feature reconstruction confidence (regions mapped, kmer support)"
+        config:
+          type: "Table"
+          metatype: "Aggregated"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/ampliseq/sidle_reconstruction_qc.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "feature_id": "Reconstructed feature ID"
+              "num_regions": "Number of amplified regions that mapped this feature"
+              "total_kmers_mapped": "Total kmers mapped across regions"
+              "mean_kmer_per_region": "Mean kmers mapped per region"
+              "stdv_kmer_per_region": "Std-dev of kmers per region"
+              "mapped_asvs": "Representative mapped ASV hash"
 
 # ============================================================================
 # RUNTIME LINKS CONFIGURATION
@@ -451,7 +600,7 @@ links:
   # Without this, dashboards bound to metadata interactive filters
   # (habitat, sampling_date, sample) cannot narrow MultiQC plots.
   - source_dc_tag: "metadata"
-    source_column: "sample"
+    source_column: "{METADATA_ID_COL}"
     target_dc_tag: "multiqc_data"
     target_type: "multiqc"
     link_config:
@@ -462,7 +611,7 @@ links:
 
   # Link 3: Metadata -> Alpha Rarefaction
   - source_dc_tag: "metadata"
-    source_column: "sample"
+    source_column: "{METADATA_ID_COL}"
     target_dc_tag: "alpha_rarefaction"
     target_type: "table"
     link_config:
@@ -473,7 +622,7 @@ links:
 
   # Link 4: Metadata -> Taxonomy Composition
   - source_dc_tag: "metadata"
-    source_column: "sample"
+    source_column: "{METADATA_ID_COL}"
     target_dc_tag: "taxonomy_composition"
     target_type: "table"
     link_config:
@@ -484,13 +633,36 @@ links:
 
   # Link 5: Metadata -> Taxonomy Rel Abundance
   - source_dc_tag: "metadata"
-    source_column: "sample"
+    source_column: "{METADATA_ID_COL}"
     target_dc_tag: "taxonomy_rel_abundance"
     target_type: "table"
     link_config:
       resolver: "direct"
       target_field: "sample"
     description: "Filter taxonomy rel abundance by metadata samples"
+    enabled: true
+
+  # Link 5b/5c: Samplesheet + Metadata -> sintax_rel_abundance (skip_qiime path).
+  # Mirror the QIIME2 taxonomy_rel_abundance links so the Community tab's sample /
+  # group filters narrow the sintax-derived bars/table on --skip_qiime runs.
+  - source_dc_tag: "samplesheet"
+    source_column: "sampleID"
+    target_dc_tag: "sintax_rel_abundance"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter sintax rel abundance by samplesheet samples"
+    enabled: true
+
+  - source_dc_tag: "metadata"
+    source_column: "{METADATA_ID_COL}"
+    target_dc_tag: "sintax_rel_abundance"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter sintax rel abundance by metadata samples"
     enabled: true
 
   # Link 6: Samplesheet -> Taxonomy Heatmap (always present, base filtering)
@@ -506,7 +678,7 @@ links:
 
   # Link 7: Metadata -> Taxonomy Heatmap (extended: enables habitat/city filtering)
   - source_dc_tag: "metadata"
-    source_column: "sample"
+    source_column: "{METADATA_ID_COL}"
     target_dc_tag: "taxonomy_heatmap"
     target_type: "table"
     link_config:
@@ -523,7 +695,7 @@ links:
   # the advanced-viz plots.
   # --------------------------------------------------------------------------
   - source_dc_tag: "metadata"
-    source_column: "sample"
+    source_column: "{METADATA_ID_COL}"
     target_dc_tag: "alpha_diversity_multi_canonical"
     target_type: "table"
     link_config:
@@ -533,7 +705,7 @@ links:
     enabled: true
 
   - source_dc_tag: "metadata"
-    source_column: "sample"
+    source_column: "{METADATA_ID_COL}"
     target_dc_tag: "rarefaction_canonical"
     target_type: "table"
     link_config:
@@ -558,7 +730,7 @@ links:
     enabled: true
 
   - source_dc_tag: "metadata"
-    source_column: "sample"
+    source_column: "{METADATA_ID_COL}"
     target_dc_tag: "stacked_taxonomy_canonical"
     target_type: "table"
     link_config:
@@ -568,7 +740,7 @@ links:
     enabled: true
 
   - source_dc_tag: "metadata"
-    source_column: "sample"
+    source_column: "{METADATA_ID_COL}"
     target_dc_tag: "embedding_pcoa"
     target_type: "table"
     link_config:
@@ -578,7 +750,7 @@ links:
     enabled: true
 
   - source_dc_tag: "metadata"
-    source_column: "sample"
+    source_column: "{METADATA_ID_COL}"
     target_dc_tag: "sunburst_canonical"
     target_type: "table"
     link_config:
@@ -588,7 +760,7 @@ links:
     enabled: true
 
   - source_dc_tag: "metadata"
-    source_column: "sample"
+    source_column: "{METADATA_ID_COL}"
     target_dc_tag: "sankey_canonical"
     target_type: "table"
     link_config:
@@ -602,7 +774,7 @@ links:
   # the row index; wide-matrix column subsetting requires renderer support
   # (tracked separately).
   - source_dc_tag: "metadata"
-    source_column: "sample"
+    source_column: "{METADATA_ID_COL}"
     target_dc_tag: "complex_heatmap_canonical"
     target_type: "table"
     link_config:
@@ -612,7 +784,7 @@ links:
     enabled: true
 
   - source_dc_tag: "metadata"
-    source_column: "sample"
+    source_column: "{METADATA_ID_COL}"
     target_dc_tag: "bray_curtis_canonical"
     target_type: "table"
     link_config:

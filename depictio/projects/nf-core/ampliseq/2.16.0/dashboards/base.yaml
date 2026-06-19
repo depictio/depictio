@@ -24,9 +24,14 @@ main_dashboard:
       w: 8
       h: 1
     title: QC Overview
+  # Bound to the always-present multiqc_data DC (sample options come from the
+  # ingested sample list) so the MultiQC tab keeps a working sample filter on
+  # every route — the metadata DC that would otherwise back it is pruned on
+  # no-metadata runs. _resolve_multiqc_sample_filter expands the picked sample
+  # to its per-report variants when filtering the plots.
   - component_type: interactive
     workflow_tag: ampliseq
-    data_collection_tag: metadata
+    data_collection_tag: multiqc_data
     interactive_component_type: MultiSelect
     column_name: sample
     column_type: object
@@ -48,7 +53,7 @@ main_dashboard:
     workflow_tag: ampliseq
     data_collection_tag: metadata
     interactive_component_type: MultiSelect
-    column_name: habitat
+    column_name: '{GROUP_COL}'
     column_type: object
     display:
       title_size: md
@@ -63,27 +68,7 @@ main_dashboard:
       y: 3
       w: 1
       h: 2
-    title: Habitat Type
-  - component_type: interactive
-    workflow_tag: ampliseq
-    data_collection_tag: metadata
-    interactive_component_type: DateRangePicker
-    column_name: sampling_date
-    column_type: datetime
-    display:
-      title_size: md
-      custom_color: '#FF6B6B'
-      icon_name: mdi:calendar-range
-    title_align: left
-    placement: left
-    tag: interactive-multiqc-sampling-date-b9d091
-    index: multiqc-sampling-date
-    layout:
-      x: 0
-      y: 5
-      w: 1
-      h: 3
-    title: Sampling Period
+    title: '{GROUP_COL_DISPLAY}'
   - component_type: multiqc
     workflow_tag: ampliseq
     data_collection_tag: multiqc_data
@@ -268,7 +253,7 @@ main_dashboard:
       h: 5
 tabs:
 - title: Alpha Diversity
-  subtitle: Within-sample richness, evenness, phylogenetic spread — rarefaction + per-habitat boxplots
+  subtitle: Within-sample richness, evenness, phylogenetic spread — rarefaction + per-group boxplots
   tab_order: 1
   tab_icon: mdi:chart-bell-curve
   tab_icon_color: orange
@@ -315,7 +300,7 @@ tabs:
     workflow_tag: ampliseq
     data_collection_tag: alpha_diversity_multi_canonical
     interactive_component_type: MultiSelect
-    column_name: habitat
+    column_name: '{GROUP_COL}'
     column_type: object
     display:
       title_size: md
@@ -330,7 +315,7 @@ tabs:
       y: 3
       w: 1
       h: 2
-    title: Habitat
+    title: '{GROUP_COL_DISPLAY}'
   - component_type: card
     workflow_tag: ampliseq
     data_collection_tag: alpha_diversity_multi_canonical
@@ -439,17 +424,12 @@ tabs:
     data_collection_tag: rarefaction_canonical
     config:
       iter_col: iter
-      group_col: group
+      group_col: '{GROUP_COL}'
       metric_options:
       - shannon
       - observed_features
       - faith_pd
       show_ci: true
-      category_palette:
-        Riverwater: '#377EB8'
-        Groundwater: '#4DAF4A'
-        Sediment: '#E41A1C'
-        Soil: '#FF7F00'
     tag: advanced_viz-alpha-rarefaction-multi-f98922
     index: alpha-rarefaction-multi
     layout:
@@ -463,16 +443,26 @@ tabs:
     data_collection_tag: alpha_diversity_multi_canonical
     visu_type: box
     figure_params:
-      title: Alpha diversity by habitat (per metric)
+      title: Alpha diversity by {GROUP_COL_DISPLAY} (per metric)
     mode: code
-    code_content: "df_modified = df.unpivot(\n    on=['shannon', 'observed_features', 'faith_pd', 'evenness'],\n\
-      \    index=['sample_id', 'habitat'],\n    variable_name='metric',\n    value_name='value',\n).filter(pl.col('value').is_not_null())\n\
-      fig = px.box(\n    df_modified.to_pandas(),\n    x='habitat', y='value', color='habitat',\n    facet_col='metric',\
-      \ facet_col_wrap=2,\n    points='all',\n    color_discrete_map={'Riverwater': '#377EB8', 'Groundwater':\
-      \ '#4DAF4A', 'Sediment': '#E41A1C', 'Soil': '#FF7F00'},\n    labels={'habitat': 'Habitat', 'value':\
-      \ ''},\n)\nfig.update_yaxes(matches=None, showticklabels=True)\nfig.for_each_annotation(lambda a:\
-      \ a.update(text=a.text.split('=')[-1], font={'size': 15, 'weight': 'bold'}))\nfig.update_layout(showlegend=False,\
-      \ title=None, margin={'t': 32, 'l': 56, 'r': 16, 'b': 40})"
+    code_content: |-
+      df_grp = df.with_columns(pl.col('{GROUP_COL}').alias('_grp')) if '{GROUP_COL}' in df.columns else df.with_columns(pl.lit('All samples').alias('_grp'))
+      df_modified = df_grp.unpivot(
+          on=['shannon', 'observed_features', 'faith_pd', 'evenness'],
+          index=['sample_id', '_grp'],
+          variable_name='metric',
+          value_name='value',
+      ).filter(pl.col('value').is_not_null())
+      fig = px.box(
+          df_modified.to_pandas(),
+          x='_grp', y='value', color='_grp',
+          facet_col='metric', facet_col_wrap=2,
+          points='all',
+          labels={'_grp': '{GROUP_COL_DISPLAY}', 'value': ''},
+      )
+      fig.update_yaxes(matches=None, showticklabels=True)
+      fig.for_each_annotation(lambda a: a.update(text=a.text.split('=')[-1], font={'size': 15, 'weight': 'bold'}))
+      fig.update_layout(showlegend=False, title=None, margin={'t': 32, 'l': 56, 'r': 16, 'b': 40})
     selection_enabled: false
     title_size: sm
     title_align: left
@@ -483,7 +473,7 @@ tabs:
       y: 12
       w: 8
       h: 6
-    title: Alpha diversity by habitat (per metric)
+    title: Alpha diversity by {GROUP_COL_DISPLAY} (per metric)
   - component_type: table
     workflow_tag: ampliseq
     data_collection_tag: alpha_diversity_multi_canonical
@@ -512,7 +502,7 @@ tabs:
       y: 11
       w: 8
       h: 1
-    title: Per-Habitat Comparison
+    title: Per-{GROUP_COL_DISPLAY} Comparison
 - title: Community & Diversity
   subtitle: Alpha diversity, rarefaction, taxonomic composition (sunburst + Sankey + stacked taxonomy)
   tab_order: 2
@@ -589,7 +579,7 @@ tabs:
     workflow_tag: ampliseq
     data_collection_tag: metadata
     aggregation: nunique
-    column_name: habitat
+    column_name: '{GROUP_COL}'
     column_type: object
     display:
       icon_name: mdi:earth
@@ -607,27 +597,34 @@ tabs:
       y: 1
       w: 2
       h: 2
-    title: Habitat Types
+    title: '{GROUP_COL_DISPLAY} groups'
   - component_type: figure
     workflow_tag: ampliseq
     data_collection_tag: taxonomy_rel_abundance
     visu_type: bar
     figure_params:
       color: Phylum
-      facet_row: habitat
+      facet_row: '{GROUP_COL}'
       labels:
         Phylum: Phylum
-        habitat: Habitat
         mean_rel_abundance: Mean Relative Abundance
-      title: Mean Relative Abundance by Habitat
+      title: Mean Relative Abundance by {GROUP_COL_DISPLAY}
       x: Phylum
       y: mean_rel_abundance
     mode: code
-    code_content: "df_mean = df.group_by(['habitat', 'Phylum']).agg(pl.col('rel_abundance').mean().alias('mean_rel_abundance')).sort('Phylum')\n\
-      fig = px.bar(\n    df_mean.to_pandas(),\n    x='Phylum', y='mean_rel_abundance', color='Phylum',\n\
-      \    facet_row='habitat',\n    title='Mean Relative Abundance by Habitat',\n    labels={'Phylum':\
-      \ 'Phylum', 'mean_rel_abundance': 'Mean Relative Abundance'}\n)\nfig.update_layout(xaxis={'categoryorder':\
-      \ 'category ascending'})\nfig.update_xaxes(tickangle=-45, tickfont={'size': 9})\nfig.update_layout(showlegend=False)"
+    code_content: |-
+      df_grp = df.with_columns(pl.col('{GROUP_COL}').alias('_facet')) if '{GROUP_COL}' in df.columns else df.with_columns(pl.lit('All samples').alias('_facet'))
+      df_modified = df_grp.group_by(['_facet', 'Phylum']).agg(pl.col('rel_abundance').mean().alias('mean_rel_abundance')).sort('Phylum')
+      fig = px.bar(
+          df_modified.to_pandas(),
+          x='Phylum', y='mean_rel_abundance', color='Phylum',
+          facet_row='_facet',
+          title='Mean Relative Abundance by {GROUP_COL_DISPLAY}',
+          labels={'Phylum': 'Phylum', 'mean_rel_abundance': 'Mean Relative Abundance'},
+      )
+      fig.update_layout(xaxis={'categoryorder': 'category ascending'})
+      fig.update_xaxes(tickangle=-45, tickfont={'size': 9})
+      fig.update_layout(showlegend=False)
     selection_enabled: false
     title_size: sm
     title_align: left
@@ -663,11 +660,106 @@ tabs:
       w: 8
       h: 6
     title: Taxonomy Relative Abundance
+  # sintax counterparts (--skip_qiime runs): bound to sintax_rel_abundance, which
+  # is present only when QIIME2 taxonomy DCs are pruned. On QIIME2 runs the DC is
+  # absent so these prune; on skip_qiime runs the QIIME2 bar/table above prune and
+  # these render, keeping the Community & Diversity tab populated.
+  - component_type: figure
+    workflow_tag: ampliseq
+    data_collection_tag: sintax_rel_abundance
+    visu_type: bar
+    figure_params:
+      color: Phylum
+      facet_row: '{GROUP_COL}'
+      labels:
+        Phylum: Phylum
+        mean_rel_abundance: Mean Relative Abundance
+      title: Mean Relative Abundance by {GROUP_COL_DISPLAY}
+      x: Phylum
+      y: mean_rel_abundance
+    mode: code
+    code_content: |-
+      df_grp = df.with_columns(pl.col('{GROUP_COL}').alias('_facet')) if '{GROUP_COL}' in df.columns else df.with_columns(pl.lit('All samples').alias('_facet'))
+      df_modified = df_grp.group_by(['_facet', 'Phylum']).agg(pl.col('rel_abundance').mean().alias('mean_rel_abundance')).sort('Phylum')
+      fig = px.bar(
+          df_modified.to_pandas(),
+          x='Phylum', y='mean_rel_abundance', color='Phylum',
+          facet_row='_facet',
+          title='Mean Relative Abundance by {GROUP_COL_DISPLAY}',
+          labels={'Phylum': 'Phylum', 'mean_rel_abundance': 'Mean Relative Abundance'},
+      )
+      fig.update_layout(xaxis={'categoryorder': 'category ascending'})
+      fig.update_xaxes(tickangle=-45, tickfont={'size': 9})
+      fig.update_layout(showlegend=False)
+    selection_enabled: false
+    title_size: sm
+    title_align: left
+    tag: figure-sintax-bar-rel-abundance-9f1a2b
+    index: sintax-bar-rel-abundance
+    layout:
+      x: 0
+      y: 3
+      w: 8
+      h: 8
+  - component_type: table
+    workflow_tag: ampliseq
+    data_collection_tag: sintax_rel_abundance
+    row_selection_enabled: false
+    title_size: sm
+    title_align: left
+    tag: table-sintax-taxonomy-3c5d71
+    index: sintax-taxonomy-table
+    layout:
+      x: 0
+      y: 11
+      w: 8
+      h: 6
+    title: Taxonomy Relative Abundance (sintax)
+  - component_type: interactive
+    workflow_tag: ampliseq
+    data_collection_tag: sintax_rel_abundance
+    interactive_component_type: MultiSelect
+    column_name: Kingdom
+    column_type: object
+    display:
+      title_size: md
+      custom_color: '#377EB8'
+      icon_name: mdi:bacteria
+    title_align: left
+    placement: left
+    tag: interactive-sintax-kingdom-5e6a18
+    index: sintax-kingdom-filter
+    layout:
+      x: 0
+      y: 8
+      w: 1
+      h: 2
+    title: Kingdom
+  - component_type: interactive
+    workflow_tag: ampliseq
+    data_collection_tag: sintax_rel_abundance
+    interactive_component_type: MultiSelect
+    column_name: Phylum
+    column_type: object
+    display:
+      title_size: md
+      custom_color: '#8BC34A'
+      icon_name: mdi:bacteria-outline
+    title_align: left
+    placement: left
+    tag: interactive-sintax-phylum-7b2c94
+    index: sintax-phylum-filter
+    layout:
+      x: 0
+      y: 10
+      w: 1
+      h: 3
+    title: Phylum
   - component_type: interactive
     workflow_tag: ampliseq
     data_collection_tag: metadata
     interactive_component_type: MultiSelect
-    column_name: sample
+    column_name: '{METADATA_ID_COL}'
     column_type: object
     display:
       title_size: md
@@ -686,7 +778,7 @@ tabs:
     workflow_tag: ampliseq
     data_collection_tag: metadata
     interactive_component_type: MultiSelect
-    column_name: habitat
+    column_name: '{GROUP_COL}'
     column_type: object
     display:
       title_size: md
@@ -700,26 +792,7 @@ tabs:
       y: 3
       w: 1
       h: 2
-    title: Habitat Type
-  - component_type: interactive
-    workflow_tag: ampliseq
-    data_collection_tag: metadata
-    interactive_component_type: DateRangePicker
-    column_name: sampling_date
-    column_type: datetime
-    display:
-      title_size: md
-      custom_color: '#45B8AC'
-      icon_name: mdi:calendar-range
-    title_align: left
-    placement: left
-    tag: interactive-sampling_date-b9d091
-    layout:
-      x: 0
-      y: 5
-      w: 1
-      h: 3
-    title: Sampling Period
+    title: '{GROUP_COL_DISPLAY}'
   - component_type: interactive
     workflow_tag: ampliseq
     data_collection_tag: taxonomy_rel_abundance
@@ -788,14 +861,9 @@ tabs:
       sort_by: abundance
       normalise_to_one: true
       annotation_strips:
-      - column: habitat
-        label: Habitat
+      - column: '{GROUP_COL}'
+        label: '{GROUP_COL_DISPLAY}'
         position: top
-        palette:
-          Riverwater: '#377EB8'
-          Groundwater: '#4DAF4A'
-          Sediment: '#E41A1C'
-          Soil: '#FF7F00'
     tag: advanced_viz-adv-stacked-taxonomy-46dad9
     index: adv-stacked-taxonomy
     layout:
@@ -813,11 +881,6 @@ tabs:
       - Kingdom
       - Phylum
       - Class
-      category_palette:
-        Riverwater: '#377EB8'
-        Groundwater: '#4DAF4A'
-        Sediment: '#E41A1C'
-        Soil: '#FF7F00'
     tag: advanced_viz-adv-sunburst-8e75c7
     index: adv-sunburst
     layout:
@@ -874,11 +937,6 @@ tabs:
       color_intersections_by: set
       default_annotation_cols:
       - taxon
-      set_colors:
-        Riverwater: '#377EB8'
-        Groundwater: '#4DAF4A'
-        Sediment: '#E41A1C'
-        Soil: '#FF7F00'
     tag: advanced_viz-adv-upset-81bed0
     index: adv-upset
     layout:
@@ -886,7 +944,7 @@ tabs:
       y: 35
       w: 8
       h: 8
-    title: Taxa shared across habitats (UpSet)
+    title: Taxa shared across {GROUP_COL_DISPLAY} groups (UpSet)
 - title: Ordination & Clustering
   subtitle: 'Sample-relationship structure: PCoA on Bray-Curtis + clustered taxonomy heatmap'
   tab_order: 3
@@ -915,7 +973,7 @@ tabs:
     workflow_tag: ampliseq
     data_collection_tag: metadata
     interactive_component_type: MultiSelect
-    column_name: sample
+    column_name: '{METADATA_ID_COL}'
     column_type: object
     display:
       title_size: md
@@ -935,7 +993,7 @@ tabs:
     workflow_tag: ampliseq
     data_collection_tag: metadata
     interactive_component_type: MultiSelect
-    column_name: habitat
+    column_name: '{GROUP_COL}'
     column_type: object
     display:
       title_size: md
@@ -950,7 +1008,30 @@ tabs:
       y: 3
       w: 1
       h: 2
-    title: Habitat
+    title: '{GROUP_COL_DISPLAY}'
+  # Phylum filter bound to the heatmap DC (non-metadata, present on every QIIME2
+  # route incl. no-metadata runs) so the Ordination tab always keeps a working
+  # filter even when the metadata-bound sample/group filters above are pruned.
+  - component_type: interactive
+    workflow_tag: ampliseq
+    data_collection_tag: complex_heatmap_canonical
+    interactive_component_type: MultiSelect
+    column_name: Phylum
+    column_type: object
+    display:
+      title_size: md
+      custom_color: '#1f9e89'
+      icon_name: mdi:filter-variant
+    title_align: left
+    placement: left
+    tag: interactive-ord-phylum-filter-7fd490
+    index: ord-phylum-filter
+    layout:
+      x: 0
+      y: 5
+      w: 1
+      h: 2
+    title: Phylum
   - component_type: advanced_viz
     workflow_tag: ampliseq
     viz_kind: embedding
@@ -960,14 +1041,9 @@ tabs:
       sample_id_col: sample_id
       dim_1_col: dim_1
       dim_2_col: dim_2
-      color_col: habitat
+      color_col: '{GROUP_COL}'
       point_size: 10
       show_density: false
-      category_palette:
-        Riverwater: '#377EB8'
-        Groundwater: '#4DAF4A'
-        Sediment: '#E41A1C'
-        Soil: '#FF7F00'
     tag: advanced_viz-ord-embedding-531e5a
     index: ord-embedding
     layout:
@@ -992,26 +1068,6 @@ tabs:
       cluster_method: ward
       cluster_metric: euclidean
       normalize: row_z
-      col_annotations:
-        habitat:
-          SRR10070130: Riverwater
-          SRR10070131: Riverwater
-          SRR10070132: Groundwater
-          SRR10070133: Groundwater
-          SRR10070134: Riverwater
-          SRR10070141: Groundwater
-          SRR10070149: Sediment
-          SRR10070150: Sediment
-          SRR10070151: Sediment
-          SRR10102392: Soil
-          SRR10102393: Soil
-          SRR10102394: Soil
-      col_annotation_colors:
-        habitat:
-          Riverwater: '#377EB8'
-          Groundwater: '#4DAF4A'
-          Sediment: '#E41A1C'
-          Soil: '#FF7F00'
     tag: advanced_viz-ord-complex-heatmap-92c52d
     index: ord-complex-heatmap
     layout:
@@ -1036,26 +1092,6 @@ tabs:
       cluster_metric: euclidean
       normalize: none
       colorscale: Viridis
-      col_annotations:
-        habitat:
-          SRR10070130: Riverwater
-          SRR10070131: Riverwater
-          SRR10070132: Groundwater
-          SRR10070133: Groundwater
-          SRR10070134: Riverwater
-          SRR10070141: Groundwater
-          SRR10070149: Sediment
-          SRR10070150: Sediment
-          SRR10070151: Sediment
-          SRR10102392: Soil
-          SRR10102393: Soil
-          SRR10102394: Soil
-      col_annotation_colors:
-        habitat:
-          Riverwater: '#377EB8'
-          Groundwater: '#4DAF4A'
-          Sediment: '#E41A1C'
-          Soil: '#FF7F00'
     tag: advanced_viz-ord-bray-curtis-f70a9e
     index: ord-bray-curtis
     layout:
@@ -1529,15 +1565,6 @@ tabs:
       - Genus
       - Species
       - dominant_habitat
-      category_palettes:
-        dominant_habitat:
-          Riverwater: '#377EB8'
-          Groundwater: '#4DAF4A'
-          Sediment: '#E41A1C'
-          Soil: '#FF7F00'
-          Mixed: '#9E9E9E'
-          Rare: '#BDBDBD'
-          No abundance: '#ECEFF1'
     tag: advanced_viz-phylo-tree-2f13e4
     index: phylo-tree
     layout:
@@ -1561,3 +1588,294 @@ tabs:
       w: 8
       h: 6
     title: ASV taxonomy table
+- title: Reconstructed Community (SIDLE)
+  subtitle: Cross-region reconstructed community + per-feature reconstruction confidence (multiregion/SIDLE route only)
+  tab_order: 6
+  tab_icon: mdi:graph-outline
+  tab_icon_color: teal
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  dashboard_id: 646b0f3c1e4a2d7f8e5b8d06
+  components:
+  - component_type: text
+    workflow_tag: ampliseq
+    title_size: sm
+    title_align: left
+    order: 1
+    alignment: left
+    tag: text-sidle-section-header-9a1c44
+    index: sidle-section-header
+    layout:
+      x: 0
+      y: 0
+      w: 8
+      h: 1
+    title: Reconstructed Community (SIDLE)
+  - component_type: interactive
+    workflow_tag: ampliseq
+    data_collection_tag: sidle_reconstructed
+    interactive_component_type: MultiSelect
+    column_name: Phylum
+    column_type: object
+    display:
+      title_size: md
+      custom_color: '#45B8AC'
+      icon_name: mdi:filter-variant
+    title_align: left
+    placement: left
+    tag: interactive-sidle-phylum-filter-9a1c48
+    index: sidle-phylum-filter
+    layout:
+      x: 0
+      y: 0
+      w: 1
+      h: 2
+    title: Phylum
+  - component_type: card
+    workflow_tag: ampliseq
+    data_collection_tag: sidle_reconstructed
+    aggregation: nunique
+    column_name: feature_id
+    column_type: object
+    display:
+      icon_name: mdi:dna
+      icon_color: '#45B8AC'
+      title_color: '#45B8AC'
+      title_font_size: xl
+      value_font_size: xl
+    title_size: sm
+    title_align: left
+    secondary_layout: vertical
+    tag: card-sidle-features-9a1c50
+    index: sidle-card-features
+    layout:
+      x: 0
+      y: 1
+      w: 2
+      h: 2
+    title: Reconstructed features
+  - component_type: card
+    workflow_tag: ampliseq
+    data_collection_tag: sidle_reconstructed
+    aggregation: nunique
+    column_name: sample
+    column_type: object
+    display:
+      icon_name: mdi:flask
+      icon_color: '#F68B33'
+      title_color: '#F68B33'
+      title_font_size: xl
+      value_font_size: xl
+    title_size: sm
+    title_align: left
+    secondary_layout: vertical
+    tag: card-sidle-samples-9a1c51
+    index: sidle-card-samples
+    layout:
+      x: 2
+      y: 1
+      w: 2
+      h: 2
+    title: Samples
+  - component_type: card
+    workflow_tag: ampliseq
+    data_collection_tag: sidle_reconstructed
+    aggregation: nunique
+    column_name: Phylum
+    column_type: object
+    display:
+      icon_name: mdi:chart-donut
+      icon_color: '#984EA3'
+      title_color: '#984EA3'
+      title_font_size: xl
+      value_font_size: xl
+    title_size: sm
+    title_align: left
+    secondary_layout: vertical
+    tag: card-sidle-phyla-9a1c52
+    index: sidle-card-phyla
+    layout:
+      x: 4
+      y: 1
+      w: 2
+      h: 2
+    title: Phyla detected
+  - component_type: card
+    workflow_tag: ampliseq
+    data_collection_tag: sidle_reconstruction_qc
+    aggregation: average
+    column_name: num_regions
+    column_type: int64
+    display:
+      icon_name: mdi:vector-link
+      icon_color: '#00BCD4'
+      title_color: '#00BCD4'
+      title_font_size: xl
+      value_font_size: xl
+    title_size: sm
+    title_align: left
+    secondary_layout: vertical
+    tag: card-sidle-mean-regions-9a1c53
+    index: sidle-card-mean-regions
+    layout:
+      x: 6
+      y: 1
+      w: 2
+      h: 2
+    title: Mean regions / feature
+  - component_type: figure
+    workflow_tag: ampliseq
+    data_collection_tag: sidle_reconstructed
+    visu_type: bar
+    figure_params:
+      color: Phylum
+      labels:
+        sample: Sample
+      title: Relative composition by phylum (per sample)
+      x: sample
+      y: rel
+    mode: code
+    code_content: |-
+      df_g = df.group_by(['sample', 'Phylum']).agg(pl.col('count').sum().alias('count'))
+      df_g = df_g.with_columns((pl.col('count') / pl.col('count').sum().over('sample') * 100).alias('rel'))
+      fig = px.bar(
+          df_g.sort(['sample', 'Phylum']).to_pandas(),
+          x='sample', y='rel', color='Phylum',
+          title='Relative composition by phylum (per sample)',
+          labels={'sample': 'Sample', 'rel': 'Relative abundance (%)', 'Phylum': 'Phylum'},
+      )
+      fig.update_layout(barmode='stack', yaxis_range=[0, 100])
+      fig.update_xaxes(tickangle=-45)
+    selection_enabled: false
+    title_size: sm
+    title_align: left
+    tag: figure-bar_sidle_rel_composition-9a1c45
+    description: Per-sample phylum makeup normalised to 100% — compare community structure across samples.
+    layout:
+      x: 0
+      y: 3
+      w: 4
+      h: 5
+  - component_type: figure
+    workflow_tag: ampliseq
+    data_collection_tag: sidle_reconstruction_qc
+    visu_type: bar
+    figure_params:
+      labels:
+        num_regions: '# regions mapped'
+      title: Cross-region support (features by regions mapped)
+      x: num_regions
+      y: features
+    mode: code
+    code_content: |-
+      df_g = df.group_by('num_regions').agg(pl.len().alias('features')).sort('num_regions')
+      fig = px.bar(
+          df_g.to_pandas(),
+          x='num_regions', y='features', text='features',
+          title='Cross-region support (features by regions mapped)',
+          labels={'num_regions': '# regions mapped', 'features': 'Reconstructed features'},
+      )
+      fig.update_xaxes(dtick=1)
+      fig.update_traces(textposition='outside')
+    selection_enabled: false
+    title_size: sm
+    title_align: left
+    tag: figure-bar_sidle_confidence-9a1c54
+    description: How many of the amplified 16S regions each feature was reconstructed from — the core SIDLE confidence signal.
+    layout:
+      x: 4
+      y: 3
+      w: 4
+      h: 5
+  - component_type: figure
+    workflow_tag: ampliseq
+    data_collection_tag: sidle_reconstructed
+    visu_type: bar
+    figure_params:
+      color: Genus
+      labels:
+        sample: Sample
+      title: Genus-level composition (per sample)
+      x: sample
+      y: count
+    mode: code
+    code_content: |-
+      df_g = df.group_by(['sample', 'Genus']).agg(pl.col('count').sum().alias('count')).sort(['sample', 'Genus'])
+      fig = px.bar(
+          df_g.to_pandas(),
+          x='sample', y='count', color='Genus',
+          title='Genus-level composition (per sample)',
+          labels={'sample': 'Sample', 'count': 'Reconstructed count', 'Genus': 'Genus'},
+      )
+      fig.update_layout(barmode='stack')
+      fig.update_xaxes(tickangle=-45)
+    selection_enabled: false
+    title_size: sm
+    title_align: left
+    tag: figure-bar_sidle_genus-9a1c55
+    description: Deeper taxonomic resolution than phylum — genus-level counts per sample (Unclassified where the lineage stops short).
+    layout:
+      x: 0
+      y: 8
+      w: 4
+      h: 5
+  - component_type: figure
+    workflow_tag: ampliseq
+    data_collection_tag: sidle_reconstruction_qc
+    visu_type: scatter
+    figure_params:
+      labels:
+        num_regions: '# regions mapped'
+      title: K-mer support vs region coverage
+      x: num_regions
+      y: total_kmers_mapped
+    mode: code
+    code_content: |-
+      fig = px.scatter(
+          df.to_pandas(),
+          x='num_regions', y='total_kmers_mapped', size='mean_kmer_per_region',
+          hover_data=['feature_id', 'mean_kmer_per_region', 'stdv_kmer_per_region'],
+          title='K-mer support vs region coverage',
+          labels={'num_regions': '# regions mapped', 'total_kmers_mapped': 'Total k-mers mapped'},
+      )
+      fig.update_traces(marker=dict(line=dict(width=1, color='DarkSlateGrey')))
+      fig.update_xaxes(dtick=1)
+    selection_enabled: false
+    title_size: sm
+    title_align: left
+    tag: figure-scatter_sidle_kmers-9a1c56
+    description: Each reconstructed feature's k-mer evidence against how many regions support it — outliers flag weakly-supported reconstructions.
+    layout:
+      x: 4
+      y: 8
+      w: 4
+      h: 5
+  - component_type: table
+    workflow_tag: ampliseq
+    data_collection_tag: sidle_reconstructed
+    row_selection_enabled: false
+    title_size: sm
+    title_align: left
+    tag: table-sidle-reconstructed-9a1c46
+    index: sidle-reconstructed-table
+    layout:
+      x: 0
+      y: 13
+      w: 8
+      h: 6
+    title: Reconstructed features (per-sample counts)
+  - component_type: table
+    workflow_tag: ampliseq
+    data_collection_tag: sidle_reconstruction_qc
+    row_selection_enabled: false
+    title_size: sm
+    title_align: left
+    tag: table-sidle-reconstruction-qc-9a1c47
+    index: sidle-reconstruction-qc-table
+    layout:
+      x: 0
+      y: 19
+      w: 8
+      h: 6
+    title: Reconstruction confidence (regions mapped, kmer support)

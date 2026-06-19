@@ -737,6 +737,16 @@ def compute_complex_heatmap(payload: dict) -> dict:
 
     pdf = df.select([index_column] + value_columns + row_annotation_cols).to_pandas()
 
+    # Empty/null categorical annotation values (e.g. an unclassified taxon with a
+    # blank Kingdom) would otherwise reach the library as a "" category that has
+    # no entry in our colour map → hard ``KeyError('')`` in CategoricalTrack. Fold
+    # them into a single explicit "Unclassified" label here so the category set
+    # and the colour universe (built below) always agree.
+    _ANNO_PLACEHOLDER = "Unclassified"
+    for _ann_col in row_annotation_cols:
+        if _ann_col in pdf.columns and pdf[_ann_col].dtype.kind in ("O", "U", "S"):
+            pdf[_ann_col] = pdf[_ann_col].fillna(_ANNO_PLACEHOLDER).replace("", _ANNO_PLACEHOLDER)
+
     # Translate depictio normalize vocab → plotly-complexheatmap normalize_data
     # vocab. The renderer/config offers row_z / col_z / log1p / none; the
     # library only knows row / column / global / none. log1p has no library
@@ -800,7 +810,11 @@ def compute_complex_heatmap(payload: dict) -> dict:
                 uniq_pl = (
                     unfiltered_lazy.select(pl.col(ann_col)).unique().collect()[ann_col].to_list()
                 )
-                anno_universes[ann_col] = sorted(str(v) for v in uniq_pl if v not in ("", None))
+                # Fold empty/null into the same "Unclassified" label used on the
+                # data column above so every rendered category has a colour.
+                anno_universes[ann_col] = sorted(
+                    {(str(v) if v not in ("", None) else _ANNO_PLACEHOLDER) for v in uniq_pl}
+                )
         except Exception as exc:  # pragma: no cover - logged + falls back
             logger.warning(
                 "compute_complex_heatmap: unique-value lookup for annotations failed (%s); "

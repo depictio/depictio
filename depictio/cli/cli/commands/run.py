@@ -55,6 +55,14 @@ def register_run_command(app: typer.Typer):
                 help="Custom project name (auto-generated from template if omitted).",
             ),
         ] = None,
+        dashboard_name: Annotated[
+            str | None,
+            typer.Option(
+                "--dashboard-name",
+                help="Custom title for the template's main dashboard "
+                "(defaults to the title defined in the dashboard YAML). Child tabs keep their titles.",
+            ),
+        ] = None,
         var: Annotated[
             list[str],
             typer.Option(
@@ -280,7 +288,7 @@ def register_run_command(app: typer.Typer):
             except Exception as e:
                 rich_print_checked_statement(f"Template resolution failed: {e}", "error")
                 if not continue_on_error:
-                    return
+                    raise typer.Exit(code=1)
 
         # Step 1: Check server accessibility
         if not skip_server_check:
@@ -293,7 +301,7 @@ def register_run_command(app: typer.Typer):
             except Exception as e:
                 rich_print_checked_statement(f"Server accessibility check failed: {e}", "error")
                 if not continue_on_error:
-                    return
+                    raise typer.Exit(code=1)
         else:
             rich_print_checked_statement("Skipping server accessibility check", "info")
             success_count += 1
@@ -310,7 +318,7 @@ def register_run_command(app: typer.Typer):
             except Exception as e:
                 rich_print_checked_statement(f"S3 storage check failed: {e}", "error")
                 if not continue_on_error:
-                    return
+                    raise typer.Exit(code=1)
         else:
             rich_print_checked_statement("Skipping S3 storage check", "info")
             success_count += 1
@@ -341,7 +349,7 @@ def register_run_command(app: typer.Typer):
         except Exception as e:
             rich_print_checked_statement(f"{e}", "error")
             if not continue_on_error:
-                return
+                raise typer.Exit(code=1)
 
         # Step 4: Sync project configuration to server
         if not skip_sync:
@@ -415,7 +423,7 @@ def register_run_command(app: typer.Typer):
             except Exception as e:
                 rich_print_checked_statement(f"Project configuration sync failed: {e}", "error")
                 if not continue_on_error:
-                    return
+                    raise typer.Exit(code=1)
         else:
             rich_print_checked_statement("Skipping project configuration sync", "info")
             success_count += 1
@@ -465,7 +473,7 @@ def register_run_command(app: typer.Typer):
             except Exception as e:
                 rich_print_checked_statement(f"Data scanning failed: {e}", "error")
                 if not continue_on_error:
-                    return
+                    raise typer.Exit(code=1)
         else:
             rich_print_checked_statement("Skipping data scanning", "info")
             success_count += 1
@@ -492,12 +500,21 @@ def register_run_command(app: typer.Typer):
                                 "preview_recipes": preview_recipes,
                             }
 
-                            process_project_helper(
+                            process_result = process_project_helper(
                                 CLI_config=CLI_config,
                                 project_config=project_config,
                                 mode="process",
                                 command_parameters=command_parameters,
                             )
+                            # Surface per-DC processing failures: a data collection
+                            # that fails to process must not be reported as overall
+                            # success (otherwise CI/automation can't detect it).
+                            if process_result and process_result.get("total_failed", 0) > 0:
+                                raise Exception(
+                                    f"{process_result['total_failed']} data collection(s) "
+                                    f"failed to process: "
+                                    f"{', '.join(process_result.get('failed_tags', []))}"
+                                )
                         else:
                             raise Exception("Local and remote project configurations do not match")
                     else:
@@ -508,7 +525,7 @@ def register_run_command(app: typer.Typer):
             except Exception as e:
                 rich_print_checked_statement(f"Data processing failed: {e}", "error")
                 if not continue_on_error:
-                    return
+                    raise typer.Exit(code=1)
         else:
             rich_print_checked_statement("Skipping data processing", "info")
             success_count += 1
@@ -556,7 +573,7 @@ def register_run_command(app: typer.Typer):
             except Exception as e:
                 rich_print_checked_statement(f"Join execution failed: {e}", "error")
                 if not continue_on_error:
-                    return
+                    raise typer.Exit(code=1)
         else:
             rich_print_checked_statement("Skipping join execution", "info")
             success_count += 1
@@ -589,6 +606,7 @@ def register_run_command(app: typer.Typer):
                         project_id=project_id,
                         overwrite=overwrite,
                         variables=template_variables,
+                        dashboard_name=dashboard_name,
                     )
 
                     imported, failed = [], []
@@ -620,7 +638,7 @@ def register_run_command(app: typer.Typer):
             except Exception as e:
                 rich_print_checked_statement(f"Dashboard import failed: {e}", "error")
                 if not continue_on_error:
-                    return
+                    raise typer.Exit(code=1)
         elif is_template_mode and skip_dashboard_import:
             rich_print_checked_statement(
                 "Skipping dashboard import (--skip-dashboard-import)", "info"
@@ -644,3 +662,7 @@ def register_run_command(app: typer.Typer):
                 f"Depictio-CLI run completed with some issues ({success_count}/{total_steps} steps)",
                 "warning",
             )
+            # A run that did not complete every step is a failure for automation
+            # purposes — exit non-zero so CI can detect it (even under
+            # --continue-on-error, which only suppresses the early aborts above).
+            raise typer.Exit(code=1)

@@ -127,6 +127,9 @@ export {
   exportDashboardJson,
   // Project management
   fetchProject,
+  fetchIngestionReport,
+  fetchIngestionHealth,
+  fetchDataCollectionFiles,
   createProject,
   updateProject,
   deleteProject,
@@ -183,12 +186,26 @@ export {
   pollComplexHeatmap,
   dispatchUpset,
   pollUpset,
+  // Catalog compose + preview
+  fetchCatalogCompose,
+  fetchCatalogPreviewPayload,
 } from './api';
 export type {
   TableMutationResult,
   RoleDtypeSpec,
+  IngestionReport,
+  IngestionDataCollection,
+  IngestionRun,
+  IngestionSummary,
+  RegisteredFile,
   VizKindSuggestion,
   VizSuggestionsResponse,
+  CatalogRender,
+  CatalogOutputMatch,
+  CatalogModule,
+  CatalogComposeResponse,
+  CatalogPreviewRender,
+  CatalogPreviewPayload,
 } from './api';
 // Selection-as-filter helpers (Plotly/AG Grid → InteractiveFilter)
 export {

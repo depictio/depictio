@@ -161,16 +161,24 @@ const DashboardCompactCard: React.FC<DashboardCompactCardProps> = ({
               {category.label}
             </Badge>
           )}
-          {projectName && (
-            <Badge
-              color="cyan"
-              variant="light"
-              size="sm"
-              leftSection={<Icon icon="mdi:folder-outline" width={11} />}
-            >
-              {projectName}
-            </Badge>
-          )}
+          {projectName &&
+            (() => {
+              const pid = (dashboard.project_id as string | undefined) || null;
+              return (
+                <Badge
+                  color="cyan"
+                  variant="light"
+                  size="sm"
+                  component={pid ? 'a' : 'div'}
+                  href={pid ? `/projects/${pid}` : undefined}
+                  onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                  leftSection={<Icon icon="mdi:folder-outline" width={11} />}
+                  style={{ cursor: pid ? 'pointer' : undefined }}
+                >
+                  {projectName}
+                </Badge>
+              );
+            })()}
           <Badge
             color={isPublic ? 'green' : 'grape'}
             variant="light"

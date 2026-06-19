@@ -34,10 +34,13 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     """Clean Nextclade CSV: extract sample name, select key QC and clade columns."""
     df = sources["nextclade_raw"]
 
-    # Extract sample name from seqName: strip reference genome suffix and consensus suffixes
+    # Extract sample name from seqName. Nanopore/ARTIC headers are path-like
+    # ("SAMPLE_01/MN908947.3/ARTIC/clair3…") so strip from the first '/' (no-op on
+    # the illumina form), then strip whitespace and consensus suffixes.
     if "seqName" in df.columns:
         df = df.with_columns(
             pl.col("seqName")
+            .str.replace(r"/.*$", "")
             .str.replace(r"\s+.*$", "")
             .str.replace(r"\.consensus.*$", "")
             .str.replace(r"\.primertrimmed.*$", "")

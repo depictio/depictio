@@ -30,6 +30,9 @@ dependencies = [
   "beanie==2.0.0",
   "python-dotenv==1.2.2",
   "bleach==6.4.0",
+  # Required by catalog recipes that build colour scales / hierarchical figures
+  # during processing (e.g. qiime2/taxonomy_heatmap.py imports plotly.colors).
+  "plotly==6.8.0",
 ]
 authors = [{ name = "Thomas Weber", email = "thomas.weber@embl.de" }]
 urls = { Homepage = "http://github.com/depictio/depictio" }

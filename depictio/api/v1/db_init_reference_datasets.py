@@ -433,7 +433,7 @@ class ReferenceDatasetRegistry:
         config = substitute_template_variables(config, variables)
 
         # 3. Apply conditional DC/link removal (pass dummy template_dir — init ignores dashboards)
-        config, _ = _apply_conditionals(config, conditionals, provided_vars, Path("."))
+        config, _, _ = _apply_conditionals(config, conditionals, provided_vars, Path("."))
 
         # 4. Skip DCs whose config still has unresolved {VAR} placeholders and prune their links
         skipped_dc_tags: set[str] = set()

@@ -7,7 +7,12 @@ from depictio.models.models.transforms import RecipeSource
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="variants_raw",
-        path="variants/ivar/variants_long_table.csv",
+        # Glob the variant-caller subdir so the recipe is caller-agnostic: ivar
+        # (default) writes variants/ivar/variants_long_table.csv, bcftools writes
+        # variants/bcftools/variants_long_table.csv. `*` matches a single segment,
+        # and only the caller subdir holds this filename (bowtie2/, snpeff/,
+        # intersect/ don't), so exactly the active caller's table is picked up.
+        glob_pattern="variants/*/variants_long_table.csv",
         format="CSV",
     ),
 ]

@@ -156,8 +156,20 @@ def read_single_file_lazy(file_info: File, file_format: str, polars_kwargs: dict
     try:
         if file_format in ["csv", "tsv", "txt"]:
             effective_kwargs = dict(polars_kwargs)
-            if file_format == "tsv" and "separator" not in effective_kwargs:
-                effective_kwargs["separator"] = "\t"
+            if "separator" not in effective_kwargs:
+                # Pick the delimiter from the on-disk extension first, falling
+                # back to the declared format when the extension is ambiguous.
+                # nf-core pipelines emit samplesheets/metadata as either .csv or
+                # .tsv depending on the user's input, so a DC declared "CSV" may
+                # actually point at a tab-separated file — without this a .tsv
+                # lands as one comma-joined column. A `.csv` extension keeps the
+                # comma default; an extensionless path uses the declared format.
+                path_str = str(file_path)
+                suffix = path_str.rsplit(".", 1)[-1].lower() if "." in path_str else ""
+                if suffix in ("tsv", "tab"):
+                    effective_kwargs["separator"] = "\t"
+                elif suffix != "csv" and file_format == "tsv":
+                    effective_kwargs["separator"] = "\t"
             lf = pl.scan_csv(file_path, **effective_kwargs)
         elif file_format == "parquet":
             lf = pl.scan_parquet(file_path, **polars_kwargs)
@@ -856,10 +868,15 @@ def process_recipe_data_collection(
     pipeline_version: str | None = getattr(workflow, "version", None)
     rich_print_checked_statement(f"Running recipe: {recipe_name}", "info")
 
-    # Build source overrides dict
+    # Build source overrides dict. A SourceOverride carries either a single-file
+    # 'path' or a multi-file 'glob_pattern'; resolve_sources interprets the value
+    # by source type, so collapse to whichever was provided.
     overrides = None
     if transform_config.source_overrides:
-        overrides = {ref: so.path for ref, so in transform_config.source_overrides.items()}
+        overrides = {
+            ref: (so.path if so.path is not None else so.glob_pattern)
+            for ref, so in transform_config.source_overrides.items()
+        }
 
     # Resolve data directory from workflow's data_location
     # For sequencing-runs structure, collect all run directories

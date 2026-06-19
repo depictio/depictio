@@ -343,7 +343,7 @@ wheels = [
 
 [[package]]
 name = "depictio-cli"
-version = "1.0.0b7"
+version = "1.0.1"
 source = { editable = "." }
 dependencies = [
     { name = "beanie" },
@@ -353,6 +353,7 @@ dependencies = [
     { name = "deltalake" },
     { name = "devtools" },
     { name = "httpx" },
+    { name = "plotly" },
     { name = "polars", extra = ["deltalake", "excel", "numpy", "pandas", "pyarrow", "rtcompat"] },
     { name = "pydantic", extra = ["email"] },
     { name = "pydantic-settings" },
@@ -379,6 +380,7 @@ requires-dist = [
     { name = "devtools", specifier = "==0.12.2" },
     { name = "httpx", specifier = "==0.28.1" },
     { name = "multiqc", marker = "extra == 'multiqc'", specifier = "==1.35" },
+    { name = "plotly", specifier = "==6.8.0" },
     { name = "polars", extras = ["rtcompat", "numpy", "pandas", "pyarrow", "excel", "deltalake"], specifier = "==1.41.2" },
     { name = "pydantic", extras = ["email"], specifier = "==2.13.4" },
     { name = "pydantic-settings", specifier = "==2.14.1" },
@@ -1057,15 +1059,15 @@ wheels = [
 
 [[package]]
 name = "plotly"
-version = "6.5.2"
+version = "6.8.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "narwhals" },
     { name = "packaging" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/e3/4f/8a10a9b9f5192cb6fdef62f1d77fa7d834190b2c50c0cd256bd62879212b/plotly-6.5.2.tar.gz", hash = "sha256:7478555be0198562d1435dee4c308268187553cc15516a2f4dd034453699e393", size = 7015695, upload-time = "2026-01-14T21:26:51.222Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/94/fd/d72c292d78aadb93d1a9bcd76bf3c678271040c7cf10abe5788b33040a39/plotly-6.8.0.tar.gz", hash = "sha256:e088e7ddc68d4f70e3d66659224727a45296d71d2b8284181862d3d8f1f0d88f", size = 6915161, upload-time = "2026-06-03T18:33:40.226Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/8a/67/f95b5460f127840310d2187f916cf0023b5875c0717fdf893f71e1325e87/plotly-6.5.2-py3-none-any.whl", hash = "sha256:91757653bd9c550eeea2fa2404dba6b85d1e366d54804c340b2c874e5a7eb4a4", size = 9895973, upload-time = "2026-01-14T21:26:47.135Z" },
+    { url = "https://files.pythonhosted.org/packages/f9/14/abe5ce876ab5b66ee3c691bf537fcd43d037aea55d447aacf74630a8f31e/plotly-6.8.0-py3-none-any.whl", hash = "sha256:13c5c4a0f70b74cab1913eda0de49b826df5931708eb6f9c3010040614700ec8", size = 9902055, upload-time = "2026-06-03T18:33:34.26Z" },
 ]
 
 [[package]]

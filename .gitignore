@@ -384,3 +384,11 @@ dev/advanced_viz_docs_screenshots/fixtures/
 # Generated CLI configs (emitted by upload.sh on the fly)
 **/.cli_config.generated.yaml
 .depictio-instance-CLI.yaml
+
+# Generated catalog-preview single-file bundle (built via pnpm run build:catalog-preview)
+depictio/viewer/dist-catalog-preview/
+
+# Nextflow runtime artifacts (from local pipeline validation runs)
+.nextflow/
+.nextflow.log*
+work/

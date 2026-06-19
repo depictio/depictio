@@ -53,7 +53,12 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     # Join ALL metadata columns generically when metadata is available
     metadata = sources.get("metadata")
     if metadata is not None:
-        metadata = metadata.rename({"ID": "sample"})
+        # The metadata sample-ID column is pipeline/user dependent (nf-core test
+        # data uses "ID", the megatest metadata uses "sample"); normalise to
+        # "sample" whatever it's called. Mirrors sintax_rel_abundance.py.
+        id_col = next((c for c in ("ID", "sample") if c in metadata.columns), metadata.columns[0])
+        if id_col != "sample":
+            metadata = metadata.rename({id_col: "sample"})
         df = df.join(metadata, on="sample", how="left")
 
     # Core columns first, then any metadata columns appended

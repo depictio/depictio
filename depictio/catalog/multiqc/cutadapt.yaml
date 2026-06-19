@@ -1,0 +1,9 @@
+id: multiqc_cutadapt
+mode: cutadapt
+description: Adapter/primer trimming summary (filtered reads, trimmed sequence lengths) — Cutadapt, surfaced via MultiQC.
+find: { path_glob: "**/multiqc/multiqc_data/multiqc.parquet" }
+# reuse the bundled nf-core pipeline MultiQC parquet (not a per-module copy);
+# `section` selects this module's plot anchors out of the shared report.
+fixture: ../../projects/nf-core/ampliseq/2.16.0/multiqc/multiqc_data/multiqc.parquet
+renders_as:
+  - { component: multiqc, section: cutadapt }

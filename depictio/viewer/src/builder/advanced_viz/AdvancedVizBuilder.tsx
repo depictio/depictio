@@ -215,6 +215,8 @@ const AdvancedVizBuilder: React.FC = () => {
   const config = useBuilderStore((s) => s.config) as {
     viz_kind?: AdvancedVizKind;
     column_mapping?: Record<string, string | string[]>;
+    preset_config?: Record<string, unknown> | null;
+    config?: Record<string, unknown> | null;
   };
   const patchConfig = useBuilderStore((s) => s.patchConfig);
   const setPreviewReady = useBuilderStore((s) => s.setPreviewReady);
@@ -395,7 +397,9 @@ const AdvancedVizBuilder: React.FC = () => {
   }, [selectedKind, schema, columnMapping, patchConfig, embeddingMode, requiredRoles, scoreMap]);
 
   const setKind = (kind: AdvancedVizKind | null) => {
-    patchConfig({ viz_kind: kind || undefined, column_mapping: {} });
+    // Re-picking a kind invalidates the catalog/saved preset (its control
+    // extras belonged to the previous kind), so drop it.
+    patchConfig({ viz_kind: kind || undefined, column_mapping: {}, preset_config: null });
   };
 
   const setRole = (role: string, value: string | string[] | null) => {
@@ -908,6 +912,7 @@ const AdvancedVizBuilder: React.FC = () => {
           dcId={dcId}
           bindingsValid={validation.ok}
           onReady={setPreviewReady}
+          presetConfig={config.preset_config ?? config.config ?? null}
         />
       ) : null}
     </Stack>

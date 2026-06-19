@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useState } from 'react';
 import GridLayout, { Layout } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
-
 import { StoredMetadata, InteractiveFilter } from '../api';
 import ComponentRenderer from './ComponentRenderer';
 
@@ -335,10 +334,13 @@ function normalizeLayout(
   // In view mode every item is `static: true` so react-grid-layout's built-in
   // vertical compaction is a no-op — gaps left behind by filtered-out items
   // (interactive components routed to the left rail rather than the main grid)
-  // stay in the layout. Run a one-shot manual compaction so y values close up.
+  // stay in the layout. Run a one-shot manual compaction so y values close up,
+  // then widen any card left alone on its row so dropped components never leave
+  // a half-empty row. (The server re-packs on import; this catches layouts
+  // already stored before that pass and anything hidden only at render time.)
   // In editor mode (interactive=true) we leave the layout untouched: items are
   // non-static there, RGL compacts naturally after every drag/resize.
-  return interactive ? merged : compactVerticallyForStatic(merged);
+  return interactive ? merged : widenLoneRows(compactVerticallyForStatic(merged));
 }
 
 /**
@@ -359,6 +361,23 @@ function compactVerticallyForStatic(items: Layout[]): Layout[] {
     placed.push({ ...item, y });
   }
   return placed;
+}
+
+/**
+ * Widen any item that ends up alone on its row to fill the grid, so a dropped
+ * component never leaves a half-width card sitting beside an empty gap. An item
+ * is "alone" when no other item shares its vertical band; only sub-full-width
+ * items are touched, and nothing is reordered. Mirrors the server's
+ * `_recompact_main_grid` lone-row rule for layouts the server didn't re-pack.
+ */
+function widenLoneRows(items: Layout[], cols = 8): Layout[] {
+  const overlapsVertically = (a: Layout, b: Layout) =>
+    !(a.y + a.h <= b.y || b.y + b.h <= a.y);
+  return items.map((item) => {
+    if (item.w >= cols) return item;
+    const hasRowMate = items.some((other) => other !== item && overlapsVertically(item, other));
+    return hasRowMate ? item : { ...item, x: 0, w: cols };
+  });
 }
 
 /** Default w/h per component_type — mirrors Dash's DUAL_PANEL_DIMENSIONS. */
