@@ -489,6 +489,42 @@ async def get_unique_values(
             detail="You don't have permission to access this data collection.",
         )
 
+    # MultiQC DCs have no Delta table — a sample filter bound to one sources its
+    # options from the ingested sample list instead, so the MultiQC tab can carry
+    # a working sample filter on every route (the metadata / summary_metrics DCs
+    # that normally back it may be pruned). Canonical sample IDs are returned;
+    # `_resolve_multiqc_sample_filter` expands them to the per-report variant
+    # names when the filter is applied.
+    # Resolve THIS data collection by _id (a nested positional projection returns
+    # the whole workflow's data_collections array, so we must match explicitly —
+    # grabbing [0] would misidentify every DC as the workflow's first one).
+    dc_cfg = projects_collection.find_one(
+        {"workflows.data_collections._id": ObjectId(data_collection_id)},
+        {"workflows.data_collections._id": 1, "workflows.data_collections.config.type": 1},
+    )
+    dc_doc: dict = {}
+    for _wf in (dc_cfg or {}).get("workflows", []):
+        for _dc in _wf.get("data_collections", []):
+            if str(_dc.get("_id")) == str(data_collection_id):
+                dc_doc = _dc
+                break
+        if dc_doc:
+            break
+    if (dc_doc.get("config", {}).get("type") or "").lower() == "multiqc":
+        from depictio.api.v1.db import multiqc_collection
+
+        mqc = multiqc_collection.find_one(
+            {
+                "data_collection_id": {
+                    "$in": [ObjectId(str(data_collection_id)), str(data_collection_id)]
+                }
+            }
+        )
+        md = (mqc or {}).get("metadata") or {}
+        samples = md.get("canonical_samples") or md.get("samples") or []
+        values_str = sorted({str(v) for v in samples})[:limit]
+        return {"column": column, "values": values_str}
+
     deltatables_list = list(deltatables_collection.find({"data_collection_id": data_collection_id}))
     if not deltatables_list:
         raise HTTPException(
