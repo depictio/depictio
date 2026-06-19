@@ -174,11 +174,18 @@ async def _get_data_collection_polars_schema(
 
     try:
         dt = DeltaTable(delta_location, storage_options=polars_s3_config)
+        # deltalake 1.x renamed ``Schema.to_pyarrow()`` to ``Schema.to_arrow()``.
+        # The pinned/deployed runtime is 1.6.0 (uses ``to_arrow``) but a dev venv
+        # may still be on 0.24.x (only ``to_pyarrow``), so accept either. Keep the
+        # read inside the guard so any future API drift surfaces as a clean 500
+        # instead of a raw AttributeError traceback.
+        schema = dt.schema()
+        to_arrow = getattr(schema, "to_arrow", None) or getattr(schema, "to_pyarrow")
+        arrow_schema = to_arrow()
     except Exception as exc:
-        logger.warning(f"polars_schema: cannot open delta at {delta_location}: {exc}")
-        raise HTTPException(status_code=500, detail="Unable to open Delta table.") from exc
+        logger.warning(f"polars_schema: cannot read delta schema at {delta_location}: {exc}")
+        raise HTTPException(status_code=500, detail="Unable to read Delta schema.") from exc
 
-    arrow_schema = dt.schema().to_pyarrow()
     # Stringify pyarrow dtypes into the polars naming convention expected by
     # validate_binding(): polars uses CamelCase ("Float64", "Int64", "Utf8"/"String").
     return {field.name: _pyarrow_to_polars_dtype_name(field.type) for field in arrow_schema}
