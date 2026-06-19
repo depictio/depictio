@@ -42,6 +42,15 @@ template:
     - name: "IS_MULTIREGION"
       description: "Auto-set from params.json (multiregion + sidle_ref_taxonomy). Prunes the QIIME2 diversity/phylogeny/ANCOM-BC DCs absent on the SIDLE route; the sidle_* DCs supply the reconstructed-community view."
       required: false
+    - name: "SKIP_TAXONOMY"
+      description: "Auto-set from params.json (skip_taxonomy). Prunes the taxonomy/ordination/differential DCs (qiime2/{barplot,rel_abundance_tables,taxonomy}/ are absent)."
+      required: false
+    - name: "SKIP_ALPHA_RAREFACTION"
+      description: "Auto-set from params.json (skip_alpha_rarefaction). Prunes the alpha-rarefaction DCs (qiime2/alpha-rarefaction/ is absent)."
+      required: false
+    - name: "SKIP_ANCOM"
+      description: "Auto-set from params.json (skip_ancom). Prunes the ANCOM-BC differential-abundance DCs (qiime2/ancombc/ is absent)."
+      required: false
   dashboards:
     - "dashboards/base.yaml"
   conditional:
@@ -49,7 +58,11 @@ template:
       # ma_canonical derives from ancombc_results (itself metadata-gated), so it
       # must be pruned together with the metadata-dependent DCs — otherwise its
       # dc_ref to the removed ancombc_results DC fails when no metadata is given.
-      remove_dc_tags: ["metadata", "alpha_rarefaction", "ancombc_results", "ma_canonical"]
+      # upset_canonical is a taxa × GROUP_COL presence matrix: with no metadata
+      # there is only one group, so it degenerates to a single useless bar — drop it.
+      remove_dc_tags:
+        ["metadata", "alpha_rarefaction", "ancombc_results", "ma_canonical",
+         "upset_canonical"]
       dashboards: ["dashboards/base.yaml"]
     - if_var_present: "METADATA_FILE"
       dashboards: ["dashboards/base.yaml"]
@@ -89,6 +102,26 @@ template:
          "complex_heatmap_canonical", "sunburst_canonical", "sankey_canonical",
          "upset_canonical", "ma_canonical", "bray_curtis_canonical",
          "phylogenetic_tree_canonical", "phylogenetic_tree_metadata_canonical"]
+      dashboards: ["dashboards/base.yaml"]
+    # --skip_taxonomy suppresses qiime2/{barplot,rel_abundance_tables,taxonomy}/, so
+    # every taxonomy/ordination/differential DC loses its source. Drop the whole chain
+    # (keep MultiQC, alpha-diversity, phylogeny) so the run ingests instead of aborting.
+    - if_var_present: "SKIP_TAXONOMY"
+      remove_dc_tags:
+        ["taxonomy_composition", "taxonomy_rel_abundance", "taxonomy_heatmap",
+         "ancombc_results", "ma_canonical", "stacked_taxonomy_canonical",
+         "embedding_pcoa", "complex_heatmap_canonical", "sunburst_canonical",
+         "sankey_canonical", "upset_canonical", "bray_curtis_canonical"]
+      dashboards: ["dashboards/base.yaml"]
+    # --skip_alpha_rarefaction suppresses qiime2/alpha-rarefaction/. Drop the
+    # rarefaction + alpha-diversity DCs that read it.
+    - if_var_present: "SKIP_ALPHA_RAREFACTION"
+      remove_dc_tags:
+        ["alpha_rarefaction", "rarefaction_canonical", "alpha_diversity_multi_canonical"]
+      dashboards: ["dashboards/base.yaml"]
+    # --skip_ancom suppresses qiime2/ancombc/. Drop the differential-abundance DCs.
+    - if_var_present: "SKIP_ANCOM"
+      remove_dc_tags: ["ancombc_results", "ma_canonical"]
       dashboards: ["dashboards/base.yaml"]
 
 # ============================================================================
@@ -258,6 +291,12 @@ workflows:
               "Kingdom": "Kingdom-level classification (row annotation)"
 
       - data_collection_tag: "ancombc_results"
+        # Optional: ampliseq computes ANCOM-BC only for *categorical* metadata
+        # columns, so the Category-{GROUP_COL}-level-2/ dir is absent when GROUP_COL
+        # auto-resolved to a non-categorical column (e.g. a per-sample label) or
+        # ANCOM-BC simply didn't run for it. Skip the Differential tab rather than
+        # aborting ingestion; the import-time prune drops the now-empty components.
+        optional: true
         description: "ANCOM-BC differential abundance at Phylum level (from 5 raw CSV slices)"
         config:
           type: "Table"

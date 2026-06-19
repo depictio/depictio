@@ -27,9 +27,13 @@ main_dashboard:
       y: 0
       w: 8
       h: 1
+  # Bound to the always-present multiqc_data DC (sample options from the ingested
+  # sample list) so the MultiQC tab keeps a working sample filter even on routes
+  # where summary_metrics is pruned (e.g. nanopore/ARTIC). The picked sample is
+  # expanded to its per-report variants by _resolve_multiqc_sample_filter.
   - component_type: interactive
     workflow_tag: viralrecon
-    data_collection_tag: summary_metrics
+    data_collection_tag: multiqc_data
     interactive_component_type: MultiSelect
     column_name: sample
     column_type: object
@@ -302,9 +306,13 @@ tabs:
       w: 3
       h: 2
     title: Genome Coverage
+  # Bound to mosdepth_genome_coverage (present on every coverage-bearing run,
+  # incl. genome-only/non-amplicon runs like HIV) rather than the amplicon DC,
+  # which is pruned on genome-only runs and would leave the Coverage tab with no
+  # filter. Genome coverage is per-sample too, so sample-slicing stays meaningful.
   - component_type: interactive
     workflow_tag: viralrecon
-    data_collection_tag: mosdepth_amplicon_coverage
+    data_collection_tag: mosdepth_genome_coverage
     interactive_component_type: MultiSelect
     column_name: sample
     column_type: object

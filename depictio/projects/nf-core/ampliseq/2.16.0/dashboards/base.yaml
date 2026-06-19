@@ -24,11 +24,16 @@ main_dashboard:
       w: 8
       h: 1
     title: QC Overview
+  # Bound to the always-present multiqc_data DC (sample options come from the
+  # ingested sample list) so the MultiQC tab keeps a working sample filter on
+  # every route — the metadata DC that would otherwise back it is pruned on
+  # no-metadata runs. _resolve_multiqc_sample_filter expands the picked sample
+  # to its per-report variants when filtering the plots.
   - component_type: interactive
     workflow_tag: ampliseq
-    data_collection_tag: metadata
+    data_collection_tag: multiqc_data
     interactive_component_type: MultiSelect
-    column_name: '{METADATA_ID_COL}'
+    column_name: sample
     column_type: object
     display:
       title_size: md
@@ -441,18 +446,19 @@ tabs:
       title: Alpha diversity by {GROUP_COL_DISPLAY} (per metric)
     mode: code
     code_content: |-
-      df_modified = df.unpivot(
+      df_grp = df.with_columns(pl.col('{GROUP_COL}').alias('_grp')) if '{GROUP_COL}' in df.columns else df.with_columns(pl.lit('All samples').alias('_grp'))
+      df_modified = df_grp.unpivot(
           on=['shannon', 'observed_features', 'faith_pd', 'evenness'],
-          index=['sample_id', '{GROUP_COL}'],
+          index=['sample_id', '_grp'],
           variable_name='metric',
           value_name='value',
       ).filter(pl.col('value').is_not_null())
       fig = px.box(
           df_modified.to_pandas(),
-          x='{GROUP_COL}', y='value', color='{GROUP_COL}',
+          x='_grp', y='value', color='_grp',
           facet_col='metric', facet_col_wrap=2,
           points='all',
-          labels={'{GROUP_COL}': '{GROUP_COL_DISPLAY}', 'value': ''},
+          labels={'_grp': '{GROUP_COL_DISPLAY}', 'value': ''},
       )
       fig.update_yaxes(matches=None, showticklabels=True)
       fig.for_each_annotation(lambda a: a.update(text=a.text.split('=')[-1], font={'size': 15, 'weight': 'bold'}))
@@ -607,24 +613,15 @@ tabs:
       y: mean_rel_abundance
     mode: code
     code_content: |-
-      group_col = '{GROUP_COL}'
-      if group_col in df.columns:
-          df_mean = df.group_by([group_col, 'Phylum']).agg(pl.col('rel_abundance').mean().alias('mean_rel_abundance')).sort('Phylum')
-          fig = px.bar(
-              df_mean.to_pandas(),
-              x='Phylum', y='mean_rel_abundance', color='Phylum',
-              facet_row=group_col,
-              title='Mean Relative Abundance by {GROUP_COL_DISPLAY}',
-              labels={'Phylum': 'Phylum', 'mean_rel_abundance': 'Mean Relative Abundance'},
-          )
-      else:
-          df_mean = df.group_by('Phylum').agg(pl.col('rel_abundance').mean().alias('mean_rel_abundance')).sort('Phylum')
-          fig = px.bar(
-              df_mean.to_pandas(),
-              x='Phylum', y='mean_rel_abundance', color='Phylum',
-              title='Mean Relative Abundance',
-              labels={'Phylum': 'Phylum', 'mean_rel_abundance': 'Mean Relative Abundance'},
-          )
+      df_grp = df.with_columns(pl.col('{GROUP_COL}').alias('_facet')) if '{GROUP_COL}' in df.columns else df.with_columns(pl.lit('All samples').alias('_facet'))
+      df_modified = df_grp.group_by(['_facet', 'Phylum']).agg(pl.col('rel_abundance').mean().alias('mean_rel_abundance')).sort('Phylum')
+      fig = px.bar(
+          df_modified.to_pandas(),
+          x='Phylum', y='mean_rel_abundance', color='Phylum',
+          facet_row='_facet',
+          title='Mean Relative Abundance by {GROUP_COL_DISPLAY}',
+          labels={'Phylum': 'Phylum', 'mean_rel_abundance': 'Mean Relative Abundance'},
+      )
       fig.update_layout(xaxis={'categoryorder': 'category ascending'})
       fig.update_xaxes(tickangle=-45, tickfont={'size': 9})
       fig.update_layout(showlegend=False)
@@ -682,24 +679,15 @@ tabs:
       y: mean_rel_abundance
     mode: code
     code_content: |-
-      group_col = '{GROUP_COL}'
-      if group_col in df.columns:
-          df_mean = df.group_by([group_col, 'Phylum']).agg(pl.col('rel_abundance').mean().alias('mean_rel_abundance')).sort('Phylum')
-          fig = px.bar(
-              df_mean.to_pandas(),
-              x='Phylum', y='mean_rel_abundance', color='Phylum',
-              facet_row=group_col,
-              title='Mean Relative Abundance by {GROUP_COL_DISPLAY}',
-              labels={'Phylum': 'Phylum', 'mean_rel_abundance': 'Mean Relative Abundance'},
-          )
-      else:
-          df_mean = df.group_by('Phylum').agg(pl.col('rel_abundance').mean().alias('mean_rel_abundance')).sort('Phylum')
-          fig = px.bar(
-              df_mean.to_pandas(),
-              x='Phylum', y='mean_rel_abundance', color='Phylum',
-              title='Mean Relative Abundance',
-              labels={'Phylum': 'Phylum', 'mean_rel_abundance': 'Mean Relative Abundance'},
-          )
+      df_grp = df.with_columns(pl.col('{GROUP_COL}').alias('_facet')) if '{GROUP_COL}' in df.columns else df.with_columns(pl.lit('All samples').alias('_facet'))
+      df_modified = df_grp.group_by(['_facet', 'Phylum']).agg(pl.col('rel_abundance').mean().alias('mean_rel_abundance')).sort('Phylum')
+      fig = px.bar(
+          df_modified.to_pandas(),
+          x='Phylum', y='mean_rel_abundance', color='Phylum',
+          facet_row='_facet',
+          title='Mean Relative Abundance by {GROUP_COL_DISPLAY}',
+          labels={'Phylum': 'Phylum', 'mean_rel_abundance': 'Mean Relative Abundance'},
+      )
       fig.update_layout(xaxis={'categoryorder': 'category ascending'})
       fig.update_xaxes(tickangle=-45, tickfont={'size': 9})
       fig.update_layout(showlegend=False)
@@ -1021,6 +1009,29 @@ tabs:
       w: 1
       h: 2
     title: '{GROUP_COL_DISPLAY}'
+  # Phylum filter bound to the heatmap DC (non-metadata, present on every QIIME2
+  # route incl. no-metadata runs) so the Ordination tab always keeps a working
+  # filter even when the metadata-bound sample/group filters above are pruned.
+  - component_type: interactive
+    workflow_tag: ampliseq
+    data_collection_tag: complex_heatmap_canonical
+    interactive_component_type: MultiSelect
+    column_name: Phylum
+    column_type: object
+    display:
+      title_size: md
+      custom_color: '#1f9e89'
+      icon_name: mdi:filter-variant
+    title_align: left
+    placement: left
+    tag: interactive-ord-phylum-filter-7fd490
+    index: ord-phylum-filter
+    layout:
+      x: 0
+      y: 5
+      w: 1
+      h: 2
+    title: Phylum
   - component_type: advanced_viz
     workflow_tag: ampliseq
     viz_kind: embedding
@@ -1601,6 +1612,118 @@ tabs:
       w: 8
       h: 1
     title: Reconstructed Community (SIDLE)
+  - component_type: interactive
+    workflow_tag: ampliseq
+    data_collection_tag: sidle_reconstructed
+    interactive_component_type: MultiSelect
+    column_name: Phylum
+    column_type: object
+    display:
+      title_size: md
+      custom_color: '#45B8AC'
+      icon_name: mdi:filter-variant
+    title_align: left
+    placement: left
+    tag: interactive-sidle-phylum-filter-9a1c48
+    index: sidle-phylum-filter
+    layout:
+      x: 0
+      y: 0
+      w: 1
+      h: 2
+    title: Phylum
+  - component_type: card
+    workflow_tag: ampliseq
+    data_collection_tag: sidle_reconstructed
+    aggregation: nunique
+    column_name: feature_id
+    column_type: object
+    display:
+      icon_name: mdi:dna
+      icon_color: '#45B8AC'
+      title_color: '#45B8AC'
+      title_font_size: xl
+      value_font_size: xl
+    title_size: sm
+    title_align: left
+    secondary_layout: vertical
+    tag: card-sidle-features-9a1c50
+    index: sidle-card-features
+    layout:
+      x: 0
+      y: 1
+      w: 2
+      h: 2
+    title: Reconstructed features
+  - component_type: card
+    workflow_tag: ampliseq
+    data_collection_tag: sidle_reconstructed
+    aggregation: nunique
+    column_name: sample
+    column_type: object
+    display:
+      icon_name: mdi:flask
+      icon_color: '#F68B33'
+      title_color: '#F68B33'
+      title_font_size: xl
+      value_font_size: xl
+    title_size: sm
+    title_align: left
+    secondary_layout: vertical
+    tag: card-sidle-samples-9a1c51
+    index: sidle-card-samples
+    layout:
+      x: 2
+      y: 1
+      w: 2
+      h: 2
+    title: Samples
+  - component_type: card
+    workflow_tag: ampliseq
+    data_collection_tag: sidle_reconstructed
+    aggregation: nunique
+    column_name: Phylum
+    column_type: object
+    display:
+      icon_name: mdi:chart-donut
+      icon_color: '#984EA3'
+      title_color: '#984EA3'
+      title_font_size: xl
+      value_font_size: xl
+    title_size: sm
+    title_align: left
+    secondary_layout: vertical
+    tag: card-sidle-phyla-9a1c52
+    index: sidle-card-phyla
+    layout:
+      x: 4
+      y: 1
+      w: 2
+      h: 2
+    title: Phyla detected
+  - component_type: card
+    workflow_tag: ampliseq
+    data_collection_tag: sidle_reconstruction_qc
+    aggregation: average
+    column_name: num_regions
+    column_type: int64
+    display:
+      icon_name: mdi:vector-link
+      icon_color: '#00BCD4'
+      title_color: '#00BCD4'
+      title_font_size: xl
+      value_font_size: xl
+    title_size: sm
+    title_align: left
+    secondary_layout: vertical
+    tag: card-sidle-mean-regions-9a1c53
+    index: sidle-card-mean-regions
+    layout:
+      x: 6
+      y: 1
+      w: 2
+      h: 2
+    title: Mean regions / feature
   - component_type: figure
     workflow_tag: ampliseq
     data_collection_tag: sidle_reconstructed
@@ -1609,30 +1732,125 @@ tabs:
       color: Phylum
       labels:
         sample: Sample
-        count: Reconstructed count
-      title: Reconstructed community composition (per sample)
+      title: Relative composition by phylum (per sample)
+      x: sample
+      y: rel
+    mode: code
+    code_content: |-
+      df_g = df.group_by(['sample', 'Phylum']).agg(pl.col('count').sum().alias('count'))
+      df_g = df_g.with_columns((pl.col('count') / pl.col('count').sum().over('sample') * 100).alias('rel'))
+      fig = px.bar(
+          df_g.sort(['sample', 'Phylum']).to_pandas(),
+          x='sample', y='rel', color='Phylum',
+          title='Relative composition by phylum (per sample)',
+          labels={'sample': 'Sample', 'rel': 'Relative abundance (%)', 'Phylum': 'Phylum'},
+      )
+      fig.update_layout(barmode='stack', yaxis_range=[0, 100])
+      fig.update_xaxes(tickangle=-45)
+    selection_enabled: false
+    title_size: sm
+    title_align: left
+    tag: figure-bar_sidle_rel_composition-9a1c45
+    description: Per-sample phylum makeup normalised to 100% — compare community structure across samples.
+    layout:
+      x: 0
+      y: 3
+      w: 4
+      h: 5
+  - component_type: figure
+    workflow_tag: ampliseq
+    data_collection_tag: sidle_reconstruction_qc
+    visu_type: bar
+    figure_params:
+      labels:
+        num_regions: '# regions mapped'
+      title: Cross-region support (features by regions mapped)
+      x: num_regions
+      y: features
+    mode: code
+    code_content: |-
+      df_g = df.group_by('num_regions').agg(pl.len().alias('features')).sort('num_regions')
+      fig = px.bar(
+          df_g.to_pandas(),
+          x='num_regions', y='features', text='features',
+          title='Cross-region support (features by regions mapped)',
+          labels={'num_regions': '# regions mapped', 'features': 'Reconstructed features'},
+      )
+      fig.update_xaxes(dtick=1)
+      fig.update_traces(textposition='outside')
+    selection_enabled: false
+    title_size: sm
+    title_align: left
+    tag: figure-bar_sidle_confidence-9a1c54
+    description: How many of the amplified 16S regions each feature was reconstructed from — the core SIDLE confidence signal.
+    layout:
+      x: 4
+      y: 3
+      w: 4
+      h: 5
+  - component_type: figure
+    workflow_tag: ampliseq
+    data_collection_tag: sidle_reconstructed
+    visu_type: bar
+    figure_params:
+      color: Genus
+      labels:
+        sample: Sample
+      title: Genus-level composition (per sample)
       x: sample
       y: count
     mode: code
     code_content: |-
-      df_g = df.group_by(['sample', 'Phylum']).agg(pl.col('count').sum().alias('count')).sort(['sample', 'Phylum'])
+      df_g = df.group_by(['sample', 'Genus']).agg(pl.col('count').sum().alias('count')).sort(['sample', 'Genus'])
       fig = px.bar(
           df_g.to_pandas(),
-          x='sample', y='count', color='Phylum',
-          title='Reconstructed community composition (per sample)',
-          labels={'sample': 'Sample', 'count': 'Reconstructed count', 'Phylum': 'Phylum'},
+          x='sample', y='count', color='Genus',
+          title='Genus-level composition (per sample)',
+          labels={'sample': 'Sample', 'count': 'Reconstructed count', 'Genus': 'Genus'},
       )
       fig.update_layout(barmode='stack')
       fig.update_xaxes(tickangle=-45)
     selection_enabled: false
     title_size: sm
     title_align: left
-    tag: figure-bar_sidle_composition-9a1c45
+    tag: figure-bar_sidle_genus-9a1c55
+    description: Deeper taxonomic resolution than phylum — genus-level counts per sample (Unclassified where the lineage stops short).
     layout:
       x: 0
-      y: 1
-      w: 8
-      h: 8
+      y: 8
+      w: 4
+      h: 5
+  - component_type: figure
+    workflow_tag: ampliseq
+    data_collection_tag: sidle_reconstruction_qc
+    visu_type: scatter
+    figure_params:
+      labels:
+        num_regions: '# regions mapped'
+      title: K-mer support vs region coverage
+      x: num_regions
+      y: total_kmers_mapped
+    mode: code
+    code_content: |-
+      fig = px.scatter(
+          df.to_pandas(),
+          x='num_regions', y='total_kmers_mapped', size='mean_kmer_per_region',
+          hover_data=['feature_id', 'mean_kmer_per_region', 'stdv_kmer_per_region'],
+          title='K-mer support vs region coverage',
+          labels={'num_regions': '# regions mapped', 'total_kmers_mapped': 'Total k-mers mapped'},
+      )
+      fig.update_traces(marker=dict(line=dict(width=1, color='DarkSlateGrey')))
+      fig.update_xaxes(dtick=1)
+    selection_enabled: false
+    title_size: sm
+    title_align: left
+    tag: figure-scatter_sidle_kmers-9a1c56
+    description: Each reconstructed feature's k-mer evidence against how many regions support it — outliers flag weakly-supported reconstructions.
+    layout:
+      x: 4
+      y: 8
+      w: 4
+      h: 5
   - component_type: table
     workflow_tag: ampliseq
     data_collection_tag: sidle_reconstructed
@@ -1643,7 +1861,7 @@ tabs:
     index: sidle-reconstructed-table
     layout:
       x: 0
-      y: 9
+      y: 13
       w: 8
       h: 6
     title: Reconstructed features (per-sample counts)
@@ -1657,7 +1875,7 @@ tabs:
     index: sidle-reconstruction-qc-table
     layout:
       x: 0
-      y: 15
+      y: 19
       w: 8
       h: 6
     title: Reconstruction confidence (regions mapped, kmer support)

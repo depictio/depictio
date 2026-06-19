@@ -26,11 +26,17 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "taxonomy": pl.Utf8,
     "Kingdom": pl.Utf8,
     "Phylum": pl.Utf8,
+    "Class": pl.Utf8,
+    "Genus": pl.Utf8,
 }
+
+# Greengenes-style rank prefixes; lower ranks are repeat-filled when unresolved, so a
+# rank is only "real" when a token actually carries its prefix (regex-extracted below).
+_RANKS: dict[str, str] = {"Kingdom": "k__", "Phylum": "p__", "Class": "c__", "Genus": "g__"}
 
 
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
-    """Unpivot per-sample count columns and split taxonomy into Kingdom/Phylum."""
+    """Unpivot per-sample count columns and split taxonomy into rank columns."""
     df = sources["reconstructed"].rename({"ID": "feature_id", "Taxon": "taxonomy"})
 
     sample_cols = [c for c in df.columns if c not in ("feature_id", "taxonomy")]
@@ -44,16 +50,11 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     df = df.filter(pl.col("count").is_not_null() & (pl.col("count") > 0))
     df = df.with_columns(
         pl.col("taxonomy")
-        .str.split(";")
-        .list.get(0)
-        .fill_null("Unclassified")
+        .str.extract(rf"{prefix}([^;]+)")
         .str.strip_chars()
-        .alias("Kingdom"),
-        pl.col("taxonomy")
-        .str.split(";")
-        .list.get(1)
+        .replace("", None)
         .fill_null("Unclassified")
-        .str.strip_chars()
-        .alias("Phylum"),
+        .alias(rank)
+        for rank, prefix in _RANKS.items()
     )
-    return df.select(["feature_id", "sample", "count", "taxonomy", "Kingdom", "Phylum"])
+    return df.select(list(EXPECTED_SCHEMA.keys()))

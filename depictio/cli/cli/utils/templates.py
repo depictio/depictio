@@ -552,6 +552,10 @@ def _introspect_pipeline_params(data_root: str, variables: dict[str, str]) -> No
 
     Flags set (only when applicable; never overrides an explicit ``--var``):
       - ``SKIP_QIIME``     — ampliseq ITS/sintax runs without QIIME2 outputs
+      - ``SKIP_TAXONOMY`` / ``SKIP_ALPHA_RAREFACTION`` — ampliseq runs that suppress
+        a qiime2/ output subtree via the matching --skip_* flag
+      - ``SKIP_ANCOM`` — ampliseq runs where ANCOM-BC was not opted into (no
+        ``--ancombc``), so qiime2/ancombc/ is absent
       - ``IS_METAGENOMIC`` — viralrecon metagenomic (non-amplicon) runs
       - ``IS_NANOPORE``    — viralrecon nanopore/artic runs
       - ``IS_MULTIREGION`` — ampliseq multiregion/SIDLE runs (per-region ASVs
@@ -590,6 +594,18 @@ def _introspect_pipeline_params(data_root: str, variables: dict[str, str]) -> No
         variables.setdefault("IS_METAGENOMIC", "true")
     if params.get("skip_qiime") is True:
         variables.setdefault("SKIP_QIIME", "true")
+    # ampliseq output-suppressing skip flags: each removes a subtree of qiime2/
+    # outputs. Surface them as flags so the template prunes the dependent DCs
+    # (otherwise a REQUIRED DC's missing source aborts ingestion on a valid run).
+    if params.get("skip_taxonomy") is True:
+        variables.setdefault("SKIP_TAXONOMY", "true")
+    if params.get("skip_alpha_rarefaction") is True:
+        variables.setdefault("SKIP_ALPHA_RAREFACTION", "true")
+    # ANCOM-BC is opt-in (positive `ancombc` flag, default false) — there is no
+    # `skip_ancom` param. When it didn't run, no qiime2/ancombc/ output exists, so
+    # prune the differential-abundance DCs.
+    if params.get("ancombc") is not True:
+        variables.setdefault("SKIP_ANCOM", "true")
     # ampliseq multiregion/SIDLE: the route is keyed by a regions reference AND a
     # SIDLE reference taxonomy (standard runs leave 'multiregion' null).
     if params.get("multiregion") and params.get("sidle_ref_taxonomy"):
@@ -747,6 +763,15 @@ def resolve_template(
     # metadata file is present; the metadata→* links are pruned in that case, so
     # the placeholder simply resolves harmlessly.
     variables.setdefault("METADATA_ID_COL", "sample")
+
+    # GROUP_COL drives per-group faceting/colouring in dashboards. When no
+    # metadata (or no annotation column) is available it cannot resolve to a real
+    # data column, so default it to a sentinel that no column matches: group-aware
+    # figures test `'{GROUP_COL}' in df.columns` and fall back to an ungrouped
+    # view, and the display label keeps titles readable instead of leaking the
+    # raw `{GROUP_COL_DISPLAY}` placeholder.
+    variables.setdefault("GROUP_COL", "__no_group__")
+    variables.setdefault("GROUP_COL_DISPLAY", "Group")
 
     provided_vars: set[str] = set(variables.keys())
 
