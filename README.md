@@ -16,7 +16,7 @@
 ## We rely on
 
 [![FastAPI](https://img.shields.io/badge/FastAPI-latest?style=flat-square&logo=fastapi&color=66C2B2)](https://fastapi.tiangolo.com/)
-[![Dash](https://img.shields.io/badge/Dash-latest?style=flat-square&logo=plotly&color=7DBEFF)](https://dash.plotly.com/)
+[![React](https://img.shields.io/badge/React-latest?style=flat-square&logo=react&logoColor=61DAFB&color=20232A)](https://react.dev/)
 [![MongoDB](https://img.shields.io/badge/MongoDB-latest?style=flat-square&logo=mongodb&color=8FCA82)](https://www.mongodb.com/)
 [![MinIO](https://img.shields.io/badge/MinIO-latest?style=flat-square&logo=minio&color=E88A97)](https://min.io/)
 [![Pydantic](https://img.shields.io/badge/Pydantic-latest?style=flat-square&logo=pydantic&color=F18AAF)](https://pydantic-docs.helpmanual.io/)
@@ -31,7 +31,7 @@
 ## Quality
 
 [![Ruff](https://img.shields.io/badge/code%20style-ruff-000000?style=flat-square&logo=python)](https://github.com/astral-sh/ruff)
-[![Test Status](https://img.shields.io/github/actions/workflow/status/depictio/depictio/deploy.yaml?label=tests&style=flat-square&logo=github-actions)](https://github.com/depictio/depictio/actions/workflows/deploy.yaml)
+[![Test Status](https://img.shields.io/github/actions/workflow/status/depictio/depictio/depictio-ci.yaml?label=tests&style=flat-square&logo=github-actions)](https://github.com/depictio/depictio/actions/workflows/depictio-ci.yaml)
 [![GitHub issues](https://img.shields.io/github/issues/depictio/depictio?style=flat-square&logo=github)](https://github.com/depictio/depictio/issues)
 
 ## Documentation

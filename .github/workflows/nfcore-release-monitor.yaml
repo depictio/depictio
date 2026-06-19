@@ -1,0 +1,129 @@
+name: nf-core release monitor
+
+# Weekly check: has nf-core shipped a newer version for any pipeline we template
+# under depictio/projects/nf-core/? If so, list that release's AWS megatest
+# results and report which of our recipe source paths no longer resolve, then
+# open one concise draft PR per pipeline carrying its drift report.
+on:
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC
+  workflow_dispatch:
+    inputs:
+      force_report_pipeline:
+        description: "Report this pipeline even if no update is detected (dry-run)."
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  # Detect which templated pipelines have a newer nf-core release and emit them
+  # as a matrix so the report job can fan out one draft PR per pipeline.
+  check:
+    runs-on: ubuntu-22.04
+    outputs:
+      matrix: ${{ steps.detect.outputs.matrix }}
+      has_updates: ${{ steps.detect.outputs.has_updates }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # avoid clashing with create-pull-request's own push token
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version-file: "pyproject.toml"
+
+      - name: Install dependencies
+        run: |
+          uv venv --python 3.12.9 venv
+          source venv/bin/activate
+          uv pip install packaging # all `check` needs (no recipe imports)
+
+      - name: Detect new nf-core releases
+        id: detect
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FORCE_PIPELINE: ${{ github.event.inputs.force_report_pipeline }}
+        run: |
+          source venv/bin/activate
+          python scripts/nfcore_monitor.py check --json > updates.json
+          {
+            echo "## nf-core release check"
+            echo '```'
+            python scripts/nfcore_monitor.py check
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          # One matrix entry per pipeline with an update (+ an optional forced one).
+          include=$(jq -c '[.[] | select(.update_available) | {pipeline, version: .remote}]' updates.json)
+          if [ -n "$FORCE_PIPELINE" ]; then
+            include=$(jq -c --arg p "$FORCE_PIPELINE" '. + [{pipeline: $p, version: "forced"}]' <<<"$include")
+          fi
+          echo "matrix={\"include\":$include}" >> "$GITHUB_OUTPUT"
+          [ "$(jq 'length' <<<"$include")" -gt 0 ] && echo "has_updates=1" >> "$GITHUB_OUTPUT" || echo "has_updates=0" >> "$GITHUB_OUTPUT"
+
+  # One leg per pipeline: build its drift report and open its own draft PR.
+  report:
+    needs: check
+    if: needs.check.outputs.has_updates == '1'
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.check.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version-file: "pyproject.toml"
+
+      - name: Install dependencies
+        run: |
+          uv venv --python 3.12.9 venv
+          source venv/bin/activate
+          uv pip install -e ".[dev]"
+          # Recipes need polars-lts-cpu (same pin as the quality/catalog jobs)
+          uv pip uninstall -y polars polars-runtime-32 2>/dev/null || true
+          uv pip install --force-reinstall "polars-lts-cpu[numpy,pandas,pyarrow,excel,deltalake]==1.19.0"
+
+      - name: Generate megatest drift report
+        id: gen
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          source venv/bin/activate
+          mkdir -p .nfcore-monitor
+          out=".nfcore-monitor/${{ matrix.pipeline }}-${{ matrix.version }}.md"
+          # stdout is the short status (✅ valid / ⚠️ N issue(s)) for the PR title
+          status=$(python scripts/nfcore_monitor.py report --pipeline "${{ matrix.pipeline }}" --out "$out")
+          cat "$out" >> "$GITHUB_STEP_SUMMARY"
+          echo "report_file=$out" >> "$GITHUB_OUTPUT"
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+
+      - name: Open draft PR with drift report
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: nfcore-monitor/${{ matrix.pipeline }}-${{ matrix.version }}
+          draft: true
+          add-paths: ${{ steps.gen.outputs.report_file }}
+          commit-message: "chore(nf-core): validate ${{ matrix.pipeline }} ${{ matrix.version }} against megatest"
+          title: "nf-core/${{ matrix.pipeline }} ${{ matrix.version }} — megatest: ${{ steps.gen.outputs.status }}"
+          labels: nf-core
+          body-path: ${{ steps.gen.outputs.report_file }}
