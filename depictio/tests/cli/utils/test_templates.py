@@ -270,7 +270,7 @@ class TestApplyConditionals:
     def test_absent_var_removes_dcs_and_prunes_links(self) -> None:
         """When OPT_VAR absent: optional DCs removed, their links pruned."""
         config = self._base_config()
-        result, dashboards = _apply_conditionals(
+        result, dashboards, _ = _apply_conditionals(
             config, self._conditionals(), {"REQUIRED_VAR"}, Path("/tmp")
         )
         dc_tags = [dc["data_collection_tag"] for dc in result["workflows"][0]["data_collections"]]
@@ -288,7 +288,7 @@ class TestApplyConditionals:
     def test_present_var_keeps_all_dcs(self) -> None:
         """When OPT_VAR present: all DCs kept; extended dashboard added."""
         config = self._base_config()
-        result, dashboards = _apply_conditionals(
+        result, dashboards, _ = _apply_conditionals(
             config,
             self._conditionals(),
             {"REQUIRED_VAR", "OPT_VAR"},
@@ -303,7 +303,7 @@ class TestApplyConditionals:
     def test_no_conditionals_is_noop(self) -> None:
         """Empty conditionals list: config unchanged, no dashboards selected."""
         config = self._base_config()
-        result, dashboards = _apply_conditionals(config, [], {"REQUIRED_VAR"}, Path("/tmp"))
+        result, dashboards, _ = _apply_conditionals(config, [], {"REQUIRED_VAR"}, Path("/tmp"))
         dc_tags = [dc["data_collection_tag"] for dc in result["workflows"][0]["data_collections"]]
         assert len(dc_tags) == 5
         assert dashboards == []
@@ -312,7 +312,7 @@ class TestApplyConditionals:
         """Config without a 'links' key doesn't crash when pruning."""
         config = self._base_config()
         del config["links"]
-        result, _ = _apply_conditionals(
+        result, _, _ = _apply_conditionals(
             config, self._conditionals(), {"REQUIRED_VAR"}, Path("/tmp")
         )
         assert "links" in result
@@ -342,7 +342,7 @@ class TestApplyConditionals:
         conditionals = [
             TemplateConditional(if_var_absent="OPT_VAR", remove_dc_tags=["dc_optional_a"])
         ]
-        result, _ = _apply_conditionals(config, conditionals, set(), Path("/tmp"))
+        result, _, _ = _apply_conditionals(config, conditionals, set(), Path("/tmp"))
         for wf in result["workflows"]:
             tags = [dc["data_collection_tag"] for dc in wf["data_collections"]]
             assert "dc_optional_a" not in tags
