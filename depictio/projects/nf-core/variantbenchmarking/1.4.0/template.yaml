@@ -1,0 +1,270 @@
+# nf-core/variantbenchmarking Template v1.4.0 - Variant Calling Benchmarking
+# ============================================================================
+# This is a TEMPLATE project configuration. Use with:
+#   depictio run --template nf-core/variantbenchmarking/1.4.0 --data-root /path/to/your/data
+#
+# Tested against nf-core/variantbenchmarking AWS megatest results:
+#   s3://nf-core-awsmegatests/variantbenchmarking/results-8b21c01749c4447b285d242a198127736f3ffe51
+#   (most recent release-line run, 2026-04-22 — the only megatest covering both
+#    germline `small/` and somatic `indel/` categories).
+#
+# The public megatest exercises only two profiles:
+#   - small/  : germline SNP/INDEL (HG002/GIAB) — hap.py + rtg-tools vcfeval
+#   - indel/  : somatic indels (SEQC2)          — som.py (sompy) + rtg-tools vcfeval
+# No megatest contains sv/, cnv/ or multiqc/, so the SV/CNV data collections are
+# declared optional (non-data-backed) to cover those pipeline scenarios when a user
+# runs the corresponding profiles. Generic, core-facility compatible.
+# ============================================================================
+
+# Template metadata (parsed and removed before Project model validation)
+template:
+  template_id: "nf-core/variantbenchmarking/1.4.0"
+  description: "nf-core/variantbenchmarking template: benchmark variant callers (germline/somatic SNP·INDEL, SV, CNV) against truth sets — precision/recall/F1 per tool, sample and stratum."
+  version: "1.0.0"
+  variables:
+    - name: "DATA_ROOT"
+      description: "Root directory containing variantbenchmarking output (small/, indel/, and optionally sv/, cnv/)."
+      required: true
+  dashboards:
+    - "dashboards/base.yaml"
+
+# ============================================================================
+# PROJECT CONFIGURATION
+# ============================================================================
+
+name: "Variant Benchmarking Analysis"
+project_type: "advanced"
+is_public: true
+workflows:
+  - name: "variantbenchmarking"
+    version: "1.4.0"
+    engine:
+      name: "nextflow"
+      version: "24.10.4"
+    catalog:
+      name: "nf-core"
+      url: "https://nf-co.re"
+    repository_url: "https://github.com/nf-core/variantbenchmarking"
+    data_location:
+      structure: "flat"
+      locations:
+        - "{DATA_ROOT}"
+    data_collections:
+      # ----------------------------------------------------------------
+      # Germline small variants (small/) — rtg-tools vcfeval + hap.py
+      # ----------------------------------------------------------------
+      - data_collection_tag: "germline_vcfeval_summary"
+        description: "Germline rtg-tools vcfeval benchmark summary (precision/recall/F1 per sample)"
+        config:
+          type: "Table"
+          metatype: "Aggregated"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/variantbenchmarking/vcfeval_summary.py"
+          dc_specific_properties:
+            format: "CSV"
+            columns_description:
+              "label": "Sample identifier (germline) / caller (somatic)"
+              "caller": "Truth-set version (germline) / variant caller"
+              "tp_base": "True positives (baseline)"
+              "tp_comp": "True positives (comparison)"
+              "fp": "False positives"
+              "fn": "False negatives"
+              "precision": "Precision (0-1)"
+              "recall": "Recall / sensitivity (0-1)"
+              "f1": "F1 score (0-1)"
+
+      - data_collection_tag: "germline_happy_summary"
+        optional: true  # hap.py per-sample summaries; pooled across samples by Type×Filter
+        description: "Germline hap.py pooled performance by variant type (SNP/INDEL) × filter (ALL/PASS)"
+        config:
+          type: "Table"
+          metatype: "Aggregated"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/variantbenchmarking/happy_summary.py"
+          dc_specific_properties:
+            format: "CSV"
+            columns_description:
+              "variant_type": "Variant type (SNP / INDEL)"
+              "filter": "hap.py filter (ALL / PASS)"
+              "truth_tp": "Pooled truth true positives"
+              "truth_fn": "Pooled truth false negatives"
+              "query_fp": "Pooled query false positives"
+              "recall": "Recall recomputed from pooled counts"
+              "precision": "Precision recomputed from pooled counts"
+              "f1": "F1 score recomputed from pooled counts"
+
+      - data_collection_tag: "germline_happy_roc"
+        optional: true  # hap.py ROC sweep (.roc.Locations.SNP.PASS.csv.gz) — sparse in megatest
+        description: "Germline hap.py SNP precision-recall sweep (per quality threshold)"
+        config:
+          type: "Table"
+          metatype: "Aggregated"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/variantbenchmarking/happy_roc.py"
+          dc_specific_properties:
+            format: "CSV"
+            columns_description:
+              "quality": "hap.py quality threshold (QQ)"
+              "recall": "Recall at threshold"
+              "precision": "Precision at threshold"
+              "f1": "F1 score at threshold"
+
+      # ----------------------------------------------------------------
+      # Somatic small variants (indel/) — rtg-tools vcfeval + som.py
+      # ----------------------------------------------------------------
+      - data_collection_tag: "somatic_vcfeval_summary"
+        optional: true  # absent on germline-only runs
+        description: "Somatic rtg-tools vcfeval benchmark summary (precision/recall/F1 per caller)"
+        config:
+          type: "Table"
+          metatype: "Aggregated"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/variantbenchmarking/vcfeval_summary.py"
+            source_overrides:
+              rtgtools_summary:
+                path: "indel/summary/tables/rtgtools/rtgtools.summary.csv"
+          dc_specific_properties:
+            format: "CSV"
+            columns_description:
+              "label": "Variant caller"
+              "caller": "Variant caller"
+              "tp_base": "True positives (baseline)"
+              "tp_comp": "True positives (comparison)"
+              "fp": "False positives"
+              "fn": "False negatives"
+              "precision": "Precision (0-1)"
+              "recall": "Recall / sensitivity (0-1)"
+              "f1": "F1 score (0-1)"
+
+      - data_collection_tag: "somatic_sompy_summary"
+        optional: true  # absent on germline-only runs
+        description: "Somatic som.py benchmark summary (precision/recall/F1 per caller, with CIs)"
+        config:
+          type: "Table"
+          metatype: "Aggregated"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/variantbenchmarking/sompy_summary.py"
+          dc_specific_properties:
+            format: "CSV"
+            columns_description:
+              "caller": "Variant caller (mutect2 / strelka / freebayes …)"
+              "variant_type": "Variant type (indels / SNVs)"
+              "tp": "True positives"
+              "fp": "False positives"
+              "fn": "False negatives"
+              "recall": "Recall (0-1)"
+              "precision": "Precision (0-1)"
+              "f1": "F1 score (0-1)"
+              "recall_lower": "Recall 95% CI lower bound"
+              "recall_upper": "Recall 95% CI upper bound"
+              "precision_lower": "Precision 95% CI lower bound"
+              "precision_upper": "Precision 95% CI upper bound"
+
+      - data_collection_tag: "somatic_sompy_regions"
+        optional: true  # absent on germline-only runs
+        description: "Somatic som.py metrics stratified by allele-fraction bin (caller × AF-bin)"
+        config:
+          type: "Table"
+          metatype: "Aggregated"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/variantbenchmarking/sompy_regions.py"
+          dc_specific_properties:
+            format: "CSV"
+            columns_description:
+              "caller": "Variant caller"
+              "af_bin": "Allele-fraction stratum (e.g. 0.200000-0.400000)"
+              "recall": "Recall within AF bin (0-1)"
+              "precision": "Precision within AF bin (0-1)"
+              "f1": "F1 score within AF bin (0-1)"
+              "tp": "True positives in bin"
+              "fp": "False positives in bin"
+              "fn": "False negatives in bin"
+
+      # ----------------------------------------------------------------
+      # Structural variants & CNV — OPTIONAL, not in the public megatest.
+      # Present only when the user runs the sv/ and cnv/ profiles. Recipes
+      # use tolerant column matching (pin against a real run when available).
+      # ----------------------------------------------------------------
+      - data_collection_tag: "sv_truvari_summary"
+        optional: true
+        description: "Structural-variant Truvari benchmark summary (precision/recall/F1)"
+        config:
+          type: "Table"
+          metatype: "Aggregated"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/variantbenchmarking/truvari_summary.py"
+          dc_specific_properties:
+            format: "CSV"
+            columns_description:
+              "label": "Sample / caller"
+              "precision": "Precision (0-1)"
+              "recall": "Recall (0-1)"
+              "f1": "F1 score (0-1)"
+
+      - data_collection_tag: "sv_svbenchmark_summary"
+        optional: true
+        description: "Structural-variant SVanalyzer (svbenchmark) summary (precision/recall/F1)"
+        config:
+          type: "Table"
+          metatype: "Aggregated"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/variantbenchmarking/svbenchmark_summary.py"
+          dc_specific_properties:
+            format: "CSV"
+            columns_description:
+              "label": "Sample / caller"
+              "precision": "Precision (0-1)"
+              "recall": "Recall / sensitivity (0-1)"
+              "f1": "F1 score (0-1)"
+
+      - data_collection_tag: "cnv_wittyer_summary"
+        optional: true
+        description: "CNV/SV Wittyer benchmark summary (precision/recall/F1, optionally stratified)"
+        config:
+          type: "Table"
+          metatype: "Aggregated"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/variantbenchmarking/wittyer_summary.py"
+          dc_specific_properties:
+            format: "CSV"
+            columns_description:
+              "label": "Sample / caller"
+              "event_type": "Event type (DEL / DUP / INS …)"
+              "size_bin": "Event size bin"
+              "precision": "Precision (0-1)"
+              "recall": "Recall (0-1)"
+              "f1": "F1 score (0-1)"
+
+# ============================================================================
+# RUNTIME LINKS CONFIGURATION
+# ============================================================================
+# Cross-filtering by caller across the somatic benchmark tables.
+links:
+  - source_dc_tag: "somatic_sompy_summary"
+    source_column: "caller"
+    target_dc_tag: "somatic_sompy_regions"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "caller"
+    description: "Filter the AF-stratified regions by the selected caller"
+    enabled: true
+
+  - source_dc_tag: "somatic_sompy_summary"
+    source_column: "caller"
+    target_dc_tag: "somatic_vcfeval_summary"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "caller"
+    description: "Cross-filter som.py and vcfeval somatic summaries by caller"
+    enabled: true
