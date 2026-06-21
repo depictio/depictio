@@ -188,6 +188,60 @@ class TestBackupEndpoints:
             # Clean up the override
             client.app.dependency_overrides.clear()
 
+    @pytest.mark.asyncio
+    @patch("depictio.api.v1.endpoints.backup_endpoints.routes.users_collection")
+    @patch("depictio.api.v1.endpoints.backup_endpoints.routes.projects_collection")
+    @patch("depictio.api.v1.endpoints.backup_endpoints.routes.dashboards_collection")
+    @patch("depictio.api.v1.endpoints.backup_endpoints.routes.data_collections_collection")
+    @patch("depictio.api.v1.endpoints.backup_endpoints.routes.workflows_collection")
+    @patch("depictio.api.v1.endpoints.backup_endpoints.routes.files_collection")
+    @patch("depictio.api.v1.endpoints.backup_endpoints.routes.deltatables_collection")
+    @patch("depictio.api.v1.endpoints.backup_endpoints.routes.runs_collection")
+    @patch("depictio.api.v1.endpoints.backup_endpoints.routes.groups_collection")
+    async def test_backup_metadata_records_real_version(
+        self,
+        mock_groups,
+        mock_runs,
+        mock_deltatables,
+        mock_files,
+        mock_workflows,
+        mock_data_collections,
+        mock_dashboards,
+        mock_projects,
+        mock_users,
+        admin_user,
+    ):
+        """Backup metadata must record the actual project version, not a stale literal.
+
+        Guards against regression of the previously hardcoded ``"0.1.0"`` value,
+        which made backups impossible to reason about across releases.
+        """
+        from depictio.api.v1.endpoints.backup_endpoints.routes import _create_mongodb_backup
+        from depictio.version import get_version
+
+        for mock_collection in (
+            mock_users,
+            mock_projects,
+            mock_dashboards,
+            mock_data_collections,
+            mock_workflows,
+            mock_files,
+            mock_deltatables,
+            mock_runs,
+            mock_groups,
+        ):
+            mock_collection.find.return_value = []
+            mock_collection.count_documents.return_value = 0
+
+        backup = await _create_mongodb_backup(admin_user)
+
+        recorded_version = backup["backup_metadata"]["depictio_version"]
+        assert recorded_version, "depictio_version must not be empty"
+        assert recorded_version != "0.1.0", (
+            "depictio_version must reflect the real project version, not the old hardcoded literal"
+        )
+        assert recorded_version == get_version()
+
     def test_backup_request_model(self):
         """Test BackupRequest model validation."""
         from depictio.api.v1.endpoints.backup_endpoints.routes import BackupRequest

@@ -25,6 +25,7 @@ from depictio.api.v1.db import (
 )
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 from depictio.models.models.users import User
+from depictio.version import get_version
 
 backup_endpoint_router = APIRouter()
 
@@ -243,7 +244,7 @@ async def _create_mongodb_backup(current_user: User) -> dict:
         "backup_metadata": {
             "timestamp": timestamp.isoformat(),
             "created_by": current_user.email,
-            "depictio_version": "0.1.0",
+            "depictio_version": get_version(),
             "total_documents": total_documents,
             "excluded_documents": excluded_documents,
             "collections": collections_backed_up,
