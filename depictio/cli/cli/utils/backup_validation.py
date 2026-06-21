@@ -227,11 +227,17 @@ def check_backup_collections_coverage() -> Dict[str, Any]:
         missing_validators = expected_set - validators_set
 
         # Only consider core collections (filter out utility collections like 'test', 'initialization')
-        # Also exclude 'tokens' which is intentionally excluded from backup/restore
+        # Also exclude 'tokens' which is intentionally excluded from backup/restore.
+        # Derived / regenerable collections are excluded too: they are rebuilt from
+        # source data and never need to be part of the MongoDB backup set:
+        #   - 'jbrowse'            : derived track configuration
+        #   - 'multiqc'            : parsed MultiQC reports (regenerated on ingestion)
+        #   - 'multiqc_prerender'  : prerender cache (regenerated on demand)
+        derived_collections = ["jbrowse", "multiqc", "multiqc_prerender"]
         core_collections = {
             col
             for col in collections_in_settings
-            if col not in ["test", "initialization", "jbrowse", "tokens"]
+            if col not in ["test", "initialization", "tokens", *derived_collections]
         }
         missing_from_expected_core = core_collections - expected_set
 
