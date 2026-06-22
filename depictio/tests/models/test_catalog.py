@@ -298,7 +298,11 @@ def test_alpha_diversity_has_code_figure_and_metric_cards():
         if o.id == "qiime2_alpha_diversity"
     )
     components = [r.component for r in out.renders_as]
-    assert components.count("card") == 4 and "figure" in components
+    # four per-metric Tukey cards (+ a samples-count card, + interactive/table renders).
+    box_cards = [
+        r for r in out.renders_as if r.component == "card" and r.secondary_layout == "box_plot"
+    ]
+    assert len(box_cards) == 4 and "figure" in components
     fig = next(r for r in out.renders_as if r.component == "figure")
     assert fig.code and "fig = px.box" in fig.code  # code-mode figure
     card = next(r for r in out.renders_as if r.component == "card")

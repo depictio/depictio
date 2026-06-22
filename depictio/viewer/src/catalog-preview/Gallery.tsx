@@ -7,22 +7,27 @@
  * the kind (e.g. volcano). Styling mirrors the Depictio viewer (colored section
  * title, Card/ThemeIcon, Mantine tokens — no hex chrome).
  */
-import React, { useMemo, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActionIcon,
+  Alert,
   Anchor,
   Badge,
   Box,
   Button,
   Card,
+  Code,
   Collapse,
   Divider,
+  Drawer,
   Group,
+  HoverCard,
   MultiSelect,
   Paper,
   Pill,
   SegmentedControl,
   SimpleGrid,
+  Skeleton,
   Stack,
   Switch,
   Table,
@@ -33,13 +38,272 @@ import {
   Tooltip,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
-import { CATALOG_ACCENT, IdentityLink, TypeBadge, lastSeg, logoFor, metaFor } from './shared';
+import { ComponentRenderer, bulkComputeCards } from 'depictio-react-core';
+import type { StoredMetadata } from 'depictio-react-core';
+import { CATALOG_ACCENT, IdentityLink, ToolLogo, TypeBadge, lastSeg, logoFor, metaFor } from './shared';
 import type { OutputEntry, ToolEntry } from './shared';
 
 type ViewMode = 'cards' | 'table';
 type SortCol = 'tool' | 'output' | 'fixture';
 type SortDir = 'asc' | 'desc';
 const ACCENT = CATALOG_ACCENT;
+const DASHBOARD_ID = 'catalog-preview';
+
+/** Card-value maps for `card` renders, computed once and shared so each preview
+ *  doesn't recompute. Mirrors OutputView's bulkComputeCards wiring. */
+const CardValuesCtx = createContext<{
+  values: Record<string, unknown>;
+  secondary: Record<string, Record<string, unknown>>;
+}>({ values: {}, secondary: {} });
+
+/** Big-viz grid columns, driven by the gallery width toggle: full width → 3-up,
+ *  normal (constrained) width → 2-up. */
+const BigColsCtx = createContext<Record<string, number>>({ base: 1, sm: 2, lg: 3 });
+
+/** Keep one failing render from blanking its whole card (and the gallery). */
+class PreviewBoundary extends React.Component<
+  { children: React.ReactNode },
+  { failed?: boolean }
+> {
+  state: { failed?: boolean } = {};
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  render() {
+    if (this.state.failed) {
+      return (
+        <Group justify="center" align="center" h="100%" c="dimmed" gap={6}>
+          <Icon icon="mdi:image-broken-variant" width={20} />
+          <Text size="xs">preview unavailable</Text>
+        </Group>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+/** "Big" renders deserve a roomy 2-up grid at chart height; "compact" ones
+ *  (KPI cards, filters, text) pack into a dense multi-column row. */
+const BIG_TYPES = new Set(['figure', 'advanced_viz', 'table', 'multiqc', 'map', 'image']);
+
+/** Clip height per component type — KPI cards and interactive filters are short;
+ *  figures / tables / advanced-viz get a tall tile to read as a real chart. */
+const tileHeight = (ct: string): number =>
+  ct === 'card' ? 150 : ct === 'interactive' ? 130 : ct === 'text' ? 104 : 380;
+
+/** One render's live mini-preview: a labelled, clipped tile drawn by the REAL
+ *  ComponentRenderer on the fixture (same renderer the detail view uses). Each
+ *  tile lazy-mounts itself on scroll, so an output with 15 renders only mounts
+ *  the tiles actually in view — no wall of simultaneous Plotly/grid instances. */
+const RenderTile: React.FC<{
+  m: StoredMetadata;
+  toolId: string;
+  outputId: string;
+  onOpen: (id: string) => void;
+}> = ({ m, toolId, outputId, onOpen }) => {
+  const { values, secondary } = useContext(CardValuesCtx);
+  const ref = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || visible) return undefined;
+    const io = new IntersectionObserver(
+      (ents) => {
+        if (ents.some((e) => e.isIntersecting)) {
+          setVisible(true);
+          io.disconnect();
+        }
+      },
+      { rootMargin: '250px' },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [visible]);
+
+  const rec = m as Record<string, unknown>;
+  const ct = rec.component_type as string;
+  const note = rec._unsupported as string | undefined;
+  const variant = rec._variant as string | undefined;
+  const binds = rec._binds as Record<string, string> | undefined;
+  // Readable render id (e.g. `shannon_card`) when the catalog declares one;
+  // fall back to the positional index for renders without an explicit id.
+  const renderId = (rec.render_id as string | null) || null;
+  const label = renderId || m.index;
+  // Big charts get a fixed clipped height (read as a thumbnail); cards / filters
+  // size to their natural content so nothing gets cut off.
+  const big = BIG_TYPES.has(ct);
+  const h = tileHeight(ct);
+  const useHandle = renderId ? `use: ${toolId}/${renderId}` : null;
+  return (
+    <Box
+      ref={ref}
+      style={{
+        ...(big ? { height: h } : { minHeight: h }),
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: big ? 'hidden' : 'visible',
+        borderRadius: 6,
+        border: '1px solid var(--mantine-color-default-border)',
+        background: 'var(--mantine-color-body)',
+      }}
+    >
+      {/* Only the header navigates; the body stays a live, usable component. */}
+      <Group
+        justify="space-between"
+        gap={6}
+        px={8}
+        py={5}
+        wrap="nowrap"
+        onClick={() => onOpen(outputId)}
+        title="Open this component"
+        style={{
+          borderBottom: '1px solid var(--mantine-color-default-border)',
+          flexShrink: 0,
+          cursor: 'pointer',
+        }}
+      >
+        <Group gap={8} wrap="nowrap" style={{ minWidth: 0 }}>
+          <TypeBadge type={ct} size="sm" />
+          <Text size="sm" fw={500} c="dimmed" truncate style={{ minWidth: 0 }}>
+            {label}
+          </Text>
+        </Group>
+        {/* hover to reveal this render's metadata — reference handle + column bindings */}
+        <HoverCard width={330} shadow="md" openDelay={200} withinPortal position="top-end">
+          <HoverCard.Target>
+            <ActionIcon
+              size="sm"
+              variant="subtle"
+              color="gray"
+              style={{ flexShrink: 0 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <Icon icon="mdi:information-outline" width={16} />
+            </ActionIcon>
+          </HoverCard.Target>
+          <HoverCard.Dropdown>
+            <Stack gap={8}>
+              <Group gap={6} wrap="wrap">
+                <TypeBadge type={ct} size="xs" />
+                {variant ? (
+                  <Badge size="xs" variant="dot" color="gray">
+                    {variant}
+                  </Badge>
+                ) : null}
+              </Group>
+              {useHandle ? (
+                <div>
+                  <Text size="xs" fw={600} c="dimmed">
+                    Reference
+                  </Text>
+                  <Code block fz={11}>
+                    {useHandle}
+                  </Code>
+                </div>
+              ) : null}
+              {binds && Object.keys(binds).length ? (
+                <div>
+                  <Text size="xs" fw={600} c="dimmed" mb={2}>
+                    Column bindings
+                  </Text>
+                  <Stack gap={2}>
+                    {Object.entries(binds).map(([role, col]) => (
+                      <Text size="xs" key={role}>
+                        <Text span c="dimmed">
+                          {role}
+                        </Text>{' '}
+                        → <Code fz={11}>{col}</Code>
+                      </Text>
+                    ))}
+                  </Stack>
+                </div>
+              ) : null}
+              <Text size="xs" c="dimmed">
+                Click the tile to open the full view.
+              </Text>
+            </Stack>
+          </HoverCard.Dropdown>
+        </HoverCard>
+      </Group>
+      <Box
+        style={
+          big
+            ? { flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }
+            : { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: 6 }
+        }
+      >
+        {!visible ? (
+          <Skeleton h={big ? '100%' : h - 40} radius={0} />
+        ) : note ? (
+          <Group justify="center" align="center" h="100%" c="dimmed" px="sm" ta="center">
+            <Text size="xs">{note}</Text>
+          </Group>
+        ) : (
+          <PreviewBoundary>
+            <ComponentRenderer
+              metadata={m}
+              filters={[]}
+              dashboardId={DASHBOARD_ID}
+              cardValue={values[m.index]}
+              cardSecondaryValues={secondary[m.index]}
+              cardLoading={false}
+            />
+          </PreviewBoundary>
+        )}
+      </Box>
+    </Box>
+  );
+};
+
+/** Live preview of EVERY component an output renders as — each one its real
+ *  component on the fixture. KPI `card` renders pack into a compact row; the rest
+ *  (figures / tables / advanced-viz / interactive) stack full width. Each tile
+ *  lazy-mounts independently (see RenderTile). */
+const CardVizPreview: React.FC<{ entry: OutputEntry; toolId: string; onOpen: (id: string) => void }> = ({
+  entry,
+  toolId,
+  onOpen,
+}) => {
+  const bigCols = useContext(BigColsCtx);
+  const renders = entry.renders as unknown as StoredMetadata[];
+  const outputId = entry.output.id;
+
+  if (!entry.ok || renders.length === 0) {
+    return (
+      <Box style={{ background: 'var(--mantine-color-default-hover)' }}>
+        <Group justify="center" align="center" h={140} c="dimmed" gap={6}>
+          <Icon icon="mdi:flask-empty-outline" width={20} />
+          <Text size="xs">{entry.ok ? 'no preview' : 'build failed'}</Text>
+        </Group>
+      </Box>
+    );
+  }
+
+  const big = renders.filter((m) => BIG_TYPES.has((m as Record<string, unknown>).component_type as string));
+  const compact = renders.filter((m) => !BIG_TYPES.has((m as Record<string, unknown>).component_type as string));
+
+  return (
+    <Box style={{ background: 'var(--mantine-color-default-hover)' }}>
+      <Stack gap="md" p="sm">
+        {big.length > 0 ? (
+          <SimpleGrid cols={bigCols} spacing="md">
+            {big.map((m) => (
+              <RenderTile key={m.index} m={m} toolId={toolId} outputId={outputId} onOpen={onOpen} />
+            ))}
+          </SimpleGrid>
+        ) : null}
+        {compact.length > 0 ? (
+          <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="xs">
+            {compact.map((m) => (
+              <RenderTile key={m.index} m={m} toolId={toolId} outputId={outputId} onOpen={onOpen} />
+            ))}
+          </SimpleGrid>
+        ) : null}
+      </Stack>
+    </Box>
+  );
+};
 
 /** Everything a free-text search should match for one output: its id/description,
  *  mode, recipe, find rule, fixture columns, and every render's variant + bindings
@@ -191,47 +455,76 @@ const OutputCard: React.FC<{ tool: ToolEntry; entry: OutputEntry; onOpen: (id: s
   onOpen,
 }) => {
   const out = entry.output;
-  const { types, kinds } = renderTags(entry);
-  const meta = metaFor(types[0] || '');
+  const { types } = renderTags(entry);
+  // Per-module collapse: a module (output) can have many renders, so each card
+  // opens to reveal its render tiles. Default collapsed for a readable index.
+  const [open, setOpen] = useState(false);
+  const n = entry.renders.length;
   return (
-    <Card withBorder radius="md" shadow="sm" padding="md" style={{ opacity: entry.ok ? 1 : 0.6 }}>
-      <Group justify="space-between" wrap="nowrap" align="flex-start" mb={6}>
-        <Group gap="sm" wrap="nowrap" align="flex-start" style={{ minWidth: 0, flex: 1 }}>
-          <ThemeIcon size={40} radius="md" variant="light" color={meta.color} style={{ flexShrink: 0 }}>
-            <Icon icon={meta.icon} width={22} />
-          </ThemeIcon>
-          <Group gap={6} wrap="wrap" align="baseline" style={{ minWidth: 0 }}>
-            <OpenTitle entry={entry} label={shortId(tool.id, out.id)} onOpen={onOpen} />
-            {out.mode ? (
-              <Badge size="xs" variant="outline" color="gray">
-                {out.mode}
+    <Card withBorder radius="md" shadow="sm" padding={0} style={{ opacity: entry.ok ? 1 : 0.6, overflow: 'hidden' }}>
+      {/* Header — click to expand this module's renders. */}
+      <Group
+        justify="space-between"
+        wrap="nowrap"
+        align="center"
+        gap="sm"
+        px="md"
+        py="sm"
+        style={{ cursor: 'pointer' }}
+        onClick={() => setOpen((o) => !o)}
+      >
+        <Group gap="sm" wrap="nowrap" style={{ minWidth: 0, flex: 1 }}>
+          <Icon
+            icon="mdi:chevron-right"
+            width={20}
+            style={{
+              transform: open ? 'rotate(90deg)' : 'none',
+              transition: 'transform 150ms',
+              flexShrink: 0,
+            }}
+          />
+          <Box style={{ minWidth: 0 }}>
+            <Group gap={6} align="baseline" wrap="wrap">
+              <Tooltip label={out.id} withinPortal openDelay={400}>
+                <Text fw={600} size="sm" style={{ wordBreak: 'break-word' }}>
+                  {shortId(tool.id, out.id)}
+                </Text>
+              </Tooltip>
+              {out.mode ? (
+                <Badge size="xs" variant="outline" color="gray">
+                  {out.mode}
+                </Badge>
+              ) : null}
+              <Badge size="xs" variant="light" color="gray" radius="sm">
+                {n} render{n === 1 ? '' : 's'}
               </Badge>
+            </Group>
+            {out.description ? (
+              <Text size="xs" c="dimmed" lineClamp={1}>
+                {out.description}
+              </Text>
             ) : null}
-          </Group>
+          </Box>
         </Group>
-        <OpenButton entry={entry} onOpen={onOpen} />
+        <Group gap={8} wrap="nowrap" style={{ flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
+          <Group gap={6} wrap="nowrap" visibleFrom="sm">
+            <TypeBadges types={types} />
+          </Group>
+          <FixtureChip has={out.fixture} />
+          <OpenButton entry={entry} onOpen={onOpen} />
+        </Group>
       </Group>
-      {out.description ? (
-        <Text size="xs" c="dimmed" lineClamp={2}>
-          {out.description}
-        </Text>
-      ) : null}
-      <Group gap={6} wrap="wrap" mt="xs">
-        <TypeBadges types={types} />
-        {kinds.map((k) => (
-          <Badge key={k} size="xs" variant="dot" color="gray">
-            {k}
-          </Badge>
-        ))}
-      </Group>
-      <Group gap={6} wrap="wrap" mt={6}>
-        <FixtureChip has={out.fixture} />
-      </Group>
-      {!entry.ok && entry.error ? (
-        <Text size="xs" c="red.6" lineClamp={2} mt={6}>
-          {entry.error}
-        </Text>
-      ) : null}
+      <Collapse in={open}>
+        <Divider />
+        <CardVizPreview entry={entry} toolId={tool.id} onOpen={onOpen} />
+        {!entry.ok && entry.error ? (
+          <Box px="md" py="xs">
+            <Text size="xs" c="red.6" lineClamp={2}>
+              {entry.error}
+            </Text>
+          </Box>
+        ) : null}
+      </Collapse>
     </Card>
   );
 };
@@ -261,6 +554,7 @@ const ToolSection: React.FC<{
             style={{ transform: opened ? 'rotate(90deg)' : 'none', transition: 'transform 150ms' }}
           />
         </ActionIcon>
+        <ToolLogo tool={tool} size={30} />
         <Title order={4} style={{ lineHeight: 1.1 }}>
           {tool.name}
         </Title>
@@ -281,11 +575,11 @@ const ToolSection: React.FC<{
     <Collapse in={opened}>
       <Divider />
       <Box p="md">
-        <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="md">
+        <Stack gap="md">
           {entries.map((e) => (
             <OutputCard key={e.output.id} tool={tool} entry={e} onOpen={onOpen} />
           ))}
-        </SimpleGrid>
+        </Stack>
       </Box>
     </Collapse>
   </Card>
@@ -427,8 +721,29 @@ const Gallery: React.FC<{ tools: ToolEntry[]; onOpen: (id: string) => void; them
   const [toolFilter, setToolFilter] = useState<string[]>([]);
   const [fixtureOnly, setFixtureOnly] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('cards');
-  // Track collapsed sections (default: all open — a fresh tool shows expanded).
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  // Full-width content (3-up viz grid) vs constrained (2-up). Header stays put.
+  // Default: constrained / 2 columns.
+  const [wide, setWide] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  // Track collapsed sections (default: all collapsed — the page opens as a
+  // readable tool index; expand a section to load its live previews).
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set(tools.map((t) => t.id)));
+
+  // Card-render values for the live previews (computed once, same as OutputView).
+  const [cardData, setCardData] = useState<{
+    values: Record<string, unknown>;
+    secondary: Record<string, Record<string, unknown>>;
+  }>({ values: {}, secondary: {} });
+  useEffect(() => {
+    bulkComputeCards(DASHBOARD_ID, [])
+      .then((r) =>
+        setCardData({
+          values: r.values as Record<string, unknown>,
+          secondary: (r.secondary_values || {}) as Record<string, Record<string, unknown>>,
+        }),
+      )
+      .catch(() => undefined);
+  }, []);
 
   // Facet options carry counts (a histogram of the catalog — "Figure (1)",
   // "Advanced viz (12)") so the filters convey the catalog's shape at a glance.
@@ -499,7 +814,46 @@ const Gallery: React.FC<{ tools: ToolEntry[]; onOpen: (id: string) => void; them
   const collapseAll = () => setCollapsed(new Set(shownToolIds));
 
   return (
-    <Box p="lg" style={{ maxWidth: 1280, margin: '0 auto' }}>
+    <CardValuesCtx.Provider value={cardData}>
+    <BigColsCtx.Provider value={wide ? { base: 1, sm: 2, lg: 3 } : { base: 1, sm: 2 }}>
+    <Box p="lg">
+      <Drawer
+        opened={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        position="right"
+        size="sm"
+        title={
+          <Group gap={8}>
+            <Icon icon="mdi:tune-variant" width={18} />
+            <Text fw={600}>Display settings</Text>
+          </Group>
+        }
+      >
+        <Stack gap="lg">
+          <div>
+            <Text size="sm" fw={600} mb={2}>
+              Content width
+            </Text>
+            <Text size="xs" c="dimmed" mb="xs">
+              Full uses the whole window (3 charts per row); Normal keeps a centered column (2 per
+              row). Only the content widens — the header stays put.
+            </Text>
+            <SegmentedControl
+              fullWidth
+              value={wide ? 'wide' : 'normal'}
+              onChange={(v) => setWide(v === 'wide')}
+              data={[
+                { value: 'normal', label: 'Normal' },
+                { value: 'wide', label: 'Full' },
+              ]}
+            />
+          </div>
+          {/* room for more display settings here later */}
+        </Stack>
+      </Drawer>
+
+      {/* Header / filters / controls stay constrained; only the content below widens. */}
+      <Box style={{ maxWidth: 1280, margin: '0 auto' }}>
       <Group justify="space-between" align="center" wrap="nowrap" gap="md">
         <Group gap="md" wrap="nowrap" align="center" style={{ minWidth: 0 }}>
           <img src={logoFor(theme)} alt="Depictio" style={{ height: 38, width: 'auto', flexShrink: 0 }} />
@@ -613,6 +967,16 @@ const Gallery: React.FC<{ tools: ToolEntry[]; onOpen: (id: string) => void; them
               },
             ]}
           />
+          <Tooltip label="Display settings" withinPortal openDelay={300}>
+            <ActionIcon
+              variant="default"
+              size="lg"
+              aria-label="Display settings"
+              onClick={() => setSettingsOpen(true)}
+            >
+              <Icon icon="mdi:tune-variant" width={17} />
+            </ActionIcon>
+          </Tooltip>
         </Group>
       </Group>
 
@@ -653,7 +1017,10 @@ const Gallery: React.FC<{ tools: ToolEntry[]; onOpen: (id: string) => void; them
       ) : null}
 
       <Divider my="md" />
+      </Box>
 
+      {/* Content area: width follows the Normal/Full setting. */}
+      <Box style={{ maxWidth: wide ? '100%' : 1280, margin: '0 auto' }}>
       {groups.length === 0 ? (
         <Stack align="center" py="xl" gap="sm">
           <ThemeIcon size={48} radius="xl" variant="light" color="gray">
@@ -688,7 +1055,10 @@ const Gallery: React.FC<{ tools: ToolEntry[]; onOpen: (id: string) => void; them
           ))}
         </Stack>
       )}
+      </Box>
     </Box>
+    </BigColsCtx.Provider>
+    </CardValuesCtx.Provider>
   );
 };
 

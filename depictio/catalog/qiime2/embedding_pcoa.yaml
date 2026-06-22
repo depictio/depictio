@@ -1,0 +1,11 @@
+id: qiime2_embedding_pcoa
+mode: ordination
+description: >-
+  Sample ordination — 2D embedding (PCoA on Bray-Curtis distances), one point
+  per sample. Colour grouping is supplied per run by the dashboard.
+find: { path_glob: "**/qiime2/rel_abundance_tables/rel-table-*.tsv" }
+recipe: qiime2/embedding_pcoa.py
+# fixture: real ampliseq 2.16.0 project sample (PCoA on Bray-Curtis), columns sample_id/dim_1/dim_2 (+ habitat)
+fixture: embedding_pcoa.tsv
+renders_as:
+  - { id: embedding, component: advanced_viz, kind: embedding, roles: {sample_id: sample_id, dim_1: dim_1, dim_2: dim_2} }

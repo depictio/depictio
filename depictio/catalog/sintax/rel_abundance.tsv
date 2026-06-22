@@ -1,0 +1,12 @@
+sample	taxonomy	rel_abundance	Kingdom	Phylum
+S1	Bacteria;Proteobacteria	0.42	Bacteria	Proteobacteria
+S1	Bacteria;Firmicutes	0.33	Bacteria	Firmicutes
+S1	Bacteria;Bacteroidota	0.20	Bacteria	Bacteroidota
+S1	Bacteria;Unclassified	0.05	Bacteria	Unclassified
+S2	Bacteria;Proteobacteria	0.51	Bacteria	Proteobacteria
+S2	Bacteria;Bacteroidota	0.28	Bacteria	Bacteroidota
+S2	Bacteria;Firmicutes	0.21	Bacteria	Firmicutes
+S3	Bacteria;Firmicutes	0.46	Bacteria	Firmicutes
+S3	Bacteria;Proteobacteria	0.31	Bacteria	Proteobacteria
+S3	Bacteria;Bacteroidota	0.18	Bacteria	Bacteroidota
+S3	Bacteria;Unclassified	0.05	Bacteria	Unclassified

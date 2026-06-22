@@ -4,7 +4,7 @@
  * Kept in one place so the gallery grid and the detail page stay visually in sync.
  */
 import React from 'react';
-import { ActionIcon, Anchor, Badge, Box, Button, CopyButton, Group, Text, Tooltip } from '@mantine/core';
+import { ActionIcon, Anchor, Avatar, Badge, Box, Button, CopyButton, Group, Text, Tooltip } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import logoRaw from '../../public/logos/logo_black.svg?raw';
 import logoWhiteRaw from '../../public/logos/logo_white.svg?raw';
@@ -35,6 +35,39 @@ export const COMPONENT_META: Record<string, { name: string; color: string; icon:
 
 export const metaFor = (t: string) =>
   COMPONENT_META[t] || { name: t, color: '#868e96', icon: 'mdi:shape-outline' };
+
+// --- Tool identity avatar (curated logo, else Gmail-style letter monogram) ---
+
+// Deterministic Mantine palette color so a tool's monogram is stable across renders.
+const MONOGRAM_COLORS = ['violet', 'teal', 'blue', 'grape', 'cyan', 'indigo', 'pink', 'green'];
+const colorForTool = (id: string): string => {
+  let h = 0;
+  for (let i = 0; i < id.length; i += 1) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return MONOGRAM_COLORS[h % MONOGRAM_COLORS.length];
+};
+
+/** Square tool-identity tile: the tool's curated logo when one is set, otherwise
+ *  a Gmail-style colored letter monogram (Mantine `Avatar`'s built-in fallback).
+ *  No derived favicons / GitHub OG cards — a tool either has a real logo or a
+ *  clean monogram. Used as the gallery section thumbnail. */
+export const ToolLogo: React.FC<{
+  tool: { id: string; name?: string; logo?: string | null };
+  size?: number;
+}> = ({ tool, size = 40 }) => {
+  const initial = (tool.name || tool.id || '?').trim().charAt(0).toUpperCase() || '?';
+  return (
+    <Avatar
+      src={tool.logo || undefined}
+      alt={tool.name || tool.id}
+      size={size}
+      radius="md"
+      color={colorForTool(tool.id)}
+      style={{ flexShrink: 0 }}
+    >
+      {initial}
+    </Avatar>
+  );
+};
 
 /** Colored depictio-style component-type badge. */
 export const TypeBadge: React.FC<{ type: string; size?: string }> = ({ type, size = 'sm' }) => {
@@ -168,6 +201,7 @@ export interface ToolEntry {
   id: string;
   name: string;
   description?: string;
+  logo?: string | null;
   homepage?: string | null;
   nf_core_url?: string | null;
   biotools_url?: string | null;
