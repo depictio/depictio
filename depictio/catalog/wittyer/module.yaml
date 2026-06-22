@@ -1,0 +1,5 @@
+# Wittyer — CNV/SV benchmarking stratified by event type and size bin.
+id: wittyer
+name: Wittyer
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/wittyer
+biotools_url: https://bio.tools/wittyer

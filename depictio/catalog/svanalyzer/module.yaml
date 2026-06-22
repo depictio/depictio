@@ -1,0 +1,5 @@
+# SVanalyzer (svbenchmark) — structural-variant accuracy benchmarking.
+id: svanalyzer
+name: SVanalyzer
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/svanalyzer/svbenchmark
+biotools_url: https://bio.tools/svanalyzer

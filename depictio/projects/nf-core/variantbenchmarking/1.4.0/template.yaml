@@ -60,7 +60,7 @@ workflows:
           metatype: "Aggregated"
           source: "transformed"
           transform:
-            recipe: "nf-core/variantbenchmarking/vcfeval_summary.py"
+            recipe: "rtgtools/vcfeval_summary.py"
           dc_specific_properties:
             format: "CSV"
             columns_description:
@@ -82,7 +82,7 @@ workflows:
           metatype: "Aggregated"
           source: "transformed"
           transform:
-            recipe: "nf-core/variantbenchmarking/happy_summary.py"
+            recipe: "happy/summary.py"
           dc_specific_properties:
             format: "CSV"
             columns_description:
@@ -103,7 +103,7 @@ workflows:
           metatype: "Aggregated"
           source: "transformed"
           transform:
-            recipe: "nf-core/variantbenchmarking/happy_roc.py"
+            recipe: "happy/roc.py"
           dc_specific_properties:
             format: "CSV"
             columns_description:
@@ -123,7 +123,7 @@ workflows:
           metatype: "Aggregated"
           source: "transformed"
           transform:
-            recipe: "nf-core/variantbenchmarking/vcfeval_summary.py"
+            recipe: "rtgtools/vcfeval_summary.py"
             source_overrides:
               rtgtools_summary:
                 path: "indel/summary/tables/rtgtools/rtgtools.summary.csv"
@@ -148,7 +148,7 @@ workflows:
           metatype: "Aggregated"
           source: "transformed"
           transform:
-            recipe: "nf-core/variantbenchmarking/sompy_summary.py"
+            recipe: "sompy/summary.py"
           dc_specific_properties:
             format: "CSV"
             columns_description:
@@ -173,7 +173,7 @@ workflows:
           metatype: "Aggregated"
           source: "transformed"
           transform:
-            recipe: "nf-core/variantbenchmarking/sompy_regions.py"
+            recipe: "sompy/regions.py"
           dc_specific_properties:
             format: "CSV"
             columns_description:
@@ -199,7 +199,7 @@ workflows:
           metatype: "Aggregated"
           source: "transformed"
           transform:
-            recipe: "nf-core/variantbenchmarking/truvari_summary.py"
+            recipe: "truvari/summary.py"
           dc_specific_properties:
             format: "CSV"
             columns_description:
@@ -216,7 +216,7 @@ workflows:
           metatype: "Aggregated"
           source: "transformed"
           transform:
-            recipe: "nf-core/variantbenchmarking/svbenchmark_summary.py"
+            recipe: "svanalyzer/svbenchmark.py"
           dc_specific_properties:
             format: "CSV"
             columns_description:
@@ -233,7 +233,7 @@ workflows:
           metatype: "Aggregated"
           source: "transformed"
           transform:
-            recipe: "nf-core/variantbenchmarking/wittyer_summary.py"
+            recipe: "wittyer/summary.py"
           dc_specific_properties:
             format: "CSV"
             columns_description:

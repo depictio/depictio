@@ -1,0 +1,5 @@
+# RTG Tools (vcfeval) — variant-calling benchmark against a truth set.
+id: rtgtools
+name: RTG Tools
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/rtgtools/vcfeval
+biotools_url: https://bio.tools/rtg-tools

@@ -1,0 +1,11 @@
+id: happy_roc
+mode: roc
+description: >-
+  Germline hap.py SNP precision-recall sweep across quality thresholds (one row
+  per QQ threshold).
+find: { path_glob: "**/benchmarks/happy/*.roc.Locations.SNP.PASS.csv.gz" }
+recipe: happy/roc.py
+fixture: roc.tsv
+renders_as:
+  - { component: figure, visu_type: line, dict_kwargs: {x: recall, y: precision} } # precision-recall sweep
+  - { component: table }

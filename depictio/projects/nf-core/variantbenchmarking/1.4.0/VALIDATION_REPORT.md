@@ -47,21 +47,27 @@ The recipes consume the **same published result files** the pipeline plots itsel
 | `SVANALYZER_SVBENCHMARK` (SV, optional) | `sv/summary/tables/svbenchmark/svbenchmark.summary.csv` | CSV | **bar** / table |
 | `WITTYER` (CNV, optional) | `cnv/summary/tables/wittyer/wittyer.summary.csv` | CSV | **heatmap** event type × size bin |
 
-## Recipes (`../recipes/`)
+## Modules (catalog: `depictio/catalog/<tool>/`)
 
-All germline + somatic recipes were **validated offline against the real megatest CSVs**
-(`execute_recipe` → schema check passes):
+Recipes follow the **catalog module** convention — one folder per tool with `module.yaml`,
+`<recipe>.py` (owns the output columns), `<recipe>.yaml` (the module card: `find` / `recipe` /
+`fixture` / `renders_as`) and a co-located `.tsv` fixture. The germline + somatic outputs were
+**validated offline against the real megatest CSVs** (`execute_recipe` → schema check passes), and
+every output's `renders_as` was checked by building its catalog payload on the bundled fixture.
 
-| Recipe | Source | Output schema | Status |
+| Catalog module | Source | Output schema | Status |
 |---|---|---|---|
-| `vcfeval_summary.py` | `rtgtools.summary.csv` (small; somatic via `source_overrides`) | label, caller, tp_base, tp_comp, fp, fn, precision, recall, f1 | ✅ validated |
-| `happy_summary.py` | glob `small/*/benchmarks/happy/*.summary.csv` (pooled) | variant_type, filter, truth_tp, truth_fn, query_fp, recall, precision, f1 | ✅ validated |
-| `happy_roc.py` | glob `small/*/benchmarks/happy/*.roc.Locations.SNP.PASS.csv.gz` | quality, recall, precision, f1 | ✅ validated |
-| `sompy_summary.py` | `sompy.summary.csv` | caller, variant_type, tp, fp, fn, recall, precision, f1 (+CIs) | ✅ validated |
-| `sompy_regions.py` | `sompy.regions.csv` | caller, af_bin, recall, precision, f1 (+counts) | ✅ validated |
-| `truvari_summary.py` | `sv/.../truvari.summary.csv` | label, precision, recall, f1 (+counts) | ⚠️ no megatest data — tolerant matching |
-| `svbenchmark_summary.py` | `sv/.../svbenchmark.summary.csv` | label, precision, recall, f1 | ⚠️ no megatest data — tolerant matching |
-| `wittyer_summary.py` | `cnv/.../wittyer.summary.csv` | label, event_type, size_bin, precision, recall, f1 | ⚠️ no megatest data — tolerant matching |
+| `rtgtools/vcfeval_summary.py` | `rtgtools.summary.csv` (small; somatic via `source_overrides`) | label, caller, tp_base, tp_comp, fp, fn, precision, recall, f1 | ✅ validated |
+| `happy/summary.py` | glob `small/*/benchmarks/happy/*.summary.csv` (pooled) | variant_type, filter, truth_tp, truth_fn, query_fp, recall, precision, f1 | ✅ validated |
+| `happy/roc.py` | glob `small/*/benchmarks/happy/*.roc.Locations.SNP.PASS.csv.gz` | quality, recall, precision, f1 | ✅ validated |
+| `sompy/summary.py` | `sompy.summary.csv` | caller, variant_type, tp, fp, fn, recall, precision, f1 (+CIs) | ✅ validated |
+| `sompy/regions.py` | `sompy.regions.csv` | caller, af_bin, recall, precision, f1 (+counts) | ✅ validated |
+| `truvari/summary.py` | `sv/.../truvari.summary.csv` | label, precision, recall, f1 (+counts) | ⚠️ no megatest data — tolerant matching, synthetic fixture |
+| `svanalyzer/svbenchmark.py` | `sv/.../svbenchmark.summary.csv` | label, precision, recall, f1 | ⚠️ no megatest data — tolerant matching, synthetic fixture |
+| `wittyer/summary.py` | `cnv/.../wittyer.summary.csv` | label, event_type, size_bin, precision, recall, f1 | ⚠️ no megatest data — tolerant matching, synthetic fixture |
+
+Each `<recipe>.yaml` declares `renders_as` — the module→component bindings (precision↔recall
+scatter, F1 bar, table, best-F1 card) reused by the dashboard.
 
 > Note: hap.py per-sample summaries lack an internal sample column and the glob loader
 > concatenates without a filename column, so `happy_summary.py` **pools** counts by
@@ -115,10 +121,10 @@ DIR=depictio/projects/nf-core/variantbenchmarking/1.4.0
 # 1. Download the megatest tables
 bash $DIR/download_test_data.sh ./vb-testdata
 # 2. Sanity-check each recipe
-depictio recipe run nf-core/variantbenchmarking/vcfeval_summary.py -d ./vb-testdata
-depictio recipe run nf-core/variantbenchmarking/happy_summary.py   -d ./vb-testdata
-depictio recipe run nf-core/variantbenchmarking/sompy_summary.py   -d ./vb-testdata
-depictio recipe run nf-core/variantbenchmarking/sompy_regions.py   -d ./vb-testdata
+depictio recipe run rtgtools/vcfeval_summary.py -d ./vb-testdata
+depictio recipe run happy/summary.py            -d ./vb-testdata
+depictio recipe run sompy/summary.py            -d ./vb-testdata
+depictio recipe run sompy/regions.py            -d ./vb-testdata
 # 3. Validate the template, then ingest (needs the running stack)
 depictio run --template nf-core/variantbenchmarking/1.4.0 --data-root ./vb-testdata --dry-run --deep
 depictio run --template nf-core/variantbenchmarking/1.4.0 --data-root ./vb-testdata
