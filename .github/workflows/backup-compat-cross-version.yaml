@@ -1,0 +1,234 @@
+# Cross-version backup/restore backward-compatibility (Tier 3 of issue #869).
+#
+# The fast `quality` job already validates committed backup fixtures against the
+# current Pydantic models on every PR (Mongo-document level, 1-many over all
+# supported versions). This job adds the *real* end-to-end integration that the
+# fixtures can't: a backup produced by a PREVIOUS released image (real MinIO /
+# Delta data included) is restored by an image built from the CURRENT code, and
+# the restored state is verified.
+#
+# Design (see issue #869):
+#   * 1-1: source = previous stable release, target = current code. Per-version
+#     breadth stays in the cheap fixture lane.
+#   * Self-iterating: the source version is auto-resolved from git tags (highest
+#     stable < current VERSION), with a workflow_dispatch override.
+#   * Off the PR critical path: scheduled + manual only.
+#
+# NOTE: this workflow boots real Docker stacks and cannot be validated locally;
+# run it once via "Run workflow" (workflow_dispatch) after merge to confirm.
+name: Backup compat (cross-version restore)
+
+on:
+  schedule:
+    # Weekly, Monday 04:00 UTC — heavy job, kept off the PR path.
+    - cron: "0 4 * * 1"
+  workflow_dispatch:
+    inputs:
+      source_version:
+        description: "Source version to restore FROM (e.g. 1.0.0). Empty = auto-resolve the previous stable release."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  cross-version-restore:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0 # need tags to resolve the previous release
+
+      - name: Resolve source (old) version
+        id: resolve
+        run: |
+          set -euo pipefail
+          CURRENT="$(cat VERSION)"
+          OVERRIDE="${{ github.event.inputs.source_version }}"
+          if [ -n "$OVERRIDE" ]; then
+            SRC="$OVERRIDE"
+            echo "Using overridden source version: $SRC"
+          else
+            # All stable tags (vMAJOR.MINOR.PATCH, no pre-release) plus current,
+            # sorted ascending; the line just before current = previous stable.
+            SRC="$( { git tag -l 'v[0-9]*.[0-9]*.[0-9]*' | grep -vE -- '-' | sed 's/^v//'; echo "$CURRENT"; } \
+                    | sort -V -u | sed -n "/^${CURRENT}\$/q;p" | tail -1 )"
+            echo "Auto-resolved source version: '${SRC:-<none>}' (current=$CURRENT)"
+          fi
+          if [ -z "$SRC" ]; then
+            echo "::notice::No previous stable release found — nothing to test. Skipping."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "source_version=$SRC" >> "$GITHUB_OUTPUT"
+          echo "current_version=$CURRENT" >> "$GITHUB_OUTPUT"
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR
+        if: steps.resolve.outputs.skip != 'true'
+        run: echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u "${{ github.repository_owner }}" --password-stdin
+
+      - name: Verify old image is published
+        id: verify
+        if: steps.resolve.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          IMG="ghcr.io/depictio/depictio-api:${{ steps.resolve.outputs.source_version }}"
+          if docker manifest inspect "$IMG" > /dev/null 2>&1; then
+            echo "✅ Found $IMG"
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::Old image $IMG is not published — skipping cross-version test."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Prepare environment
+        if: steps.verify.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          # Single-user mode lets us use the weak local minio defaults without the
+          # >=16-char secret check; we only need an admin to drive the backup API.
+          {
+            echo "DEPICTIO_AUTH_SINGLE_USER_MODE=true"
+            echo "DEPICTIO_MINIO_ROOT_USER=minio"
+            echo "DEPICTIO_MINIO_ROOT_PASSWORD=minio123"
+            echo "DEPICTIO_BOOTSTRAP_ADMIN_EMAIL=admin@example.com"
+            echo "DEPICTIO_BOOTSTRAP_ADMIN_PASSWORD=ci_admin_password_aaaaaaaaaa"
+          } > .env
+          echo "✅ .env written"
+
+      # ---------------------------------------------------------------------
+      # PHASE 1 — OLD release creates a backup (real Mongo + MinIO/Delta data)
+      # ---------------------------------------------------------------------
+      - name: "Phase 1 (old ${{ steps.resolve.outputs.source_version }}): boot + seed + create backup"
+        if: steps.verify.outputs.skip != 'true'
+        env:
+          DEPICTIO_VERSION: ${{ steps.resolve.outputs.source_version }}
+        run: |
+          set -euo pipefail
+          echo "🐳 Booting old stack (DEPICTIO_VERSION=$DEPICTIO_VERSION)..."
+          docker compose -f docker-compose.yaml up -d mongo redis minio depictio-backend depictio-celery-worker
+
+          echo "⏳ Waiting for backend health..."
+          for i in $(seq 1 40); do
+            status="$(docker inspect -f '{{ .State.Health.Status }}' depictio-backend 2>/dev/null || echo missing)"
+            echo "  attempt $i: backend=$status"
+            [ "$status" = "healthy" ] && break
+            [ "$i" = "40" ] && { docker compose logs --tail=50 depictio-backend; exit 1; }
+            sleep 10
+          done
+
+          echo "⏳ Waiting for reference-dataset background processing..."
+          for i in $(seq 1 30); do
+            bg="$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --quiet \
+              --eval "var d=db.initialization.findOne({_id:'reference_datasets_metadata'}); print(d ? (d.background_processing_complete ? 'complete' : (d.background_processing_failed ? 'failed' : 'pending')) : 'missing')" 2>&1 | tail -1)"
+            echo "  attempt $i: $bg"
+            [ "$bg" = "complete" ] && break
+            [ "$bg" = "failed" ] && { docker compose logs --tail=50 depictio-backend; exit 1; }
+            sleep 10
+          done
+
+          echo "🔑 Extracting admin token..."
+          TOKEN="$(docker compose exec -T depictio-backend sh -c 'grep access_token /app/depictio/.depictio/admin_config.yaml' | awk '{print $2}' | tr -d "'\"")"
+          [ -n "$TOKEN" ] || { echo "❌ no admin token"; exit 1; }
+
+          echo "📊 Capturing old document counts..."
+          for c in users projects workflows dashboards data_collections deltatables; do
+            n="$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --quiet --eval "db.$c.countDocuments({})" 2>&1 | tail -1)"
+            echo "OLD_${c}=$n" >> "$GITHUB_ENV"
+            echo "  old $c=$n"
+          done
+
+          echo "💾 Creating backup (include S3 data) via API..."
+          RESP="$(curl -sf -X POST http://localhost:8058/depictio/api/v1/backup/create \
+            -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+            -d '{"include_s3_data": true, "s3_backup_prefix": "xver"}')"
+          echo "$RESP"
+          BACKUP_ID="$(echo "$RESP" | python3 -c 'import sys, json; print(json.load(sys.stdin)["backup_id"])')"
+          [ -n "$BACKUP_ID" ] || { echo "❌ no backup_id"; exit 1; }
+          echo "BACKUP_ID=$BACKUP_ID" >> "$GITHUB_ENV"
+          echo "✅ Created backup $BACKUP_ID"
+
+          echo "📤 Extracting backup files from old container..."
+          mkdir -p ci_backups
+          docker cp depictio-backend:/app/depictio/backups/. ci_backups/
+          ls -la ci_backups
+
+      - name: Wipe data (simulate fresh upgraded target)
+        if: steps.verify.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          docker compose -f docker-compose.yaml down -v
+          echo "✅ Old stack + volumes removed"
+
+      - name: Build current API image
+        if: steps.verify.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          docker build -f docker-images/Dockerfile.api -t ghcr.io/depictio/depictio-api:current .
+          echo "✅ Built ghcr.io/depictio/depictio-api:current"
+
+      # ---------------------------------------------------------------------
+      # PHASE 2 — CURRENT code restores the old backup and verifies
+      # ---------------------------------------------------------------------
+      - name: "Phase 2 (current ${{ steps.resolve.outputs.current_version }}): restore + verify"
+        if: steps.verify.outputs.skip != 'true'
+        env:
+          DEPICTIO_VERSION: current
+        run: |
+          set -euo pipefail
+          echo "🐳 Booting current backend on a clean DB (DEPICTIO_VERSION=current)..."
+          # Only the backend is needed to drive the restore API (no viewer/worker
+          # built for :current). depends_on still brings up mongo/redis/minio.
+          docker compose -f docker-compose.yaml up -d mongo redis minio depictio-backend
+
+          echo "⏳ Waiting for backend health..."
+          for i in $(seq 1 40); do
+            status="$(docker inspect -f '{{ .State.Health.Status }}' depictio-backend 2>/dev/null || echo missing)"
+            echo "  attempt $i: backend=$status"
+            [ "$status" = "healthy" ] && break
+            [ "$i" = "40" ] && { docker compose logs --tail=50 depictio-backend; exit 1; }
+            sleep 10
+          done
+
+          echo "📥 Injecting old backup files into current container..."
+          docker compose exec -T depictio-backend sh -c 'mkdir -p /app/depictio/backups'
+          docker cp ci_backups/. depictio-backend:/app/depictio/backups/
+          docker compose exec -T depictio-backend sh -c 'ls -la /app/depictio/backups'
+
+          echo "🔑 Extracting admin token (current)..."
+          TOKEN="$(docker compose exec -T depictio-backend sh -c 'grep access_token /app/depictio/.depictio/admin_config.yaml' | awk '{print $2}' | tr -d "'\"")"
+          [ -n "$TOKEN" ] || { echo "❌ no admin token"; exit 1; }
+
+          echo "♻️ Restoring backup $BACKUP_ID with current code..."
+          # allow_unverified: older releases may predate the .sha256 sidecar; the
+          # point of this test is schema/data compat, not file integrity.
+          RESP="$(curl -sf -X POST http://localhost:8058/depictio/api/v1/backup/restore \
+            -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+            -d "{\"backup_id\": \"$BACKUP_ID\", \"dry_run\": false, \"allow_unverified\": true}")"
+          echo "$RESP"
+          echo "$RESP" | python3 -c 'import sys, json; r = json.load(sys.stdin); assert r.get("success"), r; print("restore success:", r.get("message"))'
+
+          echo "🔎 Verifying restored counts match the old release..."
+          fail=0
+          for c in users projects workflows dashboards data_collections deltatables; do
+            old_var="OLD_${c}"; old="${!old_var}"
+            new="$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --quiet --eval "db.$c.countDocuments({})" 2>&1 | tail -1)"
+            echo "  $c: old=$old new=$new"
+            if [ "${old:-0}" -gt 0 ] && [ "${new:-0}" != "${old:-0}" ]; then
+              echo "  ❌ mismatch for $c (old=$old new=$new)"; fail=1
+            fi
+          done
+          [ "$fail" = "0" ] || { echo "❌ restored data does not match old release"; exit 1; }
+          echo "✅ Cross-version restore verified: $BACKUP_ID (current ← ${{ steps.resolve.outputs.source_version }})"
+
+      - name: Dump backend logs on failure
+        if: failure() && steps.verify.outputs.skip != 'true'
+        run: docker compose -f docker-compose.yaml logs --tail=120 depictio-backend || true
+
+      - name: Tear down
+        if: always()
+        run: docker compose -f docker-compose.yaml down -v || true
