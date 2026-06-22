@@ -20,6 +20,20 @@ covering both categories; earlier runs (`results-55e33f…`, `results-68a3209…
 | `indel/` (somatic) | SEQC2 | som.py (sompy), rtg-tools vcfeval | `indel/summary/tables/{rtgtools,sompy}/*.csv` |
 | `sv/`, `cnv/` | — | Truvari, SVanalyzer, Wittyer | not in the public megatest (optional DCs) |
 
+## Alignment with the pipeline's own plotting scripts
+
+The recipes consume the **same published result files** the pipeline plots itself
+([`bin/`](https://github.com/nf-core/variantbenchmarking/tree/dev/bin)):
+
+| Pipeline script | Published input | Produces | Depictio equivalent |
+|---|---|---|---|
+| `plots.R` | `summary/tables/<tool>/<tool>.summary.csv` (col `Tool`) | `f1_by_tool`, `pr_recall_by_tool`, `variants_by_tool` (`_mqc.png`) | **reproduced natively**: F1-by-tool bar, precision↔recall scatter, TP/FP/FN bar (`vcfeval_summary` / `sompy_summary` recipes) |
+| `plot_upset.py` | per-tool FP/FN/TP_Base/TP_Comp CSVs (`_GT`, CHROM/POS/REF/ALT) | grouped UpSet PNGs | `upset_plot` advanced viz — see "Advanced viz to develop" (needs VCF→CSV; not in megatest) |
+| `plot_svlendist.py` | SV/indel VCF/CSV (SVLEN) | length-distribution PNGs | histogram figure / `lollipop` — SV only (not in megatest) |
+
+`plots.R`'s stratification matches the recipes/dashboard: `rtgtools` filters `Threshold == "None"`;
+`happy` splits by `Type`×`Filter`; `sompy`/`truvari`/`svbenchmark` are single-stratum.
+
 ## Module → final output → plot mapping
 
 | nf-core module / tool | Final output | Format | Depictio plot |
@@ -56,16 +70,24 @@ All germline + somatic recipes were **validated offline against the real megates
 
 ## Dashboard (`dashboards/base.yaml`) — 4 tabs
 
-1. **Overview** — KPI cards (best F1 germline/somatic, sample count) + germline & somatic P/R/F1 bars.
-2. **Germline (small variants)** — vcfeval bar + table, hap.py SNP/INDEL bar, hap.py PR-sweep line.
-3. **Somatic (indels)** — som.py bar + table + best-F1 card, caller × AF-bin F1 heatmap.
-4. **Structural & CNV** — optional Truvari / SVanalyzer / Wittyer panels (empty on the megatest).
+Each category tab reproduces the three canonical `plots.R` panels from the published summary table:
+
+1. **Overview** — KPI cards (best F1 germline/somatic, sample count) + germline & somatic
+   precision↔recall scatters.
+2. **Germline (small variants)** — F1-by-tool bar, precision↔recall scatter, TP/FP/FN-by-tool bar,
+   table; hap.py SNP/INDEL F1 bar, hap.py PR-sweep line.
+3. **Somatic (indels)** — F1-by-caller bar, precision↔recall scatter, TP/FP/FN-by-caller bar,
+   caller × AF-bin F1 heatmap, table + best-F1 card.
+4. **Structural & CNV** — optional Truvari (PR scatter) / SVanalyzer (table) / Wittyer (heatmap)
+   panels (empty on the megatest).
 
 ## Advanced viz — reused + to develop
 
-**Reused (existing kinds)** for benchmarking: `complex_heatmap` (stratified metrics),
-`upset_plot` (common/unique TP·FP·FN across tools), `dot_plot` (precision↔recall scatter).
-The current dashboard uses native `figure` bar/heatmap/line; advanced-viz kinds can be swapped in.
+**Reused (existing kinds)** suited to benchmarking: `dot_plot` (precision↔recall scatter — the
+signature `pr_recall_by_tool` plot), `complex_heatmap` (stratified metrics), `upset_plot`
+(common/unique TP·FP·FN across tools — the `plot_upset.py` equivalent). The dashboard currently
+renders the canonical plots with native `figure` scatter/bar/heatmap; these advanced-viz kinds can
+be swapped in.
 
 **Missing — recommended follow-up issues** (the real gap for benchmarking):
 
@@ -75,6 +97,8 @@ The current dashboard uses native `figure` bar/heatmap/line; advanced-viz kinds 
 | `confusion_matrix` | hap.py / sompy / truvari summaries | tp, fp, fn, unk per type/sample/caller | TP/FP/FN/UNK matrix |
 | `metric_radar` | any `*.summary.csv` | tool, metric, value | multi-metric tool-comparison radar |
 | bar with CI (extend `da_barplot`) | sompy `*_lower/_upper` | value, lower, upper | P/R bars with error bars (CIs already in sompy) |
+| upset (via `upset_plot`) | per-tool FP/FN/TP CSVs (cf. `plot_upset.py`) | variant id × tool membership | TP_Base+FN and TP_Comp+FP intersections |
+| SV length distribution | SV VCFs (cf. `plot_svlendist.py`) | svlen, sample, direction | SVLEN histogram |
 
 ## Validation scenarios
 
