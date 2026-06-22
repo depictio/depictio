@@ -40,7 +40,16 @@ import {
 import { Icon } from '@iconify/react';
 import { ComponentRenderer, bulkComputeCards } from 'depictio-react-core';
 import type { StoredMetadata } from 'depictio-react-core';
-import { CATALOG_ACCENT, IdentityLink, ToolLogo, TypeBadge, lastSeg, logoFor, metaFor } from './shared';
+import {
+  CATALOG_ACCENT,
+  IdentityLink,
+  ModulesMark,
+  ToolLogo,
+  TypeBadge,
+  lastSeg,
+  logoFor,
+  metaFor,
+} from './shared';
 import type { OutputEntry, ToolEntry } from './shared';
 
 type ViewMode = 'cards' | 'table';
@@ -859,9 +868,12 @@ const Gallery: React.FC<{ tools: ToolEntry[]; onOpen: (id: string) => void; them
           <img src={logoFor(theme)} alt="Depictio" style={{ height: 38, width: 'auto', flexShrink: 0 }} />
           <Divider orientation="vertical" style={{ height: 40 }} />
           <Box style={{ minWidth: 0 }}>
-            <Title order={2} c={ACCENT} style={{ lineHeight: 1.15 }}>
-              Depictio Modules
-            </Title>
+            <Group gap={10} wrap="nowrap" align="center">
+              <ModulesMark size={42} />
+              <Title order={2} c={ACCENT} style={{ lineHeight: 1.15 }}>
+                Depictio Modules
+              </Title>
+            </Group>
             <Text size="sm" c="dimmed">
               Every tool output and the Depictio dashboard components it renders as — preview each
               live on its bundled fixture.

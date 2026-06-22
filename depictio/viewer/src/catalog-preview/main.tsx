@@ -41,8 +41,12 @@ import faviconRaw from '../../public/favicon.svg?raw';
 
 async function resolvePayload(): Promise<Record<string, unknown>> {
   const raw = (document.getElementById('catalog-payload')?.textContent || '').trim();
-  // Built bundle served by the CLI: the placeholder is replaced with real JSON.
-  if (raw && raw !== '__CATALOG_PAYLOAD__') return JSON.parse(raw);
+  // Built bundle served by the CLI: the placeholder was replaced with real JSON
+  // (starts with '{'). IMPORTANT: never write the literal payload-placeholder
+  // token in this file — the CLI does a blanket text-replace of it when injecting
+  // the payload, so any copy of that token in the bundle gets clobbered too
+  // (embeds the payload N times + corrupts the JS → blank gallery).
+  if (raw.startsWith('{')) return JSON.parse(raw);
   // Dev server (HMR): fetch the dumped payload. A missing file makes Vite serve
   // index.html (HTML, not JSON) with a 200, so check the body — not just res.ok —
   // to give a clear message instead of "Unexpected token '<'".

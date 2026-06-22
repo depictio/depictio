@@ -19,6 +19,44 @@ export const logoFor = (theme?: string) => (theme === 'dark' ? LOGO_WHITE_SRC : 
  *  (Projects uses teal; each app/section gets its own flat Mantine color). */
 export const CATALOG_ACCENT = 'violet';
 
+/** Depictio brand palette, sampled from the logo mark — reuse for on-brand
+ *  accents instead of generic Mantine colors. */
+export const DEPICTIO_COLORS = {
+  cyan: '#5ab5cb',
+  green: '#a2d54f',
+  gold: '#f2c44e',
+  pink: '#d88da9',
+  purple: '#bd65e1',
+  orange: '#ec8f54',
+} as const;
+
+export const MODULES_ICON = 'mdi:view-module';
+
+/** The "Depictio Modules" brand mark: the `mdi:view-module` shape (2 rows × 3
+ *  columns of bricks), with each brick in an official Depictio palette colour.
+ *  Reuse anywhere the modules catalog is branded so the mark stays consistent. */
+export const ModulesMark: React.FC<{ size?: number }> = ({ size = 42 }) => {
+  const c = DEPICTIO_COLORS;
+  // 2 rows × 3 cols, mirroring mdi:view-module's grid.
+  const bricks = [
+    { x: 2, y: 5, fill: c.cyan },
+    { x: 9, y: 5, fill: c.green },
+    { x: 16, y: 5, fill: c.gold },
+    { x: 2, y: 13, fill: c.pink },
+    { x: 9, y: 13, fill: c.purple },
+    { x: 16, y: 13, fill: c.orange },
+  ];
+  return (
+    <Box style={{ width: size, height: size, flexShrink: 0, lineHeight: 0 }} aria-label="Depictio Modules">
+      <svg width={size} height={size} viewBox="0 0 24 24" role="img">
+        {bricks.map((b) => (
+          <rect key={`${b.x}-${b.y}`} x={b.x} y={b.y} width="6" height="6" rx="1.4" fill={b.fill} />
+        ))}
+      </svg>
+    </Box>
+  );
+};
+
 /** Component type → badge style, mirrored from depictio/dash/component_metadata.py
  *  (colors/icons kept in sync by hand to stay Dash-free). */
 export const COMPONENT_META: Record<string, { name: string; color: string; icon: string }> = {
