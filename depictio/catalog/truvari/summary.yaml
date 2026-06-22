@@ -1,0 +1,11 @@
+id: truvari_summary
+mode: benchmark-summary
+description: >-
+  Structural-variant accuracy from Truvari (precision/recall/F1). Optional — not
+  produced by the public megatest; recipe uses tolerant column matching.
+find: { path_glob: "**/summary/tables/truvari/truvari.summary.csv" }
+recipe: truvari/summary.py
+fixture: summary.tsv
+renders_as:
+  - { component: figure, visu_type: scatter, dict_kwargs: {x: recall, y: precision, color: label} } # precision vs recall
+  - { component: table }

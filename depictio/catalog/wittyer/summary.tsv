@@ -1,0 +1,5 @@
+label	event_type	size_bin	precision	recall	f1
+sampleA	DEL	1-1k	0.95	0.91	0.929
+sampleA	DEL	1k-10k	0.9	0.85	0.874
+sampleA	DUP	1-1k	0.88	0.83	0.854
+sampleA	DUP	1k-10k	0.8	0.74	0.769
