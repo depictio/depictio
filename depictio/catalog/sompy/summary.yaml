@@ -1,0 +1,13 @@
+id: sompy_summary
+mode: benchmark-summary
+description: >-
+  Somatic small-variant accuracy from som.py: precision/recall/F1 per caller with
+  binomial confidence intervals.
+find: { path_glob: "**/summary/tables/sompy/sompy.summary.csv" }
+recipe: sompy/summary.py
+fixture: summary.tsv
+renders_as:
+  - { component: figure, visu_type: scatter, dict_kwargs: {x: recall, y: precision, color: caller} } # precision vs recall
+  - { component: figure, visu_type: bar, dict_kwargs: {x: caller, y: f1} } # f1 by caller
+  - { component: card, column: f1, aggregation: max } # best F1
+  - { component: table }
