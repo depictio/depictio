@@ -7,5 +7,5 @@ find: { path_glob: "**/benchmarks/happy/*.roc.Locations.SNP.PASS.csv.gz" }
 recipe: happy/roc.py
 fixture: roc.tsv
 renders_as:
-  - { component: figure, visu_type: line, dict_kwargs: {x: recall, y: precision} } # precision-recall sweep
+  - { id: pr_curve, component: advanced_viz, kind: roc_pr_curve, roles: {recall: recall, precision: precision} } # threshold-sweep PR curve + AUC
   - { component: table }

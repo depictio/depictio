@@ -1,0 +1,36 @@
+title: ROC / PR curve (demo)
+project_tag: Advanced Visualisations
+is_main_tab: false
+parent_dashboard_tag: Advanced Visualisations
+tab_order: 25
+icon: mdi:chart-bell-curve
+icon_color: teal
+components:
+- component_type: text
+  tag: roc-demo-intro
+  title: ROC / PR curve
+  order: 1
+  alignment: left
+  body: >
+    Threshold-sweep curves, one per caller, on synthetic data. Use the tab bar at
+    the top of the panel to switch between **PR curve** (precision vs recall),
+    **ROC** (true-positive vs false-positive rate, with the random-classifier
+    diagonal) and **vs threshold** (precision & recall vs quality). AUC is shown
+    per curve.
+  workflow_tag: advanced_viz_demo
+  data_collection_tag: roc_curve_demo
+  layout: {x: 0, y: 0, w: 8, h: 1}
+- component_type: advanced_viz
+  workflow_tag: advanced_viz_demo
+  data_collection_tag: roc_curve_demo
+  viz_kind: roc_pr_curve
+  config:
+    viz_kind: roc_pr_curve
+    recall_col: recall
+    precision_col: precision
+    fpr_col: fpr
+    threshold_col: quality
+    group_col: tool
+  tag: roc-demo-viz
+  title: ROC / PR curve
+  layout: {x: 0, y: 1, w: 8, h: 10}
