@@ -35,28 +35,31 @@ viewer:
   strategy: "RollingUpdate"
 
 # Protect the multi-replica workloads during node drains / cluster upgrades.
-# Only emitted for components with >1 replica (see values.yaml), so celery
-# (1 replica on stable) is intentionally left without a PDB here.
+# backend, viewer AND celery all run >1 replica here, so all three get a PDB
+# (the template only emits one for components with >1 replica — see values.yaml).
 podDisruptionBudget:
   enabled: true
   minAvailable: 1
 
 # Celery worker — advanced-viz compute bottleneck (Playwright screenshots,
-# polars C-extension compute). Limits reduced from 8→5 CPU / 16→10Gi to fit
-# both demo+devdemo within the 32 CPU / 64 GiB tenant ResourceQuota when
-# MongoDB HA (3 replicas × 2 deployments = 6 pods) is running in parallel.
+# polars C-extension compute). 2 replicas for HA + better tail latency under
+# concurrent compute. Budget-neutral: per-pod requests/limits are halved vs the
+# old single pod, so the aggregate (3 CPU / 6 Gi requests, 5 CPU / 10 Gi limits,
+# 8 worker slots) is unchanged and still fits the shared 32 CPU / 64 GiB tenant
+# ResourceQuota alongside demodev + MongoDB HA (3 replicas × 2 deployments).
 celery:
   enabled: true
-  replicas: 1
+  replicas: 2
   resources:
     requests:
-      memory: "6Gi"
-      cpu: "3"
+      memory: "3Gi"
+      cpu: "1.5"
     limits:
-      memory: "10Gi"
-      cpu: "5"
+      memory: "5Gi"
+      cpu: "2.5"
   env:
-    DEPICTIO_CELERY_WORKERS: "8"  # parallel tasks per worker
+    # 4 slots per pod × 2 pods = 8 total (same concurrency as the old single pod)
+    DEPICTIO_CELERY_WORKERS: "4"
 
 # Backend API — serves the React viewer's data-fetching endpoints
 # (render_figure, bulk_compute_cards, …) + the SPA static assets.
