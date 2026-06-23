@@ -1,0 +1,58 @@
+# nf-core/variantbenchmarking 1.4.0 — Structural variants (variant_type=structural)
+# One of three per-variant-type projects. See categories/small/template.yaml.
+# Structural has no published summary CSV in the megatest — the benchmark numbers
+# (truvari precision/recall/F1, classifications) live in the MultiQC report.
+#   depictio run --template nf-core/variantbenchmarking/1.4.0/categories/structural \
+#     --data-root <root with multiqc/multiqc_data/multiqc.parquet (structural)>
+
+template:
+  template_id: "nf-core/variantbenchmarking/1.4.0/categories/structural"
+  description: "nf-core/variantbenchmarking — structural-variant benchmarking: truvari precision/recall/F1 + classifications and the SV MultiQC report."
+  version: "1.0.0"
+  variables:
+    - name: "DATA_ROOT"
+      description: "Root containing multiqc/multiqc_data/multiqc.parquet for the structural run."
+      required: true
+  dashboards:
+    - "dashboards/base.yaml"
+
+name: "Variant Benchmarking — Structural variants"
+project_type: "advanced"
+is_public: true
+workflows:
+  - name: "variantbenchmarking"
+    version: "1.4.0"
+    engine:
+      name: "nextflow"
+      version: "24.10.4"
+    catalog:
+      name: "nf-core"
+      url: "https://nf-co.re"
+    repository_url: "https://github.com/nf-core/variantbenchmarking"
+    data_location:
+      structure: "flat"
+      locations:
+        - "{DATA_ROOT}"
+    data_collections:
+      - data_collection_tag: "multiqc_data"
+        description: "MultiQC report for the structural-variant run — truvari benchmark + SURVIVOR."
+        config:
+          type: "MultiQC"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "multiqc/multiqc_data/multiqc.parquet"
+          dc_specific_properties:
+            s3_location: null
+            modules:
+              - "general_stats"
+              - "truvari"
+              - "survivor"
+              - "variant_calling_summary"
+            plots:
+              truvari:
+                - "Precision vs. Recall"
+                - "Classifications"
+              survivor:
+                - "survivor-section"

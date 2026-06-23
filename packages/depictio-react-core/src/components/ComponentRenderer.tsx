@@ -28,6 +28,10 @@ import SunburstRenderer from './advanced_viz/SunburstRenderer';
 import OncoplotRenderer from './advanced_viz/OncoplotRenderer';
 import CoverageTrackRenderer from './advanced_viz/CoverageTrackRenderer';
 import SankeyRenderer from './advanced_viz/SankeyRenderer';
+import PrBenchmarkRenderer from './advanced_viz/PrBenchmarkRenderer';
+import RocPrCurveRenderer from './advanced_viz/RocPrCurveRenderer';
+import ConfusionMatrixRenderer from './advanced_viz/ConfusionMatrixRenderer';
+import MetricCiBarsRenderer from './advanced_viz/MetricCiBarsRenderer';
 import { AdvancedVizExtrasProvider } from './advanced_viz/AdvancedVizExtras';
 import MultiSelectRenderer from './interactive/MultiSelectRenderer';
 import RangeSliderRenderer from './interactive/RangeSliderRenderer';
@@ -642,6 +646,14 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
     inner = <CoverageTrackRenderer {...(advProps as any)} />;
   } else if (vizKind === 'sankey') {
     inner = <SankeyRenderer {...(advProps as any)} />;
+  } else if (vizKind === 'pr_benchmark') {
+    inner = <PrBenchmarkRenderer {...(advProps as any)} />;
+  } else if (vizKind === 'roc_pr_curve') {
+    inner = <RocPrCurveRenderer {...(advProps as any)} />;
+  } else if (vizKind === 'confusion_matrix') {
+    inner = <ConfusionMatrixRenderer {...(advProps as any)} />;
+  } else if (vizKind === 'metric_ci_bars') {
+    inner = <MetricCiBarsRenderer {...(advProps as any)} />;
   } else {
     inner = (
       <div className="dashboard-error" style={{ fontSize: '0.75rem' }}>

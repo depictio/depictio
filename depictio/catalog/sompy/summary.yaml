@@ -7,7 +7,10 @@ find: { path_glob: "**/summary/tables/sompy/sompy.summary.csv" }
 recipe: sompy/summary.py
 fixture: summary.tsv
 renders_as:
-  - { component: figure, visu_type: scatter, dict_kwargs: {x: recall, y: precision, color: caller} } # precision vs recall
+  - { id: pr_scatter, component: advanced_viz, kind: pr_benchmark, roles: {label: caller, recall: recall, precision: precision, f1: f1} } # precision-recall benchmark
+  - { id: confusion, component: advanced_viz, kind: confusion_matrix, roles: {label: caller, tp: tp, fp: fp, fn: fn} } # TP/FP/FN matrix
+  - { id: precision_ci, component: advanced_viz, kind: metric_ci_bars, roles: {label: caller, value: precision, lower: precision_lower, upper: precision_upper} } # precision ± 95% CI
+  - { id: recall_ci, component: advanced_viz, kind: metric_ci_bars, roles: {label: caller, value: recall, lower: recall_lower, upper: recall_upper} } # recall ± 95% CI
   - { component: figure, visu_type: bar, dict_kwargs: {x: caller, y: f1} } # f1 by caller
   - { component: card, column: f1, aggregation: max } # best F1
   - { component: table }

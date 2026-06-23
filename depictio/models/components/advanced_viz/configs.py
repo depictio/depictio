@@ -797,6 +797,109 @@ class OncoplotConfig(_BaseVizConfig):
 
 
 # Discriminated union — the AdvancedViz component stores one of these.
+class PrBenchmarkConfig(_BaseVizConfig):
+    """Precision-recall benchmark scatter.
+
+    Each point is a callset (tool / sample / caller) plotted at its
+    (recall, precision). F1 iso-contours and the y=x diagonal are drawn as
+    reference; optional ``f1_col`` colours points and ``support_col`` sizes
+    them. The signature variant-benchmarking view — top-right is best.
+    """
+
+    viz_kind: Literal["pr_benchmark"] = "pr_benchmark"
+
+    label_col: str = Field(
+        default="label", description="Callset identifier (tool / sample / caller)"
+    )
+    recall_col: str = Field(default="recall", description="Recall / sensitivity column (x, 0-1)")
+    precision_col: str = Field(default="precision", description="Precision column (y, 0-1)")
+    f1_col: str = Field(default="f1", description="F1 column (point colour)")
+    support_col: str | None = Field(
+        default=None, description="Optional count column (e.g. TP) for point size"
+    )
+    category_col: str | None = Field(
+        default=None, description="Optional column to colour points by category instead of F1"
+    )
+
+    show_iso_f1: bool = Field(default=True, description="Draw F1 iso-contours")
+    show_diagonal: bool = Field(default=True, description="Draw the y=x reference line")
+    show_labels: bool = Field(default=True, description="Annotate points with the label")
+    colorscale: str = Field(
+        default="Tealgrn", description="Continuous colour scale for the F1 point colour"
+    )
+
+
+class RocPrCurveConfig(_BaseVizConfig):
+    """Threshold-sweep precision-recall / ROC curve.
+
+    Plots precision (y) against recall (x) across the quality-threshold sweep
+    (e.g. hap.py ROC). Multiple curves are drawn when ``group_col`` is set
+    (one line per tool / caller). Area under the curve is reported per group.
+    """
+
+    viz_kind: Literal["roc_pr_curve"] = "roc_pr_curve"
+
+    recall_col: str = Field(default="recall", description="Recall / TPR column (0-1)")
+    precision_col: str = Field(default="precision", description="Precision column (0-1)")
+    fpr_col: str | None = Field(
+        default=None,
+        description="Optional false-positive-rate column — enables a true ROC (TPR vs FPR) case",
+    )
+    threshold_col: str | None = Field(
+        default=None, description="Optional quality-threshold column (hover + sort order)"
+    )
+    group_col: str | None = Field(
+        default=None, description="Optional column to split into one curve per group"
+    )
+
+    show_auc: bool = Field(default=True, description="Compute & show area under the curve")
+    fill: bool = Field(default=False, description="Shade the area under each curve")
+
+
+class ConfusionMatrixConfig(_BaseVizConfig):
+    """Benchmark confusion matrix (TP / FP / FN, optionally TN) per callset.
+
+    A compact heatmap of the exact counts that underlie precision/recall — one
+    column block per callset (``label_col``), rows = TP / FP / FN (/ TN).
+    Optionally row-normalised to fractions.
+    """
+
+    viz_kind: Literal["confusion_matrix"] = "confusion_matrix"
+
+    label_col: str = Field(default="label", description="Callset identifier (tool / caller)")
+    tp_col: str = Field(default="tp", description="True-positive count column")
+    fp_col: str = Field(default="fp", description="False-positive count column")
+    fn_col: str = Field(default="fn", description="False-negative count column")
+    tn_col: str | None = Field(default=None, description="Optional true-negative count column")
+
+    normalize: bool = Field(
+        default=False, description="Show fractions instead of raw counts in cell labels"
+    )
+    normalize_mode: Literal["per_caller", "per_truth", "none"] = Field(
+        default="per_caller", description="How cell colour is normalised"
+    )
+    colorscale: str = Field(default="Blues", description="Heatmap colour scale")
+
+
+class MetricCiBarsConfig(_BaseVizConfig):
+    """Metric bars with 95% confidence-interval whiskers.
+
+    Horizontal bars of a single metric (precision / recall / F1) per callset
+    with asymmetric error bars from ``lower_col`` / ``upper_col`` — surfaces
+    the binomial CIs that som.py already emits but the plain bar charts drop.
+    """
+
+    viz_kind: Literal["metric_ci_bars"] = "metric_ci_bars"
+
+    label_col: str = Field(default="label", description="Callset identifier (tool / caller)")
+    value_col: str = Field(default="value", description="Metric value column (0-1)")
+    lower_col: str = Field(default="lower", description="CI lower-bound column")
+    upper_col: str = Field(default="upper", description="CI upper-bound column")
+    metric_name: str = Field(default="F1", description="Display name of the metric (axis title)")
+    sort_desc: bool = Field(default=True, description="Sort bars by value descending")
+    colorscale: str = Field(default="Tealgrn", description="Continuous colour scale for the points")
+
+
 VizConfig = Annotated[
     VolcanoConfig
     | EmbeddingConfig
@@ -815,6 +918,10 @@ VizConfig = Annotated[
     | SunburstConfig
     | OncoplotConfig
     | CoverageTrackConfig
-    | SankeyConfig,
+    | SankeyConfig
+    | PrBenchmarkConfig
+    | RocPrCurveConfig
+    | ConfusionMatrixConfig
+    | MetricCiBarsConfig,
     Field(discriminator="viz_kind"),
 ]

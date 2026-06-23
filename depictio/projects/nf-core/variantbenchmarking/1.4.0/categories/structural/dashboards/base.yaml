@@ -1,0 +1,80 @@
+version: 1
+main_dashboard:
+  title: Variant Benchmarking — Structural variants
+  subtitle: "variant_type=structural — truvari precision · recall · F1 + SURVIVOR (HG002 SVs Tier1)"
+  project_tag: Variant Benchmarking — Structural variants
+  main_tab_name: MultiQC
+  tab_icon: /assets/images/logos/multiqc_icon_color.svg
+  tab_icon_color: orange
+  workflow_system: none
+  components:
+  - component_type: text
+    tag: sv-intro
+    title: Structural-variant benchmarking (MultiQC)
+    order: 1
+    alignment: left
+    body: >
+      Structural variants have no separate summary table in the pipeline — the
+      benchmark numbers live in the MultiQC report. General statistics carry
+      truvari precision / recall / F1 and genotype concordance per callset; the
+      precision–recall scatter is the signature view and classifications breaks
+      down TP / FP / FN. SURVIVOR summarises the merged SV callset.
+    workflow_tag: variantbenchmarking
+    data_collection_tag: multiqc_data
+    layout: {x: 0, y: 0, w: 8, h: 2}
+
+  - component_type: interactive
+    workflow_tag: variantbenchmarking
+    data_collection_tag: multiqc_data
+    interactive_component_type: MultiSelect
+    column_name: sample
+    display: {title_size: md, custom_color: '#FB8C00', icon_name: 'mdi:tools'}
+    tag: sv-filter-sample
+    index: sv-sample-filter
+    title: Sample
+    layout: {x: 0, y: 2, w: 1, h: 2}
+
+  - component_type: multiqc
+    workflow_tag: variantbenchmarking
+    data_collection_tag: multiqc_data
+    selected_module: general_stats
+    selected_plot: general_stats
+    tag: sv-general-stats
+    title: Benchmark statistics (truvari precision · recall · F1 · GT concordance)
+    layout: {x: 0, y: 2, w: 8, h: 4}
+
+  - component_type: multiqc
+    workflow_tag: variantbenchmarking
+    data_collection_tag: multiqc_data
+    selected_module: truvari
+    selected_plot: Precision vs. Recall
+    tag: sv-truvari-pr
+    title: truvari — precision vs recall
+    layout: {x: 0, y: 6, w: 4, h: 6}
+
+  - component_type: multiqc
+    workflow_tag: variantbenchmarking
+    data_collection_tag: multiqc_data
+    selected_module: truvari
+    selected_plot: Classifications
+    tag: sv-truvari-classifications
+    title: truvari — classifications (TP / FP / FN)
+    layout: {x: 4, y: 6, w: 4, h: 6}
+
+  - component_type: multiqc
+    workflow_tag: variantbenchmarking
+    data_collection_tag: multiqc_data
+    selected_module: survivor
+    selected_plot: survivor-section
+    tag: sv-survivor
+    title: SURVIVOR — merged SV summary
+    layout: {x: 0, y: 12, w: 4, h: 5}
+
+  - component_type: multiqc
+    workflow_tag: variantbenchmarking
+    data_collection_tag: multiqc_data
+    selected_module: variant_calling_summary
+    selected_plot: variant_calling_summary-section
+    tag: sv-vcsummary
+    title: Variant-calling summary
+    layout: {x: 4, y: 12, w: 4, h: 5}
