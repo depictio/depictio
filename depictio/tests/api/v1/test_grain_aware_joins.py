@@ -15,6 +15,7 @@ Key principles:
 
 import polars as pl
 import pytest
+from polars.exceptions import ColumnNotFoundError
 
 from depictio.api.v1.grain_aware_joins import (
     grain_aware_join,
@@ -183,14 +184,8 @@ class TestAggregationDirection:
         cell_type_col = [c for c in result.columns if "cell_type" in c][0]
 
         # S1 has 3 cells: ['T', 'T', 'B']
-        # Extract the list value properly from Polars
-        print(f"DEBUG: result columns = {result.columns}")
-        print(f"DEBUG: s1_row = {s1_row}")
-        print(f"DEBUG: cell_type_col = {cell_type_col}")
         row_dict = s1_row.row(0, named=True)
-        print(f"DEBUG: row_dict = {row_dict}")
         cell_types = row_dict[cell_type_col]
-        print(f"DEBUG: cell_types = {cell_types}, type = {type(cell_types)}")
         assert isinstance(cell_types, list)
         assert sorted(cell_types) == ["B", "T", "T"]
 
@@ -345,14 +340,14 @@ class TestEdgeCases:
 
     def test_missing_join_column_in_base(self, samples_df, qc_metrics_df):
         """Test error handling when join column missing in base DataFrame"""
-        with pytest.raises((KeyError, pl.ColumnNotFoundError)):
+        with pytest.raises((KeyError, ColumnNotFoundError)):
             grain_aware_join(samples_df, qc_metrics_df, on="nonexistent_column")
 
     def test_missing_join_column_in_other(self, samples_df):
         """Test error handling when join column missing in other DataFrame"""
         other_df = pl.DataFrame({"different_id": ["S1", "S2"], "value": [10, 20]})
 
-        with pytest.raises((KeyError, pl.ColumnNotFoundError)):
+        with pytest.raises((KeyError, ColumnNotFoundError)):
             grain_aware_join(samples_df, other_df, on="sample_id")
 
     def test_all_null_join_column(self):

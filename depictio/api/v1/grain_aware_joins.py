@@ -24,9 +24,11 @@ Example:
     True
 """
 
-from typing import Union
+from typing import Literal, Union
 
 import polars as pl
+
+JoinStrategy = Literal["inner", "left", "right", "full", "semi", "anti", "cross"]
 
 
 def is_unique_grain(df: pl.DataFrame, columns: Union[str, list[str]]) -> bool:
@@ -71,7 +73,7 @@ def grain_aware_join(
     df_base: pl.DataFrame,
     df_other: pl.DataFrame,
     on: Union[str, list[str]],
-    how: str = "left",
+    how: JoinStrategy = "left",
     aggregations: Union[dict[str, Union[str, pl.Expr]], None] = None,
 ) -> pl.DataFrame:
     """
@@ -136,6 +138,18 @@ def grain_aware_join(
             raise KeyError(f"Join column '{col}' not found in base DataFrame")
         if col not in df_other.columns:
             raise KeyError(f"Join column '{col}' not found in other DataFrame")
+
+    # Align join-column dtypes. Empty inputs produce Null-typed columns (and
+    # mismatched key types in general) that would otherwise raise a SchemaError
+    # on join; cast the Null/other side to its partner's dtype first.
+    for col in on_list:
+        base_dtype = df_base.schema[col]
+        other_dtype = df_other.schema[col]
+        if base_dtype != other_dtype:
+            if base_dtype == pl.Null:
+                df_base = df_base.with_columns(pl.col(col).cast(other_dtype))
+            else:
+                df_other = df_other.with_columns(pl.col(col).cast(base_dtype))
 
     # Check if df_other needs aggregation
     if is_unique_grain(df_other, on_list):
@@ -256,9 +270,10 @@ def _infer_aggregation(df: pl.DataFrame, column: str) -> pl.Expr:
     ]:
         return pl.col(column).mean().alias(f"{column}_mean")
 
-    # String/Categorical → list
+    # String/Categorical → list. Inside group_by().agg() the bare column already
+    # collects to a per-group list; an extra .implode() would double-wrap it.
     elif dtype in [pl.Utf8, pl.Categorical, pl.String]:
-        return pl.col(column).implode().alias(f"{column}_list")
+        return pl.col(column).alias(f"{column}_list")
 
     # Boolean → sum (count of True)
     elif dtype == pl.Boolean:
@@ -300,7 +315,7 @@ def _build_agg_expr(column: str, agg_type: str) -> pl.Expr:
         "std": lambda col: pl.col(col).std(),
         "var": lambda col: pl.col(col).var(),
         "count": lambda col: pl.col(col).count(),
-        "list": lambda col: pl.col(col).implode().alias(f"{col}_list"),
+        "list": lambda col: pl.col(col).alias(f"{col}_list"),
         "n_unique": lambda col: pl.col(col).n_unique(),
     }
 
