@@ -1,0 +1,11 @@
+id: sompy_regions
+mode: stratified
+description: >-
+  Somatic accuracy stratified by allele-fraction bin (caller x AF-bin recall /
+  precision / F1).
+find: { path_glob: "**/summary/tables/sompy/sompy.regions.csv" }
+recipe: sompy/regions.py
+fixture: regions.tsv
+renders_as:
+  - { component: figure, visu_type: bar, dict_kwargs: {x: af_bin, y: f1, color: caller} } # F1 across AF bins
+  - { component: table }

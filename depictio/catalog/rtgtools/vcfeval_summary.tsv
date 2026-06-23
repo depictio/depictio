@@ -1,0 +1,4 @@
+label	caller	tp_base	tp_comp	fp	fn	precision	recall	f1
+test2	giab_v2	21742	21742	104	104	0.9952	0.9952	0.9952
+test1	giab_v1	20827	20827	97	1019	0.9954	0.9534	0.9739
+test3	giab_beta	16240	16226	78	5606	0.9952	0.7434	0.8511

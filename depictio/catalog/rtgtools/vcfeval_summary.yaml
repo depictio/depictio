@@ -1,0 +1,14 @@
+id: rtgtools_vcfeval_summary
+mode: benchmark-summary
+description: >-
+  Per-sample / per-caller variant-calling accuracy (TP/FP/FN, precision, recall,
+  F1) from rtg-tools vcfeval's aggregated summary. Serves both germline (small/)
+  and somatic (indel/) categories.
+find: { path_glob: "**/summary/tables/rtgtools/rtgtools.summary.csv" }
+recipe: rtgtools/vcfeval_summary.py
+fixture: vcfeval_summary.tsv
+renders_as:
+  - { component: figure, visu_type: scatter, dict_kwargs: {x: recall, y: precision, color: label} } # precision vs recall (pr_recall_by_tool)
+  - { component: figure, visu_type: bar, dict_kwargs: {x: label, y: f1} } # f1_by_tool
+  - { component: card, column: f1, aggregation: max } # best F1
+  - { component: table }

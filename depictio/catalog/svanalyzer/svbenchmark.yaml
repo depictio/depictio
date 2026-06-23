@@ -1,0 +1,11 @@
+id: svanalyzer_svbenchmark
+mode: benchmark-summary
+description: >-
+  Structural-variant accuracy from SVanalyzer svbenchmark (precision/recall/F1).
+  Optional — not produced by the public megatest; tolerant column matching.
+find: { path_glob: "**/summary/tables/svbenchmark/svbenchmark.summary.csv" }
+recipe: svanalyzer/svbenchmark.py
+fixture: svbenchmark.tsv
+renders_as:
+  - { component: figure, visu_type: bar, dict_kwargs: {x: label, y: f1} } # f1 by sample/caller
+  - { component: table }
