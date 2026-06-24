@@ -67,8 +67,9 @@ template:
     #   - repoint the shared coverage/lineage DCs at the artic_minion/ layout (same
     #     tags → genome_coverage_track / amplicon_coverage_matrix / classification_sankey
     #     keep working);
-    #   - repoint variants_long at the artic recipe (clair3 *.pass.vcf.gz → same long-table
-    #     schema as ivar), so the variant views and variant-derived DCs keep working;
+    #   - repoint variants_long at artic_minion/variants_long_table.csv — nanopore emits the
+    #     SAME aggregated long table as illumina (SAMPLE/CHROM/POS/AF/GENE/EFFECT…), so the
+    #     existing ivar recipe + variant views + variant-derived DCs keep working unchanged;
     #   - drop only summary_metrics — the MultiQC parquet lacks the ivar/bowtie2 columns
     #     its recipe reads, and there is no nanopore summary-metrics recipe yet.
     # Illumina runs (PLATFORM=illumina, the default) keep the ivar bindings untouched.
@@ -76,7 +77,8 @@ template:
       remove_dc_tags: ["summary_metrics"]
       override_dcs:
         - data_collection_tag: "variants_long"
-          recipe: "artic/variants_long.py"
+          source_overrides:
+            variants_raw: {glob_pattern: "artic_minion/variants_long_table.csv"}
         - data_collection_tag: "mosdepth_amplicon_coverage"
           scan_pattern: "artic_minion/mosdepth/amplicon/all_samples.mosdepth.coverage.tsv"
         - data_collection_tag: "mosdepth_genome_coverage"
