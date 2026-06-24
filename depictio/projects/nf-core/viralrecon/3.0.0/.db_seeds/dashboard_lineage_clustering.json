@@ -337,7 +337,7 @@
       "component_type": "advanced_viz",
       "title": "Classification sankey (QC -> lineage -> clade)",
       "workflow_tag": "viralrecon",
-      "data_collection_tag": "sankey_canonical",
+      "data_collection_tag": "classification_sankey",
       "wf_id": {
         "$oid": "746b0f3c1e4a2d7f8e5b9c01"
       },
@@ -348,7 +348,7 @@
         "type": null,
         "metatype": null,
         "description": "Sankey-ready classification funnel (qc_status \u2192 lineage \u2192 clade)",
-        "data_collection_tag": "sankey_canonical",
+        "data_collection_tag": "classification_sankey",
         "dc_specific_properties": null,
         "_id": {
           "$oid": "746b0f3c1e4a2d7f8e5b9c1d"
@@ -385,7 +385,7 @@
       "component_type": "advanced_viz",
       "title": "Variant-profile PCA embedding (coloured by lineage)",
       "workflow_tag": "viralrecon",
-      "data_collection_tag": "variant_feature_matrix_canonical",
+      "data_collection_tag": "variant_pca_matrix",
       "wf_id": {
         "$oid": "746b0f3c1e4a2d7f8e5b9c01"
       },
@@ -396,7 +396,7 @@
         "type": null,
         "metatype": null,
         "description": "Sample \u00d7 mutation binary matrix for live PCA / UMAP embedding",
-        "data_collection_tag": "variant_feature_matrix_canonical",
+        "data_collection_tag": "variant_pca_matrix",
         "dc_specific_properties": null,
         "_id": {
           "$oid": "746b0f3c1e4a2d7f8e5b9c1f"

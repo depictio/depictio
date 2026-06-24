@@ -204,12 +204,12 @@ STATIC_IDS = {
             "mosdepth_amplicon_heatmap": "746b0f3c1e4a2d7f8e5b9c18",
             # lollipop retired: the Lollipop component binds directly to
             # variants_long via catalog roles (GENE/POS/EFFECT) — `use: ivar/variants_long`.
-            "oncoplot_canonical": "746b0f3c1e4a2d7f8e5b9c1a",
-            "complex_heatmap_canonical": "746b0f3c1e4a2d7f8e5b9c1b",
-            "coverage_track_canonical": "746b0f3c1e4a2d7f8e5b9c1c",
-            "sankey_canonical": "746b0f3c1e4a2d7f8e5b9c1d",
-            "upset_canonical": "746b0f3c1e4a2d7f8e5b9c1e",
-            "variant_feature_matrix_canonical": "746b0f3c1e4a2d7f8e5b9c1f",
+            "variant_oncoplot": "746b0f3c1e4a2d7f8e5b9c1a",
+            "amplicon_coverage_matrix": "746b0f3c1e4a2d7f8e5b9c1b",
+            "genome_coverage_track": "746b0f3c1e4a2d7f8e5b9c1c",
+            "classification_sankey": "746b0f3c1e4a2d7f8e5b9c1d",
+            "mutation_upset": "746b0f3c1e4a2d7f8e5b9c1e",
+            "variant_pca_matrix": "746b0f3c1e4a2d7f8e5b9c1f",
         },
         "dashboards": {
             # Main tab id equals project_id (same convention as ampliseq).
@@ -429,11 +429,20 @@ class ReferenceDatasetRegistry:
             if var_name == "DATA_ROOT":
                 continue
             variables[var_name] = var_default.replace("{DATA_ROOT}", data_root)
-        provided_vars: set[str] = set(variables.keys())
+        # Apply template-declared variable defaults (mirrors resolve_template) so
+        # value-based routes (if_var_equals against an nf flag's default, e.g.
+        # SKIP_QIIME=false) evaluate consistently here as in a CLI run. setdefault
+        # keeps reference.vars overrides winning.
+        for var in template_section.get("variables", []):
+            if isinstance(var, dict) and var.get("default") is not None:
+                variables.setdefault(var["name"], str(var["default"]))
         config = substitute_template_variables(config, variables)
 
-        # 3. Apply conditional DC/link removal (pass dummy template_dir — init ignores dashboards)
-        config, _, _ = _apply_conditionals(config, conditionals, provided_vars, Path("."))
+        # 3. Apply conditional DC/link removal (pass dummy template_dir — init ignores dashboards).
+        # Pass the full variables map (name → value) so value-based routes (if_var_equals)
+        # evaluate; presence-based routes still read the keys. The reference seed carries no
+        # PLATFORM, so the viralrecon nanopore route stays inert (illumina reference).
+        config, _, _ = _apply_conditionals(config, conditionals, variables, Path("."))
 
         # 4. Skip DCs whose config still has unresolved {VAR} placeholders and prune their links
         skipped_dc_tags: set[str] = set()

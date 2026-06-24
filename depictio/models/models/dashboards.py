@@ -31,6 +31,7 @@ from pydantic import (
     model_validator,
 )
 
+from depictio.models.components.advanced_viz import AdvancedVizLiteComponent
 from depictio.models.components.lite import (
     CardLiteComponent,
     FigureLiteComponent,
@@ -203,7 +204,32 @@ class DashboardDataLite(BaseModel):
         "image": ImageLiteComponent,
         "multiqc": MultiQCLiteComponent,
         "map": MapLiteComponent,
+        "advanced_viz": AdvancedVizLiteComponent,
     }
+
+    @model_validator(mode="before")
+    @classmethod
+    def _expand_catalog_use(cls, data: Any) -> Any:
+        """Expand every ``use: <tool>/<ref>`` tile before union discrimination.
+
+        Catalog references are authoring sugar for any component kind. Resolving
+        them here (not just inside ``AdvancedVizLiteComponent``) sets each tile's
+        ``component_type`` + binding fields up front, so the lite-component union
+        routes multiqc/card/figure/table/interactive ``use:`` tiles to the right
+        model. Idempotent for already-expanded dicts (no ``use`` key → no-op).
+        """
+        if not isinstance(data, dict):
+            return data
+        components = data.get("components")
+        if not isinstance(components, list):
+            return data
+        from depictio.models.components.catalog_use import resolve_use
+
+        data = {
+            **data,
+            "components": [resolve_use(c) if isinstance(c, dict) else c for c in components],
+        }
+        return data
 
     @model_validator(mode="after")
     def validate_components_domain(self) -> "DashboardDataLite":

@@ -4,5 +4,6 @@
 # meta.yml. The depictio glue (find/recipe/renders_as) lives in the output YAMLs.
 id: ivar
 name: iVar
+logo: https://repository-images.githubusercontent.com/143471288/4ef073b9-d3a2-4593-9d2e-e598f7a2ef4c
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/ivar/variants
 biotools_url: https://bio.tools/andersen-lab_ivar # from nf-core meta.yml identifier

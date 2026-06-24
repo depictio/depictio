@@ -13,17 +13,21 @@ Covers:
 - _apply_conditionals helper (remove DCs, prune links, select dashboards)
 """
 
+import json
 from pathlib import Path
 
 import pytest
 
 from depictio.cli.cli.utils.templates import (
     _apply_conditionals,
+    _introspect_pipeline_params,
+    _normalize_param_value,
     _strip_ids,
     locate_template,
     substitute_template_variables,
 )
 from depictio.models.models.templates import (
+    DCOverride,
     TemplateConditional,
     TemplateMetadata,
     TemplateOrigin,
@@ -108,6 +112,54 @@ class TestStripIds:
         assert "id" not in result
 
 
+class TestIntrospectPipelineParams:
+    """Generic params.json → declared-variable derivation (nf vocabulary)."""
+
+    def test_normalize_bool_and_scalar(self) -> None:
+        assert _normalize_param_value(True) == "true"
+        assert _normalize_param_value(False) == "false"
+        assert _normalize_param_value("nanopore") == "nanopore"
+        assert _normalize_param_value(10) == "10"
+
+    def _write_params(self, tmp_path: Path, params: dict) -> str:
+        pi = tmp_path / "pipeline_info"
+        pi.mkdir()
+        (pi / "params.json").write_text(json.dumps(params))
+        return str(tmp_path)
+
+    def test_declared_vars_filled_from_same_named_params(self, tmp_path: Path) -> None:
+        root = self._write_params(
+            tmp_path, {"platform": "nanopore", "skip_pangolin": True, "variant_caller": "bcftools"}
+        )
+        variables: dict[str, str] = {}
+        _introspect_pipeline_params(
+            root, variables, ["PLATFORM", "SKIP_PANGOLIN", "VARIANT_CALLER"]
+        )
+        assert variables == {
+            "PLATFORM": "nanopore",
+            "SKIP_PANGOLIN": "true",
+            "VARIANT_CALLER": "bcftools",
+        }
+
+    def test_undeclared_and_missing_params_ignored(self, tmp_path: Path) -> None:
+        root = self._write_params(tmp_path, {"platform": "illumina", "some_other": "x"})
+        variables: dict[str, str] = {}
+        # PROTOCOL is declared but absent from params; some_other is in params but undeclared.
+        _introspect_pipeline_params(root, variables, ["PLATFORM", "PROTOCOL"])
+        assert variables == {"PLATFORM": "illumina"}
+
+    def test_explicit_var_not_overridden(self, tmp_path: Path) -> None:
+        root = self._write_params(tmp_path, {"platform": "nanopore"})
+        variables = {"PLATFORM": "illumina"}  # e.g. from --var
+        _introspect_pipeline_params(root, variables, ["PLATFORM"])
+        assert variables["PLATFORM"] == "illumina"
+
+    def test_no_params_file_is_noop(self, tmp_path: Path) -> None:
+        variables: dict[str, str] = {}
+        _introspect_pipeline_params(str(tmp_path), variables, ["PLATFORM"])
+        assert variables == {}
+
+
 class TestTemplateVariableModel:
     def test_valid_required_variable(self) -> None:
         var = TemplateVariable(name="DATA_ROOT", description="Root directory")
@@ -116,6 +168,16 @@ class TestTemplateVariableModel:
     def test_optional_variable(self) -> None:
         var = TemplateVariable(name="META_FILE", description="Metadata TSV", required=False)
         assert var.required is False
+
+    def test_default_value(self) -> None:
+        var = TemplateVariable(
+            name="PLATFORM", description="Sequencing platform", required=False, default="illumina"
+        )
+        assert var.default == "illumina"
+
+    def test_default_is_none_by_default(self) -> None:
+        var = TemplateVariable(name="PLATFORM", description="x")
+        assert var.default is None
 
     def test_name_must_be_alphanumeric_underscores(self) -> None:
         with pytest.raises(ValueError):
@@ -178,10 +240,19 @@ class TestTemplateConditionalModel:
         assert cond.if_var_present == "META_FILE"
         assert cond.remove_dc_tags == []
 
+    def test_if_var_equals(self) -> None:
+        cond = TemplateConditional(
+            if_var_equals={"PLATFORM": "nanopore"},
+            remove_dc_tags=["summary_metrics"],
+        )
+        assert cond.if_var_equals == {"PLATFORM": "nanopore"}
+        assert cond.if_var_present is None
+
     def test_defaults_are_empty(self) -> None:
         cond = TemplateConditional()
         assert cond.if_var_absent is None
         assert cond.if_var_present is None
+        assert cond.if_var_equals is None
         assert cond.remove_dc_tags == []
         assert cond.dashboards == []
 
@@ -271,7 +342,7 @@ class TestApplyConditionals:
         """When OPT_VAR absent: optional DCs removed, their links pruned."""
         config = self._base_config()
         result, dashboards, _ = _apply_conditionals(
-            config, self._conditionals(), {"REQUIRED_VAR"}, Path("/tmp")
+            config, self._conditionals(), {"REQUIRED_VAR": "1"}, Path("/tmp")
         )
         dc_tags = [dc["data_collection_tag"] for dc in result["workflows"][0]["data_collections"]]
         assert "dc_optional_a" not in dc_tags
@@ -291,7 +362,7 @@ class TestApplyConditionals:
         result, dashboards, _ = _apply_conditionals(
             config,
             self._conditionals(),
-            {"REQUIRED_VAR", "OPT_VAR"},
+            {"REQUIRED_VAR": "1", "OPT_VAR": "1"},
             Path("/tmp"),
         )
         dc_tags = [dc["data_collection_tag"] for dc in result["workflows"][0]["data_collections"]]
@@ -303,7 +374,7 @@ class TestApplyConditionals:
     def test_no_conditionals_is_noop(self) -> None:
         """Empty conditionals list: config unchanged, no dashboards selected."""
         config = self._base_config()
-        result, dashboards, _ = _apply_conditionals(config, [], {"REQUIRED_VAR"}, Path("/tmp"))
+        result, dashboards, _ = _apply_conditionals(config, [], {"REQUIRED_VAR": "1"}, Path("/tmp"))
         dc_tags = [dc["data_collection_tag"] for dc in result["workflows"][0]["data_collections"]]
         assert len(dc_tags) == 5
         assert dashboards == []
@@ -313,7 +384,7 @@ class TestApplyConditionals:
         config = self._base_config()
         del config["links"]
         result, _, _ = _apply_conditionals(
-            config, self._conditionals(), {"REQUIRED_VAR"}, Path("/tmp")
+            config, self._conditionals(), {"REQUIRED_VAR": "1"}, Path("/tmp")
         )
         assert "links" in result
         assert result["links"] == []
@@ -342,7 +413,81 @@ class TestApplyConditionals:
         conditionals = [
             TemplateConditional(if_var_absent="OPT_VAR", remove_dc_tags=["dc_optional_a"])
         ]
-        result, _, _ = _apply_conditionals(config, conditionals, set(), Path("/tmp"))
+        result, _, _ = _apply_conditionals(config, conditionals, {}, Path("/tmp"))
         for wf in result["workflows"]:
             tags = [dc["data_collection_tag"] for dc in wf["data_collections"]]
             assert "dc_optional_a" not in tags
+
+    def test_if_var_equals_fires_on_value_match(self) -> None:
+        """if_var_equals fires only when the variable equals the given value, and
+        applies remove_dc_tags + override_dcs (recipe repoint) like the nanopore route."""
+        config = {
+            "workflows": [
+                {
+                    "name": "wf",
+                    "data_collections": [
+                        {"data_collection_tag": "dc_core"},
+                        {
+                            "data_collection_tag": "dc_variants",
+                            "config": {"transform": {"recipe": "tool_a/variants.py"}},
+                        },
+                    ],
+                }
+            ],
+            "links": [],
+        }
+        conditionals = [
+            TemplateConditional(
+                if_var_equals={"PLATFORM": "nanopore"},
+                remove_dc_tags=["dc_core"],
+                override_dcs=[
+                    DCOverride(data_collection_tag="dc_variants", recipe="tool_b/variants.py")
+                ],
+            )
+        ]
+        result, _, reasons = _apply_conditionals(
+            config, conditionals, {"PLATFORM": "nanopore"}, Path("/tmp")
+        )
+        tags = [dc["data_collection_tag"] for dc in result["workflows"][0]["data_collections"]]
+        assert "dc_core" not in tags
+        variants = result["workflows"][0]["data_collections"][0]
+        assert variants["config"]["transform"]["recipe"] == "tool_b/variants.py"
+        assert reasons.get("dc_core") and "PLATFORM=nanopore" in reasons["dc_core"]
+
+    def test_if_var_equals_does_not_fire_on_mismatch(self) -> None:
+        """The default/illumina value leaves the config untouched."""
+        config = {
+            "workflows": [
+                {
+                    "name": "wf",
+                    "data_collections": [
+                        {"data_collection_tag": "dc_core"},
+                        {
+                            "data_collection_tag": "dc_variants",
+                            "config": {"transform": {"recipe": "tool_a/variants.py"}},
+                        },
+                    ],
+                }
+            ],
+            "links": [],
+        }
+        conditionals = [
+            TemplateConditional(
+                if_var_equals={"PLATFORM": "nanopore"},
+                remove_dc_tags=["dc_core"],
+                override_dcs=[
+                    DCOverride(data_collection_tag="dc_variants", recipe="tool_b/variants.py")
+                ],
+            )
+        ]
+        result, _, _ = _apply_conditionals(
+            config, conditionals, {"PLATFORM": "illumina"}, Path("/tmp")
+        )
+        tags = [dc["data_collection_tag"] for dc in result["workflows"][0]["data_collections"]]
+        assert "dc_core" in tags
+        variants = next(
+            dc
+            for dc in result["workflows"][0]["data_collections"]
+            if dc["data_collection_tag"] == "dc_variants"
+        )
+        assert variants["config"]["transform"]["recipe"] == "tool_a/variants.py"

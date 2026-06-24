@@ -13,4 +13,6 @@ columns:
 fixture: amplicon_coverage.tsv
 renders_as:
   - { id: coverage_track_amplicon, component: advanced_viz, kind: coverage_track, roles: {chromosome: chrom, position: start, value: coverage} }
-  - { component: card, column: coverage, aggregation: average } # mean amplicon depth
+  - { id: amplicons_tracked, component: card, column: region, aggregation: nunique } # number of amplicons
+  - { id: mean_coverage, component: card, column: coverage, aggregation: average } # mean amplicon depth
+  - { id: table, component: table }
