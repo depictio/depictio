@@ -325,7 +325,7 @@ tabs:
   - component_type: advanced_viz
     workflow_tag: viralrecon
     use: mosdepth/coverage_track_genome
-    data_collection_tag: coverage_track_canonical
+    data_collection_tag: genome_coverage_track
     config:
       end_col: end
       sample_col: sample
@@ -345,7 +345,7 @@ tabs:
       h: 6
   - component_type: advanced_viz
     workflow_tag: viralrecon
-    data_collection_tag: complex_heatmap_canonical
+    data_collection_tag: amplicon_coverage_matrix
     use: mosdepth/complex_heatmap
     config:
       viz_kind: complex_heatmap
@@ -519,11 +519,11 @@ tabs:
       y: 3
       w: 4
       h: 4
-  # FLAG (bespoke): bound to the dashboard's `sankey_canonical` reshape
+  # FLAG (bespoke): bound to the dashboard's `classification_sankey` reshape
   # (qc_status → lineage → clade funnel) — a composition specific to this template.
   - component_type: advanced_viz
     workflow_tag: viralrecon
-    data_collection_tag: sankey_canonical
+    data_collection_tag: classification_sankey
     viz_kind: sankey
     config:
       viz_kind: sankey
@@ -548,11 +548,11 @@ tabs:
       y: 7
       w: 8
       h: 6
-  # FLAG (bespoke): bound to the dashboard's `variant_feature_matrix_canonical`
+  # FLAG (bespoke): bound to the dashboard's `variant_pca_matrix`
   # reshape (sample × mutation binary matrix for PCA) — template-specific composition.
   - component_type: advanced_viz
     workflow_tag: viralrecon
-    data_collection_tag: variant_feature_matrix_canonical
+    data_collection_tag: variant_pca_matrix
     viz_kind: embedding
     config:
       viz_kind: embedding
@@ -1021,12 +1021,12 @@ tabs:
       y: 27
       w: 8
       h: 1
-  # FLAG (bespoke): the oncoplot section binds the dashboard's `oncoplot_canonical`
+  # FLAG (bespoke): the oncoplot section binds the dashboard's `variant_oncoplot`
   # reshape (sample × gene × mutation_type) — template-specific composition, not a
   # raw module output. Left inline (cards + matrix below).
   - component_type: card
     workflow_tag: viralrecon
-    data_collection_tag: oncoplot_canonical
+    data_collection_tag: variant_oncoplot
     aggregation: nunique
     column_name: sample_id
     column_type: object
@@ -1047,7 +1047,7 @@ tabs:
     title: Samples (oncoplot)
   - component_type: card
     workflow_tag: viralrecon
-    data_collection_tag: oncoplot_canonical
+    data_collection_tag: variant_oncoplot
     aggregation: nunique
     column_name: gene
     column_type: object
@@ -1066,10 +1066,10 @@ tabs:
       w: 3
       h: 2
     title: Genes (oncoplot)
-  # FLAG (bespoke): filters the dashboard's `oncoplot_canonical` reshape — composition-specific.
+  # FLAG (bespoke): filters the dashboard's `variant_oncoplot` reshape — composition-specific.
   - component_type: interactive
     workflow_tag: viralrecon
-    data_collection_tag: oncoplot_canonical
+    data_collection_tag: variant_oncoplot
     interactive_component_type: MultiSelect
     column_name: mutation_type
     column_type: object
@@ -1087,7 +1087,7 @@ tabs:
     title: Mutation Type
   - component_type: advanced_viz
     workflow_tag: viralrecon
-    data_collection_tag: oncoplot_canonical
+    data_collection_tag: variant_oncoplot
     viz_kind: oncoplot
     config:
       viz_kind: oncoplot

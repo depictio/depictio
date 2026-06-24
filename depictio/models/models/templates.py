@@ -36,6 +36,11 @@ class TemplateVariable(BaseModel):
     name: str = Field(..., description="Variable name (e.g., 'DATA_ROOT')")
     description: str = Field(..., description="Human-readable description of this variable")
     required: bool = Field(default=True, description="Whether this variable must be provided")
+    default: str | None = Field(
+        default=None,
+        description="Default value applied when the variable is not provided (e.g., 'illumina'). "
+        "Only meaningful for optional variables.",
+    )
 
     @field_validator("name")
     @classmethod
@@ -54,8 +59,8 @@ class TemplateVariable(BaseModel):
 class DCOverride(BaseModel):
     """Repoint an existing DC's source binding when a route conditional fires.
 
-    Lets a route IF (e.g. ``if_var_present: IS_NANOPORE``) point an existing DC at the
-    route's divergent file layout *without duplicating the DC* — so downstream
+    Lets a route IF (e.g. ``if_var_equals: {PLATFORM: nanopore}``) point an existing DC at
+    the route's divergent file layout *without duplicating the DC* — so downstream
     canonicals and dashboards that reference the tag keep working unchanged. Scan DCs
     override the scan regex / filename / format; recipe DCs override the recipe and/or
     its source globs/paths (see SourceOverride).
@@ -89,9 +94,9 @@ class DCOverride(BaseModel):
 class TemplateConditional(BaseModel):
     """A conditional rule applied during template resolution based on variable presence.
 
-    Rules fire when the named optional variable is absent or present. Matching rules
-    remove listed DCs (and links that reference them), repoint surviving DCs at a
-    route's file layout (override_dcs), and override the dashboard list.
+    Rules fire when the named optional variable is absent, present, or equals a given
+    value. Matching rules remove listed DCs (and links that reference them), repoint
+    surviving DCs at a route's file layout (override_dcs), and override the dashboard list.
 
     Example YAML:
         conditional:
@@ -100,6 +105,11 @@ class TemplateConditional(BaseModel):
             dashboards: ["dashboards/base.yaml"]
           - if_var_present: "METADATA_FILE"
             dashboards: ["dashboards/base.yaml", "dashboards/extended.yaml"]
+          - if_var_equals: {PLATFORM: nanopore}
+            remove_dc_tags: ["summary_metrics"]
+            override_dcs:
+              - data_collection_tag: "variants_long"
+                recipe: "artic/variants_long.py"
     """
 
     if_var_absent: str | None = Field(
@@ -109,6 +119,11 @@ class TemplateConditional(BaseModel):
     if_var_present: str | None = Field(
         default=None,
         description="Variable name: rule fires when this variable IS provided",
+    )
+    if_var_equals: dict[str, str] | None = Field(
+        default=None,
+        description="Variable name → value map: rule fires when every named variable "
+        "equals the given value (case-insensitive). E.g. {PLATFORM: nanopore}",
     )
     remove_dc_tags: list[str] = Field(
         default_factory=list,

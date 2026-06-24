@@ -18,31 +18,65 @@ template:
   description: "nf-core/viralrecon viral genome analysis template for amplicon sequencing (ivar variant caller)"
   version: "1.1.0"
   variables:
+    # Variables mirror nf-core/viralrecon's own params (params.json): they are
+    # auto-derived from the run and overridable with --var. Defaults match nf defaults
+    # so a run that omits a param (or a params-less reference seed) resolves correctly.
     - name: "DATA_ROOT"
       description: "Root directory containing viralrecon pipeline output (multiqc/, variants/)"
       required: true
-    - name: "IS_NANOPORE"
-      description: "Auto-set from params.json (platform=nanopore). Repoints coverage/lineage DCs at the artic_minion/ layout and drops illumina-only variant DCs."
+    - name: "PLATFORM"
+      description: "nf --platform: 'illumina' (ivar) or 'nanopore' (ARTIC/clair3). Auto-derived from params.json; override with --var PLATFORM=nanopore."
       required: false
+      default: "illumina"
+    - name: "PROTOCOL"
+      description: "nf --protocol: 'amplicon' or 'metagenomic'. Metagenomic runs have no amplicon mosdepth outputs. Auto-derived from params.json."
+      required: false
+      default: "amplicon"
+    - name: "VARIANT_CALLER"
+      description: "nf --variant_caller: 'ivar' (amplicon default) or 'bcftools' (metagenomic default). Repoints the consensus lineage/clade outputs at variants/<caller>/. Auto-derived from params.json."
+      required: false
+      default: "ivar"
+    - name: "SKIP_PANGOLIN"
+      description: "nf --skip_pangolin. When true, Pangolin lineage outputs are absent. Auto-derived from params.json."
+      required: false
+      default: "false"
+    - name: "SKIP_NEXTCLADE"
+      description: "nf --skip_nextclade. When true, Nextclade clade outputs are absent. Auto-derived from params.json."
+      required: false
+      default: "false"
+    - name: "SKIP_VARIANTS"
+      description: "nf --skip_variants. When true, all variant calling AND read mapping are skipped (no variants, no mosdepth coverage). Auto-derived from params.json."
+      required: false
+      default: "false"
+    - name: "SKIP_VARIANTS_LONG_TABLE"
+      description: "nf --skip_variants_long_table. When true, the per-variant long table is absent. Auto-derived from params.json."
+      required: false
+      default: "false"
+    - name: "SKIP_MOSDEPTH"
+      description: "nf --skip_mosdepth. When true, amplicon/genome coverage plots are absent. Auto-derived from params.json."
+      required: false
+      default: "false"
   dashboards:
     - "dashboards/base.yaml"
   # No reference.vars needed — DATA_ROOT is resolved by db_init to the
   # bundled project directory (/app/depictio/projects/nf-core/viralrecon/3.0.0).
   conditional:
-    # nanopore/ARTIC runs call variants with clair3 (not ivar/bowtie2): coverage and
-    # lineage live under artic_minion/, and the MultiQC parquet lacks the ivar/bowtie2
-    # columns the required summary_metrics recipe reads. IS_NANOPORE is auto-set from
-    # the run's params.json. When present:
+    # nanopore/ARTIC runs call variants with clair3 (not ivar/bowtie2): coverage,
+    # lineage and variants live under artic_minion/. PLATFORM is set explicitly by the
+    # user (--var PLATFORM=nanopore); when it equals "nanopore":
     #   - repoint the shared coverage/lineage DCs at the artic_minion/ layout (same
-    #     tags → coverage_track / complex_heatmap / sankey canonicals keep working);
-    #   - drop summary_metrics (the loud-failure point — no nanopore recipe yet) and
-    #     the illumina-only ivar variant DCs (no variants_long_table.csv on ARTIC).
-    # Illumina runs (no IS_NANOPORE) keep the default illumina bindings untouched.
-    - if_var_present: "IS_NANOPORE"
-      remove_dc_tags:
-        ["summary_metrics", "variants_long", "oncoplot_canonical",
-         "upset_canonical", "variant_feature_matrix_canonical"]
+    #     tags → genome_coverage_track / amplicon_coverage_matrix / classification_sankey
+    #     keep working);
+    #   - repoint variants_long at the artic recipe (clair3 *.pass.vcf.gz → same long-table
+    #     schema as ivar), so the variant views and variant-derived DCs keep working;
+    #   - drop only summary_metrics — the MultiQC parquet lacks the ivar/bowtie2 columns
+    #     its recipe reads, and there is no nanopore summary-metrics recipe yet.
+    # Illumina runs (PLATFORM=illumina, the default) keep the ivar bindings untouched.
+    - if_var_equals: {PLATFORM: nanopore}
+      remove_dc_tags: ["summary_metrics"]
       override_dcs:
+        - data_collection_tag: "variants_long"
+          recipe: "artic/variants_long.py"
         - data_collection_tag: "mosdepth_amplicon_coverage"
           scan_pattern: "artic_minion/mosdepth/amplicon/all_samples.mosdepth.coverage.tsv"
         - data_collection_tag: "mosdepth_genome_coverage"
@@ -55,6 +89,48 @@ template:
         - data_collection_tag: "nextclade_results"
           source_overrides:
             nextclade_raw: {glob_pattern: "artic_minion/nextclade/*.csv"}
+
+    # variant_caller=bcftools (illumina): the consensus lineage/clade outputs live under
+    # variants/bcftools/ instead of variants/ivar/. variants_long is already caller-agnostic
+    # (its recipe globs variants/*/variants_long_table.csv); mosdepth is under bowtie2/ and
+    # unaffected. Does not apply on nanopore (PLATFORM route already repoints these).
+    - if_var_equals: {VARIANT_CALLER: bcftools}
+      override_dcs:
+        - data_collection_tag: "pangolin_lineages"
+          source_overrides:
+            pangolin_raw: {glob_pattern: "variants/bcftools/consensus/bcftools/pangolin/*.pangolin.csv"}
+        - data_collection_tag: "nextclade_results"
+          source_overrides:
+            nextclade_raw: {glob_pattern: "variants/bcftools/consensus/bcftools/nextclade/*.csv"}
+
+    # protocol=metagenomic: no primer panel → no amplicon mosdepth (genome coverage stays).
+    - if_var_equals: {PROTOCOL: metagenomic}
+      remove_dc_tags:
+        ["mosdepth_amplicon_coverage", "mosdepth_amplicon_heatmap", "amplicon_coverage_matrix"]
+
+    # nf --skip_* routes. Each drops the absent output AND the canonicals derived from it
+    # (the canonicals dc_ref the upstream DC, so they are listed explicitly). Defaults are
+    # "false" (nf defaults), so a standard run fires none of these.
+    - if_var_equals: {SKIP_PANGOLIN: "true"}
+      remove_dc_tags: ["pangolin_lineages", "classification_sankey"]
+    - if_var_equals: {SKIP_NEXTCLADE: "true"}
+      remove_dc_tags: ["nextclade_results", "classification_sankey"]
+    - if_var_equals: {SKIP_VARIANTS_LONG_TABLE: "true"}
+      remove_dc_tags:
+        ["variants_long", "variant_oncoplot", "mutation_upset", "variant_pca_matrix"]
+    - if_var_equals: {SKIP_MOSDEPTH: "true"}
+      remove_dc_tags:
+        ["mosdepth_amplicon_coverage", "mosdepth_genome_coverage", "mosdepth_amplicon_heatmap",
+         "amplicon_coverage_matrix", "genome_coverage_track"]
+    # skip_variants disables variant calling AND read mapping → no variants and no mosdepth,
+    # and summary_metrics loses its bowtie2/ivar columns (same reason the nanopore route drops
+    # it). Removal set = SKIP_VARIANTS_LONG_TABLE tags + SKIP_MOSDEPTH tags + summary_metrics
+    # (listed explicitly — YAML anchors splice as nested lists, not flat, so can't compose them).
+    - if_var_equals: {SKIP_VARIANTS: "true"}
+      remove_dc_tags:
+        ["variants_long", "variant_oncoplot", "mutation_upset", "variant_pca_matrix",
+         "mosdepth_amplicon_coverage", "mosdepth_genome_coverage", "mosdepth_amplicon_heatmap",
+         "amplicon_coverage_matrix", "genome_coverage_track", "summary_metrics"]
 
 # ============================================================================
 # PROJECT CONFIGURATION
@@ -320,7 +396,7 @@ workflows:
       # variants_long scope — rebinding to variants_long would couple it to the
       # lollipop / variants-table filters. catalog/ivar/variants_long.yaml also
       # declares oncoplot as a render, so the relationship stays documented.
-      - data_collection_tag: "oncoplot_canonical"
+      - data_collection_tag: "variant_oncoplot"
         optional: true  # dc_ref variants_long
         description: "Oncoplot-ready variant matrix (sample_id × gene × mutation_type)"
         config:
@@ -337,7 +413,7 @@ workflows:
               "mutation_type": "Variant effect (cell colour)"
               "mutation_label": "Formatted mutation label (hover)"
 
-      - data_collection_tag: "complex_heatmap_canonical"
+      - data_collection_tag: "amplicon_coverage_matrix"
         optional: true  # dc_ref mosdepth_amplicon_heatmap
         description: "ComplexHeatmap-ready amplicon-coverage matrix (samples × amplicons)"
         config:
@@ -351,7 +427,7 @@ workflows:
             columns_description:
               "sample": "Sample identifier (use as index_column)"
 
-      - data_collection_tag: "coverage_track_canonical"
+      - data_collection_tag: "genome_coverage_track"
         optional: true  # dc_ref mosdepth_genome_coverage
         description: "Coverage-track-ready genome-coverage tracks (chromosome / position / value)"
         config:
@@ -369,7 +445,7 @@ workflows:
               "end": "Window end position"
               "sample": "Sample identifier (faceting)"
 
-      - data_collection_tag: "sankey_canonical"
+      - data_collection_tag: "classification_sankey"
         optional: true  # dc_ref pangolin_lineages + nextclade_results
         description: "Sankey-ready classification funnel (qc_status → lineage → clade)"
         config:
@@ -387,7 +463,7 @@ workflows:
               "clade": "Nextclade clade"
 
       # Tier 2 derivations — UpSet (mutation × lineage) + live PCA feature matrix.
-      - data_collection_tag: "upset_canonical"
+      - data_collection_tag: "mutation_upset"
         optional: true  # dc_ref variants_long
         description: "UpSet-ready mutation × lineage binary membership matrix"
         config:
@@ -401,7 +477,7 @@ workflows:
             columns_description:
               "mutation_label": "Variant identifier (formatted GENE:REFposALT)"
 
-      - data_collection_tag: "variant_feature_matrix_canonical"
+      - data_collection_tag: "variant_pca_matrix"
         optional: true  # dc_ref variants_long
         description: "Sample × mutation binary matrix for live PCA / UMAP embedding"
         config:
