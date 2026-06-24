@@ -550,6 +550,7 @@ def match_run_dir(
     run_dir: str | Path,
     entries: tuple[CatalogEntry, ...] | None = None,
     confirm_with_versions: bool = False,
+    executed_tools: set[str] | None = None,
 ) -> list[CatalogMatch]:
     """Walk ``run_dir`` and return every module output the catalog recognises.
 
@@ -557,13 +558,20 @@ def match_run_dir(
     (pipeline-agnostic). NOTE: exposed via `depictio catalog match`/`compose`
     and intended as the scan-time recogniser; not yet wired into live ingestion.
 
-    With ``confirm_with_versions=True`` and a ``software_versions.yml`` present,
-    matches are restricted to tools the run actually executed — a second signal
-    on top of filename matching (no file present → no restriction, non-breaking).
+    Restriction to the tools a run actually executed (a second signal on top of
+    filename matching) can come from two sources, in order of precedence:
+    ``executed_tools`` (passed explicitly — engine-agnostic, e.g. from a
+    ``WorkflowRunInfo``), else ``confirm_with_versions=True`` which reads the
+    nf-core ``software_versions.yml``. Empty/absent → no restriction (non-breaking).
     """
     run_dir = Path(run_dir)
     entries = entries if entries is not None else load_catalog_entries()
-    executed = read_software_versions(run_dir) if confirm_with_versions else set()
+    if executed_tools is not None:
+        executed = {t.lower() for t in executed_tools}
+    elif confirm_with_versions:
+        executed = read_software_versions(run_dir)
+    else:
+        executed = set()
     matches: list[CatalogMatch] = []
     for entry in entries:
         if executed and entry.id.lower() not in executed:
