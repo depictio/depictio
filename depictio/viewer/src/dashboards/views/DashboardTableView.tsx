@@ -18,6 +18,7 @@ import type { DashboardListEntry } from 'depictio-react-core';
 import DashboardActionsMenu from '../DashboardActionsMenu';
 import type { CategoryInfo } from '../DashboardsList';
 import type { GroupedDashboards } from '../lib/splitDefaultSections';
+import { dashboardHref, dashboardLinkClickHandler } from '../lib/dashboardLinks';
 import { isOwnedByEmail } from '../lib/splitDefaultSections';
 import { coerceString, isImagePath } from '../lib/format';
 import type { Density } from '../hooks/useDashboardViewPrefs';
@@ -402,8 +403,10 @@ const DashboardTableView: React.FC<DashboardTableViewProps> = ({
                         </ThemeIcon>
                       )}
                       <UnstyledButton
-                        onClick={() => onView(r.dashboard)}
-                        style={{ textAlign: 'left' }}
+                        component="a"
+                        href={dashboardHref(String(r.dashboard.dashboard_id))}
+                        onClick={dashboardLinkClickHandler(() => onView(r.dashboard))}
+                        style={{ textAlign: 'left', color: 'inherit' }}
                       >
                         <Text fw={500} size="sm">
                           {r.titleText}

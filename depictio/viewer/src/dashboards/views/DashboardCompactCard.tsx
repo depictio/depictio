@@ -16,6 +16,7 @@ import type { DashboardListEntry } from 'depictio-react-core';
 import DashboardActionsMenu from '../DashboardActionsMenu';
 import type { CategoryInfo } from '../DashboardsList';
 import { coerceString, formatLastSaved, isImagePath } from '../lib/format';
+import { dashboardHref, dashboardLinkClickHandler } from '../lib/dashboardLinks';
 
 export interface DashboardCompactCardProps {
   dashboard: DashboardListEntry;
@@ -102,8 +103,10 @@ const DashboardCompactCard: React.FC<DashboardCompactCardProps> = ({
           )}
 
           <UnstyledButton
-            onClick={() => onView(dashboard)}
-            style={{ textAlign: 'left', flex: 1, minWidth: 0 }}
+            component="a"
+            href={dashboardHref(String(dashboard.dashboard_id))}
+            onClick={dashboardLinkClickHandler(() => onView(dashboard))}
+            style={{ textAlign: 'left', flex: 1, minWidth: 0, color: 'inherit' }}
           >
             <Text fw={600} size="sm" lineClamp={1}>
               {titleText}
