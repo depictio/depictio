@@ -1,0 +1,35 @@
+# Minimal generic Depictio project config for the demo pipeline (main.nf).
+#
+# data_location.locations uses the {DEPICTIO_DATA_ROOT} placeholder, which the
+# trigger (depictio.config) exports into the depictio-cli environment as the
+# pipeline's --outdir. This is how a custom (non-nf-core) pipeline wires its
+# output directory into Depictio without hardcoding an absolute path.
+
+name: "Nextflow Trigger Example"
+
+workflows:
+  - name: "nextflow-trigger-example"
+    engine:
+      name: "nextflow"
+    description: "Demo pipeline exercising the Depictio onComplete trigger"
+    data_location:
+      structure: "flat"
+      locations:
+        - "{DEPICTIO_DATA_ROOT}"
+    data_collections:
+      - data_collection_tag: "measurements"
+        description: "Demo measurements table written by the pipeline"
+        config:
+          type: "Table"
+          scan:
+            # Recursive (not single) so the file is located under the run's
+            # data_location regardless of the CLI's working directory.
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "measurements\\.tsv$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              has_header: true

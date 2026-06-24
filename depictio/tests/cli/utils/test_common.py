@@ -7,6 +7,7 @@ from typer import Exit
 
 # Remove this line as we already import datetime later
 from depictio.cli.cli.utils.common import (
+    _apply_env_overrides,
     format_timestamp,
     generate_api_headers,
     load_depictio_config,
@@ -197,3 +198,95 @@ class TestCommon:
 
                 with pytest.raises(Exit):
                     load_depictio_config()
+
+    class TestApplyEnvOverrides:
+        """Tests for _apply_env_overrides (env-var auth for automation)"""
+
+        def test_no_env_returns_unchanged(self, sample_cli_config, monkeypatch):
+            """Without env vars the config dict is returned untouched."""
+            monkeypatch.delenv("DEPICTIO_CLI_TOKEN", raising=False)
+            monkeypatch.delenv("DEPICTIO_CLI_API_BASE_URL", raising=False)
+            original_token = sample_cli_config["user"]["token"]["access_token"]
+            original_url = sample_cli_config["api_base_url"]
+
+            result = _apply_env_overrides(sample_cli_config)
+
+            assert result is sample_cli_config
+            assert result["user"]["token"]["access_token"] == original_token
+            assert result["api_base_url"] == original_url
+
+        def test_token_override(self, sample_cli_config, monkeypatch):
+            """DEPICTIO_CLI_TOKEN overrides the access token."""
+            monkeypatch.setenv("DEPICTIO_CLI_TOKEN", "env-injected-token")
+            monkeypatch.delenv("DEPICTIO_CLI_API_BASE_URL", raising=False)
+
+            result = _apply_env_overrides(sample_cli_config)
+
+            assert result["user"]["token"]["access_token"] == "env-injected-token"
+
+        def test_api_base_url_override(self, sample_cli_config, monkeypatch):
+            """DEPICTIO_CLI_API_BASE_URL overrides the API base URL."""
+            monkeypatch.delenv("DEPICTIO_CLI_TOKEN", raising=False)
+            monkeypatch.setenv("DEPICTIO_CLI_API_BASE_URL", "https://env.depictio.dev")
+
+            result = _apply_env_overrides(sample_cli_config)
+
+            assert result["api_base_url"] == "https://env.depictio.dev"
+
+        def test_token_override_creates_missing_keys(self, monkeypatch):
+            """Token injection works even when user/token keys are absent."""
+            monkeypatch.setenv("DEPICTIO_CLI_TOKEN", "env-injected-token")
+
+            result = _apply_env_overrides({})
+
+            assert result["user"]["token"]["access_token"] == "env-injected-token"
+
+        def test_config_path_env_used_when_default(self, sample_cli_config, monkeypatch):
+            """DEPICTIO_CLI_CONFIG_PATH is honoured when the caller left the default."""
+            monkeypatch.setenv("DEPICTIO_CLI_CONFIG_PATH", "/custom/path/CLI.yaml")
+            monkeypatch.delenv("DEPICTIO_CLI_TOKEN", raising=False)
+            monkeypatch.delenv("DEPICTIO_CLI_API_BASE_URL", raising=False)
+
+            with (
+                patch("depictio.cli.cli.utils.common.get_config") as mock_get_config,
+                patch(
+                    "depictio.cli.cli.utils.common.validate_depictio_cli_config"
+                ) as mock_validate,
+                patch("depictio.cli.cli.utils.common.rich_print_checked_statement"),
+                patch("os.path.expanduser", side_effect=lambda p: p),
+            ):
+                mock_get_config.return_value = sample_cli_config
+                mock_validate.return_value = CLIConfig(
+                    api_base_url=sample_cli_config["api_base_url"],
+                    user=sample_cli_config["user"],
+                    s3_storage=sample_cli_config["s3_storage"],
+                )
+
+                load_depictio_config("~/.depictio/CLI.yaml")
+
+                mock_get_config.assert_called_once_with("/custom/path/CLI.yaml")
+
+        def test_explicit_config_path_not_overridden(self, sample_cli_config, monkeypatch):
+            """An explicit --CLI-config-path is never clobbered by the env var."""
+            monkeypatch.setenv("DEPICTIO_CLI_CONFIG_PATH", "/custom/path/CLI.yaml")
+            monkeypatch.delenv("DEPICTIO_CLI_TOKEN", raising=False)
+            monkeypatch.delenv("DEPICTIO_CLI_API_BASE_URL", raising=False)
+
+            with (
+                patch("depictio.cli.cli.utils.common.get_config") as mock_get_config,
+                patch(
+                    "depictio.cli.cli.utils.common.validate_depictio_cli_config"
+                ) as mock_validate,
+                patch("depictio.cli.cli.utils.common.rich_print_checked_statement"),
+                patch("os.path.expanduser", side_effect=lambda p: p),
+            ):
+                mock_get_config.return_value = sample_cli_config
+                mock_validate.return_value = CLIConfig(
+                    api_base_url=sample_cli_config["api_base_url"],
+                    user=sample_cli_config["user"],
+                    s3_storage=sample_cli_config["s3_storage"],
+                )
+
+                load_depictio_config("/explicit/user/path.yaml")
+
+                mock_get_config.assert_called_once_with("/explicit/user/path.yaml")

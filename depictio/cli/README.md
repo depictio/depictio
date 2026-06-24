@@ -65,6 +65,81 @@ depictio-cli data process \
   --project-config-path path/to/project_config.yaml
 ```
 
+## Automatic triggering from Nextflow
+
+Instead of running `depictio-cli run` by hand after a pipeline finishes, you can
+have a **Nextflow pipeline trigger ingestion itself** on successful completion.
+
+The mechanism is a small `nextflow.config` snippet
+([`configs/nextflow/depictio.config`](configs/nextflow/depictio.config)) that
+hooks into `workflow.onComplete` and shells out to `depictio-cli run`. All the
+logic (template/nf-core resolution, ingestion, dashboards) stays in the CLI — the
+snippet is just a thin, best-effort trigger that never fails the pipeline.
+
+### Quick start (nf-core pipeline)
+
+```bash
+# Token kept out of CLI.yaml, injected at runtime (handy for CI/clusters)
+export DEPICTIO_CLI_TOKEN="eyJhbGciOiJI...<JWT>"
+export DEPICTIO_CLI_API_BASE_URL="http://localhost:8058"   # optional
+
+nextflow run nf-core/rnaseq -r 3.18.0 -profile docker \
+  --outdir results/ -c /path/to/depictio.config
+```
+
+On success the trigger runs (manifest forwarded so the CLI resolves the bundled
+`nf-core/rnaseq/3.18.0` template automatically):
+
+```bash
+depictio-cli run --data-root results/ \
+  --nextflow-manifest nf-core/rnaseq/3.18.0 \
+  --CLI-config-path ~/.depictio/CLI.yaml
+```
+
+To make it permanent, add `includeConfig 'depictio.config'` to your
+`nextflow.config` instead of passing `-c`.
+
+### Custom (non-nf-core) pipelines
+
+There is no bundled template, so provide a Depictio project config and let the
+snippet pass it through:
+
+```groovy
+params.depictio_project_config = '/path/to/depictio_project.yaml'
+```
+
+The trigger exports `DEPICTIO_DATA_ROOT` (= `--outdir`) into the CLI environment,
+so the project config can reference the output directory as
+`{DEPICTIO_DATA_ROOT}` in `parent_runs_location`.
+
+### Authentication via environment variables
+
+`depictio-cli` now reads these env vars, so a `CLI.yaml` can be committed without
+secrets:
+
+| Variable | Overrides |
+|----------|-----------|
+| `DEPICTIO_CLI_TOKEN` | `user.token.access_token` in the CLI config |
+| `DEPICTIO_CLI_API_BASE_URL` | `api_base_url` in the CLI config |
+| `DEPICTIO_CLI_CONFIG_PATH` | path of the CLI config to load (when left at default) |
+
+### Snippet parameters
+
+| Parameter | Default | Purpose |
+|-----------|---------|---------|
+| `depictio_enabled` | `true` | Enable/disable the trigger |
+| `depictio_cli_config` | `~/.depictio/CLI.yaml` | CLI config path |
+| `depictio_data_root` | `params.outdir` | Directory to ingest |
+| `depictio_template` | _none_ | Explicit depictio template id |
+| `depictio_project_config` | _none_ | Path to a `depictio_project.yaml` |
+| `depictio_cli_executable` | `depictio-cli` | CLI command name/path |
+
+> **Requirement:** `depictio-cli` must be installed and on the `PATH` of the
+> Nextflow head job.
+
+A runnable end-to-end example lives in
+[`configs/nextflow/example/`](configs/nextflow/example/).
+
 ## Development
 
 ### Package Structure
