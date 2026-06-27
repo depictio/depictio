@@ -617,3 +617,89 @@ class TestInitializationProcess:
                                 await run_initialization()
 
                                 mock_create_anon.assert_not_called()
+
+
+class TestAnonymousDashboardListing:
+    """Regression tests for anonymous-user dashboard listing in public mode.
+
+    Anonymous users must see dashboards in *any* public project, consistent
+    with how projects are listed, while private dashboards must not leak.
+    """
+
+    def _make_anonymous_user(self):
+        user = MagicMock()
+        user.is_anonymous = True
+        user.is_admin = False
+        return user
+
+    def test_anonymous_sees_dashboards_in_non_admin_public_project(self):
+        """Public dashboards in a non-admin-owned public project must be listed."""
+        from bson import ObjectId
+
+        from depictio.api.v1.endpoints.dashboards_endpoints import core_functions
+
+        owner_id = ObjectId()
+        project_id = ObjectId()
+
+        mock_settings = MagicMock()
+        mock_settings.auth.is_single_user_mode = False
+
+        projects_coll = MagicMock()
+        # Non-admin-owned public project returned by the project visibility query.
+        projects_coll.find.return_value = [{"_id": project_id}]
+
+        dashboards_coll = MagicMock()
+        dashboards_coll.find.return_value = [
+            {
+                "_id": ObjectId(),
+                "dashboard_id": "dash-1",
+                "title": "Public Dashboard",
+                "project_id": project_id,
+                "is_public": True,
+            }
+        ]
+
+        with patch.object(core_functions, "projects_collection", projects_coll):
+            with patch.object(core_functions, "dashboards_collection", dashboards_coll):
+                with patch("depictio.api.v1.configs.config.settings", mock_settings):
+                    result = core_functions.load_dashboards_from_db(
+                        owner=str(owner_id),
+                        user=self._make_anonymous_user(),
+                    )
+
+        assert result["success"] is True
+        assert len(result["dashboards"]) == 1
+        assert result["dashboards"][0]["dashboard_id"] == "dash-1"
+
+        # The widened project visibility must NOT loosen the dashboard-level
+        # guard: anonymous users still only get public dashboards (or ones they
+        # own), so private dashboards in a public project never leak.
+        dashboard_query = dashboards_coll.find.call_args[0][0]
+        assert {"is_public": True} in dashboard_query["$or"]
+
+    def test_anonymous_project_query_has_no_admin_owner_filter(self):
+        """The anonymous project-visibility query must not require an admin owner."""
+        from bson import ObjectId
+
+        from depictio.api.v1.endpoints.dashboards_endpoints import core_functions
+
+        mock_settings = MagicMock()
+        mock_settings.auth.is_single_user_mode = False
+
+        projects_coll = MagicMock()
+        projects_coll.find.return_value = []
+
+        dashboards_coll = MagicMock()
+        dashboards_coll.find.return_value = []
+
+        with patch.object(core_functions, "projects_collection", projects_coll):
+            with patch.object(core_functions, "dashboards_collection", dashboards_coll):
+                with patch("depictio.api.v1.configs.config.settings", mock_settings):
+                    core_functions.load_dashboards_from_db(
+                        owner=str(ObjectId()),
+                        user=self._make_anonymous_user(),
+                    )
+
+        project_query = projects_coll.find.call_args[0][0]
+        assert project_query == {"is_public": True}
+        assert "permissions.owners.is_admin" not in project_query
