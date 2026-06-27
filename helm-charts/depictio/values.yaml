@@ -259,6 +259,13 @@ backend:
     DEPICTIO_CELERY_RESULT_BACKEND_PORT: "6379"
     DEPICTIO_CELERY_RESULT_BACKEND_DB: "2"
 
+    # Block self-service registration. When "true", the /register endpoint
+    # returns 403 and the Register UI is hidden, so only pre-provisioned
+    # accounts can log in. Independent of public/single-user mode — set
+    # alongside DEPICTIO_AUTH_PUBLIC_MODE="false" for a private, login-required
+    # public-facing instance.
+    DEPICTIO_AUTH_REGISTRATION_DISABLED: "false"
+
     # Anonymous user configuration
     DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL: "anonymous@depict.io"
     DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS: "24"

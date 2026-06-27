@@ -45,6 +45,7 @@ data:
   DEPICTIO_AUTH_PUBLIC_MODE: {{ .Values.backend.env.DEPICTIO_AUTH_PUBLIC_MODE | default "false" | quote }}
   DEPICTIO_AUTH_DEMO_MODE: {{ .Values.backend.env.DEPICTIO_AUTH_DEMO_MODE | default "false" | quote }}
   DEPICTIO_AUTH_SINGLE_USER_MODE: {{ .Values.backend.env.DEPICTIO_AUTH_SINGLE_USER_MODE | default "false" | quote }}
+  DEPICTIO_AUTH_REGISTRATION_DISABLED: {{ .Values.backend.env.DEPICTIO_AUTH_REGISTRATION_DISABLED | default "false" | quote }}
   DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL: {{ .Values.backend.env.DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL | default "anonymous@example.com" | quote }}
   DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS: {{ .Values.backend.env.DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS | default "24" | quote }}
 
@@ -123,6 +124,7 @@ data:
   DEPICTIO_AUTH_PUBLIC_MODE: {{ .Values.backend.env.DEPICTIO_AUTH_PUBLIC_MODE | default "false" | quote }}
   DEPICTIO_AUTH_DEMO_MODE: {{ .Values.backend.env.DEPICTIO_AUTH_DEMO_MODE | default "false" | quote }}
   DEPICTIO_AUTH_SINGLE_USER_MODE: {{ .Values.backend.env.DEPICTIO_AUTH_SINGLE_USER_MODE | default "false" | quote }}
+  DEPICTIO_AUTH_REGISTRATION_DISABLED: {{ .Values.backend.env.DEPICTIO_AUTH_REGISTRATION_DISABLED | default "false" | quote }}
   DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL: {{ .Values.backend.env.DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL | default "anonymous@example.com" | quote }}
   DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS: {{ .Values.backend.env.DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS | default "24" | quote }}
 

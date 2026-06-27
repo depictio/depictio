@@ -1765,6 +1765,10 @@ export interface AuthStatusResponse {
   /** Unauthenticated mode — anonymous users get a session, can upgrade to
    *  temporary. Older backends omit this — treat absent as `false`. */
   unauthenticated_mode?: boolean;
+  /** Self-service registration is disabled — hide the Register UI and only
+   *  allow pre-provisioned accounts to log in. Older backends omit this —
+   *  treat absent as `false`. */
+  registration_disabled?: boolean;
   google_oauth_enabled: boolean;
 }
 

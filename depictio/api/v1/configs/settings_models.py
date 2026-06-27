@@ -267,6 +267,13 @@ class AuthConfig(BaseSettings):
         description="Enable demo mode with guided tour tooltips for first-time users. "
         "Extends public mode with interactive onboarding hints.",
     )
+    registration_disabled: bool = Field(
+        default=False,
+        description="Block self-service registration. When True, the /register "
+        "endpoint returns 403 and the Register UI is hidden, so only "
+        "pre-provisioned accounts can log in. Independent of public/single-user "
+        "mode — use for private, login-required public-facing instances.",
+    )
     anonymous_user_email: str = Field(
         default="anonymous@depict.io",
         description="Default anonymous user email",
@@ -323,6 +330,10 @@ class AuthConfig(BaseSettings):
         env_demo_mode = os.getenv("DEPICTIO_AUTH_DEMO_MODE", "").lower()
         if env_demo_mode in ("true", "1", "yes"):
             object.__setattr__(self, "demo_mode", True)
+
+        env_registration_disabled = os.getenv("DEPICTIO_AUTH_REGISTRATION_DISABLED", "").lower()
+        if env_registration_disabled in ("true", "1", "yes"):
+            object.__setattr__(self, "registration_disabled", True)
 
     @computed_field
     @property

@@ -107,7 +107,7 @@ export default function AuthApp() {
               )}
             </Stack>
           </AuthCard>
-        ) : view === 'register' ? (
+        ) : view === 'register' && !status?.registration_disabled ? (
           <AuthCard heading="Please register :">
             <RegisterForm
               onSwitchToLogin={() => setView('login')}
@@ -118,7 +118,9 @@ export default function AuthApp() {
           <AuthCard heading="Welcome to Depictio :">
             <LoginForm
               googleEnabled={status?.google_oauth_enabled ?? false}
-              onSwitchToRegister={() => setView('register')}
+              onSwitchToRegister={
+                status?.registration_disabled ? undefined : () => setView('register')
+              }
               onSuccess={handleSuccess}
             />
           </AuthCard>

@@ -535,6 +535,7 @@ async def get_current_user_info_optional(
         "is_public_mode": settings.auth.is_public_mode,
         "is_single_user_mode": settings.auth.is_single_user_mode,
         "is_demo_mode": getattr(settings.auth, "is_demo_mode", False),
+        "registration_disabled": getattr(settings.auth, "registration_disabled", False),
         "is_dev_mode": is_dev_mode,
         "walkthrough_disabled": walkthrough_disabled,
         "unauthenticated_mode": getattr(settings.auth, "unauthenticated_mode", False),
@@ -749,6 +750,14 @@ async def register(
         raise HTTPException(
             status_code=403,
             detail="User registration disabled in single-user mode and public mode",
+        )
+
+    # Explicitly disabled on this instance (e.g. private, login-required deployment
+    # where only pre-provisioned accounts may sign in). Independent of auth mode.
+    if settings.auth.registration_disabled:
+        raise HTTPException(
+            status_code=403,
+            detail="User registration is disabled on this instance.",
         )
 
     # Redis-backed per-IP rate limit to slow automated enumeration / spam
