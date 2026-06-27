@@ -318,6 +318,7 @@ async def test_register_collapses_duplicate_email_to_generic_error():
     mock_settings = MagicMock()
     mock_settings.auth.is_single_user_mode = False
     mock_settings.auth.is_public_mode = False
+    mock_settings.auth.registration_disabled = False
 
     with (
         patch.object(user_routes, "settings", mock_settings),
@@ -335,6 +336,36 @@ async def test_register_collapses_duplicate_email_to_generic_error():
     detail = str(exc_info.value.detail)  # type: ignore[unresolved-attribute]
     assert "exist" not in detail.lower(), f"Enumeration leak in register error: {detail!r}"
     assert detail == user_routes._REGISTER_GENERIC_ERROR
+
+
+@pytest.mark.asyncio
+async def test_register_blocked_when_registration_disabled():
+    """With DEPICTIO_AUTH_REGISTRATION_DISABLED set, /register must 403 before
+    creating any user — only pre-provisioned accounts may log in."""
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    from fastapi import HTTPException
+
+    from depictio.api.v1.endpoints.user_endpoints import routes as user_routes
+    from depictio.models.models.users import RequestUserRegistration
+
+    registration = RequestUserRegistration(email="new@example.com", password="p" * 16)
+    mock_settings = MagicMock()
+    mock_settings.auth.is_single_user_mode = False
+    mock_settings.auth.is_public_mode = False
+    mock_settings.auth.registration_disabled = True
+
+    create_user = AsyncMock()
+    with (
+        patch.object(user_routes, "settings", mock_settings),
+        patch.object(user_routes, "enforce_rate_limit"),
+        patch.object(user_routes, "_create_user_in_db", create_user),
+    ):
+        with pytest.raises(HTTPException) as exc_info:
+            await user_routes.register(registration, MagicMock())
+
+    assert exc_info.value.status_code == 403  # type: ignore[unresolved-attribute]
+    create_user.assert_not_awaited()
 
 
 # ---------------------------------------------------------------------------

@@ -6,7 +6,9 @@ const EMAIL_RE = /^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$/;
 
 interface Props {
   googleEnabled: boolean;
-  onSwitchToRegister: () => void;
+  /** Switch to the register view. Omit to hide the Register button entirely
+   *  (e.g. when registration is disabled on this instance). */
+  onSwitchToRegister?: () => void;
   /** Called after a successful login — drives the redirect. */
   onSuccess: () => void;
 }
@@ -86,17 +88,19 @@ export default function LoginForm({ googleEnabled, onSwitchToRegister, onSuccess
         >
           Login
         </Button>
-        <Anchor
-          component="button"
-          type="button"
-          onClick={onSwitchToRegister}
-          underline="never"
-          data-testid="open-register-form"
-        >
-          <Button radius="md" variant="outline" color="blue" style={{ width: 120 }}>
-            Register
-          </Button>
-        </Anchor>
+        {onSwitchToRegister && (
+          <Anchor
+            component="button"
+            type="button"
+            onClick={onSwitchToRegister}
+            underline="never"
+            data-testid="open-register-form"
+          >
+            <Button radius="md" variant="outline" color="blue" style={{ width: 120 }}>
+              Register
+            </Button>
+          </Anchor>
+        )}
       </Group>
       {googleEnabled && (
         <Stack gap="xs">
