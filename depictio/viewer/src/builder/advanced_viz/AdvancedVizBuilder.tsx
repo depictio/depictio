@@ -194,7 +194,12 @@ function exampleInputRow(
           <Text size="xs" fw={500}>
             {role}
           </Text>
-          <Badge size="xs" variant="light" color={required ? REQUIRED_COLOR : OPTIONAL_COLOR}>
+          <Badge
+            size="xs"
+            variant="light"
+            color={required ? REQUIRED_COLOR : OPTIONAL_COLOR}
+            style={{ flexShrink: 0 }}
+          >
             {required ? 'required' : 'optional'}
           </Badge>
         </Group>
