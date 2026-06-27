@@ -43,9 +43,7 @@
       "WebSearch",
       "Task",
       "NotebookEdit",
-      "Skill",
-      "SlashCommand:*",
-      "Plugin:*"
+      "Skill"
     ],
     "deny": [
       "Bash(rm -rf /)",
