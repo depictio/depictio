@@ -124,9 +124,19 @@ async def google_oauth_callback(
         logger.info("Fetching user information from Google")
         google_user = await fetch_google_user_info(token_data["access_token"])
 
-        # Step 3: Create or get existing user
+        # Step 3: Create or get existing user. When registration is disabled,
+        # OAuth must not provision new accounts — it stays a login-only door
+        # for pre-provisioned users (mirrors the /register 403 guard).
         logger.info(f"Processing user: {google_user.email}")
-        user, user_created = await create_or_get_user(google_user)
+        user, user_created = await create_or_get_user(
+            google_user, allow_create=not settings.auth.registration_disabled
+        )
+        if user is None:
+            raise HTTPException(
+                status_code=403,
+                detail="Registration is disabled on this instance. "
+                "Ask an administrator for access.",
+            )
 
         # Step 4: Create authentication token for the user
         logger.info(f"Creating authentication token for user: {user.id}")
