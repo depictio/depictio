@@ -368,6 +368,28 @@ async def test_register_blocked_when_registration_disabled():
     create_user.assert_not_awaited()
 
 
+@pytest.mark.asyncio
+async def test_oauth_create_or_get_user_blocks_unknown_when_create_disallowed():
+    """With registration disabled, OAuth must not provision a new account for
+    an unknown email — create_or_get_user(allow_create=False) returns
+    (None, False) instead of saving a user (the OAuth registration bypass)."""
+    from unittest.mock import AsyncMock, patch
+
+    from depictio.api.v1.endpoints.auth_endpoints import utils as oauth_utils
+    from depictio.models.models.google_oauth import GoogleUserInfo
+
+    google_user = GoogleUserInfo(
+        id="g-123", email="stranger@example.com", verified_email=True, name="Stranger"
+    )
+
+    with patch.object(oauth_utils.UserBeanie, "find_one", AsyncMock(return_value=None)) as find_one:
+        user, created = await oauth_utils.create_or_get_user(google_user, allow_create=False)
+
+    find_one.assert_awaited_once()
+    assert user is None
+    assert created is False
+
+
 # ---------------------------------------------------------------------------
 # PR-C — backup restore: backup_id format + path containment
 # ---------------------------------------------------------------------------
