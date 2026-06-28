@@ -148,6 +148,31 @@ class TokenBeanie(TokenBase, Document):
         name = "tokens"  # Collection name
 
 
+class MagicLinkTicket(MongoModel):
+    """A short-lived, single-use ticket that logs a user in without a password.
+
+    The opaque ``ticket`` secret travels in the login URL; everything else
+    (the real session) is minted server-side when the ticket is redeemed. The
+    ticket is invalidated on first use (``used=True``) and ignored past
+    ``expire_datetime``.
+    """
+
+    ticket: str  # opaque random secret carried in the magic-link URL
+    user_id: PydanticObjectId
+    expire_datetime: datetime
+    used: bool = False
+    created_at: datetime = Field(default_factory=datetime.now)
+
+    @field_serializer("user_id")
+    def serialize_user_id(self, user_id: PydanticObjectId) -> str:
+        return str(user_id)
+
+
+class MagicLinkTicketBeanie(MagicLinkTicket, Document):
+    class Settings:
+        name = "magic_link_tickets"  # Collection name
+
+
 class Group(MongoModel):
     name: str
     users_ids: list[PyObjectId] = Field(default_factory=list)
