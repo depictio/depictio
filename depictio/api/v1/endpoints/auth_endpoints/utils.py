@@ -124,11 +124,22 @@ async def fetch_google_user_info(access_token: str) -> GoogleUserInfo:
         return GoogleUserInfo(**user_data)
 
 
-async def create_or_get_user(google_user: GoogleUserInfo) -> tuple[UserBeanie, bool]:
+async def create_or_get_user(
+    google_user: GoogleUserInfo, *, allow_create: bool = True
+) -> tuple[UserBeanie | None, bool]:
     """Create new user or get existing user from Google OAuth info.
 
+    Args:
+        google_user: Verified Google account info.
+        allow_create: When False, never provision a new account — return
+            ``(None, False)`` for an unknown email. Used to honour
+            ``registration_disabled`` so OAuth is a login-only door for
+            pre-provisioned accounts, not a registration bypass.
+
     Returns:
-        Tuple of (user, created) where created is True if user was newly created
+        Tuple of (user, created) where created is True if user was newly
+        created. ``user`` is None when the email is unknown and
+        ``allow_create`` is False.
     """
     # Check if user already exists
     existing_user = await UserBeanie.find_one({"email": google_user.email})
@@ -136,6 +147,13 @@ async def create_or_get_user(google_user: GoogleUserInfo) -> tuple[UserBeanie, b
     if existing_user:
         logger.info(f"Existing user found for OAuth login: {google_user.email}")
         return existing_user, False
+
+    if not allow_create:
+        logger.warning(
+            f"OAuth login rejected for unregistered email (registration disabled): "
+            f"{google_user.email}"
+        )
+        return None, False
 
     # Create new user
     logger.info(f"Creating new user from OAuth: {google_user.email}")

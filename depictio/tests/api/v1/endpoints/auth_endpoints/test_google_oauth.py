@@ -218,6 +218,10 @@ class TestGoogleOAuthCallback:
                 "google_oauth_redirect_uri"
             ]
             mock_settings.auth.google_oauth_enabled = True
+            # Normal mode: registration enabled, so a new OAuth user is
+            # auto-provisioned. (MagicMock returns a truthy default otherwise,
+            # which would trip the registration_disabled gate.)
+            mock_settings.auth.registration_disabled = False
 
             response = client.get(
                 "/auth/google/callback",
@@ -528,6 +532,10 @@ class TestGoogleOAuthIntegration:
                 "google_oauth_client_id"
             ]
             mock_settings.auth.google_oauth_enabled = True
+            # Normal mode: registration enabled so the new OAuth user is
+            # auto-provisioned (MagicMock default is truthy, which would
+            # otherwise trip the registration_disabled gate).
+            mock_settings.auth.registration_disabled = False
             mock_settings.auth.google_oauth_redirect_uri = google_oauth_config[
                 "google_oauth_redirect_uri"
             ]
