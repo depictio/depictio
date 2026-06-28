@@ -1,6 +1,6 @@
 ---
 description: Auth as Depictio admin on an EMBL K8s deployment by injecting the on-pod long-lived token into the React /dashboards hand-off — no login form, no password.
-argument-hint: "[namespace | hostname]   (default: datasci-depictio-project-demo-dev → dev.api.demo.depictio.embl.org)"
+argument-hint: "[namespace | hostname]   (default: datasci-depictio-project-demo-dev → viewer dev.demo.depictio.embl.org)"
 allowed-tools: Bash, Read
 ---
 
@@ -18,19 +18,28 @@ hand-off (`#auth=<base64 JSON>` fragment), which `viewer/src/main.tsx`
 ## Inputs
 
 `$ARGUMENTS` may be:
-- **empty** → default ns `datasci-depictio-project-demo-dev`, host `dev.api.demo.depictio.embl.org`
-- **a namespace** (e.g. `datasci-depictio-project-demo`) → resolve host from that ns's ingress
+- **empty** → default ns `datasci-depictio-project-demo-dev`
+- **a namespace** (e.g. `datasci-depictio-project-demo`) → resolve hosts from that ns's ingress
 - **a hostname** (e.g. `demo.depictio.embl.org`, contains a dot) → look up the owning namespace via `kubectl get ingress -A`
 
 ## Steps
 
 1. **Pre-flight**: Verify `kubectl config current-context` resolves the cluster. If `kubectl get ns` fails with a DNS error on `capsule.embl.de`, **stop and tell the user the EMBL VPN is down**. Do not retry blindly.
 
-2. **Resolve `NS` and `HOST`** from `$ARGUMENTS` per the rules above. When given a namespace, read the host with:
+2. **Resolve `NS`, `API_HOST` and `VIEWER_HOST`** from `$ARGUMENTS`. Read the ingress hosts:
    ```bash
    kubectl -n "$NS" get ingress -o jsonpath='{.items[*].spec.rules[*].host}'
    ```
-   Prefer hosts starting with `api.` or matching `*api.*` (that's where `/dashboards` is served from); if there are multiple, pick the one containing `api`.
+   These are **two different hosts** and must NOT be conflated:
+   - **`API_HOST`** = the host containing `api` (e.g. `dev.api.demo.depictio.embl.org`) — serves the FastAPI backend; `/depictio/api/v1/auth/me` lives here.
+   - **`VIEWER_HOST`** = the host **without** `api` (e.g. `dev.demo.depictio.embl.org`) — serves the React viewer; **`/dashboards` lives here**. Opening `/dashboards` on `API_HOST` returns a 404 JSON.
+
+   ```bash
+   HOSTS=$(kubectl -n "$NS" get ingress -o jsonpath='{.items[*].spec.rules[*].host}')
+   API_HOST=$(echo "$HOSTS" | tr ' ' '\n' | grep -m1 'api')
+   VIEWER_HOST=$(echo "$HOSTS" | tr ' ' '\n' | grep -v 'api' | grep -m1 '.')
+   ```
+   If a single combined host serves both (older deployments), set both to it.
 
 3. **Find the backend pod**:
    ```bash
@@ -38,12 +47,13 @@ hand-off (`#auth=<base64 JSON>` fragment), which `viewer/src/main.tsx`
    ```
    Abort with a clear error if empty.
 
-4. **Mint the session URL** by running the python block below. It **discovers** the admin agent-config on the pod — the API exports it as `{username}_config.yaml` (`username = adminEmail.split("@")[0]`), so it is **not** always `admin_config.yaml` (on EMBL the admin is `thomas.weber@embl.de` → `thomas.weber_config.yaml`). It globs `*_config.yaml` under the pod's `.depictio/`, prefers the file matching `$DEPICTIO_BOOTSTRAP_ADMIN_EMAIL`, verifies each candidate against `/depictio/api/v1/auth/me` and uses the first `is_admin` one, builds the `SessionPayload`, base64-encodes it, opens Chrome, and copies a DevTools-console fallback to the clipboard. Substitute `$NS`, `$POD`, `$HOST` before running:
+4. **Mint the session URL** by running the python block below. It **discovers** the admin agent-config on the pod — the API exports it as `{username}_config.yaml` (`username = adminEmail.split("@")[0]`), so it is **not** always `admin_config.yaml` (on EMBL the admin is `thomas.weber@embl.de` → `thomas.weber_config.yaml`). It globs `*_config.yaml` under the pod's `.depictio/`, prefers the file matching `$DEPICTIO_BOOTSTRAP_ADMIN_EMAIL`, verifies each candidate against `https://$API_HOST/depictio/api/v1/auth/me` and uses the first `is_admin` one, builds the `SessionPayload`, base64-encodes it, opens Chrome at `https://$VIEWER_HOST/dashboards#auth=…`, and copies a DevTools-console fallback to the clipboard. Substitute `$NS`, `$POD`, `$API_HOST`, `$VIEWER_HOST` before running:
 
    ```bash
    python3 <<PY
    import json, base64, subprocess, sys, os, urllib.request
-   ns, pod, host = "$NS", "$POD", "$HOST"
+   ns, pod = "$NS", "$POD"
+   api_host, viewer_host = "$API_HOST", "$VIEWER_HOST"  # /auth/me vs /dashboards
 
    def kx(*cmd):
        return subprocess.check_output(
@@ -95,7 +105,7 @@ hand-off (`#auth=<base64 JSON>` fragment), which `viewer/src/main.tsx`
            continue
        try:
            req = urllib.request.Request(
-               f"https://{host}/depictio/api/v1/auth/me",
+               f"https://{api_host}/depictio/api/v1/auth/me",
                headers={"Authorization": f"Bearer {t['access_token']}"})
            with urllib.request.urlopen(req, timeout=10) as r:
                cand = json.load(r)
@@ -129,16 +139,16 @@ hand-off (`#auth=<base64 JSON>` fragment), which `viewer/src/main.tsx`
    print(f"[token]    expires {session['expire_datetime']}  ({session['token_lifetime']})")
    js = json.dumps(session, separators=(",",":"))
    b64 = base64.b64encode(js.encode()).decode()
-   url = f"https://{host}/dashboards#auth={b64}"
+   url = f"https://{viewer_host}/dashboards#auth={b64}"   # viewer host, NOT api_host
    subprocess.run(["open","-a","Google Chrome",url], check=True)
    fallback = f"localStorage.setItem('local-store', JSON.stringify({js})); location.replace('/dashboards');"
    subprocess.run(["pbcopy"], input=fallback.encode(), check=False)
-   print(f"[opened]   {host}/dashboards  (Chrome)")
+   print(f"[opened]   {viewer_host}/dashboards  (Chrome)")
    print("[clipboard] DevTools console fallback ready to paste if the tab cached anonymous")
    PY
    ```
 
-5. **Report to the user**: target `NS` + `HOST`, the resolved admin email + user_id (from the chosen `*_config.yaml`), token expiry, and how to verify — top-right avatar should show that admin email, and DevTools → Application → Local Storage → key `local-store` should hold a JSON with `"logged_in":true` and the admin email.
+5. **Report to the user**: target `NS`, both `API_HOST` (auth) and `VIEWER_HOST` (opened tab), the resolved admin email + user_id (from the chosen `*_config.yaml`), token expiry, and how to verify — top-right avatar should show that admin email, and DevTools → Application → Local Storage → key `local-store` should hold a JSON with `"logged_in":true` and the admin email.
 
 ## Why this works (one-paragraph mental model)
 
