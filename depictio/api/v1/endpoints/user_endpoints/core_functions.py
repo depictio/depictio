@@ -745,14 +745,20 @@ async def _create_user_in_db(
         raise
 
 
+# Stable name for the long-lived token a pipeline uses to act as a provisioned
+# user. Reused across runs (one per user) so repeated runs don't pile up tokens.
+PIPELINE_PROVISION_TOKEN_NAME = "pipeline_provision"
+
+
 @validate_call(validate_return=True)
 async def _provision_user(email: EmailStr) -> dict:
-    """Create-or-get a passwordless user and mint a long-lived run token.
+    """Create-or-get a passwordless user and a long-lived run token.
 
     Used by pipelines (gated by the provisioning API key) to obtain a bearer
     token that lets the CLI act as ``email`` for the duration of a run. The
     user is created without a usable password — login happens via magic link,
-    never a password.
+    never a password. The run token is reused while still valid, so repeated
+    runs for the same user do not accumulate tokens.
 
     Returns:
         dict with ``user`` (UserBeanie), ``token`` (TokenBeanie) and ``created``
@@ -763,14 +769,25 @@ async def _provision_user(email: EmailStr) -> dict:
     if not isinstance(user, UserBeanie):
         raise HTTPException(status_code=500, detail="Failed to provision user")
 
-    token_data = TokenData(
-        sub=user.id,  # type: ignore[invalid-argument-type]
-        name=f"pipeline_provision_{datetime.now().strftime('%Y%m%d%H%M%S')}",
-        token_lifetime="long-lived",
+    # Reuse a still-valid run token (with comfortable headroom) instead of
+    # minting a fresh one on every run.
+    token = await TokenBeanie.find_one(
+        {
+            "user_id": user.id,
+            "name": PIPELINE_PROVISION_TOKEN_NAME,
+            "token_lifetime": "long-lived",
+            "expire_datetime": {"$gt": datetime.now() + timedelta(days=1)},
+        }
     )
-    token = await _add_token(token_data)
     if token is None:
-        raise HTTPException(status_code=500, detail="Failed to issue provisioning token")
+        token_data = TokenData(
+            sub=user.id,  # type: ignore[invalid-argument-type]
+            name=PIPELINE_PROVISION_TOKEN_NAME,
+            token_lifetime="long-lived",
+        )
+        token = await _add_token(token_data)
+        if token is None:
+            raise HTTPException(status_code=500, detail="Failed to issue provisioning token")
 
     created = bool(payload and payload.get("success"))
     return {"user": user, "token": token, "created": created}

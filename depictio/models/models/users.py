@@ -2,6 +2,7 @@ from datetime import datetime
 
 from beanie import Document, Link, PydanticObjectId
 from pydantic import BaseModel, EmailStr, Field, field_serializer, field_validator, model_validator
+from pymongo import IndexModel
 
 # from depictio.models.models.s3 import S3DepictioCLIConfig
 from depictio.models.models.base import MongoModel, PyObjectId
@@ -171,6 +172,14 @@ class MagicLinkTicket(MongoModel):
 class MagicLinkTicketBeanie(MagicLinkTicket, Document):
     class Settings:
         name = "magic_link_tickets"  # Collection name
+        indexes = [
+            # Ticket secrets are looked up directly and must be unique.
+            IndexModel([("ticket", 1)], unique=True),
+            # TTL index: MongoDB auto-deletes a ticket once it passes
+            # ``expire_datetime`` (used or not), so consumed/expired tickets
+            # never accumulate — no cleanup job needed.
+            IndexModel([("expire_datetime", 1)], expireAfterSeconds=0),
+        ]
 
 
 class Group(MongoModel):

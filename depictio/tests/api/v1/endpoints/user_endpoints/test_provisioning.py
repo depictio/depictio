@@ -5,6 +5,7 @@ POST /auth/me/magic_link and POST /auth/magic/exchange.
 """
 
 from datetime import datetime, timedelta
+from unittest.mock import patch
 
 import pytest
 from fastapi import HTTPException
@@ -57,11 +58,12 @@ class TestProvisionUser:
         assert first["created"] is True
         assert second["created"] is False
 
-        # Exactly one user, two tokens (a fresh run token each call).
+        # Exactly one user AND one run token — the token is reused, not piled up.
         users = await UserBeanie.find({"email": "bob@example.com"}).to_list()
         assert len(users) == 1
         tokens = await TokenBeanie.find({"user_id": second["user"].id}).to_list()
-        assert len(tokens) == 2
+        assert len(tokens) == 1
+        assert first["token"].access_token == second["token"].access_token
 
 
 class TestMagicLinkTicket:
@@ -110,15 +112,15 @@ class TestMagicLinkTicket:
     @beanie_setup(models=PROVISION_MODELS)
     async def test_redeem_expired_is_rejected(self):
         provisioned = await _provision_user("frank@example.com")
-        expired = MagicLinkTicketBeanie(
-            ticket="expired-secret",
-            user_id=provisioned["user"].id,
-            expire_datetime=datetime.now() - timedelta(minutes=1),
-        )
-        await expired.save()
+        ticket = await _create_magic_link_ticket(provisioned["user"].id, expiry_minutes=1)
 
-        with pytest.raises(HTTPException) as exc:
-            await _redeem_magic_link_ticket("expired-secret")
+        # Jump past the expiry without moving the wall clock (so the row isn't
+        # TTL-reaped from the store) — the redeem path must reject it as expired.
+        future = datetime.now() + timedelta(minutes=5)
+        with patch("depictio.api.v1.endpoints.user_endpoints.core_functions.datetime") as mock_dt:
+            mock_dt.now.return_value = future
+            with pytest.raises(HTTPException) as exc:
+                await _redeem_magic_link_ticket(ticket.ticket)
         assert exc.value.status_code == 401
 
     @pytest.mark.asyncio
