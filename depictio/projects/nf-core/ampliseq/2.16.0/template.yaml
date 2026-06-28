@@ -51,6 +51,20 @@ template:
     - name: "SKIP_ANCOM"
       description: "Auto-set from params.json (skip_ancom). Prunes the ANCOM-BC differential-abundance DCs (qiime2/ancombc/ is absent)."
       required: false
+  # Variables supplied when materialising the BUNDLED reference/demo dataset
+  # (db_init_reference_datasets.resolve_template_for_init). The reference run is
+  # a metadata-present analysis (GROUP_COL=habitat) — the canonical *.tsv seeds
+  # were generated this way (see generate_seeds.sh). Without METADATA_FILE the
+  # `if_var_absent: METADATA_FILE` conditional prunes metadata/ancombc_results/
+  # ma_canonical/upset_canonical/alpha_rarefaction, leaving the Differential &
+  # Community showcase dashboards bound to DCs that no longer exist (→ 404).
+  reference:
+    vars:
+      METADATA_FILE: "{DATA_ROOT}/input/Metadata_full.tsv"
+      SAMPLESHEET_FILE: "{DATA_ROOT}/input/samplesheet.csv"
+      METADATA_ID_COL: "sample"
+      GROUP_COL: "habitat"
+      GROUP_COL_DISPLAY: "Habitat"
   dashboards:
     - "dashboards/base.yaml"
   conditional:
