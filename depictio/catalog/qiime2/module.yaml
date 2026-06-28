@@ -4,6 +4,7 @@
 # this is the documented exception where identity stays declared in full here.
 id: qiime2
 name: QIIME 2
+logo: https://raw.githubusercontent.com/qiime2/logos/master/raster/transparent/qiime2-square-400.png
 description: >-
   Decentralised microbiome bioinformatics platform; emits many distinct
   artefacts depending on the plugin/subcommand invoked.

@@ -62,88 +62,23 @@ class AdvancedVizLiteComponent(BaseLiteComponent):
     def _expand_catalog_use(cls, data: Any) -> Any:
         """Expand ``use: <tool>/<ref>`` into ``viz_kind`` + ``config``.
 
-        ``<ref>`` is resolved as a **render id** first (the first-class handle:
-        ``use: ivar/manhattan``), then falls back to an **output id**
-        (``use: qiime2/ancombc`` + a ``viz_kind`` to disambiguate when the output
-        renders more than one advanced_viz kind). Either way, each declared role
-        is mapped to the ``<role>_col`` config field; a user-supplied ``config``
-        overrides the inherited bindings. Runs before the legacy-kind rewrite and
-        before union discrimination.
+        Delegates to the shared :func:`resolve_use` (which also serves the other
+        component kinds). For advanced_viz, ``<ref>`` resolves as a render id
+        first (``use: ivar/manhattan``) then an output id (+ ``viz_kind`` to
+        disambiguate); each declared role becomes a ``<role>_col`` config field
+        and a user-supplied ``config`` overrides the inherited bindings. Runs
+        before the legacy-kind rewrite and before union discrimination.
         """
         if not isinstance(data, dict) or not data.get("use"):
             return data
 
-        # Lazy import: avoids a module-load cycle (catalog ← models ← component).
-        from depictio.models.components.advanced_viz.catalog import load_catalog_entries
+        # Lazy import: avoids a module-load cycle (catalog_use ← catalog ← models).
+        from depictio.models.components.catalog_use import resolve_use
 
-        ref = data["use"]
-        if "/" not in ref:
-            raise ValueError(f"`use` must be '<tool>/<render-id-or-output>', got {ref!r}")
-        tool_id, short = ref.split("/", 1)
-
-        entries = {e.id: e for e in load_catalog_entries()}
-        entry = entries.get(tool_id)
-        if entry is None:
-            raise ValueError(f"`use`: unknown catalog tool {tool_id!r} (have {sorted(entries)})")
-
-        # 1) Render-id handle: address the viz directly, no viz_kind needed.
-        render = next(
-            (
-                r
-                for o in entry.outputs
-                for r in (o.renders_as or [])
-                if getattr(r, "component", None) == "advanced_viz" and r.id == short
-            ),
-            None,
-        )
-
-        # 2) Fallback: output id (+ viz_kind to pick when it renders many kinds).
-        if render is None:
-            output = next(
-                (o for o in entry.outputs if o.id in (f"{tool_id}_{short}", short)),
-                None,
-            )
-            if output is None:
-                render_ids = [
-                    r.id
-                    for o in entry.outputs
-                    for r in (o.renders_as or [])
-                    if getattr(r, "component", None) == "advanced_viz" and r.id
-                ]
-                raise ValueError(
-                    f"`use`: tool {tool_id!r} has no render id or output {short!r} "
-                    f"(render ids {sorted(render_ids)}; outputs {[o.id for o in entry.outputs]})"
-                )
-
-            av = [
-                r
-                for r in (output.renders_as or [])
-                if getattr(r, "component", None) == "advanced_viz"
-            ]
-            if not av:
-                raise ValueError(f"`use`: catalog output {output.id!r} has no advanced_viz render")
-
-            explicit_kind = data.get("viz_kind")
-            if explicit_kind is not None:
-                render = next((r for r in av if r.kind == explicit_kind), None)
-                if render is None:
-                    raise ValueError(
-                        f"`use`: output {output.id!r} has no advanced_viz kind {explicit_kind!r} "
-                        f"(have {[r.kind for r in av]})"
-                    )
-            elif len(av) == 1:
-                render = av[0]
-            else:
-                raise ValueError(
-                    f"`use`: output {output.id!r} renders multiple kinds {[r.kind for r in av]} "
-                    "— set `viz_kind` to pick one, or use a render id"
-                )
-
-        # role → <role>_col, with any user-supplied config taking precedence.
-        inherited = {f"{role}_col": col for role, col in (render.roles or {}).items()}
-        user_cfg = data.get("config") or {}
-        merged = {**inherited, **user_cfg, "viz_kind": render.kind}
-        return {**data, "viz_kind": render.kind, "config": merged}
+        # This class only renders advanced_viz, so hint the resolver to pick the
+        # advanced_viz render of an output (component_type isn't in the raw dict
+        # yet — it's a class default applied after this before-validator).
+        return resolve_use({"component_type": "advanced_viz", **data})
 
     @model_validator(mode="before")
     @classmethod

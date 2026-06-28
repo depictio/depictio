@@ -265,7 +265,7 @@ def _strip_ids(config: Any) -> Any:
 def _apply_conditionals(
     config: dict[str, Any],
     conditionals: list[TemplateConditional],
-    provided_vars: set[str],
+    resolved_vars: dict[str, str],
     template_dir: Path,
 ) -> tuple[dict[str, Any], list[str], dict[str, str]]:
     """Apply conditional rules based on which optional variables were provided.
@@ -279,7 +279,8 @@ def _apply_conditionals(
     Args:
         config: Resolved project config dict (modified in place).
         conditionals: List of conditional rules from template metadata.
-        provided_vars: Set of variable names actually provided by the user.
+        resolved_vars: Resolved variables (name → value), incl. applied defaults.
+            Presence checks use the keys; if_var_equals compares the values.
         template_dir: Template directory for resolving dashboard paths.
 
     Returns:
@@ -295,12 +296,19 @@ def _apply_conditionals(
     for rule in conditionals:
         fires = False
         reason = ""
-        if rule.if_var_absent and rule.if_var_absent not in provided_vars:
+        if rule.if_var_absent and rule.if_var_absent not in resolved_vars:
             fires = True
             reason = f"gated: {rule.if_var_absent} absent (if_var_absent)"
-        elif rule.if_var_present and rule.if_var_present in provided_vars:
+        elif rule.if_var_present and rule.if_var_present in resolved_vars:
             fires = True
             reason = f"gated: {rule.if_var_present} present (if_var_present)"
+        elif rule.if_var_equals and all(
+            (resolved_vars.get(k) or "").lower() == str(v).lower()
+            for k, v in rule.if_var_equals.items()
+        ):
+            fires = True
+            pairs = ", ".join(f"{k}={v}" for k, v in rule.if_var_equals.items())
+            reason = f"gated: {pairs} (if_var_equals)"
 
         if not fires:
             continue
@@ -324,7 +332,7 @@ def _apply_conditionals(
             if active_dashboards and active_dashboards != rule.dashboards:
                 logger.warning(
                     f"Conditional dashboards override: {active_dashboards} → {rule.dashboards} "
-                    f"(rule {rule.if_var_present or rule.if_var_absent})"
+                    f"(rule {rule.if_var_present or rule.if_var_absent or rule.if_var_equals})"
                 )
             active_dashboards = rule.dashboards
             logger.info(f"Conditional rule: using dashboards {rule.dashboards}")
@@ -541,25 +549,36 @@ def _log_removal_report(report: list[dict[str, str]]) -> None:
     logger.warning("Dashboard components referencing these will be excluded.")
 
 
-def _introspect_pipeline_params(data_root: str, variables: dict[str, str]) -> None:
-    """Read the run's nf-core ``params.json`` and set synthesized template flags.
+def _normalize_param_value(value: Any) -> str:
+    """Render a ``params.json`` scalar as the string a template variable compares against.
 
-    nf-core pipelines write ``pipeline_info/params*.json``. We translate a few fields
-    into present/absent flag variables so they compose with the existing
-    ``if_var_present``/``if_var_absent`` conditionals (no model change), and auto-fill
-    ``METADATA_FILE`` when the run shipped a metadata file — so the common cases need
-    no ``--var``. Best-effort: silently no-ops when no params file is found/parseable.
+    Booleans become ``"true"`` / ``"false"`` so they match ``if_var_equals`` routes
+    written against the nf flag (e.g. ``{SKIP_PANGOLIN: "true"}``); everything else is
+    stringified and trimmed. nf flag *values* are mirrored verbatim (lower-cased enums
+    like ``nanopore`` already match the case-insensitive ``if_var_equals`` compare).
+    """
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    return str(value).strip()
 
-    Flags set (only when applicable; never overrides an explicit ``--var``):
-      - ``SKIP_QIIME``     — ampliseq ITS/sintax runs without QIIME2 outputs
-      - ``SKIP_TAXONOMY`` / ``SKIP_ALPHA_RAREFACTION`` — ampliseq runs that suppress
-        a qiime2/ output subtree via the matching --skip_* flag
-      - ``SKIP_ANCOM`` — ampliseq runs where ANCOM-BC was not opted into (no
-        ``--ancombc``), so qiime2/ancombc/ is absent
-      - ``IS_METAGENOMIC`` — viralrecon metagenomic (non-amplicon) runs
-      - ``IS_NANOPORE``    — viralrecon nanopore/artic runs
-      - ``IS_MULTIREGION`` — ampliseq multiregion/SIDLE runs (per-region ASVs
-        reconstructed into one cross-region feature table under ``sidle/``)
+
+def _introspect_pipeline_params(
+    data_root: str, variables: dict[str, str], declared_vars: list[str]
+) -> None:
+    """Mirror the run's nf-core ``params.json`` into the template's declared variables.
+
+    nf-core writes every resolved parameter to ``pipeline_info/params*.json`` — the same
+    parameters that drove the pipeline. We therefore derive routing directly from it,
+    using nf's own vocabulary: for each variable a template declares, if ``params.json``
+    has the same-named key (lower-cased — ``PLATFORM`` ↔ ``platform``, ``SKIP_PANGOLIN``
+    ↔ ``skip_pangolin``, ``ANCOMBC`` ↔ ``ancombc``), its value is copied in. So a user
+    who knows their nf run needs no ``--var`` — the template adapts to what the pipeline
+    recorded. ``setdefault`` keeps explicit ``--var`` wins; template-declared ``default``
+    values (applied later) cover params an older run omitted. Best-effort: silently
+    no-ops when no params file is found/parseable.
+
+    ``METADATA_FILE`` is the one derived (not 1:1) case — the ``metadata`` param is a
+    source URL; the local copy lands in ``input/``.
     """
     # Locate the run's params.json. For "flat" projects (e.g. ampliseq, one run =
     # one DATA_ROOT) it sits directly under DATA_ROOT. For "sequencing-runs" projects
@@ -588,28 +607,16 @@ def _introspect_pipeline_params(data_root: str, variables: dict[str, str]) -> No
     if not params:
         return
 
-    if (params.get("platform") or "").lower() == "nanopore":
-        variables.setdefault("IS_NANOPORE", "true")
-    if (params.get("protocol") or "").lower() == "metagenomic":
-        variables.setdefault("IS_METAGENOMIC", "true")
-    if params.get("skip_qiime") is True:
-        variables.setdefault("SKIP_QIIME", "true")
-    # ampliseq output-suppressing skip flags: each removes a subtree of qiime2/
-    # outputs. Surface them as flags so the template prunes the dependent DCs
-    # (otherwise a REQUIRED DC's missing source aborts ingestion on a valid run).
-    if params.get("skip_taxonomy") is True:
-        variables.setdefault("SKIP_TAXONOMY", "true")
-    if params.get("skip_alpha_rarefaction") is True:
-        variables.setdefault("SKIP_ALPHA_RAREFACTION", "true")
-    # ANCOM-BC is opt-in (positive `ancombc` flag, default false) — there is no
-    # `skip_ancom` param. When it didn't run, no qiime2/ancombc/ output exists, so
-    # prune the differential-abundance DCs.
-    if params.get("ancombc") is not True:
-        variables.setdefault("SKIP_ANCOM", "true")
-    # ampliseq multiregion/SIDLE: the route is keyed by a regions reference AND a
-    # SIDLE reference taxonomy (standard runs leave 'multiregion' null).
-    if params.get("multiregion") and params.get("sidle_ref_taxonomy"):
-        variables.setdefault("IS_MULTIREGION", "true")
+    # Generic param → variable derivation (nf vocabulary). DATA_ROOT is caller-resolved
+    # and never sourced from params.
+    for name in declared_vars:
+        if name == "DATA_ROOT" or name in variables:
+            continue
+        key = name.lower()
+        if key in params and params[key] is not None:
+            value = _normalize_param_value(params[key])
+            variables[name] = value
+            logger.info(f"{name}={value} auto-derived from params.json ({key})")
 
     # Auto-fill METADATA_FILE from the run's input/ when the run used metadata
     # (params 'metadata' is the source URL; the local copy lands in input/).
@@ -724,9 +731,10 @@ def resolve_template(
     if extra_vars:
         variables.update(extra_vars)
 
-    # 3a. Introspect the run's params.json to set protocol/skip flags + auto-fill
-    # METADATA_FILE (does not override explicit --var values).
-    _introspect_pipeline_params(data_root_abs, variables)
+    # 3a. Introspect the run's params.json: mirror nf params into the template's
+    # declared variables + auto-fill METADATA_FILE (does not override explicit --var).
+    declared_var_names = [v.name for v in template_metadata.variables]
+    _introspect_pipeline_params(data_root_abs, variables, declared_var_names)
 
     # 3b. Auto-detect metadata annotation columns when METADATA_FILE is provided
     if "METADATA_FILE" in variables:
@@ -773,7 +781,12 @@ def resolve_template(
     variables.setdefault("GROUP_COL", "__no_group__")
     variables.setdefault("GROUP_COL_DISPLAY", "Group")
 
-    provided_vars: set[str] = set(variables.keys())
+    # Apply declared defaults for any optional variable not supplied / introspected.
+    # Lets a template offer an explicit value variable (e.g. PLATFORM=illumina) instead
+    # of sniffing it from the run — the default fills the common case, --var overrides it.
+    for var in template_metadata.variables:
+        if var.default is not None:
+            variables.setdefault(var.name, var.default)
 
     # 4. Validate required variables; warn about unknown extras
     required_vars = template_metadata.get_required_variable_names()
@@ -784,7 +797,6 @@ def resolve_template(
             f"Provided: {', '.join(variables.keys())}"
         )
 
-    declared_var_names = {var.name for var in template_metadata.variables}
     for v in variables:
         if v not in declared_var_names and v != "DATA_ROOT":
             logger.warning(f"Variable '{v}' provided via --var but not declared in template")
@@ -802,7 +814,7 @@ def resolve_template(
     resolved_config, conditional_dashboards, conditional_reasons = _apply_conditionals(
         resolved_config,
         template_metadata.conditional,
-        provided_vars,
+        variables,
         template_dir,
     )
     removal_reasons.update(conditional_reasons)

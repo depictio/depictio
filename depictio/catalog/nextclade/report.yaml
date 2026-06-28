@@ -5,6 +5,25 @@ find: { path_glob: "**/nextclade/*.csv" }
 recipe: nextclade/nextclade_results.py
 fixture: report.tsv
 renders_as:
-  - { component: figure, visu_type: histogram, dict_kwargs: {x: clade, color: qc_overallStatus} } # clade calls
-  - { component: card, column: coverage, aggregation: average } # mean genome coverage
-  - { component: table }
+  # Samples-per-clade bar, sorted by frequency (generic clade-distribution view).
+  - id: clade_barplot
+    component: figure
+    code: |
+      df_modified = df.group_by('clade').agg(pl.count().alias('count')).sort('count', descending=True)
+      fig = px.bar(df_modified.to_pandas(), x='clade', y='count', color='clade',
+          labels={'clade': 'Clade', 'count': 'Number of Samples'})
+      fig.update_layout(xaxis={'categoryorder': 'total descending'}, showlegend=False)
+      fig.update_xaxes(tickangle=-45)
+  # Per-sample mutation-profile shape: substitutions vs deletions, coloured by clade.
+  - id: subs_vs_dels
+    component: figure
+    code: |
+      fig = px.scatter(df.to_pandas(), x='totalSubstitutions', y='totalDeletions',
+          color='clade', hover_data=['sample', 'qc_overallStatus', 'coverage'],
+          labels={'totalSubstitutions': 'Total Substitutions', 'totalDeletions': 'Total Deletions', 'clade': 'Clade'},
+          opacity=0.8)
+      fig.update_traces(marker=dict(size=10, line=dict(width=1, color='DarkSlateGrey')))
+  - { id: clade_count, component: card, column: clade, aggregation: nunique } # distinct clades
+  - { id: coverage_card, component: card, column: coverage, aggregation: average } # mean genome coverage
+  - { id: clade_filter, component: interactive, interactive_component_type: MultiSelect, column: clade } # filter by clade
+  - { id: table, component: table }

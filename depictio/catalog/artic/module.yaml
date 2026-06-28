@@ -1,0 +1,14 @@
+# ARTIC. The nanopore variant-calling path of nf-core/viralrecon: ARTIC
+# fieldbioinformatics (`artic minion`) produces amplicon consensus + variant
+# calls via clair3/medaka, used when platform=nanopore (vs ivar on illumina).
+# NOTE: ARTIC has no vendored nf-core module entry in our `_index`, so
+# `nf_core_url` is deliberately omitted (it would fail the existence check).
+# `biotools_url` is from nf-core's artic/minion meta.yml (identifier: biotools:artic).
+id: artic
+name: ARTIC
+logo: https://raw.githubusercontent.com/artic-network/fieldbioinformatics/master/docs/artic-logo.png
+description: >-
+  ARTIC field bioinformatics: nanopore amplicon consensus and variant calling
+  via clair3/medaka, used by nf-core/viralrecon on platform=nanopore.
+homepage: https://artic.network/
+biotools_url: https://bio.tools/artic

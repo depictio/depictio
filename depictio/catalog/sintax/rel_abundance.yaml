@@ -1,0 +1,13 @@
+id: sintax_rel_abundance
+mode: rel-abundance
+description: >-
+  Phylum-level relative abundance from SINTAX taxonomy + DADA2 ASV counts
+  (the --skip_qiime counterpart of the QIIME 2 taxonomy_rel_abundance table).
+find: { path_glob: "**/sintax/ASV_tax_sintax.*[0-9].tsv" }
+recipe: nf-core/ampliseq/sintax_rel_abundance.py
+# fixture: synthetic illustrative sample (no real --skip_qiime/sintax run data in repo)
+fixture: rel_abundance.tsv
+renders_as:
+  - { id: kingdom_filter, component: interactive, interactive_component_type: MultiSelect, column: Kingdom } # filter by kingdom
+  - { id: phylum_filter, component: interactive, interactive_component_type: MultiSelect, column: Phylum } # filter by phylum
+  - { id: table, component: table }

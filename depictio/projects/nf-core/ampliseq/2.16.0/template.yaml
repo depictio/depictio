@@ -39,17 +39,27 @@ template:
     - name: "ANNOTATION_COLS"
       description: "Auto-populated: comma-separated list of all annotation columns discovered from metadata file."
       required: false
-    - name: "IS_MULTIREGION"
-      description: "Auto-set from params.json (multiregion + sidle_ref_taxonomy). Prunes the QIIME2 diversity/phylogeny/ANCOM-BC DCs absent on the SIDLE route; the sidle_* DCs supply the reconstructed-community view."
+    # Route variables mirror nf-core/ampliseq's own params (params.json): auto-derived
+    # from the run, overridable with --var. Defaults match nf defaults so a params-less
+    # reference seed and runs that omit a flag resolve correctly.
+    - name: "SKIP_QIIME"
+      description: "nf --skip_qiime. ITS/sintax runs (true) produce no QIIME2 outputs. Auto-derived from params.json."
       required: false
+      default: "false"
     - name: "SKIP_TAXONOMY"
-      description: "Auto-set from params.json (skip_taxonomy). Prunes the taxonomy/ordination/differential DCs (qiime2/{barplot,rel_abundance_tables,taxonomy}/ are absent)."
+      description: "nf --skip_taxonomy. When true, qiime2/{barplot,rel_abundance_tables,taxonomy}/ are absent. Auto-derived from params.json."
       required: false
+      default: "false"
     - name: "SKIP_ALPHA_RAREFACTION"
-      description: "Auto-set from params.json (skip_alpha_rarefaction). Prunes the alpha-rarefaction DCs (qiime2/alpha-rarefaction/ is absent)."
+      description: "nf --skip_alpha_rarefaction. When true, qiime2/alpha-rarefaction/ is absent. Auto-derived from params.json."
       required: false
-    - name: "SKIP_ANCOM"
-      description: "Auto-set from params.json (skip_ancom). Prunes the ANCOM-BC differential-abundance DCs (qiime2/ancombc/ is absent)."
+      default: "false"
+    - name: "ANCOMBC"
+      description: "nf --ancombc (positive opt-in). When false (default), no qiime2/ancombc/ output exists, so the differential-abundance DCs are pruned. Auto-derived from params.json."
+      required: false
+      default: "false"
+    - name: "MULTIREGION"
+      description: "nf --multiregion (path; present on SIDLE multi-region runs). When set, per-region ASVs are reconstructed under sidle/ and the QIIME2 diversity/phylogeny/ANCOM-BC DCs are absent. Auto-derived from params.json."
       required: false
   dashboards:
     - "dashboards/base.yaml"
@@ -71,7 +81,12 @@ template:
     # every QIIME2-derived DC so the run ingests its MultiQC + samplesheet cleanly
     # instead of hard-failing. Normal 16S runs (no skip_qiime) keep these DCs
     # required, so a genuinely missing QIIME2 output still surfaces loudly.
-    - if_var_present: "SKIP_QIIME"
+    # ITS / IonTorrent / PacBio runs use sintax (--skip_qiime) and produce NO QIIME2
+    # outputs. SKIP_QIIME mirrors the nf flag (auto-derived from params.json); when
+    # "true", drop every QIIME2-derived DC so the run ingests its MultiQC + samplesheet
+    # cleanly. Standard 16S runs (SKIP_QIIME=false) keep these DCs required, so a
+    # genuinely missing QIIME2 output still surfaces loudly.
+    - if_var_equals: {SKIP_QIIME: "true"}
       remove_dc_tags:
         ["alpha_rarefaction", "taxonomy_composition", "taxonomy_rel_abundance",
          "taxonomy_heatmap", "ancombc_results", "stacked_taxonomy_canonical",
@@ -82,19 +97,19 @@ template:
       dashboards: ["dashboards/base.yaml"]
     # sintax_rel_abundance is the skip_qiime counterpart of the QIIME2
     # taxonomy_rel_abundance DC — built from sintax/ + dada2/ outputs that only
-    # exist on --skip_qiime runs. Prune it on normal (QIIME2) runs so its absent
+    # exist on --skip_qiime runs. Prune it on standard (QIIME2) runs so its absent
     # source files don't surface as a gap.
-    - if_var_absent: "SKIP_QIIME"
+    - if_var_equals: {SKIP_QIIME: "false"}
       remove_dc_tags: ["sintax_rel_abundance"]
       dashboards: ["dashboards/base.yaml"]
     # multiregion/SIDLE runs reconstruct one cross-region feature table under sidle/
     # and emit only a SUBSET of qiime2/ — qiime2/barplot is present (taxonomy_composition
     # works), but there is no diversity, phylogenetic tree, matching rel_abundance, or
-    # ANCOM-BC. IS_MULTIREGION is auto-set from params.json (multiregion +
-    # sidle_ref_taxonomy). When present, drop the diversity/phylogeny/rel-abundance/
-    # ANCOM-BC-derived DCs (the SKIP_QIIME set minus taxonomy_composition); the
-    # sidle_reconstructed / sidle_reconstruction_qc DCs supply the route's signature view.
-    - if_var_present: "IS_MULTIREGION"
+    # ANCOM-BC. MULTIREGION mirrors the nf --multiregion path (auto-derived from
+    # params.json); when set, drop the diversity/phylogeny/rel-abundance/ANCOM-BC DCs
+    # (the SKIP_QIIME set minus taxonomy_composition); the sidle_reconstructed /
+    # sidle_reconstruction_qc DCs supply the route's signature view.
+    - if_var_present: "MULTIREGION"
       remove_dc_tags:
         ["alpha_rarefaction", "taxonomy_rel_abundance", "taxonomy_heatmap",
          "ancombc_results", "stacked_taxonomy_canonical", "embedding_pcoa",
@@ -106,7 +121,7 @@ template:
     # --skip_taxonomy suppresses qiime2/{barplot,rel_abundance_tables,taxonomy}/, so
     # every taxonomy/ordination/differential DC loses its source. Drop the whole chain
     # (keep MultiQC, alpha-diversity, phylogeny) so the run ingests instead of aborting.
-    - if_var_present: "SKIP_TAXONOMY"
+    - if_var_equals: {SKIP_TAXONOMY: "true"}
       remove_dc_tags:
         ["taxonomy_composition", "taxonomy_rel_abundance", "taxonomy_heatmap",
          "ancombc_results", "ma_canonical", "stacked_taxonomy_canonical",
@@ -115,12 +130,14 @@ template:
       dashboards: ["dashboards/base.yaml"]
     # --skip_alpha_rarefaction suppresses qiime2/alpha-rarefaction/. Drop the
     # rarefaction + alpha-diversity DCs that read it.
-    - if_var_present: "SKIP_ALPHA_RAREFACTION"
+    - if_var_equals: {SKIP_ALPHA_RAREFACTION: "true"}
       remove_dc_tags:
         ["alpha_rarefaction", "rarefaction_canonical", "alpha_diversity_multi_canonical"]
       dashboards: ["dashboards/base.yaml"]
-    # --skip_ancom suppresses qiime2/ancombc/. Drop the differential-abundance DCs.
-    - if_var_present: "SKIP_ANCOM"
+    # ANCOM-BC is a positive nf opt-in (--ancombc, default false). When NOT run
+    # (ANCOMBC=false) there is no qiime2/ancombc/ output, so drop the differential-
+    # abundance DCs. ANCOMBC mirrors the nf flag (auto-derived from params.json).
+    - if_var_equals: {ANCOMBC: "false"}
       remove_dc_tags: ["ancombc_results", "ma_canonical"]
       dashboards: ["dashboards/base.yaml"]
 

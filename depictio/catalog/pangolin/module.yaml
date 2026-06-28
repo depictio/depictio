@@ -2,5 +2,6 @@
 # `nf_core_url` points at (not duplicated). Override a field here only on drift.
 id: pangolin
 name: Pangolin
+logo: https://raw.githubusercontent.com/cov-lineages/pangolin/master/docs/logo.png
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/pangolin/run
 biotools_url: https://bio.tools/pangolin_cov-lineages # from nf-core meta.yml identifier
