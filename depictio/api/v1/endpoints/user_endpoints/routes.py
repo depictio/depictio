@@ -326,7 +326,7 @@ async def create_my_magic_link(
         current_user.id,  # type: ignore[invalid-argument-type]
         expiry_minutes=settings.auth.magic_link_expiry_minutes,
     )
-    base = f"{settings.dash.external_url}/auth/magic"
+    base = f"{settings.viewer.external_url}/auth/magic"
     return {
         "ticket": ticket.ticket,
         "expire_datetime": ticket.expire_datetime.isoformat(),

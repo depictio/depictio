@@ -24,14 +24,17 @@ from depictio.models.s3_utils import S3_storage_checks
 from depictio.models.utils import convert_model_to_dict
 
 
-def _write_provisioned_cli_config(base_config, provision: dict) -> str:
+def _write_provisioned_cli_config(base_raw_config: dict, provision: dict) -> str:
     """Write a temporary CLI config that runs the pipeline as the provisioned user.
 
-    Clones the service account's ``api_base_url`` + ``s3_storage`` but swaps in
-    the provisioned user's identity and run token. Pointing the rest of the run
-    at this file makes every step (sync, scan, process, dashboard import) own
-    its resources as that user — with no changes to downstream code. The file
-    holds a token, so it is created 0600 and removed on process exit.
+    Takes the operator's *raw* CLI config dict (as read from YAML) and swaps in
+    only the provisioned user's identity and run token — ``api_base_url`` and
+    ``s3_storage`` are preserved verbatim, so the real S3 secret (a SecretStr on
+    the parsed model, which would be masked by ``model_dump``) is kept intact.
+    Pointing the rest of the run at this file makes every step (sync, scan,
+    process, dashboard import) own its resources as that user, with no changes
+    to downstream code. The file holds a token, so it is created 0600 and
+    removed on process exit.
     """
     import atexit
     import os
@@ -39,27 +42,22 @@ def _write_provisioned_cli_config(base_config, provision: dict) -> str:
 
     import yaml
 
-    from depictio.models.models.base import convert_objectid_to_str
-
     tok = provision["token"]
-    temp_cfg = {
-        "api_base_url": str(base_config.api_base_url),
-        "user": {
-            "id": provision["user_id"],
-            "email": provision["email"],
-            "is_admin": provision["is_admin"],
-            "token": {
-                "user_id": provision["user_id"],
-                "access_token": tok["access_token"],
-                "refresh_token": tok["refresh_token"],
-                "token_type": tok["token_type"],
-                "token_lifetime": tok["token_lifetime"],
-                "expire_datetime": tok["expire_datetime"],
-                "refresh_expire_datetime": tok["refresh_expire_datetime"],
-                "name": tok["name"],
-            },
+    temp_cfg = dict(base_raw_config)  # shallow copy; only `user` is replaced
+    temp_cfg["user"] = {
+        "id": provision["user_id"],
+        "email": provision["email"],
+        "is_admin": provision["is_admin"],
+        "token": {
+            "user_id": provision["user_id"],
+            "access_token": tok["access_token"],
+            "refresh_token": tok["refresh_token"],
+            "token_type": tok["token_type"],
+            "token_lifetime": tok["token_lifetime"],
+            "expire_datetime": tok["expire_datetime"],
+            "refresh_expire_datetime": tok["refresh_expire_datetime"],
+            "name": tok["name"],
         },
-        "s3_storage": convert_objectid_to_str(base_config.s3_storage.model_dump()),
     }
 
     fd, path = tempfile.mkstemp(prefix="depictio-cli-provisioned-", suffix=".yaml")
@@ -285,11 +283,16 @@ def register_run_command(app: typer.Typer):
         if user and not dry_run:
             rich_print_section_separator("Provisioning user account")
             try:
+                import os
+
+                from depictio.models.utils import get_config
+
                 base_config = load_depictio_config(yaml_config_path=CLI_config_path)
+                base_raw_config = get_config(os.path.expanduser(CLI_config_path))
                 provision = api_provision_user(
                     str(base_config.api_base_url), user, provisioning_key
                 )
-                CLI_config_path = _write_provisioned_cli_config(base_config, provision)
+                CLI_config_path = _write_provisioned_cli_config(base_raw_config, provision)
                 action = "Created account for" if provision.get("created") else "Reusing account"
                 rich_print_checked_statement(
                     f"{action} {provision['email']} — running pipeline as this user",
