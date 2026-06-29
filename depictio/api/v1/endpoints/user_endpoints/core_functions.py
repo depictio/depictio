@@ -12,7 +12,13 @@ from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.endpoints.user_endpoints.utils import create_access_token
 from depictio.api.v1.key_utils import get_public_key
 from depictio.models.models.base import PyObjectId
-from depictio.models.models.users import TokenBase, TokenBeanie, TokenData, UserBeanie
+from depictio.models.models.users import (
+    MagicLinkTicketBeanie,
+    TokenBase,
+    TokenBeanie,
+    TokenData,
+    UserBeanie,
+)
 
 
 async def _create_permanent_token(user: UserBeanie) -> TokenBeanie:
@@ -737,3 +743,120 @@ async def _create_user_in_db(
                 }
         # Re-raise if it's a different error
         raise
+
+
+# Stable name for the long-lived token a pipeline uses to act as a provisioned
+# user. Reused across runs (one per user) so repeated runs don't pile up tokens.
+PIPELINE_PROVISION_TOKEN_NAME = "pipeline_provision"
+
+
+@validate_call(validate_return=True)
+async def _provision_user(email: EmailStr) -> dict:
+    """Create-or-get a passwordless user and a long-lived run token.
+
+    Used by pipelines (gated by the provisioning API key) to obtain a bearer
+    token that lets the CLI act as ``email`` for the duration of a run. The
+    user is created without a usable password — login happens via magic link,
+    never a password. The run token is reused while still valid, so repeated
+    runs for the same user do not accumulate tokens.
+
+    Returns:
+        dict with ``user`` (UserBeanie), ``token`` (TokenBeanie) and ``created``
+        (True when the user was newly created, False when it already existed).
+    """
+    payload = await _create_user_in_db(email=email, password="", is_anonymous=False)
+    user = payload.get("user") if payload else None
+    if not isinstance(user, UserBeanie):
+        raise HTTPException(status_code=500, detail="Failed to provision user")
+
+    # Reuse a still-valid run token (with comfortable headroom) instead of
+    # minting a fresh one on every run.
+    token = await TokenBeanie.find_one(
+        {
+            "user_id": user.id,
+            "name": PIPELINE_PROVISION_TOKEN_NAME,
+            "token_lifetime": "long-lived",
+            "expire_datetime": {"$gt": datetime.now() + timedelta(days=1)},
+        }
+    )
+    if token is None:
+        token_data = TokenData(
+            sub=user.id,  # type: ignore[invalid-argument-type]
+            name=PIPELINE_PROVISION_TOKEN_NAME,
+            token_lifetime="long-lived",
+        )
+        token = await _add_token(token_data)
+        if token is None:
+            raise HTTPException(status_code=500, detail="Failed to issue provisioning token")
+
+    created = bool(payload and payload.get("success"))
+    return {"user": user, "token": token, "created": created}
+
+
+@validate_call(validate_return=True)
+async def _create_magic_link_ticket(
+    user_id: PydanticObjectId,
+    expiry_minutes: int = 15,
+) -> MagicLinkTicketBeanie:
+    """Create a short-lived, single-use magic-link ticket for ``user_id``.
+
+    The opaque secret is what travels in the login URL; it is invalidated on
+    first redemption and ignored once expired.
+    """
+    import secrets
+
+    ticket = MagicLinkTicketBeanie(
+        ticket=secrets.token_urlsafe(32),
+        user_id=user_id,
+        expire_datetime=datetime.now() + timedelta(minutes=expiry_minutes),
+    )
+    await ticket.save()
+    return ticket
+
+
+@validate_call(validate_return=True)
+async def _redeem_magic_link_ticket(ticket_secret: str) -> dict:
+    """Redeem a magic-link ticket for a fresh browser session.
+
+    Validates the ticket (exists, unused, unexpired), marks it used so it can
+    never be replayed, then mints a standard short-lived + refresh session for
+    the ticket's user. The returned payload matches what the React viewer
+    persists to local storage.
+
+    Raises:
+        HTTPException: 401 if the ticket is missing, already used, or expired.
+        HTTPException: 404 if the ticket's user no longer exists.
+    """
+    ticket_doc = await MagicLinkTicketBeanie.find_one({"ticket": ticket_secret})
+    if ticket_doc is None or ticket_doc.used or ticket_doc.expire_datetime <= datetime.now():
+        raise HTTPException(status_code=401, detail="Invalid or expired magic link")
+
+    # Single-use: burn the ticket before issuing the session.
+    ticket_doc.used = True
+    await ticket_doc.save()
+
+    user = await UserBeanie.get(ticket_doc.user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    token_data = TokenData(
+        sub=user.id,  # type: ignore[invalid-argument-type]
+        name=f"magic_login_{datetime.now().strftime('%Y%m%d%H%M%S')}",
+        token_lifetime="short-lived",
+    )
+    token = await _add_token(token_data)
+    if token is None:
+        raise HTTPException(status_code=500, detail="Failed to issue session token")
+
+    return {
+        "logged_in": True,
+        "email": user.email,
+        "user_id": str(user.id),
+        "access_token": token.access_token,
+        "refresh_token": token.refresh_token,
+        "expire_datetime": token.expire_datetime.isoformat(),
+        "refresh_expire_datetime": token.refresh_expire_datetime.isoformat(),
+        "name": token.name,
+        "token_lifetime": token.token_lifetime,
+        "token_type": token.token_type or "bearer",
+    }

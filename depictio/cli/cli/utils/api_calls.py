@@ -85,6 +85,43 @@ def api_login(yaml_config_path: str = "~/.depictio/CLI.yaml") -> dict:
 
 
 @validate_call
+def api_provision_user(api_base_url: str, email: str, provisioning_key: str) -> dict:
+    """Provision (create-or-get) a user via the shared provisioning key.
+
+    Returns the provisioning payload, which includes a long-lived run token the
+    CLI uses to act as ``email`` for the rest of the run. The provisioning key
+    is the only credential — no per-user identity is needed on the caller side.
+    """
+    response = get_http_client().post(
+        f"{api_base_url}/depictio/api/v1/auth/provision_user",
+        json={"email": email},
+        headers={"api-key": provisioning_key},
+        timeout=60.0,  # cold-start safety net (httpx default of 5 s is too aggressive)
+    )
+    if response.status_code != 200:
+        raise RuntimeError(f"User provisioning failed ({response.status_code}): {response.text}")
+    return response.json()
+
+
+@validate_call
+def api_create_magic_link(CLI_config: CLIConfig) -> dict:
+    """Mint a short-lived, single-use magic-link login for the current user.
+
+    Authenticated as the (provisioned) user via the bearer token in
+    ``CLI_config``. Returns ``{ticket, expire_datetime, login_url}`` where
+    ``login_url`` carries the ticket in its fragment.
+    """
+    response = get_http_client().post(
+        f"{CLI_config.api_base_url}/depictio/api/v1/auth/me/magic_link",
+        headers=generate_api_headers(CLI_config),
+        timeout=60.0,  # cold-start safety net (httpx default of 5 s is too aggressive)
+    )
+    if response.status_code != 200:
+        raise RuntimeError(f"Magic-link creation failed ({response.status_code}): {response.text}")
+    return response.json()
+
+
+@validate_call
 def api_get_project_from_id(project_id: PyObjectId, CLI_config: CLIConfig):
     """
     Get a project from the server using the project ID.
