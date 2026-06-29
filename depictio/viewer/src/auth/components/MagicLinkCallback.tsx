@@ -1,9 +1,9 @@
 import { Anchor, Loader, Stack, Text } from '@mantine/core';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { exchangeMagicToken, persistSession } from 'depictio-react-core';
 import AuthCard from './AuthCard';
 
-const DEFAULT_REDIRECT = '/dashboards-beta';
+const DEFAULT_REDIRECT = '/dashboards';
 
 /** Only allow same-origin relative paths as a redirect target, so a crafted
  *  `next=` can't bounce the freshly-authenticated user to an external site. */
@@ -20,8 +20,16 @@ function safeNext(next: string | null): string {
  */
 export default function MagicLinkCallback() {
   const [error, setError] = useState<string | null>(null);
+  // Run exactly once. React StrictMode invokes effects twice in dev; without
+  // this guard the first run strips the fragment (below) and the second run
+  // reads an empty hash → a spurious "missing token" error (and a wasted,
+  // already-consumed exchange).
+  const handledRef = useRef(false);
 
   useEffect(() => {
+    if (handledRef.current) return;
+    handledRef.current = true;
+
     const params = new URLSearchParams(window.location.hash.replace(/^#/, ''));
     const ticket = params.get('ticket');
     const next = safeNext(params.get('next'));
@@ -36,25 +44,18 @@ export default function MagicLinkCallback() {
     const { pathname, search } = window.location;
     window.history.replaceState(null, '', pathname + search);
 
-    let cancelled = false;
     (async () => {
       try {
         const session = await exchangeMagicToken(ticket);
-        if (cancelled) return;
         persistSession(session);
         window.location.assign(next);
       } catch (err) {
-        if (cancelled) return;
         console.error('[auth] magic-link exchange failed:', err);
         setError(
           'This login link is invalid or has expired. Please request a new one.',
         );
       }
     })();
-
-    return () => {
-      cancelled = true;
-    };
   }, []);
 
   return (
