@@ -39,11 +39,44 @@ SANITIZED_BRANCH=$(echo "$BRANCH_NAME" | sed 's/\//-/g' | sed 's/[^a-zA-Z0-9-]/-
 # Create unique project name
 COMPOSE_PROJECT_NAME="depictio-${SANITIZED_BRANCH}"
 
-# Returns 0 if something is LISTENing on the TCP port, 1 otherwise.
-# lsof is present on macOS by default and in most Linux dev images; the
-# /dev/tcp probe is a fallback that catches anything accepting connections.
+# Host ports reserved by the Docker daemon for *other* compose projects, and for
+# *this* project, gathered from every container (running OR created/exited).
+#
+# Why this matters: `docker compose up` fails with "Bind for 127.0.0.1:PORT
+# failed: port is already allocated" when the daemon already holds a host-port
+# reservation — and a container left in `created`/`exited` state keeps that
+# reservation even though NOTHING is LISTENing. lsof / /dev/tcp therefore report
+# the port as free, the scan happily picks it, and the subsequent `up` blows up.
+# (Space-padded strings, not associative arrays: macOS ships bash 3.2.)
+OWN_RESERVED_PORTS=" "
+OTHER_RESERVED_PORTS=" "
+collect_docker_reserved_ports() {
+  command -v docker >/dev/null 2>&1 || return 0
+  local cid line name ports
+  for cid in $(docker ps -aq 2>/dev/null); do
+    # "<name>|<hostport> <hostport> ..." in one inspect call.
+    line=$(docker inspect -f '{{.Name}}|{{range $p, $conf := .HostConfig.PortBindings}}{{range $conf}}{{.HostPort}} {{end}}{{end}}' "$cid" 2>/dev/null) || continue
+    name=${line%%|*}; name=${name#/}
+    ports=${line#*|}
+    case "$name" in
+      "${COMPOSE_PROJECT_NAME}-"*) OWN_RESERVED_PORTS="${OWN_RESERVED_PORTS}${ports} " ;;
+      *)                           OTHER_RESERVED_PORTS="${OTHER_RESERVED_PORTS}${ports} " ;;
+    esac
+  done
+}
+
+# Returns 0 if the host port is unavailable, 1 if free to bind.
+# Order matters:
+#   1. Ours already → free: compose recreates the container, releasing the bind.
+#   2. Another project's reservation → unavailable, even with no live listener.
+#   3. Otherwise fall back to a live-listener probe (lsof, then /dev/tcp).
+# Treating our own bindings as free is what keeps re-runs STABLE: without it,
+# this instance's running mongo/redis would look "busy" and the scan would drift
+# to a new offset every time.
 port_in_use() {
   local port=$1
+  case "$OWN_RESERVED_PORTS" in *" $port "*) return 1 ;; esac
+  case "$OTHER_RESERVED_PORTS" in *" $port "*) return 0 ;; esac
   if command -v lsof >/dev/null 2>&1; then
     lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1
     return $?
@@ -54,6 +87,10 @@ port_in_use() {
 
 # Host-side port bases. Each instance binds (base + offset) for each entry.
 PORT_BASES=(27000 6000 8000 9000 9500 5500 7000)
+
+# Snapshot Docker's host-port reservations once, before scanning, so the offset
+# we pick won't collide with a stopped/leftover container the daemon still holds.
+collect_docker_reserved_ports
 
 PORT_OFFSET=""
 for candidate in $(seq 100 250); do
@@ -71,7 +108,7 @@ for candidate in $(seq 100 250); do
 done
 
 if [ -z "$PORT_OFFSET" ]; then
-  echo "❌ No free 8-port window found in offsets 100-250."
+  echo "❌ No free 7-port window found in offsets 100-250."
   echo "   Stop some containers or other listeners and re-source this script."
   # Dual-mode bail: `return` works when this script is sourced, `exit` runs
   # when it's executed directly. shellcheck can't tell `return` may fail.
