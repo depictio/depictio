@@ -1,28 +1,15 @@
 # Serve-specific values for Depictio deployment.
-# Auth annotations on the shared ingress are rendered by the template based
-# on `permission` set by Serve at deploy time. Base nginx annotations on the
-# dedicated backend/minio ingresses are always rendered by the template.
-ingress:
+# Uses Gateway API (HTTPRoute) for routing. Three HTTPRoutes are always
+# created: frontend (viewer), backend, and minio. Auth filters on the
+# frontend route are injected per-app by Serve at deploy time via
+# gateway.filters in the app's k8s_values.
+gateway:
   enabled: true
-  ingressClassName: "nginx"
-  annotations:
-    nginx.ingress.kubernetes.io/custom-http-errors: "503,502"
-    nginx.ingress.kubernetes.io/default-backend: nginx-errors
-  tls:
-    - secretName: "serve-tls-secret"
-      hosts: []
+  # parentRefs is set at deploy time by Serve — points to the cluster's shared Gateway.
+  parentRefs: []
 
-# Backend and MinIO get dedicated ingresses so Serve auth annotations
-# on the shared frontend ingress do not affect them.
-backend:
-  ingress:
-    separateRoute: true
-    inheritDefaultAnnotations: false
-
-minio:
-  ingress:
-    separateRoute: true
-    inheritDefaultAnnotations: false
+ingress:
+  enabled: false
 
 global:
   domain: ""
