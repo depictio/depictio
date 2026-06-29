@@ -464,6 +464,12 @@ def register_run_command(app: typer.Typer):
             try:
                 if not dry_run:
                     project_config_dict = convert_model_to_dict(project_config)
+                    # Provisioned (per-user) runs must stay private: templates
+                    # often ship `is_public: true` for showcase visibility, but
+                    # that would expose one user's project to everyone on the
+                    # instance — defeating the per-user separation --user is for.
+                    if user:
+                        project_config_dict["is_public"] = False
                     api_sync_project_config_to_server(
                         CLI_config=CLI_config,
                         ProjectConfig=project_config_dict,
@@ -764,7 +770,7 @@ def register_run_command(app: typer.Typer):
             try:
                 magic_config = load_depictio_config(yaml_config_path=CLI_config_path)
                 magic = api_create_magic_link(magic_config)
-                login_url = f"{magic['login_url']}&next=/dashboard-beta/{provisioned_dashboard_id}"
+                login_url = f"{magic['login_url']}&next=/dashboard/{provisioned_dashboard_id}"
                 rich_print_checked_statement(f"One-time login link for {user}:", "info")
                 rich_print_checked_statement(login_url, "success")
             except Exception as e:
