@@ -280,6 +280,21 @@ def _require_provisioning_key(api_key: str) -> None:
         raise HTTPException(status_code=403, detail="Invalid provisioning API key")
 
 
+def _require_magic_link_enabled() -> None:
+    """Disable provisioning + magic-link login in single-user mode.
+
+    Single-user mode is a personal, self-hosted instance with one admin and
+    authentication effectively bypassed (the anonymous user is granted admin),
+    so per-user provisioning and passwordless magic-link login are meaningless
+    there — the whole flow is gated off.
+    """
+    if settings.auth.is_single_user_mode:
+        raise HTTPException(
+            status_code=403,
+            detail="Provisioning and magic-link login are disabled in single-user mode",
+        )
+
+
 @auth_endpoint_router.post("/provision_user", include_in_schema=True)
 async def provision_user_endpoint(
     request: _ProvisionUserRequest,
@@ -291,6 +306,7 @@ async def provision_user_endpoint(
     as ``email`` for the rest of a run. Idempotent: re-running for the same
     email returns a fresh token for the existing user.
     """
+    _require_magic_link_enabled()
     _require_provisioning_key(api_key)
     result = await _provision_user(request.email)
     user = result["user"]
@@ -322,6 +338,7 @@ async def create_my_magic_link(
     run (once the dashboard exists) so the link's lifetime starts when it is
     handed out, not when the long pipeline began.
     """
+    _require_magic_link_enabled()
     ticket = await _create_magic_link_ticket(
         current_user.id,  # type: ignore[invalid-argument-type]
         expiry_minutes=settings.auth.magic_link_expiry_minutes,
@@ -339,6 +356,7 @@ async def create_my_magic_link(
 @auth_endpoint_router.post("/magic/exchange", include_in_schema=True)
 async def exchange_magic_link(request: _ExchangeMagicLinkRequest) -> dict:
     """Redeem a magic-link ticket for a browser session (public, single-use)."""
+    _require_magic_link_enabled()
     return await _redeem_magic_link_ticket(request.ticket)
 
 

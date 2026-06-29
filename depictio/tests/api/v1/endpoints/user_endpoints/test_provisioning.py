@@ -5,16 +5,18 @@ POST /auth/me/magic_link and POST /auth/magic/exchange.
 """
 
 from datetime import datetime, timedelta
-from unittest.mock import patch
+from unittest.mock import PropertyMock, patch
 
 import pytest
 from fastapi import HTTPException
 
+from depictio.api.v1.configs.config import settings
 from depictio.api.v1.endpoints.user_endpoints.core_functions import (
     _create_magic_link_ticket,
     _provision_user,
     _redeem_magic_link_ticket,
 )
+from depictio.api.v1.endpoints.user_endpoints.routes import _require_magic_link_enabled
 from depictio.models.models.users import (
     MagicLinkTicketBeanie,
     TokenBeanie,
@@ -23,6 +25,31 @@ from depictio.models.models.users import (
 from depictio.tests.api.v1.endpoints.user_endpoints.conftest import beanie_setup
 
 PROVISION_MODELS = [TokenBeanie, UserBeanie, MagicLinkTicketBeanie]
+
+
+class TestSingleUserModeGuard:
+    """Provisioning + magic-link login must be disabled in single-user mode."""
+
+    def test_blocked_in_single_user_mode(self):
+        with patch.object(
+            type(settings.auth),
+            "is_single_user_mode",
+            new_callable=PropertyMock,
+            return_value=True,
+        ):
+            with pytest.raises(HTTPException) as exc:
+                _require_magic_link_enabled()
+        assert exc.value.status_code == 403
+
+    def test_allowed_when_not_single_user(self):
+        with patch.object(
+            type(settings.auth),
+            "is_single_user_mode",
+            new_callable=PropertyMock,
+            return_value=False,
+        ):
+            # Should not raise.
+            _require_magic_link_enabled()
 
 
 class TestProvisionUser:
