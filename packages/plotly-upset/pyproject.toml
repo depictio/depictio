@@ -43,7 +43,7 @@ notebook = [
     "ipywidgets>=8.0",
 ]
 dev = [
-    "pytest>=7.0",
+    "pytest>=9.1.1",
     "pytest-cov>=4.0",
     "polars>=0.20.0",
     "jupyterlab>=4.0",

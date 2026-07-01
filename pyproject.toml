@@ -88,10 +88,10 @@ classifiers = [
 [project.optional-dependencies]
 dev = [
   "bandit==1.9.4",
-  "ruff==0.15.16",
-  "ty==0.0.46",
+  "ruff==0.15.20",
+  "ty==0.0.55",
   "pre-commit==4.6.0",
-  "pytest==9.0.3",
+  "pytest==9.1.1",
   "pytest-asyncio==1.4.0",
   "pytest-cov==7.1.0",
   "pytest-xdist==3.8.0",
@@ -100,7 +100,7 @@ dev = [
   "bump2version==1.0.1",
   "testcontainers[minio]==4.14.2",
   "types-bleach==6.4.0.20260607",
-  "types-boto3==1.43.25",
+  "types-boto3==1.43.38",
 ]
 
 
