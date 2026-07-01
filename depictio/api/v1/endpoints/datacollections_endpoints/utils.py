@@ -168,6 +168,7 @@ async def _get_data_collection_polars_schema(
     if not delta_location:
         raise HTTPException(status_code=404, detail="Delta-table location is missing.")
 
+    import pyarrow as pa
     from deltalake import DeltaTable
 
     from depictio.api.v1.s3 import polars_s3_config
@@ -182,9 +183,22 @@ async def _get_data_collection_polars_schema(
         schema = dt.schema()
         to_arrow = getattr(schema, "to_arrow", None) or getattr(schema, "to_pyarrow")
         arrow_schema = to_arrow()
+        # deltalake 1.x's ``to_arrow()`` returns arro3 Arrow types, whose DataType
+        # objects lack the ``.id`` attribute that ``pyarrow.types.is_*`` introspection
+        # relies on (below). Coerce to a real ``pyarrow.Schema`` via the Arrow
+        # PyCapsule protocol so the dtype mapping works on both deltalake 0.24
+        # (already pyarrow) and 1.6 (arro3).
+        if not isinstance(arrow_schema, pa.Schema):
+            arrow_schema = pa.schema(arrow_schema)
     except Exception as exc:
-        logger.warning(f"polars_schema: cannot read delta schema at {delta_location}: {exc}")
-        raise HTTPException(status_code=500, detail="Unable to read Delta schema.") from exc
+        logger.warning(
+            f"polars_schema: cannot read delta schema at {delta_location}: "
+            f"{type(exc).__name__}: {exc}"
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=f"Unable to read Delta schema ({type(exc).__name__}).",
+        ) from exc
 
     # Stringify pyarrow dtypes into the polars naming convention expected by
     # validate_binding(): polars uses CamelCase ("Float64", "Int64", "Utf8"/"String").

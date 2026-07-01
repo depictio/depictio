@@ -177,8 +177,8 @@ function roleBindingLabel(
   );
 }
 
-/** One row of the "Bindings overview" table: role name + a colour-coded
- *  required/optional badge, a simplified type, and the role description. */
+/** One row of the "Bindings overview" table: role name, a simplified type, a
+ *  colour-coded required/optional column, and the role description. */
 function exampleInputRow(
   role: string,
   typeLabel: string,
@@ -187,24 +187,19 @@ function exampleInputRow(
 ): React.ReactNode {
   return (
     <Table.Tr key={`${required ? 'req' : 'opt'}-${role}`}>
-      {/* Role + Type never wrap, so they always fit their content; Description
-          is the only wrapping column and absorbs the remaining width. */}
+      {/* Role, Type + Required never wrap, so they always fit their content;
+          Description is the only wrapping column and absorbs the remaining width. */}
       <Table.Td style={{ whiteSpace: 'nowrap', width: '1%' }}>
-        <Group gap={6} wrap="nowrap">
-          <Text size="xs" fw={500}>
-            {role}
-          </Text>
-          <Badge
-            size="xs"
-            variant="light"
-            color={required ? REQUIRED_COLOR : OPTIONAL_COLOR}
-            style={{ flexShrink: 0 }}
-          >
-            {required ? 'required' : 'optional'}
-          </Badge>
-        </Group>
+        <Text size="xs" fw={500}>
+          {role}
+        </Text>
       </Table.Td>
       <Table.Td style={{ whiteSpace: 'nowrap', width: '1%' }}>{typeLabel}</Table.Td>
+      <Table.Td style={{ whiteSpace: 'nowrap', width: '96px' }}>
+        <Badge size="xs" variant="light" color={required ? REQUIRED_COLOR : OPTIONAL_COLOR}>
+          {required ? 'required' : 'optional'}
+        </Badge>
+      </Table.Td>
       <Table.Td>
         <Text size="xs" c="dimmed">
           {description || '—'}
@@ -667,6 +662,7 @@ const AdvancedVizBuilder: React.FC = () => {
                     <Table.Tr>
                       <Table.Th style={{ whiteSpace: 'nowrap', width: '1%' }}>Role</Table.Th>
                       <Table.Th style={{ whiteSpace: 'nowrap', width: '1%' }}>Type</Table.Th>
+                      <Table.Th style={{ whiteSpace: 'nowrap', width: '96px' }}>Required</Table.Th>
                       <Table.Th>Description</Table.Th>
                     </Table.Tr>
                   </Table.Thead>
