@@ -39,7 +39,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-fast = ["fastcluster>=1.2.0"]
+fast = ["fastcluster>=1.3.0"]
 polars = ["polars>=0.20.0"]
 notebook = [
     "jupyterlab>=4.0",
@@ -48,7 +48,7 @@ notebook = [
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
-    "fastcluster>=1.2.0",
+    "fastcluster>=1.3.0",
     "polars>=0.20.0",
     "jupyterlab>=4.0",
     "ipywidgets>=8.0",
