@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.11"
 resolution-markers = [
     "python_full_version >= '3.14' and sys_platform == 'emscripten'",
@@ -2515,8 +2515,8 @@ dependencies = [
 requires-dist = [
     { name = "fastcluster", marker = "extra == 'dev'", specifier = ">=1.2.0" },
     { name = "fastcluster", marker = "extra == 'fast'", specifier = ">=1.2.0" },
-    { name = "ipywidgets", marker = "extra == 'dev'", specifier = ">=8.0" },
-    { name = "ipywidgets", marker = "extra == 'notebook'", specifier = ">=8.0" },
+    { name = "ipywidgets", marker = "extra == 'dev'", specifier = ">=8.1.8" },
+    { name = "ipywidgets", marker = "extra == 'notebook'", specifier = ">=8.1.8" },
     { name = "jupyterlab", marker = "extra == 'dev'", specifier = ">=4.0" },
     { name = "jupyterlab", marker = "extra == 'notebook'", specifier = ">=4.0" },
     { name = "numpy", specifier = ">=1.22.0" },
@@ -2559,8 +2559,8 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "ipywidgets", marker = "extra == 'dev'", specifier = ">=8.0" },
-    { name = "ipywidgets", marker = "extra == 'notebook'", specifier = ">=8.0" },
+    { name = "ipywidgets", marker = "extra == 'dev'", specifier = ">=8.1.8" },
+    { name = "ipywidgets", marker = "extra == 'notebook'", specifier = ">=8.1.8" },
     { name = "jupyterlab", marker = "extra == 'dev'", specifier = ">=4.0" },
     { name = "jupyterlab", marker = "extra == 'notebook'", specifier = ">=4.0" },
     { name = "numpy", specifier = ">=1.22.0" },

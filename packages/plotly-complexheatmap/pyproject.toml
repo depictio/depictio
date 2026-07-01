@@ -43,7 +43,7 @@ fast = ["fastcluster>=1.2.0"]
 polars = ["polars>=0.20.0"]
 notebook = [
     "jupyterlab>=4.0",
-    "ipywidgets>=8.0",
+    "ipywidgets>=8.1.8",
 ]
 dev = [
     "pytest>=7.0",
@@ -51,7 +51,7 @@ dev = [
     "fastcluster>=1.2.0",
     "polars>=0.20.0",
     "jupyterlab>=4.0",
-    "ipywidgets>=8.0",
+    "ipywidgets>=8.1.8",
 ]
 
 [project.urls]
