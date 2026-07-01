@@ -17,7 +17,7 @@ jobs:
       cache-hit: ${{ steps.cache-quality.outputs.cache-hit }}
       code-hash: ${{ steps.hash.outputs.hash }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0  # Need full history to compare with previous commit
 
@@ -42,7 +42,7 @@ jobs:
 
       - name: Check quality cache
         id: cache-quality
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: .quality-passed
           key: quality-${{ steps.hash.outputs.hash }}
@@ -60,7 +60,7 @@ jobs:
     needs: check-quality-cache
     if: needs.check-quality-cache.outputs.cache-hit != 'true'
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
@@ -133,7 +133,7 @@ jobs:
 
       - name: Update quality cache
         if: success()
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         with:
           path: .quality-passed
           key: quality-${{ needs.check-quality-cache.outputs.code-hash }}
@@ -143,10 +143,10 @@ jobs:
     runs-on: ubuntu-22.04
     needs: check-quality-cache
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install pixi
-        uses: prefix-dev/setup-pixi@v0.9.6
+        uses: prefix-dev/setup-pixi@v0.10.0
         with:
           pixi-version: v0.39.5
           # Disable cache until pixi.lock is committed to the repo
@@ -235,7 +235,7 @@ jobs:
       worker-image: ${{ steps.image-info.outputs.worker-image }}
       viewer-image: ${{ steps.image-info.outputs.viewer-image }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Configure Docker Permissions
         run: |
@@ -439,7 +439,7 @@ jobs:
     outputs:
       services-ready: ${{ steps.health.outputs.ready }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Log in to Container Registry
         uses: docker/login-action@v4
@@ -889,7 +889,7 @@ jobs:
       contents: read
       packages: read
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
@@ -1711,7 +1711,7 @@ jobs:
             expected_local_files: true
             expected_s3_files: true
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
@@ -2673,7 +2673,7 @@ jobs:
             public_mode: "false"
             demo_mode: "false"
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Setup environment (${{ matrix.auth_mode }} mode)
         run: |
@@ -2725,7 +2725,7 @@ jobs:
 
       - name: Cache Playwright browsers
         id: playwright-cache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
