@@ -96,7 +96,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Determine version + push policy
         id: meta-vars
@@ -174,7 +174,7 @@ jobs:
 
       - name: Upload digest
         if: steps.meta-vars.outputs.PUSH == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: digests-${{ matrix.image.name }}-${{ matrix.platform.arch }}
           path: /tmp/digests/*
@@ -207,7 +207,7 @@ jobs:
           fi
 
       - name: Download digests
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: /tmp/digests
           pattern: digests-${{ matrix.image }}-*
@@ -266,7 +266,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Determine version
         id: meta-vars
@@ -439,7 +439,7 @@ jobs:
           esac
 
       - name: Notify docs repository
-        uses: peter-evans/repository-dispatch@v3
+        uses: peter-evans/repository-dispatch@v4
         with:
           token: ${{ secrets.GHCR_PAT }}
           repository: depictio/depictio-docs
