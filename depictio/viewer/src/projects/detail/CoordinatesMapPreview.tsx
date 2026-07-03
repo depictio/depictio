@@ -4,7 +4,7 @@
  * and renders a Plotly scattermapbox where hovering a marker shows the row's
  * non-coord columns — same hover UX as the dashboard's Map component.
  */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Badge,
@@ -37,6 +37,43 @@ function escapeHtml(s: string): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+const MAP_HEIGHT = 360;
+// Leave a margin so edge points aren't flush against the frame.
+const ZOOM_PADDING = 0.5;
+// Keep a lone point (or tightly-clustered points) from zooming to street level.
+const MAX_ZOOM = 12;
+const SINGLE_POINT_ZOOM = 9;
+
+/**
+ * Web-Mercator "fit these bounds into a WxH viewport" zoom — Plotly's
+ * scattermapbox has no fitBounds, so we derive the zoom that frames every
+ * point. Mirrors the classic Google Maps getBoundsZoom, using mapbox-gl's
+ * 512px world tile. Returns the tighter of the lat/lon fits so both axes stay
+ * inside the viewport.
+ */
+function fitBoundsZoom(
+  minLat: number,
+  maxLat: number,
+  minLon: number,
+  maxLon: number,
+  widthPx: number,
+  heightPx: number,
+): number {
+  const WORLD = 512;
+  const latRad = (lat: number) => {
+    const sin = Math.sin((lat * Math.PI) / 180);
+    const rad = Math.log((1 + sin) / (1 - sin)) / 2;
+    return Math.max(Math.min(rad, Math.PI), -Math.PI) / 2;
+  };
+  const latFraction = (latRad(maxLat) - latRad(minLat)) / Math.PI;
+  let lonDiff = maxLon - minLon;
+  if (lonDiff < 0) lonDiff += 360;
+  const lonFraction = lonDiff / 360;
+  const latZoom = Math.log2(heightPx / WORLD / (latFraction || Number.EPSILON));
+  const lonZoom = Math.log2(widthPx / WORLD / (lonFraction || Number.EPSILON));
+  return Math.min(latZoom, lonZoom);
 }
 
 const CoordinatesMapPreview: React.FC<{ dc: DcLike }> = ({ dc }) => {
@@ -110,13 +147,43 @@ const CoordinatesMapPreview: React.FC<{ dc: DcLike }> = ({ dc }) => {
       };
     }, [preview, latCol, lonCol]);
 
-  // Auto-center on the mean lat/lon so the map opens roughly framed.
-  const center = useMemo(() => {
-    if (!lats.length) return { lat: 0, lon: 0 };
-    const sumLat = lats.reduce((a, b) => a + b, 0);
-    const sumLon = lons.reduce((a, b) => a + b, 0);
-    return { lat: sumLat / lats.length, lon: sumLon / lons.length };
-  }, [lats, lons]);
+  // Measure the rendered map width so the fit-bounds zoom accounts for the
+  // actual aspect ratio (height is fixed at MAP_HEIGHT). Starts at 0 → first
+  // paint uses a sensible fallback, then the ResizeObserver refines it.
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+  const [mapWidth, setMapWidth] = useState(0);
+  useEffect(() => {
+    const el = mapContainerRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect.width ?? 0;
+      if (w) setMapWidth(w);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // Frame the view to the points' bounding box: center on the bbox midpoint and
+  // pick the zoom that fits every point (padded + clamped), instead of a fixed
+  // world-scale zoom.
+  const { center, zoom } = useMemo(() => {
+    if (!lats.length) return { center: { lat: 0, lon: 0 }, zoom: 1 };
+    const minLat = Math.min(...lats);
+    const maxLat = Math.max(...lats);
+    const minLon = Math.min(...lons);
+    const maxLon = Math.max(...lons);
+    const center = { lat: (minLat + maxLat) / 2, lon: (minLon + maxLon) / 2 };
+    // All points coincident (or a single point): no span to fit.
+    if (minLat === maxLat && minLon === maxLon) {
+      return { center, zoom: SINGLE_POINT_ZOOM };
+    }
+    const width = mapWidth || 600;
+    const raw = fitBoundsZoom(minLat, maxLat, minLon, maxLon, width, MAP_HEIGHT);
+    let z = raw - ZOOM_PADDING;
+    if (!Number.isFinite(z)) z = SINGLE_POINT_ZOOM;
+    z = Math.max(0, Math.min(z, MAX_ZOOM));
+    return { center, zoom: z };
+  }, [lats, lons, mapWidth]);
 
   if (!latCol || !lonCol) {
     return (
@@ -179,7 +246,7 @@ const CoordinatesMapPreview: React.FC<{ dc: DcLike }> = ({ dc }) => {
           </Badge>
         )}
       </Group>
-      <div style={{ width: '100%', height: 360 }}>
+      <div ref={mapContainerRef} style={{ width: '100%', height: MAP_HEIGHT }}>
         <Plot
           data={[
             {
@@ -203,7 +270,7 @@ const CoordinatesMapPreview: React.FC<{ dc: DcLike }> = ({ dc }) => {
             mapbox: {
               style: mapStyle,
               center,
-              zoom: 1,
+              zoom,
             },
             showlegend: false,
           }}

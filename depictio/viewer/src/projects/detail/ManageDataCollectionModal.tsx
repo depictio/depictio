@@ -136,6 +136,7 @@ const ManageDataCollectionModal: React.FC<ManageDataCollectionModalProps> = ({
     removeFile,
     clear,
     openPicker,
+    onInputChange,
   } = useFolderDropzone(dropzoneOptions);
 
   // Reset on open / close.
@@ -332,7 +333,13 @@ const ManageDataCollectionModal: React.FC<ManageDataCollectionModalProps> = ({
                     </Text>
                   </Stack>
                 </UnstyledDropZone>
-                <input ref={inputRef} type="file" multiple style={{ display: 'none' }} />
+                <input
+                  ref={inputRef}
+                  type="file"
+                  multiple
+                  style={{ display: 'none' }}
+                  onChange={onInputChange}
+                />
               </div>
 
               {files.length > 0 && (

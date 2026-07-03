@@ -308,6 +308,11 @@ const ProjectDetailApp: React.FC = () => {
 
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure(false);
   const [desktopOpened, { toggle: toggleDesktop }] = useDisclosure(true);
+  // Held at this level (not inside DataCollectionsManagerSection) so the
+  // expand/collapse state survives the remount that a refresh() triggers —
+  // every DC mutation bumps refreshKey → setLoading(true) swaps the section
+  // for a <Loader/>, and section-local state would reset to collapsed.
+  const [dcManagerOpened, { toggle: toggleDcManager }] = useDisclosure(false);
 
   const { user } = useCurrentUser();
   const projectId = readProjectIdFromPath();
@@ -533,6 +538,8 @@ const ProjectDetailApp: React.FC = () => {
                     dataCollections={dataCollections}
                     selectedDcId={selectedDcId}
                     canMutate={canMutate}
+                    opened={dcManagerOpened}
+                    onToggle={toggleDcManager}
                     onSelect={setSelectedDcId}
                     onRename={setRenameTarget}
                     onDelete={setDeleteTarget}
@@ -950,6 +957,7 @@ const TableFileDropZone: React.FC<{
         type="file"
         accept=".csv,.tsv,.tab,.parquet,.pq,.feather,.arrow"
         style={{ display: 'none' }}
+        onChange={dropzone.onInputChange}
       />
     </div>
     {dropzone.error && (
@@ -1567,6 +1575,7 @@ const CreateDataCollectionModal: React.FC<{
                 // filterFilename:'multiqc.parquet' does the real filtering.
                 // @ts-expect-error — webkitdirectory is non-standard but widely supported.
                 webkitdirectory=""
+                onChange={multiqcDropzone.onInputChange}
               />
             </div>
             {multiqcDropzone.error && (
@@ -2147,6 +2156,12 @@ const DataCollectionsManagerSection: React.FC<{
   dataCollections: DataCollectionShape[];
   selectedDcId: string | null;
   canMutate: boolean;
+  /** Expand/collapse state, lifted to the parent so it survives the remount a
+   *  refresh() triggers after any DC mutation. Collapsed by default keeps the
+   *  Overview tab compact; expands into a height-capped scroll area so a long
+   *  DC list never dominates the page. */
+  opened: boolean;
+  onToggle: () => void;
   onSelect: (id: string | null) => void;
   onRename: (dc: DataCollectionShape) => void;
   onDelete: (dc: DataCollectionShape) => void;
@@ -2160,18 +2175,17 @@ const DataCollectionsManagerSection: React.FC<{
   dataCollections,
   selectedDcId,
   canMutate,
+  opened,
+  onToggle,
   onSelect,
   onRename,
   onDelete,
   onManage,
   onCreate,
 }) => {
-  // Collapsed by default to keep the Overview tab compact; expands into a
-  // height-capped scroll area so a long DC list never dominates the page.
-  const [opened, { toggle }] = useDisclosure(false);
   return (
     <Card withBorder radius="md" p="sm">
-      <UnstyledButton onClick={toggle} w="100%">
+      <UnstyledButton onClick={onToggle} w="100%">
         <Group gap="xs" wrap="nowrap">
           <Icon
             icon="mdi:database-outline"
