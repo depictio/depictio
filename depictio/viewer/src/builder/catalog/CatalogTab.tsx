@@ -201,7 +201,7 @@ const CatalogTab: React.FC<CatalogTabProps> = ({ projectId }) => {
     try {
       const metadata = buildMetadata(state);
       await upsertComponent(dashboardId, metadata, { appendLayout: true });
-      window.location.assign(`/dashboard-beta-edit/${dashboardId}`);
+      window.location.assign(`/dashboard-edit/${dashboardId}`);
     } catch {
       // Fall back to Edit & Add so the user can fix the issue in the Design step.
       // (initFromCatalog is already called above, so the Design step will show.)
