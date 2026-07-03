@@ -42,7 +42,7 @@ dependencies = [
 fast = ["fastcluster>=1.2.0"]
 polars = ["polars>=0.20.0"]
 notebook = [
-    "jupyterlab>=4.0",
+    "jupyterlab>=4.6.1",
     "ipywidgets>=8.0",
 ]
 dev = [
@@ -50,7 +50,7 @@ dev = [
     "pytest-cov>=4.0",
     "fastcluster>=1.2.0",
     "polars>=0.20.0",
-    "jupyterlab>=4.0",
+    "jupyterlab>=4.6.1",
     "ipywidgets>=8.0",
 ]
 
