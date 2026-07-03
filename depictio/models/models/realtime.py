@@ -5,11 +5,16 @@ This module defines the data models for the real-time event system that enables
 automatic dashboard updates when backend data changes.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
+
+
+def _utcnow() -> datetime:
+    """Naive UTC timestamp (preserves the historical ``datetime.utcnow`` behavior)."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 class EventSourceType(str, Enum):
@@ -56,7 +61,7 @@ class EventMessage(BaseModel):
     source_type: EventSourceType = Field(
         default=EventSourceType.MONGODB_CHANGES, description="Source that generated the event"
     )
-    timestamp: datetime = Field(default_factory=datetime.utcnow, description="Event timestamp")
+    timestamp: datetime = Field(default_factory=_utcnow, description="Event timestamp")
 
     # Context identifiers
     project_id: str | None = Field(default=None, description="Project ID if applicable")
@@ -116,7 +121,7 @@ class WebSocketSubscription(BaseModel):
     client_id: str = Field(description="Unique client/connection identifier")
     dashboard_id: str | None = Field(default=None, description="Dashboard being viewed")
     project_id: str | None = Field(default=None, description="Project context")
-    subscribed_at: datetime = Field(default_factory=datetime.utcnow)
+    subscribed_at: datetime = Field(default_factory=_utcnow)
 
     model_config = ConfigDict(extra="forbid")
 
@@ -129,6 +134,6 @@ class ConnectionStatus(BaseModel):
     subscriptions: list[str] = Field(
         default_factory=list, description="Active subscription channels"
     )
-    server_time: datetime = Field(default_factory=datetime.utcnow)
+    server_time: datetime = Field(default_factory=_utcnow)
 
     model_config = ConfigDict(extra="forbid")
