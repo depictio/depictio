@@ -2,7 +2,7 @@
 Analytics models for tracking user sessions and activities.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from beanie import Document
@@ -50,7 +50,9 @@ class UserSession(MongoModel, Document):
         if self.end_time:
             return False
 
-        inactive_duration = (datetime.utcnow() - self.last_activity).total_seconds() / 60
+        inactive_duration = (
+            datetime.now(timezone.utc).replace(tzinfo=None) - self.last_activity
+        ).total_seconds() / 60
         return inactive_duration < timeout_minutes
 
 
