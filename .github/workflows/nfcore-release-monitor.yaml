@@ -27,7 +27,7 @@ jobs:
       matrix: ${{ steps.detect.outputs.matrix }}
       has_updates: ${{ steps.detect.outputs.has_updates }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           # avoid clashing with create-pull-request's own push token
           persist-credentials: false
@@ -79,7 +79,7 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJSON(needs.check.outputs.matrix) }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
 
@@ -117,7 +117,7 @@ jobs:
           echo "status=$status" >> "$GITHUB_OUTPUT"
 
       - name: Open draft PR with drift report
-        uses: peter-evans/create-pull-request@v6
+        uses: peter-evans/create-pull-request@v8
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           branch: nfcore-monitor/${{ matrix.pipeline }}-${{ matrix.version }}
