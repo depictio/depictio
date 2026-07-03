@@ -12,31 +12,31 @@ dependencies = [
   # Held at 2.0.0: beanie 2.1.0 calls list_collection_names(authorizedCollections=
   # True) during init, which the latest mongomock (4.3.0) test double doesn't
   # accept, breaking the unit suite. Bump once mongomock supports the kwarg.
-  "beanie==2.0.0",
+  "beanie==2.1.0",
   # Capped at 1.43.0: s3fs 2026.4.0 -> aiobotocore caps botocore<1.43.1, so this
   # is the highest boto3 compatible with the pinned s3fs/aiobotocore chain.
   "boto3==1.43.0",
   "celery==5.6.3",
   "cloudpickle==3.1.2",
-  "cryptography==48.0.0",
+  "cryptography==49.0.0",
   "colorlog==6.10.1",
   # Visualization
   "plotly-express==0.4.1",
   "plotly-complexheatmap",
   "plotly-upset",
   # Data processing
-  "deltalake==1.6.0",
+  "deltalake==1.6.1",
   "fastparquet==2026.5.0",
   "numpy==2.4.6",
   "orjson==3.11.9",
   "pandas==3.0.3",
   # polars-lts-cpu is legacy; the modern LTS/older-CPU build is polars[rtcompat]
   # (-> polars-runtime-compat). rtcompat also matches multiqc 1.35's requirement.
-  "polars[rtcompat,numpy,pandas,pyarrow,excel,deltalake]==1.41.2",
+  "polars[rtcompat,numpy,pandas,pyarrow,excel,deltalake]==1.42.1",
   # API and web
   "devtools==0.12.2",
   "diskcache==5.6.3",
-  "fastapi==0.136.3",
+  "fastapi==0.139.0",
   "gunicorn==26.0.0",
   "httpx==0.28.1",
   "uvicorn==0.49.0",
@@ -46,32 +46,32 @@ dependencies = [
   "pymongo==4.17.0",
   # Authentication and security
   "pydantic[email]==2.13.4",
-  "pydantic-settings==2.14.1",
+  "pydantic-settings==2.14.2",
   "pyjwt==2.13.0",
   "python-jose==3.5.0",
   "python-multipart==0.0.32",
-  "restrictedpython==8.2",
+  "restrictedpython==8.3",
   # Playwright for screenshots (pure Python - installs its own browsers)
-  "playwright==1.60.0",
+  "playwright==1.61.0",
   # Utilities
   "multiqc==1.35",
-  "mypy-boto3-s3==1.43.14",
+  "mypy-boto3-s3==1.43.31",
   "psutil==7.2.2",
   "python-dotenv==1.2.2",
-  "pyyaml>=6.0.2",
+  "pyyaml>=6.0.3",
   # Held at 5.2.1 (main's pin): redis-py 8.0 regressed the real-time pub/sub
   # event listener (connection_manager) — it starves the API event loop, so
   # internal HTTP self-calls time out and reference-dataset ingestion never
   # writes deltatables. Bisecting via CI; bump again once that's resolved.
-  "redis==5.2.1",
-  "tomli==2.2.1",
+  "redis==8.0.1",
+  "tomli==2.4.1",
   "types-requests==2.33.0.20260518",
   "umap-learn==0.5.12",
   # Storage
   "s3fs==2026.4.0",
   "fsspec==2026.4.0",
   # CLI utilities (required by API code that imports CLI helpers)
-  "typer==0.26.7",
+  "typer==0.26.8",
   "rich==15.0.0",
   # Dev-only file watcher for live-reloading the Celery worker. run_celery_worker.sh
   # wraps celery in `watchmedo auto-restart` when DEPICTIO_DEV_MODE=true; in prod
@@ -114,7 +114,7 @@ plotly-complexheatmap = { path = "packages/plotly-complexheatmap", editable = tr
 plotly-upset = { path = "packages/plotly-upset", editable = true }
 
 [build-system]
-requires = ["setuptools>=61", "wheel"]
+requires = ["setuptools>=82.0.1", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
