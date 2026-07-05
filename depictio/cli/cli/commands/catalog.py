@@ -243,48 +243,44 @@ def catalog_columns(
     render_records_table([{"Column": c} for c in cols], title=f"Output columns of {recipe}")
 
 
-@dev_app.command("validate")
-def catalog_validate(
-    path: Annotated[
-        str | None,
-        typer.Option("--path", "-p", help="Validate a single tool folder/file instead"),
-    ] = None,
-) -> None:
-    """Validate the catalog (CI-friendly: non-zero on error).
+# ---------------------------------------------------------------------------
+# Shared validation core (used by both `validate` and the contributor-facing
+# `lint`). Kept identical so the local check == the CI gate (nf-core pattern).
+# ---------------------------------------------------------------------------
 
-    Beyond schema validation, grounds every recipe output's `renders_as` roles
-    against the recipe's real output columns, and checks recipes resolve.
-    """
+
+def _load_catalog_target(target: Path):
+    """Load catalog entries from a tool folder, a directory of tools, or a flat file."""
     import yaml
 
     from depictio.models.components.advanced_viz.catalog import (
-        CATALOG_DIR,
         CatalogEntry,
-        check_existence,
         load_entries_from_dir,
-        read_fixture_columns,
-        recipe_output_columns,
     )
     from depictio.models.components.advanced_viz.catalog import (
         _load_tool_dir as load_tool_dir,
     )
 
-    target = Path(path) if path else CATALOG_DIR
-    try:
-        if target.is_dir() and (target / "module.yaml").exists():
-            entries = [load_tool_dir(target)]
-        elif target.is_dir():
-            entries = load_entries_from_dir(target)
-        else:
-            entries = [CatalogEntry.model_validate(yaml.safe_load(target.read_text()))]
-    except Exception as exc:
-        typer.echo(f"  INVALID ({target}): {exc}")
-        raise typer.Exit(code=1)
+    if target.is_dir() and (target / "module.yaml").exists():
+        return [load_tool_dir(target)]
+    if target.is_dir():
+        return load_entries_from_dir(target)
+    return [CatalogEntry.model_validate(yaml.safe_load(target.read_text()))]
 
-    # nf-core module + EDAM term existence (against the vendored indices).
+
+def _ground_problems(entries) -> list[str]:
+    """Existence (nf-core/EDAM) + render column-grounding problems (empty = OK).
+
+    Grounds each render's bound columns against the real data shape:
+    the fixture (most complete) > the recipe's EXPECTED_SCHEMA > declared columns.
+    """
+    from depictio.models.components.advanced_viz.catalog import (
+        check_existence,
+        read_fixture_columns,
+        recipe_output_columns,
+    )
+
     problems: list[str] = check_existence(entries)
-    # Ground each render's bound columns against the real data shape:
-    # the fixture (most complete) > the recipe's EXPECTED_SCHEMA > declared columns.
     for entry in entries:
         for out in entry.outputs:
             source = ""
@@ -315,6 +311,31 @@ def catalog_validate(
                         f"{out.id} render {r.kind or r.component}: binds "
                         f"{sorted(missing)} absent from {source} {sorted(available)}"
                     )
+    return problems
+
+
+@dev_app.command("validate")
+def catalog_validate(
+    path: Annotated[
+        str | None,
+        typer.Option("--path", "-p", help="Validate a single tool folder/file instead"),
+    ] = None,
+) -> None:
+    """Validate the catalog (CI-friendly: non-zero on error).
+
+    Beyond schema validation, grounds every recipe output's `renders_as` roles
+    against the recipe's real output columns, and checks recipes resolve.
+    """
+    from depictio.models.components.advanced_viz.catalog import CATALOG_DIR
+
+    target = Path(path) if path else CATALOG_DIR
+    try:
+        entries = _load_catalog_target(target)
+    except Exception as exc:
+        typer.echo(f"  INVALID ({target}): {exc}")
+        raise typer.Exit(code=1)
+
+    problems = _ground_problems(entries)
     if problems:
         typer.echo(f"  INVALID ({target}):")
         for p in problems:
@@ -460,3 +481,264 @@ def catalog_schema(
         typer.echo(f"  Wrote JSON Schema to {output}")
     else:
         typer.echo(text)
+
+
+# ---------------------------------------------------------------------------
+# Scaffolding: `dev catalog new` — turn a blank page into fill-in-the-blanks
+# (nf-core `modules create` style: TODO markers + optional meta.yml prefill).
+# ---------------------------------------------------------------------------
+
+
+def _fetch_nf_core_meta(module: str) -> dict:
+    """Fetch + normalise an nf-core module's meta.yml to prefill tool identity."""
+    import urllib.request
+
+    import yaml
+
+    url = (
+        "https://raw.githubusercontent.com/nf-core/modules/master/"
+        f"modules/nf-core/{module}/meta.yml"
+    )
+    with urllib.request.urlopen(url, timeout=60) as resp:  # noqa: S310
+        raw = yaml.safe_load(resp.read()) or {}
+    meta: dict = {
+        "name": raw.get("name") or module,
+        "description": raw.get("description"),
+        "_nf_core_url": (
+            f"https://github.com/nf-core/modules/tree/master/modules/nf-core/{module}"
+        ),
+    }
+    for entry in raw.get("tools") or []:
+        if isinstance(entry, dict):
+            info = next(iter(entry.values()), {}) or {}
+            ident = str(info.get("identifier") or "")
+            if ident.startswith("biotools:"):
+                meta["_biotools_url"] = f"https://bio.tools/{ident.split(':', 1)[1]}"
+                break
+    return meta
+
+
+def _infer_columns(path: Path) -> dict[str, str]:
+    """Infer {column: polars-dtype-name} from a fixture (for a reference comment)."""
+    import polars as pl
+
+    from depictio.models.components.advanced_viz.catalog import ALLOWED_DTYPES
+
+    if path.suffix == ".parquet":
+        schema = pl.read_parquet_schema(path)
+    else:
+        sep = "\t" if path.suffix == ".tsv" else ","
+        schema = pl.read_csv(path, separator=sep, n_rows=200).schema
+    return {
+        name: (s if (s := str(dtype)) in ALLOWED_DTYPES else "String")
+        for name, dtype in schema.items()
+    }
+
+
+def _placeholder_tsv() -> str:
+    return "sample\tvalue\nsample_1\t1.0\nsample_2\t2.0\n"
+
+
+def _module_yaml_text(tool: str, meta: dict | None) -> str:
+    meta = meta or {}
+    lines = [
+        "# yaml-language-server: $schema=../catalog.schema.json",
+        f"id: {tool}",
+        f"name: {meta.get('name') or tool}",
+    ]
+    if meta.get("_nf_core_url"):
+        lines.append(f"nf_core_url: {meta['_nf_core_url']}")
+    else:
+        lines.append(
+            "# TODO: nf_core_url: "
+            f"https://github.com/nf-core/modules/tree/master/modules/nf-core/{tool}"
+        )
+    if meta.get("_biotools_url"):
+        lines.append(f"biotools_url: {meta['_biotools_url']}")
+    if meta.get("description"):
+        lines.append(f"# from meta.yml: {meta['description']}")
+    lines.append("# Keep module.yaml lightweight — see depictio/catalog/SCHEMA.md")
+    return "\n".join(lines) + "\n"
+
+
+def _output_yaml_text(
+    tool: str, output_id: str, fixture_name: str | None, columns: dict[str, str]
+) -> str:
+    lines = [
+        "# yaml-language-server: $schema=../catalog.schema.json",
+        f"id: {output_id}",
+        'description: "TODO: describe this output"',
+        "# How to recognise the raw file in a scanned run (set filename and/or path_glob):",
+        "find:",
+        f'  path_glob: "**/{tool}/**/TODO-filename"  # TODO: real glob',
+    ]
+    if fixture_name:
+        lines.append(f"fixture: {fixture_name}")
+    if columns:
+        lines.append("# Columns inferred from the fixture (reference only — grounding reads the")
+        lines.append("# fixture header directly, so you need not declare `columns:` yourself):")
+        lines += [f"#   {col}: {dtype}" for col, dtype in columns.items()]
+    lines += [
+        "# `renders_as` omitted → defaults to a browsable `table` (the no-code floor).",
+        "# Uncomment to bind richer components — see depictio/catalog/SCHEMA.md:",
+        "# renders_as:",
+        "#   - component: figure",
+        "#     visu_type: bar            # TODO: box/scatter/bar/histogram/line/heatmap",
+        "#     dict_kwargs: { x: TODO-x-col, y: TODO-y-col }",
+        "#   - component: card",
+        "#     column: TODO-col",
+        "#     aggregation: average",
+    ]
+    return "\n".join(lines) + "\n"
+
+
+@dev_app.command("new")
+def catalog_new(
+    tool: Annotated[str, typer.Argument(help="Tool id / folder name, e.g. mosdepth")],
+    output: Annotated[
+        str, typer.Option("--output", "-o", help="First output name (id = <tool>_<output>)")
+    ] = "output",
+    from_nf_core: Annotated[
+        str | None,
+        typer.Option(
+            "--from-nf-core",
+            help="nf-core module to prefill identity from (fetches its meta.yml), e.g. fastqc",
+        ),
+    ] = None,
+    fixture: Annotated[
+        str | None,
+        typer.Option(
+            "--fixture", help="Sample file (tsv/csv/parquet) to copy in and infer columns from"
+        ),
+    ] = None,
+    force: Annotated[
+        bool, typer.Option("--force", help="Overwrite existing scaffold files")
+    ] = False,
+) -> None:
+    """Scaffold a new catalog tool folder (module.yaml + one output + fixture).
+
+    Generated files carry `# TODO:` markers where a human must decide (the `find`
+    glob, richer renders). With `--from-nf-core` the identity is prefilled from
+    the module's nf-core meta.yml; with `--fixture` the sample is copied in and
+    its columns inferred. Then run
+    `depictio dev catalog validate --path depictio/catalog/<tool>`.
+    """
+    import shutil
+
+    from depictio.models.components.advanced_viz.catalog import CATALOG_DIR
+
+    tool_dir = CATALOG_DIR / tool
+    module_path = tool_dir / "module.yaml"
+    output_path = tool_dir / f"{output}.yaml"
+    output_id = f"{tool}_{output}"
+
+    clashes = [p for p in (module_path, output_path) if p.exists()]
+    if clashes and not force:
+        joined = ", ".join(str(p) for p in clashes)
+        typer.echo(f"  refusing to overwrite existing file(s): {joined}. Re-run with --force.")
+        raise typer.Exit(code=1)
+
+    meta: dict | None = None
+    if from_nf_core:
+        try:
+            meta = _fetch_nf_core_meta(from_nf_core)
+            typer.echo(f"  fetched nf-core meta.yml for {from_nf_core!r}")
+        except Exception as exc:
+            typer.echo(
+                f"  could not fetch nf-core meta for {from_nf_core!r}: {exc} "
+                "(continuing with a minimal skeleton)"
+            )
+
+    tool_dir.mkdir(parents=True, exist_ok=True)
+
+    columns: dict[str, str] = {}
+    if fixture:
+        src = Path(fixture)
+        if not src.exists():
+            typer.echo(f"  fixture not found: {src}")
+            raise typer.Exit(code=1)
+        fixture_name = f"{output}{src.suffix}"
+        shutil.copy(src, tool_dir / fixture_name)
+        try:
+            columns = _infer_columns(tool_dir / fixture_name)
+        except Exception as exc:
+            typer.echo(f"  could not infer columns from fixture: {exc}")
+    else:
+        fixture_name = f"{output}.tsv"
+        (tool_dir / fixture_name).write_text(_placeholder_tsv())
+        columns = {"sample": "String", "value": "Float64"}
+
+    module_path.write_text(_module_yaml_text(tool, meta))
+    output_path.write_text(_output_yaml_text(tool, output_id, fixture_name, columns))
+
+    typer.echo(f"  scaffolded {tool_dir}:")
+    for name in (module_path.name, output_path.name, fixture_name):
+        typer.echo(f"    - {name}")
+    typer.echo("  next: fill the `# TODO:` markers, then run")
+    typer.echo(f"        depictio dev catalog validate --path {tool_dir}")
+
+
+def _write_snapshots(entries, out_dir: Path) -> None:
+    """Write a Dash-free preview-payload JSON per output (a diffable PR preview)."""
+    import json
+
+    from depictio.catalog.payload import build_payload
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    written = skipped = 0
+    for entry in entries:
+        for out in entry.outputs:
+            try:
+                payload = build_payload(out, tool=entry)
+            except Exception as exc:  # noqa: BLE001 — preview is best-effort
+                skipped += 1
+                typer.echo(f"    - skip {out.id}: {exc}")
+                continue
+            (out_dir / f"{out.id}.json").write_text(
+                json.dumps(payload, indent=2, sort_keys=True, default=str) + "\n"
+            )
+            written += 1
+    typer.echo(f"  snapshots: {written} written, {skipped} skipped → {out_dir}")
+
+
+@dev_app.command("lint")
+def catalog_lint(
+    path: Annotated[
+        str | None,
+        typer.Option("--path", "-p", help="Lint a single tool folder/file instead of all"),
+    ] = None,
+    snapshot: Annotated[
+        str | None,
+        typer.Option(
+            "--snapshot",
+            help="Also write per-output preview-payload JSON snapshots to this directory",
+        ),
+    ] = None,
+) -> None:
+    """Contributor-facing catalog check: the SAME gate as CI `validate`, with
+    friendlier output and an optional rendered-payload snapshot for PR preview.
+
+    `--snapshot DIR` writes one Dash-free preview payload JSON per output (the
+    same blob `catalog preview` renders) so a reviewer can diff the result of a
+    contribution without running the app.
+    """
+    from depictio.models.components.advanced_viz.catalog import CATALOG_DIR
+
+    target = Path(path) if path else CATALOG_DIR
+    try:
+        entries = _load_catalog_target(target)
+    except Exception as exc:
+        typer.echo(f"  ✗ INVALID ({target}): {exc}")
+        raise typer.Exit(code=1)
+
+    problems = _ground_problems(entries)
+    if problems:
+        typer.echo(f"  ✗ {len(problems)} problem(s) in {target}:")
+        for p in problems:
+            typer.echo(f"    - {p}")
+        raise typer.Exit(code=1)
+
+    n_out = sum(len(e.outputs) for e in entries)
+    typer.echo(f"  ✓ OK: {len(entries)} tool(s), {n_out} output(s) valid in {target}")
+    if snapshot:
+        _write_snapshots(entries, Path(snapshot))

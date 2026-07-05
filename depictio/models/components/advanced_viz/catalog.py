@@ -242,11 +242,19 @@ class CatalogOutput(BaseModel):
     # `nf-core/<pipeline>/<name>.py` (kept for pipeline-version-specific reshapes).
     recipe: str | None = None
 
-    # Bindable columns. REQUIRED when there is no recipe (raw == bindable);
+    # Bindable columns. Optional: declare them only when there is no recipe AND
+    # no fixture (raw == bindable, nothing to ground against). With a `fixture`,
+    # columns are grounded against the fixture's real header by
+    # `depictio catalog validate`, so declaring them is redundant — omit them.
     # FORBIDDEN when a recipe is present (the recipe owns the output columns).
     columns: dict[str, str] = Field(default_factory=dict)
 
-    renders_as: list[Render] = Field(default_factory=list)
+    # Dashboard render target(s) + binding. **Omit to get a sensible default:**
+    # a plain `table` of the output — the MultiQC-custom-content-style no-code
+    # floor, where a `find` + `fixture` alone yield a browsable table with zero
+    # viz spec. Declare `renders_as` to bind richer components (figure/card/
+    # advanced_viz). An explicit empty list opts out of any render.
+    renders_as: list[Render] = Field(default_factory=lambda: [Render(component="table")])
 
     # A bundled sample of this output's bindable shape (path under
     # depictio/projects/, e.g. nf-core/ampliseq/2.16.0/alpha_diversity_multi_canonical.tsv).

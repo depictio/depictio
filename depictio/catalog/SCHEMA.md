@@ -56,9 +56,9 @@ existence-checking validates; the derived fields are trusted until a future
 | `mode` | CAN | str | Running mode / subcommand. |
 | `description` | CAN | str | |
 | `recipe` | CAN | str | Reshape that **owns the output columns**. Module-owned (preferred): `<module>/<name>.py`, co-located in this catalog folder, e.g. `qiime2/ancombc.py`. Pipeline-keyed legacy still resolves (`nf-core/<pipeline>/<name>.py`) for pipeline-version-specific reshapes. |
-| `columns` | CAN* | dict[str,str] | Bindable columns (polars dtype names). **MUST be set iff there is no recipe and a render binds columns; MUST be absent if `recipe` is set.** |
+| `columns` | CAN | dict[str,str] | Bindable columns (polars dtype names). Declare them **only** when there is no `recipe` and no `fixture` (nothing else to ground against). With a `fixture`, its real header grounds the renders, so declaring `columns` just duplicates it — omit it. **MUST be absent if `recipe` is set** (the recipe owns the columns). |
 | `fixture` | CAN | str | A **co-located** sample filename, resolved next to the output's YAML in the module folder (e.g. `alpha_diversity.tsv`) — a small, committed, pipeline-agnostic sample of the bindable shape. Grounds renders in CI (Level-3) and feeds `preview` later. |
-| `renders_as` | CAN | list[Render] | Dashboard render target(s) + binding. |
+| `renders_as` | CAN | list[Render] | Dashboard render target(s) + binding. **Omit → defaults to a single `table`** (the no-code floor: a `find` + `fixture` alone give a browsable table). An explicit `[]` opts out of any render. |
 | `nf_core_url` / `biotools_url` / `edam_*` | CAN | str / list | Per-output identity overrides. |
 
 ### Find — recognise the raw file (MUST set ≥ 1)
@@ -100,13 +100,27 @@ ma, dot_plot, lollipop, qq, sunburst, oncoplot, coverage_track, sankey.
 - **Recipe present** → the recipe (`EXPECTED_SCHEMA`) owns the output columns;
   the YAML must **not** declare `columns`. `roles` are grounded against the
   recipe by `depictio catalog validate`.
-- **No recipe** → the raw file is bindable; declare its `columns` in the YAML,
-  and `roles` bind to them.
+- **No recipe, with a fixture** → the fixture's real header is the source of
+  truth; `roles` are grounded against it. **Omit `columns`** — it would just
+  duplicate the fixture.
+- **No recipe, no fixture** → the raw file is bindable; declare its `columns` in
+  the YAML, and `roles` bind to them.
 - Non-tabular / role-less renders (`table`, `multiqc_plot`, `figure`) need
-  neither a recipe nor `columns`.
+  neither a recipe nor `columns`. Omitting `renders_as` entirely defaults to a
+  single `table` render.
 
 Use `depictio catalog columns <recipe>` to see a recipe's output column names
 while writing `roles`.
+
+## Scaffolding & linting (contributor commands)
+
+- `depictio dev catalog new <tool> [--from-nf-core <module>] [--fixture <file>]`
+  scaffolds the folder with `# TODO:` markers; `--from-nf-core` prefills identity
+  from the module's nf-core `meta.yml`, `--fixture` copies a sample in and infers
+  its columns.
+- `depictio dev catalog lint [--path <dir>] [--snapshot <dir>]` runs the exact CI
+  `validate` gate with contributor-friendly output; `--snapshot` writes a
+  per-output preview-payload JSON for PR review.
 
 ## Two validation tiers
 

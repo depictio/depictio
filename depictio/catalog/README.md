@@ -35,6 +35,24 @@ depictio/catalog/
 Adding a tool = a PR that adds **one folder** (`module.yaml` + output YAML(s) +
 fixture). **No Python** unless an output needs a reshape (a recipe).
 
+**Fastest path (no-code floor).** The minimal output is just an `id`, a `find`,
+and a `fixture` — omit `columns` (the fixture grounds the renders) and omit
+`renders_as` (it defaults to a browsable **`table`** of the output). A fixture
+alone therefore yields a working entry, MultiQC-custom-content style; add
+`renders_as` only to bind richer components (figure/card/advanced_viz).
+
+**Don't start from a blank page.** Scaffold the folder, prefilled with `# TODO:`
+markers (and, with `--from-nf-core`, the tool identity fetched from the module's
+nf-core `meta.yml`):
+
+```bash
+depictio dev catalog new mosdepth --from-nf-core mosdepth --fixture sample.tsv
+depictio dev catalog lint --path depictio/catalog/mosdepth   # same gate as CI
+```
+
+`dev catalog lint` runs the exact CI `validate` checks with friendlier output;
+`--snapshot DIR` also writes a per-output preview payload JSON for PR review.
+
 `module.yaml` is deliberately **lightweight**: it carries the folder anchor
 (`id`), a display `name`, and the `nf_core_url` **pointer** — nothing else. The
 rest of the identity (homepage, bio.tools id, EDAM topics) already lives in the
@@ -60,7 +78,8 @@ The golden rule for schemas — **one home, no duplication**:
 | Output | where its columns live |
 |---|---|
 | **has a recipe** | the recipe (`EXPECTED_SCHEMA`). The YAML does **not** repeat them; `roles` are grounded against the recipe at validation time. |
-| **no recipe** (raw is bindable) | the YAML, via a `columns:` block; `roles` bind to those. |
+| **no recipe, has a fixture** | the fixture's real header. `roles` are grounded against it at validation time — **omit `columns:`**, it would just duplicate the fixture. |
+| **no recipe, no fixture** (raw is bindable) | the YAML, via a `columns:` block; `roles` bind to those. |
 
 Each advanced_viz render can carry an **`id`** — a tool-unique handle a
 dashboard addresses directly:

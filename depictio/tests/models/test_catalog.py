@@ -118,6 +118,42 @@ def test_unknown_dtype_rejected():
 
 
 # ---------------------------------------------------------------------------
+# no-code floor: renders_as defaults to a table; columns optional with a fixture
+# ---------------------------------------------------------------------------
+
+
+def test_renders_as_defaults_to_a_table_when_omitted():
+    # An output with just id + find (no renders_as, no columns) still validates,
+    # defaulting to a single browsable `table` render (MultiQC-custom-content style).
+    out = CatalogOutput.model_validate(_output())
+    assert [r.component for r in out.renders_as] == ["table"]
+
+
+def test_explicit_empty_renders_as_opts_out():
+    out = CatalogOutput.model_validate(_output(renders_as=[]))
+    assert out.renders_as == []
+
+
+def test_columns_optional_when_fixture_present():
+    # With a fixture, roles are grounded at validate-time against the fixture
+    # header, so `columns` may be omitted from the YAML entirely.
+    out = CatalogOutput.model_validate(
+        _output(
+            fixture="f.tsv",
+            renders_as=[
+                {
+                    "component": "advanced_viz",
+                    "kind": "coverage_track",
+                    "roles": {"chromosome": "chrom", "position": "start", "value": "cov"},
+                }
+            ],
+        )
+    )
+    assert out.columns == {}
+    assert out.fixture == "f.tsv"
+
+
+# ---------------------------------------------------------------------------
 # renders_as
 # ---------------------------------------------------------------------------
 
