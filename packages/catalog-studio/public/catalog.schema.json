@@ -1,0 +1,503 @@
+{
+  "$defs": {
+    "CatalogFind": {
+      "additionalProperties": false,
+      "description": "How to recognise the raw output file among a scanned run's files.",
+      "properties": {
+        "filename": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Filename"
+        },
+        "path_glob": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Path Glob"
+        }
+      },
+      "title": "CatalogFind",
+      "type": "object"
+    },
+    "CatalogOutput": {
+      "additionalProperties": false,
+      "description": "One file a tool emits \u2192 one or more dashboard renders.",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "mode": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mode"
+        },
+        "description": {
+          "default": "",
+          "title": "Description",
+          "type": "string"
+        },
+        "find": {
+          "$ref": "#/$defs/CatalogFind"
+        },
+        "recipe": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recipe"
+        },
+        "columns": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Columns",
+          "type": "object"
+        },
+        "renders_as": {
+          "items": {
+            "$ref": "#/$defs/Render"
+          },
+          "title": "Renders As",
+          "type": "array"
+        },
+        "fixture": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fixture"
+        },
+        "nf_core_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Nf Core Url"
+        },
+        "biotools_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Biotools Url"
+        },
+        "edam_operations": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Edam Operations",
+          "type": "array"
+        },
+        "edam_formats": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Edam Formats",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "find"
+      ],
+      "title": "CatalogOutput",
+      "type": "object"
+    },
+    "Render": {
+      "additionalProperties": false,
+      "description": "One render target for an output: a dashboard component + its binding.\n\n- `advanced_viz` \u2192 `kind` + `roles` (role \u2192 column).\n- `figure` \u2192 either UI mode (`visu_type` + `dict_kwargs`, plotly-express) or\n  code mode (`code`: an inline snippet that sets `fig`, depictio's\n  figure `code_content`).\n- `card` \u2192 `column` + `aggregation` (a metric/KPI).\n- `multiqc`/`table`/\u2026 \u2192 no extra binding.\n\nAn optional `id` makes the render a first-class, tool-unique handle so a\ndashboard can address it directly with ``use: <tool>/<render-id>`` \u2014 no need\nto name the output and disambiguate with ``viz_kind``. Ids only need to be\nunique within a tool (enforced on the entry), and a render binds to its\nparent output's columns, so the id lives here, never in ``module.yaml``.",
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "component": {
+          "anyOf": [
+            {
+              "enum": [
+                "card",
+                "figure",
+                "interactive",
+                "table",
+                "text",
+                "jbrowse",
+                "image",
+                "map",
+                "advanced_viz"
+              ],
+              "type": "string"
+            },
+            {
+              "const": "multiqc",
+              "type": "string"
+            }
+          ],
+          "title": "Component"
+        },
+        "kind": {
+          "anyOf": [
+            {
+              "enum": [
+                "volcano",
+                "embedding",
+                "manhattan",
+                "stacked_taxonomy",
+                "phylogenetic",
+                "rarefaction",
+                "da_barplot",
+                "enrichment",
+                "complex_heatmap",
+                "upset_plot",
+                "ma",
+                "dot_plot",
+                "lollipop",
+                "qq",
+                "sunburst",
+                "oncoplot",
+                "coverage_track",
+                "sankey"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Kind"
+        },
+        "roles": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Roles",
+          "type": "object"
+        },
+        "visu_type": {
+          "anyOf": [
+            {
+              "enum": [
+                "scatter",
+                "line",
+                "bar",
+                "box",
+                "histogram",
+                "heatmap"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Visu Type"
+        },
+        "dict_kwargs": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Dict Kwargs",
+          "type": "object"
+        },
+        "code": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Code"
+        },
+        "column": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Column"
+        },
+        "aggregation": {
+          "anyOf": [
+            {
+              "enum": [
+                "count",
+                "sum",
+                "average",
+                "median",
+                "min",
+                "max",
+                "range",
+                "variance",
+                "std_dev",
+                "skewness",
+                "kurtosis",
+                "percentile",
+                "q1",
+                "q3",
+                "box_plot_stats",
+                "nunique",
+                "mode"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aggregation"
+        },
+        "aggregations": {
+          "items": {
+            "enum": [
+              "count",
+              "sum",
+              "average",
+              "median",
+              "min",
+              "max",
+              "range",
+              "variance",
+              "std_dev",
+              "skewness",
+              "kurtosis",
+              "percentile",
+              "q1",
+              "q3",
+              "box_plot_stats",
+              "nunique",
+              "mode"
+            ],
+            "type": "string"
+          },
+          "title": "Aggregations",
+          "type": "array"
+        },
+        "secondary_layout": {
+          "anyOf": [
+            {
+              "enum": [
+                "vertical",
+                "compact",
+                "box_plot",
+                "top_n",
+                "coverage",
+                "concentration"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Secondary Layout"
+        },
+        "breakdown_col": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Breakdown Col"
+        },
+        "top_n_count": {
+          "anyOf": [
+            {
+              "maximum": 5,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Top N Count"
+        },
+        "coverage_max": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Coverage Max"
+        },
+        "filter_expr": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Filter Expr"
+        },
+        "section": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Section"
+        }
+      },
+      "required": [
+        "component"
+      ],
+      "title": "Render",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "A tool + all its outputs (one flat file, or a folder of files).",
+  "properties": {
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "description": {
+      "default": "",
+      "title": "Description",
+      "type": "string"
+    },
+    "homepage": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Homepage"
+    },
+    "nf_core_url": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Nf Core Url"
+    },
+    "biotools_url": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Biotools Url"
+    },
+    "edam_topics": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Edam Topics",
+      "type": "array"
+    },
+    "schema_version": {
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "outputs": {
+      "items": {
+        "$ref": "#/$defs/CatalogOutput"
+      },
+      "minItems": 1,
+      "title": "Outputs",
+      "type": "array"
+    }
+  },
+  "required": [
+    "id",
+    "name",
+    "outputs"
+  ],
+  "title": "CatalogEntry",
+  "type": "object"
+}

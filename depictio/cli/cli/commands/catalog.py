@@ -460,3 +460,59 @@ def catalog_schema(
         typer.echo(f"  Wrote JSON Schema to {output}")
     else:
         typer.echo(text)
+
+
+# advanced_viz kinds whose renderer computes server-side (Celery / heavy libs),
+# so a purely client-side tool (e.g. catalog-studio) cannot preview them — it
+# must show a "verify in depictio" badge instead of a live plot.
+_HEAVY_KINDS = frozenset({"embedding", "complex_heatmap", "upset_plot", "sankey", "oncoplot"})
+
+
+@dev_app.command("kinds")
+def catalog_kinds(
+    as_json: Annotated[
+        bool,
+        typer.Option("--json", help="Emit a machine-readable JSON map (for catalog-studio)."),
+    ] = False,
+    output: Annotated[
+        str | None,
+        typer.Option("--output", "-o", help="Write the JSON here (default: stdout)"),
+    ] = None,
+) -> None:
+    """Emit the advanced_viz kinds → role/dtype map (source for catalog-studio's kinds.json).
+
+    Shape: ``{ kind: { roles: {role: [dtype, ...]}, required_roles: [...],
+    heavy: bool, label: str } }``. Roles merge required + optional (via
+    ``role_dtype_specs``); ``heavy`` marks kinds that cannot be previewed
+    client-side. This is the drift-free source the web app reads at build time.
+    """
+    import json
+
+    from depictio.models.components.advanced_viz.schemas import (
+        CANONICAL_SCHEMAS,
+        role_dtype_specs,
+    )
+
+    kinds: dict[str, object] = {}
+    for kind in sorted(CANONICAL_SCHEMAS):
+        specs = role_dtype_specs(kind)  # {role: {required, dtypes[], description}}
+        kinds[kind] = {
+            "roles": {role: spec["dtypes"] for role, spec in specs.items()},
+            "required_roles": [r for r, s in specs.items() if s["required"]],
+            "heavy": kind in _HEAVY_KINDS,
+            "label": kind.replace("_", " ").title(),
+        }
+
+    if not as_json:
+        # Human-readable summary.
+        for kind, meta in kinds.items():
+            flag = " (heavy — no client preview)" if meta["heavy"] else ""  # type: ignore[index]
+            typer.echo(f"{kind}{flag}: {', '.join(meta['roles'])}")  # type: ignore[index]
+        return
+
+    text = json.dumps(kinds, indent=2, sort_keys=True) + "\n"
+    if output:
+        Path(output).write_text(text)
+        typer.echo(f"  Wrote kinds JSON to {output}")
+    else:
+        typer.echo(text)

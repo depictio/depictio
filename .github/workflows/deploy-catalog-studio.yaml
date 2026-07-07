@@ -1,0 +1,68 @@
+name: deploy-catalog-studio
+
+# Build the backend-less Catalog Studio SPA and publish it to GitHub Pages at
+# https://depictio.github.io/depictio/ (Vite base '/depictio/'). Path-filtered
+# so it only runs when the app (or the in-repo schema/kinds it snapshots) change.
+#
+# The build reads committed snapshots (public/kinds.json + public/catalog.schema.json);
+# their freshness is enforced by the drift check in catalog-studio-ci.yaml, so
+# this deploy job stays lean (pure Node — no Python).
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/catalog-studio/**"
+      - "packages/depictio-react-core/**"
+      - "packages/depictio-components/**"
+      - ".github/workflows/deploy-catalog-studio.yaml"
+  workflow_dispatch:
+
+# Least-privilege token for Pages deploy.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never run two Pages deploys at once; let the newest win.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Catalog Studio
+        run: pnpm --filter catalog-studio run build
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: packages/catalog-studio/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-22.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

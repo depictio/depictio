@@ -13,6 +13,14 @@ It is **not** a runtime column→viz suggestion engine (`schemas.suggest_viz_kin
 does that from a DC's inferred schema). It is the map used to **build / assist
 dashboards when scanning a run**.
 
+## Contribute a tool without writing YAML
+
+**[Catalog Studio](https://depictio.github.io/depictio/)** is a no-backend web app
+(source: [`packages/catalog-studio/`](../../packages/catalog-studio/)) that walks you
+through it: drop a CSV/TSV, bind columns to visualizations with live previews, then
+download a zip or open a PR into this folder. The authoritative check remains
+`depictio dev catalog validate` — the same one CI runs.
+
 ## Layout
 
 **One folder per module** — a self-contained unit holding the tool identity,
