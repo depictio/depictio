@@ -388,6 +388,9 @@ dev/advanced_viz_docs_screenshots/fixtures/
 # Generated catalog-preview single-file bundle (built via pnpm run build:catalog-preview)
 depictio/viewer/dist-catalog-preview/
 
+# Generated studio single-file bundle (built via pnpm run build:studio)
+depictio/viewer/dist-studio/
+
 # Nextflow runtime artifacts (from local pipeline validation runs)
 .nextflow/
 .nextflow.log*
