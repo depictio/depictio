@@ -165,7 +165,6 @@ const ImageRenderer: React.FC<ImageRendererProps> = ({
     sortDir,
   ]);
 
-  const paths = response ? response.paths : null;
   const rows = response ? response.rows : null;
   const sortableColumns = response?.sortable_columns ?? [];
   const effectiveSortBy = response?.sort_by ?? null;
@@ -235,14 +234,25 @@ const ImageRenderer: React.FC<ImageRendererProps> = ({
   const totalRowsCount = rows ? rows.length : 0;
 
   // ── New-item highlight pipeline ───────────────────────────────────────────
-  // ``useNewItemIds`` is the WHAT (which paths just arrived);
+  // ``useNewItemIds`` is the WHAT (which items just arrived);
   // ``useTransientFlag`` is the WHEN (only ~3 s after a refreshTick
   // increment). Filter edits don't change refreshTick → no glow.
+  //
+  // Diff on the row-id column (``index_index`` etc.) rather than the image
+  // path: drivers frequently recycle a small pool of filenames across many
+  // rows (e.g. the adapt_feedb_ms stream test reuses cell_001..008.png), so a
+  // path-keyed diff would report zero new items even though fresh rows landed.
+  // Row-ids are unique per row, so newly-ingested rows are always detected.
+  // Falls back to the path when no row-id column resolves.
   const highlightDurationMs =
     typeof metadata.highlight_duration_ms === 'number'
       ? (metadata.highlight_duration_ms as number)
       : 3000;
-  const newPaths = useNewItemIds(paths || [], refreshTick);
+  const itemKeys = useMemo(
+    () => items.map((it) => (rowIdColumn ? it.rowId : it.relPath)),
+    [items, rowIdColumn],
+  );
+  const newItemKeys = useNewItemIds(itemKeys, refreshTick);
   const highlightActive = useTransientFlag(refreshTick, highlightDurationMs);
 
   const selectionEnabled = !!onFilterChange && !!imageColumn;
@@ -443,7 +453,9 @@ const ImageRenderer: React.FC<ImageRendererProps> = ({
             <SimpleGrid cols={columns} spacing="xs" verticalSpacing="xs" p={4}>
               {items.map((it) => {
                 const selected = selectedRowIds.has(it.rowId);
-                const isNew = highlightActive && newPaths.has(it.relPath);
+                const isNew =
+                  highlightActive &&
+                  newItemKeys.has(rowIdColumn ? it.rowId : it.relPath);
                 const cardClasses = [
                   isNew ? 'depictio-card-new' : null,
                   selected ? 'depictio-card-selected' : null,
