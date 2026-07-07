@@ -225,6 +225,45 @@ class ExpectedDataCollection(BaseModel):
     )
 
 
+class ColumnRequirement(BaseModel):
+    """One column a shared dashboard needs from a data collection.
+
+    Aggregated across every component that binds to the same DC: a column used by
+    several components (e.g. a group column both filtered on and coloured by) yields
+    a single entry whose ``roles`` list records each usage. This is the unit the
+    import-time validation checks against the target DC's ``aggregation_columns_specs``
+    and that pre-fills the ``DCTableConfig.rename`` suggestions.
+    """
+
+    name: str = Field(..., description="Column name referenced by the dashboard")
+    type: str | None = Field(
+        default=None,
+        description="Declared column_type when a component provided one "
+        "(int64, float64, object, ...); None if unknown",
+    )
+    roles: list[str] = Field(
+        default_factory=list,
+        description="Where the column is used, as '<component_type>:<binding>' "
+        "(e.g. 'figure:x', 'card:aggregation', 'interactive:filter')",
+    )
+
+
+class ColumnContract(BaseModel):
+    """The per-DC column requirements a dashboard imposes — its reuse contract.
+
+    Computed from a dashboard's ``stored_metadata`` at export time (see
+    ``build_column_contract``) and bundled with the shared template so the importer
+    can (a) validate that the target data collections expose the needed columns and
+    (b) pre-fill column-rename suggestions when they don't. Keyed by
+    ``data_collection_tag`` so it survives the tag→ID re-resolution on import.
+    """
+
+    collections: dict[str, list[ColumnRequirement]] = Field(
+        default_factory=dict,
+        description="Mapping of data_collection_tag -> required columns",
+    )
+
+
 class TemplateOrigin(BaseModel):
     """Stored on Project model to track that a template was used to create the project.
 

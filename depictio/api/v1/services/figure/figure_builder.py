@@ -14,6 +14,11 @@ import plotly.graph_objects as go
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.services.figure.error_figure import create_error_figure
 from depictio.api.v1.services.figure.heatmap import collect_heatmap_kwargs
+from depictio.api.v1.services.figure.px_columns import (
+    _PX_COLUMN_LIST_PARAMS,
+    _PX_COLUMN_PARAMS,
+    _WHOLE_FRAME_VISU,
+)
 from depictio.api.v1.services.multiqc.themes import get_theme_template
 
 # Above this row count, per-marker scatter plots are downsampled before being
@@ -25,30 +30,6 @@ FIGURE_MAX_POINTS = 50_000
 _POINT_PLOT_TYPES = frozenset(
     {"scatter", "scatter_3d", "scatter_ternary", "scatter_polar", "strip"}
 )
-
-# Plotly Express keyword args whose value is a single DataFrame column name.
-_PX_COLUMN_PARAMS: frozenset[str] = frozenset(
-    {
-        "x", "y", "z", "color", "size", "symbol", "line_dash", "line_group",
-        "pattern_shape", "hover_name", "names", "values", "facet_col", "facet_row",
-        "animation_frame", "animation_group", "base", "r", "theta", "a", "b", "c",
-        "error_x", "error_y", "error_z",
-    }
-)  # fmt: skip
-
-# Plotly Express keyword args whose value is a list (or ``{col: bool}`` dict) of
-# column names.
-_PX_COLUMN_LIST_PARAMS: frozenset[str] = frozenset({"hover_data", "custom_data", "dimensions"})
-
-# Visualisations that read the whole frame (or a column set we can't reliably
-# enumerate from dict_kwargs): projecting them risks dropping needed columns, so
-# signal a full load instead.
-_WHOLE_FRAME_VISU: frozenset[str] = frozenset(
-    {
-        "heatmap", "scatter_matrix", "parallel_coordinates",
-        "parallel_categories", "imshow", "scatter_geo", "choropleth",
-    }
-)  # fmt: skip
 
 
 def referenced_columns(visu_type: str, dict_kwargs: dict) -> set[str] | None:
