@@ -16,7 +16,7 @@ components:
     workflow_tag: python/microscopy_workflow
     data_collection_tag: microscopy_phenobase
     interactive_component_type: Timeline
-    column_name: acquisition_timestamp
+    column_name: meta_acquisition_timestamp
     column_type: datetime
     placement: top
     timescale: minute

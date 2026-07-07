@@ -255,6 +255,15 @@ const TableRenderer: React.FC<TableRendererProps> = ({
     };
   }, [rowIdColumn, highlightActive, newRowIds]);
 
+  // AG Grid only evaluates ``getRowClass`` when a row is first drawn. The
+  // new-row highlight resolves via an async snapshot fetch that lands *after*
+  // the grid has already painted the refreshed page, so changing the prop
+  // alone never re-classes the visible rows. Force a redraw whenever the
+  // highlight set flips on (or off) so the flash actually reaches the DOM.
+  useEffect(() => {
+    gridApiRef.current?.redrawRows();
+  }, [getRowClass]);
+
   const datasource = useMemo<IDatasource>(
     () => ({
       getRows: (params: IGetRowsParams) => {
