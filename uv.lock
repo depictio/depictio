@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = ">=3.11"
 resolution-markers = [
     "python_full_version >= '3.14' and sys_platform == 'emscripten'",
@@ -999,7 +999,7 @@ wheels = [
 
 [[package]]
 name = "depictio"
-version = "1.1.4b1"
+version = "1.1.4b2"
 source = { editable = "." }
 dependencies = [
     { name = "bcrypt" },
