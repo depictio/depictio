@@ -1,0 +1,7 @@
+# yaml-language-server: $schema=../catalog.schema.json
+id: ivar_consensus
+name: ivar_consensus
+description: "Generate a consensus sequence from a BAM file using iVar"
+homepage: https://github.com/andersen-lab/ivar
+nf_core_url: https://github.com/nf-core/modules/blob/master/modules/nf-core/ivar/consensus/meta.yml
+biotools_url: https://bio.tools/andersen-lab_ivar

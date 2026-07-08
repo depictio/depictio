@@ -1,0 +1,17 @@
+id: ivar_consensus_qual
+description: "iVar generated quality file"
+find: {path_glob: "**/ivar_consensus/*.qual.txt"}
+fixture: iris.csv
+renders_as:
+  - id: figure_code
+    component: figure
+    code: |-
+      # df is a pandas DataFrame of your fixture.
+      # Assign your Plotly figure to a variable named `fig`.
+      # Available: df, px (plotly.express), go, pd (pandas), np (numpy).
+      
+      fig = px.scatter(df, x="sepal.length", y="sepal.width", color="variety")
+      
+      # Preprocess with pandas if you like, e.g.:
+      # agg = df.groupby("group")["value"].mean().reset_index()
+      # fig = px.bar(agg, x="group", y="value")
