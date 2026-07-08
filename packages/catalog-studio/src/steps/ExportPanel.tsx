@@ -141,15 +141,30 @@ export default function ExportPanel({ kinds }: { kinds: KindsMap }) {
         </Button>
 
         {canPr ? (
-          <Button
-            size="md"
-            variant="light"
-            leftSection={<Icon icon="mdi:github" />}
-            loading={pr.status === 'working'}
-            onClick={doOpenPr}
-          >
-            {signedIn ? 'Open pull request' : 'Sign in with GitHub & open PR'}
-          </Button>
+          pr.status === 'done' && pr.url ? (
+            <Button
+              size="md"
+              color="teal"
+              component="a"
+              href={pr.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              leftSection={<Icon icon="mdi:check-circle" />}
+              rightSection={<Icon icon="mdi:open-in-new" width={14} />}
+            >
+              View pull request
+            </Button>
+          ) : (
+            <Button
+              size="md"
+              variant="light"
+              leftSection={<Icon icon="mdi:github" />}
+              loading={pr.status === 'working'}
+              onClick={doOpenPr}
+            >
+              {signedIn ? 'Open pull request' : 'Sign in with GitHub & open PR'}
+            </Button>
+          )
         ) : (
           <Button
             size="md"

@@ -3,8 +3,8 @@
 A **100 % client-side** web app (GitHub Pages, no backend) for contributing a
 tool to the depictio catalog. Pick a tool source (nf-core / Snakemake / Galaxy),
 drop a CSV/TSV, then author dashboard components with **depictio's own component
-builder** — and either **download a zip** or **contribute it on GitHub** (a
-token-free web-upload PR against `depictio/depictio`). The tool data lives in
+builder** — and either **download a zip** or open a **one-click pull request**
+(*Sign in with GitHub*) against `depictio/depictio`. The tool data lives in
 [`depictio/catalog/`](../../depictio/catalog/), not a separate repo.
 
 **Live app:** https://depictio.github.io/depictio/
@@ -23,9 +23,21 @@ token-free web-upload PR against `depictio/depictio`). The tool data lives in
    authored via a roles panel; heavy kinds (embedding, complex_heatmap,
    upset_plot, sankey, oncoplot) export fine but preview only in depictio.
 4. **Export** — download `<tool>/{module.yaml, <output>.yaml, <fixture>}` as a
-   zip, or **Contribute on GitHub**: the zip downloads and GitHub's web uploader
-   opens on `depictio/catalog/` — drag the unzipped `<tool>/` folder in and
-   *Propose changes*; GitHub forks the repo and opens the PR (no token needed).
+   zip, or **Sign in with GitHub** to open the PR in one click (the app forks
+   `depictio/depictio`, commits the three files, and opens the PR; `public_repo`
+   scope, no PAT). When OAuth isn't configured it falls back to a zip +
+   GitHub web-upload flow. See [`oauth-worker/README.md`](./oauth-worker/README.md).
+
+## Walkthrough
+
+| | |
+| --- | --- |
+| **1. Tool** — identity + the single output, 2-panel; nf-core **Import** auto-fills id/name/description **and** the output slug/glob from the module `meta.yml`. | ![Tool step](docs/screenshots/01-tool.png) |
+| **2. Fixture** — drop the output file; it's parsed client-side and shown in an ag-grid table (this file grounds the bindings in CI). | ![Fixture step](docs/screenshots/02-fixture.png) |
+| **3a. Add a visualization** — depictio's component-type grid (figure / card / table / interactive / advanced_viz). | ![Component types](docs/screenshots/03-component-types.png) |
+| **3b. Figure builder** — depictio's real UI (preview-left / properties-right) with a UI/Code toggle; Code Mode runs Plotly-Express in-browser via Pyodide. | ![Figure builder](docs/screenshots/04-figure-builder.png) |
+| **3c. Render card** — mirrors the Tools Catalog result, with tabs *For dashboard users* (preview + `use:` reuse snippet) and *For catalog developers* (render id + `renders_as`). | ![Render card](docs/screenshots/05-render-card.png) |
+| **4. Export** — the generated files for this tool + one-click PR (or zip). | ![Export step](docs/screenshots/06-export.png) |
 
 ## What it generates
 

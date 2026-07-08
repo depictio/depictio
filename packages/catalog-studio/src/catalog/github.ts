@@ -145,14 +145,39 @@ export async function openCatalogPr(
   });
 
   onProgress('Opening the pull request…');
+  const body = [
+    '## Summary',
+    `Adds the **${entry.toolId}** tool to the catalog, authored with [Depictio Tools Studio](https://depictio.github.io/depictio/).`,
+    '',
+    `## Files (\`${dir}/\`)`,
+    '| File | Purpose |',
+    '| --- | --- |',
+    '| `module.yaml` | Tool identity (id, name, links). |',
+    `| \`${entry.outputYamlName}\` | Output definition + \`renders_as\` (the dashboard components). |`,
+    `| \`${entry.fixtureName}\` | Fixture — grounds the bindings in CI (nothing computed server-side). |`,
+    '',
+    '## Validation',
+    'CI `dev catalog validate` is the authoritative check for this entry.',
+    '',
+    '<details><summary>module.yaml</summary>',
+    '',
+    '```yaml',
+    entry.moduleYaml.trimEnd(),
+    '```',
+    '</details>',
+    '',
+    `<details><summary>${entry.outputYamlName}</summary>`,
+    '',
+    '```yaml',
+    entry.outputYaml.trimEnd(),
+    '```',
+    '</details>',
+  ].join('\n');
   const pr = await gh<{ html_url: string }>(token, 'POST', `/repos/${owner}/${repo}/pulls`, {
     title: `Add catalog tool: ${entry.toolId}`,
     head: `${login}:${branch}`,
     base,
-    body:
-      `Adds \`${dir}/\` via [Depictio Tools Studio](https://depictio.github.io/depictio/).\n\n` +
-      `- \`module.yaml\`, \`${entry.outputYamlName}\`, fixture \`${entry.fixtureName}\`\n\n` +
-      `CI \`dev catalog validate\` is the authoritative check.`,
+    body,
   });
 
   return { prUrl: pr.html_url, branch };
