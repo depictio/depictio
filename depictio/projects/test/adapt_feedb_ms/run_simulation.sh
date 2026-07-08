@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 # Run an SVLT virtual-microscopy simulation against a Depictio instance.
-# Each acquisition tick: PhenoBase.write() pushes a delta table to MinIO, then
-# POSTs to depictio so connected dashboards refresh.
+# Each acquisition tick, the svltx-depictio extension (hooked onto
+# session_phenobase.write) exports the PhenoBase table to MinIO as a Delta
+# table, then POSTs to depictio so connected dashboards refresh.
+#
+# Requires the `svltx-depictio` package installed in $SVLT_ENV and the
+# experiment script to `import svltx.depictio` (proj0039-...-simulate does).
 #
 # Works in two modes:
 #   • Worktree/dev — auto-derives ports + MinIO creds from ../../../../.env.instance
@@ -12,9 +16,9 @@
 # Every value below can be overridden by exporting the matching env var first;
 # defaults target a stock local Depictio (FastAPI :8058, MinIO :9000).
 #
-# NOTE: phenobase.py reads SVLT_API_URL / SVLT_API_ENDPOINT / SVLT_API_TOKEN /
-# SVLT_API_PAYLOAD (the older SVLT_DEPICTIO_API / SVLT_DEPICTIO_TOKEN names are
-# no longer read).
+# NOTE: svltx.depictio reads SVLT_API_URL / SVLT_API_ENDPOINT / SVLT_API_TOKEN /
+# SVLT_API_PAYLOAD and the SVLT_S3_* vars (the older SVLT_DEPICTIO_API /
+# SVLT_DEPICTIO_TOKEN names are no longer read).
 #
 # We notify via /deltatables/upsert (NOT /events/test-trigger). test-trigger
 # only broadcasts + drops the cache; it does NOT recompute column specs or bump
@@ -58,6 +62,19 @@ export SVLT_S3_KEY="${SVLT_S3_KEY:-${DEPICTIO_MINIO_ROOT_USER:-minio}}"
 export SVLT_S3_SECRET="${SVLT_S3_SECRET:-${DEPICTIO_MINIO_ROOT_PASSWORD:-minio123}}"
 export SVLT_S3_BUCKET="${SVLT_S3_BUCKET:-depictio-bucket}"
 export SVLT_DC_ID="$DC_ID"
+# This simulator uses PhenoBase.write() directly, so svlt's own sync_to_bucket
+# never runs — have the extension mirror images itself. In deployments where
+# svlt pushes images to the same bucket, leave this unset (default: off).
+export SVLT_UPLOAD_IMAGES="${SVLT_UPLOAD_IMAGES:-1}"
+
+# Completeness gate: the analysis pipeline writes PhenoBase twice per
+# acquisition — once after segmentation (cells, no image patches) and once after
+# ROI-square generation (same cells, now with 2D-RGB image paths). Only the
+# second write yields displayable rows, so gate the Depictio sync on this column
+# being populated: each acquisition then fires a single realtime event, and
+# dashboards never refresh onto rows whose images don't exist yet. Unset it to
+# restore per-write notifications.
+export SVLT_IMAGE_COLUMN="${SVLT_IMAGE_COLUMN:-patches_patches_2d_rgb_path}"
 
 # --- API notify -> depictio (re-specs the delta + fires the WS broadcast) ----
 export SVLT_API_URL="${SVLT_API_URL:-http://localhost:${FASTAPI_PORT}/depictio/api/v1}"
@@ -73,7 +90,11 @@ if [[ -z "${SVLT_API_TOKEN:-}" ]]; then
 fi
 : "${SVLT_API_TOKEN:?set SVLT_API_TOKEN (or provide admin_config.yaml) for the API notify}"
 export SVLT_API_TOKEN
+# Headless: svlt's startup.main() opens a browser on launch. SVLT_NO_BROWSER
+# only helps if svlt carries the guard patch; BROWSER=echo is the universal
+# no-op (Python's webbrowser runs `echo <url>` instead of opening a browser).
 export SVLT_NO_BROWSER=1
+export BROWSER="${BROWSER:-echo}"
 
 echo "SVLT -> S3   : $SVLT_S3_ENDPOINT  (dc $DC_ID)"
 echo "SVLT -> API  : ${SVLT_API_URL}${SVLT_API_ENDPOINT}"
@@ -82,7 +103,8 @@ echo "EXP_ROOT     : $EXP_ROOT   (extra args: ${SVLT_EXTRA_ARGS:-none})"
 # SVLT refuses to overwrite prior output
 rm -rf "$EXP_ROOT/experiment" "$EXP_ROOT/session"
 
-# shellcheck disable=SC2086 -- SVLT_EXTRA_ARGS is intentionally word-split
+# SVLT_EXTRA_ARGS is intentionally word-split into separate CLI args.
+# shellcheck disable=SC2086
 exec "${MAMBA_EXE:-micromamba}" run -n "$SVLT_ENV" python \
     "$SVLT_SCRIPT" \
     --root "$EXP_ROOT" \

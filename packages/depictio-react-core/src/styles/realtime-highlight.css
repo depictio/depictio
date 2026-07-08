@@ -29,10 +29,38 @@
   }
 }
 
-.depictio-row-new {
+/**
+ * AG Grid row highlights must out-specify the theme's row background. The
+ * Alpine themes paint ``.ag-theme-alpine .ag-row-odd`` / ``.ag-row`` backgrounds
+ * with a theme-scoped selector (specificity 0,2,0) that beats a bare
+ * ``.depictio-row-new`` (0,1,0), so the static pinned tint never showed. Scope
+ * our selectors under both theme roots with the ``.ag-row`` qualifier and mark
+ * the background ``!important`` so neither the base nor the odd-stripe rule wins.
+ */
+.ag-theme-alpine .ag-row.depictio-row-new,
+.ag-theme-alpine-dark .ag-row.depictio-row-new {
   animation: depictio-row-flash 3s ease-out;
 }
 
 .depictio-card-new {
   animation: depictio-card-glow 3s ease-out;
+}
+
+/**
+ * Persistent (pinned) highlight — applied when the user re-selects a past batch
+ * from the event log. Unlike the one-shot ``-new`` animations above, these are
+ * steady styles that stay until the class is removed (highlight cleared or a
+ * different batch chosen).
+ */
+.ag-theme-alpine .ag-row.depictio-row-pinned,
+.ag-theme-alpine-dark .ag-row.depictio-row-pinned {
+  background-color: rgba(255, 235, 59, 0.28) !important;
+}
+
+/* Doubled class (specificity 0,2,0) + ``!important`` so the steady box-shadow
+ * beats Mantine's Paper/Card ``box-shadow``, which is declared at equal
+ * specificity but later in the cascade. */
+.depictio-card-pinned.depictio-card-pinned {
+  box-shadow: 0 0 0 3px rgba(255, 152, 0, 0.85),
+              0 0 12px 3px rgba(255, 193, 7, 0.5) !important;
 }

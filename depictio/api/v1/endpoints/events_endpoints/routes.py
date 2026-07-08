@@ -54,7 +54,20 @@ def _user_can_access_dashboard(user: User | None, dashboard_id: str) -> bool:
     from depictio.api.v1.endpoints.dashboards_endpoints.routes import check_project_permission
 
     try:
-        dashboard = dashboards_collection.find_one({"dashboard_id": dashboard_id})
+        # ``dashboard_id`` arrives as a raw string from the WS query param, but
+        # the stored ``dashboard_id`` field is an ObjectId (mirrors ``_id``).
+        # Query by the ObjectId form (with a string/`_id` fallback for any
+        # deployments that persisted it differently) — a plain string match
+        # silently misses and denies every subscribe.
+        try:
+            oid = ObjectId(dashboard_id)
+            dashboard_query: dict = {
+                "$or": [{"dashboard_id": oid}, {"dashboard_id": dashboard_id}, {"_id": oid}]
+            }
+        except Exception:
+            dashboard_query = {"dashboard_id": dashboard_id}
+
+        dashboard = dashboards_collection.find_one(dashboard_query)
         if not dashboard:
             logger.debug(f"WS subscribe denied: dashboard {dashboard_id} not found")
             return False
@@ -238,6 +251,12 @@ async def get_events_status(
     }
 
 
+# Upper bound on the per-batch id list shipped in the payload — keeps the
+# WebSocket frame (and the localStorage-persisted journal) from ballooning on a
+# very large upsert while still covering realistic streaming batches.
+_MAX_NEW_IDS = 1000
+
+
 def _build_event_payload(dc_id: str, operation: str = "update") -> dict[str, Any]:
     """Assemble a meaningful WS payload for a DC update.
 
@@ -341,6 +360,10 @@ def _build_event_payload(dc_id: str, operation: str = "update") -> dict[str, Any
                                 payload["id_column"] = id_col
                                 payload["new_ids_sample"] = new_ids[:10]
                                 payload["new_ids_total"] = len(new_ids)
+                                # Full (bounded) id set so the frontend can
+                                # highlight every row a batch added and re-apply
+                                # that highlight later from the event log.
+                                payload["new_ids"] = new_ids[:_MAX_NEW_IDS]
                         except Exception:
                             pass
             except Exception as diff_err:

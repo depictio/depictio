@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   Box,
   Group,
@@ -45,16 +45,23 @@ interface FormatContext {
   spansDays: boolean;
 }
 
-const dateRangeCache = new Map<
-  string,
-  Promise<{ min: Date | null; max: Date | null }>
->();
+interface DatetimeRange {
+  min: Date | null;
+  max: Date | null;
+  /** All distinct timestamps present in the column (ms since epoch, ascending).
+   *  Populated for ISO/object columns (whose specs carry no min/max), so the
+   *  slider can mark every acquisition. Empty when only precomputed min/max is
+   *  available (a large numeric datetime column not worth enumerating). */
+  stamps: number[];
+}
+
+const dateRangeCache = new Map<string, Promise<DatetimeRange>>();
 
 async function fetchDatetimeRange(
   dcId: string,
   columnName: string,
   filterExpr?: string,
-): Promise<{ min: Date | null; max: Date | null }> {
+): Promise<DatetimeRange> {
   const specs = await fetchSpecs(dcId);
   let entrySpecs: Record<string, unknown> = {};
   if (Array.isArray(specs)) {
@@ -68,29 +75,30 @@ async function fetchDatetimeRange(
   }
   const min = toDate(entrySpecs.min);
   const max = toDate(entrySpecs.max);
-  if (min && max) return { min, max };
+  if (min && max) return { min, max, stamps: [] };
 
   // Fallback: ISO-string columns are stored as `type: object` so the
   // precomputed specs only carry count/mode/nunique. Fetch unique values
-  // and parse them as dates to derive min/max client-side. Caps at 1000
-  // (the unique_values endpoint default) which is fine for timeline scopes.
+  // and parse them as dates to derive min/max — and keep the full sorted set
+  // of distinct timestamps so the slider can mark every acquisition. Caps at
+  // 1000 (the unique_values endpoint default) which is fine for timeline scopes.
   try {
     const values = await fetchUniqueValues(dcId, columnName, filterExpr);
-    let lo: number | null = null;
-    let hi: number | null = null;
-    for (const v of values) {
-      const ms = new Date(v).getTime();
-      if (!Number.isFinite(ms)) continue;
-      if (lo === null || ms < lo) lo = ms;
-      if (hi === null || ms > hi) hi = ms;
-    }
+    const stamps = Array.from(
+      new Set(
+        values
+          .map((v) => new Date(v).getTime())
+          .filter((ms) => Number.isFinite(ms)),
+      ),
+    ).sort((a, b) => a - b);
     return {
-      min: lo !== null ? new Date(lo) : min,
-      max: hi !== null ? new Date(hi) : max,
+      min: stamps.length ? new Date(stamps[0]) : min,
+      max: stamps.length ? new Date(stamps[stamps.length - 1]) : max,
+      stamps,
     };
   } catch (e) {
     console.warn('[TimelineRenderer] unique-values fallback failed:', e);
-    return { min, max };
+    return { min, max, stamps: [] };
   }
 }
 
@@ -156,6 +164,25 @@ function buildFormatContext(min: number, max: number): FormatContext {
  * 4 evenly-spaced labeled marks (start, 1/3, 2/3, end) — keeps labels readable
  * without overlap even at the narrowest panel widths.
  */
+// Label for a per-timestamp mark. Picks precision from the total span so
+// acquisitions that are seconds apart still get distinct labels (formatAt's
+// coarsest unit is the minute, which would collide for a sub-minute run).
+function formatStampLabel(ms: number, spanMs: number): string {
+  const d = new Date(ms);
+  const p = (n: number): string => String(n).padStart(2, '0');
+  if (spanMs < 60 * 60 * 1000) return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+  if (spanMs < 2 * 24 * 60 * 60 * 1000) return `${p(d.getHours())}:${p(d.getMinutes())}`;
+  return `${MONTH_SHORT[d.getMonth()]} ${d.getDate()}`;
+}
+
+// Cap on how many distinct timestamps we render as individual slider marks —
+// beyond this the ticks blur together and the DOM bloats, so fall back to the
+// regularly-spaced scale ticks instead.
+const MAX_STAMP_MARKS = 80;
+// Beyond this many marks, drop the text labels (keep the ticks) to avoid
+// overlapping, unreadable labels.
+const MAX_STAMP_LABELS = 12;
+
 function buildMarks(
   min: number,
   max: number,
@@ -178,8 +205,11 @@ const TimelineRenderer: React.FC<{
   onChange?: (filter: InteractiveFilter) => void;
   /** Compact rendering — tightens spacing and defaults marks to hidden. */
   compact?: boolean;
-}> = ({ metadata, filters, onChange, compact }) => {
-  const [bounds, setBounds] = useState<{ min: Date | null; max: Date | null } | null>(null);
+  /** Realtime refresh counter — bumping it re-fetches the datetime bounds so
+   *  the slider range extends as new rows stream in. */
+  refreshTick?: number;
+}> = ({ metadata, filters, onChange, compact, refreshTick }) => {
+  const [bounds, setBounds] = useState<DatetimeRange | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const initialScale = (metadata.timescale as Timescale | undefined) || 'day';
@@ -191,9 +221,18 @@ const TimelineRenderer: React.FC<{
       setLoading(false);
       return;
     }
-    const cacheKey = `${metadata.dc_id}|${metadata.column_name}|${metadata.filter_expr || ''}`;
+    // refreshTick participates in the cache key so a realtime update computes
+    // fresh bounds (bounds only grow), while repeated renders at the same tick
+    // still hit the cached promise.
+    const prefix = `${metadata.dc_id}|${metadata.column_name}|${metadata.filter_expr || ''}|`;
+    const cacheKey = `${prefix}${refreshTick ?? 0}`;
     let p = dateRangeCache.get(cacheKey);
     if (!p) {
+      // Drop superseded ticks for this dc/column/filter so the cache doesn't
+      // grow one stale entry per realtime update over a long session.
+      for (const key of dateRangeCache.keys()) {
+        if (key.startsWith(prefix) && key !== cacheKey) dateRangeCache.delete(key);
+      }
       p = fetchDatetimeRange(
         metadata.dc_id,
         metadata.column_name,
@@ -217,7 +256,7 @@ const TimelineRenderer: React.FC<{
     return () => {
       cancelled = true;
     };
-  }, [metadata.dc_id, metadata.column_name, metadata.filter_expr]);
+  }, [metadata.dc_id, metadata.column_name, metadata.filter_expr, refreshTick]);
 
   const minMs = bounds?.min?.getTime();
   const maxMs = bounds?.max?.getTime();
@@ -230,6 +269,29 @@ const TimelineRenderer: React.FC<{
     const bv = new Date(b).getTime();
     return Number.isFinite(av) && Number.isFinite(bv) ? [av, bv] : null;
   }, [filterEntry]);
+
+  // Geometry of Mantine's slider track relative to our wrapper, so the custom
+  // clickable timestamp dots overlay exactly on the track (Mantine insets the
+  // track by the thumb radius; we mirror that by measuring rather than guessing).
+  const sliderRef = useRef<HTMLDivElement>(null);
+  const [trackBox, setTrackBox] = useState<{ left: number; width: number; top: number } | null>(
+    null,
+  );
+  useLayoutEffect(() => {
+    const root = sliderRef.current;
+    if (!root) return;
+    const measure = () => {
+      const track = root.querySelector('.mantine-Slider-track') as HTMLElement | null;
+      if (!track) return;
+      const rb = root.getBoundingClientRect();
+      const tb = track.getBoundingClientRect();
+      setTrackBox({ left: tb.left - rb.left, width: tb.width, top: tb.top - rb.top + tb.height / 2 });
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(root);
+    return () => ro.disconnect();
+  }, [bounds, loading, compact]);
 
   if (error) {
     return (
@@ -257,10 +319,30 @@ const TimelineRenderer: React.FC<{
   const hi = maxMs as number;
   const value: [number, number] = selected ?? [lo, hi];
   const ctx = buildFormatContext(lo, hi);
-  // YAML wins; otherwise compact mode hides marks for higher density.
+
+  // Default view: mark every distinct timestamp the column actually contains
+  // (one per acquisition), so the whole set of available acquisition times is
+  // visible on the slider — not just evenly-spaced scale ticks. Falls back to
+  // scale ticks when the distinct set is unknown (numeric column, min/max only)
+  // or too dense to render one mark each.
+  const stampMarks = ((): { value: number; label: string }[] | null => {
+    const st = bounds?.stamps ?? [];
+    if (st.length < 2 || st.length > MAX_STAMP_MARKS) return null;
+    const span = hi - lo;
+    const labelAll = st.length <= MAX_STAMP_LABELS;
+    return st.map((v) => ({ value: v, label: labelAll ? formatStampLabel(v, span) : '' }));
+  })();
+
+  // YAML `show_marks` wins; otherwise show marks by default when we have the
+  // per-timestamp set (even in compact mode — that's the point of this view),
+  // else keep the old compact-hides-marks behaviour.
   const marksVisible =
-    typeof metadata.show_marks === 'boolean' ? metadata.show_marks : !compact;
-  const marks = marksVisible ? buildMarks(lo, hi, scale, ctx) : undefined;
+    typeof metadata.show_marks === 'boolean'
+      ? metadata.show_marks
+      : stampMarks
+        ? true
+        : !compact;
+  const marks = marksVisible ? (stampMarks ?? buildMarks(lo, hi, scale, ctx)) : undefined;
 
   const stepFor = (s: Timescale): number => {
     const SEC = 1000;
@@ -299,6 +381,34 @@ const TimelineRenderer: React.FC<{
     });
   };
 
+  // Click a timestamp dot → snap the nearer window handle exactly to it (clamped
+  // so the handles can't cross). This is the reliable replacement for Mantine's
+  // `restrictToMarks`, which mis-snapped on irregularly-spaced timestamps.
+  const snapToStamp = (t: number) => {
+    const [a, b] = value;
+    if (Math.abs(t - a) <= Math.abs(t - b)) emit([Math.min(t, b), b]);
+    else emit([a, Math.max(t, a)]);
+  };
+
+  // Round an arbitrary slider value to the nearest actual acquisition timestamp.
+  // Dragging or clicking the bare track would otherwise land a handle between
+  // acquisitions (e.g. 20:50:38 — a time no data exists at); snapping keeps the
+  // window bounds on real timestamps only.
+  const snapToNearestStamp = (v: number): number => {
+    const st = bounds?.stamps;
+    if (!st || !st.length) return v;
+    return st.reduce((best, s) => (Math.abs(s - v) < Math.abs(best - v) ? s : best), st[0]);
+  };
+  const handleSliderChange = (v: [number, number]) => {
+    emit(stampMarks ? [snapToNearestStamp(v[0]), snapToNearestStamp(v[1])] : v);
+  };
+
+  // When the slider is snapped to per-acquisition marks, label thumbs/readout
+  // with the exact timestamp (span-aware) rather than the coarse scale format,
+  // so the value shown matches the mark the thumb sits on.
+  const fmt = (v: number): string =>
+    stampMarks ? formatStampLabel(v, hi - lo) : formatAt(scale, v, ctx);
+
   const title = metadata.title || (metadata.column_name ? `Timeline · ${metadata.column_name}` : 'Timeline');
 
   return (
@@ -312,6 +422,8 @@ const TimelineRenderer: React.FC<{
         {title}
       </Text>
       <Box
+        ref={sliderRef}
+        pos="relative"
         pt={4}
         pb={marksVisible ? 28 : 4}
         px={8}
@@ -323,19 +435,50 @@ const TimelineRenderer: React.FC<{
           min={lo}
           max={hi}
           step={sliderStep}
-          minRange={sliderStep}
-          marks={marks}
+          minRange={stampMarks ? 0 : sliderStep}
+          // With per-acquisition dots we render our own clickable marks+labels
+          // overlay below; hand Mantine no marks so they don't double up.
+          marks={stampMarks ? undefined : marks}
           value={value}
-          onChange={(v) => emit(v as [number, number])}
-          label={(v) => formatAt(scale, v, ctx)}
+          onChange={(v) => handleSliderChange(v as [number, number])}
+          // Show the snapped timestamp in the drag tooltip so it never displays a
+          // between-acquisitions time the window can't actually land on.
+          label={(v) => fmt(stampMarks ? snapToNearestStamp(v) : v)}
         />
+        {stampMarks && marksVisible && trackBox && (
+          <div
+            className="depictio-timeline-dots"
+            style={{ left: trackBox.left, width: trackBox.width, top: trackBox.top }}
+          >
+            {(bounds?.stamps ?? []).map((t) => {
+              const pct = ((t - lo) / (hi - lo)) * 100;
+              const inRange = t >= value[0] && t <= value[1];
+              const lbl = formatStampLabel(t, hi - lo);
+              return (
+                <button
+                  key={t}
+                  type="button"
+                  className={`depictio-timeline-dot${inRange ? ' is-in-range' : ''}`}
+                  style={{ left: `${pct}%` }}
+                  title={lbl}
+                  aria-label={`Set acquisition window bound to ${lbl}`}
+                  onClick={() => snapToStamp(t)}
+                >
+                  {stampMarks.length <= MAX_STAMP_LABELS && (
+                    <span className="depictio-timeline-dot-label">{lbl}</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </Box>
       {/* Footer row: selected-range readout left, timescale picker right.
        * Moved out of the header so the long readout doesn't push the
        * SegmentedControl off-screen on narrow grid cells. */}
       <Group gap="xs" wrap="nowrap" align="center" justify="space-between">
         <Text size="xs" c="dimmed" truncate style={{ minWidth: 0 }}>
-          {formatAt(scale, value[0], ctx)} → {formatAt(scale, value[1], ctx)}
+          {fmt(value[0])} → {fmt(value[1])}
         </Text>
         <SegmentedControl
           size="xs"

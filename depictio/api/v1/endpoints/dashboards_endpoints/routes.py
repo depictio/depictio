@@ -2213,15 +2213,37 @@ def render_image_paths_endpoint(
     # Pick a default sort column when the caller didn't ask for one. Prefer the
     # first column whose name contains "acquisition" (covers the Adaptive
     # Feedback Microscopy `acquisition_timestamp` column and similar) so that
-    # newest images land first without per-project config. Fall back to the
-    # image_column itself for stable, user-visible ordering.
+    # newest images land first without per-project config.
     available = set(df.columns)
     chosen_sort = sort_by
+    descending = sort_dir == "desc"
     if not chosen_sort:
         for cand in df.columns:
             if "acquisition" in cand.lower() and ("time" in cand.lower() or "date" in cand.lower()):
                 chosen_sort = cand
                 break
+        # No acquisition-like column: fall back to newest-first on a stable,
+        # NUMERIC id column (``index_index`` / ``*_id`` / ``*_index`` / ``index``).
+        # A numeric ingest counter is monotonic, so descending surfaces the most
+        # recently added images first — matching the detail table's default and,
+        # crucially, keeping realtime new-image highlights inside the capped
+        # gallery window (a batch always appends the highest ids; oldest-first
+        # order strands them past ``max_images`` where they can never glow).
+        # The numeric gate matters: a string id (``sample_id``, ``depictio_run_id``)
+        # would sort lexicographically, which is not ingestion order — so we leave
+        # such projects in their prior natural order rather than mis-sort them.
+        if not chosen_sort:
+            numeric_cols = {c for c, dt in zip(df.columns, df.dtypes) if dt.is_numeric()}
+            if "index_index" in numeric_cols:
+                chosen_sort = "index_index"
+            else:
+                for cand in df.columns:
+                    lc = cand.lower()
+                    if cand in numeric_cols and (lc.endswith(("_id", "_index")) or lc == "index"):
+                        chosen_sort = cand
+                        break
+            if chosen_sort:
+                descending = True
     if chosen_sort and chosen_sort not in available:
         # Caller asked to sort by an unknown column — silently skip (don't 500
         # for a UI-driven sort dropdown that may race a schema change).
@@ -2229,9 +2251,16 @@ def render_image_paths_endpoint(
 
     df_filtered = df.filter(df[image_column].is_not_null())
     if chosen_sort:
-        df_filtered = df_filtered.sort(
-            chosen_sort, descending=(sort_dir == "desc"), nulls_last=True
-        )
+        sort_cols = [chosen_sort]
+        sort_desc = [descending]
+        # Tie-break by the numeric row id so a coarse/tied sort column — e.g. a
+        # per-acquisition timestamp every row in a batch shares — still yields a
+        # deterministic newest-first order instead of arbitrary within-tie order
+        # (which would strand the batch's highest-id images outside the window).
+        if "index_index" in available and chosen_sort != "index_index":
+            sort_cols.append("index_index")
+            sort_desc.append(descending)
+        df_filtered = df_filtered.sort(sort_cols, descending=sort_desc, nulls_last=True)
     df_top = df_filtered.head(limit)
 
     # Serialize to JSON-safe dicts. Polars' default `to_dicts()` returns
@@ -2250,7 +2279,7 @@ def render_image_paths_endpoint(
         "rows": rows,
         "image_column": image_column,
         "sort_by": chosen_sort,
-        "sort_dir": sort_dir,
+        "sort_dir": "desc" if descending else "asc",
         "sortable_columns": list(df.columns),
         # Backwards-compatible: callers that haven't been updated still see
         # the bare path list. Drop after every front-end caller migrates.

@@ -38,6 +38,7 @@ import SegmentedControlRenderer from './interactive/SegmentedControlRenderer';
 import TimelineRenderer from './interactive/TimelineRenderer';
 import SecondaryMetrics from './card/SecondaryMetrics';
 import { wrapWithChrome } from './chrome';
+import { ActiveHighlight } from '../highlight';
 
 interface ComponentRendererProps {
   metadata: StoredMetadata;
@@ -53,6 +54,8 @@ interface ComponentRendererProps {
   dashboardId?: string;
   /** Counter to invalidate data-fetching effects on realtime updates. */
   refreshTick?: number;
+  /** Batch currently highlighted; renderers glow its rows when the DC matches. */
+  activeHighlight?: ActiveHighlight | null;
   /** Extra action-icon nodes appended to the chrome row. Editor uses this to inject the per-cell "..." edit menu. */
   extraActions?: React.ReactNode;
   /** Show the drag handle (3×3 grip) on the chrome — typically only in editor mode. */
@@ -76,6 +79,7 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
   cardLoading,
   dashboardId,
   refreshTick,
+  activeHighlight,
   extraActions,
   showDragHandle,
   compact,
@@ -147,6 +151,7 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
           filters={filters}
           onChange={onFilterChange}
           compact={compact}
+          refreshTick={refreshTick}
         />
       );
     } else {
@@ -193,6 +198,7 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
         filters={filters}
         onFilterChange={onFilterChange}
         refreshTick={refreshTick}
+        activeHighlight={activeHighlight}
       />,
       { onResetFilter: onResetSelection, extraActions, showDragHandle, sourceFilterActive },
     );
@@ -206,6 +212,7 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
         filters={filters}
         onFilterChange={onFilterChange}
         refreshTick={refreshTick}
+        activeHighlight={activeHighlight}
         extraActions={extraActions}
         showDragHandle={showDragHandle}
       />
@@ -234,6 +241,7 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
         filters={filters}
         onFilterChange={onFilterChange}
         refreshTick={refreshTick}
+        activeHighlight={activeHighlight}
       />,
       { onResetFilter: onResetSelection, extraActions, showDragHandle, sourceFilterActive },
     );
@@ -341,6 +349,7 @@ const TableBlock: React.FC<{
   filters: InteractiveFilter[];
   onFilterChange?: (filter: InteractiveFilter) => void;
   refreshTick?: number;
+  activeHighlight?: ActiveHighlight | null;
   extraActions?: React.ReactNode;
   showDragHandle?: boolean;
 }> = ({
@@ -349,6 +358,7 @@ const TableBlock: React.FC<{
   filters,
   onFilterChange,
   refreshTick,
+  activeHighlight,
   extraActions,
   showDragHandle,
 }) => {
@@ -377,6 +387,7 @@ const TableBlock: React.FC<{
       agGridApiRef={agGridApiRef}
       onFilterChange={onFilterChange}
       refreshTick={refreshTick}
+      activeHighlight={activeHighlight}
     />,
     {
       agGridApiRef,

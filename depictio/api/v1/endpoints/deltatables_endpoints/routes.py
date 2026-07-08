@@ -253,7 +253,48 @@ async def upsert_deltatable(
                 },
             )
 
+    # Broadcast a real-time event so connected dashboards refresh. The change
+    # stream watcher only watches data_collections, not the deltatables
+    # collection, so an upsert would otherwise complete silently. Mirrors the
+    # test-trigger endpoint's invalidate-then-broadcast pattern.
+    await _broadcast_dc_update(str(data_collection_oid))
+
     return {"message": "DeltaTableAggregated upserted successfully", "result": "success"}
+
+
+async def _broadcast_dc_update(dc_id: str) -> None:
+    """Invalidate the DC cache and broadcast a data-collection-updated event to all subscribers."""
+    from datetime import timezone
+
+    from depictio.api.v1.deltatables_utils import invalidate_data_collection_cache
+    from depictio.api.v1.endpoints.events_endpoints.routes import _build_event_payload
+    from depictio.api.v1.services.events import connection_manager
+    from depictio.models.models.realtime import EventMessage, EventSourceType, EventType
+
+    dropped = invalidate_data_collection_cache(dc_id)
+    logger.info(f"Upsert {dc_id}: invalidated {dropped} cached DataFrame(s)")
+
+    # Build the same rich payload the test-trigger path produces (row delta vs.
+    # the previous delta version, new-id sample, aggregation version/hash/time,
+    # live row count) so the RealtimeIndicator journal has something to show.
+    # Runs after the upsert recorded a fresh aggregation entry, so the version/
+    # hash/time reflect the write that just landed. Best-effort, never raises.
+    payload = _build_event_payload(dc_id, operation="upsert")
+
+    event = EventMessage(
+        event_type=EventType.DATA_COLLECTION_UPDATED,
+        source_type=EventSourceType.MONGODB_CHANGES,
+        timestamp=datetime.now(timezone.utc),
+        data_collection_id=dc_id,
+        payload=payload,
+    )
+
+    subscribed = connection_manager.get_all_subscribed_dashboards()
+    for dashboard_id in subscribed:
+        event_copy = event.model_copy(update={"dashboard_id": dashboard_id})
+        await connection_manager.broadcast_to_dashboard(dashboard_id, event_copy)
+
+    logger.info(f"Upsert event broadcast for DC {dc_id} to {len(subscribed)} dashboard(s)")
 
 
 def _owned_or_admin_query(current_user: User, base: dict) -> dict:
