@@ -6,10 +6,12 @@
  */
 
 /* Virgil — hand-drawn (Excalidraw) display face. depictio's brand signature,
- * applied inline (fontFamily: 'Virgil') on the page title + primary CTAs. */
+ * applied inline (fontFamily: 'Virgil') on the page title + primary CTAs.
+ * Referenced RELATIVELY (from src/assets) so Vite resolves + fingerprints it
+ * under the app base ('/depictio/') — an absolute '/fonts/…' URL would 404. */
 @font-face {
   font-family: 'Virgil';
-  src: url('/fonts/Virgil.ttf') format('truetype');
+  src: url('../assets/fonts/Virgil.ttf') format('truetype');
   font-display: swap;
 }
 

@@ -29,9 +29,14 @@ export interface ParsedFixture {
   raw: string;
 }
 
+/** Where the tool comes from — drives the picker favicon + which module.yaml
+ *  URL field the source URL lands in (nf-core → nf_core_url; others → homepage). */
+export type ToolSource = 'nf-core' | 'snakemake' | 'galaxy';
+
 export interface ToolMeta {
   id: string;
   name: string;
+  source: ToolSource;
   nf_core_url?: string;
   homepage?: string;
   biotools_url?: string;
@@ -44,6 +49,9 @@ export interface ToolMeta {
 
 export type FigureVisuType = 'scatter' | 'line' | 'bar' | 'box' | 'histogram' | 'heatmap';
 
+// Matches the catalog schema's aggregation enum (card render). Depictio's card
+// builder exposes this full set; `fromBuilderStore` aliases its 'unique' →
+// 'nunique' so the emitted value stays within this enum.
 export type Aggregation =
   | 'count'
   | 'sum'
@@ -54,6 +62,12 @@ export type Aggregation =
   | 'range'
   | 'variance'
   | 'std_dev'
+  | 'skewness'
+  | 'kurtosis'
+  | 'percentile'
+  | 'q1'
+  | 'q3'
+  | 'box_plot_stats'
   | 'nunique'
   | 'mode';
 
@@ -72,41 +86,94 @@ export const FIGURE_COLUMN_KWARGS = [
 ] as const;
 export type FigureColumnKwarg = (typeof FIGURE_COLUMN_KWARGS)[number];
 
+/** Optional first-class handle: dashboards reuse a render via `use: <tool>/<id>`
+ *  (unique within a tool). Present on every render type. */
 export interface FigureRender {
   uid: string;
   component: 'figure';
-  visu_type: FigureVisuType;
-  /** Column-valued kwargs (x/y/color/…) + free kwargs (title, log_x, …). */
-  dict_kwargs: Record<string, string>;
+  id?: string;
+  /** UI mode: plotly-express visu type. Omitted for code-mode figures. */
+  visu_type?: FigureVisuType;
+  /** UI mode: column-valued kwargs (x/y/color/…) + free kwargs (title, log_x…). */
+  dict_kwargs?: Record<string, string>;
+  /** Code mode: inline python snippet that assigns `fig` (depictio code_content). */
+  code?: string;
+  /** Preview-only: the Plotly {data,layout} produced by executing a code-mode
+   *  figure in-browser. NOT exported — lets the render list show the real plot. */
+  _previewFigure?: { data: unknown[]; layout: Record<string, unknown> };
 }
+
+export type SecondaryLayout =
+  | 'vertical'
+  | 'compact'
+  | 'box_plot'
+  | 'top_n'
+  | 'coverage'
+  | 'concentration';
 
 export interface CardRender {
   uid: string;
   component: 'card';
+  id?: string;
   column: string;
   aggregation: Aggregation;
+  /** Optional multi-metric strip (depictio card builder). */
+  aggregations?: Aggregation[];
+  secondary_layout?: SecondaryLayout;
+  breakdown_col?: string;
+  top_n_count?: number;
+  coverage_max?: number;
 }
 
 export interface TableRender {
   uid: string;
   component: 'table';
+  id?: string;
+}
+
+/** Interactive filter control. The catalog `Render` model (extra="forbid")
+ *  carries NOTHING for interactive beyond `component` — not even `column` — so
+ *  the builder's column/variant/styling choices are authoring-preview only and
+ *  are intentionally not part of the emitted render. */
+export interface InteractiveRender {
+  uid: string;
+  component: 'interactive';
+  id?: string;
 }
 
 export interface AdvancedVizRender {
   uid: string;
   component: 'advanced_viz';
+  id?: string;
   kind: string;
   /** role → column. */
   roles: Record<string, string>;
 }
 
-export type RenderSpec = FigureRender | CardRender | TableRender | AdvancedVizRender;
+export type RenderSpec =
+  | FigureRender
+  | CardRender
+  | TableRender
+  | InteractiveRender
+  | AdvancedVizRender;
 
 export interface OutputMeta {
   /** Short output slug, e.g. "coverage" → output id "<tool>_<slug>". */
   slug: string;
   path_glob: string;
   description?: string;
+}
+
+/** A file output channel parsed from an nf-core module's `meta.yml` `output:`
+ *  section — used to auto-fill the Output slug / path_glob / description. */
+export interface NfCoreOutput {
+  /** Channel name, e.g. "summary_txt". */
+  name: string;
+  /** Glob pattern for the file, e.g. "*.summary.txt". */
+  pattern: string;
+  description: string;
+  /** meta.yml `type` (kept for filtering; only "file" outputs are surfaced). */
+  type: string;
 }
 
 // ── kinds.json (generated from schemas.py at build) ────────────────────────

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { ParsedFixture, RenderSpec, ToolMeta, OutputMeta } from '../types';
+import { defaultRenderId } from '../viz/renderMeta';
 
 let uidCounter = 0;
 export const nextUid = () => `r${++uidCounter}`;
@@ -21,7 +22,7 @@ interface StudioState {
   reset: () => void;
 }
 
-const emptyTool: ToolMeta = { id: '', name: '' };
+const emptyTool: ToolMeta = { id: '', name: '', source: 'nf-core' };
 const emptyOutput: OutputMeta = { slug: '', path_glob: '' };
 
 export const useStudioStore = create<StudioState>((set) => ({
@@ -35,7 +36,20 @@ export const useStudioStore = create<StudioState>((set) => ({
   setTool: (patch) => set((s) => ({ tool: { ...s.tool, ...patch } })),
   setOutput: (patch) => set((s) => ({ output: { ...s.output, ...patch } })),
   setFixture: (fixture) => set({ fixture }),
-  addRender: (render) => set((s) => ({ renders: [...s.renders, render] })),
+  addRender: (render) =>
+    set((s) => {
+      // Give every render a default, editable, tool-unique id so it's reusable
+      // via `use: <tool>/<id>` out of the box.
+      let spec = render;
+      if (!spec.id) {
+        const base = defaultRenderId(render) || 'render';
+        const taken = new Set(s.renders.map((r) => r.id).filter(Boolean));
+        let id = base;
+        for (let n = 2; taken.has(id); n++) id = `${base}_${n}`;
+        spec = { ...render, id } as RenderSpec;
+      }
+      return { renders: [...s.renders, spec] };
+    }),
   updateRender: (uid, patch) =>
     set((s) => ({
       renders: s.renders.map((r) => (r.uid === uid ? ({ ...r, ...patch } as RenderSpec) : r)),

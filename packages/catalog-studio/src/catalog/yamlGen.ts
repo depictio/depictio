@@ -5,7 +5,7 @@
  * header). `columns` is deliberately OMITTED — the exported fixture grounds the
  * bindings in CI (schema-ownership rule: fixture present ⇒ grounding deferred).
  */
-import type { OutputMeta, RenderSpec, ToolMeta } from '../types';
+import type { CardRender, OutputMeta, RenderSpec, ToolMeta } from '../types';
 
 /** True if a scalar can be emitted plain (no quotes) in YAML flow context. */
 function isPlainSafe(s: string): boolean {
@@ -26,21 +26,117 @@ function flowMap(pairs: [string, string][]): string {
   return `{${pairs.map(([k, v]) => `${k}: ${flowScalar(v)}`).join(', ')}}`;
 }
 
-/** One `renders_as` list item as a compact flow mapping. */
+/** One `renders_as` list item as a compact flow mapping. When set, the optional
+ *  `id` is emitted first (matching the catalog convention) so the render is
+ *  addressable by a dashboard via `use: <tool>/<id>`. */
 export function renderToFlow(render: RenderSpec): string {
+  // `id: X, ` prefix, injected right after the opening brace when present.
+  const idp = render.id ? `id: ${flowScalar(render.id)}, ` : '';
   if (render.component === 'figure') {
-    const kwargs = flowMap(Object.entries(render.dict_kwargs).map(([k, v]) => [k, v]));
-    return `{ component: figure, visu_type: ${render.visu_type}, dict_kwargs: ${kwargs} }`;
+    // Code mode: emit the snippet as `code` (a double-quoted scalar preserves
+    // its newlines via \n). UI mode: visu_type + dict_kwargs.
+    if (render.code != null) {
+      return `{ ${idp}component: figure, code: ${flowScalar(render.code)} }`;
+    }
+    const kwargs = flowMap(Object.entries(render.dict_kwargs ?? {}).map(([k, v]) => [k, v]));
+    return `{ ${idp}component: figure, visu_type: ${render.visu_type}, dict_kwargs: ${kwargs} }`;
   }
   if (render.component === 'card') {
-    return `{ component: card, column: ${flowScalar(render.column)}, aggregation: ${render.aggregation} }`;
+    const parts: [string, string][] = [
+      ['component', 'card'],
+      ['column', render.column],
+      ['aggregation', render.aggregation],
+    ];
+    if (render.aggregations?.length) {
+      // aggregations is a flow SEQUENCE, not a mapping — emit inline.
+      const seq = `[${render.aggregations.join(', ')}]`;
+      return `{ ${idp}${parts.map(([k, v]) => `${k}: ${flowScalar(v)}`).join(', ')}, aggregations: ${seq}${cardTailFlow(render)} }`;
+    }
+    return `{ ${idp}${parts.map(([k, v]) => `${k}: ${flowScalar(v)}`).join(', ')}${cardTailFlow(render)} }`;
   }
   if (render.component === 'table') {
-    return `{ component: table }`;
+    return `{ ${idp}component: table }`;
+  }
+  if (render.component === 'interactive') {
+    // Catalog Render model forbids any interactive field beyond `component`/`id`.
+    return `{ ${idp}component: interactive }`;
   }
   // advanced_viz
   const roles = flowMap(Object.entries(render.roles).map(([k, v]) => [k, v]));
-  return `{ component: advanced_viz, kind: ${render.kind}, roles: ${roles} }`;
+  return `{ ${idp}component: advanced_viz, kind: ${render.kind}, roles: ${roles} }`;
+}
+
+/** Optional card fields (secondary_layout / breakdown_col / top_n_count /
+ *  coverage_max) as a trailing flow fragment, each only when set. */
+function cardTailFlow(render: CardRender): string {
+  const bits: string[] = [];
+  if (render.secondary_layout) bits.push(`secondary_layout: ${render.secondary_layout}`);
+  if (render.breakdown_col) bits.push(`breakdown_col: ${flowScalar(render.breakdown_col)}`);
+  if (typeof render.top_n_count === 'number') bits.push(`top_n_count: ${render.top_n_count}`);
+  if (typeof render.coverage_max === 'number') bits.push(`coverage_max: ${render.coverage_max}`);
+  return bits.length ? `, ${bits.join(', ')}` : '';
+}
+
+/** Above this rendered width a flow `{ … }` item is expanded to block YAML so
+ *  long renders (many dict_kwargs, code snippets, role maps) stay readable. */
+const MAX_FLOW_WIDTH = 72;
+
+/** Block-YAML lines for a render (no leading "- "), used when the flow form is
+ *  too long. Mirrors renderToFlow's fields, one per line. */
+function renderToBlock(render: RenderSpec): string[] {
+  const idLine = render.id ? [`id: ${flowScalar(render.id)}`] : [];
+  if (render.component === 'figure') {
+    const lines = [...idLine, 'component: figure'];
+    if (render.visu_type) lines.push(`visu_type: ${render.visu_type}`);
+    const kw = render.dict_kwargs ?? {};
+    const keys = Object.keys(kw);
+    if (keys.length) {
+      lines.push('dict_kwargs:');
+      for (const k of keys) lines.push(`  ${k}: ${flowScalar(kw[k])}`);
+    }
+    return lines;
+  }
+  if (render.component === 'card') {
+    const lines = [...idLine, 'component: card', `column: ${flowScalar(render.column)}`, `aggregation: ${render.aggregation}`];
+    if (render.aggregations?.length) lines.push(`aggregations: [${render.aggregations.join(', ')}]`);
+    if (render.secondary_layout) lines.push(`secondary_layout: ${render.secondary_layout}`);
+    if (render.breakdown_col) lines.push(`breakdown_col: ${flowScalar(render.breakdown_col)}`);
+    if (typeof render.top_n_count === 'number') lines.push(`top_n_count: ${render.top_n_count}`);
+    if (typeof render.coverage_max === 'number') lines.push(`coverage_max: ${render.coverage_max}`);
+    return lines;
+  }
+  if (render.component === 'advanced_viz') {
+    const lines = [...idLine, 'component: advanced_viz', `kind: ${render.kind}`];
+    const roles = Object.entries(render.roles);
+    if (roles.length) {
+      lines.push('roles:');
+      for (const [k, v] of roles) lines.push(`  ${k}: ${flowScalar(v)}`);
+    }
+    return lines;
+  }
+  return [renderToFlow(render)];
+}
+
+/** The `renders_as` list-item body WITHOUT the leading "- ". Multi-line for
+ *  code-mode figures (block scalar) or any render whose flow form exceeds
+ *  MAX_FLOW_WIDTH; a single flow mapping otherwise. */
+export function renderItemLines(render: RenderSpec): string[] {
+  if (render.component === 'figure' && render.code != null) {
+    const idLine = render.id ? [`id: ${flowScalar(render.id)}`] : [];
+    return [...idLine, 'component: figure', 'code: |-', ...render.code.split('\n').map((l) => `  ${l}`)];
+  }
+  const flow = renderToFlow(render);
+  if (`- ${flow}`.length <= MAX_FLOW_WIDTH) return [flow];
+  return renderToBlock(render);
+}
+
+/** The full `renders_as` snippet for one render, as it appears in the output
+ *  YAML (leading "- " + aligned continuation) — reused by the designer's
+ *  per-render card so what it shows matches what gets written. */
+export function renderToSnippet(render: RenderSpec): string {
+  return renderItemLines(render)
+    .map((l, i) => (i === 0 ? `- ${l}` : `  ${l}`))
+    .join('\n');
 }
 
 /** The output id derived from tool + output slug (e.g. `mosdepth_coverage`). */
@@ -73,7 +169,9 @@ export function genOutputYaml(
   lines.push(`fixture: ${flowScalar(fixtureFileName)}`);
   lines.push('renders_as:');
   for (const r of renders) {
-    lines.push(`  - ${renderToFlow(r)}`);
+    const [first, ...rest] = renderItemLines(r);
+    lines.push(`  - ${first}`);
+    for (const l of rest) lines.push(`    ${l}`);
   }
   return lines.join('\n') + '\n';
 }

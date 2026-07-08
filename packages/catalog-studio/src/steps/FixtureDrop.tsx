@@ -1,9 +1,10 @@
 import { useRef, useState } from 'react';
-import { Stack, Title, Text, Center, Group, Badge, Table, ScrollArea, Paper, Code } from '@mantine/core';
+import { Stack, Title, Text, Center, Group, Badge, Paper } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import { notifications } from '@mantine/notifications';
 import { useStudioStore } from '../state/useStudioStore';
 import { parseFixture } from '../catalog/parseFixture';
+import TablePreviewLocal from '../builder/TablePreviewLocal';
 import type { Dtype } from '../types';
 
 const DTYPE_COLOR: Record<Dtype, string> = {
@@ -45,8 +46,6 @@ export default function FixtureDrop() {
     const file = e.dataTransfer.files?.[0];
     if (file) void ingest(file);
   };
-
-  const preview = fixture?.rows.slice(0, 8) ?? [];
 
   return (
     <Stack gap="lg">
@@ -124,28 +123,7 @@ export default function FixtureDrop() {
               </Badge>
             ))}
           </Group>
-          <ScrollArea type="auto">
-            <Table striped highlightOnHover withTableBorder fz="xs">
-              <Table.Thead>
-                <Table.Tr>
-                  {fixture.columns.map((c) => (
-                    <Table.Th key={c.name}>{c.name}</Table.Th>
-                  ))}
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
-                {preview.map((row, i) => (
-                  <Table.Tr key={i}>
-                    {fixture.columns.map((c) => (
-                      <Table.Td key={c.name}>
-                        <Code fz="xs">{String(row[c.name] ?? '')}</Code>
-                      </Table.Td>
-                    ))}
-                  </Table.Tr>
-                ))}
-              </Table.Tbody>
-            </Table>
-          </ScrollArea>
+          <TablePreviewLocal fixture={fixture} height={360} />
         </Paper>
       )}
     </Stack>

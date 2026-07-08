@@ -13,21 +13,25 @@ test('author a tool end-to-end and export a zip', async ({ page }) => {
   await page.getByLabel('Tool name').fill('My Tool');
   await page.getByLabel('Output slug').fill('results');
   await page.getByLabel('Path glob').fill('**/mytool/*.csv');
-  await page.getByRole('button', { name: 'Next' }).click();
+  await page.getByRole('button', { name: 'Next', exact: true }).click();
 
   // ── Step 1: Fixture ───────────────────────────────────────────────────────
   await page.locator('input[type="file"]').setInputFiles(goldenCsv);
   // dtype badges prove parsing worked.
   await expect(page.getByText('gene · String')).toBeVisible();
   await expect(page.getByText('coverage · Int64')).toBeVisible();
-  await page.getByRole('button', { name: 'Next' }).click();
+  await page.getByRole('button', { name: 'Next', exact: true }).click();
 
-  // ── Step 2: Visualizations ────────────────────────────────────────────────
+  // ── Step 2: Visualizations (depictio component builder in a modal) ──────────
   await page.getByRole('button', { name: 'Add visualization' }).click();
-  await page.getByRole('menuitem', { name: 'Card (metric)' }).click();
-  // A Plotly-free card render appears with a live computed value.
-  await expect(page.getByText('average of')).toBeVisible();
-  await page.getByRole('button', { name: 'Next' }).click();
+  // The depictio component-type grid renders inside the modal.
+  await expect(page.getByText('Add a visualization')).toBeVisible();
+  // Pick "Table" (zero-binding) — exercises seed → DesignArea → confirm.
+  await page.locator('.cs-type-card', { hasText: 'Table' }).click();
+  await page.getByRole('button', { name: 'Add to output' }).click();
+  // A Table render card is now listed (catalog-style, with Preview / Developer tabs).
+  await expect(page.getByRole('tab', { name: 'Developer' })).toBeVisible();
+  await page.getByRole('button', { name: 'Next', exact: true }).click();
 
   // ── Step 3: Export ────────────────────────────────────────────────────────
   await expect(page.getByText('# yaml-language-server:')).toBeVisible();

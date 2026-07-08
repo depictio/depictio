@@ -516,3 +516,70 @@ def catalog_kinds(
         typer.echo(f"  Wrote kinds JSON to {output}")
     else:
         typer.echo(text)
+
+
+@dev_app.command("figure-params")
+def catalog_figure_params(
+    as_json: Annotated[
+        bool,
+        typer.Option("--json", help="Emit the machine-readable JSON (for catalog-studio)."),
+    ] = False,
+    output: Annotated[
+        str | None,
+        typer.Option("--output", "-o", help="Write the JSON here (default: stdout)"),
+    ] = None,
+) -> None:
+    """Emit the figure builder's visualization list + per-viz parameter specs.
+
+    This is the exact payload the React figure builder fetches from
+    ``/figure/visualizations`` and ``/figure/parameter-discovery/{viz_type}``.
+    Catalog Studio seeds its builder store with this snapshot so depictio's real
+    figure UI renders offline (no backend). Shape::
+
+        { "visualizations": [ {name, label, description, icon, group}, ... ],
+          "params": { "<viz_type>": <VisualizationDefinition JSON>, ... } }
+
+    Derived from the pure Plotly-Express introspection in
+    ``depictio/api/v1/services/figure/{definitions,parameter_discovery}.py`` —
+    the drift-free source the web app snapshots at build time.
+    """
+    import json
+
+    from depictio.api.v1.services.figure.definitions import (
+        get_available_visualizations,
+        get_visualization_definition,
+    )
+
+    visualizations: list[dict[str, object]] = []
+    params: dict[str, object] = {}
+    for v in get_available_visualizations():
+        group = v.group.value if hasattr(v.group, "value") else str(v.group)
+        visualizations.append(
+            {
+                "name": v.name,
+                "label": v.label,
+                "description": v.description,
+                "icon": v.icon,
+                "group": group,
+            }
+        )
+        try:
+            viz_def = get_visualization_definition(v.name.lower())
+            params[v.name.lower()] = viz_def.model_dump(mode="json")
+        except Exception as exc:  # a single bad viz shouldn't sink the snapshot
+            typer.echo(f"  WARN: parameter discovery failed for {v.name!r}: {exc}", err=True)
+
+    payload = {"visualizations": visualizations, "params": params}
+
+    if not as_json:
+        for item in visualizations:
+            n = len(params.get(str(item["name"]).lower(), {}).get("parameters", []))  # type: ignore[union-attr]
+            typer.echo(f"{item['name']}: {n} parameters")
+        return
+
+    text = json.dumps(payload, indent=2, sort_keys=True) + "\n"
+    if output:
+        Path(output).write_text(text)
+        typer.echo(f"  Wrote figure-params JSON to {output}")
+    else:
+        typer.echo(text)

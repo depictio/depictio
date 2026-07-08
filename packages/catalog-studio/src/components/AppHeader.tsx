@@ -1,28 +1,40 @@
-import { Group, Title, ActionIcon, Tooltip, Anchor, Badge } from '@mantine/core';
+import { Group, Title, Text, ActionIcon, Tooltip, Anchor } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import { useColorScheme } from '../hooks/useColorScheme';
 
 /**
- * Light top bar (height 50, mirrors the viewer's AppShell.Header). Left: the
- * depictio wordmark + a Virgil "Catalog Studio" title. Right: a "no backend"
- * badge, a docs link, and the dark-mode toggle.
+ * Top bar (height 56). Left: the Tools Catalog mark (depictio pinwheel + hammer,
+ * theme-agnostic) and the "Depictio Tools Studio" wordmark in Virgil. Right: a
+ * compact Docs link and the dark-mode toggle. Neutral chrome — the brand colour
+ * comes from the logo and the component-type cards.
  */
 export default function AppHeader() {
   const { colorScheme, toggle } = useColorScheme();
-  // logo_black/logo_white read on light/dark surfaces respectively; swap by
-  // CSS display so both are cached and there's no flash on toggle.
   return (
-    <Group h={50} px="md" justify="space-between" wrap="nowrap" style={{ borderBottom: '1px solid var(--app-border-color)' }}>
+    <Group
+      h={56}
+      px="lg"
+      justify="space-between"
+      wrap="nowrap"
+      style={{ borderBottom: '1px solid var(--app-border-color)' }}
+    >
       <Group gap="sm" wrap="nowrap">
-        {/* base-relative asset — Vite prepends '/depictio/' at build. */}
-        <img src={`${import.meta.env.BASE_URL}logos/logo_black.svg`} alt="Depictio" height={22} style={{ display: colorScheme === 'dark' ? 'none' : 'block' }} />
-        <img src={`${import.meta.env.BASE_URL}logos/logo_white.svg`} alt="Depictio" height={22} style={{ display: colorScheme === 'dark' ? 'block' : 'none' }} />
-        <Title order={4} style={{ fontFamily: 'Virgil', fontWeight: 400 }}>
-          Catalog Studio
-        </Title>
-        <Badge size="xs" variant="light" color="gray">
-          no backend
-        </Badge>
+        {/* Colored, transparent mark — reads on light and dark, no swap needed. */}
+        <img
+          src={`${import.meta.env.BASE_URL}logos/tools_catalog_logo.png`}
+          alt="Depictio Tools Studio"
+          height={30}
+          width={30}
+          style={{ objectFit: 'contain' }}
+        />
+        <div style={{ lineHeight: 1.05 }}>
+          <Title order={4} style={{ fontFamily: 'Virgil', fontWeight: 400 }}>
+            Depictio Tools Studio
+          </Title>
+          <Text size="xs" c="dimmed">
+            Contribute a tool to the catalog
+          </Text>
+        </div>
       </Group>
       <Group gap="xs" wrap="nowrap">
         <Anchor
@@ -34,7 +46,7 @@ export default function AppHeader() {
         >
           <Group gap={4} wrap="nowrap">
             <Icon icon="mdi:book-open-variant" width={16} />
-            Catalog docs
+            Docs
           </Group>
         </Anchor>
         <Tooltip label={colorScheme === 'dark' ? 'Light mode' : 'Dark mode'}>

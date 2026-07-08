@@ -1,10 +1,11 @@
 import { useMemo } from 'react';
 import Plot from 'react-plotly.js';
-import { Alert, Center, Paper, Text, ScrollArea, Table } from '@mantine/core';
+import { Alert, Center, Paper, Text, ScrollArea, Table, useComputedColorScheme } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import { DepictioCard } from 'depictio-components';
 import type { KindsMap, ParsedFixture, RenderSpec } from '../types';
 import { buildPreview, isUnavailable } from './figureBuilder';
+import { applyPlotlyTheme } from './plotlyTheme';
 import { computeCard } from './cardCompute';
 import { makeIsHeavy } from '../catalog/kinds';
 
@@ -29,6 +30,7 @@ function Unavailable({ reason }: { reason: string }) {
 
 export default function VizPreview({ fixture, render, kinds, height = 320 }: Props) {
   const isHeavy = useMemo(() => makeIsHeavy(kinds), [kinds]);
+  const scheme = useComputedColorScheme('light');
 
   if (render.component === 'card') {
     const value = computeCard(fixture.rows, render.column, render.aggregation);
@@ -72,6 +74,50 @@ export default function VizPreview({ fixture, render, kinds, height = 320 }: Pro
     );
   }
 
+  if (render.component === 'figure' && render.code) {
+    // Code-mode figure: render the Plotly figure produced by executing the
+    // snippet in Code Mode (client-side). Only falls back to a note if it was
+    // added without executing.
+    if (render._previewFigure) {
+      return (
+        <Plot
+          data={render._previewFigure.data as Plotly.Data[]}
+          layout={applyPlotlyTheme({ ...render._previewFigure.layout, height }, scheme) as Partial<Plotly.Layout>}
+          config={{ displaylogo: false, responsive: true }}
+          style={{ width: '100%', height }}
+          useResizeHandler
+        />
+      );
+    }
+    return (
+      <Center h={height}>
+        <div style={{ width: '100%', maxWidth: 420 }}>
+          <Alert color="gray" variant="light" icon={<Icon icon="tabler:code" width={18} />} title="Code-mode figure">
+            <Text size="sm">Open this card in Code Mode and press Execute to render the figure.</Text>
+          </Alert>
+        </div>
+      </Center>
+    );
+  }
+
+  if (render.component === 'interactive') {
+    // Interactive is a component-only catalog render (no binding is exported),
+    // so there's nothing to plot — show a neutral placeholder, not the
+    // "preview unavailable / verify in depictio" warning used for heavy viz.
+    return (
+      <Center h={height}>
+        <div style={{ width: '100%', maxWidth: 420 }}>
+          <Alert color="gray" variant="light" icon={<Icon icon="mdi:filter-variant" />} title="Interactive filter">
+            <Text size="sm">Rendered as an interactive filter control by depictio at dashboard time.</Text>
+            <Text size="xs" c="dimmed" mt={4}>
+              The catalog entry is a bare <code>{'{ component: interactive }'}</code>.
+            </Text>
+          </Alert>
+        </div>
+      </Center>
+    );
+  }
+
   const result = buildPreview(fixture, render, isHeavy);
   if (isUnavailable(result)) {
     return (
@@ -85,7 +131,7 @@ export default function VizPreview({ fixture, render, kinds, height = 320 }: Pro
   return (
     <Plot
       data={result.data as Plotly.Data[]}
-      layout={{ ...result.layout, height } as Partial<Plotly.Layout>}
+      layout={applyPlotlyTheme({ ...result.layout, height }, scheme) as Partial<Plotly.Layout>}
       config={{ displaylogo: false, responsive: true }}
       style={{ width: '100%', height }}
       useResizeHandler

@@ -33,7 +33,7 @@ export default function App() {
   })();
 
   return (
-    <AppShell header={{ height: 50 }} padding={0}>
+    <AppShell header={{ height: 56 }} padding={0}>
       <AppShell.Header>
         <AppHeader />
       </AppShell.Header>

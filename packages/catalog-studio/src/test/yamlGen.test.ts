@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { genModuleYaml, genOutputYaml, renderToFlow, outputId } from '../catalog/yamlGen';
 import type { RenderSpec, ToolMeta, OutputMeta } from '../types';
 
-const tool: ToolMeta = { id: 'mytool', name: 'My Tool', nf_core_url: 'https://github.com/nf-core/modules/tree/master/modules/nf-core/mytool' };
+const tool: ToolMeta = { id: 'mytool', name: 'My Tool', source: 'nf-core', nf_core_url: 'https://github.com/nf-core/modules/tree/master/modules/nf-core/mytool' };
 const output: OutputMeta = { slug: 'results', path_glob: '**/mytool/*.tsv', description: 'desc' };
 
 describe('outputId', () => {

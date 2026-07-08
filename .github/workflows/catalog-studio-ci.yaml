@@ -75,14 +75,15 @@ jobs:
           pnpm --filter catalog-studio run build
 
       - name: Snapshot drift check
-        # The build regenerated kinds.json + catalog.schema.json from the Python
-        # source. If they differ from the committed snapshots, fail — regenerate
-        # locally and commit.
+        # The build regenerated kinds.json + figureParams.json + catalog.schema.json
+        # from the Python source. If they differ from the committed snapshots,
+        # fail — regenerate locally and commit.
         run: |
           git diff --exit-code -- \
             packages/catalog-studio/public/kinds.json \
+            packages/catalog-studio/public/figureParams.json \
             packages/catalog-studio/public/catalog.schema.json \
-          || (echo "::error::kinds.json/catalog.schema.json out of date — run 'pnpm --filter catalog-studio genkinds' and commit." && exit 1)
+          || (echo "::error::snapshots out of date — run 'pnpm --filter catalog-studio genkinds' and commit." && exit 1)
 
       - name: Round-trip — generated entry must pass catalog validate
         run: |

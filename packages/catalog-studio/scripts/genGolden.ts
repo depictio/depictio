@@ -25,8 +25,9 @@ const renders: RenderSpec[] = [
   { uid: 'r1', component: 'figure', visu_type: 'histogram', dict_kwargs: { x: 'log2fc', color: 'sample' } },
   { uid: 'r2', component: 'card', column: 'coverage', aggregation: 'average' },
   { uid: 'r3', component: 'table' },
+  { uid: 'r4', component: 'interactive' },
   {
-    uid: 'r4',
+    uid: 'r5',
     component: 'advanced_viz',
     kind: 'volcano',
     roles: { feature_id: 'gene', effect_size: 'log2fc', significance: 'pvalue' },
@@ -34,7 +35,7 @@ const renders: RenderSpec[] = [
 ];
 
 const entry = generateEntry({
-  tool: { id: 'golden_tool', name: 'Golden Tool' },
+  tool: { id: 'golden_tool', name: 'Golden Tool', source: 'nf-core' },
   output: { slug: 'results', path_glob: '**/golden/*.csv', description: 'Golden round-trip fixture.' },
   fixtureFileName: fixture.fileName,
   fixtureContent: fixture.raw,

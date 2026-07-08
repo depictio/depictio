@@ -25,13 +25,16 @@ export function boundColumns(render: RenderSpec): string[] {
   if (render.component === 'advanced_viz') {
     Object.values(render.roles).forEach((c) => c && cols.add(c));
   } else if (render.component === 'figure') {
+    // Code-mode figures bind columns inside the snippet — nothing to ground here.
     for (const k of FIGURE_COLUMN_KWARGS) {
-      const v = render.dict_kwargs[k];
+      const v = render.dict_kwargs?.[k];
       if (v) cols.add(v);
     }
   } else if (render.component === 'card') {
     if (render.column) cols.add(render.column);
+    if (render.breakdown_col) cols.add(render.breakdown_col);
   }
+  // interactive + table bind no columns in the catalog (component-only renders).
   return [...cols];
 }
 
@@ -58,10 +61,10 @@ export function validateRender(
     }
   }
 
-  if (render.component === 'figure') {
+  if (render.component === 'figure' && !render.code) {
     // A figure needs at least an x (or a heatmap needs x+y+color, but keep the
-    // client check lenient — CI is authoritative).
-    if (!render.dict_kwargs.x && !render.dict_kwargs.names) {
+    // client check lenient — CI is authoritative). Code-mode figures are exempt.
+    if (!render.dict_kwargs?.x && !render.dict_kwargs?.names) {
       issues.push({
         renderUid: render.uid,
         severity: 'warning',

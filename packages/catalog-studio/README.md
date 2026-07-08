@@ -1,26 +1,31 @@
-# Catalog Studio
+# Depictio Tools Studio
 
 A **100 % client-side** web app (GitHub Pages, no backend) for contributing a
-tool to the depictio catalog. Drop a CSV/TSV, bind columns to visualizations
-with live previews, and either **download a zip** or **open a pull request**
-straight against `depictio/depictio` — the tool data lives in
+tool to the depictio catalog. Pick a tool source (nf-core / Snakemake / Galaxy),
+drop a CSV/TSV, then author dashboard components with **depictio's own component
+builder** — and either **download a zip** or **contribute it on GitHub** (a
+token-free web-upload PR against `depictio/depictio`). The tool data lives in
 [`depictio/catalog/`](../../depictio/catalog/), not a separate repo.
 
 **Live app:** https://depictio.github.io/depictio/
 
 ## The flow
 
-1. **Tool** — id, name, output slug + `path_glob`. Optional: paste an nf-core
-   module URL and click **From nf-core** to pull identity from its `meta.yml`.
+1. **Tool** — pick the source (nf-core module / Snakemake wrapper / Galaxy tool),
+   id, name, output slug + `path_glob`. For nf-core, **Import** pulls identity
+   from the module's `meta.yml`.
 2. **Fixture** — drop the tool's output file. It's bundled verbatim as the
    fixture and is what grounds your bindings in CI. Columns + dtypes are inferred
    client-side; nothing leaves your browser.
-3. **Visualizations** — add `figure` / `card` / `table` / `advanced_viz`
-   renders, bind fixture columns via dropdowns, and see a live preview.
-   Heavy advanced-viz kinds (embedding, complex_heatmap, upset_plot, sankey,
-   oncoplot) export fine but can't be previewed here — verify them in depictio.
+3. **Visualizations** — **Add visualization** opens depictio's real
+   component-creation builder (the same figure / card / table / interactive
+   controls the dashboard editor uses), seeded from your fixture. advanced_viz is
+   authored via a roles panel; heavy kinds (embedding, complex_heatmap,
+   upset_plot, sankey, oncoplot) export fine but preview only in depictio.
 4. **Export** — download `<tool>/{module.yaml, <output>.yaml, <fixture>}` as a
-   zip, or open a PR with a GitHub token (forks + commits + PRs from the browser).
+   zip, or **Contribute on GitHub**: the zip downloads and GitHub's web uploader
+   opens on `depictio/catalog/` — drag the unzipped `<tool>/` folder in and
+   *Propose changes*; GitHub forks the repo and opens the PR (no token needed).
 
 ## What it generates
 
@@ -67,22 +72,34 @@ pnpm --filter catalog-studio e2e        # Playwright flow test
 
 ### Reuse from the monorepo
 
+- **Component builder** — the `depictio-builder` alias
+  (`vite.config.ts` / `tsconfig.json` → `depictio/viewer/src/builder`) imports
+  depictio's *real* builder store + control panels (`StepType` grid via
+  `componentTypes`, `FigureUIMode`, `CardBuilder`, `DesignShell`, `ColumnSelect`,
+  `aggFunctions`, …). They're store-driven, so `src/builder/seedStore.ts` seeds
+  the store from the in-memory fixture (columns + precomputed `specs`) instead of
+  the API; only the server-coupled data-source/previews/save are swapped for
+  client equivalents (`src/builder/DesignArea.tsx`). `src/catalog/fromBuilderStore.ts`
+  maps the builder store → a catalog `RenderSpec`.
 - **Rendering** reuses `depictio-react-core`'s shared `TAB10_PALETTE` and
   `depictio-components`' `DepictioCard`. depictio's per-type renderers are
-  backend-coupled (they fetch computed data from FastAPI), so Catalog Studio
-  builds Plotly figures client-side in `src/viz/figureBuilder.ts` — a preview
-  approximation; depictio's Python renderer stays authoritative.
+  backend-coupled (they fetch computed data from FastAPI), so previews build
+  Plotly figures client-side in `src/viz/figureBuilder.ts` — approximations;
+  depictio's Python renderer stays authoritative.
 - **Theme** mirrors `depictio/viewer/src/theme.ts` (`src/theme.ts`) + the Virgil
   brand font, so the app looks native to depictio.
 
 ### Build-time inputs (kept drift-free)
 
-`scripts/genKinds.ts` (prebuild) regenerates two snapshots from the in-repo
-Python source when a depictio-capable Python is reachable, else keeps the
-committed copies:
+`scripts/genKinds.ts` (prebuild) regenerates snapshots from the in-repo Python
+source when a depictio-capable Python is reachable, else keeps the committed
+copies:
 
 - `public/kinds.json` ← `depictio dev catalog kinds --json`
   (advanced_viz roles/dtypes from `models/components/advanced_viz/schemas.py`)
+- `public/figureParams.json` ← `depictio dev catalog figure-params --json`
+  (figure builder's viz list + per-viz parameter specs; lets depictio's
+  `FigureUIMode` render its parameter accordion offline)
 - `public/catalog.schema.json` ← copy of `depictio/catalog/catalog.schema.json`
 
 CI's drift check regenerates and `git diff --exit-code`s these, so a stale

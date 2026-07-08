@@ -1,10 +1,11 @@
 /**
- * Build-time generator for the two drift-sensitive inputs Catalog Studio reads:
+ * Build-time generator for the drift-sensitive inputs Catalog Studio reads:
  *
  *   public/kinds.json           ← `dev catalog kinds --json` (advanced_viz roles)
+ *   public/figureParams.json    ← `dev catalog figure-params --json` (figure builder UI)
  *   public/catalog.schema.json  ← copy of depictio/catalog/catalog.schema.json
  *
- * Both are also committed as snapshots. This script REGENERATES them from the
+ * All are also committed as snapshots. This script REGENERATES them from the
  * in-repo Python source when a depictio-capable Python is reachable (CI, dev
  * machines), and otherwise leaves the committed snapshots untouched so a
  * pure-JS `pnpm build` (e.g. the GitHub Pages runner without Python) still
@@ -22,7 +23,6 @@ const repoRoot = resolve(pkgRoot, '..', '..'); // packages/catalog-studio → re
 const publicDir = resolve(pkgRoot, 'public');
 const schemaSrc = resolve(repoRoot, 'depictio', 'catalog', 'catalog.schema.json');
 const schemaDst = resolve(publicDir, 'catalog.schema.json');
-const kindsDst = resolve(publicDir, 'kinds.json');
 
 mkdirSync(publicDir, { recursive: true });
 
@@ -36,26 +36,28 @@ if (existsSync(schemaSrc)) {
   console.warn(`[genKinds] WARNING: no catalog.schema.json source or snapshot`);
 }
 
-// 2. kinds.json: run the CLI command. Try the installed `depictio` binary
-//    first, then a Python invocation of the isolated Typer sub-app (needs only
-//    typer + pydantic, not the full CLI dep tree). Any success overwrites the
-//    snapshot; total failure leaves it in place.
-const PY_INVOKE = [
-  '-c',
-  [
-    'import sys',
-    'from typer.testing import CliRunner',
-    'from depictio.cli.cli.commands.catalog import dev_app',
-    "r = CliRunner().invoke(dev_app, ['kinds', '--json'])",
-    'sys.exit(r.exit_code) if r.exit_code else sys.stdout.write(r.stdout)',
-  ].join('; '),
-];
+// 2. JSON snapshots from CLI commands. Try the installed `depictio` binary
+//    first, then a Python invocation of the isolated Typer sub-app. Any success
+//    overwrites the snapshot; total failure leaves the committed one in place.
+function pyInvoke(command: string): string[] {
+  return [
+    '-c',
+    [
+      'import sys',
+      'from typer.testing import CliRunner',
+      'from depictio.cli.cli.commands.catalog import dev_app',
+      `r = CliRunner().invoke(dev_app, ['${command}', '--json'])`,
+      'sys.exit(r.exit_code) if r.exit_code else sys.stdout.write(r.stdout)',
+    ].join('; '),
+  ];
+}
 
-function tryGen(): string | null {
+/** Run `dev catalog <command> --json`, returning the JSON text or null. */
+function tryGen(command: string): string | null {
   const attempts: Array<{ cmd: string; args: string[] }> = [
-    { cmd: 'depictio', args: ['dev', 'catalog', 'kinds', '--json'] },
-    { cmd: 'python', args: PY_INVOKE },
-    { cmd: 'python3', args: PY_INVOKE },
+    { cmd: 'depictio', args: ['dev', 'catalog', command, '--json'] },
+    { cmd: 'python', args: pyInvoke(command) },
+    { cmd: 'python3', args: pyInvoke(command) },
   ];
   for (const { cmd, args } of attempts) {
     try {
@@ -76,13 +78,20 @@ function tryGen(): string | null {
   return null;
 }
 
-const generated = tryGen();
-if (generated) {
-  writeFileSync(kindsDst, generated);
-  console.log(`[genKinds] regenerated kinds.json from source`);
-} else if (existsSync(kindsDst)) {
-  console.log(`[genKinds] Python/depictio unavailable — keeping committed kinds.json`);
-} else {
-  console.error(`[genKinds] ERROR: cannot generate kinds.json and no snapshot exists`);
-  process.exit(1);
+/** Regenerate one snapshot; keep the committed copy when Python is unavailable. */
+function snapshot(command: string, filename: string): void {
+  const dst = resolve(publicDir, filename);
+  const generated = tryGen(command);
+  if (generated) {
+    writeFileSync(dst, generated);
+    console.log(`[genKinds] regenerated ${filename} from source`);
+  } else if (existsSync(dst)) {
+    console.log(`[genKinds] Python/depictio unavailable — keeping committed ${filename}`);
+  } else {
+    console.error(`[genKinds] ERROR: cannot generate ${filename} and no snapshot exists`);
+    process.exit(1);
+  }
 }
+
+snapshot('kinds', 'kinds.json');
+snapshot('figure-params', 'figureParams.json');

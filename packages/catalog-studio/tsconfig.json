@@ -21,7 +21,9 @@
     "paths": {
       "depictio-components": ["../depictio-components/src/lib"],
       "depictio-react-core": ["../depictio-react-core/src"],
-      "depictio-react-core/*": ["../depictio-react-core/src/*"]
+      "depictio-react-core/*": ["../depictio-react-core/src/*"],
+      "depictio-builder": ["../../depictio/viewer/src/builder"],
+      "depictio-builder/*": ["../../depictio/viewer/src/builder/*"]
     }
   },
   "include": ["src", "scripts", "e2e"],
