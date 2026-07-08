@@ -3,6 +3,7 @@ import GridLayout, { Layout } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
 import { StoredMetadata, InteractiveFilter } from '../api';
+import { ActiveHighlight } from '../highlight';
 import ComponentRenderer from './ComponentRenderer';
 
 interface DashboardGridProps {
@@ -23,6 +24,9 @@ interface DashboardGridProps {
    * event). Renderers include this in their effect deps; ``undefined`` is a no-op.
    */
   refreshTick?: number;
+  /** The batch currently highlighted (live arrival or a pinned re-selection
+   *  from the event log). Forwarded to renderers so they glow its rows. */
+  activeHighlight?: ActiveHighlight | null;
   /** Allow users to drag grid items. Defaults to false (viewer-safe). */
   isDraggable?: boolean;
   /** Allow users to resize grid items. Defaults to false (viewer-safe). */
@@ -67,6 +71,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
   cardSecondaryValues,
   cardValuesLoading,
   refreshTick,
+  activeHighlight,
   isDraggable = false,
   isResizable = false,
   editMode = false,
@@ -245,6 +250,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
               cardSecondaryValues={cardSecondaryValues?.[m.index]}
               cardLoading={cardValuesLoading}
               refreshTick={refreshTick}
+              activeHighlight={activeHighlight}
               extraActions={showOverlays ? renderItemOverlay!(m.index, m) : undefined}
               showDragHandle={editMode && isDraggable}
             />

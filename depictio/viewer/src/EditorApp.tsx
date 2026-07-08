@@ -63,6 +63,7 @@ import {
   useDataCollectionUpdates,
   RealtimeIndicator,
   useRealtimeJournal,
+  batchIdsFromPayload,
 } from 'depictio-react-core';
 import type {
   DashboardData,
@@ -71,6 +72,8 @@ import type {
   InteractiveFilter,
   StoredMetadata,
   RealtimeMode,
+  ActiveHighlight,
+  RealtimeJournalEntry,
 } from 'depictio-react-core';
 
 import LeftFilterPanel from './components/LeftFilterPanel';
@@ -574,6 +577,33 @@ const EditorApp: React.FC = () => {
     setFilters((prev) => [...prev]);
   }, []);
   const [journal, appendJournal, clearJournal] = useRealtimeJournal(50);
+
+  // Per-batch highlight (mirrors App.tsx). Live arrivals glow transiently;
+  // the event log can pin a past batch. The nonce re-arms the fade window.
+  const [activeHighlight, setActiveHighlight] = useState<ActiveHighlight | null>(null);
+  const highlightNonce = useRef(0);
+  const applyHighlight = useCallback(
+    (batch: { idColumn?: string; ids: string[] }, dcId?: string, sticky = false, batchKey?: string) => {
+      highlightNonce.current += 1;
+      const nonce = highlightNonce.current;
+      setActiveHighlight((prev) => {
+        // A live (non-sticky) arrival must not replace a pinned batch.
+        if (!sticky && prev?.sticky) return prev;
+        return { ...batch, dcId, sticky, batchKey, nonce };
+      });
+    },
+    [],
+  );
+  const handleHighlightBatch = useCallback(
+    (entry: RealtimeJournalEntry) => {
+      const batch = batchIdsFromPayload(entry.payload);
+      if (!batch) return;
+      applyHighlight(batch, entry.dataCollectionId, true, entry.receivedAt);
+    },
+    [applyHighlight],
+  );
+  const handleClearHighlight = useCallback(() => setActiveHighlight(null), []);
+
   const onRealtimeUpdate = useCallback(
     (
       event: {
@@ -598,6 +628,8 @@ const EditorApp: React.FC = () => {
         payload,
       });
       if (auto) {
+        const batch = batchIdsFromPayload(payload);
+        if (batch) applyHighlight(batch, event.data_collection_id, false);
         triggerRealtimeRefresh();
         return;
       }
@@ -609,7 +641,7 @@ const EditorApp: React.FC = () => {
         onClick: () => triggerRealtimeRefresh(),
       });
     },
-    [triggerRealtimeRefresh, appendJournal],
+    [triggerRealtimeRefresh, appendJournal, applyHighlight],
   );
   // Gated on the project's ``realtime.enabled`` flag (project.yaml). Static
   // projects never mount the WebSocket / indicator.
@@ -924,6 +956,9 @@ const EditorApp: React.FC = () => {
                     }}
                     journal={journal}
                     onClearJournal={clearJournal}
+                    onHighlightBatch={handleHighlightBatch}
+                    onClearHighlight={handleClearHighlight}
+                    activeHighlightKey={activeHighlight?.batchKey}
                   />
                 </span>
               )}
@@ -1018,6 +1053,7 @@ const EditorApp: React.FC = () => {
                 onDeleteComponent={handleDeleteComponent}
                 onDuplicateComponent={handleDuplicateComponent}
                 onAddComponent={handleAddComponent}
+                activeHighlight={activeHighlight}
               />
             </Box>
           </div>
@@ -1070,6 +1106,7 @@ interface RightComponentGridProps {
   onDeleteComponent: (componentId: string) => void;
   onDuplicateComponent: (componentId: string) => void;
   onAddComponent: () => void;
+  activeHighlight?: ActiveHighlight | null;
 }
 
 /**
@@ -1094,6 +1131,7 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
   onDeleteComponent,
   onDuplicateComponent,
   onAddComponent,
+  activeHighlight,
 }) => {
   const allComponents = useMemo(
     () => [...cardComponents, ...otherComponents],
@@ -1147,6 +1185,7 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
       cardValues={cardValues}
       cardSecondaryValues={cardSecondaryValues}
       cardValuesLoading={cardsLoading}
+      activeHighlight={activeHighlight}
       isDraggable={true}
       isResizable={true}
       editMode={true}

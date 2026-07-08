@@ -22,3 +22,68 @@
   transform: translate(-100%, calc(0.25rem)) !important;
   text-align: right;
 }
+
+/* Custom per-acquisition timestamp dots overlaid on the track. The container is
+ * inset to the measured track box; each dot is positioned by its time fraction.
+ * Only the dots take pointer events, so clicks between dots still reach the
+ * slider track (drag/click to move the handles). */
+.depictio-timeline-dots {
+  position: absolute;
+  height: 0;
+  pointer-events: none;
+  /* Above the Mantine track/bar (z-index 1) so dots receive clicks, but below
+   * the drag handles (z-index 3) so thumbs sitting on a dot stay draggable. */
+  z-index: 2;
+}
+.depictio-timeline-dot {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid var(--mantine-color-blue-6);
+  background-color: var(--mantine-color-body);
+  cursor: pointer;
+  pointer-events: auto;
+  transition:
+    transform 120ms ease,
+    background-color 120ms ease,
+    box-shadow 120ms ease;
+}
+.depictio-timeline-dot:hover {
+  transform: translate(-50%, -50%) scale(1.3);
+  box-shadow: 0 0 0 3px var(--mantine-color-blue-1);
+}
+.depictio-timeline-dot:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--mantine-color-blue-2);
+}
+/* Dots inside the selected window read as "active" (filled). */
+.depictio-timeline-dot.is-in-range {
+  background-color: var(--mantine-color-blue-6);
+}
+/* Per-dot label sits below the track, centered under the dot. */
+.depictio-timeline-dot-label {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: var(--mantine-font-size-xs);
+  color: var(--mantine-color-dimmed);
+  white-space: nowrap;
+  pointer-events: none;
+}
+/* Keep the first/last labels inside the component bounds (mirrors the Mantine
+ * mark-label clamp above). */
+.depictio-timeline-dot:first-child .depictio-timeline-dot-label {
+  left: 0;
+  transform: none;
+  text-align: left;
+}
+.depictio-timeline-dot:last-child .depictio-timeline-dot-label {
+  left: auto;
+  right: 0;
+  transform: none;
+  text-align: right;
+}

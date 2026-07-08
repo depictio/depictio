@@ -18,6 +18,7 @@ import { extractRowSelection } from '../selection';
 import { useInView } from '../hooks/useInView';
 import { useNewItemIds } from '../hooks/useNewItemIds';
 import { useTransientFlag } from '../hooks/useTransientFlag';
+import { ActiveHighlight } from '../highlight';
 import RefetchOverlay from './RefetchOverlay';
 
 interface TableRendererProps {
@@ -32,6 +33,9 @@ interface TableRendererProps {
   onFilterChange?: (filter: InteractiveFilter) => void;
   /** Counter to force refetch on realtime updates even when filters are unchanged. */
   refreshTick?: number;
+  /** Batch to glow — a live arrival (auto-fade) or a pinned re-selection from
+   *  the event log. Its ``ids`` are matched against each row's id column. */
+  activeHighlight?: ActiveHighlight | null;
 }
 
 const CACHE_BLOCK_SIZE = 100;
@@ -52,6 +56,7 @@ const TableRenderer: React.FC<TableRendererProps> = ({
   agGridApiRef,
   onFilterChange,
   refreshTick,
+  activeHighlight,
 }) => {
   const [colDefs, setColDefs] = useState<ColDef[]>([]);
   const [loading, setLoading] = useState(true);
@@ -131,7 +136,7 @@ const TableRenderer: React.FC<TableRendererProps> = ({
           serverSort && visibleColumns.some((c) => c.field === serverSort)
             ? serverSort
             : null;
-        const defaultSortField =
+        const acquisitionSortField =
           serverSortVisible ??
           visibleColumns
             .map((c) => c.field)
@@ -140,8 +145,32 @@ const TableRenderer: React.FC<TableRendererProps> = ({
                 /acquisition/i.test(f) && /(time|date|stamp)/i.test(f),
             ) ??
           null;
-        const defaultSortDir =
-          (res.sort_dir as 'asc' | 'desc' | undefined) ?? 'desc';
+        // Last-resort default: newest-first on the row-id column (``index_index``
+        // etc.) when it's visible AND numeric. A numeric ingest counter is
+        // monotonic, so descending surfaces the most recently added rows at the
+        // top — keeping the realtime new-row highlight in view (matching the
+        // newest-first image gallery) instead of stranding new rows at the bottom
+        // in natural ingest order. Gated on numeric dtype so a string selection
+        // column (``sample_id`` etc.) isn't lexicographically mis-sorted; those
+        // tables keep their prior natural order. Only used when no
+        // acquisition-timestamp sort applies.
+        const rowIdCol =
+          (typeof metadata.row_selection_column === 'string' &&
+            metadata.row_selection_column) ||
+          (typeof metadata.selection_column === 'string' &&
+            metadata.selection_column) ||
+          null;
+        const rowIdColMeta = rowIdCol
+          ? visibleColumns.find((c) => c.field === rowIdCol)
+          : undefined;
+        const rowIdSortField =
+          rowIdColMeta && rowIdColMeta.type === 'numericColumn' ? rowIdCol : null;
+        const defaultSortField = acquisitionSortField ?? rowIdSortField;
+        // Acquisition sort honours the server's direction (defaulting desc);
+        // the row-id fallback is always descending (newest first).
+        const defaultSortDir: 'asc' | 'desc' = acquisitionSortField
+          ? ((res.sort_dir as 'asc' | 'desc' | undefined) ?? 'desc')
+          : 'desc';
         sortRef.current = { sortBy: defaultSortField, sortDir: defaultSortDir };
         setColDefs(
           visibleColumns.map((c, i) => {
@@ -246,14 +275,47 @@ const TableRenderer: React.FC<TableRendererProps> = ({
       : 3000;
   const highlightActive = useTransientFlag(refreshTick, highlightDurationMs);
 
+  // Per-batch highlight, payload-driven — glow the exact ids a batch added,
+  // matched on the batch's own ``idColumn`` (the DC-wide column the backend
+  // diffed), which every row carries in ``params.data``. This is ADDITIVE with
+  // the legacy first-page diff below: live arrivals glow via either path, and a
+  // sticky batch (re-selected from the event log) re-glows with no refetch.
+  const batchDcMatch =
+    !!activeHighlight &&
+    (!activeHighlight.dcId || activeHighlight.dcId === metadata.dc_id);
+  const batchIdColumn = activeHighlight?.idColumn;
+  const batchIds = useMemo(
+    () => (batchDcMatch && batchIdColumn ? new Set(activeHighlight!.ids) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [batchDcMatch, batchIdColumn, activeHighlight?.ids],
+  );
+  const batchFadeActive = useTransientFlag(activeHighlight?.nonce, highlightDurationMs);
+  const batchHighlightOn = batchDcMatch && (activeHighlight!.sticky || batchFadeActive);
+  const batchSticky = !!activeHighlight?.sticky;
+
   const getRowClass = useMemo(() => {
-    if (!rowIdColumn || !highlightActive || newRowIds.size === 0) return undefined;
+    const legacyOn = !!rowIdColumn && highlightActive && newRowIds.size > 0;
+    const batchOn =
+      batchHighlightOn && !!batchIds && !!batchIdColumn && batchIds.size > 0;
+    if (!legacyOn && !batchOn) return undefined;
     return (params: { data?: Record<string, unknown> }) => {
-      const v = params.data?.[rowIdColumn];
-      if (v === null || v === undefined) return undefined;
-      return newRowIds.has(String(v)) ? 'depictio-row-new' : undefined;
+      const data = params.data;
+      if (!data) return undefined;
+      // A pinned batch gets the steady ``-pinned`` class (stays until cleared);
+      // live arrivals (batch or legacy diff) get the one-shot ``-new`` flash.
+      if (batchOn) {
+        const bv = data[batchIdColumn!];
+        if (bv != null && batchIds!.has(String(bv))) {
+          return batchSticky ? 'depictio-row-pinned' : 'depictio-row-new';
+        }
+      }
+      if (legacyOn) {
+        const lv = data[rowIdColumn!];
+        if (lv != null && newRowIds.has(String(lv))) return 'depictio-row-new';
+      }
+      return undefined;
     };
-  }, [rowIdColumn, highlightActive, newRowIds]);
+  }, [rowIdColumn, highlightActive, newRowIds, batchIds, batchIdColumn, batchHighlightOn, batchSticky]);
 
   // AG Grid only evaluates ``getRowClass`` when a row is first drawn. The
   // new-row highlight resolves via an async snapshot fetch that lands *after*

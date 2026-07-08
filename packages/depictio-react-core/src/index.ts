@@ -231,6 +231,8 @@ export type { RealtimeStatus, RealtimeMode, RealtimeEvent } from './realtime';
 export { default as RealtimeIndicator } from './components/RealtimeIndicator';
 export { useRealtimeJournal } from './hooks/useRealtimeJournal';
 export type { RealtimeJournalEntry } from './hooks/useRealtimeJournal';
+export { batchIdsFromPayload } from './highlight';
+export type { ActiveHighlight } from './highlight';
 
 export type {
   StoredMetadata,

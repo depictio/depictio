@@ -32,6 +32,7 @@ import {
   useDataCollectionUpdates,
   RealtimeIndicator,
   useRealtimeJournal,
+  batchIdsFromPayload,
   fetchProjectFromDashboard,
   fetchIngestionHealth,
 } from 'depictio-react-core';
@@ -41,6 +42,8 @@ import type {
   DashboardSummary,
   InteractiveFilter,
   RealtimeMode,
+  ActiveHighlight,
+  RealtimeJournalEntry,
   IngestionSummary,
 } from 'depictio-react-core';
 import { parseTemplateOrigin } from './projects/template';
@@ -240,6 +243,34 @@ const App: React.FC = () => {
   // the "Reset" button on the dropdown.
   const [journal, appendJournal, clearJournal] = useRealtimeJournal(50);
 
+  // The batch currently highlighted across the dashboard. Live arrivals set it
+  // transiently (auto-fade); the event log can pin a past batch (sticky). The
+  // nonce (monotonic) re-arms the renderers' fade window on every (re-)trigger.
+  const [activeHighlight, setActiveHighlight] = useState<ActiveHighlight | null>(null);
+  const highlightNonce = useRef(0);
+  const applyHighlight = useCallback(
+    (batch: { idColumn?: string; ids: string[] }, dcId?: string, sticky = false, batchKey?: string) => {
+      highlightNonce.current += 1;
+      const nonce = highlightNonce.current;
+      setActiveHighlight((prev) => {
+        // A live (non-sticky) arrival must not replace a batch the user pinned
+        // from the event log — otherwise the next stream event wipes it.
+        if (!sticky && prev?.sticky) return prev;
+        return { ...batch, dcId, sticky, batchKey, nonce };
+      });
+    },
+    [],
+  );
+  const handleHighlightBatch = useCallback(
+    (entry: RealtimeJournalEntry) => {
+      const batch = batchIdsFromPayload(entry.payload);
+      if (!batch) return;
+      applyHighlight(batch, entry.dataCollectionId, true, entry.receivedAt);
+    },
+    [applyHighlight],
+  );
+  const handleClearHighlight = useCallback(() => setActiveHighlight(null), []);
+
   const triggerRefresh = useCallback(() => {
     setRefreshTick((t) => t + 1);
   }, []);
@@ -273,6 +304,10 @@ const App: React.FC = () => {
         payload,
       });
       if (auto) {
+        // Glow exactly the rows this batch added (auto-fade). Falls back to the
+        // renderers' client-side diff when the payload carries no id list.
+        const batch = batchIdsFromPayload(payload);
+        if (batch) applyHighlight(batch, event.data_collection_id, false);
         triggerRefresh();
         return;
       }
@@ -284,7 +319,7 @@ const App: React.FC = () => {
         onClick: () => triggerRefresh(),
       });
     },
-    [triggerRefresh, appendJournal],
+    [triggerRefresh, appendJournal, applyHighlight],
   );
 
   // Only subscribe + render the indicator when the dashboard's project has
@@ -406,6 +441,9 @@ const App: React.FC = () => {
                     }}
                     journal={journal}
                     onClearJournal={clearJournal}
+                    onHighlightBatch={handleHighlightBatch}
+                    onClearHighlight={handleClearHighlight}
+                    activeHighlightKey={activeHighlight?.batchKey}
                   />
                 </span>
               )}
@@ -550,6 +588,7 @@ const App: React.FC = () => {
                         members={g.members}
                         filters={filters}
                         onFilterChange={handleFilterChange}
+                        refreshTick={refreshTick}
                       />
                     ) : (
                       <ComponentRenderer
@@ -557,6 +596,7 @@ const App: React.FC = () => {
                         metadata={g.members[0]}
                         filters={filters}
                         onFilterChange={handleFilterChange}
+                        refreshTick={refreshTick}
                       />
                     ),
                   )}
@@ -592,6 +632,7 @@ const App: React.FC = () => {
                   components={topComponents}
                   filters={filters}
                   onFilterChange={handleFilterChange}
+                  refreshTick={refreshTick}
                 />
               )}
               <Box style={{ flex: 1, minHeight: 0 }}>
@@ -644,6 +685,7 @@ const App: React.FC = () => {
                     cardSecondaryValues={cardSecondaryValues}
                     cardValuesLoading={cardsLoading}
                     refreshTick={refreshTick}
+                    activeHighlight={activeHighlight}
                     isDraggable={false}
                     isResizable={false}
                     editMode={false}

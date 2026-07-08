@@ -12,6 +12,7 @@ import { extractScatterSelection } from '../selection';
 import { useInView } from '../hooks/useInView';
 import { useNewItemIds } from '../hooks/useNewItemIds';
 import { useTransientFlag } from '../hooks/useTransientFlag';
+import { ActiveHighlight } from '../highlight';
 import { asNumberArray, extractCustomdataIds } from '../plotlyData';
 import RefetchOverlay from './RefetchOverlay';
 
@@ -24,6 +25,9 @@ interface FigureRendererProps {
   onFilterChange?: (filter: InteractiveFilter) => void;
   /** Counter to force refetch on realtime updates even when filters are unchanged. */
   refreshTick?: number;
+  /** Batch to glow — a live arrival (auto-fade) or a pinned re-selection from
+   *  the event log. Its ``ids`` are matched against the scatter customdata. */
+  activeHighlight?: ActiveHighlight | null;
 }
 
 /**
@@ -44,6 +48,7 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
   filters,
   onFilterChange,
   refreshTick,
+  activeHighlight,
 }) => {
   const [figure, setFigure] = useState<{ data?: unknown[]; layout?: Record<string, unknown> } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -244,11 +249,34 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
   const newIds = useNewItemIds(figureIds, refreshTick);
   const highlightActive = useTransientFlag(refreshTick, highlightDurationMs);
 
-  // Build an overlay trace (one per realtime tick) with markers at the new
-  // points' coordinates. We re-derive x/y from the trace's own arrays by
-  // matching customdata index → trace index. No mutation of existing traces.
+  // Per-batch highlight, payload-driven. The scatter overlay only carries the
+  // selection column's values in customdata, so a batch can only match when its
+  // ``idColumn`` equals ``selectionColumn``. This is ADDITIVE with the legacy
+  // client-side diff: live arrivals overlay via either path, a sticky batch
+  // re-overlays with no refetch.
+  const batchColumnAligned =
+    !!activeHighlight &&
+    (!activeHighlight.dcId || activeHighlight.dcId === metadata.dc_id) &&
+    (!activeHighlight.idColumn || activeHighlight.idColumn === selectionColumn);
+  const batchFadeActive = useTransientFlag(activeHighlight?.nonce, highlightDurationMs);
+  const batchHighlightOn =
+    batchColumnAligned && (activeHighlight!.sticky || batchFadeActive);
+  // Union of the legacy diff (when its window is open) and the batch ids (when
+  // its gate is on) — the overlay marks every id in the combined set.
+  const effectiveIds = useMemo<Set<string>>(() => {
+    const s = new Set<string>();
+    if (highlightActive) newIds.forEach((id) => s.add(id));
+    if (batchHighlightOn) activeHighlight!.ids.forEach((id) => s.add(id));
+    return s;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [highlightActive, newIds, batchHighlightOn, activeHighlight?.ids]);
+  const overlayActive = (highlightActive && newIds.size > 0) || batchHighlightOn;
+
+  // Build an overlay trace with markers at the highlighted points' coordinates.
+  // We re-derive x/y from the trace's own arrays by matching customdata index →
+  // trace index. No mutation of existing traces.
   const overlayTrace = useMemo<Record<string, unknown> | null>(() => {
-    if (!highlightActive || !isScatterLike || newIds.size === 0 || !figure) return null;
+    if (!overlayActive || !isScatterLike || effectiveIds.size === 0 || !figure) return null;
     const data = (figure.data as Array<{
       x?: unknown;
       y?: unknown;
@@ -262,7 +290,7 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
       const xArr = asNumberArray(trace?.x);
       const yArr = asNumberArray(trace?.y);
       for (let i = 0; i < ids.length; i++) {
-        if (newIds.has(ids[i]) && i < xArr.length && i < yArr.length) {
+        if (effectiveIds.has(ids[i]) && i < xArr.length && i < yArr.length) {
           xs.push(xArr[i]);
           ys.push(yArr[i]);
         }
@@ -284,7 +312,7 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
       showlegend: false,
       name: '__depictio_new_items',
     };
-  }, [highlightActive, isScatterLike, newIds, figure, selectionColumnIndex, highlightColor]);
+  }, [overlayActive, isScatterLike, effectiveIds, figure, selectionColumnIndex, highlightColor]);
 
   const figureData = useMemo<unknown[]>(() => {
     const base = (figure?.data as unknown[]) || [];

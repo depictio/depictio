@@ -8,6 +8,9 @@ interface TopPanelProps {
   components: StoredMetadata[];
   filters: InteractiveFilter[];
   onFilterChange?: (filter: InteractiveFilter) => void;
+  /** Realtime refresh counter — forwarded so the Timeline scrubber re-fetches
+   *  its datetime bounds (and range extends) as new rows stream in. */
+  refreshTick?: number;
 }
 
 /**
@@ -16,7 +19,12 @@ interface TopPanelProps {
  * scrubber. Filters emitted from here flow through the same
  * `onFilterChange` path as left-sidebar components.
  */
-const TopPanel: React.FC<TopPanelProps> = ({ components, filters, onFilterChange }) => {
+const TopPanel: React.FC<TopPanelProps> = ({
+  components,
+  filters,
+  onFilterChange,
+  refreshTick,
+}) => {
   if (components.length === 0) return null;
   return (
     <Paper withBorder radius={0} p="xs" mb="xs">
@@ -27,6 +35,7 @@ const TopPanel: React.FC<TopPanelProps> = ({ components, filters, onFilterChange
               metadata={m}
               filters={filters}
               onFilterChange={onFilterChange}
+              refreshTick={refreshTick}
             />
           </div>
         ))}

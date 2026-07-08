@@ -9,6 +9,9 @@ interface InteractiveGroupCardProps {
   members: StoredMetadata[];
   filters: InteractiveFilter[];
   onFilterChange?: (filter: InteractiveFilter) => void;
+  /** Realtime refresh counter — forwarded so a grouped Timeline member
+   *  re-fetches its datetime bounds as new rows stream in. */
+  refreshTick?: number;
 }
 
 /**
@@ -24,6 +27,7 @@ const InteractiveGroupCard: React.FC<InteractiveGroupCardProps> = ({
   members,
   filters,
   onFilterChange,
+  refreshTick,
 }) => {
   return (
     <Paper withBorder p="xs" radius="md" shadow="xs">
@@ -38,6 +42,7 @@ const InteractiveGroupCard: React.FC<InteractiveGroupCardProps> = ({
               metadata={m}
               filters={filters}
               onFilterChange={onFilterChange}
+              refreshTick={refreshTick}
               compact
             />
           </React.Fragment>

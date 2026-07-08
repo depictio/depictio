@@ -294,7 +294,7 @@ components:
     s3_base_folder: "s3://depictio-bucket/750a1b2c3d4e5f6a7b8c9d10/images/phenobase/"
     thumbnail_size: 120
     columns: 4
-    max_images: 50
+    max_images: 500
     layout:
       x: 0
       y: 18
