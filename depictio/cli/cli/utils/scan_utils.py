@@ -1,5 +1,6 @@
 import collections
 import hashlib
+import os
 import re
 from functools import lru_cache
 from typing import Any, DefaultDict
@@ -30,6 +31,31 @@ def regex_match(file_name: str, full_regex: str):
         logger.debug(f"Matched file - file-based: {file_name}")
         return True, match
     return False, None
+
+
+def passes_scan_limits(
+    root: str,
+    file_location: str,
+    max_depth: int | None,
+    ignore: list[str] | None,
+) -> bool:
+    """Whether a file survives a recursive scan's ``max_depth`` / ``ignore`` limits.
+
+    ``max_depth`` caps how many directory levels below ``root`` are scanned
+    (``0`` = only files directly in ``root``); ``None`` = unbounded. ``ignore``
+    skips any file whose path relative to ``root`` contains one of the substrings
+    (e.g. ``".snakemake"``, ``"tmp"``). Both come from ``ScanRecursive``; a
+    single-file scan passes ``None`` for each and this is a no-op.
+    """
+    rel = os.path.relpath(file_location, root)
+    if ignore and any(token and token in rel for token in ignore):
+        return False
+    if max_depth is not None:
+        rel_dir = os.path.dirname(rel)
+        depth = 0 if rel_dir in ("", ".") else len(rel_dir.split(os.sep))
+        if depth > max_depth:
+            return False
+    return True
 
 
 def construct_full_regex(regex: Regex) -> str:

@@ -10,6 +10,7 @@ from depictio.cli.cli.utils.scan_utils import (
     construct_full_regex,
     generate_file_hash,
     generate_run_hash,
+    passes_scan_limits,
     regex_match,
 )
 from depictio.models.models.base import PyObjectId
@@ -24,6 +25,35 @@ def set_depictio_context(monkeypatch):
     """Set DEPICTIO_CONTEXT for all tests in the module."""
     monkeypatch.setattr("depictio.models.config.DEPICTIO_CONTEXT", "server")
     monkeypatch.setattr("depictio.models.models.files.DEPICTIO_CONTEXT", "server")
+
+
+class TestPassesScanLimits:
+    """Test suite for the recursive-scan max_depth / ignore filter."""
+
+    ROOT = "/data/run"
+
+    def test_no_limits_passes_everything(self):
+        assert passes_scan_limits(self.ROOT, "/data/run/a/b/c/f.csv", None, None) is True
+
+    def test_max_depth_zero_only_root_files(self):
+        assert passes_scan_limits(self.ROOT, "/data/run/f.csv", 0, None) is True
+        assert passes_scan_limits(self.ROOT, "/data/run/sub/f.csv", 0, None) is False
+
+    def test_max_depth_counts_directory_levels(self):
+        # depth = number of directories between root and the file.
+        assert passes_scan_limits(self.ROOT, "/data/run/a/f.csv", 1, None) is True
+        assert passes_scan_limits(self.ROOT, "/data/run/a/b/f.csv", 1, None) is False
+        assert passes_scan_limits(self.ROOT, "/data/run/a/b/f.csv", 2, None) is True
+
+    def test_ignore_substring_in_path(self):
+        assert (
+            passes_scan_limits(self.ROOT, "/data/run/.snakemake/x.csv", None, [".snakemake"])
+            is False
+        )
+        assert passes_scan_limits(self.ROOT, "/data/run/keep/x.csv", None, [".snakemake"]) is True
+
+    def test_ignore_empty_token_is_noop(self):
+        assert passes_scan_limits(self.ROOT, "/data/run/x.csv", None, [""]) is True
 
 
 class TestRegexMatch:

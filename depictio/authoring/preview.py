@@ -42,6 +42,19 @@ def _read_df(path: Path):  # -> pl.DataFrame
     return pl.read_csv(path, separator=_separator(path), n_rows=_MAX_INFER_ROWS)
 
 
+def schema_of(root: Path, rel: str) -> dict[str, str]:
+    """Column→dtype map for a file (no preview rows).
+
+    Used to compare schemas across the files a scan glob matches. Reads through
+    the same ``_read_df`` sniffing as ``preview_file`` so the dtypes agree.
+    """
+    path = safe_resolve(root, rel)
+    if not path.is_file():
+        raise FileNotFoundError(f"not a file: {rel!r}")
+    df = _read_df(path)
+    return {name: str(dtype) for name, dtype in df.schema.items()}
+
+
 def preview_file(root: Path, rel: str) -> dict[str, Any]:
     """Return ``{schema, columns, rows, format, separator, n_rows_preview, truncated}``."""
     path = safe_resolve(root, rel)

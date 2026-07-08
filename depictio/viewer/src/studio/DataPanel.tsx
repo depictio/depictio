@@ -4,7 +4,7 @@
  */
 import React from 'react';
 import { AgGridReact } from 'ag-grid-react';
-import { Badge, Box, Code, Group, Paper, Stack, Text } from '@mantine/core';
+import { Badge, Code, Group, Paper, ScrollArea, Stack, Text } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import type { PreviewData, RecognizeResult } from './backend';
 
@@ -14,14 +14,13 @@ interface Props {
   theme: 'light' | 'dark';
 }
 
-const DataPanel: React.FC<Props> = ({ preview, recognize, theme }) => {
-  if (!preview)
-    return (
-      <Text size="sm" c="dimmed" p="md">
-        Pick a file on the left to see its data.
-      </Text>
-    );
-
+/** ag-grid table of a preview's rows + column·dtype headers. Shared by the source
+ *  preview and the per-DC review preview. */
+export const PreviewGrid: React.FC<{
+  preview: PreviewData;
+  theme: 'light' | 'dark';
+  height?: number;
+}> = ({ preview, theme, height = 260 }) => {
   const columnDefs = preview.columns.map((c) => ({
     field: c,
     headerName: `${c}  ·  ${preview.schema[c]}`,
@@ -29,6 +28,28 @@ const DataPanel: React.FC<Props> = ({ preview, recognize, theme }) => {
     filter: true,
     resizable: true,
   }));
+  return (
+    <div
+      className={theme === 'dark' ? 'ag-theme-alpine-dark' : 'ag-theme-alpine'}
+      style={{ height, width: '100%' }}
+    >
+      <AgGridReact
+        rowData={preview.rows}
+        columnDefs={columnDefs}
+        defaultColDef={{ flex: 1, minWidth: 120, resizable: true }}
+        suppressFieldDotNotation
+      />
+    </div>
+  );
+};
+
+const DataPanel: React.FC<Props> = ({ preview, recognize, theme }) => {
+  if (!preview)
+    return (
+      <Text size="sm" c="dimmed" p="md">
+        Pick a file on the left to see its data.
+      </Text>
+    );
 
   return (
     <Stack gap="sm" p="md">
@@ -41,28 +62,9 @@ const DataPanel: React.FC<Props> = ({ preview, recognize, theme }) => {
         </Badge>
       </Group>
 
-      <div
-        className={theme === 'dark' ? 'ag-theme-alpine-dark' : 'ag-theme-alpine'}
-        style={{ height: 260, width: '100%' }}
-      >
-        <AgGridReact
-          rowData={preview.rows}
-          columnDefs={columnDefs}
-          defaultColDef={{ flex: 1, minWidth: 120, resizable: true }}
-          suppressFieldDotNotation
-        />
-      </div>
+      <PreviewGrid preview={preview} theme={theme} />
 
-      <Group gap={6} wrap="wrap">
-        <Text size="xs" fw={700} c="dimmed" tt="uppercase">
-          Schema
-        </Text>
-        {preview.columns.map((c) => (
-          <Badge key={c} size="sm" variant="default" radius="sm" tt="none">
-            {c}: {preview.schema[c]}
-          </Badge>
-        ))}
-      </Group>
+      <SchemaList schema={preview.schema} columns={preview.columns} />
 
       {recognize ? (
         <Paper withBorder radius="md" p="sm" bg="var(--mantine-color-default-hover)">
@@ -108,3 +110,45 @@ const DataPanel: React.FC<Props> = ({ preview, recognize, theme }) => {
 };
 
 export default DataPanel;
+
+/** Scrollable column→dtype list — scales to wide tables where inline badges wrap
+ *  into an unreadable blob. Reused by the Data-collections step. */
+export const SchemaList: React.FC<{
+  schema: Record<string, string>;
+  columns?: string[];
+  maxHeight?: number;
+}> = ({ schema, columns, maxHeight = 180 }) => {
+  const cols = columns ?? Object.keys(schema);
+  return (
+    <Stack gap={4}>
+      <Text size="xs" fw={700} c="dimmed" tt="uppercase">
+        Schema · {cols.length} col{cols.length === 1 ? '' : 's'}
+      </Text>
+      <Paper withBorder radius="sm">
+        <ScrollArea.Autosize mah={maxHeight} type="auto">
+          <Stack gap={0}>
+            {cols.map((c, i) => (
+              <Group
+                key={c}
+                justify="space-between"
+                wrap="nowrap"
+                px="sm"
+                py={4}
+                style={{
+                  borderTop: i === 0 ? undefined : '1px solid var(--mantine-color-default-border)',
+                }}
+              >
+                <Text size="xs" style={{ fontFamily: 'var(--mantine-font-family-monospace)' }} lineClamp={1}>
+                  {c}
+                </Text>
+                <Badge size="xs" variant="light" color="gray" radius="sm" tt="none">
+                  {schema[c]}
+                </Badge>
+              </Group>
+            ))}
+          </Stack>
+        </ScrollArea.Autosize>
+      </Paper>
+    </Stack>
+  );
+};

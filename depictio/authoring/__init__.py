@@ -2,18 +2,18 @@
 
 ``depictio studio <dir>`` launches a standalone uvicorn app (no Mongo/Redis/
 Celery/S3) that serves the studio SPA plus the ``/studio/*`` authoring API. The
-central gesture is *pick file(s) → see the data → design a viz*, feeding two
-outputs from the same UI:
+gesture is *point at a folder → associate file(s) to Data Collections → create a
+project*: picked files become Data Collections whose scan glob/regex is inferred
+by config-by-example, producing a validated ``project.yaml`` importable via
+``depictio run``.
 
-- **Dashboard** — picked files become Data Collections; visus attach to them →
-  ``project.yaml`` + ``dashboard.yaml`` (importable via ``depictio run`` /
-  ``dashboard import``).
-- **Catalogue** — deferred in this pass (see :mod:`depictio.authoring.export_catalog`).
+Scope stops at the data setup — dashboards are authored later, in the editor of a
+real deployment, after ``depictio run`` imports the project.
 
 Everything here reuses depictio's existing Dash-free, service-free primitives:
-``build_payload`` (preview), ``match_run_dir`` (recognition), ``suggest_viz_kinds``
-(suggestions) and ``DashboardDataLite`` / ``auto_generate_layout`` (export). No
-module in this package may import ``depictio.api.main`` (it pulls Beanie/Mongo).
+``preview_file`` (polars preview), ``match_run_dir`` (recognition) and the real
+``DataCollection`` model (per-DC validation). No module in this package may import
+``depictio.api.main`` (it pulls Beanie/Mongo).
 """
 
 from depictio.authoring.paths import safe_resolve

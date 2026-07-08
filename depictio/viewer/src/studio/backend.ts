@@ -1,7 +1,6 @@
 /**
  * Client for the local studio authoring API (`/studio/*`), served by
- * depictio/authoring/server.py. Plain fetch — these calls are NOT the shimmed
- * render-data path (that stays in mockApi.ts, fed from window.__CATALOG_PREVIEW__).
+ * depictio/authoring/server.py. Plain fetch.
  *
  * In the single-file production bundle the studio is served same-origin, so the
  * relative `/studio` base just works. For `vite dev`, point the dev server proxy
@@ -66,35 +65,117 @@ export interface RecognizeResult {
   catalog_renders?: Record<string, unknown>[];
 }
 
-export interface VizSuggestion {
-  viz_kind: string;
-  score: number;
-  role_candidates: Record<string, string[]>;
-  unmet_roles: string[];
-  weak_roles: string[];
+/** What a recursive scan glob will ingest: the files it matches, the regex it
+ *  becomes, and whether those files agree on schema. */
+export interface ScanPreview {
+  glob: string;
+  regex: string;
+  matched: string[];
+  match_count: number;
+  schema: Record<string, string>;
+  consistent: boolean;
+  mismatches: { path: string; issue: string }[];
+  truncated: boolean;
 }
 
-export interface RenderPayload {
-  output: unknown;
-  fixturePreview: unknown;
-  theme: 'light' | 'dark';
-  renders: Record<string, unknown>[];
-  data: Record<string, unknown>;
+/** One Data Collection the wizard is assembling (frontend cart shape). The
+ *  backend `/export/project` maps `path` + `mode` + `glob` into a Scan block. */
+export interface DcDraft {
+  /** Data-collection tag (unique per project). */
+  dc_tag: string;
+  /** The picked example file, relative to the studio root. */
+  path: string;
+  /** 'single' → ScanSingle(filename); 'recursive' → regex from the glob. */
+  mode: 'single' | 'recursive';
+  /** Config-by-example glob (recursive mode only); seeds `pattern`. */
+  glob?: string;
+  /** Regex written to `regex_config.pattern` (recursive; editable, overrides glob). */
+  pattern?: string;
+  /** ScanRecursive.max_depth (recursive, optional). */
+  max_depth?: number | null;
+  /** ScanRecursive.ignore (recursive, optional). */
+  ignore?: string[];
+  /** Files this DC resolved to at add-time — used to tag them in the file tree. */
+  matched?: string[];
+  /** Auto-sniffed format, shown read-only in the review step. */
+  format?: string;
+  description?: string;
+}
+
+/** One workflow the wizard is assembling: its engine + data_location (folder +
+ *  structure) and the DCs scanned under it. Maps to a `Workflow` at export. */
+export interface WorkflowDraft {
+  /** Workflow name (unique per project); becomes `{engine}/{name}` workflow_tag. */
+  name: string;
+  /** Engine name — free-form; defaults to 'python'. */
+  engine: string;
+  /** data_location folder, relative to the studio launch dir ('' = launch dir). */
+  folder: string;
+  /** data_location.structure. */
+  structure: 'flat' | 'sequencing-runs';
+  /** Required by the model when structure is 'sequencing-runs'. */
+  runs_regex?: string;
+  /** Optional provenance (may be auto-filled from repo metadata). */
+  repository_url?: string;
+  version?: string;
+  catalog?: { name: string; url: string };
+  data_collections: DcDraft[];
+}
+
+export interface ExportProjectBody {
+  name: string;
+  workflows: WorkflowDraft[];
+}
+
+/** Best-effort metadata extracted from a workflow's repository URL. */
+export interface WorkflowMetadata {
+  repository_url: string;
+  name?: string;
+  engine?: string;
+  version?: string;
+  catalog?: { name: string; url: string };
+  description?: string;
+  author?: string;
+  license?: string;
+  homepage?: string;
+  /** Pipeline logo (data URIs), light/dark theme variants, when the repo ships one. */
+  logo?: string;
+  logo_dark?: string;
+  /** Which sources contributed (ro-crate, nextflow.config, github, nf-core, logo). */
+  sources: string[];
 }
 
 export interface ExportResult {
   project_yaml: string;
-  dashboard_yaml: string;
   project: Record<string, unknown>;
+  written_path: string;
 }
 
 // ---- endpoints ------------------------------------------------------------ //
+export const getContext = () => get<{ root: string }>('/context');
 export const getTree = (path = '') => get<TreeNode>(`/tree?path=${encodeURIComponent(path)}`);
 export const previewData = (path: string) => post<PreviewData>('/preview-data', { path });
 export const recognize = (path: string, examples: string[] = []) =>
   post<RecognizeResult>('/recognize', { path, examples });
-export const suggest = (schema: Record<string, string>, dc_type?: string) =>
-  post<{ suggestions: VizSuggestion[] }>('/suggest', { schema, dc_type });
-export const renderSpec = (path: string, spec: Record<string, unknown>, theme = 'light') =>
-  post<RenderPayload>('/render', { path, spec, theme });
-export const exportDashboard = (body: unknown) => post<ExportResult>('/export/dashboard', body);
+export const scanPreview = (
+  glob: string,
+  regex?: string,
+  max_depth?: number | null,
+  ignore?: string[],
+  subroot?: string,
+  structure?: 'flat' | 'sequencing-runs',
+  runs_regex?: string,
+) =>
+  post<ScanPreview>('/scan-preview', {
+    glob,
+    regex,
+    max_depth,
+    ignore,
+    subroot,
+    structure,
+    runs_regex,
+  });
+export const fetchWorkflowMetadata = (repo_url: string) =>
+  post<WorkflowMetadata>('/workflow-metadata', { repo_url });
+export const exportProject = (body: ExportProjectBody) =>
+  post<ExportResult>('/export/project', body);

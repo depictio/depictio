@@ -1,9 +1,9 @@
 """``depictio studio <dir>`` — launch the local, service-free authoring studio.
 
 Opens a browser UI on localhost served by a standalone uvicorn app (no Mongo/
-Redis/Celery/S3). Pick file(s) → preview → design a viz → export a
-``project.yaml`` + ``dashboard.yaml`` you can feed to ``depictio run`` /
-``depictio dashboard import``.
+Redis/Celery/S3). Point at a folder → associate file(s) to Data Collections
+(scan glob/regex inferred by config-by-example) → write a ``depictio_project.yaml``
+you feed to ``depictio run``. Dashboards are authored later in the editor.
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ def register_studio_command(app: typer.Typer) -> None:
     def studio(
         directory: Annotated[
             str,
-            typer.Argument(help="Run directory to author from (root of the file tree)"),
+            typer.Argument(help="Folder to author from (root of the file tree)"),
         ] = ".",
         host: Annotated[
             str, typer.Option("--host", help="Host to bind the studio server to")

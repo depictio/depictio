@@ -17,10 +17,15 @@ Two jobs:
 
 from __future__ import annotations
 
+from fnmatch import translate as _glob_to_regex
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from depictio.authoring.paths import rel_to_root, safe_resolve
+from depictio.authoring.paths import StudioPathError, rel_to_root, safe_resolve
+
+# Cap the number of matched files we open to compare schemas — a scan glob can
+# match thousands of files; the studio only needs enough to spot disagreement.
+MAX_SCHEMA_CHECK = 100
 
 
 def _wildcard_token(names: list[str]) -> str:
@@ -73,6 +78,174 @@ def config_by_example(root: Path, rel_paths: list[str]) -> dict[str, Any]:
 
     matched = sorted(rel_to_root(root, p) for p in root.glob(path_glob) if p.is_file())
     return {"path_glob": path_glob, "matched": matched, "match_count": len(matched)}
+
+
+def glob_to_pattern(glob: str) -> str:
+    """Regex for the *filename* component of a scan glob.
+
+    Mirrors what a recursive ``Scan`` matches at ingestion (the basename of each
+    candidate file against ``regex_config.pattern``), so the regex the studio
+    shows is byte-for-byte what ``export_project`` writes.
+    """
+    return _glob_to_regex(PurePosixPath(glob).name)
+
+
+def _schema_diff(reference: dict[str, str], other: dict[str, str]) -> str:
+    """Human-readable summary of how ``other`` differs from ``reference`` (or "")."""
+    missing = [c for c in reference if c not in other]
+    extra = [c for c in other if c not in reference]
+    dtype_diffs = [
+        f"{c} {reference[c]}≠{other[c]}"
+        for c in reference
+        if c in other and reference[c] != other[c]
+    ]
+    parts: list[str] = []
+    if missing:
+        parts.append(f"missing {', '.join(missing)}")
+    if extra:
+        parts.append(f"extra {', '.join(extra)}")
+    if dtype_diffs:
+        parts.append("dtype " + "; ".join(dtype_diffs))
+    return "; ".join(parts)
+
+
+def _matched_under(
+    walk_root: Path,
+    root: Path,
+    compiled: Any,
+    max_depth: int | None,
+    ignore: list[str] | None,
+) -> list[str]:
+    """Files under ``walk_root`` whose basename matches, within depth/ignore limits.
+
+    Depth/ignore are measured from ``walk_root``; results are reported relative to
+    ``root``. The ``walk_root in parents`` check also rejects symlink escapes.
+    """
+    return [
+        rel_to_root(root, p)
+        for p in walk_root.rglob("*")
+        if p.is_file()
+        and walk_root in p.resolve().parents
+        and compiled.match(p.name)
+        and _within_scan_limits(rel_to_root(walk_root, p), max_depth, ignore)
+    ]
+
+
+def _within_scan_limits(rel: str, max_depth: int | None, ignore: list[str] | None) -> bool:
+    """Recursive ``max_depth`` / ``ignore`` check on a root-relative POSIX path.
+
+    Kept in lockstep with ``depictio.cli.cli.utils.scan_utils.passes_scan_limits``
+    (which the actual ingestion uses); duplicated here only to keep the studio
+    backend free of a CLI import.
+    """
+    if ignore and any(token and token in rel for token in ignore):
+        return False
+    if max_depth is not None:
+        parent = PurePosixPath(rel).parent
+        depth = 0 if str(parent) == "." else len(parent.parts)
+        if depth > max_depth:
+            return False
+    return True
+
+
+def scan_preview(
+    root: Path,
+    glob: str,
+    regex: str | None = None,
+    max_depth: int | None = None,
+    ignore: list[str] | None = None,
+    subroot: str | None = None,
+    structure: str = "flat",
+    runs_regex: str | None = None,
+) -> dict[str, Any]:
+    """Preview what a scan will ingest: files, regex, and schema agreement.
+
+    Mirrors the CLI scanner exactly. At ingestion ``scan_single_file`` matches each
+    file's *basename* against ``regex_config.pattern`` over the workflow's
+    ``data_location``, then the recursive ``max_depth`` / ``ignore`` limits drop
+    files — so the preview does the same or it would mis-report the ingested set.
+    ``regex`` overrides the glob-derived pattern (the user can hand-edit it).
+    ``subroot`` scopes the walk to a workflow's ``data_location`` folder (relative
+    to ``root``). ``structure`` mirrors ``WorkflowDataLocation.structure``: ``flat``
+    walks the folder as one tree; ``sequencing-runs`` scans each immediate
+    ``runs_regex``-matching subdirectory as its own run (``max_depth`` counted from
+    the run dir), exactly like ``scan.py``.
+
+    Returns ``{glob, regex, matched, match_count, schema, consistent, mismatches,
+    truncated}``. ``schema`` is the reference (first matched file) column→dtype map;
+    ``mismatches`` lists files whose schema diverges from it. Non-blocking — a
+    divergent scan is surfaced, not rejected.
+    """
+    import re
+
+    from depictio.authoring import preview as preview_mod
+
+    root = Path(root).resolve()
+    glob = (glob or "").strip()
+    if not glob:
+        raise ValueError("scan_preview needs a non-empty glob")
+    if glob.startswith("/") or ".." in PurePosixPath(glob).parts:
+        raise StudioPathError(f"glob escapes studio root: {glob!r}")
+
+    # A workflow's data_location folder scopes the walk (safe_resolve rejects escapes).
+    base = safe_resolve(root, subroot) if subroot else root
+
+    pattern = (regex or "").strip() or glob_to_pattern(glob)
+    try:
+        compiled = re.compile(pattern)
+    except re.error as exc:
+        raise ValueError(f"invalid scan regex: {exc}") from exc
+
+    if structure == "sequencing-runs":
+        # Each immediate subdir matching runs_regex is a run scanned on its own,
+        # exactly like scan.py (max_depth/ignore measured from the run dir).
+        try:
+            run_pat = re.compile(runs_regex or "run_*")
+        except re.error as exc:
+            raise ValueError(f"invalid runs_regex: {exc}") from exc
+        run_dirs = (
+            [c for c in sorted(base.iterdir()) if c.is_dir() and run_pat.match(c.name)]
+            if base.is_dir()
+            else []
+        )
+        matched = sorted(
+            rel
+            for run_dir in run_dirs
+            for rel in _matched_under(run_dir, root, compiled, max_depth, ignore)
+        )
+    else:
+        matched = sorted(_matched_under(base, root, compiled, max_depth, ignore))
+
+    checked = matched[:MAX_SCHEMA_CHECK]
+    truncated = len(matched) > MAX_SCHEMA_CHECK
+    mismatches: list[dict[str, str]] = []
+    consistent = True
+    reference: dict[str, str] | None = None
+    for rel in checked:
+        try:
+            file_schema = preview_mod.schema_of(root, rel)
+        except Exception as exc:  # noqa: BLE001 — an unreadable match is a mismatch
+            consistent = False
+            mismatches.append({"path": rel, "issue": f"could not read: {exc}"})
+            continue
+        if reference is None:
+            reference = file_schema
+            continue
+        issue = _schema_diff(reference, file_schema)
+        if issue:
+            consistent = False
+            mismatches.append({"path": rel, "issue": issue})
+
+    return {
+        "glob": glob,
+        "regex": pattern,
+        "matched": matched,
+        "match_count": len(matched),
+        "schema": reference or {},
+        "consistent": consistent,
+        "mismatches": mismatches,
+        "truncated": truncated,
+    }
 
 
 def _render_to_dict(render: Any) -> dict[str, Any]:
