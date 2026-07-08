@@ -153,6 +153,8 @@ dump.rdb
 *.gz
 *.csv
 *.tsv
+# Allow the adapt_feedb_ms realtime-demo seed (imported by the deploy doc's quickstart)
+!depictio/projects/test/adapt_feedb_ms/phenobase.csv
 # Allow nf-core ampliseq data files
 !depictio/projects/nf-core/ampliseq/2.14.0/*.tsv
 !depictio/projects/nf-core/ampliseq/2.16.0/*.tsv
