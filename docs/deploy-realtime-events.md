@@ -85,9 +85,11 @@ Create an isolated env (the script defaults to one named `svlt-simulate`; overri
 `SVLT_ENV`) and install SVLT, your experiment script's deps, and the extension **editable**:
 
 ```bash
-micromamba create -n svlt-simulate python=3.11 -y     # or conda/mamba
-micromamba run -n svlt-simulate pip install svlt-core  # + the experiment project's deps
-micromamba run -n svlt-simulate pip install -e svltx/depictio
+micromamba create -n svlt-simulate python=3.11 -y   # or conda/mamba
+micromamba activate svlt-simulate
+
+pip install svlt-core           # + the experiment project's deps
+pip install -e svltx/depictio   # editable: edits apply on next run, no reinstall
 ```
 
 The extension activates by wrapping `session_phenobase.write`, so the experiment script
@@ -96,8 +98,6 @@ must import it once (the `proj0039` simulate script already does):
 ```python
 import svltx.depictio  # noqa: F401  — inert unless SVLT_S3_ENDPOINT is set
 ```
-
-`-e` (editable) means edits to `svltx/depictio` take effect on the next run — no reinstall.
 
 ### 5.2 Run the simulation
 
@@ -123,25 +123,19 @@ DC `750a1b2c3d4e5f6a7b8c9d10`); override any by exporting it first. The essentia
 | `SVLT_DC_ID` | `750a1b2c3d4e5f6a7b8c9d10` | target data collection → S3 prefix + Delta path |
 | `SVLT_EXTRA_ARGS` | *(empty)* | extra flags for the simulate script, e.g. `--delay 1 --port 6221` |
 
-In a worktree the script auto-derives ports + MinIO creds from `.env.instance` and the
-token from `depictio/.depictio/admin_config.yaml`; outside one, it falls back to the stock
-defaults and you supply `SVLT_API_TOKEN` yourself.
+In a worktree the script auto-derives ports, MinIO creds, and the token from
+`.env.instance` + `admin_config.yaml`; outside one it uses the stock defaults and you
+supply `SVLT_API_TOKEN`.
 
-Then open `http://localhost:5080/dashboard/750a1b2c3d4e5f6a7b8c9d20` and watch acquisitions
-land live — same refresh behaviour as §4, but with real segmented-cell images and per-cell
-morphology feeding the gallery, scatter plots, and the acquisition timeline.
+Open `http://localhost:5080/dashboard/750a1b2c3d4e5f6a7b8c9d20` and watch acquisitions land
+live — same refresh as §4, but with real segmented-cell images and morphology.
 
 ### 5.3 Two details the script handles for you
 
-- **One event per acquisition.** The pipeline writes `PhenoBase` twice each tick — first
-  after segmentation (cells, *no* image patches), then after ROI-square rendering (same
-  cells, now with `patches_patches_2d_rgb_path`). The script sets
-  `SVLT_IMAGE_COLUMN=patches_patches_2d_rgb_path` so the extension gates the sync on that
-  column being populated: dashboards only ever refresh onto rows whose images already
-  exist, and each acquisition fires a single WS event. Unset it to restore per-write
-  notifications.
-- **Cards recompute, not just refresh.** The notify goes to `/deltatables/upsert`, **not**
-  `/events/test-trigger`. `test-trigger` only broadcasts + drops the cache; it does *not*
-  recompute column specs or bump `aggregation_version`, so card values would stay frozen at
-  the last CLI-ingested numbers. `/upsert` re-reads the Delta SVLT just wrote, recomputes
-  specs, bumps the version, **and** broadcasts — so counts/averages/timeline all move.
+- **One event per acquisition.** The pipeline writes `PhenoBase` twice per tick (after
+  segmentation, then after image-patch rendering). The script sets
+  `SVLT_IMAGE_COLUMN=patches_patches_2d_rgb_path` so the sync fires only once that column
+  is populated — dashboards never refresh onto image-less rows. Unset to notify per write.
+- **Cards recompute, not just refresh.** It notifies `/deltatables/upsert` (not the dev-only
+  `/events/test-trigger`, which only broadcasts). `/upsert` re-reads the new Delta,
+  recomputes column specs, and bumps the version — so cards/timeline actually update.
