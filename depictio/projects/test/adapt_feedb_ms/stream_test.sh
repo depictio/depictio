@@ -42,7 +42,11 @@ DC_ID="750a1b2c3d4e5f6a7b8c9d10"
 DASHBOARD_ID="750a1b2c3d4e5f6a7b8c9d20"
 API_URL="${API_URL:-http://localhost:8058}"
 
-HEADER="index_index,coord_counter,acquisition_timestamp,features_area,features_eccentricity,features_solidity,features_intensity_mean-0,features_intensity_mean-1,features_intensity_mean-2,bounding_box_x0,bounding_box_y0,classifications_taxa,patches_patches_2d_rgb_path"
+# Column names mirror the SVLT flattened PhenoBase schema (group-prefixed), so
+# a CSV-driven run and a live run_simulation.sh run feed the dashboard
+# identically. Note meta_acquisition_timestamp (not bare acquisition_timestamp)
+# — the acquisition-timeline component binds to that exact name.
+HEADER="index_index,coord_counter,meta_acquisition_timestamp,features_area,features_eccentricity,features_solidity,features_intensity_mean-0,features_intensity_mean-1,features_intensity_mean-2,bounding_box_x0,bounding_box_y0,classifications_taxa,patches_patches_2d_rgb_path"
 
 # Predefined "nice" seed rows. Used by `reset` and consumed first by
 # `stream`/`bump`. Past row 8 we generate synthetic rows so the test can run

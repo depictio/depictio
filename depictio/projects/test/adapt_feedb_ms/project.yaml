@@ -34,7 +34,7 @@ workflows:
             columns_description:
               index_index: "Unique cell identifier"
               coord_counter: "Image counter index"
-              acquisition_timestamp: "Acquisition time (ISO 8601)"
+              meta_acquisition_timestamp: "Acquisition time (ISO 8601)"
               features_area: "ROI area in pixels"
               features_eccentricity: "Cell shape eccentricity (0=circle, 1=elongated)"
               features_solidity: "Cell shape solidity (1=convex, lower=irregular)"
