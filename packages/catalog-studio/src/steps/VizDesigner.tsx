@@ -14,6 +14,7 @@ import {
   ActionIcon,
   Paper,
   TextInput,
+  Divider,
 } from '@mantine/core';
 import { CodeHighlight } from '@mantine/code-highlight';
 import { Icon } from '@iconify/react';
@@ -105,19 +106,20 @@ function RenderCard({
 
       {/* Two sections: the user-facing preview and the developer-facing catalog
           YAML (identical to what's written to <output>.yaml under renders_as). */}
-      <Tabs defaultValue="preview" variant="outline">
+      <Tabs defaultValue="user" variant="outline">
         <Tabs.List>
-          <Tabs.Tab value="preview" leftSection={<Icon icon="tabler:eye" width={14} />}>
-            Preview
+          <Tabs.Tab value="user" leftSection={<Icon icon="tabler:eye" width={14} />}>
+            For dashboard users
           </Tabs.Tab>
-          <Tabs.Tab value="yaml" leftSection={<Icon icon="mdi:code-braces" width={14} />}>
-            Developer
+          <Tabs.Tab value="dev" leftSection={<Icon icon="mdi:code-braces" width={14} />}>
+            For catalog developers
           </Tabs.Tab>
         </Tabs.List>
 
-        <Tabs.Panel value="preview" pt="sm">
+        {/* USER: what it looks like + how to reuse it in a dashboard. */}
+        <Tabs.Panel value="user" pt="sm">
           <Text size="xs" c="dimmed" mb={6}>
-            How this renders for users on the dashboard.
+            How this renders on a dashboard.
           </Text>
           <Paper withBorder radius="sm" p="xs" bg="var(--app-subtle-bg)">
             <VizPreview fixture={fixture} render={render} kinds={kinds} height={280} />
@@ -136,28 +138,11 @@ function RenderCard({
               ))}
             </Stack>
           )}
-        </Tabs.Panel>
-
-        <Tabs.Panel value="yaml" pt="sm">
-          <TextInput
-            label="Render id (optional)"
-            description="A unique handle so a dashboard can reuse this render via use:"
-            placeholder={slugify(variant || meta.name)}
-            value={render.id ?? ''}
-            onChange={(e) => onUpdate({ id: slugify(e.currentTarget.value) || undefined })}
-            leftSection={<Icon icon="mdi:identifier" width={14} />}
-            size="xs"
-            mb="sm"
-          />
-          <Text size="xs" c="dimmed" mb={6}>
-            Catalog definition — written into <Code fz="xs">{fileName}</Code> under{' '}
-            <Code fz="xs">renders_as</Code>:
-          </Text>
-          <CodeHighlight code={renderToSnippet(render)} language="yaml" withCopyButton />
           {render.id && (
             <>
-              <Text size="xs" c="dimmed" mt="md" mb={6}>
-                Dashboard reuse — drop this component into a dashboard and point it at your data
+              <Divider my="sm" label="Reuse in a dashboard" labelPosition="left" />
+              <Text size="xs" c="dimmed" mb={6}>
+                Drop this component into a dashboard YAML and point it at your workflow &amp; data
                 collection:
               </Text>
               <CodeHighlight
@@ -178,6 +163,25 @@ function RenderCard({
               )}
             </>
           )}
+        </Tabs.Panel>
+
+        {/* DEVELOPER: the render id + the catalog entry line this tool contributes. */}
+        <Tabs.Panel value="dev" pt="sm">
+          <TextInput
+            label="Render id"
+            description="Unique handle for this render — dashboards reference it as use: <tool>/<id>"
+            placeholder={slugify(variant || meta.name)}
+            value={render.id ?? ''}
+            onChange={(e) => onUpdate({ id: slugify(e.currentTarget.value) || undefined })}
+            leftSection={<Icon icon="mdi:identifier" width={14} />}
+            size="xs"
+            mb="sm"
+          />
+          <Text size="xs" c="dimmed" mb={6}>
+            Catalog definition — written into <Code fz="xs">{fileName}</Code> under{' '}
+            <Code fz="xs">renders_as</Code>:
+          </Text>
+          <CodeHighlight code={renderToSnippet(render)} language="yaml" withCopyButton />
         </Tabs.Panel>
       </Tabs>
     </Card>

@@ -29,8 +29,8 @@ test('author a tool end-to-end and export a zip', async ({ page }) => {
   // Pick "Table" (zero-binding) — exercises seed → DesignArea → confirm.
   await page.locator('.cs-type-card', { hasText: 'Table' }).click();
   await page.getByRole('button', { name: 'Add to output' }).click();
-  // A Table render card is now listed (catalog-style, with Preview / Developer tabs).
-  await expect(page.getByRole('tab', { name: 'Developer' })).toBeVisible();
+  // A Table render card is now listed (catalog-style, with user / developer tabs).
+  await expect(page.getByRole('tab', { name: 'For catalog developers' })).toBeVisible();
   await page.getByRole('button', { name: 'Next', exact: true }).click();
 
   // ── Step 3: Export ────────────────────────────────────────────────────────
