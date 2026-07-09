@@ -1,0 +1,11 @@
+id: ivar_consensus_qual
+description: "iVar generated quality file"
+find: {path_glob: "**/ivar_consensus/*.qual.txt"}
+fixture: iris.csv
+renders_as:
+  - id: figure_scatter
+    component: figure
+    visu_type: scatter
+    dict_kwargs:
+      x: sepal.length
+      y: sepal.width
