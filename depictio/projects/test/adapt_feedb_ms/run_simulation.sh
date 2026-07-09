@@ -7,14 +7,24 @@
 # Requires the `svltx-depictio` package installed in $SVLT_ENV and the
 # experiment script to `import svltx.depictio` (proj0039-...-simulate does).
 #
-# Works in two modes:
-#   • Worktree/dev — auto-derives ports + MinIO creds from ../../../../.env.instance
-#                    and the admin token from depictio/.depictio/admin_config.yaml.
-#   • Generic SVLT — no worktree/.env.instance needed; set the SVLT_* vars below
-#                    (at minimum SVLT_EXP_ROOT and SVLT_API_TOKEN) and go.
+# Usage — point it at your experiment dir; the token comes from your CLI config:
+#   1. Set up ~/.depictio/CLI.yaml the recommended way (download it from the
+#      /cli-agents page: `mv ~/Downloads/CLI.yaml ~/.depictio/CLI.yaml`).
+#   2. export SVLT_EXP_ROOT=/path/to/your/svlt/experiment
+#   3. ./run_simulation.sh
+# (Or skip the CLI config and just `export SVLT_API_TOKEN=<token>` yourself.)
 #
 # Every value below can be overridden by exporting the matching env var first;
-# defaults target a stock local Depictio (FastAPI :8058, MinIO :9000).
+# defaults target a stock local Depictio (FastAPI :8058, MinIO :9000, MinIO
+# creds minio/minio123).
+#
+# Worktree/dev convenience: if this script lives inside a depictio checkout, it
+# also auto-discovers the instance's ports + MinIO creds (.env.instance), and
+# falls back to the checkout's admin token (depictio/.depictio/admin_config.yaml)
+# when no CLI config is present — all by searching upward from the script's own
+# directory. Run it anywhere else and those files simply aren't found; the CLI
+# config / SVLT_* vars / defaults take over. No file is ever read from a fixed
+# relative depth, so the script is safe to copy elsewhere.
 #
 # NOTE: svltx.depictio reads SVLT_API_URL / SVLT_API_ENDPOINT / SVLT_API_TOKEN /
 # SVLT_API_PAYLOAD and the SVLT_S3_* vars (the older SVLT_DEPICTIO_API /
@@ -30,14 +40,25 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DEPICTIO_ROOT="${DEPICTIO_ROOT:-$(cd "$SCRIPT_DIR/../../../.." && pwd)}"
+
+# Walk up from the script dir looking for a file/dir; print its path if found.
+# Used only to opportunistically locate a depictio checkout's config files —
+# absent outside a checkout, in which case we silently fall back to defaults.
+find_up() {
+    local rel="$1" dir="$SCRIPT_DIR"
+    while :; do
+        [[ -e "$dir/$rel" ]] && { printf '%s\n' "$dir/$rel"; return 0; }
+        [[ "$dir" == "/" ]] && return 1
+        dir="$(dirname "$dir")"
+    done
+}
 
 # --- Instance config (optional) ---------------------------------------------
 # In a worktree, .env.instance provides MINIO_PORT / FASTAPI_PORT /
 # DEPICTIO_MINIO_ROOT_USER / DEPICTIO_MINIO_ROOT_PASSWORD. Absent elsewhere —
 # fall back to stock defaults or the SVLT_* overrides below.
-ENV_INSTANCE="${ENV_INSTANCE:-$DEPICTIO_ROOT/.env.instance}"
-if [[ -f "$ENV_INSTANCE" ]]; then
+ENV_INSTANCE="${ENV_INSTANCE:-$(find_up .env.instance || true)}"
+if [[ -n "$ENV_INSTANCE" && -f "$ENV_INSTANCE" ]]; then
     # shellcheck disable=SC1090
     source "$ENV_INSTANCE"
 fi
@@ -81,14 +102,27 @@ export SVLT_API_URL="${SVLT_API_URL:-http://localhost:${FASTAPI_PORT}/depictio/a
 export SVLT_API_ENDPOINT="${SVLT_API_ENDPOINT:-/deltatables/upsert}"
 export SVLT_API_PAYLOAD="${SVLT_API_PAYLOAD:-{\"data_collection_id\":\"${DC_ID}\",\"delta_table_location\":\"s3://${SVLT_S3_BUCKET}/${DC_ID}\",\"update\":true}}"
 
-# Token: explicit SVLT_API_TOKEN wins; else read admin_config.yaml if present.
+# Token: explicit SVLT_API_TOKEN wins. Otherwise read it from your depictio CLI
+# config — ~/.depictio/CLI.yaml, the file you download from the /cli-agents page
+# (this is the recommended setup for external users; override the path with
+# CLI_CONFIG). As a dev-only last resort, a depictio checkout's
+# admin_config.yaml is used if one is found by searching upward.
 if [[ -z "${SVLT_API_TOKEN:-}" ]]; then
-    ADMIN_CONFIG="${ADMIN_CONFIG:-$DEPICTIO_ROOT/depictio/.depictio/admin_config.yaml}"
-    if [[ -f "$ADMIN_CONFIG" ]]; then
-        SVLT_API_TOKEN="$(grep 'access_token:' "$ADMIN_CONFIG" | head -1 | awk '{print $2}')"
+    CLI_CONFIG="${CLI_CONFIG:-$HOME/.depictio/CLI.yaml}"
+    TOKEN_SRC=""
+    if [[ -f "$CLI_CONFIG" ]]; then
+        TOKEN_SRC="$CLI_CONFIG"
+    else
+        TOKEN_SRC="$(find_up depictio/.depictio/admin_config.yaml || true)"
+    fi
+    if [[ -n "$TOKEN_SRC" && -f "$TOKEN_SRC" ]]; then
+        # Grab the value after `access_token:` and strip any surrounding quotes.
+        _tok="$(grep 'access_token:' "$TOKEN_SRC" | head -1 | sed 's/.*access_token:[[:space:]]*//')"
+        _tok="${_tok%[\"\']}"; _tok="${_tok#[\"\']}"
+        SVLT_API_TOKEN="$_tok"
     fi
 fi
-: "${SVLT_API_TOKEN:?set SVLT_API_TOKEN (or provide admin_config.yaml) for the API notify}"
+: "${SVLT_API_TOKEN:?set SVLT_API_TOKEN, or put your CLI config at ~/.depictio/CLI.yaml (download it from the /cli-agents page)}"
 export SVLT_API_TOKEN
 # Headless: svlt's startup.main() opens a browser on launch. SVLT_NO_BROWSER
 # only helps if svlt carries the guard patch; BROWSER=echo is the universal
