@@ -60,9 +60,11 @@ import pythonLogo from '../../public/logos/workflows/python.svg';
 import rLogo from '../../public/logos/workflows/r.svg';
 import nfcoreLogo from '../../public/logos/workflows/nf-core.png';
 import iwcLogo from '../../public/logos/workflows/iwc.png';
-// depictio wordmark (theme-aware): black on light backgrounds, white on dark.
-import depictioLogoLight from '../../public/logos/logo_black.svg';
-import depictioLogoDark from '../../public/logos/logo_white.svg';
+// depictio wordmark. `logo_black.svg` / `logo_white.svg` are byte-identical
+// (a base64 PNG in an SVG wrapper), so swapping src does nothing — invert the
+// raster in dark mode instead, preserving brand hues (the same treatment as
+// PoweredBy.tsx / AppSidebar.tsx).
+import depictioLogo from '../../public/logos/logo_black.svg';
 
 const ENGINE_LOGOS: Record<string, string> = {
   nextflow: nextflowLogo,
@@ -110,7 +112,21 @@ const WorkflowLogo: React.FC<{ engine?: string; catalog?: string; size?: number 
  *  handling, per viewer/dashboards/lib/workflowIcons.ts) plus `python`, the
  *  Project Builder's default for plain data folders. nf-core / iwc are *catalogs*
  *  (auto-detected from the repo), not engines. */
-const ENGINE_SUGGESTIONS = ['nextflow', 'snakemake', 'galaxy', 'python', 'r'];
+// Canonical lowercase values (consistent with existing depictio projects and
+// the logo lookup) paired with official-cased labels — same convention as
+// dashboards/lib/workflowIcons.ts `WORKFLOW_SYSTEM_OPTIONS`.
+const ENGINE_OPTIONS: { value: string; label: string }[] = [
+  { value: 'nextflow', label: 'Nextflow' },
+  { value: 'snakemake', label: 'Snakemake' },
+  { value: 'galaxy', label: 'Galaxy' },
+  { value: 'python', label: 'Python' },
+  { value: 'r', label: 'R' },
+];
+
+/** Official-cased label for an engine value (falls back to the raw string for a
+ *  fetched/custom engine we don't recognise). */
+const engineLabel = (engine?: string): string =>
+  ENGINE_OPTIONS.find((o) => o.value === engine?.toLowerCase())?.label || engine || '';
 
 const makeWorkflow = (id: string, name: string): WfState => ({
   _id: id,
@@ -683,9 +699,14 @@ const ProjectBuilderApp: React.FC = () => {
         <Group h="100%" px="md" justify="space-between">
           <Group gap="sm">
             <img
-              src={scheme === 'dark' ? depictioLogoDark : depictioLogoLight}
+              src={depictioLogo}
               alt="Depictio"
-              style={{ height: 24, width: 'auto', display: 'block' }}
+              style={{
+                height: 24,
+                width: 'auto',
+                display: 'block',
+                filter: scheme === 'dark' ? 'invert(1) hue-rotate(180deg)' : undefined,
+              }}
             />
             <Divider orientation="vertical" my={14} />
             <Title order={3} c="teal" style={{ fontFamily: 'Virgil', fontWeight: 400 }}>
@@ -1025,8 +1046,8 @@ const ProjectBuilderApp: React.FC = () => {
                           <Text size="sm" fw={600}>
                             {w.name}
                           </Text>
-                          <Badge size="xs" variant="light" color="gray">
-                            {w.engine}
+                          <Badge size="xs" variant="light" color="gray" tt="none">
+                            {engineLabel(w.engine)}
                           </Badge>
                           <Badge size="xs" variant="light">
                             {w.structure}
@@ -1244,9 +1265,9 @@ const WorkflowEditor: React.FC<{
             value={wf.engine}
             // Keep a fetched/custom engine selectable even if it's not in the list.
             data={
-              ENGINE_SUGGESTIONS.includes(wf.engine)
-                ? ENGINE_SUGGESTIONS
-                : [wf.engine, ...ENGINE_SUGGESTIONS]
+              ENGINE_OPTIONS.some((o) => o.value === wf.engine)
+                ? ENGINE_OPTIONS
+                : [{ value: wf.engine, label: engineLabel(wf.engine) }, ...ENGINE_OPTIONS]
             }
             onChange={(v) => onChange({ engine: v || 'python' })}
             searchable
@@ -1401,8 +1422,8 @@ const WorkflowTree: React.FC<{
                 <Text size="sm" fw={600} lineClamp={1}>
                   {w.name || '(unnamed)'}
                 </Text>
-                <Badge size="xs" variant="light" color="gray">
-                  {w.engine}
+                <Badge size="xs" variant="light" color="gray" tt="none">
+                  {engineLabel(w.engine)}
                 </Badge>
                 <Badge size="xs" variant="light" color="teal">
                   {w.data_collections.length}
