@@ -1,0 +1,17 @@
+{{- if and .Values.gateway.enabled .Values.gateway.snippetsFilter.enabled }}
+---
+apiVersion: gateway.nginx.org/v1alpha1
+kind: SnippetsFilter
+metadata:
+  name: {{ .Release.Name }}-auth
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: depictio
+    component: snippets-filter
+    {{- if .Values.gateway.labels }}
+    {{- toYaml .Values.gateway.labels | nindent 4 }}
+    {{- end }}
+spec:
+  snippets:
+    {{- toYaml .Values.gateway.snippetsFilter.snippets | nindent 4 }}
+{{- end }}

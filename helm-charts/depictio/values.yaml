@@ -210,6 +210,9 @@ minio:
     labels: {}
     hosts: []
     tls: []
+  httpRoute:
+    annotations: {}
+    filters: []
 
 # Backend settings
 backend:
@@ -323,6 +326,9 @@ backend:
     labels: {}
     hosts: []
     tls: []
+  httpRoute:
+    annotations: {}
+    filters: []
 
 # Celery Worker settings
 celery:
@@ -414,6 +420,29 @@ viewer:
 podDisruptionBudget:
   enabled: false
   minAvailable: 1
+
+# Gateway API (HTTPRoute) configuration.
+# Enable this instead of ingress when the cluster uses a Gateway API controller.
+# gateway.parentRefs points to the Gateway resource(s) the HTTPRoute attaches to.
+# Separate HTTPRoutes are always created for frontend, backend, and minio.
+# Auth filters (gateway-implementation-specific) go in gateway.filters (frontend only)
+# or backend.httpRoute.filters / minio.httpRoute.filters.
+gateway:
+  enabled: false
+  # parentRefs defines the Gateway this HTTPRoute attaches to.
+  parentRefs: []
+  # Optional metadata for all HTTPRoute resources.
+  labels: {}
+  annotations: {}
+  # Arbitrary ExtensionRef / RequestRedirect / etc. filters for the frontend HTTPRoute.
+  # Backend and MinIO routes never inherit these.
+  filters: []
+  # NGINX Gateway Fabric SnippetsFilter for injecting raw nginx config into the
+  # frontend HTTPRoute. Serve populates snippets at deploy time (auth_request for
+  # private/project access). Ignored when gateway.enabled is false.
+  snippetsFilter:
+    enabled: false
+    snippets: []
 
 # Generic base ingress values
 ingress:
