@@ -56,6 +56,8 @@ import YamlBlock from './YamlBlock';
 import nextflowLogo from '../../public/logos/workflows/nextflow.png';
 import snakemakeLogo from '../../public/logos/workflows/snakemake.png';
 import galaxyLogo from '../../public/logos/workflows/galaxy.png';
+import pythonLogo from '../../public/logos/workflows/python.svg';
+import rLogo from '../../public/logos/workflows/r.svg';
 import nfcoreLogo from '../../public/logos/workflows/nf-core.png';
 import iwcLogo from '../../public/logos/workflows/iwc.png';
 // depictio wordmark (theme-aware): black on light backgrounds, white on dark.
@@ -66,6 +68,8 @@ const ENGINE_LOGOS: Record<string, string> = {
   nextflow: nextflowLogo,
   snakemake: snakemakeLogo,
   galaxy: galaxyLogo,
+  python: pythonLogo,
+  r: rLogo,
 };
 const CATALOG_LOGOS: Record<string, string> = {
   'nf-core': nfcoreLogo,
@@ -106,7 +110,7 @@ const WorkflowLogo: React.FC<{ engine?: string; catalog?: string; size?: number 
  *  handling, per viewer/dashboards/lib/workflowIcons.ts) plus `python`, the
  *  Project Builder's default for plain data folders. nf-core / iwc are *catalogs*
  *  (auto-detected from the repo), not engines. */
-const ENGINE_SUGGESTIONS = ['nextflow', 'snakemake', 'galaxy', 'python'];
+const ENGINE_SUGGESTIONS = ['nextflow', 'snakemake', 'galaxy', 'python', 'r'];
 
 const makeWorkflow = (id: string, name: string): WfState => ({
   _id: id,
