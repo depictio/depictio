@@ -1,7 +1,7 @@
-"""Depictio Studio — host-side, service-free authoring backend.
+"""Depictio Project Builder — host-side, service-free authoring backend.
 
-``depictio studio <dir>`` launches a standalone uvicorn app (no Mongo/Redis/
-Celery/S3) that serves the studio SPA plus the ``/studio/*`` authoring API. The
+``depictio project-builder <dir>`` launches a standalone uvicorn app (no Mongo/Redis/
+Celery/S3) that serves the Project Builder SPA plus the ``/project-builder/*`` authoring API. The
 gesture is *point at a folder → associate file(s) to Data Collections → create a
 project*: picked files become Data Collections whose scan glob/regex is inferred
 by config-by-example, producing a validated ``project.yaml`` importable via
@@ -16,6 +16,6 @@ Everything here reuses depictio's existing Dash-free, service-free primitives:
 ``depictio.api.main`` (it pulls Beanie/Mongo).
 """
 
-from depictio.authoring.paths import safe_resolve
+from depictio.project_builder.paths import safe_resolve
 
 __all__ = ["safe_resolve"]

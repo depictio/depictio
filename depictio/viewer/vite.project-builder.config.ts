@@ -1,11 +1,11 @@
 /**
- * Standalone single-file build for `depictio studio <dir>`.
+ * Standalone single-file build for `depictio project-builder <dir>`.
  *
- * Produces ONE self-contained HTML (JS + CSS inlined) served by the local studio
- * uvicorn (depictio/authoring/server.py). The studio does no viz rendering, so
+ * Produces ONE self-contained HTML (JS + CSS inlined) served by the local Project Builder
+ * uvicorn (depictio/project_builder/server.py). The Project Builder does no viz rendering, so
  * there is no `depictio-react-core` render engine and no api shim — every call
- * (tree / preview / recognize / export) goes to `/studio/*` via
- * `src/studio/backend.ts`, a plain fetch client.
+ * (tree / preview / recognize / export) goes to `/project-builder/*` via
+ * `src/project-builder/backend.ts`, a plain fetch client.
  */
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
@@ -16,13 +16,13 @@ export default defineConfig({
   base: './',
   plugins: [react(), viteSingleFile()],
   build: {
-    outDir: 'dist-studio',
+    outDir: 'dist-project-builder',
     emptyOutDir: true,
     sourcemap: false,
     assetsInlineLimit: 100_000_000,
     cssCodeSplit: false,
     rollupOptions: {
-      input: path.resolve(__dirname, 'studio.html'),
+      input: path.resolve(__dirname, 'project-builder.html'),
     },
   },
   resolve: {

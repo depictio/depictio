@@ -1,4 +1,4 @@
-"""``depictio studio <dir>`` — launch the local, service-free authoring studio.
+"""``depictio project-builder <dir>`` — launch the local, service-free Project Builder.
 
 Opens a browser UI on localhost served by a standalone uvicorn app (no Mongo/
 Redis/Celery/S3). Point at a folder → associate file(s) to Data Collections
@@ -14,32 +14,37 @@ from typing import Annotated
 import typer
 
 
-def register_studio_command(app: typer.Typer) -> None:
-    @app.command("studio")
-    def studio(
+def register_project_builder_command(app: typer.Typer) -> None:
+    def project_builder(
         directory: Annotated[
             str,
             typer.Argument(help="Folder to author from (root of the file tree)"),
         ] = ".",
         host: Annotated[
-            str, typer.Option("--host", help="Host to bind the studio server to")
+            str, typer.Option("--host", help="Host to bind the Project Builder server to")
         ] = "127.0.0.1",
-        port: Annotated[int, typer.Option("--port", help="Port to serve the studio on")] = 8129,
+        port: Annotated[
+            int, typer.Option("--port", help="Port to serve the Project Builder on")
+        ] = 8129,
         no_open: Annotated[
             bool, typer.Option("--no-open", help="Do not open a browser tab")
         ] = False,
     ) -> None:
-        """Launch the local Depictio Studio on a run directory."""
-        from depictio.authoring.server import run_studio
+        """Launch the local Depictio Project Builder on a run directory."""
+        from depictio.project_builder.server import run_project_builder
 
         root = Path(directory).expanduser().resolve()
         if not root.is_dir():
             typer.echo(f"Not a directory: {root}")
             raise typer.Exit(code=1)
 
-        typer.echo(f"  Depictio Studio — authoring from {root}")
+        typer.echo(f"  Depictio Project Builder — authoring from {root}")
         typer.echo(f"  Serving at http://{host}:{port}/  (Ctrl-C to stop)")
         try:
-            run_studio(root, host=host, port=port, open_browser=not no_open)
+            run_project_builder(root, host=host, port=port, open_browser=not no_open)
         except KeyboardInterrupt:
             typer.echo("\n  stopped.")
+
+    # Primary command name, plus a hidden `studio` alias for backwards compatibility.
+    app.command("project-builder")(project_builder)
+    app.command("studio", hidden=True)(project_builder)

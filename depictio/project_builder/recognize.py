@@ -4,7 +4,7 @@ Two jobs:
 
 1. **Recognize** — is a picked file a known tool output? Wraps
    ``match_run_dir`` (``depictio.models.components.advanced_viz.catalog``) over
-   the studio root and returns the matching tool + its ``renders_as`` + the
+   the Project Builder root and returns the matching tool + its ``renders_as`` + the
    ``find`` glob that produced the match, so the designer can offer the catalog's
    existing visus in one click.
 
@@ -21,10 +21,10 @@ from fnmatch import translate as _glob_to_regex
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from depictio.authoring.paths import StudioPathError, rel_to_root, safe_resolve
+from depictio.project_builder.paths import ProjectBuilderPathError, rel_to_root, safe_resolve
 
 # Cap the number of matched files we open to compare schemas — a scan glob can
-# match thousands of files; the studio only needs enough to spot disagreement.
+# match thousands of files; the Project Builder only needs enough to spot disagreement.
 MAX_SCHEMA_CHECK = 100
 
 
@@ -84,7 +84,7 @@ def glob_to_pattern(glob: str) -> str:
     """Regex for the *filename* component of a scan glob.
 
     Mirrors what a recursive ``Scan`` matches at ingestion (the basename of each
-    candidate file against ``regex_config.pattern``), so the regex the studio
+    candidate file against ``regex_config.pattern``), so the regex the Project Builder
     shows is byte-for-byte what ``export_project`` writes.
     """
     return _glob_to_regex(PurePosixPath(glob).name)
@@ -135,7 +135,7 @@ def _within_scan_limits(rel: str, max_depth: int | None, ignore: list[str] | Non
     """Recursive ``max_depth`` / ``ignore`` check on a root-relative POSIX path.
 
     Kept in lockstep with ``depictio.cli.cli.utils.scan_utils.passes_scan_limits``
-    (which the actual ingestion uses); duplicated here only to keep the studio
+    (which the actual ingestion uses); duplicated here only to keep the Project Builder
     backend free of a CLI import.
     """
     if ignore and any(token and token in rel for token in ignore):
@@ -178,14 +178,14 @@ def scan_preview(
     """
     import re
 
-    from depictio.authoring import preview as preview_mod
+    from depictio.project_builder import preview as preview_mod
 
     root = Path(root).resolve()
     glob = (glob or "").strip()
     if not glob:
         raise ValueError("scan_preview needs a non-empty glob")
     if glob.startswith("/") or ".." in PurePosixPath(glob).parts:
-        raise StudioPathError(f"glob escapes studio root: {glob!r}")
+        raise ProjectBuilderPathError(f"glob escapes Project Builder root: {glob!r}")
 
     # A workflow's data_location folder scopes the walk (safe_resolve rejects escapes).
     base = safe_resolve(root, subroot) if subroot else root

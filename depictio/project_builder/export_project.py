@@ -11,7 +11,7 @@ Assembles the single artefact the live stack ingests to set up data:
   are intentionally absent here.)
 
 The dashboard is authored separately, later, in the editor of a real deployment —
-after ``depictio run`` imports this project. The studio stops at the data setup.
+after ``depictio run`` imports this project. The Project Builder stops at the data setup.
 """
 
 from __future__ import annotations
@@ -19,8 +19,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from depictio.authoring.paths import safe_resolve
-from depictio.authoring.recognize import glob_to_pattern
+from depictio.project_builder.paths import safe_resolve
+from depictio.project_builder.recognize import glob_to_pattern
 
 # The emitted file name — matches the CLI convention
 # (``depictio/cli/configs/nf-core/rnaseq/depictio_project.yaml``) so the user can
@@ -51,7 +51,7 @@ def _scan_for(root: Path, dc: dict[str, Any]) -> dict[str, Any]:
     """Build a Scan block for one Data Collection input.
 
     Recursive scans use the user-edited ``pattern`` verbatim when present (so the
-    regex shown in the studio is exactly what is written), else derive it from the
+    regex shown in the Project Builder is exactly what is written), else derive it from the
     ``glob``. Optional ``max_depth`` / ``ignore`` map onto ``ScanRecursive``.
     """
     path = safe_resolve(root, dc["path"])
@@ -94,7 +94,7 @@ def _data_collection(root: Path, dc: dict[str, Any]) -> dict[str, Any]:
 def _workflow(root: Path, wf: dict[str, Any]) -> dict[str, Any]:
     """Build one Workflow dict: its engine, data_location (folder + structure) and DCs.
 
-    ``folder`` is the workflow's ``data_location`` root, relative to the studio launch
+    ``folder`` is the workflow's ``data_location`` root, relative to the Project Builder launch
     ``root`` (``""`` = the launch dir itself); it is resolved through ``safe_resolve``
     so it cannot escape. DC ``path``/glob stay relative to the launch ``root`` — only
     ``data_location.locations`` carries the per-workflow folder.

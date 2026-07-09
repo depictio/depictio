@@ -1,9 +1,9 @@
 /**
- * Entry for the standalone Depictio Studio single-file bundle.
+ * Entry for the standalone Depictio Project Builder single-file bundle.
  *
- * Reuses the viewer's `depictioTheme` + Mantine provider stack so the studio
+ * Reuses the viewer's `depictioTheme` + Mantine provider stack so the Project Builder
  * looks like the rest of depictio. Service-free: every call goes to the local
- * `/studio/*` authoring API (backend.ts). No viz rendering, so no
+ * `/project-builder/*` authoring API (backend.ts). No viz rendering, so no
  * ComponentRenderer / render-data shim here.
  */
 import React from 'react';
@@ -17,7 +17,7 @@ import 'ag-grid-community/styles/ag-theme-alpine.css';
 import '../styles/app.css';
 
 import { depictioTheme } from '../theme';
-import StudioApp from './StudioApp';
+import ProjectBuilderApp from './ProjectBuilderApp';
 
 const scheme = window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 
@@ -25,7 +25,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <MantineProvider theme={depictioTheme} defaultColorScheme={scheme}>
       <Notifications position="bottom-right" />
-      <StudioApp />
+      <ProjectBuilderApp />
     </MantineProvider>
   </React.StrictMode>,
 );

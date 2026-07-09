@@ -1,7 +1,7 @@
-"""Path helpers shared across the studio backend.
+"""Path helpers shared across the Project Builder backend.
 
-Every studio endpoint resolves user-supplied relative paths against the single
-``root`` directory the ``depictio studio <dir>`` command was launched with, and
+Every Project Builder endpoint resolves user-supplied relative paths against the single
+``root`` directory the ``depictio project-builder <dir>`` command was launched with, and
 refuses anything that escapes it (``..`` traversal, absolute paths, symlinks
 pointing outside). This is the only trust boundary the service-free backend has.
 """
@@ -11,8 +11,8 @@ from __future__ import annotations
 from pathlib import Path
 
 
-class StudioPathError(ValueError):
-    """Raised when a requested path escapes the studio root."""
+class ProjectBuilderPathError(ValueError):
+    """Raised when a requested path escapes the Project Builder root."""
 
 
 def safe_resolve(root: Path, rel: str | None) -> Path:
@@ -25,7 +25,7 @@ def safe_resolve(root: Path, rel: str | None) -> Path:
     rel = (rel or "").strip().lstrip("/")
     target = (root / rel).resolve() if rel else root
     if target != root and root not in target.parents:
-        raise StudioPathError(f"path escapes studio root: {rel!r}")
+        raise ProjectBuilderPathError(f"path escapes Project Builder root: {rel!r}")
     return target
 
 

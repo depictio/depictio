@@ -1,6 +1,6 @@
 """Lightweight, RO-Crate-flavoured workflow metadata extraction from a repo URL.
 
-The studio runs locally, so given a public repository URL it best-effort fetches a
+The Project Builder runs locally, so given a public repository URL it best-effort fetches a
 few small files and merges what it finds — ``name``, ``engine``, ``version``,
 ``catalog`` (fed into the project.yaml) plus ``description`` / ``author`` /
 ``license`` / ``homepage`` (shown to the user, not stored) — to pre-fill the
@@ -142,7 +142,7 @@ def _http_get(url: str) -> str | None:
     import urllib.request
 
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "depictio-studio"})
+        req = urllib.request.Request(url, headers={"User-Agent": "depictio-project-builder"})
         with urllib.request.urlopen(req, timeout=_TIMEOUT) as resp:  # noqa: S310 — http(s) only
             if getattr(resp, "status", 200) != 200:
                 return None
@@ -157,13 +157,13 @@ _MAX_LOGO_BYTES = 1_000_000
 def _http_get_data_uri(url: str, mime: str = "image/png") -> str | None:
     """Best-effort GET of a small image, returned as a ``data:`` URI (or None).
 
-    Inlining keeps the fetched logo self-contained in the single-file studio and
+    Inlining keeps the fetched logo self-contained in the single-file Project Builder and
     avoids the browser making its own cross-origin request."""
     import base64
     import urllib.request
 
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "depictio-studio"})
+        req = urllib.request.Request(url, headers={"User-Agent": "depictio-project-builder"})
         with urllib.request.urlopen(req, timeout=_TIMEOUT) as resp:  # noqa: S310 — http(s) only
             if getattr(resp, "status", 200) != 200:
                 return None
@@ -264,7 +264,7 @@ def fetch_workflow_metadata(url: str) -> dict[str, Any]:
                 pass
 
     # nf-core pipelines ship their own logo in the repo assets; fetch both theme
-    # variants and inline them so the studio can show the actual pipeline brand.
+    # variants and inline them so the Project Builder can show the actual pipeline brand.
     if raw_base and owner and owner.lower() == "nf-core" and repo:
         light = _http_get_data_uri(f"{raw_base}/docs/images/nf-core-{repo}_logo_light.png")
         dark = _http_get_data_uri(f"{raw_base}/docs/images/nf-core-{repo}_logo_dark.png")

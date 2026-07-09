@@ -1,15 +1,15 @@
 /**
- * Client for the local studio authoring API (`/studio/*`), served by
- * depictio/authoring/server.py. Plain fetch.
+ * Client for the local Project Builder authoring API (`/project-builder/*`), served by
+ * depictio/project_builder/server.py. Plain fetch.
  *
- * In the single-file production bundle the studio is served same-origin, so the
- * relative `/studio` base just works. For `vite dev`, point the dev server proxy
- * (or VITE_STUDIO_BASE) at the running `depictio studio` server.
+ * In the single-file production bundle the Project Builder is served same-origin, so the
+ * relative `/project-builder` base just works. For `vite dev`, point the dev server proxy
+ * (or VITE_PROJECT_BUILDER_BASE) at the running `depictio project-builder` server.
  */
 
 const BASE =
-  (typeof import.meta !== 'undefined' && (import.meta as { env?: Record<string, string> }).env?.VITE_STUDIO_BASE) ||
-  '/studio';
+  (typeof import.meta !== 'undefined' && (import.meta as { env?: Record<string, string> }).env?.VITE_PROJECT_BUILDER_BASE) ||
+  '/project-builder';
 
 async function post<T>(path: string, body: unknown): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
@@ -83,7 +83,7 @@ export interface ScanPreview {
 export interface DcDraft {
   /** Data-collection tag (unique per project). */
   dc_tag: string;
-  /** The picked example file, relative to the studio root. */
+  /** The picked example file, relative to the Project Builder root. */
   path: string;
   /** 'single' → ScanSingle(filename); 'recursive' → regex from the glob. */
   mode: 'single' | 'recursive';
@@ -109,7 +109,7 @@ export interface WorkflowDraft {
   name: string;
   /** Engine name — free-form; defaults to 'python'. */
   engine: string;
-  /** data_location folder, relative to the studio launch dir ('' = launch dir). */
+  /** data_location folder, relative to the Project Builder launch dir ('' = launch dir). */
   folder: string;
   /** data_location.structure. */
   structure: 'flat' | 'sequencing-runs';

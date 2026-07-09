@@ -1,4 +1,4 @@
-"""Tests for the Depictio Studio authoring backend (``depictio/authoring``).
+"""Tests for the Depictio Project Builder authoring backend (``depictio/project_builder``).
 
 Covers the service-free path end to end: config-by-example, tree/preview,
 recognize, and the project export (which must produce a ``project.yaml`` that
@@ -11,19 +11,19 @@ from pathlib import Path
 
 import pytest
 
-from depictio.authoring import (
+from depictio.project_builder import (
     export_project as export_mod,
 )
-from depictio.authoring import (
+from depictio.project_builder import (
     preview as preview_mod,
 )
-from depictio.authoring import (
+from depictio.project_builder import (
     recognize as recognize_mod,
 )
-from depictio.authoring import (
+from depictio.project_builder import (
     tree as tree_mod,
 )
-from depictio.authoring.paths import StudioPathError, safe_resolve
+from depictio.project_builder.paths import ProjectBuilderPathError, safe_resolve
 
 
 @pytest.fixture
@@ -42,7 +42,7 @@ def run_dir(tmp_path: Path) -> Path:
 # --------------------------------------------------------------------------- #
 def test_safe_resolve_rejects_escape(run_dir: Path) -> None:
     assert safe_resolve(run_dir, "star/S1/quant.tsv").name == "quant.tsv"
-    with pytest.raises(StudioPathError):
+    with pytest.raises(ProjectBuilderPathError):
         safe_resolve(run_dir, "../../etc/passwd")
 
 
@@ -165,7 +165,7 @@ def test_scan_preview_sequencing_runs(run_dir: Path) -> None:
 
 
 def test_scan_preview_rejects_escaping_glob(run_dir: Path) -> None:
-    with pytest.raises(StudioPathError):
+    with pytest.raises(ProjectBuilderPathError):
         recognize_mod.scan_preview(run_dir, "../../etc/*")
 
 
@@ -173,7 +173,7 @@ def test_scan_preview_rejects_escaping_glob(run_dir: Path) -> None:
 # repo metadata extraction (pure parsers — no network)
 # --------------------------------------------------------------------------- #
 def test_parse_nextflow_config() -> None:
-    from depictio.authoring import metadata as metadata_mod
+    from depictio.project_builder import metadata as metadata_mod
 
     cfg = (
         "manifest {\n"
@@ -192,7 +192,7 @@ def test_parse_nextflow_config() -> None:
 
 
 def test_parse_ro_crate() -> None:
-    from depictio.authoring import metadata as metadata_mod
+    from depictio.project_builder import metadata as metadata_mod
 
     doc = {
         "@graph": [
@@ -226,7 +226,7 @@ def test_parse_ro_crate() -> None:
 
 
 def test_clean_description_strips_html_and_markdown() -> None:
-    from depictio.authoring import metadata as metadata_mod
+    from depictio.project_builder import metadata as metadata_mod
 
     raw = (
         '<h1><img src="logo.png"></h1>\n'
@@ -243,7 +243,7 @@ def test_clean_description_strips_html_and_markdown() -> None:
 def test_fetch_workflow_metadata_offline_nfcore(monkeypatch: pytest.MonkeyPatch) -> None:
     # With no network, an nf-core URL still infers engine + catalog from the owner,
     # and records "nf-core" as the source so the UI reports success (not "nothing").
-    from depictio.authoring import metadata as metadata_mod
+    from depictio.project_builder import metadata as metadata_mod
 
     monkeypatch.setattr(metadata_mod, "_http_get", lambda url: None)
     monkeypatch.setattr(metadata_mod, "_http_get_data_uri", lambda url, mime="image/png": None)
@@ -256,7 +256,7 @@ def test_fetch_workflow_metadata_offline_nfcore(monkeypatch: pytest.MonkeyPatch)
 def test_fetch_workflow_metadata_nfcore_logo(monkeypatch: pytest.MonkeyPatch) -> None:
     # The nf-core pipeline logo is fetched from repo assets and inlined; the dark
     # variant falls back to the light one when absent.
-    from depictio.authoring import metadata as metadata_mod
+    from depictio.project_builder import metadata as metadata_mod
 
     monkeypatch.setattr(metadata_mod, "_http_get", lambda url: None)
     monkeypatch.setattr(
@@ -271,7 +271,7 @@ def test_fetch_workflow_metadata_nfcore_logo(monkeypatch: pytest.MonkeyPatch) ->
 
 
 def test_fetch_workflow_metadata_rejects_bad_url() -> None:
-    from depictio.authoring import metadata as metadata_mod
+    from depictio.project_builder import metadata as metadata_mod
 
     with pytest.raises(ValueError):
         metadata_mod.fetch_workflow_metadata("not-a-url")
@@ -312,7 +312,7 @@ def test_export_project_single_and_recursive(run_dir: Path) -> None:
     from depictio.models.models.projects import Project
 
     payload = {
-        "name": "Studio Test",
+        "name": "Project Builder Test",
         "workflows": [
             {
                 "name": "main",
@@ -526,29 +526,38 @@ def test_scan_preview_subroot_scopes_matches(run_dir: Path) -> None:
 def test_routes_via_testclient(run_dir: Path) -> None:
     from fastapi.testclient import TestClient
 
-    from depictio.authoring.server import create_app
+    from depictio.project_builder.server import create_app
 
     client = TestClient(create_app(run_dir))
 
-    assert client.get("/studio/tree").status_code == 200
-    assert client.post("/studio/preview-data", json={"path": "samplesheet.csv"}).status_code == 200
-    assert client.post("/studio/recognize", json={"path": "samplesheet.csv"}).status_code == 200
+    assert client.get("/project-builder/tree").status_code == 200
+    assert (
+        client.post("/project-builder/preview-data", json={"path": "samplesheet.csv"}).status_code
+        == 200
+    )
+    assert (
+        client.post("/project-builder/recognize", json={"path": "samplesheet.csv"}).status_code
+        == 200
+    )
 
-    sp = client.post("/studio/scan-preview", json={"glob": "star/*/quant.tsv"})
+    sp = client.post("/project-builder/scan-preview", json={"glob": "star/*/quant.tsv"})
     assert sp.status_code == 200
     assert sp.json()["match_count"] == 3
     # A glob that escapes the root → 400.
-    assert client.post("/studio/scan-preview", json={"glob": "../../etc/*"}).status_code == 400
+    assert (
+        client.post("/project-builder/scan-preview", json={"glob": "../../etc/*"}).status_code
+        == 400
+    )
 
     # scan-preview scoped to a workflow sub-folder.
     scoped = client.post(
-        "/studio/scan-preview", json={"glob": "**/quant.tsv", "subroot": "star/S1"}
+        "/project-builder/scan-preview", json={"glob": "**/quant.tsv", "subroot": "star/S1"}
     )
     assert scoped.status_code == 200
     assert scoped.json()["match_count"] == 1
 
     r = client.post(
-        "/studio/export/project",
+        "/project-builder/export/project",
         json={
             "name": "HTTP Test",
             "workflows": [
@@ -565,4 +574,7 @@ def test_routes_via_testclient(run_dir: Path) -> None:
     assert (run_dir / export_mod.PROJECT_YAML_NAME).exists()
 
     # Path escape → 400.
-    assert client.post("/studio/preview-data", json={"path": "../../etc/passwd"}).status_code == 400
+    assert (
+        client.post("/project-builder/preview-data", json={"path": "../../etc/passwd"}).status_code
+        == 400
+    )

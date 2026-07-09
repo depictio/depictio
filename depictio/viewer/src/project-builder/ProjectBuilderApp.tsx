@@ -1,5 +1,5 @@
 /**
- * Depictio Studio — a folder → project authoring wizard.
+ * Depictio Project Builder — a folder → project authoring wizard.
  *
  * Reuses the depictio look: an `AppShell` (files in the navbar, wizard in the
  * main area, a workflow → data-collection tree in the aside) and a teal `Stepper`
@@ -100,7 +100,7 @@ const WorkflowLogo: React.FC<{ engine?: string; catalog?: string; size?: number 
 
 /** Workflow engines depictio actually supports (those with brand logos +
  *  handling, per viewer/dashboards/lib/workflowIcons.ts) plus `python`, the
- *  studio's default for plain data folders. nf-core / iwc are *catalogs*
+ *  Project Builder's default for plain data folders. nf-core / iwc are *catalogs*
  *  (auto-detected from the repo), not engines. */
 const ENGINE_SUGGESTIONS = ['nextflow', 'snakemake', 'galaxy', 'python'];
 
@@ -216,7 +216,7 @@ const ResizeHandle: React.FC<{ side: 'left' | 'right'; onResize: (dx: number) =>
   );
 };
 
-const StudioApp: React.FC = () => {
+const ProjectBuilderApp: React.FC = () => {
   const scheme = useComputedColorScheme('light');
 
   // Resizable side panels (drag the inner edge); roomier than the Mantine default.
@@ -284,7 +284,7 @@ const StudioApp: React.FC = () => {
       .getContext()
       .then(({ root }) => {
         if (cancelled) return;
-        const key = `depictio-studio:${root}`;
+        const key = `depictio-project-builder:${root}`;
         storageKeyRef.current = key;
         try {
           const raw = localStorage.getItem(key);
@@ -676,10 +676,10 @@ const StudioApp: React.FC = () => {
           <Group gap="xs">
             <Icon icon="mdi:palette-swatch" width={24} color="var(--mantine-color-teal-6)" />
             <Title order={3} c="teal" style={{ fontFamily: 'Virgil', fontWeight: 400 }}>
-              Studio
+              Project Builder
             </Title>
             <Text size="xs" c="dimmed">
-              local · service-free authoring
+              local · service-free
             </Text>
           </Group>
           <ThemeToggle />
@@ -734,7 +734,7 @@ const StudioApp: React.FC = () => {
                   color="teal"
                   icon={<Icon icon="mdi:folder-search-outline" width={18} />}
                 >
-                  Depictio Studio is browsing the folder it was launched in. Click a file in the{' '}
+                  Depictio Project Builder is browsing the folder it was launched in. Click a file in the{' '}
                   <b>Files</b> panel to preview its data and schema, then move on to group files
                   into data collections under workflows.
                 </Alert>
@@ -1712,4 +1712,4 @@ const DcCard: React.FC<{
   );
 };
 
-export default StudioApp;
+export default ProjectBuilderApp;

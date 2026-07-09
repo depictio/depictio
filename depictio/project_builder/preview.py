@@ -2,7 +2,7 @@
 
 Service-free: reads the local file with polars only. Mirrors the csv/tsv/parquet
 sniffing in ``depictio.catalog.payload._load_fixture_df`` so the schema the
-studio shows matches what ``build_payload`` will bind against.
+Project Builder shows matches what ``build_payload`` will bind against.
 """
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from depictio.authoring.paths import rel_to_root, safe_resolve
+from depictio.project_builder.paths import rel_to_root, safe_resolve
 
 _PREVIEW_ROWS = 50
 _MAX_INFER_ROWS = 1000

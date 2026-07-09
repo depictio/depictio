@@ -1,6 +1,6 @@
 /**
  * Minimal, dependency-free YAML syntax highlighter for the generated
- * `depictio_project.yaml` preview. The studio is a single-file offline bundle, so
+ * `depictio_project.yaml` preview. The Project Builder is a single-file offline bundle, so
  * we avoid pulling in a highlighter (highlight.js / shiki); the emitted YAML is
  * regular `yaml.safe_dump` output, which a per-line tokenizer handles cleanly.
  *

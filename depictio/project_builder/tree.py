@@ -1,13 +1,13 @@
-"""Directory tree listing for the studio file picker (left column)."""
+"""Directory tree listing for the Project Builder file picker (left column)."""
 
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
 
-from depictio.authoring.paths import rel_to_root, safe_resolve
+from depictio.project_builder.paths import rel_to_root, safe_resolve
 
-# Suffixes the studio can preview + bind (tabular). Others are still listed so
+# Suffixes the Project Builder can preview + bind (tabular). Others are still listed so
 # the user sees the whole run, just flagged as non-previewable.
 PREVIEWABLE_SUFFIXES = {".csv", ".tsv", ".txt", ".parquet", ".feather"}
 
@@ -60,7 +60,7 @@ def _list_dir(root: Path, directory: Path, depth: int, max_depth: int) -> list[d
 
 
 def build_tree(root: Path, rel: str = "", max_depth: int = 12) -> dict[str, Any]:
-    """Return a nested tree rooted at ``root/rel`` (defaults to the studio root)."""
+    """Return a nested tree rooted at ``root/rel`` (defaults to the Project Builder root)."""
     target = safe_resolve(root, rel)
     if target.is_file():
         return _node(root, target, depth=max_depth, max_depth=max_depth)
