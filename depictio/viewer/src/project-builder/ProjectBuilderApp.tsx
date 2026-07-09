@@ -760,15 +760,6 @@ const ProjectBuilderApp: React.FC = () => {
             {/* ---- Step 1: Source & preview ---- */}
             <Stepper.Step label="Source" description="Explore the folder">
               <Stack gap="md" pt="md">
-                <Alert
-                  variant="light"
-                  color="teal"
-                  icon={<Icon icon="mdi:folder-search-outline" width={18} />}
-                >
-                  Depictio Project Builder is browsing the folder it was launched in. Click a file in the{' '}
-                  <b>Files</b> panel to preview its data and schema, then move on to group files
-                  into data collections under workflows.
-                </Alert>
                 <DataPanel preview={preview} recognize={recognize} theme={scheme} />
               </Stack>
             </Stepper.Step>
