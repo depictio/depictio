@@ -19,6 +19,33 @@ export interface GroundingIssue {
   message: string;
 }
 
+// Aggregations that only make sense on a numeric column (min/max/count/nunique/
+// mode work on any dtype). Kept in sync with `_NUMERIC_AGGREGATIONS` in
+// depictio/models/.../catalog.py.
+const NUMERIC_AGGREGATIONS = new Set([
+  'sum',
+  'average',
+  'median',
+  'range',
+  'variance',
+  'std_dev',
+  'percentile',
+  'skewness',
+  'kurtosis',
+]);
+const NUMERIC_DTYPES = new Set([
+  'Int8',
+  'Int16',
+  'Int32',
+  'Int64',
+  'UInt8',
+  'UInt16',
+  'UInt32',
+  'UInt64',
+  'Float32',
+  'Float64',
+]);
+
 /** Columns a render binds — the set that must be ⊆ the fixture columns. */
 export function boundColumns(render: RenderSpec): string[] {
   const cols = new Set<string>();
@@ -79,6 +106,22 @@ export function validateRender(
       severity: 'error',
       message: 'Card needs an aggregation.',
     });
+  }
+
+  // Card numeric aggregations require a numeric column (mirrors CI's
+  // `ground_render_dtypes`). count/nunique/min/max work on any dtype.
+  if (render.component === 'card' && render.aggregation && render.column) {
+    const col = colByName.get(render.column);
+    const aggs = [render.aggregation, ...(render.aggregations ?? [])];
+    for (const agg of aggs) {
+      if (agg && NUMERIC_AGGREGATIONS.has(agg) && col && !NUMERIC_DTYPES.has(col.dtype)) {
+        issues.push({
+          renderUid: render.uid,
+          severity: 'error',
+          message: `Aggregation "${agg}" needs a numeric column, but "${render.column}" is ${col.dtype}.`,
+        });
+      }
+    }
   }
 
   if (render.component === 'advanced_viz') {

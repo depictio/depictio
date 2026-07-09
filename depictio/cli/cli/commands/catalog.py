@@ -261,8 +261,9 @@ def catalog_validate(
         CATALOG_DIR,
         CatalogEntry,
         check_existence,
+        ground_render_dtypes,
         load_entries_from_dir,
-        read_fixture_columns,
+        read_fixture_schema,
         recipe_output_columns,
     )
     from depictio.models.components.advanced_viz.catalog import (
@@ -285,17 +286,23 @@ def catalog_validate(
     problems: list[str] = check_existence(entries)
     # Ground each render's bound columns against the real data shape:
     # the fixture (most complete) > the recipe's EXPECTED_SCHEMA > declared columns.
+    # Beyond name existence, dtypes are checked too (advanced_viz roles + numeric
+    # card aggregations) via `ground_render_dtypes`.
     for entry in entries:
         for out in entry.outputs:
             source = ""
+            col_dtypes: dict[str, str] = {}
             fx = out.fixture_file()
             if fx:
                 try:
-                    available = set(read_fixture_columns(fx))
+                    col_dtypes = read_fixture_schema(fx)
+                    available = set(col_dtypes)
                     source = f"fixture {out.fixture}"
                 except Exception as exc:
                     problems.append(f"{out.id}: fixture {out.fixture} → {exc}")
                     continue
+                # Author-declared dtypes are authoritative over CSV inference.
+                col_dtypes.update(out.columns)
             elif out.recipe:
                 try:
                     available = set(recipe_output_columns(out.recipe))
@@ -304,7 +311,8 @@ def catalog_validate(
                     problems.append(f"{out.id}: recipe {out.recipe} → {exc}")
                     continue
             elif out.columns:
-                available = set(out.columns)
+                col_dtypes = dict(out.columns)
+                available = set(col_dtypes)
                 source = "declared columns"
             else:
                 continue  # nothing to ground against (non-tabular / binding-less)
@@ -315,6 +323,8 @@ def catalog_validate(
                         f"{out.id} render {r.kind or r.component}: binds "
                         f"{sorted(missing)} absent from {source} {sorted(available)}"
                     )
+                    continue
+                problems.extend(ground_render_dtypes(out.id, r, col_dtypes))
     if problems:
         typer.echo(f"  INVALID ({target}):")
         for p in problems:

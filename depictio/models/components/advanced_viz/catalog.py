@@ -496,12 +496,23 @@ def check_existence(entries: tuple[CatalogEntry, ...] | list[CatalogEntry]) -> l
 
 def read_fixture_columns(path: Path) -> list[str]:
     """Read the column header of a fixture file (csv/tsv/parquet)."""
+    return list(read_fixture_schema(path).keys())
+
+
+def read_fixture_schema(path: Path) -> dict[str, str]:
+    """Read a fixture's ``{column: polars-dtype-name}`` schema (csv/tsv/parquet).
+
+    For text fixtures dtypes are polars-inferred (up to 10k rows). Used by
+    `validate` to ground each render's bindings against the real dtypes, not
+    just the column names.
+    """
     import polars as pl
 
     if path.suffix == ".parquet":
-        return list(pl.read_parquet_schema(path).keys())
+        return {name: str(dtype) for name, dtype in pl.read_parquet_schema(path).items()}
     sep = "\t" if path.suffix == ".tsv" else ","
-    return pl.read_csv(path, separator=sep, n_rows=0).columns
+    schema = pl.read_csv(path, separator=sep, infer_schema_length=10_000).schema
+    return {name: str(dtype) for name, dtype in schema.items()}
 
 
 def recipe_output_columns(recipe_ref: str) -> list[str]:
@@ -510,6 +521,60 @@ def recipe_output_columns(recipe_ref: str) -> list[str]:
 
     module = load_recipe(recipe_ref)
     return list(module.EXPECTED_SCHEMA.keys())
+
+
+# Aggregations that are only meaningful on a numeric column. min/max/count/
+# nunique/mode work on any dtype, so they're intentionally excluded.
+_NUMERIC_AGGREGATIONS: frozenset[str] = frozenset(
+    {
+        "sum",
+        "average",
+        "median",
+        "range",
+        "variance",
+        "std_dev",
+        "percentile",
+        "skewness",
+        "kurtosis",
+    }
+)
+_NUMERIC_DTYPES: frozenset[str] = frozenset(
+    {"Int8", "Int16", "Int32", "Int64", "UInt8", "UInt16", "UInt32", "UInt64", "Float32", "Float64"}
+)
+
+
+def ground_render_dtypes(out_id: str, render: Render, col_dtypes: dict[str, str]) -> list[str]:
+    """Check a render's bound columns have *compatible dtypes*, not merely that
+    the names exist. advanced_viz roles are grounded against `role_dtype_specs`
+    (the same table the web builder uses); numeric card aggregations require a
+    numeric column. An empty `col_dtypes` (e.g. a recipe output with no dtype
+    info) skips the checks. Returns a list of problem strings (empty = ok)."""
+    from depictio.models.components.advanced_viz.schemas import role_dtype_specs
+
+    problems: list[str] = []
+    if not col_dtypes:
+        return problems
+
+    if render.component == "advanced_viz" and render.kind:
+        specs = role_dtype_specs(render.kind)
+        for role, col in render.roles.items():
+            dt = col_dtypes.get(col)
+            allowed = specs.get(role, {}).get("dtypes")
+            if dt and isinstance(allowed, list) and dt not in allowed:
+                problems.append(
+                    f"{out_id} render {render.kind}: role {role!r} → column {col!r} is "
+                    f"{dt}, but expects one of {allowed}"
+                )
+
+    if render.component == "card" and render.column:
+        dt = col_dtypes.get(render.column)
+        for agg in (a for a in [render.aggregation, *render.aggregations] if a):
+            if agg in _NUMERIC_AGGREGATIONS and dt and dt not in _NUMERIC_DTYPES:
+                problems.append(
+                    f"{out_id} render card: aggregation {agg!r} needs a numeric column, "
+                    f"but {render.column!r} is {dt}"
+                )
+    return problems
 
 
 # ---------------------------------------------------------------------------

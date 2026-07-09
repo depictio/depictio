@@ -585,6 +585,43 @@ def test_cli_commands_smoke():
 
 
 # ---------------------------------------------------------------------------
+# Dtype grounding: bindings must be dtype-compatible, not just name-present
+# ---------------------------------------------------------------------------
+
+
+def test_ground_render_dtypes():
+    from depictio.models.components.advanced_viz.catalog import Render, ground_render_dtypes
+
+    dtypes = {"chrom": "String", "start": "Int64", "coverage": "Float64", "region": "String"}
+
+    # advanced_viz: a numeric role fed a String column is flagged; correct is not.
+    bad = Render(
+        component="advanced_viz",
+        kind="coverage_track",
+        roles={"chromosome": "chrom", "position": "start", "value": "region"},
+    )
+    assert any("value" in p and "region" in p for p in ground_render_dtypes("o", bad, dtypes))
+    ok = Render(
+        component="advanced_viz",
+        kind="coverage_track",
+        roles={"chromosome": "chrom", "position": "start", "value": "coverage"},
+    )
+    assert ground_render_dtypes("o", ok, dtypes) == []
+
+    # card: a numeric aggregation on a String column is flagged; on numeric it's fine.
+    card_bad = Render(component="card", column="region", aggregation="average")
+    assert ground_render_dtypes("o", card_bad, dtypes)
+    card_ok = Render(component="card", column="coverage", aggregation="average")
+    assert ground_render_dtypes("o", card_ok, dtypes) == []
+    # count/nunique/min/max work on any dtype.
+    card_count = Render(component="card", column="region", aggregation="count")
+    assert ground_render_dtypes("o", card_count, dtypes) == []
+
+    # No dtype info (e.g. a recipe output) → checks are skipped.
+    assert ground_render_dtypes("o", bad, {}) == []
+
+
+# ---------------------------------------------------------------------------
 # Committed JSON Schema stays in sync with the model
 # ---------------------------------------------------------------------------
 
