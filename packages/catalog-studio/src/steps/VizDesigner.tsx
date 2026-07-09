@@ -193,6 +193,7 @@ export default function VizDesigner({ kinds }: { kinds: KindsMap }) {
   const tool = useStudioStore((s) => s.tool);
   const output = useStudioStore((s) => s.output);
   const renders = useStudioStore((s) => s.renders);
+  const existing = useStudioStore((s) => s.existing);
   const addRender = useStudioStore((s) => s.addRender);
   const removeRender = useStudioStore((s) => s.removeRender);
   const updateRender = useStudioStore((s) => s.updateRender);
@@ -220,9 +221,45 @@ export default function VizDesigner({ kinds }: { kinds: KindsMap }) {
         </Button>
       </Group>
 
+      {existing && (
+        <Alert
+          color="grape"
+          variant="light"
+          icon={<Icon icon="mdi:playlist-edit" />}
+          title={`Existing renders on ${existing.toolId} / ${existing.outputSlug} (read-only)`}
+        >
+          {existing.baseRenders.length === 0 ? (
+            <Text size="sm">This output has no renders yet — you're adding the first.</Text>
+          ) : (
+            <Stack gap={4} mt={4}>
+              {existing.baseRenders.map((r, i) => {
+                const variant = r.kind || r.visu_type;
+                return (
+                  <Group key={i} gap="xs" wrap="nowrap">
+                    <Badge variant="light" color="gray" size="sm" radius="sm">
+                      {variant ? `${r.component} · ${variant}` : r.component}
+                    </Badge>
+                    {r.id && (
+                      <Code fz="xs" c="dimmed" bg="transparent">
+                        {existing.toolId}/{r.id}
+                      </Code>
+                    )}
+                  </Group>
+                );
+              })}
+            </Stack>
+          )}
+          <Text size="xs" c="dimmed" mt={6}>
+            Your new render(s) below append alongside these — nothing existing is modified.
+          </Text>
+        </Alert>
+      )}
+
       {renders.length === 0 && (
         <Alert color="blue" variant="light" icon={<Icon icon="mdi:information-outline" />}>
-          No visualizations yet. Add at least one to continue.
+          {existing
+            ? 'Add at least one new visualization to append to this tool.'
+            : 'No visualizations yet. Add at least one to continue.'}
         </Alert>
       )}
 

@@ -1,9 +1,11 @@
-import { TextInput, Textarea, Stack, Title, Group, Button, Paper, Text, SimpleGrid, Code, Card, Select, Grid } from '@mantine/core';
+import { TextInput, Textarea, Stack, Title, Group, Button, Paper, Text, SimpleGrid, Code, Card, Select, Grid, Alert, Divider } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
 import { useStudioStore } from '../state/useStudioStore';
 import { fetchNfCoreMeta } from '../catalog/fromNfCore';
+import { findDuplicateTool, type CatalogManifest } from '../catalog/catalog';
+import AddToExistingPanel from './AddToExistingPanel';
 import type { NfCoreOutput, ToolSource } from '../types';
 
 const slugify = (s: string) =>
@@ -55,11 +57,14 @@ const SOURCES: SourceMeta[] = [
   },
 ];
 
-export default function ToolForm() {
+export default function ToolForm({ catalog }: { catalog: CatalogManifest }) {
   const tool = useStudioStore((s) => s.tool);
   const output = useStudioStore((s) => s.output);
   const setTool = useStudioStore((s) => s.setTool);
   const setOutput = useStudioStore((s) => s.setOutput);
+  const existing = useStudioStore((s) => s.existing);
+  const setStep = useStudioStore((s) => s.setStep);
+  const reset = useStudioStore((s) => s.reset);
   const [fetching, setFetching] = useState(false);
   // File output channels parsed from the last nf-core Import — populate the
   // output-channel picker so slug / path_glob / description can be auto-filled.
@@ -118,8 +123,43 @@ export default function ToolForm() {
     });
   };
 
+  // Adding to an existing tool: identity + fixture already came from the catalog,
+  // so the new-tool form is replaced by a banner (the work happens on the
+  // Visualizations step).
+  if (existing) {
+    return (
+      <Stack gap="lg">
+        <Alert
+          color="grape"
+          variant="light"
+          icon={<Icon icon="mdi:playlist-plus" />}
+          title={`Adding a visualization to ${existing.toolName}`}
+        >
+          <Text size="sm">
+            Output <Code>{existing.outputSlug}</Code> — {existing.baseRenders.length} existing
+            render(s). Your new visualization will append to{' '}
+            <Code>{existing.yamlPath || `${existing.toolId}/${existing.outputSlug}.yaml`}</Code>.
+          </Text>
+          <Group mt="sm" gap="sm">
+            <Button size="xs" color="grape" onClick={() => setStep(2)} rightSection={<Icon icon="mdi:chevron-right" />}>
+              Continue to visualizations
+            </Button>
+            <Button size="xs" variant="subtle" color="gray" onClick={reset}>
+              Start a new tool instead
+            </Button>
+          </Group>
+        </Alert>
+      </Stack>
+    );
+  }
+
+  const duplicate = findDuplicateTool(catalog, tool);
+
   return (
     <Stack gap="lg">
+      <AddToExistingPanel catalog={catalog} duplicate={duplicate} />
+      {catalog.tools.length > 0 && <Divider label="or create a new tool" labelPosition="center" />}
+
       <div>
         <Title order={3} style={{ fontFamily: 'Virgil', fontWeight: 400 }}>
           New tool

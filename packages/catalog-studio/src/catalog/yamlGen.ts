@@ -145,6 +145,43 @@ export function outputId(toolId: string, slug: string): string {
   return `${toolId}_${slug}`;
 }
 
+const indentBlock = (text: string, spaces: number) =>
+  text
+    .split('\n')
+    .map((l) => (l ? ' '.repeat(spaces) + l : l))
+    .join('\n');
+
+/**
+ * Append new `renders_as` items to an existing output YAML's raw text, leaving
+ * everything else (comments, identity, fixture, existing renders) untouched.
+ * Handles a populated block, an inline empty `renders_as: []`, and a missing
+ * `renders_as:` key. Used for "add a visualization to an existing tool".
+ */
+export function appendRendersToYaml(rawYaml: string, renders: RenderSpec[]): string {
+  if (!renders.length) return rawYaml;
+  const itemLines = renders.map((r) => indentBlock(renderToSnippet(r), 2)).join('\n').split('\n');
+  const lines = rawYaml.replace(/\n*$/, '\n').split('\n');
+  const idx = lines.findIndex((l) => /^renders_as\s*:/.test(l));
+
+  if (idx === -1) {
+    return lines.join('\n').replace(/\n*$/, '\n') + 'renders_as:\n' + itemLines.join('\n') + '\n';
+  }
+  if (/^renders_as\s*:\s*\[\s*\]\s*$/.test(lines[idx])) {
+    lines[idx] = 'renders_as:';
+    lines.splice(idx + 1, 0, ...itemLines);
+    return lines.join('\n').replace(/\n*$/, '\n');
+  }
+  // Find the end of the block: the first later line at column 0 that isn't blank
+  // (a new top-level key or comment), else EOF; then back up over blank lines so
+  // the new items sit right after the last existing item.
+  let end = idx + 1;
+  while (end < lines.length && (lines[end].trim() === '' || /^\s/.test(lines[end]))) end++;
+  let insertAt = end;
+  while (insertAt > idx + 1 && lines[insertAt - 1].trim() === '') insertAt--;
+  lines.splice(insertAt, 0, ...itemLines);
+  return lines.join('\n').replace(/\n*$/, '\n');
+}
+
 export function genModuleYaml(tool: ToolMeta): string {
   const lines: string[] = [
     '# yaml-language-server: $schema=../catalog.schema.json',

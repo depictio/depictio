@@ -3,6 +3,7 @@
  *
  *   public/kinds.json           ← `dev catalog kinds --json` (advanced_viz roles)
  *   public/figureParams.json    ← `dev catalog figure-params --json` (figure builder UI)
+ *   public/catalog.json         ← `dev catalog manifest --json` (existing tools/renders)
  *   public/catalog.schema.json  ← copy of depictio/catalog/catalog.schema.json
  *
  * All are also committed as snapshots. This script REGENERATES them from the
@@ -95,3 +96,4 @@ function snapshot(command: string, filename: string): void {
 
 snapshot('kinds', 'kinds.json');
 snapshot('figure-params', 'figureParams.json');
+snapshot('manifest', 'catalog.json');

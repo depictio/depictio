@@ -543,6 +543,122 @@ def catalog_kinds(
         typer.echo(text)
 
 
+@dev_app.command("manifest")
+def catalog_manifest(
+    as_json: Annotated[
+        bool,
+        typer.Option("--json", help="Emit the machine-readable JSON (for catalog-studio)."),
+    ] = False,
+    output: Annotated[
+        str | None,
+        typer.Option("--output", "-o", help="Write the JSON here (default: stdout)"),
+    ] = None,
+) -> None:
+    """Emit a JSON snapshot of the existing catalog (source for catalog-studio's
+    catalog.json). Powers duplicate detection ("this tool already exists") and
+    "add a visualization to an existing tool" — so the web app can compare the
+    wizard against what is already in `depictio/catalog/` offline.
+
+    Per tool: identity + outputs; per output: id/slug/path_glob, declared
+    columns, existing `renders_as`, the repo-relative YAML path and its raw text
+    (so the app can append a render and open an update PR), and — when the
+    fixture is a small co-located CSV/TSV — its content, so new renders ground
+    and preview client-side exactly like an upload.
+    """
+    import json
+
+    import yaml as _yaml
+
+    from depictio.models.components.advanced_viz.catalog import (
+        CATALOG_DIR,
+        load_entries_from_dir,
+    )
+
+    repo_root = CATALOG_DIR.parents[1]
+
+    def _rel(path: Path | None) -> str | None:
+        if path is None:
+            return None
+        try:
+            return str(path.relative_to(repo_root))
+        except ValueError:
+            return str(path)
+
+    def _output_file(src_dir: Path | None, out_id: str) -> tuple[Path | None, str | None]:
+        """The output's own YAML file in a folder-based tool (matched by id)."""
+        if src_dir is None or not src_dir.is_dir():
+            return None, None
+        for path in sorted(src_dir.glob("*.yaml")):
+            if path.name == "module.yaml":
+                continue
+            try:
+                raw = path.read_text()
+                if isinstance(data := _yaml.safe_load(raw), dict) and data.get("id") == out_id:
+                    return path, raw
+            except Exception:
+                continue
+        return None, None
+
+    def _fixture_text(path: Path | None) -> str | None:
+        """Embed a representative sample of a co-located CSV/TSV fixture (header +
+        up to 200 rows) so new renders ground + preview client-side without
+        bloating the bundle. Parquet / non-text fixtures stay null."""
+        try:
+            if not (path and path.exists() and path.suffix.lower() in {".csv", ".tsv"}):
+                return None
+            lines = path.read_text().splitlines()
+            return "\n".join(lines[:201]) + "\n" if lines else None
+        except Exception:
+            return None
+
+    tools: list[dict[str, object]] = []
+    for entry in load_entries_from_dir(CATALOG_DIR):
+        outs: list[dict[str, object]] = []
+        tool_dir: Path | None = None
+        for o in entry.outputs:
+            tool_dir = o._source_dir or tool_dir
+            yaml_path, raw = _output_file(o._source_dir, o.id)
+            dump = o.model_dump(mode="json", exclude_none=True)
+            outs.append(
+                {
+                    **dump,
+                    "slug": o.id.removeprefix(f"{entry.id}_"),
+                    "path_glob": o.find.path_glob,
+                    "yamlPath": _rel(yaml_path),
+                    "rawYaml": raw,
+                    "fixtureContent": _fixture_text(o.fixture_file()),
+                }
+            )
+        tools.append(
+            {
+                "id": entry.id,
+                "name": entry.name,
+                "description": entry.description,
+                "homepage": entry.homepage,
+                "nf_core_url": entry.nf_core_url,
+                "biotools_url": entry.biotools_url,
+                "dir": _rel(tool_dir),
+                "outputs": outs,
+            }
+        )
+
+    payload = {"tools": tools}
+    if not as_json:
+        for t in tools:
+            n = sum(
+                len(o["renders_as"]) for o in t["outputs"] if isinstance(o.get("renders_as"), list)
+            )  # type: ignore[arg-type]
+            typer.echo(f"{t['id']}: {len(t['outputs'])} output(s), {n} render(s)")
+        return
+
+    text = json.dumps(payload, indent=2, sort_keys=True) + "\n"
+    if output:
+        Path(output).write_text(text)
+        typer.echo(f"  Wrote catalog manifest to {output}")
+    else:
+        typer.echo(text)
+
+
 @dev_app.command("figure-params")
 def catalog_figure_params(
     as_json: Annotated[

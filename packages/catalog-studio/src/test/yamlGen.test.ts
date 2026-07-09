@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { genModuleYaml, genOutputYaml, renderToFlow, outputId } from '../catalog/yamlGen';
+import {
+  genModuleYaml,
+  genOutputYaml,
+  renderToFlow,
+  outputId,
+  appendRendersToYaml,
+} from '../catalog/yamlGen';
 import type { RenderSpec, ToolMeta, OutputMeta } from '../types';
 
 const tool: ToolMeta = { id: 'mytool', name: 'My Tool', source: 'nf-core', nf_core_url: 'https://github.com/nf-core/modules/tree/master/modules/nf-core/mytool' };
@@ -69,5 +75,52 @@ describe('genOutputYaml', () => {
     expect(yaml).toContain('renders_as:');
     expect(yaml).toContain('  - { component: table }');
     expect(yaml).not.toContain('columns:');
+  });
+});
+
+describe('appendRendersToYaml', () => {
+  const newCard: RenderSpec = {
+    uid: 'x',
+    component: 'card',
+    column: 'cov',
+    aggregation: 'average',
+    id: 'newcard',
+  };
+
+  it('appends into a populated block, keeping existing items and trailing keys', () => {
+    const raw = [
+      'id: mytool_results',
+      'find: {path_glob: "**/x"}',
+      'renders_as:',
+      '  - { component: table, id: tbl }',
+      'fixture: results.csv',
+      '',
+    ].join('\n');
+    const out = appendRendersToYaml(raw, [newCard]);
+    const lines = out.split('\n');
+    const iTbl = lines.findIndex((l) => l.includes('id: tbl'));
+    const iNew = lines.findIndex((l) => l.includes('id: newcard'));
+    const iFixture = lines.findIndex((l) => l === 'fixture: results.csv');
+    // new item is indented under renders_as, after the existing one, before fixture:
+    expect(iTbl).toBeGreaterThan(-1);
+    expect(iNew).toBeGreaterThan(iTbl);
+    expect(iFixture).toBeGreaterThan(iNew);
+    expect(lines[iNew]).toMatch(/^ {2}- \{/);
+  });
+
+  it('replaces an inline empty list', () => {
+    const out = appendRendersToYaml('id: t\nrenders_as: []\n', [newCard]);
+    expect(out).not.toContain('[]');
+    expect(out).toMatch(/renders_as:\n {2}- \{[^\n]*id: newcard/);
+  });
+
+  it('adds a renders_as block when the key is missing', () => {
+    const out = appendRendersToYaml('id: t\nfind: {path_glob: "x"}\n', [newCard]);
+    expect(out).toMatch(/renders_as:\n {2}- \{[^\n]*id: newcard/);
+  });
+
+  it('is a no-op with no new renders', () => {
+    const raw = 'id: t\nrenders_as:\n  - { component: table }\n';
+    expect(appendRendersToYaml(raw, [])).toBe(raw);
   });
 });

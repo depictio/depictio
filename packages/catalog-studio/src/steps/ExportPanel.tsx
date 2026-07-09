@@ -5,10 +5,10 @@ import { Icon } from '@iconify/react';
 import { notifications } from '@mantine/notifications';
 import JSZip from 'jszip';
 import { useStudioStore } from '../state/useStudioStore';
-import { generateEntry } from '../catalog/yamlGen';
+import { generateEntry, appendRendersToYaml } from '../catalog/yamlGen';
 import { validateAll } from '../catalog/grounding';
 import { oauthConfigured, signIn, getStoredToken, clearStoredToken, devToken } from '../catalog/githubOAuth';
-import { openCatalogPr, resolveTarget } from '../catalog/github';
+import { openCatalogPr, openAddRendersPr, resolveTarget } from '../catalog/github';
 import type { KindsMap } from '../types';
 
 // Fallback when OAuth isn't configured for the deployment: point GitHub's web
@@ -24,12 +24,15 @@ export default function ExportPanel({ kinds }: { kinds: KindsMap }) {
   const output = useStudioStore((s) => s.output);
   const fixture = useStudioStore((s) => s.fixture);
   const renders = useStudioStore((s) => s.renders);
+  const existing = useStudioStore((s) => s.existing);
   const dev = devToken();
   const [signedIn, setSignedIn] = useState<boolean>(() => Boolean(getStoredToken() || dev));
   const [pr, setPr] = useState<PrPhase>({ status: 'idle' });
 
+  // New-tool mode generates a fresh entry; existing-tool mode appends the new
+  // renders to the tool's current output YAML (nothing else changes).
   const entry = useMemo(() => {
-    if (!fixture) return null;
+    if (!fixture || existing) return null;
     return generateEntry({
       tool,
       output,
@@ -37,32 +40,50 @@ export default function ExportPanel({ kinds }: { kinds: KindsMap }) {
       fixtureContent: fixture.raw,
       renders,
     });
-  }, [tool, output, fixture, renders]);
+  }, [tool, output, fixture, renders, existing]);
+
+  const updatedYaml = useMemo(
+    () => (existing ? appendRendersToYaml(existing.rawYaml, renders) : null),
+    [existing, renders],
+  );
 
   const issues = fixture ? validateAll(renders, fixture.columns, kinds) : [];
   const errors = issues.filter((i) => i.severity === 'error');
 
-  if (!fixture || !entry) return <Text c="dimmed">Complete the earlier steps first.</Text>;
+  if (!fixture || (!entry && !existing)) return <Text c="dimmed">Complete the earlier steps first.</Text>;
 
-  const downloadZip = async () => {
+  const downloadBlob = (name: string, blob: Blob) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    a.click();
+    URL.revokeObjectURL(url);
+    notifications.show({ color: 'teal', message: `Downloaded ${name}` });
+  };
+
+  const doDownload = async () => {
+    if (existing && updatedYaml) {
+      downloadBlob(`${existing.outputSlug}.yaml`, new Blob([updatedYaml], { type: 'text/yaml' }));
+      return;
+    }
+    if (!entry) return;
     const zip = new JSZip();
     const dir = zip.folder(tool.id)!;
     dir.file('module.yaml', entry.moduleYaml);
     dir.file(entry.outputYamlName, entry.outputYaml);
     dir.file(entry.fixtureName, entry.fixtureContent);
-    const blob = await zip.generateAsync({ type: 'blob' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${tool.id}-catalog.zip`;
-    a.click();
-    URL.revokeObjectURL(url);
-    notifications.show({ color: 'teal', message: `Downloaded ${tool.id}-catalog.zip` });
+    downloadBlob(`${tool.id}-catalog.zip`, await zip.generateAsync({ type: 'blob' }));
   };
 
   const contributeViaUpload = async () => {
-    await downloadZip();
-    window.open(CATALOG_UPLOAD_URL, '_blank', 'noopener,noreferrer');
+    await doDownload();
+    // Existing tool → GitHub's edit page for that file; new tool → the uploader.
+    const url =
+      existing && existing.yamlPath
+        ? `https://github.com/depictio/depictio/edit/main/${existing.yamlPath}`
+        : CATALOG_UPLOAD_URL;
+    window.open(url, '_blank', 'noopener,noreferrer');
   };
 
   const doOpenPr = async () => {
@@ -82,11 +103,24 @@ export default function ExportPanel({ kinds }: { kinds: KindsMap }) {
       }
     }
     setPr({ status: 'working', message: 'Starting…' });
+    const onProgress = (m: string) => setPr({ status: 'working', message: m });
     try {
-      const { prUrl } = await openCatalogPr(token, entry, resolveTarget(), (m) =>
-        setPr({ status: 'working', message: m }),
-      );
-      setPr({ status: 'done', url: prUrl });
+      const result =
+        existing && updatedYaml
+          ? await openAddRendersPr(
+              token,
+              {
+                toolId: existing.toolId,
+                outputSlug: existing.outputSlug,
+                yamlPath: existing.yamlPath,
+                updatedYaml,
+                count: renders.length,
+              },
+              resolveTarget(),
+              onProgress,
+            )
+          : await openCatalogPr(token, entry!, resolveTarget(), onProgress);
+      setPr({ status: 'done', url: result.prUrl });
       notifications.show({ color: 'teal', message: 'Pull request opened.' });
     } catch (e) {
       // A stale/insufficient token is the usual culprit — drop it so the next
@@ -107,8 +141,17 @@ export default function ExportPanel({ kinds }: { kinds: KindsMap }) {
           Export
         </Title>
         <Text c="dimmed" size="sm">
-          Download a zip for <Code>depictio/catalog/{tool.id}/</Code>, or open a pull request on
-          GitHub. CI (<Code>dev catalog validate</Code>) is the authoritative check.
+          {existing ? (
+            <>
+              Append {renders.length} render(s) to <Code>{existing.yamlPath}</Code>, or open a pull
+              request on GitHub. CI (<Code>dev catalog validate</Code>) is the authoritative check.
+            </>
+          ) : (
+            <>
+              Download a zip for <Code>depictio/catalog/{tool.id}/</Code>, or open a pull request on
+              GitHub. CI (<Code>dev catalog validate</Code>) is the authoritative check.
+            </>
+          )}
         </Text>
       </div>
 
@@ -136,8 +179,13 @@ export default function ExportPanel({ kinds }: { kinds: KindsMap }) {
       )}
 
       <Group>
-        <Button size="md" color="green" leftSection={<Icon icon="mdi:folder-zip-outline" />} onClick={downloadZip}>
-          Download zip
+        <Button
+          size="md"
+          color="green"
+          leftSection={<Icon icon={existing ? 'mdi:file-download-outline' : 'mdi:folder-zip-outline'} />}
+          onClick={doDownload}
+        >
+          {existing ? 'Download updated YAML' : 'Download zip'}
         </Button>
 
         {canPr ? (
@@ -200,13 +248,34 @@ export default function ExportPanel({ kinds }: { kinds: KindsMap }) {
           {pr.status === 'idle' && (
             <Text size="xs" c="dimmed">
               One click: sign in with GitHub, and Tools Studio forks{' '}
-              <Code>{target.owner}/{target.repo}</Code>, commits the three files under{' '}
-              <Code>depictio/catalog/{tool.id}/</Code>, and opens the PR. Only the{' '}
-              <Code>public_repo</Code> scope is requested.
+              <Code>{target.owner}/{target.repo}</Code>,{' '}
+              {existing ? (
+                <>
+                  commits the updated <Code>{existing.yamlPath}</Code>
+                </>
+              ) : (
+                <>
+                  commits the three files under <Code>depictio/catalog/{tool.id}/</Code>
+                </>
+              )}
+              , and opens the PR. Only the <Code>public_repo</Code> scope is requested.
               {dev ? ' (Local dev token in use.)' : ''}
             </Text>
           )}
         </>
+      ) : existing ? (
+        <Alert color="blue" variant="light" icon={<Icon icon="mdi:source-pull" />} title="Open a PR without a token">
+          <List size="sm" spacing={2} type="ordered">
+            <List.Item>
+              <strong>Contribute on GitHub</strong> downloads the updated{' '}
+              <Code>{existing.outputSlug}.yaml</Code> and opens GitHub's editor for that file.
+            </List.Item>
+            <List.Item>
+              Paste the downloaded contents over the file and click <em>Propose changes</em> — GitHub
+              forks the repo and opens the pull request.
+            </List.Item>
+          </List>
+        </Alert>
       ) : (
         <Alert color="blue" variant="light" icon={<Icon icon="mdi:source-pull" />} title="Open a PR without a token">
           <List size="sm" spacing={2} type="ordered">
@@ -228,28 +297,33 @@ export default function ExportPanel({ kinds }: { kinds: KindsMap }) {
         <Group gap="xs" mb="sm" wrap="nowrap">
           <Icon icon="mdi:folder-outline" width={18} />
           <Text fw={600}>
-            Generated files for <Code>{tool.name || tool.id}</Code>
+            {existing ? 'Updated file for' : 'Generated files for'}{' '}
+            <Code>{tool.name || tool.id}</Code>
           </Text>
           <Badge variant="light" color="gray" radius="sm">
-            depictio/catalog/{tool.id}/
+            {existing ? existing.yamlPath : `depictio/catalog/${tool.id}/`}
           </Badge>
         </Group>
-        <Tabs defaultValue="module">
-          <Tabs.List>
-            <Tabs.Tab value="module" leftSection={<Icon icon="mdi:file-cog-outline" />}>
-              module.yaml
-            </Tabs.Tab>
-            <Tabs.Tab value="output" leftSection={<Icon icon="mdi:file-chart-outline" />}>
-              {entry.outputYamlName}
-            </Tabs.Tab>
-          </Tabs.List>
-          <Tabs.Panel value="module" pt="sm">
-            <CodeHighlight code={entry.moduleYaml} language="yaml" />
-          </Tabs.Panel>
-          <Tabs.Panel value="output" pt="sm">
-            <CodeHighlight code={entry.outputYaml} language="yaml" />
-          </Tabs.Panel>
-        </Tabs>
+        {existing && updatedYaml ? (
+          <CodeHighlight code={updatedYaml} language="yaml" />
+        ) : entry ? (
+          <Tabs defaultValue="module">
+            <Tabs.List>
+              <Tabs.Tab value="module" leftSection={<Icon icon="mdi:file-cog-outline" />}>
+                module.yaml
+              </Tabs.Tab>
+              <Tabs.Tab value="output" leftSection={<Icon icon="mdi:file-chart-outline" />}>
+                {entry.outputYamlName}
+              </Tabs.Tab>
+            </Tabs.List>
+            <Tabs.Panel value="module" pt="sm">
+              <CodeHighlight code={entry.moduleYaml} language="yaml" />
+            </Tabs.Panel>
+            <Tabs.Panel value="output" pt="sm">
+              <CodeHighlight code={entry.outputYaml} language="yaml" />
+            </Tabs.Panel>
+          </Tabs>
+        ) : null}
       </Paper>
     </Stack>
   );

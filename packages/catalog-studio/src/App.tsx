@@ -3,6 +3,7 @@ import { Icon } from '@iconify/react';
 import AppHeader from './components/AppHeader';
 import { useStudioStore } from './state/useStudioStore';
 import { useKinds } from './catalog/kinds';
+import { useCatalog } from './catalog/catalog';
 import ToolForm from './steps/ToolForm';
 import FixtureDrop from './steps/FixtureDrop';
 import VizDesigner from './steps/VizDesigner';
@@ -12,17 +13,19 @@ const STEPS = ['Tool', 'Fixture', 'Visualizations', 'Export'] as const;
 
 export default function App() {
   const { kinds } = useKinds();
+  const { catalog } = useCatalog();
   const step = useStudioStore((s) => s.step);
   const setStep = useStudioStore((s) => s.setStep);
   const tool = useStudioStore((s) => s.tool);
   const output = useStudioStore((s) => s.output);
   const fixture = useStudioStore((s) => s.fixture);
   const renders = useStudioStore((s) => s.renders);
+  const existing = useStudioStore((s) => s.existing);
 
   // Gate forward navigation on the minimum each step needs.
   const canLeave = (i: number): boolean => {
     if (i === 0) return Boolean(tool.id && tool.name && output.slug && output.path_glob);
-    if (i === 1) return Boolean(fixture);
+    if (i === 1) return Boolean(fixture || existing); // existing tools bring their own fixture
     if (i === 2) return renders.length > 0;
     return true;
   };
@@ -54,7 +57,7 @@ export default function App() {
           </Stepper>
 
           <Box mih={360}>
-            {step === 0 && <ToolForm />}
+            {step === 0 && <ToolForm catalog={catalog} />}
             {step === 1 && <FixtureDrop />}
             {step === 2 && <VizDesigner kinds={kinds} />}
             {step === 3 && <ExportPanel kinds={kinds} />}

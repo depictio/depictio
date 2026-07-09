@@ -78,21 +78,30 @@ export interface OpenPrResult {
   branch: string;
 }
 
-/** Fork, commit the entry's files on a new branch, and open the PR. Returns the
- *  PR URL. `onProgress` receives short status strings for the UI. */
-export async function openCatalogPr(
+export interface PrFile {
+  path: string;
+  content: string;
+}
+
+export interface PrSpec {
+  files: PrFile[];
+  /** Branch name stem, e.g. the tool id. */
+  branchSlug: string;
+  commitMessage: string;
+  title: string;
+  body: string;
+}
+
+/** Fork, commit `spec.files` on a new branch, and open the PR. The generic core
+ *  behind both "new tool" and "add a visualization to an existing tool".
+ *  `onProgress` receives short status strings for the UI. */
+export async function openFilesPr(
   token: string,
-  entry: GeneratedEntry,
+  spec: PrSpec,
   target: PrTarget = DEFAULT_TARGET,
   onProgress: (msg: string) => void = () => {},
 ): Promise<OpenPrResult> {
   const { owner, repo, base } = target;
-  const dir = `depictio/catalog/${entry.toolId}`;
-  const files: { path: string; content: string }[] = [
-    { path: `${dir}/module.yaml`, content: entry.moduleYaml },
-    { path: `${dir}/${entry.outputYamlName}`, content: entry.outputYaml },
-    { path: `${dir}/${entry.fixtureName}`, content: entry.fixtureContent },
-  ];
 
   onProgress('Signing in…');
   const user = await gh<{ login: string }>(token, 'GET', '/user');
@@ -115,7 +124,7 @@ export async function openCatalogPr(
     `/repos/${owner}/${repo}/git/commits/${baseSha}`,
   );
 
-  const branch = `tools-studio/${entry.toolId}-${Date.now().toString(36)}`;
+  const branch = `tools-studio/${spec.branchSlug}-${Date.now().toString(36)}`;
   onProgress('Creating a branch…');
   await gh(token, 'POST', `/repos/${login}/${repo}/git/refs`, {
     ref: `refs/heads/${branch}`,
@@ -124,7 +133,7 @@ export async function openCatalogPr(
 
   onProgress('Committing files…');
   const tree = [];
-  for (const f of files) {
+  for (const f of spec.files) {
     const blob = await gh<{ sha: string }>(token, 'POST', `/repos/${login}/${repo}/git/blobs`, {
       content: f.content,
       encoding: 'utf-8',
@@ -136,7 +145,7 @@ export async function openCatalogPr(
     tree,
   });
   const commit = await gh<{ sha: string }>(token, 'POST', `/repos/${login}/${repo}/git/commits`, {
-    message: `feat(catalog): add ${entry.toolId}`,
+    message: spec.commitMessage,
     tree: newTree.sha,
     parents: [baseSha],
   });
@@ -145,6 +154,24 @@ export async function openCatalogPr(
   });
 
   onProgress('Opening the pull request…');
+  const pr = await gh<{ html_url: string }>(token, 'POST', `/repos/${owner}/${repo}/pulls`, {
+    title: spec.title,
+    head: `${login}:${branch}`,
+    base,
+    body: spec.body,
+  });
+
+  return { prUrl: pr.html_url, branch };
+}
+
+/** New-tool PR: the three files under `depictio/catalog/<tool>/`. */
+export async function openCatalogPr(
+  token: string,
+  entry: GeneratedEntry,
+  target: PrTarget = DEFAULT_TARGET,
+  onProgress: (msg: string) => void = () => {},
+): Promise<OpenPrResult> {
+  const dir = `depictio/catalog/${entry.toolId}`;
   const body = [
     '## Summary',
     `Adds the **${entry.toolId}** tool to the catalog, authored with [Depictio Tools Studio](https://depictio.github.io/depictio/).`,
@@ -173,12 +200,59 @@ export async function openCatalogPr(
     '```',
     '</details>',
   ].join('\n');
-  const pr = await gh<{ html_url: string }>(token, 'POST', `/repos/${owner}/${repo}/pulls`, {
-    title: `Add catalog tool: ${entry.toolId}`,
-    head: `${login}:${branch}`,
-    base,
-    body,
-  });
+  return openFilesPr(
+    token,
+    {
+      files: [
+        { path: `${dir}/module.yaml`, content: entry.moduleYaml },
+        { path: `${dir}/${entry.outputYamlName}`, content: entry.outputYaml },
+        { path: `${dir}/${entry.fixtureName}`, content: entry.fixtureContent },
+      ],
+      branchSlug: entry.toolId,
+      commitMessage: `feat(catalog): add ${entry.toolId}`,
+      title: `Add catalog tool: ${entry.toolId}`,
+      body,
+    },
+    target,
+    onProgress,
+  );
+}
 
-  return { prUrl: pr.html_url, branch };
+/** Append-to-existing PR: one modified output YAML at `yamlPath`. */
+export async function openAddRendersPr(
+  token: string,
+  args: { toolId: string; outputSlug: string; yamlPath: string; updatedYaml: string; count: number },
+  target: PrTarget = DEFAULT_TARGET,
+  onProgress: (msg: string) => void = () => {},
+): Promise<OpenPrResult> {
+  const plural = args.count > 1 ? 's' : '';
+  const body = [
+    '## Summary',
+    `Adds ${args.count} visualization${plural} to the existing **${args.toolId}** tool ` +
+      `(output \`${args.outputSlug}\`), authored with [Depictio Tools Studio](https://depictio.github.io/depictio/).`,
+    '',
+    `Only \`${args.yamlPath}\` changes — new item${plural} appended under \`renders_as\`.`,
+    '',
+    '## Validation',
+    'CI `dev catalog validate` is the authoritative check for this entry.',
+    '',
+    `<details><summary>${args.yamlPath}</summary>`,
+    '',
+    '```yaml',
+    args.updatedYaml.trimEnd(),
+    '```',
+    '</details>',
+  ].join('\n');
+  return openFilesPr(
+    token,
+    {
+      files: [{ path: args.yamlPath, content: args.updatedYaml }],
+      branchSlug: `${args.toolId}-${args.outputSlug}`,
+      commitMessage: `feat(catalog): add ${args.count} render${plural} to ${args.toolId}`,
+      title: `Add ${args.count} visualization${plural} to ${args.toolId}`,
+      body,
+    },
+    target,
+    onProgress,
+  );
 }
