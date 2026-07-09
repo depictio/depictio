@@ -4,7 +4,17 @@
  */
 import React from 'react';
 import { AgGridReact } from 'ag-grid-react';
-import { Badge, Code, Group, Paper, ScrollArea, Stack, Text } from '@mantine/core';
+import {
+  Badge,
+  Center,
+  Code,
+  Group,
+  Paper,
+  ScrollArea,
+  Stack,
+  Text,
+  ThemeIcon,
+} from '@mantine/core';
 import { Icon } from '@iconify/react';
 import type { PreviewData, RecognizeResult } from './backend';
 
@@ -46,9 +56,27 @@ export const PreviewGrid: React.FC<{
 const DataPanel: React.FC<Props> = ({ preview, recognize, theme }) => {
   if (!preview)
     return (
-      <Text size="sm" c="dimmed" p="md">
-        Pick a file on the left to see its data.
-      </Text>
+      <Center mih={340} p="xl">
+        <Paper
+          withBorder
+          radius="lg"
+          p={40}
+          maw={460}
+          style={{ borderStyle: 'dashed', textAlign: 'center' }}
+        >
+          <Stack gap="md" align="center">
+            <ThemeIcon variant="light" color="teal" size={72} radius="xl">
+              <Icon icon="mdi:table-search" width={40} />
+            </ThemeIcon>
+            <Text fw={700} fz={26} lh={1.2}>
+              Pick a file to preview it
+            </Text>
+            <Text c="dimmed" fz="lg" maw={360}>
+              Click any file in the <b>Files</b> panel to see its first rows and inferred schema.
+            </Text>
+          </Stack>
+        </Paper>
+      </Center>
     );
 
   return (
