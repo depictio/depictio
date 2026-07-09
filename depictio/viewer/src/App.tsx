@@ -664,7 +664,7 @@ const App: React.FC = () => {
                       {isOwner && (
                         <Button
                           component="a"
-                          href={`/dashboard-beta-edit/${dashboardId}`}
+                          href={`/dashboard-edit/${dashboardId}`}
                           leftSection={<Icon icon="mdi:pencil" width={16} />}
                           size="md"
                           variant="filled"

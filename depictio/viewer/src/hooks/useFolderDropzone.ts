@@ -49,6 +49,12 @@ interface UseFolderDropzoneResult {
   clear: () => void;
   /** Programmatically open the OS picker bound to `inputRef`. */
   openPicker: () => void;
+  /** Bind to the hidden `<input onChange={...}>`. Uses React's delegated
+   *  change event instead of an imperative addEventListener so the handler
+   *  always tracks the live DOM node — an addEventListener bound in an effect
+   *  goes stale when React recreates the input node (e.g. StrictMode remount)
+   *  and the effect doesn't re-run, silently dropping the file selection. */
+  onInputChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
   /** Accept a `FileList` directly (e.g. from a parent `<input>`). Useful for tests. */
   addFromFileList: (files: FileList | File[] | null) => void;
 }
@@ -309,19 +315,19 @@ export function useFolderDropzone(
     };
   }, []);
 
-  // Hook the click-to-pick input — owner attaches via `inputRef` and chooses
-  // file-picker vs folder-picker semantics by setting `webkitdirectory`.
-  useEffect(() => {
-    const input = inputRef.current;
-    if (!input) return;
-    const onChange = (event: Event) => {
-      const target = event.target as HTMLInputElement;
+  // Click-to-pick change handler — owner attaches via `onChange={onInputChange}`
+  // and chooses file-picker vs folder-picker semantics by setting
+  // `webkitdirectory` on the input. React's delegated onChange always fires on
+  // the live node, unlike an addEventListener bound to inputRef.current in an
+  // effect (which orphans onto a detached node when React recreates the input).
+  const onInputChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const target = event.currentTarget;
       if (target.files?.length) ingest(Array.from(target.files));
       target.value = '';
-    };
-    input.addEventListener('change', onChange);
-    return () => input.removeEventListener('change', onChange);
-  }, [ingest]);
+    },
+    [ingest],
+  );
 
   const removeFile = useCallback((file: File) => {
     setFiles((prev) => prev.filter((f) => f !== file));
@@ -359,6 +365,7 @@ export function useFolderDropzone(
     removeFile,
     clear,
     openPicker,
+    onInputChange,
     addFromFileList,
   };
 }
