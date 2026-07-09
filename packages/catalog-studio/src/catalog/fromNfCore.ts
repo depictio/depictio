@@ -19,6 +19,23 @@ export interface NfCoreMeta {
   outputs: NfCoreOutput[];
 }
 
+/**
+ * Canonicalise a pasted nf-core module URL to the module-*directory* form the
+ * catalog uses (and that `dev catalog validate` checks against the vendored
+ * index): `https://github.com/nf-core/modules/tree/master/modules/nf-core/<module>`.
+ * Strips a trailing `/meta.yml` or `/main.nf` and rewrites `/blob/` → `/tree/`,
+ * so pasting the meta.yml page (what the module docs link to) still yields a
+ * valid `nf_core_url`. Non-nf-core URLs are returned unchanged.
+ */
+export function canonicalNfCoreUrl(url: string): string {
+  const trimmed = url.trim();
+  if (!trimmed.includes('/modules/nf-core/')) return trimmed;
+  return trimmed
+    .replace('/blob/', '/tree/')
+    .replace(/\/(meta\.yml|main\.nf)$/, '')
+    .replace(/\/+$/, '');
+}
+
 /** Turn a module tree URL into the raw meta.yml URL. */
 export function metaYmlUrl(moduleUrl: string): string {
   if (moduleUrl.endsWith('meta.yml')) {

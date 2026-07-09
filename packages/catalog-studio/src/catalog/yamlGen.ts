@@ -6,6 +6,7 @@
  * bindings in CI (schema-ownership rule: fixture present ⇒ grounding deferred).
  */
 import type { CardRender, OutputMeta, RenderSpec, ToolMeta } from '../types';
+import { canonicalNfCoreUrl } from './fromNfCore';
 
 /** True if a scalar can be emitted plain (no quotes) in YAML flow context. */
 function isPlainSafe(s: string): boolean {
@@ -152,7 +153,8 @@ export function genModuleYaml(tool: ToolMeta): string {
   ];
   if (tool.description) lines.push(`description: ${flowScalar(tool.description)}`);
   if (tool.homepage) lines.push(`homepage: ${flowScalar(tool.homepage)}`);
-  if (tool.nf_core_url) lines.push(`nf_core_url: ${flowScalar(tool.nf_core_url)}`);
+  if (tool.nf_core_url)
+    lines.push(`nf_core_url: ${flowScalar(canonicalNfCoreUrl(tool.nf_core_url))}`);
   if (tool.biotools_url) lines.push(`biotools_url: ${flowScalar(tool.biotools_url)}`);
   return lines.join('\n') + '\n';
 }

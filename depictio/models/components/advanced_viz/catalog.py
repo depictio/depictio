@@ -448,7 +448,13 @@ def load_index(name: str) -> set[str]:
 
 def _nf_core_module(url: str | None) -> str | None:
     if url and "/modules/nf-core/" in url:
-        return url.split("/modules/nf-core/", 1)[1].rstrip("/")
+        module = url.split("/modules/nf-core/", 1)[1].rstrip("/")
+        # Accept a URL that points at the module's meta.yml / main.nf (what the
+        # nf-core docs link to) — the module path is the parent directory.
+        for suffix in ("/meta.yml", "/main.nf"):
+            if module.endswith(suffix):
+                module = module[: -len(suffix)]
+        return module
     return None
 
 

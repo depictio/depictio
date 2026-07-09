@@ -42,6 +42,18 @@ describe('genModuleYaml', () => {
     expect(yaml).toContain('nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/mytool');
     expect(yaml).not.toContain('biotools_url');
   });
+  it('canonicalises a pasted meta.yml/blob URL to the module dir (so validate matches the index)', () => {
+    const yaml = genModuleYaml({
+      ...tool,
+      nf_core_url:
+        'https://github.com/nf-core/modules/blob/master/modules/nf-core/ivar/consensus/meta.yml',
+    });
+    expect(yaml).toContain(
+      'nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/ivar/consensus',
+    );
+    expect(yaml).not.toContain('meta.yml');
+    expect(yaml).not.toContain('/blob/');
+  });
 });
 
 describe('genOutputYaml', () => {
