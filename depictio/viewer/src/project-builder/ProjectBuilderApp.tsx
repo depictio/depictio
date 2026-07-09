@@ -27,6 +27,7 @@ import {
   Stack,
   Stepper,
   TagsInput,
+  Divider,
   Text,
   TextInput,
   Title,
@@ -57,6 +58,9 @@ import snakemakeLogo from '../../public/logos/workflows/snakemake.png';
 import galaxyLogo from '../../public/logos/workflows/galaxy.png';
 import nfcoreLogo from '../../public/logos/workflows/nf-core.png';
 import iwcLogo from '../../public/logos/workflows/iwc.png';
+// depictio wordmark (theme-aware): black on light backgrounds, white on dark.
+import depictioLogoLight from '../../public/logos/logo_black.svg';
+import depictioLogoDark from '../../public/logos/logo_white.svg';
 
 const ENGINE_LOGOS: Record<string, string> = {
   nextflow: nextflowLogo,
@@ -673,14 +677,16 @@ const ProjectBuilderApp: React.FC = () => {
     >
       <AppShell.Header>
         <Group h="100%" px="md" justify="space-between">
-          <Group gap="xs">
-            <Icon icon="mdi:palette-swatch" width={24} color="var(--mantine-color-teal-6)" />
+          <Group gap="sm">
+            <img
+              src={scheme === 'dark' ? depictioLogoDark : depictioLogoLight}
+              alt="Depictio"
+              style={{ height: 24, width: 'auto', display: 'block' }}
+            />
+            <Divider orientation="vertical" my={14} />
             <Title order={3} c="teal" style={{ fontFamily: 'Virgil', fontWeight: 400 }}>
               Project Builder
             </Title>
-            <Text size="xs" c="dimmed">
-              local · service-free
-            </Text>
           </Group>
           <ThemeToggle />
         </Group>
