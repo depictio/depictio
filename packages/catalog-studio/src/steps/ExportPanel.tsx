@@ -8,7 +8,7 @@ import { useStudioStore } from '../state/useStudioStore';
 import { generateEntry, appendRendersToYaml } from '../catalog/yamlGen';
 import { validateAll } from '../catalog/grounding';
 import { oauthConfigured, signIn, getStoredToken, clearStoredToken, devToken } from '../catalog/githubOAuth';
-import { openCatalogPr, openAddRendersPr, resolveTarget } from '../catalog/github';
+import { openCatalogPr, openAddRendersPr, openNewOutputPr, resolveTarget } from '../catalog/github';
 import type { KindsMap } from '../types';
 
 // Fallback when OAuth isn't configured for the deployment: point GitHub's web
@@ -25,12 +25,13 @@ export default function ExportPanel({ kinds }: { kinds: KindsMap }) {
   const fixture = useStudioStore((s) => s.fixture);
   const renders = useStudioStore((s) => s.renders);
   const existing = useStudioStore((s) => s.existing);
+  const newOutputTarget = useStudioStore((s) => s.newOutputTarget);
   const dev = devToken();
   const [signedIn, setSignedIn] = useState<boolean>(() => Boolean(getStoredToken() || dev));
   const [pr, setPr] = useState<PrPhase>({ status: 'idle' });
 
-  // New-tool mode generates a fresh entry; existing-tool mode appends the new
-  // renders to the tool's current output YAML (nothing else changes).
+  // New-tool AND new-output modes generate a fresh entry (a full <slug>.yaml +
+  // fixture); the append mode instead edits the tool's current output YAML.
   const entry = useMemo(() => {
     if (!fixture || existing) return null;
     return generateEntry({
@@ -70,10 +71,12 @@ export default function ExportPanel({ kinds }: { kinds: KindsMap }) {
     if (!entry) return;
     const zip = new JSZip();
     const dir = zip.folder(tool.id)!;
-    dir.file('module.yaml', entry.moduleYaml);
+    // New output on an existing tool: only the new files — module.yaml already exists.
+    if (!newOutputTarget) dir.file('module.yaml', entry.moduleYaml);
     dir.file(entry.outputYamlName, entry.outputYaml);
     dir.file(entry.fixtureName, entry.fixtureContent);
-    downloadBlob(`${tool.id}-catalog.zip`, await zip.generateAsync({ type: 'blob' }));
+    const zipName = newOutputTarget ? `${tool.id}-${output.slug}.zip` : `${tool.id}-catalog.zip`;
+    downloadBlob(zipName, await zip.generateAsync({ type: 'blob' }));
   };
 
   const contributeViaUpload = async () => {
@@ -119,7 +122,9 @@ export default function ExportPanel({ kinds }: { kinds: KindsMap }) {
               resolveTarget(),
               onProgress,
             )
-          : await openCatalogPr(token, entry!, resolveTarget(), onProgress);
+          : newOutputTarget
+            ? await openNewOutputPr(token, entry!, newOutputTarget.dir, resolveTarget(), onProgress)
+            : await openCatalogPr(token, entry!, resolveTarget(), onProgress);
       setPr({ status: 'done', url: result.prUrl });
       notifications.show({ color: 'teal', message: 'Pull request opened.' });
     } catch (e) {
@@ -133,6 +138,15 @@ export default function ExportPanel({ kinds }: { kinds: KindsMap }) {
 
   const canPr = oauthConfigured() || Boolean(dev);
   const target = resolveTarget();
+  // Which of the three export shapes this is, and where its files land — derived
+  // once so the copy below stays consistent (append edits one file; newOutput
+  // adds files to an existing tool dir; newTool creates the tool dir).
+  const mode: 'append' | 'newOutput' | 'newTool' = existing
+    ? 'append'
+    : newOutputTarget
+      ? 'newOutput'
+      : 'newTool';
+  const targetDir = newOutputTarget ? `${newOutputTarget.dir}/` : `depictio/catalog/${tool.id}/`;
 
   return (
     <Stack gap="lg">
@@ -141,17 +155,15 @@ export default function ExportPanel({ kinds }: { kinds: KindsMap }) {
           Export
         </Title>
         <Text c="dimmed" size="sm">
-          {existing ? (
-            <>
-              Append {renders.length} render(s) to <Code>{existing.yamlPath}</Code>, or open a pull
-              request on GitHub. CI (<Code>dev catalog validate</Code>) is the authoritative check.
-            </>
+          {mode === 'append' && existing ? (
+            <>Append {renders.length} render(s) to <Code>{existing.yamlPath}</Code>, </>
+          ) : mode === 'newOutput' ? (
+            <>Add a new output (<Code>{output.slug}.yaml</Code> + fixture) to <Code>{targetDir}</Code>, </>
           ) : (
-            <>
-              Download a zip for <Code>depictio/catalog/{tool.id}/</Code>, or open a pull request on
-              GitHub. CI (<Code>dev catalog validate</Code>) is the authoritative check.
-            </>
+            <>Download a zip for <Code>{targetDir}</Code>, </>
           )}
+          or open a pull request on GitHub. CI (<Code>dev catalog validate</Code>) is the
+          authoritative check.
         </Text>
       </div>
 
@@ -249,14 +261,12 @@ export default function ExportPanel({ kinds }: { kinds: KindsMap }) {
             <Text size="xs" c="dimmed">
               One click: sign in with GitHub, and Tools Studio forks{' '}
               <Code>{target.owner}/{target.repo}</Code>,{' '}
-              {existing ? (
-                <>
-                  commits the updated <Code>{existing.yamlPath}</Code>
-                </>
+              {mode === 'append' && existing ? (
+                <>commits the updated <Code>{existing.yamlPath}</Code></>
+              ) : mode === 'newOutput' ? (
+                <>commits the two new files under <Code>{targetDir}</Code></>
               ) : (
-                <>
-                  commits the three files under <Code>depictio/catalog/{tool.id}/</Code>
-                </>
+                <>commits the three files under <Code>{targetDir}</Code></>
               )}
               , and opens the PR. Only the <Code>public_repo</Code> scope is requested.
               {dev ? ' (Local dev token in use.)' : ''}
@@ -301,11 +311,15 @@ export default function ExportPanel({ kinds }: { kinds: KindsMap }) {
             <Code>{tool.name || tool.id}</Code>
           </Text>
           <Badge variant="light" color="gray" radius="sm">
-            {existing ? existing.yamlPath : `depictio/catalog/${tool.id}/`}
+            {existing ? existing.yamlPath : targetDir}
           </Badge>
         </Group>
         {existing && updatedYaml ? (
           <CodeHighlight code={updatedYaml} language="yaml" />
+        ) : entry && newOutputTarget ? (
+          // New output on an existing tool: module.yaml is untouched, so show only
+          // the new <slug>.yaml.
+          <CodeHighlight code={entry.outputYaml} language="yaml" />
         ) : entry ? (
           <Tabs defaultValue="module">
             <Tabs.List>

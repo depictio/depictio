@@ -11,9 +11,12 @@ builder** — and either **download a zip** or open a **one-click pull request**
 
 ## The flow
 
-1. **Tool** — pick the source (nf-core module / Snakemake wrapper / Galaxy tool),
-   id, name, output slug + `path_glob`. For nf-core, **Import** pulls identity
-   from the module's `meta.yml`.
+1. **Tool** — identify the tool (id, name, or nf-core **Import**). As you type,
+   the app checks the [committed catalog](../../depictio/catalog/): if it's
+   already there, the existing entry is shown inline and you can **add a
+   visualization to an existing output** or **add a new output to the tool**. If
+   it's new, you author its identity + first output (slug + `path_glob`). For
+   nf-core, **Import** pulls identity from the module's `meta.yml`.
 2. **Fixture** — drop the tool's output file. It's bundled verbatim as the
    fixture and is what grounds your bindings in CI. Columns + dtypes are inferred
    client-side; nothing leaves your browser.
@@ -33,6 +36,7 @@ builder** — and either **download a zip** or open a **one-click pull request**
 | | |
 | --- | --- |
 | **1. Tool** — identity + the single output, 2-panel; nf-core **Import** auto-fills id/name/description **and** the output slug/glob from the module `meta.yml`. | ![Tool step](docs/screenshots/01-tool.png) |
+| **1b. Recognition** — when the id/name/nf-core module matches a catalog tool, its outputs + existing renders surface inline, with **Add a visualization here** (append to an output) and **Add a new output to this tool** (a fresh `<output>.yaml`). | ![Recognized tool](docs/screenshots/01b-recognized.png) |
 | **2. Fixture** — drop the output file; it's parsed client-side and shown in an ag-grid table (this file grounds the bindings in CI). | ![Fixture step](docs/screenshots/02-fixture.png) |
 | **3a. Add a visualization** — depictio's component-type grid (figure / card / table / interactive / advanced_viz). | ![Component types](docs/screenshots/03-component-types.png) |
 | **3b. Figure builder** — depictio's real UI (preview-left / properties-right) with a UI/Code toggle; Code Mode runs Plotly-Express in-browser via Pyodide. | ![Figure builder](docs/screenshots/04-figure-builder.png) |

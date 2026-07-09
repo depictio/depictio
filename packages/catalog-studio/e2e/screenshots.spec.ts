@@ -18,12 +18,22 @@ test('capture documentation screenshots', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
 
-  // 1) Tool step — 2-panel identity/output + source picker.
-  await page.getByLabel('Tool id').fill('mosdepth');
-  await page.getByLabel('Tool name').fill('mosdepth');
+  // 1) Tool step — a brand-new tool: 2-panel identity/output + source picker.
+  //    Use a name that isn't in the catalog so recognition doesn't take over.
+  await page.getByLabel('Tool id').fill('mytool');
+  await page.getByLabel('Tool name').fill('My Tool');
   await page.getByLabel('Output slug').fill('coverage');
-  await page.getByLabel('Path glob').fill('**/mosdepth/*.tsv');
+  await page.getByLabel('Path glob').fill('**/mytool/*.tsv');
   await page.screenshot({ path: shot('01-tool'), fullPage: true });
+
+  // 1b) Recognition — retype the id of a tool already in the catalog; the
+  //     recognized entry (its outputs + renders) and the two actions appear.
+  await page.getByLabel('Tool id').fill('mosdepth');
+  await page.getByText('is already in the catalog').waitFor();
+  await page.screenshot({ path: shot('01b-recognized'), fullPage: true });
+
+  // Back to the new-tool flow for the remaining shots.
+  await page.getByLabel('Tool id').fill('mytool');
   await page.getByRole('button', { name: 'Next', exact: true }).click();
 
   // 2) Fixture step — ag-grid preview of the dropped file.

@@ -218,6 +218,55 @@ export async function openCatalogPr(
   );
 }
 
+/** New-output PR: a new `<slug>.yaml` + fixture under an existing tool's folder
+ *  (`module.yaml` is left untouched — the tool already exists). */
+export async function openNewOutputPr(
+  token: string,
+  entry: GeneratedEntry,
+  dir: string,
+  target: PrTarget = DEFAULT_TARGET,
+  onProgress: (msg: string) => void = () => {},
+): Promise<OpenPrResult> {
+  const body = [
+    '## Summary',
+    `Adds a new output **${entry.outputSlug}** to the existing **${entry.toolId}** tool, ` +
+      'authored with [Depictio Tools Studio](https://depictio.github.io/depictio/).',
+    '',
+    `## Files (\`${dir}/\`)`,
+    '| File | Purpose |',
+    '| --- | --- |',
+    `| \`${entry.outputYamlName}\` | New output definition + \`renders_as\` (the dashboard components). |`,
+    `| \`${entry.fixtureName}\` | Fixture — grounds the bindings in CI (nothing computed server-side). |`,
+    '',
+    '`module.yaml` is unchanged — this only adds an output to the tool.',
+    '',
+    '## Validation',
+    'CI `dev catalog validate` is the authoritative check for this entry.',
+    '',
+    `<details><summary>${entry.outputYamlName}</summary>`,
+    '',
+    '```yaml',
+    entry.outputYaml.trimEnd(),
+    '```',
+    '</details>',
+  ].join('\n');
+  return openFilesPr(
+    token,
+    {
+      files: [
+        { path: `${dir}/${entry.outputYamlName}`, content: entry.outputYaml },
+        { path: `${dir}/${entry.fixtureName}`, content: entry.fixtureContent },
+      ],
+      branchSlug: `${entry.toolId}-${entry.outputSlug}`,
+      commitMessage: `feat(catalog): add ${entry.outputSlug} output to ${entry.toolId}`,
+      title: `Add ${entry.outputSlug} output to ${entry.toolId}`,
+      body,
+    },
+    target,
+    onProgress,
+  );
+}
+
 /** Append-to-existing PR: one modified output YAML at `yamlPath`. */
 export async function openAddRendersPr(
   token: string,

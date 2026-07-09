@@ -87,7 +87,9 @@ export interface DuplicateMatch {
 }
 
 /** Find an existing catalog tool that the in-progress wizard tool collides with
- *  — by id, display name, or the same nf-core module path. */
+ *  — by the same nf-core module path (highest-signal, exact), then id, then
+ *  display name. The nf-core module is checked first across all tools so a real
+ *  module match always beats a stray id/name collision on a different tool. */
 export function findDuplicateTool(
   catalog: CatalogManifest,
   draft: { id?: string; name?: string; nf_core_url?: string | null },
@@ -95,11 +97,14 @@ export function findDuplicateTool(
   const id = norm(draft.id);
   const name = norm(draft.name);
   const mod = draft.nf_core_url ? canonicalNfCoreUrl(draft.nf_core_url) : '';
+  if (mod) {
+    for (const tool of catalog.tools)
+      if (tool.nf_core_url && canonicalNfCoreUrl(tool.nf_core_url) === mod)
+        return { tool, reason: 'nf-core module' };
+  }
   for (const tool of catalog.tools) {
     if (id && norm(tool.id) === id) return { tool, reason: 'id' };
     if (name && norm(tool.name) === name) return { tool, reason: 'name' };
-    if (mod && tool.nf_core_url && canonicalNfCoreUrl(tool.nf_core_url) === mod)
-      return { tool, reason: 'nf-core module' };
   }
   return null;
 }

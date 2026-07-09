@@ -1,7 +1,7 @@
 import { AppShell, Stepper, Container, Group, Button, Box } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import AppHeader from './components/AppHeader';
-import { useStudioStore } from './state/useStudioStore';
+import { useStudioStore, newOutputSlugClash } from './state/useStudioStore';
 import { useKinds } from './catalog/kinds';
 import { useCatalog } from './catalog/catalog';
 import ToolForm from './steps/ToolForm';
@@ -21,10 +21,16 @@ export default function App() {
   const fixture = useStudioStore((s) => s.fixture);
   const renders = useStudioStore((s) => s.renders);
   const existing = useStudioStore((s) => s.existing);
+  const newOutputTarget = useStudioStore((s) => s.newOutputTarget);
 
   // Gate forward navigation on the minimum each step needs.
   const canLeave = (i: number): boolean => {
-    if (i === 0) return Boolean(tool.id && tool.name && output.slug && output.path_glob);
+    if (i === 0) {
+      if (!(tool.id && tool.name && output.slug && output.path_glob)) return false;
+      // A new output must not reuse an existing output's slug (would overwrite its file).
+      if (newOutputSlugClash(newOutputTarget, output.slug)) return false;
+      return true;
+    }
     if (i === 1) return Boolean(fixture || existing); // existing tools bring their own fixture
     if (i === 2) return renders.length > 0;
     return true;

@@ -1,11 +1,11 @@
-import { TextInput, Textarea, Stack, Title, Group, Button, Paper, Text, SimpleGrid, Code, Card, Select, Grid, Alert, Divider } from '@mantine/core';
+import { TextInput, Textarea, Stack, Title, Group, Button, Paper, Text, SimpleGrid, Code, Card, Select, Grid, Alert } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
-import { useStudioStore } from '../state/useStudioStore';
+import { useStudioStore, newOutputSlugClash } from '../state/useStudioStore';
 import { fetchNfCoreMeta } from '../catalog/fromNfCore';
 import { findDuplicateTool, type CatalogManifest } from '../catalog/catalog';
-import AddToExistingPanel from './AddToExistingPanel';
+import RecognizedTool from './RecognizedTool';
 import type { NfCoreOutput, ToolSource } from '../types';
 
 const slugify = (s: string) =>
@@ -63,12 +63,17 @@ export default function ToolForm({ catalog }: { catalog: CatalogManifest }) {
   const setTool = useStudioStore((s) => s.setTool);
   const setOutput = useStudioStore((s) => s.setOutput);
   const existing = useStudioStore((s) => s.existing);
+  const newOutputTarget = useStudioStore((s) => s.newOutputTarget);
   const setStep = useStudioStore((s) => s.setStep);
   const reset = useStudioStore((s) => s.reset);
   const [fetching, setFetching] = useState(false);
   // File output channels parsed from the last nf-core Import — populate the
   // output-channel picker so slug / path_glob / description can be auto-filled.
   const [nfOutputs, setNfOutputs] = useState<NfCoreOutput[]>([]);
+  // The catalog tool id the author has dismissed as "not my tool", so the
+  // recognized panel yields to new-tool authoring until the identity changes to
+  // a *different* match.
+  const [dismissedMatchId, setDismissedMatchId] = useState<string | null>(null);
 
   const active = SOURCES.find((s) => s.value === tool.source) ?? SOURCES[0];
   const sourceUrl = (active.field === 'nf_core_url' ? tool.nf_core_url : tool.homepage) ?? '';
@@ -123,9 +128,156 @@ export default function ToolForm({ catalog }: { catalog: CatalogManifest }) {
     });
   };
 
-  // Adding to an existing tool: identity + fixture already came from the catalog,
-  // so the new-tool form is replaced by a banner (the work happens on the
-  // Visualizations step).
+  // ── Reusable field groups (shared across the entry branches) ───────────────
+  const identityFields = (
+    <Stack gap="md">
+      <div>
+        <Text size="sm" fw={600} mb={6}>
+          Tool source
+        </Text>
+        <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="sm">
+          {SOURCES.map((s) => {
+            const selected = s.value === tool.source;
+            return (
+              <Card
+                key={s.value}
+                withBorder
+                radius="md"
+                p="sm"
+                onClick={() => pickSource(s.value)}
+                style={{
+                  cursor: 'pointer',
+                  borderColor: selected ? 'var(--mantine-color-blue-filled)' : undefined,
+                  borderWidth: selected ? 2 : 1,
+                  background: selected ? 'var(--mantine-color-blue-light)' : undefined,
+                }}
+              >
+                <Group gap="sm" wrap="nowrap">
+                  <img src={s.logo} alt={s.label} height={24} width={24} style={{ objectFit: 'contain' }} />
+                  <Text fw={selected ? 700 : 500} size="sm">
+                    {s.label}
+                  </Text>
+                </Group>
+              </Card>
+            );
+          })}
+        </SimpleGrid>
+      </div>
+
+      <Paper withBorder p="md" radius="md">
+        <Group align="flex-end" gap="sm" mb="sm">
+          <TextInput
+            style={{ flex: 1 }}
+            label={active.urlLabel}
+            placeholder={active.placeholder}
+            value={sourceUrl}
+            onChange={(e) => setSourceUrl(e.currentTarget.value)}
+          />
+          {active.autoFetch && (
+            <Button
+              variant="light"
+              color="green"
+              loading={fetching}
+              leftSection={<Icon icon="mdi:cloud-download-outline" />}
+              onClick={importFromNfCore}
+            >
+              Import
+            </Button>
+          )}
+        </Group>
+        <Text size="xs" c="dimmed">
+          {active.autoFetch
+            ? "Fetches the module's meta.yml to pre-fill name, description, links and outputs."
+            : 'Stored as the tool homepage. Fill name & description below (auto-fetch not yet supported for this source).'}
+        </Text>
+      </Paper>
+
+      <SimpleGrid cols={{ base: 1, sm: 2 }}>
+        <TextInput
+          label="Tool id"
+          description="lowercase slug, folder name"
+          placeholder="mosdepth"
+          required
+          value={tool.id}
+          onChange={(e) => setTool({ id: slugify(e.currentTarget.value) })}
+        />
+        <TextInput
+          label="Tool name"
+          placeholder="mosdepth"
+          required
+          value={tool.name}
+          onChange={(e) => setTool({ name: e.currentTarget.value })}
+        />
+      </SimpleGrid>
+
+      <Textarea
+        label="Description (optional)"
+        autosize
+        minRows={2}
+        value={tool.description ?? ''}
+        onChange={(e) => setTool({ description: e.currentTarget.value })}
+      />
+    </Stack>
+  );
+
+  const outputFields = (slugError?: string) => (
+    <Paper withBorder p="md" radius="md" h="100%">
+      <Group gap="xs" mb="xs">
+        <Icon icon="mdi:file-document-outline" width={18} />
+        <Title order={5}>Output</Title>
+      </Group>
+      <Text size="xs" c="dimmed" mb="md">
+        The single file this catalog entry describes — recognized in a run by its path glob.
+      </Text>
+
+      {nfOutputs.length > 0 && (
+        <Select
+          label="nf-core output channel"
+          description="Auto-fills slug, path glob and description from meta.yml. Editable after."
+          placeholder="Pick an output to auto-fill…"
+          mb="md"
+          searchable
+          data={nfOutputs.map((o) => ({
+            value: o.name,
+            label: `${o.name} · ${o.pattern}`,
+          }))}
+          onChange={applyNfOutput}
+          leftSection={<Icon icon="mdi:magic-staff" width={16} />}
+        />
+      )}
+
+      <Stack gap="md">
+        <TextInput
+          label="Output slug"
+          description={`file & id → ${toolId}_${output.slug || '<slug>'}`}
+          placeholder="coverage"
+          required
+          error={slugError}
+          value={output.slug}
+          onChange={(e) => setOutput({ slug: slugify(e.currentTarget.value) })}
+        />
+        <TextInput
+          label="Path glob"
+          description="how a run's file is recognized"
+          placeholder="**/mosdepth/*.coverage.tsv"
+          required
+          value={output.path_glob}
+          onChange={(e) => setOutput({ path_glob: e.currentTarget.value })}
+        />
+        <Textarea
+          label="Output description (optional)"
+          autosize
+          minRows={2}
+          value={output.description ?? ''}
+          onChange={(e) => setOutput({ description: e.currentTarget.value })}
+        />
+      </Stack>
+    </Paper>
+  );
+
+  // ── Branch A — adding a visualization to an existing output (append mode) ──
+  // Identity + fixture already came from the catalog, so the form is replaced by
+  // a banner (the work happens on the Visualizations step).
   if (existing) {
     return (
       <Stack gap="lg">
@@ -153,169 +305,81 @@ export default function ToolForm({ catalog }: { catalog: CatalogManifest }) {
     );
   }
 
-  const duplicate = findDuplicateTool(catalog, tool);
+  // ── Branch B — adding a NEW output to an existing tool ─────────────────────
+  // Identity is locked to the catalog tool; the author writes a fresh output
+  // (slug/path_glob) here, then brings its own fixture + renders.
+  if (newOutputTarget) {
+    const slugClash = newOutputSlugClash(newOutputTarget, output.slug);
+    return (
+      <Stack gap="lg">
+        <Alert
+          color="teal"
+          variant="light"
+          icon={<Icon icon="mdi:file-plus-outline" />}
+          title={`Adding a new output to ${newOutputTarget.toolName}`}
+        >
+          <Text size="sm">
+            Reuses the tool's identity — export writes a new{' '}
+            <Code>
+              {newOutputTarget.dir}/{output.slug || '<slug>'}.yaml
+            </Code>{' '}
+            (+ its fixture). <Code>module.yaml</Code> is left untouched.
+          </Text>
+          <Group mt="sm">
+            <Button size="xs" variant="subtle" color="gray" onClick={reset}>
+              Start a new tool instead
+            </Button>
+          </Group>
+        </Alert>
 
+        {outputFields(
+          slugClash
+            ? `${output.slug} already exists on ${newOutputTarget.toolName} — pick a different slug`
+            : undefined,
+        )}
+      </Stack>
+    );
+  }
+
+  // ── Branch C — recognition-first entry ─────────────────────────────────────
+  const duplicate = findDuplicateTool(catalog, tool);
+  const match = duplicate && duplicate.tool.id !== dismissedMatchId ? duplicate : null;
+
+  const header = (
+    <div>
+      <Title order={3} style={{ fontFamily: 'Virgil', fontWeight: 400 }}>
+        Tool
+      </Title>
+      <Text c="dimmed" size="sm">
+        Identify the tool — id, name, or an nf-core <strong>Import</strong>. We check the catalog as
+        you type.
+      </Text>
+    </div>
+  );
+
+  // A recognized tool: identity full-width, the existing entry + its two actions
+  // below (routing supersedes new-output authoring).
+  if (match) {
+    return (
+      <Stack gap="lg">
+        {header}
+        {identityFields}
+        <RecognizedTool
+          tool={match.tool}
+          reason={match.reason}
+          onDismiss={() => setDismissedMatchId(match.tool.id)}
+        />
+      </Stack>
+    );
+  }
+
+  // No match → author a brand-new tool (identity + its single output).
   return (
     <Stack gap="lg">
-      <AddToExistingPanel catalog={catalog} duplicate={duplicate} />
-      {catalog.tools.length > 0 && <Divider label="or create a new tool" labelPosition="center" />}
-
-      <div>
-        <Title order={3} style={{ fontFamily: 'Virgil', fontWeight: 400 }}>
-          New tool
-        </Title>
-        <Text c="dimmed" size="sm">
-          Identity for <Code>module.yaml</Code> and the single output this entry describes.
-        </Text>
-      </div>
-
+      {header}
       <Grid gutter="xl">
-        {/* ── Left panel: tool identity ─────────────────────────────────── */}
-        <Grid.Col span={{ base: 12, md: 6 }}>
-          <Stack gap="md">
-            <div>
-              <Text size="sm" fw={600} mb={6}>
-                Tool source
-              </Text>
-              <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="sm">
-                {SOURCES.map((s) => {
-                  const selected = s.value === tool.source;
-                  return (
-                    <Card
-                      key={s.value}
-                      withBorder
-                      radius="md"
-                      p="sm"
-                      onClick={() => pickSource(s.value)}
-                      style={{
-                        cursor: 'pointer',
-                        borderColor: selected ? 'var(--mantine-color-blue-filled)' : undefined,
-                        borderWidth: selected ? 2 : 1,
-                        background: selected ? 'var(--mantine-color-blue-light)' : undefined,
-                      }}
-                    >
-                      <Group gap="sm" wrap="nowrap">
-                        <img src={s.logo} alt={s.label} height={24} width={24} style={{ objectFit: 'contain' }} />
-                        <Text fw={selected ? 700 : 500} size="sm">
-                          {s.label}
-                        </Text>
-                      </Group>
-                    </Card>
-                  );
-                })}
-              </SimpleGrid>
-            </div>
-
-            <Paper withBorder p="md" radius="md">
-              <Group align="flex-end" gap="sm" mb="sm">
-                <TextInput
-                  style={{ flex: 1 }}
-                  label={active.urlLabel}
-                  placeholder={active.placeholder}
-                  value={sourceUrl}
-                  onChange={(e) => setSourceUrl(e.currentTarget.value)}
-                />
-                {active.autoFetch && (
-                  <Button
-                    variant="light"
-                    color="green"
-                    loading={fetching}
-                    leftSection={<Icon icon="mdi:cloud-download-outline" />}
-                    onClick={importFromNfCore}
-                  >
-                    Import
-                  </Button>
-                )}
-              </Group>
-              <Text size="xs" c="dimmed">
-                {active.autoFetch
-                  ? "Fetches the module's meta.yml to pre-fill name, description, links and outputs."
-                  : 'Stored as the tool homepage. Fill name & description below (auto-fetch not yet supported for this source).'}
-              </Text>
-            </Paper>
-
-            <SimpleGrid cols={{ base: 1, sm: 2 }}>
-              <TextInput
-                label="Tool id"
-                description="lowercase slug, folder name"
-                placeholder="mosdepth"
-                required
-                value={tool.id}
-                onChange={(e) => setTool({ id: slugify(e.currentTarget.value) })}
-              />
-              <TextInput
-                label="Tool name"
-                placeholder="mosdepth"
-                required
-                value={tool.name}
-                onChange={(e) => setTool({ name: e.currentTarget.value })}
-              />
-            </SimpleGrid>
-
-            <Textarea
-              label="Description (optional)"
-              autosize
-              minRows={2}
-              value={tool.description ?? ''}
-              onChange={(e) => setTool({ description: e.currentTarget.value })}
-            />
-          </Stack>
-        </Grid.Col>
-
-        {/* ── Right panel: output ───────────────────────────────────────── */}
-        <Grid.Col span={{ base: 12, md: 6 }}>
-          <Paper withBorder p="md" radius="md" h="100%">
-            <Group gap="xs" mb="xs">
-              <Icon icon="mdi:file-document-outline" width={18} />
-              <Title order={5}>Output</Title>
-            </Group>
-            <Text size="xs" c="dimmed" mb="md">
-              The single file this catalog entry describes — recognized in a run by its path glob.
-            </Text>
-
-            {nfOutputs.length > 0 && (
-              <Select
-                label="nf-core output channel"
-                description="Auto-fills slug, path glob and description from meta.yml. Editable after."
-                placeholder="Pick an output to auto-fill…"
-                mb="md"
-                searchable
-                data={nfOutputs.map((o) => ({
-                  value: o.name,
-                  label: `${o.name} · ${o.pattern}`,
-                }))}
-                onChange={applyNfOutput}
-                leftSection={<Icon icon="mdi:magic-staff" width={16} />}
-              />
-            )}
-
-            <Stack gap="md">
-              <TextInput
-                label="Output slug"
-                description={`file & id → ${toolId}_${output.slug || '<slug>'}`}
-                placeholder="coverage"
-                required
-                value={output.slug}
-                onChange={(e) => setOutput({ slug: slugify(e.currentTarget.value) })}
-              />
-              <TextInput
-                label="Path glob"
-                description="how a run's file is recognized"
-                placeholder="**/mosdepth/*.coverage.tsv"
-                required
-                value={output.path_glob}
-                onChange={(e) => setOutput({ path_glob: e.currentTarget.value })}
-              />
-              <Textarea
-                label="Output description (optional)"
-                autosize
-                minRows={2}
-                value={output.description ?? ''}
-                onChange={(e) => setOutput({ description: e.currentTarget.value })}
-              />
-            </Stack>
-          </Paper>
-        </Grid.Col>
+        <Grid.Col span={{ base: 12, md: 6 }}>{identityFields}</Grid.Col>
+        <Grid.Col span={{ base: 12, md: 6 }}>{outputFields()}</Grid.Col>
       </Grid>
     </Stack>
   );
