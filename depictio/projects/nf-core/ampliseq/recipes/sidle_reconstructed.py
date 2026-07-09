@@ -16,6 +16,9 @@ SOURCES: list[RecipeSource] = [
         ref="reconstructed",
         path="sidle/reconstructed/reconstructed_merged.tsv",
         format="TSV",
+        # The standard AWS megatest run never runs the multiregion/SIDLE sub-workflow,
+        # so this path never appears there regardless of nf-core version.
+        megatest_optional=True,
     ),
 ]
 

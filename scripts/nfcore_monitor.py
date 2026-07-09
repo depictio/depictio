@@ -295,11 +295,12 @@ def _iter_recipe_dcs(template: dict, version: str):
 def collect_recipe_source_paths(
     template: dict, pipeline: str, version: str
 ) -> list[tuple[str, str, str, bool]]:
-    """Extract ``(dc_tag, source_ref, resolved_path, optional)`` for every recipe.
+    """Extract ``(dc_tag, source_ref, resolved_path, allow_missing)`` for every recipe.
 
     Loads each transformed DC's recipe, takes its file-based ``SOURCES`` (skipping
     ``dc_ref`` joins), applies the DC's ``source_overrides``, and substitutes
-    template variables.
+    template variables. ``allow_missing`` is set for sources the megatest can never
+    cover (``megatest_optional``) as well as ``optional`` ones.
     """
     variables = _template_vars(template)
     entries: list[tuple[str, str, str, bool]] = []
@@ -313,7 +314,8 @@ def collect_recipe_source_paths(
             raw = overrides.get(src.ref, src.path)
             if not raw:
                 continue
-            entries.append((tag, src.ref, substitute_vars(raw, variables), bool(src.optional)))
+            allow_missing = bool(src.optional or src.megatest_optional)
+            entries.append((tag, src.ref, substitute_vars(raw, variables), allow_missing))
     return entries
 
 
@@ -361,6 +363,13 @@ def _validate_one_recipe(
         if "{" in rel:
             return RecipeCheck(dc_tag, recipe_name, "SKIPPED", f"unresolved var in {rel}")
         if rel not in sizes:
+            if src.megatest_optional:
+                return RecipeCheck(
+                    dc_tag,
+                    recipe_name,
+                    "SKIPPED",
+                    f"{rel} absent — not covered by the standard megatest profile",
+                )
             return RecipeCheck(dc_tag, recipe_name, "FAIL", f"source file absent: {rel}")
         if sizes[rel] > max_file_mb * 1_000_000:
             return RecipeCheck(
@@ -476,8 +485,8 @@ def build_drift_report(
     key_set = set(keys)
     resolved: list[tuple[str, str, str]] = []
     missing: list[tuple[str, str, str]] = []
-    for tag, ref, path, optional in source_paths:
-        if _path_resolves(path, keys, key_set) or optional:
+    for tag, ref, path, allow_missing in source_paths:
+        if _path_resolves(path, keys, key_set) or allow_missing:
             resolved.append((tag, ref, path))
         else:
             missing.append((tag, ref, path))

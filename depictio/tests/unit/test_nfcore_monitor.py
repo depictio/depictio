@@ -142,6 +142,69 @@ def test_validate_one_recipe_skips_dc_ref_recipes(nfm: ModuleType, tmp_path: Pat
     assert "dc_ref" in result.detail
 
 
+def test_validate_one_recipe_skips_megatest_optional_missing_source(
+    nfm: ModuleType, tmp_path: Path
+) -> None:
+    # A source flagged megatest_optional (e.g. multiregion/SIDLE output the standard
+    # megatest profile never produces) is SKIPPED, not FAILed, when absent.
+    pytest.importorskip("depictio.recipes")  # needs the editable install (present in CI)
+    from types import SimpleNamespace
+
+    src = SimpleNamespace(
+        dc_ref=None,
+        glob_pattern=None,
+        path="sidle/reconstructed/reconstructed_merged.tsv",
+        ref="reconstructed",
+        megatest_optional=True,
+    )
+    module = SimpleNamespace(SOURCES=[src])
+    result = nfm._validate_one_recipe(
+        "sidle_reconstructed",
+        "nf-core/ampliseq/sidle_reconstructed.py",
+        module,
+        {},
+        {},
+        "ampliseq/results-x/",
+        {},  # no keys -> source is "absent"
+        tmp_path,
+        "2.16.0",
+        50.0,
+    )
+    assert result.status == "SKIPPED"
+    assert "not covered by the standard megatest profile" in result.detail
+
+
+def test_validate_one_recipe_fails_on_missing_required_source(
+    nfm: ModuleType, tmp_path: Path
+) -> None:
+    # A regular (non-megatest_optional) missing source still fails the check.
+    pytest.importorskip("depictio.recipes")  # needs the editable install (present in CI)
+    from types import SimpleNamespace
+
+    src = SimpleNamespace(
+        dc_ref=None,
+        glob_pattern=None,
+        path="qiime2/ancombc/gone.csv",
+        ref="lfc",
+        megatest_optional=False,
+    )
+    module = SimpleNamespace(SOURCES=[src])
+    result = nfm._validate_one_recipe(
+        "ancombc",
+        "qiime2/ancombc.py",
+        module,
+        {},
+        {},
+        "ampliseq/results-x/",
+        {},
+        tmp_path,
+        "2.16.0",
+        50.0,
+    )
+    assert result.status == "FAIL"
+    assert "source file absent" in result.detail
+
+
 def test_resolve_results_prefix_with_explicit_hash(nfm: ModuleType) -> None:
     # No network: an explicit hash short-circuits S3 discovery.
     assert nfm.resolve_results_prefix("ampliseq", "deadbeef") == "ampliseq/results-deadbeef/"

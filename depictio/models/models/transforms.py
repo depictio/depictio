@@ -15,6 +15,11 @@ class RecipeSource(BaseModel):
     format: str = "CSV"  # CSV, TSV, Parquet
     read_kwargs: dict | None = None  # Extra kwargs passed to polars read function
     optional: bool = False  # If True and dc_ref not resolvable, passes None to transform()
+    # If True, nfcore_monitor.py won't fail a drift report when this file is absent from
+    # the AWS megatest results — for sources only produced by a sub-workflow/profile the
+    # standard megatest run never exercises (e.g. multiregion/SIDLE), so no megatest run
+    # can ever satisfy them regardless of nf-core version.
+    megatest_optional: bool = False
 
     model_config = ConfigDict(extra="forbid")
 
