@@ -1,0 +1,141 @@
+# Depictio — external S3 / no bundled MinIO.
+# Same stack as the root docker-compose.yaml but the `minio` service is dropped;
+# point Depictio at your own S3 / MinIO endpoint via the .env vars below.
+#
+# Run:  docker compose -f docker-compose/docker-compose.no-minio.yaml up -d
+#
+# Required .env (all prefixed DEPICTIO_MINIO_ — see S3DepictioCLIConfig):
+#   DEPICTIO_MINIO_EXTERNAL_SERVICE=true          # S3 lives outside this compose network (required)
+#   DEPICTIO_MINIO_PUBLIC_URL=https://s3.example.com   # full endpoint URL (host[:port])
+#   DEPICTIO_MINIO_ROOT_USER=<access-key>         # S3 access key
+#   DEPICTIO_MINIO_ROOT_PASSWORD=<secret-key>     # S3 secret key (>= 8 chars, not a default)
+# Optional:
+#   DEPICTIO_MINIO_BUCKET=depictio-bucket         # target bucket (default shown)
+#   DEPICTIO_MINIO_VERIFY_TLS=true                # set false only for self-signed dev certs
+
+services:
+  mongo:
+    image: mongo:8.0.14
+    container_name: mongo
+    command: mongod --port 27018
+    volumes:
+      - mongo_data:/data/db
+    # Internal-only: no host port — don't publish the DB.
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --port 27018 --eval 'db.adminCommand(\"ping\")'"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  redis:
+    image: redis:8.2.1
+    container_name: redis
+    volumes:
+      - redis_data:/data
+    command: redis-server
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 30s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  # No `minio` service here — external S3 is supplied via the DEPICTIO_MINIO_* vars above.
+
+  depictio-backend:
+    image: ghcr.io/depictio/depictio-api:${DEPICTIO_VERSION:-1.1.4}
+    container_name: depictio-backend
+    ports:
+      # Loopback-only: front with a TLS proxy for external access.
+      - 127.0.0.1:8058:8058
+    volumes:
+      - depictio_keys:/app/depictio/keys
+      # Shared worker→backend: worker writes screenshots, backend serves them.
+      - depictio_screenshots:/app/depictio/api/static/screenshots
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DEPICTIO_AUTH_SINGLE_USER_MODE: "${DEPICTIO_AUTH_SINGLE_USER_MODE:-true}"
+      DEPICTIO_MINIO_ROOT_USER: "${DEPICTIO_MINIO_ROOT_USER:-minio}"
+      DEPICTIO_MINIO_ROOT_PASSWORD: "${DEPICTIO_MINIO_ROOT_PASSWORD:-minio123}"
+      DEPICTIO_BOOTSTRAP_ADMIN_EMAIL: "${DEPICTIO_BOOTSTRAP_ADMIN_EMAIL:-}"
+      DEPICTIO_BOOTSTRAP_ADMIN_PASSWORD: "${DEPICTIO_BOOTSTRAP_ADMIN_PASSWORD:-}"
+      DEPICTIO_BOOTSTRAP_SEED_TEST_USER: "${DEPICTIO_BOOTSTRAP_SEED_TEST_USER:-false}"
+      DEPICTIO_BOOTSTRAP_TEST_USER_EMAIL: "${DEPICTIO_BOOTSTRAP_TEST_USER_EMAIL:-test_user@example.com}"
+      DEPICTIO_BOOTSTRAP_TEST_USER_PASSWORD: "${DEPICTIO_BOOTSTRAP_TEST_USER_PASSWORD:-test_pwd}"
+    command: ["/app/run_fastapi.sh"]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8058/health > /dev/null"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+    # No minio dependency — S3 is external and reached over the network.
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  depictio-viewer:
+    image: ghcr.io/depictio/depictio-viewer:${DEPICTIO_VERSION:-1.1.4}
+    container_name: depictio-viewer
+    ports:
+      - 5080:8080
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
+    depends_on:
+      depictio-backend:
+        condition: service_healthy
+
+  depictio-celery-worker:
+    container_name: depictio-celery-worker
+    # Always enabled — the dashboard editor (stepper / design mode) needs it.
+    image: ghcr.io/depictio/depictio-worker:${DEPICTIO_VERSION:-1.1.4}
+    volumes:
+      - depictio_keys:/app/depictio/keys
+      # Shared with the backend (see above) — worker writes screenshots here.
+      - depictio_screenshots:/app/depictio/api/static/screenshots
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DEPICTIO_CONTEXT: "server"
+      DEPICTIO_AUTH_SINGLE_USER_MODE: "${DEPICTIO_AUTH_SINGLE_USER_MODE:-true}"
+      DEPICTIO_MINIO_ROOT_USER: "${DEPICTIO_MINIO_ROOT_USER:-minio}"
+      DEPICTIO_MINIO_ROOT_PASSWORD: "${DEPICTIO_MINIO_ROOT_PASSWORD:-minio123}"
+    command: ["/app/run_celery_worker.sh"]
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A depictio.api.celery_worker:celery_app inspect ping -d celery@$$HOSTNAME || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      depictio-backend:
+        condition: service_healthy
+
+volumes:
+  mongo_data:
+    driver: local
+  redis_data:
+    driver: local
+  # No minio_data volume — storage is external.
+  depictio_keys:
+    driver: local
+  depictio_screenshots:
+    driver: local
