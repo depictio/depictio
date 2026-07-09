@@ -66,14 +66,16 @@ export default function ToolForm({ catalog }: { catalog: CatalogManifest }) {
   const newOutputTarget = useStudioStore((s) => s.newOutputTarget);
   const setStep = useStudioStore((s) => s.setStep);
   const reset = useStudioStore((s) => s.reset);
+  // The catalog tool id the author has dismissed as "not my tool", so the
+  // recognized panel yields to new-tool authoring until the identity changes to
+  // a *different* match. Held in the store so a Back/Next round-trip (which
+  // unmounts this step) doesn't resurface a dismissed match.
+  const dismissedMatchId = useStudioStore((s) => s.dismissedMatchId);
+  const setDismissedMatch = useStudioStore((s) => s.setDismissedMatch);
   const [fetching, setFetching] = useState(false);
   // File output channels parsed from the last nf-core Import — populate the
   // output-channel picker so slug / path_glob / description can be auto-filled.
   const [nfOutputs, setNfOutputs] = useState<NfCoreOutput[]>([]);
-  // The catalog tool id the author has dismissed as "not my tool", so the
-  // recognized panel yields to new-tool authoring until the identity changes to
-  // a *different* match.
-  const [dismissedMatchId, setDismissedMatchId] = useState<string | null>(null);
 
   const active = SOURCES.find((s) => s.value === tool.source) ?? SOURCES[0];
   const sourceUrl = (active.field === 'nf_core_url' ? tool.nf_core_url : tool.homepage) ?? '';
@@ -367,7 +369,7 @@ export default function ToolForm({ catalog }: { catalog: CatalogManifest }) {
         <RecognizedTool
           tool={match.tool}
           reason={match.reason}
-          onDismiss={() => setDismissedMatchId(match.tool.id)}
+          onDismiss={() => setDismissedMatch(match.tool.id)}
         />
       </Stack>
     );

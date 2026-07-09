@@ -50,6 +50,10 @@ interface StudioState {
   renders: RenderSpec[];
   existing: ExistingTarget | null;
   newOutputTarget: NewOutputTarget | null;
+  /** Catalog tool id the author dismissed as "not my tool" — kept in the store
+   *  (not ToolForm local state) so it survives the Tool step unmounting on
+   *  Back/Next, instead of resurfacing the dismissed match. */
+  dismissedMatchId: string | null;
 
   setStep: (step: number) => void;
   setTool: (patch: Partial<ToolMeta>) => void;
@@ -62,6 +66,8 @@ interface StudioState {
   startExisting: (tool: ManifestTool, output: ManifestOutput) => void;
   /** Enter "add a new output to an existing tool" mode from the manifest. */
   startNewOutput: (tool: ManifestTool) => void;
+  /** Dismiss the recognized match for a catalog tool id (or clear with null). */
+  setDismissedMatch: (toolId: string | null) => void;
   reset: () => void;
 }
 
@@ -109,6 +115,7 @@ export const useStudioStore = create<StudioState>((set) => ({
   renders: [],
   existing: null,
   newOutputTarget: null,
+  dismissedMatchId: null,
 
   setStep: (step) => set({ step }),
   setTool: (patch) => set((s) => ({ tool: { ...s.tool, ...patch } })),
@@ -179,6 +186,7 @@ export const useStudioStore = create<StudioState>((set) => ({
         existingOutputSlugs: tool.outputs.map((o) => o.slug),
       },
     })),
+  setDismissedMatch: (toolId) => set({ dismissedMatchId: toolId }),
   reset: () =>
     set({
       step: 0,
@@ -188,5 +196,6 @@ export const useStudioStore = create<StudioState>((set) => ({
       renders: [],
       existing: null,
       newOutputTarget: null,
+      dismissedMatchId: null,
     }),
 }));
