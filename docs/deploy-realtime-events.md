@@ -117,15 +117,17 @@ DC `750a1b2c3d4e5f6a7b8c9d10`); override any by exporting it first. The essentia
 | Var | Default | Purpose |
 |-----|---------|---------|
 | `SVLT_EXP_ROOT` | — (**required**) | your SVLT experiment directory (holds the simulate script + inputs) |
-| `SVLT_API_TOKEN` | from `admin_config.yaml` if present | Bearer token for the API notify — set it explicitly outside a worktree |
+| `SVLT_API_TOKEN` | read from `~/.depictio/CLI.yaml` (§2) if present | Bearer token for the API notify — set it explicitly if your CLI config lives elsewhere (override the path with `CLI_CONFIG`) |
 | `SVLT_ENV` | `svlt-simulate` | conda/micromamba env holding svlt + the extension |
 | `SVLT_SCRIPT` | `$SVLT_EXP_ROOT/proj0039-exp0002-simulate-experiment.py` | experiment entry point |
 | `SVLT_DC_ID` | `750a1b2c3d4e5f6a7b8c9d10` | target data collection → S3 prefix + Delta path |
 | `SVLT_EXTRA_ARGS` | *(empty)* | extra flags for the simulate script, e.g. `--delay 1 --port 6221` |
 
-In a worktree the script auto-derives ports, MinIO creds, and the token from
-`.env.instance` + `admin_config.yaml`; outside one it uses the stock defaults and you
-supply `SVLT_API_TOKEN`.
+Outside a checkout the script reads the token from your `~/.depictio/CLI.yaml`
+(from §2) and uses the stock defaults for everything else — so once the CLI config
+is in place, `SVLT_EXP_ROOT` is the only thing you must set. In a worktree it
+additionally auto-derives ports + MinIO creds from `.env.instance` (and can fall
+back to the checkout's `admin_config.yaml` for the token).
 
 Open `http://localhost:5080/dashboard/750a1b2c3d4e5f6a7b8c9d20` and watch acquisitions land
 live — same refresh as §4, but with real segmented-cell images and morphology.
