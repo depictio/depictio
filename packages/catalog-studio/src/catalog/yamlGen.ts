@@ -151,25 +151,38 @@ const indentBlock = (text: string, spaces: number) =>
     .map((l) => (l ? ' '.repeat(spaces) + l : l))
     .join('\n');
 
+export interface AppendResult {
+  /** The merged YAML text (what gets committed / downloaded). */
+  yaml: string;
+  /** 0-based indices (into `yaml.split('\n')`) of the inserted render lines,
+   *  so the Export preview can highlight exactly what was appended. */
+  addedLines: number[];
+}
+
 /**
  * Append new `renders_as` items to an existing output YAML's raw text, leaving
- * everything else (comments, identity, fixture, existing renders) untouched.
- * Handles a populated block, an inline empty `renders_as: []`, and a missing
- * `renders_as:` key. Used for "add a visualization to an existing tool".
+ * everything else (comments, identity, fixture, existing renders) untouched, and
+ * report which lines were inserted (for the preview highlight). Handles a
+ * populated block, an inline empty `renders_as: []`, and a missing `renders_as:`
+ * key. Used for "add a visualization to an existing tool".
  */
-export function appendRendersToYaml(rawYaml: string, renders: RenderSpec[]): string {
-  if (!renders.length) return rawYaml;
+export function appendRenders(rawYaml: string, renders: RenderSpec[]): AppendResult {
+  if (!renders.length) return { yaml: rawYaml, addedLines: [] };
   const itemLines = renders.map((r) => indentBlock(renderToSnippet(r), 2)).join('\n').split('\n');
-  const lines = rawYaml.replace(/\n*$/, '\n').split('\n');
+  const range = (start: number) => Array.from({ length: itemLines.length }, (_, i) => start + i);
+  const lines = rawYaml.replace(/\n*$/, '\n').split('\n'); // trailing '' from the final \n
   const idx = lines.findIndex((l) => /^renders_as\s*:/.test(l));
 
   if (idx === -1) {
-    return lines.join('\n').replace(/\n*$/, '\n') + 'renders_as:\n' + itemLines.join('\n') + '\n';
+    // No renders_as key: append a fresh block at EOF (drop the trailing '' first).
+    const body = lines.slice(0, -1);
+    const merged = [...body, 'renders_as:', ...itemLines];
+    return { yaml: merged.join('\n') + '\n', addedLines: range(body.length + 1) };
   }
   if (/^renders_as\s*:\s*\[\s*\]\s*$/.test(lines[idx])) {
     lines[idx] = 'renders_as:';
     lines.splice(idx + 1, 0, ...itemLines);
-    return lines.join('\n').replace(/\n*$/, '\n');
+    return { yaml: lines.join('\n').replace(/\n*$/, '\n'), addedLines: range(idx + 1) };
   }
   // Find the end of the block: the first later line at column 0 that isn't blank
   // (a new top-level key or comment), else EOF; then back up over blank lines so
@@ -179,7 +192,12 @@ export function appendRendersToYaml(rawYaml: string, renders: RenderSpec[]): str
   let insertAt = end;
   while (insertAt > idx + 1 && lines[insertAt - 1].trim() === '') insertAt--;
   lines.splice(insertAt, 0, ...itemLines);
-  return lines.join('\n').replace(/\n*$/, '\n');
+  return { yaml: lines.join('\n').replace(/\n*$/, '\n'), addedLines: range(insertAt) };
+}
+
+/** As {@link appendRenders} but returning only the merged YAML text. */
+export function appendRendersToYaml(rawYaml: string, renders: RenderSpec[]): string {
+  return appendRenders(rawYaml, renders).yaml;
 }
 
 export function genModuleYaml(tool: ToolMeta): string {
@@ -190,6 +208,7 @@ export function genModuleYaml(tool: ToolMeta): string {
   ];
   if (tool.description) lines.push(`description: ${flowScalar(tool.description)}`);
   if (tool.homepage) lines.push(`homepage: ${flowScalar(tool.homepage)}`);
+  if (tool.source_url) lines.push(`source_url: ${flowScalar(tool.source_url)}`);
   if (tool.nf_core_url)
     lines.push(`nf_core_url: ${flowScalar(canonicalNfCoreUrl(tool.nf_core_url))}`);
   if (tool.biotools_url) lines.push(`biotools_url: ${flowScalar(tool.biotools_url)}`);

@@ -8,16 +8,8 @@
  * or a direct meta.yml URL. Returns a small metadata bag; missing fields are ''.
  */
 import yaml from 'js-yaml';
-import type { NfCoreOutput } from '../types';
-
-export interface NfCoreMeta {
-  name: string;
-  description: string;
-  homepage: string;
-  biotools_url: string;
-  /** File output channels parsed from the `output:` section (for auto-fill). */
-  outputs: NfCoreOutput[];
-}
+import type { ExtractedMeta, OutputChannel } from '../types';
+import { githubRawUrl } from './githubRaw';
 
 /**
  * Canonicalise a pasted nf-core module URL to the module-*directory* form the
@@ -36,17 +28,11 @@ export function canonicalNfCoreUrl(url: string): string {
     .replace(/\/+$/, '');
 }
 
-/** Turn a module tree URL into the raw meta.yml URL. */
+/** Turn a module tree URL (or a direct meta.yml page) into the raw meta.yml URL. */
 export function metaYmlUrl(moduleUrl: string): string {
-  if (moduleUrl.endsWith('meta.yml')) {
-    return moduleUrl.replace('github.com', 'raw.githubusercontent.com').replace('/tree/', '/').replace('/blob/', '/');
-  }
   // .../tree/<ref>/modules/nf-core/<tool>  →  raw .../<ref>/modules/nf-core/<tool>/meta.yml
-  const raw = moduleUrl
-    .replace('github.com', 'raw.githubusercontent.com')
-    .replace('/tree/', '/')
-    .replace(/\/+$/, '');
-  return `${raw}/meta.yml`;
+  const raw = githubRawUrl(moduleUrl).replace(/\/+$/, '');
+  return raw.endsWith('meta.yml') ? raw : `${raw}/meta.yml`;
 }
 
 interface MetaYml {
@@ -95,8 +81,8 @@ function findFileDescriptor(node: unknown): { pattern: string; description: stri
 /** Parse the `output:` section into the file channels we can auto-fill from.
  *  Tolerates both the modern map form (`output: { channel: … }`) and the older
  *  list form (`output: [ { channel: … } ]`). Non-file channels are skipped. */
-export function parseNfCoreOutputs(output: unknown): NfCoreOutput[] {
-  const outs: NfCoreOutput[] = [];
+export function parseOutputChannels(output: unknown): OutputChannel[] {
+  const outs: OutputChannel[] = [];
   const push = (name: string, value: unknown) => {
     const d = findFileDescriptor(value);
     if (d) {
@@ -120,7 +106,7 @@ export function parseNfCoreOutputs(output: unknown): NfCoreOutput[] {
   return outs;
 }
 
-export async function fetchNfCoreMeta(moduleUrl: string): Promise<NfCoreMeta> {
+export async function fetchNfCoreMeta(moduleUrl: string): Promise<ExtractedMeta> {
   const url = metaYmlUrl(moduleUrl.trim());
   const res = await fetch(url);
   if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
@@ -146,6 +132,7 @@ export async function fetchNfCoreMeta(moduleUrl: string): Promise<NfCoreMeta> {
     description,
     homepage,
     biotools_url: biotools,
-    outputs: parseNfCoreOutputs(doc.output),
+    source_url: canonicalNfCoreUrl(moduleUrl.trim()),
+    outputs: parseOutputChannels(doc.output),
   };
 }

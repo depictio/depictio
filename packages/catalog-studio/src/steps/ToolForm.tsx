@@ -4,9 +4,18 @@ import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
 import { useStudioStore, newOutputSlugClash } from '../state/useStudioStore';
 import { fetchNfCoreMeta } from '../catalog/fromNfCore';
+import { fetchSnakemakeMeta } from '../catalog/fromSnakemake';
+import { fetchGalaxyMeta } from '../catalog/fromGalaxy';
 import { findDuplicateTool, type CatalogManifest } from '../catalog/catalog';
 import RecognizedTool from './RecognizedTool';
-import type { NfCoreOutput, ToolSource } from '../types';
+import type { ExtractedMeta, OutputChannel, ToolSource } from '../types';
+
+/** Client-side metadata extractor per tool source (the one-click Import). */
+const EXTRACTORS: Record<ToolSource, (url: string) => Promise<ExtractedMeta>> = {
+  'nf-core': fetchNfCoreMeta,
+  snakemake: fetchSnakemakeMeta,
+  galaxy: fetchGalaxyMeta,
+};
 
 const slugify = (s: string) =>
   s
@@ -22,9 +31,11 @@ interface SourceMeta {
   logo: string;
   urlLabel: string;
   placeholder: string;
-  /** Which module.yaml field the source URL lands in. */
-  field: 'nf_core_url' | 'homepage';
+  /** Which module.yaml field the pasted source URL lands in. */
+  field: 'nf_core_url' | 'source_url';
   autoFetch: boolean;
+  /** Helper text under the URL input (source-specific fetch caveats). */
+  hint: string;
 }
 
 const SOURCES: SourceMeta[] = [
@@ -36,24 +47,27 @@ const SOURCES: SourceMeta[] = [
     placeholder: 'https://github.com/nf-core/modules/tree/master/modules/nf-core/<tool>',
     field: 'nf_core_url',
     autoFetch: true,
+    hint: "Fetches the module's meta.yml to pre-fill name, description, links and outputs.",
   },
   {
     value: 'snakemake',
     label: 'Snakemake wrapper',
     logo: `${BASE}logos/workflows/snakemake.svg`,
     urlLabel: 'Snakemake wrapper URL',
-    placeholder: 'https://snakemake-wrappers.readthedocs.io/en/stable/wrappers/<tool>.html',
-    field: 'homepage',
-    autoFetch: false,
+    placeholder: 'https://github.com/snakemake/snakemake-wrappers/tree/master/bio/<tool>',
+    field: 'source_url',
+    autoFetch: true,
+    hint: "Fetches the wrapper's meta.yaml to pre-fill name, description and homepage. A readthedocs wrapper page works too.",
   },
   {
     value: 'galaxy',
     label: 'Galaxy tool',
     logo: `${BASE}logos/workflows/galaxy.png`,
     urlLabel: 'Galaxy tool URL',
-    placeholder: 'https://toolshed.g2.bx.psu.edu/view/<owner>/<tool>',
-    field: 'homepage',
-    autoFetch: false,
+    placeholder: 'https://github.com/galaxyproject/tools-iuc/blob/main/tools/<tool>/<tool>.xml',
+    field: 'source_url',
+    autoFetch: true,
+    hint: 'Fetches the tool XML (a GitHub .xml URL) to pre-fill name, description and outputs. Fields defined via macros come back blank.',
   },
 ];
 
@@ -73,46 +87,67 @@ export default function ToolForm({ catalog }: { catalog: CatalogManifest }) {
   const dismissedMatchId = useStudioStore((s) => s.dismissedMatchId);
   const setDismissedMatch = useStudioStore((s) => s.setDismissedMatch);
   const [fetching, setFetching] = useState(false);
-  // File output channels parsed from the last nf-core Import — populate the
+  // File output channels parsed from the last Import — populate the
   // output-channel picker so slug / path_glob / description can be auto-filled.
-  const [nfOutputs, setNfOutputs] = useState<NfCoreOutput[]>([]);
+  const [extractedOutputs, setExtractedOutputs] = useState<OutputChannel[]>([]);
 
   const active = SOURCES.find((s) => s.value === tool.source) ?? SOURCES[0];
-  const sourceUrl = (active.field === 'nf_core_url' ? tool.nf_core_url : tool.homepage) ?? '';
+  const sourceUrl = (active.field === 'nf_core_url' ? tool.nf_core_url : tool.source_url) ?? '';
 
   const pickSource = (value: ToolSource) => {
-    // Clear both URL slots when switching so a stale URL doesn't leak across
-    // sources; the field the new source writes to is chosen on next input.
-    setTool({ source: value, nf_core_url: undefined, homepage: undefined });
-    setNfOutputs([]);
+    // Full identity reset when switching source, so a name/id/link from the
+    // previous source can't linger (a Snakemake "samtools" must not survive a
+    // switch to Galaxy). The author re-imports or retypes for the new source.
+    setTool({
+      source: value,
+      id: '',
+      name: '',
+      description: undefined,
+      nf_core_url: undefined,
+      source_url: undefined,
+      homepage: undefined,
+      biotools_url: undefined,
+    });
+    setExtractedOutputs([]);
   };
 
   const setSourceUrl = (url: string) => {
-    setTool(active.field === 'nf_core_url' ? { nf_core_url: url } : { homepage: url });
+    setTool(active.field === 'nf_core_url' ? { nf_core_url: url } : { source_url: url });
   };
 
-  const importFromNfCore = async () => {
+  const importMeta = async () => {
     if (!sourceUrl) {
-      notifications.show({ color: 'red', message: 'Paste the nf-core module URL first.' });
+      notifications.show({ color: 'red', message: `Paste the ${active.label} URL first.` });
       return;
     }
     setFetching(true);
     try {
-      const meta = await fetchNfCoreMeta(sourceUrl);
+      const meta = await EXTRACTORS[tool.source](sourceUrl);
       setTool({
-        id: tool.id || slugify(meta.name),
-        name: tool.name || meta.name,
-        description: tool.description || meta.description,
-        homepage: meta.homepage,
-        biotools_url: meta.biotools_url,
+        // Import is an explicit "pull metadata" action, so fetched values win
+        // over whatever is in the form (a stale name from a previous source, or
+        // a re-import of a different URL). Fields the source doesn't declare are
+        // cleared rather than left stale.
+        id: meta.name ? slugify(meta.name) : tool.id,
+        name: meta.name || tool.name,
+        description: meta.description || undefined,
+        // nf-core keeps its URL in nf_core_url (canonicalised on export); other
+        // sources record the fetched location in source_url — normalise the
+        // pasted value to the GitHub form that was actually fetched.
+        ...(tool.source !== 'nf-core' ? { source_url: meta.source_url } : {}),
+        homepage: meta.homepage || undefined,
+        biotools_url: meta.biotools_url || undefined,
       });
-      setNfOutputs(meta.outputs);
+      setExtractedOutputs(meta.outputs);
       const outMsg = meta.outputs.length
         ? ` — ${meta.outputs.length} output${meta.outputs.length > 1 ? 's' : ''} found, pick one on the right.`
-        : ' (no file outputs found in meta.yml — fill the Output manually).';
+        : ' (no file outputs found — fill the Output manually).';
       notifications.show({ color: 'teal', message: `Imported metadata for ${meta.name}${outMsg}` });
     } catch (e) {
-      notifications.show({ color: 'red', message: `nf-core fetch failed: ${(e as Error).message}` });
+      notifications.show({
+        color: 'red',
+        message: `${active.label} fetch failed: ${(e as Error).message}`,
+      });
     } finally {
       setFetching(false);
     }
@@ -120,12 +155,14 @@ export default function ToolForm({ catalog }: { catalog: CatalogManifest }) {
 
   const toolId = tool.id || '<tool>';
 
-  const applyNfOutput = (name: string | null) => {
-    const chan = nfOutputs.find((o) => o.name === name);
+  const applyOutput = (name: string | null) => {
+    const chan = extractedOutputs.find((o) => o.name === name);
     if (!chan) return;
     setOutput({
       slug: slugify(chan.name),
-      path_glob: `**/${toolId}/${chan.pattern}`,
+      // Some sources (Snakemake) describe outputs in prose with no glob — leave
+      // path_glob for the author to complete rather than emit a dangling `**/`.
+      path_glob: chan.pattern ? `**/${toolId}/${chan.pattern}` : output.path_glob,
       description: chan.description || output.description,
     });
   };
@@ -181,16 +218,14 @@ export default function ToolForm({ catalog }: { catalog: CatalogManifest }) {
               color="green"
               loading={fetching}
               leftSection={<Icon icon="mdi:cloud-download-outline" />}
-              onClick={importFromNfCore}
+              onClick={importMeta}
             >
               Import
             </Button>
           )}
         </Group>
         <Text size="xs" c="dimmed">
-          {active.autoFetch
-            ? "Fetches the module's meta.yml to pre-fill name, description, links and outputs."
-            : 'Stored as the tool homepage. Fill name & description below (auto-fetch not yet supported for this source).'}
+          {active.hint}
         </Text>
       </Paper>
 
@@ -232,18 +267,18 @@ export default function ToolForm({ catalog }: { catalog: CatalogManifest }) {
         The single file this catalog entry describes — recognized in a run by its path glob.
       </Text>
 
-      {nfOutputs.length > 0 && (
+      {extractedOutputs.length > 0 && (
         <Select
-          label="nf-core output channel"
-          description="Auto-fills slug, path glob and description from meta.yml. Editable after."
+          label="Output channel"
+          description="Auto-fills slug, path glob and description from the source metadata. Editable after."
           placeholder="Pick an output to auto-fill…"
           mb="md"
           searchable
-          data={nfOutputs.map((o) => ({
+          data={extractedOutputs.map((o) => ({
             value: o.name,
-            label: `${o.name} · ${o.pattern}`,
+            label: o.pattern ? `${o.name} · ${o.pattern}` : `${o.name} · (set path glob)`,
           }))}
-          onChange={applyNfOutput}
+          onChange={applyOutput}
           leftSection={<Icon icon="mdi:magic-staff" width={16} />}
         />
       )}
@@ -353,8 +388,8 @@ export default function ToolForm({ catalog }: { catalog: CatalogManifest }) {
         Tool
       </Title>
       <Text c="dimmed" size="sm">
-        Identify the tool — id, name, or an nf-core <strong>Import</strong>. We check the catalog as
-        you type.
+        Identify the tool — id, name, or a one-click <strong>Import</strong> from nf-core, Snakemake
+        or Galaxy. We check the catalog as you type.
       </Text>
     </div>
   );

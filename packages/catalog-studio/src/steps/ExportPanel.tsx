@@ -5,7 +5,8 @@ import { Icon } from '@iconify/react';
 import { notifications } from '@mantine/notifications';
 import JSZip from 'jszip';
 import { useStudioStore } from '../state/useStudioStore';
-import { generateEntry, appendRendersToYaml } from '../catalog/yamlGen';
+import { generateEntry, appendRenders } from '../catalog/yamlGen';
+import AppendedYamlPreview from './AppendedYamlPreview';
 import { validateAll } from '../catalog/grounding';
 import { oauthConfigured, signIn, getStoredToken, clearStoredToken, devToken } from '../catalog/githubOAuth';
 import { openCatalogPr, openAddRendersPr, openNewOutputPr, resolveTarget } from '../catalog/github';
@@ -43,10 +44,11 @@ export default function ExportPanel({ kinds }: { kinds: KindsMap }) {
     });
   }, [tool, output, fixture, renders, existing]);
 
-  const updatedYaml = useMemo(
-    () => (existing ? appendRendersToYaml(existing.rawYaml, renders) : null),
+  const append = useMemo(
+    () => (existing ? appendRenders(existing.rawYaml, renders) : null),
     [existing, renders],
   );
+  const updatedYaml = append?.yaml ?? null;
 
   const issues = fixture ? validateAll(renders, fixture.columns, kinds) : [];
   const errors = issues.filter((i) => i.severity === 'error');
@@ -314,8 +316,8 @@ export default function ExportPanel({ kinds }: { kinds: KindsMap }) {
             {existing ? existing.yamlPath : targetDir}
           </Badge>
         </Group>
-        {existing && updatedYaml ? (
-          <CodeHighlight code={updatedYaml} language="yaml" />
+        {existing && append ? (
+          <AppendedYamlPreview yaml={append.yaml} addedLines={append.addedLines} />
         ) : entry && newOutputTarget ? (
           // New output on an existing tool: module.yaml is untouched, so show only
           // the new <slug>.yaml.

@@ -5,6 +5,7 @@ import {
   renderToFlow,
   outputId,
   appendRendersToYaml,
+  appendRenders,
 } from '../catalog/yamlGen';
 import type { RenderSpec, ToolMeta, OutputMeta } from '../types';
 
@@ -47,6 +48,20 @@ describe('genModuleYaml', () => {
     expect(yaml).toContain('name: "My Tool"');
     expect(yaml).toContain('nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/mytool');
     expect(yaml).not.toContain('biotools_url');
+  });
+  it('emits source_url for a non-nf-core source', () => {
+    const yaml = genModuleYaml({
+      id: 'samtools_sort',
+      name: 'samtools sort',
+      source: 'snakemake',
+      source_url: 'https://github.com/snakemake/snakemake-wrappers/tree/master/bio/samtools/sort',
+      homepage: 'http://www.htslib.org/',
+    });
+    expect(yaml).toContain(
+      'source_url: https://github.com/snakemake/snakemake-wrappers/tree/master/bio/samtools/sort',
+    );
+    expect(yaml).toContain('homepage: http://www.htslib.org/');
+    expect(yaml).not.toContain('nf_core_url');
   });
   it('canonicalises a pasted meta.yml/blob URL to the module dir (so validate matches the index)', () => {
     const yaml = genModuleYaml({
@@ -122,5 +137,50 @@ describe('appendRendersToYaml', () => {
   it('is a no-op with no new renders', () => {
     const raw = 'id: t\nrenders_as:\n  - { component: table }\n';
     expect(appendRendersToYaml(raw, [])).toBe(raw);
+  });
+});
+
+describe('appendRenders addedLines', () => {
+  const newCard: RenderSpec = { uid: 'x', component: 'card', column: 'cov', aggregation: 'average', id: 'newcard' };
+
+  it('reports the inserted line index in a populated block (before trailing keys)', () => {
+    const raw = [
+      'id: mytool_results',
+      'find: {path_glob: "**/x"}',
+      'renders_as:',
+      '  - { component: table, id: tbl }',
+      'fixture: results.csv',
+      '',
+    ].join('\n');
+    const { yaml, addedLines } = appendRenders(raw, [newCard]);
+    const out = yaml.split('\n');
+    expect(addedLines).toHaveLength(1);
+    // The reported index points exactly at the new render line.
+    expect(out[addedLines[0]]).toContain('id: newcard');
+    // …and only the new line is flagged (the existing table isn't).
+    expect(out[addedLines[0]]).not.toContain('component: table');
+  });
+
+  it('reports the inserted line when replacing an empty list', () => {
+    const { yaml, addedLines } = appendRenders('id: t\nrenders_as: []\n', [newCard]);
+    const out = yaml.split('\n');
+    expect(addedLines).toHaveLength(1);
+    expect(out[addedLines[0]]).toContain('id: newcard');
+  });
+
+  it('reports the inserted line when the renders_as key is missing', () => {
+    const { yaml, addedLines } = appendRenders('id: t\nfind: {path_glob: "x"}\n', [newCard]);
+    const out = yaml.split('\n');
+    expect(addedLines).toHaveLength(1);
+    expect(out[addedLines[0]]).toContain('id: newcard');
+  });
+
+  it('flags every line of a multi-line render (code-mode figure)', () => {
+    const codeFig: RenderSpec = { uid: 'y', component: 'figure', code: 'fig = px.bar(df)\nfig.update_layout()' };
+    const { yaml, addedLines } = appendRenders('id: t\nrenders_as:\n  - { component: table }\n', [codeFig]);
+    const out = yaml.split('\n');
+    expect(addedLines.length).toBeGreaterThan(1);
+    for (const i of addedLines) expect(out[i]).toMatch(/\S/); // every flagged line has content
+    expect(addedLines.map((i) => out[i]).join('\n')).toContain('code: |-');
   });
 });

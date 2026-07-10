@@ -38,6 +38,10 @@ export interface ToolMeta {
   name: string;
   source: ToolSource;
   nf_core_url?: string;
+  /** Where a non-nf-core source (Snakemake wrapper / Galaxy tool) was fetched
+   *  from — kept distinct from `homepage` so an extractor can preserve the
+   *  pasted source URL *and* fill the tool's own upstream homepage. */
+  source_url?: string;
   homepage?: string;
   biotools_url?: string;
   description?: string;
@@ -164,16 +168,33 @@ export interface OutputMeta {
   description?: string;
 }
 
-/** A file output channel parsed from an nf-core module's `meta.yml` `output:`
- *  section — used to auto-fill the Output slug / path_glob / description. */
-export interface NfCoreOutput {
+/** A file output channel parsed from a tool source's metadata (nf-core
+ *  `meta.yml` `output:`, Snakemake wrapper `meta.yaml` `output:`, Galaxy tool
+ *  `<outputs>`) — used to auto-fill the Output slug / path_glob / description.
+ *  `pattern` may be empty when the source only describes outputs in prose
+ *  (Snakemake), in which case only slug + description are auto-filled. */
+export interface OutputChannel {
   /** Channel name, e.g. "summary_txt". */
   name: string;
-  /** Glob pattern for the file, e.g. "*.summary.txt". */
+  /** Glob pattern for the file, e.g. "*.summary.txt" (may be ''). */
   pattern: string;
   description: string;
   /** meta.yml `type` (kept for filtering; only "file" outputs are surfaced). */
   type: string;
+}
+
+/** Identity bag returned by every source extractor (nf-core / Snakemake /
+ *  Galaxy), used to auto-fill the Tool step. Missing fields are ''. */
+export interface ExtractedMeta {
+  name: string;
+  description: string;
+  /** The tool's own upstream homepage, when the source declares one. */
+  homepage: string;
+  biotools_url: string;
+  /** Canonicalised URL the metadata was fetched from (→ `ToolMeta.source_url`,
+   *  or `nf_core_url` for nf-core). */
+  source_url: string;
+  outputs: OutputChannel[];
 }
 
 // ── kinds.json (generated from schemas.py at build) ────────────────────────

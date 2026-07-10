@@ -61,11 +61,14 @@ def _check_identity_urls(
     nf_core_url: str | None,
     biotools_url: str | None,
     edam: dict[str, list[str]],
+    source_url: str | None = None,
 ) -> None:
     """Validate identity references point at the right authority (offline check).
 
     Format-level only: guarantees well-formed bio.tools / nf-core / EDAM refs.
     Existence (the term/module is real) is a CI step against a vendored index.
+    `source_url` (Snakemake/Galaxy fetch origin) has no authority to check
+    against, so only its scheme is asserted.
     """
     if biotools_url and not biotools_url.startswith("https://bio.tools/"):
         raise ValueError(f"biotools_url must be a https://bio.tools/ URL, got {biotools_url!r}")
@@ -73,6 +76,8 @@ def _check_identity_urls(
         raise ValueError(
             f"nf_core_url must point at github.com/nf-core/modules/..., got {nf_core_url!r}"
         )
+    if source_url and not source_url.startswith(("http://", "https://")):
+        raise ValueError(f"source_url must be an http(s):// URL, got {source_url!r}")
     for category, urls in edam.items():  # category -> expected EDAM prefix
         for url in urls:
             if not url.startswith(f"http://edamontology.org/{category}_"):
@@ -327,6 +332,10 @@ class CatalogTool(BaseModel):
     name: str
     description: str = ""
     homepage: str | None = None
+    # Where a non-nf-core source (Snakemake wrapper / Galaxy tool) was fetched
+    # from — kept distinct from `homepage` (the tool's own upstream page). No
+    # authority check: any source, so only well-formedness is asserted.
+    source_url: str | None = None
     nf_core_url: str | None = None
     biotools_url: str | None = None
     edam_topics: list[str] = Field(default_factory=list)
@@ -335,7 +344,12 @@ class CatalogTool(BaseModel):
 
     @model_validator(mode="after")
     def _identity_urls(self) -> CatalogTool:
-        _check_identity_urls(self.nf_core_url, self.biotools_url, {"topic": self.edam_topics})
+        _check_identity_urls(
+            self.nf_core_url,
+            self.biotools_url,
+            {"topic": self.edam_topics},
+            self.source_url,
+        )
         return self
 
 

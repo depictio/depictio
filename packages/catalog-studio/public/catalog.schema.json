@@ -448,6 +448,18 @@
       "default": null,
       "title": "Homepage"
     },
+    "source_url": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Source Url"
+    },
     "nf_core_url": {
       "anyOf": [
         {

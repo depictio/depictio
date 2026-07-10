@@ -26,6 +26,11 @@ export default function App() {
   // Gate forward navigation on the minimum each step needs.
   const canLeave = (i: number): boolean => {
     if (i === 0) {
+      // Append mode: identity + output come from the catalog (not authored in
+      // the Tool form, and an existing output may recognise its file by
+      // `filename` rather than `path_glob`), so the Tool step is always
+      // satisfied — otherwise maxReachable stalls at 0 and blocks Next→Export.
+      if (existing) return true;
       if (!(tool.id && tool.name && output.slug && output.path_glob)) return false;
       // A new output must not reuse an existing output's slug (would overwrite its file).
       if (newOutputSlugClash(newOutputTarget, output.slug)) return false;

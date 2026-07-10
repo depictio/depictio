@@ -180,6 +180,22 @@ def test_identity_url_format_is_validated():
         CatalogTool.model_validate({"id": "x", "name": "X", "edam_topics": ["topic_3174"]})
 
 
+def test_source_url_scheme_is_validated():
+    from depictio.models.components.advanced_viz.catalog import CatalogTool
+
+    # A Snakemake/Galaxy source URL has no authority to check — only its scheme.
+    tool = CatalogTool.model_validate(
+        {
+            "id": "x",
+            "name": "X",
+            "source_url": "https://github.com/snakemake/snakemake-wrappers/tree/master/bio/x",
+        }
+    )
+    assert tool.source_url.endswith("/bio/x")
+    with pytest.raises(ValueError, match="http"):
+        CatalogTool.model_validate({"id": "x", "name": "X", "source_url": "ftp://nope"})
+
+
 def test_output_edam_operation_prefix_enforced():
     with pytest.raises(ValueError, match="operation_"):
         CatalogOutput.model_validate(
