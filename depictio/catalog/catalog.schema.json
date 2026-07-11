@@ -204,7 +204,11 @@
                 "sunburst",
                 "oncoplot",
                 "coverage_track",
-                "sankey"
+                "sankey",
+                "pr_benchmark",
+                "roc_pr_curve",
+                "confusion_matrix",
+                "metric_ci_bars"
               ],
               "type": "string"
             },

@@ -17,6 +17,8 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
+# som.py always emits the binomial confidence intervals, so they are required
+# output columns — the `metric_ci_bars` render (catalog/sompy/summary.yaml) binds them.
 EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "caller": pl.Utf8,
     "variant_type": pl.Utf8,
@@ -26,9 +28,6 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "recall": pl.Float64,
     "precision": pl.Float64,
     "f1": pl.Float64,
-}
-
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {
     "recall_lower": pl.Float64,
     "recall_upper": pl.Float64,
     "precision_lower": pl.Float64,
