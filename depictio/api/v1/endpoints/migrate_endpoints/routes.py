@@ -12,7 +12,7 @@ import os
 import zipfile
 from datetime import datetime
 from typing import Any, Literal, cast
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit
 
 import boto3
 from botocore.exceptions import ClientError
@@ -38,7 +38,6 @@ from depictio.api.v1.db import (
 )
 from depictio.api.v1.endpoints.backup_endpoints.routes import _convert_complex_objects_to_strings
 from depictio.api.v1.endpoints.user_endpoints.routes import (
-    get_current_user,
     get_user_or_anonymous,
 )
 from depictio.models.models.users import User
@@ -422,12 +421,18 @@ async def export_project(
     deltatables_docs: list[dict] = []
     runs_docs: list[dict] = []
     dashboards_docs: list[dict] = []
+    multiqc_docs: list[dict] = []
+    jbrowse_docs: list[dict] = []
 
     if mode in ("all", "metadata"):
         if dc_ids:
             dc_query = _dc_ids_query(dc_ids)
             files_docs = list(files_collection.find({"data_collection_id": dc_query}))
             deltatables_docs = list(deltatables_collection.find({"data_collection_id": dc_query}))
+            # MultiQC / JBrowse report docs hold the dc_id → s3_location mapping the
+            # renderers read; without them the target 404s on "missing s3_locations".
+            multiqc_docs = list(multiqc_collection.find({"data_collection_id": dc_query}))
+            jbrowse_docs = list(jbrowse_collection.find({"data_collection_id": dc_query}))
         if workflow_ids:
             runs_docs = list(runs_collection.find({"workflow_id": {"$in": workflow_ids}}))
 
@@ -448,6 +453,8 @@ async def export_project(
         data["deltatables"] = deltatables_docs
         data["runs"] = runs_docs
         data["dashboards"] = dashboards_docs
+        data["multiqc"] = multiqc_docs
+        data["jbrowse"] = jbrowse_docs
     elif mode == "dashboard":
         data["dashboards"] = dashboards_docs
     # files mode: only S3, no MongoDB docs
@@ -570,12 +577,23 @@ async def export_project(
             )
     buf.seek(0)
 
-    project_name = (project.get("name") or "export").replace(" ", "_")
+    project_name = project.get("name") or "export"
     filename = f"depictio_export_{project_name}.zip"
+    # Content-Disposition header values must be latin-1 encodable, but project
+    # names may contain em-dashes, slashes, or other non-ASCII characters. Emit
+    # an ASCII-safe ``filename`` fallback plus an RFC 5987 ``filename*`` that
+    # preserves the original name for clients that support it.
+    ascii_name = "".join(
+        c if c.isascii() and (c.isalnum() or c in "._-") else "_" for c in project_name
+    )
+    ascii_filename = f"depictio_export_{ascii_name}.zip"
+    content_disposition = (
+        f"attachment; filename=\"{ascii_filename}\"; filename*=UTF-8''{quote(filename)}"
+    )
     return StreamingResponse(
         buf,
         media_type="application/zip",
-        headers={"Content-Disposition": f"attachment; filename={filename}"},
+        headers={"Content-Disposition": content_disposition},
     )
 
 
@@ -587,7 +605,7 @@ async def export_project(
 @migrate_endpoint_router.post("/import-project", response_model=MigrateImportResponse)
 async def import_project(
     request: MigrateImportRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_user_or_anonymous),
 ) -> MigrateImportResponse:
     """
     Import a project bundle into this instance (non-destructive upsert).
@@ -640,6 +658,8 @@ async def import_project(
         ("deltatables", deltatables_collection),
         ("runs", runs_collection),
         ("dashboards", dashboards_collection),
+        ("multiqc", multiqc_collection),
+        ("jbrowse", jbrowse_collection),
     ]
 
     data_section = bundle["data"]
@@ -651,10 +671,18 @@ async def import_project(
             upserted[collection_name] = 0
             continue
 
+        # MultiQC reports store data_collection_id as a plain string (see the
+        # MultiQCReport model) and are looked up by string, so it must NOT be
+        # coerced to ObjectId on import or the report becomes invisible.
+        keep_string_dc_id = collection_name == "multiqc"
         ops: list[ReplaceOne] = []
         for doc in raw_docs:
             doc = _prepare_doc_for_import(
-                doc, existing_user_ids, admin_id, force_remap=request.force_owner_remap
+                doc,
+                existing_user_ids,
+                admin_id,
+                force_remap=request.force_owner_remap,
+                keep_string_dc_id=keep_string_dc_id,
             )
             ops.append(ReplaceOne({"_id": doc["_id"]}, doc, upsert=True))
 
@@ -690,7 +718,7 @@ async def import_project_zip(
     file: UploadFile = File(...),
     dry_run: bool = False,
     overwrite: bool = False,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_user_or_anonymous),
 ) -> MigrateImportResponse:
     """
     Import a project bundle from a ZIP file (for UI use).
@@ -774,8 +802,14 @@ def _prepare_doc_for_import(
     existing_user_ids: set[str],
     fallback_owner_id: Any,
     force_remap: bool = False,
+    keep_string_dc_id: bool = False,
 ) -> dict:
-    """Convert string IDs back to ObjectId and remap unknown owners."""
+    """Convert string IDs back to ObjectId and remap unknown owners.
+
+    ``keep_string_dc_id`` preserves ``data_collection_id`` as a string (for
+    collections like ``multiqc`` that store and query it as a string) instead
+    of coercing it to ObjectId.
+    """
     doc = dict(doc)
     # Convert _id
     if "id" in doc and "_id" not in doc:
@@ -807,6 +841,11 @@ def _prepare_doc_for_import(
 
     # Recursively convert any remaining string ObjectIds for known ID fields
     _convert_id_fields(doc)
+
+    # Some collections (e.g. multiqc) store data_collection_id as a string and
+    # look it up by string — undo the ObjectId coercion for those.
+    if keep_string_dc_id and doc.get("data_collection_id") is not None:
+        doc["data_collection_id"] = str(doc["data_collection_id"])
 
     return doc
 
