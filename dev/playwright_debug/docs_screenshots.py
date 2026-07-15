@@ -37,6 +37,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from depictio.api.v1.services.screenshot_helpers import (  # noqa: E402
     build_localstorage_init_script,
     dismiss_notifications,
+    wait_for_theme_applied,
 )
 
 app = typer.Typer(add_completion=False, no_args_is_help=True)
@@ -53,6 +54,7 @@ class ShotContext:
     project_id: str
     dashboard_id: str
     output_dir: Path
+    theme: str = "light"
 
 
 ShotFn = Callable[[ShotContext], Awaitable[None]]
@@ -107,6 +109,18 @@ async def _shot(ctx: ShotContext, selector: str, name: str) -> None:
     typer.echo(f"  → {target.relative_to(REPO_ROOT.parent)}")
 
 
+async def _page_shot_current(ctx: ShotContext, name: str) -> None:
+    """Full-viewport capture of the page as it currently stands (no navigation).
+
+    For shots that first click through in-page UI (tabs, segmented controls,
+    accordions) — the caller has already navigated and settled.
+    """
+    target = ctx.output_dir / f"{name}.png"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    await ctx.page.screenshot(path=str(target), full_page=False)
+    typer.echo(f"  → {target.relative_to(REPO_ROOT.parent)}")
+
+
 async def _page_shot(ctx: ShotContext, route: str, name: str, wait_ms: int = 1200) -> None:
     """Full-viewport capture of a React Beta page after navigation + settle.
 
@@ -120,10 +134,7 @@ async def _page_shot(ctx: ShotContext, route: str, name: str, wait_ms: int = 120
     # single-user-mode anonymous token and surface red error toasts that
     # would otherwise sit on top of the shot.
     await dismiss_notifications(ctx.page)
-    target = ctx.output_dir / f"{name}.png"
-    target.parent.mkdir(parents=True, exist_ok=True)
-    await ctx.page.screenshot(path=str(target), full_page=False)
-    typer.echo(f"  → {target.relative_to(REPO_ROOT.parent)}")
+    await _page_shot_current(ctx, name)
 
 
 # ---- Shot registry --------------------------------------------------------
@@ -247,6 +258,69 @@ async def _new_dashboard(ctx: ShotContext) -> None:
     await _shot(ctx, '[data-testid="create-dashboard-modal"]', _rb("new_dashboard_modal"))
 
 
+# ---- Admin "Log & Task" monitoring shots ----------------------------------
+# Navigate to /admin, open the "Log & Task" tab, select a pane, and capture the
+# full viewport (tab bar + segmented control give docs context). Filenames carry
+# a _<theme> suffix so a light and a dark run produce the #only-light/#only-dark
+# pair the docs site expects.
+
+
+async def _open_monitoring(ctx: ShotContext, pane_label: str | None) -> None:
+    """Open Admin → Log & Task and select `pane_label` (None keeps the default
+    Tasks pane). Waits for the colour scheme + a pane row/empty-state to settle."""
+    await ctx.page.goto(f"{ctx.viewer_url}/admin", wait_until="domcontentloaded")
+    await ctx.page.wait_for_timeout(800)
+    await wait_for_theme_applied(ctx.page, ctx.theme)
+    # The admin page is a Mantine Tabs; the monitoring tab is labelled "Log & Task".
+    await ctx.page.get_by_role("tab", name="Log & Task").click()
+    await ctx.page.wait_for_timeout(600)
+    if pane_label:
+        # SegmentedControl labels are plain text buttons inside the panel.
+        await ctx.page.get_by_text(pane_label, exact=True).click()
+    # Give the pane's first poll time to resolve so the shot isn't a bare loader.
+    await ctx.page.wait_for_timeout(1500)
+    await dismiss_notifications(ctx.page)
+
+
+@register("admin_monitoring_tasks")
+async def _mon_tasks(ctx: ShotContext) -> None:
+    """Log & Task → Tasks pane (Celery task ledger)."""
+    await _open_monitoring(ctx, None)
+    await _page_shot_current(ctx, _rb(f"admin_monitoring_tasks_{ctx.theme}"))
+
+
+@register("admin_monitoring_ingestion")
+async def _mon_ingestion(ctx: ShotContext) -> None:
+    """Log & Task → Ingestion pane (CLI/UI ingestion runs)."""
+    await _open_monitoring(ctx, "Ingestion")
+    await _page_shot_current(ctx, _rb(f"admin_monitoring_ingestion_{ctx.theme}"))
+
+
+@register("admin_monitoring_logs")
+async def _mon_logs(ctx: ShotContext) -> None:
+    """Log & Task → Logs pane (capped application-log collection)."""
+    await _open_monitoring(ctx, "Logs")
+    await _page_shot_current(ctx, _rb(f"admin_monitoring_logs_{ctx.theme}"))
+
+
+@register("admin_monitoring_health")
+async def _mon_health(ctx: ShotContext) -> None:
+    """Log & Task → Health pane (Celery worker/broker health)."""
+    await _open_monitoring(ctx, "Health")
+    await _page_shot_current(ctx, _rb(f"admin_monitoring_health_{ctx.theme}"))
+
+
+@register("admin_monitoring_task_detail")
+async def _mon_task_detail(ctx: ShotContext) -> None:
+    """Log & Task → Tasks pane with the first row expanded (id/worker/args/logs)."""
+    await _open_monitoring(ctx, None)
+    control = ctx.page.locator("button.mantine-Accordion-control").first
+    await control.wait_for(state="visible", timeout=10_000)
+    await control.click()
+    await ctx.page.wait_for_timeout(600)
+    await _page_shot_current(ctx, _rb(f"admin_monitoring_task_detail_{ctx.theme}"))
+
+
 # ---- CLI ------------------------------------------------------------------
 
 
@@ -285,18 +359,26 @@ def run(
         "--output-root",
         help="Parent dir for <version>/ subfolders.",
     ),
+    theme: str = typer.Option(
+        "light",
+        "--theme",
+        help="Colour scheme to seed (light|dark). Theme-aware shots suffix the "
+        "filename with _<theme>; run once per theme for the docs light/dark pair.",
+    ),
     viewport_width: int = typer.Option(1440, "--viewport-width"),
     viewport_height: int = typer.Option(900, "--viewport-height"),
     headless: bool = typer.Option(True, "--headless/--headed"),
 ) -> None:
     """Capture one or more named shots into <output-root>/<version>/."""
+    if theme not in ("light", "dark"):
+        raise typer.BadParameter(f"--theme must be 'light' or 'dark', got {theme!r}.")
     output_dir = output_root / version
     output_dir.mkdir(parents=True, exist_ok=True)
     names = shot or sorted(REGISTRY)
     unknown = [n for n in names if n not in REGISTRY]
     if unknown:
         raise typer.BadParameter(f"Unknown shot(s): {unknown}. Run `list` to see available names.")
-    typer.echo(f"📸 Capturing {len(names)} shot(s) into {output_dir}")
+    typer.echo(f"📸 Capturing {len(names)} shot(s) [{theme}] into {output_dir}")
     asyncio.run(
         _run(
             names,
@@ -307,6 +389,7 @@ def run(
             viewport_width,
             viewport_height,
             headless,
+            theme,
         )
     )
 
@@ -320,6 +403,7 @@ async def _run(
     vw: int,
     vh: int,
     headless: bool,
+    theme: str,
 ) -> None:
     token_payload = _load_token_payload()
     async with async_playwright() as p:
@@ -328,9 +412,8 @@ async def _run(
         # Seed auth + theme in localStorage via init script so they are present
         # BEFORE any page script runs — early API calls (listProjectLinks,
         # listChildTabs) and the SPA's readInitialColorScheme both fire on first
-        # paint, so a post-navigation setItem is too late. Theme defaults to
-        # light so docs shots stay consistent across runs.
-        await context.add_init_script(build_localstorage_init_script(token_payload, "light"))
+        # paint, so a post-navigation setItem is too late.
+        await context.add_init_script(build_localstorage_init_script(token_payload, theme))
         page = await context.new_page()
         ctx = ShotContext(
             page=page,
@@ -338,6 +421,7 @@ async def _run(
             project_id=project_id,
             dashboard_id=dashboard_id,
             output_dir=output_dir,
+            theme=theme,
         )
         for name in names:
             typer.echo(f"• {name}")

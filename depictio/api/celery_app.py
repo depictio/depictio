@@ -951,6 +951,20 @@ def prewarm_multiqc_dc_all_plots(self, dc_id: str) -> dict:
 # Management, Viewer, and Editor apps each have their own callback registry
 
 
+# Register monitoring signal handlers (task lifecycle → MongoDB ledger) and the
+# per-task log capture handler. Imported for side effects; gated by the
+# monitoring feature flag. Never let a monitoring import error break the worker.
+if settings.monitoring.enabled:
+    try:
+        from depictio.api.v1.monitoring import task_signals  # noqa: F401
+    except Exception as _exc:  # pragma: no cover - defensive
+        import logging as _logging
+
+        _logging.getLogger(__name__).warning(
+            "monitoring: failed to register task signal handlers: %s", _exc
+        )
+
+
 # Auto-discovery of tasks on app start
 if __name__ == "__main__":
     celery_app.start()

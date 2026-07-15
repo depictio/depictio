@@ -7,6 +7,8 @@ from depictio.cli.cli.utils.api_calls import (
     api_create_magic_link,
     api_get_project_from_name,
     api_login,
+    api_monitoring_ingestion_finish,
+    api_monitoring_ingestion_start,
     api_provision_user,
     api_sync_project_config_to_server,
 )
@@ -277,6 +279,9 @@ def register_run_command(app: typer.Typer):
         success_count = 0
         total_steps = 8 if is_template_mode else 7
 
+        # Server-side monitoring record for this ingestion run (best-effort).
+        ingestion_run_id: str | None = None
+
         # Step 0a (provisioning only): create-or-get the user and switch the run
         # to act as them by pointing CLI_config_path at a temporary per-user
         # config. Everything downstream then owns its resources as that user.
@@ -455,6 +460,19 @@ def register_run_command(app: typer.Typer):
             rich_print_checked_statement(f"{e}", "error")
             if not continue_on_error:
                 raise typer.Exit(code=1)
+
+        # Open the monitoring ingestion record now that CLI_config is validated.
+        # Best-effort: a monitoring outage must never affect the ingestion.
+        if not dry_run:
+            try:
+                _proj = locals().get("project_config")
+                ingestion_run_id = api_monitoring_ingestion_start(
+                    CLI_config=CLI_config,
+                    command="run",
+                    project_name=getattr(_proj, "name", None),
+                )
+            except Exception:
+                ingestion_run_id = None
 
         # Step 4: Sync project configuration to server
         if not skip_sync:
@@ -790,7 +808,25 @@ def register_run_command(app: typer.Typer):
                 f"Depictio-CLI run completed with some issues ({success_count}/{total_steps} steps)",
                 "warning",
             )
-            # A run that did not complete every step is a failure for automation
-            # purposes — exit non-zero so CI can detect it (even under
-            # --continue-on-error, which only suppresses the early aborts above).
+
+        # Close the monitoring ingestion record (best-effort).
+        if ingestion_run_id:
+            final_status = "success" if success_count == total_steps else "partial"
+            api_monitoring_ingestion_finish(
+                CLI_config=CLI_config,
+                run_id=ingestion_run_id,
+                status=final_status,
+                steps=[
+                    {
+                        "name": "run",
+                        "status": final_status,
+                        "detail": f"{success_count}/{total_steps} steps",
+                    }
+                ],
+            )
+
+        # A run that did not complete every step is a failure for automation
+        # purposes — exit non-zero so CI can detect it (even under
+        # --continue-on-error, which only suppresses the early aborts above).
+        if success_count != total_steps:
             raise typer.Exit(code=1)

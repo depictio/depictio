@@ -151,6 +151,13 @@ export {
   listAllDashboards,
   listExampleProjects,
   cleanExampleProjects,
+  // Admin monitoring (Log & Task)
+  fetchMonitoringTasks,
+  fetchMonitoringTask,
+  fetchIngestionRuns,
+  fetchIngestionRun,
+  fetchAppLogs,
+  fetchMonitoringHealth,
   // Profile + CLI tokens
   fetchCurrentUserFull,
   editPassword,
@@ -226,8 +233,13 @@ export {
 } from './availableValues';
 
 // Real-time event subscription (WebSocket /events/ws)
-export { useDataCollectionUpdates } from './realtime';
-export type { RealtimeStatus, RealtimeMode, RealtimeEvent } from './realtime';
+export { useDataCollectionUpdates, useMonitoringEvents, ADMIN_MONITORING_CHANNEL } from './realtime';
+export type {
+  RealtimeStatus,
+  RealtimeMode,
+  RealtimeEvent,
+  MonitoringLiveEvent,
+} from './realtime';
 export { default as RealtimeIndicator } from './components/RealtimeIndicator';
 export { useRealtimeJournal } from './hooks/useRealtimeJournal';
 export type { RealtimeJournalEntry } from './hooks/useRealtimeJournal';
@@ -291,6 +303,11 @@ export type {
   AdminProject,
   AdminDashboard,
   ExampleProject,
+  // Admin monitoring types
+  MonitoringTaskEvent,
+  MonitoringIngestionRun,
+  MonitoringAppLog,
+  MonitoringHealth,
   // Profile + CLI token types
   ProfileUser,
   CliToken,
