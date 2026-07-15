@@ -5,6 +5,7 @@ import {
   Badge,
   Box,
   Center,
+  Chip,
   Group,
   Loader,
   ScrollArea,
@@ -20,7 +21,7 @@ import { fetchCatalogCompose, upsertComponent } from 'depictio-react-core';
 import { useBuilderStore } from '../store/useBuilderStore';
 import type { ComponentType } from '../store/useBuilderStore';
 import { buildMetadata } from '../buildMetadata';
-import CatalogPreviewPanel from './CatalogPreviewPanel';
+import CatalogPreviewPanel, { catalogUseRef } from './CatalogPreviewPanel';
 
 interface CatalogTabProps {
   projectId: string;
@@ -32,6 +33,14 @@ const COMPONENT_COLORS: Record<string, string> = {
   table:        'gray',
   advanced_viz: 'violet',
   multiqc:      'orange',
+};
+
+const COMPONENT_LABELS: Record<string, string> = {
+  figure:       'Figure',
+  card:         'Card',
+  table:        'Table',
+  advanced_viz: 'Advanced viz',
+  multiqc:      'MultiQC',
 };
 
 function buildConfigFromRender(render: CatalogRender): Record<string, unknown> {
@@ -76,8 +85,8 @@ const MatchRow: React.FC<MatchRowProps> = ({ match, selected, onClick }) => (
     px="md"
     py="sm"
     style={{
-      borderLeft: `3px solid ${selected ? 'var(--mantine-color-teal-6)' : 'transparent'}`,
-      background: selected ? 'var(--mantine-color-teal-0)' : 'transparent',
+      borderLeft: `3px solid ${selected ? 'var(--mantine-color-violet-6)' : 'transparent'}`,
+      background: selected ? 'var(--mantine-color-violet-0)' : 'transparent',
       transition: 'background 120ms',
     }}
   >
@@ -109,9 +118,9 @@ const MatchRow: React.FC<MatchRowProps> = ({ match, selected, onClick }) => (
 // Tool section header
 // ---------------------------------------------------------------------------
 
-const ToolLabel: React.FC<{ module: CatalogModule }> = ({ module }) => (
+const ToolLabel: React.FC<{ module: CatalogModule; count: number }> = ({ module, count }) => (
   <Group gap="sm" wrap="nowrap">
-    <Icon icon="mdi:toolbox-outline" width={16} color="var(--mantine-color-teal-6)" />
+    <Icon icon="mdi:toolbox-outline" width={16} color="var(--mantine-color-violet-6)" />
     <Stack gap={0} style={{ minWidth: 0 }}>
       <Text size="sm" fw={700} lineClamp={1}>
         {module.tool_name}
@@ -120,11 +129,42 @@ const ToolLabel: React.FC<{ module: CatalogModule }> = ({ module }) => (
         {module.tool_id}
       </Text>
     </Stack>
-    <Badge size="xs" variant="light" color="teal" ml="auto" style={{ flexShrink: 0 }}>
-      {module.matches.length}
+    <Badge size="xs" variant="light" color="violet" ml="auto" style={{ flexShrink: 0 }}>
+      {count}
     </Badge>
   </Group>
 );
+
+// ---------------------------------------------------------------------------
+// Facet filter group — a labelled Chip.Group with per-option counts
+// ---------------------------------------------------------------------------
+
+interface FacetProps {
+  label: string;
+  options: { value: string; label: string; count: number }[];
+  selected: string[];
+  onChange: (values: string[]) => void;
+}
+
+const Facet: React.FC<FacetProps> = ({ label, options, selected, onChange }) => {
+  if (options.length <= 1) return null; // nothing to filter on
+  return (
+    <Box>
+      <Text size="xs" fw={700} c="dimmed" tt="uppercase" mb={6}>
+        {label}
+      </Text>
+      <Chip.Group multiple value={selected} onChange={onChange}>
+        <Group gap={6}>
+          {options.map((o) => (
+            <Chip key={o.value} value={o.value} size="xs" variant="outline" color="violet" radius="sm">
+              {o.label} <Text span c="dimmed" fz={10}>({o.count})</Text>
+            </Chip>
+          ))}
+        </Group>
+      </Chip.Group>
+    </Box>
+  );
+};
 
 // ---------------------------------------------------------------------------
 // Main component
@@ -134,8 +174,16 @@ const CatalogTab: React.FC<CatalogTabProps> = ({ projectId }) => {
   const [modules, setModules] = useState<CatalogModule[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selectedMatch, setSelectedMatch] = useState<CatalogOutputMatch | null>(null);
+  const [selectedToolId, setSelectedToolId] = useState('');
   const [selectedToolName, setSelectedToolName] = useState('');
   const [search, setSearch] = useState('');
+
+  // Facet filters, auto-derived from the compose result (see facet options below).
+  const [toolFilter, setToolFilter] = useState<string[]>([]);
+  const [typeFilter, setTypeFilter] = useState<string[]>([]);
+  const [dcFilter, setDcFilter] = useState<string[]>([]);
+  // Which tool accordion items are expanded (controlled — start all-open).
+  const [openTools, setOpenTools] = useState<string[]>([]);
 
   const initFromCatalog = useBuilderStore((s) => s.initFromCatalog);
   const dashboardId = useBuilderStore((s) => s.dashboardId);
@@ -146,67 +194,134 @@ const CatalogTab: React.FC<CatalogTabProps> = ({ projectId }) => {
     fetchCatalogCompose(projectId)
       .then((r) => {
         setModules(r.modules);
+        setOpenTools(r.modules.map((m) => m.tool_id)); // start with every tool open
         if (r.modules.length > 0 && r.modules[0].matches.length > 0) {
           setSelectedMatch(r.modules[0].matches[0]);
+          setSelectedToolId(r.modules[0].tool_id);
           setSelectedToolName(r.modules[0].tool_name);
         }
       })
       .catch((e: unknown) => setError(String(e)));
   }, [projectId]);
 
-  // Filter by search query across tool name, output description, output_id, dc_tag
+  // ── Facet options with counts (from the full, unfiltered module set) ──────
+  const facetOptions = useMemo(() => {
+    const tools = new Map<string, { label: string; count: number }>();
+    const types = new Map<string, number>();
+    const dcs = new Map<string, number>();
+    for (const mod of modules ?? []) {
+      const t = tools.get(mod.tool_id) ?? { label: mod.tool_name, count: 0 };
+      t.count += mod.matches.length;
+      tools.set(mod.tool_id, t);
+      for (const m of mod.matches) {
+        dcs.set(m.dc_tag, (dcs.get(m.dc_tag) ?? 0) + 1);
+        const seen = new Set<string>();
+        for (const r of m.renders_as) {
+          if (seen.has(r.component)) continue;
+          seen.add(r.component);
+          types.set(r.component, (types.get(r.component) ?? 0) + 1);
+        }
+      }
+    }
+    return {
+      tools: [...tools.entries()]
+        .map(([value, v]) => ({ value, label: v.label, count: v.count }))
+        .sort((a, b) => a.label.localeCompare(b.label)),
+      types: [...types.entries()]
+        .map(([value, count]) => ({ value, label: COMPONENT_LABELS[value] ?? value, count }))
+        .sort((a, b) => a.label.localeCompare(b.label)),
+      dcs: [...dcs.entries()]
+        .map(([value, count]) => ({ value, label: value, count }))
+        .sort((a, b) => a.label.localeCompare(b.label)),
+    };
+  }, [modules]);
+
+  const anyFilterActive =
+    search.trim() !== '' || toolFilter.length > 0 || typeFilter.length > 0 || dcFilter.length > 0;
+
+  const clearFilters = () => {
+    setSearch('');
+    setToolFilter([]);
+    setTypeFilter([]);
+    setDcFilter([]);
+  };
+
+  // ── Apply search + facets ─────────────────────────────────────────────────
   const filteredModules = useMemo<CatalogModule[]>(() => {
     if (!modules) return [];
     const q = search.trim().toLowerCase();
-    if (!q) return modules;
+    const matchPasses = (mod: CatalogModule, m: CatalogOutputMatch): boolean => {
+      if (dcFilter.length && !dcFilter.includes(m.dc_tag)) return false;
+      if (typeFilter.length && !m.renders_as.some((r) => typeFilter.includes(r.component)))
+        return false;
+      if (!q) return true;
+      return (
+        mod.tool_name.toLowerCase().includes(q) ||
+        mod.tool_id.toLowerCase().includes(q) ||
+        m.description.toLowerCase().includes(q) ||
+        m.output_id.toLowerCase().includes(q) ||
+        m.dc_tag.toLowerCase().includes(q)
+      );
+    };
     return modules
-      .map((mod) => ({
-        ...mod,
-        matches: mod.matches.filter(
-          (m) =>
-            mod.tool_name.toLowerCase().includes(q) ||
-            mod.tool_id.toLowerCase().includes(q) ||
-            m.description.toLowerCase().includes(q) ||
-            m.output_id.toLowerCase().includes(q) ||
-            m.dc_tag.toLowerCase().includes(q),
-        ),
-      }))
+      .filter((mod) => !toolFilter.length || toolFilter.includes(mod.tool_id))
+      .map((mod) => ({ ...mod, matches: mod.matches.filter((m) => matchPasses(mod, m)) }))
       .filter((mod) => mod.matches.length > 0);
-  }, [modules, search]);
+  }, [modules, search, toolFilter, typeFilter, dcFilter]);
 
-  const handleAdd = (match: CatalogOutputMatch, toolName: string) => (render: CatalogRender) => {
-    initFromCatalog({
-      componentType: render.component as ComponentType,
-      wfId: match.wf_id,
-      dcId: match.dc_id,
-      projectId,
-      config: buildConfigFromRender(render),
-      source: { toolName, outputId: match.output_id, description: match.description },
-    });
+  const selectMatch = (mod: CatalogModule, match: CatalogOutputMatch) => {
+    setSelectedMatch(match);
+    setSelectedToolId(mod.tool_id);
+    setSelectedToolName(mod.tool_name);
   };
+
+  const handleAdd = (match: CatalogOutputMatch, toolId: string, toolName: string) =>
+    (render: CatalogRender) => {
+      initFromCatalog({
+        componentType: render.component as ComponentType,
+        wfId: match.wf_id,
+        dcId: match.dc_id,
+        projectId,
+        config: buildConfigFromRender(render),
+        source: {
+          toolId,
+          toolName,
+          outputId: match.output_id,
+          description: match.description,
+          use: catalogUseRef(toolId, match.output_id, render),
+        },
+      });
+    };
 
   // Quick-add: pre-fill store, build metadata, save to backend, navigate.
-  const handleDirectAdd = (match: CatalogOutputMatch) => async (render: CatalogRender) => {
-    if (!dashboardId || !componentId) return;
-    initFromCatalog({
-      componentType: render.component as ComponentType,
-      wfId: match.wf_id,
-      dcId: match.dc_id,
-      projectId,
-      config: buildConfigFromRender(render),
-      source: { toolName: selectedToolName, outputId: match.output_id, description: match.description },
-    });
-    // Zustand set() is synchronous — read the updated state immediately.
-    const state = useBuilderStore.getState();
-    try {
-      const metadata = buildMetadata(state);
-      await upsertComponent(dashboardId, metadata, { appendLayout: true });
-      window.location.assign(`/dashboard-beta-edit/${dashboardId}`);
-    } catch {
-      // Fall back to Edit & Add so the user can fix the issue in the Design step.
-      // (initFromCatalog is already called above, so the Design step will show.)
-    }
-  };
+  const handleDirectAdd = (match: CatalogOutputMatch, toolId: string, toolName: string) =>
+    async (render: CatalogRender) => {
+      if (!dashboardId || !componentId) return;
+      initFromCatalog({
+        componentType: render.component as ComponentType,
+        wfId: match.wf_id,
+        dcId: match.dc_id,
+        projectId,
+        config: buildConfigFromRender(render),
+        source: {
+          toolId,
+          toolName,
+          outputId: match.output_id,
+          description: match.description,
+          use: catalogUseRef(toolId, match.output_id, render),
+        },
+      });
+      // Zustand set() is synchronous — read the updated state immediately.
+      const state = useBuilderStore.getState();
+      try {
+        const metadata = buildMetadata(state);
+        await upsertComponent(dashboardId, metadata, { appendLayout: true });
+        window.location.assign(`/dashboard-edit/${dashboardId}`);
+      } catch {
+        // Fall back to Edit & Add so the user can fix the issue in the Design step.
+        // (initFromCatalog is already called above, so the Design step will show.)
+      }
+    };
 
   // ── Loading ──────────────────────────────────────────────────────────────
   if (!modules && !error) {
@@ -250,18 +365,24 @@ const CatalogTab: React.FC<CatalogTabProps> = ({ projectId }) => {
   }
 
   // ── Split panel ──────────────────────────────────────────────────────────
-  // Default open: all tool accordion items
-  const defaultOpen = (modules ?? []).map((m) => m.tool_id);
-
   return (
     <Group
       align="flex-start"
       gap={0}
-      style={{ height: '100%', minHeight: 520 }}
+      wrap="nowrap"
+      style={{
+        height: '100%',
+        minHeight: 520,
+        border: '1px solid var(--mantine-color-default-border)',
+        borderRadius: 12,
+        overflow: 'hidden',
+      }}
     >
-      {/* ── Left panel ── */}
+      {/* ── Left panel (≈1/4) — search + facets + tool accordion ── */}
       <Box
-        w={360}
+        w="26%"
+        miw={300}
+        maw={420}
         h="100%"
         style={{
           borderRight: '1px solid var(--mantine-color-default-border)',
@@ -270,7 +391,7 @@ const CatalogTab: React.FC<CatalogTabProps> = ({ projectId }) => {
           flexDirection: 'column',
         }}
       >
-        {/* Search */}
+        {/* Search + facets */}
         <Box px="md" py="sm" style={{ borderBottom: '1px solid var(--mantine-color-default-border)' }}>
           <TextInput
             placeholder="Search tools, outputs, files…"
@@ -286,18 +407,36 @@ const CatalogTab: React.FC<CatalogTabProps> = ({ projectId }) => {
             }
             size="sm"
           />
+
+          <Stack gap="sm" mt="sm">
+            <Facet label="Tool" options={facetOptions.tools} selected={toolFilter} onChange={setToolFilter} />
+            <Facet label="Component" options={facetOptions.types} selected={typeFilter} onChange={setTypeFilter} />
+            <Facet label="Data collection" options={facetOptions.dcs} selected={dcFilter} onChange={setDcFilter} />
+          </Stack>
+
+          {anyFilterActive && (
+            <Group justify="flex-end" mt="xs">
+              <UnstyledButton onClick={clearFilters}>
+                <Group gap={4}>
+                  <Icon icon="mdi:filter-remove-outline" width={14} color="var(--mantine-color-violet-6)" />
+                  <Text size="xs" c="violet" fw={600}>Clear filters</Text>
+                </Group>
+              </UnstyledButton>
+            </Group>
+          )}
         </Box>
 
         {/* Accordion grouped by tool */}
         <ScrollArea style={{ flex: 1 }}>
           {filteredModules.length === 0 ? (
             <Center py="xl">
-              <Text size="sm" c="dimmed">No results for "{search}"</Text>
+              <Text size="sm" c="dimmed">No results for the current filters</Text>
             </Center>
           ) : (
             <Accordion
               multiple
-              defaultValue={defaultOpen}
+              value={openTools}
+              onChange={setOpenTools}
               variant="default"
               chevronPosition="left"
               styles={{
@@ -310,7 +449,7 @@ const CatalogTab: React.FC<CatalogTabProps> = ({ projectId }) => {
               {filteredModules.map((module) => (
                 <Accordion.Item key={module.tool_id} value={module.tool_id}>
                   <Accordion.Control>
-                    <ToolLabel module={module} />
+                    <ToolLabel module={module} count={module.matches.length} />
                   </Accordion.Control>
                   <Accordion.Panel>
                     <Stack gap={0}>
@@ -323,10 +462,7 @@ const CatalogTab: React.FC<CatalogTabProps> = ({ projectId }) => {
                             key={`${match.dc_id}-${match.output_id}`}
                             match={match}
                             selected={isSelected}
-                            onClick={() => {
-                              setSelectedMatch(match);
-                              setSelectedToolName(module.tool_name);
-                            }}
+                            onClick={() => selectMatch(module, match)}
                           />
                         );
                       })}
@@ -339,14 +475,15 @@ const CatalogTab: React.FC<CatalogTabProps> = ({ projectId }) => {
         </ScrollArea>
       </Box>
 
-      {/* ── Right panel — per-render preview cards ── */}
+      {/* ── Right panel (≈3/4) — per-render preview cards ── */}
       <Box style={{ flex: 1, minWidth: 0, overflow: 'hidden' }} h="100%">
         {selectedMatch ? (
           <CatalogPreviewPanel
             match={selectedMatch}
+            toolId={selectedToolId}
             toolName={selectedToolName}
-            onAdd={handleAdd(selectedMatch, selectedToolName)}
-            onDirectAdd={handleDirectAdd(selectedMatch)}
+            onAdd={handleAdd(selectedMatch, selectedToolId, selectedToolName)}
+            onDirectAdd={handleDirectAdd(selectedMatch, selectedToolId, selectedToolName)}
           />
         ) : (
           <Center h="100%">

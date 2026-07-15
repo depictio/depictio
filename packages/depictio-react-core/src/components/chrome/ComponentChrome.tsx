@@ -3,6 +3,7 @@ import { ActionIcon, Group } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import { StoredMetadata } from '../../api';
+import CatalogFlag from './CatalogFlag';
 import MetadataPopover from './MetadataPopover';
 import FullscreenButton from './FullscreenButton';
 import DownloadButton from './DownloadButton';
@@ -159,6 +160,9 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
         (isFullscreenActive ? ' fullscreen-active' : '')
       }
     >
+      {metadata.catalog_source && (
+        <CatalogFlag source={metadata.catalog_source} />
+      )}
       <Group
         gap={4}
         className={

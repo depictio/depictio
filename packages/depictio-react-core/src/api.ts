@@ -192,12 +192,30 @@ function generateObjectId(): string {
     : Math.random().toString(16).slice(2).padEnd(24, '0').slice(0, 24);
 }
 
+/** Provenance stamped on a component that was added from the tools catalog. */
+export interface CatalogSource {
+  /** Catalog tool id, e.g. `ivar`. */
+  toolId?: string;
+  /** Human tool name, e.g. `iVar`. */
+  toolName?: string;
+  /** Catalog output id, e.g. `ivar_variants_long`. */
+  outputId?: string;
+  /** Output description shown in the picker. */
+  description?: string;
+  /** The `use: <tool>/<ref>` reference this component maps to (advanced_viz). */
+  use?: string;
+}
+
 export interface StoredMetadata {
   index: string;
   component_type: string;
   wf_id?: string;
   dc_id?: string;
   project_id?: string;
+  /** Set when the component was added from the tools catalog — drives the
+   *  "from catalog" flag on the tile and the catalog section in the metadata
+   *  inspector. Preserved through edits via buildMetadata's `...existing` spread. */
+  catalog_source?: CatalogSource;
   // Card
   title?: string;
   value?: unknown;
@@ -3390,6 +3408,9 @@ export async function clearTableDC(dcId: string): Promise<TableMutationResult> {
 
 export interface CatalogRender {
   component: string;
+  /** Tool-unique render handle, when declared in the catalog. Combined with the
+   *  tool id it forms the `use: <tool>/<id>` snippet (advanced_viz renders). */
+  id?: string;
   kind?: string;
   roles?: Record<string, string>;
   visu_type?: string;

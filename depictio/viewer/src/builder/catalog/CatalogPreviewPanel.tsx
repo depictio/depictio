@@ -1,23 +1,29 @@
 /**
  * Right panel: one component fills the full height.
  * A compact tab row at the top lets the user switch between renders_as entries.
- * The "Add to dashboard" button lives in the same row as the tabs.
+ * The "Add" / "Edit & Add" buttons live in the same row as the tabs, and — for
+ * advanced_viz renders — a copyable `use: <tool>/<ref>` snippet is offered so a
+ * dashboard YAML can reference the same catalog render.
  */
 import React, { useState } from 'react';
 import {
+  ActionIcon,
   Badge,
   Box,
   Button,
+  Code,
   Group,
   Stack,
   Text,
   Title,
+  Tooltip,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import type { CatalogOutputMatch, CatalogRender } from 'depictio-react-core';
 
 interface CatalogPreviewPanelProps {
   match: CatalogOutputMatch;
+  toolId: string;
   toolName: string;
   onAdd: (render: CatalogRender) => void;
   onDirectAdd: (render: CatalogRender) => void;
@@ -39,16 +45,57 @@ function renderVariant(render: CatalogRender): string {
   return '';
 }
 
+// ---------------------------------------------------------------------------
+// use: <tool>/<ref> — only advanced_viz renders resolve through the catalog
+// `use:` expander today, so a snippet is only meaningful there. Prefer the
+// render's own id; fall back to the output short id. Exported (imported by
+// CatalogTab, which stamps the same ref as provenance on the added component).
+// ---------------------------------------------------------------------------
+function outputShort(outputId: string, toolId: string): string {
+  return outputId.startsWith(`${toolId}_`) ? outputId.slice(toolId.length + 1) : outputId;
+}
+
+export function catalogUseRef(
+  toolId: string,
+  outputId: string,
+  render: CatalogRender,
+): string | undefined {
+  if (render.component !== 'advanced_viz') return undefined;
+  const ref = render.id || outputShort(outputId, toolId);
+  return `${toolId}/${ref}`;
+}
+
 const PREVIEW_BASE = '/depictio/api/v1/catalog/output';
 
-const CatalogPreviewPanel: React.FC<CatalogPreviewPanelProps> = ({ match, toolName, onAdd, onDirectAdd }) => {
+const CatalogPreviewPanel: React.FC<CatalogPreviewPanelProps> = ({
+  match,
+  toolId,
+  toolName,
+  onAdd,
+  onDirectAdd,
+}) => {
   const [selectedIdx, setSelectedIdx] = useState(0);
+  const [copied, setCopied] = useState(false);
   const renders = match.renders_as;
   const current = renders[selectedIdx];
   const renderId = `${match.output_id}-${selectedIdx}`;
   // render_id via hash: read by the bundle's own JS (no backend restart needed).
   // ?render_id= also sent as an optimisation hint for the backend to filter payload size.
   const previewUrl = `${PREVIEW_BASE}/${encodeURIComponent(match.output_id)}/preview-html?render_id=${encodeURIComponent(renderId)}#render_id=${encodeURIComponent(renderId)}`;
+
+  const useRef = current ? catalogUseRef(toolId, match.output_id, current) : undefined;
+  const useSnippet = useRef ? `use: ${useRef}` : '';
+
+  const copyUse = async () => {
+    if (!useSnippet) return;
+    try {
+      await navigator.clipboard.writeText(useSnippet);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // clipboard denied — silently ignore
+    }
+  };
 
   return (
     <Stack gap={0} h="100%" style={{ minHeight: 0 }}>
@@ -61,7 +108,7 @@ const CatalogPreviewPanel: React.FC<CatalogPreviewPanelProps> = ({ match, toolNa
         style={{ borderBottom: '1px solid var(--mantine-color-default-border)', flexShrink: 0 }}
       >
         <Group gap="xs" mb={2}>
-          <Badge variant="dot" color="teal" size="sm">{toolName}</Badge>
+          <Badge variant="dot" color="violet" size="sm">{toolName}</Badge>
           <Text size="xs" c="dimmed">{match.dc_tag}</Text>
         </Group>
         <Title order={4} fw={700} lineClamp={1}>
@@ -103,7 +150,7 @@ const CatalogPreviewPanel: React.FC<CatalogPreviewPanelProps> = ({ match, toolNa
         <Group gap="xs" style={{ flexShrink: 0 }}>
           <Button
             size="sm"
-            color="teal"
+            color="violet"
             variant="filled"
             leftSection={<Icon icon="mdi:plus" width={16} />}
             onClick={() => onDirectAdd(current)}
@@ -112,7 +159,7 @@ const CatalogPreviewPanel: React.FC<CatalogPreviewPanelProps> = ({ match, toolNa
           </Button>
           <Button
             size="sm"
-            color="teal"
+            color="violet"
             variant="outline"
             leftSection={<Icon icon="mdi:pencil-plus-outline" width={16} />}
             onClick={() => onAdd(current)}
@@ -121,6 +168,27 @@ const CatalogPreviewPanel: React.FC<CatalogPreviewPanelProps> = ({ match, toolNa
           </Button>
         </Group>
       </Group>
+
+      {/* use: snippet — advanced_viz renders only (the ones `use:` resolves) */}
+      {useSnippet && (
+        <Group
+          px="lg"
+          py={6}
+          gap="xs"
+          wrap="nowrap"
+          style={{ borderBottom: '1px solid var(--mantine-color-default-border)', flexShrink: 0 }}
+        >
+          <Tooltip label="Reference this catalog render from a dashboard YAML" withArrow>
+            <Icon icon="mdi:code-tags" width={14} color="var(--mantine-color-violet-6)" />
+          </Tooltip>
+          <Code style={{ fontSize: 12 }}>{useSnippet}</Code>
+          <Tooltip label={copied ? 'Copied!' : 'Copy snippet'} withArrow>
+            <ActionIcon variant="subtle" color="violet" size="sm" onClick={copyUse} aria-label="Copy use snippet">
+              <Icon icon={copied ? 'mdi:check' : 'mdi:content-copy'} width={14} />
+            </ActionIcon>
+          </Tooltip>
+        </Group>
+      )}
 
       {/* Full-height bare component preview */}
       <Box style={{ flex: 1, minHeight: 0 }}>

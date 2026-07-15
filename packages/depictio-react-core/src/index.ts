@@ -207,6 +207,7 @@ export type {
   CatalogComposeResponse,
   CatalogPreviewRender,
   CatalogPreviewPayload,
+  CatalogSource,
 } from './api';
 // Selection-as-filter helpers (Plotly/AG Grid → InteractiveFilter)
 export {
