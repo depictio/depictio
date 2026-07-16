@@ -3,9 +3,11 @@ DRAFT NOTE (remove before publishing):
 - Publishes to the depictio-docs blog. Move this file there, or PR it across.
 - `authors:` slug must exist in depictio-docs `.authors.yml` (existing posts use Thomas Weber).
 - Version framing per user decision: celebrate "1.0" as the milestone (repo tag is currently 1.1.4).
-- IMAGES: sourced from the live depictio-docs site (v1.2.0), referenced here as ABSOLUTE URLs so the
-  draft previews on GitHub. When integrating into depictio-docs, switch to repo-relative paths
-  (e.g. ../../images/guides/advanced-visualizations/volcano_light.webp) so they track the doc version.
+- IMAGES: screenshots sourced from the live depictio-docs site (v1.2.0), referenced here as ABSOLUTE
+  URLs so the draft previews on GitHub. When integrating into depictio-docs, switch to repo-relative
+  paths (e.g. ../../images/guides/advanced-visualizations/volcano_light.webp) so they track the version.
+  LOGO: uses this repo's docs/images/logo_hd.png (../images/logo_hd.png) so it renders on GitHub;
+  in depictio-docs repoint to that repo's images/logo/logo_hd.svg (or logo_hd.png).
   No videos exist on the docs (screenshots/webp only); if you have screencasts, add them.
   The advanced-viz images come as light/dark pairs (volcano_light.webp / volcano_dark.webp). Draft
   uses the light one only (GitHub renders both variants, looking like a duplicate). In mkdocs you can
@@ -30,6 +32,8 @@ categories:
 ---
 
 # 🎉 Depictio 1.0: from prototype to production
+
+<p align="center"><img src="../images/logo_hd.png" alt="Depictio" width="280"></p>
 
 When Depictio went live last year, I'll be honest, it was still a prototype. A
 promising one, running real dashboards for real people, but a prototype all the
@@ -91,7 +95,7 @@ One server instead of two, a real separation between front and back, and as a
 nice bonus the automatic dashboard screenshots came out roughly twice as fast on
 the new stack.
 
-![The Depictio dashboard editor running on the new React frontend](https://depictio.github.io/depictio-docs/v1.2.0/images/v0.12/react-beta/page_dashboard_editor.png)
+![The Depictio dashboards landing page on the new React frontend](https://depictio.github.io/depictio-docs/v1.2.0/images/v0.12/react-beta/page_dashboards.png)
 
 ## 🧬 Visualisations built for biology
 
@@ -151,18 +155,26 @@ properly.
 
 A stable foundation is the point, not the finish line, and the next post is
 already taking shape. It's about the two pieces I deliberately kept out of this
-one: Depictio's dashboard templates and its bioinformatics tools catalog.
+one: Depictio's dashboard **templates** and its bioinformatics **tools catalog**.
 
-Templates are the idea that a standardised pipeline should come with a
-standardised dashboard: you point Depictio at a run and get a populated,
-interactive dashboard in minutes, no manual wiring. The tools catalog is what
-sits underneath, mapping a given tool's output to the visualisation that suits
-it, and it's built to be community-extensible so anyone can add a tool. Together
-they're how Depictio goes from "a dashboard builder" to "the dashboard your
-pipeline should have shipped with."
+A **template** is a ready-made dashboard for a known pipeline. Instead of
+rebuilding a dashboard from scratch every time, you pick the template that
+matches your pipeline, point Depictio at your results, and it assembles the
+dashboard for you. Run the same pipeline next week on new samples, and it's the
+same template with new data: a populated, interactive dashboard in minutes.
 
-That's the next story, along with the performance benchmarks I promised above.
-More soon.
+The **tools catalog** is the library that makes templates possible. For each
+bioinformatics tool, it records what the tool's output looks like and which
+visualisation renders it best, so a differential-expression table knows it should
+become a volcano plot, and a taxonomy table knows it should become a stacked bar.
+A template is really just an assembly of catalog entries. And the catalog is
+built to be community-extensible: adding a new tool is a small config
+contribution, not a code change, which is how the coverage grows beyond what I
+could ever map on my own.
+
+Put together, that's how Depictio goes from "a dashboard builder" to "the
+dashboard your pipeline should have shipped with." That's the next story, along
+with the performance benchmarks I promised above. More soon.
 
 ## 🚀 Try it
 
