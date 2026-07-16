@@ -3,19 +3,18 @@ DRAFT NOTE (remove before publishing):
 - Publishes to the depictio-docs blog. Move this file there, or PR it across.
 - `authors:` slug must exist in depictio-docs `.authors.yml` (existing posts use Thomas Weber).
 - Version framing per user decision: celebrate "1.0" as the milestone (repo tag is currently 1.1.4).
-- NUMBERS: GitHub stars (47) and forks (4) are REAL as of 2026-07 (GitHub API). Deployment count,
-  container-image pulls, and user count are PLACEHOLDERS [N] - GHCR pull counts are not exposed by
-  any API, so fill these in by hand before publishing. Performance benchmark numbers are pending
-  (author is running them); the post promises them rather than stating them.
+- IMAGES: sourced from the live depictio-docs site (v1.2.0), referenced here as ABSOLUTE URLs so the
+  draft previews on GitHub. When integrating into depictio-docs, switch to repo-relative paths
+  (e.g. ../../images/guides/advanced-visualizations/volcano_light.webp) so they track the doc version.
+  No videos exist on the docs (screenshots/webp only); if you have screencasts, add them.
+- NUMBERS: GitHub stars (47) and forks (4) are REAL as of 2026-07 (GitHub API). Deployment count and
+  container-image pulls are PLACEHOLDERS [N] - GHCR pull counts are not exposed by any API, fill by hand.
+  Performance benchmark numbers are pending (author running them); the post promises rather than states.
 - Real-time dashboards intentionally NOT mentioned.
-- nf-core pipelines / workflow templates / tools catalog are intentionally NOT covered here
-  (reserved for a separate article); only the advanced-viz family is described.
-- SCREENSHOTS/VIDEO: no dashboard or advanced-viz screenshots exist in the repo or on the docs
-  homepage yet (main.png is an outdated Dash-era architecture diagram). Placeholders marked below.
-  Advanced-viz stills can be generated with dev/advanced_viz_docs_screenshots/capture_react_screenshots.py.
-- Features referenced are all in the shipped changelog: React migration #770, performance work
-  (Polars-native figures, Delta schema cache/column projection, render offload, MultiQC caching),
-  advanced-viz catalog + live Celery clustering, Helm/Percona HA.
+- nf-core pipelines / workflow templates / tools catalog intentionally NOT covered (separate article).
+- Features referenced are all shipped: React migration #770, performance work (Polars-native figures,
+  Delta schema cache/column projection, render offload, MultiQC caching), advanced-viz catalog + live
+  Celery clustering, Helm/Percona HA.
 -->
 ---
 date: 2026-07-15
@@ -36,11 +35,11 @@ Releasing 1.0 is me saying something different this time: Depictio is now a
 stable, production-ready product. This post is about what that actually means,
 and about everything that went into getting here.
 
-<!-- SCREENSHOT: hero shot of a finished Depictio dashboard goes here -->
+![A Depictio dashboard bringing several linked visualisations together](https://depictio.github.io/depictio-docs/v1.2.0/images/guides/dashboard_creation/dashboard_example.png)
 
 <!-- more -->
 
-## What 1.0 really means
+## ✅ What 1.0 really means
 
 A version number is a kind of promise. With 1.0, the promise is that the core has
 stopped moving: the data model, the API, and the viewer are stable enough that
@@ -52,7 +51,7 @@ That is the real change here. Everything before was "you can try this." 1.0 is
 test, it's a product I'm asking people to depend on, and that shift shaped every
 decision in this release.
 
-## A serious step forward in performance
+## ⚡ A serious step forward in performance
 
 This is the part I'm most proud of, and it's the least visible in a screenshot.
 A lot of the past year went into making Depictio fast on real, large data
@@ -73,7 +72,7 @@ next to those claims instead of adjectives. Those are coming shortly, and I'll
 share them in a follow-up. The short version for now: dashboards that hold up
 when the data gets serious, not just when it's a few thousand rows.
 
-## The front end is now React, same look, cleaner architecture
+## ⚛️ The front end is now React, same look, cleaner architecture
 
 The biggest structural change since launch is one you feel more than you see. The
 entire front end was rebuilt in React and TypeScript, and the old Dash codebase
@@ -89,7 +88,9 @@ One server instead of two, a real separation between front and back, and as a
 nice bonus the automatic dashboard screenshots came out roughly twice as fast on
 the new stack.
 
-## Visualisations built for biology
+![The Depictio dashboard editor running on the new React frontend](https://depictio.github.io/depictio-docs/v1.2.0/images/v0.12/react-beta/page_dashboard_editor.png)
+
+## 🧬 Visualisations built for biology
 
 Depictio now ships a catalog of advanced visualisations aimed squarely at omics
 work: volcano plots, clustered heatmaps, embeddings (PCA, UMAP, t-SNE, PCoA),
@@ -97,8 +98,10 @@ Manhattan plots, oncoplots, taxonomy bars, and more. Each one is a self-containe
 panel that comes with its own controls, so a volcano arrives with movable
 thresholds and a Manhattan knows how to order chromosomes.
 
-<!-- SCREENSHOT/GIF: an advanced viz in action, e.g. volcano with threshold drag.
-     Generate stills with dev/advanced_viz_docs_screenshots/capture_react_screenshots.py -->
+![Volcano plot in Depictio](https://depictio.github.io/depictio-docs/v1.2.0/images/guides/advanced-visualizations/volcano_light.webp#only-light)
+![Volcano plot in Depictio](https://depictio.github.io/depictio-docs/v1.2.0/images/guides/advanced-visualizations/volcano_dark.webp#only-dark)
+
+*The volcano panel is one of eighteen advanced visualisations in the catalog. [Browse the full gallery in the docs.](https://depictio.github.io/depictio-docs/v1.2.0/images/guides/advanced-visualizations/)*
 
 The heavier steps, dimensionality reduction and clustering, run in the background
 with caching, so you can compute an embedding and then explore it without the
@@ -106,7 +109,7 @@ page locking up. There's a lot more to say about how these plots connect to
 pipelines and to a community-extensible tool catalog, but that deserves its own
 post, so I'll come back to it.
 
-## Ready to deploy for real
+## 🚀 Ready to deploy for real
 
 Production-readiness is also about the parts nobody tweets about. Depictio's
 services are built to scale independently: an API replica runs with four FastAPI
@@ -127,7 +130,7 @@ And it's still self-hosted and open-source, the way it started. Your data stays
 on your infrastructure, there's no vendor account and no per-seat bill, and you
 can read every line if you want to.
 
-## Where Depictio is today
+## 📊 Where Depictio is today
 
 1.0 is also a good moment to look up from the code for a second. Depictio has been
 in the making for about three years, it's MIT-licensed, and as of this release it
@@ -142,13 +145,13 @@ Beyond GitHub, please fill in the real figures before publishing:
 None of that happened by accident, and all of it is why 1.0 felt worth doing
 properly.
 
-## What's next
+## 🗺️ What's next
 
 A stable foundation is the point, not the finish line. Next up: the performance
 benchmarks I mentioned, deeper coverage of the visualisation catalog, and the
 pipeline-template and tool-catalog story I've been holding back for its own post.
 
-## Try it
+## 🚀 Try it
 
 - **Live demo:** explore the pre-loaded datasets, or upload your own.
 - **Docs:** start with "Your first dashboard in 15 minutes."
