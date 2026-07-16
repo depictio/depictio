@@ -35,7 +35,7 @@ Releasing 1.0 is me saying something different this time: Depictio is now a
 stable, production-ready product. This post is about what that actually means,
 and about everything that went into getting here.
 
-![A Depictio dashboard bringing several linked visualisations together](https://depictio.github.io/depictio-docs/v1.2.0/images/guides/dashboard_creation/dashboard_example.png)
+![A Depictio dashboard in the viewer, with interactive filters](https://depictio.github.io/depictio-docs/v1.2.0/images/v0.12/react-beta/page_dashboard_viewer.png)
 
 <!-- more -->
 
