@@ -7,6 +7,9 @@ DRAFT NOTE (remove before publishing):
   draft previews on GitHub. When integrating into depictio-docs, switch to repo-relative paths
   (e.g. ../../images/guides/advanced-visualizations/volcano_light.webp) so they track the doc version.
   No videos exist on the docs (screenshots/webp only); if you have screencasts, add them.
+  The advanced-viz images come as light/dark pairs (volcano_light.webp / volcano_dark.webp). Draft
+  uses the light one only (GitHub renders both variants, looking like a duplicate). In mkdocs you can
+  use the theme-aware pattern: img#only-light + img#only-dark to switch with the site theme.
 - NUMBERS: GitHub stars (47) and forks (4) are REAL as of 2026-07 (GitHub API). Deployment count and
   container-image pulls are PLACEHOLDERS [N] - GHCR pull counts are not exposed by any API, fill by hand.
   Performance benchmark numbers are pending (author running them); the post promises rather than states.
@@ -98,8 +101,7 @@ Manhattan plots, oncoplots, taxonomy bars, and more. Each one is a self-containe
 panel that comes with its own controls, so a volcano arrives with movable
 thresholds and a Manhattan knows how to order chromosomes.
 
-![Volcano plot in Depictio](https://depictio.github.io/depictio-docs/v1.2.0/images/guides/advanced-visualizations/volcano_light.webp#only-light)
-![Volcano plot in Depictio](https://depictio.github.io/depictio-docs/v1.2.0/images/guides/advanced-visualizations/volcano_dark.webp#only-dark)
+![Volcano plot in Depictio](https://depictio.github.io/depictio-docs/v1.2.0/images/guides/advanced-visualizations/volcano_light.webp)
 
 *The volcano panel is one of eighteen advanced visualisations in the catalog. [Browse the full gallery in the docs.](https://depictio.github.io/depictio-docs/v1.2.0/images/guides/advanced-visualizations/)*
 
