@@ -157,11 +157,15 @@ A stable foundation is the point, not the finish line, and the next post is
 already taking shape. It's about the two pieces I deliberately kept out of this
 one: Depictio's dashboard **templates** and its bioinformatics **tools catalog**.
 
+<p align="center"><img src="https://depictio.github.io/depictio-docs/v1.2.0/images/logo/templates_catalog_logo.png" alt="Depictio Templates" width="220"></p>
+
 A **template** is a ready-made dashboard for a known pipeline. Instead of
 rebuilding a dashboard from scratch every time, you pick the template that
 matches your pipeline, point Depictio at your results, and it assembles the
 dashboard for you. Run the same pipeline next week on new samples, and it's the
 same template with new data: a populated, interactive dashboard in minutes.
+
+<p align="center"><img src="https://depictio.github.io/depictio-docs/v1.2.0/images/logo/tools_catalog_logo.png" alt="Depictio Tools Catalog" width="220"></p>
 
 The **tools catalog** is the library that makes templates possible. For each
 bioinformatics tool, it records what the tool's output looks like and which
