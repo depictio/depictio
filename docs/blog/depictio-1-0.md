@@ -3,8 +3,12 @@ DRAFT NOTE (remove before publishing):
 - Publishes to the depictio-docs blog. Move this file there, or PR it across.
 - `authors:` slug must exist in depictio-docs `.authors.yml` (existing posts use Thomas Weber).
 - Version framing per user decision: celebrate "1.0" as the milestone (repo tag is currently 1.1.4).
-- All features referenced are shipped on main (v1.1.4): React migration #770, realtime #899/#900,
-  advanced-viz renderers, catalog CLI, Gateway API #882.
+- ACTION REQUIRED: the "Where Depictio is today" section has PLACEHOLDER numbers in [square brackets].
+  Fill in real figures (GitHub stars, Docker/GHCR pulls, deployment count, contributors) before publishing.
+- Real-time dashboards intentionally NOT mentioned.
+- Features referenced are all in the shipped changelog: React migration #770, performance work
+  (Polars-native figures, Delta schema cache/column projection, render offload, MultiQC caching),
+  advanced-viz catalog + live Celery clustering, nf-core templates, DC linking, Helm/Percona HA.
 -->
 ---
 date: 2026-07-15
@@ -16,114 +20,130 @@ categories:
   - Features
 ---
 
-# 🎉 Depictio 1.0 — what's changed since we went live
+# Depictio 1.0: from prototype to production
 
-A year ago, Depictio went live with a public demo and a simple promise: turn
-bioinformatics results into interactive dashboards, without writing a
-front-end. Today, Depictio reaches its first **stable major release**.
-
-This post is the tour of everything that landed on the way to 1.0 — and there's
-a lot.
+When Depictio went live last year, I'll be honest, it was still a prototype. A
+promising one, running real dashboards for real people, but a prototype all the
+same. Releasing 1.0 is me saying something different this time: Depictio is now a
+stable, production-ready product. This post is about what that actually means,
+and about everything that went into getting here.
 
 <!-- more -->
 
-## ✅ What "1.0" means
+## What 1.0 really means
 
-1.0 is a commitment, not just a number. It means the core is stable and
-production-ready: the data model, the API, and the viewer have settled enough
-that you can build on them and deploy them for real users — in a lab, a core
-facility, or a consortium — without expecting the ground to shift under you.
+A version number is a kind of promise, and 1.0 is the one that matters most. It
+says the core has settled: the data model, the API, and the viewer are stable
+enough that you can deploy Depictio for a lab, a core facility, or a consortium
+and build on top of it without expecting the ground to move under you.
 
-Concretely, 1.0 ships with:
+That is the real change here. Everything before was "you can try this." 1.0 is
+"you can rely on this." Depictio is no longer an experiment I'm asking people to
+test, it's a product I'm asking people to depend on, and that shift shaped every
+decision in this release.
 
-- a rewritten, modern front end,
-- real-time dashboards,
-- a catalog of omics-specific visualisations,
-- pipeline templates,
-- and the same self-hosted, open-source foundation Depictio started with.
+## A serious step forward in performance
 
-Let's go through them.
+This is the part I'm most proud of, and it's the least visible in a screenshot.
+A lot of the past year went into making Depictio fast on real, large data
+instead of tidy little demo files.
 
-## 🔁 The big one: Dash → React
+Figures and cards now read straight from your Delta tables and pull only the
+columns they actually need, backed by a schema cache, so a chart doesn't drag the
+whole table across just to draw a few series. The figure engine is Polars-native
+now, with downsampling and Arrow for moving data around efficiently. Heavy
+rendering is pushed off to background workers with higher concurrency and gzip on
+the wire, which keeps the interface responsive while the expensive work happens
+somewhere else. MultiQC reports, which can get large, get filter-aware caching
+and prewarming so they don't recompute from scratch every time you touch a
+filter.
 
-The single largest change since launch is invisible in a screenshot but felt
-everywhere: **the entire front end was rewritten in React/TypeScript**, and the
-old Dash codebase was removed.
+We even wrote up a gigabyte-scale dataframe performance audit to keep ourselves
+honest about where the limits are. The upshot is simple: dashboards that hold up
+when the data gets serious, not just when it's a few thousand rows.
 
-Why do it? The dashboard viewer is the heart of Depictio, and a React foundation
-gives us what a dashboarding tool needs most — a real component model, precise
-control over interactivity and state, and a clean path to advanced,
-cross-linked visualisations. Charts still render with Plotly.js; what changed is
-everything around them.
+## The front end is now React
 
-For you, the payoff is a faster, smoother viewer and a component architecture
-that made the rest of this release possible.
+The biggest structural change since launch is one you feel more than you see. The
+entire front end was rebuilt in React and TypeScript, and the old Dash codebase
+is gone.
 
-## ⚡ Real-time dashboards
+Charts still render with Plotly, what changed is everything around them. React
+gives Depictio a real component model and much tighter control over interactivity
+and state, and that foundation is what made the advanced visualisations and the
+data linking below possible in the first place. As a nice bonus, even the
+automatic dashboard screenshots came out roughly twice as fast on the new stack.
 
-Dashboards used to describe data that already existed. Now they can describe
-data as it *arrives*.
+## Visualisations built for biology
 
-Depictio 1.0 introduces **real-time dashboards over WebSockets**. A running
-process — say a microscopy acquisition — can stream events into Depictio, and a
-live timeline and gallery update in the browser as new items land, with recent
-arrivals highlighted. No refresh, no re-run.
+Depictio now ships a catalog of advanced visualisations aimed squarely at omics
+work: volcano plots, clustered heatmaps, embeddings (PCA, UMAP, t-SNE, PCoA),
+Manhattan plots, oncoplots, taxonomy bars, and more. Each one is a self-contained
+panel that comes with its own controls, so a volcano arrives with movable
+thresholds and a Manhattan knows how to order chromosomes.
 
-It's a small feature to describe and a striking one to watch: a dashboard that
-moves while you look at it.
+The heavier steps, dimensionality reduction and clustering, run in the background
+with caching, so you can compute an embedding and then explore it without the
+page locking up. Underneath all of this there's a module-granular catalog that
+maps a bioinformatics tool's output to the visualisation that suits it, anchored
+on nf-core, bio.tools, and EDAM. That catalog is the seed of something I care a
+lot about: a community-extensible library where adding a tool is a config file,
+not a code change.
 
-## 📊 An omics visualization catalog
+## Made for nf-core pipelines
 
-Every field has *that one plot*. RNA-seq has the volcano. Single-cell has the
-UMAP. GWAS has the Manhattan. Expression studies have the heatmap.
+If you run nf-core, a good part of this release is pointed at you. Depictio ships
+templates for pipelines like viralrecon and ampliseq that adapt to how the
+pipeline was actually run, including awkward things like option variability and
+alternate routes, so the dashboard reflects your run rather than an idealised
+one. MultiQC reports load straight into a dashboard, and you can create and link
+data collections directly from the UI.
 
-Depictio now ships a growing family of **advanced, interactive
-visualisations** built for exactly these: volcano plots with draggable
-significance thresholds, clustered heatmaps, PCA/UMAP/PCoA embeddings, Manhattan
-plots — and more (oncoplot, lollipop, stacked taxonomy, rarefaction, sunburst…).
-Each is a self-contained panel: a chart plus its own controls.
+The goal behind all of it is unglamorous and, I think, exactly right: your
+pipeline finishes, and you get a real dashboard, not a folder of files nobody
+opens again.
 
-We'll dedicate a whole post to the catalog. For now: the plots you reach for are
-becoming first-class, interactive citizens in Depictio.
+## Ready to deploy for real
 
-## 📥 Bring any data
+Production-readiness is also about the parts nobody tweets about. On Kubernetes,
+the Helm chart moved MongoDB high-availability onto the Percona operator, there's
+permission-based authentication, and there are dedicated ingress paths for the
+backend and object storage. Dashboards now carry an ingestion report and a health
+banner, so when something goes wrong during a scan you can actually see it instead
+of guessing. These are the boring, essential things that separate a demo from
+something a department can run without babysitting.
 
-Depictio 1.0 is deliberately unfussy about inputs. You can bring:
+And it's still self-hosted and open-source, the way it started. Your data stays
+on your infrastructure, there's no vendor account and no per-seat bill, and you
+can read every line if you want to.
 
-- **dataframes** (CSV, Parquet, …),
-- **MultiQC reports**,
-- **GeoJSON**,
-- **images**,
+## Where Depictio is today
 
-and create data collections straight from the UI. Then you can **connect
-multiple sources together** so components react to one another — click in one
-panel and the rest update. One linked, interactive view instead of a folder of
-disconnected files.
+1.0 is also a good moment to look up from the code for a second. A few numbers,
+please treat these as a snapshot to be filled in with the real figures at
+publish time:
 
-## 🔒 Still self-hosted — your data stays yours
+- deployed across **[N]** labs and core facilities, including several groups at
+  EMBL,
+- container images pulled more than **[N]** times,
+- **[N]** stars and **[N]** contributors on GitHub.
 
-None of this changes the founding principle: **Depictio is self-hosted and
-open-source**. You run it on your own infrastructure — laptop, institute
-servers, cluster, private cloud — and your data never leaves your control.
+None of that happened by accident, and all of it is why 1.0 felt worth doing
+properly.
 
-1.0 makes the deployment story sturdier, including a **Gateway API** option for
-cleaner ingress in front of the backend, alongside the existing Docker Compose
-and Helm/Kubernetes paths. No vendor account, no per-seat bill, no data leaving
-the building.
+## What's next
 
-## 🗺️ What's next
+A stable foundation is the point, not the finish line. Next up: deeper templates
+for common nf-core pipelines, guided dashboard assembly straight from a run
+directory, and opening up that tool-to-visualisation catalog so the community can
+extend it.
 
-1.0 is a foundation, not a finish line. On the roadmap: deeper pipeline
-templates for common nf-core workflows, guided dashboard assembly straight from
-a run directory, and a community-extensible catalog so any tool's output can be
-mapped to the right visualisation.
+## Try it
 
-## 🚀 Try it
+- **Live demo:** explore the pre-loaded datasets, or upload your own.
+- **Docs:** start with "Your first dashboard in 15 minutes."
+- **GitHub:** star the repo, open an issue, tell me what breaks.
 
-- **Live demo:** explore pre-loaded datasets or upload your own.
-- **Docs:** start with *Your first dashboard in 15 minutes*.
-- **GitHub:** ⭐ the repo, file issues, join the discussion.
-
-A year ago Depictio went live. Today it's 1.0 — stable, faster, real-time, and
-ready for your data. Huge thanks to everyone who tested, filed issues, and
-pushed us to ship. 🙏
+A year ago Depictio went live as a prototype. Today it's 1.0, stable, faster, and
+ready to be relied on. Thank you to everyone who tested it, filed issues, and
+pushed me to get it here.
