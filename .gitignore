@@ -394,3 +394,7 @@ depictio/viewer/dist-catalog-preview/
 .nextflow/
 .nextflow.log*
 work/
+
+# Benchmark harness generated artifacts (datasets + results are generated live,
+# never committed — see benchmark/README.md)
+benchmark/output/
