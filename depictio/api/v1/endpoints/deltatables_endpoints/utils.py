@@ -12,6 +12,10 @@ from depictio.api.v1.db import files_collection
 from depictio.api.v1.s3 import s3_client
 from depictio.api.v1.utils import numpy_to_python
 
+# Cap on how many distinct categorical values we sample into ``specs`` for the
+# card-builder preview. Kept small so specs stay compact in Mongo.
+_UNIQUE_VALUES_PREVIEW_CAP = 20
+
 
 def get_s3_folder_size(bucket_name, prefix):
     """
@@ -201,6 +205,25 @@ def precompute_columns_specs(aggregated_df: pl.DataFrame, agg_functions: dict, d
                         continue
                     result = result.flat[0]
                 tmp_dict["specs"][str(method_name)] = numpy_to_python(result)
+
+        # Categorical columns: record a small, frequency-ordered sample of the
+        # actual distinct values so the React card-builder preview can show real
+        # category names in top-N / concentration strips instead of placeholder
+        # "Bucket N" labels. The saved card recomputes the true distribution from
+        # live data via bulk_compute_cards(); this only makes the design-time
+        # preview representative. Capped to keep specs compact.
+        if normalized_type in ("object", "bool", "category") or normalized_type.startswith(
+            "string"
+        ):
+            try:
+                value_counts = aggregated_df[column].value_counts(dropna=True)
+                unique_values = [
+                    str(v) for v in value_counts.index.tolist()[:_UNIQUE_VALUES_PREVIEW_CAP]
+                ]
+                if unique_values:
+                    tmp_dict["specs"]["unique_values"] = unique_values
+            except Exception as exc:  # never let preview metadata abort an upsert
+                logger.debug(f"unique_values sample failed for column {column!r}: {exc}")
 
         results.append(tmp_dict)
 

@@ -106,6 +106,23 @@ def test_pangolin_lineages_shape_does_not_raise() -> None:
     assert by_name["qc_status"]["specs"]["mode"] in ("pass", "fail")
 
 
+def test_unique_values_recorded_for_categorical() -> None:
+    """Categorical columns carry a frequency-ordered ``unique_values`` sample so
+    the card-builder preview shows real names instead of "Bucket N" labels."""
+    df = pl.DataFrame({"variety": ["Setosa", "Setosa", "Versicolor", "Virginica"]})
+    [spec] = precompute_columns_specs(df, _AGG_FUNCTIONS, _dc_data())
+    uv = spec["specs"]["unique_values"]
+    assert uv[0] == "Setosa"  # most frequent first
+    assert set(uv) == {"Setosa", "Versicolor", "Virginica"}
+
+
+def test_unique_values_capped() -> None:
+    """High-cardinality columns only keep a capped sample to keep specs compact."""
+    df = pl.DataFrame({"id": [f"v{i}" for i in range(50)]})
+    [spec] = precompute_columns_specs(df, _AGG_FUNCTIONS, _dc_data())
+    assert len(spec["specs"]["unique_values"]) == 20
+
+
 def test_ndarray_result_uses_positional_indexing() -> None:
     """When pandas_method is callable and returns ndarray, positional
     indexing must still work — protects the symmetric branch in the fix."""
