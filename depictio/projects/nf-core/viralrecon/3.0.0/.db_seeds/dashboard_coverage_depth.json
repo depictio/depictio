@@ -217,7 +217,7 @@
       "component_type": "advanced_viz",
       "title": "Genome coverage track per sample",
       "workflow_tag": "viralrecon",
-      "data_collection_tag": "coverage_track_canonical",
+      "data_collection_tag": "genome_coverage_track",
       "wf_id": {
         "$oid": "746b0f3c1e4a2d7f8e5b9c01"
       },
@@ -228,7 +228,7 @@
         "type": null,
         "metatype": null,
         "description": "Coverage-track-ready genome-coverage tracks (chromosome / position / value)",
-        "data_collection_tag": "coverage_track_canonical",
+        "data_collection_tag": "genome_coverage_track",
         "dc_specific_properties": null,
         "_id": {
           "$oid": "746b0f3c1e4a2d7f8e5b9c1c"
@@ -264,7 +264,7 @@
       "component_type": "advanced_viz",
       "title": "Amplicon coverage heatmap (clustered)",
       "workflow_tag": "viralrecon",
-      "data_collection_tag": "complex_heatmap_canonical",
+      "data_collection_tag": "amplicon_coverage_matrix",
       "wf_id": {
         "$oid": "746b0f3c1e4a2d7f8e5b9c01"
       },
@@ -275,7 +275,7 @@
         "type": null,
         "metatype": null,
         "description": "ComplexHeatmap-ready amplicon-coverage matrix (samples \u00d7 amplicons)",
-        "data_collection_tag": "complex_heatmap_canonical",
+        "data_collection_tag": "amplicon_coverage_matrix",
         "dc_specific_properties": null,
         "_id": {
           "$oid": "746b0f3c1e4a2d7f8e5b9c1b"

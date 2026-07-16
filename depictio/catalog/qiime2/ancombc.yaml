@@ -11,3 +11,12 @@ renders_as:
   - { id: volcano, component: advanced_viz, kind: volcano, roles: {feature_id: id, effect_size: lfc, significance: q_val} }
   - { id: da_barplot, component: advanced_viz, kind: da_barplot, roles: {feature_id: id, contrast: contrast, lfc: lfc} }
   - { id: qq, component: advanced_viz, kind: qq, roles: {p_value: p_val} }
+  - { id: total_taxa, component: card, column: id, aggregation: nunique } # taxa analysed (add filter_expr for significant subset)
+  - { id: phyla_count, component: card, column: Phylum, aggregation: nunique } # phyla analysed
+  - { id: lfc_card, component: card, column: lfc, aggregation: average } # log-fold-change distribution
+  - { id: contrast_filter, component: interactive, interactive_component_type: MultiSelect, column: contrast } # filter by contrast
+  - { id: anc_phylum_filter, component: interactive, interactive_component_type: MultiSelect, column: Phylum } # filter by phylum
+  - { id: anc_kingdom_filter, component: interactive, interactive_component_type: MultiSelect, column: Kingdom } # filter by kingdom
+  - { id: w_slider, component: interactive, interactive_component_type: RangeSlider, column: w } # filter by W statistic
+  - { id: lfc_slider, component: interactive, interactive_component_type: RangeSlider, column: lfc } # filter by log-fold change
+  - { id: anc_table, component: table }

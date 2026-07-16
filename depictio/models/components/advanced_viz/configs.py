@@ -442,6 +442,13 @@ class UpsetPlotConfig(_BaseVizConfig):
             "Use to pin domain palettes (e.g. habitat → Set1) consistently across tiles."
         ),
     )
+    default_annotation_cols: list[str] | None = Field(
+        default=None,
+        description=(
+            "Element-annotation columns surfaced by default when inspecting an "
+            "intersection (e.g. ['taxon']). None → no annotations preselected."
+        ),
+    )
 
 
 class PhylogeneticConfig(_BaseVizConfig):

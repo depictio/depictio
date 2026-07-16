@@ -1,8 +1,9 @@
-id: ivar_variants_long
+id: artic_variants_long
 mode: variants
-description: Per-sample annotated variant calls (long table).
-find: { filename: "variants_long_table.csv" } # raw nf-core file
-recipe: ivar/variants_long.py # owns the output columns
+description: Per-sample annotated nanopore variant calls (clair3/medaka, long table).
+# Nanopore variants land under artic_minion/ as per-sample pass VCFs (clair3).
+find: { path_glob: "**/artic_minion/**/*.pass.vcf.gz" } # raw nf-core file
+recipe: artic/variants_long.py # owns the output columns
 fixture: variants_long.tsv # co-located bindable sample
 renders_as:
   - { id: lollipop, component: advanced_viz, kind: lollipop, roles: {feature_id: GENE, position: POS, category: EFFECT} }

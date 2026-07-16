@@ -154,3 +154,53 @@ nanopore runs, leaving the tab filter-less. Fix:
 - The main-tab sample filter is rebound to the always-present `multiqc_data` DC; the picked sample is
   expanded to its per-report variants by `_resolve_multiqc_sample_filter`. Verified: nanopore / HIV /
   enterovirus main tabs now carry a populated `multiqc_data/sample` filter.
+
+## Template overhaul (2026-06-24)
+
+Three changes supersede the nanopore + naming notes above (VR-D2 / VR-S2 / "out of scope"):
+
+### `PLATFORM` value variable replaces the `IS_NANOPORE` boolean
+The bespoke `IS_NANOPORE` flag became a named `PLATFORM` value (`illumina` default, or
+`nanopore`), routed via the new `if_var_equals: {PLATFORM: nanopore}` rule (added to
+`TemplateConditional`, alongside a `default` field on `TemplateVariable`). See the
+harmonization note below for how it is acquired (auto-derived from `params.json`, overridable).
+
+### Nanopore now keeps variant views (ARTIC) instead of failing out of scope
+`PLATFORM=nanopore` no longer drops the variant DCs. It repoints `variants_long` at the
+`artic/variants_long.py` catalog recipe (clair3 `*.pass.vcf.gz` → same long-table schema as
+ivar), so the variant components and the variant-derived DCs keep working. Only
+`summary_metrics` is still dropped (no nanopore summary-metrics recipe yet). The mosdepth /
+pangolin / nextclade `artic_minion/` repoints are unchanged.
+*Caveat:* `artic/variants_long.py` is still marked UNVALIDATED — verify the VCF/INFO field
+parsing against a real nf-core/viralrecon nanopore run before relying on it.
+
+### Canonical DC tags renamed (clarity)
+`oncoplot_canonical → variant_oncoplot`, `complex_heatmap_canonical → amplicon_coverage_matrix`,
+`coverage_track_canonical → genome_coverage_track`, `sankey_canonical → classification_sankey`,
+`upset_canonical → mutation_upset`, `variant_feature_matrix_canonical → variant_pca_matrix`.
+Recipe filenames are unchanged (catalog-shared / internal). Updated across `template.yaml`,
+`dashboards/base.yaml`, `.db_seeds/*.json`, and `db_init_reference_datasets.py`.
+
+## nf-vocabulary harmonization (2026-06-24)
+
+Both nf-core templates (viralrecon + ampliseq) now mirror nf-core's *own* parameter
+vocabulary and derive routing generically from the run's `params.json`:
+
+- **Generic introspection.** `_introspect_pipeline_params` no longer hardcodes per-flag
+  branches. For each variable a template declares, it copies the same-named (lower-cased)
+  `params.json` value (`PLATFORM`↔`platform`, `SKIP_PANGOLIN`↔`skip_pangolin`,
+  `ANCOMBC`↔`ancombc`, …), normalized (bool→`true`/`false`). `setdefault` precedence:
+  `--var` > `params.json` > template `default`. Each derived value is logged.
+- **viralrecon** declares `PLATFORM`, `PROTOCOL`, `VARIANT_CALLER`, and
+  `SKIP_PANGOLIN/NEXTCLADE/VARIANTS/VARIANTS_LONG_TABLE/MOSDEPTH`, all routed via
+  `if_var_equals`. `VARIANT_CALLER=bcftools` repoints pangolin/nextclade at
+  `variants/bcftools/…` (variants_long is already caller-agnostic); `PROTOCOL=metagenomic`
+  drops the amplicon mosdepth trio; each `SKIP_*` drops its DC + dependent canonicals.
+- **ampliseq** realigned its bespoke vars to nf names: `SKIP_ANCOM`→`ANCOMBC` (routes on
+  `=false`), `IS_MULTIREGION`→`MULTIREGION`, `IS_METAGENOMIC` dropped; `SKIP_QIIME` is now
+  declared; all `if_var_present/absent` skip routes became `if_var_equals`. The reference
+  seed's surviving-DC set was verified byte-identical (17 DCs) before/after.
+- **Init resolver** (`resolve_template_for_init`) now applies template-declared defaults so
+  value-routes evaluate consistently during params-less reference seeding.
+- **UX:** `depictio run --template … --data-root results/` — nothing else — adapts to
+  platform / protocol / caller / any `--skip` combination. `--var` overrides anything.

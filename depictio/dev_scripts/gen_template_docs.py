@@ -52,6 +52,10 @@ _STYLE = """<style>
 .gtd-badge{display:inline-block;padding:0 .5em;border-radius:10px;font-size:.78em;font-weight:600;line-height:1.5;white-space:nowrap;}
 .gtd-scan{background:#eef1fb;color:#3949ab;}
 .gtd-transformed{background:#e6f7f5;color:#2a8c82;}
+.gtd-direct{background:#eaf2ff;color:#2563c9;}
+.gtd-derived{background:#f3e8fd;color:#8e44ad;}
+.gtd-recipe{background:#fbe9f1;color:#b4337a;}
+.gtd-file{background:#eef0f2;color:#5a6573;}
 .gtd-opt{background:#fff6e6;color:#b9770e;}
 .gtd-req{background:#e9f7ef;color:#1e8e5a;}
 .gtd-plus-chip{background:#e9f7ef;color:#1e8e5a;}
@@ -67,6 +71,8 @@ _STYLE = """<style>
    only the other columns' long paths may wrap. */
 .md-typeset table td:first-child{white-space:nowrap;}
 .md-typeset table td:not(:first-child) code{overflow-wrap:anywhere;}
+/* Reads-column paths: smaller monospace + wrap so long scan targets keep the row tidy. */
+.md-typeset table code.gtd-path{font-size:.62rem;overflow-wrap:anywhere;}
 .gtd-mtx{margin:.8rem 0;}
 .gtd-mtx table{border-collapse:separate;border-spacing:0;font-size:.7rem;}
 .gtd-mtx th,.gtd-mtx td{border:1px solid var(--md-default-fg-color--lightest,#e6e6e6);padding:2px 5px;text-align:center;}
@@ -140,18 +146,73 @@ def _iter_dcs(raw: dict[str, Any]) -> list[dict[str, Any]]:
     return dcs
 
 
-def _dc_source_detail(dc: dict[str, Any]) -> tuple[str, str]:
-    """Return (source, detail) — recipe ref for transformed DCs, scan target otherwise."""
+# DC-type → Material icon, mirroring depictio/viewer/src/projects/dcTypeIcon.tsx so the
+# docs use the same glyph the app shows. mdi:* there → :material-*: here (Material for
+# MkDocs bundles the MDI set). MultiQC renders its own logo (same icon the app uses).
+_DC_TYPE_ICON = {
+    "table": "material-table",
+    "jbrowse2": "material-dna",
+    "image": "material-image-outline",
+    "geojson": "material-map-marker-radius-outline",
+    "map": "material-map-marker-radius-outline",
+    "phylogeny": "material-graph-outline",
+}
+_DC_TYPE_FALLBACK = "material-file-document-outline"
+# Official MultiQC icon (the app renders this same SVG for MultiQC DCs).
+_MULTIQC_LOGO = "https://raw.githubusercontent.com/MultiQC/logo/main/logos/multiqc_icon_color.svg"
+
+
+def _dc_type_cell(dc_type: str) -> str:
+    """Render the Type cell as the depictio type icon (MultiQC logo) + the type label."""
+    if not dc_type or dc_type == "—":
+        return "—"
+    if dc_type.lower() == "multiqc":
+        return (
+            f'<img src="{_MULTIQC_LOGO}" alt="MultiQC" width="14" '
+            f'style="vertical-align:text-bottom;"> {_esc(dc_type)}'
+        )
+    icon = _DC_TYPE_ICON.get(dc_type.lower(), _DC_TYPE_FALLBACK)
+    return f":{icon}: {_esc(dc_type)}"
+
+
+def _dc_source_detail(dc: dict[str, Any]) -> tuple[str, str | None]:
+    """Return (source, target) — the recipe ref for transformed DCs, the scan path otherwise.
+
+    The raw string is returned (not code-wrapped) so the caller can style the path cell.
+    """
     # `or {}` (not get default) so a present-but-null YAML key (e.g. empty
     # `transform:`) coerces to {} instead of crashing the chained .get().
     config = dc.get("config") or {}
     source = config.get("source", "scan")
     if source == "transformed":
-        recipe = (config.get("transform") or {}).get("recipe")
-        return source, _code(recipe) if recipe else "—"
+        return source, (config.get("transform") or {}).get("recipe")
     scan_params = (config.get("scan") or {}).get("scan_parameters") or {}
-    target = (scan_params.get("regex_config") or {}).get("pattern") or scan_params.get("filename")
-    return source, _code(target) if target else "—"
+    return source, (scan_params.get("regex_config") or {}).get("pattern") or scan_params.get(
+        "filename"
+    )
+
+
+def _dc_origin(dc: dict[str, Any], pipeline_version: str) -> str:
+    """Classify a DC as 'direct' or 'derived'.
+
+    *Direct* = a real pipeline output: either scanned straight off disk, or a recipe
+    that reads raw pipeline files. *Derived* = a recipe that reshapes one or more other
+    data collections (its recipe declares a ``dc_ref`` source) into the column layout a
+    specific visualization needs — it is a view of existing data, not new measurement.
+    """
+    config = dc.get("config") or {}
+    if config.get("source") != "transformed":
+        return "direct"
+    recipe = (config.get("transform") or {}).get("recipe")
+    if not recipe:
+        return "direct"
+    try:
+        module = load_recipe(recipe, pipeline_version)
+        if any(getattr(s, "dc_ref", None) for s in module.SOURCES):
+            return "derived"
+    except Exception:  # noqa: BLE001 — unresolved recipe falls back to 'direct'
+        pass
+    return "direct"
 
 
 def _collect_recipe_refs(raw: dict[str, Any], meta: TemplateMetadata) -> list[str]:
@@ -195,8 +256,9 @@ def _render_variables(meta: TemplateMetadata) -> list[str]:
     lines = [
         "### Template variables",
         "",
-        "Variables you provide when running the template — `DATA_ROOT` via `--data-root`, "
-        "the rest via `--var NAME=value`:",
+        "`DATA_ROOT` (via `--data-root`) is the only required input. The rest mirror the "
+        "pipeline's own nf-core parameters and are **auto-derived from the run's "
+        "`params.json`** — pass `--var NAME=value` only to override what the run recorded:",
         "",
         "| Variable | Required | Description |",
         "|---|:--:|---|",
@@ -218,27 +280,50 @@ def _badge(text: str, cls: str) -> str:
     return f'<span class="gtd-badge {cls}">{text}</span>'
 
 
-def _render_data_collections(dcs: list[dict[str, Any]]) -> list[str]:
+def _render_data_collections(dcs: list[dict[str, Any]], pipeline_version: str) -> list[str]:
     optional_count = sum(1 for dc in dcs if dc.get("optional"))
     required_count = len(dcs) - optional_count
+    origins = {dc["data_collection_tag"]: _dc_origin(dc, pipeline_version) for dc in dcs}
+    direct_count = sum(1 for o in origins.values() if o == "direct")
+    derived_count = len(dcs) - direct_count
     lines = [
         "### Data collections",
         "",
         f"{len(dcs)} data collections — {_badge(f'{required_count} required', 'gtd-req')} "
-        f"{_badge(f'{optional_count} optional', 'gtd-opt')}.",
+        f"{_badge(f'{optional_count} optional', 'gtd-opt')} · "
+        f"{_badge(f'{direct_count} direct', 'gtd-direct')} "
+        f"{_badge(f'{derived_count} derived', 'gtd-derived')}.",
         "",
-        "| Tag | Type | Source | Recipe / scan target | Status |",
-        "|---|---|---|---|:--:|",
+        f"**Origin** tells you whether a collection is *real pipeline data* or a reshape of it: "
+        f"{_badge('direct', 'gtd-direct')} = a pipeline output (scanned, or a recipe that reads raw "
+        f"files); {_badge('derived', 'gtd-derived')} = a recipe that reshapes one or more *direct* "
+        f"collections into the layout a visualization needs (no new measurement). **Reads** shows "
+        f"what produces it: a {_badge('recipe', 'gtd-recipe')} `.py` transform, or a raw "
+        f"{_badge('file', 'gtd-file')} scanned off disk. (A `direct` collection can still have a "
+        f"recipe — one that merely parses/cleans the raw file; `derived` means the recipe reshapes "
+        f"another collection.)",
+        "",
+        "| Tag | Origin | Type | Reads | Status |",
+        "|---|:--:|---|---|:--:|",
     ]
     for dc in dcs:
-        source, detail = _dc_source_detail(dc)
+        source, target = _dc_source_detail(dc)
         dc_type = (dc.get("config") or {}).get("type", "—")
-        src = _badge(source, "gtd-transformed" if source == "transformed" else "gtd-scan")
+        origin = origins[dc["data_collection_tag"]]
+        origin_badge = _badge(origin, "gtd-direct" if origin == "direct" else "gtd-derived")
+        reads_badge = (
+            _badge("recipe", "gtd-recipe")
+            if source == "transformed"
+            else _badge("file", "gtd-file")
+        )
+        # Small monospace, wrap-anywhere so long scan paths don't blow out the row.
+        path = f'<code class="gtd-path">{_html(target)}</code>' if target else "—"
         status = (
             _badge("optional", "gtd-opt") if dc.get("optional") else _badge("required", "gtd-req")
         )
         lines.append(
-            f"| {_code(dc['data_collection_tag'])} | {dc_type} | {src} | {detail} | {status} |"
+            f"| {_code(dc['data_collection_tag'])} | {origin_badge} | {_dc_type_cell(dc_type)} | "
+            f"{reads_badge} {path} | {status} |"
         )
     lines.append("")
     return lines
@@ -250,11 +335,19 @@ def _html(text: str) -> str:
 
 
 def _condition_parts(cond: TemplateConditional) -> tuple[str, str]:
-    """Trigger split into (variable, polarity) for a two-line header."""
+    """Trigger split into (column label, polarity).
+
+    polarity is one of: ``present`` (fires when the var is set), ``absent``
+    (fires when the var is NOT set), or ``equals`` (fires when the var has a
+    specific value — the column label carries ``NAME=value``).
+    """
     if cond.if_var_present:
         return cond.if_var_present, "present"
     if cond.if_var_absent:
         return cond.if_var_absent, "absent"
+    if cond.if_var_equals:
+        label = ", ".join(f"{k}={v}" for k, v in cond.if_var_equals.items())
+        return label, "equals"
     return "always", ""
 
 
@@ -279,16 +372,20 @@ def _render_conditionals(meta: TemplateMetadata, dc_tags: list[str]) -> list[str
         var, pol = _condition_parts(cond)
         if var not in cols:
             cols.append(var)
+        # "equals" routes (NAME=value) fire when the variable is SET to that value,
+        # so they behave like "present"; the column label already carries the value.
+        when_set = pol in ("present", "equals")
+        when_phrase = var if pol == "equals" else f"{var} is set"
         for tag in cond.remove_dc_tags:
-            if pol == "present":
-                entry = ("−", "minus", f"removed when {var} is set")
+            if when_set:
+                entry = ("−", "minus", f"removed when {when_phrase}")
             else:  # removed when the variable is ABSENT → only present when it is set
                 entry = ("+", "plus", f"included only when {var} is set")
             marks.setdefault(tag, {}).setdefault(var, entry)
         for override in cond.override_dcs:
-            when = "set" if pol == "present" else "unset"
+            phrase = when_phrase if when_set else f"{var} is unset"
             marks.setdefault(override.data_collection_tag, {}).setdefault(
-                var, ("⇄", "swap", f"re-sourced when {var} is {when}")
+                var, ("⇄", "swap", f"re-sourced when {phrase}")
             )
 
     # Rows in DC-table order; append any conditional-only tags not in the DC list.
@@ -410,7 +507,7 @@ def render_template(template_path: Path) -> str:
         _STYLE,
         "",
         *_render_variables(meta),
-        *_render_data_collections(dcs),
+        *_render_data_collections(dcs, pipeline_version),
         *_render_conditionals(meta, [dc["data_collection_tag"] for dc in dcs]),
         *_render_links(raw),
         *_render_recipes(recipe_refs, pipeline_version),

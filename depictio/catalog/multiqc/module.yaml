@@ -5,6 +5,7 @@
 # says multiqc.info; MultiQC is now maintained under Seqera).
 id: multiqc
 name: MultiQC
+logo: https://raw.githubusercontent.com/MultiQC/logo/main/logos/multiqc_icon_color.svg
 homepage: https://seqera.io/multiqc/ # override: meta.yml stale (multiqc.info)
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/multiqc
 biotools_url: https://bio.tools/multiqc # from nf-core meta.yml identifier

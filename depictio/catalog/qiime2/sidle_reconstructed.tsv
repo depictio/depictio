@@ -1,0 +1,12 @@
+feature_id	sample	count	taxonomy	Kingdom	Phylum	Class	Genus
+F001	S1	152	k__Bacteria;p__Proteobacteria;c__Gammaproteobacteria;g__Pseudomonas	Bacteria	Proteobacteria	Gammaproteobacteria	Pseudomonas
+F001	S2	98	k__Bacteria;p__Proteobacteria;c__Gammaproteobacteria;g__Pseudomonas	Bacteria	Proteobacteria	Gammaproteobacteria	Pseudomonas
+F002	S1	73	k__Bacteria;p__Bacteroidota;c__Bacteroidia;g__Bacteroides	Bacteria	Bacteroidota	Bacteroidia	Bacteroides
+F002	S3	61	k__Bacteria;p__Bacteroidota;c__Bacteroidia;g__Bacteroides	Bacteria	Bacteroidota	Bacteroidia	Bacteroides
+F003|F004	S2	44	k__Bacteria;p__Firmicutes;c__Clostridia;g__Faecalibacterium	Bacteria	Firmicutes	Clostridia	Faecalibacterium
+F003|F004	S3	57	k__Bacteria;p__Firmicutes;c__Clostridia;g__Faecalibacterium	Bacteria	Firmicutes	Clostridia	Faecalibacterium
+F005	S1	29	k__Bacteria;p__Firmicutes;c__Bacilli;g__Lactobacillus	Bacteria	Firmicutes	Bacilli	Lactobacillus
+F005	S2	35	k__Bacteria;p__Firmicutes;c__Bacilli;g__Lactobacillus	Bacteria	Firmicutes	Bacilli	Lactobacillus
+F006	S3	18	k__Bacteria;p__Proteobacteria;c__Alphaproteobacteria;g__Rhodobacter	Bacteria	Proteobacteria	Alphaproteobacteria	Rhodobacter
+F007	S1	12	k__Bacteria;p__Bacteroidota;c__Flavobacteriia;g__Flavobacterium	Bacteria	Bacteroidota	Flavobacteriia	Flavobacterium
+F007	S2	21	k__Bacteria;p__Bacteroidota;c__Flavobacteriia;g__Flavobacterium	Bacteria	Bacteroidota	Flavobacteriia	Flavobacterium

@@ -1,0 +1,42 @@
+id: qiime2_sidle_reconstructed
+mode: sidle-reconstructed
+description: >-
+  SIDLE cross-region reconstructed community (multiregion route): per-sample
+  reconstructed-feature counts with taxonomy ranks.
+find: { path_glob: "**/sidle/reconstructed/reconstructed_merged.tsv" }
+recipe: nf-core/ampliseq/sidle_reconstructed.py
+# fixture: synthetic illustrative sample (no real multiregion/SIDLE run data in repo)
+fixture: sidle_reconstructed.tsv
+renders_as:
+  # Per-sample phylum makeup normalised to 100%.
+  - id: phylum_composition
+    component: figure
+    code: |
+      df_g = df.group_by(['sample', 'Phylum']).agg(pl.col('count').sum().alias('count'))
+      df_g = df_g.with_columns((pl.col('count') / pl.col('count').sum().over('sample') * 100).alias('rel'))
+      fig = px.bar(
+          df_g.sort(['sample', 'Phylum']).to_pandas(),
+          x='sample', y='rel', color='Phylum',
+          title='Relative composition by phylum (per sample)',
+          labels={'sample': 'Sample', 'rel': 'Relative abundance (%)', 'Phylum': 'Phylum'},
+      )
+      fig.update_layout(barmode='stack', yaxis_range=[0, 100])
+      fig.update_xaxes(tickangle=-45)
+  # Genus-level counts per sample (deeper resolution than phylum).
+  - id: genus_composition
+    component: figure
+    code: |
+      df_g = df.group_by(['sample', 'Genus']).agg(pl.col('count').sum().alias('count')).sort(['sample', 'Genus'])
+      fig = px.bar(
+          df_g.to_pandas(),
+          x='sample', y='count', color='Genus',
+          title='Genus-level composition (per sample)',
+          labels={'sample': 'Sample', 'count': 'Reconstructed count', 'Genus': 'Genus'},
+      )
+      fig.update_layout(barmode='stack')
+      fig.update_xaxes(tickangle=-45)
+  - { id: sidle_features_card, component: card, column: feature_id, aggregation: nunique } # reconstructed features
+  - { id: sidle_samples_card, component: card, column: sample, aggregation: nunique } # samples
+  - { id: sidle_phyla_card, component: card, column: Phylum, aggregation: nunique } # phyla detected
+  - { id: sidle_phylum_filter, component: interactive, interactive_component_type: MultiSelect, column: Phylum } # filter by phylum
+  - { id: sidle_table, component: table }

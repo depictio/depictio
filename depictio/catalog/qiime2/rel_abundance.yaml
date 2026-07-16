@@ -10,3 +10,9 @@ renders_as:
   # stacked_taxonomy needs a single long-format rank column this table lacks.
   - { id: sunburst, component: advanced_viz, kind: sunburst, roles: {abundance: rel_abundance} }
   - { id: complex_heatmap, component: advanced_viz, kind: complex_heatmap, roles: {} }
+  - { id: rel_abundance_card, component: card, column: rel_abundance, aggregation: average } # mean relative abundance
+  - { id: taxonomy_count, component: card, column: taxonomy, aggregation: nunique } # distinct taxa
+  - { id: rel_kingdom_filter, component: interactive, interactive_component_type: MultiSelect, column: Kingdom } # filter by kingdom
+  - { id: rel_phylum_filter, component: interactive, interactive_component_type: MultiSelect, column: Phylum } # filter by phylum
+  - { id: rel_abundance_slider, component: interactive, interactive_component_type: RangeSlider, column: rel_abundance } # filter by relative abundance
+  - { id: rel_table, component: table }

@@ -28,6 +28,7 @@ import {
   Text,
   ThemeIcon,
   Title,
+  Tooltip,
 } from '@mantine/core';
 import { AgGridReact } from 'ag-grid-react';
 import { Icon } from '@iconify/react';
@@ -223,6 +224,7 @@ const ComponentCard: React.FC<{
   const yaml = rec._yaml as string | undefined;
   const variant = (rec._variant as string) || '';
   const binds = rec._binds as Record<string, string> | undefined;
+  const renderId = (rec.render_id as string | null | undefined) || undefined;
   const meta = metaFor(m.component_type);
   const [showYaml, setShowYaml] = useState(false);
 
@@ -243,9 +245,17 @@ const ComponentCard: React.FC<{
                 </Text>
               ) : null}
             </Text>
-            <Code fz="xs" c="dimmed" bg="transparent" p={0}>
-              {m.index}
-            </Code>
+            {renderId ? (
+              <Tooltip label={m.index} withinPortal openDelay={400}>
+                <Code fz="xs" c="dimmed" bg="transparent" p={0} style={{ cursor: 'help' }}>
+                  {renderId}
+                </Code>
+              </Tooltip>
+            ) : (
+              <Code fz="xs" c="dimmed" bg="transparent" p={0}>
+                {m.index}
+              </Code>
+            )}
           </Stack>
         </Group>
         {yaml ? (

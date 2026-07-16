@@ -323,6 +323,116 @@ def _coverage_track_payload(df, render) -> tuple[dict[str, Any], dict[str, Any]]
 
 
 # ---------------------------------------------------------------------------
+# Interactive (filter control — distinct values / numeric range from the fixture)
+# ---------------------------------------------------------------------------
+
+# Subtypes whose option list is the column's distinct values.
+_INTERACTIVE_CATEGORICAL = frozenset({"MultiSelect", "Select", "SegmentedControl"})
+# Subtypes whose payload is the column's numeric min/max.
+_INTERACTIVE_RANGE = frozenset({"RangeSlider", "Slider"})
+_INTERACTIVE_MAX_OPTIONS = 50
+
+
+def _interactive_payload(df, render) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Compute an interactive filter control's preview payload from the fixture.
+
+    Mirrors how the live viewer feeds its interactive renderers: categorical
+    controls (MultiSelect/Select/SegmentedControl) read the column's distinct
+    values via ``fetchUniqueValues`` → ``data["unique"]["<dc_id>::<col>"]``;
+    range controls (RangeSlider/Slider) read numeric min/max via
+    ``fetchColumnRange`` → ``data["ranges"]["<dc_id>::<col>"]``;
+    DateRangePicker reads ``fetchSpecs`` → ``data["specs"]["<dc_id>"]``;
+    Switch needs no data.
+
+    Returns ``(meta_extra, data_extra)`` where ``meta_extra`` is folded into the
+    render meta and ``data_extra`` carries the keyed ``unique``/``ranges``/``specs``
+    sub-maps to merge into the payload's ``data``. Raises ``CatalogPayloadError``
+    on a missing/empty column so the caller degrades to ``_unsupported`` cleanly.
+    """
+    import polars as pl
+
+    subtype = render.interactive_component_type
+    column = render.column
+    if not column or column not in df.columns:
+        raise CatalogPayloadError(
+            f"interactive column {column!r} absent from fixture {list(df.columns)}"
+        )
+
+    col = df[column].drop_nulls()
+    meta_extra: dict[str, Any] = {
+        "interactive_component_type": subtype,
+        "column_name": column,
+        "title": column,
+        "_preview_height": 140,
+    }
+    data_extra: dict[str, dict[str, Any]] = {"unique": {}, "ranges": {}, "specs": {}}
+
+    if subtype in _INTERACTIVE_CATEGORICAL:
+        values = col.unique().to_list()
+        try:
+            values = sorted(values, key=lambda v: (v is None, str(v)))
+        except TypeError:
+            values = list(values)
+        total = len(values)
+        capped = [str(v) for v in values[:_INTERACTIVE_MAX_OPTIONS]]
+        if not capped:
+            raise CatalogPayloadError(f"interactive column {column!r} has no distinct values")
+        meta_extra["_distinct_count"] = total
+        meta_extra["_distinct_shown"] = len(capped)
+        data_extra["unique"][column] = capped
+        return meta_extra, data_extra
+
+    if subtype in _INTERACTIVE_RANGE:
+        numeric = (
+            pl.Int8,
+            pl.Int16,
+            pl.Int32,
+            pl.Int64,
+            pl.UInt8,
+            pl.UInt16,
+            pl.UInt32,
+            pl.UInt64,
+            pl.Float32,
+            pl.Float64,
+        )
+        if df[column].dtype not in numeric:
+            raise CatalogPayloadError(
+                f"interactive {subtype} column {column!r} is not numeric ({df[column].dtype})"
+            )
+        if len(col) == 0:
+            raise CatalogPayloadError(f"interactive column {column!r} has no numeric values")
+        lo, hi = float(col.min()), float(col.max())
+        meta_extra["_range"] = {"min": lo, "max": hi}
+        data_extra["ranges"][column] = {"min": lo, "max": hi}
+        return meta_extra, data_extra
+
+    if subtype == "DateRangePicker":
+        # The DatePicker renderer pulls min/max from fetchSpecs; provide them
+        # best-effort (string min/max are fine — the renderer coerces to Date).
+        meta_extra["_preview_height"] = 120
+        try:
+            data_extra["specs"][column] = {
+                "min": str(col.min()),
+                "max": str(col.max()),
+            }
+        except Exception:  # noqa: BLE001 — specs are best-effort
+            pass
+        return meta_extra, data_extra
+
+    if subtype == "Switch":
+        # No data needed — the Switch renders purely from its metadata.
+        meta_extra["_preview_height"] = 100
+        return meta_extra, data_extra
+
+    # Timeline / anything else: surface distinct values so the control is populated.
+    values = [str(v) for v in col.unique().to_list()[:_INTERACTIVE_MAX_OPTIONS]]
+    if not values:
+        raise CatalogPayloadError(f"interactive column {column!r} has no values")
+    data_extra["unique"][column] = values
+    return meta_extra, data_extra
+
+
+# ---------------------------------------------------------------------------
 # MultiQC (pre-compute Plotly figures from the parquet plot_input_data column)
 # ---------------------------------------------------------------------------
 
@@ -660,6 +770,7 @@ def _render_meta(render, output: Any, i: int) -> dict[str, Any]:
         "component_type": render.component,
         "wf_id": "catalog::wf",
         "dc_id": f"catalog::{index}",
+        "render_id": getattr(render, "id", None),
         "_variant": _render_variant(render),
         "_yaml": _render_yaml(render),
     }
@@ -695,7 +806,10 @@ def _normalise_theme(theme: str) -> str:
     return "dark" if theme == "dark" else "light"
 
 
-_NON_TABULAR_COMPONENTS = frozenset({"image", "interactive", "text", "map"})
+# Components that show metadata + a friendly placeholder without a fixture.
+# (`interactive` is NOT here: it needs the fixture column to populate its
+# distinct values / numeric range, so it's handled in the fixture path below.)
+_NON_TABULAR_COMPONENTS = frozenset({"image", "text", "map"})
 
 
 def build_payload(output: Any, theme: str = "light", tool: Any = None) -> dict[str, Any]:
@@ -731,6 +845,29 @@ def build_payload(output: Any, theme: str = "light", tool: Any = None) -> dict[s
                 continue
             if df is None:
                 meta["_error"] = "no fixture — cannot preview"
+                renders.append(meta)
+                continue
+            if comp == "interactive":
+                # Filter control populated from the fixture: distinct values
+                # (Select-likes) or numeric min/max (Slider-likes). The viewer's
+                # real interactive renderers fetch these from the keyed sub-maps
+                # below, so ComponentRenderer shows the control read-only.
+                try:
+                    meta_extra, data_extra = _interactive_payload(df, render)
+                except CatalogPayloadError as exc:
+                    meta["_unsupported"] = (
+                        f"preview for interactive '{render.interactive_component_type}' "
+                        f"unavailable: {exc}"
+                    )
+                else:
+                    meta.update(meta_extra)
+                    # mockApi keys interactive lookups by `<dc_id>::<column>`.
+                    for col_name, values in data_extra["unique"].items():
+                        data["unique"][f"{dc_id}::{col_name}"] = values
+                    for col_name, rng in data_extra["ranges"].items():
+                        data["ranges"][f"{dc_id}::{col_name}"] = rng
+                    if data_extra["specs"]:
+                        data["specs"][dc_id] = data_extra["specs"]
                 renders.append(meta)
                 continue
             if comp == "figure":
@@ -863,6 +1000,7 @@ def _tool_dict(tool: Any, outputs: list[dict[str, Any]]) -> dict[str, Any]:
         "nf_core_url": tool.nf_core_url,
         "biotools_url": tool.biotools_url,
         "edam_topics": list(tool.edam_topics),
+        "logo": getattr(tool, "logo", None),
         "outputs": outputs,
     }
 

@@ -37,6 +37,7 @@ from depictio.models.components.types import (
     AggregationFunction,
     ChartType,
     ComponentType,
+    InteractiveType,
 )
 
 CATALOG_DIR = Path(__file__).resolve().parents[3] / "catalog"
@@ -162,6 +163,10 @@ class Render(BaseModel):
     filter_expr: str | None = None  # optional polars pre-filter
     # multiqc
     section: str | None = None
+    # interactive (filter control): bound column reuses `column`; the dashboard
+    # `use:` supplies the concrete per-run column via `config:` when the catalog
+    # column is a placeholder.
+    interactive_component_type: InteractiveType | None = None
 
     model_config = ConfigDict(extra="forbid")
 
@@ -203,6 +208,21 @@ class Render(BaseModel):
                 )
         elif self.visu_type or self.dict_kwargs or self.code:
             raise ValueError(f"figure fields are only valid for component=figure, not {c}")
+        # interactive: a filter control bound to a single `column`.
+        if self.interactive_component_type is not None and c != "interactive":
+            raise ValueError(
+                f"'interactive_component_type' is only valid for component=interactive, not {c}"
+            )
+        if c == "interactive":
+            if not (self.interactive_component_type and self.column):
+                raise ValueError(
+                    "renders_as interactive requires 'interactive_component_type' and 'column'"
+                )
+            if any(
+                (self.aggregation, self.aggregations, self.secondary_layout, self.breakdown_col)
+            ):
+                raise ValueError(f"card fields are not valid for component={c}")
+            return self
         # card: column + hero aggregation (+ optional secondary aggregations / filter)
         if c == "card":
             if not (self.column and self.aggregation):
@@ -330,6 +350,10 @@ class CatalogTool(BaseModel):
     nf_core_url: str | None = None
     biotools_url: str | None = None
     edam_topics: list[str] = Field(default_factory=list)
+    # Optional curated logo image URL (real project logo, or the tool repo's
+    # GitHub social-preview card). Shown once per tool in the gallery section
+    # header; absent → the UI renders a letter monogram.
+    logo: str | None = None
 
     model_config = ConfigDict(extra="forbid")
 

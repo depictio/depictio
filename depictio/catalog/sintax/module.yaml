@@ -1,0 +1,11 @@
+# SINTAX taxonomic classification (the --skip_qiime path in nf-core/ampliseq:
+# VSEARCH sintax + DADA2 ASV counts). nf-core wraps it as `vsearch/sintax`, so
+# `biotools_url` is the VSEARCH entry from that module's meta.yml
+# (identifier: biotools:vsearch); `nf_core_url` stays omitted (not in our _index).
+id: sintax
+name: SINTAX
+description: >-
+  K-mer–based taxonomic classifier (VSEARCH/USEARCH SINTAX). In nf-core/ampliseq
+  it provides the taxonomy when QIIME 2 is skipped (ITS / PacBio / IonTorrent).
+homepage: https://www.drive5.com/usearch/manual/sintax_algo.html
+biotools_url: https://bio.tools/vsearch

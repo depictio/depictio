@@ -619,7 +619,7 @@
       "component_type": "card",
       "title": "Samples (oncoplot)",
       "workflow_tag": "viralrecon",
-      "data_collection_tag": "oncoplot_canonical",
+      "data_collection_tag": "variant_oncoplot",
       "wf_id": {
         "$oid": "746b0f3c1e4a2d7f8e5b9c01"
       },
@@ -630,7 +630,7 @@
         "type": null,
         "metatype": null,
         "description": "Oncoplot-ready variant matrix (sample_id \u00d7 gene \u00d7 mutation_type)",
-        "data_collection_tag": "oncoplot_canonical",
+        "data_collection_tag": "variant_oncoplot",
         "dc_specific_properties": null,
         "_id": {
           "$oid": "746b0f3c1e4a2d7f8e5b9c1a"
@@ -663,7 +663,7 @@
       "component_type": "card",
       "title": "Genes (oncoplot)",
       "workflow_tag": "viralrecon",
-      "data_collection_tag": "oncoplot_canonical",
+      "data_collection_tag": "variant_oncoplot",
       "wf_id": {
         "$oid": "746b0f3c1e4a2d7f8e5b9c01"
       },
@@ -674,7 +674,7 @@
         "type": null,
         "metatype": null,
         "description": "Oncoplot-ready variant matrix (sample_id \u00d7 gene \u00d7 mutation_type)",
-        "data_collection_tag": "oncoplot_canonical",
+        "data_collection_tag": "variant_oncoplot",
         "dc_specific_properties": null,
         "_id": {
           "$oid": "746b0f3c1e4a2d7f8e5b9c1a"
@@ -707,7 +707,7 @@
       "component_type": "interactive",
       "title": "Mutation Type",
       "workflow_tag": "viralrecon",
-      "data_collection_tag": "oncoplot_canonical",
+      "data_collection_tag": "variant_oncoplot",
       "wf_id": {
         "$oid": "746b0f3c1e4a2d7f8e5b9c01"
       },
@@ -718,7 +718,7 @@
         "type": null,
         "metatype": null,
         "description": "Oncoplot-ready variant matrix (sample_id \u00d7 gene \u00d7 mutation_type)",
-        "data_collection_tag": "oncoplot_canonical",
+        "data_collection_tag": "variant_oncoplot",
         "dc_specific_properties": null,
         "_id": {
           "$oid": "746b0f3c1e4a2d7f8e5b9c1a"
@@ -748,7 +748,7 @@
       "component_type": "advanced_viz",
       "title": "Sample \u00d7 gene mutation matrix",
       "workflow_tag": "viralrecon",
-      "data_collection_tag": "oncoplot_canonical",
+      "data_collection_tag": "variant_oncoplot",
       "wf_id": {
         "$oid": "746b0f3c1e4a2d7f8e5b9c01"
       },
@@ -759,7 +759,7 @@
         "type": null,
         "metatype": null,
         "description": "Oncoplot-ready variant matrix (sample_id \u00d7 gene \u00d7 mutation_type)",
-        "data_collection_tag": "oncoplot_canonical",
+        "data_collection_tag": "variant_oncoplot",
         "dc_specific_properties": null,
         "_id": {
           "$oid": "746b0f3c1e4a2d7f8e5b9c1a"

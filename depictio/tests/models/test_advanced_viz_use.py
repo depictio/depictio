@@ -134,3 +134,56 @@ def test_no_use_still_requires_explicit_binding_path():
     c = _component(viz_kind="volcano", config={"viz_kind": "volcano", "feature_id_col": "id"})
     assert c.viz_kind == "volcano"
     assert c.config.feature_id_col == "id"
+
+
+# ---------------------------------------------------------------------------
+# (c) `use:` for non-advanced_viz kinds (multiqc / card / figure / table /
+#     interactive) — expanded via DashboardDataLite before union discrimination.
+# ---------------------------------------------------------------------------
+
+
+def _tile(**kw):
+    """Parse a single tile through the dashboard's `use:` expansion + routing."""
+    from depictio.models.models.dashboards import DashboardDataLite
+
+    kw.setdefault("workflow_tag", "wf")
+    return DashboardDataLite(title="t", components=[kw]).components[0]
+
+
+def test_use_multiqc_inherits_module_and_keeps_plot():
+    c = _tile(
+        use="multiqc/fastqc",
+        data_collection_tag="multiqc_data",
+        config={"selected_plot": "Status Checks"},
+    )
+    assert type(c).__name__ == "MultiQCLiteComponent"
+    assert c.selected_module == "fastqc" and c.selected_plot == "Status Checks"
+
+
+def test_use_card_inherits_column_and_aggregation():
+    c = _tile(use="pangolin/lineage_count", data_collection_tag="pangolin_lineages")
+    assert type(c).__name__ == "CardLiteComponent"
+    assert c.column_name == "lineage" and c.aggregation == "nunique"
+
+
+def test_use_card_explicit_field_overrides_catalog_default():
+    """A tile's own top-level value wins over the catalog render default."""
+    c = _tile(use="qiime2/shannon_card", data_collection_tag="alpha", aggregation="median")
+    assert c.column_name == "shannon" and c.aggregation == "median"  # catalog avg overridden
+
+
+def test_use_figure_inherits_code_mode_body():
+    c = _tile(use="ivar/variants_by_gene", data_collection_tag="variants_long")
+    assert type(c).__name__ == "FigureLiteComponent"
+    assert c.mode == "code" and "group_by" in (c.code_content or "")
+
+
+def test_use_table_routes_to_table_component():
+    c = _tile(use="ivar/table", data_collection_tag="variants_long")
+    assert type(c).__name__ == "TableLiteComponent"
+
+
+def test_use_interactive_inherits_type_and_column():
+    c = _tile(use="ivar/af_slider", data_collection_tag="variants_long")
+    assert type(c).__name__ == "InteractiveLiteComponent"
+    assert c.interactive_component_type == "RangeSlider" and c.column_name == "AF"

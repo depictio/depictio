@@ -5,5 +5,15 @@ find: { filename: "*.pangolin.csv" }
 recipe: pangolin/pangolin_lineages.py
 fixture: report.tsv
 renders_as:
-  - { component: figure, visu_type: histogram, dict_kwargs: {x: lineage, color: qc_status} } # lineage calls
-  - { component: table }
+  # Samples-per-lineage bar, sorted by frequency (generic lineage-distribution view).
+  - id: lineage_barplot
+    component: figure
+    code: |
+      df_modified = df.group_by('lineage').agg(pl.count().alias('count')).sort('count', descending=True)
+      fig = px.bar(df_modified.to_pandas(), x='lineage', y='count', color='lineage',
+          labels={'lineage': 'Lineage', 'count': 'Number of Samples'})
+      fig.update_layout(xaxis={'categoryorder': 'total descending'}, showlegend=False)
+      fig.update_xaxes(tickangle=-45)
+  - { id: lineage_count, component: card, column: lineage, aggregation: nunique } # distinct lineages
+  - { id: lineage_filter, component: interactive, interactive_component_type: MultiSelect, column: lineage } # filter by lineage
+  - { id: table, component: table }

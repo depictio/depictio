@@ -55,14 +55,21 @@ def test_flagship_payload_has_all_renders() -> None:
     assert payload["output"]["id"] == FLAGSHIP
     assert payload["theme"] == "light"
     types = [m["component_type"] for m in payload["renders"]]
-    assert types == ["figure", "card", "card", "card", "card", "table"]
+    # The flagship renders at least a figure, several metric cards and a table
+    # (its exact shape evolves with the catalog, so assert the core kinds, not
+    # an exact list).
+    assert types[0] == "figure"
+    assert types.count("card") >= 4
+    assert "table" in types
+    # No render is left unsupported — every declared kind is wired.
+    assert not any(m.get("_unsupported") or m.get("_error") for m in payload["renders"])
 
     data = payload["data"]
     # figure → Plotly JSON (2×2 facet box plot = a trace per habitat)
     fig = next(iter(data["figures"].values()))
     assert "data" in fig["figure"] and len(fig["figure"]["data"]) >= 1
-    # 4 metric cards → numeric values
-    assert len(data["cards"]["values"]) == 4
+    # metric cards → numeric values
+    assert len(data["cards"]["values"]) >= 4
     assert all(isinstance(v, (int, float)) for v in data["cards"]["values"].values())
     # 1 table with rows
     table = next(iter(data["tables"].values()))
@@ -70,6 +77,50 @@ def test_flagship_payload_has_all_renders() -> None:
     # every render carries a unique synthetic dc_id (interactive/advanced-viz keying)
     dc_ids = [m["dc_id"] for m in payload["renders"]]
     assert len(set(dc_ids)) == len(dc_ids)
+
+
+def test_interactive_payload_wired() -> None:
+    # sintax → two MultiSelect filters (Kingdom/Phylum) + a table. The
+    # interactive renders must be wired (no _unsupported) and carry their
+    # distinct-value options keyed by `<dc_id>::<column>` for the viewer's
+    # interactive renderers (fetchUniqueValues).
+    payload = build_payload(_get_output("sintax_rel_abundance"), "light")
+    interactives = [m for m in payload["renders"] if m["component_type"] == "interactive"]
+    assert interactives, "expected interactive renders in sintax_rel_abundance"
+    for m in interactives:
+        assert not m.get("_unsupported") and not m.get("_error")
+        assert m.get("render_id")  # render's own id is exposed
+        assert m["interactive_component_type"] == "MultiSelect"
+        key = f"{m['dc_id']}::{m['column_name']}"
+        assert key in payload["data"]["unique"]
+        assert payload["data"]["unique"][key]  # non-empty distinct values
+
+
+def test_interactive_range_payload_wired() -> None:
+    # artic_variants_long has a RangeSlider on a numeric column (AF) → min/max
+    # keyed by `<dc_id>::<column>` for fetchColumnRange.
+    payload = build_payload(_get_output("artic_variants_long"), "light")
+    sliders = [
+        m
+        for m in payload["renders"]
+        if m["component_type"] == "interactive"
+        and m.get("interactive_component_type") == "RangeSlider"
+    ]
+    assert sliders, "expected a RangeSlider render in artic_variants_long"
+    for m in sliders:
+        assert not m.get("_unsupported") and not m.get("_error")
+        key = f"{m['dc_id']}::{m['column_name']}"
+        rng = payload["data"]["ranges"][key]
+        assert isinstance(rng["min"], float) and isinstance(rng["max"], float)
+        assert rng["min"] <= rng["max"]
+
+
+def test_render_id_exposed() -> None:
+    # Every render's own `id` (when declared) is surfaced as `render_id`.
+    payload = build_payload(_get_output("artic_variants_long"), "light")
+    render_ids = [m.get("render_id") for m in payload["renders"]]
+    assert "af_slider" in render_ids
+    assert "table" in render_ids
 
 
 def test_payload_is_json_serialisable() -> None:

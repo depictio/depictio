@@ -4,7 +4,7 @@
  * Kept in one place so the gallery grid and the detail page stay visually in sync.
  */
 import React from 'react';
-import { ActionIcon, Anchor, Badge, Box, Button, CopyButton, Group, Text, Tooltip } from '@mantine/core';
+import { ActionIcon, Anchor, Avatar, Badge, Box, Button, CopyButton, Group, Text, Tooltip } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import logoRaw from '../../public/logos/logo_black.svg?raw';
 import logoWhiteRaw from '../../public/logos/logo_white.svg?raw';
@@ -18,6 +18,44 @@ export const logoFor = (theme?: string) => (theme === 'dark' ? LOGO_WHITE_SRC : 
 /** The catalog's section accent — one constant so the gallery + detail agree
  *  (Projects uses teal; each app/section gets its own flat Mantine color). */
 export const CATALOG_ACCENT = 'violet';
+
+/** Depictio brand palette, sampled from the logo mark — reuse for on-brand
+ *  accents instead of generic Mantine colors. */
+export const DEPICTIO_COLORS = {
+  cyan: '#5ab5cb',
+  green: '#a2d54f',
+  gold: '#f2c44e',
+  pink: '#d88da9',
+  purple: '#bd65e1',
+  orange: '#ec8f54',
+} as const;
+
+export const MODULES_ICON = 'mdi:view-module';
+
+/** The "Depictio Modules" brand mark: the `mdi:view-module` shape (2 rows × 3
+ *  columns of bricks), with each brick in an official Depictio palette colour.
+ *  Reuse anywhere the modules catalog is branded so the mark stays consistent. */
+export const ModulesMark: React.FC<{ size?: number }> = ({ size = 42 }) => {
+  const c = DEPICTIO_COLORS;
+  // 2 rows × 3 cols, mirroring mdi:view-module's grid.
+  const bricks = [
+    { x: 2, y: 5, fill: c.cyan },
+    { x: 9, y: 5, fill: c.green },
+    { x: 16, y: 5, fill: c.gold },
+    { x: 2, y: 13, fill: c.pink },
+    { x: 9, y: 13, fill: c.purple },
+    { x: 16, y: 13, fill: c.orange },
+  ];
+  return (
+    <Box style={{ width: size, height: size, flexShrink: 0, lineHeight: 0 }} aria-label="Depictio Modules">
+      <svg width={size} height={size} viewBox="0 0 24 24" role="img">
+        {bricks.map((b) => (
+          <rect key={`${b.x}-${b.y}`} x={b.x} y={b.y} width="6" height="6" rx="1.4" fill={b.fill} />
+        ))}
+      </svg>
+    </Box>
+  );
+};
 
 /** Component type → badge style, mirrored from depictio/dash/component_metadata.py
  *  (colors/icons kept in sync by hand to stay Dash-free). */
@@ -35,6 +73,39 @@ export const COMPONENT_META: Record<string, { name: string; color: string; icon:
 
 export const metaFor = (t: string) =>
   COMPONENT_META[t] || { name: t, color: '#868e96', icon: 'mdi:shape-outline' };
+
+// --- Tool identity avatar (curated logo, else Gmail-style letter monogram) ---
+
+// Deterministic Mantine palette color so a tool's monogram is stable across renders.
+const MONOGRAM_COLORS = ['violet', 'teal', 'blue', 'grape', 'cyan', 'indigo', 'pink', 'green'];
+const colorForTool = (id: string): string => {
+  let h = 0;
+  for (let i = 0; i < id.length; i += 1) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return MONOGRAM_COLORS[h % MONOGRAM_COLORS.length];
+};
+
+/** Square tool-identity tile: the tool's curated logo when one is set, otherwise
+ *  a Gmail-style colored letter monogram (Mantine `Avatar`'s built-in fallback).
+ *  No derived favicons / GitHub OG cards — a tool either has a real logo or a
+ *  clean monogram. Used as the gallery section thumbnail. */
+export const ToolLogo: React.FC<{
+  tool: { id: string; name?: string; logo?: string | null };
+  size?: number;
+}> = ({ tool, size = 40 }) => {
+  const initial = (tool.name || tool.id || '?').trim().charAt(0).toUpperCase() || '?';
+  return (
+    <Avatar
+      src={tool.logo || undefined}
+      alt={tool.name || tool.id}
+      size={size}
+      radius="md"
+      color={colorForTool(tool.id)}
+      style={{ flexShrink: 0 }}
+    >
+      {initial}
+    </Avatar>
+  );
+};
 
 /** Colored depictio-style component-type badge. */
 export const TypeBadge: React.FC<{ type: string; size?: string }> = ({ type, size = 'sm' }) => {
@@ -168,6 +239,7 @@ export interface ToolEntry {
   id: string;
   name: string;
   description?: string;
+  logo?: string | null;
   homepage?: string | null;
   nf_core_url?: string | null;
   biotools_url?: string | null;

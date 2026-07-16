@@ -27,9 +27,31 @@ const apiShim = (): Plugin => ({
   },
 });
 
+// Dev-only: the gallery lives at /catalog-preview.html (not the default index),
+// so redirect the bare root there — opening http://localhost:PORT/ "just works"
+// instead of serving the main viewer's "Welcome to Depictio" page.
+const rootToCatalog = (): Plugin => ({
+  name: 'catalog-root-redirect',
+  apply: 'serve',
+  configureServer(server) {
+    server.middlewares.use((req, res, next) => {
+      if (req.url === '/' || req.url === '') {
+        res.statusCode = 302;
+        res.setHeader('Location', '/catalog-preview.html');
+        res.end();
+        return;
+      }
+      next();
+    });
+  },
+});
+
 export default defineConfig({
   base: './',
-  plugins: [react(), apiShim(), viteSingleFile()],
+  plugins: [react(), apiShim(), rootToCatalog(), viteSingleFile()],
+  // Dedicated dev port (5180) so it never clashes with the main viewer (5173),
+  // and auto-open straight to the gallery page.
+  server: { port: 5180, strictPort: false, open: '/catalog-preview.html' },
   build: {
     outDir: 'dist-catalog-preview',
     emptyOutDir: true,

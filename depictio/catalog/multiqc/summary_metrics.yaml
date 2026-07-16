@@ -7,6 +7,27 @@ find: { path_glob: "**/multiqc/summary_variants_metrics_mqc.csv" }
 recipe: multiqc/summary_metrics.py
 fixture: summary_metrics.tsv
 renders_as:
-  - { component: card, column: pct_genome_covered_10x, aggregation: average } # mean ≥10× breadth
-  - { component: card, column: num_variants_total, aggregation: average } # mean variant load
-  - { component: table }
+  # Median coverage vs total variants, coloured by lineage (QC-triage scatter).
+  - id: coverage_vs_variants
+    component: figure
+    code: |
+      fig = px.scatter(df.to_pandas(), x='coverage_median', y='num_variants_total',
+          color='lineage', hover_data=['sample', 'pct_genome_covered_10x'],
+          labels={'coverage_median': 'Median Coverage Depth', 'num_variants_total': 'Total Variants', 'lineage': 'Lineage'},
+          size_max=12)
+      fig.update_traces(marker=dict(size=10, line=dict(width=1, color='DarkSlateGrey')))
+  # Per-sample % genome ≥10× breadth, sorted, with the 80% reliability cut-off.
+  - id: genome_coverage_barplot
+    component: figure
+    code: |
+      df_modified = df.sort('pct_genome_covered_10x', descending=True)
+      fig = px.bar(df_modified.to_pandas(), x='sample', y='pct_genome_covered_10x',
+          color='lineage',
+          labels={'sample': 'Sample', 'pct_genome_covered_10x': '% Genome >= 10x', 'lineage': 'Lineage'})
+      fig.add_hline(y=80, line_dash='dash', line_color='red', annotation_text='80% threshold')
+      fig.update_xaxes(tickangle=-45, tickfont={'size': 9})
+  - { id: pct_10x, component: card, column: pct_genome_covered_10x, aggregation: average } # mean ≥10× breadth
+  - { id: variants_total, component: card, column: num_variants_total, aggregation: average } # mean variant load
+  - { id: sample_filter, component: interactive, interactive_component_type: MultiSelect, column: sample } # filter by sample
+  - { id: lineage_filter, component: interactive, interactive_component_type: MultiSelect, column: lineage } # filter by lineage
+  - { id: table, component: table }

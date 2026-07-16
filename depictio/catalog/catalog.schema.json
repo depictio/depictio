@@ -411,6 +411,28 @@
           ],
           "default": null,
           "title": "Section"
+        },
+        "interactive_component_type": {
+          "anyOf": [
+            {
+              "enum": [
+                "Select",
+                "MultiSelect",
+                "SegmentedControl",
+                "Slider",
+                "RangeSlider",
+                "DateRangePicker",
+                "Timeline",
+                "Switch"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Interactive Component Type"
         }
       },
       "required": [
@@ -478,6 +500,18 @@
       },
       "title": "Edam Topics",
       "type": "array"
+    },
+    "logo": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Logo"
     },
     "schema_version": {
       "default": 1,

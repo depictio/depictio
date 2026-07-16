@@ -62,13 +62,21 @@ packages = [
   "depictio.models",
   "depictio.models.models",
   "depictio.models.models.data_collections_types",
+  "depictio.models.components",
+  "depictio.models.components.advanced_viz",
   "depictio.api",
   "depictio.api.v1",
   "depictio.api.v1.configs",
   "depictio.recipes",
+  # Catalog metadata + fixtures: load_catalog_entries() reads
+  # depictio/catalog/**/*.yaml|*.tsv to match runs and render the gallery.
+  "depictio.catalog",
 ]
 
 # Add explicit package data if needed
 [tool.setuptools.package-data]
 "depictio.cli" = ["*.yaml", "*.yml", "*.json"]
 "depictio.recipes" = ["**/*.py"]
+# Ship the per-tool catalog fixtures/specs so wheel installs (not just
+# editable) can resolve CATALOG_DIR contents.
+"depictio.catalog" = ["**/*.yaml", "**/*.tsv", "**/*.txt", "**/*.json", "**/*.md", "**/*.py"]
