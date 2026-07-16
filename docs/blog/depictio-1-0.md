@@ -149,9 +149,20 @@ properly.
 
 ## 🗺️ What's next
 
-A stable foundation is the point, not the finish line. Next up: the performance
-benchmarks I mentioned, deeper coverage of the visualisation catalog, and the
-pipeline-template and tool-catalog story I've been holding back for its own post.
+A stable foundation is the point, not the finish line, and the next post is
+already taking shape. It's about the two pieces I deliberately kept out of this
+one: Depictio's dashboard templates and its bioinformatics tools catalog.
+
+Templates are the idea that a standardised pipeline should come with a
+standardised dashboard: you point Depictio at a run and get a populated,
+interactive dashboard in minutes, no manual wiring. The tools catalog is what
+sits underneath, mapping a given tool's output to the visualisation that suits
+it, and it's built to be community-extensible so anyone can add a tool. Together
+they're how Depictio goes from "a dashboard builder" to "the dashboard your
+pipeline should have shipped with."
+
+That's the next story, along with the performance benchmarks I promised above.
+More soon.
 
 ## 🚀 Try it
 
