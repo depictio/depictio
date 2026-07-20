@@ -35,10 +35,34 @@ _RENDER_FIELDS = [
     "task_duration_ms",
     "load_ms",
     "build_ms",
+    "server_total_ms",
     "error",
 ]
 
 _SIZE_ORDER = {"10mb": 0, "100mb": 1, "1gb": 2, "5gb": 3, "10gb": 4}
+
+# Usability thresholds on render p95 wall-clock (ms). Answers "up to what size
+# does Depictio stay usable?": snappy < 1s, tolerable < 3s, sluggish beyond.
+_USABLE_MS = 1000.0
+_TOLERABLE_MS = 3000.0
+
+
+def _avg(rows: list[dict], key: str) -> float | None:
+    """Mean of a numeric field over rows where it is present (else None)."""
+    vals = [float(r[key]) for r in rows if r.get(key) is not None]
+    return sum(vals) / len(vals) if vals else None
+
+
+def _fmt(v: float | None) -> str:
+    return f"{v:.0f}" if v is not None else "—"
+
+
+def _size_of(ingest_row: dict) -> str:
+    """Size token for an ingest row — parsed from the ``bench_<size>_...`` slug."""
+    if ingest_row.get("size"):
+        return str(ingest_row["size"])
+    parts = str(ingest_row.get("cell_slug", "")).split("_")
+    return parts[1] if len(parts) > 1 else ""
 
 
 def _load(results_path: Path) -> tuple[list[dict], list[dict]]:
@@ -176,6 +200,48 @@ def build_report(output_root: str | Path) -> Path:
     lines.append(_md_table(["component_type", "n", "mean", "p50", "p95"], rows))
     lines.append("")
 
+    # Where the render time goes: Delta load vs build vs transport/queue.
+    # server_total = load + build + server-side glue (templates, JSON);
+    # overhead = wall - server_total = network + (de)serialization + Celery queue.
+    lines += [
+        "## Render compute breakdown (bottleneck attribution)",
+        "",
+        "Mean ms per stage, by DC size and component type. "
+        "`load`=Delta read, `build`=plot/table build, "
+        "`server_total`=whole endpoint server-side, "
+        "`overhead`=wall−server_total (network + serialization + Celery queue).",
+        "",
+    ]
+    brk_buckets: dict[tuple, list[dict]] = defaultdict(list)
+    for r in renders:
+        if r.get("ok"):
+            brk_buckets[(r.get("size"), r.get("component_type"))].append(r)
+    brk_rows = []
+    for key in sorted(brk_buckets, key=lambda k: (_SIZE_ORDER.get(str(k[0]), 99), str(k[1]))):
+        rs = brk_buckets[key]
+        wall = _avg(rs, "wall_ms")
+        stot = _avg(rs, "server_total_ms")
+        overhead = (wall - stot) if (wall is not None and stot is not None) else None
+        brk_rows.append(
+            [
+                key[0],
+                key[1],
+                len(rs),
+                _fmt(_avg(rs, "load_ms")),
+                _fmt(_avg(rs, "build_ms")),
+                _fmt(stot),
+                _fmt(overhead),
+                _fmt(wall),
+            ]
+        )
+    lines.append(
+        _md_table(
+            ["size", "type", "n", "load", "build", "server_total", "overhead", "wall"],
+            brk_rows,
+        )
+    )
+    lines.append("")
+
     # By connect mode × #DCs
     lines += ["## Render latency by connect mode and #DCs", ""]
     rows = [
@@ -185,20 +251,87 @@ def build_report(output_root: str | Path) -> Path:
     lines.append(_md_table(["connect", "n_dcs", "n", "mean", "p50", "p95"], rows))
     lines.append("")
 
-    # Ingestion timings
+    # Ingestion throughput (the dominant cost at 1 GB+).
     ok_ing = [i for i in ingests if i.get("ok")]
     if ok_ing:
-        lines += ["## Ingestion time by cell", ""]
-        rows = [
-            [
-                i["cell_slug"],
-                f"{i.get('ingest_wall_ms', 0):.0f}",
-                f"{i.get('import_wall_ms', 0):.0f}",
-            ]
-            for i in ok_ing
+        lines += [
+            "## Ingestion throughput by cell",
+            "",
+            "`rows/s` and `MB/s` are raw-CSV input ÷ ingest wall. "
+            "`compress` = input ÷ Delta (>1 = Delta smaller); — if size unknown.",
+            "",
         ]
-        lines.append(_md_table(["cell", "ingest_ms", "import_ms"], rows))
+        rows = []
+        for i in sorted(ok_ing, key=lambda x: _SIZE_ORDER.get(_size_of(x), 99)):
+            secs = (i.get("ingest_wall_ms") or 0) / 1000.0
+            rows_total = i.get("rows_total") or 0
+            input_bytes = i.get("input_bytes") or 0
+            delta_bytes = i.get("delta_bytes") or 0
+            rps = rows_total / secs if secs > 0 else 0
+            mbps = (input_bytes / 1024**2) / secs if secs > 0 else 0
+            comp = input_bytes / delta_bytes if delta_bytes > 0 else 0
+            rows.append(
+                [
+                    i["cell_slug"],
+                    f"{i.get('ingest_wall_ms', 0) / 1000:.1f}",
+                    f"{rows_total:,}",
+                    f"{input_bytes / 1024**2:.0f}",
+                    f"{rps:,.0f}",
+                    f"{mbps:.1f}",
+                    f"{comp:.2f}" if comp else "—",
+                ]
+            )
+        lines.append(
+            _md_table(
+                ["cell", "ingest_s", "rows", "in_MB", "rows/s", "MB/s", "compress"],
+                rows,
+            )
+        )
         lines.append("")
+
+    # Usability ceiling: the direct answer to "up to what size is Depictio
+    # usable?". Per size: worst render p95, any failures, and a verdict.
+    lines += [
+        "## Usability ceiling by DC size",
+        "",
+        f"Verdict on render p95 wall: **snappy** < {_USABLE_MS:.0f}ms, "
+        f"**tolerable** < {_TOLERABLE_MS:.0f}ms, else **sluggish**; "
+        "any render/ingest failure at a size ⇒ **FAIL**.",
+        "",
+    ]
+    sizes = sorted(
+        {r.get("size") for r in renders} | {_size_of(i) for i in ingests},
+        key=lambda s: _SIZE_ORDER.get(str(s), 99),
+    )
+    verdict_rows = []
+    for size in sizes:
+        srenders = [r for r in renders if r.get("size") == size]
+        singests = [i for i in ingests if _size_of(i) == size]
+        n_fail_r = sum(1 for r in srenders if not r.get("ok"))
+        n_fail_i = sum(1 for i in singests if not i.get("ok"))
+        walls = [float(r["wall_ms"]) for r in srenders if r.get("ok") and r.get("wall_ms")]
+        p95 = summarize(walls)["p95"] if walls else float("nan")
+        if n_fail_r or n_fail_i:
+            verdict = "❌ FAIL"
+        elif not walls:
+            verdict = "—"
+        elif p95 < _USABLE_MS:
+            verdict = "✅ snappy"
+        elif p95 < _TOLERABLE_MS:
+            verdict = "🟡 tolerable"
+        else:
+            verdict = "🔴 sluggish"
+        verdict_rows.append(
+            [
+                size,
+                len(srenders),
+                f"{n_fail_r + n_fail_i}",
+                f"{p95:.0f}" if walls else "—",
+                verdict,
+            ]
+        )
+    lines.append(_md_table(["size", "renders", "failures", "p95_wall_ms", "verdict"], verdict_rows))
+    lines.append("")
 
     if plot_names:
         lines += ["## Plots", ""]

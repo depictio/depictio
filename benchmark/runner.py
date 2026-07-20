@@ -63,12 +63,50 @@ def _ingest(cell: Cell, cli_config_path: str, gen: GeneratedConfigs, depictio_bi
             "--project-config-path",
             gen.project_path,
             "--overwrite",
+            "--update-config",
         ],
         check=True,
         capture_output=True,
         text=True,
     )
     return (time.perf_counter() - t0) * 1000.0
+
+
+def _dir_csv_bytes(dataset_dir: Path) -> int:
+    """Total on-disk bytes of the generated CSV shards (the ingest input)."""
+    return sum(p.stat().st_size for p in Path(dataset_dir).rglob("*.csv"))
+
+
+def _project_delta_bytes(client, base: str, headers: dict, dashboard_id: str) -> int:
+    """Best-effort materialized Delta size for a dashboard's project.
+
+    Sums ``flexible_metadata.deltatable_size_bytes`` (written by the CLI at
+    ingest) across every data collection of the project's workflows. Returns 0
+    on any failure — compression is then omitted from the report, not guessed.
+    """
+    try:
+        resp = client.get(
+            f"{_api(base)}/projects/get/from_dashboard_id/{dashboard_id}", headers=headers
+        )
+        if resp.status_code != 200:
+            return 0
+        body = resp.json()
+        # Endpoint wraps the project: {"project": {...}, "delta_locations": {...}}.
+        project = body.get("project", body)
+    except Exception:
+        return 0
+    total = 0
+    # In joins mode the materialized size lands on the joined DC (source DCs
+    # carry empty flexible_metadata); in links/independent mode it's on each
+    # source DC. Summing all workflow DCs captures the right total either way.
+    for wf in project.get("workflows") or []:
+        for dc in wf.get("data_collections") or []:
+            fm = dc.get("flexible_metadata") or {}
+            try:
+                total += int(fm.get("deltatable_size_bytes") or 0)
+            except (TypeError, ValueError):
+                continue
+    return total
 
 
 def _import_dashboard(client, base: str, headers: dict, gen: GeneratedConfigs) -> tuple[str, float]:
@@ -132,11 +170,23 @@ def _render_component(
         return {}  # interactive/card/text — not a timed render
 
     wall_ms = (time.perf_counter() - t0) * 1000.0
+
+    def _hdr_float(name: str):
+        raw = resp.headers.get(name)
+        try:
+            return float(raw) if raw not in (None, "") else None
+        except (TypeError, ValueError):
+            return None
+
     return {
         "wall_ms": wall_ms,
         "celery_path": celery_path,
         "http_status": resp.status_code,
         "ok": resp.status_code == 200,
+        # Server-side per-stage split (additive X-* headers; None if absent).
+        "load_ms": _hdr_float("X-Load-Ms"),
+        "build_ms": _hdr_float("X-Build-Ms"),
+        "server_total_ms": _hdr_float("X-Total-Ms"),
         "error": "" if resp.status_code == 200 else resp.text[:300],
     }
 
@@ -192,24 +242,38 @@ def run_matrix(
 
         for cell in cells:
             dataset_dir = output_root / "data" / f"{cell.size}_dc{cell.n_dcs}"
-            generate_dataset(cell.size_bytes, cell.n_dcs, dataset_dir, force=force_datagen)
+            manifest = generate_dataset(
+                cell.size_bytes, cell.n_dcs, dataset_dir, force=force_datagen
+            )
             gen = write_configs(cell, dataset_dir, output_root / "configs" / cell.slug)
+            input_bytes = _dir_csv_bytes(dataset_dir)
 
             # ── Ingest + import ──────────────────────────────────────────────
             try:
                 ingest_ms = _ingest(cell, cli_config_path, gen, depictio_bin)
                 dashboard_id, import_ms = _import_dashboard(client, base, headers, gen)
-                ingest_res = IngestResult(cell.slug, ingest_ms, import_ms, True, dashboard_id)
             except subprocess.CalledProcessError as exc:
                 emit(_ingest_error_row(cell, server_mode, f"ingest failed: {exc.stderr[:300]}"))
                 continue
             except Exception as exc:  # import/network failure
                 emit(_ingest_error_row(cell, server_mode, f"import failed: {exc}"))
                 continue
-            emit({"kind": "ingest", "server_mode": server_mode, **vars(ingest_res)})
 
             # ── Render each component ────────────────────────────────────────
             components = _get_components(client, base, headers, dashboard_id)
+            ingest_res = IngestResult(
+                cell_slug=cell.slug,
+                ingest_wall_ms=ingest_ms,
+                import_wall_ms=import_ms,
+                ok=True,
+                dashboard_id=dashboard_id,
+                n_dcs=cell.n_dcs,
+                rows_per_dc=manifest.rows_total,
+                rows_total=manifest.rows_total * cell.n_dcs,
+                input_bytes=input_bytes,
+                delta_bytes=_project_delta_bytes(client, base, headers, dashboard_id),
+            )
+            emit({"kind": "ingest", "server_mode": server_mode, **vars(ingest_res)})
             passes: list[tuple[bool, list[dict]]] = [(False, [])]
             if cross_filter and cell.connect is ConnectMode.LINKS:
                 passes.append((True, _CROSS_FILTER))
