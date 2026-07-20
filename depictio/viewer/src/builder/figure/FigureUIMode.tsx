@@ -12,6 +12,7 @@ import {
   Alert,
   Group,
   Loader,
+  NumberInput,
   Select,
   Stack,
   Text,
@@ -80,8 +81,19 @@ const FigureUIMode: React.FC = () => {
   const config = useBuilderStore((s) => s.config) as {
     selection_enabled?: boolean;
     selection_column?: string;
+    max_points?: number | null;
   };
   const patchConfig = useBuilderStore((s) => s.patchConfig);
+
+  // Point-style plots (scatter family + strip) are the only ones the backend
+  // downsamples, so the max-points control is only meaningful for them.
+  const isPointPlot = useMemo(
+    () =>
+      ['scatter', 'scatter_3d', 'scatter_ternary', 'scatter_polar', 'strip'].includes(
+        visuType,
+      ),
+    [visuType],
+  );
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -307,6 +319,20 @@ const FigureUIMode: React.FC = () => {
             />
           )}
         </Accordion>
+      )}
+
+      {isPointPlot && (
+        <NumberInput
+          label="Max points"
+          description="Downsample above this count (blank = global default). Viewers can still load all points on demand."
+          min={0}
+          step={1000}
+          placeholder="Global default"
+          value={typeof config.max_points === 'number' ? config.max_points : ''}
+          onChange={(v) =>
+            patchConfig({ max_points: typeof v === 'number' ? v : null })
+          }
+        />
       )}
     </Stack>
   );

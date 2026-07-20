@@ -1842,6 +1842,23 @@ def bulk_compute_cards(
 # ============================================================================
 
 
+def _emit_timing_headers(response, timings, t0, _time_mod) -> None:
+    """Attach ``X-Load-Ms`` / ``X-Build-Ms`` / ``X-Total-Ms`` to a render response.
+
+    ``timings`` is the per-stage dict a render task/endpoint produced (may be
+    ``None``); ``t0`` is a ``perf_counter()`` stamp taken when server-side
+    handling began, so ``X-Total-Ms`` covers the whole endpoint, not just the
+    compute. Purely additive telemetry consumed by the benchmark harness —
+    clients ignore unknown headers.
+    """
+    timings = timings or {}
+    if timings.get("load_ms") is not None:
+        response.headers["X-Load-Ms"] = str(timings["load_ms"])
+    if timings.get("build_ms") is not None:
+        response.headers["X-Build-Ms"] = str(timings["build_ms"])
+    response.headers["X-Total-Ms"] = f"{(_time_mod.perf_counter() - t0) * 1000:.1f}"
+
+
 @dashboards_endpoint_router.post("/render_figure/{dashboard_id}/{component_id}")
 async def render_figure_endpoint(
     dashboard_id: PyObjectId,
@@ -1868,13 +1885,17 @@ async def render_figure_endpoint(
     code path on the worker.
 
     Request body:
-        {"filters": [...], "theme": "light" | "dark"}
+        {"filters": [...], "theme": "light" | "dark", "full_load": bool}
+
+    ``full_load`` (default False) bypasses the point-plot row cap so the client
+    can explicitly render every point on demand (slow on large datasets).
 
     Response:
         {"figure": <plotly fig dict>, "metadata": {visu_type, ...}}
     """
     filters = request.get("filters") or []
     theme = request.get("theme") or "light"
+    full_load = bool(request.get("full_load", False))
 
     dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
     if not dashboard_data:
@@ -1924,6 +1945,7 @@ async def render_figure_endpoint(
         "code_content": component.get("code_content", ""),
         "selection_enabled": bool(component.get("selection_enabled", False)),
         "selection_column": component.get("selection_column"),
+        "max_points": component.get("max_points"),
     }
 
     # Offload to Celery only when the render is actually heavy. A blanket
@@ -1941,9 +1963,17 @@ async def render_figure_endpoint(
     )
     response.headers["X-Celery-Path"] = "offloaded" if offload else "inline"
 
-    payload = {"metadata": metadata, "filter_metadata": filter_metadata, "theme": theme}
+    payload = {
+        "metadata": metadata,
+        "filter_metadata": filter_metadata,
+        "theme": theme,
+        "full_load": full_load,
+    }
+    import time as _time
+
+    _t0 = _time.perf_counter()
     try:
-        return await offload_or_run(
+        result = await offload_or_run(
             build_figure_preview_task,
             (payload,),
             offload=offload,
@@ -1954,6 +1984,8 @@ async def render_figure_endpoint(
     except Exception as e:
         logger.error(f"render_figure: build failed for {component_id}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Figure render failed: {e}")
+    _emit_timing_headers(response, (result or {}).get("metadata", {}).get("timings"), _t0, _time)
+    return result
 
 
 # ============================================================================
@@ -1966,6 +1998,7 @@ def render_table_endpoint(
     dashboard_id: PyObjectId,
     component_id: str,
     request: dict,
+    response: Response,
     current_user: User = Depends(get_user_or_anonymous),
     access_token: Annotated[str | None, Depends(oauth2_scheme_optional)] = None,
 ):
@@ -1987,8 +2020,11 @@ def render_table_endpoint(
     any ``acquisition*`` column (newest first) so realtime ingests land at
     the top of the visible table; users can override via header click.
     """
-    from depictio.api.v1.deltatables_utils import load_deltatable_lite
+    import time as _time
 
+    from depictio.api.v1.deltatables_utils import count_deltatable_lite, load_deltatable_lite
+
+    _t0 = _time.perf_counter()
     filters = request.get("filters") or []
     start = int(request.get("start") or 0)
     limit = int(request.get("limit") or 100)
@@ -2047,45 +2083,83 @@ def render_table_endpoint(
             "size_bytes": dc_config.get("size_bytes", 0),
         }
 
+    wf_oid = ObjectId(str(wf_id)) if not isinstance(wf_id, ObjectId) else wf_id
+
+    _t_load = _time.perf_counter()
     try:
-        df = load_deltatable_lite(
-            workflow_id=ObjectId(str(wf_id)) if not isinstance(wf_id, ObjectId) else wf_id,
+        # Cheap schema peek (one row) so we can resolve the default sort column
+        # and build column defs without materialising the whole table. Column
+        # names/dtypes are independent of filters, so this needs no filter.
+        schema_df = load_deltatable_lite(
+            workflow_id=wf_oid,
             data_collection_id=str(dc_id),
-            metadata=filter_metadata or None,
+            limit_rows=1,
             init_data=init_data,
         )
+        available_cols = schema_df.columns
+
+        # Pick a default sort if the client didn't ask for one — first column
+        # whose name reads like an acquisition timestamp. Mirrors the image
+        # endpoint's logic so both components show "newest first" out of the box
+        # (realtime dashboards rely on this).
+        chosen_sort = sort_by
+        if not chosen_sort:
+            for cand in available_cols:
+                if "acquisition" in cand.lower() and (
+                    "time" in cand.lower() or "date" in cand.lower() or "stamp" in cand.lower()
+                ):
+                    chosen_sort = cand
+                    break
+        if chosen_sort and chosen_sort not in available_cols:
+            # Unknown column from a stale client cache — silently drop the sort
+            # rather than 500ing for a UI race.
+            chosen_sort = None
+
+        if chosen_sort:
+            # A server-side sort has to see every row, so we load the full frame
+            # (its height is then a free, exact total). This is the expensive
+            # path — inherent to sorting a paginated grid; kept for the realtime
+            # "newest first" default and explicit header-click sorts.
+            df = load_deltatable_lite(
+                workflow_id=wf_oid,
+                data_collection_id=str(dc_id),
+                metadata=filter_metadata or None,
+                init_data=init_data,
+            )
+            total = df.height
+            sliced = df.sort(chosen_sort, descending=(sort_dir == "desc"), nulls_last=True).slice(
+                start, limit
+            )
+        else:
+            # No sort → push the page window down to the Delta scan so we only
+            # read up to (start + limit) rows instead of the whole table. Total
+            # comes from a separate pushdown count (no full materialisation).
+            total = count_deltatable_lite(
+                workflow_id=wf_oid,
+                data_collection_id=str(dc_id),
+                metadata=filter_metadata or None,
+                init_data=init_data,
+            )
+            df = load_deltatable_lite(
+                workflow_id=wf_oid,
+                data_collection_id=str(dc_id),
+                metadata=filter_metadata or None,
+                limit_rows=start + limit,
+                init_data=init_data,
+            )
+            sliced = df.slice(start, limit)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"render_table: DC load failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to load data: {e}")
+    _load_ms = int((_time.perf_counter() - _t_load) * 1000)
 
-    total = df.height
-
-    # Pick a default sort if the client didn't ask for one — first column
-    # whose name reads like an acquisition timestamp. Mirrors the image
-    # endpoint's logic so both components show "newest first" out of the box.
-    chosen_sort = sort_by
-    if not chosen_sort:
-        for cand in df.columns:
-            if "acquisition" in cand.lower() and (
-                "time" in cand.lower() or "date" in cand.lower() or "stamp" in cand.lower()
-            ):
-                chosen_sort = cand
-                break
-    if chosen_sort and chosen_sort not in df.columns:
-        # Unknown column from a stale client cache — silently drop the sort
-        # rather than 500ing for a UI race.
-        chosen_sort = None
-
-    if chosen_sort:
-        df_sorted = df.sort(chosen_sort, descending=(sort_dir == "desc"), nulls_last=True)
-    else:
-        df_sorted = df
-
-    sliced = df_sorted.slice(start, limit)
+    _t_build = _time.perf_counter()
     rows = sliced.to_dicts()
 
     columns = []
-    for name, dtype in zip(df.columns, df.dtypes):
+    for name, dtype in zip(schema_df.columns, schema_df.dtypes):
         type_str = str(dtype).lower()
         ag_type = (
             "numericColumn"
@@ -2094,6 +2168,8 @@ def render_table_endpoint(
         )
         columns.append({"field": name, "headerName": name, "type": ag_type})
 
+    _build_ms = int((_time.perf_counter() - _t_build) * 1000)
+    _emit_timing_headers(response, {"load_ms": _load_ms, "build_ms": _build_ms}, _t0, _time)
     return {
         "columns": columns,
         "rows": rows,

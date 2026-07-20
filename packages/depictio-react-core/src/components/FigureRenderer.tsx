@@ -1,5 +1,15 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Paper, Loader, Text, Stack, useMantineColorScheme } from '@mantine/core';
+import {
+  Paper,
+  Loader,
+  Text,
+  Stack,
+  Badge,
+  Button,
+  Group,
+  Tooltip,
+  useMantineColorScheme,
+} from '@mantine/core';
 import Plot from 'react-plotly.js';
 // Vite resolve.alias in depictio/viewer/vite.config.ts rewrites bare
 // `plotly.js` to `plotly.js/dist/plotly`, so this import grabs the prebuilt
@@ -7,7 +17,7 @@ import Plot from 'react-plotly.js';
 // `buffer/` source walk, no extra bundle weight, single Plotly instance.
 import Plotly from 'plotly.js';
 
-import { renderFigure, InteractiveFilter, StoredMetadata } from '../api';
+import { renderFigure, InteractiveFilter, StoredMetadata, FigureResponse } from '../api';
 import { extractScatterSelection } from '../selection';
 import { useInView } from '../hooks/useInView';
 import { useNewItemIds } from '../hooks/useNewItemIds';
@@ -51,6 +61,10 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
   activeHighlight,
 }) => {
   const [figure, setFigure] = useState<{ data?: unknown[]; layout?: Record<string, unknown> } | null>(null);
+  const [renderMeta, setRenderMeta] = useState<FigureResponse['metadata'] | null>(null);
+  // User opted to render every point for this component (bypasses the cap).
+  // Reset whenever the filters change so a new slice starts capped again.
+  const [fullLoad, setFullLoad] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { colorScheme } = useMantineColorScheme();
@@ -89,12 +103,19 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
     [filters, metadata.index],
   );
 
+  // A new filter slice may have a different point count — go back to the capped
+  // render so the user re-opts into a full load for the new data.
+  useEffect(() => {
+    setFullLoad(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(filtersForFetch)]);
+
   useEffect(() => {
     if (!inView) return;
     let cancelled = false;
     setLoading(true);
     setError(null);
-    renderFigure(dashboardId, metadata.index, filtersForFetch, theme)
+    renderFigure(dashboardId, metadata.index, filtersForFetch, theme, fullLoad)
       .then((res) => {
         if (cancelled) return;
         // Keep the previous figure mounted while the next response is in
@@ -102,6 +123,7 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
         // this avoids the full SVG teardown/init the old "unmount + full
         // loader" pattern triggered.
         setFigure(res.figure);
+        setRenderMeta(res.metadata ?? null);
       })
       .catch((err) => {
         if (cancelled) return;
@@ -114,7 +136,7 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dashboardId, metadata.index, JSON.stringify(filtersForFetch), theme, inView, refreshTick]);
+  }, [dashboardId, metadata.index, JSON.stringify(filtersForFetch), theme, inView, refreshTick, fullLoad]);
 
   // First-paint loader vs refetch overlay: only show the big "Rendering…"
   // block until we have something to show; subsequent fetches keep the
@@ -347,6 +369,52 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
     return base;
   }, [figure, selectionEnabled, metadata.selection_mode, refreshTick]);
 
+  // "N of M points" indicator + full-load override. Shown when the server
+  // downsampled/capped this figure (was_sampled), or as a passive "complete"
+  // note once the user has loaded every point.
+  const sampleBadge = useMemo(() => {
+    if (!renderMeta) return null;
+    const displayed = renderMeta.displayed_data_count;
+    const total = renderMeta.total_data_count;
+    const wrap = (children: React.ReactNode) => (
+      <Group
+        gap={6}
+        style={{ position: 'absolute', top: 6, right: 6, zIndex: 5 }}
+        wrap="nowrap"
+      >
+        {children}
+      </Group>
+    );
+    if (renderMeta.was_sampled && typeof displayed === 'number' && typeof total === 'number') {
+      return wrap(
+        <>
+          <Badge color="orange" variant="light" size="sm">
+            Sample: {displayed.toLocaleString()} / {total.toLocaleString()} pts
+          </Badge>
+          <Tooltip label="Render every point — may be slow on large datasets" withArrow>
+            <Button
+              size="compact-xs"
+              variant="light"
+              color="orange"
+              loading={loading && fullLoad}
+              onClick={() => setFullLoad(true)}
+            >
+              Load all
+            </Button>
+          </Tooltip>
+        </>,
+      );
+    }
+    if (fullLoad && renderMeta.full_data_loaded && typeof displayed === 'number') {
+      return wrap(
+        <Badge color="teal" variant="light" size="sm">
+          Complete: {displayed.toLocaleString()} pts
+        </Badge>,
+      );
+    }
+    return null;
+  }, [renderMeta, loading, fullLoad]);
+
   return (
     <Paper
       ref={containerRef}
@@ -397,6 +465,7 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
             onDeselect={selectionEnabled ? handleDeselect : undefined}
           />
           <RefetchOverlay visible={showRefetchOverlay} />
+          {sampleBadge}
         </div>
       )}
     </Paper>

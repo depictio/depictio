@@ -950,6 +950,32 @@ class PerformanceConfig(BaseSettings):
     http_client_timeout: int = Field(default=30)
     api_request_timeout: int = Field(default=60)
 
+    # Component render caps — bound how many rows a single figure/table render
+    # materialises so large Delta tables stay responsive (and don't OOM).
+    figure_max_points: int = Field(
+        default=50_000,
+        description=(
+            "Target marker count for per-row point plots (scatter family). Above "
+            "this the figure is downsampled before serialising to Plotly. Per-"
+            "component `max_points` overrides this."
+        ),
+    )
+    figure_max_load_rows: int = Field(
+        default=500_000,
+        description=(
+            "Row ceiling loaded from Delta for a point-plot / code-mode figure "
+            "(memory bound). Beyond it the figure samples the first N rows loaded "
+            "rather than the whole table. Bypassed when the client requests a full "
+            "load."
+        ),
+    )
+    table_default_page_size: int = Field(
+        default=10,
+        description=(
+            "Fallback rows-per-page for the viewer table when the component has no `page_size` set."
+        ),
+    )
+
     # Playwright/browser timeouts (in milliseconds)
     browser_navigation_timeout: int = Field(default=60000)  # 60s default
     browser_page_load_timeout: int = Field(default=90000)  # 90s default

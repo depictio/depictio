@@ -451,7 +451,19 @@ export async function bulkComputeCards(
 /** Server-rendered Plotly figure for one component. */
 export interface FigureResponse {
   figure: { data?: unknown[]; layout?: Record<string, unknown> };
-  metadata: { visu_type?: string; filter_applied?: boolean };
+  metadata: {
+    visu_type?: string;
+    filter_applied?: boolean;
+    /** True when the scatter-family figure was downsampled / the source was
+     *  row-capped before plotting (see `full_data_loaded`). */
+    was_sampled?: boolean;
+    /** Points actually plotted (post-sampling). */
+    displayed_data_count?: number;
+    /** True source row count (post-filter), for the "N of M" indicator. */
+    total_data_count?: number;
+    /** True when every point was rendered (no cap applied / full_load). */
+    full_data_loaded?: boolean;
+  };
 }
 
 export async function renderFigure(
@@ -459,13 +471,14 @@ export async function renderFigure(
   componentId: string,
   filters: InteractiveFilter[],
   theme: 'light' | 'dark' = 'light',
+  fullLoad = false,
 ): Promise<FigureResponse> {
   const res = await fetch(
     `${API_BASE}/dashboards/render_figure/${dashboardId}/${componentId}`,
     {
       method: 'POST',
       headers: authHeaders(),
-      body: JSON.stringify({ filters, theme }),
+      body: JSON.stringify({ filters, theme, full_load: fullLoad }),
     },
   );
   if (!res.ok) throw new Error(`Failed to render figure: ${res.status}`);
