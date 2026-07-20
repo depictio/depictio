@@ -98,6 +98,30 @@ class IngestionStep(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class IngestionDataCollection(BaseModel):
+    """Per-data-collection summary captured for an ingestion run.
+
+    Mirrors what the DC manager surfaces (tag / type / format) *plus* the local
+    scan paths the CLI resolved — base directories and the file-matching pattern
+    (regex for recursive scans, or the single filename) — which the DC manager
+    itself does not display.
+    """
+
+    tag: str = Field(..., description="Data collection tag")
+    type: Optional[str] = Field(default=None, description="DC type, e.g. 'table', 'jbrowse2'")
+    format: Optional[str] = Field(default=None, description="Table format, e.g. 'csv', 'parquet'")
+    scan_mode: Optional[str] = Field(default=None, description="'recursive' or 'single'")
+    scan_pattern: Optional[str] = Field(
+        default=None, description="Regex (recursive) or filename (single) the scan matched on"
+    )
+    locations: list[str] = Field(
+        default_factory=list, description="Local base directories scanned (workflow data location)"
+    )
+    file_count: Optional[int] = Field(default=None, description="Files matched, when known")
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class IngestionRun(BaseModel):
     """Lifecycle record for one ingestion invocation (CLI ``run`` or UI upload).
 
@@ -121,8 +145,30 @@ class IngestionRun(BaseModel):
     project_id: Optional[str] = Field(default=None, description="Target project id")
     project_name: Optional[str] = Field(default=None, description="Target project name")
     command: str = Field(default="run", description="CLI command that triggered the run")
+    command_line: Optional[str] = Field(
+        default=None, description="Exact CLI invocation used (sensitive flags redacted)"
+    )
+    cli_config_path: Optional[str] = Field(
+        default=None, description="Local CLI config file the run used"
+    )
+    project_config_path: Optional[str] = Field(
+        default=None, description="Local project config YAML path (standard mode)"
+    )
+    data_root: Optional[str] = Field(
+        default=None, description="Local data root directory (template mode)"
+    )
+    data_collections: list[IngestionDataCollection] = Field(
+        default_factory=list, description="Per-DC summary + local scan paths for this run"
+    )
     status: IngestionStatus = Field(default="running", description="Overall run status")
     steps: list[IngestionStep] = Field(default_factory=list, description="Per-step tally")
+    # Placeholder for future async/offloaded ingestion: a long-running ingestion
+    # can PATCH steps + current_step live (see POST /monitoring/ingestion/{run_id}/step)
+    # while status='running'. Synchronous CLI runs leave this None and report all
+    # steps at finish.
+    current_step: Optional[str] = Field(
+        default=None, description="Step currently running, for live async ingestion"
+    )
     error: Optional[str] = Field(default=None, description="Failure message if the run failed")
     started_at: datetime = Field(default_factory=datetime.now)
     finished_at: Optional[datetime] = Field(default=None, description="When the run completed")

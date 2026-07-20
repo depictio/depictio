@@ -2939,11 +2939,29 @@ export interface MonitoringIngestionRun {
   project_id?: string | null;
   project_name?: string | null;
   command: string;
+  command_line?: string | null;
+  cli_config_path?: string | null;
+  project_config_path?: string | null;
+  data_root?: string | null;
+  data_collections?: MonitoringIngestionDataCollection[];
   status: 'running' | 'success' | 'partial' | 'failed';
   steps?: { name: string; status: string; detail?: string | null }[];
+  /** Step currently running (live async ingestion); null for finished runs. */
+  current_step?: string | null;
   error?: string | null;
   started_at?: string;
   finished_at?: string | null;
+}
+
+/** Per-data-collection summary + local scan paths captured for an ingestion run. */
+export interface MonitoringIngestionDataCollection {
+  tag: string;
+  type?: string | null;
+  format?: string | null;
+  scan_mode?: string | null;
+  scan_pattern?: string | null;
+  locations?: string[];
+  file_count?: number | null;
 }
 
 /** A recent application log line from the capped collection. */

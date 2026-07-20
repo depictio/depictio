@@ -7,6 +7,7 @@ import {
   Box,
   Card,
   Code,
+  CopyButton,
   Group,
   Loader,
   ScrollArea,
@@ -199,6 +200,39 @@ function stepTally(steps?: { status: string }[]): string {
   if (counts.other) parts.push(`${counts.other} other`);
   return parts.join(' · ');
 }
+
+/** Collapse a long filesystem path to `head/…/last-two-segments` so it fits on
+ *  one line; the full value is surfaced via tooltip in `PathTip`. */
+function shortenPath(p: string, maxLen = 44): string {
+  if (p.length <= maxLen) return p;
+  const parts = p.split('/').filter(Boolean);
+  if (parts.length <= 2) return `…${p.slice(-(maxLen - 1))}`;
+  const lead = p.startsWith('/') ? '/' : '';
+  const tail = parts.slice(-2).join('/');
+  const short = `${lead}${parts[0]}/…/${tail}`;
+  return short.length <= maxLen ? short : `…/${tail}`;
+}
+
+/** A single-line, ellipsized path (monospace). The full path shows on hover, and
+ *  clicking copies it to the clipboard (the shortened text isn't selectable). */
+const PathTip: React.FC<{ path?: string | null }> = ({ path }) =>
+  path ? (
+    <CopyButton value={path} timeout={1500}>
+      {({ copied, copy }) => (
+        <Tooltip label={copied ? 'Copied!' : `${path}  (click to copy)`} withArrow multiline maw={560}>
+          <Code
+            fz="10px"
+            onClick={copy}
+            style={{ whiteSpace: 'nowrap', cursor: 'pointer' }}
+          >
+            {shortenPath(path)}
+          </Code>
+        </Tooltip>
+      )}
+    </CopyButton>
+  ) : (
+    <>—</>
+  );
 
 /** One metadatum as a stacked label-over-value cell (uppercase caption above the
  *  value). Used in the ingestion detail field grid so values line up in columns
@@ -569,7 +603,15 @@ const IngestionPane: React.FC<{ liveSignal: number }> = ({ liveSignal }) => {
               <Accordion.Control>
                 <Group gap="sm" wrap="nowrap">
                   <Box w={84} style={{ flexShrink: 0 }}>
-                    <Badge size="xs" fullWidth color={statusColor(r.status)} variant="filled">
+                    <Badge
+                      size="xs"
+                      fullWidth
+                      color={statusColor(r.status)}
+                      variant="filled"
+                      leftSection={
+                        r.status === 'running' ? <Loader size={8} color="white" /> : undefined
+                      }
+                    >
                       {r.status}
                     </Badge>
                   </Box>
@@ -638,6 +680,17 @@ const IngestionPane: React.FC<{ liveSignal: number }> = ({ liveSignal }) => {
                     </Field>
                     <Field label="Steps">{stepTally(r.steps)}</Field>
                   </SimpleGrid>
+                  {r.command_line && (
+                    <DetailBlock label="Command">
+                      <Code
+                        block
+                        fz="11px"
+                        style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}
+                      >
+                        {r.command_line}
+                      </Code>
+                    </DetailBlock>
+                  )}
                   <Group gap="xl" wrap="wrap">
                     <Field label="Run ID">
                       <Code fz="10px">{r.run_id}</Code>
@@ -653,6 +706,75 @@ const IngestionPane: React.FC<{ liveSignal: number }> = ({ liveSignal }) => {
                       </Field>
                     )}
                   </Group>
+                  {(r.cli_config_path || r.project_config_path || r.data_root) && (
+                    <Group gap="xl" wrap="wrap">
+                      {r.cli_config_path && (
+                        <Field label="CLI config">
+                          <PathTip path={r.cli_config_path} />
+                        </Field>
+                      )}
+                      {r.project_config_path && (
+                        <Field label="Project config">
+                          <PathTip path={r.project_config_path} />
+                        </Field>
+                      )}
+                      {r.data_root && (
+                        <Field label="Data root">
+                          <PathTip path={r.data_root} />
+                        </Field>
+                      )}
+                    </Group>
+                  )}
+                  {r.data_collections && r.data_collections.length > 0 && (
+                    <DetailBlock label={`Data collections (${r.data_collections.length})`}>
+                      <Table.ScrollContainer minWidth={560}>
+                        <Table withTableBorder withColumnBorders fz="xs" layout="auto">
+                          <Table.Thead>
+                            <Table.Tr>
+                              <Table.Th>Tag</Table.Th>
+                              <Table.Th>Type</Table.Th>
+                              <Table.Th>Format</Table.Th>
+                              <Table.Th>Scan</Table.Th>
+                              <Table.Th>Pattern / file</Table.Th>
+                              <Table.Th>Local paths</Table.Th>
+                              <Table.Th ta="right">Files</Table.Th>
+                            </Table.Tr>
+                          </Table.Thead>
+                          <Table.Tbody>
+                            {r.data_collections.map((dc, i) => (
+                              <Table.Tr key={`${r.run_id}-dc-${i}`}>
+                                <Table.Td fw={500}>{dc.tag}</Table.Td>
+                                <Table.Td>{dc.type || '—'}</Table.Td>
+                                <Table.Td>{dc.format || '—'}</Table.Td>
+                                <Table.Td>{dc.scan_mode || '—'}</Table.Td>
+                                <Table.Td>
+                                  {dc.scan_mode === 'single' ? (
+                                    <PathTip path={dc.scan_pattern} />
+                                  ) : dc.scan_pattern ? (
+                                    <Code fz="10px">{dc.scan_pattern}</Code>
+                                  ) : (
+                                    '—'
+                                  )}
+                                </Table.Td>
+                                <Table.Td>
+                                  {dc.locations && dc.locations.length > 0 ? (
+                                    <Stack gap={2}>
+                                      {dc.locations.map((l) => (
+                                        <PathTip key={l} path={l} />
+                                      ))}
+                                    </Stack>
+                                  ) : (
+                                    '—'
+                                  )}
+                                </Table.Td>
+                                <Table.Td ta="right">{dc.file_count ?? '—'}</Table.Td>
+                              </Table.Tr>
+                            ))}
+                          </Table.Tbody>
+                        </Table>
+                      </Table.ScrollContainer>
+                    </DetailBlock>
+                  )}
                   {r.steps && r.steps.length > 0 && (
                     <Table withTableBorder withColumnBorders fz="xs">
                       <Table.Thead>
@@ -663,17 +785,28 @@ const IngestionPane: React.FC<{ liveSignal: number }> = ({ liveSignal }) => {
                         </Table.Tr>
                       </Table.Thead>
                       <Table.Tbody>
-                        {r.steps.map((s, i) => (
-                          <Table.Tr key={`${r.run_id}-${i}`}>
-                            <Table.Td>{s.name}</Table.Td>
-                            <Table.Td>
-                              <Badge size="xs" color={statusColor(s.status)} variant="light">
-                                {s.status}
-                              </Badge>
-                            </Table.Td>
-                            <Table.Td>{s.detail || '—'}</Table.Td>
-                          </Table.Tr>
-                        ))}
+                        {r.steps.map((s, i) => {
+                          const isCurrent = r.status === 'running' && s.name === r.current_step;
+                          return (
+                            <Table.Tr
+                              key={`${r.run_id}-${i}`}
+                              bg={isCurrent ? 'var(--mantine-color-yellow-light)' : undefined}
+                            >
+                              <Table.Td>
+                                <Group gap={6} wrap="nowrap">
+                                  {isCurrent && <Loader size={10} color="yellow" />}
+                                  {s.name}
+                                </Group>
+                              </Table.Td>
+                              <Table.Td>
+                                <Badge size="xs" color={statusColor(s.status)} variant="light">
+                                  {s.status}
+                                </Badge>
+                              </Table.Td>
+                              <Table.Td>{s.detail || '—'}</Table.Td>
+                            </Table.Tr>
+                          );
+                        })}
                       </Table.Tbody>
                     </Table>
                   )}

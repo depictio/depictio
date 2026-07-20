@@ -414,6 +414,10 @@ def api_monitoring_ingestion_start(
     project_id: str | None = None,
     project_name: str | None = None,
     cli_version: str | None = None,
+    command_line: str | None = None,
+    cli_config_path: str | None = None,
+    project_config_path: str | None = None,
+    data_root: str | None = None,
 ) -> str | None:
     """Open a server-side ingestion-run record. Best-effort.
 
@@ -427,6 +431,10 @@ def api_monitoring_ingestion_start(
             "project_id": project_id,
             "project_name": project_name,
             "cli_version": cli_version,
+            "command_line": command_line,
+            "cli_config_path": cli_config_path,
+            "project_config_path": project_config_path,
+            "data_root": data_root,
         }
         response = get_http_client().post(
             url, json=payload, headers=generate_api_headers(CLI_config), timeout=30.0
@@ -446,6 +454,7 @@ def api_monitoring_ingestion_finish(
     steps: list[dict] | None = None,
     error: str | None = None,
     project_id: str | None = None,
+    data_collections: list[dict] | None = None,
 ) -> None:
     """Close a server-side ingestion-run record. Best-effort; never raises."""
     if not run_id:
@@ -457,6 +466,7 @@ def api_monitoring_ingestion_finish(
             "steps": steps or [],
             "error": error,
             "project_id": project_id,
+            "data_collections": data_collections or [],
         }
         get_http_client().post(
             url, json=payload, headers=generate_api_headers(CLI_config), timeout=30.0

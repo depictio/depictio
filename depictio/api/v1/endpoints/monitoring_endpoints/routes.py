@@ -25,7 +25,11 @@ from depictio.api.celery_app import celery_app
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 from depictio.api.v1.monitoring import store
-from depictio.models.models.monitoring import IngestionRun, IngestionStep
+from depictio.models.models.monitoring import (
+    IngestionDataCollection,
+    IngestionRun,
+    IngestionStep,
+)
 from depictio.models.models.users import User
 
 logger = logging.getLogger(__name__)
@@ -98,6 +102,10 @@ class IngestionStartRequest(BaseModel):
     project_id: Optional[str] = None
     project_name: Optional[str] = None
     cli_version: Optional[str] = None
+    command_line: Optional[str] = None
+    cli_config_path: Optional[str] = None
+    project_config_path: Optional[str] = None
+    data_root: Optional[str] = None
 
 
 class IngestionFinishRequest(BaseModel):
@@ -107,6 +115,17 @@ class IngestionFinishRequest(BaseModel):
     # Resolved mid-run (the CLI often only learns the server-side project id after
     # sync), so it can be patched onto the record at close time.
     project_id: Optional[str] = None
+    # Per-DC breakdown (tag / type / format + local scan paths), derived from the
+    # validated project config once the run has scanned.
+    data_collections: list[IngestionDataCollection] = Field(default_factory=list)
+
+
+class IngestionStepRequest(BaseModel):
+    """Live per-step update. Placeholder for future async/offloaded ingestion:
+    a long-running worker PATCHes a step's status while the run is ``running``."""
+
+    step: IngestionStep
+    current_step: Optional[str] = None
 
 
 @monitoring_endpoint_router.post("/ingestion/start")
@@ -135,6 +154,10 @@ def start_ingestion(
         project_id=body.project_id,
         project_name=body.project_name,
         command=body.command,
+        command_line=body.command_line,
+        cli_config_path=body.cli_config_path,
+        project_config_path=body.project_config_path,
+        data_root=body.data_root,
         status="running",
     )
     store.create_ingestion_run(run)
@@ -156,12 +179,16 @@ def finish_ingestion(
     extra: dict = {}
     if body.project_id:
         extra["project_id"] = body.project_id
+    if body.data_collections:
+        extra["data_collections"] = [dc.model_dump() for dc in body.data_collections]
     matched = store.finish_ingestion_run(
         run_id,
         status=body.status,
         steps=[s.model_dump() for s in body.steps],
         error=body.error,
         finished_at=datetime.now(),
+        # A finished run is no longer "running" any step.
+        current_step=None,
         **extra,
     )
     if not matched:
@@ -170,6 +197,34 @@ def finish_ingestion(
 
     publish_ingestion_event(run_id, body.status, None)
     return {"run_id": run_id, "status": body.status}
+
+
+@monitoring_endpoint_router.post("/ingestion/{run_id}/step")
+def update_ingestion_step(
+    run_id: str,
+    body: IngestionStepRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """Upsert a single step of an in-flight ingestion and mark it as current.
+
+    Placeholder for future async/offloaded ingestion: a long-running worker calls
+    this to push per-step progress while the run stays ``running``, so the admin
+    UI reflects live state instead of only the final tally. The current
+    synchronous CLI does not call this yet — it reports all steps at ``finish``.
+    """
+    if not settings.monitoring.enabled:
+        raise HTTPException(status_code=404, detail="Monitoring is disabled.")
+    matched = store.upsert_ingestion_step(
+        run_id,
+        step=body.step.model_dump(),
+        current_step=body.current_step,
+    )
+    if not matched:
+        raise HTTPException(status_code=404, detail="Ingestion run not found.")
+    from depictio.api.v1.monitoring.publish import publish_ingestion_event
+
+    publish_ingestion_event(run_id, "running", None)
+    return {"run_id": run_id, "step": body.step.name}
 
 
 @monitoring_endpoint_router.get("/ingestion")
