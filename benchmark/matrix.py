@@ -80,6 +80,95 @@ class Cell:
         return f"bench_{self.size}_c{self.n_components}_dc{self.n_dcs}_{self.connect.value}_{visu}"
 
 
+class DCKind(str, Enum):
+    """The data-collection ingestion families the benchmark exercises.
+
+    Each has a *different* magnitude axis, which is why ingestion is a separate
+    spec from the render :class:`MatrixSpec` (whose axes — components/connect/visu
+    — are render concerns that don't apply to MultiQC/image ingestion):
+
+    - ``TABLE``   : magnitude = on-disk CSV bytes (the ``SIZES`` ladder).
+    - ``MULTIQC`` : magnitude = number of ``multiqc.parquet`` files (parse + the
+      per-file HTTP round-trips dominate, not the byte size of one parquet).
+    - ``IMAGES``  : magnitude = number of images (N HEAD + N PUT dominate).
+    """
+
+    TABLE = "table"
+    MULTIQC = "multiqc"
+    IMAGES = "images"
+
+
+# Default magnitude ladders per ingestion kind (overridable from the CLI).
+MULTIQC_FILE_COUNTS: tuple[int, ...] = (1, 5, 25)
+IMAGE_COUNTS: tuple[int, ...] = (1_000, 10_000)
+
+
+@dataclass(frozen=True)
+class IngestCell:
+    """One ingestion benchmark configuration (no render).
+
+    ``magnitude`` is interpreted per :attr:`kind`: a ``SIZES`` key for TABLE, a
+    file count for MULTIQC, an image count for IMAGES. ``n_dcs`` lets the table
+    kind exercise the sequential/parallel multi-DC ingestion path.
+    """
+
+    kind: DCKind
+    magnitude: str  # SIZES key (table) | file count (multiqc) | image count (images)
+    n_dcs: int = 1
+
+    @property
+    def magnitude_int(self) -> int:
+        return int(self.magnitude)
+
+    @property
+    def size_bytes(self) -> int:
+        """Target bytes per DC — only meaningful for TABLE (else 0)."""
+        return SIZES.get(self.magnitude, 0)
+
+    @property
+    def slug(self) -> str:
+        return f"ingest_{self.kind.value}_{self.magnitude}_dc{self.n_dcs}"
+
+
+@dataclass
+class IngestSpec:
+    """Selected ingestion cells; ``expand()`` -> one cell per (magnitude, n_dcs).
+
+    Unlike the render matrix this is not a full cartesian product across kinds —
+    each kind is expanded over its own magnitude ladder so table sizes never mix
+    with MultiQC file counts.
+    """
+
+    kinds: list[DCKind] = field(default_factory=lambda: [DCKind.TABLE])
+    table_sizes: list[str] = field(default_factory=lambda: ["10mb", "100mb", "1gb"])
+    multiqc_counts: list[int] = field(default_factory=lambda: list(MULTIQC_FILE_COUNTS))
+    image_counts: list[int] = field(default_factory=lambda: list(IMAGE_COUNTS))
+    n_dcs: list[int] = field(default_factory=lambda: [1])
+
+    def __post_init__(self) -> None:
+        for s in self.table_sizes:
+            if s not in SIZES:
+                raise ValueError(f"Unknown size {s!r}; valid: {sorted(SIZES)}")
+
+    def expand(self) -> list[IngestCell]:
+        cells: list[IngestCell] = []
+        for kind in self.kinds:
+            if kind is DCKind.TABLE:
+                magnitudes: list[str] = list(self.table_sizes)
+            elif kind is DCKind.MULTIQC:
+                magnitudes = [str(c) for c in self.multiqc_counts]
+            else:  # IMAGES
+                magnitudes = [str(c) for c in self.image_counts]
+            for magnitude in magnitudes:
+                for n_dc in self.n_dcs:
+                    # Only TABLE meaningfully scales across DCs; others stay 1.
+                    dcs = n_dc if kind is DCKind.TABLE else 1
+                    cells.append(IngestCell(kind=kind, magnitude=magnitude, n_dcs=dcs))
+        # De-dup (image/multiqc collapse n_dcs -> 1 may create repeats).
+        seen: dict[str, IngestCell] = {c.slug: c for c in cells}
+        return list(seen.values())
+
+
 @dataclass
 class MatrixSpec:
     """Selected values per dimension; ``expand()`` -> the cartesian product."""
@@ -142,3 +231,7 @@ def parse_connect(raw: str) -> list[ConnectMode]:
 
 def parse_visu(raw: str) -> list[VisuType]:
     return [VisuType(s.strip().lower()) for s in raw.split(",") if s.strip()]
+
+
+def parse_kinds(raw: str) -> list[DCKind]:
+    return [DCKind(s.strip().lower()) for s in raw.split(",") if s.strip()]

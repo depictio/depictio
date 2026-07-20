@@ -77,6 +77,15 @@ class IngestResult:
     rows_total: int = 0  # rows_per_dc * n_dcs (all DCs ingested)
     input_bytes: int = 0  # raw CSV bytes across all DCs
     delta_bytes: int = 0  # materialized Delta bytes across all DCs (0 if unknown)
+    # Per-DC-kind ingestion breakdown (table / multiqc / images).
+    dc_kind: str = "table"  # DCKind value
+    magnitude: str = ""  # size key (table) | file count (multiqc) | image count (images)
+    n_units: int = 0  # rows (table) | files (multiqc) | images (images)
+    # Per-phase wall from the CLI ``DEPICTIO_INGEST_TIMINGS`` marker (ms), summed
+    # across DCs: parse / collect / write / upsert / upload. Empty if not captured.
+    phase_ms: dict[str, float] = field(default_factory=dict)
+    peak_rss_mb: Optional[float] = None  # process peak RSS during ingest
+    streaming: Optional[bool] = None  # table: was the sink_delta streaming path used?
 
     @property
     def rows_per_s(self) -> float:

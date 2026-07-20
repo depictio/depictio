@@ -21,8 +21,18 @@ live in :data:`COLUMN_DESCRIPTIONS`.
 from __future__ import annotations
 
 import math
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
+
+# Real MultiQC parquet fixtures shipped in the repo, scaled by *count* (parse +
+# per-file HTTP cost dominates, not the byte size of one parquet). Synthesising a
+# parquet that satisfies ``multiqc.parse_logs`` from scratch is fragile, so we
+# copy a known-good report instead. Resolved relative to the repo root.
+_MULTIQC_FIXTURES: dict[str, str] = {
+    "small": "depictio/projects/nf-core/ampliseq/2.16.0/multiqc/multiqc_data/multiqc.parquet",  # ~2.6M
+    "large": "depictio/projects/nf-core/viralrecon/3.0.0/run_1/multiqc/multiqc_data/multiqc.parquet",  # ~24M
+}
 
 # Ordered canonical columns shared by every data collection. Kept as a superset
 # so figure (scatter/bar/box), table, and advanced_viz (volcano/ma/dot_plot) all
@@ -196,4 +206,142 @@ def generate_dataset(
         rows_total=rows_total,
         bytes_per_row=bytes_per_row,
         approx_bytes_per_dc=size_bytes,
+    )
+
+
+# ── MultiQC + image ingestion datasets ──────────────────────────────────────
+def _repo_root() -> Path:
+    """Repo root — this file lives at ``<root>/benchmark/datagen.py``."""
+    return Path(__file__).resolve().parent.parent
+
+
+@dataclass
+class MultiQCManifest:
+    dataset_dir: str
+    n_files: int
+    source_bytes: int  # bytes of one fixture parquet
+    total_bytes: int  # n_files * source_bytes
+
+
+@dataclass
+class ImageManifest:
+    dataset_dir: str
+    images_dir: str
+    metadata_csv: str
+    n_images: int
+    total_bytes: int
+
+
+def generate_multiqc_dataset(
+    n_files: int,
+    dataset_dir: str | Path,
+    *,
+    fixture: str = "small",
+    force: bool = False,
+) -> MultiQCManifest:
+    """Stage ``n_files`` copies of a real ``multiqc.parquet`` under ``run_*`` dirs.
+
+    Layout matches a ``sequencing-runs`` scan (``runs_regex: run_*`` + a recursive
+    ``multiqc_data/multiqc.parquet`` pattern), so each run contributes one MultiQC
+    file — the axis that actually drives parse + per-file HTTP cost. Idempotent via
+    a ``.manifest`` marker.
+    """
+    dataset_dir = Path(dataset_dir)
+    src = _repo_root() / _MULTIQC_FIXTURES[fixture]
+    if not src.exists():
+        raise FileNotFoundError(f"MultiQC fixture not found: {src}")
+    source_bytes = src.stat().st_size
+
+    marker = dataset_dir / ".manifest"
+    if marker.exists() and not force:
+        existing = dict(
+            line.split("=", 1) for line in marker.read_text().splitlines() if "=" in line
+        )
+        if existing.get("n_files") == str(n_files) and existing.get("fixture") == fixture:
+            return MultiQCManifest(
+                dataset_dir=str(dataset_dir),
+                n_files=n_files,
+                source_bytes=source_bytes,
+                total_bytes=source_bytes * n_files,
+            )
+
+    dataset_dir.mkdir(parents=True, exist_ok=True)
+    for i in range(n_files):
+        run_dir = dataset_dir / f"run_{i:05d}" / "multiqc_data"
+        run_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(src, run_dir / "multiqc.parquet")
+
+    marker.write_text(f"n_files={n_files}\nfixture={fixture}\nsource_bytes={source_bytes}\n")
+    return MultiQCManifest(
+        dataset_dir=str(dataset_dir),
+        n_files=n_files,
+        source_bytes=source_bytes,
+        total_bytes=source_bytes * n_files,
+    )
+
+
+def generate_image_dataset(
+    n_images: int,
+    dataset_dir: str | Path,
+    *,
+    image_px: int = 16,
+    force: bool = False,
+) -> ImageManifest:
+    """Generate ``n_images`` tiny PNGs + a metadata CSV with an ``image_path`` column.
+
+    Images are small (default 16×16) — the ingestion cost being measured is the
+    per-object S3 traffic (N HEAD + N PUT), not pixel volume. Idempotent via a
+    ``.manifest`` marker. Requires Pillow + numpy.
+    """
+    import numpy as np
+    import polars as pl
+    from PIL import Image
+
+    dataset_dir = Path(dataset_dir)
+    images_dir = dataset_dir / "images"
+    metadata_csv = dataset_dir / "images_data.csv"
+
+    marker = dataset_dir / ".manifest"
+    if marker.exists() and not force:
+        existing = dict(
+            line.split("=", 1) for line in marker.read_text().splitlines() if "=" in line
+        )
+        if existing.get("n_images") == str(n_images):
+            total = (
+                sum(p.stat().st_size for p in images_dir.rglob("*.png"))
+                if images_dir.exists()
+                else 0
+            )
+            return ImageManifest(
+                dataset_dir=str(dataset_dir),
+                images_dir=str(images_dir),
+                metadata_csv=str(metadata_csv),
+                n_images=n_images,
+                total_bytes=total,
+            )
+
+    images_dir.mkdir(parents=True, exist_ok=True)
+    rng = np.random.default_rng(0)
+    categories = ("A", "B", "C")
+    rows = {"sample_id": [], "image_path": [], "category": [], "quality_score": []}
+    total_bytes = 0
+    for i in range(n_images):
+        name = f"img_{i:07d}.png"
+        arr = rng.integers(0, 256, size=(image_px, image_px, 3), dtype="uint8")
+        out = images_dir / name
+        Image.fromarray(arr, "RGB").save(out, "PNG")
+        total_bytes += out.stat().st_size
+        rows["sample_id"].append(f"S{i:07d}")
+        rows["image_path"].append(name)  # relative to images_dir (image_column)
+        rows["category"].append(categories[i % len(categories)])
+        rows["quality_score"].append(round(float(rng.uniform(0.5, 1.0)), 3))
+
+    pl.DataFrame(rows).write_csv(metadata_csv)
+    marker.write_text(f"n_images={n_images}\nimage_px={image_px}\n")
+    return ImageManifest(
+        dataset_dir=str(dataset_dir),
+        images_dir=str(images_dir),
+        metadata_csv=str(metadata_csv),
+        n_images=n_images,
+        total_bytes=total_bytes,
     )

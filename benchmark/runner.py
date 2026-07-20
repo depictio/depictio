@@ -18,9 +18,13 @@ import subprocess
 import time
 from pathlib import Path
 
-from benchmark.configgen import GeneratedConfigs, write_configs
-from benchmark.datagen import generate_dataset
-from benchmark.matrix import Cell, ConnectMode, VisuType
+from benchmark.configgen import GeneratedConfigs, write_configs, write_ingest_config
+from benchmark.datagen import (
+    generate_dataset,
+    generate_image_dataset,
+    generate_multiqc_dataset,
+)
+from benchmark.matrix import Cell, ConnectMode, DCKind, IngestCell, VisuType
 from benchmark.metrics import IngestResult, RenderResult
 
 # Columns projected for advanced_viz (/advanced_viz/data) — a superset that
@@ -315,6 +319,178 @@ def _ingest_error_row(cell: Cell, server_mode: str, error: str) -> dict:
         "ingest_wall_ms": 0.0,
         "import_wall_ms": 0.0,
         "dashboard_id": "",
+    }
+
+
+def _run_cli_capture(args: list[str]) -> tuple[int, str, str, float]:
+    """Run a depictio CLI subprocess, returning (rc, stdout, stderr, wall_ms)."""
+    t0 = time.perf_counter()
+    proc = subprocess.run(args, capture_output=True, text=True)
+    wall_ms = (time.perf_counter() - t0) * 1000.0
+    return proc.returncode, proc.stdout, proc.stderr, wall_ms
+
+
+def _aggregate_markers(stdout: str) -> dict:
+    """Sum per-phase timings + collect counters from ``DEPICTIO_INGEST_TIMINGS`` lines."""
+    from depictio.cli.cli.utils.ingest_timing import parse_timing_markers
+
+    phase_ms: dict[str, float] = {}
+    peak_rss: float | None = None
+    n_units = 0
+    delta_bytes = 0
+    for m in parse_timing_markers(stdout):
+        for phase, ms in (m.get("phase_ms") or {}).items():
+            phase_ms[phase] = phase_ms.get(phase, 0.0) + float(ms)
+        rss = m.get("peak_rss_mb")
+        if rss is not None:
+            peak_rss = rss if peak_rss is None else max(peak_rss, rss)
+        n_units += int(m.get("n_rows") or m.get("n_files") or m.get("n_images") or 0)
+        delta_bytes += int(m.get("delta_bytes") or 0)
+    return {
+        "phase_ms": phase_ms,
+        "peak_rss_mb": peak_rss,
+        "n_units": n_units,
+        "delta_bytes": delta_bytes,
+    }
+
+
+def run_ingest_matrix(
+    cells: list[IngestCell],
+    *,
+    cli_config_path: str,
+    output_root: str | Path,
+    multiqc_fixture: str = "small",
+    force_datagen: bool = False,
+    depictio_bin: str = "depictio",
+) -> Path:
+    """Ingest each cell (no render) and append ``kind=="ingest"`` rows.
+
+    Dispatches per :class:`~benchmark.matrix.DCKind`: TABLE/MULTIQC run through
+    ``depictio run``; IMAGES additionally pushes the PNGs via ``depictio images
+    push``. The per-phase ``DEPICTIO_INGEST_TIMINGS`` markers emitted by the CLI
+    are parsed out of captured stdout to fill the phase breakdown + peak RSS.
+    """
+    from depictio.cli.cli.utils.common import load_depictio_config
+
+    output_root = Path(output_root)
+    output_root.mkdir(parents=True, exist_ok=True)
+    results_path = output_root / "results.jsonl"
+
+    cli_config = load_depictio_config(cli_config_path)
+    s3_bucket = getattr(getattr(cli_config, "s3_storage", None), "bucket", "depictio-bucket")
+
+    with results_path.open("a", encoding="utf-8") as sink:
+
+        def emit(row: dict) -> None:
+            sink.write(json.dumps(row) + "\n")
+            sink.flush()
+
+        for cell in cells:
+            data_dir = output_root / "data" / cell.slug
+            cfg_dir = output_root / "configs" / cell.slug
+            input_bytes = 0
+            metadata_csv = images_dir = None
+
+            # ── generate the dataset for this kind ───────────────────────────
+            if cell.kind is DCKind.TABLE:
+                generate_dataset(cell.size_bytes, cell.n_dcs, data_dir, force=force_datagen)
+                input_bytes = _dir_csv_bytes(data_dir)
+            elif cell.kind is DCKind.MULTIQC:
+                mq = generate_multiqc_dataset(
+                    cell.magnitude_int, data_dir, fixture=multiqc_fixture, force=force_datagen
+                )
+                input_bytes = mq.total_bytes
+            else:  # IMAGES
+                im = generate_image_dataset(cell.magnitude_int, data_dir, force=force_datagen)
+                input_bytes = im.total_bytes
+                metadata_csv, images_dir = im.metadata_csv, im.images_dir
+
+            gen = write_ingest_config(
+                cell,
+                data_dir,
+                cfg_dir,
+                s3_bucket=s3_bucket,
+                metadata_csv=metadata_csv,
+                images_dir=images_dir,
+            )
+
+            # ── ingest (run) ─────────────────────────────────────────────────
+            rc, out, err, wall_ms = _run_cli_capture(
+                [
+                    depictio_bin,
+                    "run",
+                    "--CLI-config-path",
+                    cli_config_path,
+                    "--project-config-path",
+                    gen.project_path,
+                    "--overwrite",
+                    "--update-config",
+                ]
+            )
+            if rc != 0:
+                emit(
+                    _ingest_kind_error_row(cell, input_bytes, f"run failed (rc={rc}): {err[-300:]}")
+                )
+                continue
+
+            combined_stdout = out
+            # ── images: push the PNGs to S3 (the real N-HEAD + N-PUT cost) ────
+            if cell.kind is DCKind.IMAGES and gen.s3_base_folder:
+                prc, pout, perr, pwall = _run_cli_capture(
+                    [
+                        depictio_bin,
+                        "images",
+                        "push",
+                        images_dir,
+                        gen.s3_base_folder,
+                        "--CLI-config-path",
+                        cli_config_path,
+                        "--overwrite",
+                    ]
+                )
+                wall_ms += pwall
+                combined_stdout += "\n" + pout
+                if prc != 0:
+                    emit(
+                        _ingest_kind_error_row(
+                            cell, input_bytes, f"images push failed (rc={prc}): {perr[-300:]}"
+                        )
+                    )
+                    continue
+
+            agg = _aggregate_markers(combined_stdout)
+            res = IngestResult(
+                cell_slug=cell.slug,
+                ingest_wall_ms=wall_ms,
+                import_wall_ms=0.0,
+                ok=True,
+                n_dcs=cell.n_dcs,
+                rows_total=agg["n_units"] if cell.kind is DCKind.TABLE else 0,
+                input_bytes=input_bytes,
+                delta_bytes=agg["delta_bytes"],
+                dc_kind=cell.kind.value,
+                magnitude=cell.magnitude,
+                n_units=agg["n_units"],
+                phase_ms=agg["phase_ms"],
+                peak_rss_mb=agg["peak_rss_mb"],
+            )
+            emit({"kind": "ingest", "server_mode": "ingest", **vars(res)})
+
+    return results_path
+
+
+def _ingest_kind_error_row(cell: IngestCell, input_bytes: int, error: str) -> dict:
+    return {
+        "kind": "ingest",
+        "server_mode": "ingest",
+        "cell_slug": cell.slug,
+        "dc_kind": cell.kind.value,
+        "magnitude": cell.magnitude,
+        "ok": False,
+        "error": error,
+        "ingest_wall_ms": 0.0,
+        "import_wall_ms": 0.0,
+        "input_bytes": input_bytes,
     }
 
 
