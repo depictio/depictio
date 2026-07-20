@@ -157,6 +157,8 @@ def create_figure_from_data(
     theme: str = "light",
     selection_enabled: bool = False,
     selection_column: str | None = None,
+    max_points: int | None = None,
+    render_stats: dict[str, Any] | None = None,
 ) -> go.Figure:
     """
     Create Plotly figure from DataFrame and parameters.
@@ -168,6 +170,11 @@ def create_figure_from_data(
         theme: Theme name (light or dark)
         selection_enabled: Whether to enable scatter selection filtering
         selection_column: Column to include in customdata for selection extraction
+        max_points: Point-plot downsampling target (falls back to
+            ``FIGURE_MAX_POINTS``). Only applies to the scatter family.
+        render_stats: Optional out-dict. When provided, it is populated with
+            ``{"displayed": int, "sampled": bool}`` reflecting the plotted marker
+            count so the caller can surface a "sampled" indicator to the client.
 
     Returns:
         Plotly Figure object
@@ -336,13 +343,26 @@ def create_figure_from_data(
 
         # Downsample very large point-style scatters and prefer WebGL so the
         # serialised figure stays small and the browser stays responsive.
-        if visu_type in _POINT_PLOT_TYPES and plot_df.height > FIGURE_MAX_POINTS:
+        # ``max_points``: None → module default; <= 0 → sampling disabled (the
+        # caller asked for a full, uncapped render); > 0 → explicit cap.
+        if max_points is None:
+            point_cap: int | None = FIGURE_MAX_POINTS
+        elif max_points <= 0:
+            point_cap = None
+        else:
+            point_cap = max_points
+        if point_cap is not None and visu_type in _POINT_PLOT_TYPES and plot_df.height > point_cap:
             original_height = plot_df.height
-            plot_df = plot_df.sample(n=FIGURE_MAX_POINTS, seed=0)
+            plot_df = plot_df.sample(n=point_cap, seed=0)
+            if render_stats is not None:
+                render_stats["sampled"] = True
             logger.info(
                 f"create_figure_from_data: downsampled {visu_type} from "
-                f"{original_height} to {FIGURE_MAX_POINTS} points to cap payload size"
+                f"{original_height} to {point_cap} points to cap payload size"
             )
+        if render_stats is not None:
+            render_stats.setdefault("sampled", False)
+            render_stats["displayed"] = plot_df.height
         if visu_type == "scatter":
             # px.scatter renders SVG by default for small N; force WebGL so even
             # the capped point count draws on the GPU instead of as DOM/SVG nodes.

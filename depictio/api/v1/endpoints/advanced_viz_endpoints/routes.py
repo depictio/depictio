@@ -21,7 +21,7 @@ import os
 from typing import Any
 
 from bson import ObjectId
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException, Response
 from fastapi.responses import PlainTextResponse
 
 from depictio.api.v1.endpoints.user_endpoints.routes import (
@@ -268,6 +268,7 @@ def list_kinds(current_user=Depends(get_user_or_anonymous)) -> list[dict[str, An
 
 @advanced_viz_endpoint_router.post("/data")
 def fetch_advanced_viz_data(
+    response: Response,
     payload: dict = Body(...),
     current_user=Depends(get_user_or_anonymous),
     access_token: str | None = Depends(oauth2_scheme_optional),
@@ -291,6 +292,9 @@ def fetch_advanced_viz_data(
           "filter_applied": bool,
         }
     """
+    import time as _time
+
+    _t0 = _time.perf_counter()
     wf_id = payload.get("wf_id")
     dc_id = payload.get("dc_id")
     columns = payload.get("columns") or []
@@ -415,6 +419,7 @@ def fetch_advanced_viz_data(
     if available_cols is not None:
         projection = [c for c in projection if c in available_cols]
 
+    _t_load = _time.perf_counter()
     try:
         df = load_deltatable_lite(
             workflow_id=wf_oid,
@@ -434,17 +439,25 @@ def fetch_advanced_viz_data(
         raise HTTPException(
             status_code=500, detail=f"Failed to load data collection: {exc}"
         ) from exc
+    _load_ms = int((_time.perf_counter() - _t_load) * 1000)
 
     # Drop any requested columns that didn't survive projection (e.g. user
     # bound an optional column the recipe didn't emit). The renderer
     # decides what to do with missing optional columns.
+    _t_build = _time.perf_counter()
     present = [c for c in columns if c in df.columns]
-    return {
+    result = {
         "columns": present,
         "rows": {c: df.get_column(c).to_list() for c in present},
         "row_count": int(df.height),
         "filter_applied": bool(filter_metadata),
     }
+    # Additive timing telemetry for the benchmark harness (clients ignore
+    # unknown headers). load = Delta read; build = column materialisation.
+    response.headers["X-Load-Ms"] = str(_load_ms)
+    response.headers["X-Build-Ms"] = str(int((_time.perf_counter() - _t_build) * 1000))
+    response.headers["X-Total-Ms"] = f"{(_time.perf_counter() - _t0) * 1000:.1f}"
+    return result
 
 
 _CACHE_KEY_VERSION = "v3"

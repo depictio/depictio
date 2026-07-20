@@ -958,6 +958,53 @@ def _load_and_cache_fresh_data(
     return df
 
 
+def _apply_scan_filters(
+    delta_scan: pl.LazyFrame,
+    metadata: list[dict] | None,
+    data_collection_id_str: str,
+    version_salt: str | int | None = None,
+) -> pl.LazyFrame:
+    """Push ``metadata`` filters onto a lazy Delta scan (schema-guarded).
+
+    Skips filters whose column isn't present on this DC — happens when a
+    cross-DC filter (e.g. metadata.habitat) is also being applied to a
+    canonical advanced-viz DC keyed on sample_id. The link resolver appends
+    the translated sample_id filter, so we can safely drop the untranslated
+    habitat filter here instead of failing the whole load with a polars
+    ColumnNotFoundError. Returns the scan unchanged when there are no filters.
+    """
+    if not metadata:
+        return delta_scan
+
+    schema_names = _get_cached_schema(delta_scan, data_collection_id_str, version_salt)
+    available_cols = set(schema_names) if schema_names is not None else None
+
+    usable_metadata = metadata
+    if available_cols is not None:
+        usable_metadata = []
+        for component in metadata:
+            meta = component.get("metadata") or {}
+            col = component.get("column_name") or meta.get("column_name")
+            if col and col not in available_cols:
+                logger.info(
+                    "Skipping filter on column %r — not present in DC (available: %s)",
+                    col,
+                    sorted(available_cols),
+                )
+                continue
+            usable_metadata.append(component)
+
+    filter_expressions = process_metadata_and_filter(usable_metadata)
+
+    if filter_expressions:
+        combined_filter = filter_expressions[0]
+        for filt in filter_expressions[1:]:
+            combined_filter &= filt
+        delta_scan = delta_scan.filter(combined_filter)
+
+    return delta_scan
+
+
 def _load_large_dataframe(
     delta_scan: pl.LazyFrame,
     data_collection_id_str: str,
@@ -985,37 +1032,7 @@ def _load_large_dataframe(
 
     # Apply filters at scan level for large DataFrames
     if metadata and not load_for_options:
-        # Skip filters whose column isn't present on this DC — happens when a
-        # cross-DC filter (e.g. metadata.habitat) is also being applied to a
-        # canonical advanced-viz DC keyed on sample_id. The link resolver
-        # appends the translated sample_id filter, so we can safely drop the
-        # untranslated habitat filter here instead of failing the whole load
-        # with a polars ColumnNotFoundError.
-        schema_names = _get_cached_schema(delta_scan, data_collection_id_str, version_salt)
-        available_cols = set(schema_names) if schema_names is not None else None
-
-        usable_metadata = metadata
-        if available_cols is not None:
-            usable_metadata = []
-            for component in metadata:
-                meta = component.get("metadata") or {}
-                col = component.get("column_name") or meta.get("column_name")
-                if col and col not in available_cols:
-                    logger.info(
-                        "Skipping filter on column %r — not present in DC (available: %s)",
-                        col,
-                        sorted(available_cols),
-                    )
-                    continue
-                usable_metadata.append(component)
-
-        filter_expressions = process_metadata_and_filter(usable_metadata)
-
-        if filter_expressions:
-            combined_filter = filter_expressions[0]
-            for filt in filter_expressions[1:]:
-                combined_filter &= filt
-            delta_scan = delta_scan.filter(combined_filter)
+        delta_scan = _apply_scan_filters(delta_scan, metadata, data_collection_id_str, version_salt)
 
     if limit_rows:
         delta_scan = delta_scan.limit(limit_rows)
@@ -1275,6 +1292,53 @@ def load_deltatable_lite(
         df = df.drop("depictio_aggregation_time")
 
     return df
+
+
+def count_deltatable_lite(
+    workflow_id: ObjectId,
+    data_collection_id: ObjectId | str,
+    metadata: list[dict] | None = None,
+    init_data: dict[str, dict] | None = None,
+    TOKEN: str | None = None,
+) -> int:
+    """Count rows of a (optionally filtered) Delta table without materialising it.
+
+    Runs ``scan.filter(...).select(pl.len())`` so the row count comes back via
+    Polars predicate/aggregation pushdown — no full-width, all-rows load. Used
+    by the figure/table render endpoints to report ``total_data_count`` cheaply
+    when the row payload itself is capped or paginated with pushdown.
+
+    Filters are applied with the same schema-guard as ``load_deltatable_lite``
+    (see ``_apply_scan_filters``). Returns 0 on any scan/collect error rather
+    than raising — a missing count only degrades the UI's "N of M" hint.
+    """
+    data_collection_id_str = str(data_collection_id)
+    workflow_id_str = str(workflow_id)
+
+    if isinstance(data_collection_id, str) and "--" in data_collection_id:
+        raise NotImplementedError(
+            f"Joined DC '{data_collection_id}' format is deprecated. "
+            "Use the pre-computed result data collection ID instead."
+        )
+
+    try:
+        if init_data and data_collection_id_str in init_data:
+            dc_type = init_data[data_collection_id_str].get("dc_type")
+        else:
+            dc_type = _get_dc_type_from_db(
+                ObjectId(data_collection_id)
+                if isinstance(data_collection_id, str)
+                else data_collection_id
+            )
+        version_salt = _get_aggregation_version(data_collection_id_str)
+        file_id = _get_delta_location(data_collection_id_str, workflow_id_str, init_data, TOKEN)
+        delta_scan = _create_delta_scan(file_id, dc_type)
+        delta_scan = _apply_scan_filters(delta_scan, metadata, data_collection_id_str, version_salt)
+        result = delta_scan.select(pl.len()).collect()
+        return int(result.item()) if result.height else 0
+    except Exception as e:
+        logger.warning(f"count_deltatable_lite failed for DC {data_collection_id_str}: {e}")
+        return 0
 
 
 # Memory management for DataFrames - new adaptive caching system

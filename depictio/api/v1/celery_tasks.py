@@ -21,6 +21,7 @@ from typing import Any
 from bson import ObjectId
 
 from depictio.api.celery_app import celery_app
+from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 
 
@@ -55,11 +56,12 @@ def build_figure_preview(payload: dict) -> dict:
         {"figure": <plotly fig dict>, "metadata": {"visu_type": str, "filter_applied": bool}}
     """
     from depictio.api.v1.db import deltatables_collection
-    from depictio.api.v1.deltatables_utils import load_deltatable_lite
+    from depictio.api.v1.deltatables_utils import count_deltatable_lite, load_deltatable_lite
 
     metadata = payload.get("metadata") or {}
     filter_metadata = payload.get("filter_metadata") or []
     theme = payload.get("theme") or "light"
+    full_load = bool(payload.get("full_load", False))
 
     wf_id = metadata.get("wf_id")
     dc_id = metadata.get("dc_id")
@@ -90,14 +92,34 @@ def build_figure_preview(payload: dict) -> dict:
     # filter columns and schema-guards the set. Code mode can reference any
     # column via arbitrary user code, so it always loads the full frame.
     select_columns: list[str] | None = None
-    if mode != "code":
-        from depictio.api.v1.services.figure.figure_builder import referenced_columns
+    from depictio.api.v1.services.figure.figure_builder import (
+        _POINT_PLOT_TYPES,
+        referenced_columns,
+    )
 
+    if mode != "code":
         cols = referenced_columns(visu_type, dict_kwargs)
         if cols is not None:
             if selection_enabled and selection_column:
                 cols = cols | {selection_column}
             select_columns = sorted(cols)
+
+    # Row ceiling: for per-row point plots (scatter family) and code-mode
+    # figures, bound how many rows we pull from Delta so a 10 GB table doesn't
+    # fully materialise just to be downsampled/plotted. Aggregated plots
+    # (bar/box/line/histogram) read every row by design, so they're never
+    # capped. ``full_load`` (explicit client request) bypasses the cap.
+    limit_rows: int | None = None
+    is_point_plot = visu_type in _POINT_PLOT_TYPES
+    if not full_load and (is_point_plot or mode == "code"):
+        limit_rows = settings.performance.figure_max_load_rows
+
+    # Plot-level point cap: component override or global default, unless the
+    # client explicitly asked for a full load (-1 disables sampling entirely).
+    if full_load:
+        effective_max_points = -1
+    else:
+        effective_max_points = metadata.get("max_points") or settings.performance.figure_max_points
 
     started = time.monotonic()
     df = load_deltatable_lite(
@@ -105,6 +127,7 @@ def build_figure_preview(payload: dict) -> dict:
         data_collection_id=str(dc_id),
         metadata=filter_metadata or None,
         select_columns=select_columns,
+        limit_rows=limit_rows,
         init_data=init_data,
     )
     load_ms = int((time.monotonic() - started) * 1000)
@@ -118,6 +141,7 @@ def build_figure_preview(payload: dict) -> dict:
 
     build_started = time.monotonic()
     code_error: str | None = None
+    render_stats: dict[str, Any] = {}
     if mode == "code":
         ok, fig, detected = process_code_mode_figure(code_content, df, theme, "viewer")
         if not ok:
@@ -159,6 +183,8 @@ def build_figure_preview(payload: dict) -> dict:
             theme=theme,
             selection_enabled=selection_enabled,
             selection_column=selection_column,
+            max_points=effective_max_points,
+            render_stats=render_stats,
         )
     build_ms = int((time.monotonic() - build_started) * 1000)
 
@@ -174,9 +200,40 @@ def build_figure_preview(payload: dict) -> dict:
         f"visu={visu_type} load_ms={load_ms} build_ms={build_ms}"
     )
 
+    # Sampling accounting for the "showing N of M points" indicator. A figure is
+    # "sampled" when either the UI-mode point-plot downsample fired, or the
+    # scan-level load cap truncated the source (code mode / very large point
+    # plot). Only run the extra count query when something was actually capped —
+    # a full load or an uncapped small frame needs no total lookup.
+    loaded_height = df.height if hasattr(df, "height") else 0
+    displayed_count = int(render_stats.get("displayed", loaded_height))
+    load_truncated = bool(limit_rows) and loaded_height >= limit_rows
+    was_sampled = bool(render_stats.get("sampled", False)) or load_truncated
+    if was_sampled and not full_load:
+        total_data_count = max(
+            count_deltatable_lite(
+                workflow_id=ObjectId(str(wf_id)) if not isinstance(wf_id, ObjectId) else wf_id,
+                data_collection_id=str(dc_id),
+                metadata=filter_metadata or None,
+                init_data=init_data,
+            ),
+            displayed_count,
+        )
+    else:
+        total_data_count = displayed_count
+
     response_metadata: dict[str, Any] = {
         "visu_type": visu_type,
         "filter_applied": bool(filter_metadata),
+        # Sampling indicator fields consumed by the React viewer badge.
+        "was_sampled": was_sampled,
+        "displayed_data_count": displayed_count,
+        "total_data_count": total_data_count,
+        "full_data_loaded": full_load or not was_sampled,
+        # Per-stage timings ride back through both the inline and the Celery
+        # result-backend paths; the render endpoint lifts them into X-* headers
+        # for the benchmark harness. Unknown key — the React client ignores it.
+        "timings": {"load_ms": load_ms, "build_ms": build_ms},
     }
     if code_error:
         # Surface the underlying Plotly error to the React Code-mode Status

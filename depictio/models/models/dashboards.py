@@ -431,6 +431,7 @@ class DashboardDataLite(BaseModel):
                 "code_content",
                 "selection_enabled",
                 "selection_column",
+                "max_points",
             ],
             "card": [
                 # mandatory
@@ -786,6 +787,8 @@ class DashboardDataLite(BaseModel):
                     lite_comp["code_content"] = comp["code_content"]
                 if comp.get("selection_enabled") is not None:
                     lite_comp["selection_enabled"] = comp["selection_enabled"]
+                if comp.get("max_points") is not None:
+                    lite_comp["max_points"] = comp["max_points"]
 
             elif comp_type == "card":
                 lite_comp["aggregation"] = comp.get("aggregation", "")
@@ -1013,6 +1016,7 @@ class DashboardDataLite(BaseModel):
                         "total_data_count": 0,
                         "was_sampled": False,
                         "filter_applied": False,
+                        "max_points": comp_dict.get("max_points"),
                         # Selection filtering fields
                         "selection_enabled": comp_dict.get("selection_enabled", False),
                         "selection_column": comp_dict.get("selection_column"),

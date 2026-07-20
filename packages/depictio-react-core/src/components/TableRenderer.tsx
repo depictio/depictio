@@ -1,5 +1,15 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Paper, Loader, Text, Stack, useMantineColorScheme } from '@mantine/core';
+import {
+  Paper,
+  Loader,
+  Text,
+  Stack,
+  Badge,
+  Button,
+  Group,
+  Tooltip,
+  useMantineColorScheme,
+} from '@mantine/core';
 import { AgGridReact } from 'ag-grid-react';
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-alpine.css';
@@ -38,8 +48,17 @@ interface TableRendererProps {
   activeHighlight?: ActiveHighlight | null;
 }
 
-const CACHE_BLOCK_SIZE = 100;
 const MAX_BLOCKS_IN_CACHE = 10;
+const DEFAULT_PAGE_SIZE = 10;
+// Server clamps a single render_table request to 500 rows; "Show all" pages
+// through in chunks of this size up to the client-side safety ceiling below.
+const SERVER_MAX_LIMIT = 500;
+// Hard ceiling on rows pulled fully into the browser via "Show all" — beyond
+// this the client-side grid would jank; we truncate and warn instead.
+const TABLE_FULL_LOAD_CAP = 20000;
+
+const clampPageSize = (v: unknown): number =>
+  typeof v === 'number' && v > 0 ? Math.min(Math.floor(v), SERVER_MAX_LIMIT) : DEFAULT_PAGE_SIZE;
 
 /**
  * Renders a table component via AG Grid using the infinite row model. The
@@ -63,6 +82,15 @@ const TableRenderer: React.FC<TableRendererProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [total, setTotal] = useState(0);
   const [ready, setReady] = useState(false);
+  // "Show all" mode: pull every row (up to a cap) into a client-side grid so
+  // the user can scroll/search the whole table on demand. Off by default —
+  // the grid stays server-paged (never > a page in the browser).
+  const [showAll, setShowAll] = useState(false);
+  const [allRows, setAllRows] = useState<Record<string, unknown>[] | null>(null);
+  const [allLoading, setAllLoading] = useState(false);
+  const [allTruncated, setAllTruncated] = useState(false);
+
+  const pageSize = clampPageSize(metadata.page_size);
   const { colorScheme } = useMantineColorScheme();
   const isDark = colorScheme === 'dark';
   const [containerRef, inView] = useInView<HTMLDivElement>('200px');
@@ -230,6 +258,58 @@ const TableRenderer: React.FC<TableRendererProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(filtersForFetch), ready, refreshTick]);
 
+  // A new filter slice changes the row set — drop back to the paginated
+  // (server-paged) view so the user re-opts into a full load for the new data.
+  useEffect(() => {
+    setShowAll(false);
+    setAllRows(null);
+    setAllTruncated(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(filtersForFetch)]);
+
+  // Pull every row (capped) into memory by paging the server in chunks, then
+  // hand them to a client-side grid. Respects the server's 500-row/request
+  // clamp and the client-side ceiling; truncates + warns beyond the cap.
+  const loadAllRows = async () => {
+    setShowAll(true);
+    setAllLoading(true);
+    setAllTruncated(false);
+    setError(null);
+    try {
+      const cap = Math.min(total || TABLE_FULL_LOAD_CAP, TABLE_FULL_LOAD_CAP);
+      const rows: Record<string, unknown>[] = [];
+      for (let start = 0; start < cap; start += SERVER_MAX_LIMIT) {
+        const chunk = Math.min(SERVER_MAX_LIMIT, cap - start);
+        const res = await renderTable(
+          dashboardId,
+          metadata.index,
+          filtersRef.current,
+          start,
+          chunk,
+          sortRef.current.sortBy,
+          sortRef.current.sortDir,
+        );
+        rows.push(...(res.rows as Record<string, unknown>[]));
+        if (typeof res.total === 'number') setTotal(res.total);
+        if (res.rows.length < chunk) break; // reached the end early
+      }
+      setAllRows(rows);
+      setAllTruncated((total || 0) > TABLE_FULL_LOAD_CAP);
+    } catch (err) {
+      setError((err as Error)?.message || String(err));
+      setShowAll(false);
+      setAllRows(null);
+    } finally {
+      setAllLoading(false);
+    }
+  };
+
+  const exitShowAll = () => {
+    setShowAll(false);
+    setAllRows(null);
+    setAllTruncated(false);
+  };
+
   // ── New-row highlight pipeline ────────────────────────────────────────────
   // Snapshot the first page's IDs (by ``row_selection_column`` if defined,
   // else fallback to ``selection_column``) on every ``refreshTick`` change.
@@ -245,11 +325,11 @@ const TableRenderer: React.FC<TableRendererProps> = ({
   useEffect(() => {
     if (!rowIdColumn || !ready) return;
     let cancelled = false;
-    const pageSize =
+    const snapshotPageSize =
       typeof metadata.page_size === 'number'
         ? Math.min(Math.max(metadata.page_size as number, 1), 200)
         : 50;
-    renderTable(dashboardId, metadata.index, filtersForFetch, 0, pageSize)
+    renderTable(dashboardId, metadata.index, filtersForFetch, 0, snapshotPageSize)
       .then((res) => {
         if (cancelled) return;
         const ids: string[] = [];
@@ -365,6 +445,9 @@ const TableRenderer: React.FC<TableRendererProps> = ({
   // header click itself doesn't reorder rows because the infinite row model
   // doesn't have all rows loaded — we MUST go back to the server.
   const onSortChanged = (event: SortChangedEvent) => {
+    // In "Show all" (client-side) mode AG Grid sorts the in-memory rows itself
+    // — no server round-trip, and purgeInfiniteCache would throw.
+    if (showAll) return;
     const sorted = event.api.getColumnState().find((c) => c.sort);
     sortRef.current = {
       sortBy: sorted?.colId ?? null,
@@ -397,7 +480,11 @@ const TableRenderer: React.FC<TableRendererProps> = ({
         defaultState: { sort: null },
       });
     }
-    event.api.setGridOption('datasource', datasource);
+    // The datasource only applies to the infinite (server-paged) row model.
+    // In "Show all" mode the grid is client-side with rowData, so skip it.
+    if (!showAll) {
+      event.api.setGridOption('datasource', datasource);
+    }
   };
 
   const selectionEnabled = Boolean(metadata.row_selection_enabled) && !!onFilterChange;
@@ -430,6 +517,13 @@ const TableRenderer: React.FC<TableRendererProps> = ({
     [],
   );
 
+  // Page-size options for the pagination footer — always include the
+  // configured page size so AG Grid doesn't warn about a missing selector value.
+  const pageSizeSelector = useMemo(
+    () => Array.from(new Set([pageSize, 10, 25, 50, 100])).sort((a, b) => a - b),
+    [pageSize],
+  );
+
   return (
     <Paper
       ref={containerRef}
@@ -447,11 +541,6 @@ const TableRenderer: React.FC<TableRendererProps> = ({
       {metadata.title && (
         <Text fw={600} size="sm" mb="xs">
           {metadata.title}
-          {total > 0 && (
-            <Text component="span" c="dimmed" size="xs" ml="xs">
-              ({total} rows)
-            </Text>
-          )}
         </Text>
       )}
       {showInitialLoader && (
@@ -466,43 +555,90 @@ const TableRenderer: React.FC<TableRendererProps> = ({
         </Stack>
       )}
       {ready && (
-        <div
-          className={isDark ? 'ag-theme-alpine-dark' : 'ag-theme-alpine'}
-          style={{ width: '100%', flex: 1, minHeight: 0, position: 'relative' }}
-        >
-          <AgGridReact
-            columnDefs={colDefs}
-            defaultColDef={defaultColDef}
-            rowModelType="infinite"
-            cacheBlockSize={CACHE_BLOCK_SIZE}
-            maxBlocksInCache={MAX_BLOCKS_IN_CACHE}
-            rowHeight={metadata.compact ? 28 : undefined}
-            headerHeight={metadata.compact ? 32 : undefined}
-            onGridReady={onGridReady}
-            getRowClass={getRowClass}
-            getRowId={
-              rowIdColumn
-                ? (params: { data?: Record<string, unknown> }) =>
-                    String(params.data?.[rowIdColumn] ?? '')
-                : undefined
-            }
-            // Polars columns can contain ``.`` (iris: ``sepal.length``,
-            // ``petal.width``). Without this, AG Grid treats the dot as a
-            // path separator and tries ``row.sepal.length`` (nested), which
-            // fails because the row has flat keys → empty cells.
-            suppressFieldDotNotation
-            rowSelection={selectionEnabled ? 'multiple' : undefined}
-            // Plain click adds/removes from the selection set — without this
-            // AG Grid Community requires Ctrl/Shift modifiers, which is not
-            // discoverable. The checkbox column rendered on the first column
-            // (configured in ``setColDefs`` above) gives users a visual cue.
-            rowMultiSelectWithClick={selectionEnabled || undefined}
-            suppressRowClickSelection={selectionEnabled ? false : undefined}
-            onSelectionChanged={selectionEnabled ? onSelectionChanged : undefined}
-            onSortChanged={onSortChanged}
-          />
-          <RefetchOverlay visible={showRefetchOverlay} />
-        </div>
+        <>
+          <Group justify="space-between" gap="xs" mb={6} wrap="nowrap">
+            <Badge variant="light" color={showAll ? 'teal' : 'blue'} size="sm">
+              {showAll
+                ? `Showing all: ${(allRows?.length ?? 0).toLocaleString()} rows`
+                : `Paginated — ${total.toLocaleString()} rows`}
+            </Badge>
+            {showAll ? (
+              <Button size="compact-xs" variant="subtle" onClick={exitShowAll}>
+                Back to paginated
+              </Button>
+            ) : (
+              <Tooltip
+                label="Load every row into the browser — may be slow on large tables"
+                withArrow
+              >
+                <Button
+                  size="compact-xs"
+                  variant="light"
+                  loading={allLoading}
+                  onClick={loadAllRows}
+                >
+                  Show all
+                </Button>
+              </Tooltip>
+            )}
+          </Group>
+          {showAll && allTruncated && (
+            <Text size="xs" c="orange" mb={6}>
+              Table exceeds {TABLE_FULL_LOAD_CAP.toLocaleString()} rows — showing the
+              first {TABLE_FULL_LOAD_CAP.toLocaleString()} only.
+            </Text>
+          )}
+          <div
+            className={isDark ? 'ag-theme-alpine-dark' : 'ag-theme-alpine'}
+            style={{ width: '100%', flex: 1, minHeight: 0, position: 'relative' }}
+          >
+            <AgGridReact
+              // Remount when switching row models — AG Grid can't swap
+              // infinite ↔ client-side on a live instance.
+              key={showAll ? 'client' : 'infinite'}
+              columnDefs={colDefs}
+              defaultColDef={defaultColDef}
+              {...(showAll
+                ? { rowData: allRows ?? [] }
+                : {
+                    rowModelType: 'infinite' as const,
+                    cacheBlockSize: pageSize,
+                    maxBlocksInCache: MAX_BLOCKS_IN_CACHE,
+                  })}
+              pagination
+              paginationPageSize={pageSize}
+              // Infinite row model requires paginationPageSize === cacheBlockSize,
+              // so a size selector (which changes page size) can't be offered
+              // there — only in client-side "Show all" mode.
+              paginationPageSizeSelector={showAll ? pageSizeSelector : false}
+              rowHeight={metadata.compact ? 28 : undefined}
+              headerHeight={metadata.compact ? 32 : undefined}
+              onGridReady={onGridReady}
+              getRowClass={getRowClass}
+              getRowId={
+                rowIdColumn
+                  ? (params: { data?: Record<string, unknown> }) =>
+                      String(params.data?.[rowIdColumn] ?? '')
+                  : undefined
+              }
+              // Polars columns can contain ``.`` (iris: ``sepal.length``,
+              // ``petal.width``). Without this, AG Grid treats the dot as a
+              // path separator and tries ``row.sepal.length`` (nested), which
+              // fails because the row has flat keys → empty cells.
+              suppressFieldDotNotation
+              rowSelection={selectionEnabled ? 'multiple' : undefined}
+              // Plain click adds/removes from the selection set — without this
+              // AG Grid Community requires Ctrl/Shift modifiers, which is not
+              // discoverable. The checkbox column rendered on the first column
+              // (configured in ``setColDefs`` above) gives users a visual cue.
+              rowMultiSelectWithClick={selectionEnabled || undefined}
+              suppressRowClickSelection={selectionEnabled ? false : undefined}
+              onSelectionChanged={selectionEnabled ? onSelectionChanged : undefined}
+              onSortChanged={onSortChanged}
+            />
+            <RefetchOverlay visible={showRefetchOverlay || (showAll && allLoading)} />
+          </div>
+        </>
       )}
     </Paper>
   );
