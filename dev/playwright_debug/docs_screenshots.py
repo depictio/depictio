@@ -307,6 +307,13 @@ async def _mon_logs(ctx: ShotContext) -> None:
 async def _mon_health(ctx: ShotContext) -> None:
     """Log & Task → Health pane (Celery worker/broker health)."""
     await _open_monitoring(ctx, "Health")
+    # Worker-inspect (Celery ping) lags the generic pane settle; wait for the
+    # metric cards so the shot isn't a bare loader.
+    try:
+        await ctx.page.get_by_text("Workers", exact=True).wait_for(state="visible", timeout=10_000)
+        await ctx.page.wait_for_timeout(600)
+    except Exception:
+        pass
     await _page_shot_current(ctx, _rb(f"admin_monitoring_health_{ctx.theme}"))
 
 
