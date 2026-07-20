@@ -38,12 +38,24 @@ class RenderResult:
     http_status: int = 0
     ok: bool = False
     filtered: bool = False  # was a cross-filter payload applied?
-    # Optional server-side enrichment
+    # Optional server-side enrichment (from X-* timing headers / task ledger)
     task_duration_ms: Optional[float] = None
-    load_ms: Optional[float] = None
-    build_ms: Optional[float] = None
+    load_ms: Optional[float] = None  # X-Load-Ms: Delta read
+    build_ms: Optional[float] = None  # X-Build-Ms: plot/table/frame build
+    server_total_ms: Optional[float] = None  # X-Total-Ms: whole endpoint, server-side
     error: str = ""
     extra: dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def overhead_ms(self) -> Optional[float]:
+        """Client wall minus server total = network + (de)serialization + queue.
+
+        The bottleneck bucket that is neither Delta load nor plot build — e.g.
+        template setup, JSON transport, or Celery broker round-trip.
+        """
+        if self.wall_ms and self.server_total_ms is not None:
+            return max(0.0, self.wall_ms - self.server_total_ms)
+        return None
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -51,7 +63,7 @@ class RenderResult:
 
 @dataclass
 class IngestResult:
-    """Timing for one cell's ingestion (CLI ``run``) + dashboard import."""
+    """Timing + throughput for one cell's ingestion (CLI ``run``) + import."""
 
     cell_slug: str
     ingest_wall_ms: float
@@ -59,6 +71,27 @@ class IngestResult:
     ok: bool
     dashboard_id: str = ""
     error: str = ""
+    # Throughput inputs (from the dataset manifest + post-ingest Delta size).
+    n_dcs: int = 0
+    rows_per_dc: int = 0
+    rows_total: int = 0  # rows_per_dc * n_dcs (all DCs ingested)
+    input_bytes: int = 0  # raw CSV bytes across all DCs
+    delta_bytes: int = 0  # materialized Delta bytes across all DCs (0 if unknown)
+
+    @property
+    def rows_per_s(self) -> float:
+        secs = self.ingest_wall_ms / 1000.0
+        return self.rows_total / secs if secs > 0 else 0.0
+
+    @property
+    def input_mb_per_s(self) -> float:
+        secs = self.ingest_wall_ms / 1000.0
+        return (self.input_bytes / 1024**2) / secs if secs > 0 else 0.0
+
+    @property
+    def compression_ratio(self) -> float:
+        """input / delta — >1 means Delta is smaller than raw CSV."""
+        return self.input_bytes / self.delta_bytes if self.delta_bytes > 0 else 0.0
 
 
 def percentile(values: list[float], pct: float) -> float:
