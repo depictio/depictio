@@ -321,6 +321,34 @@ async def _mon_task_detail(ctx: ShotContext) -> None:
     await _page_shot_current(ctx, _rb(f"admin_monitoring_task_detail_{ctx.theme}"))
 
 
+async def _mon_expand_shot(ctx: ShotContext, has_text: str | None, out_name: str) -> None:
+    """Open Ingestion, expand the row matching `has_text` (or the first), and
+    element-screenshot the whole expanded item so a tall detail isn't clipped."""
+    await _open_monitoring(ctx, "Ingestion")
+    controls = ctx.page.locator("button.mantine-Accordion-control")
+    control = controls.filter(has_text=has_text).first if has_text else controls.first
+    await control.wait_for(state="visible", timeout=10_000)
+    await control.click()
+    await ctx.page.wait_for_timeout(700)
+    item = control.locator("xpath=ancestor::*[contains(@class,'mantine-Accordion-item')]").first
+    target = ctx.output_dir / f"{out_name}.png"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    await item.screenshot(path=str(target))
+    typer.echo(f"  → {target.relative_to(REPO_ROOT.parent)}")
+
+
+@register("admin_monitoring_ingestion_detail")
+async def _mon_ingestion_detail(ctx: ShotContext) -> None:
+    """Ingestion detail: CLI command, local paths, per-DC breakdown + step list."""
+    await _mon_expand_shot(ctx, None, _rb(f"admin_monitoring_ingestion_detail_{ctx.theme}"))
+
+
+@register("admin_monitoring_ingestion_live")
+async def _mon_ingestion_live(ctx: ShotContext) -> None:
+    """Ingestion detail for an in-flight run (running status + current-step highlight)."""
+    await _mon_expand_shot(ctx, "Viralrecon", _rb(f"admin_monitoring_ingestion_live_{ctx.theme}"))
+
+
 # ---- CLI ------------------------------------------------------------------
 
 
