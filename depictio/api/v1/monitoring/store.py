@@ -145,6 +145,34 @@ def finish_ingestion_run(run_id: str, **fields: Any) -> bool:
     return result.matched_count > 0
 
 
+def upsert_ingestion_step(
+    run_id: str, *, step: dict[str, Any], current_step: Optional[str] = None
+) -> bool:
+    """Add-or-update one step of an in-flight run, keyed by step name.
+
+    Placeholder for future async/offloaded ingestion (see the
+    ``/monitoring/ingestion/{run_id}/step`` endpoint): a worker pushes per-step
+    progress live. Replaces an existing same-named step in place so repeated
+    updates (running -> success) don't duplicate rows. Returns False if unknown.
+    """
+    doc = ingestion_runs_collection.find_one({"run_id": run_id}, {"_id": 0, "steps": 1})
+    if doc is None:
+        return False
+    steps: list[dict[str, Any]] = list(doc.get("steps") or [])
+    name = step.get("name")
+    for i, existing in enumerate(steps):
+        if existing.get("name") == name:
+            steps[i] = step
+            break
+    else:
+        steps.append(step)
+    result = ingestion_runs_collection.update_one(
+        {"run_id": run_id},
+        {"$set": {"steps": steps, "current_step": current_step}},
+    )
+    return result.matched_count > 0
+
+
 def query_ingestion_runs(
     *,
     instance: Optional[str] = None,

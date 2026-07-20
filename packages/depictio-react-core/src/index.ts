@@ -158,6 +158,8 @@ export {
   fetchIngestionRun,
   fetchAppLogs,
   fetchMonitoringHealth,
+  fetchLogCaptureLevel,
+  setLogCaptureLevel,
   // Profile + CLI tokens
   fetchCurrentUserFull,
   editPassword,

@@ -25,7 +25,11 @@ from depictio.api.celery_app import celery_app
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 from depictio.api.v1.monitoring import store
-from depictio.models.models.monitoring import IngestionRun, IngestionStep
+from depictio.models.models.monitoring import (
+    IngestionDataCollection,
+    IngestionRun,
+    IngestionStep,
+)
 from depictio.models.models.users import User
 
 logger = logging.getLogger(__name__)
@@ -97,12 +101,31 @@ class IngestionStartRequest(BaseModel):
     command: str = Field(default="run")
     project_id: Optional[str] = None
     project_name: Optional[str] = None
+    cli_version: Optional[str] = None
+    command_line: Optional[str] = None
+    cli_config_path: Optional[str] = None
+    project_config_path: Optional[str] = None
+    data_root: Optional[str] = None
 
 
 class IngestionFinishRequest(BaseModel):
     status: str = Field(default="success", description="running|success|partial|failed")
     steps: list[IngestionStep] = Field(default_factory=list)
     error: Optional[str] = None
+    # Resolved mid-run (the CLI often only learns the server-side project id after
+    # sync), so it can be patched onto the record at close time.
+    project_id: Optional[str] = None
+    # Per-DC breakdown (tag / type / format + local scan paths), derived from the
+    # validated project config once the run has scanned.
+    data_collections: list[IngestionDataCollection] = Field(default_factory=list)
+
+
+class IngestionStepRequest(BaseModel):
+    """Live per-step update. Placeholder for future async/offloaded ingestion:
+    a long-running worker PATCHes a step's status while the run is ``running``."""
+
+    step: IngestionStep
+    current_step: Optional[str] = None
 
 
 @monitoring_endpoint_router.post("/ingestion/start")
@@ -122,13 +145,19 @@ def start_ingestion(
     run_id = body.run_id or str(uuid.uuid4())
     run = IngestionRun(
         run_id=run_id,
+        source="cli",
         cli_instance_label=x_depictio_cli_instance,
         cli_hostname=x_depictio_cli_host,
+        cli_version=body.cli_version,
         user_id=str(current_user.id),
         email=current_user.email,
         project_id=body.project_id,
         project_name=body.project_name,
         command=body.command,
+        command_line=body.command_line,
+        cli_config_path=body.cli_config_path,
+        project_config_path=body.project_config_path,
+        data_root=body.data_root,
         status="running",
     )
     store.create_ingestion_run(run)
@@ -147,12 +176,20 @@ def finish_ingestion(
     """Close an ingestion-run record with the final status + per-step tally."""
     if not settings.monitoring.enabled:
         raise HTTPException(status_code=404, detail="Monitoring is disabled.")
+    extra: dict = {}
+    if body.project_id:
+        extra["project_id"] = body.project_id
+    if body.data_collections:
+        extra["data_collections"] = [dc.model_dump() for dc in body.data_collections]
     matched = store.finish_ingestion_run(
         run_id,
         status=body.status,
         steps=[s.model_dump() for s in body.steps],
         error=body.error,
         finished_at=datetime.now(),
+        # A finished run is no longer "running" any step.
+        current_step=None,
+        **extra,
     )
     if not matched:
         raise HTTPException(status_code=404, detail="Ingestion run not found.")
@@ -160,6 +197,34 @@ def finish_ingestion(
 
     publish_ingestion_event(run_id, body.status, None)
     return {"run_id": run_id, "status": body.status}
+
+
+@monitoring_endpoint_router.post("/ingestion/{run_id}/step")
+def update_ingestion_step(
+    run_id: str,
+    body: IngestionStepRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """Upsert a single step of an in-flight ingestion and mark it as current.
+
+    Placeholder for future async/offloaded ingestion: a long-running worker calls
+    this to push per-step progress while the run stays ``running``, so the admin
+    UI reflects live state instead of only the final tally. The current
+    synchronous CLI does not call this yet — it reports all steps at ``finish``.
+    """
+    if not settings.monitoring.enabled:
+        raise HTTPException(status_code=404, detail="Monitoring is disabled.")
+    matched = store.upsert_ingestion_step(
+        run_id,
+        step=body.step.model_dump(),
+        current_step=body.current_step,
+    )
+    if not matched:
+        raise HTTPException(status_code=404, detail="Ingestion run not found.")
+    from depictio.api.v1.monitoring.publish import publish_ingestion_event
+
+    publish_ingestion_event(run_id, "running", None)
+    return {"run_id": run_id, "step": body.step.name}
 
 
 @monitoring_endpoint_router.get("/ingestion")
@@ -204,6 +269,41 @@ def list_logs(
     return {"logs": store.query_app_logs(level=level, source=source, limit=limit)}
 
 
+class LogLevelRequest(BaseModel):
+    level: str = Field(..., description="DEBUG | INFO | WARNING | ERROR | CRITICAL")
+
+
+@monitoring_endpoint_router.get("/logs/level")
+def get_log_capture_level(current_user: User = Depends(get_current_user)):
+    """Current floor of what the app-log handler persists (this API process)."""
+    _require_admin(current_user)
+    from depictio.api.v1.monitoring.log_handler import get_app_log_capture_level
+
+    return {"level": get_app_log_capture_level()}
+
+
+@monitoring_endpoint_router.post("/logs/level")
+def set_log_capture_level(body: LogLevelRequest, current_user: User = Depends(get_current_user)):
+    """Change the app-log capture floor at runtime (admin-only).
+
+    Applies immediately in the API process and is broadcast best-effort to Celery
+    workers so their logs follow the same floor. Not persisted — a restart reverts
+    to ``settings.monitoring.app_log_min_level``.
+    """
+    _require_admin(current_user)
+    from depictio.api.v1.monitoring.log_handler import set_app_log_capture_level
+
+    try:
+        applied = set_app_log_capture_level(body.level)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    try:
+        celery_app.control.broadcast("set_app_log_capture_level", arguments={"level": applied})
+    except Exception as exc:
+        logger.debug(f"Could not broadcast log level to workers: {exc}")
+    return {"level": applied}
+
+
 # ── Health ──────────────────────────────────────────────────────────────────
 
 
@@ -217,13 +317,17 @@ def monitoring_health(current_user: User = Depends(get_current_user)):
         "live_updates": settings.monitoring.live_updates and settings.events.enabled,
     }
     try:
-        inspect = celery_app.control.inspect(timeout=1.0)
-        ping = inspect.ping() or {}
+        inspect = celery_app.control.inspect(timeout=0.75)
+        # Single broadcast: active() replies are keyed by every live worker
+        # (empty list when idle), so it yields both the worker roster and the
+        # active-task count without a second ping() round-trip. inspect waits
+        # the full timeout per call, so dropping ping() roughly halves latency.
         active = inspect.active() or {}
-        out["workers"] = sorted(ping.keys())
-        out["worker_count"] = len(ping)
+        workers = sorted(active.keys())
+        out["workers"] = workers
+        out["worker_count"] = len(workers)
         out["active_count"] = sum(len(v or []) for v in active.values())
-        out["status"] = "ok" if ping else "no_workers"
+        out["status"] = "ok" if workers else "no_workers"
     except Exception as exc:
         logger.warning(f"monitoring/health: inspect failed: {exc}")
         out["status"] = "broker_unreachable"
