@@ -2930,6 +2930,7 @@ export interface MonitoringTaskEvent {
 /** A CLI ingestion-run record. */
 export interface MonitoringIngestionRun {
   run_id: string;
+  source?: 'cli' | 'ui';
   cli_instance_label?: string | null;
   cli_hostname?: string | null;
   user_id?: string | null;
@@ -3043,6 +3044,27 @@ export async function fetchMonitoringHealth(): Promise<MonitoringHealth> {
   const res = await fetch(`${API_BASE}/monitoring/health`, { headers: authHeaders() });
   if (!res.ok) await throwHttpDetailError(res, 'Failed to load monitoring health');
   return (await res.json()) as MonitoringHealth;
+}
+
+/** Read the current app-log capture floor (admin-only). */
+export async function fetchLogCaptureLevel(): Promise<string> {
+  const res = await fetch(`${API_BASE}/monitoring/logs/level`, { headers: authHeaders() });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to load log level');
+  const data = await res.json();
+  return typeof data?.level === 'string' ? data.level : 'WARNING';
+}
+
+/** Set the runtime app-log capture floor (admin-only). Applies live in the API
+ *  process and is broadcast best-effort to Celery workers. */
+export async function setLogCaptureLevel(level: string): Promise<string> {
+  const res = await fetch(`${API_BASE}/monitoring/logs/level`, {
+    method: 'POST',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ level }),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to set log level');
+  const data = await res.json();
+  return typeof data?.level === 'string' ? data.level : level;
 }
 
 // ---- Profile + CLI token management (/profile, /cli-agents) -----

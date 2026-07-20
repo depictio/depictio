@@ -99,16 +99,20 @@ class IngestionStep(BaseModel):
 
 
 class IngestionRun(BaseModel):
-    """Lifecycle record for one CLI ``run`` invocation.
+    """Lifecycle record for one ingestion invocation (CLI ``run`` or UI upload).
 
-    Stored in the ``ingestion_runs`` collection, keyed by ``run_id``. Opened by
-    ``POST /monitoring/ingestion/start`` and closed by
-    ``POST /monitoring/ingestion/{run_id}/finish``.
+    Stored in the ``ingestion_runs`` collection, keyed by ``run_id``. CLI runs are
+    opened by ``POST /monitoring/ingestion/start`` and closed by
+    ``POST /monitoring/ingestion/{run_id}/finish``; UI table uploads open/close the
+    record in-process via the monitoring store.
     """
 
     run_id: str = Field(..., description="Client-generated UUID for the ingestion run")
+    source: Literal["cli", "ui"] = Field(
+        default="cli", description="Origin of the ingestion: CLI run or web UI upload"
+    )
     cli_instance_label: Optional[str] = Field(
-        default=None, description="User-defined CLI instance label from the CLI YAML config"
+        default=None, description="CLI instance label (CLI runs) or 'Web UI' for UI uploads"
     )
     cli_hostname: Optional[str] = Field(default=None, description="Hostname the CLI ran on")
     user_id: Optional[str] = Field(default=None, description="Id of the ingesting user")

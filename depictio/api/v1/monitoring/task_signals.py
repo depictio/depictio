@@ -222,3 +222,28 @@ def install_task_log_capture() -> None:
 
 # Connect handlers + log capture as a side effect of import.
 install_task_log_capture()
+
+
+# Remote-control command so the API can push a new app-log capture floor to every
+# worker (mirrors the in-process change made by the POST /monitoring/logs/level
+# endpoint). Registration is best-effort — a control-API change across Celery
+# versions must never break worker startup.
+try:
+    from celery.worker.control import control_command
+
+    @control_command()
+    def set_app_log_capture_level(state, level):  # noqa: ARG001 - Celery passes state
+        """Apply a new app-log capture floor on this worker."""
+        try:
+            from depictio.api.v1.monitoring.log_handler import (
+                set_app_log_capture_level as _apply,
+            )
+
+            applied = _apply(level)
+            return {"ok": True, "level": applied}
+        except Exception as exc:
+            logger.debug(f"set_app_log_capture_level control command failed: {exc}")
+            return {"ok": False, "error": str(exc)}
+
+except Exception:  # pragma: no cover - registration is best-effort
+    logger.debug("Could not register set_app_log_capture_level control command")

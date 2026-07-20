@@ -187,11 +187,13 @@ def analyze_constrained_code(code: str) -> dict[str, Any]:
                 "error_message": "Preprocessing creates variables, but fig line doesn't use any dataframe (df, df_modified, etc.)",
             }
 
-        # Otherwise allow it - user can use df_modified or other intermediate vars
-        # Just log a warning if not using df_modified (best practice)
+        # Otherwise allow it - user can use df_modified or other intermediate vars.
+        # Nudge toward df_modified as a best practice, but at debug level: this runs
+        # on every figure validation, so warning-level would flood the logs (and the
+        # admin monitoring pane) with noise for a purely cosmetic naming preference.
         if "df_modified" not in "\n".join(preprocessing_lines):
-            logger.warning(
-                "⚠️ Preprocessing doesn't create 'df_modified' variable. Consider using df_modified as final variable name for clarity."
+            logger.debug(
+                "Preprocessing doesn't create 'df_modified' variable. Consider using df_modified as final variable name for clarity."
             )
 
     if uses_modified_df and not preprocessing_lines:

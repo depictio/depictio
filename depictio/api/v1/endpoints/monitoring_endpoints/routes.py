@@ -122,6 +122,7 @@ def start_ingestion(
     run_id = body.run_id or str(uuid.uuid4())
     run = IngestionRun(
         run_id=run_id,
+        source="cli",
         cli_instance_label=x_depictio_cli_instance,
         cli_hostname=x_depictio_cli_host,
         user_id=str(current_user.id),
@@ -204,6 +205,41 @@ def list_logs(
     return {"logs": store.query_app_logs(level=level, source=source, limit=limit)}
 
 
+class LogLevelRequest(BaseModel):
+    level: str = Field(..., description="DEBUG | INFO | WARNING | ERROR | CRITICAL")
+
+
+@monitoring_endpoint_router.get("/logs/level")
+def get_log_capture_level(current_user: User = Depends(get_current_user)):
+    """Current floor of what the app-log handler persists (this API process)."""
+    _require_admin(current_user)
+    from depictio.api.v1.monitoring.log_handler import get_app_log_capture_level
+
+    return {"level": get_app_log_capture_level()}
+
+
+@monitoring_endpoint_router.post("/logs/level")
+def set_log_capture_level(body: LogLevelRequest, current_user: User = Depends(get_current_user)):
+    """Change the app-log capture floor at runtime (admin-only).
+
+    Applies immediately in the API process and is broadcast best-effort to Celery
+    workers so their logs follow the same floor. Not persisted — a restart reverts
+    to ``settings.monitoring.app_log_min_level``.
+    """
+    _require_admin(current_user)
+    from depictio.api.v1.monitoring.log_handler import set_app_log_capture_level
+
+    try:
+        applied = set_app_log_capture_level(body.level)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    try:
+        celery_app.control.broadcast("set_app_log_capture_level", arguments={"level": applied})
+    except Exception as exc:
+        logger.debug(f"Could not broadcast log level to workers: {exc}")
+    return {"level": applied}
+
+
 # ── Health ──────────────────────────────────────────────────────────────────
 
 
@@ -217,13 +253,17 @@ def monitoring_health(current_user: User = Depends(get_current_user)):
         "live_updates": settings.monitoring.live_updates and settings.events.enabled,
     }
     try:
-        inspect = celery_app.control.inspect(timeout=1.0)
-        ping = inspect.ping() or {}
+        inspect = celery_app.control.inspect(timeout=0.75)
+        # Single broadcast: active() replies are keyed by every live worker
+        # (empty list when idle), so it yields both the worker roster and the
+        # active-task count without a second ping() round-trip. inspect waits
+        # the full timeout per call, so dropping ping() roughly halves latency.
         active = inspect.active() or {}
-        out["workers"] = sorted(ping.keys())
-        out["worker_count"] = len(ping)
+        workers = sorted(active.keys())
+        out["workers"] = workers
+        out["worker_count"] = len(workers)
         out["active_count"] = sum(len(v or []) for v in active.values())
-        out["status"] = "ok" if ping else "no_workers"
+        out["status"] = "ok" if workers else "no_workers"
     except Exception as exc:
         logger.warning(f"monitoring/health: inspect failed: {exc}")
         out["status"] = "broker_unreachable"

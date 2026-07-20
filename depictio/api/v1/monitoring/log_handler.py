@@ -66,3 +66,33 @@ def install_app_log_handler(source: str) -> None:
     handler.setLevel(getattr(logging, settings.monitoring.app_log_min_level, logging.WARNING))
     handler.setFormatter(logging.Formatter("%(message)s"))
     root.addHandler(handler)
+
+
+def get_app_log_capture_level() -> str:
+    """Return the Mongo log handler's current capture floor in this process."""
+    root = logging.getLogger("depictio")
+    for h in root.handlers:
+        if isinstance(h, AppLogMongoHandler):
+            return logging.getLevelName(h.level)
+    return settings.monitoring.app_log_min_level
+
+
+def set_app_log_capture_level(level: str) -> str:
+    """Dynamically change what the Mongo log handler persists, in this process.
+
+    Sets the handler level to ``level`` and *lowers* the ``depictio`` logger's own
+    level if needed so records at the new floor actually reach the handler (a
+    logger never raises its level here, to avoid muting other handlers like the
+    console). Returns the normalized level name. Raises ValueError on a bad level.
+    """
+    name = (level or "").upper()
+    numeric = logging.getLevelName(name)
+    if not isinstance(numeric, int):
+        raise ValueError(f"Invalid log level: {level!r}")
+    root = logging.getLogger("depictio")
+    if root.level == logging.NOTSET or numeric < root.level:
+        root.setLevel(numeric)
+    for h in root.handlers:
+        if isinstance(h, AppLogMongoHandler):
+            h.setLevel(numeric)
+    return name
