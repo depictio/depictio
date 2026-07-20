@@ -9,6 +9,7 @@ from depictio.cli.cli.utils.api_calls import (
     api_get_files_by_dc_id,
     api_upsert_deltatable,
 )
+from depictio.cli.cli.utils.ingest_timing import record, timed
 from depictio.cli.cli.utils.multiqc_processor import process_multiqc_data_collection
 from depictio.cli.cli.utils.rich_utils import rich_print_checked_statement
 from depictio.cli.cli_logging import logger
@@ -527,10 +528,14 @@ def client_aggregate_data(
     dc_props = data_collection_config.get("dc_specific_properties", {})
     file_format = dc_props.get("format", "csv").lower()
     polars_kwargs = dict(dc_props.get("polars_kwargs", {}))
-    lazy_frames = read_files_lazy(files, file_format, polars_kwargs)
+    with timed("parse"):
+        lazy_frames = read_files_lazy(files, file_format, polars_kwargs)
+    record("n_files", len(files) if files else 0)
 
     # 4. Aggregate LazyFrames and materialize the result
-    aggregated_df = aggregate_lazy_dataframes(lazy_frames)
+    with timed("collect"):
+        aggregated_df = aggregate_lazy_dataframes(lazy_frames)
+    record("n_rows", aggregated_df.height)
     logger.debug(f"Aggregated DataFrame shape: {aggregated_df.shape}")
     logger.debug(f"Aggregated DataFrame schema: {aggregated_df.schema}")
     logger.info(f"Aggregated DataFrame head: {aggregated_df.head(5)}")
@@ -549,6 +554,7 @@ def client_aggregate_data(
     logger.info(f"Aggregated DataFrame shape before size calculation: {aggregated_df.shape}")
     logger.debug(f"Aggregated DataFrame columns: {aggregated_df.columns}")
     deltatable_size_bytes = calculate_dataframe_size_bytes(aggregated_df)
+    record("delta_bytes", deltatable_size_bytes)
 
     # Enhanced debugging for size calculation
     logger.info(f"🔍 DEBUG: Calculated deltatable_size_bytes = {deltatable_size_bytes}")
@@ -561,11 +567,12 @@ def client_aggregate_data(
             f"DataFrame head: {aggregated_df.head(2) if aggregated_df.height > 0 else 'DataFrame is empty'}"
         )
 
-    result = write_delta_table(
-        aggregated_df=aggregated_df,
-        destination_file=destination_prefix,
-        storage_options=storage_options,
-    )
+    with timed("write"):
+        result = write_delta_table(
+            aggregated_df=aggregated_df,
+            destination_file=destination_prefix,
+            storage_options=storage_options,
+        )
 
     extended = True if rich_tables else False
 
@@ -585,13 +592,14 @@ def client_aggregate_data(
     logger.info(
         f"🔍 DEBUG: About to call api_upsert_deltatable with deltatable_size_bytes={deltatable_size_bytes}"
     )
-    api_upsert_result = api_upsert_deltatable(
-        data_collection_id=str(dc_id),
-        CLI_config=CLI_config,
-        delta_table_location=destination_prefix,
-        update=overwrite,
-        deltatable_size_bytes=deltatable_size_bytes,
-    )
+    with timed("upsert"):
+        api_upsert_result = api_upsert_deltatable(
+            data_collection_id=str(dc_id),
+            CLI_config=CLI_config,
+            delta_table_location=destination_prefix,
+            update=overwrite,
+            deltatable_size_bytes=deltatable_size_bytes,
+        )
     logger.info(f"🔍 DEBUG: API upsert response status: {api_upsert_result.status_code}")
     if api_upsert_result.status_code != 200:
         error_msg = f"Error upserting Delta table metadata: {api_upsert_result.text}"
