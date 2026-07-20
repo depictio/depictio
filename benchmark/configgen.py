@@ -36,6 +36,8 @@ from benchmark.matrix import (
     FIGURE_VISU_ROTATION,
     Cell,
     ConnectMode,
+    DCKind,
+    IngestCell,
     VisuType,
 )
 
@@ -141,6 +143,122 @@ def build_project(cell: Cell, dataset_dir: str | Path) -> dict:
         ]
 
     return project
+
+
+# ── ingestion-only project configs (table / multiqc / images) ───────────────
+def _multiqc_dc_block(tag: str, dc_id: str) -> dict:
+    return {
+        "data_collection_tag": tag,
+        "id": dc_id,
+        "description": "Benchmark MultiQC report",
+        "config": {
+            "type": "MultiQC",
+            "scan": {
+                "mode": "recursive",
+                "scan_parameters": {"regex_config": {"pattern": "multiqc_data/multiqc.parquet"}},
+            },
+            # Modules/plots are auto-extracted from the parquet at ingest; an empty
+            # spec is fine for a throughput benchmark.
+            "dc_specific_properties": {},
+        },
+    }
+
+
+def _image_dc_block(
+    tag: str, dc_id: str, metadata_csv: str, images_dir: str, s3_base_folder: str
+) -> dict:
+    return {
+        "data_collection_tag": tag,
+        "id": dc_id,
+        "description": "Benchmark image collection",
+        "config": {
+            "type": "Image",
+            "metatype": "Images",
+            "scan": {
+                "mode": "single",
+                "scan_parameters": {"filename": str(metadata_csv)},
+            },
+            "dc_specific_properties": {
+                "format": "csv",
+                "columns_description": {
+                    "sample_id": "Unique sample identifier",
+                    "image_path": "Relative path to image file",
+                    "category": "Sample category",
+                    "quality_score": "Quality score 0-1",
+                },
+                "image_column": "image_path",
+                "s3_base_folder": s3_base_folder,
+                "local_images_path": str(images_dir),
+                "supported_formats": [".png", ".jpg", ".jpeg"],
+                "thumbnail_size": 150,
+            },
+        },
+    }
+
+
+def build_ingest_project(
+    cell: IngestCell,
+    dataset_dir: str | Path,
+    *,
+    s3_bucket: str = "depictio-bucket",
+    metadata_csv: str | None = None,
+    images_dir: str | None = None,
+) -> dict:
+    """Build a minimal ingestion project for one :class:`IngestCell`.
+
+    TABLE reuses the recursive ``run_*`` CSV scan; MULTIQC scans ``run_*`` for the
+    staged parquet; IMAGES is a single-scan metadata table plus an ``image_column``
+    whose ``s3_base_folder`` is where :func:`benchmark.runner` pushes the images.
+    """
+    slug = cell.slug
+    project_name = f"Benchmark {slug}"
+    workflow_name = f"{slug}_wf"
+    resolved_dir = str(Path(dataset_dir).resolve())
+
+    if cell.kind is DCKind.TABLE:
+        dc_tags = [f"dc_{i}" for i in range(cell.n_dcs)]
+        data_collections = [_dc_block(tag, static_id("dc", slug, tag)) for tag in dc_tags]
+        data_location = {
+            "structure": "sequencing-runs",
+            "runs_regex": "run_*",
+            "locations": [resolved_dir],
+        }
+    elif cell.kind is DCKind.MULTIQC:
+        data_collections = [_multiqc_dc_block("multiqc_data", static_id("dc", slug, "multiqc"))]
+        data_location = {
+            "structure": "sequencing-runs",
+            "runs_regex": "run_*",
+            "locations": [resolved_dir],
+        }
+    else:  # IMAGES
+        s3_base_folder = f"s3://{s3_bucket}/bench_images/{slug}/"
+        data_collections = [
+            _image_dc_block(
+                "sample_images",
+                static_id("dc", slug, "images"),
+                metadata_csv=metadata_csv or str(Path(resolved_dir) / "images_data.csv"),
+                images_dir=images_dir or str(Path(resolved_dir) / "images"),
+                s3_base_folder=s3_base_folder,
+            )
+        ]
+        data_location = {"structure": "flat", "locations": [resolved_dir]}
+
+    return {
+        "name": project_name,
+        "project_type": "advanced",
+        "is_public": True,
+        "id": static_id("project", slug),
+        "workflows": [
+            {
+                "name": workflow_name,
+                "id": static_id("workflow", slug),
+                "engine": {"name": ENGINE_NAME},
+                "description": f"Benchmark ingestion workflow for {slug}",
+                "data_location": data_location,
+                "data_collections": data_collections,
+            }
+        ],
+    }
 
 
 def bindable_tags(cell: Cell) -> list[str]:
@@ -303,4 +421,45 @@ def write_configs(cell: Cell, dataset_dir: str | Path, out_dir: str | Path) -> G
         workflow_tag=f"{ENGINE_NAME}/{project['workflows'][0]['name']}",
         project_id=project["id"],
         bindable_dc_tags=bindable_tags(cell),
+    )
+
+
+@dataclass
+class GeneratedIngestConfig:
+    project_path: str
+    project_name: str
+    project_id: str
+    # For IMAGES only: where the runner should ``depictio images push`` the PNGs
+    # (must equal the DC's s3_base_folder so the DC resolves them at render time).
+    s3_base_folder: str | None = None
+
+
+def write_ingest_config(
+    cell: IngestCell,
+    dataset_dir: str | Path,
+    out_dir: str | Path,
+    *,
+    s3_bucket: str = "depictio-bucket",
+    metadata_csv: str | None = None,
+    images_dir: str | None = None,
+) -> GeneratedIngestConfig:
+    """Build + write the ingestion ``project.yaml`` for one cell."""
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    project = build_ingest_project(
+        cell, dataset_dir, s3_bucket=s3_bucket, metadata_csv=metadata_csv, images_dir=images_dir
+    )
+    project_path = out_dir / "project.yaml"
+    project_path.write_text(yaml.safe_dump(project, sort_keys=False))
+
+    s3_base_folder = None
+    if cell.kind is DCKind.IMAGES:
+        dc = project["workflows"][0]["data_collections"][0]
+        s3_base_folder = dc["config"]["dc_specific_properties"]["s3_base_folder"]
+
+    return GeneratedIngestConfig(
+        project_path=str(project_path),
+        project_name=project["name"],
+        project_id=project["id"],
+        s3_base_folder=s3_base_folder,
     )

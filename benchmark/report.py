@@ -289,6 +289,75 @@ def build_report(output_root: str | Path) -> Path:
         )
         lines.append("")
 
+    # Ingestion by DC type & phase — the per-type breakdown (table / multiqc /
+    # images) with where the ingest wall goes (parse/collect/write/upsert/upload)
+    # and process peak RSS. This is the headline of the ingestion-optimization work.
+    typed_ing = [i for i in ok_ing if i.get("dc_kind")]
+    if typed_ing:
+        lines += [
+            "## Ingestion by DC type & phase",
+            "",
+            "Per cell: ingest wall, per-phase ms from the CLI timing markers "
+            "(`parse`/`collect`/`write`/`upsert`/`upload`), peak RSS, and unit "
+            "throughput (`units` = rows for table, files for multiqc, images for "
+            "images). `stream` shows the table write path when recorded.",
+            "",
+        ]
+        _kind_order = {"table": 0, "multiqc": 1, "images": 2}
+        rows = []
+        for i in sorted(
+            typed_ing,
+            key=lambda x: (
+                _kind_order.get(x.get("dc_kind"), 9),
+                _SIZE_ORDER.get(x.get("magnitude"), 99),
+                str(x.get("magnitude")),
+            ),
+        ):
+            ph = i.get("phase_ms") or {}
+            secs = (i.get("ingest_wall_ms") or 0) / 1000.0
+            units = i.get("n_units") or 0
+            ups = units / secs if secs > 0 else 0
+            rss = i.get("peak_rss_mb")
+            stream = i.get("streaming")
+            rows.append(
+                [
+                    i.get("dc_kind"),
+                    i.get("magnitude"),
+                    i.get("n_dcs") or 1,
+                    f"{i.get('ingest_wall_ms', 0) / 1000:.1f}",
+                    _fmt(ph.get("parse")),
+                    _fmt(ph.get("collect")),
+                    _fmt(ph.get("write")),
+                    _fmt(ph.get("upsert")),
+                    _fmt(ph.get("upload")),
+                    f"{rss:.0f}" if rss is not None else "—",
+                    f"{units:,}",
+                    f"{ups:,.0f}",
+                    "—" if stream is None else ("stream" if stream else "collect"),
+                ]
+            )
+        lines.append(
+            _md_table(
+                [
+                    "kind",
+                    "mag",
+                    "dcs",
+                    "wall_s",
+                    "parse",
+                    "collect",
+                    "write",
+                    "upsert",
+                    "upload",
+                    "rss_mb",
+                    "units",
+                    "units/s",
+                    "path",
+                ],
+                rows,
+            )
+        )
+        lines.append("")
+
     # Usability ceiling: the direct answer to "up to what size is Depictio
     # usable?". Per size: worst render p95, any failures, and a verdict.
     lines += [

@@ -18,9 +18,11 @@ from pathlib import Path
 import typer
 
 from benchmark.matrix import (
+    IngestSpec,
     MatrixSpec,
     parse_connect,
     parse_ints,
+    parse_kinds,
     parse_sizes,
     parse_visu,
 )
@@ -103,6 +105,46 @@ def run(
         output_root=output,
         server_mode=server_mode,
         cross_filter=cross_filter,
+        force_datagen=force_datagen,
+        depictio_bin=depictio_bin,
+    )
+    typer.echo(f"Results appended to {results}")
+
+
+@app.command()
+def ingest(
+    cli_config: str = typer.Option(..., "--cli-config", help="Path to depictio CLI config YAML"),
+    kinds: str = typer.Option(
+        "table,multiqc,images", "--kinds", help="Comma list: table,multiqc,images"
+    ),
+    sizes: str = typer.Option("10mb,100mb,1gb", "--sizes", help="Table byte sizes"),
+    multiqc_counts: str = typer.Option("1,5,25", "--multiqc-counts", help="MultiQC file counts"),
+    image_counts: str = typer.Option("1000,10000", "--image-counts", help="Image counts"),
+    dcs: str = typer.Option("1", "--dcs", help="Table #DCs (multi-DC ingestion path)"),
+    multiqc_fixture: str = typer.Option(
+        "small", "--multiqc-fixture", help="small (2.6M) | large (24M)"
+    ),
+    output: str = _OUTPUT,
+    force_datagen: bool = typer.Option(False, "--force-datagen", help="Regenerate data"),
+    depictio_bin: str = typer.Option("depictio", "--depictio-bin", help="depictio CLI executable"),
+) -> None:
+    """Ingestion-only benchmark across DC types (table / multiqc / images)."""
+    from benchmark.runner import run_ingest_matrix
+
+    spec = IngestSpec(
+        kinds=parse_kinds(kinds),
+        table_sizes=parse_sizes(sizes),
+        multiqc_counts=parse_ints(multiqc_counts),
+        image_counts=parse_ints(image_counts),
+        n_dcs=parse_ints(dcs),
+    )
+    cells = spec.expand()
+    typer.echo(f"Ingesting {len(cells)} cell(s) [{kinds}] ...")
+    results = run_ingest_matrix(
+        cells,
+        cli_config_path=cli_config,
+        output_root=output,
+        multiqc_fixture=multiqc_fixture,
         force_datagen=force_datagen,
         depictio_bin=depictio_bin,
     )
