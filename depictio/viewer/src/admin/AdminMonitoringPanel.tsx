@@ -12,6 +12,7 @@ import {
   ScrollArea,
   SegmentedControl,
   Select,
+  SimpleGrid,
   Stack,
   Switch,
   Table,
@@ -171,12 +172,72 @@ function formatDuration(ms?: number | null): string {
   return `${Math.floor(s / 60)}m ${Math.round(s % 60)}s`;
 }
 
+/** Wall-clock duration between two ISO timestamps, in ms (null if either is missing). */
+function spanMs(start?: string | null, end?: string | null): number | null {
+  const a = parseTs(start);
+  const b = parseTs(end);
+  if (Number.isNaN(a) || Number.isNaN(b)) return null;
+  return Math.max(0, b - a);
+}
+
+/** Compact "N ok · M failed · K skipped" tally from a run's step list. */
+function stepTally(steps?: { status: string }[]): string {
+  if (!steps || steps.length === 0) return '—';
+  const counts = { success: 0, failed: 0, skipped: 0, partial: 0, other: 0 };
+  for (const s of steps) {
+    const key = (s.status || '').toLowerCase();
+    if (key === 'success') counts.success += 1;
+    else if (key === 'failed' || key === 'failure') counts.failed += 1;
+    else if (key === 'skipped') counts.skipped += 1;
+    else if (key === 'partial' || key === 'running') counts.partial += 1;
+    else counts.other += 1;
+  }
+  const parts: string[] = [`${counts.success} ok`];
+  if (counts.failed) parts.push(`${counts.failed} failed`);
+  if (counts.skipped) parts.push(`${counts.skipped} skipped`);
+  if (counts.partial) parts.push(`${counts.partial} partial`);
+  if (counts.other) parts.push(`${counts.other} other`);
+  return parts.join(' · ');
+}
+
+/** One metadatum as a stacked label-over-value cell (uppercase caption above the
+ *  value). Used in the ingestion detail field grid so values line up in columns
+ *  instead of wrapping into an unreadable run-on. */
+const Field: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
+  <Box>
+    <Text size="10px" c="dimmed" tt="uppercase" fw={700} lts={0.4}>
+      {label}
+    </Text>
+    <Text size="xs" style={{ lineHeight: 1.35 }}>
+      {children}
+    </Text>
+  </Box>
+);
+
 const TimeText: React.FC<{ iso?: string | null }> = ({ iso }) => (
   <Tooltip label={iso || 'n/a'} disabled={!iso} withArrow>
     <Text component="span" size="xs" c="dimmed">
       {relTime(iso)}
     </Text>
   </Tooltip>
+);
+
+/** Small uppercase caption used to title each block in an expanded detail panel. */
+const SectionLabel: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <Text size="xs" c="dimmed" tt="uppercase" fw={600}>
+    {children}
+  </Text>
+);
+
+/** A titled block: caption above arbitrary content (a CodeHighlight, an Alert…). */
+const DetailBlock: React.FC<{ label: string; children: React.ReactNode }> = ({
+  label,
+  children,
+}) => (
+  <Stack gap={2}>
+    <SectionLabel>{label}</SectionLabel>
+    {children}
+  </Stack>
 );
 
 /** Shared header: title + auto-refresh toggle + manual refresh + last-updated. */
@@ -260,6 +321,10 @@ const TasksPane: React.FC<{ liveSignal: number }> = ({ liveSignal }) => {
   const [status, setStatus] = useState<string | null>(null);
   const [kind, setKind] = useState<string | null>(null);
   const [q, setQ] = useState('');
+  // Controlled open rows: only the expanded item mounts its CodeHighlight blocks,
+  // so a pane of 200 tasks doesn't run 200 syntax-highlight passes (which froze
+  // the UI) on load and on every auto-refresh.
+  const [open, setOpen] = useState<string[]>([]);
   const load = useCallback(
     () =>
       fetchMonitoringTasks({
@@ -321,6 +386,8 @@ const TasksPane: React.FC<{ liveSignal: number }> = ({ liveSignal }) => {
             variant="contained"
             chevronPosition="left"
             multiple
+            value={open}
+            onChange={setOpen}
             styles={ACCORDION_STYLES}
           >
             {tasks.map((t) => (
@@ -359,6 +426,7 @@ const TasksPane: React.FC<{ liveSignal: number }> = ({ liveSignal }) => {
                 </Group>
               </Accordion.Control>
               <Accordion.Panel>
+                {open.includes(t.task_id) && (
                 <Stack gap={6}>
                   <Group gap="lg">
                     <Text size="xs" c="dimmed">
@@ -381,35 +449,54 @@ const TasksPane: React.FC<{ liveSignal: number }> = ({ liveSignal }) => {
                     )}
                   </Group>
                   {t.args_repr && (
-                    <CodeHighlight
-                      code={t.args_repr}
-                      language="python"
-                      copyLabel="Copy"
-                      styles={CODE_STYLES}
-                    />
+                    <DetailBlock label="Arguments">
+                      <CodeHighlight
+                        code={t.args_repr}
+                        language="python"
+                        copyLabel="Copy"
+                        styles={CODE_STYLES}
+                      />
+                    </DetailBlock>
+                  )}
+                  {t.result_summary && (
+                    <DetailBlock label="Result">
+                      <CodeHighlight
+                        code={t.result_summary}
+                        language="python"
+                        copyLabel="Copy"
+                        styles={CODE_STYLES}
+                      />
+                    </DetailBlock>
                   )}
                   {t.error && (
-                    <Alert color="red" variant="light" p="xs">
-                      <Text size="xs">{t.error}</Text>
-                    </Alert>
+                    <DetailBlock label="Error">
+                      <Alert color="red" variant="light" p="xs">
+                        <Text size="xs">{t.error}</Text>
+                      </Alert>
+                    </DetailBlock>
                   )}
                   {t.traceback && (
-                    <CodeHighlight
-                      code={t.traceback}
-                      language="text"
-                      copyLabel="Copy"
-                      styles={CODE_STYLES}
-                    />
+                    <DetailBlock label="Traceback">
+                      <CodeHighlight
+                        code={t.traceback}
+                        language="text"
+                        copyLabel="Copy"
+                        styles={CODE_STYLES}
+                      />
+                    </DetailBlock>
                   )}
                   {t.logs && t.logs.length > 0 && (
-                    <CodeHighlight
-                      code={t.logs.join('\n')}
-                      language="text"
-                      copyLabel="Copy"
-                      styles={CODE_STYLES}
-                    />
+                    <DetailBlock label="Logs">
+                      <CodeHighlight
+                        code={t.logs.join('\n')}
+                        language="text"
+                        copyLabel="Copy"
+                        styles={CODE_STYLES}
+                      />
+                    </DetailBlock>
                   )}
                 </Stack>
+                )}
               </Accordion.Panel>
             </Accordion.Item>
           ))}
@@ -425,6 +512,9 @@ const TasksPane: React.FC<{ liveSignal: number }> = ({ liveSignal }) => {
 const IngestionPane: React.FC<{ liveSignal: number }> = ({ liveSignal }) => {
   const [auto, setAuto] = useState(true);
   const [q, setQ] = useState('');
+  // Controlled open rows: only the expanded run mounts its field grid + steps
+  // table, keeping a large run list light on load and on refresh.
+  const [open, setOpen] = useState<string[]>([]);
   const load = useCallback(() => fetchIngestionRuns({ limit: 200 }), []);
   const { data, loading, error, refresh } = usePolling<MonitoringIngestionRun[]>(
     load,
@@ -470,6 +560,8 @@ const IngestionPane: React.FC<{ liveSignal: number }> = ({ liveSignal }) => {
             variant="contained"
             chevronPosition="left"
             multiple
+            value={open}
+            onChange={setOpen}
             styles={ACCORDION_STYLES}
           >
             {runs.map((r) => (
@@ -513,17 +605,53 @@ const IngestionPane: React.FC<{ liveSignal: number }> = ({ liveSignal }) => {
                 </Group>
               </Accordion.Control>
               <Accordion.Panel>
-                <Stack gap={6}>
-                  <Group gap="lg">
-                    <Text size="xs" c="dimmed">
-                      run_id: <Code>{r.run_id}</Code>
-                    </Text>
-                    <Text size="xs" c="dimmed">
-                      host: {r.cli_hostname || '—'}
-                    </Text>
-                    <Text size="xs" c="dimmed">
-                      finished: <TimeText iso={r.finished_at} />
-                    </Text>
+                {open.includes(r.run_id) && (
+                <Stack gap="sm">
+                  <SimpleGrid cols={{ base: 2, xs: 3, sm: 4 }} spacing="md" verticalSpacing="xs">
+                    <Field label="Project">{r.project_name || '—'}</Field>
+                    <Field label="User">{r.email || '—'}</Field>
+                    <Field label="Source">{r.source === 'ui' ? 'UI upload' : 'CLI'}</Field>
+                    <Field label="Command">{r.command || '—'}</Field>
+                    <Field label="Instance">{r.cli_instance_label || '—'}</Field>
+                    <Field label="Host">{r.cli_hostname || '—'}</Field>
+                    <Field label="CLI version">{r.cli_version ? `v${r.cli_version}` : '—'}</Field>
+                    <Field label="Duration">
+                      {formatDuration(spanMs(r.started_at, r.finished_at))}
+                    </Field>
+                    <Field label="Started">
+                      {absTime(r.started_at)}{' '}
+                      <Text component="span" size="xs" c="dimmed">
+                        (<TimeText iso={r.started_at} />)
+                      </Text>
+                    </Field>
+                    <Field label="Finished">
+                      {r.finished_at ? (
+                        <>
+                          {absTime(r.finished_at)}{' '}
+                          <Text component="span" size="xs" c="dimmed">
+                            (<TimeText iso={r.finished_at} />)
+                          </Text>
+                        </>
+                      ) : (
+                        '—'
+                      )}
+                    </Field>
+                    <Field label="Steps">{stepTally(r.steps)}</Field>
+                  </SimpleGrid>
+                  <Group gap="xl" wrap="wrap">
+                    <Field label="Run ID">
+                      <Code fz="10px">{r.run_id}</Code>
+                    </Field>
+                    {r.project_id && (
+                      <Field label="Project ID">
+                        <Code fz="10px">{r.project_id}</Code>
+                      </Field>
+                    )}
+                    {r.user_id && (
+                      <Field label="User ID">
+                        <Code fz="10px">{r.user_id}</Code>
+                      </Field>
+                    )}
                   </Group>
                   {r.steps && r.steps.length > 0 && (
                     <Table withTableBorder withColumnBorders fz="xs">
@@ -555,6 +683,7 @@ const IngestionPane: React.FC<{ liveSignal: number }> = ({ liveSignal }) => {
                     </Alert>
                   )}
                 </Stack>
+                )}
               </Accordion.Panel>
             </Accordion.Item>
           ))}
@@ -575,6 +704,10 @@ const LogsPane: React.FC = () => {
   // Server-side capture floor (what actually gets persisted), distinct from the
   // client-side `level` filter above which only narrows already-captured rows.
   const [captureLevel, setCaptureLevel] = useState<string | null>(null);
+  // Controlled open rows: only the expanded log mounts its CodeHighlight, so a
+  // 400-row pane doesn't run 400 syntax passes (which froze the UI) on load and
+  // on every auto-refresh.
+  const [open, setOpen] = useState<string[]>([]);
   const load = useCallback(
     () => fetchAppLogs({ level: level || undefined, source: source || undefined, limit: 400 }),
     [level, source],
@@ -663,10 +796,14 @@ const LogsPane: React.FC = () => {
             variant="contained"
             chevronPosition="left"
             multiple
+            value={open}
+            onChange={setOpen}
             styles={ACCORDION_STYLES}
           >
-            {logs.map((l, i) => (
-              <Accordion.Item key={`${l.ts}-${i}`} value={`${l.ts}-${i}`}>
+            {logs.map((l, i) => {
+              const key = `${l.ts}-${i}`;
+              return (
+              <Accordion.Item key={key} value={key}>
                 <Accordion.Control>
                   <Group gap="sm" wrap="nowrap">
                     <Box w={84} style={{ flexShrink: 0 }}>
@@ -700,6 +837,7 @@ const LogsPane: React.FC = () => {
                   </Group>
                 </Accordion.Control>
                 <Accordion.Panel>
+                  {open.includes(key) && (
                   <Stack gap={6}>
                     <Group gap="lg">
                       <Text size="xs" c="dimmed">
@@ -719,9 +857,11 @@ const LogsPane: React.FC = () => {
                       styles={CODE_STYLES}
                     />
                   </Stack>
+                  )}
                 </Accordion.Panel>
               </Accordion.Item>
-            ))}
+              );
+            })}
           </Accordion>
         </ScrollArea>
       )}

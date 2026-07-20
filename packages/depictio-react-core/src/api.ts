@@ -2933,6 +2933,7 @@ export interface MonitoringIngestionRun {
   source?: 'cli' | 'ui';
   cli_instance_label?: string | null;
   cli_hostname?: string | null;
+  cli_version?: string | null;
   user_id?: string | null;
   email?: string | null;
   project_id?: string | null;

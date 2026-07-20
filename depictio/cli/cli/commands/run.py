@@ -26,6 +26,23 @@ from depictio.models.s3_utils import S3_storage_checks
 from depictio.models.utils import convert_model_to_dict
 
 
+def _cli_version() -> str | None:
+    """Installed depictio-cli version, or ``None`` if it can't be determined.
+
+    Best-effort metadata for the monitoring ledger — never raises.
+    """
+    try:
+        from importlib.metadata import PackageNotFoundError
+        from importlib.metadata import version as _pkg_version
+
+        try:
+            return _pkg_version("depictio-cli")
+        except PackageNotFoundError:
+            return "dev"
+    except Exception:
+        return None
+
+
 def _write_provisioned_cli_config(base_raw_config: dict, provision: dict) -> str:
     """Write a temporary CLI config that runs the pipeline as the provisioned user.
 
@@ -281,6 +298,17 @@ def register_run_command(app: typer.Typer):
 
         # Server-side monitoring record for this ingestion run (best-effort).
         ingestion_run_id: str | None = None
+        # Per-phase step ledger sent to the monitoring endpoint at finish. Populated
+        # by ``_rec`` from the very start so successful phases that ran before the
+        # record is opened (server/S3/validate) are still reported. Best-effort:
+        # recording must never affect the ingestion itself.
+        run_steps: list[dict] = []
+        # Server-side project id, resolved once available (post-sync); patched onto
+        # the monitoring record at finish.
+        resolved_project_id: str | None = None
+
+        def _rec(name: str, status: str, detail: str | None = None) -> None:
+            run_steps.append({"name": name, "status": status, "detail": detail})
 
         # Step 0a (provisioning only): create-or-get the user and switch the run
         # to act as them by pointing CLI_config_path at a temporary per-user
@@ -303,8 +331,10 @@ def register_run_command(app: typer.Typer):
                     f"{action} {provision['email']} — running pipeline as this user",
                     "success",
                 )
+                _rec("provisioning", "success", f"{action} {provision.get('email')}")
             except Exception as e:
                 rich_print_checked_statement(f"User provisioning failed: {e}", "error")
+                _rec("provisioning", "failed", str(e))
                 raise typer.Exit(code=1)
 
         # Step 0 (template only): Resolve template and validate data
@@ -349,6 +379,11 @@ def register_run_command(app: typer.Typer):
                 rich_print_checked_statement(
                     f"Template '{template_metadata.template_id}' loaded successfully",
                     "success",
+                )
+                _rec(
+                    "template_resolve",
+                    "success",
+                    f"template '{template_metadata.template_id}' loaded",
                 )
 
                 template_resolved_config = resolved_config
@@ -397,6 +432,7 @@ def register_run_command(app: typer.Typer):
                 raise
             except Exception as e:
                 rich_print_checked_statement(f"Template resolution failed: {e}", "error")
+                _rec("template_resolve", "failed", str(e))
                 if not continue_on_error:
                     raise typer.Exit(code=1)
 
@@ -408,13 +444,16 @@ def register_run_command(app: typer.Typer):
                     api_login(CLI_config_path)
                 rich_print_checked_statement("Server accessibility check passed", "success")
                 success_count += 1
+                _rec("server_check", "success", "server reachable")
             except Exception as e:
                 rich_print_checked_statement(f"Server accessibility check failed: {e}", "error")
+                _rec("server_check", "failed", str(e))
                 if not continue_on_error:
                     raise typer.Exit(code=1)
         else:
             rich_print_checked_statement("Skipping server accessibility check", "info")
             success_count += 1
+            _rec("server_check", "skipped")
 
         # Step 2: Check S3 storage
         if not skip_s3_check:
@@ -425,13 +464,16 @@ def register_run_command(app: typer.Typer):
                     S3_storage_checks(CLI_config.s3_storage)
                 rich_print_checked_statement("S3 storage configuration check passed", "success")
                 success_count += 1
+                _rec("s3_check", "success", "S3 storage reachable")
             except Exception as e:
                 rich_print_checked_statement(f"S3 storage check failed: {e}", "error")
+                _rec("s3_check", "failed", str(e))
                 if not continue_on_error:
                     raise typer.Exit(code=1)
         else:
             rich_print_checked_statement("Skipping S3 storage check", "info")
             success_count += 1
+            _rec("s3_check", "skipped")
 
         # Step 3: Validate project configuration
         rich_print_section_separator(f"Step 3/{total_steps}: Validating project configuration")
@@ -456,8 +498,10 @@ def register_run_command(app: typer.Typer):
                 project_config = validation_response["project_config"]
             rich_print_checked_statement("Project configuration validation passed", "success")
             success_count += 1
+            _rec("validate_config", "success", "config valid")
         except Exception as e:
             rich_print_checked_statement(f"{e}", "error")
+            _rec("validate_config", "failed", str(e))
             if not continue_on_error:
                 raise typer.Exit(code=1)
 
@@ -470,6 +514,7 @@ def register_run_command(app: typer.Typer):
                     CLI_config=CLI_config,
                     command="run",
                     project_name=getattr(_proj, "name", None),
+                    cli_version=_cli_version(),
                 )
             except Exception:
                 ingestion_run_id = None
@@ -513,6 +558,10 @@ def register_run_command(app: typer.Typer):
                                 remote = api_get_project_from_id(pid, CLI_config)
                         if remote.status_code == 200:
                             proj_data = remote.json()
+                            resolved_project_id = (
+                                str(proj_data.get("_id") or proj_data.get("id") or "")
+                                or resolved_project_id
+                            )
                             tag_to_id: dict[str, str] = {}
                             for wf in proj_data.get("workflows", []):
                                 for dc in wf.get("data_collections", []):
@@ -549,13 +598,16 @@ def register_run_command(app: typer.Typer):
                         logger.warning(f"Link tag resolution failed (non-blocking): {e}")
 
                 success_count += 1
+                _rec("sync_project", "success", "project synced")
             except Exception as e:
                 rich_print_checked_statement(f"Project configuration sync failed: {e}", "error")
+                _rec("sync_project", "failed", str(e))
                 if not continue_on_error:
                     raise typer.Exit(code=1)
         else:
             rich_print_checked_statement("Skipping project configuration sync", "info")
             success_count += 1
+            _rec("sync_project", "skipped")
 
         # Step 5: Scan data files
         if not skip_scan:
@@ -569,8 +621,13 @@ def register_run_command(app: typer.Typer):
 
                     if remote_project_config.status_code == 200:
                         # Compare hashes
+                        remote_json = remote_project_config.json()
                         local_hash = project_config.hash
-                        remote_hash = remote_project_config.json().get("hash", None)
+                        remote_hash = remote_json.get("hash", None)
+                        resolved_project_id = (
+                            str(remote_json.get("_id") or remote_json.get("id") or "")
+                            or resolved_project_id
+                        )
                         logger.info(f"Local & Remote hashes: {local_hash} & {remote_hash}")
 
                         if local_hash == remote_hash:
@@ -599,13 +656,16 @@ def register_run_command(app: typer.Typer):
 
                 rich_print_checked_statement("Data scanning completed", "success")
                 success_count += 1
+                _rec("scan", "success", "data files scanned")
             except Exception as e:
                 rich_print_checked_statement(f"Data scanning failed: {e}", "error")
+                _rec("scan", "failed", str(e))
                 if not continue_on_error:
                     raise typer.Exit(code=1)
         else:
             rich_print_checked_statement("Skipping data scanning", "info")
             success_count += 1
+            _rec("scan", "skipped")
 
         # Step 6: Process data collections
         if not skip_process:
@@ -651,13 +711,24 @@ def register_run_command(app: typer.Typer):
 
                 rich_print_checked_statement("Data processing completed", "success")
                 success_count += 1
+                _proc = locals().get("process_result") or {}
+                _n_ok = _proc.get("total_processed")
+                _rec(
+                    "process",
+                    "success",
+                    f"{_n_ok} data collection(s) processed"
+                    if _n_ok is not None
+                    else "data collections processed",
+                )
             except Exception as e:
                 rich_print_checked_statement(f"Data processing failed: {e}", "error")
+                _rec("process", "failed", str(e))
                 if not continue_on_error:
                     raise typer.Exit(code=1)
         else:
             rich_print_checked_statement("Skipping data processing", "info")
             success_count += 1
+            _rec("process", "skipped")
 
         # Step 7: Execute table joins
         if not skip_join:
@@ -699,13 +770,23 @@ def register_run_command(app: typer.Typer):
 
                 rich_print_checked_statement("Join execution completed", "success")
                 success_count += 1
+                _join = locals().get("join_result") or {}
+                _n_join = len(_join.get("processed") or [])
+                _n_join_err = len(_join.get("errors") or [])
+                _rec(
+                    "joins",
+                    "success",
+                    f"{_n_join} processed / {_n_join_err} failed" if _join else "no joins defined",
+                )
             except Exception as e:
                 rich_print_checked_statement(f"Join execution failed: {e}", "error")
+                _rec("joins", "failed", str(e))
                 if not continue_on_error:
                     raise typer.Exit(code=1)
         else:
             rich_print_checked_statement("Skipping join execution", "info")
             success_count += 1
+            _rec("joins", "skipped")
 
         # Step 8 (template only): Import dashboards
         if is_template_mode and not skip_dashboard_import and template_dashboard_paths:
@@ -727,6 +808,7 @@ def register_run_command(app: typer.Typer):
                     if remote_project.status_code == 200:
                         remote_project_data = remote_project.json()
                         project_id = remote_project_data.get("_id") or remote_project_data.get("id")
+                        resolved_project_id = str(project_id or "") or resolved_project_id
 
                     results = import_dashboards_from_template(
                         dashboard_paths=template_dashboard_paths,
@@ -767,8 +849,13 @@ def register_run_command(app: typer.Typer):
 
                 rich_print_checked_statement("Dashboard import completed", "success")
                 success_count += 1
+                # `imported`/`failed` are only bound in the non-dry-run branch above.
+                _imp = locals().get("imported") or []
+                _fld = locals().get("failed") or []
+                _rec("dashboard_import", "success", f"{len(_imp)} imported / {len(_fld)} failed")
             except Exception as e:
                 rich_print_checked_statement(f"Dashboard import failed: {e}", "error")
+                _rec("dashboard_import", "failed", str(e))
                 if not continue_on_error:
                     raise typer.Exit(code=1)
         elif is_template_mode and skip_dashboard_import:
@@ -776,9 +863,11 @@ def register_run_command(app: typer.Typer):
                 "Skipping dashboard import (--skip-dashboard-import)", "info"
             )
             success_count += 1
+            _rec("dashboard_import", "skipped")
         elif is_template_mode and not template_dashboard_paths:
             rich_print_checked_statement("No dashboards defined in template", "info")
             success_count += 1
+            _rec("dashboard_import", "skipped", "no dashboards in template")
 
         # Passwordless login link for the provisioned user. Minted now (not at
         # provisioning time) so the short-lived ticket's clock starts when the
@@ -812,17 +901,15 @@ def register_run_command(app: typer.Typer):
         # Close the monitoring ingestion record (best-effort).
         if ingestion_run_id:
             final_status = "success" if success_count == total_steps else "partial"
+            # Send the per-phase step ledger recorded by ``_rec`` throughout the run.
+            # The overall status rides on ``status`` (shown as the header badge in
+            # the admin UI), so no separate summary row is needed.
             api_monitoring_ingestion_finish(
                 CLI_config=CLI_config,
                 run_id=ingestion_run_id,
                 status=final_status,
-                steps=[
-                    {
-                        "name": "run",
-                        "status": final_status,
-                        "detail": f"{success_count}/{total_steps} steps",
-                    }
-                ],
+                steps=run_steps,
+                project_id=resolved_project_id,
             )
 
         # A run that did not complete every step is a failure for automation

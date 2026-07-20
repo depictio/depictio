@@ -115,6 +115,7 @@ class IngestionRun(BaseModel):
         default=None, description="CLI instance label (CLI runs) or 'Web UI' for UI uploads"
     )
     cli_hostname: Optional[str] = Field(default=None, description="Hostname the CLI ran on")
+    cli_version: Optional[str] = Field(default=None, description="Depictio CLI version that ran")
     user_id: Optional[str] = Field(default=None, description="Id of the ingesting user")
     email: Optional[str] = Field(default=None, description="Email of the ingesting user")
     project_id: Optional[str] = Field(default=None, description="Target project id")

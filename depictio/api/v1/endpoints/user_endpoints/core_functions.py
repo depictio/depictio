@@ -340,7 +340,10 @@ async def _async_fetch_user_from_token(token: str) -> UserBeanie | None:
             options={"require": ["exp"]},
         )
     except ExpiredSignatureError:
-        logger.info("Rejected expired JWT")
+        # Routine, expected event (a client polling with a stale access token
+        # before it refreshes) — keep it at DEBUG so it doesn't flood the admin
+        # Logs pane. The genuinely-suspicious *invalid* path below stays WARNING.
+        logger.debug("Rejected expired JWT")
         return None
     except InvalidTokenError as exc:
         logger.warning("Rejected invalid JWT: %s", exc)

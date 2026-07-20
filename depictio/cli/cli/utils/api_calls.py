@@ -413,6 +413,7 @@ def api_monitoring_ingestion_start(
     command: str = "run",
     project_id: str | None = None,
     project_name: str | None = None,
+    cli_version: str | None = None,
 ) -> str | None:
     """Open a server-side ingestion-run record. Best-effort.
 
@@ -421,7 +422,12 @@ def api_monitoring_ingestion_start(
     """
     try:
         url = f"{CLI_config.api_base_url}/depictio/api/v1/monitoring/ingestion/start"
-        payload = {"command": command, "project_id": project_id, "project_name": project_name}
+        payload = {
+            "command": command,
+            "project_id": project_id,
+            "project_name": project_name,
+            "cli_version": cli_version,
+        }
         response = get_http_client().post(
             url, json=payload, headers=generate_api_headers(CLI_config), timeout=30.0
         )
@@ -439,13 +445,19 @@ def api_monitoring_ingestion_finish(
     status: str = "success",
     steps: list[dict] | None = None,
     error: str | None = None,
+    project_id: str | None = None,
 ) -> None:
     """Close a server-side ingestion-run record. Best-effort; never raises."""
     if not run_id:
         return
     try:
         url = f"{CLI_config.api_base_url}/depictio/api/v1/monitoring/ingestion/{run_id}/finish"
-        payload = {"status": status, "steps": steps or [], "error": error}
+        payload = {
+            "status": status,
+            "steps": steps or [],
+            "error": error,
+            "project_id": project_id,
+        }
         get_http_client().post(
             url, json=payload, headers=generate_api_headers(CLI_config), timeout=30.0
         )

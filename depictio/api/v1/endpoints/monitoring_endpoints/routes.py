@@ -97,12 +97,16 @@ class IngestionStartRequest(BaseModel):
     command: str = Field(default="run")
     project_id: Optional[str] = None
     project_name: Optional[str] = None
+    cli_version: Optional[str] = None
 
 
 class IngestionFinishRequest(BaseModel):
     status: str = Field(default="success", description="running|success|partial|failed")
     steps: list[IngestionStep] = Field(default_factory=list)
     error: Optional[str] = None
+    # Resolved mid-run (the CLI often only learns the server-side project id after
+    # sync), so it can be patched onto the record at close time.
+    project_id: Optional[str] = None
 
 
 @monitoring_endpoint_router.post("/ingestion/start")
@@ -125,6 +129,7 @@ def start_ingestion(
         source="cli",
         cli_instance_label=x_depictio_cli_instance,
         cli_hostname=x_depictio_cli_host,
+        cli_version=body.cli_version,
         user_id=str(current_user.id),
         email=current_user.email,
         project_id=body.project_id,
@@ -148,12 +153,16 @@ def finish_ingestion(
     """Close an ingestion-run record with the final status + per-step tally."""
     if not settings.monitoring.enabled:
         raise HTTPException(status_code=404, detail="Monitoring is disabled.")
+    extra: dict = {}
+    if body.project_id:
+        extra["project_id"] = body.project_id
     matched = store.finish_ingestion_run(
         run_id,
         status=body.status,
         steps=[s.model_dump() for s in body.steps],
         error=body.error,
         finished_at=datetime.now(),
+        **extra,
     )
     if not matched:
         raise HTTPException(status_code=404, detail="Ingestion run not found.")

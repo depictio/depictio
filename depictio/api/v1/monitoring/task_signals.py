@@ -34,6 +34,11 @@ _log_buffers: dict[str, list[str]] = {}
 _buffers_lock = threading.Lock()
 _MAX_LINES_PER_TASK = 500
 
+# Char cap for the stored repr of task args/kwargs and result. Large enough that
+# code-mode figure payloads (the ``code_content`` string can be a few hundred
+# chars) are shown whole in the admin detail view rather than clipped mid-string.
+_REPR_MAX = 4000
+
 
 def _safe(fn):
     """Decorator: never let a signal handler raise into Celery internals."""
@@ -102,7 +107,7 @@ def _on_prerun(task_id=None, task=None, args=None, kwargs=None, **_extra):
     fields: dict[str, Any] = {
         "task_name": getattr(task, "name", "") or "",
         "status": "started",
-        "args_repr": (repr({"args": args, "kwargs": kwargs}))[:500],
+        "args_repr": (repr({"args": args, "kwargs": kwargs}))[:_REPR_MAX],
         "started_at": datetime.now(),
         "worker": getattr(request, "hostname", None),
         "queue": getattr(request, "delivery_info", {}).get("routing_key")
@@ -151,7 +156,7 @@ def _on_postrun(task_id=None, task=None, retval=None, state=None, **_extra):
     else:
         fields["status"] = "success" if status not in ("failure", "retry") else status
     try:
-        fields["result_summary"] = repr(retval)[:500] if retval is not None else None
+        fields["result_summary"] = repr(retval)[:_REPR_MAX] if retval is not None else None
     except Exception:
         fields["result_summary"] = None
     store.upsert_task_event(task_id, **fields)
