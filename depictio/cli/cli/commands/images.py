@@ -234,15 +234,23 @@ def push(
 
     counts = {"uploaded": 0, "skipped": 0, "error": 0}
 
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-        console=console,
-    ) as progress:
+    from depictio.cli.cli.utils.ingest_timing import ingest_run, record, timed
+
+    with (
+        ingest_run(s3_destination, "image"),
+        Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+            console=console,
+        ) as progress,
+    ):
+        record("n_images", len(images))
         task = progress.add_task("Uploading images...", total=len(images))
-        with ThreadPoolExecutor(max_workers=concurrency) as executor:
+        # Uploads run across worker threads, so time the whole concurrent batch
+        # from the main thread — the per-phase contextvar does not cross threads.
+        with ThreadPoolExecutor(max_workers=concurrency) as executor, timed("upload"):
             futures = [executor.submit(_upload_one, img) for img in images]
             for future in as_completed(futures):
                 counts[future.result()] += 1

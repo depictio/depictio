@@ -12,6 +12,7 @@ from depictio.cli.cli.utils.api_calls import (
     api_update_multiqc_report,
 )
 from depictio.cli.cli.utils.file_utils import compute_file_hash
+from depictio.cli.cli.utils.ingest_timing import record, timed
 from depictio.cli.cli.utils.rich_utils import rich_print_multiqc_processing_summary
 from depictio.cli.cli_logging import logger
 
@@ -272,7 +273,8 @@ def process_multiqc_data_collection(
                 # Extract MultiQC metadata from parquet file
                 logger.info(f"Processing file {i}/{len(files)}: {file_path}")
                 logger.info(f"Extracting metadata from: {file_path}")
-                metadata = extract_multiqc_metadata(file_path)
+                with timed("parse"):
+                    metadata = extract_multiqc_metadata(file_path)
 
                 # Get file size for metadata
                 file_size = Path(file_path).stat().st_size
@@ -301,6 +303,7 @@ def process_multiqc_data_collection(
             }
 
         logger.info(f"Successfully processed {processed_files} MultiQC files")
+        record("n_files", processed_files)
 
         # Calculate merged metadata for summary (but don't use for DB storage)
         all_samples = []
@@ -433,7 +436,7 @@ def process_multiqc_data_collection(
 
                             logger.info(f"Uploading file to S3: {file_path} -> {s3_key}")
                             # Use put_object to avoid multipart upload issues with MinIO
-                            with open(file_path, "rb") as f:
+                            with open(file_path, "rb") as f, timed("upload"):
                                 s3_client.put_object(
                                     Bucket=CLI_config.s3_storage.bucket,
                                     Key=s3_key,
@@ -545,12 +548,13 @@ def process_multiqc_data_collection(
                     from boto3.s3.transfer import TransferConfig
 
                     _single_part_cfg = TransferConfig(multipart_threshold=5 * 1024**3)
-                    s3_client.upload_file(
-                        file_path,
-                        CLI_config.s3_storage.bucket,
-                        s3_key,
-                        Config=_single_part_cfg,
-                    )
+                    with timed("upload"):
+                        s3_client.upload_file(
+                            file_path,
+                            CLI_config.s3_storage.bucket,
+                            s3_key,
+                            Config=_single_part_cfg,
+                        )
                     s3_location = f"s3://{CLI_config.s3_storage.bucket}/{s3_key}"
                     logger.info(f"Successfully uploaded {file_path} to {s3_location}")
 
