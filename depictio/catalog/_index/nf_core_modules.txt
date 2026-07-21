@@ -17,3 +17,9 @@ qiime2/barplot
 qiime2/diversityalphararefaction
 qiime2/diversitycore
 qiime2/relativeabundancetables
+rtgtools/vcfeval
+happy/happy
+happy/sompy
+truvari/bench
+svanalyzer/svbenchmark
+wittyer

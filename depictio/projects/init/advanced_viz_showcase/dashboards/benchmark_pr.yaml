@@ -1,0 +1,34 @@
+title: Precision-recall benchmark (demo)
+project_tag: Advanced Visualisations
+is_main_tab: false
+parent_dashboard_tag: Advanced Visualisations
+tab_order: 24
+icon: mdi:target-arrow
+icon_color: indigo
+components:
+- component_type: text
+  tag: pr-demo-intro
+  title: Precision–recall benchmark
+  order: 1
+  alignment: left
+  body: >
+    Each point is a variant caller at its (recall, precision); dotted lines are
+    equal-F1 contours, the diagonal is recall=precision. Top-right is best.
+    Synthetic demo data. Open the gear for colour scale, point-size and axis controls.
+  workflow_tag: advanced_viz_demo
+  data_collection_tag: benchmark_demo
+  layout: {x: 0, y: 0, w: 8, h: 1}
+- component_type: advanced_viz
+  workflow_tag: advanced_viz_demo
+  data_collection_tag: benchmark_demo
+  viz_kind: pr_benchmark
+  config:
+    viz_kind: pr_benchmark
+    label_col: tool
+    recall_col: recall
+    precision_col: precision
+    f1_col: f1
+    support_col: tp
+  tag: pr-demo-viz
+  title: Precision–recall benchmark
+  layout: {x: 0, y: 1, w: 8, h: 10}

@@ -1,0 +1,11 @@
+id: happy_summary
+mode: benchmark-summary
+description: >-
+  Germline SNP/INDEL accuracy from hap.py, pooled across samples by variant type
+  and filter (ALL/PASS) with recomputed precision/recall/F1.
+find: { path_glob: "**/benchmarks/happy/*.summary.csv" }
+recipe: happy/summary.py
+fixture: summary.tsv
+renders_as:
+  - { component: figure, visu_type: bar, dict_kwargs: {x: variant_type, y: f1, color: filter} } # F1 by SNP/INDEL
+  - { component: table }

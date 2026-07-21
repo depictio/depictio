@@ -1,0 +1,3 @@
+label	precision	recall	f1	tp	fp	fn
+sampleA	0.9	0.82	0.858	1150	120	250
+sampleB	0.84	0.76	0.798	1050	180	330

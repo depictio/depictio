@@ -1,0 +1,11 @@
+id: wittyer_summary
+mode: stratified
+description: >-
+  CNV/SV accuracy from Wittyer, stratified by event type and size bin
+  (precision/recall/F1). Optional — not produced by the public megatest.
+find: { path_glob: "**/summary/tables/wittyer/wittyer.summary.csv" }
+recipe: wittyer/summary.py
+fixture: summary.tsv
+renders_as:
+  - { component: figure, visu_type: bar, dict_kwargs: {x: size_bin, y: f1, color: event_type} } # F1 by event type x size
+  - { component: table }

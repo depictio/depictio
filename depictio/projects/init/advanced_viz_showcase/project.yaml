@@ -456,4 +456,56 @@ workflows:
               genome_size_mb: "Genome size in megabases"
               resistance_profile: "MDR / Susceptible / Variable"
 
+      # ----------------------------------------------------------------
+      # Variant-benchmarking demo DCs (pr_benchmark / confusion_matrix /
+      # metric_ci_bars / roc_pr_curve). Synthetic, so the curve has a real sweep.
+      # ----------------------------------------------------------------
+      - id: "646b0f3c1e4a2d7f8e5b8d60"
+        data_collection_tag: "benchmark_demo"
+        description: "Synthetic per-caller benchmark summary (precision/recall/F1 + counts + CIs)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/benchmark_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              tool: "Variant caller"
+              precision: "Precision (0-1)"
+              recall: "Recall (0-1)"
+              f1: "F1 score (0-1)"
+              tp: "True positives"
+              fp: "False positives"
+              fn: "False negatives"
+              precision_lower: "Precision 95% CI lower"
+              precision_upper: "Precision 95% CI upper"
+              recall_lower: "Recall 95% CI lower"
+              recall_upper: "Recall 95% CI upper"
+
+      - id: "646b0f3c1e4a2d7f8e5b8d61"
+        data_collection_tag: "roc_curve_demo"
+        description: "Synthetic threshold sweep (3 tools × ~13 quality thresholds) for the PR/ROC curve"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/roc_curve_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              tool: "Variant caller (one curve per tool)"
+              quality: "Quality threshold (sweep axis)"
+              precision: "Precision at threshold (0-1)"
+              recall: "Recall / TPR at threshold (0-1)"
+              fpr: "False-positive rate at threshold (0-1) — enables the true ROC case"
+
 # No joins. Filters in each dashboard are scoped to a single DC.

@@ -220,6 +220,33 @@ STATIC_IDS = {
             "viralrecon_sample_qc": "746b0f3c1e4a2d7f8e5b9cc2",
         },
     },
+    # nf-core/variantbenchmarking — IDs reserved for the 1.4.0 template. The project
+    # is NOT yet added to ``all_datasets`` (no vendored .db_seeds): reserving the IDs
+    # here keeps ``dashboards/base.yaml`` and ``generate_seeds.sh`` consistent so the
+    # seeds materialise against the right slots once a local ingest is run. See
+    # depictio/projects/nf-core/variantbenchmarking/1.4.0/VALIDATION_REPORT.md.
+    "variantbenchmarking": {
+        "project": "846b0f3c1e4a2d7f8e5bba01",
+        "workflows": {"variantbenchmarking": "846b0f3c1e4a2d7f8e5bba02"},
+        "data_collections": {
+            "germline_vcfeval_summary": "846b0f3c1e4a2d7f8e5bba10",
+            "germline_happy_summary": "846b0f3c1e4a2d7f8e5bba11",
+            "germline_happy_roc": "846b0f3c1e4a2d7f8e5bba12",
+            "somatic_vcfeval_summary": "846b0f3c1e4a2d7f8e5bba13",
+            "somatic_sompy_summary": "846b0f3c1e4a2d7f8e5bba14",
+            "somatic_sompy_regions": "846b0f3c1e4a2d7f8e5bba15",
+            "sv_truvari_summary": "846b0f3c1e4a2d7f8e5bba16",
+            "sv_svbenchmark_summary": "846b0f3c1e4a2d7f8e5bba17",
+            "cnv_wittyer_summary": "846b0f3c1e4a2d7f8e5bba18",
+        },
+        "dashboards": {
+            # Main tab id equals project_id (same convention as ampliseq/viralrecon).
+            "variantbenchmarking_overview": "846b0f3c1e4a2d7f8e5bba01",
+            "variantbenchmarking_germline": "846b0f3c1e4a2d7f8e5bba20",
+            "variantbenchmarking_somatic": "846b0f3c1e4a2d7f8e5bba21",
+            "variantbenchmarking_sv_cnv": "846b0f3c1e4a2d7f8e5bba22",
+        },
+    },
 }
 
 
@@ -393,6 +420,8 @@ class ReferenceDatasetRegistry:
         "ampliseq": os.path.join("nf-core", "ampliseq", "2.16.0"),
         "advanced_viz_showcase": os.path.join("init", "advanced_viz_showcase"),
         "viralrecon": os.path.join("nf-core", "viralrecon", "3.0.0"),
+        # Reserved (not yet in all_datasets — see STATIC_IDS["variantbenchmarking"] note).
+        "variantbenchmarking": os.path.join("nf-core", "variantbenchmarking", "1.4.0"),
     }
 
     @classmethod
