@@ -8,6 +8,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "build:catalog-preview": "vite build --config vite.catalog-preview.config.ts",
+    "build:project-builder": "vite build --config vite.project-builder.config.ts",
     "preview": "vite preview"
   },
   "dependencies": {

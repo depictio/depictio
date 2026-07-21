@@ -23,6 +23,7 @@ from depictio.cli.cli.utils.scan_utils import (
     construct_full_regex,
     generate_file_hash,
     generate_run_hash,
+    passes_scan_limits,
     regex_match,
 )
 from depictio.cli.cli_logging import logger
@@ -269,11 +270,20 @@ def process_files(
         )
         logger.debug(f"Full Regex: {full_regex}")
 
+    # Recursive-scan limits (ScanRecursive.max_depth / ignore); None for single scans.
+    scan_params = (
+        data_collection.config.scan.scan_parameters if data_collection.config.scan else None
+    )
+    max_depth = getattr(scan_params, "max_depth", None)
+    ignore = getattr(scan_params, "ignore", None)
+
     if os.path.isdir(path):
         logger.debug(f"Scanning directory: {path}")
         for root, _, files in os.walk(path):
             for file in files:
                 file_location = os.path.join(root, file)
+                if not passes_scan_limits(path, file_location, max_depth, ignore):
+                    continue
                 file_instance = scan_single_file(
                     file_location=file_location,
                     run=run,
@@ -393,6 +403,10 @@ def scan_run_for_multiple_data_collections(
         )
         logger.debug(f"Regex for DC {dc.data_collection_tag}: {full_regex}")
 
+        # Recursive-scan limits for this DC (ScanRecursive.max_depth / ignore).
+        dc_max_depth = getattr(dc.config.scan.scan_parameters, "max_depth", None)
+        dc_ignore = getattr(dc.config.scan.scan_parameters, "ignore", None)
+
         # A temporary run used only for file association — invariant across
         # every file in this run, so build it once here instead of
         # reallocating an identical WorkflowRun inside the per-file loop.
@@ -412,6 +426,8 @@ def scan_run_for_multiple_data_collections(
         # Process files that match this data collection's regex
         dc_file_scan_results = []
         for file_location in all_files_in_run:
+            if not passes_scan_limits(run_location, file_location, dc_max_depth, dc_ignore):
+                continue
             file_name = os.path.basename(file_location)
 
             # Check regex match against basename first

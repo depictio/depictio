@@ -13,6 +13,7 @@ from depictio.cli.cli.commands.data import app as data
 from depictio.cli.cli.commands.dev import app as dev
 from depictio.cli.cli.commands.images import app as images
 from depictio.cli.cli.commands.migrate import app as migrate
+from depictio.cli.cli.commands.project_builder import register_project_builder_command
 from depictio.cli.cli.commands.run import register_run_command
 from depictio.cli.cli.commands.standalone import register_standalone_commands
 from depictio.cli.cli.utils.rich_utils import add_rich_display_to_polars
@@ -26,6 +27,9 @@ register_standalone_commands(app)
 
 # Register the run command
 register_run_command(app)
+
+# Register the local Project Builder command (`depictio project-builder <dir>`)
+register_project_builder_command(app)
 
 
 @app.callback()
