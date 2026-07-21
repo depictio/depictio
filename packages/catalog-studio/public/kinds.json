@@ -1,0 +1,545 @@
+{
+  "complex_heatmap": {
+    "heavy": true,
+    "label": "Complex Heatmap",
+    "required_roles": [
+      "index"
+    ],
+    "roles": {
+      "index": [
+        "String",
+        "Utf8"
+      ]
+    }
+  },
+  "coverage_track": {
+    "heavy": false,
+    "label": "Coverage Track",
+    "required_roles": [
+      "chromosome",
+      "position",
+      "value"
+    ],
+    "roles": {
+      "category": [
+        "String",
+        "Utf8"
+      ],
+      "chromosome": [
+        "String",
+        "Utf8"
+      ],
+      "end": [
+        "Int16",
+        "Int32",
+        "Int64",
+        "Int8",
+        "UInt16",
+        "UInt32",
+        "UInt64",
+        "UInt8"
+      ],
+      "position": [
+        "Int16",
+        "Int32",
+        "Int64",
+        "Int8",
+        "UInt16",
+        "UInt32",
+        "UInt64",
+        "UInt8"
+      ],
+      "sample": [
+        "String",
+        "Utf8"
+      ],
+      "value": [
+        "Float32",
+        "Float64",
+        "Int16",
+        "Int32",
+        "Int64",
+        "Int8",
+        "UInt16",
+        "UInt32",
+        "UInt64",
+        "UInt8"
+      ]
+    }
+  },
+  "da_barplot": {
+    "heavy": false,
+    "label": "Da Barplot",
+    "required_roles": [
+      "feature_id",
+      "contrast",
+      "lfc"
+    ],
+    "roles": {
+      "contrast": [
+        "String",
+        "Utf8"
+      ],
+      "feature_id": [
+        "String",
+        "Utf8"
+      ],
+      "label": [
+        "String",
+        "Utf8"
+      ],
+      "lfc": [
+        "Float32",
+        "Float64"
+      ],
+      "significance": [
+        "Float32",
+        "Float64"
+      ]
+    }
+  },
+  "dot_plot": {
+    "heavy": false,
+    "label": "Dot Plot",
+    "required_roles": [
+      "cluster",
+      "gene",
+      "mean_expression",
+      "frac_expressing"
+    ],
+    "roles": {
+      "cluster": [
+        "String",
+        "Utf8"
+      ],
+      "frac_expressing": [
+        "Float32",
+        "Float64"
+      ],
+      "gene": [
+        "String",
+        "Utf8"
+      ],
+      "mean_expression": [
+        "Float32",
+        "Float64"
+      ]
+    }
+  },
+  "embedding": {
+    "heavy": true,
+    "label": "Embedding",
+    "required_roles": [
+      "sample_id",
+      "dim_1",
+      "dim_2"
+    ],
+    "roles": {
+      "cluster": [
+        "String",
+        "Utf8"
+      ],
+      "color": [
+        "Float32",
+        "Float64",
+        "Int16",
+        "Int32",
+        "Int64",
+        "Int8",
+        "String",
+        "UInt16",
+        "UInt32",
+        "UInt64",
+        "UInt8",
+        "Utf8"
+      ],
+      "dim_1": [
+        "Float32",
+        "Float64"
+      ],
+      "dim_2": [
+        "Float32",
+        "Float64"
+      ],
+      "dim_3": [
+        "Float32",
+        "Float64"
+      ],
+      "sample_id": [
+        "String",
+        "Utf8"
+      ]
+    }
+  },
+  "enrichment": {
+    "heavy": false,
+    "label": "Enrichment",
+    "required_roles": [
+      "term",
+      "nes",
+      "padj",
+      "gene_count"
+    ],
+    "roles": {
+      "gene_count": [
+        "Float32",
+        "Float64",
+        "Int16",
+        "Int32",
+        "Int64",
+        "Int8",
+        "UInt16",
+        "UInt32",
+        "UInt64",
+        "UInt8"
+      ],
+      "nes": [
+        "Float32",
+        "Float64"
+      ],
+      "padj": [
+        "Float32",
+        "Float64"
+      ],
+      "source": [
+        "String",
+        "Utf8"
+      ],
+      "term": [
+        "String",
+        "Utf8"
+      ]
+    }
+  },
+  "lollipop": {
+    "heavy": false,
+    "label": "Lollipop",
+    "required_roles": [
+      "feature_id",
+      "position",
+      "category"
+    ],
+    "roles": {
+      "category": [
+        "String",
+        "Utf8"
+      ],
+      "effect": [
+        "Float32",
+        "Float64"
+      ],
+      "feature_id": [
+        "String",
+        "Utf8"
+      ],
+      "position": [
+        "Int16",
+        "Int32",
+        "Int64",
+        "Int8",
+        "UInt16",
+        "UInt32",
+        "UInt64",
+        "UInt8"
+      ]
+    }
+  },
+  "ma": {
+    "heavy": false,
+    "label": "Ma",
+    "required_roles": [
+      "feature_id",
+      "avg_log_intensity",
+      "log2_fold_change"
+    ],
+    "roles": {
+      "avg_log_intensity": [
+        "Float32",
+        "Float64"
+      ],
+      "feature_id": [
+        "String",
+        "Utf8"
+      ],
+      "label": [
+        "String",
+        "Utf8"
+      ],
+      "log2_fold_change": [
+        "Float32",
+        "Float64"
+      ],
+      "significance": [
+        "Float32",
+        "Float64"
+      ]
+    }
+  },
+  "manhattan": {
+    "heavy": false,
+    "label": "Manhattan",
+    "required_roles": [
+      "chr",
+      "pos",
+      "score"
+    ],
+    "roles": {
+      "chr": [
+        "String",
+        "Utf8"
+      ],
+      "effect": [
+        "Float32",
+        "Float64"
+      ],
+      "feature": [
+        "String",
+        "Utf8"
+      ],
+      "pos": [
+        "Int16",
+        "Int32",
+        "Int64",
+        "Int8",
+        "UInt16",
+        "UInt32",
+        "UInt64",
+        "UInt8"
+      ],
+      "score": [
+        "Float32",
+        "Float64"
+      ]
+    }
+  },
+  "oncoplot": {
+    "heavy": true,
+    "label": "Oncoplot",
+    "required_roles": [
+      "sample_id",
+      "gene",
+      "mutation_type"
+    ],
+    "roles": {
+      "gene": [
+        "String",
+        "Utf8"
+      ],
+      "mutation_type": [
+        "String",
+        "Utf8"
+      ],
+      "sample_id": [
+        "String",
+        "Utf8"
+      ]
+    }
+  },
+  "phylogenetic": {
+    "heavy": false,
+    "label": "Phylogenetic",
+    "required_roles": [
+      "taxon"
+    ],
+    "roles": {
+      "color": [
+        "Float32",
+        "Float64",
+        "Int16",
+        "Int32",
+        "Int64",
+        "Int8",
+        "String",
+        "UInt16",
+        "UInt32",
+        "UInt64",
+        "UInt8",
+        "Utf8"
+      ],
+      "label": [
+        "String",
+        "Utf8"
+      ],
+      "taxon": [
+        "String",
+        "Utf8"
+      ]
+    }
+  },
+  "qq": {
+    "heavy": false,
+    "label": "Qq",
+    "required_roles": [
+      "p_value"
+    ],
+    "roles": {
+      "category": [
+        "String",
+        "Utf8"
+      ],
+      "feature_id": [
+        "String",
+        "Utf8"
+      ],
+      "p_value": [
+        "Float32",
+        "Float64"
+      ]
+    }
+  },
+  "rarefaction": {
+    "heavy": false,
+    "label": "Rarefaction",
+    "required_roles": [
+      "sample_id",
+      "depth",
+      "metric"
+    ],
+    "roles": {
+      "depth": [
+        "Float32",
+        "Float64",
+        "Int16",
+        "Int32",
+        "Int64",
+        "Int8",
+        "UInt16",
+        "UInt32",
+        "UInt64",
+        "UInt8"
+      ],
+      "group": [
+        "String",
+        "Utf8"
+      ],
+      "iter": [
+        "Float32",
+        "Float64",
+        "Int16",
+        "Int32",
+        "Int64",
+        "Int8",
+        "UInt16",
+        "UInt32",
+        "UInt64",
+        "UInt8"
+      ],
+      "metric": [
+        "Float32",
+        "Float64",
+        "Int16",
+        "Int32",
+        "Int64",
+        "Int8",
+        "UInt16",
+        "UInt32",
+        "UInt64",
+        "UInt8"
+      ],
+      "sample_id": [
+        "String",
+        "Utf8"
+      ]
+    }
+  },
+  "sankey": {
+    "heavy": true,
+    "label": "Sankey",
+    "required_roles": [],
+    "roles": {}
+  },
+  "stacked_taxonomy": {
+    "heavy": false,
+    "label": "Stacked Taxonomy",
+    "required_roles": [
+      "sample_id",
+      "taxon",
+      "rank",
+      "abundance"
+    ],
+    "roles": {
+      "abundance": [
+        "Float32",
+        "Float64",
+        "Int16",
+        "Int32",
+        "Int64",
+        "Int8",
+        "UInt16",
+        "UInt32",
+        "UInt64",
+        "UInt8"
+      ],
+      "rank": [
+        "String",
+        "Utf8"
+      ],
+      "sample_id": [
+        "String",
+        "Utf8"
+      ],
+      "taxon": [
+        "String",
+        "Utf8"
+      ]
+    }
+  },
+  "sunburst": {
+    "heavy": false,
+    "label": "Sunburst",
+    "required_roles": [
+      "abundance"
+    ],
+    "roles": {
+      "abundance": [
+        "Float32",
+        "Float64",
+        "Int16",
+        "Int32",
+        "Int64",
+        "Int8",
+        "UInt16",
+        "UInt32",
+        "UInt64",
+        "UInt8"
+      ]
+    }
+  },
+  "upset_plot": {
+    "heavy": true,
+    "label": "Upset Plot",
+    "required_roles": [],
+    "roles": {}
+  },
+  "volcano": {
+    "heavy": false,
+    "label": "Volcano",
+    "required_roles": [
+      "feature_id",
+      "effect_size",
+      "significance"
+    ],
+    "roles": {
+      "category": [
+        "String",
+        "Utf8"
+      ],
+      "effect_size": [
+        "Float32",
+        "Float64"
+      ],
+      "feature_id": [
+        "String",
+        "Utf8"
+      ],
+      "label": [
+        "String",
+        "Utf8"
+      ],
+      "significance": [
+        "Float32",
+        "Float64"
+      ]
+    }
+  }
+}

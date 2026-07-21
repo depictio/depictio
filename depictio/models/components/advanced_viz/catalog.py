@@ -61,11 +61,14 @@ def _check_identity_urls(
     nf_core_url: str | None,
     biotools_url: str | None,
     edam: dict[str, list[str]],
+    source_url: str | None = None,
 ) -> None:
     """Validate identity references point at the right authority (offline check).
 
     Format-level only: guarantees well-formed bio.tools / nf-core / EDAM refs.
     Existence (the term/module is real) is a CI step against a vendored index.
+    `source_url` (Snakemake/Galaxy fetch origin) has no authority to check
+    against, so only its scheme is asserted.
     """
     if biotools_url and not biotools_url.startswith("https://bio.tools/"):
         raise ValueError(f"biotools_url must be a https://bio.tools/ URL, got {biotools_url!r}")
@@ -73,6 +76,8 @@ def _check_identity_urls(
         raise ValueError(
             f"nf_core_url must point at github.com/nf-core/modules/..., got {nf_core_url!r}"
         )
+    if source_url and not source_url.startswith(("http://", "https://")):
+        raise ValueError(f"source_url must be an http(s):// URL, got {source_url!r}")
     for category, urls in edam.items():  # category -> expected EDAM prefix
         for url in urls:
             if not url.startswith(f"http://edamontology.org/{category}_"):
@@ -327,6 +332,10 @@ class CatalogTool(BaseModel):
     name: str
     description: str = ""
     homepage: str | None = None
+    # Where a non-nf-core source (Snakemake wrapper / Galaxy tool) was fetched
+    # from — kept distinct from `homepage` (the tool's own upstream page). No
+    # authority check: any source, so only well-formedness is asserted.
+    source_url: str | None = None
     nf_core_url: str | None = None
     biotools_url: str | None = None
     edam_topics: list[str] = Field(default_factory=list)
@@ -335,7 +344,12 @@ class CatalogTool(BaseModel):
 
     @model_validator(mode="after")
     def _identity_urls(self) -> CatalogTool:
-        _check_identity_urls(self.nf_core_url, self.biotools_url, {"topic": self.edam_topics})
+        _check_identity_urls(
+            self.nf_core_url,
+            self.biotools_url,
+            {"topic": self.edam_topics},
+            self.source_url,
+        )
         return self
 
 
@@ -448,7 +462,13 @@ def load_index(name: str) -> set[str]:
 
 def _nf_core_module(url: str | None) -> str | None:
     if url and "/modules/nf-core/" in url:
-        return url.split("/modules/nf-core/", 1)[1].rstrip("/")
+        module = url.split("/modules/nf-core/", 1)[1].rstrip("/")
+        # Accept a URL that points at the module's meta.yml / main.nf (what the
+        # nf-core docs link to) — the module path is the parent directory.
+        for suffix in ("/meta.yml", "/main.nf"):
+            if module.endswith(suffix):
+                module = module[: -len(suffix)]
+        return module
     return None
 
 
@@ -490,12 +510,23 @@ def check_existence(entries: tuple[CatalogEntry, ...] | list[CatalogEntry]) -> l
 
 def read_fixture_columns(path: Path) -> list[str]:
     """Read the column header of a fixture file (csv/tsv/parquet)."""
+    return list(read_fixture_schema(path).keys())
+
+
+def read_fixture_schema(path: Path) -> dict[str, str]:
+    """Read a fixture's ``{column: polars-dtype-name}`` schema (csv/tsv/parquet).
+
+    For text fixtures dtypes are polars-inferred (up to 10k rows). Used by
+    `validate` to ground each render's bindings against the real dtypes, not
+    just the column names.
+    """
     import polars as pl
 
     if path.suffix == ".parquet":
-        return list(pl.read_parquet_schema(path).keys())
+        return {name: str(dtype) for name, dtype in pl.read_parquet_schema(path).items()}
     sep = "\t" if path.suffix == ".tsv" else ","
-    return pl.read_csv(path, separator=sep, n_rows=0).columns
+    schema = pl.read_csv(path, separator=sep, infer_schema_length=10_000).schema
+    return {name: str(dtype) for name, dtype in schema.items()}
 
 
 def recipe_output_columns(recipe_ref: str) -> list[str]:
@@ -504,6 +535,60 @@ def recipe_output_columns(recipe_ref: str) -> list[str]:
 
     module = load_recipe(recipe_ref)
     return list(module.EXPECTED_SCHEMA.keys())
+
+
+# Aggregations that are only meaningful on a numeric column. min/max/count/
+# nunique/mode work on any dtype, so they're intentionally excluded.
+_NUMERIC_AGGREGATIONS: frozenset[str] = frozenset(
+    {
+        "sum",
+        "average",
+        "median",
+        "range",
+        "variance",
+        "std_dev",
+        "percentile",
+        "skewness",
+        "kurtosis",
+    }
+)
+_NUMERIC_DTYPES: frozenset[str] = frozenset(
+    {"Int8", "Int16", "Int32", "Int64", "UInt8", "UInt16", "UInt32", "UInt64", "Float32", "Float64"}
+)
+
+
+def ground_render_dtypes(out_id: str, render: Render, col_dtypes: dict[str, str]) -> list[str]:
+    """Check a render's bound columns have *compatible dtypes*, not merely that
+    the names exist. advanced_viz roles are grounded against `role_dtype_specs`
+    (the same table the web builder uses); numeric card aggregations require a
+    numeric column. An empty `col_dtypes` (e.g. a recipe output with no dtype
+    info) skips the checks. Returns a list of problem strings (empty = ok)."""
+    from depictio.models.components.advanced_viz.schemas import role_dtype_specs
+
+    problems: list[str] = []
+    if not col_dtypes:
+        return problems
+
+    if render.component == "advanced_viz" and render.kind:
+        specs = role_dtype_specs(render.kind)
+        for role, col in render.roles.items():
+            dt = col_dtypes.get(col)
+            allowed = specs.get(role, {}).get("dtypes")
+            if dt and isinstance(allowed, list) and dt not in allowed:
+                problems.append(
+                    f"{out_id} render {render.kind}: role {role!r} → column {col!r} is "
+                    f"{dt}, but expects one of {allowed}"
+                )
+
+    if render.component == "card" and render.column:
+        dt = col_dtypes.get(render.column)
+        for agg in (a for a in [render.aggregation, *render.aggregations] if a):
+            if agg in _NUMERIC_AGGREGATIONS and dt and dt not in _NUMERIC_DTYPES:
+                problems.append(
+                    f"{out_id} render card: aggregation {agg!r} needs a numeric column, "
+                    f"but {render.column!r} is {dt}"
+                )
+    return problems
 
 
 # ---------------------------------------------------------------------------

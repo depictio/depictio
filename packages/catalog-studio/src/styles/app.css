@@ -1,0 +1,42 @@
+/*
+ * Catalog Studio global styles. The `--app-*` tokens + Virgil @font-face are
+ * mirrored from depictio/viewer/src/styles/app.css so the app looks native to
+ * depictio. Tokens are thin aliases over Mantine's native theme variables so
+ * they flip with light/dark for free.
+ */
+
+/* Virgil — hand-drawn (Excalidraw) display face. depictio's brand signature,
+ * applied inline (fontFamily: 'Virgil') on the page title + primary CTAs.
+ * Referenced RELATIVELY (from src/assets) so Vite resolves + fingerprints it
+ * under the app base ('/depictio/') — an absolute '/fonts/…' URL would 404. */
+@font-face {
+  font-family: 'Virgil';
+  src: url('../assets/fonts/Virgil.ttf') format('truetype');
+  font-display: swap;
+}
+
+:root {
+  --app-bg-color: var(--mantine-color-body);
+  --app-surface-color: var(--mantine-color-body);
+  --app-text-color: var(--mantine-color-text);
+  --app-border-color: var(--mantine-color-default-border);
+  --app-subtle-bg: var(--mantine-color-default-hover);
+  --app-accent: var(--mantine-primary-color-filled);
+  --combobox-chevron-color: var(--mantine-color-text);
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--app-bg-color);
+  color: var(--app-text-color);
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  overflow-x: hidden;
+  max-width: 100vw;
+}
+
+#root {
+  min-height: 100vh;
+}

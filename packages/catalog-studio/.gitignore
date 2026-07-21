@@ -1,0 +1,17 @@
+node_modules/
+dist/
+test-results/
+playwright-report/
+.golden-out/
+*.tsbuildinfo
+
+# The root .gitignore ignores all *.csv, but this fixture is a committed CI
+# input (scripts/genGolden.ts → round-trip validate). Keep it tracked.
+!e2e/golden/golden.csv
+.playwright-mcp/
+
+# Local env (OAuth client id / worker URL / dev token) — never commit secrets.
+.env.local
+.env.*.local
+# Cloudflare Worker local secrets.
+oauth-worker/.dev.vars
