@@ -229,6 +229,12 @@ export interface StoredMetadata {
    *  When omitted, the renderer defaults to visible for ungrouped components and
    *  hidden for components inside a group (compact mode). */
   show_marks?: boolean;
+  // Table
+  /** Column allowlist for table components — when non-empty, only these
+   *  columns are rendered (empty / undefined = show all columns). */
+  columns?: string[];
+  /** Compact table row + header heights. */
+  compact?: boolean;
   [key: string]: unknown;
 }
 
