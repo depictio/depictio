@@ -4,6 +4,8 @@
  * fallback that relies on get_user_or_anonymous middleware for anonymous mode.
  */
 
+import { enqueueFetch } from './fetchQueue';
+
 const API_BASE = '/depictio/api/v1';
 
 /** localStorage key shared with the Dash app — same payload shape. */
@@ -229,6 +231,9 @@ export interface StoredMetadata {
    *  When omitted, the renderer defaults to visible for ungrouped components and
    *  hidden for components inside a group (compact mode). */
   show_marks?: boolean;
+  /** Grid placement. `y` doubles as the render-queue priority so components
+   *  nearer the top of the dashboard are fetched first (see `fetchQueue`). */
+  layout?: { x?: number; y?: number; w?: number; h?: number };
   [key: string]: unknown;
 }
 
@@ -582,33 +587,50 @@ export async function fetchVizSuggestions(
 export interface AdvancedVizDataResponse {
   columns: string[];
   rows: Record<string, unknown[]>;
+  /** Returned rows (== the sampled count when `sampled` is true). */
   row_count: number;
+  /** Rows before sampling — feeds the "N / M" reduction badge. */
+  total_rows?: number;
+  /** True when the server randomly downsampled the frame. */
+  sampled?: boolean;
   filter_applied: boolean;
 }
 
 /** Project a column subset from a DC + apply global filters. Rendering is
  *  done entirely on the client so intra-viz controls (thresholds, top-N,
- *  rank dropdown) don't round-trip to the server. */
+ *  rank dropdown) don't round-trip to the server.
+ *
+ *  `fullLoad` bypasses server-side sampling (raising the scan cap) so the
+ *  renderer's Load-All toggle can restore every row — mirrors the scatter
+ *  figure full-load contract. Ignored when an explicit `limitRows` is given. */
 export async function fetchAdvancedVizData(
   wfId: string,
   dcId: string,
   columns: string[],
   filters: InteractiveFilter[],
   limitRows?: number,
+  fullLoad?: boolean,
 ): Promise<AdvancedVizDataResponse> {
-  const res = await fetch(`${API_BASE}/advanced_viz/data`, {
-    method: 'POST',
-    headers: authHeaders(),
-    body: JSON.stringify({
-      wf_id: wfId,
-      dc_id: dcId,
-      columns,
-      filter_metadata: filters,
-      limit_rows: limitRows,
-    }),
+  // Queued here rather than at each call site: ~15 advanced-viz renderers each
+  // own an unguarded fetch, and this is the single choke point they all pass
+  // through. Bounding it keeps a dashboard's mount burst from saturating the
+  // API pool ahead of the figures and tables the user is looking at.
+  return enqueueFetch(async () => {
+    const res = await fetch(`${API_BASE}/advanced_viz/data`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({
+        wf_id: wfId,
+        dc_id: dcId,
+        columns,
+        filter_metadata: filters,
+        limit_rows: limitRows,
+        full_load: fullLoad,
+      }),
+    });
+    if (!res.ok) throw new Error(`Failed to fetch advanced viz data: ${res.status}`);
+    return res.json();
   });
-  if (!res.ok) throw new Error(`Failed to fetch advanced viz data: ${res.status}`);
-  return res.json();
 }
 
 export interface ComputeEmbeddingPayload {

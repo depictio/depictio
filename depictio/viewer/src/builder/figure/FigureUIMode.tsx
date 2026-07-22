@@ -85,16 +85,24 @@ const FigureUIMode: React.FC = () => {
   };
   const patchConfig = useBuilderStore((s) => s.patchConfig);
 
-  // Point-style plots (scatter family + strip) are the only ones the backend
-  // downsamples, so the max-points control is only meaningful for them. Keep
-  // this list in sync with `_POINT_PLOT_TYPES` in
+  // Mark-per-row plots (scatter family + line/area/bar/ecdf) are the ones the
+  // backend downsamples, so the max-points control is only meaningful for them.
+  // Keep this list in sync with `_SAMPLABLE_PLOT_TYPES` in
   // depictio/api/v1/services/figure/figure_builder.py — if they drift, the
   // control shows/hides on the wrong visu types.
   const isPointPlot = useMemo(
     () =>
-      ['scatter', 'scatter_3d', 'scatter_ternary', 'scatter_polar', 'strip'].includes(
-        visuType,
-      ),
+      [
+        'scatter',
+        'scatter_3d',
+        'scatter_ternary',
+        'scatter_polar',
+        'strip',
+        'line',
+        'area',
+        'bar',
+        'ecdf',
+      ].includes(visuType),
     [visuType],
   );
 
