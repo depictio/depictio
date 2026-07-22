@@ -358,7 +358,12 @@ def sink_delta_table(
     concatenated dataset into RAM before writing, which is what OOMs at scale.
     """
     logger.debug(f"Streaming (sink_delta) aggregated LazyFrame to {destination_file}.")
-    concatenated_lf.sink_delta(  # type: ignore[unresolved-attribute]
+    # Looked up dynamically: sink_delta is absent on older polars builds, and the
+    # resulting AttributeError is exactly what triggers the caller's fallback.
+    sink_delta = getattr(concatenated_lf, "sink_delta", None)
+    if sink_delta is None:
+        raise AttributeError("This polars build has no LazyFrame.sink_delta")
+    sink_delta(
         destination_file,
         storage_options=storage_options.model_dump(),
         delta_write_options={"schema_mode": "overwrite"},
