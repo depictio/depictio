@@ -5,9 +5,7 @@ import {
   Text,
   Stack,
   Badge,
-  Button,
   Group,
-  Tooltip,
   useMantineColorScheme,
 } from '@mantine/core';
 import Plot from 'react-plotly.js';
@@ -25,6 +23,7 @@ import { useTransientFlag } from '../hooks/useTransientFlag';
 import { ActiveHighlight } from '../highlight';
 import { asNumberArray, extractCustomdataIds } from '../plotlyData';
 import RefetchOverlay from './RefetchOverlay';
+import { LoadAllState } from './chrome/LoadAllButton';
 
 interface FigureRendererProps {
   dashboardId: string;
@@ -38,6 +37,9 @@ interface FigureRendererProps {
   /** Batch to glow — a live arrival (auto-fade) or a pinned re-selection from
    *  the event log. Its ``ids`` are matched against the scatter customdata. */
   activeHighlight?: ActiveHighlight | null;
+  /** Reports the sample/full state so the chrome can render a "load all points"
+   *  action icon. ``null`` when the figure isn't downsampled. */
+  onLoadAllState?: (state: LoadAllState | null) => void;
 }
 
 /**
@@ -59,6 +61,7 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
   onFilterChange,
   refreshTick,
   activeHighlight,
+  onLoadAllState,
 }) => {
   const [figure, setFigure] = useState<{ data?: unknown[]; layout?: Record<string, unknown> } | null>(null);
   const [renderMeta, setRenderMeta] = useState<FigureResponse['metadata'] | null>(null);
@@ -369,51 +372,50 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
     return base;
   }, [figure, selectionEnabled, metadata.selection_mode, refreshTick]);
 
-  // "N of M points" indicator + full-load override. Shown when the server
-  // downsampled/capped this figure (was_sampled), or as a passive "complete"
-  // note once the user has loaded every point.
-  const sampleBadge = useMemo(() => {
+  // "N of M points" indicator. Passive/informational — the full-load toggle
+  // itself lives in the component chrome (see the onLoadAllState effect below),
+  // matching the table's row indicator for a consistent look and placement.
+  const reductionBadge = useMemo(() => {
     if (!renderMeta) return null;
     const displayed = renderMeta.displayed_data_count;
     const total = renderMeta.total_data_count;
-    const wrap = (children: React.ReactNode) => (
-      <Group
-        gap={6}
-        style={{ position: 'absolute', top: 6, right: 6, zIndex: 5 }}
-        wrap="nowrap"
-      >
-        {children}
-      </Group>
-    );
-    if (renderMeta.was_sampled && typeof displayed === 'number' && typeof total === 'number') {
-      return wrap(
-        <>
-          <Badge color="orange" variant="light" size="sm">
-            Sample: {displayed.toLocaleString()} / {total.toLocaleString()} pts
-          </Badge>
-          <Tooltip label="Render every point — may be slow on large datasets" withArrow>
-            <Button
-              size="compact-xs"
-              variant="light"
-              color="orange"
-              loading={loading && fullLoad}
-              onClick={() => setFullLoad(true)}
-            >
-              Load all
-            </Button>
-          </Tooltip>
-        </>,
+    if (typeof displayed !== 'number') return null;
+    if (renderMeta.was_sampled && typeof total === 'number') {
+      return (
+        <Badge variant="light" color="gray" size="xs" radius="sm">
+          {displayed.toLocaleString()} / {total.toLocaleString()} pts
+        </Badge>
       );
     }
-    if (fullLoad && renderMeta.full_data_loaded && typeof displayed === 'number') {
-      return wrap(
-        <Badge color="teal" variant="light" size="sm">
-          Complete: {displayed.toLocaleString()} pts
-        </Badge>,
+    if (fullLoad && renderMeta.full_data_loaded) {
+      return (
+        <Badge variant="light" color="gray" size="xs" radius="sm">
+          {displayed.toLocaleString()} pts (all)
+        </Badge>
       );
     }
     return null;
-  }, [renderMeta, loading, fullLoad]);
+  }, [renderMeta, fullLoad]);
+
+  // Publish the sample/full state so the chrome can render the "load all points"
+  // action icon in the same cluster as reset / fullscreen. Bidirectional: the
+  // toggle flips back to the sampled view once fully loaded.
+  useEffect(() => {
+    if (!onLoadAllState) return;
+    const canToggle =
+      !!renderMeta && (renderMeta.was_sampled || (fullLoad && !!renderMeta.full_data_loaded));
+    onLoadAllState(
+      canToggle
+        ? {
+            reduced: !fullLoad,
+            full: fullLoad,
+            loading,
+            toggle: () => setFullLoad((v) => !v),
+            noun: 'points',
+          }
+        : null,
+    );
+  }, [onLoadAllState, renderMeta, fullLoad, loading]);
 
   return (
     <Paper
@@ -429,10 +431,15 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
         flexDirection: 'column',
       }}
     >
-      {metadata.title && (
-        <Text fw={600} size="sm" mb="xs">
-          {metadata.title}
-        </Text>
+      {(metadata.title || reductionBadge) && (
+        <Group gap="xs" mb="xs" wrap="nowrap">
+          {metadata.title && (
+            <Text fw={600} size="sm">
+              {metadata.title}
+            </Text>
+          )}
+          {reductionBadge}
+        </Group>
       )}
       {showInitialLoader && (
         <Stack align="center" justify="center" gap="xs" style={{ flex: 1 }}>
@@ -465,7 +472,6 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
             onDeselect={selectionEnabled ? handleDeselect : undefined}
           />
           <RefetchOverlay visible={showRefetchOverlay} />
-          {sampleBadge}
         </div>
       )}
     </Paper>

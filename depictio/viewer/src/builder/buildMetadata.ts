@@ -218,7 +218,7 @@ function buildTable(
     striped: c.striped ?? true,
     compact: c.compact ?? false,
     export_csv: c.export_csv ?? false,
-    page_size: typeof c.page_size === 'number' ? c.page_size : 10,
+    page_size: typeof c.page_size === 'number' ? c.page_size : 100,
     // Row selection drives `table_selection` filters in
     // packages/depictio-react-core/src/components/ComponentRenderer.tsx —
     // mirrors what map / figure do with `selection_enabled`.
