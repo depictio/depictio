@@ -86,7 +86,10 @@ const FigureUIMode: React.FC = () => {
   const patchConfig = useBuilderStore((s) => s.patchConfig);
 
   // Point-style plots (scatter family + strip) are the only ones the backend
-  // downsamples, so the max-points control is only meaningful for them.
+  // downsamples, so the max-points control is only meaningful for them. Keep
+  // this list in sync with `_POINT_PLOT_TYPES` in
+  // depictio/api/v1/services/figure/figure_builder.py — if they drift, the
+  // control shows/hides on the wrong visu types.
   const isPointPlot = useMemo(
     () =>
       ['scatter', 'scatter_3d', 'scatter_ternary', 'scatter_polar', 'strip'].includes(
@@ -325,12 +328,14 @@ const FigureUIMode: React.FC = () => {
         <NumberInput
           label="Max points"
           description="Downsample above this count (blank = global default). Viewers can still load all points on demand."
-          min={0}
+          // min 1: blank means "use the global default"; disabling the cap
+          // entirely is a viewer-side action ("Load all"), not an authoring one.
+          min={1}
           step={1000}
           placeholder="Global default"
           value={typeof config.max_points === 'number' ? config.max_points : ''}
           onChange={(v) =>
-            patchConfig({ max_points: typeof v === 'number' ? v : null })
+            patchConfig({ max_points: typeof v === 'number' && v > 0 ? v : null })
           }
         />
       )}

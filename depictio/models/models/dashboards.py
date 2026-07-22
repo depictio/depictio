@@ -509,7 +509,7 @@ class DashboardDataLite(BaseModel):
         _GENERATED: set[str] = {"tag", "index", "layout", "title"}
 
         mandatory_keys = _MANDATORY_COMMON | _MANDATORY_BY_TYPE.get(comp_type, set())
-        table_defaults = {"page_size": 10, "sortable": True, "filterable": True}
+        table_defaults = {"page_size": 100, "sortable": True, "filterable": True}
         is_table = comp_type == "table"
 
         field_order = DashboardDataLite._get_component_field_order(comp_type)
@@ -1082,7 +1082,7 @@ class DashboardDataLite(BaseModel):
                 full_comp.update(
                     {
                         "columns": comp_dict.get("columns", []),
-                        "page_size": comp_dict.get("page_size", 10),
+                        "page_size": comp_dict.get("page_size", 100),
                         "sortable": comp_dict.get("sortable", True),
                         "filterable": comp_dict.get("filterable", True),
                         # Compact row/header heights in the React TableRenderer.

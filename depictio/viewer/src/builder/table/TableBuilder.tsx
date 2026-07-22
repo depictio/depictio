@@ -94,9 +94,9 @@ const TableBuilder: React.FC = () => {
                 min={1}
                 max={500}
                 clampBehavior="strict"
-                value={config.page_size ?? 10}
+                value={config.page_size ?? 100}
                 onChange={(v) =>
-                  patchConfig({ page_size: typeof v === 'number' ? v : 10 })
+                  patchConfig({ page_size: typeof v === 'number' ? v : 100 })
                 }
               />
             </Stack>

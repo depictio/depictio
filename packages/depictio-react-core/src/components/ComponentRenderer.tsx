@@ -38,6 +38,7 @@ import SegmentedControlRenderer from './interactive/SegmentedControlRenderer';
 import TimelineRenderer from './interactive/TimelineRenderer';
 import SecondaryMetrics from './card/SecondaryMetrics';
 import { wrapWithChrome } from './chrome';
+import LoadAllButton, { LoadAllState } from './chrome/LoadAllButton';
 import { ActiveHighlight } from '../highlight';
 
 interface ComponentRendererProps {
@@ -170,37 +171,17 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
   }
 
   if (metadata.component_type === 'figure' && dashboardId) {
-    // Only scatter / scatter_3d traces carry the per-row customdata we need
-    // for meaningful cross-filter selection. Aggregated visus (histogram,
-    // box, bar, pie, …) would emit per-bin envelopes — hide the reset
-    // affordance there too so chrome stays clean.
-    const isScatterLikeForSelection =
-      metadata.visu_type === 'scatter' || metadata.visu_type === 'scatter_3d';
-    const selectionEnabled =
-      Boolean(metadata.selection_enabled) && !!onFilterChange && isScatterLikeForSelection;
-    const onResetSelection =
-      selectionEnabled && onFilterChange
-        ? () =>
-            onFilterChange({
-              index: metadata.index,
-              value: [],
-              source: 'scatter_selection',
-            })
-        : undefined;
-    const sourceFilterActive = isSourceFilterActive(filters, metadata.index, 'scatter_selection');
-    return wrapWithChrome(
-      'figure',
-      metadata,
-      undefined,
-      <FigureRenderer
+    return (
+      <FigureBlock
         dashboardId={dashboardId}
         metadata={metadata}
         filters={filters}
         onFilterChange={onFilterChange}
         refreshTick={refreshTick}
         activeHighlight={activeHighlight}
-      />,
-      { onResetFilter: onResetSelection, extraActions, showDragHandle, sourceFilterActive },
+        extraActions={extraActions}
+        showDragHandle={showDragHandle}
+      />
     );
   }
 
@@ -363,6 +344,7 @@ const TableBlock: React.FC<{
   showDragHandle,
 }) => {
   const agGridApiRef = useRef<GridApi | null>(null);
+  const [loadAllState, setLoadAllState] = React.useState<LoadAllState | null>(null);
   const selectionEnabled = Boolean(metadata.row_selection_enabled) && !!onFilterChange;
   const onResetSelection =
     selectionEnabled && onFilterChange
@@ -376,6 +358,13 @@ const TableBlock: React.FC<{
         }
       : undefined;
   const sourceFilterActive = isSourceFilterActive(filters, metadata.index, 'table_selection');
+  const combinedExtras =
+    loadAllState || extraActions ? (
+      <>
+        {loadAllState && <LoadAllButton state={loadAllState} />}
+        {extraActions}
+      </>
+    ) : undefined;
   return wrapWithChrome(
     'table',
     metadata,
@@ -388,14 +377,77 @@ const TableBlock: React.FC<{
       onFilterChange={onFilterChange}
       refreshTick={refreshTick}
       activeHighlight={activeHighlight}
+      onLoadAllState={setLoadAllState}
     />,
     {
       agGridApiRef,
       onResetFilter: onResetSelection,
-      extraActions,
+      extraActions: combinedExtras,
       showDragHandle,
       sourceFilterActive,
     },
+  );
+};
+
+const FigureBlock: React.FC<{
+  dashboardId: string;
+  metadata: StoredMetadata;
+  filters: InteractiveFilter[];
+  onFilterChange?: (filter: InteractiveFilter) => void;
+  refreshTick?: number;
+  activeHighlight?: ActiveHighlight | null;
+  extraActions?: React.ReactNode;
+  showDragHandle?: boolean;
+}> = ({
+  dashboardId,
+  metadata,
+  filters,
+  onFilterChange,
+  refreshTick,
+  activeHighlight,
+  extraActions,
+  showDragHandle,
+}) => {
+  const [loadAllState, setLoadAllState] = React.useState<LoadAllState | null>(null);
+  // Only scatter / scatter_3d traces carry the per-row customdata we need for
+  // meaningful cross-filter selection. Aggregated visus (histogram, box, bar,
+  // pie, …) would emit per-bin envelopes — hide the reset affordance there so
+  // chrome stays clean.
+  const isScatterLikeForSelection =
+    metadata.visu_type === 'scatter' || metadata.visu_type === 'scatter_3d';
+  const selectionEnabled =
+    Boolean(metadata.selection_enabled) && !!onFilterChange && isScatterLikeForSelection;
+  const onResetSelection =
+    selectionEnabled && onFilterChange
+      ? () =>
+          onFilterChange({
+            index: metadata.index,
+            value: [],
+            source: 'scatter_selection',
+          })
+      : undefined;
+  const sourceFilterActive = isSourceFilterActive(filters, metadata.index, 'scatter_selection');
+  const combinedExtras =
+    loadAllState || extraActions ? (
+      <>
+        {loadAllState && <LoadAllButton state={loadAllState} />}
+        {extraActions}
+      </>
+    ) : undefined;
+  return wrapWithChrome(
+    'figure',
+    metadata,
+    undefined,
+    <FigureRenderer
+      dashboardId={dashboardId}
+      metadata={metadata}
+      filters={filters}
+      onFilterChange={onFilterChange}
+      refreshTick={refreshTick}
+      activeHighlight={activeHighlight}
+      onLoadAllState={setLoadAllState}
+    />,
+    { onResetFilter: onResetSelection, extraActions: combinedExtras, showDragHandle, sourceFilterActive },
   );
 };
 

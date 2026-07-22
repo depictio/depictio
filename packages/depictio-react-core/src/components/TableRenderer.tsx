@@ -5,9 +5,7 @@ import {
   Text,
   Stack,
   Badge,
-  Button,
   Group,
-  Tooltip,
   useMantineColorScheme,
 } from '@mantine/core';
 import { AgGridReact } from 'ag-grid-react';
@@ -24,6 +22,7 @@ import type {
 } from 'ag-grid-community';
 
 import { renderTable, InteractiveFilter, StoredMetadata } from '../api';
+import { LoadAllState } from './chrome/LoadAllButton';
 import { extractRowSelection } from '../selection';
 import { useInView } from '../hooks/useInView';
 import { useNewItemIds } from '../hooks/useNewItemIds';
@@ -46,10 +45,13 @@ interface TableRendererProps {
   /** Batch to glow — a live arrival (auto-fade) or a pinned re-selection from
    *  the event log. Its ``ids`` are matched against each row's id column. */
   activeHighlight?: ActiveHighlight | null;
+  /** Reports the paginated/full state so the chrome can render a "load all
+   *  rows" action icon consistent with the figure. */
+  onLoadAllState?: (state: LoadAllState | null) => void;
 }
 
 const MAX_BLOCKS_IN_CACHE = 10;
-const DEFAULT_PAGE_SIZE = 10;
+const DEFAULT_PAGE_SIZE = 100;
 // Server clamps a single render_table request to 500 rows; "Show all" pages
 // through in chunks of this size up to the client-side safety ceiling below.
 const SERVER_MAX_LIMIT = 500;
@@ -76,6 +78,7 @@ const TableRenderer: React.FC<TableRendererProps> = ({
   onFilterChange,
   refreshTick,
   activeHighlight,
+  onLoadAllState,
 }) => {
   const [colDefs, setColDefs] = useState<ColDef[]>([]);
   const [loading, setLoading] = useState(true);
@@ -532,6 +535,38 @@ const TableRenderer: React.FC<TableRendererProps> = ({
     [pageSize],
   );
 
+  // The table is "reduced" whenever the full set spans more than one page.
+  const hasReduction = ready && (total > pageSize || showAll);
+
+  // Publish the paginated/full state to the chrome so it can render the same
+  // "load all" action icon the figure uses (consistent affordance + placement).
+  useEffect(() => {
+    if (!onLoadAllState) return;
+    onLoadAllState(
+      hasReduction
+        ? {
+            reduced: !showAll,
+            full: showAll,
+            loading: allLoading,
+            toggle: showAll ? exitShowAll : loadAllRows,
+            noun: 'rows',
+          }
+        : null,
+    );
+    // exitShowAll/loadAllRows are stable enough across the tracked deps.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onLoadAllState, hasReduction, showAll, allLoading]);
+
+  // Informational row-count indicator — same styling/placement as the figure's
+  // point indicator. The load-all toggle lives in the chrome (above).
+  const rowBadge = hasReduction ? (
+    <Badge variant="light" color="gray" size="xs" radius="sm">
+      {showAll
+        ? `${(allRows?.length ?? 0).toLocaleString()} rows (all)`
+        : `${total.toLocaleString()} rows`}
+    </Badge>
+  ) : null;
+
   return (
     <Paper
       ref={containerRef}
@@ -546,10 +581,15 @@ const TableRenderer: React.FC<TableRendererProps> = ({
         flexDirection: 'column',
       }}
     >
-      {metadata.title && (
-        <Text fw={600} size="sm" mb="xs">
-          {metadata.title}
-        </Text>
+      {(metadata.title || rowBadge) && (
+        <Group gap="xs" mb="xs" wrap="nowrap">
+          {metadata.title && (
+            <Text fw={600} size="sm">
+              {metadata.title}
+            </Text>
+          )}
+          {rowBadge}
+        </Group>
       )}
       {showInitialLoader && (
         <Stack align="center" justify="center" gap="xs" style={{ flex: 1 }}>
@@ -564,32 +604,6 @@ const TableRenderer: React.FC<TableRendererProps> = ({
       )}
       {ready && (
         <>
-          <Group justify="space-between" gap="xs" mb={6} wrap="nowrap">
-            <Badge variant="light" color={showAll ? 'teal' : 'blue'} size="sm">
-              {showAll
-                ? `Showing all: ${(allRows?.length ?? 0).toLocaleString()} rows`
-                : `Paginated — ${total.toLocaleString()} rows`}
-            </Badge>
-            {showAll ? (
-              <Button size="compact-xs" variant="subtle" onClick={exitShowAll}>
-                Back to paginated
-              </Button>
-            ) : (
-              <Tooltip
-                label="Load every row into the browser — may be slow on large tables"
-                withArrow
-              >
-                <Button
-                  size="compact-xs"
-                  variant="light"
-                  loading={allLoading}
-                  onClick={loadAllRows}
-                >
-                  Show all
-                </Button>
-              </Tooltip>
-            )}
-          </Group>
           {showAll && allTruncated && (
             <Text size="xs" c="orange" mb={6}>
               Table exceeds {TABLE_FULL_LOAD_CAP.toLocaleString()} rows — showing the

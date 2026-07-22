@@ -2022,7 +2022,12 @@ def render_table_endpoint(
     """
     import time as _time
 
-    from depictio.api.v1.deltatables_utils import count_deltatable_lite, load_deltatable_lite
+    from depictio.api.v1.deltatables_utils import (
+        count_deltatable_lite,
+        load_deltatable_lite,
+        load_sorted_deltatable_lite,
+        schema_deltatable_lite,
+    )
 
     _t0 = _time.perf_counter()
     filters = request.get("filters") or []
@@ -2087,16 +2092,16 @@ def render_table_endpoint(
 
     _t_load = _time.perf_counter()
     try:
-        # Cheap schema peek (one row) so we can resolve the default sort column
-        # and build column defs without materialising the whole table. Column
-        # names/dtypes are independent of filters, so this needs no filter.
-        schema_df = load_deltatable_lite(
+        # Read the column schema (names + dtypes) straight from the Delta log so
+        # we can resolve the default sort column and build column defs without
+        # materialising any rows. A ``limit_rows=1`` peek would instead share the
+        # cached loader's key and could poison it for the real page load.
+        schema = schema_deltatable_lite(
             workflow_id=wf_oid,
             data_collection_id=str(dc_id),
-            limit_rows=1,
             init_data=init_data,
         )
-        available_cols = schema_df.columns
+        available_cols = list(schema.keys())
 
         # Pick a default sort if the client didn't ask for one — first column
         # whose name reads like an acquisition timestamp. Mirrors the image
@@ -2117,19 +2122,22 @@ def render_table_endpoint(
 
         if chosen_sort:
             # A server-side sort has to see every row, so we load the full frame
-            # (its height is then a free, exact total). This is the expensive
-            # path — inherent to sorting a paginated grid; kept for the realtime
-            # "newest first" default and explicit header-click sorts.
-            df = load_deltatable_lite(
+            # (its height is then a free, exact total). Inherent to sorting a
+            # paginated grid; kept for the realtime "newest first" default and
+            # explicit header-click sorts. The *sorted* frame is memoised per
+            # (dc, filters, sort_by, sort_dir) so AG Grid's per-scroll-block page
+            # fetches slice an already-sorted frame instead of re-sorting the
+            # whole table every block.
+            df = load_sorted_deltatable_lite(
                 workflow_id=wf_oid,
                 data_collection_id=str(dc_id),
+                sort_by=chosen_sort,
+                descending=(sort_dir == "desc"),
                 metadata=filter_metadata or None,
                 init_data=init_data,
             )
             total = df.height
-            sliced = df.sort(chosen_sort, descending=(sort_dir == "desc"), nulls_last=True).slice(
-                start, limit
-            )
+            sliced = df.slice(start, limit)
         else:
             # No sort → push the page window down to the Delta scan so we only
             # read up to (start + limit) rows instead of the whole table. Total
@@ -2159,7 +2167,7 @@ def render_table_endpoint(
     rows = sliced.to_dicts()
 
     columns = []
-    for name, dtype in zip(schema_df.columns, schema_df.dtypes):
+    for name, dtype in schema.items():
         type_str = str(dtype).lower()
         ag_type = (
             "numericColumn"

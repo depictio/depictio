@@ -24,6 +24,11 @@ from depictio.api.celery_app import celery_app
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 
+# For point plots we random-sample down to the plotted-point target, but we only
+# need to *load* a modest multiple of it for that sample to be representative —
+# scanning the whole table just to discard most rows is the dominant render cost.
+_POINT_LOAD_OVERSAMPLE = 4
+
 
 def _ensure_mantine_templates() -> None:
     """Worker-side Plotly template registration. Mirrors the helper in
@@ -65,6 +70,7 @@ def build_figure_preview(payload: dict) -> dict:
 
     wf_id = metadata.get("wf_id")
     dc_id = metadata.get("dc_id")
+    wf_oid = ObjectId(str(wf_id)) if not isinstance(wf_id, ObjectId) else wf_id
 
     dc_config = metadata.get("dc_config") or {}
     init_data: dict[str, dict] = {}
@@ -104,16 +110,6 @@ def build_figure_preview(payload: dict) -> dict:
                 cols = cols | {selection_column}
             select_columns = sorted(cols)
 
-    # Row ceiling: for per-row point plots (scatter family) and code-mode
-    # figures, bound how many rows we pull from Delta so a 10 GB table doesn't
-    # fully materialise just to be downsampled/plotted. Aggregated plots
-    # (bar/box/line/histogram) read every row by design, so they're never
-    # capped. ``full_load`` (explicit client request) bypasses the cap.
-    limit_rows: int | None = None
-    is_point_plot = visu_type in _POINT_PLOT_TYPES
-    if not full_load and (is_point_plot or mode == "code"):
-        limit_rows = settings.performance.figure_max_load_rows
-
     # Plot-level point cap: component override or global default, unless the
     # client explicitly asked for a full load (-1 disables sampling entirely).
     if full_load:
@@ -121,9 +117,28 @@ def build_figure_preview(payload: dict) -> dict:
     else:
         effective_max_points = metadata.get("max_points") or settings.performance.figure_max_points
 
+    # Row ceiling: for per-row point plots (scatter family) and code-mode
+    # figures, bound how many rows we pull from Delta so a 10 GB table doesn't
+    # fully materialise just to be downsampled/plotted. For a point plot we only
+    # need a modest multiple of the plotted-point target for the random sample to
+    # stay representative — loading the whole table just to throw ~95% away is
+    # the main render-latency cost, so cap the scan near the sample size.
+    # Aggregated plots (bar/box/line/histogram) read every row by design, so
+    # they're never capped. ``full_load`` bypasses the cap entirely.
+    limit_rows: int | None = None
+    is_point_plot = visu_type in _POINT_PLOT_TYPES
+    if not full_load:
+        if is_point_plot and effective_max_points > 0:
+            limit_rows = min(
+                effective_max_points * _POINT_LOAD_OVERSAMPLE,
+                settings.performance.figure_max_load_rows,
+            )
+        elif is_point_plot or mode == "code":
+            limit_rows = settings.performance.figure_max_load_rows
+
     started = time.monotonic()
     df = load_deltatable_lite(
-        workflow_id=ObjectId(str(wf_id)) if not isinstance(wf_id, ObjectId) else wf_id,
+        workflow_id=wf_oid,
         data_collection_id=str(dc_id),
         metadata=filter_metadata or None,
         select_columns=select_columns,
@@ -212,7 +227,7 @@ def build_figure_preview(payload: dict) -> dict:
     if was_sampled and not full_load:
         total_data_count = max(
             count_deltatable_lite(
-                workflow_id=ObjectId(str(wf_id)) if not isinstance(wf_id, ObjectId) else wf_id,
+                workflow_id=wf_oid,
                 data_collection_id=str(dc_id),
                 metadata=filter_metadata or None,
                 init_data=init_data,

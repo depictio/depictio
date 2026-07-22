@@ -2,6 +2,7 @@ import hashlib
 import json
 import os
 import sys
+import threading
 import warnings
 
 import httpx
@@ -1261,10 +1262,13 @@ def load_deltatable_lite(
 
     # ADAPTIVE LOADING STRATEGY
     if size_bytes == -1 or size_bytes <= MEMORY_THRESHOLD_BYTES:
-        # Unknown or small DataFrame - load, cache, then filter in memory
-        if limit_rows:
-            delta_scan = delta_scan.limit(limit_rows)
-
+        # Unknown or small DataFrame - load, cache, then filter in memory.
+        # NOTE: cache the *full* frame and apply ``limit_rows`` only to the
+        # returned view (below). The cache key intentionally ignores
+        # ``limit_rows`` (see _generate_cache_keys), so caching a pre-limited
+        # frame here would poison the key for any later load of the same DC +
+        # filters with a different (or no) limit — e.g. paging a table (limit
+        # 10, then 20, …) or a 1-row schema peek followed by a real page.
         df = _load_and_cache_fresh_data(
             delta_scan,
             base_cache_key,
@@ -1275,6 +1279,8 @@ def load_deltatable_lite(
             load_for_options,
             size_bytes,
         )
+        if limit_rows:
+            df = df.limit(limit_rows)
     else:
         # Large DataFrame - use lazy loading with filters at scan level
         df = _load_large_dataframe(
@@ -1292,6 +1298,99 @@ def load_deltatable_lite(
         df = df.drop("depictio_aggregation_time")
 
     return df
+
+
+def load_sorted_deltatable_lite(
+    workflow_id: ObjectId,
+    data_collection_id: ObjectId | str,
+    sort_by: str,
+    descending: bool = True,
+    metadata: list[dict] | None = None,
+    init_data: dict[str, dict] | None = None,
+    nulls_last: bool = True,
+) -> pl.DataFrame:
+    """Return the fully-sorted (optionally filtered) frame, memoised per sort key.
+
+    ``load_deltatable_lite`` already caches the *unsorted* frame, so the table
+    render endpoint's ``load`` is a cache hit on pages 2..N. The cost that kept
+    repeating was the ``df.sort(...)`` itself: AG Grid's infinite row model
+    fetches one block per scroll, and each block re-sorted the whole cached
+    frame. We memoise the *sorted* frame under a key derived from the same
+    base/filter key plus ``(sort_by, sort_dir, nulls_last)`` so every block
+    after the first slices an already-sorted frame — no re-sort.
+
+    The key embeds the dc_id and the aggregation ``version_salt`` (via
+    ``_generate_cache_keys``), so a realtime ingest that bumps the version — or
+    an explicit ``invalidate_data_collection_cache`` (dc_id substring match) —
+    busts this entry for free, exactly like the base frame. Frames above the
+    per-item cap are still sorted correctly, just not memoised (they'd double
+    the base frame's footprint), so those fall back to the prior per-block sort.
+    """
+    import time
+
+    global _total_memory_usage
+
+    data_collection_id_str = str(data_collection_id)
+    workflow_id_str = str(workflow_id)
+
+    version_salt = _get_aggregation_version(data_collection_id_str)
+    base_key, filtered_key, _ = _generate_cache_keys(
+        workflow_id_str,
+        data_collection_id_str,
+        load_for_preview=False,
+        select_columns=None,
+        metadata=metadata,
+        load_for_options=False,
+        version_salt=version_salt,
+    )
+    key_root = filtered_key or base_key
+    sort_key = (
+        f"{key_root}_sort_{sort_by}_{'desc' if descending else 'asc'}"
+        f"_{'nl' if nulls_last else 'nf'}"
+    )
+
+    cached = _dataframe_memory_cache.get(sort_key)
+    if cached is not None:
+        update_cache_timestamp(sort_key)
+        return cached
+
+    # Per-key lock: this endpoint is a sync ``def`` (threadpool), and AG Grid's
+    # infinite row model fires the first few blocks for the same (dc, sort) key
+    # near-simultaneously. Without serialising the miss, each of those threads
+    # would run the full load + full-frame sort in parallel (thundering herd on
+    # exactly the first-paint moment we want to be fast) and each would add its
+    # own ``size_bytes`` to the shared budget while overwriting the single
+    # metadata entry — leaking the accounting. One thread computes; the rest wait
+    # and hit the cache via the double-check below.
+    with _sorted_cache_locks_guard:
+        key_lock = _sorted_cache_locks.setdefault(sort_key, threading.Lock())
+
+    with key_lock:
+        cached = _dataframe_memory_cache.get(sort_key)
+        if cached is not None:
+            update_cache_timestamp(sort_key)
+            return cached
+
+        df = load_deltatable_lite(
+            workflow_id=workflow_id,
+            data_collection_id=data_collection_id,
+            metadata=metadata,
+            init_data=init_data,
+        )
+        sorted_df = df.sort(sort_by, descending=descending, nulls_last=nulls_last)
+
+        # Reuse the base cache's LRU budget + per-item cap so the sorted copy
+        # can't pin more RAM than a normal frame. ``estimated_size`` is cheap on
+        # an already materialised frame (buffer-size sum, no scan).
+        size_bytes = sorted_df.estimated_size()
+        if size_bytes <= MEMORY_PER_ITEM_MAX_BYTES:
+            while _total_memory_usage + size_bytes > MEMORY_THRESHOLD_BYTES and _cache_metadata:
+                evict_oldest_cached_dataframe()
+            _dataframe_memory_cache[sort_key] = sorted_df
+            _cache_metadata[sort_key] = {"size_bytes": size_bytes, "timestamp": time.time()}
+            _total_memory_usage += size_bytes
+
+        return sorted_df
 
 
 def count_deltatable_lite(
@@ -1341,10 +1440,50 @@ def count_deltatable_lite(
         return 0
 
 
+def schema_deltatable_lite(
+    workflow_id: ObjectId,
+    data_collection_id: ObjectId | str,
+    init_data: dict[str, dict] | None = None,
+    TOKEN: str | None = None,
+) -> dict:
+    """Return the Delta table's column schema (name → dtype) without loading rows.
+
+    Reads only the Delta log via ``scan.collect_schema()`` — no data scan and no
+    cache interaction, so it can safely precede a cached ``load_deltatable_lite``
+    call. (A ``limit_rows=1`` peek would instead share the cache key and could
+    poison it.) Used by the table render endpoint to resolve the default sort
+    column and build AG Grid column defs before choosing a load strategy.
+    Returns ``{}`` on error; the caller degrades gracefully.
+    """
+    data_collection_id_str = str(data_collection_id)
+    workflow_id_str = str(workflow_id)
+    try:
+        if init_data and data_collection_id_str in init_data:
+            dc_type = init_data[data_collection_id_str].get("dc_type")
+        else:
+            dc_type = _get_dc_type_from_db(
+                ObjectId(data_collection_id)
+                if isinstance(data_collection_id, str)
+                else data_collection_id
+            )
+        file_id = _get_delta_location(data_collection_id_str, workflow_id_str, init_data, TOKEN)
+        schema = _create_delta_scan(file_id, dc_type).collect_schema()
+        return dict(schema)
+    except Exception as e:
+        logger.warning(f"schema_deltatable_lite failed for DC {data_collection_id_str}: {e}")
+        return {}
+
+
 # Memory management for DataFrames - new adaptive caching system
 _dataframe_memory_cache = {}
 _cache_metadata = {}  # Track size and timestamp for each cached DataFrame
 _total_memory_usage = 0
+# Per-sort-key locks so concurrent AG Grid block fetches for the same
+# (dc, filters, sort) compute the sorted frame once instead of stampeding.
+# ``_sorted_cache_locks_guard`` only protects the tiny setdefault of the
+# per-key lock, never the load/sort itself. See ``load_sorted_deltatable_lite``.
+_sorted_cache_locks: dict[str, threading.Lock] = {}
+_sorted_cache_locks_guard = threading.Lock()
 MEMORY_THRESHOLD_BYTES = 1024 * 1024 * 1024  # 1GB threshold (total in-process cache)
 # Per-item cap: a single large DataFrame must not be able to consume most of the
 # in-process cache and evict every smaller, frequently-reused frame. Above this

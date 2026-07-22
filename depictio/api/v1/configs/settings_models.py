@@ -953,11 +953,13 @@ class PerformanceConfig(BaseSettings):
     # Component render caps — bound how many rows a single figure/table render
     # materialises so large Delta tables stay responsive (and don't OOM).
     figure_max_points: int = Field(
-        default=50_000,
+        default=10_000,
         description=(
             "Target marker count for per-row point plots (scatter family). Above "
-            "this the figure is downsampled before serialising to Plotly. Per-"
-            "component `max_points` overrides this."
+            "this the figure is downsampled before serialising to Plotly — the "
+            "dominant cost is the serialised trace size + browser WebGL draw, so "
+            "this is kept modest for snappy interaction. Per-component "
+            "`max_points` overrides this."
         ),
     )
     figure_max_load_rows: int = Field(
@@ -969,12 +971,9 @@ class PerformanceConfig(BaseSettings):
             "load."
         ),
     )
-    table_default_page_size: int = Field(
-        default=10,
-        description=(
-            "Fallback rows-per-page for the viewer table when the component has no `page_size` set."
-        ),
-    )
+    # Table rows-per-page has no server-side default here: the component model
+    # (TableLiteComponent.page_size) already defaults to 10, and the React grid
+    # reads that value directly — a settings knob would be dead config.
 
     # Playwright/browser timeouts (in milliseconds)
     browser_navigation_timeout: int = Field(default=60000)  # 60s default
