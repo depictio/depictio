@@ -11,9 +11,11 @@ to running the work inline.
 from __future__ import annotations
 
 import asyncio
+import functools
 import time
 from typing import Any
 
+import anyio.to_thread
 from celery.exceptions import TimeoutError as CeleryTimeoutError
 from fastapi import HTTPException
 
@@ -72,13 +74,18 @@ async def offload_or_run(
 ) -> Any:
     """Run `task` either inline or via Celery, awaiting completion async-safely.
 
-    Inline path simply calls `task.run(*args)` in the current event-loop thread.
+    Inline path runs `task.run(*args)` in a worker thread. It must NOT run
+    directly on the event loop: the callers are ``async def`` endpoints, so a
+    synchronous call there blocks *every* concurrent request for the whole
+    Delta-load + Plotly-build — a dashboard's components then render strictly
+    one after another and unrelated endpoints (health, auth) stall behind them.
+
     Offload path dispatches via `apply_async` and polls `AsyncResult.ready()`
     with `asyncio.sleep` so the FastAPI event loop stays responsive while the
     worker does the heavy work.
     """
     if not offload:
-        return task.run(*args)
+        return await anyio.to_thread.run_sync(functools.partial(task.run, *args))
 
     timeout = timeout if timeout is not None else settings.celery.offload_timeout_seconds
     async_result = task.apply_async(args=list(args))

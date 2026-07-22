@@ -281,14 +281,17 @@ def fetch_advanced_viz_data(
           "dc_id": str,
           "columns": [str],          # column names to project
           "filter_metadata": [...],  # optional global filters
-          "limit_rows": int | None,  # optional cap (default 100k)
+          "limit_rows": int | None,  # optional explicit cap (no sampling)
+          "full_load": bool,         # optional; bypass sampling, raise scan cap
         }
 
     Output shape:
         {
           "columns": [str],          # echoed back for ordering
-          "rows": {col: [values]},   # column-oriented
-          "row_count": int,
+          "rows": {col: [values]},   # column-oriented (post-sampling)
+          "row_count": int,          # returned rows (== len after sampling)
+          "total_rows": int,         # rows before sampling (for the badge)
+          "sampled": bool,           # True when the frame was downsampled
           "filter_applied": bool,
         }
     """
@@ -300,6 +303,7 @@ def fetch_advanced_viz_data(
     columns = payload.get("columns") or []
     filter_metadata = payload.get("filter_metadata") or []
     limit_rows = payload.get("limit_rows")
+    full_load = bool(payload.get("full_load", False))
 
     if not wf_id or not dc_id:
         raise HTTPException(status_code=400, detail="wf_id and dc_id are required")
@@ -318,10 +322,26 @@ def fetch_advanced_viz_data(
         component_type="advanced_viz/data",
     )
 
-    # Cap at 100k rows by default — advanced viz are rendered client-side and
-    # plotly chokes on huge frames. Recipes are the right place to pre-reduce.
-    if limit_rows is None:
+    # Row handling — three cases:
+    #   * explicit ``limit_rows`` in the payload → honour it, no sampling (callers
+    #     like the ComplexHeatmap preview ask for a specific bound).
+    #   * ``full_load`` → raise the scan cap to the figure full-load ceiling and
+    #     skip sampling (the user opted into the whole frame via Load-All).
+    #   * default → cap the scan at 100k, then random-downsample to
+    #     ``figure_max_points`` so plotly isn't handed a huge client-side frame.
+    # This mirrors the scatter-figure sampling contract (random sample, seed=0,
+    # a "sampled" flag + pre-sample count surfaced for the reduction badge).
+    from depictio.api.v1.configs.config import settings
+
+    display_cap = settings.performance.figure_max_points
+    do_sample = False
+    if limit_rows is not None:
+        limit_rows = int(limit_rows)
+    elif full_load:
+        limit_rows = settings.performance.figure_max_load_rows
+    else:
         limit_rows = 100_000
+        do_sample = True
 
     try:
         wf_oid = ObjectId(str(wf_id))
@@ -441,21 +461,50 @@ def fetch_advanced_viz_data(
         ) from exc
     _load_ms = int((_time.perf_counter() - _t_load) * 1000)
 
+    # Downsample large frames before materialising rows so the client isn't
+    # handed (and plotly doesn't render) hundreds of thousands of marks. Random
+    # sample with a fixed seed for a stable, representative reduction; report the
+    # pre-sample height so the renderer's reduction badge shows "N / M".
+    total_rows = int(df.height)
+    sampled = False
+    if do_sample and display_cap > 0 and df.height > display_cap:
+        df = df.sample(n=display_cap, seed=0)
+        sampled = True
+
     # Drop any requested columns that didn't survive projection (e.g. user
     # bound an optional column the recipe didn't emit). The renderer
     # decides what to do with missing optional columns.
     _t_build = _time.perf_counter()
     present = [c for c in columns if c in df.columns]
+
+    # Round float columns before serialising. This endpoint's cost is dominated
+    # by transport, not compute — the benchmark shows ~50 ms of server time
+    # against ~500 ms of wall — and full float64 repr is a large share of that
+    # JSON: "0.30000000000000004" is 19 bytes to say 0.3. Six significant digits
+    # is far below what any plot can resolve, and the reduction compounds with
+    # gzip because the shortened values repeat.
+    import polars as pl
+
+    float_cols = [c for c in present if df.schema[c] in (pl.Float32, pl.Float64)]
+    if float_cols:
+        df = df.with_columns([pl.col(c).round_sig_figs(6) for c in float_cols])
+
     result = {
         "columns": present,
         "rows": {c: df.get_column(c).to_list() for c in present},
         "row_count": int(df.height),
+        "total_rows": total_rows,
+        "sampled": sampled,
         "filter_applied": bool(filter_metadata),
     }
-    # Additive timing telemetry for the benchmark harness (clients ignore
-    # unknown headers). load = Delta read; build = column materialisation.
+    # Additive telemetry for the benchmark harness (clients ignore unknown
+    # headers). load = Delta read; build = column materialisation.
     response.headers["X-Load-Ms"] = str(_load_ms)
     response.headers["X-Build-Ms"] = str(int((_time.perf_counter() - _t_build) * 1000))
+    response.headers["X-Rows-Loaded"] = str(total_rows)
+    response.headers["X-Rows-Displayed"] = str(int(df.height))
+    response.headers["X-Frame-Bytes"] = str(int(df.estimated_size()))
+    response.headers["X-Aggregated"] = "0"
     response.headers["X-Total-Ms"] = f"{(_time.perf_counter() - _t0) * 1000:.1f}"
     return result
 

@@ -833,7 +833,7 @@ class DashboardDataLite(BaseModel):
                     lite_comp["columns"] = comp["columns"]
                 if comp.get("compact"):
                     lite_comp["compact"] = comp["compact"]
-                if comp.get("page_size") and comp["page_size"] != 10:
+                if comp.get("page_size") and comp["page_size"] != 100:
                     lite_comp["page_size"] = comp["page_size"]
                 if comp.get("sortable") is False:
                     lite_comp["sortable"] = False

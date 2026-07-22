@@ -972,7 +972,7 @@ class PerformanceConfig(BaseSettings):
         ),
     )
     # Table rows-per-page has no server-side default here: the component model
-    # (TableLiteComponent.page_size) already defaults to 10, and the React grid
+    # (TableLiteComponent.page_size) already defaults to 100, and the React grid
     # reads that value directly — a settings knob would be dead config.
 
     # Playwright/browser timeouts (in milliseconds)

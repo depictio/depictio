@@ -1006,6 +1006,100 @@ def _apply_scan_filters(
     return delta_scan
 
 
+def _estimate_frame_size_bytes(delta_scan: pl.LazyFrame) -> int:
+    """Cheaply estimate a lazy frame's materialised footprint (bytes).
+
+    Reads the row count via Polars aggregation pushdown (Delta parquet stats —
+    no data scan) and the projected width via the lazy schema (a Delta-log read),
+    then applies the same ``rows × cols × 8`` heuristic the fresh-load path uses
+    for unknown sizes. Used to classify a DC whose ``size_bytes`` was never
+    recorded so the adaptive loader doesn't mistake a multi-GB table for a small
+    one. Returns ``-1`` if the estimate can't be computed (caller then keeps its
+    prior unknown-size behaviour).
+    """
+    try:
+        n_cols = len(delta_scan.collect_schema())
+        n_rows = int(delta_scan.select(pl.len()).collect().item())
+        return n_rows * max(n_cols, 1) * 8
+    except Exception as e:
+        logger.debug(f"_estimate_frame_size_bytes: estimate failed: {e}")
+        return -1
+
+
+def _open_sortable_scan(
+    workflow_id_str: str,
+    data_collection_id_str: str,
+    init_data: dict[str, dict] | None,
+    metadata: list[dict] | None,
+    effective_cols: list[str] | None,
+    version_salt: str | int | None,
+    TOKEN: str | None = None,
+) -> pl.LazyFrame | None:
+    """Build a filtered + projected lazy Delta scan (no collect).
+
+    Used by the sorted-page path so a large frame can be sorted + sliced lazily
+    (bounded memory) instead of going through the full-frame cache. Filters are
+    applied before projection; ``effective_cols`` already folds in the filter
+    columns (see ``_effective_projection``) so nothing a filter references is
+    projected away. Returns ``None`` if the scan can't be built, so the caller
+    falls back to the memoised full-sort path.
+    """
+    try:
+        if init_data and data_collection_id_str in init_data:
+            dc_type = init_data[data_collection_id_str].get("dc_type")
+        else:
+            dc_type = _get_dc_type_from_db(ObjectId(data_collection_id_str))
+        file_id = _get_delta_location(data_collection_id_str, workflow_id_str, init_data, TOKEN)
+        delta_scan = _create_delta_scan(file_id, dc_type)
+        delta_scan = _apply_scan_filters(delta_scan, metadata, data_collection_id_str, version_salt)
+        delta_scan = _project_scan(delta_scan, effective_cols, data_collection_id_str, version_salt)
+        return delta_scan
+    except Exception as e:
+        logger.debug(f"_open_sortable_scan: failed to build scan for {data_collection_id_str}: {e}")
+        return None
+
+
+def open_deltatable_scan(
+    workflow_id: ObjectId | str,
+    data_collection_id: ObjectId | str,
+    metadata: list[dict] | None = None,
+    init_data: dict[str, dict] | None = None,
+    select_columns: list[str] | None = None,
+    TOKEN: str | None = None,
+) -> pl.LazyFrame | None:
+    """Public entry point for a filtered + projected **lazy** Delta scan.
+
+    The counterpart to ``load_deltatable_lite`` for callers that want to express
+    their work as a Polars aggregation rather than receive rows: figure
+    aggregation (box/histogram/density), card metrics, and any other reduction
+    that parquet statistics + projection pushdown can answer without
+    materialising the frame. A ``mean`` over a 28 M-row table costs a column
+    scan here versus a full in-memory collect through the row-returning loader.
+
+    Resolves the aggregation ``version_salt`` and the effective projection (which
+    folds in the filter columns, so nothing a filter references is projected
+    away) exactly like the row loader, keeping filter semantics identical between
+    the two paths. Returns ``None`` when the scan can't be built — every caller
+    is expected to fall back to ``load_deltatable_lite``.
+
+    Note this deliberately bypasses the frame cache: the result of a scan is a
+    plan, not data, and the aggregates built on it are far smaller than the
+    frames the cache is sized for (they belong in the result cache instead).
+    """
+    data_collection_id_str = str(data_collection_id)
+    version_salt = _get_aggregation_version(data_collection_id_str)
+    effective_cols = _effective_projection(select_columns, metadata, False)
+    return _open_sortable_scan(
+        str(workflow_id),
+        data_collection_id_str,
+        init_data,
+        metadata,
+        effective_cols,
+        version_salt,
+        TOKEN,
+    )
+
+
 def _load_large_dataframe(
     delta_scan: pl.LazyFrame,
     data_collection_id_str: str,
@@ -1260,6 +1354,15 @@ def load_deltatable_lite(
     # Apply column projection at scan level (schema-guarded; see _project_scan)
     delta_scan = _project_scan(delta_scan, effective_cols, data_collection_id_str, version_salt)
 
+    # A DC whose in-memory footprint was never recorded (size_bytes None/0/-1)
+    # must NOT be assumed small: a multi-GB table would then take the
+    # cache-the-whole-frame branch below and fully collect every row on each
+    # paginated page fetch (and, being over the per-item cap, never even cache).
+    # Estimate the footprint cheaply from a pushdown row count × projected width
+    # so the adaptive branch routes big tables to the lazy limit-pushdown path.
+    if size_bytes is None or size_bytes <= 0:
+        size_bytes = _estimate_frame_size_bytes(delta_scan)
+
     # ADAPTIVE LOADING STRATEGY
     if size_bytes == -1 or size_bytes <= MEMORY_THRESHOLD_BYTES:
         # Unknown or small DataFrame - load, cache, then filter in memory.
@@ -1308,23 +1411,34 @@ def load_sorted_deltatable_lite(
     metadata: list[dict] | None = None,
     init_data: dict[str, dict] | None = None,
     nulls_last: bool = True,
+    select_columns: list[str] | None = None,
+    page: tuple[int, int] | None = None,
 ) -> pl.DataFrame:
-    """Return the fully-sorted (optionally filtered) frame, memoised per sort key.
+    """Return a sorted (optionally filtered / projected) frame, or one page of it.
 
     ``load_deltatable_lite`` already caches the *unsorted* frame, so the table
     render endpoint's ``load`` is a cache hit on pages 2..N. The cost that kept
     repeating was the ``df.sort(...)`` itself: AG Grid's infinite row model
     fetches one block per scroll, and each block re-sorted the whole cached
     frame. We memoise the *sorted* frame under a key derived from the same
-    base/filter key plus ``(sort_by, sort_dir, nulls_last)`` so every block
+    base/filter key plus ``(cols, sort_by, sort_dir, nulls_last)`` so every block
     after the first slices an already-sorted frame — no re-sort.
+
+    ``select_columns`` restricts the load to the columns the grid will actually
+    render (plus the sort column), cutting I/O + memory on wide tables; the memo
+    key reflects the projection so different projections don't collide.
+
+    ``page`` = ``(start, limit)`` returns only that window. Small frames are
+    fully sorted once and memoised, so later pages are free slices. A frame whose
+    estimated footprint exceeds the per-item memo cap is instead sorted **lazily**
+    and sliced at scan level — never fully materialised in memory — trading the
+    memo (deep pages re-sort) for bounded memory and a far cheaper first page.
+    ``page=None`` returns the whole sorted frame (memoised full-sort path).
 
     The key embeds the dc_id and the aggregation ``version_salt`` (via
     ``_generate_cache_keys``), so a realtime ingest that bumps the version — or
     an explicit ``invalidate_data_collection_cache`` (dc_id substring match) —
-    busts this entry for free, exactly like the base frame. Frames above the
-    per-item cap are still sorted correctly, just not memoised (they'd double
-    the base frame's footprint), so those fall back to the prior per-block sort.
+    busts this entry for free, exactly like the base frame.
     """
     import time
 
@@ -1334,11 +1448,12 @@ def load_sorted_deltatable_lite(
     workflow_id_str = str(workflow_id)
 
     version_salt = _get_aggregation_version(data_collection_id_str)
+    effective_cols = _effective_projection(select_columns, metadata, False)
     base_key, filtered_key, _ = _generate_cache_keys(
         workflow_id_str,
         data_collection_id_str,
         load_for_preview=False,
-        select_columns=None,
+        select_columns=effective_cols,
         metadata=metadata,
         load_for_options=False,
         version_salt=version_salt,
@@ -1349,10 +1464,13 @@ def load_sorted_deltatable_lite(
         f"_{'nl' if nulls_last else 'nf'}"
     )
 
+    def _page(frame: pl.DataFrame) -> pl.DataFrame:
+        return frame.slice(page[0], page[1]) if page is not None else frame
+
     cached = _dataframe_memory_cache.get(sort_key)
     if cached is not None:
         update_cache_timestamp(sort_key)
-        return cached
+        return _page(cached)
 
     # Per-key lock: this endpoint is a sync ``def`` (threadpool), and AG Grid's
     # infinite row model fires the first few blocks for the same (dc, sort) key
@@ -1369,15 +1487,55 @@ def load_sorted_deltatable_lite(
         cached = _dataframe_memory_cache.get(sort_key)
         if cached is not None:
             update_cache_timestamp(sort_key)
-            return cached
+            return _page(cached)
 
+        # Lazy sorted-page path for large frames: estimate the footprint from the
+        # projected scan and, above the per-item memo cap, sort + slice lazily so
+        # we never materialise the whole sorted frame. Only when a page is
+        # requested — a full-frame caller needs every row anyway.
+        if page is not None:
+            scan = _open_sortable_scan(
+                workflow_id_str,
+                data_collection_id_str,
+                init_data,
+                metadata,
+                effective_cols,
+                version_salt,
+            )
+            if scan is not None:
+                est = _estimate_frame_size_bytes(scan)
+                if est == -1 or est > MEMORY_PER_ITEM_MAX_BYTES:
+                    start, limit = page
+                    # ``maintain_order`` keeps tie-breaking deterministic and
+                    # identical to the eager memo path below, so a table that
+                    # sits near the memo cap can't reorder equal-key rows between
+                    # requests (page boundaries stay stable). ~10% sort cost.
+                    page_df = (
+                        scan.sort(
+                            sort_by,
+                            descending=descending,
+                            nulls_last=nulls_last,
+                            maintain_order=True,
+                        )
+                        .slice(start, limit)
+                        .collect()
+                    )
+                    if "depictio_aggregation_time" in page_df.columns:
+                        page_df = page_df.drop("depictio_aggregation_time")
+                    return page_df
+
+        # Small frame (or full-frame request): full sort once + memoise so later
+        # pages are free slices of the cached frame.
         df = load_deltatable_lite(
             workflow_id=workflow_id,
             data_collection_id=data_collection_id,
             metadata=metadata,
             init_data=init_data,
+            select_columns=select_columns,
         )
-        sorted_df = df.sort(sort_by, descending=descending, nulls_last=nulls_last)
+        sorted_df = df.sort(
+            sort_by, descending=descending, nulls_last=nulls_last, maintain_order=True
+        )
 
         # Reuse the base cache's LRU budget + per-item cap so the sorted copy
         # can't pin more RAM than a normal frame. ``estimated_size`` is cheap on
@@ -1390,7 +1548,7 @@ def load_sorted_deltatable_lite(
             _cache_metadata[sort_key] = {"size_bytes": size_bytes, "timestamp": time.time()}
             _total_memory_usage += size_bytes
 
-        return sorted_df
+        return _page(sorted_df)
 
 
 def count_deltatable_lite(
