@@ -47,13 +47,16 @@ class ConnectMode(str, Enum):
 class VisuType(str, Enum):
     """The component families the benchmark exercises."""
 
-    FIGURE = "figure"  # Plotly figure (scatter/bar/box) via /render_figure
+    FIGURE = "figure"  # Plotly figure (scatter/box/histogram) via /render_figure
     TABLE = "table"  # AG-Grid table via /render_table
     ADVANCED_VIZ = "advanced_viz"  # async compute job (always Celery)
 
 
 # Concrete Plotly ``visu_type`` values rotated across figure components.
-FIGURE_VISU_ROTATION: tuple[str, ...] = ("scatter", "bar", "box", "histogram")
+# ``bar`` is deliberately excluded: px.bar stacks one segment per row, so on the
+# large benchmark frames it materialises millions of rectangles and stalls the
+# browser — not a useful render-perf case to benchmark.
+FIGURE_VISU_ROTATION: tuple[str, ...] = ("scatter", "box", "histogram")
 # ``viz_kind`` values rotated across advanced_viz components (kept to kinds that
 # map cleanly onto the generic numeric columns the generator produces).
 ADVANCED_VIZ_ROTATION: tuple[str, ...] = ("volcano", "ma")

@@ -36,6 +36,15 @@ _RENDER_FIELDS = [
     "load_ms",
     "build_ms",
     "server_total_ms",
+    "dc_first_touch",
+    "iteration",
+    "concurrent",
+    "rows_loaded",
+    "rows_displayed",
+    "frame_bytes",
+    "aggregated",
+    "cache",
+    "peak_rss_mb",
     "error",
 ]
 
@@ -45,6 +54,12 @@ _SIZE_ORDER = {"10mb": 0, "100mb": 1, "1gb": 2, "5gb": 3, "10gb": 4}
 # does Depictio stay usable?": snappy < 1s, tolerable < 3s, sluggish beyond.
 _USABLE_MS = 1000.0
 _TOLERABLE_MS = 3000.0
+
+# A p95 over a handful of renders is the max of a tiny sample, not a tail. Sizes
+# whose cells aborted early would otherwise score *better* than sizes that ran to
+# completion (survivor bias), so below this count we report the sample instead of
+# a verdict.
+_MIN_RENDERS_FOR_VERDICT = 20
 
 
 def _avg(rows: list[dict], key: str) -> float | None:
@@ -65,9 +80,10 @@ def _size_of(ingest_row: dict) -> str:
     return parts[1] if len(parts) > 1 else ""
 
 
-def _load(results_path: Path) -> tuple[list[dict], list[dict]]:
+def _load(results_path: Path) -> tuple[list[dict], list[dict], list[dict]]:
     renders: list[dict] = []
     ingests: list[dict] = []
+    loads: list[dict] = []
     for line in results_path.read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if not line:
@@ -77,7 +93,9 @@ def _load(results_path: Path) -> tuple[list[dict], list[dict]]:
             renders.append(row)
         elif row.get("kind") == "ingest":
             ingests.append(row)
-    return renders, ingests
+        elif row.get("kind") == "dashboard_load":
+            loads.append(row)
+    return renders, ingests, loads
 
 
 def _write_csv(renders: list[dict], out: Path) -> None:
@@ -160,8 +178,13 @@ def build_report(output_root: str | Path) -> Path:
     if not results_path.exists():
         raise FileNotFoundError(f"No results at {results_path} — run the matrix first.")
 
-    renders, ingests = _load(results_path)
+    renders, ingests, loads = _load(results_path)
     _write_csv(renders, output_root / "results.csv")
+    # Concurrent renders belong to the dashboard-load section only: mixing them
+    # into the sequential tables would inflate every latency with contention
+    # that the sequential protocol never applied.
+    concurrent = [r for r in renders if r.get("concurrent")]
+    renders = [r for r in renders if not r.get("concurrent")]
     plot_names = _plots(renders, output_root)
 
     n_ok = sum(1 for r in renders if r.get("ok"))
@@ -199,6 +222,29 @@ def build_report(output_root: str | Path) -> Path:
     ]
     lines.append(_md_table(["component_type", "n", "mean", "p50", "p95"], rows))
     lines.append("")
+
+    # Cold vs warm. The cold read is what a user actually waits for when opening
+    # a dashboard; the warm one is what the cache serves afterwards. Reporting
+    # them together hides both.
+    cold = [r for r in renders if r.get("dc_first_touch")]
+    warm = [r for r in renders if not r.get("dc_first_touch")]
+    if cold and warm:
+        lines += [
+            "## Cold vs warm frame cache",
+            "",
+            "`cold` = first render touching a DC in its cell (pays the Delta read); "
+            "`warm` = every later render on that DC.",
+            "",
+        ]
+        rows = []
+        for label, subset in (("cold", cold), ("warm", warm)):
+            for k, s in _group_summary(subset, ("size",)):
+                rows.append(
+                    [k[0], label, s["n"], f"{s['mean']:.0f}", f"{s['p50']:.0f}", f"{s['p95']:.0f}"]
+                )
+        rows.sort(key=lambda r: (_SIZE_ORDER.get(str(r[0]), 99), r[1]))
+        lines.append(_md_table(["size", "cache", "n", "mean", "p50", "p95"], rows))
+        lines.append("")
 
     # Where the render time goes: Delta load vs build vs transport/queue.
     # server_total = load + build + server-side glue (templates, JSON);
@@ -358,6 +404,53 @@ def build_report(output_root: str | Path) -> Path:
         )
         lines.append("")
 
+    # Dashboard cold open: all components in flight at once, which is what a
+    # user triggers by opening the page. The gap against the sequential p95 is
+    # the contention cost (worker pool, connection pool, concurrent Delta reads).
+    if loads:
+        lines += [
+            "## Dashboard cold open (all components at once)",
+            "",
+            "`wall_ms` = time until the **last** component lands — what the user waits for. "
+            "`seq_p95` is the same cell rendered one component at a time, for contrast.",
+            "",
+        ]
+        rows = []
+        for load in sorted(
+            loads, key=lambda r: (_SIZE_ORDER.get(str(r.get("size")), 99), r.get("n_components", 0))
+        ):
+            seq = [
+                float(r["wall_ms"])
+                for r in renders
+                if r.get("cell_slug") == load.get("cell_slug") and r.get("ok") and r.get("wall_ms")
+            ]
+            rows.append(
+                [
+                    load.get("size", ""),
+                    load.get("n_components", ""),
+                    load.get("connect", ""),
+                    f"{load.get('n_rendered', 0)}/{load.get('n_requested', 0)}",
+                    f"{float(load.get('wall_ms') or 0):.0f}",
+                    f"{summarize(seq)['p95']:.0f}" if seq else "—",
+                ]
+            )
+        lines.append(
+            _md_table(
+                ["size", "#comp", "connect", "rendered", "wall_ms", "seq_p95"],
+                rows,
+            )
+        )
+        lines.append("")
+
+    if concurrent:
+        lines += ["### Per-component latency under concurrent load", ""]
+        rows = [
+            [k[0], k[1], s["n"], f"{s['mean']:.0f}", f"{s['p50']:.0f}", f"{s['p95']:.0f}"]
+            for k, s in _group_summary(concurrent, ("size", "component_type"))
+        ]
+        lines.append(_md_table(["size", "type", "n", "mean", "p50", "p95"], rows))
+        lines.append("")
+
     # Usability ceiling: the direct answer to "up to what size is Depictio
     # usable?". Per size: worst render p95, any failures, and a verdict.
     lines += [
@@ -365,7 +458,8 @@ def build_report(output_root: str | Path) -> Path:
         "",
         f"Verdict on render p95 wall: **snappy** < {_USABLE_MS:.0f}ms, "
         f"**tolerable** < {_TOLERABLE_MS:.0f}ms, else **sluggish**; "
-        "any render/ingest failure at a size ⇒ **FAIL**.",
+        "any render/ingest failure at a size ⇒ **FAIL**; "
+        f"fewer than {_MIN_RENDERS_FOR_VERDICT} successful renders ⇒ no verdict.",
         "",
     ]
     sizes = sorted(
@@ -384,6 +478,8 @@ def build_report(output_root: str | Path) -> Path:
             verdict = "❌ FAIL"
         elif not walls:
             verdict = "—"
+        elif len(walls) < _MIN_RENDERS_FOR_VERDICT:
+            verdict = f"⚠️ n={len(walls)}, insufficient"
         elif p95 < _USABLE_MS:
             verdict = "✅ snappy"
         elif p95 < _TOLERABLE_MS:

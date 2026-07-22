@@ -38,11 +38,30 @@ class RenderResult:
     http_status: int = 0
     ok: bool = False
     filtered: bool = False  # was a cross-filter payload applied?
+    # Cache regime. The frame cache makes the first read of a DC far slower than
+    # every later one, so mixing them yields a bimodal distribution whose mean
+    # describes neither. ``dc_first_touch`` marks the render that paid the cold
+    # read; ``iteration`` counts full passes over the cell (0 = first pass).
+    dc_first_touch: bool = False
+    iteration: int = 0
+    # True when this render was fired simultaneously with every other component
+    # of its dashboard (see ``dashboard_load``): the latency then includes
+    # server-side contention, which sequential rendering never exposes.
+    concurrent: bool = False
     # Optional server-side enrichment (from X-* timing headers / task ledger)
     task_duration_ms: Optional[float] = None
     load_ms: Optional[float] = None  # X-Load-Ms: Delta read
     build_ms: Optional[float] = None  # X-Build-Ms: plot/table/frame build
     server_total_ms: Optional[float] = None  # X-Total-Ms: whole endpoint, server-side
+    # What the render had to touch. A latency figure on its own doesn't say
+    # whether it was fast because the work was small or because the work was
+    # avoided; these separate the two.
+    rows_loaded: Optional[int] = None  # X-Rows-Loaded: rows materialised (0 if aggregated)
+    rows_displayed: Optional[int] = None  # X-Rows-Displayed: marks/rows in the payload
+    frame_bytes: Optional[int] = None  # X-Frame-Bytes: in-memory footprint
+    aggregated: bool = False  # X-Aggregated: served by a scan-level reduction
+    cache: str = ""  # X-Cache: "hit" | "miss" | ""
+    peak_rss_mb: Optional[float] = None  # X-Peak-RSS-MB: process high-water mark
     error: str = ""
     extra: dict[str, Any] = field(default_factory=dict)
 

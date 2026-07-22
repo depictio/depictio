@@ -101,10 +101,41 @@ def test_generated_dashboard_parses_with_pydantic():
     import yaml
 
     lite = DashboardDataLite.from_yaml(yaml.safe_dump(dashboard))
-    # figure+table components (4) + 2 interactive filters added for links mode
-    assert len(lite.components) == 6
+    # figure+table components (4) + the top strip: 2 interactive filters and
+    # 2 metric cards, both added on every connect mode.
+    assert len(lite.components) == 8
     types = {c.component_type for c in lite.components}
     assert "interactive" in types
+    # Cards must be present: they were previously absent from the matrix, which
+    # hid the filtered-card path (the one that can't use precomputed specs)
+    # from every benchmark number.
+    assert "card" in types
+    assert sum(c.component_type == "card" for c in lite.components) == 2
+
+
+def test_filters_added_in_joins_mode_bind_to_joined_table():
+    """Filters are added on all connect modes (not just links); in joins mode
+    they must bind to the joined table so cross-filtering actually narrows the
+    same frame the figures/tables render from."""
+    cell = _cell(ConnectMode.JOINS, n_dcs=2, n_components=4)
+    dashboard = build_dashboard(cell, build_project(cell, dataset_dir="/tmp/x"))
+    filters = [c for c in dashboard["components"] if c["component_type"] == "interactive"]
+    assert len(filters) == 2
+    assert {f["column_name"] for f in filters} == {"species", "body_mass_g"}
+    assert all(f["data_collection_tag"] == "joined_join_0_1" for f in filters)
+
+
+def test_readable_title_decodes_axes():
+    from benchmark.configgen import readable_title
+
+    cell = Cell(
+        size="1gb",
+        n_components=5,
+        n_dcs=2,
+        connect=ConnectMode.JOINS,
+        visu=(VisuType.FIGURE, VisuType.TABLE, VisuType.ADVANCED_VIZ),
+    )
+    assert readable_title(cell) == "1 GB · 5 comp · 2 DC · joins · figure+table+adv-viz"
 
 
 def test_advanced_viz_config_parses():

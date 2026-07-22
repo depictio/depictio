@@ -92,6 +92,14 @@ def run(
         False, "--cross-filter", help="Also render links cells with a filter payload"
     ),
     force_datagen: bool = typer.Option(False, "--force-datagen", help="Regenerate data"),
+    repeats: int = typer.Option(
+        1, "--repeats", help="Passes over each cell's components (>1 separates warm from cold)"
+    ),
+    dashboard_load: bool = typer.Option(
+        False,
+        "--dashboard-load",
+        help="Also fire all components at once (real dashboard cold open, under contention)",
+    ),
     depictio_bin: str = typer.Option("depictio", "--depictio-bin", help="depictio CLI executable"),
 ) -> None:
     """Ingest + render the matrix against a live stack; append to results.jsonl."""
@@ -106,6 +114,8 @@ def run(
         server_mode=server_mode,
         cross_filter=cross_filter,
         force_datagen=force_datagen,
+        repeats=repeats,
+        dashboard_load=dashboard_load,
         depictio_bin=depictio_bin,
     )
     typer.echo(f"Results appended to {results}")
@@ -126,6 +136,9 @@ def ingest(
     ),
     output: str = _OUTPUT,
     force_datagen: bool = typer.Option(False, "--force-datagen", help="Regenerate data"),
+    streaming: bool = typer.Option(
+        False, "--streaming", help="Ingest tables via the streamed Delta write (before/after)"
+    ),
     depictio_bin: str = typer.Option("depictio", "--depictio-bin", help="depictio CLI executable"),
 ) -> None:
     """Ingestion-only benchmark across DC types (table / multiqc / images)."""
@@ -146,6 +159,7 @@ def ingest(
         output_root=output,
         multiqc_fixture=multiqc_fixture,
         force_datagen=force_datagen,
+        streaming=streaming,
         depictio_bin=depictio_bin,
     )
     typer.echo(f"Results appended to {results}")
@@ -160,6 +174,19 @@ def report(output: str = _OUTPUT) -> None:
     typer.echo(f"Wrote {path}")
 
 
+@app.command("blog-metrics")
+def blog_metrics(output: str = _OUTPUT) -> None:
+    """Build blog_metrics.json + BLOG_SNIPPET.md from results.jsonl.
+
+    Absolute numbers for the current build — no baseline, so no speedup claims.
+    """
+    from benchmark.blog_metrics import build_blog_metrics
+
+    json_path, snippet_path = build_blog_metrics(output)
+    typer.echo(f"Wrote {json_path}")
+    typer.echo(f"Wrote {snippet_path}")
+
+
 @app.command()
 def all(
     cli_config: str = typer.Option(..., "--cli-config", help="Path to depictio CLI config YAML"),
@@ -172,9 +199,14 @@ def all(
     output: str = _OUTPUT,
     cross_filter: bool = typer.Option(False, "--cross-filter"),
     force_datagen: bool = typer.Option(False, "--force-datagen"),
+    repeats: int = typer.Option(1, "--repeats"),
+    dashboard_load: bool = typer.Option(False, "--dashboard-load"),
     depictio_bin: str = typer.Option("depictio", "--depictio-bin"),
 ) -> None:
     """generate (implicit) -> run -> report in one shot."""
+    # Every parameter must be forwarded explicitly: ``run`` is Typer-decorated,
+    # so an omitted argument resolves to its OptionInfo sentinel, not to the
+    # value shown in the help text.
     run(
         cli_config=cli_config,
         server_mode=server_mode,
@@ -186,9 +218,12 @@ def all(
         output=output,
         cross_filter=cross_filter,
         force_datagen=force_datagen,
+        repeats=repeats,
+        dashboard_load=dashboard_load,
         depictio_bin=depictio_bin,
     )
     report(output=output)
+    blog_metrics(output=output)
 
 
 def main() -> None:
