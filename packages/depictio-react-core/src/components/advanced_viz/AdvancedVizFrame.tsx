@@ -2,12 +2,33 @@ import React, { useContext, useEffect, useMemo } from 'react';
 import { Alert, Badge, Group, Loader, Paper, Stack, Text } from '@mantine/core';
 
 import ErrorBoundary from '../ErrorBoundary';
+import LoadAllButton from '../chrome/LoadAllButton';
 import {
   AdvancedVizDataPopover,
   AdvancedVizExtrasContext,
   AdvancedVizSettingsPopover,
   type TierAnnotation,
 } from './AdvancedVizExtras';
+
+/**
+ * Server-side downsampling state, mirroring the scatter-figure reduction badge
+ * + Load-All toggle. When `sampled` (or `full`) is set, the frame shows an
+ * "N / M pts" badge and publishes a Load-All ActionIcon into the chrome row.
+ */
+export interface AdvancedVizReduction {
+  /** Rows currently shown (post-sampling). */
+  displayed: number;
+  /** Rows before sampling. */
+  total: number;
+  /** Server randomly downsampled the returned frame. */
+  sampled: boolean;
+  /** Full frame currently loaded (Load-All engaged). */
+  full: boolean;
+  /** A full-load refetch is in flight. */
+  loading: boolean;
+  /** Flip between the sampled and full views. */
+  onToggle: () => void;
+}
 
 interface AdvancedVizFrameProps {
   /** Inner content (the viz itself). */
@@ -49,6 +70,12 @@ interface AdvancedVizFrameProps {
    * dict's iteration order, so renderers should pass an ordered object.
    */
   counts?: Record<string, number>;
+  /**
+   * Server-side downsampling state. When present and reduced/full, the frame
+   * renders an "N / M pts" badge and a Load-All toggle in the chrome row,
+   * matching the scatter-figure UX.
+   */
+  reduction?: AdvancedVizReduction;
 }
 
 /** Subtle Mantine theme colour for each canonical tier name (no hardcoded
@@ -95,8 +122,13 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
   dataColumns,
   tierAnnotation,
   counts,
+  reduction,
 }) => {
   const publish = useContext(AdvancedVizExtrasContext);
+
+  // Only surface the reduction affordances once the frame is actually reduced
+  // (or fully loaded) — an unsampled small frame has nothing to expand.
+  const showReduction = Boolean(reduction && (reduction.sampled || reduction.full));
 
   // Render the popovers as a single React node and publish it. ComponentRenderer
   // reads it via useState and threads it through wrapWithChrome's extraActions
@@ -117,8 +149,24 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
         />,
       );
     }
+    // Reuse the exact figure/table Load-All ActionIcon so the toggle looks and
+    // sits identically across component types.
+    if (reduction && showReduction) {
+      nodes.push(
+        <LoadAllButton
+          key="load-all"
+          state={{
+            reduced: !reduction.full,
+            full: reduction.full,
+            loading: reduction.loading,
+            toggle: reduction.onToggle,
+            noun: 'points',
+          }}
+        />,
+      );
+    }
     return nodes.length ? <>{nodes}</> : null;
-  }, [controls, dataRows, dataColumns, tierAnnotation]);
+  }, [controls, dataRows, dataColumns, tierAnnotation, reduction, showReduction]);
 
   useEffect(() => {
     if (!publish) return;
@@ -141,7 +189,7 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
           borderWidth: 1.5,
         }}
       >
-        {title || subtitle || (counts && Object.keys(counts).length > 0) ? (
+        {title || subtitle || (counts && Object.keys(counts).length > 0) || showReduction ? (
           <Stack gap={2} mb="xs">
             {title ? (
               <Text fw={600} size="sm" lineClamp={1}>
@@ -185,6 +233,15 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
                     </Badge>
                   );
                 })}
+              </Group>
+            ) : null}
+            {reduction && showReduction ? (
+              <Group gap={4} wrap="nowrap" mt={2}>
+                <Badge variant="light" color="gray" size="xs" radius="sm">
+                  {reduction.full
+                    ? `${reduction.displayed.toLocaleString()} pts (all)`
+                    : `${reduction.displayed.toLocaleString()} / ${reduction.total.toLocaleString()} pts`}
+                </Badge>
               </Group>
             ) : null}
           </Stack>

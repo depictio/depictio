@@ -118,6 +118,18 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
   const [rows, setRows] = useState<Record<string, unknown[]> | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  // Server-side downsampling state (mirrors the scatter-figure Load-All UX).
+  const [fullLoad, setFullLoad] = useState(false);
+  const [reduction, setReduction] = useState<{
+    displayed: number;
+    total: number;
+    sampled: boolean;
+  } | null>(null);
+
+  const filterSig = JSON.stringify(filters);
+  useEffect(() => {
+    setFullLoad(false);
+  }, [filterSig]);
 
   useEffect(() => {
     if (!metadata.wf_id || !metadata.dc_id || requiredCols.length < 4) {
@@ -128,9 +140,15 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetchAdvancedVizData(metadata.wf_id, metadata.dc_id, requiredCols, filters)
+    fetchAdvancedVizData(metadata.wf_id, metadata.dc_id, requiredCols, filters, undefined, fullLoad)
       .then((res) => {
-        if (!cancelled) setRows(res.rows);
+        if (cancelled) return;
+        setRows(res.rows);
+        setReduction({
+          displayed: res.row_count,
+          total: res.total_rows ?? res.row_count,
+          sampled: Boolean(res.sampled),
+        });
       })
       .catch((err: unknown) => {
         if (!cancelled) setError(err instanceof Error ? err.message : String(err));
@@ -141,7 +159,7 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
     return () => {
       cancelled = true;
     };
-  }, [metadata.wf_id, metadata.dc_id, JSON.stringify(requiredCols), JSON.stringify(filters), refreshTick]);
+  }, [metadata.wf_id, metadata.dc_id, JSON.stringify(requiredCols), filterSig, refreshTick, fullLoad]);
 
   const { figure, allRanks } = useMemo(() => {
     if (!rows) return { figure: null, allRanks: [] as string[] };
@@ -424,6 +442,18 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
       emptyMessage={rows && Object.values(rows)[0]?.length === 0 ? 'No data' : undefined}
       dataRows={rows ?? undefined}
       dataColumns={requiredCols}
+      reduction={
+        reduction && (reduction.sampled || fullLoad)
+          ? {
+              displayed: reduction.displayed,
+              total: reduction.total,
+              sampled: reduction.sampled,
+              full: fullLoad,
+              loading,
+              onToggle: () => setFullLoad((v) => !v),
+            }
+          : undefined
+      }
     >
       {figure ? (
         <Plot

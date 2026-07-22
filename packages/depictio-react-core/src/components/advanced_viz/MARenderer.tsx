@@ -61,6 +61,18 @@ const MARenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
   const [rows, setRows] = useState<Record<string, unknown[]> | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  // Server-side downsampling state (mirrors the scatter-figure Load-All UX).
+  const [fullLoad, setFullLoad] = useState(false);
+  const [reduction, setReduction] = useState<{
+    displayed: number;
+    total: number;
+    sampled: boolean;
+  } | null>(null);
+
+  const filterSig = JSON.stringify(filters);
+  useEffect(() => {
+    setFullLoad(false);
+  }, [filterSig]);
 
   useEffect(() => {
     if (!metadata.wf_id || !metadata.dc_id || requiredCols.length < 3) {
@@ -71,9 +83,15 @@ const MARenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetchAdvancedVizData(metadata.wf_id, metadata.dc_id, requiredCols, filters)
+    fetchAdvancedVizData(metadata.wf_id, metadata.dc_id, requiredCols, filters, undefined, fullLoad)
       .then((res) => {
-        if (!cancelled) setRows(res.rows);
+        if (cancelled) return;
+        setRows(res.rows);
+        setReduction({
+          displayed: res.row_count,
+          total: res.total_rows ?? res.row_count,
+          sampled: Boolean(res.sampled),
+        });
       })
       .catch((err: unknown) => {
         if (!cancelled) setError(err instanceof Error ? err.message : String(err));
@@ -84,7 +102,7 @@ const MARenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
     return () => {
       cancelled = true;
     };
-  }, [metadata.wf_id, metadata.dc_id, JSON.stringify(requiredCols), JSON.stringify(filters), refreshTick]);
+  }, [metadata.wf_id, metadata.dc_id, JSON.stringify(requiredCols), filterSig, refreshTick, fullLoad]);
 
   const figure = useMemo(() => {
     if (!rows) return null;
@@ -305,6 +323,18 @@ const MARenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
       dataColumns={requiredCols}
       counts={figure?.counts}
       tierAnnotation={tierAnnotation}
+      reduction={
+        reduction && (reduction.sampled || fullLoad)
+          ? {
+              displayed: reduction.displayed,
+              total: reduction.total,
+              sampled: reduction.sampled,
+              full: fullLoad,
+              loading,
+              onToggle: () => setFullLoad((v) => !v),
+            }
+          : undefined
+      }
     >
       {figure ? (
         <Plot

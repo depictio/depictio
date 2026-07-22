@@ -16,6 +16,7 @@ import Plot from 'react-plotly.js';
 import Plotly from 'plotly.js';
 
 import { renderFigure, InteractiveFilter, StoredMetadata, FigureResponse } from '../api';
+import { enqueueFetch } from '../fetchQueue';
 import { extractScatterSelection } from '../selection';
 import { useInView } from '../hooks/useInView';
 import { useNewItemIds } from '../hooks/useNewItemIds';
@@ -118,7 +119,12 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
     let cancelled = false;
     setLoading(true);
     setError(null);
-    renderFigure(dashboardId, metadata.index, filtersForFetch, theme, fullLoad)
+    // Queued so a dense dashboard doesn't fire every figure's render at once;
+    // the vertical position is the priority, so the top of the page paints first.
+    enqueueFetch(
+      () => renderFigure(dashboardId, metadata.index, filtersForFetch, theme, fullLoad),
+      metadata.layout?.y ?? 0,
+    )
       .then((res) => {
         if (cancelled) return;
         // Keep the previous figure mounted while the next response is in

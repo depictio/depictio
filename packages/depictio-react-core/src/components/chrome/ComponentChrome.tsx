@@ -194,6 +194,12 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
           </span>
         )}
         {actions.map((a) => {
+          // Render first and skip actions that produce nothing (e.g. `reset`
+          // with no `onResetFilter`). Emitting an empty wrapper span would
+          // leave a `gap`-sized hole in the row, so any following icon (the
+          // Load-All toggle) looks detached / misaligned from the rest.
+          const node = renderAction(a);
+          if (!node) return null;
           const isActiveReset = a === 'reset' && sourceFilterActive && Boolean(onResetFilter);
           return (
             <span
@@ -204,7 +210,7 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
               onTouchStart={(e) => e.stopPropagation()}
               onPointerDown={(e) => e.stopPropagation()}
             >
-              {renderAction(a)}
+              {node}
             </span>
           );
         })}

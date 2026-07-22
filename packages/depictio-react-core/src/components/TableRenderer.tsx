@@ -25,6 +25,7 @@ import { renderTable, InteractiveFilter, StoredMetadata } from '../api';
 import { LoadAllState } from './chrome/LoadAllButton';
 import { extractRowSelection } from '../selection';
 import { useInView } from '../hooks/useInView';
+import { enqueueFetch } from '../fetchQueue';
 import { useNewItemIds } from '../hooks/useNewItemIds';
 import { useTransientFlag } from '../hooks/useTransientFlag';
 import { ActiveHighlight } from '../highlight';
@@ -140,7 +141,10 @@ const TableRenderer: React.FC<TableRendererProps> = ({
     let cancelled = false;
     setLoading(true);
     setError(null);
-    renderTable(dashboardId, metadata.index, filtersForFetch, 0, 1)
+    enqueueFetch(
+      () => renderTable(dashboardId, metadata.index, filtersForFetch, 0, 1),
+      metadata.layout?.y ?? 0,
+    )
       .then((res) => {
         if (cancelled) return;
         const selectionOn =
@@ -422,14 +426,21 @@ const TableRenderer: React.FC<TableRendererProps> = ({
       getRows: (params: IGetRowsParams) => {
         const start = params.startRow;
         const limit = params.endRow - params.startRow;
-        renderTable(
-          dashboardId,
-          metadata.index,
-          filtersRef.current,
+        // Queued: AG Grid's infinite row model fires several blocks at once on
+        // first paint, and they'd otherwise contend with every other component's
+        // render. Earlier blocks get priority so the visible rows arrive first.
+        enqueueFetch(
+          () =>
+            renderTable(
+              dashboardId,
+              metadata.index,
+              filtersRef.current,
+              start,
+              limit,
+              sortRef.current.sortBy,
+              sortRef.current.sortDir,
+            ),
           start,
-          limit,
-          sortRef.current.sortBy,
-          sortRef.current.sortDir,
         )
           .then((res) => {
             // lastRow tells the grid the total — required so the scrollbar is
