@@ -1,0 +1,128 @@
+# Benchmark overlay — makes local perf numbers comparable to the EMBL cluster.
+#
+#   docker compose -f docker-compose.dev.yaml -f docker-compose.bench.yaml \
+#     --env-file docker-compose/.env up -d
+#
+# Two independent changes, both needed for a run whose numbers mean something:
+#
+#   1. RESOURCE LIMITS. The dev stack is unbounded, so the API can grab all 8
+#      vCPU of the colima VM while the same process gets 2 CPU / 4Gi on the
+#      cluster. Unbounded local runs are structurally optimistic and cannot be
+#      compared to prod. CPU quotas mirror values-embl-demo-base.yaml; MEMORY
+#      does not, and deliberately so — see the sizing note below.
+#
+# MEMORY SIZING (measured, not guessed). The benchmark schema costs 90 B/row and
+# a Polars read peaks at ~1.75x the resulting frame:
+#
+#     15M rows -> 1.32 GB frame -> 2.31 GB peak per in-flight render
+#
+# A memory limit is per CONTAINER, shared by every worker process inside it, so
+# the real requirement is `concurrency x 2.31 GB`. EMBL's 4Gi + FASTAPI_WORKERS=4
+# therefore OOM-kills on the second concurrent heavy render — copying it here
+# would measure the OOM, not the latency. These values keep concurrency x peak
+# under the limit; to reproduce the production failure instead, set backend to
+# 4G/WORKERS=4 and celery to 2G/WORKERS=2 and expect kills at 1gb.
+#
+#   2. NAMED VOLUMES on the I/O-hot paths. The dev stack bind-mounts them to the
+#      macOS filesystem through virtiofs; named volumes live on the VM's own ext4.
+#      This matters on both sides of what we measure: mongo/minio journal+parquet
+#      writes drive INGESTION throughput, and /app/cache (delta_cache + s3_files)
+#      sits on the RENDER hot path — it is what load_ms reads from on a cache hit.
+#
+# ⚠️ DESTRUCTIVE: switching to named volumes hides the current bind-mounted data
+# (MinIO bucket + Mongo DB). Both move together, so the stack stays coherent —
+# but it comes up EMPTY and every benchmark dataset must be re-ingested. The old
+# data is untouched under ./${DATA_DIR}/ and comes back if you drop this overlay.
+#
+# Source-code mounts (./depictio:/app/depictio) are deliberately left as binds:
+# live editing must keep working.
+
+services:
+  # Named volumes are created root:root, but every service runs as 1000:1000
+  # (docker-compose.dev.yaml: user "${UID:-1000}:${GID:-1000}"). The bind mounts
+  # hid this — virtiofs maps macOS ownership permissively — but on the VM's ext4
+  # it is enforced, and mongo/minio die on first write. This one-shot takes
+  # ownership before anything else starts. It is a no-op on later boots.
+  bench-volume-init:
+    image: busybox:1.36
+    user: "0:0"
+    # Guarded: a bare `chown -R` would walk the whole Delta store on every boot.
+    command: >
+      sh -c 'for d in /v/mongo /v/minio /v/redis /v/cache; do
+        [ "$$(stat -c %u "$$d")" = 1000 ] || chown -R 1000:1000 "$$d"; done'
+    volumes:
+      - bench_mongo:/v/mongo
+      - bench_minio:/v/minio
+      - bench_redis:/v/redis
+      - bench_cache:/v/cache
+
+  mongo:
+    depends_on:
+      bench-volume-init:
+        condition: service_completed_successfully
+    volumes:
+      - bench_mongo:/data/db
+    deploy:
+      resources:
+        limits: {cpus: "0.5", memory: 1G}
+
+  redis:
+    depends_on:
+      bench-volume-init:
+        condition: service_completed_successfully
+    volumes:
+      - bench_redis:/data
+    # 2G, not the chart's 512M: the observed working set was already ~855 MB of
+    # cached frames, and DEPICTIO_CACHE_REDIS_MAX_MEMORY_MB defaults to 1024.
+    deploy:
+      resources:
+        limits: {cpus: "0.5", memory: 2G}
+
+  minio:
+    depends_on:
+      bench-volume-init:
+        condition: service_completed_successfully
+    volumes:
+      - bench_minio:/data
+    # Deliberately UNBOUNDED. EMBL sets minio.enabled=false and uses external S3
+    # (values-embl-demo-base.yaml:139), so there is no production limit to mirror
+    # here — capping it would only invent a bottleneck on the ingestion path that
+    # does not exist in the deployment being modelled.
+
+  depictio-backend:
+    depends_on:
+      bench-volume-init:
+        condition: service_completed_successfully
+    volumes:
+      - bench_cache:/app/cache
+    # 2 workers x 2.31 GB peak = 4.6 GB, plus interpreter/framework headroom.
+    environment:
+      DEPICTIO_FASTAPI_WORKERS: "2"
+    deploy:
+      resources:
+        limits: {cpus: "2", memory: 8G}
+
+  depictio-celery-worker:
+    depends_on:
+      bench-volume-init:
+        condition: service_completed_successfully
+    # Same named volume as the backend: the two processes share this cache by
+    # design (backend fetches, worker reuses), which the bind mount provided.
+    volumes:
+      - bench_cache:/app/cache
+    # Offloaded renders do the Delta read here too, so the same 2.31 GB applies.
+    # 2 prefork slots x 2.31 GB = 4.6 GB, so 6G. One slot was safer on memory but
+    # made the celery_on half measure queue wait instead of compute: any long
+    # background task (screenshot, MultiQC prewarm) blocks the single slot and
+    # every offloaded render times out behind it.
+    environment:
+      DEPICTIO_CELERY_WORKERS: "2"
+    deploy:
+      resources:
+        limits: {cpus: "2", memory: 6G}
+
+volumes:
+  bench_mongo:
+  bench_redis:
+  bench_minio:
+  bench_cache:

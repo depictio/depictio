@@ -17,9 +17,13 @@ Key decisions (mirroring known-good authored projects like ``penguins``):
 - **connect mode**:
   - ``joins``       -> one ``joins:`` entry per (dc_0, dc_i); components bind to
     the resulting ``joined_<name>`` tables.
-  - ``links``       -> one ``links:`` entry from dc_0 to each dc_i, plus a couple
-    of ``interactive`` components on dc_0 so cross-filter actually fires.
+  - ``links``       -> one ``links:`` entry from dc_0 to each dc_i.
   - ``independent`` -> components bind round-robin across the raw DCs.
+- **filters**: every dashboard gets two ``interactive`` components (a species
+  MultiSelect + a body-mass RangeSlider) so filtering responsiveness is
+  benchmarkable across all connect modes. They bind to the tag components
+  render from (the joined table for joins; ``dc_0`` for links, where link
+  resolution propagates the filter to the linked DCs).
 """
 
 from __future__ import annotations
@@ -203,39 +207,48 @@ def build_ingest_project(
     s3_bucket: str = "depictio-bucket",
     metadata_csv: str | None = None,
     images_dir: str | None = None,
+    run_tag: str = "",
 ) -> dict:
     """Build a minimal ingestion project for one :class:`IngestCell`.
 
     TABLE reuses the recursive ``run_*`` CSV scan; MULTIQC scans ``run_*`` for the
     staged parquet; IMAGES is a single-scan metadata table plus an ``image_column``
     whose ``s3_base_folder`` is where :func:`benchmark.runner` pushes the images.
+
+    ``run_tag`` namespaces the project name *and* the derived static IDs. Without
+    it, re-running a cell reuses the same project, and the files registered by
+    earlier runs are still attached to the data collection — so each run
+    aggregates its own data plus every previous run's, inflating row counts (a
+    10 MB cell measured 137k rows, then 275k, then 413k) and silently
+    invalidating any before/after comparison.
     """
     slug = cell.slug
-    project_name = f"Benchmark {slug}"
+    scope = f"{slug}-{run_tag}" if run_tag else slug
+    project_name = f"Benchmark {scope}"
     workflow_name = f"{slug}_wf"
     resolved_dir = str(Path(dataset_dir).resolve())
 
     if cell.kind is DCKind.TABLE:
         dc_tags = [f"dc_{i}" for i in range(cell.n_dcs)]
-        data_collections = [_dc_block(tag, static_id("dc", slug, tag)) for tag in dc_tags]
+        data_collections = [_dc_block(tag, static_id("dc", scope, tag)) for tag in dc_tags]
         data_location = {
             "structure": "sequencing-runs",
             "runs_regex": "run_*",
             "locations": [resolved_dir],
         }
     elif cell.kind is DCKind.MULTIQC:
-        data_collections = [_multiqc_dc_block("multiqc_data", static_id("dc", slug, "multiqc"))]
+        data_collections = [_multiqc_dc_block("multiqc_data", static_id("dc", scope, "multiqc"))]
         data_location = {
             "structure": "sequencing-runs",
             "runs_regex": "run_*",
             "locations": [resolved_dir],
         }
     else:  # IMAGES
-        s3_base_folder = f"s3://{s3_bucket}/bench_images/{slug}/"
+        s3_base_folder = f"s3://{s3_bucket}/bench_images/{scope}/"
         data_collections = [
             _image_dc_block(
                 "sample_images",
-                static_id("dc", slug, "images"),
+                static_id("dc", scope, "images"),
                 metadata_csv=metadata_csv or str(Path(resolved_dir) / "images_data.csv"),
                 images_dir=images_dir or str(Path(resolved_dir) / "images"),
                 s3_base_folder=s3_base_folder,
@@ -247,11 +260,11 @@ def build_ingest_project(
         "name": project_name,
         "project_type": "advanced",
         "is_public": True,
-        "id": static_id("project", slug),
+        "id": static_id("project", scope),
         "workflows": [
             {
                 "name": workflow_name,
-                "id": static_id("workflow", slug),
+                "id": static_id("workflow", scope),
                 "engine": {"name": ENGINE_NAME},
                 "description": f"Benchmark ingestion workflow for {slug}",
                 "data_location": data_location,
@@ -268,12 +281,45 @@ def bindable_tags(cell: Cell) -> list[str]:
     return [f"dc_{i}" for i in range(cell.n_dcs)]
 
 
+# Human-readable size labels for dashboard titles (SIZES keys -> display text).
+_SIZE_LABELS: dict[str, str] = {
+    "10mb": "10 MB",
+    "100mb": "100 MB",
+    "1gb": "1 GB",
+    "5gb": "5 GB",
+    "10gb": "10 GB",
+}
+
+# Short visu labels for the title's "figure+table+adv-viz" segment.
+_VISU_LABELS: dict[str, str] = {
+    "figure": "figure",
+    "table": "table",
+    "advanced_viz": "adv-viz",
+}
+
+
+def readable_title(cell: Cell) -> str:
+    """Decode a cell's axes into a scannable title.
+
+    e.g. ``10 MB · 5 comp · 2 DC · joins · figure+table+adv-viz`` — the raw
+    ``cell.slug`` is kept as the project name (binding key) but is too cryptic
+    for the dashboard list, so the display title spells every axis out.
+    """
+    size = _SIZE_LABELS.get(cell.size, cell.size)
+    visu = "+".join(_VISU_LABELS.get(v.value, v.value) for v in cell.visu)
+    return f"{size} · {cell.n_components} comp · {cell.n_dcs} DC · {cell.connect.value} · {visu}"
+
+
 # ── dashboard.yaml ──────────────────────────────────────────────────────────
-def _layout(index: int, w: int, h: int, per_row: int = 2) -> dict:
-    """Simple flow layout on a 12-column grid."""
+def _layout(index: int, w: int, h: int, per_row: int = 2, y_offset: int = 0) -> dict:
+    """Simple flow layout on a 12-column grid.
+
+    ``y_offset`` reserves rows at the top for the filter strip so figures/tables
+    start below the interactive filters instead of overlapping them.
+    """
     col = index % per_row
     row = index // per_row
-    return {"x": col * (12 // per_row), "y": row * h, "w": w, "h": h}
+    return {"x": col * (12 // per_row), "y": y_offset + row * h, "w": w, "h": h}
 
 
 def _figure_kwargs(visu_type: str) -> dict:
@@ -304,9 +350,85 @@ def _advanced_viz_config(viz_kind: str) -> dict:
     raise ValueError(f"Unsupported benchmark viz_kind {viz_kind!r}")
 
 
+# Height (grid rows) of the top filter strip. Components start below it.
+_FILTER_STRIP_H = 4
+
+
+def _filter_tag(cell: Cell) -> str:
+    """The DC/joined tag the filters bind to so cross-filtering actually fires.
+
+    - ``links``  : bind to the source ``dc_0`` — link resolution propagates the
+      filter to the linked DCs the components render from.
+    - ``joins``  : bind to the joined table the components themselves bind to, so
+      the filter narrows the same frame (an interactive only filters components
+      sharing its data collection).
+    - ``independent`` : bind to ``dc_0`` (the first raw DC components round-robin).
+    """
+    if cell.connect is ConnectMode.LINKS:
+        return "dc_0"
+    return bindable_tags(cell)[0]
+
+
+def _filter_components(cell: Cell, workflow_tag: str) -> list[dict]:
+    """Two interactive filters (categorical + numeric range) to benchmark
+    filtering responsiveness. Added to every dashboard regardless of connect
+    mode. Laid out as a top strip so they don't overlap the figures/tables."""
+    filter_tag = _filter_tag(cell)
+    base = {"workflow_tag": workflow_tag, "data_collection_tag": filter_tag}
+    return [
+        {
+            "tag": "filter-species",
+            "component_type": "interactive",
+            **base,
+            "interactive_component_type": "MultiSelect",
+            "column_name": "species",
+            "column_type": "object",
+            "title": "Species",
+            "layout": {"x": 0, "y": 0, "w": 3, "h": _FILTER_STRIP_H},
+        },
+        {
+            "tag": "filter-body-mass",
+            "component_type": "interactive",
+            **base,
+            "interactive_component_type": "RangeSlider",
+            "column_name": "body_mass_g",
+            "column_type": "int64",
+            "title": "Body mass",
+            "layout": {"x": 3, "y": 0, "w": 3, "h": _FILTER_STRIP_H},
+        },
+        # Two metric cards sharing the filter DC. Cards were previously absent
+        # from the matrix, which hid their worst case entirely: with no filters
+        # they're answered from precomputed specs without touching Delta, but the
+        # moment a filter is applied that shortcut is gone and the value has to be
+        # computed against the (filtered) data. Both are timed — the unfiltered
+        # pass and the filtered one — so the difference is visible.
+        {
+            "tag": "card-mean-mass",
+            "component_type": "card",
+            **base,
+            "column_name": "body_mass_g",
+            "column_type": "int64",
+            # "average", not "mean": both reduce identically, but the card model
+            # only accepts "average" for a numeric column.
+            "aggregation": "average",
+            "title": "Mean body mass",
+            "layout": {"x": 6, "y": 0, "w": 3, "h": _FILTER_STRIP_H},
+        },
+        {
+            "tag": "card-unique-species",
+            "component_type": "card",
+            **base,
+            "column_name": "species",
+            "column_type": "object",
+            "aggregation": "nunique",
+            "title": "Distinct species",
+            "layout": {"x": 9, "y": 0, "w": 3, "h": _FILTER_STRIP_H},
+        },
+    ]
+
+
 def build_dashboard(cell: Cell, project: dict) -> dict:
     """Build the dashboard (lite) config dict for a cell."""
-    slug = cell.slug
     workflow_name = project["workflows"][0]["name"]
     workflow_tag = f"{ENGINE_NAME}/{workflow_name}"
     tags = bindable_tags(cell)
@@ -317,6 +439,7 @@ def build_dashboard(cell: Cell, project: dict) -> dict:
         visu = cell.visu[i % len(cell.visu)]
         dc_tag = tags[i % len(tags)]
         base = {"workflow_tag": workflow_tag, "data_collection_tag": dc_tag}
+        layout = _layout(i, w=6, h=8, y_offset=_FILTER_STRIP_H)
 
         if visu is VisuType.FIGURE:
             visu_type = FIGURE_VISU_ROTATION[fig_i % len(FIGURE_VISU_ROTATION)]
@@ -329,7 +452,7 @@ def build_dashboard(cell: Cell, project: dict) -> dict:
                     "visu_type": visu_type,
                     "dict_kwargs": _figure_kwargs(visu_type),
                     "title": f"Figure {i} ({visu_type})",
-                    "layout": _layout(i, w=6, h=8),
+                    "layout": layout,
                 }
             )
         elif visu is VisuType.TABLE:
@@ -339,7 +462,7 @@ def build_dashboard(cell: Cell, project: dict) -> dict:
                     "component_type": "table",
                     **base,
                     "title": f"Table {i}",
-                    "layout": _layout(i, w=6, h=8),
+                    "layout": layout,
                 }
             )
         elif visu is VisuType.ADVANCED_VIZ:
@@ -353,47 +476,20 @@ def build_dashboard(cell: Cell, project: dict) -> dict:
                     "viz_kind": viz_kind,
                     "config": _advanced_viz_config(viz_kind),
                     "title": f"Advanced viz {i} ({viz_kind})",
-                    "layout": _layout(i, w=6, h=8),
+                    "layout": layout,
                 }
             )
 
-    # For links mode, add interactive filters on the source DC (dc_0) so that
-    # cross-filtering actually exercises the link-resolution path at render time.
-    if cell.connect is ConnectMode.LINKS:
-        source = "dc_0"
-        components.append(
-            {
-                "tag": "filter-species",
-                "component_type": "interactive",
-                "workflow_tag": workflow_tag,
-                "data_collection_tag": source,
-                "interactive_component_type": "MultiSelect",
-                "column_name": "species",
-                "column_type": "object",
-                "title": "Species",
-                "layout": {"x": 0, "y": 0, "w": 1, "h": 3},
-            }
-        )
-        components.append(
-            {
-                "tag": "filter-body-mass",
-                "component_type": "interactive",
-                "workflow_tag": workflow_tag,
-                "data_collection_tag": source,
-                "interactive_component_type": "RangeSlider",
-                "column_name": "body_mass_g",
-                "column_type": "int64",
-                "title": "Body mass",
-                "layout": {"x": 0, "y": 3, "w": 1, "h": 3},
-            }
-        )
+    # Interactive filters on every dashboard so filtering responsiveness is
+    # benchmarkable across all connect modes (previously links-only).
+    components.extend(_filter_components(cell, workflow_tag))
 
     return {
         "version": 1,
-        "title": f"Benchmark {slug}",
+        "title": readable_title(cell),
         "subtitle": (
             f"size={cell.size} components={cell.n_components} "
-            f"dcs={cell.n_dcs} connect={cell.connect.value}"
+            f"dcs={cell.n_dcs} connect={cell.connect.value} filters=2"
         ),
         "project_tag": project["name"],
         "components": components,
@@ -442,12 +538,23 @@ def write_ingest_config(
     s3_bucket: str = "depictio-bucket",
     metadata_csv: str | None = None,
     images_dir: str | None = None,
+    run_tag: str = "",
 ) -> GeneratedIngestConfig:
-    """Build + write the ingestion ``project.yaml`` for one cell."""
+    """Build + write the ingestion ``project.yaml`` for one cell.
+
+    Pass a distinct ``run_tag`` per benchmark invocation to ingest into a fresh
+    project — see :func:`build_ingest_project` on why sharing one accumulates
+    rows across runs.
+    """
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     project = build_ingest_project(
-        cell, dataset_dir, s3_bucket=s3_bucket, metadata_csv=metadata_csv, images_dir=images_dir
+        cell,
+        dataset_dir,
+        s3_bucket=s3_bucket,
+        metadata_csv=metadata_csv,
+        images_dir=images_dir,
+        run_tag=run_tag,
     )
     project_path = out_dir / "project.yaml"
     project_path.write_text(yaml.safe_dump(project, sort_keys=False))

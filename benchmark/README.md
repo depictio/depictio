@@ -56,7 +56,14 @@ python -m benchmark.cli run \
 
 # 4. build results.csv + REPORT.md + plots
 python -m benchmark.cli report
+
+# 5. build blog_metrics.json + BLOG_SNIPPET.md (absolute numbers, no baseline)
+python -m benchmark.cli blog-metrics
 ```
+
+**Use `--components 25` at 1 GB.** The report withholds a verdict below 20
+successful renders per size (a p95 over a handful of points is the max of a tiny
+sample, not a tail), so a 5-component run at 1 GB reports `n=1, insufficient`.
 
 `all` chains run + report for one server config.
 
@@ -83,7 +90,29 @@ the "celery on" half.
 | `runner.py` | ingest via CLI, discover components, POST renders, collect metrics |
 | `metrics.py` | result schema, percentiles, monitoring-ledger enrichment |
 | `report.py` | aggregate → `results.csv` + `REPORT.md` + PNG plots |
-| `cli.py` | Typer entrypoint (`generate`/`run`/`report`/`all`) |
+| `blog_metrics.py` | → `blog_metrics.json` + `BLOG_SNIPPET.md` for write-ups |
+| `cli.py` | Typer entrypoint (`generate`/`run`/`report`/`blog-metrics`/`all`) |
+
+## What each component type costs
+
+Every component on the generated dashboard is timed, including the two that were
+previously skipped:
+
+| type | endpoint | note |
+| --- | --- | --- |
+| figure | `render_figure` | reducing visus (box/histogram/density/bar) are answered by a Polars aggregation — `X-Rows-Loaded: 0` |
+| table | `render_table` | one AG Grid block |
+| advanced_viz | `advanced_viz/data` | dominated by payload transport, not compute |
+| card | `bulk_compute_cards` | timed **filtered and unfiltered** — unfiltered is served from precomputed specs, filtered is the path that has to touch the data |
+| interactive | `deltatables/unique_values` | MultiSelect option list (the per-mount cost). RangeSliders read precomputed specs and never touch Delta, so they aren't timed |
+
+## Reading the numbers
+
+`X-Rows-Loaded` / `X-Aggregated` are what make a latency figure interpretable —
+they say whether a render was fast because the work was small or because the work
+was avoided. Keep the cache regimes apart when quoting anything: `dc_first_touch`
+marks the render that paid the cold Delta read, `concurrent` marks renders fired
+together by a dashboard load. Averaging cold with warm describes neither.
 
 ## What else could we measure? (roadmap)
 

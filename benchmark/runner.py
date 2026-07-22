@@ -18,6 +18,8 @@ import subprocess
 import time
 from pathlib import Path
 
+import httpx
+
 from benchmark.configgen import GeneratedConfigs, write_configs, write_ingest_config
 from benchmark.datagen import (
     generate_dataset,
@@ -36,6 +38,13 @@ _ADVANCED_VIZ_COLUMNS = [
     "mean_expression",
     "species",
 ]
+
+# A heavy render is the *subject* of this benchmark, not an anomaly: at 1 GB/DC a
+# cold table read is minutes, not seconds. The CLI's shared client defaults to
+# httpx's 5 s, which turns every measurement above that into a ReadTimeout that
+# aborts the whole matrix — so the harness owns its own client with a ceiling
+# high enough that a timeout means "genuinely stuck", not "slow but interesting".
+_BENCH_TIMEOUT = httpx.Timeout(900.0, connect=10.0)
 
 # Representative cross-filter payload (React filter shape) for links cells.
 _CROSS_FILTER = [
@@ -137,41 +146,81 @@ def _get_components(client, base: str, headers: dict, dashboard_id: str) -> list
 def _render_component(
     client, base: str, headers: dict, dashboard_id: str, comp: dict, filters: list[dict]
 ) -> dict:
-    """Dispatch one component to its render endpoint. Returns a metrics dict."""
+    """Dispatch one component to its render endpoint. Returns a metrics dict.
+
+    Never raises: a transport failure is itself a measurement (the size at which
+    rendering stops working is the answer we are after), so it is recorded as a
+    row with ``ok=False`` rather than propagated to abort the matrix.
+    """
     ctype = comp.get("component_type")
     index = str(comp.get("index"))
     api = _api(base)
     t0 = time.perf_counter()
 
-    if ctype == "figure":
-        resp = client.post(
-            f"{api}/dashboards/render_figure/{dashboard_id}/{index}",
-            json={"filters": filters, "theme": "light"},
-            headers=headers,
-        )
-        celery_path = resp.headers.get("X-Celery-Path", "inline")
-    elif ctype == "table":
-        resp = client.post(
-            f"{api}/dashboards/render_table/{dashboard_id}/{index}",
-            json={"filters": filters, "start": 0, "limit": 100},
-            headers=headers,
-        )
-        celery_path = resp.headers.get("X-Celery-Path", "n/a")
-    elif ctype == "advanced_viz":
-        resp = client.post(
-            f"{api}/advanced_viz/data",
-            json={
-                "wf_id": str(comp.get("wf_id")),
-                "dc_id": str(comp.get("dc_id")),
-                "columns": _ADVANCED_VIZ_COLUMNS,
-                "filter_metadata": filters,
-                "limit_rows": 100_000,
-            },
-            headers=headers,
-        )
-        celery_path = resp.headers.get("X-Celery-Path", "n/a")
-    else:
-        return {}  # interactive/card/text — not a timed render
+    try:
+        if ctype == "figure":
+            resp = client.post(
+                f"{api}/dashboards/render_figure/{dashboard_id}/{index}",
+                json={"filters": filters, "theme": "light"},
+                headers=headers,
+            )
+            celery_path = resp.headers.get("X-Celery-Path", "inline")
+        elif ctype == "table":
+            resp = client.post(
+                f"{api}/dashboards/render_table/{dashboard_id}/{index}",
+                json={"filters": filters, "start": 0, "limit": 100},
+                headers=headers,
+            )
+            celery_path = resp.headers.get("X-Celery-Path", "n/a")
+        elif ctype == "advanced_viz":
+            resp = client.post(
+                f"{api}/advanced_viz/data",
+                json={
+                    "wf_id": str(comp.get("wf_id")),
+                    "dc_id": str(comp.get("dc_id")),
+                    "columns": _ADVANCED_VIZ_COLUMNS,
+                    "filter_metadata": filters,
+                    "limit_rows": 100_000,
+                },
+                headers=headers,
+            )
+            celery_path = resp.headers.get("X-Celery-Path", "n/a")
+        elif ctype == "card":
+            # One bulk call serves every card on the dashboard, so time it for
+            # this component and let the report divide by the card count. The
+            # filtered variant is the interesting one: it's the case the
+            # precomputed-specs fast path can't serve.
+            resp = client.post(
+                f"{api}/dashboards/bulk_compute_cards/{dashboard_id}",
+                json={"filters": filters, "component_ids": [index]},
+                headers=headers,
+            )
+            celery_path = "n/a"
+        elif ctype == "interactive":
+            # MultiSelect option list — the cost paid on every mount. RangeSliders
+            # read precomputed specs and never touch Delta, so they aren't timed.
+            if (comp.get("interactive_component_type") or "") != "MultiSelect":
+                return {}
+            dc_id = str(comp.get("dc_id"))
+            column = comp.get("column_name") or ""
+            if not dc_id or not column:
+                return {}
+            resp = client.get(
+                f"{api}/deltatables/unique_values/{dc_id}",
+                params={"column": column},
+                headers=headers,
+            )
+            celery_path = "n/a"
+        else:
+            return {}  # text and other passive components — not a timed render
+    except httpx.HTTPError as exc:
+        return {
+            "wall_ms": (time.perf_counter() - t0) * 1000.0,
+            "celery_path": "error",
+            "http_status": 0,
+            "ok": False,
+            "error": f"{type(exc).__name__}: {exc}"[:300],
+        }
 
     wall_ms = (time.perf_counter() - t0) * 1000.0
 
@@ -182,6 +231,10 @@ def _render_component(
         except (TypeError, ValueError):
             return None
 
+    def _hdr_int(name: str):
+        v = _hdr_float(name)
+        return int(v) if v is not None else None
+
     return {
         "wall_ms": wall_ms,
         "celery_path": celery_path,
@@ -191,8 +244,41 @@ def _render_component(
         "load_ms": _hdr_float("X-Load-Ms"),
         "build_ms": _hdr_float("X-Build-Ms"),
         "server_total_ms": _hdr_float("X-Total-Ms"),
+        # What the render had to touch — this is what makes the latency number
+        # interpretable. rows_loaded == 0 with aggregated == True means a
+        # scan-level reduction served it without materialising anything.
+        "rows_loaded": _hdr_int("X-Rows-Loaded"),
+        "rows_displayed": _hdr_int("X-Rows-Displayed"),
+        "frame_bytes": _hdr_int("X-Frame-Bytes"),
+        "aggregated": resp.headers.get("X-Aggregated") == "1",
+        "cache": resp.headers.get("X-Cache", ""),
+        "peak_rss_mb": _hdr_float("X-Peak-RSS-MB"),
         "error": "" if resp.status_code == 200 else resp.text[:300],
     }
+
+
+def _dashboard_load(
+    client, base: str, headers: dict, dashboard_id: str, components: list[dict]
+) -> tuple[list[tuple[dict, dict]], float]:
+    """Fire every component at once, as opening the dashboard does.
+
+    Sequential rendering measures one component on an idle server; a real cold
+    open puts all of them in flight together, so the answer to "does a heavy
+    dashboard hold up" lives in the contention this creates — worker-pool
+    saturation, connection-pool queueing, memory pressure from concurrent Delta
+    reads. Returns the per-component metrics plus the wall-clock to the *last*
+    one, which is what the user actually waits for.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
+    t0 = time.perf_counter()
+    with ThreadPoolExecutor(max_workers=max(1, len(components))) as pool:
+        futures = [
+            (comp, pool.submit(_render_component, client, base, headers, dashboard_id, comp, []))
+            for comp in components
+        ]
+        results = [(comp, fut.result()) for comp, fut in futures]
+    return results, (time.perf_counter() - t0) * 1000.0
 
 
 def _get_celery_health(client, base: str, headers: dict) -> dict:
@@ -213,6 +299,8 @@ def run_matrix(
     server_mode: str,
     cross_filter: bool = False,
     force_datagen: bool = False,
+    repeats: int = 1,
+    dashboard_load: bool = False,
     depictio_bin: str = "depictio",
 ) -> Path:
     """Run every cell and append results to ``<output_root>/results.jsonl``.
@@ -223,7 +311,6 @@ def run_matrix(
     # Lazy imports: keep this module importable without the full depictio stack.
     from depictio.cli.cli.utils.common import (
         generate_api_headers,
-        get_http_client,
         load_depictio_config,
     )
 
@@ -234,7 +321,8 @@ def run_matrix(
     cli_config = load_depictio_config(cli_config_path)
     base = str(cli_config.api_base_url)
     headers = generate_api_headers(cli_config)
-    client = get_http_client()
+    # Own client, not the CLI's shared singleton: see _BENCH_TIMEOUT.
+    client = httpx.Client(timeout=_BENCH_TIMEOUT)
 
     celery_health = _get_celery_health(client, base, headers)
 
@@ -282,27 +370,82 @@ def run_matrix(
             if cross_filter and cell.connect is ConnectMode.LINKS:
                 passes.append((True, _CROSS_FILTER))
 
+            touched_dcs: set[str] = set()
             for filtered, filt in passes:
-                for comp in components:
-                    m = _render_component(client, base, headers, dashboard_id, comp, filt)
+                for iteration in range(max(1, repeats)):
+                    for comp in components:
+                        m = _render_component(client, base, headers, dashboard_id, comp, filt)
+                        if not m:
+                            continue
+                        dc_tag = str(comp.get("dc_config", {}).get("data_collection_tag", ""))
+                        first_touch = dc_tag not in touched_dcs
+                        touched_dcs.add(dc_tag)
+                        row = RenderResult(
+                            cell_slug=cell.slug,
+                            size=cell.size,
+                            size_bytes=cell.size_bytes,
+                            n_components=cell.n_components,
+                            n_dcs=cell.n_dcs,
+                            connect=cell.connect.value,
+                            component_type=comp.get("component_type", ""),
+                            component_index=str(comp.get("index")),
+                            visu=str(comp.get("visu_type") or comp.get("viz_kind") or ""),
+                            dc_tag=dc_tag,
+                            server_mode=server_mode,
+                            filtered=filtered,
+                            dc_first_touch=first_touch,
+                            iteration=iteration,
+                            **m,
+                        )
+                        emit({"kind": "render", **row.to_dict()})
+
+            if dashboard_load:
+                loaded, total_ms = _dashboard_load(client, base, headers, dashboard_id, components)
+                # Passive components (text, …) return no metrics; counting them as
+                # "requested" would report a complete load as partial.
+                n_timed = sum(1 for _, m in loaded if m)
+                n_ok = 0
+                for comp, m in loaded:
                     if not m:
                         continue
-                    row = RenderResult(
-                        cell_slug=cell.slug,
-                        size=cell.size,
-                        size_bytes=cell.size_bytes,
-                        n_components=cell.n_components,
-                        n_dcs=cell.n_dcs,
-                        connect=cell.connect.value,
-                        component_type=comp.get("component_type", ""),
-                        component_index=str(comp.get("index")),
-                        visu=str(comp.get("visu_type") or comp.get("viz_kind") or ""),
-                        dc_tag=str(comp.get("dc_config", {}).get("data_collection_tag", "")),
-                        server_mode=server_mode,
-                        filtered=filtered,
-                        **m,
+                    n_ok += bool(m.get("ok"))
+                    emit(
+                        {
+                            "kind": "render",
+                            **RenderResult(
+                                cell_slug=cell.slug,
+                                size=cell.size,
+                                size_bytes=cell.size_bytes,
+                                n_components=cell.n_components,
+                                n_dcs=cell.n_dcs,
+                                connect=cell.connect.value,
+                                component_type=comp.get("component_type", ""),
+                                component_index=str(comp.get("index")),
+                                visu=str(comp.get("visu_type") or comp.get("viz_kind") or ""),
+                                dc_tag=str(
+                                    comp.get("dc_config", {}).get("data_collection_tag", "")
+                                ),
+                                server_mode=server_mode,
+                                concurrent=True,
+                                **m,
+                            ).to_dict(),
+                        }
                     )
-                    emit({"kind": "render", **row.to_dict()})
+                emit(
+                    {
+                        "kind": "dashboard_load",
+                        "cell_slug": cell.slug,
+                        "size": cell.size,
+                        "n_components": cell.n_components,
+                        "n_dcs": cell.n_dcs,
+                        "connect": cell.connect.value,
+                        "server_mode": server_mode,
+                        "wall_ms": total_ms,
+                        "n_rendered": n_ok,
+                        "n_requested": n_timed,
+                        "ok": n_ok == n_timed,
+                    }
+                )
 
     client.close()
     _stamp_run_meta(output_root, server_mode, celery_health)
@@ -338,6 +481,9 @@ def _aggregate_markers(stdout: str) -> dict:
     peak_rss: float | None = None
     n_units = 0
     delta_bytes = 0
+    # Authoritative write path, as taken (a requested stream that hit the
+    # fallback reports False) — None when no marker declared one.
+    streaming: bool | None = None
     for m in parse_timing_markers(stdout):
         for phase, ms in (m.get("phase_ms") or {}).items():
             phase_ms[phase] = phase_ms.get(phase, 0.0) + float(ms)
@@ -346,11 +492,16 @@ def _aggregate_markers(stdout: str) -> dict:
             peak_rss = rss if peak_rss is None else max(peak_rss, rss)
         n_units += int(m.get("n_rows") or m.get("n_files") or m.get("n_images") or 0)
         delta_bytes += int(m.get("delta_bytes") or 0)
+        if "streaming" in m:
+            # Across multiple DCs, only report streaming if every one streamed.
+            val = bool(m["streaming"])
+            streaming = val if streaming is None else (streaming and val)
     return {
         "phase_ms": phase_ms,
         "peak_rss_mb": peak_rss,
         "n_units": n_units,
         "delta_bytes": delta_bytes,
+        "streaming": streaming,
     }
 
 
@@ -361,6 +512,8 @@ def run_ingest_matrix(
     output_root: str | Path,
     multiqc_fixture: str = "small",
     force_datagen: bool = False,
+    streaming: bool = False,
+    run_tag: str = "",
     depictio_bin: str = "depictio",
 ) -> Path:
     """Ingest each cell (no render) and append ``kind=="ingest"`` rows.
@@ -369,12 +522,18 @@ def run_ingest_matrix(
     ``depictio run``; IMAGES additionally pushes the PNGs via ``depictio images
     push``. The per-phase ``DEPICTIO_INGEST_TIMINGS`` markers emitted by the CLI
     are parsed out of captured stdout to fill the phase breakdown + peak RSS.
+
+    ``run_tag`` namespaces the generated projects so this invocation ingests into
+    fresh data collections; it defaults to a timestamp. Reusing a previous run's
+    project would re-aggregate the files it registered on top of this run's own,
+    inflating row counts and invalidating before/after comparisons.
     """
     from depictio.cli.cli.utils.common import load_depictio_config
 
     output_root = Path(output_root)
     output_root.mkdir(parents=True, exist_ok=True)
     results_path = output_root / "results.jsonl"
+    run_tag = run_tag or time.strftime("%Y%m%d%H%M%S")
 
     cli_config = load_depictio_config(cli_config_path)
     s3_bucket = getattr(getattr(cli_config, "s3_storage", None), "bucket", "depictio-bucket")
@@ -412,21 +571,25 @@ def run_ingest_matrix(
                 s3_bucket=s3_bucket,
                 metadata_csv=metadata_csv,
                 images_dir=images_dir,
+                run_tag=run_tag,
             )
 
             # ── ingest (run) ─────────────────────────────────────────────────
-            rc, out, err, wall_ms = _run_cli_capture(
-                [
-                    depictio_bin,
-                    "run",
-                    "--CLI-config-path",
-                    cli_config_path,
-                    "--project-config-path",
-                    gen.project_path,
-                    "--overwrite",
-                    "--update-config",
-                ]
-            )
+            run_args = [
+                depictio_bin,
+                "run",
+                "--CLI-config-path",
+                cli_config_path,
+                "--project-config-path",
+                gen.project_path,
+                "--overwrite",
+                "--update-config",
+            ]
+            # Toggling this per run is how the table before/after is measured:
+            # same cell, same data, collect-then-write vs streamed write.
+            if streaming:
+                run_args.append("--streaming")
+            rc, out, err, wall_ms = _run_cli_capture(run_args)
             if rc != 0:
                 emit(
                     _ingest_kind_error_row(cell, input_bytes, f"run failed (rc={rc}): {err[-300:]}")
@@ -473,6 +636,7 @@ def run_ingest_matrix(
                 n_units=agg["n_units"],
                 phase_ms=agg["phase_ms"],
                 peak_rss_mb=agg["peak_rss_mb"],
+                streaming=agg["streaming"],
             )
             emit({"kind": "ingest", "server_mode": "ingest", **vars(res)})
 
