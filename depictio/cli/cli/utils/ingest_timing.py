@@ -31,11 +31,6 @@ from typing import Any
 
 from depictio.cli.cli_logging import logger
 
-try:
-    import resource  # POSIX only (Linux, macOS) — absent on Windows.
-except ImportError:  # pragma: no cover - depictio CLI targets POSIX
-    resource = None  # type: ignore[assignment]
-
 _MARKER = "DEPICTIO_INGEST_TIMINGS="
 
 _active: contextvars.ContextVar["IngestTimer | None"] = contextvars.ContextVar(
@@ -69,9 +64,12 @@ class IngestTimer:
 def _peak_rss_mb() -> float | None:
     """Process peak resident set size in MB, or ``None`` if unavailable.
 
-    ``ru_maxrss`` is bytes on macOS but kilobytes on Linux — normalise both.
+    ``resource`` is POSIX-only, hence the local import. ``ru_maxrss`` is bytes on
+    macOS but kilobytes on Linux — normalise both.
     """
-    if resource is None:
+    try:
+        import resource
+    except ImportError:  # pragma: no cover - depictio CLI targets POSIX
         return None
     ru_maxrss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
     divisor = 1024.0**2 if platform.system() == "Darwin" else 1024.0
