@@ -3,6 +3,7 @@ MultiQC processing utilities for extracting metadata from parquet files.
 Uses MultiQC Python module to extract samples, modules, and plots.
 """
 
+import os
 from pathlib import Path
 from typing import Any, Dict
 
@@ -112,6 +113,90 @@ def extract_multiqc_metadata(parquet_path: str) -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"Failed to extract MultiQC metadata from {parquet_path}: {e}")
         raise
+
+
+def _is_parseable_multiqc_file(file_path: str) -> bool:
+    """Whether a registered file is a MultiQC parquet that still exists on disk."""
+    if not file_path.endswith(".parquet"):
+        logger.warning(f"Skipping non-parquet file: {file_path}")
+        return False
+    if not Path(file_path).exists():
+        logger.error(f"File not found: {file_path}")
+        return False
+    return True
+
+
+def _parse_multiqc_worker(file_path: str) -> Dict[str, Any]:
+    """Parse one report in a worker process — module-level so it stays picklable."""
+    return extract_multiqc_metadata(file_path)
+
+
+def multiqc_parse_workers() -> int:
+    """Number of processes to parse MultiQC reports with (1 = serial, the default).
+
+    ``multiqc.parse_logs`` dominates MultiQC ingestion (≈90-99% of the wall) and
+    is independent per file, so parsing several at once is the only real lever —
+    but MultiQC keeps *module-global* state, so it must be processes, not threads.
+
+    Opt-in via ``DEPICTIO_MULTIQC_PARSE_WORKERS`` because each worker holds a
+    fully parsed report in memory; on a large report set that multiplies peak RSS,
+    which is not a trade a memory-capped deployment should make unasked.
+    """
+    raw = os.getenv("DEPICTIO_MULTIQC_PARSE_WORKERS", "").strip()
+    if not raw:
+        return 1
+    try:
+        return max(1, int(raw))
+    except ValueError:
+        logger.warning(f"Invalid DEPICTIO_MULTIQC_PARSE_WORKERS={raw!r}; parsing serially.")
+        return 1
+
+
+def _parse_multiqc_files(file_paths: list[str]) -> list[tuple[str, Dict[str, Any] | None]]:
+    """Parse each report, returning ``(path, metadata|None)`` in input order.
+
+    A file that fails to parse yields ``None`` rather than aborting the batch, so
+    one corrupt report cannot lose the whole data collection.
+    """
+    workers = min(multiqc_parse_workers(), len(file_paths))
+
+    if workers <= 1 or len(file_paths) <= 1:
+        return _parse_multiqc_files_serial(file_paths)
+
+    logger.info(f"Parsing {len(file_paths)} MultiQC files across {workers} processes")
+    try:
+        from concurrent.futures import ProcessPoolExecutor
+
+        with ProcessPoolExecutor(max_workers=workers) as executor:
+            futures = [executor.submit(_parse_multiqc_worker, p) for p in file_paths]
+            out: list[tuple[str, Dict[str, Any] | None]] = []
+            for path, future in zip(file_paths, futures):
+                try:
+                    out.append((path, future.result()))
+                except Exception as e:
+                    logger.error(f"Failed to process MultiQC file {path}: {e}")
+                    out.append((path, None))
+            return out
+    except Exception as e:
+        # Process pools can be unavailable (sandboxes, restricted containers) —
+        # never fail an ingest over a parallelism optimisation.
+        logger.warning(f"Parallel MultiQC parse unavailable ({e}); falling back to serial.")
+        return _parse_multiqc_files_serial(file_paths)
+
+
+def _parse_multiqc_files_serial(
+    file_paths: list[str],
+) -> list[tuple[str, Dict[str, Any] | None]]:
+    """Parse reports one at a time, isolating per-file failures."""
+    results: list[tuple[str, Dict[str, Any] | None]] = []
+    for i, path in enumerate(file_paths, 1):
+        logger.info(f"Processing file {i}/{len(file_paths)}: {path}")
+        try:
+            results.append((path, _parse_multiqc_worker(path)))
+        except Exception as e:
+            logger.error(f"Failed to process MultiQC file {path}: {e}")
+            results.append((path, None))
+    return results
 
 
 def validate_multiqc_parquet(parquet_path: str) -> bool:
@@ -259,42 +344,25 @@ def process_multiqc_data_collection(
         first_s3_location = None  # Track first S3 location for dc_specific_properties
 
         logger.info(f"Starting to process {len(files)} MultiQC files...")
-        for i, file_obj in enumerate(files, 1):
-            file_path = file_obj.file_location
-            if not file_path.endswith(".parquet"):
-                logger.warning(f"Skipping non-parquet file: {file_path}")
-                continue
+        parseable = [f.file_location for f in files if _is_parseable_multiqc_file(f.file_location)]
 
-            if not Path(file_path).exists():
-                logger.error(f"File not found: {file_path}")
-                continue
+        with timed("parse"):
+            parsed = _parse_multiqc_files(parseable)
 
-            try:
-                # Extract MultiQC metadata from parquet file
-                logger.info(f"Processing file {i}/{len(files)}: {file_path}")
-                logger.info(f"Extracting metadata from: {file_path}")
-                with timed("parse"):
-                    metadata = extract_multiqc_metadata(file_path)
-
-                # Get file size for metadata
-                file_size = Path(file_path).stat().st_size
-                logger.info(f"Processing MultiQC file: {file_path} ({file_size} bytes)")
-
-                # Store individual file metadata for creating separate reports
-                individual_file_metadata.append(
-                    {
-                        "file_path": file_path,
-                        "file_size_bytes": file_size,
-                        "metadata": metadata,
-                        "multiqc_version": metadata.get("multiqc_version"),
-                    }
-                )
-
-                processed_files += 1
-
-            except Exception as e:
-                logger.error(f"Failed to process MultiQC file {file_path}: {e}")
-                continue
+        for file_path, metadata in parsed:
+            if metadata is None:
+                continue  # already logged by the parser
+            file_size = Path(file_path).stat().st_size
+            logger.info(f"Processing MultiQC file: {file_path} ({file_size} bytes)")
+            individual_file_metadata.append(
+                {
+                    "file_path": file_path,
+                    "file_size_bytes": file_size,
+                    "metadata": metadata,
+                    "multiqc_version": metadata.get("multiqc_version"),
+                }
+            )
+            processed_files += 1
 
         if processed_files == 0:
             return {
