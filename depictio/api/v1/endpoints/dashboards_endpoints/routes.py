@@ -1,4 +1,5 @@
 import json
+import sys
 import uuid
 from datetime import datetime
 from typing import Annotated, Any
@@ -1213,6 +1214,76 @@ def bulk_get_component_data_endpoint(
 # ============================================================================
 
 
+def _agg_expr(column: str, aggregation: str) -> Any:
+    """Polars *expression* form of :func:`_agg_value`, or ``None`` if there isn't one.
+
+    ``_agg_value`` reduces an already-materialised Series; this returns the same
+    reduction as a lazy expression so it can be evaluated against a Delta scan —
+    a card's ``mean`` then costs a column scan with parquet statistics pushdown
+    instead of collecting every row into memory first.
+
+    Returns ``None`` for aggregations that genuinely need the values in hand:
+    ``box_plot_stats`` (its outlier list is per-row data) and anything unknown.
+    The caller must fall back to the load + ``_agg_value`` path for those — this
+    function never approximates.
+
+    Keep in sync with ``_agg_value``: an aggregation present here but computing
+    something different there would make a card's value depend on whether a
+    sibling card happened to force a full load.
+    """
+    import polars as _pl
+
+    agg = (aggregation or "").lower()
+    col = _pl.col(column)
+    if agg == "count":
+        return col.drop_nulls().len()
+    if agg in ("average", "mean"):
+        return col.mean()
+    if agg == "sum":
+        return col.sum()
+    if agg == "median":
+        return col.median()
+    if agg == "min":
+        return col.min()
+    if agg == "max":
+        return col.max()
+    if agg in ("std", "std_dev"):
+        return col.std()
+    if agg in ("variance", "var"):
+        return col.var()
+    if agg in ("nunique", "unique"):
+        return col.n_unique()
+    if agg == "range":
+        return col.max() - col.min()
+    if agg in ("q1", "q3"):
+        return col.quantile(0.25 if agg == "q1" else 0.75, interpolation="linear")
+    # ``mode`` is deliberately absent even though an expression exists: Polars
+    # doesn't guarantee an order among tied modes, so the two paths could pick
+    # different winners. A card's value must not depend on whether a sibling
+    # card happened to force a full load, so mode always goes through _agg_value.
+    return None
+
+
+def _coerce_agg_result(value: Any, aggregation: str) -> Any:
+    """Match :func:`_agg_value`'s return types for a pushdown result.
+
+    ``_agg_value`` returns ``int`` for count/nunique, ``float`` for the numeric
+    reductions and ``str`` for non-numeric min/max/mode. The React card renderer
+    formats on those types, so a pushdown that returned a raw Polars scalar would
+    render differently from the same card computed via the fallback path.
+    """
+    if value is None:
+        return None
+    agg = (aggregation or "").lower()
+    if agg in ("count", "nunique", "unique"):
+        return int(value)
+    if agg in ("min", "max", "mode"):
+        return float(value) if isinstance(value, (int, float)) else str(value)
+    if agg == "range":
+        return float(value) if isinstance(value, (int, float)) else None
+    return float(value) if isinstance(value, (int, float)) else None
+
+
 def _agg_value(col: Any, aggregation: str) -> Any:
     """Compute a scalar aggregation over a Polars Series.
 
@@ -1642,6 +1713,76 @@ def bulk_compute_cards(
         if breakdown_col:
             key_cols.add(breakdown_col)
 
+    # Cards sharing a cache key share one Delta read; group them so the pushdown
+    # below can answer all of their aggregations in a single query.
+    cards_by_key: dict[tuple, list[dict]] = {}
+    for card in cards:
+        if not (card.get("wf_id") and card.get("dc_id") and card.get("column_name")):
+            continue
+        cards_by_key.setdefault(_card_cache_key(card["wf_id"], card["dc_id"]), []).append(card)
+
+    # ``(component_index, aggregation) -> value`` filled by the pushdown pass.
+    pushdown_values: dict[tuple[str, str], Any] = {}
+    pushdown_tried: set[tuple] = set()
+
+    def _try_pushdown(cache_key: tuple, wf_id: Any, dc_id: Any) -> None:
+        """Answer every aggregation on ``cache_key``'s cards with one scan query.
+
+        This is the path that used to force a full frame load: as soon as any
+        interactive filter is set, the precomputed-specs fast path can't serve
+        the cards, and each distinct (dc, filter) combination collected the whole
+        Delta table into memory just to reduce one column to a scalar. Evaluating
+        the same reductions as expressions over the lazy scan reads the column
+        with parquet pushdown and materialises nothing.
+
+        Cards needing an aggregation without an expression form (``box_plot_stats``)
+        are simply left out of ``pushdown_values`` — the main loop then falls back
+        to the load for those, exactly as before.
+        """
+        from depictio.api.v1.deltatables_utils import open_deltatable_scan
+
+        key_cards = cards_by_key.get(cache_key) or []
+        exprs = []
+        aliases: list[tuple[str, str]] = []  # (component_index, aggregation)
+        for card in key_cards:
+            column = card.get("column_name")
+            wanted = [card.get("aggregation")] + list(card.get("aggregations") or [])
+            for agg in wanted:
+                if not agg:
+                    continue
+                cidx = str(card.get("index"))
+                if (cidx, agg) in dict.fromkeys(aliases):
+                    continue
+                expr = _agg_expr(str(column), str(agg))
+                if expr is None:
+                    continue
+                alias = f"c{len(aliases)}"
+                exprs.append(expr.alias(alias))
+                aliases.append((cidx, str(agg)))
+        if not exprs:
+            return
+
+        scan = open_deltatable_scan(
+            workflow_id=ObjectId(str(wf_id)) if not isinstance(wf_id, ObjectId) else wf_id,
+            data_collection_id=str(dc_id),
+            metadata=_resolved_filters_for(str(dc_id)) or None,
+            init_data=init_data,
+            select_columns=sorted(needed_cols_by_key.get(cache_key, set())) or None,
+        )
+        if scan is None:
+            return
+        try:
+            row = scan.select(exprs).collect().row(0)
+        except Exception as e:
+            logger.warning(f"bulk_compute_cards: pushdown failed for {cache_key}: {e}")
+            return
+        for (cidx, agg), value in zip(aliases, row):
+            pushdown_values[(cidx, agg)] = _coerce_agg_result(value, agg)
+        logger.debug(
+            f"bulk_compute_cards: pushdown answered {len(aliases)} aggregation(s) "
+            f"for {cache_key} without loading a frame"
+        )
+
     for card in cards:
         idx = str(card.get("index"))
         wf_id = card.get("wf_id")
@@ -1705,12 +1846,37 @@ def bulk_compute_cards(
                 # else: fall through to slow path so the breakdown gets
                 # computed even though the hero value came from specs.
 
-        # Slow path: load Delta and compute. Required when filters change the
-        # input set, or when the precomputed aggregation isn't available.
+        # Slow path: the precomputed specs couldn't serve this card (filters
+        # changed the input set, or the aggregation isn't in the specs).
         # Cache key includes the filter signature so two cards on the same DC
         # with different (link-resolved) filter sets don't collide.
         card_filters = _resolved_filters_for(str(dc_id))
         cache_key = _card_cache_key(wf_id, dc_id)
+
+        # Try the scan-level pushdown once per cache key before considering a
+        # load. It answers every expressible aggregation for all cards sharing
+        # the key in one query, so a dashboard of N filtered cards over one DC
+        # costs one column scan rather than one full-frame collect.
+        if cache_key not in pushdown_tried:
+            pushdown_tried.add(cache_key)
+            _try_pushdown(cache_key, wf_id, dc_id)
+
+        needs_breakdown_payload = bool(card.get("breakdown_col")) and (
+            card.get("secondary_layout") or "vertical"
+        ) in ("top_n", "concentration")
+        wanted_aggs = [aggregation] + list(secondary_aggs)
+        fully_pushed = not needs_breakdown_payload and all(
+            (idx, a) in pushdown_values for a in wanted_aggs
+        )
+        if fully_pushed:
+            values[idx] = pushdown_values[(idx, aggregation)]
+            if secondary_aggs:
+                secondary_values[idx] = {a: pushdown_values[(idx, a)] for a in secondary_aggs}
+            logger.debug(
+                f"bulk_compute_cards: {idx} ({aggregation}/{column}) = {values[idx]} (pushdown)"
+            )
+            continue
+
         df = df_cache.get(cache_key)
         if df is None:
             try:
@@ -1843,20 +2009,85 @@ def bulk_compute_cards(
 
 
 def _emit_timing_headers(response, timings, t0, _time_mod) -> None:
-    """Attach ``X-Load-Ms`` / ``X-Build-Ms`` / ``X-Total-Ms`` to a render response.
+    """Attach the per-render telemetry headers the benchmark harness reads.
 
     ``timings`` is the per-stage dict a render task/endpoint produced (may be
     ``None``); ``t0`` is a ``perf_counter()`` stamp taken when server-side
     handling began, so ``X-Total-Ms`` covers the whole endpoint, not just the
-    compute. Purely additive telemetry consumed by the benchmark harness —
-    clients ignore unknown headers.
+    compute. Purely additive telemetry — clients ignore unknown headers.
+
+    Beyond timing, this reports *what the render had to touch*, which is what
+    makes a latency number interpretable: ``X-Rows-Loaded`` is 0 when a
+    scan-level aggregate served the request (nothing was materialised),
+    ``X-Frame-Bytes`` is the honest in-memory footprint, and ``X-Peak-RSS-MB``
+    is a process high-water mark — deliberately not a per-render figure, since
+    RSS never comes back down.
     """
     timings = timings or {}
     if timings.get("load_ms") is not None:
         response.headers["X-Load-Ms"] = str(timings["load_ms"])
     if timings.get("build_ms") is not None:
         response.headers["X-Build-Ms"] = str(timings["build_ms"])
+    for header, key in (
+        ("X-Rows-Loaded", "rows_loaded"),
+        ("X-Rows-Displayed", "rows_displayed"),
+        ("X-Frame-Bytes", "frame_bytes"),
+    ):
+        if timings.get(key) is not None:
+            response.headers[header] = str(int(timings[key]))
+    if timings.get("aggregated") is not None:
+        response.headers["X-Aggregated"] = "1" if timings["aggregated"] else "0"
+    if timings.get("cache") is not None:
+        response.headers["X-Cache"] = str(timings["cache"])
+    try:
+        import resource
+
+        rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        # Linux reports KiB, macOS reports bytes.
+        mb = rss / 1024 if sys.platform != "darwin" else rss / (1024 * 1024)
+        response.headers["X-Peak-RSS-MB"] = f"{mb:.1f}"
+    except Exception:
+        pass
     response.headers["X-Total-Ms"] = f"{(_time_mod.perf_counter() - t0) * 1000:.1f}"
+
+
+def _cached_row_count(wf_oid, dc_id: str, filter_metadata, init_data, count_fn) -> int:
+    """Row count for a (dc, filters) pair, memoised until the data version changes.
+
+    AG Grid's infinite row model requests one block per scroll and each block
+    needs the total to size the scrollbar. The count is a pushdown, but running
+    it per block still re-reads parquet statistics for a number that cannot
+    change while the user scrolls. The aggregation version salt is in the key, so
+    an ingest invalidates it for free.
+
+    Falls back to counting directly if the cache is unavailable — this is an
+    optimisation, and a wrong total would break the grid's paging.
+    """
+    from depictio.api.v1.deltatables_utils import _generate_filter_hash, _get_aggregation_version
+
+    def _count() -> int:
+        return count_fn(
+            workflow_id=wf_oid,
+            data_collection_id=dc_id,
+            metadata=filter_metadata or None,
+            init_data=init_data,
+        )
+
+    try:
+        from depictio.api.cache import get_cache
+
+        filter_hash = _generate_filter_hash(filter_metadata) if filter_metadata else "nofilter"
+        key = f"rowcount_{dc_id}_{filter_hash}_{_get_aggregation_version(dc_id)}"
+        cache = get_cache()
+        cached = cache.get(key)
+        if cached is not None:
+            return int(cached)
+        total = _count()
+        cache.set(key, int(total))
+        return total
+    except Exception as exc:
+        logger.debug(f"_cached_row_count: cache unavailable ({exc}); counting directly")
+        return _count()
 
 
 @dashboards_endpoint_router.post("/render_figure/{dashboard_id}/{component_id}")
@@ -2120,40 +2351,55 @@ def render_table_endpoint(
             # rather than 500ing for a UI race.
             chosen_sort = None
 
+        # Project to the columns the grid will actually render — the builder's
+        # per-column ``hide`` flags (cols_json) plus the sort column — so a wide
+        # table only reads/materialises the visible slice. Stays ``None`` (full
+        # frame, shared cache key) when nothing is hidden, preserving today's
+        # behaviour for tables that show every column.
+        cols_json = component.get("cols_json") or {}
+        visible_cols = [c for c in available_cols if not (cols_json.get(c) or {}).get("hide")]
+        select_columns: list[str] | None = None
+        if 0 < len(visible_cols) < len(available_cols):
+            select_columns = list(visible_cols)
+            if chosen_sort and chosen_sort not in select_columns:
+                select_columns.append(chosen_sort)
+
+        # Total is a cheap pushdown count in both branches (no full-frame
+        # materialisation) — the sorted branch used to read it off the fully
+        # loaded frame, which forced a whole-table load even for the first page.
+        # Cheap is not free though: AG Grid's infinite row model asks for one
+        # block per scroll and this ran on every single one, re-counting a table
+        # whose size can't change between blocks. Memoise it per
+        # (dc, filters, data version) so only the first block pays.
+        total = _cached_row_count(
+            wf_oid, str(dc_id), filter_metadata, init_data, count_deltatable_lite
+        )
         if chosen_sort:
-            # A server-side sort has to see every row, so we load the full frame
-            # (its height is then a free, exact total). Inherent to sorting a
-            # paginated grid; kept for the realtime "newest first" default and
-            # explicit header-click sorts. The *sorted* frame is memoised per
-            # (dc, filters, sort_by, sort_dir) so AG Grid's per-scroll-block page
-            # fetches slice an already-sorted frame instead of re-sorting the
-            # whole table every block.
-            df = load_sorted_deltatable_lite(
+            # Server-side sort has to see every row. ``load_sorted_deltatable_lite``
+            # memoises the sorted frame for small tables (later blocks are free
+            # slices) and falls back to a lazy sort+slice for frames over the memo
+            # cap, so a big table's first page doesn't materialise + sort the whole
+            # thing. Kept for the realtime "newest first" default and header clicks.
+            sliced = load_sorted_deltatable_lite(
                 workflow_id=wf_oid,
                 data_collection_id=str(dc_id),
                 sort_by=chosen_sort,
                 descending=(sort_dir == "desc"),
                 metadata=filter_metadata or None,
                 init_data=init_data,
+                select_columns=select_columns,
+                page=(start, limit),
             )
-            total = df.height
-            sliced = df.slice(start, limit)
         else:
             # No sort → push the page window down to the Delta scan so we only
-            # read up to (start + limit) rows instead of the whole table. Total
-            # comes from a separate pushdown count (no full materialisation).
-            total = count_deltatable_lite(
-                workflow_id=wf_oid,
-                data_collection_id=str(dc_id),
-                metadata=filter_metadata or None,
-                init_data=init_data,
-            )
+            # read up to (start + limit) rows instead of the whole table.
             df = load_deltatable_lite(
                 workflow_id=wf_oid,
                 data_collection_id=str(dc_id),
                 metadata=filter_metadata or None,
                 limit_rows=start + limit,
                 init_data=init_data,
+                select_columns=select_columns,
             )
             sliced = df.slice(start, limit)
     except HTTPException:
@@ -2177,7 +2423,22 @@ def render_table_endpoint(
         columns.append({"field": name, "headerName": name, "type": ag_type})
 
     _build_ms = int((_time.perf_counter() - _t_build) * 1000)
-    _emit_timing_headers(response, {"load_ms": _load_ms, "build_ms": _build_ms}, _t0, _time)
+    _emit_timing_headers(
+        response,
+        {
+            "load_ms": _load_ms,
+            "build_ms": _build_ms,
+            # A table page is a bounded slice by construction, so rows_loaded ==
+            # rows_displayed here; both are reported so the harness can compare
+            # component types on the same axes.
+            "rows_loaded": sliced.height,
+            "rows_displayed": sliced.height,
+            "frame_bytes": sliced.estimated_size(),
+            "aggregated": False,
+        },
+        _t0,
+        _time,
+    )
     return {
         "columns": columns,
         "rows": rows,

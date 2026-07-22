@@ -579,6 +579,28 @@ async def get_unique_values(
             status_code=404, detail="Delta table location not found in deltatable document."
         )
 
+    # Cached option lists. ``unique()`` has to see every value and Polars can't
+    # push ``limit`` through it, so this is a full column scan — repeated on every
+    # mount of every MultiSelect, on every dashboard load, for a list that only
+    # changes when the data does. The aggregation version salt is part of the key,
+    # so an ingest invalidates it for free (same contract as the frame cache).
+    from depictio.api.v1.deltatables_utils import _get_aggregation_version
+
+    dc_id_str = str(data_collection_id)
+    cache_key = (
+        f"unique_values_{dc_id_str}_{column}_{limit}_"
+        f"{filter_expr or 'nofilter'}_{_get_aggregation_version(dc_id_str)}"
+    )
+    try:
+        from depictio.api.cache import get_cache
+
+        cached = get_cache().get(cache_key)
+        if cached is not None:
+            logger.debug(f"unique_values: cache hit for {column} on {dc_id_str}")
+            return {"column": column, "values": cached}
+    except Exception as exc:  # the cache is an optimisation, never a dependency
+        logger.debug(f"unique_values: cache read failed for {cache_key}: {exc}")
+
     try:
         lazy = pl.scan_delta(delta_table_location, storage_options=polars_s3_config)
 
@@ -609,6 +631,12 @@ async def get_unique_values(
         values = df[column].drop_nulls().to_list()
         # Stable ordering — MultiSelect UX expects sorted strings.
         values_str = sorted({str(v) for v in values})
+        try:
+            from depictio.api.cache import get_cache
+
+            get_cache().set(cache_key, values_str)
+        except Exception as exc:
+            logger.debug(f"unique_values: cache write failed for {cache_key}: {exc}")
         return {"column": column, "values": values_str}
     except HTTPException:
         raise
