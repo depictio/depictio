@@ -208,17 +208,23 @@ def push(
 
     from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn
 
+    from depictio.cli.cli.utils.ingest_timing import ingest_run, record, timed
+
+    # Resolve "which keys already exist?" with ONE paginated LIST instead of a
+    # HEAD per image: at 10k images that is 10k round-trips replaced by ~10, and
+    # the answer is identical because the keys all share this prefix.
+    existing_keys: set[str] = set()
+    if not overwrite:
+        with timed("list_existing"):
+            existing_keys = _list_existing_keys(s3_client, bucket, prefix)
+        logger.debug(f"Found {len(existing_keys)} existing object(s) under {prefix}")
+
     def _upload_one(img: Path) -> str:
         rel_path = img.relative_to(source_path)
         s3_key = f"{prefix}{rel_path}".replace("\\", "/")
         try:
-            # Check if file exists (unless overwrite is set)
-            if not overwrite:
-                try:
-                    s3_client.head_object(Bucket=bucket, Key=s3_key)
-                    return "skipped"
-                except s3_client.exceptions.ClientError:
-                    pass  # File doesn't exist, proceed with upload
+            if not overwrite and s3_key in existing_keys:
+                return "skipped"
 
             s3_client.upload_file(
                 str(img),
@@ -233,8 +239,6 @@ def push(
             return "error"
 
     counts = {"uploaded": 0, "skipped": 0, "error": 0}
-
-    from depictio.cli.cli.utils.ingest_timing import ingest_run, record, timed
 
     with (
         ingest_run(s3_destination, "image"),
@@ -289,6 +293,26 @@ def _get_content_type(path: Path) -> str:
 
     mime_type, _ = mimetypes.guess_type(str(path))
     return mime_type or "application/octet-stream"
+
+
+def _list_existing_keys(s3_client, bucket: str, prefix: str) -> set[str]:
+    """Every object key already under ``prefix``, via one paginated LIST.
+
+    Replaces a per-image ``head_object`` when skipping existing uploads: LIST
+    returns 1000 keys per call, so 10k images cost ~10 requests instead of
+    10k. Returns an empty set on failure — the caller then re-uploads rather
+    than wrongly skipping, which is the safe direction to be wrong in.
+    """
+    keys: set[str] = set()
+    try:
+        paginator = s3_client.get_paginator("list_objects_v2")
+        for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+            for obj in page.get("Contents", []):
+                keys.add(obj["Key"])
+    except Exception as e:
+        logger.warning(f"Could not list existing objects under {prefix}: {e}")
+        return set()
+    return keys
 
 
 @app.command()
