@@ -156,9 +156,30 @@ def _categorical_predicate(column_name: str, values: list, dtype: pl.DataType | 
     kind we don't convert confidently, we fall back to the original
     column-cast form — correctness first, speed only when it is free.
 
+    How a value is converted depends on the dtype, and getting this wrong is
+    how a filter silently empties a component:
+
+    - numerics and ``Date`` — ``cast`` parses their string form directly.
+    - ``Datetime`` and ``Time`` — ``cast`` from string is a *numeric* parse and
+      returns null without raising, so casting is not merely slow, it drops
+      every row. They need the real parsers (``str.to_datetime`` /
+      ``str.to_time``), which also accept every rendering a client sends:
+      ``str()`` (``"2024-01-01 12:30:45"``), ``isoformat()`` (with ``T``), and
+      Polars' own ``cast(Utf8)`` (with microseconds). Note the column-cast form
+      matched *none* of those — it renders microseconds while clients send
+      seconds — so temporal categorical filters never matched anything before;
+      routing them through a parser fixes that as well as making them pushable.
+    - ``Duration`` — no parser, and its string form isn't castable at all, so
+      it keeps the fallback (which raises on contact; pre-existing).
+    - everything else (Boolean, Categorical, nested) keeps the fallback: the
+      conversion rules aren't obvious enough to risk a silent behaviour change.
+
     A value that cannot be converted is dropped rather than matched: an int
-    column genuinely has no row equal to ``"abc"``, which is exactly what the
-    column-cast form returned too.
+    column genuinely has no row equal to ``"abc"``, which is what the
+    column-cast form returned too. But if *nothing* converts we fall back
+    instead of returning "matches nothing" — an all-null conversion is far more
+    likely to mean "this dtype doesn't parse from text" than "the user picked
+    values this column cannot hold", and guessing wrong empties the component.
     """
     str_values = [str(v) for v in values]
     fallback = pl.col(column_name).cast(pl.Utf8, strict=False).is_in(str_values)
@@ -171,28 +192,33 @@ def _categorical_predicate(column_name: str, values: list, dtype: pl.DataType | 
     if dtype == pl.String:  # pl.Utf8 is the same dtype under an older name
         return pl.col(column_name).is_in(str_values)
 
-    # Numeric and temporal columns: convert the strings once, in Polars, and
-    # compare in the column's own type. Anything else (Boolean, Categorical,
-    # nested types) keeps the old form — the conversion rules are not obvious
-    # enough to risk a silent behaviour change for a performance gain.
-    if not (dtype.is_numeric() or dtype.is_temporal()):
-        return fallback
-
+    raw = pl.Series(str_values, dtype=pl.Utf8)
+    base = dtype.base_type()
     try:
-        converted = pl.Series(str_values, dtype=pl.Utf8).cast(dtype, strict=False)
+        if dtype.is_numeric() or dtype == pl.Date:
+            converted = raw.cast(dtype, strict=False)
+        elif base == pl.Datetime:
+            # Parse naive, then cast to the column's own unit/zone. Verified to
+            # round-trip for naive, UTC and offset zones.
+            converted = raw.str.to_datetime(strict=False).cast(dtype, strict=False)
+        elif base == pl.Time:
+            converted = raw.str.to_time(strict=False)
+        else:
+            return fallback
     except Exception as e:
         logger.debug(
-            f"_categorical_predicate: cannot cast values to {dtype} for column "
+            f"_categorical_predicate: cannot convert values to {dtype} for column "
             f"{column_name!r} ({e}); using the string-cast predicate"
         )
         return fallback
 
     typed_values = converted.drop_nulls().to_list()
     if not typed_values:
-        # Nothing the user selected is representable in this column's type, so
-        # nothing can match. Expressed explicitly because an empty ``is_in``
-        # reads as "no filter" to some callers.
-        return pl.lit(False)
+        logger.debug(
+            f"_categorical_predicate: no value converted to {dtype} for column "
+            f"{column_name!r}; using the string-cast predicate"
+        )
+        return fallback
     return pl.col(column_name).is_in(typed_values)
 
 
@@ -746,7 +772,25 @@ def _get_cached_dtypes(
     and memoizes it. Returns ``None`` if the schema can't be read, so callers
     fall back to their pre-cache behaviour (no projection / no filter pruning /
     untyped filter predicates).
+
+    ``version_salt`` is what makes a cached entry safe to reuse: an upsert
+    increments the aggregation version, so a re-ingest that changes a column's
+    dtype lands under a new key. When the version is *unknown* (``None`` — the
+    Mongo lookup failed, or the DC has no aggregation yet) that guarantee is
+    gone, and a stale dtype is worse than a stale name set: the predicate is
+    built for the wrong type and the scan raises instead of merely mispruning.
+    So an unknown version reads the schema fresh and does not memoize it.
     """
+    if version_salt is None:
+        try:
+            schema = dict(delta_scan.collect_schema())
+        except Exception as e:
+            logger.debug(
+                f"_get_cached_dtypes: schema read failed for {data_collection_id_str}: {e}"
+            )
+            return None
+        return schema or None
+
     cache_key = (data_collection_id_str, str(version_salt))
     cached = _DELTA_SCHEMA_CACHE.get(cache_key)
     if cached is not None:

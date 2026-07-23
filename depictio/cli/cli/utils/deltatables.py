@@ -329,23 +329,38 @@ def link_columns_by_dc(project_config) -> dict[str, list[str]]:
 
     Links are declared on the *project* (``Project.links``), not on the data
     collection, so a DC config alone cannot tell you it participates in one.
-    Both ends of a link are matched on ``source_column``: the resolver
-    translates the user's filter into values of that column and applies them to
-    the target under the same name — which is why the target column is the
-    link's ``source_column`` and not the column the user filtered on.
+
+    The two ends are not always searched by the same column name. The source is
+    filtered on ``source_column``; the target is filtered on whatever
+    ``filter_links._link_target_column`` resolves to, which prefers
+    ``link_config.target_field`` when the resolver renames across DCs (the
+    MultiQC ``sample_mapping`` case) and only then falls back to
+    ``source_column``. Clustering the target on ``source_column`` regardless
+    would sort it on a column it is never searched by — harmless, but the
+    speedup would silently not happen.
 
     Returns ``{data_collection_id: [column, ...]}`` covering both ends of every
-    enabled link, so either side can be clustered on the key it is searched by.
+    enabled link, so either side is clustered on the key it is searched by.
+
+    Note this keys on DC *ids*. A link written with ``source_dc_tag`` /
+    ``target_dc_tag`` and no id (template mode) contributes nothing — it would
+    need tag→id resolution that isn't available here. Such a DC is written
+    unsorted, which is the previous behaviour, not a new failure.
     """
     mapping: dict[str, list[str]] = {}
     # ``links`` only exists on a full ``Project``; other config shapes reach the
     # ingest path too, and they simply have nothing to cluster on.
     for link in getattr(project_config, "links", None) or []:
-        column = link.source_column
-        if not link.enabled or not column:
+        if not link.enabled:
             continue
-        for dc_id in (link.source_dc_id, link.target_dc_id):
-            if not dc_id:
+        link_config = link.link_config
+        target_field = getattr(link_config, "target_field", None) if link_config else None
+        ends = (
+            (link.source_dc_id, link.source_column),
+            (link.target_dc_id, target_field or link.source_column),
+        )
+        for dc_id, column in ends:
+            if not dc_id or not column:
                 continue
             bucket = mapping.setdefault(str(dc_id), [])
             if column not in bucket:
@@ -736,16 +751,32 @@ def client_aggregate_data(
         # selective for the filters a dashboard actually issues. Timed as its
         # own phase: it is a real cost paid once at ingest to buy it back on
         # every filtered render, and that trade has to be visible.
+        #
+        # Two caveats worth knowing before reading a benchmark number:
+        #  - ``link_columns_by_dc`` is injected by ``process_project_data_collections``,
+        #    so entry points that build their own ``command_parameters`` (join
+        #    repair in ``joins.py``, recipe/``transformed`` DCs, the API-side
+        #    ``table_manage`` write) get join-config clustering only. A project
+        #    can therefore hold both clustered and unclustered tables.
+        #  - the sort is not in-place, so it adds a frame copy to the peak of
+        #    the collect-then-write path — the same path HANDOFF_ingest_memory.md
+        #    describes as the memory ceiling. The streaming path skips it.
         sort_cols = clustering_columns(
             data_collection_config,
             aggregated_df.columns,
             (command_parameters or {}).get("link_columns_by_dc", {}).get(str(dc_id)),
         )
         if sort_cols:
-            with timed("sort"):
-                aggregated_df = aggregated_df.sort(sort_cols)
-            record("sorted_by", ",".join(sort_cols))
-            logger.info(f"Clustered Delta table on join columns {sort_cols}")
+            try:
+                with timed("sort"):
+                    aggregated_df = aggregated_df.sort(sort_cols)
+                record("sorted_by", ",".join(sort_cols))
+                logger.info(f"Clustered Delta table on join columns {sort_cols}")
+            except Exception as e:
+                # Clustering is an optimisation, never a correctness
+                # requirement — an unsortable key (nested List/Struct dtype)
+                # must not fail an otherwise valid ingest.
+                logger.warning(f"Could not cluster on {sort_cols} ({e}); writing unsorted.")
 
         # Calculate DataFrame size before writing (more accurate than S3 file size estimation)
         deltatable_size_bytes = calculate_dataframe_size_bytes(aggregated_df)
