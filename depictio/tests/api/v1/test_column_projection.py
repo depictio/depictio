@@ -185,10 +185,20 @@ class TestProjectScanAndSchemaCache:
         assert out.collect().height == 2
 
     def test_schema_cache_populated_and_reused(self):
+        # The cache holds the full {column: dtype} schema; `_get_cached_schema`
+        # is the name-only view over it, so categorical filters can read dtypes
+        # from the same single Delta-log read.
         assert ("dc1", "v1") not in dtu._DELTA_SCHEMA_CACHE
         names = _get_cached_schema(self._lf(), "dc1", "v1")
         assert names == frozenset({"a", "b", "c"})
-        assert dtu._DELTA_SCHEMA_CACHE[("dc1", "v1")] == frozenset({"a", "b", "c"})
+        assert set(dtu._DELTA_SCHEMA_CACHE[("dc1", "v1")]) == {"a", "b", "c"}
+
+    def test_schema_cache_keeps_dtypes(self):
+        lf = pl.LazyFrame({"i": [1], "s": ["x"]})
+        schema = dtu._get_cached_dtypes(lf, "dcT", "v1")
+        assert schema is not None
+        assert schema["i"] == pl.Int64
+        assert schema["s"] == pl.String
 
     def test_schema_cache_keyed_on_version(self):
         _get_cached_schema(self._lf(), "dc1", "v1")
@@ -196,7 +206,7 @@ class TestProjectScanAndSchemaCache:
         names_v2 = _get_cached_schema(lf2, "dc1", "v2")
         assert "d" in names_v2
         # The v1 entry is untouched under its own key.
-        assert dtu._DELTA_SCHEMA_CACHE[("dc1", "v1")] == frozenset({"a", "b", "c"})
+        assert set(dtu._DELTA_SCHEMA_CACHE[("dc1", "v1")]) == {"a", "b", "c"}
 
     def test_schema_read_failure_returns_none_and_is_not_cached(self):
         bad = MagicMock()
