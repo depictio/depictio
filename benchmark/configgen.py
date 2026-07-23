@@ -29,12 +29,21 @@ Key decisions (mirroring known-good authored projects like ``penguins``):
 from __future__ import annotations
 
 import hashlib
+import math
 from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
 
 from benchmark.datagen import COLUMN_DESCRIPTIONS
+from benchmark.datagen_linked import (
+    FEATURES_TAG,
+    JOIN_COLUMN,
+    LINKED_COLUMN_DESCRIPTIONS,
+    LINKED_TAGS,
+    METADATA_TAG,
+    METRICS_TAG,
+)
 from benchmark.matrix import (
     ADVANCED_VIZ_ROTATION,
     FIGURE_VISU_ROTATION,
@@ -67,7 +76,13 @@ class GeneratedConfigs:
 
 
 # ── project.yaml ────────────────────────────────────────────────────────────
-def _dc_block(tag: str, dc_id: str) -> dict:
+def _dc_block(tag: str, dc_id: str, columns_description: dict[str, str] | None = None) -> dict:
+    """One Table data collection scanning ``<tag>.csv`` under every ``run_*``.
+
+    ``columns_description`` defaults to the symmetric generator's canonical
+    schema; the linked topology passes its own, because its three collections
+    have different schemas (that is the point of it).
+    """
     return {
         "data_collection_tag": tag,
         "id": dc_id,
@@ -81,22 +96,63 @@ def _dc_block(tag: str, dc_id: str) -> dict:
             "dc_specific_properties": {
                 "format": "CSV",
                 "polars_kwargs": {"separator": ","},
-                "columns_description": dict(COLUMN_DESCRIPTIONS),
+                "columns_description": dict(columns_description or COLUMN_DESCRIPTIONS),
             },
         },
     }
 
 
-def build_project(cell: Cell, dataset_dir: str | Path) -> dict:
-    """Build the project config dict for a cell."""
-    slug = cell.slug
+# The realistic link topology, as (source, target) tags. Both routes to
+# ``features`` are declared on purpose: the direct one and the one through
+# ``metrics``. They must not produce contradictory filters.
+LINKED_ROUTES: tuple[tuple[str, str], ...] = (
+    (METADATA_TAG, METRICS_TAG),
+    (METADATA_TAG, FEATURES_TAG),
+    (METRICS_TAG, FEATURES_TAG),
+)
+
+
+def dataset_slug(cell: Cell, n_samples: int | None = None) -> str:
+    """Identity of the *data* a cell reads — not of its dashboard.
+
+    The project (and every DC id in it) is keyed on this, so changing the
+    dashboard — component count, visu mix — reuses the ingested data instead of
+    creating a second project that has to be ingested from scratch. Anything
+    that changes the bytes on disk is in the key: size tier, connect mode, DC
+    count, and the join-key cardinality of the linked topology.
+    """
+    slug = f"bench_{cell.size}_dc{cell.n_dcs}_{cell.connect.value}"
+    if cell.connect is ConnectMode.LINKS and n_samples:
+        slug += f"_s{n_samples}"
+    return slug
+
+
+def linked_dc_ids(cell: Cell, n_samples: int | None = None) -> dict[str, str]:
+    """Tag -> static DC id for the linked topology (same ids configgen emits)."""
+    slug = dataset_slug(cell, n_samples)
+    return {tag: static_id("dc", slug, tag) for tag in LINKED_TAGS}
+
+
+def build_project(cell: Cell, dataset_dir: str | Path, n_samples: int | None = None) -> dict:
+    """Build the project config dict for a cell.
+
+    Named after :func:`dataset_slug`: two cells that read the same data share one
+    project, so iterating on the dashboard costs an import rather than an ingest.
+    """
+    slug = dataset_slug(cell, n_samples)
     project_name = f"Benchmark {slug}"
     workflow_name = f"{slug}_wf"
     project_id = static_id("project", slug)
     workflow_id = static_id("workflow", slug)
 
-    dc_tags = [f"dc_{i}" for i in range(cell.n_dcs)]
-    data_collections = [_dc_block(tag, static_id("dc", slug, tag)) for tag in dc_tags]
+    if cell.connect is ConnectMode.LINKS:
+        data_collections = [
+            _dc_block(tag, static_id("dc", slug, tag), LINKED_COLUMN_DESCRIPTIONS[tag])
+            for tag in LINKED_TAGS
+        ]
+    else:
+        dc_tags = [f"dc_{i}" for i in range(cell.n_dcs)]
+        data_collections = [_dc_block(tag, static_id("dc", slug, tag)) for tag in dc_tags]
 
     project: dict = {
         "name": project_name,
@@ -133,7 +189,7 @@ def build_project(cell: Cell, dataset_dir: str | Path) -> dict:
             }
             for i in range(1, cell.n_dcs)
         ]
-    elif cell.connect is ConnectMode.LINKS:
+    elif cell.connect is ConnectMode.LINKS_ADVERSARIAL:
         project["links"] = [
             {
                 "source_dc_id": static_id("dc", slug, "dc_0"),
@@ -144,6 +200,22 @@ def build_project(cell: Cell, dataset_dir: str | Path) -> dict:
                 "description": f"Link dc_0 -> dc_{i}",
             }
             for i in range(1, cell.n_dcs)
+        ]
+    elif cell.connect is ConnectMode.LINKS:
+        # Star + chain in one project: metadata reaches features directly AND
+        # through metrics, so a filter on metadata exercises the 1-hop and the
+        # 2-hop path against the same target.
+        project["links"] = [
+            {
+                "id": static_id("link", slug, f"{source}_{target}"),
+                "source_dc_id": static_id("dc", slug, source),
+                "source_column": JOIN_COLUMN,
+                "target_dc_id": static_id("dc", slug, target),
+                "target_type": "table",
+                "link_config": {"resolver": "direct"},
+                "description": f"Link {source} -> {target}",
+            }
+            for source, target in LINKED_ROUTES
         ]
 
     return project
@@ -278,6 +350,10 @@ def bindable_tags(cell: Cell) -> list[str]:
     """Tags a component may bind to for this connect mode."""
     if cell.connect is ConnectMode.JOINS:
         return [f"joined_join_0_{i}" for i in range(1, cell.n_dcs)]
+    if cell.connect is ConnectMode.LINKS:
+        # The heavy collection is what the timed components read; metadata and
+        # metrics drive the filters and cards.
+        return [FEATURES_TAG]
     return [f"dc_{i}" for i in range(cell.n_dcs)]
 
 
@@ -311,15 +387,64 @@ def readable_title(cell: Cell) -> str:
 
 
 # ── dashboard.yaml ──────────────────────────────────────────────────────────
-def _layout(index: int, w: int, h: int, per_row: int = 2, y_offset: int = 0) -> dict:
-    """Simple flow layout on a 12-column grid.
+# Grid rhythm for every generated dashboard, expressed in the REACT VIEWER's
+# grid — not Dash's 12-column one. The viewer splits a dashboard into two grids
+# (packages/depictio-react-core/src/api.ts): the right panel is **8 columns**
+# and the left panel, which holds the interactive filters, is a single column
+# with the filters stacked. Emitting 12-column boxes here is what made three
+# w=3 cards wrap after two, and two w=6 components take a row each.
+#
+#   - cards: 4 per row, short;
+#   - figures / tables / advanced viz: 2 per row.
+_RIGHT_PANEL_COLS = 8
+_STRIP_PER_ROW = 4
+_STRIP_H = 2
+_BODY_PER_ROW = 2
+_BODY_H = 5
+# Left panel: one column, so a filter is full width and rows stack.
+_FILTER_W = 1
+_FILTER_H = 2
 
-    ``y_offset`` reserves rows at the top for the filter strip so figures/tables
-    start below the interactive filters instead of overlapping them.
+
+def _layout(
+    index: int, w: int, h: int, per_row: int = 2, y_offset: int = 0, cols: int = _RIGHT_PANEL_COLS
+) -> dict:
+    """Flow layout on the right panel's grid.
+
+    ``y_offset`` reserves the rows the cards occupy so figures/tables start below
+    them instead of overlapping.
     """
     col = index % per_row
     row = index // per_row
-    return {"x": col * (12 // per_row), "y": y_offset + row * h, "w": w, "h": h}
+    return {"x": col * (cols // per_row), "y": y_offset + row * h, "w": w, "h": h}
+
+
+def _strip_layout(index: int) -> dict:
+    """Position for the ``index``-th card, 4 per row on the 8-column panel."""
+    return _layout(index, w=_RIGHT_PANEL_COLS // _STRIP_PER_ROW, h=_STRIP_H, per_row=_STRIP_PER_ROW)
+
+
+def _filter_layout(index: int) -> dict:
+    """Position for the ``index``-th interactive filter in the left panel.
+
+    That panel is one column wide, so filters stack — giving them x/w from the
+    right panel's grid would place them off it.
+    """
+    return {"x": 0, "y": index * _FILTER_H, "w": _FILTER_W, "h": _FILTER_H}
+
+
+def _strip_height(n_items: int) -> int:
+    """Grid rows a strip of ``n_items`` occupies, at 4 per row."""
+    return math.ceil(n_items / _STRIP_PER_ROW) * _STRIP_H
+
+
+def _linked_figure_kwargs(visu_type: str) -> dict:
+    """Figure bindings for the ``features`` schema (linked topology)."""
+    return {
+        "scatter": {"x": "mean_expression", "y": "expression", "color": "feature_class"},
+        "box": {"x": "feature_class", "y": "expression"},
+        "histogram": {"x": "expression"},
+    }.get(visu_type, {"x": "mean_expression", "y": "expression"})
 
 
 def _figure_kwargs(visu_type: str) -> dict:
@@ -331,11 +456,11 @@ def _figure_kwargs(visu_type: str) -> dict:
     }.get(visu_type, {"x": "bill_length_mm", "y": "body_mass_g"})
 
 
-def _advanced_viz_config(viz_kind: str) -> dict:
+def _advanced_viz_config(viz_kind: str, feature_id_col: str = "individual_id") -> dict:
     if viz_kind == "volcano":
         return {
             "viz_kind": "volcano",
-            "feature_id_col": "individual_id",
+            "feature_id_col": feature_id_col,
             "effect_size_col": "effect_size",
             "significance_col": "neg_log10_p",
             "significance_is_neg_log10": True,
@@ -343,28 +468,106 @@ def _advanced_viz_config(viz_kind: str) -> dict:
     if viz_kind == "ma":
         return {
             "viz_kind": "ma",
-            "feature_id_col": "individual_id",
+            "feature_id_col": feature_id_col,
             "avg_log_intensity_col": "mean_expression",
             "log2_fold_change_col": "effect_size",
         }
     raise ValueError(f"Unsupported benchmark viz_kind {viz_kind!r}")
 
 
-# Height (grid rows) of the top filter strip. Components start below it.
-_FILTER_STRIP_H = 4
+def _linked_filter_components(workflow_tag: str) -> list[dict]:
+    """Filter strip for the linked topology: filters on metadata, cards on metrics.
+
+    The filters deliberately do NOT sit on the collection the components read.
+    That is the topology being measured: a filter on ``metadata`` has to travel
+    a link to reach ``metrics`` (1 hop) and ``features`` (1 hop directly, 2 hops
+    through metrics).
+    """
+    # Filters and cards are laid out from y=0 *independently*: the dashboard
+    # import splits them into two grids — interactives go to
+    # ``left_panel_layout_data``, everything else to ``right_panel_layout_data``
+    # — so reserving the filters' height in the components' panel would leave an
+    # empty band at the top of it and push the cards down a row.
+    meta = {"workflow_tag": workflow_tag, "data_collection_tag": METADATA_TAG}
+    metrics = {"workflow_tag": workflow_tag, "data_collection_tag": METRICS_TAG}
+    return [
+        {
+            "tag": "filter-condition",
+            "component_type": "interactive",
+            **meta,
+            "interactive_component_type": "MultiSelect",
+            "column_name": "condition",
+            "column_type": "object",
+            "title": "Condition",
+            "layout": _filter_layout(0),
+        },
+        {
+            "tag": "filter-batch",
+            "component_type": "interactive",
+            **meta,
+            "interactive_component_type": "MultiSelect",
+            "column_name": "batch",
+            "column_type": "object",
+            "title": "Batch",
+            "layout": _filter_layout(1),
+        },
+        {
+            "tag": "filter-age",
+            "component_type": "interactive",
+            **meta,
+            "interactive_component_type": "RangeSlider",
+            "column_name": "age",
+            "column_type": "int64",
+            "title": "Age",
+            "layout": _filter_layout(2),
+        },
+        {
+            "tag": "card-mean-metric",
+            "component_type": "card",
+            **metrics,
+            "column_name": "value",
+            "column_type": "float64",
+            "aggregation": "average",
+            "title": "Mean metric value",
+            "layout": _strip_layout(0),
+        },
+        {
+            "tag": "card-tools",
+            "component_type": "card",
+            **metrics,
+            "column_name": "tool",
+            "column_type": "object",
+            "aggregation": "nunique",
+            "title": "Distinct QC tools",
+            "layout": _strip_layout(1),
+        },
+        {
+            "tag": "card-mapped",
+            "component_type": "card",
+            **metrics,
+            "column_name": "mapped_pct",
+            "column_type": "float64",
+            "aggregation": "average",
+            "title": "Mean mapped %",
+            "layout": _strip_layout(2),
+        },
+    ]
 
 
 def _filter_tag(cell: Cell) -> str:
     """The DC/joined tag the filters bind to so cross-filtering actually fires.
 
-    - ``links``  : bind to the source ``dc_0`` — link resolution propagates the
-      filter to the linked DCs the components render from.
+    - ``links``  : bind to ``metadata`` — the linked topology's filter origin.
+    - ``links-adversarial`` : bind to the source ``dc_0`` — link resolution
+      propagates the filter to the linked DCs the components render from.
     - ``joins``  : bind to the joined table the components themselves bind to, so
       the filter narrows the same frame (an interactive only filters components
       sharing its data collection).
     - ``independent`` : bind to ``dc_0`` (the first raw DC components round-robin).
     """
     if cell.connect is ConnectMode.LINKS:
+        return METADATA_TAG
+    if cell.connect is ConnectMode.LINKS_ADVERSARIAL:
         return "dc_0"
     return bindable_tags(cell)[0]
 
@@ -384,7 +587,7 @@ def _filter_components(cell: Cell, workflow_tag: str) -> list[dict]:
             "column_name": "species",
             "column_type": "object",
             "title": "Species",
-            "layout": {"x": 0, "y": 0, "w": 3, "h": _FILTER_STRIP_H},
+            "layout": _filter_layout(0),
         },
         {
             "tag": "filter-body-mass",
@@ -394,7 +597,7 @@ def _filter_components(cell: Cell, workflow_tag: str) -> list[dict]:
             "column_name": "body_mass_g",
             "column_type": "int64",
             "title": "Body mass",
-            "layout": {"x": 3, "y": 0, "w": 3, "h": _FILTER_STRIP_H},
+            "layout": _filter_layout(1),
         },
         # Two metric cards sharing the filter DC. Cards were previously absent
         # from the matrix, which hid their worst case entirely: with no filters
@@ -412,7 +615,7 @@ def _filter_components(cell: Cell, workflow_tag: str) -> list[dict]:
             # only accepts "average" for a numeric column.
             "aggregation": "average",
             "title": "Mean body mass",
-            "layout": {"x": 6, "y": 0, "w": 3, "h": _FILTER_STRIP_H},
+            "layout": _strip_layout(0),
         },
         {
             "tag": "card-unique-species",
@@ -422,24 +625,40 @@ def _filter_components(cell: Cell, workflow_tag: str) -> list[dict]:
             "column_type": "object",
             "aggregation": "nunique",
             "title": "Distinct species",
-            "layout": {"x": 9, "y": 0, "w": 3, "h": _FILTER_STRIP_H},
+            "layout": _strip_layout(1),
         },
     ]
 
 
-def build_dashboard(cell: Cell, project: dict) -> dict:
-    """Build the dashboard (lite) config dict for a cell."""
-    workflow_name = project["workflows"][0]["name"]
-    workflow_tag = f"{ENGINE_NAME}/{workflow_name}"
-    tags = bindable_tags(cell)
+def _timed_components(
+    cell: Cell,
+    workflow_tag: str,
+    tags: list[str],
+    *,
+    linked: bool,
+    y_offset: int,
+) -> list[dict]:
+    """The components whose render latency is measured, rotating through ``visu``.
+
+    ``linked`` selects the column bindings: the linked topology's ``features``
+    collection has its own schema. ``y_offset`` is where the strip ends, so the
+    timed components never overlap the filters however many there are.
+    """
+    figure_kwargs = _linked_figure_kwargs if linked else _figure_kwargs
+    feature_id_col = "feature_id" if linked else "individual_id"
 
     components: list[dict] = []
     fig_i = av_i = 0
     for i in range(cell.n_components):
         visu = cell.visu[i % len(cell.visu)]
-        dc_tag = tags[i % len(tags)]
-        base = {"workflow_tag": workflow_tag, "data_collection_tag": dc_tag}
-        layout = _layout(i, w=6, h=8, y_offset=_FILTER_STRIP_H)
+        base = {"workflow_tag": workflow_tag, "data_collection_tag": tags[i % len(tags)]}
+        layout = _layout(
+            i,
+            w=_RIGHT_PANEL_COLS // _BODY_PER_ROW,
+            h=_BODY_H,
+            per_row=_BODY_PER_ROW,
+            y_offset=y_offset,
+        )
 
         if visu is VisuType.FIGURE:
             visu_type = FIGURE_VISU_ROTATION[fig_i % len(FIGURE_VISU_ROTATION)]
@@ -450,7 +669,7 @@ def build_dashboard(cell: Cell, project: dict) -> dict:
                     "component_type": "figure",
                     **base,
                     "visu_type": visu_type,
-                    "dict_kwargs": _figure_kwargs(visu_type),
+                    "dict_kwargs": figure_kwargs(visu_type),
                     "title": f"Figure {i} ({visu_type})",
                     "layout": layout,
                 }
@@ -474,34 +693,186 @@ def build_dashboard(cell: Cell, project: dict) -> dict:
                     "component_type": "advanced_viz",
                     **base,
                     "viz_kind": viz_kind,
-                    "config": _advanced_viz_config(viz_kind),
+                    "config": _advanced_viz_config(viz_kind, feature_id_col=feature_id_col),
                     "title": f"Advanced viz {i} ({viz_kind})",
                     "layout": layout,
                 }
             )
+    return components
+
+
+def build_dashboard(cell: Cell, project: dict) -> dict:
+    """Build the dashboard (lite) config dict for a cell."""
+    workflow_name = project["workflows"][0]["name"]
+    workflow_tag = f"{ENGINE_NAME}/{workflow_name}"
+    linked = cell.connect is ConnectMode.LINKS
 
     # Interactive filters on every dashboard so filtering responsiveness is
     # benchmarkable across all connect modes (previously links-only).
-    components.extend(_filter_components(cell, workflow_tag))
+    if linked:
+        filters = _linked_filter_components(workflow_tag)
+        n_filters = 3
+    else:
+        filters = _filter_components(cell, workflow_tag)
+        n_filters = 2
 
     return {
         "version": 1,
         "title": readable_title(cell),
         "subtitle": (
             f"size={cell.size} components={cell.n_components} "
-            f"dcs={cell.n_dcs} connect={cell.connect.value} filters=2"
+            f"dcs={cell.n_dcs} connect={cell.connect.value} filters={n_filters}"
         ),
         "project_tag": project["name"],
-        "components": components,
+        # Only the CARDS share the components' panel, so only their height is
+        # reserved — the interactive filters are moved to the left panel at
+        # import and their rows do not exist in this grid.
+        "components": _timed_components(
+            cell,
+            workflow_tag,
+            bindable_tags(cell),
+            linked=linked,
+            y_offset=_strip_height(sum(1 for c in filters if c["component_type"] == "card")),
+        )
+        + filters,
     }
 
 
-def write_configs(cell: Cell, dataset_dir: str | Path, out_dir: str | Path) -> GeneratedConfigs:
+@dataclass(frozen=True)
+class FilterPlan:
+    """One filter *origin* to time rounds against.
+
+    The cost of a filter change depends on where the filter starts, not only on
+    how big the target is: a filter on ``metadata`` must be translated through
+    one or two links before ``features`` can be narrowed, while a filter on
+    ``features`` itself applies natively. Reporting them together would average
+    two different mechanisms.
+
+    ``values`` are successive rounds, each using a value set none of the earlier
+    rounds used — re-applying one is answered by the filtered frame cache and
+    would time the cache instead of the filter. ``max_rounds`` is therefore a
+    hard ceiling, not a suggestion: asking for more rounds than there are values
+    would start timing the cache.
+
+    ``sequential_value`` is reserved for the ``--cross-filter`` sequential pass,
+    which runs *before* the rounds. It is deliberately absent from ``values``:
+    reusing round 0's value there would make round 0 a cache hit.
+    """
+
+    dc_tag: str  # collection the filter originates on
+    column: str
+    values: tuple[tuple[str, ...], ...]
+    hops: int  # link hops to the farthest component (0 = no propagation)
+    label: str
+    sequential_value: tuple[str, ...] = ()
+    # Collections this filter can actually narrow: its own, plus every one
+    # reachable from it through the declared links. A component outside this set
+    # renders unfiltered, and counting it in a round's window would compare two
+    # different amounts of work between origins.
+    reachable_tags: frozenset[str] = frozenset()
+
+    @property
+    def max_rounds(self) -> int:
+        return len(self.values)
+
+
+_SPECIES_ROUNDS: tuple[tuple[str, ...], ...] = (
+    ("Adelie",),
+    ("Gentoo",),
+    ("Chinstrap",),
+    ("Adelie", "Gentoo"),
+)
+_CONDITION_ROUNDS: tuple[tuple[str, ...], ...] = (
+    ("control",),
+    ("treated",),
+    ("recovery",),
+    ("control", "treated"),
+)
+_FEATURE_CLASS_ROUNDS: tuple[tuple[str, ...], ...] = (
+    ("protein_coding",),
+    ("lncRNA",),
+    ("pseudogene",),
+    ("protein_coding", "lncRNA"),
+)
+
+
+def _reachable_tags(origin: str, routes: tuple[tuple[str, str], ...]) -> frozenset[str]:
+    """``origin`` plus everything reachable from it by following ``routes``.
+
+    Links are directed: ``metadata -> features`` does not let a filter on
+    ``features`` narrow ``metadata``. Knowing which collections a given origin
+    can reach is what makes the propagated and native sweeps comparable — the
+    components outside the set never filter at all.
+    """
+    reached = {origin}
+    frontier = [origin]
+    while frontier:
+        current = frontier.pop()
+        for source, target in routes:
+            if source == current and target not in reached:
+                reached.add(target)
+                frontier.append(target)
+    return frozenset(reached)
+
+
+def filter_plans(cell: Cell) -> list[FilterPlan]:
+    """Filter origins to time for this cell, in the order they should run."""
+    if cell.connect is ConnectMode.LINKS:
+        return [
+            FilterPlan(
+                dc_tag=METADATA_TAG,
+                column="condition",
+                values=_CONDITION_ROUNDS,
+                # metadata -> metrics (1) and metadata -> metrics -> features (2)
+                hops=2,
+                label="metadata-propagated",
+                sequential_value=("treated", "recovery"),
+                reachable_tags=_reachable_tags(METADATA_TAG, LINKED_ROUTES),
+            ),
+            FilterPlan(
+                dc_tag=FEATURES_TAG,
+                column="feature_class",
+                values=_FEATURE_CLASS_ROUNDS,
+                hops=0,
+                label="features-native",
+                sequential_value=("lncRNA", "pseudogene"),
+                # features has no outgoing link, so this filter narrows nothing
+                # else — the cards on metrics stay unfiltered in this sweep.
+                reachable_tags=_reachable_tags(FEATURES_TAG, LINKED_ROUTES),
+            ),
+        ]
+    origin = _filter_tag(cell)
+    if cell.connect is ConnectMode.LINKS_ADVERSARIAL:
+        routes = tuple(("dc_0", f"dc_{i}") for i in range(1, cell.n_dcs))
+        reachable = _reachable_tags(origin, routes)
+    else:
+        # joins/independent: the filter applies natively to whatever shares its
+        # data collection, which is what the components bind to.
+        reachable = frozenset({origin, *bindable_tags(cell)})
+    return [
+        FilterPlan(
+            dc_tag=origin,
+            column="species",
+            values=_SPECIES_ROUNDS,
+            hops=1 if cell.connect is ConnectMode.LINKS_ADVERSARIAL else 0,
+            label=cell.connect.value,
+            sequential_value=("Gentoo", "Chinstrap"),
+            reachable_tags=reachable,
+        )
+    ]
+
+
+def write_configs(
+    cell: Cell,
+    dataset_dir: str | Path,
+    out_dir: str | Path,
+    n_samples: int | None = None,
+) -> GeneratedConfigs:
     """Build + write both YAML files, returning their paths and key identifiers."""
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    project = build_project(cell, dataset_dir)
+    project = build_project(cell, dataset_dir, n_samples)
     dashboard = build_dashboard(cell, project)
 
     project_path = out_dir / "project.yaml"

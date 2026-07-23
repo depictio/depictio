@@ -7,6 +7,7 @@ Polars is unavailable.
 """
 
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -43,19 +44,36 @@ def _cell(connect=ConnectMode.JOINS, n_dcs=2, n_components=4):
     )
 
 
-def test_matrix_expand_skips_links_with_one_dc():
+def test_matrix_expand_skips_adversarial_links_with_one_dc():
     spec = MatrixSpec(
         sizes=["10mb"],
         n_components=[5],
         n_dcs=[1, 2],
-        connect=[ConnectMode.INDEPENDENT, ConnectMode.LINKS],
+        connect=[ConnectMode.INDEPENDENT, ConnectMode.LINKS_ADVERSARIAL],
         visu=[VisuType.FIGURE],
     )
     cells = spec.expand()
-    # independent allows 1 or 2 DCs; links requires >= 2 -> only the n_dcs=2 case.
-    assert any(c.connect is ConnectMode.LINKS for c in cells)
-    assert all(c.n_dcs >= 2 for c in cells if c.connect is ConnectMode.LINKS)
+    # independent allows 1 or 2 DCs; the adversarial links mode needs >= 2 DCs
+    # (there must be something to link to) -> only the n_dcs=2 case.
+    adversarial = [c for c in cells if c.connect is ConnectMode.LINKS_ADVERSARIAL]
+    assert adversarial
+    assert all(c.n_dcs >= 2 for c in adversarial)
     assert any(c.connect is ConnectMode.INDEPENDENT and c.n_dcs == 1 for c in cells)
+
+
+def test_matrix_pins_realistic_links_to_three_dcs():
+    """``links`` is a fixed three-collection topology, whatever --dcs says."""
+    from benchmark.matrix import LINKED_N_DCS
+
+    cells = MatrixSpec(
+        sizes=["10mb"],
+        n_components=[5],
+        n_dcs=[1, 2, 5],
+        connect=[ConnectMode.LINKS],
+        visu=[VisuType.FIGURE],
+    ).expand()
+    assert len(cells) == 1, "the --dcs values must collapse to one linked cell"
+    assert cells[0].n_dcs == LINKED_N_DCS
 
 
 def test_matrix_rejects_unknown_size():
@@ -81,8 +99,8 @@ def test_project_has_joins_block():
     assert all(len(dc["id"]) == 24 for dc in dcs)
 
 
-def test_project_has_links_block():
-    project = build_project(_cell(ConnectMode.LINKS, n_dcs=3), dataset_dir="/tmp/x")
+def test_adversarial_project_has_links_block():
+    project = build_project(_cell(ConnectMode.LINKS_ADVERSARIAL, n_dcs=3), dataset_dir="/tmp/x")
     assert len(project["links"]) == 2
     link = project["links"][0]
     assert link["source_column"] == "individual_id"
@@ -94,7 +112,7 @@ def test_generated_dashboard_parses_with_pydantic():
     """The generated dashboard YAML must validate against DashboardDataLite."""
     from depictio.models.models.dashboards import DashboardDataLite
 
-    cell = _cell(ConnectMode.LINKS, n_dcs=2, n_components=4)
+    cell = _cell(ConnectMode.LINKS_ADVERSARIAL, n_dcs=2, n_components=4)
     project = build_project(cell, dataset_dir="/tmp/x")
     dashboard = build_dashboard(cell, project)
 
@@ -178,3 +196,195 @@ def test_datagen_tiny(tmp_path):
     assert run_dirs
     assert (run_dirs[0] / "dc_0.csv").exists()
     assert (run_dirs[0] / "dc_1.csv").exists()
+
+
+# ---------------------------------------------------------------------------
+# Filter rounds: one filter change on a warm dashboard, timed the way the
+# viewer actually issues it (bounded concurrency).
+# ---------------------------------------------------------------------------
+
+
+def test_filter_payload_carries_the_origin_dc():
+    """The payload must name the DC the filter comes from.
+
+    ``_resolve_link_filters`` groups filters by their source DC and only walks
+    the link graph for filters belonging to another DC than the component being
+    rendered. Without ``metadata.dc_id`` the filter is treated as native, and on
+    a linked topology (where the column exists only on the source collection) it
+    is then dropped as an unknown column — the render comes back unfiltered.
+    """
+    from benchmark.configgen import filter_plans
+    from benchmark.runner import _filter_payload
+
+    plan = filter_plans(_cell(ConnectMode.JOINS))[0]
+    payload = _filter_payload(plan, ("Gentoo", "Adelie"), dc_id="abc123")
+    assert payload[0]["value"] == ["Gentoo", "Adelie"]
+    assert payload[0]["column_name"] == plan.column
+    assert payload[0]["metadata"]["dc_id"] == "abc123"
+    assert payload[0]["metadata"]["column_name"] == plan.column
+
+
+def test_filter_round_values_are_all_distinct():
+    """Successive rounds must not repeat a value.
+
+    Re-applying a value already used would be answered by the filtered frame
+    cache, so the round would time the cache instead of the filter.
+    """
+    from benchmark.configgen import filter_plans
+
+    for connect in ConnectMode:
+        for plan in filter_plans(_cell(connect, n_dcs=2)):
+            assert len(set(plan.values)) == len(plan.values), plan.label
+
+
+def test_filter_round_bounds_concurrency_and_times_first_and_last(monkeypatch):
+    """The round must never exceed the viewer's in-flight limit."""
+    import threading
+
+    from benchmark import runner
+
+    in_flight = 0
+    peak = 0
+    lock = threading.Lock()
+
+    def fake_render(client, base, headers, dashboard_id, comp, filters):
+        nonlocal in_flight, peak
+        with lock:
+            in_flight += 1
+            peak = max(peak, in_flight)
+        time.sleep(0.02)
+        with lock:
+            in_flight -= 1
+        # Passive components return {} and must be excluded from the window.
+        if comp.get("component_type") == "text":
+            return {}
+        return {"ok": True, "wall_ms": 20.0}
+
+    monkeypatch.setattr(runner, "_render_component", fake_render)
+
+    components = [{"component_type": "figure", "index": str(i)} for i in range(10)]
+    components.append({"component_type": "text", "index": "passive"})
+
+    rows, first_ms, last_ms = runner._filter_round(
+        None, "http://x", {}, "dash1", components, filters=[], concurrency=4
+    )
+
+    assert peak <= 4, f"fired {peak} concurrently, viewer caps at 4"
+    assert len(rows) == 11
+    assert sum(1 for _, m, _ in rows if m) == 10  # the text component is untimed
+    assert 0 < first_ms <= last_ms
+    # 10 timed components through a pool of 4 means at least 3 waves.
+    assert last_ms >= 3 * 20.0
+
+
+def test_filter_round_result_catch_up_and_serialization():
+    from benchmark.metrics import FilterRoundResult
+
+    r = FilterRoundResult(
+        cell_slug="c",
+        size="1gb",
+        size_bytes=1 << 30,
+        n_components=25,
+        n_dcs=2,
+        connect="links",
+        time_to_first_ms=120.0,
+        time_to_last_ms=3400.0,
+    )
+    assert r.catch_up_ms == 3280.0
+    d = r.to_dict()
+    assert d["time_to_last_ms"] == 3400.0
+    assert d["filter_values"] == []
+
+
+def test_dashboard_load_rows_separate_cold_from_warm():
+    """A cold open and a warm one must be distinguishable after the fact.
+
+    They are the same request set at the same concurrency; only the server's
+    cache state differs. Pooling them would average a first visit with a
+    revisit and describe neither.
+    """
+    from benchmark import runner
+    from benchmark.matrix import Cell, ConnectMode, VisuType
+
+    cell = Cell(
+        size="1gb",
+        n_components=8,
+        n_dcs=3,
+        connect=ConnectMode.LINKS,
+        visu=(VisuType.FIGURE,),
+    )
+    loaded = [
+        # (component, metrics, when it landed relative to the shared t0)
+        ({"component_type": "figure", "index": "0"}, {"ok": True, "wall_ms": 900.0}, 900.0),
+        ({"component_type": "card", "index": "1"}, {"ok": True, "wall_ms": 120.0}, 120.0),
+        ({"component_type": "table", "index": "2"}, {"ok": True, "wall_ms": 700.0}, 700.0),
+        # A failure returns fast and must not be credited as the first paint.
+        ({"component_type": "card", "index": "3"}, {"ok": False, "wall_ms": 5.0}, 5.0),
+        # Passive components are untimed and must not count as requested.
+        ({"component_type": "text", "index": "4"}, {}, 3.0),
+    ]
+
+    cold = runner._dashboard_load_rows(
+        cell, loaded, 1200.0, server_mode="celery_on", profile_label="hw", cache_state="cold"
+    )
+    warm = runner._dashboard_load_rows(
+        cell, loaded, 400.0, server_mode="celery_on", profile_label="hw", cache_state="warm"
+    )
+
+    cold_summary = cold[-1]
+    warm_summary = warm[-1]
+    assert cold_summary["kind"] == warm_summary["kind"] == "dashboard_load"
+    assert cold_summary["cache_state"] == "cold"
+    assert warm_summary["cache_state"] == "warm"
+    assert cold_summary["wall_ms"] == 1200.0
+    assert warm_summary["wall_ms"] == 400.0
+    # The untimed component is excluded from the count; the failed one is not.
+    assert cold_summary["n_requested"] == 4
+    assert cold_summary["n_rendered"] == 3
+    assert cold_summary["ok"] is False
+
+    assert [r["phase"] for r in cold[:-1]] == ["dashboard_load_cold"] * 4
+    assert [r["phase"] for r in warm[:-1]] == ["dashboard_load"] * 4
+
+
+def test_dashboard_load_reports_first_paint_and_first_chart():
+    """First component, first *chart* and last component are three moments.
+
+    On a dense dashboard they are far apart, and a single wall-clock number
+    hides both of the earlier two.
+    """
+    from benchmark import runner
+    from benchmark.matrix import Cell, ConnectMode, VisuType
+
+    cell = Cell(
+        size="1gb", n_components=8, n_dcs=3, connect=ConnectMode.LINKS, visu=(VisuType.FIGURE,)
+    )
+    loaded = [
+        ({"component_type": "figure", "index": "0"}, {"ok": True, "wall_ms": 900.0}, 900.0),
+        ({"component_type": "card", "index": "1"}, {"ok": True, "wall_ms": 120.0}, 120.0),
+        ({"component_type": "advanced_viz", "index": "2"}, {"ok": True}, 640.0),
+        # An interactive component isn't data-bearing and can't claim first paint.
+        ({"component_type": "interactive", "index": "3"}, {"ok": True}, 30.0),
+        # A failed render returns fast; crediting it would report a paint that
+        # never happened.
+        ({"component_type": "card", "index": "4"}, {"ok": False}, 5.0),
+    ]
+
+    summary = runner._dashboard_load_rows(
+        cell, loaded, 900.0, server_mode="celery_on", profile_label="hw", cache_state="cold"
+    )[-1]
+
+    assert summary["time_to_first_ms"] == 120.0  # the card, not the interactive or the failure
+    assert summary["time_to_first_figure_ms"] == 640.0  # the advanced viz beat the figure
+    assert summary["wall_ms"] == 900.0
+
+
+def test_report_buckets_every_render_phase():
+    """``report`` must not silently drop a phase it doesn't recognise."""
+    from benchmark.report import _phase_of
+
+    assert _phase_of({"phase": "dashboard_load_cold"}) == "dashboard_load_cold"
+    # Rows written before ``phase`` existed still resolve to a known bucket.
+    assert _phase_of({"concurrent": True, "filtered": False}) == "dashboard_load"
+    assert _phase_of({"concurrent": True, "filtered": True}) == "filter_round"
+    assert _phase_of({}) == "sequential"

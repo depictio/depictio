@@ -41,7 +41,25 @@ class ConnectMode(str, Enum):
 
     INDEPENDENT = "independent"  # N unrelated DCs side by side (baseline)
     JOINS = "joins"  # materialized top-level joins: -> one wide Delta table
-    LINKS = "links"  # virtual cross-filter links: -> DCs stay separate
+    # Realistic cross-filter topology: metadata / metrics / features joined on a
+    # ``sample_id`` with hundreds of distinct values (benchmark.datagen_linked).
+    LINKS = "links"
+    # The symmetric dataset whose join key is unique per row. Kept because it
+    # found real bugs (eager full-table read in link resolution, a timeout
+    # degrading into unfiltered data, an empty resolution rendering every row) —
+    # but it is an adversarial case, not what normal usage costs, so it is no
+    # longer what ``links`` means.
+    LINKS_ADVERSARIAL = "links-adversarial"
+
+    @property
+    def is_links(self) -> bool:
+        """Either link topology (as opposed to joins/independent)."""
+        return self in (ConnectMode.LINKS, ConnectMode.LINKS_ADVERSARIAL)
+
+
+# The realistic link topology is a fixed three-collection shape, so ``n_dcs`` is
+# not a free dimension for it.
+LINKED_N_DCS = 3
 
 
 class VisuType(str, Enum):
@@ -196,27 +214,32 @@ class MatrixSpec:
     def expand(self) -> list[Cell]:
         """Cartesian product over the scalar dimensions.
 
-        ``connect = links`` requires >= 2 DCs (there must be something to link
-        to); such degenerate combinations are skipped rather than erroring.
+        ``joins`` and ``links-adversarial`` require >= 2 DCs (there must be
+        something to link to); such degenerate combinations are skipped rather
+        than erroring. ``links`` is a fixed three-collection topology, so its
+        ``n_dcs`` is pinned to :data:`LINKED_N_DCS` and duplicate cells that
+        would differ only by a ``--dcs`` value are collapsed.
+
         The ``visu`` list is applied whole to every cell (the component-count
         loop rotates through it), so it is not part of the product.
         """
-        cells: list[Cell] = []
+        cells: dict[str, Cell] = {}
         for size, n_comp, n_dc, conn in itertools.product(
             self.sizes, self.n_components, self.n_dcs, self.connect
         ):
-            if conn in (ConnectMode.JOINS, ConnectMode.LINKS) and n_dc < 2:
+            if conn is ConnectMode.LINKS:
+                n_dc = LINKED_N_DCS
+            elif conn in (ConnectMode.JOINS, ConnectMode.LINKS_ADVERSARIAL) and n_dc < 2:
                 continue
-            cells.append(
-                Cell(
-                    size=size,
-                    n_components=n_comp,
-                    n_dcs=n_dc,
-                    connect=conn,
-                    visu=tuple(self.visu),
-                )
+            cell = Cell(
+                size=size,
+                n_components=n_comp,
+                n_dcs=n_dc,
+                connect=conn,
+                visu=tuple(self.visu),
             )
-        return cells
+            cells.setdefault(cell.slug, cell)
+        return list(cells.values())
 
 
 # ── CLI parsing helpers ─────────────────────────────────────────────────────

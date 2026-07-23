@@ -8,8 +8,20 @@
 #   1. RESOURCE LIMITS. The dev stack is unbounded, so the API can grab all 8
 #      vCPU of the colima VM while the same process gets 2 CPU / 4Gi on the
 #      cluster. Unbounded local runs are structurally optimistic and cannot be
-#      compared to prod. CPU quotas mirror values-embl-demo-base.yaml; MEMORY
-#      does not, and deliberately so — see the sizing note below.
+#      compared to prod. MEMORY deliberately does not mirror the cluster — see
+#      the sizing note below.
+#
+#      CPU no longer mirrors it either, by default. At 1 GB/DC the cluster's
+#      2 CPU made the stack unusable to work against: ingestion saturates both
+#      and the UI stops answering until it finishes. The defaults below are
+#      4 CPU / 4 workers so iteration is bearable, overridable per run:
+#
+#        BENCH_API_CPUS=2 BENCH_API_WORKERS=2 \
+#        BENCH_CELERY_CPUS=2 BENCH_CELERY_WORKERS=2 docker compose ... up -d
+#
+#      ⚠️ Numbers taken at the raised defaults describe THIS machine, not the
+#      deployment. Anything published as a production characterisation must be
+#      re-run with the cluster values above, and must say which profile it used.
 #
 # MEMORY SIZING (measured, not guessed). The benchmark schema costs 90 B/row and
 # a Polars read peaks at ~1.75x the resulting frame:
@@ -62,9 +74,15 @@ services:
         condition: service_completed_successfully
     volumes:
       - bench_mongo:/data/db
+    # Raised from the cluster's 0.5 CPU. Every filtered render does a blocking
+    # ``projects_collection.find_one`` before it can offload (``_resolve_link_filters``
+    # in dashboards_endpoints/routes.py), and that call sits on the uvicorn
+    # worker's event loop — so a slow Mongo doesn't just delay one request, it
+    # stalls the worker serving it. At 0.5 CPU that turned a filter round into a
+    # stall with the API otherwise idle.
     deploy:
       resources:
-        limits: {cpus: "0.5", memory: 1G}
+        limits: {cpus: "${BENCH_MONGO_CPUS:-2}", memory: 2G}
 
   redis:
     depends_on:
@@ -95,12 +113,19 @@ services:
         condition: service_completed_successfully
     volumes:
       - bench_cache:/app/cache
-    # 2 workers x 2.31 GB peak = 4.6 GB, plus interpreter/framework headroom.
+    # 4 workers x 2.31 GB peak = 9.2 GB, plus interpreter/framework headroom.
+    #
+    # Raised from the cluster's 2 CPU / 2 workers (see BENCH_CPUS below): at
+    # 1 GB/DC the capped profile made the stack unusable while iterating — the
+    # UI stops answering for the whole ingestion because the upsert's
+    # ``precompute_columns_specs`` runs IN the API process and saturates both
+    # CPUs. Raising the ceiling makes development bearable; it does not fix
+    # that, it hides it.
     environment:
-      DEPICTIO_FASTAPI_WORKERS: "2"
+      DEPICTIO_FASTAPI_WORKERS: "${BENCH_API_WORKERS:-4}"
     deploy:
       resources:
-        limits: {cpus: "2", memory: 8G}
+        limits: {cpus: "${BENCH_API_CPUS:-4}", memory: 12G}
 
   depictio-celery-worker:
     depends_on:
@@ -111,15 +136,15 @@ services:
     volumes:
       - bench_cache:/app/cache
     # Offloaded renders do the Delta read here too, so the same 2.31 GB applies.
-    # 2 prefork slots x 2.31 GB = 4.6 GB, so 6G. One slot was safer on memory but
+    # 4 prefork slots x 2.31 GB = 9.2 GB, so 10G. One slot was safer on memory but
     # made the celery_on half measure queue wait instead of compute: any long
     # background task (screenshot, MultiQC prewarm) blocks the single slot and
     # every offloaded render times out behind it.
     environment:
-      DEPICTIO_CELERY_WORKERS: "2"
+      DEPICTIO_CELERY_WORKERS: "${BENCH_CELERY_WORKERS:-4}"
     deploy:
       resources:
-        limits: {cpus: "2", memory: 6G}
+        limits: {cpus: "${BENCH_CELERY_CPUS:-4}", memory: 10G}
 
 volumes:
   bench_mongo:
