@@ -124,13 +124,24 @@ def _advanced_viz_columns(comp: dict) -> list[str]:
     component never binds to.
     """
     config = comp.get("config") or {}
-    columns = [str(v) for k, v in config.items() if k.endswith("_col") and v]
-    # Keep the union both volcano and ma bind to, so the payload size stays
-    # comparable across viz kinds within a cell.
+    columns: list[str] = []
+    for k, v in config.items():
+        if not v:
+            continue
+        # Multi-column roles (sunburst ``rank_cols``, sankey ``step_cols``) are
+        # lists, not single ``*_col`` strings — miss them and the projection
+        # drops the very columns those kinds hierarchy/flow on.
+        if k.endswith("_cols") and isinstance(v, list):
+            columns.extend(str(x) for x in v if x)
+        elif k.endswith("_col") and isinstance(v, str):
+            columns.append(v)
+    # Keep the union volcano/ma bind to, so the payload size stays comparable
+    # across viz kinds within a cell.
     for extra in ("mean_expression", "neg_log10_p", "effect_size"):
         if extra not in columns:
             columns.append(extra)
-    return columns
+    # Dedupe, preserving first-seen order (a column can play two roles).
+    return list(dict.fromkeys(columns))
 
 
 def _advanced_viz_policy(comp: dict) -> dict:
@@ -138,16 +149,16 @@ def _advanced_viz_policy(comp: dict) -> dict:
 
     ``/advanced_viz/data`` picks its reduction from these, so a harness that
     omitted them would time a path the viewer no longer takes: a uniform sample
-    where the volcano and MA components get a tail-preserving one. Mirrors what
-    ``VolcanoRenderer``/``MARenderer`` put in the body, built from the same
+    where the volcano/MA/manhattan components get a tail-preserving one. Mirrors
+    what the corresponding renderers put in the body, built from the same
     component config the dashboard was generated with.
 
-    Only those two kinds are handled because only those two exist here:
-    ``matrix.ADVANCED_VIZ_ROTATION`` is ``("volcano", "ma")`` and
-    ``configgen._advanced_viz_config`` raises on anything else. Growing the
-    rotation means growing this — a kind with no branch falls back to the
-    server's role/settings defaults, which is a different measurement from the
-    one its renderer would produce.
+    Every kind gets ``viz_kind`` — that alone lets the server pick the ``hash``
+    (qq/lollipop) or ``none`` (da_barplot/sunburst/sankey/stacked_taxonomy/
+    dot_plot) policy. Only the three ``tail`` kinds additionally need
+    ``roles``/``tail`` so the server knows which column's significant end to
+    keep; a tail kind with no branch here would fall back to a uniform sample,
+    which is a different measurement from the one its renderer produces.
     """
     config = comp.get("config") or {}
     viz_kind = str(comp.get("viz_kind") or config.get("viz_kind") or "")
@@ -182,6 +193,17 @@ def _advanced_viz_policy(comp: dict) -> dict:
                 "column": fc,
                 "direction": "both",
                 "threshold": float(config.get("fold_change_threshold") or 1.0),
+            }
+    elif viz_kind == "manhattan":
+        score = config.get("score_col")
+        payload["roles"] = {"score": score, "chr": config.get("chr_col")}
+        if score:
+            # The generator's score column is a −log10(p) (large = significant),
+            # so the tail is the high end, at the conventional −log10(0.05) line.
+            payload["tail"] = {
+                "column": score,
+                "direction": "high",
+                "threshold": -math.log10(float(config.get("significance_threshold") or 0.05)),
             }
     return payload
 

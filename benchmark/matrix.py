@@ -70,14 +70,43 @@ class VisuType(str, Enum):
     ADVANCED_VIZ = "advanced_viz"  # async compute job (always Celery)
 
 
-# Concrete Plotly ``visu_type`` values rotated across figure components.
-# ``bar`` is deliberately excluded: px.bar stacks one segment per row, so on the
-# large benchmark frames it materialises millions of rectangles and stalls the
-# browser — not a useful render-perf case to benchmark.
-FIGURE_VISU_ROTATION: tuple[str, ...] = ("scatter", "box", "histogram")
-# ``viz_kind`` values rotated across advanced_viz components (kept to kinds that
-# map cleanly onto the generic numeric columns the generator produces).
-ADVANCED_VIZ_ROTATION: tuple[str, ...] = ("volcano", "ma")
+# Concrete Plotly ``visu_type`` values rotated across figure components. Limited
+# to the types a ui-mode figure component accepts (``ChartType``: scatter / line
+# / bar / box / histogram / heatmap) — ``violin`` renders via the aggregation
+# service but ``DashboardDataLite`` rejects it in ui mode, so it cannot be
+# imported as a figure here.
+# ``bar`` used to be excluded because px.bar stacks one segment per row and
+# stalled the browser on the large frames — but the figure aggregation service
+# (services/figure/aggregate.py) now serves it via an exact group-by on a
+# low-cardinality x, so it materialises a handful of bars, not millions. ``bar``
+# groups, ``line`` is a sampled mark-per-row plot; both are safe at 1 GB. Kept
+# low-cardinality-x for bar so the group-by stays under ``_MAX_GROUPS``.
+FIGURE_VISU_ROTATION: tuple[str, ...] = (
+    "scatter",
+    "box",
+    "histogram",
+    "bar",
+    "line",
+)
+# ``viz_kind`` values rotated across advanced_viz components. Every kind here
+# binds to real columns the linked generator emits (see
+# ``configgen._advanced_viz_config``) and exercises all three sampling policies
+# (``models/components/advanced_viz/sampling.py``): tail (volcano/ma/manhattan),
+# hash (qq/lollipop), none (da_barplot/sunburst/sankey/stacked_taxonomy/dot_plot).
+# The ``none`` kinds cross the 2 M no-sample ceiling on a 1 GB features DC, so the
+# rotation also exercises the degraded/flagged-sample path.
+ADVANCED_VIZ_ROTATION: tuple[str, ...] = (
+    "volcano",
+    "ma",
+    "manhattan",
+    "qq",
+    "lollipop",
+    "da_barplot",
+    "sunburst",
+    "sankey",
+    "stacked_taxonomy",
+    "dot_plot",
+)
 
 
 @dataclass(frozen=True)

@@ -439,11 +439,18 @@ def _strip_height(n_items: int) -> int:
 
 
 def _linked_figure_kwargs(visu_type: str) -> dict:
-    """Figure bindings for the ``features`` schema (linked topology)."""
+    """Figure bindings for the ``features`` schema (linked topology).
+
+    ``bar`` binds a low-cardinality categorical x (``feature_class``, 3 values)
+    so the aggregation service's exact group-by stays tiny; ``line`` is a sampled
+    mark-per-row plot. See ``matrix.FIGURE_VISU_ROTATION``.
+    """
     return {
         "scatter": {"x": "mean_expression", "y": "expression", "color": "feature_class"},
         "box": {"x": "feature_class", "y": "expression"},
         "histogram": {"x": "expression"},
+        "bar": {"x": "feature_class", "y": "expression"},
+        "line": {"x": "mean_expression", "y": "expression"},
     }.get(visu_type, {"x": "mean_expression", "y": "expression"})
 
 
@@ -457,22 +464,90 @@ def _figure_kwargs(visu_type: str) -> dict:
 
 
 def _advanced_viz_config(viz_kind: str, feature_id_col: str = "individual_id") -> dict:
-    if viz_kind == "volcano":
-        return {
+    """Component config for one advanced-viz ``viz_kind``, bound to the linked
+    ``features`` columns (see ``benchmark.datagen_linked``).
+
+    Every kind here binds to a real column of the right dtype, so the render
+    exercises the actual reduction path rather than a validation error. The
+    column choices are the generator's, not biology's — ``chr``/``position`` are
+    synthetic, ``qq`` reads the uniform ``frac_expressing`` as its p-value (so
+    the QQ line is the ideal diagonal), and the taxonomy kinds treat
+    ``feature_class`` as a taxon. The three sampling policies are all covered:
+    tail (volcano/ma/manhattan), hash (qq/lollipop), none (the rest).
+    """
+    configs: dict[str, dict] = {
+        # ── tail: keep the significant end whole, stride the middle ──────────
+        "volcano": {
             "viz_kind": "volcano",
             "feature_id_col": feature_id_col,
             "effect_size_col": "effect_size",
             "significance_col": "neg_log10_p",
             "significance_is_neg_log10": True,
-        }
-    if viz_kind == "ma":
-        return {
+        },
+        "ma": {
             "viz_kind": "ma",
             "feature_id_col": feature_id_col,
             "avg_log_intensity_col": "mean_expression",
             "log2_fold_change_col": "effect_size",
-        }
-    raise ValueError(f"Unsupported benchmark viz_kind {viz_kind!r}")
+        },
+        "manhattan": {
+            "viz_kind": "manhattan",
+            "chr_col": "chr",
+            "pos_col": "position",
+            "score_col": "neg_log10_p",
+            "feature_col": feature_id_col,
+            "effect_col": "effect_size",
+        },
+        # ── hash: uniform sample is faithful (mark-per-row) ──────────────────
+        "qq": {
+            "viz_kind": "qq",
+            "p_value_col": "frac_expressing",
+            "feature_id_col": feature_id_col,
+            "category_col": "feature_class",
+        },
+        "lollipop": {
+            "viz_kind": "lollipop",
+            "feature_id_col": feature_id_col,
+            "position_col": "position",
+            "category_col": "feature_class",
+            "effect_col": "effect_size",
+        },
+        # ── none: renderer aggregates client-side, never sample by default ───
+        "da_barplot": {
+            "viz_kind": "da_barplot",
+            "feature_id_col": feature_id_col,
+            "contrast_col": "feature_class",
+            "lfc_col": "effect_size",
+            "significance_col": "neg_log10_p",
+        },
+        "sunburst": {
+            "viz_kind": "sunburst",
+            "rank_cols": ["rank", "feature_class"],
+            "abundance_col": "expression",
+        },
+        "sankey": {
+            "viz_kind": "sankey",
+            "step_cols": ["rank", "feature_class"],
+        },
+        "stacked_taxonomy": {
+            "viz_kind": "stacked_taxonomy",
+            "sample_id_col": "sample_id",
+            "taxon_col": "feature_class",
+            "rank_col": "rank",
+            "abundance_col": "expression",
+        },
+        "dot_plot": {
+            "viz_kind": "dot_plot",
+            "cluster_col": "feature_class",
+            "gene_col": feature_id_col,
+            "mean_expression_col": "mean_expression",
+            "frac_expressing_col": "frac_expressing",
+        },
+    }
+    try:
+        return configs[viz_kind]
+    except KeyError:
+        raise ValueError(f"Unsupported benchmark viz_kind {viz_kind!r}")
 
 
 def _linked_filter_components(workflow_tag: str) -> list[dict]:
