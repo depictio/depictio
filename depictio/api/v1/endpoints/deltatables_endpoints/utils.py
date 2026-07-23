@@ -1,7 +1,8 @@
 import collections
+import functools
 import os
+from collections.abc import Callable
 
-import numpy as np
 import polars as pl
 from botocore.exceptions import ClientError
 from bson import ObjectId
@@ -114,94 +115,353 @@ def upload_dir_to_s3(bucket_name, s3_folder, local_dir, s3_client):
             s3_client.upload_file(local_path, bucket_name, s3_path)
 
 
-def precompute_columns_specs(aggregated_df: pl.DataFrame, agg_functions: dict, dc_data: dict):
-    """Aggregate dataframes and return a list of dictionaries with column names, types and specs."""
-    aggregated_df = aggregated_df.to_pandas()  # type: ignore[invalid-assignment]
+# Per-column aggregations, expressed lazily so the frame is never materialised.
+#
+# Keyed by the ``pandas`` method name declared in ``agg_functions`` (or by the
+# card-method name for the one entry whose ``pandas`` value is a callable —
+# ``range``). Each entry maps a column expression to the polars expression that
+# reproduces *exactly* what the pandas method used to return; the non-obvious
+# arguments are all parity fixes, measured against pandas 2.2:
+#
+# - ``quantile``: polars defaults to ``nearest`` interpolation, pandas to ``linear``.
+# - ``skew`` / ``kurt``: polars defaults to the biased estimator, pandas to the
+#   bias-corrected one.
+# - ``nunique`` / ``mode``: polars counts null as a distinct value, pandas drops it.
+# - ``mode``: pandas ``.mode()`` returns the tied modes *sorted* and the caller
+#   took the first one — i.e. the smallest. ``.min()`` over the modes is the
+#   same value and stays a scalar, so every expression here reduces to one row.
+#
+# Each entry also declares what its memory scales with, which decides how the
+# work is split into passes (see _aggregate). Measured on the benchmark 1 GB
+# tier (14.1M rows, 12 columns) with the polars 1.42 streaming engine:
+#
+#   CHEAP        constant                  all 12 columns          → 0.37 GB
+#   ORDER_STATS  the column                8 numeric columns       → 1.30 GB
+#   CARDINALITY  the distinct values       1 near-unique string    → 2.20 GB
+#
+# Run together those buffers coexist and cost 5.4 GB; run as separate passes
+# the cost is the maximum instead of the sum.
+_CHEAP, _ORDER_STATS, _CARDINALITY = "cheap", "order_stats", "cardinality"
 
-    results = list()
+_POLARS_AGG_EXPRS: dict[str, tuple[str, Callable[[pl.Expr], pl.Expr]]] = {
+    "count": (_CHEAP, lambda e: e.count()),
+    "sum": (_CHEAP, lambda e: e.sum()),
+    "mean": (_CHEAP, lambda e: e.mean()),
+    "min": (_CHEAP, lambda e: e.min()),
+    "max": (_CHEAP, lambda e: e.max()),
+    "var": (_CHEAP, lambda e: e.var()),
+    "std": (_CHEAP, lambda e: e.std()),
+    # The bias-corrected estimators are undefined below 3 (skew) and 4
+    # (kurtosis) observations — pandas returns NaN there, polars keeps
+    # returning a number. Guard so tiny columns behave as they always did.
+    "skew": (_CHEAP, lambda e: pl.when(e.count() >= 3).then(e.skew(bias=False))),
+    "kurt": (_CHEAP, lambda e: pl.when(e.count() >= 4).then(e.kurtosis(bias=False))),
+    # ``agg_functions["int64"]["card_methods"]["range"]["pandas"]`` is a lambda,
+    # so it has no method name to key on — it is resolved by card-method name.
+    "range": (_CHEAP, lambda e: e.max() - e.min()),
+    # Order statistics need the whole column in memory.
+    "median": (_ORDER_STATS, lambda e: e.median()),
+    "quantile": (_ORDER_STATS, lambda e: e.quantile(0.5, interpolation="linear")),
+    # These size with the column's cardinality, not with the row count.
+    "nunique": (_CARDINALITY, lambda e: e.drop_nulls().n_unique()),
+    "mode": (_CARDINALITY, lambda e: e.drop_nulls().mode().min()),
+}
+
+# Above this many distinct values, a column's cardinality aggregations get a
+# pass to themselves instead of sharing one with the other columns. Three
+# near-unique string columns computed together peaked at 6.7 GB; one pass each
+# brought that to 3.2 GB for the same wall time.
+_LARGE_CARDINALITY = 1_000_000
+
+_NESTED_DTYPES = (pl.List, pl.Array, pl.Struct, pl.Binary, pl.Null, pl.Object)
+
+_INTEGER_DTYPES = (
+    pl.Int8,
+    pl.Int16,
+    pl.Int32,
+    pl.Int64,
+    pl.UInt8,
+    pl.UInt16,
+    pl.UInt32,
+    pl.UInt64,
+)
+
+
+def _polars_type_name(dtype: pl.DataType) -> str:
+    """Normalized type name for a polars dtype, ignoring nullability.
+
+    The names are the ones the rest of the stack understands: the validator in
+    ``models/models/deltatables.py``, the ``agg_functions`` lookup and the
+    frontend type maps. They are *not* polars dtype names.
+    """
+    if dtype in _INTEGER_DTYPES:
+        return "int64"
+    if dtype in (pl.Float32, pl.Float64):
+        return "float64"
+    if dtype == pl.Boolean:
+        return "bool"
+    if dtype in (pl.Date, pl.Datetime):
+        return "datetime"
+    if dtype == pl.Duration:
+        # Kept as "time" — that is what the pandas path emitted for
+        # timedelta64 columns, and "timedelta" is not an accepted value of
+        # DeltaTableColumn.validate_column_type.
+        return "time"
+    if dtype in (pl.Categorical, pl.Enum):
+        return "category"
+    # String, Time, Binary, Decimal, List, Struct, Null — everything the pandas
+    # path used to surface as dtype "object".
+    return "object"
+
+
+def _legacy_type_name(dtype: pl.DataType, has_nulls: bool) -> str:
+    """The name the previous ``to_pandas()`` implementation would have emitted.
+
+    ``to_pandas()`` silently widened two cases (verified, not inferred):
+    an integer column containing nulls came back as ``float64``, and a boolean
+    column containing nulls came back as ``object``. Existing dashboards have
+    those names recorded in their component metadata, so they must remain
+    reachable — see ``precompute_columns_specs`` for when they are preferred.
+    """
+    if has_nulls and dtype in _INTEGER_DTYPES:
+        return "float64"
+    if has_nulls and dtype == pl.Boolean:
+        return "object"
+    return _polars_type_name(dtype)
+
+
+def _column_expr(column: str, dtype: pl.DataType) -> pl.Expr:
+    """Base expression for a column, adjusted so aggregations match pandas."""
+    expr = pl.col(column)
+    if dtype in (pl.Float32, pl.Float64):
+        # pandas treats NaN as missing; polars treats it as a value. Without
+        # this, count/nunique/mean/min/max all drift on any column holding NaN.
+        expr = expr.fill_nan(None)
+    elif dtype in (pl.Categorical, pl.Enum):
+        # ``mode().min()`` on a categorical compares physical codes, not labels.
+        expr = expr.cast(pl.Utf8)
+    return expr
+
+
+def _supports_approx_n_unique(dtype: pl.DataType) -> bool:
+    """Whether HyperLogLog accepts this dtype (after ``_column_expr``'s casts).
+
+    polars rejects it on temporal, decimal and nested dtypes; categoricals are
+    fine because ``_column_expr`` casts them to Utf8.
+    """
+    return dtype in _INTEGER_DTYPES or dtype in (
+        pl.Float32,
+        pl.Float64,
+        pl.Boolean,
+        pl.String,
+        pl.Categorical,
+        pl.Enum,
+    )
+
+
+def _resolve_method_expr(
+    method_name: str, method_info: dict
+) -> tuple[str, Callable[[pl.Expr], pl.Expr]] | None:
+    """Map one ``agg_functions`` card method to its cost class and expression."""
+    pandas_method = method_info.get("pandas")
+    if isinstance(pandas_method, str) and pandas_method in _POLARS_AGG_EXPRS:
+        return _POLARS_AGG_EXPRS[pandas_method]
+    if method_name in _POLARS_AGG_EXPRS:
+        return _POLARS_AGG_EXPRS[method_name]
+    return None
+
+
+@functools.lru_cache(maxsize=1)
+def _streaming_collect_kwargs() -> dict:
+    """How to ask this polars for the streaming engine, or ``{}`` if it can't.
+
+    The streaming engine is what keeps the scan from being materialised before
+    the aggregations run. Its spelling changed across versions (the dev venv is
+    on polars 1.19, the API container on 1.42), so it is probed once on a
+    trivial plan rather than guessed from the version string.
+    """
+    probe = pl.LazyFrame({"x": [1]}).select(pl.col("x").sum())
+    for kwargs in ({"engine": "streaming"}, {"streaming": True}):
+        try:
+            probe.collect(**kwargs)  # type: ignore[call-overload]
+            return kwargs
+        except Exception:  # noqa: S110 — unsupported spelling, try the next one
+            continue
+    logger.warning("polars streaming engine unavailable; column specs use the in-memory engine.")
+    return {}
+
+
+def _collect(lf: pl.LazyFrame) -> pl.DataFrame:
+    """Collect a pure-aggregation plan through the streaming engine when possible."""
+    return lf.collect(**_streaming_collect_kwargs())  # type: ignore[call-overload]
+
+
+def precompute_columns_specs(
+    aggregated_df: pl.DataFrame | pl.LazyFrame,
+    agg_functions: dict,
+    dc_data: dict,
+    previous_types: dict[str, str] | None = None,
+):
+    """Return one spec dict per column: name, description, type and aggregations.
+
+    Everything is computed as lazy polars aggregations — the frame is never
+    materialised. This function runs on every Delta upsert, including data
+    collections of tens of millions of rows, where the previous ``.to_pandas()``
+    implementation allocated several gigabytes (every string cell became a
+    Python ``str``) and got the API worker OOM-killed.
+
+    ``previous_types`` maps column name to the type recorded by the previous
+    aggregation. When a column is already known, its recorded name wins over the
+    freshly derived one, so a re-ingest never silently changes the type a saved
+    dashboard component was built against. Columns never seen before get the
+    true polars type.
+    """
+    lf = aggregated_df.lazy()
+    schema = lf.collect_schema()
     dc_config = dc_data["config"]
+    columns_description = dc_config["dc_specific_properties"].get("columns_description") or {}
 
-    for column in aggregated_df.columns:
+    # Build every aggregation up front, grouped by column and by cost class. The
+    # final type depends on whether the column holds nulls, which is only known
+    # after collecting — so all candidate types' methods are computed and the
+    # ones that don't apply are dropped when the specs are assembled.
+    plan: list[dict[str, list[pl.Expr]]] = []
+
+    for idx, (column, dtype) in enumerate(schema.items()):
+        base = _column_expr(column, dtype)
+        column_exprs: dict[str, list[pl.Expr]] = {
+            _CHEAP: [pl.col(column).null_count().alias(f"c{idx}__nulls")],
+            _ORDER_STATS: [],
+            _CARDINALITY: [],
+        }
+        seen: set[str] = set()
+
+        # Only the types this dtype can actually take: a recorded type that
+        # contradicts the dtype is discarded when the specs are assembled, so
+        # there is nothing to compute for it.
+        candidates = {
+            _polars_type_name(dtype),
+            _legacy_type_name(dtype, has_nulls=False),
+            _legacy_type_name(dtype, has_nulls=True),
+        }
+        nested = isinstance(dtype, _NESTED_DTYPES)
+
+        for type_name in sorted(candidates):
+            for method_name, method_info in (
+                agg_functions.get(type_name, {}).get("card_methods", {}).items()
+            ):
+                alias = f"c{idx}__{type_name}__{method_name}"
+                if alias in seen:
+                    continue
+                if nested and method_name != "count":
+                    # List/Struct/Binary/Null reject ordering and hashing; only
+                    # counting them is meaningful. Skipping up front keeps
+                    # _aggregate's retry path for genuine surprises.
+                    continue
+                resolved = _resolve_method_expr(method_name, method_info)
+                if resolved is None:
+                    logger.warning(
+                        f"precompute_columns_specs: no polars equivalent for card method "
+                        f"'{method_name}' of type '{type_name}' — skipping it."
+                    )
+                    continue
+                cost, factory = resolved
+                seen.add(alias)
+                column_exprs[cost].append(factory(base).alias(alias))
+
+        if column_exprs[_CARDINALITY] and _supports_approx_n_unique(dtype):
+            # Planner signal only, never recorded: HyperLogLog is cheap and tells
+            # us whether this column's exact cardinality aggregations deserve a
+            # pass to themselves. Columns without it are treated as small — their
+            # dtypes (temporal, decimal) hash to fixed-width keys, so a shared
+            # pass stays affordable even at high cardinality.
+            column_exprs[_CHEAP].append(base.approx_n_unique().alias(f"c{idx}__approx"))
+        plan.append(column_exprs)
+
+    aggregated = _aggregate(lf, plan)
+
+    results = []
+    for idx, (column, dtype) in enumerate(schema.items()):
         tmp_dict = collections.defaultdict(dict)
         tmp_dict["name"] = column
-        column_description = None
+        tmp_dict["description"] = columns_description.get(column)
 
-        if "columns_description" in dc_config["dc_specific_properties"]:
-            if column in list(dc_config["dc_specific_properties"]["columns_description"].keys()):
-                column_description = dc_config["dc_specific_properties"]["columns_description"][
-                    column
-                ]
-
-        tmp_dict["description"] = column_description
-        # Identify the column data type
-        col_type = str(aggregated_df[column].dtype).lower()
-        # logger.info(col_type)
-
-        # Normalize pandas dtypes to match allowed values
-        if col_type.startswith("datetime64"):
-            normalized_type = "datetime"
-        elif col_type.startswith("timedelta64"):
-            normalized_type = "time"
-        elif col_type in ["int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64"]:
-            normalized_type = "int64"
-        elif col_type in ["float16", "float32", "float64"]:
-            normalized_type = "float64"
-        elif col_type in ["bool", "boolean"]:
-            normalized_type = "bool"
-        elif col_type == "str" or col_type.startswith("string") or col_type == "large_string":
-            # pandas 3.0 infers a dedicated string dtype (str(dtype) == "str");
-            # pandas <3 represented strings as object. Normalize to "object" so
-            # the validator, agg_functions lookup and downstream type maps behave
-            # exactly as they did on pandas 2.x.
-            normalized_type = "object"
+        null_count = aggregated.get(f"c{idx}__nulls")
+        has_nulls = bool(null_count) if null_count is not None else False
+        polars_name = _polars_type_name(dtype)
+        legacy_name = _legacy_type_name(dtype, has_nulls)
+        recorded = (previous_types or {}).get(column)
+        if recorded in (legacy_name, polars_name):
+            normalized_type = recorded
         else:
-            normalized_type = col_type.lower()
-
+            normalized_type = polars_name
         tmp_dict["type"] = normalized_type
 
-        # ``agg_functions`` is keyed by *normalized* type names (``int64``,
-        # ``float64``, ``datetime``, ``bool``, …) — not the raw pandas dtype.
-        # Looking up by ``col_type`` worked for int64/float64/object only by
-        # coincidence (their normalized names happen to equal the raw dtype);
-        # ``datetime64[ns]`` / ``int32`` etc. silently fell off the path so
-        # min/max never landed in specs and the React DatePicker showed
-        # "No date bounds available". Use ``normalized_type`` instead.
-        lookup_key = normalized_type if normalized_type in agg_functions else col_type
-        if lookup_key in agg_functions:
-            methods = agg_functions[lookup_key]["card_methods"]
-
-            for method_name, method_info in methods.items():
-                pandas_method = method_info["pandas"]
-                if callable(pandas_method):
-                    result = pandas_method(aggregated_df[column])
-                elif isinstance(pandas_method, str):
-                    result = getattr(aggregated_df[column], pandas_method)()
-                else:
-                    continue
-
-                # Normalize the pandas method's return:
-                # - .mode() returns a pd.Series (possibly empty, possibly with
-                #   a non-RangeIndex when the aggregated df was reindexed); we
-                #   want the first tied mode by position.
-                # - .mean() / .median() / .min() / .max() etc. return scalars.
-                # - .unique() returns an ndarray.
-                # Previous code did ``result[0]`` for the mode branch, which is
-                # LABEL-based indexing on a pd.Series and raised KeyError(0)
-                # any time the Series index didn't contain 0 — e.g. viralrecon
-                # pangolin_lineages, which has sparse string columns whose
-                # aggregated-df modes carry a non-default index. The whole
-                # deltatable upsert aborted, leaving every dashboard tile
-                # bound to that DC stuck on 404.
-                if hasattr(result, "iloc"):  # pd.Series
-                    if len(result) == 0:
-                        continue  # nothing to record for this method
-                    result = result.iloc[0]
-                elif isinstance(result, np.ndarray):
-                    if result.size == 0:
-                        continue
-                    result = result.flat[0]
-                tmp_dict["specs"][str(method_name)] = numpy_to_python(result)
+        for method_name in agg_functions.get(normalized_type, {}).get("card_methods", {}):
+            value = aggregated.get(f"c{idx}__{normalized_type}__{method_name}")
+            # None covers both "nothing to aggregate" (empty or all-null column,
+            # where pandas returned an empty Series and the entry was skipped
+            # too) and "aggregation dropped" (nested dtype, see _aggregate).
+            if value is None:
+                continue
+            tmp_dict["specs"][str(method_name)] = numpy_to_python(value)
 
         results.append(tmp_dict)
 
     return results
+
+
+def _run_pass(lf: pl.LazyFrame, exprs: list[pl.Expr]) -> dict:
+    """Collect one batch of aggregations, degrading rather than aborting.
+
+    Nested dtypes (List, Struct, Binary) accept some of the aggregations above
+    and reject others. Rather than failing the whole upsert — which would leave
+    every dashboard tile bound to that data collection on a 404 — a failing
+    batch is retried expression by expression and only the offending ones are
+    dropped.
+    """
+    if not exprs:
+        return {}
+    try:
+        return _collect(lf.select(exprs)).to_dicts()[0]
+    except Exception as e:
+        logger.warning(
+            f"precompute_columns_specs: aggregation batch failed ({e}); "
+            "retrying its expressions individually."
+        )
+
+    out: dict = {}
+    for expr in exprs:
+        try:
+            out.update(_collect(lf.select(expr)).to_dicts()[0])
+        except Exception as e:
+            logger.warning(f"precompute_columns_specs: dropping one aggregation — {e}")
+    return out
+
+
+def _aggregate(lf: pl.LazyFrame, plan: list[dict[str, list[pl.Expr]]]) -> dict:
+    """Run the plan as one pass per cost class, keeping peak memory bounded.
+
+    Every pass reads the table again, so this trades I/O for memory — on the
+    benchmark 1 GB tier the extra passes cost under a second each, while running
+    everything together costs 5.4 GB against 3.5 GB here. Cardinality
+    aggregations on a column with more than ``_LARGE_CARDINALITY`` distinct
+    values get a pass of their own: their hash tables are the one term that
+    scales with the data, and several such columns sharing a pass add up (6.7 GB
+    measured for three, against 3.2 GB one at a time).
+    """
+    out: dict = {}
+    out.update(_run_pass(lf, [e for column in plan for e in column[_CHEAP]]))
+    out.update(_run_pass(lf, [e for column in plan for e in column[_ORDER_STATS]]))
+
+    small: list[pl.Expr] = []
+    for idx, column in enumerate(plan):
+        if not column[_CARDINALITY]:
+            continue
+        approx = out.get(f"c{idx}__approx") or 0
+        if approx > _LARGE_CARDINALITY:
+            out.update(_run_pass(lf, column[_CARDINALITY]))
+        else:
+            small += column[_CARDINALITY]
+    out.update(_run_pass(lf, small))
+    return out
