@@ -246,6 +246,18 @@ export type { RealtimeJournalEntry } from './hooks/useRealtimeJournal';
 export { batchIdsFromPayload } from './highlight';
 export type { ActiveHighlight } from './highlight';
 
+// Render-fetch queue. Apps that own the filter state call
+// ``bumpFetchGeneration`` when it changes, so requests queued for the previous
+// filter are dropped instead of running against a question nobody is asking.
+export {
+  bumpFetchGeneration,
+  currentFetchGeneration,
+  fetchQueueState,
+  isStaleFetch,
+  setFetchConcurrency,
+  StaleFetchError,
+} from './fetchQueue';
+
 export type {
   StoredMetadata,
   DashboardData,

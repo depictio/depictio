@@ -25,7 +25,7 @@ import { renderTable, InteractiveFilter, StoredMetadata } from '../api';
 import { LoadAllState } from './chrome/LoadAllButton';
 import { extractRowSelection } from '../selection';
 import { useInView } from '../hooks/useInView';
-import { enqueueFetch } from '../fetchQueue';
+import { enqueueFetch, isStaleFetch } from '../fetchQueue';
 import { useNewItemIds } from '../hooks/useNewItemIds';
 import { useTransientFlag } from '../hooks/useTransientFlag';
 import { ActiveHighlight } from '../highlight';
@@ -143,10 +143,21 @@ const TableRenderer: React.FC<TableRendererProps> = ({
   useEffect(() => {
     if (!inView || ready) return;
     let cancelled = false;
+    const ctrl = new AbortController();
     setLoading(true);
     setError(null);
     enqueueFetch(
-      () => renderTable(dashboardId, metadata.index, filtersForFetch, 0, 1),
+      () =>
+        renderTable(
+          dashboardId,
+          metadata.index,
+          filtersForFetch,
+          0,
+          1,
+          undefined,
+          'desc',
+          ctrl.signal,
+        ),
       metadata.layout?.y ?? 0,
     )
       .then((res) => {
@@ -256,7 +267,9 @@ const TableRenderer: React.FC<TableRendererProps> = ({
         setReady(true);
       })
       .catch((err) => {
-        if (cancelled) return;
+        // Superseded / aborted rounds are expected when the user keeps moving a
+        // filter — not something to surface as a broken table.
+        if (cancelled || isStaleFetch(err)) return;
         setError(err?.message || String(err));
       })
       .finally(() => {
@@ -264,6 +277,7 @@ const TableRenderer: React.FC<TableRendererProps> = ({
       });
     return () => {
       cancelled = true;
+      ctrl.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dashboardId, metadata.index, inView, ready]);
@@ -349,11 +363,21 @@ const TableRenderer: React.FC<TableRendererProps> = ({
   useEffect(() => {
     if (!rowIdColumn || !ready) return;
     let cancelled = false;
+    const ctrl = new AbortController();
     const snapshotPageSize =
       typeof metadata.page_size === 'number'
         ? Math.min(Math.max(metadata.page_size as number, 1), 200)
         : 50;
-    renderTable(dashboardId, metadata.index, filtersForFetch, 0, snapshotPageSize)
+    renderTable(
+      dashboardId,
+      metadata.index,
+      filtersForFetch,
+      0,
+      snapshotPageSize,
+      undefined,
+      'desc',
+      ctrl.signal,
+    )
       .then((res) => {
         if (cancelled) return;
         const ids: string[] = [];
@@ -368,6 +392,7 @@ const TableRenderer: React.FC<TableRendererProps> = ({
       });
     return () => {
       cancelled = true;
+      ctrl.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dashboardId, metadata.index, ready, rowIdColumn, JSON.stringify(filtersForFetch), refreshTick]);
@@ -478,7 +503,11 @@ const TableRenderer: React.FC<TableRendererProps> = ({
             if (typeof res.total === 'number') setTotal(res.total);
           })
           .catch((err) => {
-            setError(err?.message || String(err));
+            // A filter change purges the grid's cache and drops every block
+            // still queued for the old filters. Those rejections are the
+            // mechanism working, not an error to show the user — the grid is
+            // already re-requesting the same blocks for the new filters.
+            if (!isStaleFetch(err)) setError(err?.message || String(err));
             params.failCallback();
           });
       },
