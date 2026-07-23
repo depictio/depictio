@@ -164,6 +164,43 @@ heavy advanced-viz kinds (embedding/heatmap/upset/…) always use the Celery job
 pattern regardless of the offload flags, so they only participate meaningfully in
 the "celery on" half.
 
+## A/B'ing a server-side setting
+
+The same two-run mechanism works for any setting fixed at process start. Boot,
+run one half with a label, reboot with the setting flipped, run the other half
+with `--reuse-ingest` so both halves measure the same ingested data:
+
+```bash
+# Half A — exact box quartiles (the current default)
+BENCH_BOX_SAMPLE_ROWS_PER_GROUP=0 docker compose … up -d
+python -m benchmark.cli run --cli-config ~/.depictio/CLI.yaml \
+  --server-mode box_exact --sizes 1gb --components 25 --visu figure --repeats 2
+
+# Half B — per-group sampled quartiles
+BENCH_BOX_SAMPLE_ROWS_PER_GROUP=10000 docker compose … up -d
+python -m benchmark.cli run --cli-config ~/.depictio/CLI.yaml \
+  --server-mode box_sampled --sizes 1gb --components 25 --visu figure \
+  --repeats 2 --reuse-ingest
+```
+
+`box_sample_rows_per_group` is off by default because the measured 3.7x win at
+17 M rows was taken on warm local parquet: sampling trades a sort for an *extra
+scan*, and on S3-backed Delta the read can cost more than the sort it removes.
+This is the run that settles it. Compare `visu == "box"` latency across the two
+`server_mode` halves, and check the quartiles agree — the whiskers come from the
+exact pass either way, so only q1/median/q3 can move.
+
+## Advanced viz: the payload picks the reduction
+
+`POST /advanced_viz/data` chooses how to reduce a large frame from the `viz_kind`
+in the request body, so the harness sends the same `viz_kind` / `roles` / `tail`
+fields the React renderers do (`_advanced_viz_policy` in `runner.py`). Omitting
+them would time the uniform-sample path that no renderer takes any more. Each
+render records the policy the server actually applied (`sampling_policy`, from
+`X-Sampling-Policy`), because a `tail` and a `hash` render of the same component
+are not the same measurement: the tail keeps every significant row and pays a
+predicate for it.
+
 ## Layout
 
 | File | Role |
