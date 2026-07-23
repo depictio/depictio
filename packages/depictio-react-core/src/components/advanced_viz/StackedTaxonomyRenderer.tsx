@@ -380,7 +380,11 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
     };
   }, [rows, config, rank, topN, normalise, sampleSort, showLegend, logY, isDark, theme, taxonUniverse]);
 
-  const controls = (
+  // Memoised so AdvancedVizFrame's `extras` useMemo stays stable — an unmemoised
+  // element re-fires the frame's publish effect and loops it against
+  // ComponentRenderer's setState ("Maximum update depth exceeded").
+  const controls = useMemo(
+    () => (
     <Stack gap="xs">
       <Select
         size="xs"
@@ -446,6 +450,8 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
         </Stack>
       ) : null}
     </Stack>
+    ),
+    [rank, sampleSort, topN, normalise, showLegend, logY, allRanks],
   );
 
   return (

@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useMemo } from 'react';
+import React, { useCallback, useContext, useEffect, useMemo, useRef } from 'react';
 import { Alert, Badge, Group, Loader, Paper, Stack, Text, Tooltip } from '@mantine/core';
 
 import ErrorBoundary from '../ErrorBoundary';
@@ -140,6 +140,22 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
   // (or fully loaded) — an unsampled small frame has nothing to expand.
   const showReduction = Boolean(reduction && (reduction.sampled || reduction.full));
 
+  // Depend on `reduction`'s *primitive* fields, not the object identity. Several
+  // renderers build `reduction={{ …, onToggle: () => … }}` inline, i.e. a fresh
+  // object with a fresh callback every render; depending on the object would
+  // recompute `extras` every render, re-fire the publish effect below, and —
+  // because `publish` setStates in ComponentRenderer, which re-renders this
+  // subtree — loop until React aborts with "Maximum update depth exceeded".
+  // Reading the primitives keeps `extras` stable across renders that didn't
+  // change anything, and the ref lets the Load-All toggle call the latest
+  // `onToggle` without its identity churn invalidating the memo.
+  const redPresent = Boolean(reduction);
+  const redFull = reduction?.full ?? false;
+  const redLoading = reduction?.loading ?? false;
+  const onToggleRef = useRef(reduction?.onToggle);
+  onToggleRef.current = reduction?.onToggle;
+  const stableToggle = useCallback(() => onToggleRef.current?.(), []);
+
   // Render the popovers as a single React node and publish it. ComponentRenderer
   // reads it via useState and threads it through wrapWithChrome's extraActions
   // slot. The popovers themselves portal their dropdown content so even if the
@@ -161,22 +177,32 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
     }
     // Reuse the exact figure/table Load-All ActionIcon so the toggle looks and
     // sits identically across component types.
-    if (reduction && showReduction) {
+    if (redPresent && showReduction) {
       nodes.push(
         <LoadAllButton
           key="load-all"
           state={{
-            reduced: !reduction.full,
-            full: reduction.full,
-            loading: reduction.loading,
-            toggle: reduction.onToggle,
+            reduced: !redFull,
+            full: redFull,
+            loading: redLoading,
+            toggle: stableToggle,
             noun: 'points',
           }}
         />,
       );
     }
     return nodes.length ? <>{nodes}</> : null;
-  }, [controls, dataRows, dataColumns, tierAnnotation, reduction, showReduction]);
+  }, [
+    controls,
+    dataRows,
+    dataColumns,
+    tierAnnotation,
+    redPresent,
+    redFull,
+    redLoading,
+    stableToggle,
+    showReduction,
+  ]);
 
   useEffect(() => {
     if (!publish) return;
