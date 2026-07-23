@@ -109,16 +109,17 @@ const SankeyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => 
   useEffect(() => {
     if (!metadata.wf_id || !metadata.dc_id || !effectiveStepCols.length) return;
     let cancelled = false;
-    fetchAdvancedVizData(
-      metadata.wf_id,
-      metadata.dc_id,
+    fetchAdvancedVizData({
+      wfId: metadata.wf_id,
+      dcId: metadata.dc_id,
       // Fetch the WHOLE possible-step universe, not just the depth-sliced
       // active prefix — so the step-filter MultiSelects keep working when the
       // user expands depth without a refetch.
-      allSteps,
+      columns: allSteps,
       filters,
-      5000,
-    )
+      limitRows: 5000,
+      vizKind: 'sankey',
+    })
       .then((res) => {
         if (cancelled) return;
         const opts: Record<string, string[]> = {};

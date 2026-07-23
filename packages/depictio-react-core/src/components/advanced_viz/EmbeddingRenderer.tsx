@@ -183,7 +183,13 @@ const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
     setComputeMs(null);
 
     if (!liveMode) {
-      fetchAdvancedVizData(metadata.wf_id, metadata.dc_id, requiredCols, filters)
+      fetchAdvancedVizData({
+        wfId: metadata.wf_id,
+        dcId: metadata.dc_id,
+        columns: requiredCols,
+        filters,
+        vizKind: 'embedding',
+      })
         .then((res) => {
           if (!cancelled) setRows(res.rows);
         })

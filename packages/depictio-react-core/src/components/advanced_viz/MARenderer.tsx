@@ -87,12 +87,34 @@ const MARenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
     setLoading(true);
     setError(null);
     fetchAdvancedVizData(
-      metadata.wf_id,
-      metadata.dc_id,
-      requiredCols,
-      filters,
-      undefined,
-      fullLoad,
+      {
+        wfId: metadata.wf_id,
+        dcId: metadata.dc_id,
+        columns: requiredCols,
+        filters,
+        fullLoad,
+        vizKind: 'ma',
+        roles: {
+          feature_id: config.feature_id_col,
+          avg_log_intensity: config.avg_log_intensity_col,
+          log2_fold_change: config.log2_fold_change_col,
+        },
+        // Same reasoning as the volcano: keep the hits whole, sample the blob.
+        // An MA plot defines its hits by p-value when one is bound and by fold
+        // change otherwise, and the saved threshold is used rather than the live
+        // slider so dragging it doesn't refetch the table.
+        tail: config.significance_col
+          ? {
+              column: config.significance_col,
+              direction: 'low',
+              threshold: config.significance_threshold ?? 0.05,
+            }
+          : {
+              column: config.log2_fold_change_col,
+              direction: 'both',
+              threshold: config.fold_change_threshold ?? 1.0,
+            },
+      },
       ctrl.signal,
     )
       .then((res) => {

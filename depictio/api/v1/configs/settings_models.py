@@ -962,6 +962,39 @@ class PerformanceConfig(BaseSettings):
             "`max_points` overrides this."
         ),
     )
+    advanced_viz_no_sample_max_rows: int = Field(
+        default=2_000_000,
+        description=(
+            "Row ceiling for the advanced-viz kinds that must not be sampled. "
+            "Their renderers aggregate client-side (per-sample sums, top-N "
+            "rankings), so a sample changes the values rather than their "
+            "resolution — see `models/components/advanced_viz/sampling.py`. "
+            "Those kinds are served whole, but a data collection large enough "
+            "to exhaust the API process has to be reduced somehow: past this "
+            "count the request falls back to a uniform sample and the response "
+            "reports `sampling.exact = false` so the renderer can mark the "
+            "figure approximate instead of presenting an estimate as a total. "
+            "0 disables the ceiling (unbounded loads)."
+        ),
+    )
+    advanced_viz_tail_p_threshold: float = Field(
+        default=0.05,
+        description=(
+            "Significance cutoff below which a volcano/manhattan row is kept "
+            "whole rather than sampled. A uniform sample of a 17M-row DE table "
+            "keeps ~0.06% of the hits, i.e. none — the plot becomes a cloud "
+            "with nothing to label. Only a fallback: renderers send the "
+            "threshold their own plot draws its line at, and that wins."
+        ),
+    )
+    advanced_viz_tail_effect_threshold: float = Field(
+        default=1.0,
+        description=(
+            "Same, for the kinds whose tail is a signed effect size (MA's log2 "
+            "fold change): rows with |effect| at or above this are kept whole. "
+            "1.0 is a two-fold change, the conventional default line."
+        ),
+    )
     box_sample_rows_per_group: int = Field(
         default=0,
         description=(

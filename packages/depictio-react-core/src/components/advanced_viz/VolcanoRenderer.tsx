@@ -96,12 +96,35 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
     setLoading(true);
     setError(null);
     fetchAdvancedVizData(
-      metadata.wf_id,
-      metadata.dc_id,
-      requiredCols,
-      filters,
-      undefined,
-      fullLoad,
+      {
+        wfId: metadata.wf_id,
+        dcId: metadata.dc_id,
+        columns: requiredCols,
+        filters,
+        fullLoad,
+        vizKind: 'volcano',
+        roles: {
+          feature_id: config.feature_id_col,
+          effect_size: config.effect_size_col,
+          significance: config.significance_col,
+        },
+        // The server reduces a large frame to ~10k rows, and a uniform sample
+        // of a genome-wide table keeps essentially none of the hits — the plot
+        // that exists to show them would show a cloud. Sending the cutoff this
+        // volcano draws its own line at keeps precisely those rows whole.
+        //
+        // Deliberately the *saved* threshold, not the live `sigThreshold`
+        // control: that one is a client-side slider, and refetching a 17M-row
+        // table on every drag to widen the tail is a worse trade than leaving
+        // the newly-significant rows to the uniform sample of the middle.
+        tail: {
+          column: config.significance_col,
+          direction: config.significance_is_neg_log10 ? 'high' : 'low',
+          threshold: config.significance_is_neg_log10
+            ? -Math.log10(config.significance_threshold ?? 0.05)
+            : (config.significance_threshold ?? 0.05),
+        },
+      },
       ctrl.signal,
     )
       .then((res) => {

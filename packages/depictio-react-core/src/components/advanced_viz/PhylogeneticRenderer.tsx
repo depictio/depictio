@@ -119,6 +119,9 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
   const [metaCols, setMetaCols] = useState<string[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  // Tip metadata is served whole; past `advanced_viz_no_sample_max_rows` the
+  // server samples it, which means tips go missing rather than blur.
+  const [estimated, setEstimated] = useState(false);
 
   useEffect(() => {
     if (!config.tree_dc_id) {
@@ -148,12 +151,13 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
     }
     const metaP =
       config.metadata_wf_id && config.metadata_dc_id
-        ? fetchAdvancedVizData(
-            config.metadata_wf_id,
-            config.metadata_dc_id,
-            Array.from(new Set(wantedCols)),
+        ? fetchAdvancedVizData({
+            wfId: config.metadata_wf_id,
+            dcId: config.metadata_dc_id,
+            columns: Array.from(new Set(wantedCols)),
             filters,
-          )
+            vizKind: 'phylogenetic',
+          })
         : Promise.resolve(null);
 
     Promise.all([treeP, metaP])
@@ -163,9 +167,13 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
         if (metaRes) {
           setMeta(metaRes.rows);
           setMetaCols(metaRes.columns);
+          // A sampled tip-metadata table is missing tips, not merely coarser:
+          // the ones it drops render uncoloured with no label.
+          setEstimated(Boolean(metaRes.sampling?.degraded));
         } else {
           setMeta(null);
           setMetaCols([]);
+          setEstimated(false);
         }
       })
       .catch((err: unknown) => {
@@ -652,6 +660,7 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
 
   return (
     <AdvancedVizFrame
+      estimated={estimated}
       title={metadata.title || 'Phylogeny'}
       subtitle={(metadata as any).description || (metadata as any).subtitle}
       controls={controls}
