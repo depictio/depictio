@@ -74,6 +74,10 @@ LINKED_COLUMN_DESCRIPTIONS: dict[str, dict[str, str]] = {
         "neg_log10_p": "-log10(p-value) for volcano plots",
         "mean_expression": "Mean expression for MA plots",
         "feature_class": "Feature class — a categorical local to this collection",
+        "chr": "Synthetic chromosome label (manhattan/lollipop)",
+        "position": "Synthetic 1-based genomic position (manhattan/lollipop)",
+        "frac_expressing": "Fraction expressing in [0,1] (dot_plot)",
+        "rank": "Synthetic taxonomic rank label (stacked_taxonomy)",
     },
 }
 
@@ -85,6 +89,14 @@ _SEX = ("male", "female")
 _TOOLS = ("fastqc", "samtools", "picard", "qualimap", "bcftools")
 _METRICS = ("reads", "coverage", "insert_size", "error_rate")
 _FEATURE_CLASSES = ("protein_coding", "lncRNA", "pseudogene")
+# Synthetic genomic + taxonomy columns on the features grain. They exist so the
+# diverse benchmark dashboard can bind the viz kinds whose canonical schema
+# needs them (manhattan/lollipop want chr+position, dot_plot wants a fraction in
+# [0, 1], stacked_taxonomy wants a rank label). They are not biologically
+# meaningful — the point is a valid binding of the right dtype at scale, not a
+# real genome.
+_CHROMOSOMES = tuple(f"chr{i}" for i in range(1, 23)) + ("chrX", "chrY")
+_TAXO_RANKS = ("phylum", "class", "order", "family", "genus")
 
 # One row per (sample, tool, metric): 5 x 4 = 20 metric rows per sample.
 METRICS_PER_SAMPLE = len(_TOOLS) * len(_METRICS)
@@ -172,6 +184,11 @@ def _features_batch(sample_ids: list[str], features_per_sample: int, seed: int):
             "neg_log10_p": rng.exponential(1.5, n).round(3),
             "mean_expression": rng.uniform(0.0, 14.0, n).round(3),
             "feature_class": rng.choice(_FEATURE_CLASSES, n),
+            # Synthetic genomic + taxonomy roles (see the constants above).
+            "chr": rng.choice(_CHROMOSOMES, n),
+            "position": rng.integers(1, 250_000_000, n),
+            "frac_expressing": rng.uniform(0.0, 1.0, n).round(3),
+            "rank": rng.choice(_TAXO_RANKS, n),
         }
     )
 
