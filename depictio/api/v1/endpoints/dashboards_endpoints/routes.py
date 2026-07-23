@@ -2240,6 +2240,50 @@ def _cached_row_count(wf_oid, dc_id: str, filter_metadata, init_data, count_fn) 
         return _count()
 
 
+def _load_natural_page(
+    wf_oid, dc_id: str, filter_metadata, init_data, select_columns, start: int, limit: int
+):
+    """One page of an unsorted table, with the offset pushed into the scan.
+
+    ``open_deltatable_scan`` gives a filtered + projected lazy scan; slicing it
+    before collecting keeps the cost flat in the page number, where loading
+    ``start + limit`` rows and slicing afterwards is quadratic in it.
+
+    Falls back to the row loader when the scan can't be built, matching every
+    other ``open_deltatable_scan`` caller. That fallback keeps the old
+    materialise-then-slice shape, which is correct — just costlier on deep pages.
+    """
+    from depictio.api.v1.deltatables_utils import load_deltatable_lite, open_deltatable_scan
+
+    try:
+        scan = open_deltatable_scan(
+            workflow_id=wf_oid,
+            data_collection_id=dc_id,
+            metadata=filter_metadata or None,
+            init_data=init_data,
+            select_columns=select_columns,
+        )
+        if scan is not None:
+            page = scan.slice(start, limit).collect()
+            if "depictio_aggregation_time" in page.columns:
+                page = page.drop("depictio_aggregation_time")
+            return page
+    except Exception as exc:
+        logger.warning(
+            f"render_table: scan-level paging failed for {dc_id} ({exc}) — using the row loader"
+        )
+
+    df = load_deltatable_lite(
+        workflow_id=wf_oid,
+        data_collection_id=dc_id,
+        metadata=filter_metadata or None,
+        limit_rows=start + limit,
+        init_data=init_data,
+        select_columns=select_columns,
+    )
+    return df.slice(start, limit)
+
+
 @dashboards_endpoint_router.post("/render_figure/{dashboard_id}/{component_id}")
 async def render_figure_endpoint(
     dashboard_id: PyObjectId,
@@ -2412,8 +2456,8 @@ def render_table_endpoint(
     import time as _time
 
     from depictio.api.v1.deltatables_utils import (
+        _get_aggregation_version,
         count_deltatable_lite,
-        load_deltatable_lite,
         load_sorted_deltatable_lite,
         schema_deltatable_lite,
     )
@@ -2533,6 +2577,32 @@ def render_table_endpoint(
         total = _cached_row_count(
             wf_oid, str(dc_id), filter_metadata, init_data, count_deltatable_lite
         )
+
+        # Above a threshold, sorting stops being worth what it costs. A sort has
+        # to see every row, so it scales with the table while an unsorted page
+        # does not: measured on a 7-column frame, one 100-row page costs 87 ms
+        # sorted at 1 M rows, 957 ms at 5 M and 6 254 ms at 20 M, against a flat
+        # ~6 ms unsorted at every size (the limit pushdown reads one row group).
+        # A string key is worse still. So past ``table_sort_max_rows`` the rows
+        # come back in natural order.
+        #
+        # Decided here rather than inside ``load_sorted_deltatable_lite`` so the
+        # response can *say* the sort was refused: a client that thinks it sorted
+        # and didn't shows unsorted rows under a sorted header, which is worse
+        # than not offering the affordance.
+        #
+        # ``total <= 0`` counts as large deliberately: ``count_deltatable_lite``
+        # returns 0 on any error, and a failed count must not read as "tiny
+        # table, sort away".
+        sort_max = int(settings.performance.table_sort_max_rows)
+        sort_disabled = bool(sort_max) and (total <= 0 or total > sort_max)
+        if sort_disabled and chosen_sort:
+            logger.info(
+                f"render_table: {total} rows exceeds table_sort_max_rows={sort_max} — "
+                f"serving {dc_id} in natural order instead of sorting on {chosen_sort!r}"
+            )
+            chosen_sort = None
+
         if chosen_sort:
             # Server-side sort has to see every row. ``load_sorted_deltatable_lite``
             # memoises the sorted frame for small tables (later blocks are free
@@ -2550,17 +2620,17 @@ def render_table_endpoint(
                 page=(start, limit),
             )
         else:
-            # No sort → push the page window down to the Delta scan so we only
-            # read up to (start + limit) rows instead of the whole table.
-            df = load_deltatable_lite(
-                workflow_id=wf_oid,
-                data_collection_id=str(dc_id),
-                metadata=filter_metadata or None,
-                limit_rows=start + limit,
-                init_data=init_data,
-                select_columns=select_columns,
+            # No sort → push the page window itself down to the Delta scan.
+            #
+            # This used to load ``start + limit`` rows and slice afterwards,
+            # which is quadratic in the page number: page 200 of a 17 M-row table
+            # materialised 2 M rows to return 100, and the "Show all" control
+            # pages to 20 000 rows in 500-row blocks — ~410 000 row-loads for
+            # 20 000 rows. ``slice`` on the lazy scan pushes the offset into the
+            # reader instead, so cost is flat with depth.
+            sliced = _load_natural_page(
+                wf_oid, str(dc_id), filter_metadata, init_data, select_columns, start, limit
             )
-            sliced = df.slice(start, limit)
     except HTTPException:
         raise
     except Exception as e:
@@ -2604,6 +2674,16 @@ def render_table_endpoint(
         "total": total,
         "sort_by": chosen_sort,
         "sort_dir": sort_dir,
+        # Tells the grid to drop the sort affordance entirely. Without it the
+        # header keeps its chevron, the click re-fetches, and the same unsorted
+        # rows come back under a "sorted" header with nothing to detect it.
+        "sort_disabled": sort_disabled,
+        # Natural order is stable while files are only appended, but a Delta
+        # OPTIMIZE/vacuum rewrites the active file list and reorders the scan —
+        # pages would then shift mid-scroll, silently duplicating and dropping
+        # rows in the grid's block cache. Echoing the data version lets the
+        # client purge its cache when the underlying order can have changed.
+        "data_version": _get_aggregation_version(str(dc_id)),
     }
 
 

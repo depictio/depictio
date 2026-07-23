@@ -946,6 +946,14 @@ export interface TableResponse {
   sort_by?: string | null;
   /** Effective sort direction. */
   sort_dir?: 'asc' | 'desc';
+  /** True when the table is too large to sort (see `table_sort_max_rows`) and
+   *  rows come back in natural scan order. The grid must drop its sort
+   *  affordance rather than offer one the server will discard. */
+  sort_disabled?: boolean;
+  /** Data-collection aggregation version. Natural order is stable across
+   *  appends but a Delta compaction reorders the scan, so a change here means
+   *  cached row blocks may no longer line up and must be purged. */
+  data_version?: string | number | null;
 }
 
 export async function renderTable(
