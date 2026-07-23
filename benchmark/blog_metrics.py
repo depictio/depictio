@@ -15,8 +15,10 @@ Two things this deliberately does *not* average over:
 - **Cold vs warm.** The first read of a data collection pays the Delta read; every
   later one hits the frame cache. Their mean describes neither, so they are
   reported separately (``dc_first_touch``).
-- **Sequential vs concurrent.** A dashboard-load render competes with its
-  siblings; a lone render doesn't. Also separated (``concurrent``).
+- **The three render phases.** A sequential render has the server to itself, a
+  cold open fires every component at once unfiltered, and a filter round fires
+  them through the viewer's bounded queue with a filter applied. All three are
+  reported apart (``phase``).
 """
 
 from __future__ import annotations
@@ -26,7 +28,8 @@ from pathlib import Path
 from typing import Any
 
 from benchmark.metrics import summarize
-from benchmark.report import _SIZE_ORDER, _load, _size_of
+from benchmark.profile import describe, read_profile
+from benchmark.report import _SIZE_ORDER, _load, _phase_of, _scope_to_profile, _size_of
 
 # A percentile over a handful of renders is the max of a tiny sample, not a tail.
 # Mirrors report.py's guard so the two artefacts can't disagree about whether a
@@ -73,7 +76,9 @@ def _scale(ingests: list[dict]) -> dict[str, Any]:
 
 
 def _ingest(ingests: list[dict]) -> dict[str, Any]:
-    ok = [i for i in ingests if i.get("ok")]
+    # A reused project ingested nothing this run; its 0 ms wall would report an
+    # infinite throughput.
+    ok = [i for i in ingests if i.get("ok") and not i.get("reused")]
     if not ok:
         return {}
     biggest = max(ok, key=lambda i: int(i.get("rows_total") or 0))
@@ -96,6 +101,9 @@ def _memory(renders: list[dict], ingests: list[dict]) -> dict[str, Any]:
     rss_ingest = [float(i["peak_rss_mb"]) for i in ingests if i.get("peak_rss_mb")]
     return {
         "max_render_frame_gb": _bytes_to_gb(max(frames)) if frames else None,
+        # Kept in bytes as well: the GB figure rounds to 0.001 for frames this
+        # small, and anything derived from it inherits that error.
+        "max_render_frame_bytes": max(frames) if frames else None,
         "peak_rss_ingest_mb": round(max(rss_ingest), 1) if rss_ingest else None,
         # Process high-water mark, not a per-render figure: RSS never comes back
         # down, so this is an upper bound on the API process across the whole run.
@@ -135,6 +143,158 @@ def _aggregation_coverage(renders: list[dict]) -> dict[str, Any]:
     }
 
 
+def _duration(ms: float | None) -> str:
+    """A duration a reader can hold in their head: ms below a second, else s."""
+    if ms is None:
+        return "—"
+    return f"{ms:.0f} ms" if ms < 1000 else f"{ms / 1000:.1f} s"
+
+
+def _dashboard_open(loads: list[dict]) -> list[dict[str, Any]]:
+    """First-chart and full-load time per component count, cold and warm.
+
+    A `cold (reused)` row is dropped rather than relabelled: its caches were
+    populated by an earlier cell in the same run, so publishing it as a cold
+    number would overstate how well a genuine first visit performs. Better to
+    show fewer rows than a flattering wrong one.
+    """
+    out: list[dict[str, Any]] = []
+    for load in sorted(loads, key=lambda r: (r.get("n_components") or 0,)):
+        state = str(load.get("cache_state") or "")
+        if state == "cold" and not load.get("dataset_first_open", True):
+            continue
+        if load.get("time_to_first_figure_ms") is None:
+            continue
+        out.append(
+            {
+                "n_components": load.get("n_components"),
+                "cache": state or "—",
+                "first_chart": _duration(load.get("time_to_first_figure_ms")),
+                "all_components": _duration(load.get("wall_ms")),
+                "n_rendered": load.get("n_rendered"),
+                "n_requested": load.get("n_requested"),
+            }
+        )
+    return out
+
+
+def _filter_latency(filter_rounds: list[dict]) -> dict[str, Any]:
+    """Time for a dashboard to catch up with one filter change, per scale.
+
+    Grouped by ``(size, n_components, n_dcs)`` because the number a reader wants
+    is meaningless without all three — "3 seconds" describes a dashboard, not a
+    system. Only successful rounds are summarised: a round where a component
+    errored finished early for the wrong reason.
+
+    Rounds are kept individually as well as summarised. There are usually few of
+    them (one per applied value), so a percentile would be the max of a tiny
+    sample — the same guard the rest of this module applies.
+    """
+    ok_rounds = [f for f in filter_rounds if f.get("ok")]
+    if not ok_rounds:
+        return {}
+
+    groups: dict[tuple, list[dict]] = {}
+    for f in ok_rounds:
+        key = (
+            str(f.get("size")),
+            int(f.get("n_components") or 0),
+            int(f.get("n_dcs") or 0),
+            str(f.get("server_mode") or ""),
+            str(f.get("filter_dc_tag") or ""),
+            int(f.get("hops") or 0),
+        )
+        groups.setdefault(key, []).append(f)
+
+    by_scale: list[dict[str, Any]] = []
+    for (size, n_comp, n_dcs, server_mode, filter_dc, hops), rounds in sorted(
+        groups.items(), key=lambda kv: (_SIZE_ORDER.get(kv[0][0], 99), kv[0][1], kv[0][4])
+    ):
+        first = summarize([float(r.get("time_to_first_ms") or 0.0) for r in rounds])
+        last = summarize([float(r.get("time_to_last_ms") or 0.0) for r in rounds])
+        by_scale.append(
+            {
+                "size": size,
+                "n_components": n_comp,
+                "n_dcs": n_dcs,
+                "server_mode": server_mode,
+                "connect": rounds[0].get("connect", ""),
+                # Where the filter started and how far it travelled. A filter on
+                # the collection a component reads propagates for free; one that
+                # crosses links pays a resolution per hop first.
+                "filter_dc": filter_dc,
+                "hops": hops,
+                # Components this origin can actually narrow (links are directed).
+                "components_affected": int(rounds[0].get("n_affected") or 0),
+                "filter_column": rounds[0].get("filter_column", ""),
+                "n_rounds": len(rounds),
+                "components_per_round": int(rounds[0].get("n_fired") or 0),
+                "client_concurrency": int(rounds[0].get("concurrency") or 0),
+                "to_first_ms": {
+                    "median": round(first["p50"], 1),
+                    "max": round(first["max"], 1),
+                },
+                "to_last_ms": {
+                    "median": round(last["p50"], 1),
+                    "max": round(last["max"], 1),
+                },
+                # Every round applied a value none of the earlier ones used, so
+                # none of these could be served by the filtered frame cache.
+                "values_applied": [r.get("filter_values") for r in rounds],
+            }
+        )
+    return {"by_scale": by_scale}
+
+
+def _link_resolution(rows: list[dict]) -> dict[str, Any]:
+    """How large each cross-DC translation was, per route.
+
+    The number that decides whether a cross-filter measurement describes normal
+    usage: a join key with hundreds of distinct values translates a filter into
+    hundreds. Millions means the key is near-unique per row — a pathological
+    topology, kept as an explicit adversarial case and labelled as one.
+    """
+    if not rows:
+        return {}
+    # One entry per route. The probe runs once per filter round and once per
+    # server mode, so the raw rows repeat each route many times over.
+    grouped: dict[tuple, list[dict]] = {}
+    for r in rows:
+        key = (
+            str(r.get("cell_slug", "")),
+            f"{r.get('source_tag', '')} -> {r.get('target_tag', '')}",
+            int(r.get("hops") or 0),
+        )
+        grouped.setdefault(key, []).append(r)
+
+    routes: list[dict[str, Any]] = []
+    for (cell, route, hops), probes in sorted(grouped.items()):
+        out_values = [int(p.get("n_resolved_values") or 0) for p in probes]
+        routes.append(
+            {
+                "cell": cell,
+                "route": route,
+                "hops": hops,
+                "probes": len(probes),
+                "filter_column": probes[0].get("filter_column", ""),
+                "values_in": int(probes[0].get("n_source_values") or 0),
+                "values_out_min": min(out_values) if out_values else 0,
+                "values_out_max": max(out_values) if out_values else 0,
+                "wall_ms_median": round(
+                    summarize([float(p.get("wall_ms") or 0.0) for p in probes])["p50"], 1
+                ),
+                "ok": all(p.get("ok") for p in probes),
+                "pathological": any(p.get("pathological") for p in probes),
+            }
+        )
+    resolved = [r["values_out_max"] for r in routes if r["ok"]]
+    return {
+        "routes": routes,
+        "max_values_resolved": max(resolved) if resolved else 0,
+        "any_pathological": any(r["pathological"] for r in routes),
+    }
+
+
 def build_blog_metrics(output_root: str | Path) -> tuple[Path, Path]:
     """Write ``blog_metrics.json`` and ``BLOG_SNIPPET.md``. Returns both paths."""
     output_root = Path(output_root)
@@ -142,27 +302,40 @@ def build_blog_metrics(output_root: str | Path) -> tuple[Path, Path]:
     if not results.exists():
         raise FileNotFoundError(f"No results at {results} — run the matrix first.")
 
-    renders, ingests, _loads = _load(results)
+    renders, ingests, loads, filter_rounds, link_resolutions = _load(results)
+    profile = read_profile(output_root)
+    # results.jsonl accumulates across runs; hardware_profile.json describes only
+    # the latest. Numbers from other limits must not be published under it.
+    (renders, ingests, loads, filter_rounds, link_resolutions), scope_note = _scope_to_profile(
+        profile, (renders, ingests, loads, filter_rounds, link_resolutions)
+    )
     ok_renders = [r for r in renders if r.get("ok")]
 
-    cold = [r for r in ok_renders if r.get("dc_first_touch")]
-    warm = [r for r in ok_renders if not r.get("dc_first_touch") and not r.get("concurrent")]
-    concurrent = [r for r in ok_renders if r.get("concurrent")]
+    sequential = [r for r in ok_renders if _phase_of(r) == "sequential"]
+    cold = [r for r in sequential if r.get("dc_first_touch")]
+    warm = [r for r in sequential if not r.get("dc_first_touch")]
+    # Two distinct concurrent regimes: a cold open is unfiltered and unbounded,
+    # a filter round is filtered and bounded by the viewer's queue.
+    dashboard_load_cold = [r for r in ok_renders if _phase_of(r) == "dashboard_load_cold"]
+    dashboard_load = [r for r in ok_renders if _phase_of(r) == "dashboard_load"]
+    filter_round = [r for r in ok_renders if _phase_of(r) == "filter_round"]
 
     by_size: dict[str, Any] = {}
     for size in sorted(
         {str(r.get("size")) for r in ok_renders}, key=lambda s: _SIZE_ORDER.get(s, 99)
     ):
         rows = [r for r in ok_renders if str(r.get("size")) == size]
+        seq = [r for r in rows if _phase_of(r) == "sequential"]
         by_size[size] = {
             "all": _stats(rows),
-            "cold": _stats([r for r in rows if r.get("dc_first_touch")]),
-            "warm": _stats(
-                [r for r in rows if not r.get("dc_first_touch") and not r.get("concurrent")]
-            ),
+            "cold": _stats([r for r in seq if r.get("dc_first_touch")]),
+            "warm": _stats([r for r in seq if not r.get("dc_first_touch")]),
         }
 
     metrics: dict[str, Any] = {
+        # The machine, VM and container limits these numbers describe. Quoting a
+        # latency without them makes it uncomparable to any other run.
+        "hardware": profile,
         "scale": _scale(ingests),
         "ingest": _ingest(ingests),
         "memory": _memory(renders, ingests),
@@ -173,22 +346,39 @@ def build_blog_metrics(output_root: str | Path) -> tuple[Path, Path]:
             "cache_regime": {
                 "cold": _stats(cold),
                 "warm": _stats(warm),
-                "concurrent": _stats(concurrent),
+                "dashboard_load_cold": _stats(dashboard_load_cold),
+                "dashboard_load": _stats(dashboard_load),
+                "filter_round": _stats(filter_round),
             },
         },
+        "dashboard_open": _dashboard_open(loads),
+        "filter_latency": _filter_latency(filter_rounds),
+        "link_resolution": _link_resolution(link_resolutions),
         "aggregation": _aggregation_coverage(renders),
         "totals": {
             "renders": len(renders),
             "renders_ok": len(ok_renders),
             "ingests": len(ingests),
         },
-        "caveats": [
+        "caveats": ([scope_note] if scope_note else [])
+        + [
             "Absolute numbers for this build; no baseline run, so no speedup figures.",
             "Cold (first touch of a data collection) and warm (frame-cache hit) are "
             "reported separately — their mean describes neither.",
             "peak_rss_api_mb is a process high-water mark, not per-render.",
             f"Percentiles from fewer than {_MIN_RENDERS} renders are marked "
             "sufficient=false and should not be quoted.",
+            "Every figure describes one hardware profile (see the `hardware` key) — "
+            "host, VM and per-container CPU limits. A number taken under other limits "
+            "is a different measurement, not a comparable one.",
+            "connect=links-adversarial is a deliberate worst case: its join key is "
+            "unique per row, so a filter translates into millions of values. It is "
+            "kept because it found real bugs; it does not describe normal usage, and "
+            "its cross-filter numbers must not be quoted as the cost of cross-filtering.",
+            "filter_latency is server-side: it ends when the last HTTP response lands, "
+            "not when the browser has painted. JSON parsing and the Plotly/AG-Grid "
+            "build happen after that, on a single main thread, and are not counted "
+            "here — the in-browser number is larger.",
         ],
     }
 
@@ -213,6 +403,10 @@ def _render_snippet(m: dict) -> str:
     memory = m.get("memory") or {}
     lines: list[str] = ["## By the numbers", ""]
 
+    hardware = m.get("hardware") or {}
+    if hardware:
+        lines += ["Measured on:", "", *describe(hardware), ""]
+
     if scale:
         bits = [f"**{scale['rows_total']:,} rows**"]
         if scale.get("n_dcs"):
@@ -228,10 +422,17 @@ def _render_snippet(m: dict) -> str:
             + (f", {ingest['rows_per_s']:,} rows/s" if ingest.get("rows_per_s") else "")
             + (f" ({ingest['mb_per_s']} MB/s)" if ingest.get("mb_per_s") else ""),
         ]
-    if memory.get("max_render_frame_gb") is not None:
-        lines.append(
-            f"- **Largest frame held in memory for a render** — {memory['max_render_frame_gb']} GB"
+    if memory.get("max_render_frame_bytes") is not None:
+        # Rounded to GB this reads "0.001", which throws away the point: the
+        # frame is three orders of magnitude smaller than the collection. Show
+        # it in the unit that carries the meaning, from the raw byte count.
+        frame_bytes = float(memory["max_render_frame_bytes"])
+        frame = (
+            f"{frame_bytes / 1024**2:.1f} MB"
+            if frame_bytes < 1024**3
+            else f"{frame_bytes / 1024**3:.2f} GB"
         )
+        lines.append(f"- **Largest frame held in memory for any render** — {frame}")
     if memory.get("peak_rss_api_mb"):
         lines.append(
             f"- **API process peak RSS** — {memory['peak_rss_api_mb']:.0f} MB "
@@ -245,6 +446,86 @@ def _render_snippet(m: dict) -> str:
             "answered by a Polars aggregation over the Delta scan — no rows materialised"
         )
     lines.append("")
+
+    opens = m.get("dashboard_open") or []
+    if opens:
+        lines += [
+            "### Opening a dashboard",
+            "",
+            "Every component is fetched at once, the way the page does it. `first chart` "
+            "is when a plot is on screen — the moment the dashboard stops looking empty; "
+            "`all components` is when the last one lands. They are far apart, and quoting "
+            "only the second describes a wait the user never spends staring at nothing.",
+            "",
+            "`cold` is the first ever open of the dashboard, with every server-side cache "
+            "empty. `warm` is a revisit.",
+            "",
+            "| components | cache | first chart | all components |",
+            "| --- | --- | --- | --- |",
+        ]
+        for entry in opens:
+            lines.append(
+                f"| {entry['n_components']} | {entry['cache']} | "
+                f"{entry['first_chart']} | {entry['all_components']} |"
+            )
+        lines.append("")
+
+    filt = (m.get("filter_latency") or {}).get("by_scale") or []
+    if filt:
+        lines += [
+            "### Changing a filter on an open dashboard",
+            "",
+            "Every component re-renders when a filter changes. `to first` is when the "
+            "dashboard starts responding, `to last` is when it has fully caught up — "
+            "the number the user actually waits for. Each round applies a value none of "
+            "the previous rounds used, so none of these are cache hits. Requests are "
+            "issued through the same bounded queue the viewer uses.",
+            "",
+            "`filter on` is the collection the filter is applied to and `hops` how many "
+            "links it has to cross to reach the components — a filter on the collection "
+            "being rendered propagates for free, one across links pays a resolution per "
+            "hop first.",
+            "",
+            "| dataset | filter on | hops | components | affected | to first | to last |",
+            "| --- | --- | --- | --- | --- | --- | --- |",
+        ]
+        for entry in filt:
+            scale = f"{entry['size']} × {entry['n_dcs']} DC"
+            comps = f"{entry['components_per_round']} (≤{entry['client_concurrency']} in flight)"
+            origin = f"{entry.get('filter_dc') or '—'}.{entry.get('filter_column', '')}"
+            lines.append(
+                f"| {scale} | {origin} | {entry.get('hops', 0)} | {comps} "
+                f"| {entry.get('components_affected', '?')} "
+                f"| {entry['to_first_ms']['median']:.0f} ms "
+                f"| {entry['to_last_ms']['median'] / 1000:.1f} s |"
+            )
+        lines.append("")
+
+    links = m.get("link_resolution") or {}
+    if links.get("routes"):
+        lines += [
+            "### What a cross-DC filter has to translate",
+            "",
+            "Before a linked component can be narrowed, the filter is translated into "
+            "the join key of the target collection. The size of that translation — not "
+            "the size of the collection — is what makes cross-filtering cheap or "
+            "impossible.",
+            "",
+            "| route | hops | values in | values out | median ms |",
+            "| --- | --- | --- | --- | --- |",
+        ]
+        for route in links["routes"]:
+            flag = " ⚠️" if route["pathological"] else ""
+            span = (
+                f"{route['values_out_min']:,}"
+                if route["values_out_min"] == route["values_out_max"]
+                else f"{route['values_out_min']:,}–{route['values_out_max']:,}"
+            )
+            lines.append(
+                f"| {route['route']}{flag} | {route['hops']} | {route['values_in']} "
+                f"| {span} | {route['wall_ms_median']:.0f} |"
+            )
+        lines.append("")
 
     by_component = (m.get("render") or {}).get("by_component") or {}
     if by_component:

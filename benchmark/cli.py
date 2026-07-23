@@ -17,6 +17,7 @@ from pathlib import Path
 
 import typer
 
+from benchmark.datagen_linked import DEFAULT_N_SAMPLES
 from benchmark.matrix import (
     IngestSpec,
     MatrixSpec,
@@ -46,9 +47,38 @@ def _spec(sizes: str, components: str, dcs: str, connect: str, visu: str) -> Mat
 _SIZES = typer.Option("10mb", "--sizes", help="Comma list: 10mb,100mb,1gb,5gb,10gb")
 _COMPONENTS = typer.Option("5", "--components", help="Comma list of components-per-tab counts")
 _DCS = typer.Option("2", "--dcs", help="Comma list of #data-collections counts")
-_CONNECT = typer.Option("joins", "--connect", help="Comma list: independent,joins,links")
+_CONNECT = typer.Option(
+    "joins",
+    "--connect",
+    help="Comma list: independent,joins,links,links-adversarial "
+    "(links = realistic 3-DC topology; links-adversarial = unique join key)",
+)
 _VISU = typer.Option("figure,table", "--visu", help="Comma list: figure,table,advanced_viz")
 _OUTPUT = typer.Option(DEFAULT_OUTPUT, "--output", help="Output root (gitignored)")
+_SAMPLES = typer.Option(
+    DEFAULT_N_SAMPLES,
+    "--samples",
+    help=(
+        "Join-key cardinality of the linked topology (distinct sample_id). "
+        "Deliberately independent of the size tier — rows scale through the "
+        "per-sample fan-out, the join key does not."
+    ),
+)
+_PROFILE_LABEL = typer.Option(
+    "",
+    "--profile-label",
+    help="Name for the hardware/CPU profile these numbers describe (e.g. mbp-m1max-4cpu)",
+)
+_REUSE_INGEST = typer.Option(
+    False,
+    "--reuse-ingest",
+    help=(
+        "Re-import the dashboard against the already-ingested project and skip "
+        "the reset + ingest. For iterating on the dashboard itself; the run then "
+        "reports no ingest timing. Falls back to a full ingest if the project "
+        "does not exist."
+    ),
+)
 
 
 @app.command()
@@ -59,20 +89,22 @@ def generate(
     connect: str = _CONNECT,
     visu: str = _VISU,
     output: str = _OUTPUT,
+    samples: int = _SAMPLES,
     force: bool = typer.Option(False, "--force", help="Regenerate data even if a manifest exists"),
 ) -> None:
     """Generate datasets + project/dashboard configs for the matrix (no server)."""
     from benchmark.configgen import write_configs
-    from benchmark.datagen import generate_dataset
+    from benchmark.runner import prepare_dataset
 
     cells = _spec(sizes, components, dcs, connect, visu).expand()
     out = Path(output)
     typer.echo(f"Generating {len(cells)} cell(s) under {out}/ ...")
     for cell in cells:
-        dataset_dir = out / "data" / f"{cell.size}_dc{cell.n_dcs}"
-        manifest = generate_dataset(cell.size_bytes, cell.n_dcs, dataset_dir, force=force)
-        write_configs(cell, dataset_dir, out / "configs" / cell.slug)
-        typer.echo(f"  ✓ {cell.slug}: {manifest.n_runs} runs, {manifest.rows_total} rows/DC")
+        # Same helper the runner uses, so pre-staging here and running later
+        # reuse the same directory instead of silently regenerating.
+        dataset_dir, facts = prepare_dataset(cell, out, n_samples=samples, force=force)
+        write_configs(cell, dataset_dir, out / "configs" / cell.slug, n_samples=samples)
+        typer.echo(f"  ✓ {cell.slug}: {facts.summary}")
     typer.echo("Done.")
 
 
@@ -100,13 +132,28 @@ def run(
         "--dashboard-load",
         help="Also fire all components at once (real dashboard cold open, under contention)",
     ),
+    filter_rounds: int = typer.Option(
+        0,
+        "--filter-rounds",
+        help=(
+            "Filter changes to time on the warm dashboard (each uses a NEW value, "
+            "so the filtered cache can't answer it). 0 disables the phase."
+        ),
+    ),
     depictio_bin: str = typer.Option("depictio", "--depictio-bin", help="depictio CLI executable"),
+    samples: int = _SAMPLES,
+    profile_label: str = _PROFILE_LABEL,
+    reuse_ingest: bool = _REUSE_INGEST,
 ) -> None:
     """Ingest + render the matrix against a live stack; append to results.jsonl."""
+    from benchmark.profile import collect_profile, describe
     from benchmark.runner import run_matrix
 
     cells = _spec(sizes, components, dcs, connect, visu).expand()
+    profile = collect_profile(profile_label or f"{server_mode}-unlabelled")
     typer.echo(f"Running {len(cells)} cell(s) [server_mode={server_mode}] ...")
+    for line in describe(profile):
+        typer.echo(f"  {line}")
     results = run_matrix(
         cells,
         cli_config_path=cli_config,
@@ -116,7 +163,11 @@ def run(
         force_datagen=force_datagen,
         repeats=repeats,
         dashboard_load=dashboard_load,
+        filter_rounds=filter_rounds,
         depictio_bin=depictio_bin,
+        n_samples=samples,
+        profile=profile,
+        reuse_ingest=reuse_ingest,
     )
     typer.echo(f"Results appended to {results}")
 
@@ -201,7 +252,11 @@ def all(
     force_datagen: bool = typer.Option(False, "--force-datagen"),
     repeats: int = typer.Option(1, "--repeats"),
     dashboard_load: bool = typer.Option(False, "--dashboard-load"),
+    filter_rounds: int = typer.Option(0, "--filter-rounds"),
     depictio_bin: str = typer.Option("depictio", "--depictio-bin"),
+    samples: int = _SAMPLES,
+    profile_label: str = _PROFILE_LABEL,
+    reuse_ingest: bool = _REUSE_INGEST,
 ) -> None:
     """generate (implicit) -> run -> report in one shot."""
     # Every parameter must be forwarded explicitly: ``run`` is Typer-decorated,
@@ -220,7 +275,11 @@ def all(
         force_datagen=force_datagen,
         repeats=repeats,
         dashboard_load=dashboard_load,
+        filter_rounds=filter_rounds,
         depictio_bin=depictio_bin,
+        samples=samples,
+        profile_label=profile_label,
+        reuse_ingest=reuse_ingest,
     )
     report(output=output)
     blog_metrics(output=output)

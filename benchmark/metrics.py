@@ -48,6 +48,21 @@ class RenderResult:
     # of its dashboard (see ``dashboard_load``): the latency then includes
     # server-side contention, which sequential rendering never exposes.
     concurrent: bool = False
+    # Which phase produced this row. ``concurrent`` alone is not enough: a cold
+    # open fires every component at once *unfiltered*, a filter round fires them
+    # through the viewer's bounded queue *filtered*. Both set ``concurrent``, and
+    # averaging them together describes neither.
+    #
+    # ``dashboard_load_cold`` and ``dashboard_load`` are the same concurrent
+    # open before and after the server's caches are populated — first visit
+    # versus revisit.
+    phase: str = "sequential"
+    # "sequential" | "dashboard_load_cold" | "dashboard_load" | "filter_round"
+    # Filter-round rows only: where the filter originated and how far it had to
+    # travel. Without these the propagated and native sweeps are indistinguishable
+    # once the rows are aggregated — ``iteration`` collides between them.
+    filter_dc_tag: str = ""
+    hops: int = 0
     # Optional server-side enrichment (from X-* timing headers / task ledger)
     task_duration_ms: Optional[float] = None
     load_ms: Optional[float] = None  # X-Load-Ms: Delta read
@@ -62,6 +77,14 @@ class RenderResult:
     aggregated: bool = False  # X-Aggregated: served by a scan-level reduction
     cache: str = ""  # X-Cache: "hit" | "miss" | ""
     peak_rss_mb: Optional[float] = None  # X-Peak-RSS-MB: process high-water mark
+    # How much cross-DC translation this render paid for: the number of values a
+    # link resolution injected (X-Link-Values) and how far the filter travelled
+    # (X-Link-Hops). None when the render applied no link-resolved filter.
+    link_values: Optional[int] = None
+    link_hops: Optional[int] = None
+    # Hardware profile this measurement was taken under (see benchmark/profile.py).
+    # Without it a number cannot be compared to anything, including a later run.
+    profile_label: str = ""
     error: str = ""
     extra: dict[str, Any] = field(default_factory=dict)
 
@@ -105,6 +128,16 @@ class IngestResult:
     phase_ms: dict[str, float] = field(default_factory=dict)
     peak_rss_mb: Optional[float] = None  # process peak RSS during ingest
     streaming: Optional[bool] = None  # table: was the sink_delta streaming path used?
+    profile_label: str = ""
+    # True when the cell reused an already-ingested project (``--reuse-ingest``):
+    # nothing was ingested, so ``ingest_wall_ms`` is 0 and must not be read as a
+    # throughput figure. The dataset shape below is still real.
+    reused: bool = False
+    # Linked topology only: distinct join-key values and rows per collection.
+    # The join-key cardinality is the property the realistic dataset exists to
+    # hold down, so it is recorded rather than inferred from the tier.
+    join_key_cardinality: int = 0
+    rows_by_dc: dict[str, int] = field(default_factory=dict)
 
     @property
     def rows_per_s(self) -> float:
@@ -120,6 +153,106 @@ class IngestResult:
     def compression_ratio(self) -> float:
         """input / delta — >1 means Delta is smaller than raw CSV."""
         return self.input_bytes / self.delta_bytes if self.delta_bytes > 0 else 0.0
+
+
+@dataclass
+class FilterRoundResult:
+    """One *filter change* on an already-open dashboard.
+
+    The other two render phases each describe half of this and neither describes
+    it on its own: the sequential filtered pass measures one component on an idle
+    server, and ``dashboard_load`` measures every component at once but
+    *unfiltered*. What a user actually waits for is every component re-rendering
+    together under a filter they just changed — which is what this row times.
+
+    ``time_to_last_ms`` is the number the user experiences; ``time_to_first_ms``
+    says whether the dashboard feels responsive while it catches up. The
+    per-component detail is emitted separately as ``RenderResult`` rows stamped
+    ``filtered=True, concurrent=True``, so this row stays an aggregate.
+
+    Rounds apply *different* filter values on purpose (see
+    ``configgen.FilterPlan.values``): re-applying the same value would be
+    answered by the filtered frame cache and would measure the cache, not the
+    filter. The runner caps the round count at the number of distinct values.
+    """
+
+    # Matrix cell identity
+    cell_slug: str
+    size: str
+    size_bytes: int
+    n_components: int
+    n_dcs: int
+    connect: str
+    server_mode: str = ""
+    # What was applied
+    round_index: int = 0  # 0 = first filter change; later rounds use new values
+    filter_column: str = ""
+    filter_values: list[str] = field(default_factory=list)
+    # The client-side concurrency cap this round modelled. The viewer bounds
+    # in-flight render fetches (packages/depictio-react-core/src/fetchQueue.ts),
+    # so firing N components with unbounded parallelism would measure a client
+    # that doesn't exist.
+    concurrency: int = 0
+    # Measurements
+    n_fired: int = 0  # timed components (passive ones excluded)
+    n_ok: int = 0
+    time_to_first_ms: float = 0.0
+    time_to_last_ms: float = 0.0
+    ok: bool = False
+    # Where the filter started and how far it had to travel. A filter on the
+    # collection the components read costs nothing to propagate; one that must
+    # be translated across one or two links does. Averaging the two would
+    # describe neither.
+    filter_dc_tag: str = ""
+    hops: int = 0
+    # Timed components the filter can actually narrow — its own collection plus
+    # everything reachable through the declared links. Links are directed, so a
+    # filter on the leaf collection reaches nothing else and the rest of the
+    # dashboard re-renders unfiltered. Without this, two origins doing different
+    # amounts of work would look like a like-for-like comparison.
+    n_affected: int = 0
+    profile_label: str = ""
+    error: str = ""
+
+    @property
+    def catch_up_ms(self) -> float:
+        """Spread between the first and last component repainting."""
+        return max(0.0, self.time_to_last_ms - self.time_to_first_ms)
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+@dataclass
+class LinkResolutionResult:
+    """One link translation, measured directly against ``/links/{id}/resolve``.
+
+    This is the number that says whether a cross-filter benchmark is describing
+    normal usage or a pathology. A filter on a 3-value column translating into
+    hundreds of join-key values is a real topology; the same filter translating
+    into millions means the join key is near-unique per row — the dataset is
+    wrong, not the code — and the row is flagged ``pathological`` so the report
+    can label it instead of quietly averaging it in.
+    """
+
+    cell_slug: str
+    connect: str
+    source_tag: str
+    target_tag: str
+    hops: int
+    filter_column: str
+    filter_values: list[str] = field(default_factory=list)
+    n_source_values: int = 0
+    n_resolved_values: int = 0
+    wall_ms: float = 0.0
+    ok: bool = False
+    pathological: bool = False
+    server_mode: str = ""
+    profile_label: str = ""
+    error: str = ""
+
+    def to_dict(self) -> dict:
+        return asdict(self)
 
 
 def percentile(values: list[float], pct: float) -> float:
