@@ -3,6 +3,7 @@ import { NumberInput, ScrollArea, Stack, Tabs, useMantineColorScheme, useMantine
 import Plot from 'react-plotly.js';
 
 import { fetchAdvancedVizData, InteractiveFilter, StoredMetadata } from '../../api';
+import { isStaleFetch } from '../../fetchQueue';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragment } from './plotlyTheme';
 
@@ -71,9 +72,18 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
       return;
     }
     let cancelled = false;
+    const ctrl = new AbortController();
     setLoading(true);
     setError(null);
-    fetchAdvancedVizData(metadata.wf_id, metadata.dc_id, requiredCols, filters, undefined, fullLoad)
+    fetchAdvancedVizData(
+      metadata.wf_id,
+      metadata.dc_id,
+      requiredCols,
+      filters,
+      undefined,
+      fullLoad,
+      ctrl.signal,
+    )
       .then((res) => {
         if (cancelled) return;
         setRows(res.rows);
@@ -84,13 +94,15 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
         });
       })
       .catch((err: unknown) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
+        if (cancelled || isStaleFetch(err)) return;
+        setError(err instanceof Error ? err.message : String(err));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
     return () => {
       cancelled = true;
+      ctrl.abort();
     };
   }, [metadata.wf_id, metadata.dc_id, JSON.stringify(requiredCols), filterSig, refreshTick, fullLoad]);
 

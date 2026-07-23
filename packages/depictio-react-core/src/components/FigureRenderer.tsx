@@ -16,13 +16,14 @@ import Plot from 'react-plotly.js';
 import Plotly from 'plotly.js';
 
 import { renderFigure, InteractiveFilter, StoredMetadata, FigureResponse } from '../api';
-import { enqueueFetch } from '../fetchQueue';
+import { enqueueFetch, isStaleFetch } from '../fetchQueue';
 import { extractScatterSelection } from '../selection';
 import { useInView } from '../hooks/useInView';
 import { useNewItemIds } from '../hooks/useNewItemIds';
 import { useTransientFlag } from '../hooks/useTransientFlag';
 import { ActiveHighlight } from '../highlight';
 import { asNumberArray, extractCustomdataIds } from '../plotlyData';
+import { adaptGlTraces, PlotlyTrace, useWebglSlot } from '../webglBudget';
 import RefetchOverlay from './RefetchOverlay';
 import { LoadAllState } from './chrome/LoadAllButton';
 
@@ -117,12 +118,24 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
   useEffect(() => {
     if (!inView) return;
     let cancelled = false;
+    // Abort the request itself, not just its result handling: a stale render
+    // otherwise keeps its queue slot and its API worker for as long as it takes
+    // to finish work nobody will look at.
+    const ctrl = new AbortController();
     setLoading(true);
     setError(null);
     // Queued so a dense dashboard doesn't fire every figure's render at once;
     // the vertical position is the priority, so the top of the page paints first.
     enqueueFetch(
-      () => renderFigure(dashboardId, metadata.index, filtersForFetch, theme, fullLoad),
+      () =>
+        renderFigure(
+          dashboardId,
+          metadata.index,
+          filtersForFetch,
+          theme,
+          fullLoad,
+          ctrl.signal,
+        ),
       metadata.layout?.y ?? 0,
     )
       .then((res) => {
@@ -135,7 +148,10 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
         setRenderMeta(res.metadata ?? null);
       })
       .catch((err) => {
-        if (cancelled) return;
+        // A superseded round is the user changing their mind, not a failure:
+        // surfacing it would flash an error on a component that is about to be
+        // re-rendered anyway.
+        if (cancelled || isStaleFetch(err)) return;
         setError(err?.message || String(err));
       })
       .finally(() => {
@@ -143,6 +159,7 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
       });
     return () => {
       cancelled = true;
+      ctrl.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dashboardId, metadata.index, JSON.stringify(filtersForFetch), theme, inView, refreshTick, fullLoad]);

@@ -477,6 +477,7 @@ export async function renderFigure(
   filters: InteractiveFilter[],
   theme: 'light' | 'dark' = 'light',
   fullLoad = false,
+  signal?: AbortSignal,
 ): Promise<FigureResponse> {
   const res = await fetch(
     `${API_BASE}/dashboards/render_figure/${dashboardId}/${componentId}`,
@@ -484,6 +485,7 @@ export async function renderFigure(
       method: 'POST',
       headers: authHeaders(),
       body: JSON.stringify({ filters, theme, full_load: fullLoad }),
+      signal,
     },
   );
   if (!res.ok) throw new Error(`Failed to render figure: ${res.status}`);
@@ -616,6 +618,7 @@ export async function fetchAdvancedVizData(
   filters: InteractiveFilter[],
   limitRows?: number,
   fullLoad?: boolean,
+  signal?: AbortSignal,
 ): Promise<AdvancedVizDataResponse> {
   // Queued here rather than at each call site: ~15 advanced-viz renderers each
   // own an unguarded fetch, and this is the single choke point they all pass
@@ -633,6 +636,7 @@ export async function fetchAdvancedVizData(
         limit_rows: limitRows,
         full_load: fullLoad,
       }),
+      signal,
     });
     if (!res.ok) throw new Error(`Failed to fetch advanced viz data: ${res.status}`);
     return res.json();
@@ -970,6 +974,7 @@ export async function renderTable(
   limit = 100,
   sortBy?: string | null,
   sortDir: 'asc' | 'desc' = 'desc',
+  signal?: AbortSignal,
 ): Promise<TableResponse> {
   const res = await fetch(
     `${API_BASE}/dashboards/render_table/${dashboardId}/${componentId}`,
@@ -983,6 +988,7 @@ export async function renderTable(
         sort_by: sortBy ?? null,
         sort_dir: sortDir,
       }),
+      signal,
     },
   );
   if (!res.ok) throw new Error(`Failed to render table: ${res.status}`);

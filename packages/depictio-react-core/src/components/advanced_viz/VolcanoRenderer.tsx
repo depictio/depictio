@@ -16,6 +16,8 @@ import {
   InteractiveFilter,
   StoredMetadata,
 } from '../../api';
+import { isStaleFetch } from '../../fetchQueue';
+import { adaptGlTrace, SVG_MAX_POINTS, useWebglSlot } from '../../webglBudget';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragment } from './plotlyTheme';
 
@@ -90,6 +92,7 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
       return;
     }
     let cancelled = false;
+    const ctrl = new AbortController();
     setLoading(true);
     setError(null);
     fetchAdvancedVizData(
@@ -99,6 +102,7 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
       filters,
       undefined,
       fullLoad,
+      ctrl.signal,
     )
       .then((res) => {
         if (cancelled) return;
@@ -110,7 +114,7 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
         });
       })
       .catch((err: unknown) => {
-        if (cancelled) return;
+        if (cancelled || isStaleFetch(err)) return;
         setError(err instanceof Error ? err.message : String(err));
       })
       .finally(() => {
@@ -118,8 +122,13 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
       });
     return () => {
       cancelled = true;
+      ctrl.abort();
     };
   }, [metadata.wf_id, metadata.dc_id, JSON.stringify(requiredCols), filterSig, refreshTick, fullLoad]);
+
+  // A volcano always draws a marker cloud, so it always competes for one of
+  // the bounded WebGL slots. Without one it renders as SVG — see webglBudget.
+  const glGranted = useWebglSlot(true);
 
   const figure = useMemo(() => {
     if (!rows) return null;

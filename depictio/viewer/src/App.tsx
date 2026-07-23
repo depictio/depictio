@@ -13,7 +13,7 @@ import {
   Paper,
   Box,
 } from '@mantine/core';
-import { useDisclosure } from '@mantine/hooks';
+import { useDebouncedValue, useDisclosure } from '@mantine/hooks';
 import { Icon } from '@iconify/react';
 
 import {
@@ -35,6 +35,7 @@ import {
   batchIdsFromPayload,
   fetchProjectFromDashboard,
   fetchIngestionHealth,
+  bumpFetchGeneration,
 } from 'depictio-react-core';
 import type {
   DashboardData,
@@ -52,6 +53,12 @@ import { parseTemplateOrigin } from './projects/template';
  *  the dismissal sticks across the dashboard's sibling tabs. */
 const ingestionBannerKey = (projectId: string) =>
   `depictio:ingestion-banner-dismissed:${projectId}`;
+
+/** How long the filter must hold still before the dashboard re-fetches.
+ *
+ *  Long enough to swallow a burst of MultiSelect picks or a slider drag, short
+ *  enough that a single deliberate change still feels immediate. */
+const FILTER_DEBOUNCE_MS = 250;
 import { notifications } from '@mantine/notifications';
 import { Header, Sidebar, SettingsDrawer } from './chrome';
 import { useSidebarOpen } from './hooks/useSidebarOpen';
@@ -80,6 +87,26 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<InteractiveFilter[]>([]);
+  // Data fetches follow a *settled* filter, not every intermediate value of one.
+  // Interactive components keep reading `filters` directly so their own UI stays
+  // instant; only the components that hit the API wait for the pause. Without
+  // this, picking three values in a MultiSelect fires three full rounds of
+  // renders and the first two are obsolete before they land.
+  const [deferredFilters] = useDebouncedValue(filters, FILTER_DEBOUNCE_MS);
+
+  // Invalidate whatever the previous filter left queued.
+  //
+  // This runs during render on purpose. React runs child effects *before*
+  // parent effects, so bumping from an effect here would land after the
+  // renderers had already queued the new round — and would discard exactly the
+  // requests it exists to protect. Rendering happens before any child effect,
+  // which is the ordering the queue needs.
+  const deferredFilterKey = stableFilterKey(deferredFilters);
+  const lastFilterKeyRef = useRef<string | null>(null);
+  if (lastFilterKeyRef.current !== deferredFilterKey) {
+    lastFilterKeyRef.current = deferredFilterKey;
+    bumpFetchGeneration();
+  }
   const [cardValues, setCardValues] = useState<Record<string, unknown>>({});
   const [cardSecondaryValues, setCardSecondaryValues] = useState<
     Record<string, Record<string, unknown>>
@@ -174,7 +201,12 @@ const App: React.FC = () => {
   // fetch via ``DashboardGrid`` → ``ComponentRenderer``.
   const [refreshTick, setRefreshTick] = useState(0);
 
-  // Bulk-compute card values whenever filters change
+  // Bulk-compute card values whenever the settled filter changes.
+  //
+  // The debounce used to live here as a local `setTimeout`; it now comes from
+  // `deferredFilters`, shared with every other component. Keeping a second one
+  // stacked on top would have delayed cards by twice as long as the figures
+  // next to them, so they'd visibly lag behind the rest of the dashboard.
   useEffect(() => {
     if (!dashboard || !dashboardId) return;
     const cardIds = (dashboard.stored_metadata || [])
@@ -182,26 +214,23 @@ const App: React.FC = () => {
       .map((m) => m.index);
     if (cardIds.length === 0) return;
 
-    const timer = setTimeout(() => {
-      setCardsLoading(true);
-      // Keep the previous card values mounted while the new bulk-compute
-      // round-trip is in flight. ``cardsLoading`` is what CardRenderer
-      // already consults to dim the value — clearing the values here would
-      // snap every card back to ``…`` on every keystroke / drag step.
-      if (bulkCtrl.current) bulkCtrl.current.abort();
-      bulkCtrl.current = new AbortController();
-      bulkComputeCards(dashboardId, filters, cardIds)
-        .then((res) => {
-          setCardValues(res.values);
-          setCardSecondaryValues(res.secondary_values || {});
-        })
-        .catch((err) => {
-          if (err?.name !== 'AbortError') console.warn('[App] bulk-compute failed:', err);
-        })
-        .finally(() => setCardsLoading(false));
-    }, 250);
-    return () => clearTimeout(timer);
-  }, [dashboard, dashboardId, stableFilterKey(filters), refreshTick]);
+    setCardsLoading(true);
+    // Keep the previous card values mounted while the new bulk-compute
+    // round-trip is in flight. ``cardsLoading`` is what CardRenderer
+    // already consults to dim the value — clearing the values here would
+    // snap every card back to ``…`` on every keystroke / drag step.
+    if (bulkCtrl.current) bulkCtrl.current.abort();
+    bulkCtrl.current = new AbortController();
+    bulkComputeCards(dashboardId, deferredFilters, cardIds)
+      .then((res) => {
+        setCardValues(res.values);
+        setCardSecondaryValues(res.secondary_values || {});
+      })
+      .catch((err) => {
+        if (err?.name !== 'AbortError') console.warn('[App] bulk-compute failed:', err);
+      })
+      .finally(() => setCardsLoading(false));
+  }, [dashboard, dashboardId, deferredFilterKey, refreshTick]);
 
   const handleFilterChange = useCallback(
     (update: InteractiveFilter) => {
@@ -681,7 +710,7 @@ const App: React.FC = () => {
                     dashboardId={dashboardId!}
                     metadataList={rightComponents}
                     layoutData={dashboard.right_panel_layout_data}
-                    filters={filters}
+                    filters={deferredFilters}
                     onFilterChange={handleFilterChange}
                     cardValues={cardValues}
                     cardSecondaryValues={cardSecondaryValues}
