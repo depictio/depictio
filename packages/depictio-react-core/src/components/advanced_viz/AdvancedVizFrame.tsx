@@ -1,5 +1,5 @@
 import React, { useContext, useEffect, useMemo } from 'react';
-import { Alert, Badge, Group, Loader, Paper, Stack, Text } from '@mantine/core';
+import { Alert, Badge, Group, Loader, Paper, Stack, Text, Tooltip } from '@mantine/core';
 
 import ErrorBoundary from '../ErrorBoundary';
 import LoadAllButton from '../chrome/LoadAllButton';
@@ -76,6 +76,15 @@ interface AdvancedVizFrameProps {
    * matching the scatter-figure UX.
    */
   reduction?: AdvancedVizReduction;
+  /**
+   * The rows behind this viz were sampled even though it aggregates them, so
+   * the values on screen are estimates rather than totals. Set from the
+   * server's `sampling.degraded` — see `advanced_viz_no_sample_max_rows`. The
+   * frame renders a warning badge; it is deliberately separate from
+   * `reduction`, since the renderers that most need to say this are the ones
+   * with no Load-All toggle to hang it off.
+   */
+  estimated?: boolean;
 }
 
 /** Subtle Mantine theme colour for each canonical tier name (no hardcoded
@@ -123,6 +132,7 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
   tierAnnotation,
   counts,
   reduction,
+  estimated,
 }) => {
   const publish = useContext(AdvancedVizExtrasContext);
 
@@ -189,7 +199,7 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
           borderWidth: 1.5,
         }}
       >
-        {title || subtitle || (counts && Object.keys(counts).length > 0) || showReduction ? (
+        {title || subtitle || (counts && Object.keys(counts).length > 0) || showReduction || estimated ? (
           <Stack gap={2} mb="xs">
             {title ? (
               <Text fw={600} size="sm" lineClamp={1}>
@@ -242,6 +252,23 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
                     ? `${reduction.displayed.toLocaleString()} pts (all)`
                     : `${reduction.displayed.toLocaleString()} / ${reduction.total.toLocaleString()} pts`}
                 </Badge>
+              </Group>
+            ) : null}
+            {estimated ? (
+              // "10,000 / 5,000,000 pts" on a chart that sums its rows reads as
+              // a display cap. It isn't: the values themselves are off by the
+              // sampling stride, and that has to be said outright.
+              <Group gap={4} wrap="nowrap" mt={2}>
+                <Tooltip
+                  label="This chart derives its values from the rows it receives, and the collection was too large to send whole — what is shown is an estimate."
+                  multiline
+                  w={260}
+                  withArrow
+                >
+                  <Badge variant="light" color="orange" size="xs" radius="sm">
+                    estimated
+                  </Badge>
+                </Tooltip>
               </Group>
             ) : null}
           </Stack>

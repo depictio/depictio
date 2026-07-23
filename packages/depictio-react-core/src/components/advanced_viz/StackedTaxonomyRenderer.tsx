@@ -125,6 +125,7 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
     displayed: number;
     total: number;
     sampled: boolean;
+    degraded: boolean;
   } | null>(null);
 
   const filterSig = JSON.stringify(filters);
@@ -143,12 +144,14 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
     setLoading(true);
     setError(null);
     fetchAdvancedVizData(
-      metadata.wf_id,
-      metadata.dc_id,
-      requiredCols,
-      filters,
-      undefined,
-      fullLoad,
+      {
+        wfId: metadata.wf_id,
+        dcId: metadata.dc_id,
+        columns: requiredCols,
+        filters,
+        fullLoad,
+        vizKind: 'stacked_taxonomy',
+      },
       ctrl.signal,
     )
       .then((res) => {
@@ -158,6 +161,7 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
           displayed: res.row_count,
           total: res.total_rows ?? res.row_count,
           sampled: Boolean(res.sampled),
+          degraded: Boolean(res.sampling?.degraded),
         });
       })
       .catch((err: unknown) => {
@@ -454,6 +458,7 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
       emptyMessage={rows && Object.values(rows)[0]?.length === 0 ? 'No data' : undefined}
       dataRows={rows ?? undefined}
       dataColumns={requiredCols}
+      estimated={Boolean(reduction?.degraded)}
       reduction={
         reduction && (reduction.sampled || fullLoad)
           ? {

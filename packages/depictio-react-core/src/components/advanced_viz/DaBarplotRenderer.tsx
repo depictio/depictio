@@ -58,6 +58,7 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
     displayed: number;
     total: number;
     sampled: boolean;
+    degraded: boolean;
   } | null>(null);
 
   const filterSig = JSON.stringify(filters);
@@ -76,12 +77,14 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
     setLoading(true);
     setError(null);
     fetchAdvancedVizData(
-      metadata.wf_id,
-      metadata.dc_id,
-      requiredCols,
-      filters,
-      undefined,
-      fullLoad,
+      {
+        wfId: metadata.wf_id,
+        dcId: metadata.dc_id,
+        columns: requiredCols,
+        filters,
+        fullLoad,
+        vizKind: 'da_barplot',
+      },
       ctrl.signal,
     )
       .then((res) => {
@@ -91,6 +94,7 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
           displayed: res.row_count,
           total: res.total_rows ?? res.row_count,
           sampled: Boolean(res.sampled),
+          degraded: Boolean(res.sampling?.degraded),
         });
       })
       .catch((err: unknown) => {
@@ -289,6 +293,7 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
       emptyMessage={rows && Object.values(rows)[0]?.length === 0 ? 'No data' : undefined}
       dataRows={rows ?? undefined}
       dataColumns={requiredCols}
+      estimated={Boolean(reduction?.degraded)}
       reduction={
         reduction && (reduction.sampled || fullLoad)
           ? {

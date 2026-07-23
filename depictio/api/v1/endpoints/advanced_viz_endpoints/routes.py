@@ -28,6 +28,7 @@ from depictio.api.v1.endpoints.user_endpoints.routes import (
     get_user_or_anonymous,
     oauth2_scheme_optional,
 )
+from depictio.models.components.advanced_viz.sampling import SamplingPolicy
 from depictio.models.components.advanced_viz.schemas import (
     CANONICAL_SCHEMAS,
     role_dtype_specs,
@@ -266,19 +267,8 @@ def list_kinds(current_user=Depends(get_user_or_anonymous)) -> list[dict[str, An
     ]
 
 
-def _load_uniform_sample(
-    wf_oid,
-    dc_oid,
-    filter_metadata: list[dict] | None,
-    projection: list[str],
-    init_data: dict[str, dict],
-    cap: int,
-) -> tuple[Any | None, int | None, bool]:
-    """Draw ~``cap`` rows uniformly from the filtered frame, at scan level.
-
-    Returns ``(frame, total_rows, sampled)``, or ``(None, None, False)`` when the
-    scan can't be built — the caller then falls back to the row loader, exactly
-    like every other ``open_deltatable_scan`` caller.
+def _hash_sample(scan: Any, projection: list[str], total: int, cap: int) -> Any | None:
+    """~``cap`` rows drawn uniformly from ``scan``, or None if the hash collapsed.
 
     The keep/drop decision hashes a struct of *all* projected columns rather than
     a single column: hashing one column would keep or drop every row sharing a
@@ -295,7 +285,211 @@ def _load_uniform_sample(
     """
     import polars as pl
 
+    stride = -(-total // cap)  # ceil
+    frame = scan.filter(pl.struct(projection).hash(seed=0) % stride == 0).collect()
+    # Integer strides undershoot, and hashing is only approximately uniform,
+    # so the band is deliberately wide — it is here to catch a degenerate
+    # split, not to police the sample size.
+    if not (cap // 4 <= frame.height <= cap * 4):
+        logger.info(
+            "advanced_viz/data: hash sample returned %d rows against a target of %d "
+            "— the projection's value tuples are too coarse to split on, "
+            "loading without sampling",
+            frame.height,
+            cap,
+        )
+        return None
+    return frame
+
+
+def _tail_predicate(column: str, direction: str, threshold: float) -> Any:
+    """Rows a ``tail`` kind must keep whole: the significant end of ``column``."""
+    import polars as pl
+
+    col = pl.col(column)
+    if direction == "low":
+        return col <= threshold
+    if direction == "high":
+        return col >= threshold
+    return col.abs() >= threshold
+
+
+def _resolve_tail(
+    scan: Any,
+    viz_kind: str | None,
+    roles: dict[str, str],
+    tail: dict | None,
+    available: set[str],
+) -> tuple[str, str, float] | None:
+    """Settle ``(column, direction, threshold)`` for a ``tail`` reduction.
+
+    The renderer knows all three — it draws the threshold lines — so a payload
+    that carries ``tail`` is taken at its word, and the plot then keeps exactly
+    the rows it would mark as hits. The fallback path exists for callers that
+    send only ``viz_kind``: the role table says which column carries the tail
+    and the settings supply a conventional cutoff.
+
+    Returns None when the column can't be resolved or isn't on this DC, which
+    drops the caller back to a uniform sample.
+    """
+    from depictio.api.v1.configs.config import settings
+    from depictio.models.components.advanced_viz.sampling import (
+        resolve_tail_direction,
+        tail_role_for_kind,
+    )
+
+    if tail:
+        column = tail.get("column")
+        direction = tail.get("direction") or "both"
+        try:
+            # A malformed threshold must not raise here: the caller's handler
+            # treats any exception as "reduction unavailable" and falls back to
+            # an unbounded load, which is a worse answer than a uniform sample.
+            threshold = float(tail.get("threshold"))
+        except (TypeError, ValueError):
+            threshold = None
+        if column in available and threshold is not None and direction in ("low", "high", "both"):
+            return str(column), str(direction), threshold
+        logger.info("advanced_viz/data: ignoring unusable tail spec %s for kind %s", tail, viz_kind)
+
+    spec = tail_role_for_kind(viz_kind)
+    if spec is None:
+        return None
+    role, declared = spec
+    column = roles.get(role)
+    if not column or column not in available:
+        logger.info(
+            "advanced_viz/data: kind %s has no column bound to its %r role — sampling uniformly",
+            viz_kind,
+            role,
+        )
+        return None
+
+    direction: str = declared
+    if declared == "auto":
+        # One extra reduction over a single column, and one Polars pushes into
+        # the parquet statistics. See resolve_tail_direction for why the range
+        # is enough to tell a p-value from its -log10.
+        import polars as pl
+
+        bounds = scan.select(
+            pl.col(column).min().alias("lo"), pl.col(column).max().alias("hi")
+        ).collect()
+        direction = resolve_tail_direction(declared, bounds["lo"][0], bounds["hi"][0])
+
+    threshold = (
+        settings.performance.advanced_viz_tail_effect_threshold
+        if direction == "both"
+        else settings.performance.advanced_viz_tail_p_threshold
+    )
+    if direction == "high":
+        # A -log10 column compares against the transformed cutoff, not the raw p.
+        import math
+
+        threshold = -math.log10(threshold) if threshold > 0 else 0.0
+    return column, direction, float(threshold)
+
+
+def _tail_sample(
+    scan: Any, projection: list[str], total: int, cap: int, spec: tuple[str, str, float]
+) -> Any | None:
+    """Every row in the tail, plus a uniform sample of the dense middle.
+
+    A volcano's content is its tail. Uniformly sampling 10 000 of 17 M rows keeps
+    about six ten-thousandths of the significant features, so the plot that exists
+    to show hits shows none of them — the reduction is not coarse, it answers a
+    different question. Keeping the tail whole and striding only the undifferentiated
+    blob in the middle costs the same single scan and preserves what is being looked at.
+
+    The tail itself is sampled when it alone exceeds the cap: a filter matching
+    millions of rows is a threshold that isn't selecting, and truncating it would
+    silently drop whichever hits sorted last.
+    """
+    import polars as pl
+
+    column, direction, threshold = spec
+    # Nulls are not tail members and must not be dropped by the negation either:
+    # `~(null <= t)` is null, which would filter them out of both branches.
+    keep = _tail_predicate(column, direction, threshold).fill_null(False)
+    middle = ~keep
+
+    # One reduction, not a second count: the caller already knows ``total``, and
+    # the strides below need only how much of it the tail claims.
+    n_tail = int(scan.select(keep.sum().alias("n_tail")).collect()["n_tail"][0] or 0)
+
+    hashed = pl.struct(projection).hash(seed=0)
+    if n_tail >= cap:
+        stride = -(-n_tail // cap)
+        predicate = keep & (hashed % stride == 0)
+    else:
+        budget = max(1, cap - n_tail)
+        stride = max(1, -(-(total - n_tail) // budget))
+        predicate = keep | (middle & (hashed % stride == 0))
+
+    frame = scan.filter(predicate).collect()
+    if frame.height > cap * 4:
+        # Same degenerate-hash failure the uniform path guards against, except
+        # here the tail is a floor on the result, so only the upper bound means
+        # anything.
+        logger.info(
+            "advanced_viz/data: tail reduction returned %d rows against a target of %d "
+            "— falling back to a uniform sample",
+            frame.height,
+            cap,
+        )
+        return None
+    logger.debug(
+        "advanced_viz/data: tail on %s %s %g kept %d of %d rows (%d in the tail)",
+        column,
+        direction,
+        threshold,
+        frame.height,
+        total,
+        n_tail,
+    )
+    return frame
+
+
+def _load_reduced(
+    wf_oid,
+    dc_oid,
+    filter_metadata: list[dict] | None,
+    projection: list[str],
+    init_data: dict[str, dict],
+    cap: int,
+    policy: SamplingPolicy = "hash",
+    viz_kind: str | None = None,
+    roles: dict[str, str] | None = None,
+    tail: dict | None = None,
+) -> tuple[Any | None, int | None, dict | None]:
+    """Read the filtered frame, reduced the way ``policy`` allows.
+
+    Returns ``(frame, total_rows, sampling)``, or ``(None, None, None)`` when the
+    scan can't be built or a reduction degenerated — the caller then falls back to
+    the row loader, exactly like every other ``open_deltatable_scan`` caller.
+    ``sampling`` reports the policy that actually ran and whether the frame is the
+    whole filtered set (``exact``).
+
+    ``total_rows`` is always the count *before* reduction: it is the "of M" half
+    of the renderer's badge, and measuring it after would make the badge agree
+    with itself while disagreeing with the table.
+    """
+    import polars as pl
+
+    from depictio.api.v1.configs.config import settings
     from depictio.api.v1.deltatables_utils import open_deltatable_scan
+
+    # Set when a kind that must not be sampled was sampled anyway, i.e. its
+    # renderer's sums and rankings are now estimates. Distinct from `exact`,
+    # which is merely "you did not get every row" — true of every volcano and
+    # not something the volcano needs to warn about.
+    degraded = False
+
+    def _exact(frame, total, name):
+        return frame, total, {"policy": name, "exact": True, "sampled": False, "degraded": False}
+
+    def _reduced(frame, total, name, degraded=False):
+        return frame, total, {"policy": name, "exact": False, "sampled": True, "degraded": degraded}
 
     try:
         scan = open_deltatable_scan(
@@ -306,34 +500,61 @@ def _load_uniform_sample(
             select_columns=projection,
         )
         if scan is None:
-            return None, None, False
+            return None, None, None
 
         total = int(scan.select(pl.len()).collect().item())
+
+        if policy == "none":
+            ceiling = settings.performance.advanced_viz_no_sample_max_rows
+            if ceiling <= 0 or total <= ceiling:
+                return _exact(scan.collect(), total, "none")
+            # Serving it whole is what this kind needs and what this process
+            # cannot afford. Sample, and say the aggregate is approximate rather
+            # than let the renderer present an estimate as a total.
+            logger.warning(
+                "advanced_viz/data: %s rows exceeds advanced_viz_no_sample_max_rows=%s for "
+                "kind %s, whose renderer aggregates client-side — sampling, so its values "
+                "are estimates",
+                total,
+                ceiling,
+                viz_kind,
+            )
+            degraded = True
+
         if total <= cap:
             # Nothing to reduce; collect the projected frame as-is.
-            return scan.collect(), total, False
+            return _exact(scan.collect(), total, policy)
 
-        stride = -(-total // cap)  # ceil
-        frame = scan.filter(pl.struct(projection).hash(seed=0) % stride == 0).collect()
-        # Integer strides undershoot, and hashing is only approximately uniform,
-        # so the band is deliberately wide — it is here to catch a degenerate
-        # split, not to police the sample size.
-        if not (cap // 4 <= frame.height <= cap * 4):
-            logger.info(
-                "advanced_viz/data: hash sample returned %d rows against a target of %d "
-                "— the projection's value tuples are too coarse to split on, "
-                "loading without sampling",
-                frame.height,
+        if policy == "tail":
+            spec = _resolve_tail(scan, viz_kind, roles or {}, tail, set(projection))
+            frame = _tail_sample(scan, projection, total, cap, spec) if spec else None
+            if frame is not None:
+                return _reduced(frame, total, "tail")
+
+        frame = _hash_sample(scan, projection, total, cap)
+        if frame is None:
+            if not degraded:
+                return None, None, None
+            # Every bail-out above lands the caller on an unbounded
+            # ``load_deltatable_lite``, which is fine when the frame was merely
+            # too big to draw and fatal when it was too big to hold — this
+            # branch is only reached past the no-sample ceiling. A prefix is a
+            # poor sample, but it is bounded and already flagged as an estimate,
+            # which an OOM is not.
+            logger.warning(
+                "advanced_viz/data: no usable sample past the no-sample ceiling — "
+                "returning the first %s rows for kind %s",
                 cap,
+                viz_kind,
             )
-            return None, None, False
-        return frame, total, True
+            return _reduced(scan.head(cap).collect(), total, "head", degraded=True)
+        return _reduced(frame, total, "hash", degraded)
     except Exception as exc:
         logger.warning(
-            "advanced_viz/data: scan-level sample failed (%s) — falling back to the row loader",
+            "advanced_viz/data: scan-level reduction failed (%s) — falling back to the row loader",
             exc,
         )
-        return None, None, False
+        return None, None, None
 
 
 @advanced_viz_endpoint_router.post("/data")
@@ -353,6 +574,11 @@ def fetch_advanced_viz_data(
           "filter_metadata": [...],  # optional global filters
           "limit_rows": int | None,  # optional explicit cap (no sampling)
           "full_load": bool,         # optional; bypass sampling, raise scan cap
+          "viz_kind": str | None,    # optional; selects the reduction policy
+          "roles": {role: column},   # optional; role -> bound column name
+          "tail": {                  # optional; the rows a tail kind must keep
+            "column": str, "direction": "low"|"high"|"both", "threshold": float
+          },
         }
 
     Output shape:
@@ -362,8 +588,20 @@ def fetch_advanced_viz_data(
           "row_count": int,          # returned rows (== len after sampling)
           "total_rows": int,         # rows before sampling (for the badge)
           "sampled": bool,           # True when the frame was downsampled
+          "sampling": {              # `degraded`: a kind that must not be
+            "policy": str,           # sampled was, so the renderer's own
+            "exact": bool,           # aggregates are estimates
+            "degraded": bool,
+          },
           "filter_applied": bool,
         }
+
+    How much of the frame a caller gets back depends on its ``viz_kind``: a
+    marker cloud can be sampled uniformly, a renderer that sums or ranks the
+    rows it is handed cannot be sampled at all, and a volcano needs its tail
+    kept whole. The table lives in ``models/components/advanced_viz/sampling.py``.
+    A payload with no ``viz_kind`` samples uniformly, which is what every caller
+    got before that table existed.
     """
     import time as _time
 
@@ -374,6 +612,9 @@ def fetch_advanced_viz_data(
     filter_metadata = payload.get("filter_metadata") or []
     limit_rows = payload.get("limit_rows")
     full_load = bool(payload.get("full_load", False))
+    viz_kind = payload.get("viz_kind")
+    roles = payload.get("roles") or {}
+    tail = payload.get("tail") or None
 
     if not wf_id or not dc_id:
         raise HTTPException(status_code=400, detail="wf_id and dc_id are required")
@@ -397,8 +638,9 @@ def fetch_advanced_viz_data(
     #     like the ComplexHeatmap preview ask for a specific bound).
     #   * ``full_load`` → raise the scan cap to the figure full-load ceiling and
     #     skip sampling (the user opted into the whole frame via Load-All).
-    #   * default → a uniform scan-level sample down to ``figure_max_points`` so
-    #     plotly isn't handed a huge client-side frame.
+    #   * default → a scan-level reduction down to ``figure_max_points`` so
+    #     plotly isn't handed a huge client-side frame, of whichever shape the
+    #     kind's renderer can survive (uniform / tail-preserving / none).
     #
     # The default path used to set ``limit_rows = 100_000`` and then
     # ``df.sample()`` the result. That is a *prefix*, not a sample: Polars pushes
@@ -409,16 +651,19 @@ def fetch_advanced_viz_data(
     # across the whole filtered frame instead — the same mechanism the box and
     # violin figure paths use (``services/figure/aggregate.py``).
     from depictio.api.v1.configs.config import settings
+    from depictio.models.components.advanced_viz.sampling import policy_for_kind
 
     display_cap = settings.performance.figure_max_points
-    do_sample = False
+    # None = no scan-level reduction attempted (explicit cap / full load).
+    policy: SamplingPolicy | None = None
     if limit_rows is not None:
         limit_rows = int(limit_rows)
     elif full_load:
         limit_rows = settings.performance.figure_max_load_rows
     else:
         limit_rows = None
-        do_sample = display_cap > 0
+        if display_cap > 0:
+            policy = policy_for_kind(viz_kind)
 
     try:
         wf_oid = ObjectId(str(wf_id))
@@ -518,11 +763,20 @@ def fetch_advanced_viz_data(
 
     _t_load = _time.perf_counter()
     total_rows: int | None = None
-    sampled = False
+    sampling: dict | None = None
     df = None
-    if do_sample:
-        df, total_rows, sampled = _load_uniform_sample(
-            wf_oid, dc_oid, filter_metadata, projection, init_data, display_cap
+    if policy is not None:
+        df, total_rows, sampling = _load_reduced(
+            wf_oid,
+            dc_oid,
+            filter_metadata,
+            projection,
+            init_data,
+            display_cap,
+            policy=policy,
+            viz_kind=viz_kind,
+            roles=roles,
+            tail=tail,
         )
     if df is None:
         try:
@@ -556,6 +810,18 @@ def fetch_advanced_viz_data(
     # with a `pl.len()` pushdown; the other paths have the whole frame in hand.
     if total_rows is None:
         total_rows = int(df.height)
+    if sampling is None:
+        # The row-loader path: either an explicit cap, a full load, or a
+        # reduction that bailed out. A cap the frame actually reached is a
+        # truncation, and the renderer is entitled to know it isn't looking at
+        # everything.
+        truncated = limit_rows is not None and df.height >= limit_rows
+        sampling = {
+            "policy": "explicit" if limit_rows is not None else "full",
+            "exact": not truncated,
+            "sampled": False,
+            "degraded": False,
+        }
 
     # Drop any requested columns that didn't survive projection (e.g. user
     # bound an optional column the recipe didn't emit). The renderer
@@ -580,7 +846,12 @@ def fetch_advanced_viz_data(
         "rows": {c: df.get_column(c).to_list() for c in present},
         "row_count": int(df.height),
         "total_rows": total_rows,
-        "sampled": sampled,
+        "sampled": bool(sampling["sampled"]),
+        "sampling": {
+            "policy": sampling["policy"],
+            "exact": bool(sampling["exact"]),
+            "degraded": bool(sampling["degraded"]),
+        },
         "filter_applied": bool(filter_metadata),
     }
     # Additive telemetry for the benchmark harness (clients ignore unknown
@@ -591,6 +862,7 @@ def fetch_advanced_viz_data(
     response.headers["X-Rows-Displayed"] = str(int(df.height))
     response.headers["X-Frame-Bytes"] = str(int(df.estimated_size()))
     response.headers["X-Aggregated"] = "0"
+    response.headers["X-Sampling-Policy"] = str(sampling["policy"])
     response.headers["X-Total-Ms"] = f"{(_time.perf_counter() - _t0) * 1000:.1f}"
     return result
 

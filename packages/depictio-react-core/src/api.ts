@@ -595,23 +595,55 @@ export interface AdvancedVizDataResponse {
   total_rows?: number;
   /** True when the server randomly downsampled the frame. */
   sampled?: boolean;
+  /** Which reduction the server applied and whether the frame is the whole
+   *  filtered set. `degraded` is the one that matters to a renderer which
+   *  aggregates its rows: it means the frame was sampled anyway (the DC
+   *  exceeded the no-sample ceiling), so any sum or ranking taken off it is an
+   *  estimate rather than a total. */
+  sampling?: { policy: string; exact: boolean; degraded: boolean };
   filter_applied: boolean;
+}
+
+/** The rows a tail-preserving reduction must keep whole — the significant end
+ *  of `column`. Sent by the renderers that draw a threshold line, so the server
+ *  keeps exactly the rows the plot would mark as hits instead of guessing a
+ *  cutoff. `direction` is `low` for a raw p-value, `high` for a -log10 score,
+ *  `both` for a signed effect size. */
+export interface AdvancedVizTailSpec {
+  column: string;
+  direction: 'low' | 'high' | 'both';
+  threshold: number;
+}
+
+export interface AdvancedVizDataRequest {
+  wfId: string;
+  dcId: string;
+  columns: string[];
+  filters: InteractiveFilter[];
+  /** Explicit row cap. Suppresses sampling entirely — for callers that want a
+   *  specific bound (heatmap/upset previews), not a representative frame. */
+  limitRows?: number;
+  /** Bypass sampling and raise the scan cap — the renderer's Load-All toggle,
+   *  mirroring the scatter figure full-load contract. Ignored when `limitRows`
+   *  is given. */
+  fullLoad?: boolean;
+  /** Selects the server-side reduction policy. Renderers should always send
+   *  their own kind: without it the server samples uniformly, which is wrong
+   *  for any renderer that aggregates the rows it receives. Typed against the
+   *  union rather than `string` because an unrecognised kind is not an error
+   *  on the wire — it silently falls back to that uniform sample. */
+  vizKind?: AdvancedVizKind;
+  /** Role -> bound column name, so the server can find the column a policy
+   *  needs (e.g. which column carries significance). */
+  roles?: Record<string, string>;
+  tail?: AdvancedVizTailSpec;
 }
 
 /** Project a column subset from a DC + apply global filters. Rendering is
  *  done entirely on the client so intra-viz controls (thresholds, top-N,
- *  rank dropdown) don't round-trip to the server.
- *
- *  `fullLoad` bypasses server-side sampling (raising the scan cap) so the
- *  renderer's Load-All toggle can restore every row — mirrors the scatter
- *  figure full-load contract. Ignored when an explicit `limitRows` is given. */
+ *  rank dropdown) don't round-trip to the server. */
 export async function fetchAdvancedVizData(
-  wfId: string,
-  dcId: string,
-  columns: string[],
-  filters: InteractiveFilter[],
-  limitRows?: number,
-  fullLoad?: boolean,
+  req: AdvancedVizDataRequest,
   signal?: AbortSignal,
 ): Promise<AdvancedVizDataResponse> {
   // Queued here rather than at each call site: ~15 advanced-viz renderers each
@@ -623,12 +655,15 @@ export async function fetchAdvancedVizData(
       method: 'POST',
       headers: authHeaders(),
       body: JSON.stringify({
-        wf_id: wfId,
-        dc_id: dcId,
-        columns,
-        filter_metadata: filters,
-        limit_rows: limitRows,
-        full_load: fullLoad,
+        wf_id: req.wfId,
+        dc_id: req.dcId,
+        columns: req.columns,
+        filter_metadata: req.filters,
+        limit_rows: req.limitRows,
+        full_load: req.fullLoad,
+        viz_kind: req.vizKind,
+        roles: req.roles,
+        tail: req.tail,
       }),
       signal,
     });
