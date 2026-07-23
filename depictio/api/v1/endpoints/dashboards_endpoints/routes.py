@@ -1,5 +1,7 @@
 import json
 import sys
+import threading
+import time
 import uuid
 from datetime import datetime
 from typing import Annotated, Any
@@ -8,6 +10,7 @@ from uuid import UUID
 import yaml
 from bson import ObjectId
 from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, Response
 
 from depictio.api.v1.celery_dispatch import offload_or_run, should_offload_render
@@ -1464,6 +1467,120 @@ def _resolve_link_filters(
     return list(filters) + flattened
 
 
+# Cross-DC link resolution is identical for every component that shares a target
+# DC and a filter set — and a filter change asks all of them at once. Resolving
+# it per component means N project lookups (and N link resolutions) for one
+# answer, all issued concurrently, all missing any downstream cache because none
+# has returned yet.
+#
+# The TTL is short on purpose. It exists to collapse ONE fan-out, not to cache
+# across interactions: by the time the user moves the filter again the key has
+# changed anyway, and a link edited in the meantime must not stay stale.
+_LINK_FILTER_TTL_S = 5.0
+_link_filter_cache: dict[tuple, tuple[float, list[dict]]] = {}
+_link_filter_locks: dict[tuple, threading.Lock] = {}
+_link_filter_locks_guard = threading.Lock()
+
+
+def _link_filter_key(
+    filters: list[dict], target_dc_id: str, project_id: Any, component_type: str
+) -> tuple:
+    """Stable key for one (target DC, filter set) resolution.
+
+    Salted with the ``aggregation_hash`` of every DC the resolution reads — the
+    target plus each DC a filter comes from. A link resolves *values* (which
+    sample ids on the target correspond to the filtered source rows), so any
+    update to either side changes the correct answer: new samples must start
+    matching. Keying on the filter alone would keep serving the pre-update
+    answer, and the affected rows would silently be missing from every linked
+    component.
+
+    The hash rather than ``aggregation_version``: the version is a counter the
+    upsert increments, the hash is derived from the Delta log (table version +
+    active files), so it tracks the state of the data rather than the number of
+    writes. ``None`` (lookup failed) is folded in as itself, so an unreadable
+    hash yields a distinct key rather than colliding with a real one.
+    """
+    from depictio.api.v1.deltatables_utils import _get_aggregation_hash
+
+    dc_ids = {str(target_dc_id)}
+    for f in filters:
+        dc = str((f.get("metadata") or {}).get("dc_id") or f.get("dc_id") or "")
+        if dc:
+            dc_ids.add(dc)
+    versions = tuple(sorted((dc, _get_aggregation_hash(dc)) for dc in dc_ids))
+
+    sig = json.dumps(
+        sorted(
+            (
+                str(f.get("index")),
+                str(f.get("source") or ""),
+                str((f.get("metadata") or {}).get("dc_id") or f.get("dc_id") or ""),
+                str((f.get("metadata") or {}).get("column_name") or f.get("column_name") or ""),
+                json.dumps(f.get("value"), sort_keys=True, default=str),
+            )
+            for f in filters
+        ),
+        default=str,
+    )
+    return (str(project_id), str(target_dc_id), component_type, sig, versions)
+
+
+def _resolve_link_filters_cached(
+    filters: list[dict],
+    target_dc_id: str,
+    project_id: Any,
+    access_token: str | None,
+    component_type: str,
+) -> list[dict]:
+    """``_resolve_link_filters`` with one resolution per fan-out instead of N.
+
+    The per-key lock is what makes this useful: without it, N components firing
+    together all miss the cache simultaneously and every one of them does the
+    full lookup — the cache would only help the *next* fan-out, which never
+    reuses the same key. With it, the first caller resolves and the rest wait on
+    its result.
+    """
+    if not filters:
+        return list(filters)
+
+    key = _link_filter_key(filters, target_dc_id, project_id, component_type)
+    now = time.monotonic()
+
+    cached = _link_filter_cache.get(key)
+    if cached and now - cached[0] < _LINK_FILTER_TTL_S:
+        return list(cached[1])
+
+    with _link_filter_locks_guard:
+        lock = _link_filter_locks.setdefault(key, threading.Lock())
+
+    with lock:
+        # Re-check: whoever held the lock has just populated this key.
+        cached = _link_filter_cache.get(key)
+        if cached and time.monotonic() - cached[0] < _LINK_FILTER_TTL_S:
+            return list(cached[1])
+
+        resolved = _resolve_link_filters(
+            filters=filters,
+            target_dc_id=target_dc_id,
+            project_id=project_id,
+            access_token=access_token,
+            component_type=component_type,
+        )
+        _link_filter_cache[key] = (time.monotonic(), list(resolved))
+
+    # Drop expired entries so a long-lived process doesn't accumulate one per
+    # filter value the user has ever picked.
+    if len(_link_filter_cache) > 256:
+        cutoff = time.monotonic() - _LINK_FILTER_TTL_S
+        for stale in [k for k, (ts, _) in _link_filter_cache.items() if ts < cutoff]:
+            _link_filter_cache.pop(stale, None)
+            with _link_filter_locks_guard:
+                _link_filter_locks.pop(stale, None)
+
+    return list(resolved)
+
+
 def _own_selection_values(filters: list[dict], component: dict, source: str) -> list | None:
     """Pluck the values for this component's own active selection, if any.
 
@@ -1640,7 +1757,7 @@ def bulk_compute_cards(
     def _resolved_filters_for(dc_id_str: str) -> list[dict]:
         if dc_id_str in resolved_per_dc:
             return resolved_per_dc[dc_id_str]
-        merged = _resolve_link_filters(
+        merged = _resolve_link_filters_cached(
             filters=filters,
             target_dc_id=dc_id_str,
             project_id=project_id,
@@ -2051,6 +2168,39 @@ def _emit_timing_headers(response, timings, t0, _time_mod) -> None:
     response.headers["X-Total-Ms"] = f"{(_time_mod.perf_counter() - t0) * 1000:.1f}"
 
 
+def _emit_link_headers(response, merged: list[dict]) -> None:
+    """Report how much cross-DC translation this render carried.
+
+    ``X-Link-Values`` is the number of values the link resolution injected and
+    ``X-Link-Hops`` how many links the filter travelled. Without them a slow
+    filtered render is indistinguishable from a fast one whose filter happened to
+    translate into millions of values — the size of the translation is a
+    property of the *topology*, and it belongs next to the latency it explains.
+
+    Link-resolved filters are the ones ``extend_filters_via_links`` tags with a
+    ``link_<id>[_<id>...]`` index, one link id per hop. Purely additive
+    telemetry; unknown headers are ignored by clients.
+
+    Counted per distinct ``(column, values)`` rather than per filter: when a
+    project declares two routes to the same target — say a direct link and a
+    chain through a third collection — both resolve to the same value set and
+    both are injected, so summing the filters would report twice the number of
+    values the translation actually produced.
+    """
+    injected = [f for f in merged if str(f.get("index", "")).startswith("link_")]
+    if not injected:
+        return
+    distinct: dict[tuple, int] = {}
+    for f in injected:
+        values = f.get("value") or []
+        key = (f.get("column_name"), tuple(sorted(str(v) for v in values)))
+        distinct[key] = len(values)
+    response.headers["X-Link-Values"] = str(sum(distinct.values()))
+    response.headers["X-Link-Hops"] = str(
+        max(len(str(f["index"]).removeprefix("link_").split("_")) for f in injected)
+    )
+
+
 def _cached_row_count(wf_oid, dc_id: str, filter_metadata, init_data, count_fn) -> int:
     """Row count for a (dc, filters) pair, memoised until the data version changes.
 
@@ -2152,13 +2302,21 @@ async def render_figure_endpoint(
     if not wf_id or not dc_id:
         raise HTTPException(status_code=400, detail="Component missing wf_id/dc_id.")
 
-    merged_filters = _resolve_link_filters(
-        filters=filters,
-        target_dc_id=str(dc_id),
-        project_id=project_id,
-        access_token=access_token,
-        component_type="figure",
+    # Off the event loop. This endpoint is ``async def``, and link resolution is
+    # fully synchronous — a pymongo ``find_one`` plus, when links apply, an HTTP
+    # round-trip. Running it inline blocks the uvicorn worker's loop for its
+    # whole duration, so a burst of filtered figure renders stalls not just each
+    # other but every unrelated request that worker owns. (The other render
+    # endpoints are plain ``def`` and already get a threadpool for free.)
+    merged_filters = await run_in_threadpool(
+        _resolve_link_filters_cached,
+        filters,
+        str(dc_id),
+        project_id,
+        access_token,
+        "figure",
     )
+    _emit_link_headers(response, merged_filters)
     filter_metadata = _build_filter_metadata(merged_filters)
 
     # Build a JSON-safe payload for the task. ObjectIds in the component dict
@@ -2294,13 +2452,14 @@ def render_table_endpoint(
     if not wf_id or not dc_id:
         raise HTTPException(status_code=400, detail="Component missing wf_id/dc_id.")
 
-    merged_filters = _resolve_link_filters(
+    merged_filters = _resolve_link_filters_cached(
         filters=filters,
         target_dc_id=str(dc_id),
         project_id=project_id,
         access_token=access_token,
         component_type="table",
     )
+    _emit_link_headers(response, merged_filters)
     filter_metadata = _build_filter_metadata(merged_filters)
 
     dc_config = component.get("dc_config") or {}
@@ -2514,7 +2673,7 @@ def render_image_paths_endpoint(
     if not (wf_id and dc_id and image_column):
         raise HTTPException(status_code=400, detail="Component missing wf_id/dc_id/image_column.")
 
-    merged_filters = _resolve_link_filters(
+    merged_filters = _resolve_link_filters_cached(
         filters=filters,
         target_dc_id=str(dc_id),
         project_id=project_id,
@@ -2686,7 +2845,7 @@ def render_map_endpoint(
     if not wf_id or not dc_id:
         raise HTTPException(status_code=400, detail="Component missing wf_id/dc_id.")
 
-    merged_filters = _resolve_link_filters(
+    merged_filters = _resolve_link_filters_cached(
         filters=filters,
         target_dc_id=str(dc_id),
         project_id=project_id,

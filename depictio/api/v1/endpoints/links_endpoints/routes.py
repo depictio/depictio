@@ -183,20 +183,27 @@ async def _translate_filter_values(
         # Read Delta table with S3 credentials
         from depictio.api.v1.s3 import polars_s3_config
 
-        df = pl.read_delta(delta_table_location, storage_options=polars_s3_config)
+        # Lazy, projected, filter pushed down. This used to be an eager
+        # ``pl.read_delta``, which materialised every column of the source DC to
+        # read two of them — on a 14M-row collection that is a multi-second load
+        # and gigabytes of RAM, paid again on every filter change. The same
+        # eager-read pattern was removed from the ingestion path in 6558e29c5;
+        # it survived here.
+        lf = pl.scan_delta(delta_table_location, storage_options=polars_s3_config)
 
-        # Validate columns exist
-        if filter_column not in df.columns:
+        schema = lf.collect_schema()
+        available = schema.names()
+        if filter_column not in available:
             raise HTTPException(
                 status_code=400,
                 detail=f"Filter column '{filter_column}' not found in source DC. "
-                f"Available: {', '.join(df.columns)}",
+                f"Available: {', '.join(available)}",
             )
-        if link_column not in df.columns:
+        if link_column not in available:
             raise HTTPException(
                 status_code=400,
                 detail=f"Link column '{link_column}' not found in source DC. "
-                f"Available: {', '.join(df.columns)}",
+                f"Available: {', '.join(available)}",
             )
 
         # Filter and extract link column values
@@ -204,7 +211,7 @@ async def _translate_filter_values(
         is_date_range = (
             isinstance(filter_values, list)
             and len(filter_values) == 2
-            and df[filter_column].dtype in [pl.Date, pl.Datetime]
+            and schema[filter_column] in [pl.Date, pl.Datetime]
         )
 
         if is_date_range:
@@ -224,16 +231,28 @@ async def _translate_filter_values(
 
             # Apply date range filter
             date_col = pl.col(filter_column).cast(pl.Datetime)
-            filtered_df = df.filter((date_col >= start_date) & (date_col <= end_date))
+            predicate = (date_col >= start_date) & (date_col <= end_date)
         else:
             # Standard MultiSelect/Select: Use is_in() filtering
-            filtered_df = df.filter(pl.col(filter_column).is_in(filter_values))
+            predicate = pl.col(filter_column).is_in(filter_values)
 
-        link_values = filtered_df[link_column].unique().to_list()
+        # Project to the two columns that matter BEFORE collecting, and let the
+        # engine count matched rows rather than materialising them: only the
+        # distinct link values are needed downstream.
+        result = (
+            lf.filter(predicate)
+            .select(
+                pl.col(link_column).unique().implode().alias("_values"),
+                pl.len().alias("_matched"),
+            )
+            .collect()
+        )
+        link_values = result["_values"].item().to_list() if result.height else []
+        matched_rows = int(result["_matched"].item()) if result.height else 0
 
         logger.info(
             f"Column translation: {len(filter_values)} {filter_column} values -> "
-            f"{len(link_values)} {link_column} values (from {len(filtered_df)} rows)"
+            f"{len(link_values)} {link_column} values (from {matched_rows} rows)"
         )
 
         return link_values
