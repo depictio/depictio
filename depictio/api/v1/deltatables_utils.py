@@ -578,6 +578,38 @@ def _get_aggregation_version(data_collection_id_str: str) -> str | None:
         return None
 
 
+def _get_aggregation_hash(data_collection_id_str: str) -> str | None:
+    """Fetch the latest ``aggregation_hash`` for a DC from MongoDB.
+
+    Preferred over ``_get_aggregation_version`` as a cache-key salt: the version
+    is a counter the upsert increments, whereas the hash is derived from the
+    Delta log itself (table version + active files, see ``_delta_identity_hash``)
+    and therefore describes the *state of the data* rather than how many times
+    it has been written.
+
+    Note it is additionally salted with the write timestamp, so it is not a
+    content-identity hash: two upserts of byte-identical data produce different
+    hashes. For invalidation that bias is the safe one — it can cause a
+    redundant recompute, never a stale answer.
+
+    Returns ``None`` on lookup failure so callers can fall back.
+    """
+    try:
+        from depictio.api.v1.db import deltatables_collection as _dt_coll
+
+        dt = _dt_coll.find_one(
+            {"data_collection_id": ObjectId(data_collection_id_str)},
+            {"aggregation": 1},
+        )
+        agg_list = (dt or {}).get("aggregation") or []
+        if not agg_list:
+            return None
+        return str(agg_list[-1].get("aggregation_hash") or "")
+    except Exception as e:
+        logger.debug(f"_get_aggregation_hash({data_collection_id_str}) failed: {e}")
+        return None
+
+
 def _get_dc_type_from_db(data_collection_id: ObjectId) -> str | None:
     """
     Fetch data collection type from MongoDB.
