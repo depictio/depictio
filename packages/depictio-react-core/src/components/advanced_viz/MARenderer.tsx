@@ -202,21 +202,24 @@ const MARenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
       tiers,
       counts,
       data: [
-        {
-          type: 'scattergl' as const,
-          mode: 'markers' as const,
-          x: xs,
-          y: ys,
-          text: ids.map((v) => String(v ?? '')),
-          customdata,
-          hovertemplate:
-            `<b>%{customdata[0]}</b>  <span style="opacity:0.7">[%{customdata[2]}]</span>` +
-            `<br>${config.avg_log_intensity_col}: %{x:.3f}` +
-            `<br>${config.log2_fold_change_col}: %{y:.3f}` +
-            (sigRaw ? `<br>${config.significance_col}: %{customdata[1]:.2e}` : '') +
-            `<extra></extra>`,
-          marker: { color: colors, size: sizes, opacity: 0.85 },
-        },
+        adaptGlTrace(
+          {
+            type: 'scattergl' as const,
+            mode: 'markers' as const,
+            x: xs,
+            y: ys,
+            text: ids.map((v) => String(v ?? '')),
+            customdata,
+            hovertemplate:
+              `<b>%{customdata[0]}</b>  <span style="opacity:0.7">[%{customdata[2]}]</span>` +
+              `<br>${config.avg_log_intensity_col}: %{x:.3f}` +
+              `<br>${config.log2_fold_change_col}: %{y:.3f}` +
+              (sigRaw ? `<br>${config.significance_col}: %{customdata[1]:.2e}` : '') +
+              `<extra></extra>`,
+            marker: { color: colors, size: sizes, opacity: 0.85 },
+          },
+          glGranted,
+        ),
       ],
       layout: {
         ...plotlyThemeFragment(isDark, theme),
@@ -256,7 +259,7 @@ const MARenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
         autosize: true,
       },
     };
-  }, [rows, config, sigThreshold, fcThreshold, topN, search, showLabels, isDark, theme]);
+  }, [rows, config, sigThreshold, fcThreshold, topN, search, showLabels, isDark, theme, glGranted]);
 
   const controls = useMemo(
     () => (
@@ -343,7 +346,11 @@ const MARenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
       reduction={
         reduction && (reduction.sampled || fullLoad)
           ? {
-              displayed: reduction.displayed,
+              // Without a WebGL slot the trace is drawn as downsampled SVG, so
+              // the badge must report what is on screen, not what arrived.
+              displayed: glGranted
+                ? reduction.displayed
+                : Math.min(reduction.displayed, SVG_MAX_POINTS),
               total: reduction.total,
               sampled: reduction.sampled,
               full: fullLoad,

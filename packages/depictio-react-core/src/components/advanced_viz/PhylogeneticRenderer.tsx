@@ -11,7 +11,7 @@ import {
   useMantineColorScheme,
   useMantineTheme,
 } from '@mantine/core';
-import Plot from 'react-plotly.js';
+import AdvancedVizPlot from './AdvancedVizPlot';
 
 import {
   fetchAdvancedVizData,
@@ -665,7 +665,7 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
         {legend}
         <div style={{ flex: '1 1 auto', minHeight: 0 }}>
           {figure ? (
-            <Plot
+            <AdvancedVizPlot
               data={applyDataTheme(figure.data, isDark, theme) as any}
               layout={applyLayoutTheme(figure.layout as any, isDark, theme) as any}
               onClick={onPlotClick}

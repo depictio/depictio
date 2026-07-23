@@ -17,6 +17,7 @@ import {
   InteractiveFilter,
   StoredMetadata,
 } from '../../api';
+import { adaptGlTrace, useWebglSlot } from '../../webglBudget';
 import AdvancedVizFrame, { TIER_COLORS } from './AdvancedVizFrame';
 import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragment } from './plotlyTheme';
 
@@ -143,6 +144,11 @@ const ManhattanRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
     JSON.stringify(filters),
     refreshTick,
   ]);
+
+  // Variant clouds are the densest thing on a dashboard, so always compete for
+  // a WebGL slot; without one the trace renders as downsampled SVG — see
+  // webglBudget.
+  const glGranted = useWebglSlot(true);
 
   const { figure, allChrs, tiers, counts } = useMemo(() => {
     if (!rows)
@@ -522,7 +528,7 @@ const ManhattanRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
 
     return {
       figure: {
-        data: [mainTrace, ...legendTraces, ...numericColorbarTrace],
+        data: [adaptGlTrace(mainTrace, glGranted), ...legendTraces, ...numericColorbarTrace],
         layout: {
           ...plotlyThemeFragment(isDark, theme),
           // Slightly more right margin to give the colorbar / legend breathing
@@ -595,6 +601,7 @@ const ManhattanRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
     colorBy,
     colorScheme,
     theme,
+    glGranted,
   ]);
 
   // Memoised so AdvancedVizFrame's `extras` useMemo stays stable between

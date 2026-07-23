@@ -362,10 +362,16 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
     };
   }, [overlayActive, isScatterLike, effectiveIds, figure, selectionColumnIndex, highlightColor]);
 
+  // Plotly Express emits `scattergl` above ~1000 points and the server passes
+  // that verdict through in the figure JSON, so scatter figures are the ones
+  // that consume the scarce GL contexts. Aggregated visus (bar, box,
+  // histogram) never do and don't take a slot — see webglBudget.
+  const glGranted = useWebglSlot(isScatterLike);
+
   const figureData = useMemo<unknown[]>(() => {
-    const base = (figure?.data as unknown[]) || [];
+    const base = adaptGlTraces(((figure?.data as PlotlyTrace[]) || []), glGranted);
     return overlayTrace ? [...base, overlayTrace] : base;
-  }, [figure, overlayTrace]);
+  }, [figure, overlayTrace, glGranted]);
 
   const layout = useMemo<Record<string, unknown>>(() => {
     const base: Record<string, unknown> = {

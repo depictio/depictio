@@ -231,7 +231,8 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
       tiers,
       counts,
       data: [
-        {
+        adaptGlTrace(
+          {
           type: 'scattergl' as const,
           mode: 'markers' as const,
           x: xs,
@@ -245,7 +246,9 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
             `<br>-log10(sig): %{y:.2f}` +
             `<extra></extra>`,
           marker: { color: colors, size: sizes, opacity: 0.85 },
-        },
+          },
+          glGranted,
+        ),
       ],
       layout: {
         ...plotlyThemeFragment(isDark, theme),
@@ -297,7 +300,7 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
         autosize: true,
       },
     };
-  }, [rows, config, sigThreshold, effectThreshold, topN, search, showLabels, isDark, theme]);
+  }, [rows, config, sigThreshold, effectThreshold, topN, search, showLabels, isDark, theme, glGranted]);
 
   // Memoised so AdvancedVizFrame's `extras` useMemo doesn't invalidate on
   // every render — otherwise the published popover JSX is republished on
@@ -385,7 +388,11 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
       reduction={
         reduction && (reduction.sampled || fullLoad)
           ? {
-              displayed: reduction.displayed,
+              // Without a WebGL slot the trace is drawn as downsampled SVG, so
+              // the badge must report what is on screen, not what arrived.
+              displayed: glGranted
+                ? reduction.displayed
+                : Math.min(reduction.displayed, SVG_MAX_POINTS),
               total: reduction.total,
               sampled: reduction.sampled,
               full: fullLoad,
