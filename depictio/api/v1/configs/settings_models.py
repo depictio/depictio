@@ -998,6 +998,18 @@ class PerformanceConfig(BaseSettings):
             "load."
         ),
     )
+    table_sort_max_rows: int = Field(
+        default=1_000_000,
+        description=(
+            "Post-filter row count above which a table is served in natural "
+            "(scan) order instead of being sorted. A sort must see every row, so "
+            "it scales with the table while an unsorted page does not — measured "
+            "on one 100-row page: 87 ms sorted at 1M rows, 957 ms at 5M, 6254 ms "
+            "at 20M, against a flat ~6 ms unsorted. The response reports "
+            "`sort_disabled` so the grid can drop the sort affordance rather "
+            "than show unsorted rows under a sorted header. 0 disables the gate."
+        ),
+    )
     # Table rows-per-page has no server-side default here: the component model
     # (TableLiteComponent.page_size) already defaults to 100, and the React grid
     # reads that value directly — a settings knob would be dead config.

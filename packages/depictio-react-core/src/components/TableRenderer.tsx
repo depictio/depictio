@@ -124,6 +124,10 @@ const TableRenderer: React.FC<TableRendererProps> = ({
     sortBy: null,
     sortDir: 'desc',
   });
+  // Data version the currently-cached row blocks were fetched against. Only
+  // meaningful for unsorted tables, whose row order is the scan's own (see the
+  // purge in ``datasource.getRows``).
+  const dataVersionRef = useRef<string | number | null>(null);
 
   // One-shot bootstrap: fetch column defs + total row count via a tiny
   // (start=0, limit=1) call. The infinite row model then takes over for
@@ -174,20 +178,28 @@ const TableRenderer: React.FC<TableRendererProps> = ({
         // fallback to visible columns so we never default-sort on a hidden
         // one. If the server's pick is itself hidden, drop it too — the
         // user has chosen not to surface that column.
+        // The server refuses to sort tables past ``table_sort_max_rows``: a sort
+        // has to see every row, so on a multi-million-row table one page costs
+        // seconds instead of milliseconds. When it says so, every client-side
+        // fallback below must stand down too — otherwise we'd send a ``sort_by``
+        // the server discards and render unsorted rows under a sorted header,
+        // which the infinite row model has no way to detect.
+        const sortDisabled = res.sort_disabled === true;
         const serverSort = res.sort_by as string | null | undefined;
         const serverSortVisible =
-          serverSort && visibleColumns.some((c) => c.field === serverSort)
+          !sortDisabled && serverSort && visibleColumns.some((c) => c.field === serverSort)
             ? serverSort
             : null;
-        const acquisitionSortField =
-          serverSortVisible ??
-          visibleColumns
-            .map((c) => c.field)
-            .find(
-              (f) =>
-                /acquisition/i.test(f) && /(time|date|stamp)/i.test(f),
-            ) ??
-          null;
+        const acquisitionSortField = sortDisabled
+          ? null
+          : (serverSortVisible ??
+            visibleColumns
+              .map((c) => c.field)
+              .find(
+                (f) =>
+                  /acquisition/i.test(f) && /(time|date|stamp)/i.test(f),
+              ) ??
+            null);
         // Last-resort default: newest-first on the row-id column (``index_index``
         // etc.) when it's visible AND numeric. A numeric ingest counter is
         // monotonic, so descending surfaces the most recently added rows at the
@@ -207,7 +219,9 @@ const TableRenderer: React.FC<TableRendererProps> = ({
           ? visibleColumns.find((c) => c.field === rowIdCol)
           : undefined;
         const rowIdSortField =
-          rowIdColMeta && rowIdColMeta.type === 'numericColumn' ? rowIdCol : null;
+          !sortDisabled && rowIdColMeta && rowIdColMeta.type === 'numericColumn'
+            ? rowIdCol
+            : null;
         const defaultSortField = acquisitionSortField ?? rowIdSortField;
         // Acquisition sort honours the server's direction (defaulting desc);
         // the row-id fallback is always descending (newest first).
@@ -228,7 +242,10 @@ const TableRenderer: React.FC<TableRendererProps> = ({
             return {
               field: c.field,
               headerName: c.headerName,
-              sortable: true,
+              // Removing the affordance is the honest signal: AG Grid drops the
+              // chevron and the click handler, so the user is never shown a
+              // sort control that silently does nothing.
+              sortable: !sortDisabled,
               filter: isNumeric ? 'agNumberColumnFilter' : true,
               resizable: true,
               cellClass: isNumeric ? 'ag-right-aligned-cell' : undefined,
@@ -443,6 +460,22 @@ const TableRenderer: React.FC<TableRendererProps> = ({
           start,
         )
           .then((res) => {
+            // An unsorted table is served in Delta scan order. That order is
+            // stable while files are only appended, but a compaction (OPTIMIZE /
+            // vacuum) rewrites the active file list and reorders the scan — at
+            // which point already-cached blocks no longer line up with freshly
+            // fetched ones, and the grid silently shows some rows twice and
+            // others not at all. The data version changes when that can have
+            // happened, so purge and restart paging from a consistent snapshot.
+            const version = res.data_version ?? null;
+            if (version !== null && dataVersionRef.current === null) {
+              dataVersionRef.current = version;
+            } else if (version !== null && version !== dataVersionRef.current) {
+              dataVersionRef.current = version;
+              params.failCallback();
+              gridApiRef.current?.purgeInfiniteCache();
+              return;
+            }
             // lastRow tells the grid the total — required so the scrollbar is
             // accurate and the grid stops asking past the end.
             const lastRow =
