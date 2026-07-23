@@ -17,9 +17,13 @@ import polars as pl
 from depictio.cli.cli.utils.deltatables import clustering_columns, link_columns_by_dc
 
 
-def _link(source_dc, target_dc, column, enabled=True):
+def _link(source_dc, target_dc, column, enabled=True, target_field=None):
     return SimpleNamespace(
-        source_dc_id=source_dc, target_dc_id=target_dc, source_column=column, enabled=enabled
+        source_dc_id=source_dc,
+        target_dc_id=target_dc,
+        source_column=column,
+        enabled=enabled,
+        link_config=SimpleNamespace(target_field=target_field),
     )
 
 
@@ -39,6 +43,25 @@ class TestLinkColumnsByDC:
             ]
         )
         assert link_columns_by_dc(project)["dcA"] == ["sample_id", "run_id"]
+
+    def test_target_field_renames_the_key_on_the_target_side(self):
+        """A resolver that renames across DCs (MultiQC sample_mapping).
+
+        The target is filtered on ``target_field``, so clustering it on
+        ``source_column`` would sort it by a column it is never searched by —
+        no crash, just a speedup that silently doesn't happen.
+        """
+        project = SimpleNamespace(links=[_link("dcA", "dcB", "sample_id", target_field="sample")])
+        assert link_columns_by_dc(project) == {"dcA": ["sample_id"], "dcB": ["sample"]}
+
+    def test_absent_target_field_falls_back_to_source_column(self):
+        project = SimpleNamespace(links=[_link("dcA", "dcB", "sample_id", target_field=None)])
+        assert link_columns_by_dc(project) == {"dcA": ["sample_id"], "dcB": ["sample_id"]}
+
+    def test_link_without_dc_ids_contributes_nothing(self):
+        """Template-mode links carry tags, not ids; nothing to key on here."""
+        project = SimpleNamespace(links=[_link("", "", "sample_id")])
+        assert link_columns_by_dc(project) == {}
 
     def test_disabled_links_are_ignored(self):
         project = SimpleNamespace(links=[_link("dcA", "dcB", "sample_id", enabled=False)])

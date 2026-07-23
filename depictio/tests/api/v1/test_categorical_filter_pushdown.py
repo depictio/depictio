@@ -14,6 +14,7 @@ wraps the column in a cast.
 """
 
 import polars as pl
+import pytest
 
 from depictio.api.v1.deltatables_utils import (
     _categorical_predicate,
@@ -116,6 +117,100 @@ class TestRowParityWithTheStringCastForm:
         typed = df.filter(_categorical_predicate("id", values, df.schema["id"]))
         assert typed.to_dicts() == df.filter(_legacy_predicate("id", values)).to_dicts()
         assert typed["id"].to_list() == [1]
+
+
+class TestTemporalDtypesAreParsedNotCast:
+    """Casting a string to a temporal dtype is a parse polars does NOT do.
+
+    ``Series(["09:00:00"]).cast(pl.Time, strict=False)`` yields null instead of
+    raising, so a naive typed predicate on a Time column matched nothing — real
+    data loss, found in review. Temporal values now go through the real parsers.
+
+    That also fixes a *pre-existing* bug: the column-cast form rendered a
+    Datetime with microseconds while clients send seconds, so a Datetime
+    categorical filter matched nothing no matter what the user picked. These
+    tests assert the correct answer, which is why several of them deliberately
+    do NOT match the legacy predicate.
+    """
+
+    def test_time_column_matches(self):
+        df = pl.DataFrame({"t": pl.Series(["09:00:00", "10:00:00"]).str.to_time()})
+
+        typed = df.filter(_categorical_predicate("t", ["09:00:00"], df.schema["t"]))
+        assert typed.height == 1
+        assert typed.height == df.filter(_legacy_predicate("t", ["09:00:00"])).height
+
+    def test_datetime_matches_every_rendering_a_client_sends(self):
+        """str(), isoformat() and Polars' own cast all name the same instant."""
+        df = pl.DataFrame({"ts": pl.Series(["2024-01-01 12:30:45"]).str.to_datetime()})
+        value = df["ts"][0]
+
+        for rendering in (str(value), value.isoformat(), "2024-01-01 12:30:45.000000"):
+            typed = df.filter(_categorical_predicate("ts", [rendering], df.schema["ts"]))
+            assert typed.height == 1, rendering
+
+    def test_datetime_now_matches_where_the_legacy_form_never_did(self):
+        """The pre-existing bug this fixes, stated explicitly."""
+        df = pl.DataFrame({"ts": pl.Series(["2024-01-01 12:30:45"]).str.to_datetime()})
+        values = [str(df["ts"][0])]  # what a client actually sends
+
+        assert df.filter(_legacy_predicate("ts", values)).height == 0  # was broken
+        assert df.filter(_categorical_predicate("ts", values, df.schema["ts"])).height == 1
+
+    def test_timezone_aware_datetime_round_trips(self):
+        for tz in ("UTC", "Europe/Paris"):
+            series = pl.Series(["2024-01-01 12:30:45"]).str.to_datetime().dt.replace_time_zone(tz)
+            df = pl.DataFrame({"ts": series})
+            values = [str(df["ts"][0])]
+
+            typed = df.filter(_categorical_predicate("ts", values, df.schema["ts"]))
+            assert typed.height == 1, tz
+
+    def test_temporal_predicates_are_pushable(self):
+        """The column stays bare, so row-group statistics remain usable."""
+        cases = [
+            (pl.Datetime("us"), "2024-01-01 00:00:00"),
+            (pl.Datetime("us", "UTC"), "2024-01-01 00:00:00+00:00"),
+            (pl.Time, "09:00:00"),
+            (pl.Date, "2024-01-01"),
+        ]
+        for dtype, value in cases:
+            expr = repr(_categorical_predicate("c", [value], dtype)).lower()
+            assert 'col("c").cast' not in expr, dtype
+
+    def test_duration_keeps_the_fallback(self):
+        """No parser exists, and ``"1000"`` would cast to 1000µs — a wrong match.
+
+        The fallback it keeps cannot render a Duration as text on polars 1.19
+        and raises. That raise is pre-existing (every categorical filter used
+        this form before); what matters is that a loud failure was not replaced
+        by a silently wrong match.
+        """
+        assert "cast" in repr(_categorical_predicate("d", ["1000"], pl.Duration("us"))).lower()
+
+        df = pl.DataFrame({"d": pl.Series([1000], dtype=pl.Int64).cast(pl.Duration("us"))})
+        with pytest.raises(pl.exceptions.InvalidOperationError):
+            df.filter(_legacy_predicate("d", ["1000"]))
+
+    def test_unparseable_temporal_value_falls_back(self):
+        assert "cast" in repr(_categorical_predicate("ts", ["nope"], pl.Datetime("us"))).lower()
+
+
+class TestNothingConvertsFallsBack:
+    """An all-null conversion means "this dtype doesn't parse", not "no match"."""
+
+    def test_unconvertible_values_do_not_produce_a_match_nothing_predicate(self):
+        expr = repr(_categorical_predicate("id", ["abc"], pl.Int64)).lower()
+        assert "false" not in expr
+        assert "cast" in expr
+
+    def test_and_the_rows_still_agree_with_the_old_form(self):
+        df = pl.DataFrame({"id": [1, 2, 3]})
+        values = ["abc"]
+
+        typed = df.filter(_categorical_predicate("id", values, df.schema["id"]))
+        assert typed.to_dicts() == df.filter(_legacy_predicate("id", values)).to_dicts()
+        assert typed.height == 0
 
 
 class TestPredicateShape:
