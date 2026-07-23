@@ -266,6 +266,76 @@ def list_kinds(current_user=Depends(get_user_or_anonymous)) -> list[dict[str, An
     ]
 
 
+def _load_uniform_sample(
+    wf_oid,
+    dc_oid,
+    filter_metadata: list[dict] | None,
+    projection: list[str],
+    init_data: dict[str, dict],
+    cap: int,
+) -> tuple[Any | None, int | None, bool]:
+    """Draw ~``cap`` rows uniformly from the filtered frame, at scan level.
+
+    Returns ``(frame, total_rows, sampled)``, or ``(None, None, False)`` when the
+    scan can't be built — the caller then falls back to the row loader, exactly
+    like every other ``open_deltatable_scan`` caller.
+
+    The keep/drop decision hashes a struct of *all* projected columns rather than
+    a single column: hashing one column would keep or drop every row sharing a
+    value, which takes whole categories in or out (the same reasoning documented
+    in ``services/figure/aggregate.py::_build_subsample``).
+
+    That per-value behaviour also means the sample size is only *approximately*
+    the cap, and on a coarse projection it degenerates badly. With few distinct
+    value tuples the modulus is effectively all-or-nothing per tuple: the result
+    is either near-empty or a large fraction of the table, and neither is a
+    sample. Both are rejected here — an outcome outside a generous band around
+    the cap means the hash did not split the frame, so the caller falls back to
+    an ordinary load, the same bail-out ``_build_box`` makes.
+    """
+    import polars as pl
+
+    from depictio.api.v1.deltatables_utils import open_deltatable_scan
+
+    try:
+        scan = open_deltatable_scan(
+            workflow_id=wf_oid,
+            data_collection_id=str(dc_oid),
+            metadata=filter_metadata or None,
+            init_data=init_data,
+            select_columns=projection,
+        )
+        if scan is None:
+            return None, None, False
+
+        total = int(scan.select(pl.len()).collect().item())
+        if total <= cap:
+            # Nothing to reduce; collect the projected frame as-is.
+            return scan.collect(), total, False
+
+        stride = -(-total // cap)  # ceil
+        frame = scan.filter(pl.struct(projection).hash(seed=0) % stride == 0).collect()
+        # Integer strides undershoot, and hashing is only approximately uniform,
+        # so the band is deliberately wide — it is here to catch a degenerate
+        # split, not to police the sample size.
+        if not (cap // 4 <= frame.height <= cap * 4):
+            logger.info(
+                "advanced_viz/data: hash sample returned %d rows against a target of %d "
+                "— the projection's value tuples are too coarse to split on, "
+                "loading without sampling",
+                frame.height,
+                cap,
+            )
+            return None, None, False
+        return frame, total, True
+    except Exception as exc:
+        logger.warning(
+            "advanced_viz/data: scan-level sample failed (%s) — falling back to the row loader",
+            exc,
+        )
+        return None, None, False
+
+
 @advanced_viz_endpoint_router.post("/data")
 def fetch_advanced_viz_data(
     response: Response,
@@ -327,10 +397,17 @@ def fetch_advanced_viz_data(
     #     like the ComplexHeatmap preview ask for a specific bound).
     #   * ``full_load`` → raise the scan cap to the figure full-load ceiling and
     #     skip sampling (the user opted into the whole frame via Load-All).
-    #   * default → cap the scan at 100k, then random-downsample to
-    #     ``figure_max_points`` so plotly isn't handed a huge client-side frame.
-    # This mirrors the scatter-figure sampling contract (random sample, seed=0,
-    # a "sampled" flag + pre-sample count surfaced for the reduction badge).
+    #   * default → a uniform scan-level sample down to ``figure_max_points`` so
+    #     plotly isn't handed a huge client-side frame.
+    #
+    # The default path used to set ``limit_rows = 100_000`` and then
+    # ``df.sample()`` the result. That is a *prefix*, not a sample: Polars pushes
+    # the limit into the scan, and Delta scan order is ingest order, so "the
+    # first 100k rows" is the first few samples (or, on a variant table sorted by
+    # position, chromosome 1 alone). Sampling that prefix afterwards dressed a
+    # biased subset up as a random one. The scan-level hash sample below is drawn
+    # across the whole filtered frame instead — the same mechanism the box and
+    # violin figure paths use (``services/figure/aggregate.py``).
     from depictio.api.v1.configs.config import settings
 
     display_cap = settings.performance.figure_max_points
@@ -340,8 +417,8 @@ def fetch_advanced_viz_data(
     elif full_load:
         limit_rows = settings.performance.figure_max_load_rows
     else:
-        limit_rows = 100_000
-        do_sample = True
+        limit_rows = None
+        do_sample = display_cap > 0
 
     try:
         wf_oid = ObjectId(str(wf_id))
@@ -440,36 +517,45 @@ def fetch_advanced_viz_data(
         projection = [c for c in projection if c in available_cols]
 
     _t_load = _time.perf_counter()
-    try:
-        df = load_deltatable_lite(
-            workflow_id=wf_oid,
-            data_collection_id=str(dc_oid),
-            metadata=filter_metadata or None,
-            limit_rows=limit_rows,
-            select_columns=projection,
-            init_data=init_data,
+    total_rows: int | None = None
+    sampled = False
+    df = None
+    if do_sample:
+        df, total_rows, sampled = _load_uniform_sample(
+            wf_oid, dc_oid, filter_metadata, projection, init_data, display_cap
         )
-    except Exception as exc:
-        logger.warning(
-            "advanced_viz/data: load_deltatable_lite failed for dc_id=%s: %s",
-            dc_id,
-            exc,
-            exc_info=True,
-        )
-        raise HTTPException(
-            status_code=500, detail=f"Failed to load data collection: {exc}"
-        ) from exc
+    if df is None:
+        try:
+            df = load_deltatable_lite(
+                workflow_id=wf_oid,
+                data_collection_id=str(dc_oid),
+                metadata=filter_metadata or None,
+                limit_rows=limit_rows,
+                select_columns=projection,
+                init_data=init_data,
+            )
+        except Exception as exc:
+            logger.warning(
+                "advanced_viz/data: load_deltatable_lite failed for dc_id=%s: %s",
+                dc_id,
+                exc,
+                exc_info=True,
+            )
+            # A data problem is not a server fault. The missing-Delta-table case
+            # above already answers 502-style failures with a typed 404; do the
+            # same here so the renderer can say what went wrong instead of
+            # surfacing a bare 500.
+            raise HTTPException(
+                status_code=422,
+                detail=f"Could not read this data collection: {exc}",
+            ) from exc
     _load_ms = int((_time.perf_counter() - _t_load) * 1000)
 
-    # Downsample large frames before materialising rows so the client isn't
-    # handed (and plotly doesn't render) hundreds of thousands of marks. Random
-    # sample with a fixed seed for a stable, representative reduction; report the
-    # pre-sample height so the renderer's reduction badge shows "N / M".
-    total_rows = int(df.height)
-    sampled = False
-    if do_sample and display_cap > 0 and df.height > display_cap:
-        df = df.sample(n=display_cap, seed=0)
-        sampled = True
+    # ``total_rows`` must be the count *before* any reduction — it is what the
+    # renderer's badge reports as the "of M" half. The sampling path measures it
+    # with a `pl.len()` pushdown; the other paths have the whole frame in hand.
+    if total_rows is None:
+        total_rows = int(df.height)
 
     # Drop any requested columns that didn't survive projection (e.g. user
     # bound an optional column the recipe didn't emit). The renderer
