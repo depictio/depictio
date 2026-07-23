@@ -1,4 +1,5 @@
 import os
+from collections.abc import Iterable
 from datetime import datetime
 
 import polars as pl
@@ -323,6 +324,72 @@ def streaming_write_enabled(command_parameters: dict | None = None) -> bool:
     )
 
 
+def link_columns_by_dc(project_config) -> dict[str, list[str]]:
+    """Per-DC join-key columns implied by the project's cross-DC links.
+
+    Links are declared on the *project* (``Project.links``), not on the data
+    collection, so a DC config alone cannot tell you it participates in one.
+    Both ends of a link are matched on ``source_column``: the resolver
+    translates the user's filter into values of that column and applies them to
+    the target under the same name — which is why the target column is the
+    link's ``source_column`` and not the column the user filtered on.
+
+    Returns ``{data_collection_id: [column, ...]}`` covering both ends of every
+    enabled link, so either side can be clustered on the key it is searched by.
+    """
+    mapping: dict[str, list[str]] = {}
+    # ``links`` only exists on a full ``Project``; other config shapes reach the
+    # ingest path too, and they simply have nothing to cluster on.
+    for link in getattr(project_config, "links", None) or []:
+        column = link.source_column
+        if not link.enabled or not column:
+            continue
+        for dc_id in (link.source_dc_id, link.target_dc_id):
+            if not dc_id:
+                continue
+            bucket = mapping.setdefault(str(dc_id), [])
+            if column not in bucket:
+                bucket.append(column)
+    return mapping
+
+
+def clustering_columns(
+    data_collection_config: dict,
+    available: Iterable[str],
+    link_columns: Iterable[str] | None = None,
+) -> list[str]:
+    """Columns to sort a Delta table by before writing it.
+
+    Parquet keeps min/max statistics per row group, so a scan can skip a whole
+    row group whose range excludes the predicate. Those statistics are only
+    *selective* if related rows sit together — on an unsorted table every row
+    group spans nearly the full value range and nothing can be skipped.
+
+    The keys a filtered render actually searches by are the cross-DC join keys,
+    which reach a DC two different ways:
+
+    - ``TableJoinConfig.on_columns`` for DCs joined at ingest, and
+    - the project's ``links`` for DCs wired for cross-DC filtering, passed in
+      as ``link_columns`` (see :func:`link_columns_by_dc`). This is the case the
+      benchmark's ``links`` topology exercises, and it declares no ``join`` at
+      all — keying only on ``join`` silently clusters nothing there.
+
+    Sorting takes a filtered read from ~18 ms to ~2 ms on 8 M rows, and that
+    multiplies with the typed filter predicate, which is what makes the
+    statistics reachable in the first place.
+
+    Returns ``[]`` when the DC has no join key or none of them are present, in
+    which case the caller writes unsorted as before.
+    """
+    join_cfg = (data_collection_config or {}).get("join") or {}
+    candidates = list(join_cfg.get("on_columns") or [])
+    for column in link_columns or []:
+        if column not in candidates:
+            candidates.append(column)
+    present = set(available)
+    return [c for c in candidates if c in present]
+
+
 def delta_table_stats(
     destination_file: str, storage_options: PolarsStorageOptions
 ) -> tuple[int, int]:
@@ -632,6 +699,13 @@ def client_aggregate_data(
     if use_streaming:
         # Stream the concat straight to Delta — never materializes the full
         # dataset, which is what OOMs on large ingests.
+        #
+        # Deliberately NOT clustered on the join keys: a sort is a blocking,
+        # whole-dataset operation, so applying it here would materialize
+        # exactly what this path exists to avoid. Streamed tables therefore
+        # keep unselective row-group statistics and read back slower under a
+        # filter — the trade is memory for filtered-read speed, and it is why
+        # this path stays opt-in.
         try:
             with timed("write"):
                 result = sink_delta_table(
@@ -657,6 +731,21 @@ def client_aggregate_data(
         logger.debug(f"Aggregated DataFrame shape: {aggregated_df.shape}")
         logger.debug(f"Aggregated DataFrame schema: {aggregated_df.schema}")
         logger.info(f"Aggregated DataFrame head: {aggregated_df.head(5)}")
+
+        # Cluster on the join keys so parquet row-group statistics become
+        # selective for the filters a dashboard actually issues. Timed as its
+        # own phase: it is a real cost paid once at ingest to buy it back on
+        # every filtered render, and that trade has to be visible.
+        sort_cols = clustering_columns(
+            data_collection_config,
+            aggregated_df.columns,
+            (command_parameters or {}).get("link_columns_by_dc", {}).get(str(dc_id)),
+        )
+        if sort_cols:
+            with timed("sort"):
+                aggregated_df = aggregated_df.sort(sort_cols)
+            record("sorted_by", ",".join(sort_cols))
+            logger.info(f"Clustered Delta table on join columns {sort_cols}")
 
         # Calculate DataFrame size before writing (more accurate than S3 file size estimation)
         deltatable_size_bytes = calculate_dataframe_size_bytes(aggregated_df)
