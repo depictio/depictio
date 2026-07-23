@@ -283,7 +283,9 @@ def _streaming_collect_kwargs() -> dict:
     probe = pl.LazyFrame({"x": [1]}).select(pl.col("x").sum())
     for kwargs in ({"engine": "streaming"}, {"streaming": True}):
         try:
-            probe.collect(**kwargs)  # type: ignore[call-overload]
+            # Untyped on purpose: which spelling exists is a property of the
+            # installed polars, not of the signature the type checker sees.
+            _collect_with(probe, kwargs)
             return kwargs
         except Exception:  # noqa: S110 — unsupported spelling, try the next one
             continue
@@ -291,9 +293,15 @@ def _streaming_collect_kwargs() -> dict:
     return {}
 
 
+def _collect_with(lf: pl.LazyFrame, kwargs: dict) -> pl.DataFrame:
+    """``lf.collect(**kwargs)`` with the version-dependent kwargs kept dynamic."""
+    collect: Callable[..., pl.DataFrame] = lf.collect
+    return collect(**kwargs)
+
+
 def _collect(lf: pl.LazyFrame) -> pl.DataFrame:
     """Collect a pure-aggregation plan through the streaming engine when possible."""
-    return lf.collect(**_streaming_collect_kwargs())  # type: ignore[call-overload]
+    return _collect_with(lf, _streaming_collect_kwargs())
 
 
 def precompute_columns_specs(
