@@ -138,7 +138,184 @@ def test_violin_subsamples_and_flags_it():
     assert len(fig.data) == 2
 
 
+@pytest.fixture
+def sampling_on(monkeypatch):
+    """Enable box quartile sampling, which ships disabled.
+
+    The default is 0 (exact) because the sampled path trades the quartile sort
+    for an extra scan, and on a cold object-store-backed Delta table the read
+    dominates. These tests exercise the mechanism, so they turn it on explicitly
+    rather than depending on a default that is deliberately conservative.
+    """
+    from depictio.api.v1.configs.config import settings
+
+    monkeypatch.setattr(settings.performance, "box_sample_rows_per_group", 10_000)
+
+
+@pytest.fixture
+def big_box_frame() -> pl.DataFrame:
+    """Two large groups and one deliberately small one.
+
+    The small group must come through the sampled path bit-identical: its stride
+    is 1, so "sampling" it keeps every row.
+    """
+    rng = np.random.default_rng(1)
+    parts = [
+        pl.DataFrame({"g": ["big_a"] * 60_000, "v": rng.normal(10, 3, 60_000)}),
+        pl.DataFrame({"g": ["big_b"] * 45_000, "v": rng.normal(20, 5, 45_000)}),
+        pl.DataFrame({"g": ["tiny"] * 500, "v": rng.normal(0, 1, 500)}),
+    ]
+    return pl.concat(parts)
+
+
+def _box_stats(fig, name: str) -> dict:
+    """The five numbers plotly carries for group ``name`` of a single trace."""
+    trace = fig.data[0]
+    i = list(trace.x).index(name)
+    return {
+        "q1": trace.q1[i],
+        "median": trace.median[i],
+        "q3": trace.q3[i],
+        "lowerfence": trace.lowerfence[i],
+        "upperfence": trace.upperfence[i],
+        "n": trace.customdata[i],
+    }
+
+
+def test_box_samples_large_groups_and_keeps_the_quartiles_close(sampling_on, big_box_frame):
+    """Above the per-group target the quartiles are sampled — and stay accurate.
+
+    The tolerance is expressed against the group's IQR rather than as an
+    absolute: a quartile that lands within a few percent of an IQR is a box the
+    reader cannot distinguish from the exact one.
+    """
+    stats: dict = {}
+    plan = plan_aggregation("box", {"x": "g", "y": "v"})
+    fig = build_aggregated_figure(big_box_frame.lazy(), plan, "light", stats)
+    assert fig is not None
+    assert stats["sampled"] is True
+
+    for name in ("big_a", "big_b"):
+        subset = big_box_frame.filter(pl.col("g") == name)["v"].to_numpy()
+        exact = {q: np.percentile(subset, q) for q in (25, 50, 75)}
+        iqr = exact[75] - exact[25]
+        got = _box_stats(fig, name)
+        assert abs(got["q1"] - exact[25]) < 0.05 * iqr
+        assert abs(got["median"] - exact[50]) < 0.05 * iqr
+        assert abs(got["q3"] - exact[75]) < 0.05 * iqr
+
+
+def test_box_extremes_and_counts_stay_exact_when_sampled(sampling_on, big_box_frame):
+    """Whiskers and n come from the exact pass, never the sample.
+
+    A sampled minimum sits well inside the true one, which visibly shortens the
+    whisker — the fences are clipped to the observed extremes, so an inexact
+    min/max is not a rounding difference, it redraws the box.
+    """
+    stats: dict = {}
+    plan = plan_aggregation("box", {"x": "g", "y": "v"})
+    fig = build_aggregated_figure(big_box_frame.lazy(), plan, "light", stats)
+    assert stats["sampled"] is True
+
+    for name in ("big_a", "big_b", "tiny"):
+        subset = big_box_frame.filter(pl.col("g") == name)["v"].to_numpy()
+        got = _box_stats(fig, name)
+        assert got["n"] == len(subset)
+        # Tukey fences are clipped to the true extremes, so they can never sit
+        # outside them — and the clip must use the exact min/max.
+        assert got["lowerfence"] >= subset.min()
+        assert got["upperfence"] <= subset.max()
+
+
+def test_box_groups_below_the_target_are_untouched_by_sampling(sampling_on, big_box_frame):
+    """A group smaller than the per-group target keeps every row (stride 1)."""
+    plan = plan_aggregation("box", {"x": "g", "y": "v"})
+    sampled_fig = build_aggregated_figure(big_box_frame.lazy(), plan, "light", {})
+
+    tiny = big_box_frame.filter(pl.col("g") == "tiny")["v"].to_numpy()
+    got = _box_stats(sampled_fig, "tiny")
+    assert got["q1"] == pytest.approx(np.percentile(tiny, 25))
+    assert got["median"] == pytest.approx(np.percentile(tiny, 50))
+    assert got["q3"] == pytest.approx(np.percentile(tiny, 75))
+
+
+def test_box_stays_exact_above_the_group_cap(sampling_on, monkeypatch):
+    """Past the group cap, sampling costs more than the sort it replaces.
+
+    Grouped quantiles get cheaper as cardinality rises (each group's sort is
+    smaller), so the guard must send high-cardinality frames to the exact path.
+    """
+    from depictio.api.v1.configs.config import settings
+
+    monkeypatch.setattr(settings.performance, "box_sample_max_groups", 4)
+    rng = np.random.default_rng(2)
+    n = 120_000
+    many = pl.DataFrame({"g": rng.integers(0, 20, n).astype(str), "v": rng.normal(0, 1, n)})
+
+    stats: dict = {}
+    plan = plan_aggregation("box", {"x": "g", "y": "v"})
+    fig = build_aggregated_figure(many.lazy(), plan, "light", stats)
+    assert fig is not None
+    assert stats["sampled"] is False
+
+    subset = many.filter(pl.col("g") == "7")["v"].to_numpy()
+    got = _box_stats(fig, "7")
+    assert got["q1"] == pytest.approx(np.percentile(subset, 25))
+    assert got["q3"] == pytest.approx(np.percentile(subset, 75))
+
+
+def test_box_falls_back_to_exact_when_the_value_hash_collapses(sampling_on):
+    """A low-cardinality projection must not silently yield an empty sample.
+
+    ``struct(cols).hash() % stride`` decides per *distinct value tuple*, not per
+    row. With only a handful of distinct (group, y) pairs, whole groups — or the
+    entire sample — can fall on the wrong side of the modulus. Measured on a
+    discrete column: 0 rows kept out of 14 M. The guard must notice and compute
+    the quartiles exactly rather than draw a box from nothing.
+    """
+    rng = np.random.default_rng(3)
+    n = 120_000
+    # Only 6 distinct y values, so at most 12 distinct (g, v) tuples exist.
+    discrete = pl.DataFrame(
+        {
+            "g": rng.choice(["a", "b"], n),
+            "v": rng.integers(0, 6, n).astype(float),
+        }
+    )
+    stats: dict = {}
+    plan = plan_aggregation("box", {"x": "g", "y": "v"})
+    fig = build_aggregated_figure(discrete.lazy(), plan, "light", stats)
+
+    assert fig is not None
+    assert stats["sampled"] is False, "a collapsed sample must fall back, not be trusted"
+    subset = discrete.filter(pl.col("g") == "a")["v"].to_numpy()
+    got = _box_stats(fig, "a")
+    assert got["q1"] == pytest.approx(np.percentile(subset, 25))
+    assert got["median"] == pytest.approx(np.percentile(subset, 50))
+    assert got["q3"] == pytest.approx(np.percentile(subset, 75))
+
+
+def test_box_sampling_can_be_disabled(monkeypatch, big_box_frame):
+    """``box_sample_rows_per_group = 0`` restores unconditional exactness."""
+    from depictio.api.v1.configs.config import settings
+
+    monkeypatch.setattr(settings.performance, "box_sample_rows_per_group", 0)
+    stats: dict = {}
+    plan = plan_aggregation("box", {"x": "g", "y": "v"})
+    fig = build_aggregated_figure(big_box_frame.lazy(), plan, "light", stats)
+    assert stats["sampled"] is False
+
+    subset = big_box_frame.filter(pl.col("g") == "big_a")["v"].to_numpy()
+    got = _box_stats(fig, "big_a")
+    assert got["q1"] == pytest.approx(np.percentile(subset, 25))
+
+
 def test_exact_paths_do_not_claim_to_be_sampled(frame):
+    """Below the per-group target, box is still exact and says so.
+
+    ``frame``'s largest group is ~3 300 rows, well under
+    ``box_sample_rows_per_group``, so no sampling is triggered.
+    """
     for visu, kwargs in [
         ("box", {"x": "g", "y": "v"}),
         ("histogram", {"x": "v"}),

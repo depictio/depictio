@@ -12,11 +12,15 @@ it against a lazy Delta scan (``deltatables_utils.open_deltatable_scan``).
 
 Design rules:
 
-- **Exactness first.** ``box`` / ``histogram`` / ``density_*`` / ``bar`` /
-  ``funnel`` are computed exactly — the aggregate is the same number px would
-  have arrived at, just reached without collecting. Only ``violin`` and ``ecdf``
-  are approximate (they need the distribution's shape, which has no small exact
-  summary), and both say so via ``render_stats["sampled"]``.
+- **Exactness first.** ``histogram`` / ``density_*`` / ``bar`` / ``funnel`` are
+  computed exactly — the aggregate is the same number px would have arrived at,
+  just reached without collecting. ``violin`` and ``ecdf`` are approximate (they
+  need the distribution's shape, which has no small exact summary). ``box`` is
+  exact except for its three quartiles on large frames: those are order
+  statistics, the only reduction here that forces Polars to sort, so above
+  ``box_sample_rows_per_group`` they are computed on a per-group sample while
+  the extremes and counts stay exact. Every approximate path says so via
+  ``render_stats["sampled"]``.
 - **Bail loudly rather than approximate silently.** ``plan_aggregation`` returns
   ``None`` for anything it can't reproduce faithfully, and the caller falls back
   to the full-load px path. A wrong figure is far worse than a slow one.
@@ -277,6 +281,117 @@ def _build_reduce(scan: pl.LazyFrame, plan: AggPlan, render_stats: dict | None) 
     return _build_density(scan, plan, render_stats)
 
 
+def _by_key(frame: pl.DataFrame, keys: list[str], column: str) -> dict[tuple, Any]:
+    """``{key tuple: value}`` for a small grouped frame."""
+    return {tuple(row[k] for k in keys): row[column] for row in frame.iter_rows(named=True)}
+
+
+def _attach_quartiles(base: pl.DataFrame, quartiles: pl.DataFrame, keys: list[str]) -> pl.DataFrame:
+    """Attach ``_q1``/``_med``/``_q3`` to ``base``, matching on the group keys.
+
+    Done by dict lookup rather than ``DataFrame.join`` for two reasons. Both
+    frames are bounded by ``_MAX_GROUPS``, so this is a few thousand tuples at
+    worst and the join buys nothing. More importantly, a join that matches null
+    group keys needs the kwarg Polars renamed from ``join_nulls`` to
+    ``nulls_equal`` — passing either one pins this module to a Polars version,
+    and getting it wrong is not a loud failure: the default drops null keys, so
+    px's null group would silently vanish from the plot.
+    """
+    lookup = {
+        tuple(row[k] for k in keys): (row["_q1"], row["_med"], row["_q3"])
+        for row in quartiles.iter_rows(named=True)
+    }
+    picked: dict[str, list] = {"_q1": [], "_med": [], "_q3": []}
+    for row in base.iter_rows(named=True):
+        q1, med, q3 = lookup.get(tuple(row[k] for k in keys), (None, None, None))
+        picked["_q1"].append(q1)
+        picked["_med"].append(med)
+        picked["_q3"].append(q3)
+    return base.with_columns(
+        [pl.Series(name, values, dtype=pl.Float64) for name, values in picked.items()]
+    )
+
+
+def _group_stride_expr(base: pl.DataFrame, keys: list[str], strides: list[int]) -> pl.Expr:
+    """Per-group sampling stride as an inline ``when/then`` chain.
+
+    Built from the tiny exact-pass frame rather than joined back onto the scan.
+    A join would cost more than the whole aggregate it is meant to speed up (a
+    join over the 14 M-row scan measured ~330 ms against an 81 ms floor), and
+    ``LazyFrame.join`` additionally defaults to ``nulls_equal=False``, which
+    would silently drop px's null group. A ``when/then`` chain is bounded by
+    ``box_sample_max_groups`` branches and stays a scan-level filter.
+    """
+    chain: Any = pl
+    for row, stride in zip(base.iter_rows(named=True), strides):
+        cond: pl.Expr | None = None
+        for k in keys:
+            value = row[k]
+            test = pl.col(k).is_null() if value is None else (pl.col(k) == pl.lit(value))
+            cond = test if cond is None else (cond & test)
+        assert cond is not None  # keys is non-empty whenever this is called
+        chain = chain.when(cond).then(pl.lit(stride, dtype=pl.UInt64))
+    return chain.otherwise(pl.lit(1, dtype=pl.UInt64))
+
+
+def _sampled_quartiles(
+    scan: pl.LazyFrame,
+    plan: AggPlan,
+    keys: list[str],
+    base: pl.DataFrame,
+    counts: list[int],
+    per_group: int,
+) -> pl.DataFrame | None:
+    """Quartiles over a ~``per_group``-row hash sample of each group.
+
+    Returns ``None`` when the sample collapsed and the caller must fall back to
+    the exact computation. That check is not paranoia: the hash is taken over a
+    *struct of column values*, so it decides per distinct value tuple rather
+    than per row. On a low-cardinality projection — a discrete ``y`` with a few
+    dozen distinct values — every tuple can hash to the same residue class and
+    the "sample" comes back empty or missing whole groups.
+    """
+    y = plan.y
+    assert y is not None
+
+    # ceil division: a group at or below the target gets stride 1, i.e. keeps
+    # every row, so small groups come through bit-identical to the exact path.
+    strides = [max(1, -(-n // per_group)) for n in counts]
+
+    stride_expr = _group_stride_expr(base, keys, strides)
+    sampled_scan = scan.filter(pl.struct(keys + [y]).hash(seed=0) % stride_expr == 0)
+    got = (
+        sampled_scan.group_by(keys)
+        .agg(
+            pl.col(y).quantile(0.25, interpolation="linear").alias("_q1"),
+            pl.col(y).median().alias("_med"),
+            pl.col(y).quantile(0.75, interpolation="linear").alias("_q3"),
+            pl.len().alias("_ns"),
+        )
+        .collect()
+    )
+
+    if got.height != base.height:
+        logger.info(
+            f"_build_box: sample kept {got.height}/{base.height} groups — "
+            "hash collapsed on a low-cardinality projection, computing exactly"
+        )
+        return None
+
+    # A group should retain about n/stride rows. Landing far below that means
+    # the distinct-tuple collapse thinned it, not the stride. A quarter of the
+    # expectation is deliberately loose: integer strides already undershoot (a
+    # 21 032-row group at stride 3 keeps ~7 011, not 10 000), and this guard is
+    # here to catch a collapse, not to police sample size.
+    kept = _by_key(got, keys, "_ns")
+    for row, n, stride in zip(base.iter_rows(named=True), counts, strides):
+        got_rows = kept.get(tuple(row[k] for k in keys))
+        if got_rows is None or got_rows < max(1, n // stride // 4):
+            logger.info("_build_box: sample thinner than the stride implies — computing exactly")
+            return None
+    return got.drop("_ns")
+
+
 def _build_box(scan: pl.LazyFrame, plan: AggPlan, render_stats: dict | None) -> go.Figure | None:
     """Box plot from precomputed quartiles.
 
@@ -284,37 +399,78 @@ def _build_box(scan: pl.LazyFrame, plan: AggPlan, render_stats: dict | None) -> 
     ``lowerfence``/``upperfence``), which is the whole reason this is cheap: the
     trace carries seven numbers per box instead of every underlying value.
 
+    Two passes. The first is exact and cheap — ``min``/``max``/``mean``/``len``
+    are streaming reductions with no sort, and it settles the ``_MAX_GROUPS``
+    cardinality question before any expensive work happens. The second computes
+    the three quartiles, which are order statistics and therefore the only part
+    that makes Polars sort; on a large frame that pass is sampled per group (see
+    ``_sampled_quartiles``).
+
+    The extremes and the count deliberately come from the *exact* pass even when
+    the quartiles are sampled: a sampled minimum measured +4.25 against a true
+    minimum of −0.074 on a 14 M-row group, i.e. sampling visibly shortens the
+    whiskers, while the quartiles themselves stay within ~3 % of an IQR.
+
     Fences follow Tukey (1.5·IQR) clipped to the observed min/max, matching what
     px draws for ``boxpoints=False``. Outlier markers are deliberately not
     emitted — they are per-row data, and re-introducing them would re-introduce
     the payload this path exists to avoid. Load-All still shows the exact px box.
     """
+    from depictio.api.v1.configs.config import settings
+
     keys = [k for k in (plan.x, plan.color) if k]
     y = plan.y
     assert y is not None  # guaranteed by plan_aggregation
+
+    # Pass 1 — exact, no sort, and the cardinality gate.
+    base_exprs = [
+        pl.col(y).min().alias("_min"),
+        pl.col(y).max().alias("_max"),
+        pl.col(y).mean().alias("_mean"),
+        pl.len().alias("_n"),
+    ]
+    base = (
+        scan.group_by(keys).agg(base_exprs).collect() if keys else scan.select(base_exprs).collect()
+    )
+    if base.height == 0:
+        return None
+    if base.height > _MAX_GROUPS:
+        logger.info(f"_build_box: {base.height} groups exceeds cap {_MAX_GROUPS} — falling back")
+        return None
 
     # ``interpolation="linear"`` is required, not cosmetic: Polars defaults to
     # "nearest", which snaps each quartile to an actual data point and would put
     # the box edges in a slightly different place than px (and than the card
     # path's ``_agg_value``, which also asks for linear). Same figure, two
     # quartile conventions, is exactly the kind of drift this path must not add.
-    agg_exprs = [
+    quartile_exprs = [
         pl.col(y).quantile(0.25, interpolation="linear").alias("_q1"),
         pl.col(y).median().alias("_med"),
         pl.col(y).quantile(0.75, interpolation="linear").alias("_q3"),
-        pl.col(y).min().alias("_min"),
-        pl.col(y).max().alias("_max"),
-        pl.col(y).mean().alias("_mean"),
-        pl.len().alias("_n"),
     ]
-    stats = (
-        scan.group_by(keys).agg(agg_exprs).collect() if keys else scan.select(agg_exprs).collect()
-    )
-    if stats.height == 0:
-        return None
-    if stats.height > _MAX_GROUPS:
-        logger.info(f"_build_box: {stats.height} groups exceeds cap {_MAX_GROUPS} — falling back")
-        return None
+
+    # Sample only where it pays. Grouped quantiles get *cheaper* as cardinality
+    # rises — each group's sort is smaller — so past ~64 groups the per-group
+    # sample costs more than the sort it replaces (measured: 500 groups, 310 ms
+    # sampled against 179 ms exact). And a frame whose largest group already
+    # fits the target has nothing to sample.
+    per_group = int(settings.performance.box_sample_rows_per_group)
+    max_groups = int(settings.performance.box_sample_max_groups)
+    counts = [int(n) for n in base["_n"].to_list()]
+    quartiles: pl.DataFrame | None = None
+    sampled = False
+    if keys and per_group > 0 and base.height <= max_groups and max(counts) > per_group:
+        quartiles = _sampled_quartiles(scan, plan, keys, base, counts, per_group)
+        sampled = quartiles is not None
+
+    if quartiles is None:
+        quartiles = (
+            scan.group_by(keys).agg(quartile_exprs).collect()
+            if keys
+            else scan.select(quartile_exprs).collect()
+        )
+
+    stats = _attach_quartiles(base, quartiles, keys) if keys else base.hstack(quartiles)
 
     stats = stats.with_columns(
         (pl.col("_q3") - pl.col("_q1")).alias("_iqr"),
@@ -357,7 +513,9 @@ def _build_box(scan: pl.LazyFrame, plan: AggPlan, render_stats: dict | None) -> 
     )
     if render_stats is not None:
         render_stats["rows_displayed"] = stats.height
-        render_stats["sampled"] = False
+        render_stats["sampled"] = sampled
+        if sampled:
+            render_stats["total_rows"] = int(stats["_n"].sum())
     return fig
 
 

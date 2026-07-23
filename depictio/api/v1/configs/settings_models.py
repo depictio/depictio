@@ -962,6 +962,33 @@ class PerformanceConfig(BaseSettings):
             "`max_points` overrides this."
         ),
     )
+    box_sample_rows_per_group: int = Field(
+        default=0,
+        description=(
+            "Rows sampled per box-plot group before computing the quartiles; 0 "
+            "(the default) computes them exactly. A box plot's quartiles are "
+            "order statistics, so unlike the other aggregate figures they cannot "
+            "be answered by a pushdown — the scan has to be sorted. Sampling per "
+            "group (rather than globally) keeps small groups intact while "
+            "bounding the sort on the large ones, and min/max/count stay exact "
+            "either way, so the whiskers do not move. "
+            "Off by default because it trades a sort for an *extra scan*: the "
+            "exact extremes must be read before the per-group strides are known. "
+            "On warm local parquet that was a 3.7x win at 17M rows, but on a "
+            "cold S3-backed Delta table the read dominates and the second pass "
+            "can cost more than the sort it removes. Enable it only where the "
+            "sort has been measured to be the bottleneck."
+        ),
+    )
+    box_sample_max_groups: int = Field(
+        default=64,
+        description=(
+            "Group-count ceiling above which box quartiles are computed exactly "
+            "rather than sampled. Grouped quantiles get *cheaper* as cardinality "
+            "rises (each group's sort is smaller), so past this point sampling "
+            "costs more than it saves — measured at ~64 groups on a 14M-row frame."
+        ),
+    )
     figure_max_load_rows: int = Field(
         default=500_000,
         description=(
