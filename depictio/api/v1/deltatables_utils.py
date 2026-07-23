@@ -23,10 +23,15 @@ DELTA_CACHE_DIR = os.getenv("DEPICTIO_DELTA_CACHE_DIR", "/app/cache/delta_cache"
 # Delta schema cache (#12). ``collect_schema()`` reads the Delta log; on the hot
 # render path (a card grid re-computing on every filter change, or a projected
 # figure load) that's a repeated round-trip for a schema that only changes when
-# ingest bumps the aggregation version. Cache the column names per
+# ingest bumps the aggregation version. Cache the full schema per
 # (data_collection_id, aggregation_version) so a new ingest naturally
 # invalidates the entry — the same discriminator the dataframe cache keys use.
-_DELTA_SCHEMA_CACHE: dict[tuple[str, str], frozenset[str]] = {}
+#
+# The dtypes are cached alongside the names because they are what lets
+# ``add_filter`` build a *typed* categorical predicate instead of wrapping the
+# column in a ``cast(Utf8)`` — see the comment there. Both come from the same
+# ``collect_schema()`` call, so keeping dtypes costs no extra round-trip.
+_DELTA_SCHEMA_CACHE: dict[tuple[str, str], dict[str, pl.DataType]] = {}
 _DELTA_SCHEMA_CACHE_MAX = 512  # bounded; the version salt churns keys over time
 
 
@@ -123,6 +128,74 @@ def _generate_filter_hash(metadata: list[dict] | None) -> str:
     return filter_hash
 
 
+# Synthetic ``interactive_component_type`` for "a cross-DC link resolved to no
+# target values". Not a user-facing component: it exists so an empty resolution
+# can be carried through the ordinary filter payload and still mean "no rows",
+# which an empty value list cannot express (see ``add_filter``).
+LINK_NO_MATCH = "__link_no_match__"
+
+
+def _categorical_predicate(column_name: str, values: list, dtype: pl.DataType | None) -> pl.Expr:
+    """Build the ``is_in`` predicate for Select/MultiSelect/SegmentedControl.
+
+    The values arrive stringified: ``unique_values`` stringifies for the React
+    MultiSelect, and scatter/table selections round-trip through the same path.
+    So an ``int64`` column compared against ``["1", "2"]`` must still match.
+
+    The obvious way to get that — ``pl.col(c).cast(pl.Utf8).is_in([...])`` — is
+    a performance trap. Wrapping the *column* in a cast makes the predicate
+    opaque to Polars' parquet reader: row-group min/max statistics can no
+    longer be used to skip, and dictionary pushdown is lost, so every filtered
+    read fully decodes the filter column across the whole table. Measured on
+    the 1 GB benchmark tier that turned a 100-row filtered table page into an
+    18-second load.
+
+    So we cast the *values* to the column's dtype instead, which leaves
+    ``pl.col(c)`` bare and keeps the predicate pushable. ``dtype`` comes from
+    the cached Delta schema; when it is unknown (no schema available) or of a
+    kind we don't convert confidently, we fall back to the original
+    column-cast form — correctness first, speed only when it is free.
+
+    A value that cannot be converted is dropped rather than matched: an int
+    column genuinely has no row equal to ``"abc"``, which is exactly what the
+    column-cast form returned too.
+    """
+    str_values = [str(v) for v in values]
+    fallback = pl.col(column_name).cast(pl.Utf8, strict=False).is_in(str_values)
+
+    if dtype is None:
+        return fallback
+
+    # Already text: no conversion needed on either side, and the bare column
+    # is directly pushable. The common case for categorical filters.
+    if dtype == pl.String:  # pl.Utf8 is the same dtype under an older name
+        return pl.col(column_name).is_in(str_values)
+
+    # Numeric and temporal columns: convert the strings once, in Polars, and
+    # compare in the column's own type. Anything else (Boolean, Categorical,
+    # nested types) keeps the old form — the conversion rules are not obvious
+    # enough to risk a silent behaviour change for a performance gain.
+    if not (dtype.is_numeric() or dtype.is_temporal()):
+        return fallback
+
+    try:
+        converted = pl.Series(str_values, dtype=pl.Utf8).cast(dtype, strict=False)
+    except Exception as e:
+        logger.debug(
+            f"_categorical_predicate: cannot cast values to {dtype} for column "
+            f"{column_name!r} ({e}); using the string-cast predicate"
+        )
+        return fallback
+
+    typed_values = converted.drop_nulls().to_list()
+    if not typed_values:
+        # Nothing the user selected is representable in this column's type, so
+        # nothing can match. Expressed explicitly because an empty ``is_in``
+        # reads as "no filter" to some callers.
+        return pl.lit(False)
+    return pl.col(column_name).is_in(typed_values)
+
+
 def add_filter(
     filter_list: list,
     interactive_component_type: str,
@@ -130,22 +203,33 @@ def add_filter(
     value,
     min_value=None,
     max_value=None,
+    dtype: pl.DataType | None = None,
 ) -> None:
-    """Add filter criteria to a filter list based on component type."""
-    if interactive_component_type in ["Select", "MultiSelect", "SegmentedControl"]:
+    """Add filter criteria to a filter list based on component type.
+
+    ``dtype`` is the column's Delta dtype when the caller knows it (from the
+    cached schema); it only affects categorical filters, where it enables a
+    pushable predicate. Omitting it preserves the previous behaviour exactly.
+    """
+    if interactive_component_type == LINK_NO_MATCH:
+        # A cross-DC link resolved to zero target values: the user's filter is
+        # satisfiable on the source but matches nothing on this DC, so the
+        # correct result is no rows.
+        #
+        # This cannot be expressed as an empty ``is_in`` list, because every
+        # branch below is guarded by ``if value:`` — an empty list falls through
+        # as "no filter at all" and the component renders EVERY row, which reads
+        # as "the filter did nothing" rather than "nothing matched". Hence an
+        # explicit component type carrying an always-false predicate.
+        filter_list.append(pl.lit(False))
+
+    elif interactive_component_type in ["Select", "MultiSelect", "SegmentedControl"]:
         if value:
             # Ensure value is a list for is_in() function
             if not isinstance(value, list):
                 value = [value]
 
-            # Cast both column and values to Utf8 so the filter is dtype-agnostic.
-            # The unique_values endpoint stringifies values for the React MultiSelect
-            # (and scatter/table selections round-trip through the same code path),
-            # so an int64 column compared against ["1", "2"] would otherwise
-            # silently return zero rows. Only safe for categorical (`is_in`) filters.
-            filter_list.append(
-                pl.col(column_name).cast(pl.Utf8, strict=False).is_in([str(v) for v in value])
-            )
+            filter_list.append(_categorical_predicate(column_name, value, dtype))
 
     elif interactive_component_type == "TextInput":
         if value:
@@ -246,13 +330,20 @@ def add_filter(
             )
 
 
-def process_metadata_and_filter(metadata: list) -> list:
+def process_metadata_and_filter(
+    metadata: list, schema: dict[str, pl.DataType] | None = None
+) -> list:
     """Process metadata and build a list of Polars filter expressions.
 
     If a component carries ``filter_expr`` (either at the top level or under
     ``metadata.filter_expr``), the compiled expression is appended alongside
     the value-based filter so downstream consumers see the source's row
     scoping in addition to the user's selection.
+
+    ``schema`` is the DC's ``{column: dtype}`` map when the caller has it (the
+    lazy scan path does, via the cached Delta schema). It is passed down so
+    categorical filters can be built as pushable typed predicates; without it
+    they keep their previous dtype-agnostic form.
     """
     filter_list = []
 
@@ -272,6 +363,7 @@ def process_metadata_and_filter(metadata: list) -> list:
             interactive_component_type=interactive_component_type,
             column_name=column_name,
             value=component["value"],
+            dtype=schema.get(column_name) if schema else None,
         )
 
         if filter_expr:
@@ -611,6 +703,43 @@ def _create_delta_scan(file_id: str, dc_type: str | None = None) -> pl.LazyFrame
     return pl.scan_delta(file_id, storage_options=polars_s3_config)
 
 
+def _get_cached_dtypes(
+    delta_scan: pl.LazyFrame,
+    data_collection_id_str: str,
+    version_salt: str | int | None,
+) -> dict[str, pl.DataType] | None:
+    """Return a DC's Delta schema as ``{column: dtype}``, cached (#12).
+
+    On cache miss, reads the lazy schema once (a Delta-log round-trip, no data)
+    and memoizes it. Returns ``None`` if the schema can't be read, so callers
+    fall back to their pre-cache behaviour (no projection / no filter pruning /
+    untyped filter predicates).
+    """
+    cache_key = (data_collection_id_str, str(version_salt))
+    cached = _DELTA_SCHEMA_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+    try:
+        schema = dict(delta_scan.collect_schema())
+    except Exception as e:
+        logger.debug(f"_get_cached_dtypes: schema read failed for {data_collection_id_str}: {e}")
+        return None
+    if not schema:
+        # A columnless schema is not a real DC, and treating it as authoritative
+        # is actively dangerous: callers use the name set to decide which
+        # filters apply, so an empty answer silently drops *every* filter and
+        # renders unfiltered data. Report it as unreadable instead, which makes
+        # callers fall back to their unguarded behaviour.
+        logger.debug(f"_get_cached_dtypes: empty schema for {data_collection_id_str}; ignoring")
+        return None
+    # Simple bound: a schema is cheap to re-read, so clearing on overflow is
+    # fine and avoids tracking per-entry recency.
+    if len(_DELTA_SCHEMA_CACHE) >= _DELTA_SCHEMA_CACHE_MAX:
+        _DELTA_SCHEMA_CACHE.clear()
+    _DELTA_SCHEMA_CACHE[cache_key] = schema
+    return schema
+
+
 def _get_cached_schema(
     delta_scan: pl.LazyFrame,
     data_collection_id_str: str,
@@ -618,25 +747,12 @@ def _get_cached_schema(
 ) -> frozenset[str] | None:
     """Return a DC's Delta column names, cached per (collection, version) (#12).
 
-    On cache miss, reads the lazy schema once (a Delta-log round-trip, no data)
-    and memoizes it. Returns ``None`` if the schema can't be read, so callers
-    fall back to their pre-cache behaviour (no projection / no filter pruning).
+    Thin view over :func:`_get_cached_dtypes` — callers that only need to know
+    *which* columns exist (projection guards, filter pruning) keep taking a
+    name set, and share the one cached schema read with the dtype consumers.
     """
-    cache_key = (data_collection_id_str, str(version_salt))
-    cached = _DELTA_SCHEMA_CACHE.get(cache_key)
-    if cached is not None:
-        return cached
-    try:
-        names = frozenset(delta_scan.collect_schema().names())
-    except Exception as e:
-        logger.debug(f"_get_cached_schema: schema read failed for {data_collection_id_str}: {e}")
-        return None
-    # Simple bound: a schema is cheap to re-read, so clearing on overflow is
-    # fine and avoids tracking per-entry recency.
-    if len(_DELTA_SCHEMA_CACHE) >= _DELTA_SCHEMA_CACHE_MAX:
-        _DELTA_SCHEMA_CACHE.clear()
-    _DELTA_SCHEMA_CACHE[cache_key] = names
-    return names
+    schema = _get_cached_dtypes(delta_scan, data_collection_id_str, version_salt)
+    return None if schema is None else frozenset(schema)
 
 
 def _filter_columns(metadata: list[dict] | None) -> set[str]:
@@ -977,25 +1093,24 @@ def _apply_scan_filters(
     if not metadata:
         return delta_scan
 
-    schema_names = _get_cached_schema(delta_scan, data_collection_id_str, version_salt)
-    available_cols = set(schema_names) if schema_names is not None else None
+    schema = _get_cached_dtypes(delta_scan, data_collection_id_str, version_salt)
 
     usable_metadata = metadata
-    if available_cols is not None:
+    if schema is not None:
         usable_metadata = []
         for component in metadata:
             meta = component.get("metadata") or {}
             col = component.get("column_name") or meta.get("column_name")
-            if col and col not in available_cols:
+            if col and col not in schema:
                 logger.info(
                     "Skipping filter on column %r — not present in DC (available: %s)",
                     col,
-                    sorted(available_cols),
+                    sorted(schema),
                 )
                 continue
             usable_metadata.append(component)
 
-    filter_expressions = process_metadata_and_filter(usable_metadata)
+    filter_expressions = process_metadata_and_filter(usable_metadata, schema)
 
     if filter_expressions:
         combined_filter = filter_expressions[0]
@@ -1830,7 +1945,10 @@ def apply_runtime_filters(df: pl.DataFrame, metadata: list[dict] | None) -> pl.D
         if valid_metadata:
             logger.info(f"  ✅ Continuing with {len(valid_metadata)} valid filter(s)")
 
-    filter_expressions = process_metadata_and_filter(valid_metadata)
+    # The frame is materialised, so its schema is free — and passing it keeps
+    # this path's categorical semantics identical to the lazy scan path, which
+    # also builds typed predicates.
+    filter_expressions = process_metadata_and_filter(valid_metadata, dict(df.schema))
 
     if filter_expressions:
         try:
