@@ -52,12 +52,22 @@ def process_project_data_collections(
     Returns:
         dict: Results summary
     """
-    if command_parameters is None:
-        command_parameters = {}
-
     rich_print_checked_statement(
         f"Processing Project: [italic]'{project_config.name}'[/italic]", "info"
     )
+
+    # Cross-DC links live on the project, but the columns they match on are
+    # needed down in the per-DC write (to cluster the Delta table on the key it
+    # will be filtered by). Resolve them once here and carry them alongside the
+    # other run-level options rather than re-deriving them per DC. Rebuilt, not
+    # mutated in place, so a caller's dict is left alone (and ``None`` becomes
+    # the empty defaults the rest of this function already assumed).
+    from depictio.cli.cli.utils.deltatables import link_columns_by_dc
+
+    command_parameters = {
+        **(command_parameters or {}),
+        "link_columns_by_dc": link_columns_by_dc(project_config),
+    }
 
     # Filter workflows if specific workflow_name is provided
     workflows_to_process = project_config.workflows
