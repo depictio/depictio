@@ -214,27 +214,34 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
     };
   };
 
-  const controls = (
-    <Stack gap="xs">
-      <NumberInput
-        size="xs"
-        label="Top-N per panel"
-        value={topN}
-        onChange={(v) => setTopN(Math.max(1, Number(v) || 15))}
-        min={1}
-        max={50}
-      />
-      <NumberInput
-        size="xs"
-        label="Significance threshold"
-        value={sigThreshold}
-        onChange={(v) => setSigThreshold(Math.max(0, Math.min(1, Number(v) || 0.05)))}
-        min={0}
-        max={1}
-        step={0.01}
-        decimalScale={3}
-      />
-    </Stack>
+  // Memoised so AdvancedVizFrame's `extras` useMemo doesn't invalidate on every
+  // render — an unmemoised element re-fires the frame's publish effect and loops
+  // it against ComponentRenderer's setState ("Maximum update depth exceeded").
+  // Mirrors the other renderers (Sunburst/Volcano/…) which already memoise this.
+  const controls = useMemo(
+    () => (
+      <Stack gap="xs">
+        <NumberInput
+          size="xs"
+          label="Top-N per panel"
+          value={topN}
+          onChange={(v) => setTopN(Math.max(1, Number(v) || 15))}
+          min={1}
+          max={50}
+        />
+        <NumberInput
+          size="xs"
+          label="Significance threshold"
+          value={sigThreshold}
+          onChange={(v) => setSigThreshold(Math.max(0, Math.min(1, Number(v) || 0.05)))}
+          min={0}
+          max={1}
+          step={0.01}
+          decimalScale={3}
+        />
+      </Stack>
+    ),
+    [topN, sigThreshold],
   );
 
   // Per-panel height for the faceted "All" view. Tight enough to fit several
