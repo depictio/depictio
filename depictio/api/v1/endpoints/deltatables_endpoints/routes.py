@@ -53,11 +53,12 @@ def _delta_identity_hash(delta_table_location: str, storage_options: dict) -> st
     parts = [str(dt.version())]
     try:
         actions = pl.from_arrow(dt.get_add_actions(flatten=True))
-        wanted = [c for c in ("path", "size_bytes", "modification_time") if c in actions.columns]  # type: ignore[union-attr]
-        parts += [
-            "|".join(str(v) for v in row)
-            for row in sorted(actions.select(wanted).rows())  # type: ignore[union-attr]
-        ]
+        if not isinstance(actions, pl.DataFrame):
+            # A single-column result comes back as a Series; the fallback below
+            # handles it rather than this branch guessing at its shape.
+            raise TypeError(f"get_add_actions yielded {type(actions).__name__}, not a table")
+        wanted = [c for c in ("path", "size_bytes", "modification_time") if c in actions.columns]
+        parts += ["|".join(str(v) for v in row) for row in sorted(actions.select(wanted).rows())]
     except Exception as e:
         logger.warning(f"get_add_actions unavailable ({e}); hashing the file list instead.")
         parts += sorted(dt.file_uris())
