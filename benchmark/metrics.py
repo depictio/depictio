@@ -75,6 +75,11 @@ class RenderResult:
     rows_displayed: Optional[int] = None  # X-Rows-Displayed: marks/rows in the payload
     frame_bytes: Optional[int] = None  # X-Frame-Bytes: in-memory footprint
     aggregated: bool = False  # X-Aggregated: served by a scan-level reduction
+    # X-Sampling-Policy: which reduction /advanced_viz/data applied ("hash" |
+    # "tail" | "none" | "explicit" | "full"). Two advanced-viz rows with the same
+    # latency and different policies are not the same measurement — a tail keeps
+    # the hits a uniform sample throws away, and pays a predicate for it.
+    sampling_policy: str = ""
     cache: str = ""  # X-Cache: "hit" | "miss" | ""
     peak_rss_mb: Optional[float] = None  # X-Peak-RSS-MB: process high-water mark
     # How much cross-DC translation this render paid for: the number of values a

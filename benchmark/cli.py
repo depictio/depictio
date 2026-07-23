@@ -140,7 +140,17 @@ def run(
             "so the filtered cache can't answer it). 0 disables the phase."
         ),
     ),
-    depictio_bin: str = typer.Option("depictio", "--depictio-bin", help="depictio CLI executable"),
+    depictio_bin: str = typer.Option(
+        "",
+        "--depictio-bin",
+        help=(
+            "Python interpreter whose `depictio` is THIS worktree (the CLI runs as "
+            "`<interp> -m depictio.cli`). Empty = the interpreter running the benchmark. "
+            "Do NOT pass a `bin/depictio` console script: it imports the main checkout, "
+            "not the worktree, so CLI changes are measured against the wrong source — "
+            "the run hard-fails if the resolved source is outside the worktree."
+        ),
+    ),
     samples: int = _SAMPLES,
     profile_label: str = _PROFILE_LABEL,
     reuse_ingest: bool = _REUSE_INGEST,
@@ -190,7 +200,17 @@ def ingest(
     streaming: bool = typer.Option(
         False, "--streaming", help="Ingest tables via the streamed Delta write (before/after)"
     ),
-    depictio_bin: str = typer.Option("depictio", "--depictio-bin", help="depictio CLI executable"),
+    depictio_bin: str = typer.Option(
+        "",
+        "--depictio-bin",
+        help=(
+            "Python interpreter whose `depictio` is THIS worktree (the CLI runs as "
+            "`<interp> -m depictio.cli`). Empty = the interpreter running the benchmark. "
+            "Do NOT pass a `bin/depictio` console script: it imports the main checkout, "
+            "not the worktree, so CLI changes are measured against the wrong source — "
+            "the run hard-fails if the resolved source is outside the worktree."
+        ),
+    ),
 ) -> None:
     """Ingestion-only benchmark across DC types (table / multiqc / images)."""
     from benchmark.runner import run_ingest_matrix
@@ -253,7 +273,14 @@ def all(
     repeats: int = typer.Option(1, "--repeats"),
     dashboard_load: bool = typer.Option(False, "--dashboard-load"),
     filter_rounds: int = typer.Option(0, "--filter-rounds"),
-    depictio_bin: str = typer.Option("depictio", "--depictio-bin"),
+    depictio_bin: str = typer.Option(
+        "",
+        "--depictio-bin",
+        help=(
+            "Python interpreter whose `depictio` is THIS worktree (runs `<interp> -m "
+            "depictio.cli`). Empty = the benchmark's own interpreter. Not a console script."
+        ),
+    ),
     samples: int = _SAMPLES,
     profile_label: str = _PROFILE_LABEL,
     reuse_ingest: bool = _REUSE_INGEST,

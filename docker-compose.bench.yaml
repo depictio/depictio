@@ -123,6 +123,15 @@ services:
     # that, it hides it.
     environment:
       DEPICTIO_FASTAPI_WORKERS: "${BENCH_API_WORKERS:-4}"
+      # Box quartiles are order statistics, so unlike every other aggregate
+      # figure they make Polars sort. Sampling per group bounds that sort; it
+      # also costs an extra scan, which is cheap on warm local parquet and may
+      # not be on S3-backed Delta. Exposed here so the two halves can be run
+      # against one ingest (`--server-mode box_exact` / `box_sampled`) and the
+      # default in settings_models.py can be set from a measurement instead of
+      # an assumption. Both services carry it: figures offload to Celery above
+      # the 50 MB threshold, so the worker is where most of them actually run.
+      DEPICTIO_PERFORMANCE_BOX_SAMPLE_ROWS_PER_GROUP: "${BENCH_BOX_SAMPLE_ROWS_PER_GROUP:-0}"
     deploy:
       resources:
         limits: {cpus: "${BENCH_API_CPUS:-4}", memory: 12G}
@@ -142,6 +151,9 @@ services:
     # every offloaded render times out behind it.
     environment:
       DEPICTIO_CELERY_WORKERS: "${BENCH_CELERY_WORKERS:-4}"
+      # Must match the backend's value — a box figure that offloads and one that
+      # runs inline would otherwise be computed two different ways in one run.
+      DEPICTIO_PERFORMANCE_BOX_SAMPLE_ROWS_PER_GROUP: "${BENCH_BOX_SAMPLE_ROWS_PER_GROUP:-0}"
     deploy:
       resources:
         limits: {cpus: "${BENCH_CELERY_CPUS:-4}", memory: 10G}

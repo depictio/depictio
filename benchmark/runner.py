@@ -14,6 +14,7 @@ the ``server_mode`` label you pass and the authoritative per-render
 from __future__ import annotations
 
 import json
+import math
 import os
 import subprocess
 import sys
@@ -54,6 +55,63 @@ from benchmark.metrics import (
 )
 from benchmark.profile import write_profile
 
+# The worktree root — ``benchmark/`` sits directly under it. Every CLI subprocess
+# is run from here so the worktree wins on ``sys.path`` (see ``_cli_argv``).
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _cli_argv(interpreter: str) -> list[str]:
+    """The command prefix for a depictio CLI subprocess: ``<py> -m depictio.cli``.
+
+    Never a console-script path. ``<venv>/bin/depictio`` puts the venv's ``bin/``
+    on ``sys.path[0]``, so ``import depictio`` inside it resolves to whatever
+    checkout the venv installed — the *main* checkout, not this worktree — and a
+    CLI edit under test is run against the wrong source with no error at all
+    (this already produced one false 2.9× result). Running ``-m`` with
+    ``cwd=_REPO_ROOT`` (see the call sites) prepends the worktree to ``sys.path``
+    instead, so the code under test is the code that runs.
+    """
+    return [interpreter, "-m", "depictio.cli"]
+
+
+def _verify_cli_source(interpreter: str) -> str:
+    """Resolve the ``depictio.cli`` the benchmark will actually execute; hard-fail
+    if it is not inside this worktree.
+
+    Runs the same interpreter + ``cwd`` the real ingests use, so the path it
+    reports is the path they will import. Returns it (recorded into
+    ``run_meta.jsonl`` as proof of provenance). Raising here aborts the whole run
+    before a single number is produced — a measurement against the wrong source
+    is worse than no measurement, so the trap is a stop, not a warning.
+    """
+    proc = subprocess.run(
+        [interpreter, "-c", "import depictio.cli, sys; sys.stdout.write(depictio.cli.__file__)"],
+        capture_output=True,
+        text=True,
+        cwd=_REPO_ROOT,
+    )
+    source = (proc.stdout or "").strip()
+    if proc.returncode != 0 or not source:
+        raise RuntimeError(
+            f"benchmark: could not import depictio.cli via {interpreter!r} "
+            f"(rc={proc.returncode}). --depictio-bin must be a Python interpreter "
+            f"whose depictio is this worktree, not a bin/depictio console script.\n"
+            f"  stderr: {(proc.stderr or '').strip()[-300:]}"
+        )
+    resolved = Path(source).resolve()
+    try:
+        resolved.relative_to(_REPO_ROOT)
+    except ValueError:
+        raise RuntimeError(
+            "benchmark: depictio.cli resolves OUTSIDE this worktree — CLI changes "
+            "would be silently ignored, so the run is aborted.\n"
+            f"  resolved: {resolved}\n"
+            f"  worktree: {_REPO_ROOT}\n"
+            "Point --depictio-bin at an interpreter whose depictio is installed "
+            "editable from this worktree (or run the benchmark from its venv)."
+        )
+    return str(resolved)
+
 
 def _advanced_viz_columns(comp: dict) -> list[str]:
     """Columns to project for ``/advanced_viz/data``, read off the component.
@@ -73,6 +131,59 @@ def _advanced_viz_columns(comp: dict) -> list[str]:
         if extra not in columns:
             columns.append(extra)
     return columns
+
+
+def _advanced_viz_policy(comp: dict) -> dict:
+    """The kind + role + threshold fields a renderer sends with its data request.
+
+    ``/advanced_viz/data`` picks its reduction from these, so a harness that
+    omitted them would time a path the viewer no longer takes: a uniform sample
+    where the volcano and MA components get a tail-preserving one. Mirrors what
+    ``VolcanoRenderer``/``MARenderer`` put in the body, built from the same
+    component config the dashboard was generated with.
+
+    Only those two kinds are handled because only those two exist here:
+    ``matrix.ADVANCED_VIZ_ROTATION`` is ``("volcano", "ma")`` and
+    ``configgen._advanced_viz_config`` raises on anything else. Growing the
+    rotation means growing this — a kind with no branch falls back to the
+    server's role/settings defaults, which is a different measurement from the
+    one its renderer would produce.
+    """
+    config = comp.get("config") or {}
+    viz_kind = str(comp.get("viz_kind") or config.get("viz_kind") or "")
+    if not viz_kind:
+        return {}
+
+    payload: dict = {"viz_kind": viz_kind}
+    if viz_kind == "volcano":
+        sig = config.get("significance_col")
+        payload["roles"] = {
+            "feature_id": config.get("feature_id_col"),
+            "effect_size": config.get("effect_size_col"),
+            "significance": sig,
+        }
+        if sig:
+            neg_log10 = bool(config.get("significance_is_neg_log10"))
+            cutoff = float(config.get("significance_threshold") or 0.05)
+            payload["tail"] = {
+                "column": sig,
+                "direction": "high" if neg_log10 else "low",
+                "threshold": -math.log10(cutoff) if neg_log10 else cutoff,
+            }
+    elif viz_kind == "ma":
+        fc = config.get("log2_fold_change_col")
+        payload["roles"] = {
+            "feature_id": config.get("feature_id_col"),
+            "avg_log_intensity": config.get("avg_log_intensity_col"),
+            "log2_fold_change": fc,
+        }
+        if fc:
+            payload["tail"] = {
+                "column": fc,
+                "direction": "both",
+                "threshold": float(config.get("fold_change_threshold") or 1.0),
+            }
+    return payload
 
 
 # A heavy render is the *subject* of this benchmark, not an anomaly: at 1 GB/DC a
@@ -187,7 +298,7 @@ def _api(base: str) -> str:
 
 
 def _ingest(
-    cell: Cell, cli_config_path: str, gen: GeneratedConfigs, depictio_bin: str
+    cell: Cell, cli_config_path: str, gen: GeneratedConfigs, interpreter: str
 ) -> tuple[float, str]:
     """Run ``depictio run`` for the generated project.
 
@@ -202,7 +313,7 @@ def _ingest(
     t0 = time.perf_counter()
     proc = subprocess.run(
         [
-            depictio_bin,
+            *_cli_argv(interpreter),
             "run",
             "--CLI-config-path",
             cli_config_path,
@@ -214,6 +325,7 @@ def _ingest(
         check=True,
         capture_output=True,
         text=True,
+        cwd=_REPO_ROOT,
     )
     return (time.perf_counter() - t0) * 1000.0, proc.stdout or ""
 
@@ -432,6 +544,11 @@ def _render_component(
                     "dc_id": str(comp.get("dc_id")),
                     "columns": _advanced_viz_columns(comp),
                     "filter_metadata": filters,
+                    # Same reasoning as the omitted ``limit_rows``: the kind
+                    # selects the server's reduction policy, so a payload
+                    # without one measures the uniform-sample path that no
+                    # renderer takes any more.
+                    **_advanced_viz_policy(comp),
                 },
                 headers=headers,
             )
@@ -502,6 +619,7 @@ def _render_component(
         "rows_displayed": _hdr_int("X-Rows-Displayed"),
         "frame_bytes": _hdr_int("X-Frame-Bytes"),
         "aggregated": resp.headers.get("X-Aggregated") == "1",
+        "sampling_policy": resp.headers.get("X-Sampling-Policy", ""),
         "cache": resp.headers.get("X-Cache", ""),
         "peak_rss_mb": _hdr_float("X-Peak-RSS-MB"),
         # How much cross-DC translation this render carried (absent on endpoints
@@ -851,7 +969,7 @@ def run_matrix(
     repeats: int = 1,
     dashboard_load: bool = False,
     filter_rounds: int = 0,
-    depictio_bin: str = "depictio",
+    depictio_bin: str = "",
     n_samples: int = DEFAULT_N_SAMPLES,
     profile: dict | None = None,
     reuse_ingest: bool = False,
@@ -881,6 +999,13 @@ def run_matrix(
     output_root = Path(output_root)
     output_root.mkdir(parents=True, exist_ok=True)
     results_path = output_root / "results.jsonl"
+
+    # Resolve + verify the CLI *before* any ingest: a mis-resolved CLI silently
+    # measures the wrong source (see _cli_argv / _verify_cli_source). Empty means
+    # "the interpreter running this benchmark", which is the worktree venv.
+    interpreter = depictio_bin or sys.executable
+    cli_source = _verify_cli_source(interpreter)
+    print(f"  · depictio CLI: {cli_source}")
 
     cli_config = load_depictio_config(cli_config_path)
     base = str(cli_config.api_base_url)
@@ -936,7 +1061,7 @@ def run_matrix(
                 if reused:
                     ingest_ms, ingest_stdout = 0.0, ""
                 else:
-                    ingest_ms, ingest_stdout = _ingest(cell, cli_config_path, gen, depictio_bin)
+                    ingest_ms, ingest_stdout = _ingest(cell, cli_config_path, gen, interpreter)
                 if reused:
                     print(f"  · reusing the ingested data of {gen.project_name!r}")
                 dashboard_id, import_ms = _import_dashboard(client, base, headers, gen)
@@ -1170,7 +1295,7 @@ def run_matrix(
                     )
 
     client.close()
-    _stamp_run_meta(output_root, server_mode, celery_health, profile)
+    _stamp_run_meta(output_root, server_mode, celery_health, profile, cli_source=cli_source)
     return results_path
 
 
@@ -1187,10 +1312,10 @@ def _ingest_error_row(cell: Cell, server_mode: str, error: str) -> dict:
     }
 
 
-def _run_cli_capture(args: list[str]) -> tuple[int, str, str, float]:
+def _run_cli_capture(args: list[str], cwd: str | Path | None = None) -> tuple[int, str, str, float]:
     """Run a depictio CLI subprocess, returning (rc, stdout, stderr, wall_ms)."""
     t0 = time.perf_counter()
-    proc = subprocess.run(args, capture_output=True, text=True)
+    proc = subprocess.run(args, capture_output=True, text=True, cwd=cwd)
     wall_ms = (time.perf_counter() - t0) * 1000.0
     return proc.returncode, proc.stdout, proc.stderr, wall_ms
 
@@ -1236,7 +1361,7 @@ def run_ingest_matrix(
     force_datagen: bool = False,
     streaming: bool = False,
     run_tag: str = "",
-    depictio_bin: str = "depictio",
+    depictio_bin: str = "",
 ) -> Path:
     """Ingest each cell (no render) and append ``kind=="ingest"`` rows.
 
@@ -1256,6 +1381,12 @@ def run_ingest_matrix(
     output_root.mkdir(parents=True, exist_ok=True)
     results_path = output_root / "results.jsonl"
     run_tag = run_tag or time.strftime("%Y%m%d%H%M%S")
+
+    # Same guard as run_matrix: fail before the first ingest if the CLI resolves
+    # outside this worktree (see _cli_argv / _verify_cli_source).
+    interpreter = depictio_bin or sys.executable
+    cli_source = _verify_cli_source(interpreter)
+    print(f"  · depictio CLI: {cli_source}")
 
     cli_config = load_depictio_config(cli_config_path)
     s3_bucket = getattr(getattr(cli_config, "s3_storage", None), "bucket", "depictio-bucket")
@@ -1298,7 +1429,7 @@ def run_ingest_matrix(
 
             # ── ingest (run) ─────────────────────────────────────────────────
             run_args = [
-                depictio_bin,
+                *_cli_argv(interpreter),
                 "run",
                 "--CLI-config-path",
                 cli_config_path,
@@ -1311,7 +1442,7 @@ def run_ingest_matrix(
             # same cell, same data, collect-then-write vs streamed write.
             if streaming:
                 run_args.append("--streaming")
-            rc, out, err, wall_ms = _run_cli_capture(run_args)
+            rc, out, err, wall_ms = _run_cli_capture(run_args, cwd=_REPO_ROOT)
             if rc != 0:
                 emit(
                     _ingest_kind_error_row(cell, input_bytes, f"run failed (rc={rc}): {err[-300:]}")
@@ -1323,7 +1454,7 @@ def run_ingest_matrix(
             if cell.kind is DCKind.IMAGES and gen.s3_base_folder:
                 prc, pout, perr, pwall = _run_cli_capture(
                     [
-                        depictio_bin,
+                        *_cli_argv(interpreter),
                         "images",
                         "push",
                         images_dir,
@@ -1331,7 +1462,8 @@ def run_ingest_matrix(
                         "--CLI-config-path",
                         cli_config_path,
                         "--overwrite",
-                    ]
+                    ],
+                    cwd=_REPO_ROOT,
                 )
                 wall_ms += pwall
                 combined_stdout += "\n" + pout
@@ -1381,7 +1513,11 @@ def _ingest_kind_error_row(cell: IngestCell, input_bytes: int, error: str) -> di
 
 
 def _stamp_run_meta(
-    output_root: Path, server_mode: str, celery_health: dict, profile: dict | None = None
+    output_root: Path,
+    server_mode: str,
+    celery_health: dict,
+    profile: dict | None = None,
+    cli_source: str = "",
 ) -> None:
     """Record the server config + hardware profile for this matrix half.
 
@@ -1390,6 +1526,11 @@ def _stamp_run_meta(
     was non-zero — is otherwise only inferable from which row *kinds* happen to
     be absent, which is exactly the ambiguity that made an earlier baseline
     with no ``filter_round`` rows hard to interpret.
+
+    ``cli_source`` is the verified ``depictio.cli.__file__`` the ingests ran
+    against (see ``_verify_cli_source``): proof, in the results file itself, that
+    a CLI change under test was actually the code measured — the trap that
+    otherwise fails silently.
     """
     meta_path = output_root / "run_meta.jsonl"
     with meta_path.open("a", encoding="utf-8") as fh:
@@ -1401,6 +1542,7 @@ def _stamp_run_meta(
                     "profile": profile or {},
                     "argv": sys.argv,
                     "cwd": os.getcwd(),
+                    "cli_source": cli_source,
                 }
             )
             + "\n"
