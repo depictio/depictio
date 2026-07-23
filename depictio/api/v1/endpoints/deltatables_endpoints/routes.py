@@ -35,6 +35,48 @@ from depictio.models.models.users import User
 deltatables_endpoint_router = APIRouter()
 
 
+def _delta_identity_hash(delta_table_location: str, storage_options: dict) -> str:
+    """Hash the identity of a Delta table from its log, without reading data.
+
+    This replaces a ``df.hash_rows()`` over the fully materialised frame, which
+    on a ~14M-row data collection cost a full read plus a numpy round-trip and
+    contributed to OOM-killing the worker. The resulting digest is *not* a
+    content hash: it covers the table version and the active files (path, size,
+    modification time), which change whenever the data does. That is all the
+    value is ever used for — it is salted with ``datetime.now()`` by the caller,
+    so no two upserts ever produce comparable digests anyway; downstream
+    (``RealtimeIndicator``) only tests it for inequality.
+    """
+    from deltalake import DeltaTable
+
+    dt = DeltaTable(delta_table_location, storage_options=storage_options)
+    parts = [str(dt.version())]
+    try:
+        actions = pl.from_arrow(dt.get_add_actions(flatten=True))
+        wanted = [c for c in ("path", "size_bytes", "modification_time") if c in actions.columns]  # type: ignore[union-attr]
+        parts += [
+            "|".join(str(v) for v in row)
+            for row in sorted(actions.select(wanted).rows())  # type: ignore[union-attr]
+        ]
+    except Exception as e:
+        logger.warning(f"get_add_actions unavailable ({e}); hashing the file list instead.")
+        parts += sorted(dt.file_uris())
+    return hashlib.sha256("\n".join(parts).encode()).hexdigest()
+
+
+def _previous_column_types(deltatable_doc: dict | None) -> dict[str, str]:
+    """Column name -> type recorded by the latest aggregation, if any.
+
+    Feeding these back into ``precompute_columns_specs`` keeps a re-ingest from
+    silently changing the type a saved dashboard component was built against.
+    """
+    aggregations = (deltatable_doc or {}).get("aggregation") or []
+    if not aggregations:
+        return {}
+    specs = aggregations[-1].get("aggregation_columns_specs") or []
+    return {s["name"]: s["type"] for s in specs if s.get("name") and s.get("type")}
+
+
 def sanitize_for_json(obj):
     """
     Recursively sanitizes data for JSON serialization by replacing NaN and Infinity with None.
@@ -101,6 +143,8 @@ async def upsert_deltatable(
     dc_type = dc_data.get("config", {}).get("type", "")
     is_multiqc = dc_type.lower() == "multiqc"
 
+    query_dt = deltatables_collection.find_one({"data_collection_id": data_collection_oid})
+
     # For MultiQC, skip delta table validation since it's stored as raw parquet
     if is_multiqc:
         # Create minimal hash for MultiQC without reading the file
@@ -109,18 +153,20 @@ async def upsert_deltatable(
         ).hexdigest()
         results = []  # Column specs not computed for MultiQC (empty list required by Pydantic)
     else:
-        # Standard delta table validation and column spec computation
-        df = pl.read_delta(payload.delta_table_location, storage_options=polars_s3_config)
-        results = precompute_columns_specs(df, agg_functions, dc_data)
+        # Standard delta table validation and column spec computation. The scan
+        # stays lazy: precompute_columns_specs only needs per-column
+        # aggregations, and materialising a multi-GB data collection here is
+        # what used to get the worker OOM-killed.
+        lf = pl.scan_delta(payload.delta_table_location, storage_options=polars_s3_config)
+        results = precompute_columns_specs(
+            lf, agg_functions, dc_data, previous_types=_previous_column_types(query_dt)
+        )
 
-        hash_series = df.hash_rows(seed=0)
-        hash_bytes = hash_series.to_numpy().tobytes()
-        hash_df = hashlib.sha256(hash_bytes).hexdigest()
+        hash_df = _delta_identity_hash(payload.delta_table_location, polars_s3_config)
         final_hash = hashlib.sha256(
             f"{payload.delta_table_location}{datetime.now()}{hash_df}".encode()
         ).hexdigest()
 
-    query_dt = deltatables_collection.find_one({"data_collection_id": data_collection_oid})
     if query_dt:
         deltatable = DeltaTableAggregated.from_mongo(query_dt)
         version = (
