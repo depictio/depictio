@@ -347,6 +347,8 @@ cache/
 .env.instance
 .env
 data/depictio-*/
+# Generated MultiQC scale-test fixtures + their machine-local project configs
+data/scale_scenarios/
 .devcontainer/docker-compose.git-mount.yaml
 docker-compose.override.yaml
 
