@@ -83,6 +83,12 @@ const LollipopRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
   const [error, setError] = useState<string | null>(null);
   const [categoryUniverse, setCategoryUniverse] = useState<string[] | null>(null);
   const [selectedGene, setSelectedGene] = useState<string | null>(null);
+  // The lollipop aggregates its rows into per-gene variant counts + mean effect,
+  // and the `lollipop` kind is hash-sampled server-side, so on a large DC those
+  // counts are computed over a sample — an estimate. Surface that (see the
+  // `estimated` badge in AdvancedVizFrame). `sampled` (not `degraded`) is the
+  // right flag: hash sampling is expected, but the aggregate over it is not exact.
+  const [estimated, setEstimated] = useState<boolean>(false);
 
   useEffect(() => {
     if (!metadata.wf_id || !metadata.dc_id || requiredCols.length < 3) {
@@ -101,7 +107,9 @@ const LollipopRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
       vizKind: 'lollipop',
     })
       .then((res) => {
-        if (!cancelled) setRows(res.rows);
+        if (cancelled) return;
+        setRows(res.rows);
+        setEstimated(Boolean(res.sampled));
       })
       .catch((err: unknown) => {
         if (!cancelled) setError(err instanceof Error ? err.message : String(err));
@@ -494,6 +502,7 @@ const LollipopRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
       emptyMessage={rows && Object.values(rows)[0]?.length === 0 ? 'No data' : undefined}
       dataRows={rows ?? undefined}
       dataColumns={requiredCols}
+      estimated={estimated}
     >
       {figure ? (
         <AdvancedVizPlot
