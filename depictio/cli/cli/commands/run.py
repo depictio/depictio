@@ -294,6 +294,14 @@ def register_run_command(app: typer.Typer):
                 "1.2.2 did. Deprecated escape hatch; will be removed."
             ),
         ),
+        state_cache: bool = typer.Option(
+            True,
+            "--state-cache/--no-state-cache",
+            help=(
+                "Use the local scan-state cache to skip runs whose file tree is unchanged "
+                "since the last successful scan. Only applies when rescanning."
+            ),
+        ),
         rich_tables: bool = typer.Option(
             False,
             "--rich-tables",
@@ -726,6 +734,8 @@ def register_run_command(app: typer.Typer):
                                 "sync_files": sync_files,
                                 "sync_changed": sync_changed,
                                 "legacy_scan_depth": legacy_scan_depth,
+                                "dry_run": dry_run,
+                                "state_cache": state_cache,
                                 "rich_tables": rich_tables,
                             }
 
