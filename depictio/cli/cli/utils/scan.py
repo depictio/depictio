@@ -9,8 +9,10 @@ from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn
 
 from depictio.cli.cli.utils.api_calls import (
     api_create_files,
+    api_create_files_chunked,
     api_delete_file,
-    api_delete_run,
+    api_delete_files_concurrent,
+    api_delete_runs_concurrent,
     api_get_files_by_dc_id,
     api_get_runs_by_wf_id,
     api_upsert_runs_batch,
@@ -465,6 +467,8 @@ def scan_run_for_multiple_data_collections(
     honor_scan_bounds: bool = True,
     prewalked: list[ScannedPath] | None = None,
     dry_run: bool = False,
+    concurrency: int = 4,
+    upload_chunk_size: int = 1000,
 ) -> WorkflowRun | None:
     """
     Scan a single run for multiple data collections simultaneously.
@@ -656,10 +660,12 @@ def scan_run_for_multiple_data_collections(
                     # /files/upsert_batch uses $setOnInsert when update=False, which
                     # would silently discard the new metadata of a file that already
                     # exists — so pushing changed files has to ask for $set.
-                    api_create_files(
+                    api_create_files_chunked(
                         files=files_to_upload,
                         CLI_config=CLI_config,
                         update=update_files or sync_changed,
+                        chunk_size=upload_chunk_size,
+                        concurrency=concurrency,
                     )
 
             # Handle missing files
@@ -680,8 +686,7 @@ def scan_run_for_multiple_data_collections(
                         "info",
                     )
                 else:
-                    for file_id in missing_files:
-                        api_delete_file(file_id=file_id, CLI_config=CLI_config)
+                    api_delete_files_concurrent(missing_files, CLI_config, concurrency=concurrency)
 
             # Collect all files for this run
             all_processed_files.extend(files_to_upload)
@@ -956,6 +961,8 @@ def scan_files_for_workflow(
     use_state_cache = command_parameters.get("state_cache", True)
     project_id = command_parameters.get("project_id")
     project_hash = command_parameters.get("project_hash")
+    concurrency = command_parameters.get("concurrency", 4)
+    upload_chunk_size = command_parameters.get("upload_chunk_size", 1000)
 
     if honor_scan_bounds:
         _warn_enforced_scan_bounds(data_collections)
@@ -1078,6 +1085,8 @@ def scan_files_for_workflow(
                     honor_scan_bounds=honor_scan_bounds,
                     prewalked=candidate.scanned,
                     dry_run=dry_run,
+                    concurrency=concurrency,
+                    upload_chunk_size=upload_chunk_size,
                     existing_run=existing_runs_reformated.get(candidate.tag, None),
                 )
                 if workflow_run:
@@ -1110,15 +1119,24 @@ def scan_files_for_workflow(
                     "info",
                 )
             else:
-                for run_id in missing_runs:
-                    api_delete_run(run_id=run_id, CLI_config=CLI_config)
-                    # Delete related files
-                    for dc_id, files in all_existing_files.items():
-                        for file in files.values():
-                            if str(file["run_id"]) == run_id:
-                                api_delete_file(file_id=str(file["_id"]), CLI_config=CLI_config)
+                # Index the registry by run once. This used to be a nested scan
+                # of every registered file per missing run — O(missing x total)
+                # in Python, on top of one blocking round-trip per file.
+                files_by_run: defaultdict[str, list[str]] = defaultdict(list)
+                for files in all_existing_files.values():
+                    for file in files.values():
+                        files_by_run[str(file["run_id"])].append(str(file["_id"]))
+
+                orphaned_files = [
+                    file_id for run_id in missing_runs for file_id in files_by_run.get(run_id, [])
+                ]
+
+                api_delete_runs_concurrent(missing_runs, CLI_config, concurrency=concurrency)
+                api_delete_files_concurrent(orphaned_files, CLI_config, concurrency=concurrency)
+
                 rich_print_checked_statement(
-                    f"Removed {len(missing_runs)} runs and related files from the DB : {missing_runs_tag}",
+                    f"Removed {len(missing_runs)} runs and {len(orphaned_files)} related "
+                    f"files from the DB : {missing_runs_tag}",
                     "info",
                 )
 

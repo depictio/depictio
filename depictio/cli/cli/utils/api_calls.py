@@ -1,6 +1,8 @@
 import io
 import json
 import zipfile
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import httpx
 import typer
@@ -11,6 +13,7 @@ from depictio.cli.cli.utils.common import (
     get_http_client,
     load_depictio_config,
 )
+from depictio.cli.cli.utils.http_retry import request_with_retry
 from depictio.cli.cli.utils.rich_utils import rich_print_checked_statement
 from depictio.cli.cli_logging import logger
 from depictio.models.models.base import BaseModel, PyObjectId
@@ -314,11 +317,15 @@ def api_create_files(
 
     logger.debug(f"Payload: {payload}")
 
-    response = get_http_client().post(
+    # Safe to retry: /files/upsert_batch is a true upsert keyed on file_location,
+    # so a replayed batch converges to the same registry state.
+    response = request_with_retry(
+        "POST",
         url,
         json=payload,
         headers=generate_api_headers(CLI_config),
         timeout=120.0,  # 2 minutes timeout for file batch operations
+        idempotent=True,
     )
     return response
 
@@ -339,12 +346,110 @@ def api_get_files_by_dc_id(dc_id: str, CLI_config: CLIConfig) -> httpx.Response:
     logger.debug(f"CLI Config: {CLI_config}")
     logger.info(f"{CLI_config.api_base_url}/depictio/api/v1/files/list/{dc_id}")
     logger.info(generate_api_headers(CLI_config))
-    response = get_http_client().get(
+    response = request_with_retry(
+        "GET",
         f"{CLI_config.api_base_url}/depictio/api/v1/files/list/{dc_id}",
         headers=generate_api_headers(CLI_config),
         timeout=60.0,  # Increase timeout to 60 seconds
+        idempotent=True,
     )
     return response
+
+
+def api_create_files_chunked(
+    files: list[File],
+    CLI_config: CLIConfig,
+    *,
+    update: bool = False,
+    chunk_size: int = 1000,
+    concurrency: int = 4,
+) -> list[httpx.Response]:
+    """Register files in bounded, concurrent batches.
+
+    The single unbounded POST this replaces sent every file of a data collection
+    in one JSON body against a 120 s timeout — a live failure mode on large
+    runs, not a theoretical one. ``/files/upsert_batch`` keys on
+    ``file_location``, so chunks are order-independent and each one is
+    individually retryable.
+
+    Returns every response so the caller can inspect failures; it does not
+    raise on a non-2xx, matching ``api_create_files``.
+    """
+    if not files:
+        return []
+
+    chunks = [files[i : i + chunk_size] for i in range(0, len(files), chunk_size)]
+    if len(chunks) == 1 or concurrency <= 1:
+        return [
+            api_create_files(files=chunk, CLI_config=CLI_config, update=update) for chunk in chunks
+        ]
+
+    logger.info(
+        f"Uploading {len(files)} files in {len(chunks)} chunk(s), concurrency={concurrency}"
+    )
+    responses: list[httpx.Response] = []
+    with ThreadPoolExecutor(max_workers=concurrency) as executor:
+        futures = [
+            executor.submit(api_create_files, files=chunk, CLI_config=CLI_config, update=update)
+            for chunk in chunks
+        ]
+        for future in as_completed(futures):
+            responses.append(future.result())
+    return responses
+
+
+def _delete_concurrently(
+    ids: list[str],
+    delete_one: Callable[[str, CLIConfig], httpx.Response],
+    CLI_config: CLIConfig,
+    *,
+    concurrency: int = 4,
+) -> int:
+    """Fan out per-id deletes and count the successes.
+
+    Interim measure until /files/delete_batch and /runs/delete_batch exist:
+    cleanup was one blocking round-trip per id, which on a large project meant
+    thousands of sequential requests.
+    """
+    if not ids:
+        return 0
+    if concurrency <= 1 or len(ids) == 1:
+        return sum(1 for item in ids if delete_one(item, CLI_config).status_code < 400)
+
+    deleted = 0
+    with ThreadPoolExecutor(max_workers=concurrency) as executor:
+        futures = [executor.submit(delete_one, item, CLI_config) for item in ids]
+        for future in as_completed(futures):
+            try:
+                if future.result().status_code < 400:
+                    deleted += 1
+            except httpx.HTTPError as exc:
+                # Cleanup is best-effort: a stale id that cannot be removed must
+                # not abort a scan that otherwise succeeded.
+                logger.warning(f"Delete failed during cleanup: {exc}")
+    return deleted
+
+
+def api_delete_files_concurrent(
+    file_ids: list[str], CLI_config: CLIConfig, *, concurrency: int = 4
+) -> int:
+    return _delete_concurrently(
+        file_ids,
+        lambda file_id, config: api_delete_file(file_id=file_id, CLI_config=config),
+        CLI_config,
+        concurrency=concurrency,
+    )
+
+
+def api_delete_runs_concurrent(
+    run_ids: list[str], CLI_config: CLIConfig, *, concurrency: int = 4
+) -> int:
+    return _delete_concurrently(
+        run_ids,
+        lambda run_id, config: api_delete_run(run_id=run_id, CLI_config=config),
+        CLI_config,
+        concurrency=concurrency,
+    )
 
 
 # Optionally, if you also need to push runs, you could create a similar function:
@@ -365,7 +470,9 @@ def api_get_runs_by_wf_id(wf_id: str, CLI_config: CLIConfig) -> httpx.Response:
     logger.info(f"Getting runs for workflow ID: {wf_id}")
 
     url = f"{CLI_config.api_base_url}/depictio/api/v1/runs/list/{wf_id}"
-    response = get_http_client().get(url, headers=generate_api_headers(CLI_config), timeout=60.0)
+    response = request_with_retry(
+        "GET", url, headers=generate_api_headers(CLI_config), timeout=60.0, idempotent=True
+    )
     return response
 
 
@@ -399,11 +506,14 @@ def api_upsert_runs_batch(
     logger.debug(f"Payload runs upsert batch: {payload}")
     url = f"{CLI_config.api_base_url}/depictio/api/v1/runs/upsert_batch"
 
-    response = get_http_client().post(
+    # Safe to retry: /runs/upsert_batch is a true upsert keyed on run_tag.
+    response = request_with_retry(
+        "POST",
         url,
         json=payload,
         headers=generate_api_headers(CLI_config),
         timeout=120.0,  # 2 minutes timeout for runs batch operations
+        idempotent=True,
     )
     return response
 
@@ -490,7 +600,10 @@ def api_delete_run(run_id: str, CLI_config: CLIConfig) -> httpx.Response:
     logger.info(f"Deleting run with ID: {run_id}")
 
     url = f"{CLI_config.api_base_url}/depictio/api/v1/runs/delete/{run_id}"
-    response = get_http_client().delete(url, headers=generate_api_headers(CLI_config), timeout=60.0)
+    # Deleting by id is idempotent: a replay simply finds nothing left to delete.
+    response = request_with_retry(
+        "DELETE", url, headers=generate_api_headers(CLI_config), timeout=60.0, idempotent=True
+    )
     return response
 
 
@@ -528,7 +641,10 @@ def api_delete_file(file_id: str, CLI_config: CLIConfig) -> httpx.Response:
     logger.info(f"Deleting file with ID: {file_id}")
 
     url = f"{CLI_config.api_base_url}/depictio/api/v1/files/delete/{file_id}"
-    response = get_http_client().delete(url, headers=generate_api_headers(CLI_config), timeout=60.0)
+    # Deleting by id is idempotent: a replay simply finds nothing left to delete.
+    response = request_with_retry(
+        "DELETE", url, headers=generate_api_headers(CLI_config), timeout=60.0, idempotent=True
+    )
     return response
 
 
@@ -568,11 +684,19 @@ def api_upsert_deltatable(
     logger.debug(f"Payload: {payload}")
 
     try:
-        response = get_http_client().post(
+        # NOT idempotent. This endpoint *appends* an Aggregation and derives the
+        # next version from aggregation[-1].aggregation_version + 1, so replaying
+        # it creates a duplicate entry and a phantom version bump — and
+        # aggregation_version salts the API's dataframe cache keys, so the damage
+        # surfaces later as silently invalidated caches rather than as an error.
+        # Only failures that provably never reached the server are retried.
+        response = request_with_retry(
+            "POST",
             url,
             json=payload,
             headers=generate_api_headers(CLI_config),
             timeout=300.0,  # 5 minutes timeout for large deltatable processing
+            idempotent=False,
         )
         return response
     except httpx.TimeoutException:

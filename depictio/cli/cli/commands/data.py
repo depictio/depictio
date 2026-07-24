@@ -3,6 +3,7 @@ from typing import Annotated
 import typer
 
 from depictio.cli.cli.utils.api_calls import api_get_project_from_id, api_get_project_from_name
+from depictio.cli.cli.utils.common import get_http_client
 from depictio.cli.cli.utils.config import validate_project_config_and_check_S3_storage
 from depictio.cli.cli.utils.helpers import process_project_helper
 from depictio.cli.cli.utils.rich_utils import (
@@ -68,6 +69,15 @@ def scan(
             "since the last successful scan. Only applies when rescanning."
         ),
     ),
+    concurrency: int = typer.Option(
+        4,
+        "--concurrency",
+        "-c",
+        help="Parallel HTTP requests for file uploads and cleanup deletes",
+    ),
+    upload_chunk_size: int = typer.Option(
+        1000, "--upload-chunk-size", help="Files per /files/upsert_batch request"
+    ),
     rich_tables: bool = typer.Option(
         False, "--rich-tables", help="Display rich tables in the output"
     ),
@@ -84,6 +94,10 @@ def scan(
         update_files (Annotated[bool, typer.Option, optional): _description_. Defaults to "Update files for the data collection. rescan-folders will be enabled if used.")]=False.
     """
     rich_print_command_usage("scan")
+
+    # Size the shared connection pool before the first request: it is created
+    # lazily and honours this only on the first call.
+    get_http_client(concurrency=concurrency)
 
     # Both re-upload flags need every run walked again; without this, runs
     # already registered are skipped before a single file is looked at.
@@ -144,6 +158,8 @@ def scan(
                     "legacy_scan_depth": legacy_scan_depth,
                     "dry_run": dry_run,
                     "state_cache": state_cache,
+                    "concurrency": concurrency,
+                    "upload_chunk_size": upload_chunk_size,
                     "rich_tables": rich_tables,
                 }
 

@@ -12,7 +12,11 @@ from depictio.cli.cli.utils.api_calls import (
     api_provision_user,
     api_sync_project_config_to_server,
 )
-from depictio.cli.cli.utils.common import generate_api_headers, load_depictio_config
+from depictio.cli.cli.utils.common import (
+    generate_api_headers,
+    get_http_client,
+    load_depictio_config,
+)
 from depictio.cli.cli.utils.config import validate_project_config_and_check_S3_storage
 from depictio.cli.cli.utils.helpers import process_project_helper
 from depictio.cli.cli.utils.rich_utils import (
@@ -302,6 +306,15 @@ def register_run_command(app: typer.Typer):
                 "since the last successful scan. Only applies when rescanning."
             ),
         ),
+        concurrency: int = typer.Option(
+            4,
+            "--concurrency",
+            "-c",
+            help="Parallel HTTP requests for file uploads and cleanup deletes",
+        ),
+        upload_chunk_size: int = typer.Option(
+            1000, "--upload-chunk-size", help="Files per /files/upsert_batch request"
+        ),
         rich_tables: bool = typer.Option(
             False,
             "--rich-tables",
@@ -347,6 +360,10 @@ def register_run_command(app: typer.Typer):
             depictio-cli run --template nf-core/ampliseq/2.16.0 --data-root /path/to/data
         """
         rich_print_command_usage("run")
+
+        # Size the shared connection pool before the first request: it is created
+        # lazily and honours this only on the first call.
+        get_http_client(concurrency=concurrency)
 
         # Validate template/project-config-path mutual exclusivity
         if template and project_config_path:
@@ -736,6 +753,8 @@ def register_run_command(app: typer.Typer):
                                 "legacy_scan_depth": legacy_scan_depth,
                                 "dry_run": dry_run,
                                 "state_cache": state_cache,
+                                "concurrency": concurrency,
+                                "upload_chunk_size": upload_chunk_size,
                                 "rich_tables": rich_tables,
                             }
 
