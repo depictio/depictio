@@ -1,3 +1,5 @@
+import asyncio
+
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -150,9 +152,18 @@ async def create_run(
             detail=f"User does not have permission on the project containing workflow '{workflow_id}'.",
         )
 
-    # If permission is granted, retrieve all runs for the given workflow.
-    runs_cursor = runs_collection.find({"workflow_id": workflow_oid})
-    existing_runs = list(runs_cursor)
+    # All of this is synchronous pymongo — a find, one find_one *per run* to diff
+    # scan_results, and a bulk_write — so it runs in a worker thread instead of
+    # pinning the event loop for the whole batch.
+    try:
+        return await asyncio.to_thread(_apply_run_upserts, payload, workflow_oid)
+    except BulkWriteError as bwe:
+        raise HTTPException(status_code=500, detail=bwe.details)
+
+
+def _apply_run_upserts(payload: UpsertWorkflowRunBatchRequest, workflow_oid: ObjectId) -> dict:
+    """Build and apply the run upsert operations. Synchronous by design."""
+    existing_runs = list(runs_collection.find({"workflow_id": workflow_oid}))
     existing_run_tags = {run["run_tag"] for run in existing_runs}
 
     operations = []
@@ -191,21 +202,17 @@ async def create_run(
     if not operations:
         return {"inserted_count": 0, "existing_count": len(payload.runs)}
 
-    try:
-        result = runs_collection.bulk_write(operations, ordered=False)
+    result = runs_collection.bulk_write(operations, ordered=False)
 
-        if payload.update:
-            return {
-                "matched_count": result.matched_count,
-                "modified_count": result.modified_count,
-                "upserted_count": result.upserted_count,
-            }
-        else:
-            inserted_count = result.upserted_count
-            existing_count = len(payload.runs) - inserted_count
-            return {
-                "inserted_count": inserted_count,
-                "existing_count": existing_count,
-            }
-    except BulkWriteError as bwe:
-        raise HTTPException(status_code=500, detail=bwe.details)
+    if payload.update:
+        return {
+            "matched_count": result.matched_count,
+            "modified_count": result.modified_count,
+            "upserted_count": result.upserted_count,
+        }
+
+    inserted_count = result.upserted_count
+    return {
+        "inserted_count": inserted_count,
+        "existing_count": len(payload.runs) - inserted_count,
+    }

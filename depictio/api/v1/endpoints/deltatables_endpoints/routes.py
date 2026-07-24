@@ -5,6 +5,7 @@ Provides CRUD operations for DeltaTableAggregated objects including
 upsert, fetch, batch existence checks, and shape queries.
 """
 
+import asyncio
 import hashlib
 import math
 from datetime import datetime
@@ -47,6 +48,33 @@ def sanitize_for_json(obj):
         if math.isnan(obj) or math.isinf(obj):
             return None
     return obj
+
+
+def _compute_upsert_artifacts(
+    delta_table_location: str, dc_data: dict, is_multiqc: bool
+) -> tuple[str, list]:
+    """Content hash and column specs for a data collection's table.
+
+    Synchronous and CPU/IO-heavy by nature (full table read, pandas
+    materialisation, row hashing), so it lives outside the request coroutine and
+    is called via ``asyncio.to_thread``.
+    """
+    if is_multiqc:
+        # MultiQC is stored as raw parquet, not a Delta table: there is nothing
+        # to read, and column specs are not computed for it.
+        final_hash = hashlib.sha256(f"{delta_table_location}{datetime.now()}".encode()).hexdigest()
+        return final_hash, []
+
+    df = pl.read_delta(delta_table_location, storage_options=polars_s3_config)
+    results = precompute_columns_specs(df, agg_functions, dc_data)
+
+    hash_series = df.hash_rows(seed=0)
+    hash_bytes = hash_series.to_numpy().tobytes()
+    hash_df = hashlib.sha256(hash_bytes).hexdigest()
+    final_hash = hashlib.sha256(
+        f"{delta_table_location}{datetime.now()}{hash_df}".encode()
+    ).hexdigest()
+    return final_hash, results
 
 
 @deltatables_endpoint_router.post("/upsert")
@@ -101,24 +129,17 @@ async def upsert_deltatable(
     dc_type = dc_data.get("config", {}).get("type", "")
     is_multiqc = dc_type.lower() == "multiqc"
 
-    # For MultiQC, skip delta table validation since it's stored as raw parquet
-    if is_multiqc:
-        # Create minimal hash for MultiQC without reading the file
-        final_hash = hashlib.sha256(
-            f"{payload.delta_table_location}{datetime.now()}".encode()
-        ).hexdigest()
-        results = []  # Column specs not computed for MultiQC (empty list required by Pydantic)
-    else:
-        # Standard delta table validation and column spec computation
-        df = pl.read_delta(payload.delta_table_location, storage_options=polars_s3_config)
-        results = precompute_columns_specs(df, agg_functions, dc_data)
-
-        hash_series = df.hash_rows(seed=0)
-        hash_bytes = hash_series.to_numpy().tobytes()
-        hash_df = hashlib.sha256(hash_bytes).hexdigest()
-        final_hash = hashlib.sha256(
-            f"{payload.delta_table_location}{datetime.now()}{hash_df}".encode()
-        ).hexdigest()
+    # Off the event loop: the non-MultiQC branch reads the whole Delta table,
+    # copies it into pandas and hashes every row. Run inline, that pins the
+    # uvicorn worker for the duration — long enough on a large table to blow
+    # gunicorn's --timeout and kill the worker outright, which is what the CLI
+    # sees as a dropped connection rather than a clean 504.
+    final_hash, results = await asyncio.to_thread(
+        _compute_upsert_artifacts,
+        payload.delta_table_location,
+        dc_data,
+        is_multiqc,
+    )
 
     query_dt = deltatables_collection.find_one({"data_collection_id": data_collection_oid})
     if query_dt:
@@ -279,7 +300,10 @@ async def _broadcast_dc_update(dc_id: str) -> None:
     # live row count) so the RealtimeIndicator journal has something to show.
     # Runs after the upsert recorded a fresh aggregation entry, so the version/
     # hash/time reflect the write that just landed. Best-effort, never raises.
-    payload = _build_event_payload(dc_id, operation="upsert")
+    # Also off the event loop: _build_event_payload reads the table and its
+    # previous Delta version to compute the row delta, so it is as heavy as the
+    # upsert artifacts it follows.
+    payload = await asyncio.to_thread(_build_event_payload, dc_id, "upsert")
 
     event = EventMessage(
         event_type=EventType.DATA_COLLECTION_UPDATED,
