@@ -33,6 +33,11 @@ dependencies = [
   # Required by catalog recipes that build colour scales / hierarchical figures
   # during processing (e.g. qiime2/taxonomy_heatmap.py imports plotly.colors).
   "plotly==6.8.0",
+  # Native filesystem events for `depictio data watch`. Optional at runtime —
+  # watch.py degrades to polling when it is missing, or when inotify watches are
+  # exhausted — but shipped by default so the low-latency path works out of the
+  # box. Same version as the root pyproject.
+  "watchdog==6.0.0",
 ]
 authors = [{ name = "Thomas Weber", email = "thomas.weber@embl.de" }]
 urls = { Homepage = "http://github.com/depictio/depictio" }
