@@ -1,3 +1,4 @@
+import os
 from typing import Annotated
 
 import typer
@@ -10,6 +11,12 @@ from depictio.cli.cli.utils.rich_utils import (
     rich_print_checked_statement,
     rich_print_command_usage,
     rich_print_section_separator,
+)
+from depictio.cli.cli.utils.state import state_dir
+from depictio.cli.cli.utils.watch import (
+    ProjectWatcher,
+    WatchConfig,
+    project_lock,
 )
 from depictio.cli.cli_logging import logger
 
@@ -190,6 +197,201 @@ def scan(
     # process_project_helper(cli_config, project_config, headers, update, scan_files, data_collection_tag)
 
     # remote_upload_files(response["CLI_config"], project_config_path, data_collection_tag)
+
+
+@app.command()
+def watch(
+    CLI_config_path: Annotated[
+        str,
+        typer.Option("--CLI-config-path", help="Path to the CLI configuration file"),
+    ] = "~/.depictio/CLI.yaml",
+    project_config_path: Annotated[
+        str,
+        typer.Option("--project-config-path", help="Path to the pipeline configuration file"),
+    ] = "",
+    mode: str = typer.Option(
+        "incremental",
+        "--mode",
+        help=(
+            "incremental: register new and changed files only. "
+            "full: re-scan and rewrite everything, as if --rescan-folders --sync-files "
+            "--overwrite were passed."
+        ),
+    ),
+    backend: str = typer.Option(
+        "auto",
+        "--backend",
+        help=(
+            "auto (detect), native (filesystem events only), polling (periodic re-walk), "
+            "or both. auto selects polling on network filesystems, where native events "
+            "do not see writes made from another host."
+        ),
+    ),
+    debounce: float = typer.Option(
+        30.0, "--debounce", help="Seconds of quiet before an ingestion cycle is triggered"
+    ),
+    settle: float = typer.Option(
+        5.0,
+        "--settle",
+        help="Seconds a file must hold the same size and mtime before it is ingested",
+    ),
+    interval: float = typer.Option(
+        300.0, "--interval", help="Seconds between polling walks (also the event-loss backstop)"
+    ),
+    max_delay: float = typer.Option(
+        300.0,
+        "--max-delay",
+        help="Ceiling on debouncing, so a continuously-written tree still gets ingested",
+    ),
+    full_every: int | None = typer.Option(
+        None, "--full-every", help="Run a full re-ingest every N incremental cycles"
+    ),
+    once: bool = typer.Option(False, "--once", help="Run a single cycle and exit"),
+    max_runs: int | None = typer.Option(
+        None, "--max-runs", help="Stop after this many ingestion cycles"
+    ),
+    write_mode: str = typer.Option(
+        "overwrite",
+        "--write-mode",
+        help="Delta write strategy passed to the process step (overwrite, append, replace-runs)",
+    ),
+    concurrency: int = typer.Option(
+        4, "--concurrency", "-c", help="Parallel HTTP requests during each cycle"
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Report each cycle's changes without writing to the server"
+    ),
+):
+    """
+    Watch the data root and re-run ingestion when it changes.
+
+    Runs until interrupted. SIGINT/SIGTERM finish the cycle in progress and then
+    exit cleanly, so it is safe to run under systemd or as a container command.
+    """
+    rich_print_command_usage("watch")
+
+    if mode not in ("incremental", "full"):
+        rich_print_checked_statement(f"Invalid --mode '{mode}'", "error", exit=True)
+        raise typer.Exit(code=1)
+    if backend not in ("auto", "native", "polling", "both"):
+        rich_print_checked_statement(f"Invalid --backend '{backend}'", "error", exit=True)
+        raise typer.Exit(code=1)
+
+    get_http_client(concurrency=concurrency)
+
+    CLI_config, response = validate_project_config_and_check_S3_storage(
+        CLI_config_path=CLI_config_path, project_config_path=project_config_path
+    )
+    if not response["success"]:
+        rich_print_checked_statement("Depictio Project configuration validation failed", "error")
+        raise typer.Exit(code=1)
+
+    project_config = response["project_config"]
+
+    roots = _project_data_roots(project_config)
+    if not roots:
+        rich_print_checked_statement(
+            "No existing data locations to watch in this project.", "error"
+        )
+        raise typer.Exit(code=1)
+
+    if mode == "incremental" and write_mode == "overwrite":
+        # Worth saying plainly: with the default write mode, every new file
+        # rewrites the whole Delta table. That is exactly what a watch loop
+        # should not do, and the reason --write-mode replace-runs exists.
+        rich_print_checked_statement(
+            "Incremental watching with --write-mode overwrite rewrites the entire Delta "
+            "table on every cycle. Use --write-mode replace-runs to rewrite only the runs "
+            "that changed.",
+            "warning",
+        )
+
+    config = WatchConfig(
+        mode=mode,  # type: ignore[arg-type]
+        backend=backend,  # type: ignore[arg-type]
+        debounce_seconds=debounce,
+        settle_seconds=settle,
+        poll_interval_seconds=interval,
+        max_delay_seconds=max_delay,
+        full_every=full_every,
+        once=once,
+        max_runs=max_runs,
+    )
+
+    def run_cycle(cycle_mode: str, paths: set[str]) -> bool:
+        if paths:
+            logger.info(f"Ingesting after {len(paths)} settled change(s).")
+        command_parameters = {
+            # A full cycle re-walks and re-uploads everything; an incremental one
+            # only acts on files whose metadata hash moved.
+            "rescan_folders": True,
+            "sync_files": cycle_mode == "full",
+            "sync_changed": cycle_mode == "incremental",
+            # Always true, including incremental cycles: client_aggregate_data
+            # refuses to write over an existing Delta table without it, so every
+            # cycle after the first would fail at the process step. Until
+            # --write-mode replace-runs makes the write partition-scoped, this
+            # does mean a full table rewrite per cycle — which is what the
+            # warning above is about.
+            "overwrite": True,
+            "write_mode": write_mode,
+            "dry_run": dry_run,
+            "state_cache": True,
+            "concurrency": concurrency,
+            "rich_tables": False,
+            "trigger": "watch",
+        }
+        try:
+            process_project_helper(
+                CLI_config=CLI_config,
+                project_config=project_config,
+                workflow_name=None,
+                data_collection_tag=None,
+                command_parameters=command_parameters,
+                mode="scan",
+            )
+            process_project_helper(
+                CLI_config=CLI_config,
+                project_config=project_config,
+                workflow_name=None,
+                data_collection_tag=None,
+                command_parameters=command_parameters,
+                mode="process",
+            )
+            return True
+        except Exception as exc:  # noqa: BLE001 - a watcher must outlive one bad cycle
+            logger.error(f"Ingestion cycle failed: {exc}")
+            return False
+
+    lock_file = state_dir() / f"{project_config.id}.lock"
+    watcher = ProjectWatcher(roots=roots, config=config, run_cycle=run_cycle)
+    watcher.install_signal_handlers()
+
+    rich_print_section_separator(f"Watching {len(roots)} location(s) — {watcher.backend} backend")
+    for root in roots:
+        rich_print_checked_statement(f"  {root}", "info")
+
+    try:
+        with project_lock(lock_file):
+            raise typer.Exit(code=watcher.run())
+    except RuntimeError as exc:
+        rich_print_checked_statement(str(exc), "error")
+        raise typer.Exit(code=1) from exc
+    except KeyboardInterrupt:
+        rich_print_checked_statement("Interrupted.", "warning")
+        raise typer.Exit(code=130) from None
+
+
+def _project_data_roots(project_config) -> list[str]:
+    """Existing, distinct data locations across every workflow of a project."""
+    roots: list[str] = []
+    for workflow in project_config.workflows:
+        for location in workflow.data_location.locations or []:
+            if location not in roots and os.path.isdir(location):
+                roots.append(location)
+            elif not os.path.isdir(location):
+                logger.warning(f"Skipping non-existent data location: {location}")
+    return roots
 
 
 @app.command()
