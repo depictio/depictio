@@ -55,6 +55,19 @@ def scan(
             "1.2.2 did. Deprecated escape hatch; will be removed."
         ),
     ),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Report what would be registered or removed without writing to the server",
+    ),
+    state_cache: bool = typer.Option(
+        True,
+        "--state-cache/--no-state-cache",
+        help=(
+            "Use the local scan-state cache to skip runs whose file tree is unchanged "
+            "since the last successful scan. Only applies when rescanning."
+        ),
+    ),
     rich_tables: bool = typer.Option(
         False, "--rich-tables", help="Display rich tables in the output"
     ),
@@ -80,6 +93,11 @@ def scan(
     logger.info(f"Reprocessing runs: {rescan_folders}")
     logger.info(f"Updating files: {sync_files}")
     logger.info(f"Syncing changed files: {sync_changed}")
+
+    if dry_run:
+        rich_print_checked_statement(
+            "DRY RUN — reporting what would change, writing nothing", "info"
+        )
 
     # Validate configurations and prepare headers
     CLI_config, response = validate_project_config_and_check_S3_storage(
@@ -124,6 +142,8 @@ def scan(
                     "sync_files": sync_files,
                     "sync_changed": sync_changed,
                     "legacy_scan_depth": legacy_scan_depth,
+                    "dry_run": dry_run,
+                    "state_cache": state_cache,
                     "rich_tables": rich_tables,
                 }
 

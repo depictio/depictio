@@ -27,7 +27,13 @@ from depictio.cli.cli.utils.scan_utils import (
     generate_run_hash,
     regex_match,
 )
-from depictio.cli.cli.utils.scan_walk import ScannedPath, is_ignored, iter_run_files
+from depictio.cli.cli.utils.scan_walk import (
+    ScannedPath,
+    is_ignored,
+    iter_run_files,
+    run_signature,
+)
+from depictio.cli.cli.utils.state import ProjectScanState, RunState, load_state, save_state
 from depictio.cli.cli_logging import logger
 from depictio.models.models.base import PyObjectId
 from depictio.models.models.cli import CLIConfig
@@ -457,9 +463,15 @@ def scan_run_for_multiple_data_collections(
     update_files: bool = False,
     sync_changed: bool = False,
     honor_scan_bounds: bool = True,
+    prewalked: list[ScannedPath] | None = None,
+    dry_run: bool = False,
 ) -> WorkflowRun | None:
     """
     Scan a single run for multiple data collections simultaneously.
+
+    ``prewalked`` lets the caller hand over a walk it already performed (the
+    state-cache signature check does one), so the tree is never walked twice.
+    ``dry_run`` reports what would happen without writing anything to the server.
     """
     if not os.path.exists(run_location):
         raise ValueError(f"The directory '{run_location}' does not exist.")
@@ -493,14 +505,17 @@ def scan_run_for_multiple_data_collections(
     # Walk the run tree once and share it across every data collection. The
     # stat metadata rides along, so the per-DC loops below never touch the
     # filesystem again — they only re-run the regex.
-    walk_bounds = _walk_bounds(data_collections) if honor_scan_bounds else _ScanBounds(None, ())
-    all_files_in_run: list[ScannedPath] = list(
-        iter_run_files(
-            run_location,
-            max_depth=walk_bounds.max_depth,
-            ignore=list(walk_bounds.ignore),
+    if prewalked is not None:
+        all_files_in_run: list[ScannedPath] = prewalked
+    else:
+        walk_bounds = _walk_bounds(data_collections) if honor_scan_bounds else _ScanBounds(None, ())
+        all_files_in_run = list(
+            iter_run_files(
+                run_location,
+                max_depth=walk_bounds.max_depth,
+                ignore=list(walk_bounds.ignore),
+            )
         )
-    )
 
     # Process files for each data collection
     all_processed_files = []
@@ -631,14 +646,21 @@ def scan_run_for_multiple_data_collections(
             # Upload files for this data collection
             if files_to_upload:
                 logger.info(f"Files to add for DC {dc.data_collection_tag}: {len(files_to_upload)}")
-                # /files/upsert_batch uses $setOnInsert when update=False, which
-                # would silently discard the new metadata of a file that already
-                # exists — so pushing changed files has to ask for $set.
-                api_create_files(
-                    files=files_to_upload,
-                    CLI_config=CLI_config,
-                    update=update_files or sync_changed,
-                )
+                if dry_run:
+                    rich_print_checked_statement(
+                        f"[dry-run] Would register {len(files_to_upload)} file(s) "
+                        f"for {dc.data_collection_tag}",
+                        "info",
+                    )
+                else:
+                    # /files/upsert_batch uses $setOnInsert when update=False, which
+                    # would silently discard the new metadata of a file that already
+                    # exists — so pushing changed files has to ask for $set.
+                    api_create_files(
+                        files=files_to_upload,
+                        CLI_config=CLI_config,
+                        update=update_files or sync_changed,
+                    )
 
             # Handle missing files
             missing_files_location = set(existing_files_for_dc.keys()) - set(
@@ -651,8 +673,15 @@ def scan_run_for_multiple_data_collections(
 
             if missing_files and update_files:
                 logger.info(f"Files to remove for DC {dc.data_collection_tag}: {missing_files}")
-                for file_id in missing_files:
-                    api_delete_file(file_id=file_id, CLI_config=CLI_config)
+                if dry_run:
+                    rich_print_checked_statement(
+                        f"[dry-run] Would remove {len(missing_files)} stale file(s) "
+                        f"from {dc.data_collection_tag}",
+                        "info",
+                    )
+                else:
+                    for file_id in missing_files:
+                        api_delete_file(file_id=file_id, CLI_config=CLI_config)
 
             # Collect all files for this run
             all_processed_files.extend(files_to_upload)
@@ -722,6 +751,11 @@ def scan_run_for_multiple_data_collections(
     # Store dc_stats for table display (temporary storage)
     workflow_run._dc_stats_for_display = dc_stats
 
+    # Carry the tree signature back so the caller can cache it without walking
+    # the run a second time.
+    workflow_run._scan_signature = run_signature(all_files_in_run)
+    workflow_run._scan_file_count = len(all_files_in_run)
+
     logger.debug(f"Storing dc_stats for display on run {run_tag}: {dc_stats}")
 
     if workflow_run.scan_results is None:
@@ -738,6 +772,18 @@ def scan_run_for_multiple_data_collections(
 
 
 @dataclass(slots=True)
+class _PendingRun:
+    """A run that still needs scanning."""
+
+    location: str
+    tag: str
+    #: Populated when the state cache forced a walk to compute the signature.
+    #: Handed to the scan so the tree is never walked twice in one invocation.
+    scanned: list[ScannedPath] | None = None
+    signature: str | None = None
+
+
+@dataclass(slots=True)
 class _PendingLocation:
     """Runs still needing a scan under one configured location.
 
@@ -749,7 +795,7 @@ class _PendingLocation:
 
     location: str
     structure: str
-    runs: list[tuple[str, str]]  # (run_location, run_tag)
+    runs: list[_PendingRun]
 
 
 def _fetch_existing_files(
@@ -805,10 +851,47 @@ def _resolve_pending_runs(
     locations: list[str],
     existing_runs: dict[str, WorkflowRun],
     rescan_folders: bool,
+    state: ProjectScanState | None = None,
+    walk_bounds: _ScanBounds | None = None,
 ) -> list[_PendingLocation]:
-    """Determine which runs need scanning, touching only the filesystem and the run list."""
+    """Determine which runs need scanning, touching only the filesystem and the run list.
+
+    Two levels of skipping, in increasing cost:
+
+    1. The run is already registered and no rescan was asked for — free, no
+       filesystem access at all.
+    2. A rescan *was* asked for, but the cached signature says the run's tree is
+       byte-for-byte what it was at the last successful scan. This costs one
+       walk, which is far less than the regex pass, ``File`` construction and
+       registry fetch it avoids. The walk is handed forward so the scan itself
+       does not repeat it.
+    """
     pending: list[_PendingLocation] = []
     structure = workflow.data_location.structure
+    workflow_id = str(workflow.id)
+    bounds = walk_bounds or _ScanBounds(None, ())
+
+    def _consider(run_location: str, run_tag: str) -> _PendingRun | None:
+        """Return the run to scan, or None when it can be skipped."""
+        if run_tag in existing_runs and not rescan_folders:
+            logger.debug(f"Skipping existing run {run_tag}.")
+            return None
+
+        cached = state.run_state(workflow_id, run_tag) if state else None
+        if cached is None or run_tag not in existing_runs:
+            # Nothing to compare against, or the server has never seen this run:
+            # either way the cache cannot authorise a skip.
+            return _PendingRun(location=run_location, tag=run_tag)
+
+        scanned = list(
+            iter_run_files(run_location, max_depth=bounds.max_depth, ignore=list(bounds.ignore))
+        )
+        signature = run_signature(scanned)
+        if signature == cached.signature and cached.run_location == run_location:
+            logger.info(f"Run {run_tag} unchanged since last scan — skipping.")
+            return None
+
+        return _PendingRun(location=run_location, tag=run_tag, scanned=scanned, signature=signature)
 
     for location in locations:
         if not os.path.exists(location):
@@ -816,15 +899,14 @@ def _resolve_pending_runs(
         if not os.path.isdir(location):
             raise ValueError(f"'{location}' is not a directory.")
 
-        runs: list[tuple[str, str]] = []
+        runs: list[_PendingRun] = []
 
         if structure == "flat":
             # Treat the provided directory as a single run
             run_tag = os.path.basename(os.path.normpath(location))
-            if run_tag in existing_runs and not rescan_folders:
-                logger.debug(f"Skipping existing run {run_tag}.")
-            else:
-                runs.append((location, run_tag))
+            candidate = _consider(location, run_tag)
+            if candidate:
+                runs.append(candidate)
 
         elif structure == "sequencing-runs":
             # Each subdirectory that matches the regex is a run
@@ -836,10 +918,9 @@ def _resolve_pending_runs(
             for run in sorted(os.listdir(location)):
                 run_path = os.path.join(location, run)
                 if os.path.isdir(run_path) and re.match(runs_regex, run):
-                    if run in existing_runs and not rescan_folders:
-                        logger.debug(f"Skipping existing run {run}.")
-                        continue
-                    runs.append((run_path, run))
+                    candidate = _consider(run_path, run)
+                    if candidate:
+                        runs.append(candidate)
 
         pending.append(_PendingLocation(location=location, structure=structure, runs=runs))
 
@@ -871,6 +952,10 @@ def scan_files_for_workflow(
     sync_changed = command_parameters.get("sync_changed", False)
     rich_tables = command_parameters.get("rich_tables", True)
     honor_scan_bounds = not command_parameters.get("legacy_scan_depth", False)
+    dry_run = command_parameters.get("dry_run", False)
+    use_state_cache = command_parameters.get("state_cache", True)
+    project_id = command_parameters.get("project_id")
+    project_hash = command_parameters.get("project_hash")
 
     if honor_scan_bounds:
         _warn_enforced_scan_bounds(data_collections)
@@ -907,11 +992,27 @@ def scan_files_for_workflow(
         )
         return {"result": "error", "message": "No locations configured"}
 
+    # The state cache can only authorise skipping a rescan; without one, the
+    # existing-run check above already short-circuits without touching disk.
+    state: ProjectScanState | None = None
+    if use_state_cache and rescan_folders and project_id:
+        state = load_state(
+            CLI_config.api_base_url, project_id, project_hash=project_hash
+        ) or ProjectScanState(
+            api_base_url=CLI_config.api_base_url,
+            project_id=project_id,
+            project_hash=project_hash,
+        )
+
+    walk_bounds = _walk_bounds(data_collections) if honor_scan_bounds else _ScanBounds(None, ())
+
     pending_locations = _resolve_pending_runs(
         workflow=workflow,
         locations=locations,
         existing_runs=existing_runs_reformated,
         rescan_folders=rescan_folders,
+        state=state,
+        walk_bounds=walk_bounds,
     )
     pending_total = sum(len(pending.runs) for pending in pending_locations)
 
@@ -927,81 +1028,65 @@ def scan_files_for_workflow(
     all_workflow_runs = []
 
     for pending in pending_locations:
+        if not pending.runs:
+            continue
+
         logger.info(f"Scanning location: {pending.location}")
 
         if workflow.config is None:
             logger.error(f"Workflow config is None for workflow {workflow_id}")
             continue
 
-        if pending.structure == "flat":
-            for run_location, run_tag in pending.runs:
-                # Show simple spinner for single-location scanning
-                with Progress(
-                    SpinnerColumn(),
-                    TextColumn("[progress.description]{task.description}"),
-                    console=None,
-                ) as progress:
-                    progress.add_task(f"🔍 Scanning single location: {run_tag}")
-
-                    workflow_run = scan_run_for_multiple_data_collections(
-                        run_location=run_location,
-                        run_tag=run_tag,
-                        workflow_config=workflow.config,
-                        data_collections=data_collections,
-                        all_existing_files=all_existing_files,
-                        workflow_id=workflow_id,
-                        CLI_config=CLI_config,
-                        permissions=permissions,
-                        rescan_folders=rescan_folders,
-                        update_files=update_files,
-                        sync_changed=sync_changed,
-                        honor_scan_bounds=honor_scan_bounds,
-                        existing_run=existing_runs_reformated.get(run_tag, None),
-                    )
-                    if workflow_run:
-                        all_workflow_runs.append(workflow_run)
-
-        elif pending.structure == "sequencing-runs" and pending.runs:
-            # Process runs with progress bar
-            with Progress(
-                SpinnerColumn(),
-                TextColumn("[progress.description]{task.description}"),
+        # "flat" treats the configured location itself as one run, so a progress
+        # bar over a single item is noise; "sequencing-runs" can have hundreds.
+        show_bar = pending.structure != "flat"
+        columns = [SpinnerColumn(), TextColumn("[progress.description]{task.description}")]
+        if show_bar:
+            columns += [
                 BarColumn(),
                 TaskProgressColumn(),
                 TextColumn("({task.completed}/{task.total} runs)"),
-                console=None,  # Use default console
-            ) as progress:
-                task_id = progress.add_task(
-                    f"🔍 Scanning runs in {os.path.basename(pending.location)}",
-                    total=len(pending.runs),
-                )
+            ]
 
-                for run_path, run in pending.runs:
+        with Progress(*columns, console=None) as progress:
+            task_id = progress.add_task(
+                f"🔍 Scanning runs in {os.path.basename(pending.location)}"
+                if show_bar
+                else f"🔍 Scanning single location: {pending.runs[0].tag}",
+                total=len(pending.runs) if show_bar else None,
+            )
+
+            for candidate in pending.runs:
+                if show_bar:
                     # Format run name to consistent width to avoid line changes
                     # Need 29 chars for run name to match total description length of 45 chars
-                    formatted_run = f"{run:<29}"[:29]  # Left-align and pad/truncate to 29 chars
+                    formatted_run = f"{candidate.tag:<29}"[:29]
                     progress.update(task_id, description=f"🔍 Scanning run: {formatted_run}")
 
-                    workflow_run = scan_run_for_multiple_data_collections(
-                        run_location=run_path,
-                        run_tag=run,
-                        workflow_config=workflow.config,
-                        data_collections=data_collections,
-                        all_existing_files=all_existing_files,
-                        workflow_id=workflow_id,
-                        CLI_config=CLI_config,
-                        permissions=permissions,
-                        rescan_folders=rescan_folders,
-                        update_files=update_files,
-                        sync_changed=sync_changed,
-                        honor_scan_bounds=honor_scan_bounds,
-                        existing_run=existing_runs_reformated.get(run, None),
-                    )
-                    if workflow_run:
-                        all_workflow_runs.append(workflow_run)
+                workflow_run = scan_run_for_multiple_data_collections(
+                    run_location=candidate.location,
+                    run_tag=candidate.tag,
+                    workflow_config=workflow.config,
+                    data_collections=data_collections,
+                    all_existing_files=all_existing_files,
+                    workflow_id=workflow_id,
+                    CLI_config=CLI_config,
+                    permissions=permissions,
+                    rescan_folders=rescan_folders,
+                    update_files=update_files,
+                    sync_changed=sync_changed,
+                    honor_scan_bounds=honor_scan_bounds,
+                    prewalked=candidate.scanned,
+                    dry_run=dry_run,
+                    existing_run=existing_runs_reformated.get(candidate.tag, None),
+                )
+                if workflow_run:
+                    all_workflow_runs.append(workflow_run)
 
+                if show_bar:
                     progress.advance(task_id)
 
+            if show_bar:
                 progress.update(task_id, description="✅ Scanning completed")
 
     # Handle missing runs if rescanning.
@@ -1018,27 +1103,59 @@ def scan_files_for_workflow(
 
         if missing_runs:
             logger.info(f"Runs to remove: {missing_runs}")
-            for run_id in missing_runs:
-                api_delete_run(run_id=run_id, CLI_config=CLI_config)
-                # Delete related files
-                for dc_id, files in all_existing_files.items():
-                    for file in files.values():
-                        if str(file["run_id"]) == run_id:
-                            api_delete_file(file_id=str(file["_id"]), CLI_config=CLI_config)
-            rich_print_checked_statement(
-                f"Removed {len(missing_runs)} runs and related files from the DB : {missing_runs_tag}",
-                "info",
-            )
+            if dry_run:
+                rich_print_checked_statement(
+                    f"[dry-run] Would remove {len(missing_runs)} run(s) and their files: "
+                    f"{missing_runs_tag}",
+                    "info",
+                )
+            else:
+                for run_id in missing_runs:
+                    api_delete_run(run_id=run_id, CLI_config=CLI_config)
+                    # Delete related files
+                    for dc_id, files in all_existing_files.items():
+                        for file in files.values():
+                            if str(file["run_id"]) == run_id:
+                                api_delete_file(file_id=str(file["_id"]), CLI_config=CLI_config)
+                rich_print_checked_statement(
+                    f"Removed {len(missing_runs)} runs and related files from the DB : {missing_runs_tag}",
+                    "info",
+                )
 
     # Upsert all runs at once with progress indicator
     if all_workflow_runs:
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=None,
-        ) as progress:
-            progress.add_task(f"💾 Uploading {len(all_workflow_runs)} run(s) to server")
-            api_upsert_runs_batch(all_workflow_runs, CLI_config, rescan_folders)
+        if dry_run:
+            rich_print_checked_statement(
+                f"[dry-run] Would upload {len(all_workflow_runs)} run(s) to the server", "info"
+            )
+        else:
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                console=None,
+            ) as progress:
+                progress.add_task(f"💾 Uploading {len(all_workflow_runs)} run(s) to server")
+                api_upsert_runs_batch(all_workflow_runs, CLI_config, rescan_folders)
+
+    # Only record state for work that actually reached the server. A dry run
+    # must not convince the next invocation that these runs are up to date.
+    if state is not None and not dry_run:
+        for run in all_workflow_runs:
+            signature = getattr(run, "_scan_signature", None)
+            if not signature:
+                continue
+            state.record_run(
+                str(workflow_id),
+                RunState(
+                    run_tag=run.run_tag,
+                    run_location=run.run_location,
+                    signature=signature,
+                    file_count=getattr(run, "_scan_file_count", 0),
+                ),
+            )
+        if rescan_folders:
+            state.forget_runs(str(workflow_id), missing_runs_tag)
+        save_state(state)
 
     # Generate single summary table for the entire workflow
     # if all_workflow_runs:
@@ -1068,6 +1185,7 @@ def scan_files_for_data_collection(
     # Parse the command parameters
     update_files = command_parameters.get("sync_files", False)
     sync_changed = command_parameters.get("sync_changed", False)
+    dry_run = command_parameters.get("dry_run", False)
 
     workflow_id = workflow.id
 
@@ -1120,7 +1238,8 @@ def scan_files_for_data_collection(
                         f"Removing stale file {stale_file['file_location']} "
                         f"(expected {current_file_path})"
                     )
-                    api_delete_file(str(stale_id), CLI_config)
+                    if not dry_run:
+                        api_delete_file(str(stale_id), CLI_config)
                     del existing_files_reformated[stale_file["file_location"]]
     else:
         existing_files_reformated = {}
@@ -1169,7 +1288,16 @@ def scan_files_for_data_collection(
     files = [sc.file for sc in scan_file_result if sc.scan_result["result"] == "success"]
 
     if files:
-        api_create_files(files=files, CLI_config=CLI_config, update=update_files or sync_changed)
+        if dry_run:
+            rich_print_checked_statement(
+                f"[dry-run] Would register {len(files)} file(s) for "
+                f"{data_collection.data_collection_tag}",
+                "info",
+            )
+        else:
+            api_create_files(
+                files=files, CLI_config=CLI_config, update=update_files or sync_changed
+            )
 
     rich_print_checked_statement(
         f"Scanned {len(files)} file(s) for data collection {data_collection.data_collection_tag}",
@@ -1202,6 +1330,16 @@ def scan_project_files(
     """
     if command_parameters is None:
         command_parameters = {}
+
+    # The state cache is keyed on (server, project) and invalidated by the
+    # project hash, so both have to reach scan_files_for_workflow. They are not
+    # on Workflow, only on the project, so pass them through the parameter dict
+    # rather than threading two more arguments through every call site.
+    command_parameters = {
+        **command_parameters,
+        "project_id": str(project_config.id),
+        "project_hash": getattr(project_config, "hash", None),
+    }
 
     rich_print_checked_statement(
         f"Scanning Project: [italic]'{project_config.name}'[/italic]", "info"
