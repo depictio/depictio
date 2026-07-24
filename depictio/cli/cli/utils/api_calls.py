@@ -865,6 +865,33 @@ def api_check_duplicate_multiqc_report(
         return None
 
 
+def api_get_multiqc_s3_locations(data_collection_id: str, CLI_config: "CLIConfig") -> list[str]:
+    """Return every MultiQC report's S3 parquet location for a data collection.
+
+    Authoritative full set (all reports, unpaginated), used by the offline
+    figure prerender to decide whether this run is a fresh ingest (its local
+    files reproduce the full aggregation) before building figures keyed over
+    that set. Returns an empty list on any error — the caller then skips
+    prerender rather than building against an incomplete set.
+    """
+    url = (
+        f"{CLI_config.api_base_url}/depictio/api/v1/multiqc/prerender/"
+        f"{data_collection_id}/s3-locations"
+    )
+    headers = generate_api_headers(CLI_config)
+    try:
+        response = get_http_client().get(url, headers=headers, timeout=30.0)
+        if response.status_code == 200:
+            return list(response.json().get("s3_locations", []))
+        logger.warning(
+            f"Failed to fetch MultiQC s3-locations: HTTP {response.status_code} - {response.text}"
+        )
+        return []
+    except Exception as e:
+        logger.warning(f"Error fetching MultiQC s3-locations: {e}")
+        return []
+
+
 def api_delete_multiqc_report(
     report_id: str, delete_s3_file: bool, CLI_config: "CLIConfig"
 ) -> httpx.Response | None:

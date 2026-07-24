@@ -3585,16 +3585,60 @@ def render_multiqc_endpoint(
         # to disk — fall through and let the disk-read step below serve the
         # specific figure. Otherwise enqueue ``build_multiqc_prerender`` and
         # 202; the task's own ``set_nx`` lock dedups racing render requests.
+        # Bare (filter-less, version-less) figure key — what ``create_multiqc_plot``
+        # and the prewarm task write under, and the name the CLI's offline
+        # prerender uploads to S3 under. Shared by the S3 probe below and the
+        # Redis/disk fast path further down.
+        bare_key = generate_figure_cache_key(
+            s3_locations,
+            selected_module,
+            selected_plot,
+            selected_dataset,
+            theme,
+            dc_id=str(dc_id) if dc_id else None,
+        )
+
         if cached is None and dc_id:
-            from depictio.api.v1.db import multiqc_prerender_collection
+            # S3 prerender: the CLI may have shipped this figure at ingest
+            # (``s3://{bucket}/{dc_id}/prerender/<sha>.json.gz``), keyed by the
+            # same bare cache key. If so, warm the bare Redis key + disk store
+            # from S3 now and fall through — the bare/disk read below then
+            # serves it, skipping both the 202 and the 30-75s Celery build.
+            bare_warm = cache.get(bare_key) is not None
+            if not bare_warm:
+                from depictio.api.v1.services import multiqc_s3_prerender
 
-            prerender_doc = multiqc_prerender_collection.find_one(
-                {"dc_id": str(dc_id)}, {"status": 1}
-            )
-            prerender_ready = bool(prerender_doc and prerender_doc.get("status") == "ready")
+                t_s3 = _time.perf_counter()
+                s3_fig = multiqc_s3_prerender.read_figure(str(dc_id), bare_key)
+                timings["s3_prerender_get_ms"] = (_time.perf_counter() - t_s3) * 1000
+                if s3_fig is not None:
+                    hit_kind = "s3_prerender"
+                    try:
+                        cache.set(bare_key, s3_fig, ttl=MULTIQC_CACHE_TTL_SECONDS)
+                        bare_warm = True
+                    except Exception as cache_err:
+                        logger.warning(f"render_multiqc: bare warm-from-S3 failed: {cache_err}")
+                    try:
+                        from depictio.api.v1.services import multiqc_prerender_store
 
-            build_lock_key = f"multiqc:prerender_build_lock:dc={dc_id}"
-            build_running = cache.get(build_lock_key) is not None
+                        multiqc_prerender_store.write_figure(str(dc_id), bare_key, s3_fig)
+                    except Exception as disk_err:
+                        logger.warning(f"render_multiqc: disk warm-from-S3 failed: {disk_err}")
+
+            # If S3 just warmed the bare key, don't 202 — fall through to serve.
+            if bare_warm:
+                prerender_ready = True
+                build_running = False
+            else:
+                from depictio.api.v1.db import multiqc_prerender_collection
+
+                prerender_doc = multiqc_prerender_collection.find_one(
+                    {"dc_id": str(dc_id)}, {"status": 1}
+                )
+                prerender_ready = bool(prerender_doc and prerender_doc.get("status") == "ready")
+
+                build_lock_key = f"multiqc:prerender_build_lock:dc={dc_id}"
+                build_running = cache.get(build_lock_key) is not None
 
             if not prerender_ready or build_running:
                 if not build_running:
@@ -3630,14 +3674,6 @@ def render_multiqc_endpoint(
             # from the cached dict (~1.4s on big figures because Plotly's
             # constructor validates every trace) and then ``to_json`` it
             # right back. We just want the dict.
-            bare_key = generate_figure_cache_key(
-                s3_locations,
-                selected_module,
-                selected_plot,
-                selected_dataset,
-                theme,
-                dc_id=str(dc_id) if dc_id else None,
-            )
             t_bare = _time.perf_counter()
             bare_cached = cache.get(bare_key)
             timings["bare_get_ms"] = (_time.perf_counter() - t_bare) * 1000
@@ -3646,7 +3682,10 @@ def render_multiqc_endpoint(
                 fig_dict = bare_cached
                 timings["create_plot_ms"] = 0.0
                 timings["to_json_ms"] = 0.0
-                hit_kind = "redis_bare"
+                # Keep the "s3_prerender" label when this bare hit is the figure
+                # the S3 probe above just warmed — don't relabel it "redis_bare".
+                if hit_kind != "s3_prerender":
+                    hit_kind = "redis_bare"
             else:
                 # Phase 2: try the disk-persistent prerender store before
                 # falling through to the slow build path. A hit here means
