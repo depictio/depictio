@@ -13,6 +13,22 @@ import './styles/realtime-highlight.css';
 export { default as DashboardGrid } from './components/DashboardGrid';
 export { default as ComponentRenderer } from './components/ComponentRenderer';
 export { default as ErrorBoundary } from './components/ErrorBoundary';
+export { default as ComponentSkeleton } from './components/ComponentSkeleton';
+export type { SkeletonVariant } from './components/ComponentSkeleton';
+
+// Dashboard-wide load registry: renderers report their status, the viewer's
+// progress bar reads the aggregate. Absent provider → reporting is a no-op.
+export {
+  DashboardLoadingProvider,
+  ComponentIndexContext,
+  useReportLoadStatus,
+  useDashboardLoadSummary,
+  TRACKED_LOAD_TYPES,
+} from './components/DashboardLoadingProvider';
+export type {
+  ComponentLoadStatus,
+  DashboardLoadSummary,
+} from './components/DashboardLoadingProvider';
 
 // Per-type renderers (top-level)
 export { default as FigureRenderer } from './components/FigureRenderer';
