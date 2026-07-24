@@ -39,6 +39,22 @@ def scan(
     sync_files: bool = typer.Option(
         False, "--sync-files", help="Update files for the data collection"
     ),
+    sync_changed: bool = typer.Option(
+        False,
+        "--sync-changed",
+        help=(
+            "Re-upload only files whose metadata hash moved since the last scan. "
+            "Narrower than --sync-files, which re-uploads every registered file."
+        ),
+    ),
+    legacy_scan_depth: bool = typer.Option(
+        False,
+        "--legacy-scan-depth",
+        help=(
+            "Ignore each data collection's scan max_depth/ignore, as releases before "
+            "1.2.2 did. Deprecated escape hatch; will be removed."
+        ),
+    ),
     rich_tables: bool = typer.Option(
         False, "--rich-tables", help="Display rich tables in the output"
     ),
@@ -56,11 +72,14 @@ def scan(
     """
     rich_print_command_usage("scan")
 
-    if sync_files:
+    # Both re-upload flags need every run walked again; without this, runs
+    # already registered are skipped before a single file is looked at.
+    if sync_files or sync_changed:
         rescan_folders = True
 
     logger.info(f"Reprocessing runs: {rescan_folders}")
     logger.info(f"Updating files: {sync_files}")
+    logger.info(f"Syncing changed files: {sync_changed}")
 
     # Validate configurations and prepare headers
     CLI_config, response = validate_project_config_and_check_S3_storage(
@@ -103,6 +122,8 @@ def scan(
                 command_parameters = {
                     "rescan_folders": rescan_folders,
                     "sync_files": sync_files,
+                    "sync_changed": sync_changed,
+                    "legacy_scan_depth": legacy_scan_depth,
                     "rich_tables": rich_tables,
                 }
 

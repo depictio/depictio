@@ -8,6 +8,16 @@ from depictio.models.models.base import MongoModel, PyObjectId
 from depictio.models.models.data_collections import WildcardRegexBase
 from depictio.models.models.users import Permission
 
+#: Outcomes a single file can have during a scan.
+#:
+#: ``skipped`` predates hash-based detection and is kept so older scan results
+#: still validate; new scans emit ``unchanged``/``changed`` instead.
+ALLOWED_SCAN_REASONS = frozenset({"added", "skipped", "updated", "failed", "unchanged", "changed"})
+
+#: Reasons that mean "this file is already registered and was not re-uploaded".
+#: Counted as skipped rather than as a genuine failure.
+NOT_UPLOADED_SCAN_REASONS = frozenset({"skipped", "unchanged", "changed"})
+
 
 class WildcardRegex(WildcardRegexBase):
     value: str
@@ -116,8 +126,13 @@ class FileScanResult(BaseModel):
             raise ValueError("Scan result must contain 'reason' key")
         if value["result"] not in ["success", "failure"]:
             raise ValueError("Scan result must be one of ['success', 'failure']")
-        if value["reason"] not in ["added", "skipped", "updated", "failed"]:
-            raise ValueError("Scan reason must be one of ['added', 'skipped', 'updated', 'failed']")
+        # ``unchanged``/``changed`` split what used to be a single ``skipped``
+        # bucket: the scanner has always computed a metadata hash per file, but
+        # only logged the comparison. ``result`` still says whether the file gets
+        # uploaded, so ``changed`` appears as a failure until --sync-changed (or
+        # --sync-files) opts into acting on it.
+        if value["reason"] not in ALLOWED_SCAN_REASONS:
+            raise ValueError(f"Scan reason must be one of {sorted(ALLOWED_SCAN_REASONS)}")
         return value
 
     @field_validator("scan_time", mode="before")
