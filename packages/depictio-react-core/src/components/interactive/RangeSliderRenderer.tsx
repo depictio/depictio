@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { DepictioRangeSlider } from 'depictio-components';
+import ComponentSkeleton from '../ComponentSkeleton';
 
 import {
   fetchColumnRange,
@@ -58,11 +59,7 @@ const RangeSliderRenderer: React.FC<{
       : null;
 
   if (loading || !bounds) {
-    return (
-      <div className="dashboard-loading" style={{ minHeight: 80, fontSize: '0.75rem' }}>
-        Loading range…
-      </div>
-    );
+    return <ComponentSkeleton variant="control" />;
   }
 
   return (

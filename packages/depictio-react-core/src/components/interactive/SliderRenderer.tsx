@@ -3,6 +3,7 @@ import { Paper, Stack, Text, Group, Slider } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import { fetchColumnRange, InteractiveFilter, StoredMetadata } from '../../api';
+import ComponentSkeleton from '../ComponentSkeleton';
 
 /**
  * Single-value Slider renderer for the React viewer.
@@ -134,11 +135,7 @@ const SliderRenderer: React.FC<{
   }
 
   if (loading || !bounds) {
-    return (
-      <div className="dashboard-loading" style={{ minHeight: 80, fontSize: '0.75rem' }}>
-        Loading range…
-      </div>
-    );
+    return <ComponentSkeleton variant="control" />;
   }
 
   const value = selectedValue != null ? selectedValue : bounds.min;

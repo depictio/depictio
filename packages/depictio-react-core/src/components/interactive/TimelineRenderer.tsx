@@ -14,6 +14,7 @@ import {
   InteractiveFilter,
   StoredMetadata,
 } from '../../api';
+import ComponentSkeleton from '../ComponentSkeleton';
 import './TimelineRenderer.css';
 
 /**
@@ -301,11 +302,7 @@ const TimelineRenderer: React.FC<{
     );
   }
   if (loading) {
-    return (
-      <Text size="xs" c="dimmed">
-        Loading timeline…
-      </Text>
-    );
+    return <ComponentSkeleton variant="control" />;
   }
   // Only genuinely-missing bounds (non-finite) are "unavailable". A single
   // distinct timestamp (min === max) is a normal early-stream state for a

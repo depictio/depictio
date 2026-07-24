@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { DepictioMultiSelect } from 'depictio-components';
+import ComponentSkeleton from '../ComponentSkeleton';
 
 import {
   fetchUniqueValues,
@@ -85,6 +86,12 @@ const MultiSelectRenderer: React.FC<{
       ? 'mdi:toggle-switch'
       : 'mdi:form-select';
 
+  // Skeleton on first load so this widget matches the rest of the dashboard's
+  // loading treatment instead of flashing an empty select.
+  if (loading) {
+    return <ComponentSkeleton variant="control" />;
+  }
+
   return (
     <DepictioMultiSelect
       title={metadata.title}
@@ -92,11 +99,7 @@ const MultiSelectRenderer: React.FC<{
       interactive_component_type={metadata.interactive_component_type}
       options={optionItems}
       value={selected}
-      placeholder={
-        loading
-          ? 'Loading options…'
-          : `Select ${metadata.column_name || 'values'}…`
-      }
+      placeholder={`Select ${metadata.column_name || 'values'}…`}
       color={
         // Mirrors `kwargs.get("color") or kwargs.get("custom_color")` from
         // depictio/dash/modules/interactive_component/utils.py:1612
