@@ -131,6 +131,16 @@ def _invalidate_multiqc_caches_for_dc(dc_id: str) -> None:
         logger.warning(f"Prerender disk invalidation failed for dc={dc_id}: {exc}")
 
     try:
+        from depictio.api.v1.services import multiqc_s3_prerender
+
+        dropped_s3 = multiqc_s3_prerender.delete_dc_prefix(str(dc_id))
+        logger.info(
+            f"MultiQC prerender invalidate dc={dc_id}: dropped {dropped_s3} S3 prerender object(s)"
+        )
+    except Exception as exc:
+        logger.warning(f"Prerender S3 invalidation failed for dc={dc_id}: {exc}")
+
+    try:
         from datetime import datetime
 
         from depictio.api.v1.db import multiqc_prerender_collection

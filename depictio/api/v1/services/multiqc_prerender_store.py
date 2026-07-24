@@ -23,15 +23,9 @@ from typing import Optional
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 
-
-def _split_cache_key(cache_key: str) -> str:
-    """Extract the trailing hash digest from a Phase-1 bare cache key.
-
-    Bare keys have the shape ``multiqc:figure:dc=<id>:<16-hex>``. The hash is
-    deterministic over (s3_locations, module, plot, dataset, theme), so we use
-    it as the on-disk filename without re-hashing.
-    """
-    return cache_key.rsplit(":", 1)[-1]
+# Single source of truth for "figure file name from cache key" — shared with the
+# S3 store and the CLI upload path so the three never drift.
+from depictio.cli.cli.utils.multiqc_figures import figure_cache_key_sha
 
 
 def prerender_dir() -> Path:
@@ -51,7 +45,7 @@ def dc_dir(dc_id: str) -> Path:
 
 def figure_path(dc_id: str, cache_key: str) -> Path:
     """Absolute path for a single figure file (does not check existence)."""
-    return dc_dir(dc_id) / f"{_split_cache_key(cache_key)}.json.gz"
+    return dc_dir(dc_id) / f"{figure_cache_key_sha(cache_key)}.json.gz"
 
 
 def write_figure(dc_id: str, cache_key: str, fig_dict: dict) -> None:
