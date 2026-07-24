@@ -17,6 +17,7 @@ import {
   InteractiveFilter,
   StoredMetadata,
 } from '../../api';
+import { adaptGlTrace, SVG_MAX_POINTS, useWebglSlot } from '../../webglBudget';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragment } from './plotlyTheme';
 
@@ -53,6 +54,10 @@ const DotPlotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
   const [clusterSort, setClusterSort] = useState<AxisSort>('name');
   const [annotateTopN, setAnnotateTopN] = useState<number>(0);
   const [markerOutline, setMarkerOutline] = useState<boolean>(true);
+  // A dot plot of every gene is both illegible and slow, so by default only the
+  // most cluster-discriminating genes are shown; Load-All (below) lifts the cap.
+  const [maxGenes, setMaxGenes] = useState<number>(50);
+  const [fullGenes, setFullGenes] = useState<boolean>(false);
 
   const requiredCols = useMemo(
     () =>
@@ -128,16 +133,75 @@ const DotPlotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
     };
   }, [metadata.dc_id, config.gene_col]);
 
+  // A dot plot draws one marker cloud, so it always competes for a bounded
+  // WebGL slot; without one the trace renders as downsampled SVG — see
+  // webglBudget. Asked at mount from the kind, like Volcano/Manhattan.
+  const glGranted = useWebglSlot(true);
+
   const figure = useMemo(() => {
     if (!rows) return null;
-    const clusterVals = (rows[config.cluster_col] || []) as (string | number)[];
-    const geneVals = (rows[config.gene_col] || []) as (string | number)[];
-    const meanRaw = (rows[config.mean_expression_col] || []) as number[];
-    const fracVals = (rows[config.frac_expressing_col] || []) as number[];
+    // Raw per-(cluster, gene) rows, before the gene cap.
+    const clusterAll = (rows[config.cluster_col] || []) as (string | number)[];
+    const geneAll = (rows[config.gene_col] || []) as (string | number)[];
+    const meanRawAll = (rows[config.mean_expression_col] || []) as number[];
+    const fracAll = (rows[config.frac_expressing_col] || []) as number[];
 
-    const meanVals = logTransform
-      ? meanRaw.map((v) => Math.log10(Math.max(0, Number(v) || 0) + 1))
-      : meanRaw.map((v) => Number(v) || 0);
+    const meanValsAll = logTransform
+      ? meanRawAll.map((v) => Math.log10(Math.max(0, Number(v) || 0) + 1))
+      : meanRawAll.map((v) => Number(v) || 0);
+
+    const genesInDataAll = Array.from(new Set(geneAll.map(String)));
+    const capActive = !fullGenes && genesInDataAll.length > maxGenes;
+
+    // Gene cap — keep the genes whose mean-expression varies most across
+    // clusters: the cluster-discriminating markers a dot plot exists to show.
+    // A dot plot of thousands of near-flat genes is both illegible and slow.
+    // `geneSort` still orders the visible axis independently (see below);
+    // Load-All (`fullGenes`) lifts the cap. When the cap is inactive the raw
+    // arrays pass through untouched — no ranking, no per-point copies.
+    let clusterVals = clusterAll;
+    let geneVals = geneAll;
+    let meanRaw = meanRawAll;
+    let meanVals = meanValsAll;
+    let fracVals = fracAll;
+    let pointsShown = geneAll.length;
+    if (capActive) {
+      const meanByGene = new Map<string, number[]>();
+      for (let i = 0; i < geneAll.length; i++) {
+        const g = String(geneAll[i]);
+        const bucket = meanByGene.get(g);
+        if (bucket) bucket.push(meanValsAll[i]);
+        else meanByGene.set(g, [meanValsAll[i]]);
+      }
+      const geneVariance = new Map<string, number>();
+      meanByGene.forEach((vals, g) => {
+        const n = vals.length;
+        if (n === 0) {
+          geneVariance.set(g, 0);
+          return;
+        }
+        const mean = vals.reduce((a, b) => a + b, 0) / n;
+        const varr = vals.reduce((a, b) => a + (b - mean) * (b - mean), 0) / n;
+        geneVariance.set(g, varr);
+      });
+      const keptSet = new Set(
+        [...genesInDataAll]
+          .sort((a, b) => (geneVariance.get(b) ?? 0) - (geneVariance.get(a) ?? 0))
+          .slice(0, maxGenes),
+      );
+      // Subset every per-point array to the kept genes so the trace, sizes,
+      // annotations and axis aggregation stay aligned.
+      const keepIdx: number[] = [];
+      for (let i = 0; i < geneAll.length; i++) {
+        if (keptSet.has(String(geneAll[i]))) keepIdx.push(i);
+      }
+      clusterVals = keepIdx.map((i) => clusterAll[i]);
+      geneVals = keepIdx.map((i) => geneAll[i]);
+      meanRaw = keepIdx.map((i) => meanRawAll[i]);
+      meanVals = keepIdx.map((i) => meanValsAll[i]);
+      fracVals = keepIdx.map((i) => fracAll[i]);
+      pointsShown = keepIdx.length;
+    }
 
     const clustersInData = Array.from(new Set(clusterVals.map(String)));
     const genesInData = Array.from(new Set(geneVals.map(String)));
@@ -203,42 +267,51 @@ const DotPlotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
       : config.mean_expression_col;
 
     return {
+      pointsShown,
+      pointsTotal: geneAll.length,
+      capActive,
       data: [
-        {
-          type: 'scatter' as const,
-          mode: 'markers' as const,
-          x: clusterVals.map(String),
-          y: geneVals.map(String),
-          customdata: fracVals.map((f, i) => [
-            String(geneVals[i] ?? ''),
-            String(clusterVals[i] ?? ''),
-            Number(f).toFixed(3),
-            Number(meanRaw[i]).toFixed(3),
-          ]),
-          hovertemplate:
-            `<b>%{customdata[0]}</b> in <b>%{customdata[1]}</b>` +
-            `<br>${config.mean_expression_col}: %{customdata[3]}` +
-            `<br>${config.frac_expressing_col}: %{customdata[2]}` +
-            `<extra></extra>`,
-          marker: {
-            size: sizes,
-            color: meanVals,
-            colorscale: colourScale,
-            reversescale: reverseScale,
-            showscale: true,
-            colorbar: {
-              title: { text: meanLabel, side: 'right' as const },
-              thickness: 12,
-              len: 0.85,
+        adaptGlTrace(
+          {
+            type: 'scattergl' as const,
+            mode: 'markers' as const,
+            x: clusterVals.map(String),
+            y: geneVals.map(String),
+            customdata: fracVals.map((f, i) => [
+              String(geneVals[i] ?? ''),
+              String(clusterVals[i] ?? ''),
+              Number(f).toFixed(3),
+              Number(meanRaw[i]).toFixed(3),
+            ]),
+            hovertemplate:
+              `<b>%{customdata[0]}</b> in <b>%{customdata[1]}</b>` +
+              `<br>${config.mean_expression_col}: %{customdata[3]}` +
+              `<br>${config.frac_expressing_col}: %{customdata[2]}` +
+              `<extra></extra>`,
+            marker: {
+              size: sizes,
+              color: meanVals,
+              colorscale: colourScale,
+              reversescale: reverseScale,
+              showscale: true,
+              colorbar: {
+                title: { text: meanLabel, side: 'right' as const },
+                thickness: 12,
+                len: 0.85,
+              },
+              // marker.line (outline) is poorly supported under scattergl, so
+              // the outline is honoured only on the SVG fallback path.
+              line:
+                markerOutline && !glGranted
+                  ? {
+                      width: 0.6,
+                      color: colorScheme === 'dark' ? 'rgba(0,0,0,0.7)' : 'rgba(255,255,255,0.85)',
+                    }
+                  : { width: 0 },
             },
-            line: markerOutline
-              ? {
-                  width: 0.6,
-                  color: colorScheme === 'dark' ? 'rgba(0,0,0,0.7)' : 'rgba(255,255,255,0.85)',
-                }
-              : { width: 0 },
           },
-        },
+          glGranted,
+        ),
       ],
       layout: {
         ...plotlyThemeFragment(isDark, theme),
@@ -276,6 +349,9 @@ const DotPlotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
     clusterSort,
     annotateTopN,
     markerOutline,
+    maxGenes,
+    fullGenes,
+    glGranted,
     colorScheme,
     theme,
     isDark,
@@ -362,6 +438,16 @@ const DotPlotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
         </Group>
         <NumberInput
           size="xs"
+          label="Max genes"
+          description="Top genes by cross-cluster variance (Load-All to override)"
+          value={maxGenes}
+          onChange={(v) => setMaxGenes(Math.max(5, Math.min(500, Number(v) || 50)))}
+          min={5}
+          max={500}
+          disabled={fullGenes}
+        />
+        <NumberInput
+          size="xs"
           label="Annotate top-N frac"
           description="0 = off"
           value={annotateTopN}
@@ -392,6 +478,8 @@ const DotPlotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
       minSize,
       annotateTopN,
       markerOutline,
+      maxGenes,
+      fullGenes,
       config.mean_expression_col,
     ],
   );
@@ -407,6 +495,22 @@ const DotPlotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
       emptyMessage={rows && Object.values(rows)[0]?.length === 0 ? 'No data' : undefined}
       dataRows={rows ?? undefined}
       dataColumns={requiredCols}
+      reduction={
+        figure && (figure.capActive || fullGenes)
+          ? {
+              // Points on screen — post-cap, and clamped to the SVG budget when
+              // this plot missed a WebGL slot and fell back to downsampled SVG.
+              displayed: glGranted
+                ? figure.pointsShown
+                : Math.min(figure.pointsShown, SVG_MAX_POINTS),
+              total: figure.pointsTotal,
+              sampled: figure.capActive,
+              full: fullGenes,
+              loading: false,
+              onToggle: () => setFullGenes((v) => !v),
+            }
+          : undefined
+      }
     >
       {figure ? (
         <Plot
