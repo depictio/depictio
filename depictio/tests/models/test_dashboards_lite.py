@@ -409,7 +409,7 @@ class TestTableLiteComponent:
         assert comp.tag == "table-1"
         assert comp.component_type == "table"
         assert comp.columns == []
-        assert comp.page_size == 10
+        assert comp.page_size == 100
         assert comp.sortable is True
         assert comp.filterable is True
 
