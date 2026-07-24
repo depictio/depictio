@@ -216,3 +216,109 @@ body.sidebar-transitioning .react-grid-layout {
   animation: depictio-duplicate-flash 1.5s ease-out;
   border-radius: 6px;
 }
+
+/* ── Dashboard-wide loading bar ────────────────────────────────────────────
+ * Determinate progress bar pinned just below the 50px header, reflecting how
+ * many panels have finished loading (ready / total). The visible line is 3px;
+ * the container is taller to give the hover tooltip a comfortable target.
+ * Colours come from the Mantine primary/red tokens so it tracks light/dark.
+ * See DashboardLoadingBar.tsx. */
+.depictio-loading-bar {
+  position: fixed;
+  top: 50px;
+  left: 0;
+  right: 0;
+  z-index: 300;
+  height: 9px; /* hover zone; the drawn line is 3px at the top */
+  pointer-events: none;
+}
+/* Full-height transparent strip = the tooltip hover target. */
+.depictio-loading-bar__track {
+  position: absolute;
+  inset: 0;
+  pointer-events: auto;
+}
+/* The faint 3px line the fill runs along. */
+.depictio-loading-bar__track::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: color-mix(in srgb, var(--mantine-color-default-border) 45%, transparent);
+}
+.depictio-loading-bar__fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 3px;
+  min-width: 2px;
+  border-radius: 0 3px 3px 0;
+  overflow: hidden; /* clip the sheen sweep to the filled width */
+  background: linear-gradient(
+    90deg,
+    var(--mantine-primary-color-7),
+    var(--mantine-primary-color-4)
+  );
+  box-shadow: 0 0 10px 0 color-mix(in srgb, var(--mantine-primary-color-5) 55%, transparent);
+  transition:
+    width 450ms cubic-bezier(0.22, 1, 0.36, 1),
+    background 300ms ease;
+}
+/* Glossy sheen that sweeps across the filled width while actively loading. */
+.depictio-loading-bar__fill::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--mantine-color-white) 55%, transparent),
+    transparent
+  );
+  transform: translateX(-100%);
+}
+/* While actively loading: sweep the sheen and pulse the glow. */
+.depictio-loading-bar[data-loading='true'] .depictio-loading-bar__fill::before {
+  animation: depictio-progress-sheen 1.4s ease-in-out infinite;
+}
+.depictio-loading-bar[data-loading='true'] .depictio-loading-bar__fill {
+  animation: depictio-progress-glow 1.3s ease-in-out infinite;
+}
+.depictio-loading-bar[data-error='true'] .depictio-loading-bar__fill {
+  background: linear-gradient(
+    90deg,
+    var(--mantine-color-red-7),
+    var(--mantine-color-red-4)
+  );
+  box-shadow: 0 0 10px 0 color-mix(in srgb, var(--mantine-color-red-5) 55%, transparent);
+  animation: none; /* a failed panel isn't "in progress" — hold steady */
+}
+@keyframes depictio-progress-sheen {
+  0% {
+    transform: translateX(-100%);
+  }
+  60%,
+  100% {
+    transform: translateX(100%);
+  }
+}
+@keyframes depictio-progress-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 8px 0 color-mix(in srgb, var(--mantine-primary-color-5) 45%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 16px 1px color-mix(in srgb, var(--mantine-primary-color-4) 75%, transparent);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .depictio-loading-bar__fill,
+  .depictio-loading-bar__fill::before {
+    animation: none !important;
+  }
+  .depictio-loading-bar__fill {
+    transition: none;
+  }
+}

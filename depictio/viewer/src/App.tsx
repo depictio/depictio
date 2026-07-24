@@ -36,6 +36,7 @@ import {
   fetchProjectFromDashboard,
   fetchIngestionHealth,
   bumpFetchGeneration,
+  DashboardLoadingProvider,
 } from 'depictio-react-core';
 import type {
   DashboardData,
@@ -65,6 +66,7 @@ import { useSidebarOpen } from './hooks/useSidebarOpen';
 import { useCurrentUser } from './hooks/useCurrentUser';
 import { isDashboardOwner } from './lib/dashboardOwnership';
 import NotesFooter from './components/NotesFooter';
+import DashboardLoadingBar from './components/DashboardLoadingBar';
 
 /**
  * Top-level SPA. Layout:
@@ -429,6 +431,7 @@ const App: React.FC = () => {
       dashboardMetadata={dashboard?.stored_metadata}
       projectId={dashboard?.project_id}
     >
+      <DashboardLoadingProvider>
       <AppShell
       header={{ height: 50 }}
       navbar={{
@@ -440,6 +443,9 @@ const App: React.FC = () => {
       transitionDuration={300}
       transitionTimingFunction="ease"
     >
+      {dashboard && !loading && !error && (
+        <DashboardLoadingBar metadataList={rightComponents} cardsLoading={cardsLoading} />
+      )}
       <AppShell.Header data-tour-id="header-title">
         <Header
           dashboardId={dashboardId}
@@ -765,6 +771,7 @@ const App: React.FC = () => {
         dashboard={dashboard}
       />
     </AppShell>
+      </DashboardLoadingProvider>
     </AvailableFilterValuesProvider>
   );
 };
