@@ -1,8 +1,10 @@
 import React, { useCallback, useContext, useEffect, useMemo, useRef } from 'react';
-import { Alert, Badge, Group, Loader, Paper, Stack, Text, Tooltip } from '@mantine/core';
+import { Alert, Badge, Group, Paper, Stack, Text, Tooltip } from '@mantine/core';
 
 import ErrorBoundary from '../ErrorBoundary';
+import ComponentSkeleton from '../ComponentSkeleton';
 import LoadAllButton from '../chrome/LoadAllButton';
+import { ComponentIndexContext, useReportLoadStatus } from '../DashboardLoadingProvider';
 import {
   AdvancedVizDataPopover,
   AdvancedVizExtrasContext,
@@ -135,6 +137,16 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
   estimated,
 }) => {
   const publish = useContext(AdvancedVizExtrasContext);
+
+  // Report this panel's load status to the dashboard registry (drives the
+  // header progress bar). Index arrives via context from AdvancedVizDispatch so
+  // we don't thread it through all ~20 per-viz renderers. No-ops with no
+  // provider (catalog preview / editor).
+  const componentIndex = useContext(ComponentIndexContext);
+  useReportLoadStatus(
+    componentIndex ?? '',
+    componentIndex ? (loading ? 'loading' : error ? 'error' : 'ready') : null,
+  );
 
   // Only surface the reduction affordances once the frame is actually reduced
   // (or fully loaded) — an unsampled small frame has nothing to expand.
@@ -301,16 +313,8 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
         ) : null}
         <div style={{ flex: '1 1 auto', minHeight: 0, position: 'relative' }}>
           {loading ? (
-            <div
-              style={{
-                position: 'absolute',
-                inset: 0,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <Loader size="sm" />
+            <div style={{ position: 'absolute', inset: 0, display: 'flex' }}>
+              <ComponentSkeleton variant="block" />
             </div>
           ) : error ? (
             <Alert color="red" title="Failed to render" variant="light">

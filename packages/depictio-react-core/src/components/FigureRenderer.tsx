@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Paper,
-  Loader,
   Text,
   Stack,
   Badge,
@@ -25,6 +24,8 @@ import { ActiveHighlight } from '../highlight';
 import { asNumberArray, extractCustomdataIds } from '../plotlyData';
 import { adaptGlTraces, PlotlyTrace, useWebglSlot } from '../webglBudget';
 import RefetchOverlay from './RefetchOverlay';
+import ComponentSkeleton from './ComponentSkeleton';
+import { useReportLoadStatus } from './DashboardLoadingProvider';
 import { LoadAllState } from './chrome/LoadAllButton';
 
 interface FigureRendererProps {
@@ -170,6 +171,13 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
   const isInitialLoad = figure === null;
   const showInitialLoader = (!inView || (isInitialLoad && loading));
   const showRefetchOverlay = !isInitialLoad && loading;
+
+  // Report load status to the dashboard registry. Off-screen → pending (null);
+  // once we have a figure it stays "ready" through any refetch overlay.
+  useReportLoadStatus(
+    metadata.index,
+    !inView ? null : figure != null ? 'ready' : error ? 'error' : 'loading',
+  );
 
   const emitSelection = (values: string[]) => {
     if (!onFilterChange) return;
@@ -470,12 +478,7 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
           {reductionBadge}
         </Group>
       )}
-      {showInitialLoader && (
-        <Stack align="center" justify="center" gap="xs" style={{ flex: 1 }}>
-          <Loader size="sm" />
-          <Text size="xs" c="dimmed">Rendering figure…</Text>
-        </Stack>
-      )}
+      {showInitialLoader && <ComponentSkeleton variant="block" />}
       {error && isInitialLoad && (
         <Stack style={{ flex: 1 }} justify="center" align="center">
           <Text size="sm" c="red">Figure failed: {error}</Text>

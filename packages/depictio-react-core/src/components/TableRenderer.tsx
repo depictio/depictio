@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Paper,
-  Loader,
   Text,
   Stack,
   Badge,
@@ -30,6 +29,8 @@ import { useNewItemIds } from '../hooks/useNewItemIds';
 import { useTransientFlag } from '../hooks/useTransientFlag';
 import { ActiveHighlight } from '../highlight';
 import RefetchOverlay from './RefetchOverlay';
+import ComponentSkeleton from './ComponentSkeleton';
+import { useReportLoadStatus } from './DashboardLoadingProvider';
 
 interface TableRendererProps {
   dashboardId: string;
@@ -284,6 +285,12 @@ const TableRenderer: React.FC<TableRendererProps> = ({
 
   const showInitialLoader = !inView || (!ready && loading);
   const showRefetchOverlay = ready && loading;
+
+  // Report load status to the dashboard registry. Off-screen → pending (null).
+  useReportLoadStatus(
+    metadata.index,
+    !inView ? null : ready ? 'ready' : error ? 'error' : 'loading',
+  );
 
   // When filters change after the grid is mounted, purge the cache so the
   // grid re-requests rows with the new filter state. Watch ``filtersForFetch``
@@ -656,12 +663,7 @@ const TableRenderer: React.FC<TableRendererProps> = ({
           {rowBadge}
         </Group>
       )}
-      {showInitialLoader && (
-        <Stack align="center" justify="center" gap="xs" style={{ flex: 1 }}>
-          <Loader size="sm" />
-          <Text size="xs" c="dimmed">Loading rows…</Text>
-        </Stack>
-      )}
+      {showInitialLoader && <ComponentSkeleton variant="table" />}
       {error && !ready && (
         <Stack style={{ flex: 1 }} justify="center" align="center">
           <Text size="sm" c="red">Table failed: {error}</Text>
