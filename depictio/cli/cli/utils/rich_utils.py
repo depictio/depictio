@@ -374,6 +374,40 @@ def add_rich_display_to_polars():
 #     large_df.rich_print(title="Large Dataset", max_rows=5, max_cols=5)
 
 
+#: Numeric columns of the scan summary tables, as (header, stat key).
+#:
+#: Declared once because the same set is rendered five times per table (header,
+#: per-DC row, run total, grand total, separator width) and across two tables.
+#: Adding a counter is now a single edit here.
+#:
+#: ``New``/``Changed``/``Unchanged`` are grouped: they are the detection
+#: outcomes. ``Skipped`` is retained because it is what pre-hash-detection scan
+#: results recorded, and equals Unchanged + un-pushed Changed.
+SCAN_SUMMARY_COLUMNS: tuple[tuple[str, str], ...] = (
+    ("Total", "total_files"),
+    ("New", "new_files"),
+    ("Changed", "changed_files"),
+    ("Unchanged", "unchanged_files"),
+    ("Updated", "updated_files"),
+    ("Missing", "missing_files"),
+    ("Deleted", "deleted_files"),
+    ("Skipped", "skipped_files"),
+    ("Other", "other_failure_files"),
+)
+
+SCAN_SUMMARY_STAT_KEYS: tuple[str, ...] = tuple(key for _, key in SCAN_SUMMARY_COLUMNS)
+
+
+def _scan_cells(stats: dict, template: str = "{}") -> list[str]:
+    """Render one row's numeric cells in column order."""
+    return [template.format(stats.get(key, 0)) for key in SCAN_SUMMARY_STAT_KEYS]
+
+
+def _accumulate_scan_stats(totals: dict[str, int], stats: dict) -> None:
+    for key in SCAN_SUMMARY_STAT_KEYS:
+        totals[key] += stats.get(key, 0)
+
+
 def rich_print_summary_scan_table_enhanced(
     runs: list[WorkflowRun], workflow: Workflow, show_totals: bool = True
 ) -> None:
@@ -405,24 +439,11 @@ def rich_print_summary_scan_table_enhanced(
     # Define columns
     table.add_column("Run Tag", style="cyan", justify="left", min_width=15)
     table.add_column("Data Collection", style="yellow", justify="left", min_width=18)
-    table.add_column("Total", justify="center", min_width=7)
-    table.add_column("Updated", justify="center", min_width=7)
-    table.add_column("New", justify="center", min_width=7)
-    table.add_column("Missing", justify="center", min_width=7)
-    table.add_column("Deleted", justify="center", min_width=7)
-    table.add_column("Skipped", justify="center", min_width=7)
-    table.add_column("Other", justify="center", min_width=7)
+    for header, _ in SCAN_SUMMARY_COLUMNS:
+        table.add_column(header, justify="center", min_width=7)
 
     # Track totals
-    grand_totals = {
-        "total_files": 0,
-        "updated_files": 0,
-        "new_files": 0,
-        "missing_files": 0,
-        "deleted_files": 0,
-        "skipped_files": 0,
-        "other_failure_files": 0,
-    }
+    grand_totals = dict.fromkeys(SCAN_SUMMARY_STAT_KEYS, 0)
 
     # Check if any runs have dc_stats data
     has_dc_stats = any(
@@ -439,13 +460,7 @@ def rich_print_summary_scan_table_enhanced(
             table.add_row(
                 "[dim]No scan data[/dim]",
                 f"[yellow]{dc.data_collection_tag}[/yellow]",
-                "0",
-                "0",
-                "0",
-                "0",
-                "0",
-                "0",
-                "0",
+                *_scan_cells({}),
             )
 
         console.print(table)
@@ -481,32 +496,19 @@ def rich_print_summary_scan_table_enhanced(
                 table.add_row(
                     run_tag_display,
                     f"[yellow]{dc_tag}[/yellow]",
-                    str(stats.get("total_files", 0)),
-                    str(stats.get("updated_files", 0)),
-                    str(stats.get("new_files", 0)),
-                    str(stats.get("missing_files", 0)),
-                    str(stats.get("deleted_files", 0)),
-                    str(stats.get("skipped_files", 0)),
-                    str(stats.get("other_failure_files", 0)),
+                    *_scan_cells(stats),
                 )
 
                 # Update totals
-                for key in run_totals.keys():
-                    run_totals[key] += stats.get(key, 0)
-                    grand_totals[key] += stats.get(key, 0)
+                _accumulate_scan_stats(run_totals, stats)
+                _accumulate_scan_stats(grand_totals, stats)
 
             # Add run total if multiple data collections
             if show_totals and len(scan_results.dc_stats) > 1:
                 table.add_row(
                     "",
                     "[dim italic]Run Total[/dim italic]",
-                    f"[bold]{run_totals['total_files']}[/bold]",
-                    f"[bold]{run_totals['updated_files']}[/bold]",
-                    f"[bold]{run_totals['new_files']}[/bold]",
-                    f"[bold]{run_totals['missing_files']}[/bold]",
-                    f"[bold]{run_totals['deleted_files']}[/bold]",
-                    f"[bold]{run_totals['skipped_files']}[/bold]",
-                    f"[bold]{run_totals['other_failure_files']}[/bold]",
+                    *_scan_cells(run_totals, "[bold]{}[/bold]"),
                     style="dim",
                 )
         else:
@@ -519,22 +521,15 @@ def rich_print_summary_scan_table_enhanced(
             table.add_row(
                 f"[bold]{run.run_tag}[/bold]",
                 "[dim]aggregated[/dim]",
-                str(stats.get("total_files", "")),
-                str(stats.get("updated_files", "")),
-                str(stats.get("new_files", "")),
-                str(stats.get("missing_files", "")),
-                str(stats.get("deleted_files", "")),
-                str(stats.get("skipped_files", "")),
-                str(stats.get("other_failure_files", "")),
+                *_scan_cells(stats),
             )
 
             # Update grand totals
-            for key in grand_totals.keys():
-                grand_totals[key] += stats.get(key, 0)
+            _accumulate_scan_stats(grand_totals, stats)
 
         # Add separator between runs
         if run_idx < len(runs) - 1:
-            table.add_row("", "", "", "", "", "", "", "", "", style="dim", end_section=True)
+            table.add_row(*([""] * (2 + len(SCAN_SUMMARY_COLUMNS))), style="dim", end_section=True)
 
     # Add grand total row
     if show_totals and len(runs) > 1:
@@ -542,13 +537,7 @@ def rich_print_summary_scan_table_enhanced(
         table.add_row(
             "[bold blue]TOTAL[/bold blue]",
             "[bold blue]All Collections[/bold blue]",
-            f"[bold blue]{grand_totals['total_files']}[/bold blue]",
-            f"[bold blue]{grand_totals['updated_files']}[/bold blue]",
-            f"[bold blue]{grand_totals['new_files']}[/bold blue]",
-            f"[bold blue]{grand_totals['missing_files']}[/bold blue]",
-            f"[bold blue]{grand_totals['deleted_files']}[/bold blue]",
-            f"[bold blue]{grand_totals['skipped_files']}[/bold blue]",
-            f"[bold blue]{grand_totals['other_failure_files']}[/bold blue]",
+            *_scan_cells(grand_totals, "[bold blue]{}[/bold blue]"),
         )
 
     console.print(table)
@@ -581,62 +570,29 @@ def rich_print_summary_scan_table_by_dc(runs: list[WorkflowRun]) -> None:
 
     table.add_column("Data Collection", style="yellow", justify="left", min_width=18)
     table.add_column("Run Tag", style="cyan", justify="left", min_width=15)
-    table.add_column("Total", justify="center")
-    table.add_column("Updated", justify="center")
-    table.add_column("New", justify="center")
-    table.add_column("Missing", justify="center")
-    table.add_column("Deleted", justify="center")
-    table.add_column("Skipped", justify="center")
-    table.add_column("Other", justify="center")
+    for header, _ in SCAN_SUMMARY_COLUMNS:
+        table.add_column(header, justify="center")
 
     for dc_idx, (dc_tag, run_data) in enumerate(dc_data.items()):
         first_row = True
-        dc_totals = {
-            key: 0
-            for key in [
-                "total_files",
-                "updated_files",
-                "new_files",
-                "missing_files",
-                "deleted_files",
-                "skipped_files",
-                "other_failure_files",
-            ]
-        }
+        dc_totals = dict.fromkeys(SCAN_SUMMARY_STAT_KEYS, 0)
 
         for run_tag, stats in run_data:
             # Only show DC tag in first row
             dc_display = f"[bold yellow]{dc_tag}[/bold yellow]" if first_row else ""
             first_row = False
 
-            table.add_row(
-                dc_display,
-                run_tag,
-                str(stats.get("total_files", 0)),
-                str(stats.get("updated_files", 0)),
-                str(stats.get("new_files", 0)),
-                str(stats.get("missing_files", 0)),
-                str(stats.get("deleted_files", 0)),
-                str(stats.get("skipped_files", 0)),
-                str(stats.get("other_failure_files", 0)),
-            )
+            table.add_row(dc_display, run_tag, *_scan_cells(stats))
 
             # Update DC totals
-            for key in dc_totals.keys():
-                dc_totals[key] += stats.get(key, 0)
+            _accumulate_scan_stats(dc_totals, stats)
 
         # Add DC summary row
         if len(run_data) > 1:
             table.add_row(
                 "",
                 "[dim italic]DC Total[/dim italic]",
-                f"[bold]{dc_totals['total_files']}[/bold]",
-                f"[bold]{dc_totals['updated_files']}[/bold]",
-                f"[bold]{dc_totals['new_files']}[/bold]",
-                f"[bold]{dc_totals['missing_files']}[/bold]",
-                f"[bold]{dc_totals['deleted_files']}[/bold]",
-                f"[bold]{dc_totals['skipped_files']}[/bold]",
-                f"[bold]{dc_totals['other_failure_files']}[/bold]",
+                *_scan_cells(dc_totals, "[bold]{}[/bold]"),
                 style="dim",
             )
 

@@ -278,6 +278,22 @@ def register_run_command(app: typer.Typer):
         sync_files: bool = typer.Option(
             False, "--sync-files", help="Update files for the data collection"
         ),
+        sync_changed: bool = typer.Option(
+            False,
+            "--sync-changed",
+            help=(
+                "Re-upload only files whose metadata hash moved since the last scan. "
+                "Narrower than --sync-files, which re-uploads every registered file."
+            ),
+        ),
+        legacy_scan_depth: bool = typer.Option(
+            False,
+            "--legacy-scan-depth",
+            help=(
+                "Ignore each data collection's scan max_depth/ignore, as releases before "
+                "1.2.2 did. Deprecated escape hatch; will be removed."
+            ),
+        ),
         rich_tables: bool = typer.Option(
             False,
             "--rich-tables",
@@ -342,7 +358,9 @@ def register_run_command(app: typer.Typer):
                 "DRY RUN MODE - No actual operations will be performed", "info"
             )
 
-        if sync_files or overwrite:
+        # Any re-upload flag needs every run walked again; without this, runs
+        # already registered are skipped before a single file is looked at.
+        if sync_files or sync_changed or overwrite:
             rescan_folders = True
 
         if user and not provisioning_key:
@@ -706,6 +724,8 @@ def register_run_command(app: typer.Typer):
                             command_parameters = {
                                 "rescan_folders": rescan_folders,
                                 "sync_files": sync_files,
+                                "sync_changed": sync_changed,
+                                "legacy_scan_depth": legacy_scan_depth,
                                 "rich_tables": rich_tables,
                             }
 

@@ -1,5 +1,6 @@
 import os
 import re
+from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -26,12 +27,16 @@ from depictio.cli.cli.utils.scan_utils import (
     generate_run_hash,
     regex_match,
 )
-from depictio.cli.cli.utils.scan_walk import ScannedPath, iter_run_files
+from depictio.cli.cli.utils.scan_walk import ScannedPath, is_ignored, iter_run_files
 from depictio.cli.cli_logging import logger
 from depictio.models.models.base import PyObjectId
 from depictio.models.models.cli import CLIConfig
 from depictio.models.models.data_collections import DataCollection
-from depictio.models.models.files import File, FileScanResult
+from depictio.models.models.files import (
+    NOT_UPLOADED_SCAN_REASONS,
+    File,
+    FileScanResult,
+)
 from depictio.models.models.users import Permission, UserBase
 from depictio.models.models.workflows import (
     Workflow,
@@ -39,6 +44,31 @@ from depictio.models.models.workflows import (
     WorkflowDataLocation,
     WorkflowRun,
     WorkflowRunScan,
+)
+
+#: Counter keys carried by every per-data-collection scan stat block. Declared
+#: once so the run-level aggregate stays in sync when a counter is added.
+SCAN_STAT_KEYS: tuple[str, ...] = (
+    "total_files",
+    "updated_files",
+    "new_files",
+    "changed_files",
+    "unchanged_files",
+    "missing_files",
+    "deleted_files",
+    "skipped_files",
+    "other_failure_files",
+)
+
+#: File-id buckets persisted on each ``WorkflowRunScan``. Deliberately narrower
+#: than SCAN_STAT_KEYS: unchanged files are the bulk of a steady-state scan and
+#: listing their ids would bloat the run document for no benefit.
+SCAN_FILE_ID_BUCKETS: tuple[str, ...] = (
+    "updated_files",
+    "new_files",
+    "changed_files",
+    "skipped_files",
+    "other_failure_files",
 )
 
 # Supported image extensions for S3 verification
@@ -109,6 +139,85 @@ def _verify_s3_images(s3_base_folder: str, CLI_config: CLIConfig) -> dict:
         return {"count": 0, "sample": [], "error": str(e)}
 
 
+@dataclass(frozen=True, slots=True)
+class _ScanBounds:
+    """A data collection's ``max_depth``/``ignore`` restrictions."""
+
+    max_depth: int | None
+    ignore: tuple[str, ...]
+
+    @property
+    def is_unbounded(self) -> bool:
+        return self.max_depth is None and not self.ignore
+
+    def allows(self, scanned: ScannedPath) -> bool:
+        if self.max_depth is not None and scanned.rel_path.count("/") > self.max_depth:
+            return False
+        return not is_ignored(scanned.match_name, scanned.rel_path, self.ignore)
+
+
+def _dc_scan_bounds(dc: DataCollection) -> _ScanBounds:
+    """Read a data collection's scan bounds, defaulting to unbounded."""
+    params = dc.config.scan.scan_parameters if dc.config.scan else None
+    return _ScanBounds(
+        max_depth=getattr(params, "max_depth", None),
+        ignore=tuple(getattr(params, "ignore", None) or ()),
+    )
+
+
+def _walk_bounds(data_collections: list[DataCollection]) -> _ScanBounds:
+    """The most permissive bounds across data collections.
+
+    The run tree is walked once and shared, so directory-level pruning may only
+    drop what *every* data collection excludes; each one re-applies its own
+    bounds as a filter afterwards. When they all agree — the common case — the
+    prune still happens during the walk and nothing under an ignored folder is
+    ever stat'd.
+    """
+    per_dc = [_dc_scan_bounds(dc) for dc in data_collections]
+    if not per_dc:
+        return _ScanBounds(max_depth=None, ignore=())
+
+    depths = [bounds.max_depth for bounds in per_dc]
+    walk_depth = None if any(d is None for d in depths) else max(d for d in depths if d is not None)
+
+    common_ignore = set(per_dc[0].ignore)
+    for bounds in per_dc[1:]:
+        common_ignore &= set(bounds.ignore)
+
+    return _ScanBounds(max_depth=walk_depth, ignore=tuple(sorted(common_ignore)))
+
+
+def _warn_enforced_scan_bounds(data_collections: list[DataCollection]) -> None:
+    """Announce that ``max_depth``/``ignore`` are now enforced.
+
+    Both fields have been accepted by the config model and silently dropped, so
+    any project that set them has been registering files its own config asked to
+    exclude. Enforcing them is the fix, but it *removes* files from an existing
+    project's view — which deserves saying out loud rather than showing up as an
+    unexplained drop in counts.
+    """
+    bounded = []
+    for dc in data_collections:
+        bounds = _dc_scan_bounds(dc)
+        if not bounds.is_unbounded:
+            bounded.append((dc.data_collection_tag, bounds))
+
+    if not bounded:
+        return
+
+    details = ", ".join(
+        f"{tag} (max_depth={bounds.max_depth}, ignore={list(bounds.ignore)})"
+        for tag, bounds in bounded
+    )
+    rich_print_checked_statement(
+        f"Now enforcing scan max_depth/ignore for: {details}. These were previously parsed "
+        "but never applied, so fewer files may be registered than in earlier runs. "
+        "Pass --legacy-scan-depth to restore the old behaviour for one release.",
+        "warning",
+    )
+
+
 def scan_single_file(
     file_location: str,
     run: WorkflowRun,
@@ -119,6 +228,7 @@ def scan_single_file(
     full_regex: str | None = None,
     skip_regex: bool = False,
     scanned: ScannedPath | None = None,
+    sync_changed: bool = False,
 ) -> FileScanResult | None:
     """
     Process a single file.
@@ -140,6 +250,9 @@ def scan_single_file(
             provided, ``file_location`` is ignored and no filesystem call is made
             here — the walker's single ``scandir`` stat is reused instead of
             re-issuing ``realpath`` plus three ``stat`` calls per file.
+        sync_changed (bool): Whether a registered file whose metadata hash moved
+            should be re-uploaded. Narrower than ``update_files``, which
+            re-uploads every registered file regardless.
 
     Returns:
         Optional[File]: A File instance if the file is valid; otherwise, None.
@@ -190,21 +303,25 @@ def scan_single_file(
     # registry once per scanned file, regardless of log level.
     existing_file = existing_files.get(file_location)
     if existing_file is not None:
-        logger.debug(f"File {file_name} already exists in the database.")
-
-        # compare hashes to check if the file has changed
-        if existing_file["file_hash"] == file_hash:
-            logger.debug(f"File {file_name} has not changed based on hash since last scan.")
-        else:
-            logger.debug(f"File {file_name} has changed based on hash since last scan.")
-
         file_id = existing_file["_id"]
-        if not update_files:
-            logger.debug(f"Skipping existing file {file_name}.")
-            scan_result = {"result": "failure", "reason": "skipped"}
-        else:
+        changed = existing_file["file_hash"] != file_hash
+
+        if update_files:
+            # --sync-files: re-upload unconditionally, changed or not.
             logger.debug(f"Updating existing file {file_name}.")
             scan_result = {"result": "success", "reason": "updated"}
+        elif changed:
+            # This comparison was already being computed and then thrown away in
+            # a debug log, so a file rewritten in place stayed invisible unless
+            # the user reached for --sync-files and re-uploaded everything.
+            logger.debug(f"File {file_name} changed since last scan.")
+            scan_result = {
+                "result": "success" if sync_changed else "failure",
+                "reason": "changed",
+            }
+        else:
+            logger.debug(f"File {file_name} unchanged since last scan.")
+            scan_result = {"result": "failure", "reason": "unchanged"}
 
     # Create the File instance.
     file_instance = File(
@@ -244,6 +361,8 @@ def process_files(
     existing_files: dict[str, dict],
     update_files: bool = False,
     skip_regex: bool = False,
+    sync_changed: bool = False,
+    honor_scan_bounds: bool = True,
 ) -> list[FileScanResult]:
     """
     Scan files from a given directory or a single file path.
@@ -286,7 +405,8 @@ def process_files(
 
     if os.path.isdir(path):
         logger.debug(f"Scanning directory: {path}")
-        for scanned in iter_run_files(path):
+        bounds = _dc_scan_bounds(data_collection) if honor_scan_bounds else _ScanBounds(None, ())
+        for scanned in iter_run_files(path, max_depth=bounds.max_depth, ignore=list(bounds.ignore)):
             file_instance = scan_single_file(
                 file_location=scanned.path,
                 run=run,
@@ -297,6 +417,7 @@ def process_files(
                 full_regex=full_regex,
                 skip_regex=skip_regex,
                 scanned=scanned,
+                sync_changed=sync_changed,
             )
             if file_instance:
                 file_list.append(file_instance)
@@ -311,6 +432,7 @@ def process_files(
             update_files=update_files,
             full_regex=full_regex,
             skip_regex=skip_regex,
+            sync_changed=sync_changed,
         )
         logger.debug(f"File Instance: {file_instance}")
         if file_instance:
@@ -333,6 +455,8 @@ def scan_run_for_multiple_data_collections(
     permissions: Permission,
     rescan_folders: bool = False,
     update_files: bool = False,
+    sync_changed: bool = False,
+    honor_scan_bounds: bool = True,
 ) -> WorkflowRun | None:
     """
     Scan a single run for multiple data collections simultaneously.
@@ -369,7 +493,14 @@ def scan_run_for_multiple_data_collections(
     # Walk the run tree once and share it across every data collection. The
     # stat metadata rides along, so the per-DC loops below never touch the
     # filesystem again — they only re-run the regex.
-    all_files_in_run: list[ScannedPath] = list(iter_run_files(run_location))
+    walk_bounds = _walk_bounds(data_collections) if honor_scan_bounds else _ScanBounds(None, ())
+    all_files_in_run: list[ScannedPath] = list(
+        iter_run_files(
+            run_location,
+            max_depth=walk_bounds.max_depth,
+            ignore=list(walk_bounds.ignore),
+        )
+    )
 
     # Process files for each data collection
     all_processed_files = []
@@ -421,8 +552,17 @@ def scan_run_for_multiple_data_collections(
         )
 
         # Process files that match this data collection's regex
+        # The shared walk is pruned only to what every data collection excludes,
+        # so each one re-applies its own bounds here.
+        dc_bounds = _dc_scan_bounds(dc) if honor_scan_bounds else None
+        if dc_bounds is not None and dc_bounds.is_unbounded:
+            dc_bounds = None
+
         dc_file_scan_results = []
         for scanned in all_files_in_run:
+            if dc_bounds is not None and not dc_bounds.allows(scanned):
+                continue
+
             # Check regex match against basename first. ``match_name``/``rel_path``
             # are the walked names rather than the symlink-resolved ones, matching
             # what this loop compared before.
@@ -448,55 +588,57 @@ def scan_run_for_multiple_data_collections(
                 full_regex=full_regex,
                 skip_regex=True,
                 scanned=scanned,
+                sync_changed=sync_changed,
             )
 
             if file_scan_result:
                 dc_file_scan_results.append(file_scan_result)
 
-        # Process the scan results for this data collection
-        old_updated_files = []
-        new_files = []
-        files_skipped = []
-        files_other_failure = []
+        # Process the scan results for this data collection. Bucket by reason
+        # once rather than re-walking the result list per counter.
+        by_reason: defaultdict[str, list] = defaultdict(list)
+        for sc in dc_file_scan_results:
+            by_reason[sc.scan_result["reason"]].append(sc.file.id)
+
+        old_updated_files = by_reason["updated"]
+        new_files = by_reason["added"]
+        files_unchanged = by_reason["unchanged"]
+        files_changed = by_reason["changed"]
+
+        # "skipped" stays the umbrella for "already registered, not re-uploaded"
+        # so counts remain comparable with scans predating hash detection.
+        # Anything failing outside that set is a genuine failure.
+        files_skipped = [
+            sc.file.id
+            for sc in dc_file_scan_results
+            if sc.scan_result["result"] == "failure"
+            and sc.scan_result["reason"] in NOT_UPLOADED_SCAN_REASONS
+        ]
+        files_other_failure = [
+            sc.file.id
+            for sc in dc_file_scan_results
+            if sc.scan_result["result"] == "failure"
+            and sc.scan_result["reason"] not in NOT_UPLOADED_SCAN_REASONS
+        ]
 
         if dc_file_scan_results:
-            old_updated_files = [
-                sc.file.id
-                for sc in dc_file_scan_results
-                if sc.scan_result["result"] == "success" and sc.scan_result["reason"] == "updated"
+            # ``result`` already encodes "should this be uploaded": added always,
+            # changed only under --sync-changed, updated only under --sync-files.
+            files_to_upload = [
+                sc.file for sc in dc_file_scan_results if sc.scan_result["result"] == "success"
             ]
-            new_files = [
-                sc.file.id
-                for sc in dc_file_scan_results
-                if sc.scan_result["result"] == "success" and sc.scan_result["reason"] == "added"
-            ]
-            files_skipped = [
-                sc.file.id
-                for sc in dc_file_scan_results
-                if sc.scan_result["result"] == "failure" and sc.scan_result["reason"] == "skipped"
-            ]
-            files_other_failure = [
-                sc.file.id
-                for sc in dc_file_scan_results
-                if sc.scan_result["result"] == "failure" and sc.scan_result["reason"] != "skipped"
-            ]
-
-            # Get files to upload
-            if not update_files:
-                files_to_upload = [
-                    sc.file
-                    for sc in dc_file_scan_results
-                    if sc.scan_result["result"] == "success" and sc.scan_result["reason"] == "added"
-                ]
-            else:
-                files_to_upload = [
-                    sc.file for sc in dc_file_scan_results if sc.scan_result["result"] == "success"
-                ]
 
             # Upload files for this data collection
             if files_to_upload:
                 logger.info(f"Files to add for DC {dc.data_collection_tag}: {len(files_to_upload)}")
-                api_create_files(files=files_to_upload, CLI_config=CLI_config, update=update_files)
+                # /files/upsert_batch uses $setOnInsert when update=False, which
+                # would silently discard the new metadata of a file that already
+                # exists — so pushing changed files has to ask for $set.
+                api_create_files(
+                    files=files_to_upload,
+                    CLI_config=CLI_config,
+                    update=update_files or sync_changed,
+                )
 
             # Handle missing files
             missing_files_location = set(existing_files_for_dc.keys()) - set(
@@ -515,10 +657,13 @@ def scan_run_for_multiple_data_collections(
             # Collect all files for this run
             all_processed_files.extend(files_to_upload)
 
-        # Store file IDs for this data collection
+        # Store file IDs for this data collection. ``changed_files`` is worth
+        # persisting because it is small and actionable; ``unchanged_files`` is
+        # the bulk of a steady-state scan and would only bloat the run document.
         dc_file_ids[dc.data_collection_tag] = {
             "updated_files": old_updated_files,
             "new_files": new_files,
+            "changed_files": files_changed,
             "skipped_files": files_skipped,
             "other_failure_files": files_other_failure,
         }
@@ -533,6 +678,8 @@ def scan_run_for_multiple_data_collections(
             "total_files": len(dc_file_scan_results),
             "updated_files": len(old_updated_files),
             "new_files": len(new_files),
+            "changed_files": len(files_changed),
+            "unchanged_files": len(files_unchanged),
             "missing_files": missing_files_count if not update_files else 0,
             "deleted_files": missing_files_count if update_files else 0,
             "skipped_files": len(files_skipped),
@@ -547,40 +694,25 @@ def scan_run_for_multiple_data_collections(
     # Update the workflow run with all files
     workflow_run.files_id = [file.id for file in all_processed_files]
 
-    # Generate aggregate stats for the run (sum across all data collections)
+    # Generate aggregate stats for the run (sum across all data collections).
+    # Driven by SCAN_STAT_KEYS so a new counter shows up in the run total
+    # without a second edit here.
     aggregate_stats = {
-        "total_files": sum(stats["total_files"] for stats in dc_stats.values()),
-        "updated_files": sum(stats["updated_files"] for stats in dc_stats.values()),
-        "new_files": sum(stats["new_files"] for stats in dc_stats.values()),
-        "missing_files": sum(stats["missing_files"] for stats in dc_stats.values()),
-        "deleted_files": sum(stats["deleted_files"] for stats in dc_stats.values()),
-        "skipped_files": sum(stats["skipped_files"] for stats in dc_stats.values()),
-        "other_failure_files": sum(stats["other_failure_files"] for stats in dc_stats.values()),
+        key: sum(stats.get(key, 0) for stats in dc_stats.values()) for key in SCAN_STAT_KEYS
     }
 
     logger.debug(f"Aggregate Stats for run {run_tag}: {aggregate_stats}")
 
     # Combine file IDs from all data collections
-    all_updated_files = []
-    all_new_files = []
-    all_skipped_files = []
-    all_other_failure_files = []
-
-    for dc_tag, file_ids in dc_file_ids.items():
-        all_updated_files.extend(file_ids["updated_files"])
-        all_new_files.extend(file_ids["new_files"])
-        all_skipped_files.extend(file_ids["skipped_files"])
-        all_other_failure_files.extend(file_ids["other_failure_files"])
+    combined_files_id: dict[str, list] = {bucket: [] for bucket in SCAN_FILE_ID_BUCKETS}
+    for file_ids in dc_file_ids.values():
+        for bucket in SCAN_FILE_ID_BUCKETS:
+            combined_files_id[bucket].extend(file_ids.get(bucket, []))
 
     # Create the WorkflowRunScan with dc_stats
     scan_result = WorkflowRunScan(
         stats=aggregate_stats,
-        files_id={
-            "updated_files": all_updated_files,
-            "new_files": all_new_files,
-            "skipped_files": all_skipped_files,
-            "other_failure_files": all_other_failure_files,
-        },
+        files_id=combined_files_id,
         dc_stats=dc_stats,  # Make sure this is set!
         scan_time=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     )
@@ -736,7 +868,12 @@ def scan_files_for_workflow(
     # Parse the command parameters
     rescan_folders = command_parameters.get("rescan_folders", False)
     update_files = command_parameters.get("sync_files", False)
+    sync_changed = command_parameters.get("sync_changed", False)
     rich_tables = command_parameters.get("rich_tables", True)
+    honor_scan_bounds = not command_parameters.get("legacy_scan_depth", False)
+
+    if honor_scan_bounds:
+        _warn_enforced_scan_bounds(data_collections)
 
     workflow_id = workflow.id
 
@@ -817,6 +954,8 @@ def scan_files_for_workflow(
                         permissions=permissions,
                         rescan_folders=rescan_folders,
                         update_files=update_files,
+                        sync_changed=sync_changed,
+                        honor_scan_bounds=honor_scan_bounds,
                         existing_run=existing_runs_reformated.get(run_tag, None),
                     )
                     if workflow_run:
@@ -854,6 +993,8 @@ def scan_files_for_workflow(
                         permissions=permissions,
                         rescan_folders=rescan_folders,
                         update_files=update_files,
+                        sync_changed=sync_changed,
+                        honor_scan_bounds=honor_scan_bounds,
                         existing_run=existing_runs_reformated.get(run, None),
                     )
                     if workflow_run:
@@ -926,6 +1067,7 @@ def scan_files_for_data_collection(
     """
     # Parse the command parameters
     update_files = command_parameters.get("sync_files", False)
+    sync_changed = command_parameters.get("sync_changed", False)
 
     workflow_id = workflow.id
 
@@ -1019,22 +1161,15 @@ def scan_files_for_data_collection(
         permissions=permissions,
         update_files=update_files,
         skip_regex=True,
+        sync_changed=sync_changed,
     )
 
-    if scan_file_result:
-        if not update_files:
-            files = [
-                sc.file
-                for sc in scan_file_result
-                if sc.scan_result["result"] == "success" and sc.scan_result["reason"] == "added"
-            ]
-        else:
-            files = [sc.file for sc in scan_file_result if sc.scan_result["result"] == "success"]
-    else:
-        files = []
+    # ``result`` already encodes whether a file should be uploaded: added
+    # always, changed under --sync-changed, updated under --sync-files.
+    files = [sc.file for sc in scan_file_result if sc.scan_result["result"] == "success"]
 
     if files:
-        api_create_files(files=files, CLI_config=CLI_config, update=update_files)
+        api_create_files(files=files, CLI_config=CLI_config, update=update_files or sync_changed)
 
     rich_print_checked_statement(
         f"Scanned {len(files)} file(s) for data collection {data_collection.data_collection_tag}",

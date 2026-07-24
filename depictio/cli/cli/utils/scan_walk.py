@@ -59,7 +59,7 @@ class ScannedPath:
     mtime_ns: int
 
 
-def _is_ignored(name: str, rel_path: str, patterns: tuple[str, ...]) -> bool:
+def is_ignored(name: str, rel_path: str, patterns: tuple[str, ...]) -> bool:
     """Whether an entry matches any ignore glob, by basename or run-relative path.
 
     Both are tested so that ``*.tmp`` and ``work/**`` style patterns each work
@@ -119,7 +119,7 @@ def iter_run_files(
         for entry in entries:
             rel_path = f"{rel_dir}/{entry.name}" if rel_dir else entry.name
 
-            if _is_ignored(entry.name, rel_path, patterns):
+            if is_ignored(entry.name, rel_path, patterns):
                 logger.debug(f"Ignoring {rel_path} (matched ignore pattern)")
                 continue
 
