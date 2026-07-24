@@ -14,6 +14,7 @@ import {
   InteractiveFilter,
   StoredMetadata,
 } from '../../api';
+import ComponentSkeleton from '../ComponentSkeleton';
 import './TimelineRenderer.css';
 
 /**
@@ -301,11 +302,7 @@ const TimelineRenderer: React.FC<{
     );
   }
   if (loading) {
-    return (
-      <Text size="xs" c="dimmed">
-        Loading timeline…
-      </Text>
-    );
+    return <ComponentSkeleton variant="control" />;
   }
   if (!Number.isFinite(minMs) || !Number.isFinite(maxMs) || (maxMs as number) <= (minMs as number)) {
     return (

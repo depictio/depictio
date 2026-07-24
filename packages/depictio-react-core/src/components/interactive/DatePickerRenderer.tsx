@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Paper, Stack, Group, Text } from '@mantine/core';
 import { DatePickerInput } from '@mantine/dates';
 import { Icon } from '@iconify/react';
+import ComponentSkeleton from '../ComponentSkeleton';
 
 import {
   fetchSpecs,
@@ -171,11 +172,7 @@ const DatePickerRenderer: React.FC<{
   const iconCol = metadata.icon_color || 'var(--mantine-color-blue-6)';
 
   if (loading) {
-    return (
-      <div className="dashboard-loading" style={{ minHeight: 80, fontSize: '0.75rem' }}>
-        Loading date range…
-      </div>
-    );
+    return <ComponentSkeleton variant="control" />;
   }
 
   if (error || !bounds) {
