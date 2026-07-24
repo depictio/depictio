@@ -601,16 +601,25 @@ async def get_unique_values(
     if (dc_doc.get("config", {}).get("type") or "").lower() == "multiqc":
         from depictio.api.v1.db import multiqc_collection
 
-        mqc = multiqc_collection.find_one(
+        # multiqc_collection stores one document per report, each carrying only
+        # its own report's samples. A multi-report DC therefore has N docs, so a
+        # find_one() would surface just one arbitrary report's samples. Union
+        # canonical_samples (fallback samples) across ALL report docs so the
+        # filter dropdown reflects the aggregate — mirrors the all-docs
+        # aggregation in _resolve_multiqc_sample_filter.
+        union: set[str] = set()
+        for rep in multiqc_collection.find(
             {
                 "data_collection_id": {
                     "$in": [ObjectId(str(data_collection_id)), str(data_collection_id)]
                 }
-            }
-        )
-        md = (mqc or {}).get("metadata") or {}
-        samples = md.get("canonical_samples") or md.get("samples") or []
-        values_str = sorted({str(v) for v in samples})[:limit]
+            },
+            {"metadata.canonical_samples": 1, "metadata.samples": 1},
+        ):
+            md = rep.get("metadata") or {}
+            for v in md.get("canonical_samples") or md.get("samples") or []:
+                union.add(str(v))
+        values_str = sorted(union)[:limit]
         return {"column": column, "values": values_str}
 
     deltatables_list = list(deltatables_collection.find({"data_collection_id": data_collection_id}))
