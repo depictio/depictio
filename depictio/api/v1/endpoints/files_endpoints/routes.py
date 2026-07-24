@@ -1,3 +1,4 @@
+import asyncio
 import mimetypes
 import posixpath
 from urllib.parse import unquote
@@ -63,8 +64,10 @@ async def create_file(payload: UpsertFilesBatchRequest, current_user=Depends(get
         operations.append(op)
 
     try:
-        # Perform the bulk upsert
-        result = files_collection.bulk_write(operations, ordered=False)
+        # Perform the bulk upsert. pymongo is synchronous, so running it inline
+        # in an async handler blocks the whole worker's event loop for the
+        # duration — and a scan sends every file of a data collection at once.
+        result = await asyncio.to_thread(files_collection.bulk_write, operations, ordered=False)
 
         if payload.update:
             # When update=True, some files might be updated and some inserted.
