@@ -26,6 +26,7 @@ export const TRACKED_LOAD_TYPES: ReadonlySet<string> = new Set([
   'map',
   'image',
   'advanced_viz',
+  'multiqc',
 ]);
 
 interface LoadingActions {
