@@ -25,7 +25,7 @@ from depictio.cli.cli.utils.rich_utils import (
     rich_print_command_usage,
     rich_print_section_separator,
 )
-from depictio.cli.cli.utils.state import state_dir
+from depictio.cli.cli.utils.state import lock_path
 from depictio.cli.cli.utils.watch import (
     ProjectWatcher,
     WatchConfig,
@@ -546,7 +546,7 @@ def watch(
             logger.error(f"Ingestion cycle failed: {exc}")
             return False
 
-    lock_file = state_dir() / f"{project_config.id}.lock"
+    lock_file = lock_path(CLI_config.api_base_url, str(project_config.id))
     watcher = ProjectWatcher(roots=roots, config=config, run_cycle=run_cycle)
     watcher.install_signal_handlers()
 
@@ -645,6 +645,15 @@ def process(
         "--preview-recipes",
         help="Show recipe input sources and transformed output without writing to Delta Lake",
     ),
+    repartition: bool = typer.Option(
+        False,
+        "--repartition",
+        help=(
+            "Allow --write-mode replace-runs to adopt run partitioning on a table "
+            "that does not have it yet. This rewrites every row, so it is never "
+            "done implicitly — and never by the watcher."
+        ),
+    ),
     async_upsert: bool = typer.Option(
         False,
         "--async-upsert",
@@ -705,6 +714,7 @@ def process(
                     "preview_recipes": preview_recipes,
                     "project_id": str(project_config.id),
                     "async_upsert": async_upsert,
+                    "repartition": repartition,
                 }
 
                 rich_print_section_separator("Processing files")

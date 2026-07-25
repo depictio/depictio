@@ -168,3 +168,31 @@ class TestDurability:
         cached = loaded.run_state("wf-1", "run-a")
         assert cached is not None
         assert cached.signature == "sig-updated"
+
+
+class TestLockPath:
+    """The lock must be namespaced exactly like the state file."""
+
+    def test_lock_sits_beside_the_state_file(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("DEPICTIO_CLI_STATE_DIR", str(tmp_path))
+        from depictio.cli.cli.utils.state import lock_path, state_path
+
+        state = state_path("http://api.example", "proj1")
+        lock = lock_path("http://api.example", "proj1")
+        assert lock.parent == state.parent
+        assert lock.name == "proj1.lock"
+
+    def test_same_project_on_two_servers_gets_two_locks(self, tmp_path, monkeypatch):
+        # The project id comes from the YAML, so a config pointed at staging and
+        # at production shares it. An unscoped lock would make those two
+        # watchers contend and one would refuse to start.
+        monkeypatch.setenv("DEPICTIO_CLI_STATE_DIR", str(tmp_path))
+        from depictio.cli.cli.utils.state import lock_path
+
+        assert lock_path("http://staging", "proj1") != lock_path("http://prod", "proj1")
+
+    def test_different_projects_on_one_server_get_two_locks(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("DEPICTIO_CLI_STATE_DIR", str(tmp_path))
+        from depictio.cli.cli.utils.state import lock_path
+
+        assert lock_path("http://api", "proj1") != lock_path("http://api", "proj2")

@@ -212,6 +212,7 @@ def plan_partitioning(
     destination: str,
     storage_options: PolarsStorageOptions,
     write_mode: WriteMode,
+    repartition: bool = False,
 ) -> tuple[bool, str | None]:
     """Decide whether to partition by run, and why not when we cannot.
 
@@ -224,9 +225,10 @@ def plan_partitioning(
       percent-encoded hive segment;
     * too many runs, where hive partitioning trades one big file for thousands
       of small ones;
-    * an existing table with different partitioning — delta-rs rejects that
-      outright, and silently rewriting the whole table is not something to do
-      without being asked.
+    * an existing table with different partitioning — delta-rs rejects a
+      partition-column change outright, so adopting one means rewriting every
+      row. ``repartition=True`` is the caller saying they accept that cost;
+      without it we fall back rather than silently rewrite the whole table.
     """
     if write_mode != "replace-runs":
         return False, None
@@ -246,10 +248,11 @@ def plan_partitioning(
         return False, f"{len(run_tags)} runs exceeds the {MAX_PARTITIONS}-partition guard"
 
     existing = _existing_partition_columns(destination, storage_options)
-    if existing is not None and existing != [RUN_ID_COLUMN]:
+    if existing is not None and existing != [RUN_ID_COLUMN] and not repartition:
         return False, (
             f"existing table is partitioned by {existing or 'nothing'}; "
-            "re-partitioning requires a full rewrite (--repartition)"
+            "adopting run partitioning rewrites every row — pass --repartition "
+            "to allow it"
         )
 
     return True, None
