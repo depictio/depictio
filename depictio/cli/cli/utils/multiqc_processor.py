@@ -139,17 +139,17 @@ def multiqc_parse_workers() -> int:
     is independent per file, so parsing several at once is the only real lever —
     but MultiQC keeps *module-global* state, so it must be processes, not threads.
 
-    Opt-in via ``DEPICTIO_MULTIQC_PARSE_WORKERS`` because each worker holds a
+    Opt-in via ``DEPICTIO_INGEST_MULTIQC_PARSE_WORKERS`` because each worker holds a
     fully parsed report in memory; on a large report set that multiplies peak RSS,
     which is not a trade a memory-capped deployment should make unasked.
     """
-    raw = os.getenv("DEPICTIO_MULTIQC_PARSE_WORKERS", "").strip()
+    raw = os.getenv("DEPICTIO_INGEST_MULTIQC_PARSE_WORKERS", "").strip()
     if not raw:
         return 1
     try:
         return max(1, int(raw))
     except ValueError:
-        logger.warning(f"Invalid DEPICTIO_MULTIQC_PARSE_WORKERS={raw!r}; parsing serially.")
+        logger.warning(f"Invalid DEPICTIO_INGEST_MULTIQC_PARSE_WORKERS={raw!r}; parsing serially.")
         return 1
 
 
@@ -203,14 +203,18 @@ def _parse_multiqc_files_serial(
 def multiqc_prerender_enabled() -> bool:
     """Whether to build MultiQC figures offline at ingest and upload them to S3.
 
-    Opt-in via ``DEPICTIO_MULTIQC_PRERENDER`` (``1``/``true``/``yes``). When on,
+    Opt-in via ``DEPICTIO_INGEST_MULTIQC_PRERENDER`` (``1``/``true``/``yes``). When on,
     the CLI reuses the parse it already pays for metadata to also render every
     present plot's Plotly JSON and ship it to ``s3://{bucket}/{dc_id}/prerender/``.
     The API render path then serves those figures directly, skipping the
     ~30-75 s cold ``parse_logs``/``get_plot`` build entirely. Off by default so
     ingestion behaviour is unchanged unless explicitly requested.
     """
-    return os.getenv("DEPICTIO_MULTIQC_PRERENDER", "").strip().lower() in {"1", "true", "yes"}
+    return os.getenv("DEPICTIO_INGEST_MULTIQC_PRERENDER", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }
 
 
 def _iter_module_plots(entries: Any):
