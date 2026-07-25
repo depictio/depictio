@@ -2945,12 +2945,63 @@ export interface MonitoringIngestionRun {
   data_root?: string | null;
   data_collections?: MonitoringIngestionDataCollection[];
   status: 'running' | 'success' | 'partial' | 'failed';
-  steps?: { name: string; status: string; detail?: string | null }[];
+  steps?: MonitoringIngestionStep[];
   /** Step currently running (live async ingestion); null for finished runs. */
   current_step?: string | null;
   error?: string | null;
   started_at?: string;
   finished_at?: string | null;
+
+  /** How the run was initiated. Absent on runs recorded before this existed,
+   *  which the UI shows as "manual" — correct, since nothing else could start
+   *  one at the time. */
+  trigger?: 'manual' | 'watch' | 'schedule' | 'ui' | null;
+  /** Why a watcher fired: the paths whose change triggered this cycle. */
+  trigger_reason?: string | null;
+  progress?: MonitoringProgress | null;
+  counters?: Record<string, number> | null;
+  timings?: Record<string, number> | null;
+  concurrency?: number | null;
+  warnings?: string[];
+  errors?: MonitoringIngestionError[];
+  errors_truncated?: boolean;
+  logs_truncated?: boolean;
+}
+
+/** One step of an ingestion run. `counters` is an open dict so the CLI can add
+ *  measurements without a server-side schema change. */
+export interface MonitoringIngestionStep {
+  name: string;
+  status: string;
+  detail?: string | null;
+  started_at?: string | null;
+  finished_at?: string | null;
+  duration_ms?: number | null;
+  index?: number | null;
+  total?: number | null;
+  progress?: MonitoringProgress | null;
+  counters?: Record<string, number> | null;
+  data_collection_tag?: string | null;
+  job_id?: string | null;
+  error?: string | null;
+}
+
+export interface MonitoringProgress {
+  current?: number | null;
+  total?: number | null;
+  /** Only present when the backend can compute a real fraction. The UI must
+   *  never synthesise one from a step index — a bar that jumps 0→50→100 across
+   *  three very unequal steps is worse than no bar at all. */
+  percent?: number | null;
+  unit?: string | null;
+}
+
+export interface MonitoringIngestionError {
+  step?: string | null;
+  data_collection_tag?: string | null;
+  message: string;
+  file_path?: string | null;
+  ts?: string | null;
 }
 
 /** Per-data-collection summary + local scan paths captured for an ingestion run. */
@@ -2962,6 +3013,50 @@ export interface MonitoringIngestionDataCollection {
   scan_pattern?: string | null;
   locations?: string[];
   file_count?: number | null;
+
+  /** Outcome counters. */
+  files_new?: number | null;
+  files_updated?: number | null;
+  files_unchanged?: number | null;
+  files_skipped?: number | null;
+  files_failed?: number | null;
+  rows_written?: number | null;
+  delta_version?: number | null;
+  duration_ms?: number | null;
+  status?: string | null;
+
+  /** Scan diagnostics. These turn a bare "No files found" from a dead end into
+   *  something actionable: how much of the tree was walked, how many candidates
+   *  the regex rejected, and example paths that were seen but not matched. */
+  dirs_walked?: number | null;
+  files_seen?: number | null;
+  regex_rejected?: number | null;
+  skip_reasons?: Record<string, number> | null;
+  sample_rejected?: string[];
+}
+
+/** A long-running CLI agent (a `depictio data watch` process) as the server
+ *  last heard from it. Rows expire via TTL a few heartbeats after one dies, so
+ *  a listed agent is a live one. */
+export interface MonitoringCliAgent {
+  agent_id: string;
+  instance_label?: string | null;
+  hostname?: string | null;
+  pid?: number | null;
+  cli_version?: string | null;
+  project_id?: string | null;
+  project_name?: string | null;
+  mode?: string | null;
+  backend?: string | null;
+  watching?: string[];
+  status: 'idle' | 'settling' | 'scanning' | 'ingesting' | 'error';
+  last_trigger_at?: string | null;
+  last_run_id?: string | null;
+  last_error?: string | null;
+  runs_total?: number | null;
+  started_at?: string | null;
+  heartbeat_at?: string | null;
+  expires_at?: string | null;
 }
 
 /** A recent application log line from the capped collection. */
@@ -3057,6 +3152,21 @@ export async function fetchAppLogs(opts: {
   if (!res.ok) await throwHttpDetailError(res, 'Failed to load logs');
   const data = await res.json();
   return Array.isArray(data?.logs) ? (data.logs as MonitoringAppLog[]) : [];
+}
+
+/** List live CLI agents (watchers). Admin-scoped, or project-scoped when a
+ *  projectId is given. A 404 means this server predates agents — treated as an
+ *  empty list rather than an error, so the pane degrades to "none" instead of
+ *  showing a failure. */
+export async function fetchCliAgents(
+  opts: { projectId?: string; limit?: number } = {},
+): Promise<MonitoringCliAgent[]> {
+  const qs = monitoringQuery({ project_id: opts.projectId, limit: opts.limit });
+  const res = await fetch(`${API_BASE}/monitoring/agents${qs}`, { headers: authHeaders() });
+  if (res.status === 404) return [];
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to load CLI agents');
+  const data = await res.json();
+  return Array.isArray(data?.agents) ? (data.agents as MonitoringCliAgent[]) : [];
 }
 
 export async function fetchMonitoringHealth(): Promise<MonitoringHealth> {
