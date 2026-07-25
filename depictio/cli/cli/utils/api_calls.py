@@ -629,6 +629,41 @@ def api_monitoring_ingestion_start(
     return None
 
 
+def api_agent_heartbeat(CLI_config: CLIConfig, agent: dict) -> bool:
+    """Report that a long-running CLI agent is alive. Best-effort; never raises.
+
+    Returns False when the server does not support agents (404 on an older API)
+    so the caller can stop trying and log once, rather than warning on every
+    beat for the lifetime of the process.
+    """
+    try:
+        url = f"{CLI_config.api_base_url}/depictio/api/v1/monitoring/agents/heartbeat"
+        response = get_http_client().post(
+            url, json=agent, headers=generate_api_headers(CLI_config), timeout=15.0
+        )
+        if response.status_code == 404:
+            return False
+        if response.status_code >= 400:
+            logger.debug(f"Agent heartbeat rejected (HTTP {response.status_code})")
+        return True
+    except Exception as exc:
+        logger.debug(f"Agent heartbeat failed (non-fatal): {exc}")
+        return True
+
+
+def api_agent_deregister(CLI_config: CLIConfig, agent_id: str) -> None:
+    """Remove an agent on clean shutdown. Best-effort; never raises.
+
+    Without this the agent lingers until its TTL expires, which reads as "still
+    running" for minutes after a deliberate stop.
+    """
+    try:
+        url = f"{CLI_config.api_base_url}/depictio/api/v1/monitoring/agents/{agent_id}"
+        get_http_client().delete(url, headers=generate_api_headers(CLI_config), timeout=10.0)
+    except Exception as exc:
+        logger.debug(f"Agent deregistration failed (non-fatal): {exc}")
+
+
 def api_monitoring_ingestion_finish(
     CLI_config: CLIConfig,
     run_id: str,

@@ -63,4 +63,5 @@ multiqc_prerender_collection = db[settings.mongodb.collections.multiqc_prerender
 task_events_collection = db[settings.mongodb.collections.task_events_collection]
 ingestion_runs_collection = db[settings.mongodb.collections.ingestion_runs_collection]
 app_logs_collection = db[settings.mongodb.collections.app_logs_collection]
+cli_agents_collection = db[settings.mongodb.collections.cli_agents_collection]
 test_collection = db[settings.mongodb.collections.test_collection]

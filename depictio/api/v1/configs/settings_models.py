@@ -176,6 +176,7 @@ class MongoDBConfig(ServiceConfig):
         task_events_collection: str = Field(default="task_events")
         ingestion_runs_collection: str = Field(default="ingestion_runs")
         app_logs_collection: str = Field(default="app_logs")
+        cli_agents_collection: str = Field(default="cli_agents")
         test_collection: str = Field(default="test")
 
     collections: Collections = Field(default_factory=Collections)
@@ -817,6 +818,16 @@ class MonitoringConfig(BaseSettings):
     app_log_capped_mb: int = Field(
         default=64, description="Size cap (MB) of the capped app_logs collection"
     )
+    agent_ttl_seconds: int = Field(
+        default=300,
+        description="How long a CLI agent's heartbeat stays valid. Several beats "
+        "long, so one missed heartbeat does not evict a healthy watcher.",
+    )
+    cli_log_shipping: bool = Field(
+        default=True,
+        description="Accept log lines shipped from CLI runs into the app_logs ledger. "
+        "Telemetry only — it can never affect an ingestion's outcome.",
+    )
     live_updates: bool = Field(
         default=True,
         description="Push live task/ingestion status changes over the events WebSocket "
@@ -824,6 +835,33 @@ class MonitoringConfig(BaseSettings):
     )
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_MONITORING_")
+
+
+class IngestionConfig(BaseSettings):
+    """Server-side limits and opt-ins for the data-ingestion path.
+
+    Everything that changes *behaviour* defaults to off, so an existing
+    deployment upgrades without any change in what it does. Only the limits —
+    which merely make an existing implicit ceiling explicit — are active by
+    default.
+    """
+
+    max_files_per_batch: int = Field(
+        default=5000, description="Largest accepted /files/upsert_batch payload"
+    )
+    max_ids_per_delete_batch: int = Field(
+        default=5000, description="Largest accepted delete_batch payload"
+    )
+    step_updates_per_minute: int = Field(
+        default=60,
+        description="Non-terminal ingestion-step updates accepted per run per minute. "
+        "Terminal steps always pass, so a run's final tally is never throttled away.",
+    )
+    delta_history_timeout_seconds: float = Field(
+        default=20.0, description="Deadline for reading a Delta table's commit history"
+    )
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_INGESTION_")
 
 
 class DashboardYAMLConfig(BaseSettings):
@@ -1109,6 +1147,7 @@ class Settings(BaseSettings):
     backup: BackupConfig = Field(default_factory=BackupConfig)
     events: EventsConfig = Field(default_factory=EventsConfig)
     monitoring: MonitoringConfig = Field(default_factory=MonitoringConfig)
+    ingestion: IngestionConfig = Field(default_factory=IngestionConfig)
     dashboard_yaml: DashboardYAMLConfig = Field(default_factory=DashboardYAMLConfig)
 
     # Observability & development
