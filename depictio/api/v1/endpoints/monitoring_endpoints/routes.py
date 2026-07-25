@@ -15,7 +15,7 @@ from __future__ import annotations
 import logging
 import socket
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
@@ -25,7 +25,9 @@ from depictio.api.celery_app import celery_app
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 from depictio.api.v1.monitoring import store
+from depictio.api.v1.monitoring.rate_limit import allow_step_update
 from depictio.models.models.monitoring import (
+    CliAgent,
     IngestionDataCollection,
     IngestionRun,
     IngestionStep,
@@ -121,11 +123,14 @@ class IngestionFinishRequest(BaseModel):
 
 
 class IngestionStepRequest(BaseModel):
-    """Live per-step update. Placeholder for future async/offloaded ingestion:
-    a long-running worker PATCHes a step's status while the run is ``running``."""
+    """Live per-step update, pushed while the run is still ``running``."""
 
     step: IngestionStep
     current_step: Optional[str] = None
+    #: Run-level rollups, refreshed alongside the step rather than only at
+    #: finish, so a run in flight shows real numbers instead of zeros.
+    counters: Optional[dict[str, int]] = None
+    progress: Optional[dict] = None
 
 
 @monitoring_endpoint_router.post("/ingestion/start")
@@ -207,17 +212,27 @@ def update_ingestion_step(
 ):
     """Upsert a single step of an in-flight ingestion and mark it as current.
 
-    Placeholder for future async/offloaded ingestion: a long-running worker calls
-    this to push per-step progress while the run stays ``running``, so the admin
-    UI reflects live state instead of only the final tally. The current
-    synchronous CLI does not call this yet — it reports all steps at ``finish``.
+    The CLI calls this as each step starts and finishes, so the admin UI shows
+    live state rather than only the final tally.
+
+    Throttled per run: over the configured rate the update is dropped and the
+    response says so, rather than returning 429. A dropped progress ping is not
+    an error and must not make the client retry — but a *terminal* step always
+    goes through, so a run's final tally is never lost to throttling.
     """
     if not settings.monitoring.enabled:
         raise HTTPException(status_code=404, detail="Monitoring is disabled.")
+
+    terminal = body.step.status in ("success", "failed", "skipped")
+    if not terminal and not allow_step_update(run_id):
+        return {"run_id": run_id, "step": body.step.name, "throttled": True}
+
     matched = store.upsert_ingestion_step(
         run_id,
         step=body.step.model_dump(),
         current_step=body.current_step,
+        counters=body.counters,
+        progress=body.progress,
     )
     if not matched:
         raise HTTPException(status_code=404, detail="Ingestion run not found.")
@@ -225,6 +240,55 @@ def update_ingestion_step(
 
     publish_ingestion_event(run_id, "running", None)
     return {"run_id": run_id, "step": body.step.name}
+
+
+@monitoring_endpoint_router.post("/agents/heartbeat")
+def agent_heartbeat(body: CliAgent, current_user: User = Depends(get_current_user)):
+    """Record that a long-running CLI agent (a watcher) is alive.
+
+    Auth-only rather than admin-gated, like the ingestion start/finish calls:
+    the agent reports about itself, using its own credentials.
+
+    ``expires_at`` is set several heartbeat intervals ahead so one missed beat
+    does not evict a healthy agent, while a dead one clears within minutes.
+    """
+    if not settings.monitoring.enabled:
+        raise HTTPException(status_code=404, detail="Monitoring is disabled.")
+
+    ttl = max(60, settings.monitoring.agent_ttl_seconds)
+    agent = body.model_copy(
+        update={
+            "user_id": str(current_user.id),
+            "email": current_user.email,
+            "heartbeat_at": datetime.now(),
+            "expires_at": datetime.now() + timedelta(seconds=ttl),
+        }
+    )
+    store.upsert_cli_agent(agent)
+    return {"agent_id": agent.agent_id, "expires_in": ttl}
+
+
+@monitoring_endpoint_router.delete("/agents/{agent_id}")
+def deregister_agent(agent_id: str, current_user: User = Depends(get_current_user)):
+    """Remove an agent immediately, on clean shutdown.
+
+    Without this the agent would linger until its TTL expires, which reads as
+    "still running" for several minutes after a deliberate stop.
+    """
+    if not settings.monitoring.enabled:
+        raise HTTPException(status_code=404, detail="Monitoring is disabled.")
+    return {"agent_id": agent_id, "removed": store.delete_cli_agent(agent_id)}
+
+
+@monitoring_endpoint_router.get("/agents")
+def list_agents(
+    current_user: User = Depends(get_current_user),
+    project_id: Optional[str] = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+):
+    """List live CLI agents. Admin-gated, like the rest of the monitoring views."""
+    _require_admin(current_user)
+    return {"agents": store.query_cli_agents(project_id=project_id, limit=limit)}
 
 
 @monitoring_endpoint_router.get("/ingestion")

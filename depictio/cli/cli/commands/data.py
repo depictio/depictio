@@ -1,11 +1,17 @@
 import json
 import os
+import socket
 from typing import Annotated
 
 import typer
 
-from depictio.cli.cli.utils.api_calls import api_get_project_from_id, api_get_project_from_name
-from depictio.cli.cli.utils.common import get_http_client
+from depictio.cli.cli.utils.api_calls import (
+    api_agent_deregister,
+    api_agent_heartbeat,
+    api_get_project_from_id,
+    api_get_project_from_name,
+)
+from depictio.cli.cli.utils.common import cli_version, get_http_client
 from depictio.cli.cli.utils.config import validate_project_config_and_check_S3_storage
 from depictio.cli.cli.utils.delta_versioning import (
     METADATA_PREFIX,
@@ -544,19 +550,54 @@ def watch(
     watcher = ProjectWatcher(roots=roots, config=config, run_cycle=run_cycle)
     watcher.install_signal_handlers()
 
+    # Register with the server so the watcher is visible in the admin UI, and
+    # keep reporting as its state changes. Entirely best-effort: a server that
+    # does not support agents (or is simply down) must not stop the watching.
+    agent_id = f"{socket.gethostname()}:{os.getpid()}:{project_config.id}"
+    agents_supported = {"ok": True}
+
+    def report_status(status: str, extra: dict) -> None:
+        if not agents_supported["ok"]:
+            return
+        payload = {
+            "agent_id": agent_id,
+            "kind": "watcher",
+            "hostname": socket.gethostname(),
+            "pid": os.getpid(),
+            "cli_version": cli_version(),
+            "project_id": str(project_config.id),
+            "project_name": project_config.name,
+            "mode": mode,
+            "backend": watcher.backend,
+            "watching": roots,
+            "status": status,
+            "runs_total": int(extra.get("runs_total", 0)),
+        }
+        if not api_agent_heartbeat(CLI_config, payload):
+            logger.info("Server has no CLI-agent registry; skipping further heartbeats.")
+            agents_supported["ok"] = False
+
+    watcher.on_status = report_status
+    report_status("idle", {})
+
     rich_print_section_separator(f"Watching {len(roots)} location(s) — {watcher.backend} backend")
     for root in roots:
         rich_print_checked_statement(f"  {root}", "info")
 
     try:
         with project_lock(lock_file):
-            raise typer.Exit(code=watcher.run())
+            exit_code = watcher.run()
     except RuntimeError as exc:
         rich_print_checked_statement(str(exc), "error")
         raise typer.Exit(code=1) from exc
     except KeyboardInterrupt:
         rich_print_checked_statement("Interrupted.", "warning")
-        raise typer.Exit(code=130) from None
+        exit_code = 130
+    finally:
+        if agents_supported["ok"]:
+            api_agent_deregister(CLI_config, agent_id)
+
+    raise typer.Exit(code=exit_code)
 
 
 def _project_data_roots(project_config) -> list[str]:

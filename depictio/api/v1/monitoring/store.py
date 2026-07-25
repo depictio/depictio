@@ -19,12 +19,14 @@ from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import (
     app_logs_collection,
+    cli_agents_collection,
     db,
     ingestion_runs_collection,
     task_events_collection,
 )
 from depictio.models.models.monitoring import (
     AppLogRecord,
+    CliAgent,
     IngestionRun,
     derive_task_kind,
 )
@@ -46,6 +48,11 @@ def ensure_monitoring_storage() -> None:
         )
         ingestion_runs_collection.create_index("run_id", unique=True)
         ingestion_runs_collection.create_index([("started_at", DESCENDING)])
+        cli_agents_collection.create_index("agent_id", unique=True)
+        # TTL keyed on expires_at rather than a fixed window from creation: an
+        # agent refreshes its own expiry on every heartbeat, so a dead one is
+        # evicted a few beats after it stops while a healthy one never is.
+        cli_agents_collection.create_index("expires_at", expireAfterSeconds=0, name="agent_ttl")
     except Exception as exc:  # pragma: no cover - defensive
         logger.warning(f"monitoring: failed to ensure task/ingestion indexes: {exc}")
 
@@ -146,29 +153,63 @@ def finish_ingestion_run(run_id: str, **fields: Any) -> bool:
 
 
 def upsert_ingestion_step(
-    run_id: str, *, step: dict[str, Any], current_step: Optional[str] = None
+    run_id: str,
+    *,
+    step: dict[str, Any],
+    current_step: Optional[str] = None,
+    clear_current_step: bool = False,
+    counters: Optional[dict[str, int]] = None,
+    progress: Optional[dict[str, Any]] = None,
 ) -> bool:
     """Add-or-update one step of an in-flight run, keyed by step name.
 
-    Placeholder for future async/offloaded ingestion (see the
-    ``/monitoring/ingestion/{run_id}/step`` endpoint): a worker pushes per-step
-    progress live. Replaces an existing same-named step in place so repeated
-    updates (running -> success) don't duplicate rows. Returns False if unknown.
+    Applied as a single atomic Mongo operation. The previous implementation read
+    the whole ``steps`` array, mutated it in Python and wrote it back, so two
+    concurrent step updates for the same run silently lost one of them — which
+    goes from theoretical to routine once the CLI reports steps live and scans
+    files in parallel.
+
+    ``current_step`` is only written when supplied. It used to be set
+    unconditionally, so any caller that omitted it wiped the field to None and
+    the UI lost track of what was running. ``clear_current_step`` is the
+    explicit way to blank it on completion.
+
+    Returns False if the run_id is unknown.
     """
-    doc = ingestion_runs_collection.find_one({"run_id": run_id}, {"_id": 0, "steps": 1})
-    if doc is None:
-        return False
-    steps: list[dict[str, Any]] = list(doc.get("steps") or [])
     name = step.get("name")
-    for i, existing in enumerate(steps):
-        if existing.get("name") == name:
-            steps[i] = step
-            break
-    else:
-        steps.append(step)
+    top_level: dict[str, Any] = {}
+    if clear_current_step:
+        top_level["current_step"] = None
+    elif current_step is not None:
+        top_level["current_step"] = current_step
+    if counters:
+        top_level["counters"] = counters
+    if progress:
+        top_level["progress"] = progress
+
+    # Replace the same-named step in place when it exists…
     result = ingestion_runs_collection.update_one(
-        {"run_id": run_id},
-        {"$set": {"steps": steps, "current_step": current_step}},
+        {"run_id": run_id, "steps.name": name},
+        {"$set": {"steps.$[s]": step, **top_level}},
+        array_filters=[{"s.name": name}],
+    )
+    if result.matched_count:
+        return True
+
+    # …otherwise append it, guarding against the race where another writer
+    # inserted the same step between the two operations.
+    result = ingestion_runs_collection.update_one(
+        {"run_id": run_id, "steps.name": {"$ne": name}},
+        {"$push": {"steps": step}, **({"$set": top_level} if top_level else {})},
+    )
+    if result.matched_count:
+        return True
+
+    # The step appeared in between: retry the in-place path once.
+    result = ingestion_runs_collection.update_one(
+        {"run_id": run_id, "steps.name": name},
+        {"$set": {"steps.$[s]": step, **top_level}},
+        array_filters=[{"s.name": name}],
     )
     return result.matched_count > 0
 
@@ -200,6 +241,39 @@ def query_ingestion_runs(
 def get_ingestion_run(run_id: str) -> Optional[dict[str, Any]]:
     doc = ingestion_runs_collection.find_one({"run_id": run_id}, {"_id": 0})
     return _serialize(doc) if doc else None
+
+
+# ── CLI agents ──────────────────────────────────────────────────────────────
+
+
+def upsert_cli_agent(agent: CliAgent) -> None:
+    """Record or refresh a long-running CLI agent's heartbeat."""
+    cli_agents_collection.update_one(
+        {"agent_id": agent.agent_id},
+        {
+            # started_at and runs_total belong to the agent's own view of
+            # itself; everything else is refreshed on each beat.
+            "$set": agent.model_dump(exclude={"started_at"}),
+            "$setOnInsert": {"started_at": agent.started_at},
+        },
+        upsert=True,
+    )
+
+
+def query_cli_agents(*, project_id: Optional[str] = None, limit: int = 100) -> list[dict[str, Any]]:
+    query: dict[str, Any] = {}
+    if project_id:
+        query["project_id"] = project_id
+    cursor = (
+        cli_agents_collection.find(query, {"_id": 0})
+        .sort("heartbeat_at", DESCENDING)
+        .limit(max(1, min(limit, 500)))
+    )
+    return [_serialize(doc) for doc in cursor]
+
+
+def delete_cli_agent(agent_id: str) -> bool:
+    return cli_agents_collection.delete_one({"agent_id": agent_id}).deleted_count > 0
 
 
 # ── Application logs ────────────────────────────────────────────────────────

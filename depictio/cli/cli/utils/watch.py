@@ -383,6 +383,10 @@ class ProjectWatcher:
         self._cycles = 0
         self._consecutive_failures = 0
         self._signatures: dict[str, str] = {}
+        #: Optional telemetry sink. Called with (status, extra) on each state
+        #: change; a watcher nobody can see is a watcher nobody can debug.
+        self.on_status: Callable[[str, dict], None] | None = None
+        self._last_run_id: str | None = None
 
         if self.backend in ("polling", "both") and (
             config.debounce_seconds < config.poll_interval_seconds
@@ -446,9 +450,19 @@ class ProjectWatcher:
             return "full"
         return "incremental"
 
+    def _report(self, status: str, **extra: object) -> None:
+        """Publish a status change, if anyone is listening. Never raises."""
+        if self.on_status is None:
+            return
+        try:
+            self.on_status(status, {"runs_total": self._cycles, **extra})
+        except Exception as exc:  # noqa: BLE001 - telemetry must not break the loop
+            logger.debug(f"Status report failed (non-fatal): {exc}")
+
     def _execute(self, paths: set[str]) -> None:
         mode = self._mode_for_cycle()
         self._cycles += 1
+        self._report("ingesting", mode=mode, changed_paths=len(paths))
         try:
             succeeded = self.run_cycle(mode, paths)
         except Exception as exc:  # noqa: BLE001 - a watcher must outlive one bad cycle
@@ -457,9 +471,11 @@ class ProjectWatcher:
 
         if succeeded:
             self._consecutive_failures = 0
+            self._report("idle")
             return
 
         self._consecutive_failures += 1
+        self._report("error", failures=self._consecutive_failures)
         delay = min(
             self.config.backoff_max_seconds,
             self.config.backoff_initial_seconds * (2 ** (self._consecutive_failures - 1)),
