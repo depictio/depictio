@@ -156,6 +156,7 @@ export {
   fetchMonitoringTask,
   fetchIngestionRuns,
   fetchIngestionRun,
+  fetchCliAgents,
   fetchAppLogs,
   fetchMonitoringHealth,
   fetchLogCaptureLevel,
@@ -308,6 +309,11 @@ export type {
   // Admin monitoring types
   MonitoringTaskEvent,
   MonitoringIngestionRun,
+  MonitoringIngestionStep,
+  MonitoringIngestionDataCollection,
+  MonitoringIngestionError,
+  MonitoringProgress,
+  MonitoringCliAgent,
   MonitoringAppLog,
   MonitoringHealth,
   // Profile + CLI token types
