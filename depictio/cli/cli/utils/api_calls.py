@@ -763,6 +763,7 @@ def api_upsert_deltatable(
     update: bool = False,
     deltatable_size_bytes: int | None = None,
     delta_provenance: dict | None = None,
+    async_mode: bool = False,
 ) -> httpx.Response:
     """
     Create or update a Delta Table on the server using a bulk upsert.
@@ -776,6 +777,11 @@ def api_upsert_deltatable(
             run_tags, ingestion_run_id, trigger. Sent only when present, so an
             older server (which ignores unknown fields) and an older CLI (which
             sends none) both keep working.
+        async_mode (bool): Ask the server to offload the expensive half of the
+            upsert and answer with a ``job_id``. A request, not a guarantee —
+            the server decides. A response without ``job_id`` means the work is
+            already complete, which is also exactly what an older server
+            returns, so no version negotiation is needed.
 
     Returns:
         httpx.Response: The response from the server.
@@ -787,6 +793,9 @@ def api_upsert_deltatable(
         "delta_table_location": delta_table_location,
         "update": update,
     }
+
+    if async_mode:
+        payload["async_mode"] = True
 
     # Add deltatable size to payload if provided
     if deltatable_size_bytes is not None:

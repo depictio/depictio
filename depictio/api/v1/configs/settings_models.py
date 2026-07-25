@@ -177,6 +177,7 @@ class MongoDBConfig(ServiceConfig):
         ingestion_runs_collection: str = Field(default="ingestion_runs")
         app_logs_collection: str = Field(default="app_logs")
         cli_agents_collection: str = Field(default="cli_agents")
+        jobs_collection: str = Field(default="jobs")
         test_collection: str = Field(default="test")
 
     collections: Collections = Field(default_factory=Collections)
@@ -553,7 +554,32 @@ class CeleryConfig(BaseSettings):
     result_expires: int = Field(default=3600, description="Task result expiration in seconds (1hr)")
 
     # Queue settings
-    default_queue: str = Field(default="dashboard_tasks", description="Default task queue name")
+    default_queue: str = Field(
+        default="dashboard_tasks",
+        description=(
+            "Historical value only — NOT applied. celery_app pins "
+            "task_default_queue to 'celery', which is the queue the shipped "
+            "worker command actually consumes. Applying this value would route "
+            "every task to a queue nothing listens on."
+        ),
+    )
+    ingestion_queue: str = Field(
+        default="ingestion",
+        description="Queue for offloaded ingestion tasks, consumed by the dedicated "
+        "ingestion worker so a 20-minute table read cannot starve dashboard callbacks.",
+    )
+    ingestion_worker_concurrency: int = Field(
+        default=2,
+        description="Prefork processes on the ingestion worker. Low on purpose: each "
+        "task holds a full DataFrame plus its pandas and numpy copies, so memory — "
+        "not CPU — is the binding constraint, and Polars is already multi-threaded.",
+    )
+    ingestion_task_soft_time_limit: int = Field(
+        default=1800, description="Soft time limit for ingestion tasks (30min)"
+    )
+    ingestion_task_time_limit: int = Field(
+        default=2100, description="Hard time limit for ingestion tasks (35min)"
+    )
 
     # Monitoring settings
     worker_send_task_events: bool = Field(default=True, description="Enable task event monitoring")
@@ -860,8 +886,43 @@ class IngestionConfig(BaseSettings):
     delta_history_timeout_seconds: float = Field(
         default=20.0, description="Deadline for reading a Delta table's commit history"
     )
+    async_deltatable_upsert: bool = Field(
+        default=False,
+        description=(
+            "Offload the expensive half of /deltatables/upsert (column specs, row "
+            "hash, Delta history read) to a Celery task and return a job_id. "
+            "Requires DEPICTIO_JOBS_ENABLED=true — without it the API has nowhere "
+            "to record the job and stays on the synchronous path."
+        ),
+    )
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_INGESTION_")
+
+
+class JobsConfig(BaseSettings):
+    """User-facing job records for offloaded work (``jobs`` collection).
+
+    Off by default: enabling it creates a collection and its indexes, and
+    changes what ``/deltatables/upsert`` may return. Nothing consults a job
+    unless a client asked for one.
+    """
+
+    enabled: bool = Field(default=False, description="Expose the /jobs endpoints")
+    retention_hours: int = Field(
+        default=24, description="How long a successful job document is kept"
+    )
+    failed_retention_hours: int = Field(
+        default=168,
+        description="How long a failed or cancelled job is kept — longer than a "
+        "success, because a failure is what someone comes back to read.",
+    )
+    max_result_bytes: int = Field(
+        default=262144,
+        description="Results larger than this are dropped and flagged truncated "
+        "rather than risking the 16 MB BSON document ceiling.",
+    )
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_JOBS_")
 
 
 class DashboardYAMLConfig(BaseSettings):
@@ -1148,6 +1209,7 @@ class Settings(BaseSettings):
     events: EventsConfig = Field(default_factory=EventsConfig)
     monitoring: MonitoringConfig = Field(default_factory=MonitoringConfig)
     ingestion: IngestionConfig = Field(default_factory=IngestionConfig)
+    jobs: JobsConfig = Field(default_factory=JobsConfig)
     dashboard_yaml: DashboardYAMLConfig = Field(default_factory=DashboardYAMLConfig)
 
     # Observability & development

@@ -665,6 +665,7 @@ def client_aggregate_data(
             "ingestion_run_id": command_parameters.get("ingestion_run_id"),
             "trigger": command_parameters.get("trigger"),
         },
+        async_mode=bool(command_parameters.get("async_upsert")),
     )
     logger.info(f"🔍 DEBUG: API upsert response status: {api_upsert_result.status_code}")
     if api_upsert_result.status_code != 200:
@@ -677,10 +678,45 @@ def client_aggregate_data(
         assert type(result["message"]) is str
         return result
 
+    # A job_id means the server accepted the write but deferred profiling the
+    # table. No job_id means it finished inline — including on any server that
+    # predates offloading, which is why this is a presence check rather than a
+    # version check.
+    job_outcome = _await_upsert_job(result, CLI_config)
+    if job_outcome is not None and not job_outcome.ok:
+        return {
+            "result": "error",
+            "message": f"Delta table finalization failed: {job_outcome.error}",
+        }
+
     return {
         "result": "success",
         "message": f"Aggregated data written to {destination_prefix}.",
     }
+
+
+def _await_upsert_job(response_payload: dict, CLI_config: CLIConfig):
+    """Block until an offloaded upsert finishes. Returns None if none was opened.
+
+    A polling failure is reported as a failed outcome rather than raised: the
+    Delta table itself is already written and its aggregation recorded, so the
+    ingestion is not lost — only the column specs are missing, and the caller
+    should say so rather than crash.
+    """
+    from depictio.cli.cli.utils.jobs import JobOutcome, JobPollError, maybe_wait_for_job
+
+    try:
+        return maybe_wait_for_job(
+            response_payload,
+            api_base_url=CLI_config.api_base_url,
+            token=CLI_config.user.token.access_token,
+            on_update=lambda st: logger.info(
+                f"  … {st.get('step') or 'working'}: {st.get('detail') or ''}"
+            ),
+        )
+    except JobPollError as exc:
+        logger.error(f"Delta table finalization could not be tracked: {exc}")
+        return JobOutcome(status="failed", error=str(exc))
 
 
 def process_geojson_data_collection(

@@ -327,6 +327,16 @@ def register_run_command(app: typer.Typer):
             "--preview-recipes",
             help="Show recipe input sources and transformed output before writing to Delta Lake",
         ),
+        async_upsert: bool = typer.Option(
+            False,
+            "--async-upsert",
+            help=(
+                "Ask the server to profile the written table in the background and poll "
+                "until it finishes, instead of holding one long HTTP request open. "
+                "Ignored by servers without offloading enabled — the upsert then just "
+                "completes inline as before."
+            ),
+        ),
         # General options
         continue_on_error: bool = typer.Option(
             False, "--continue-on-error", help="Continue execution even if a step fails"
@@ -809,6 +819,7 @@ def register_run_command(app: typer.Typer):
                                 "preview_recipes": preview_recipes,
                                 "project_id": str(project_config.id),
                                 "ingestion_run_id": ingestion_run_id,
+                                "async_upsert": async_upsert,
                             }
 
                             process_result = process_project_helper(

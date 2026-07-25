@@ -28,9 +28,9 @@ def allow_step_update(run_id: str) -> bool:
     limit = max(1, settings.ingestion.step_updates_per_minute)
 
     try:
-        from depictio.api.v1.monitoring.publish import _get_redis
+        from depictio.api.v1.monitoring.publish import get_sync_redis
 
-        client = _get_redis()
+        client = get_sync_redis()
         if client is None:
             return True
 
