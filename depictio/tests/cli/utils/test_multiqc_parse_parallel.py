@@ -12,7 +12,7 @@ import pytest
 
 from depictio.cli.cli.utils import multiqc_processor as mp
 
-_ENV = "DEPICTIO_MULTIQC_PARSE_WORKERS"
+_ENV = "DEPICTIO_INGEST_MULTIQC_PARSE_WORKERS"
 
 
 @pytest.mark.parametrize(

@@ -15,7 +15,7 @@ import pytest
 from depictio.cli.cli.utils import multiqc_processor as mp
 from depictio.cli.cli.utils.multiqc_figures import multiqc_figure_cache_key
 
-_ENV = "DEPICTIO_MULTIQC_PRERENDER"
+_ENV = "DEPICTIO_INGEST_MULTIQC_PRERENDER"
 
 
 # --------------------------------------------------------------------------- #
