@@ -350,6 +350,169 @@ async def get_project_ingestion_runs(
     return {"runs": [_redact_run(run, full=full) for run in runs], "redacted": not full}
 
 
+def _unreachable_data_locations(project: dict) -> list[str]:
+    """Configured data locations this server cannot read.
+
+    A browser-triggered ingestion runs inside the API's own container, so the
+    data has to be on a filesystem that container has mounted. On a deployment
+    where the CLI runs on an HPC node and the API does not share its storage,
+    every location here comes back unreadable — which is the honest answer, and
+    much better than starting a run that finds nothing and reports success.
+    """
+    import os
+
+    missing: list[str] = []
+    for workflow in project.get("workflows", []) or []:
+        for location in (workflow.get("data_location") or {}).get("locations") or []:
+            if not os.path.isdir(location):
+                missing.append(location)
+    return missing
+
+
+def _may_trigger_ingestion(project: dict, current_user) -> bool:
+    """Owners, editors and admins may start an ingestion; viewers may not.
+
+    Same bar as writing to the project, because that is what this does — it
+    rewrites data collections.
+    """
+    if getattr(current_user, "is_admin", False):
+        return True
+    permissions = project.get("permissions") or {}
+    user_id = str(current_user.id)
+    return any(
+        str(entry.get("_id")) == user_id
+        for group in ("owners", "editors")
+        for entry in (permissions.get(group) or [])
+    )
+
+
+@projects_endpoint_router.get("/ingestion/trigger-status/{project_id}")
+async def get_ingestion_trigger_status(
+    project_id: PyObjectId,
+    current_user=Depends(get_user_or_anonymous),
+):
+    """Whether this project can be re-ingested from the browser, and why not.
+
+    Two separate booleans, because they drive different UI. ``enabled`` is
+    whether the server offers this at all — when it is false the control is not
+    rendered, since a permanently dead button on every deployment that never
+    turns the flag on is just noise. ``available`` is whether *this* caller can
+    use it *right now*; when that is false the control is rendered and disabled
+    with ``reason`` attached, because "the server cannot read /data/runs" is
+    actionable and a missing button is not.
+    """
+    if not current_user:
+        raise HTTPException(status_code=401, detail="User not found.")
+
+    project = _async_get_project_from_id(project_id, current_user, projects_collection)
+
+    # Jobs off means there is nowhere to record the work, so the feature is not
+    # merely unavailable — it is not offered.
+    enabled = settings.ingestion.browser_trigger and settings.jobs.enabled
+    if not enabled:
+        return {"enabled": False, "available": False, "reason": None}
+
+    if not _may_trigger_ingestion(project, current_user):
+        return {
+            "enabled": True,
+            "available": False,
+            "reason": "You need editor access to run an ingestion.",
+        }
+
+    unreachable = await asyncio.to_thread(_unreachable_data_locations, project)
+    if unreachable:
+        return {
+            "enabled": True,
+            "available": False,
+            "reason": (
+                "This server cannot read the project's data. Run the ingestion from a "
+                "machine that can see it."
+            ),
+            "unreachable_locations": unreachable[:5],
+        }
+    return {"enabled": True, "available": True, "reason": None}
+
+
+@projects_endpoint_router.post("/ingestion/trigger/{project_id}")
+async def trigger_project_ingestion(
+    project_id: PyObjectId,
+    overwrite: bool = False,
+    current_user=Depends(get_current_user),
+):
+    """Start a server-side ingestion of this project. Returns a job to poll.
+
+    Off by default (``DEPICTIO_INGESTION_BROWSER_TRIGGER``) and useless where
+    the API cannot see the data, so every precondition is checked here rather
+    than discovered by a task that fails ten minutes later.
+    """
+    if not settings.ingestion.browser_trigger:
+        raise HTTPException(status_code=404, detail="Browser-triggered ingestion is disabled.")
+    if not settings.jobs.enabled:
+        raise HTTPException(
+            status_code=503,
+            detail="Job tracking is disabled, so an ingestion could not be followed.",
+        )
+
+    project = _async_get_project_from_id(project_id, current_user, projects_collection)
+    if not _may_trigger_ingestion(project, current_user):
+        raise HTTPException(status_code=403, detail="Editor access is required to run ingestion.")
+
+    unreachable = await asyncio.to_thread(_unreachable_data_locations, project)
+    if unreachable:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "This server cannot read the project's data locations: "
+                f"{', '.join(unreachable[:3])}. Run the ingestion from a machine that can."
+            ),
+        )
+
+    import uuid
+
+    from depictio.api.v1.ingestion_tasks import run_project_ingestion
+    from depictio.api.v1.jobs import store as jobs_store
+    from depictio.models.models.jobs import Job
+
+    # One ingestion per project at a time. Hand back whatever is already running
+    # rather than starting a second full rewrite of the same tables.
+    active = await asyncio.to_thread(
+        jobs_store.find_active_job, kind="project.ingest", project_id=str(project_id)
+    )
+    if active:
+        return {
+            "job_id": active["job_id"],
+            "run_id": active.get("ingestion_run_id"),
+            "already_running": True,
+        }
+
+    run_id = str(uuid.uuid4())
+    job, _created = await asyncio.to_thread(
+        jobs_store.create_job,
+        Job(
+            job_id=uuid.uuid4().hex,
+            kind="project.ingest",
+            user_id=str(current_user.id),
+            project_id=str(project_id),
+            ingestion_run_id=run_id,
+        ),
+    )
+
+    async_result = run_project_ingestion.apply_async(
+        args=[
+            {
+                "job_id": job.job_id,
+                "run_id": run_id,
+                "project_id": str(project_id),
+                "user_id": str(current_user.id),
+                "overwrite": overwrite,
+            }
+        ]
+    )
+    await asyncio.to_thread(jobs_store.attach_task, job.job_id, async_result.id)
+    logger.info(f"Browser-triggered ingestion for project {project_id}: job {job.job_id}")
+    return {"job_id": job.job_id, "run_id": run_id, "already_running": False}
+
+
 @projects_endpoint_router.post("/create")
 async def create_project(project: Project, current_user=Depends(get_user_or_anonymous)):
     """Create a new project.

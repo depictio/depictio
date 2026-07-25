@@ -76,6 +76,7 @@ import { AppSidebar } from '../../chrome';
 import JoinsGraph from './JoinsGraph';
 import IngestionReportPanel from './IngestionReportPanel';
 import ProjectIngestionHistoryPanel from './ProjectIngestionHistoryPanel';
+import ProjectIngestionTrigger from './ProjectIngestionTrigger';
 import { DeltaVersionHistory } from './DeltaVersionHistory';
 import { parseTemplate, TemplateChip, templateDocsUrl } from '../template';
 import { DcTypeIcon } from '../dcTypeIcon';
@@ -323,6 +324,9 @@ const ProjectDetailApp: React.FC = () => {
       : 'report',
   );
   const [refreshKey, setRefreshKey] = useState(0);
+  // Nudges the history panel off its idle 30s cadence when a browser-triggered
+  // ingestion finishes, so the completed run shows up straight away.
+  const [ingestionHistorySignal, setIngestionHistorySignal] = useState(0);
   // Scroll-to + auto-open the DC viewer when a preview was requested from the
   // ingestion report (set when onPreviewDc fires, consumed once the viewer mounts).
   const dcViewerRef = useRef<HTMLDivElement>(null);
@@ -632,16 +636,25 @@ const ProjectDetailApp: React.FC = () => {
                       <Tabs.Panel value="overview">{overviewSections}</Tabs.Panel>
                       <Tabs.Panel value="ingestion">
                         <Stack gap="md">
-                          <SegmentedControl
-                            size="xs"
-                            w="fit-content"
-                            value={ingestionView}
-                            onChange={(v: string) => setIngestionView(v as 'report' | 'history')}
-                            data={[
-                              { value: 'report', label: 'Report' },
-                              { value: 'history', label: 'History' },
-                            ]}
-                          />
+                          <Group justify="space-between" wrap="wrap" gap="sm">
+                            <SegmentedControl
+                              size="xs"
+                              w="fit-content"
+                              value={ingestionView}
+                              onChange={(v: string) => setIngestionView(v as 'report' | 'history')}
+                              data={[
+                                { value: 'report', label: 'Report' },
+                                { value: 'history', label: 'History' },
+                              ]}
+                            />
+                            <ProjectIngestionTrigger
+                              projectId={projectId}
+                              // Switch to History as soon as a run starts —
+                              // that is where its progress is visible.
+                              onStarted={() => setIngestionView('history')}
+                              onFinished={() => setIngestionHistorySignal((n) => n + 1)}
+                            />
+                          </Group>
                           {ingestionView === 'report' ? (
                             <IngestionReportPanel
                               projectId={projectId}
@@ -657,7 +670,10 @@ const ProjectDetailApp: React.FC = () => {
                               }}
                             />
                           ) : (
-                            <ProjectIngestionHistoryPanel projectId={projectId} />
+                            <ProjectIngestionHistoryPanel
+                              projectId={projectId}
+                              refreshSignal={ingestionHistorySignal}
+                            />
                           )}
                         </Stack>
                       </Tabs.Panel>

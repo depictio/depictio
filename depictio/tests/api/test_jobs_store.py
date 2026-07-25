@@ -39,13 +39,24 @@ class FakeCollection:
         self.docs[doc["job_id"]] = doc
         return FakeResult()
 
-    def find_one(self, query, projection=None):
+    @staticmethod
+    def _matches(doc: dict, query: dict) -> bool:
+        for key, cond in query.items():
+            if isinstance(cond, dict) and "$nin" in cond:
+                if doc.get(key) in cond["$nin"]:
+                    return False
+            elif doc.get(key) != cond:
+                return False
+        return True
+
+    def find_one(self, query, projection=None, sort=None):
         if "job_id" in query:
             return self.docs.get(query["job_id"])
-        for doc in self.docs.values():
-            if all(doc.get(k) == v for k, v in query.items()):
-                return doc
-        return None
+        candidates = [doc for doc in self.docs.values() if self._matches(doc, query)]
+        if sort:
+            key, direction = sort[0]
+            candidates.sort(key=lambda d: d.get(key), reverse=direction < 0)
+        return candidates[0] if candidates else None
 
     def update_one(self, query, update, array_filters=None, upsert=False):
         self.updates.append((query, update, {"array_filters": array_filters}))
@@ -229,3 +240,52 @@ class TestExpiry:
         job, _ = store.create_job(_job(expires_at=chosen))
 
         assert job.expires_at == chosen
+
+
+class TestFindActiveJob:
+    """The one-ingestion-per-project lock.
+
+    Expressed as a status query rather than an idempotency key on purpose: a
+    key stays valid for the document's whole retention window, so keying a
+    project ingestion on its project id would make the second ingestion of the
+    day silently return the morning's finished job and start nothing.
+    """
+
+    def _store(self, store, **kwargs):
+        kwargs.setdefault("kind", "project.ingest")
+        kwargs.setdefault("project_id", "p1")
+        job = _job(**kwargs)
+        store._fake.docs[job.job_id] = job.model_dump()
+        return job
+
+    def test_finds_a_running_job(self, store):
+        self._store(store, job_id="running", status="running")
+
+        found = store.find_active_job(kind="project.ingest", project_id="p1")
+
+        assert found is not None and found["job_id"] == "running"
+
+    def test_finds_a_pending_job(self, store):
+        self._store(store, job_id="queued", status="pending")
+
+        assert store.find_active_job(kind="project.ingest", project_id="p1") is not None
+
+    @pytest.mark.parametrize("state", sorted(TERMINAL_JOB_STATES))
+    def test_ignores_terminal_jobs(self, store, state):
+        # The regression this pins: a finished ingestion must not block the
+        # next one.
+        self._store(store, job_id=f"done-{state}", status=state)
+
+        assert store.find_active_job(kind="project.ingest", project_id="p1") is None
+
+    def test_ignores_another_project(self, store):
+        self._store(store, job_id="other", status="running", project_id="p2")
+
+        assert store.find_active_job(kind="project.ingest", project_id="p1") is None
+
+    def test_ignores_another_kind(self, store):
+        # A DC upsert also carries project_id; it must not look like an
+        # in-flight project ingestion.
+        self._store(store, job_id="upsert", kind="deltatable.upsert", status="running")
+
+        assert store.find_active_job(kind="project.ingest", project_id="p1") is None

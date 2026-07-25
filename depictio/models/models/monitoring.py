@@ -244,12 +244,14 @@ class IngestionRun(BaseModel):
     )
     status: IngestionStatus = Field(default="running", description="Overall run status")
     steps: list[IngestionStep] = Field(default_factory=list, description="Per-step tally")
-    # Placeholder for future async/offloaded ingestion: a long-running ingestion
-    # can PATCH steps + current_step live (see POST /monitoring/ingestion/{run_id}/step)
-    # while status='running'. Synchronous CLI runs leave this None and report all
-    # steps at finish.
+    # Written while status='running', via POST /monitoring/ingestion/{run_id}/step:
+    # by the CLI's StepReporter for `depictio run` / `data watch`, and by the
+    # server-side ingestion task for browser-triggered runs. Cleared when a step
+    # reaches a terminal status, so the UI does not keep a spinner on a phase
+    # that already ended. Runs recorded before live reporting existed leave it
+    # None and report their whole step list at finish.
     current_step: Optional[str] = Field(
-        default=None, description="Step currently running, for live async ingestion"
+        default=None, description="Step currently running, for live progress"
     )
     error: Optional[str] = Field(default=None, description="Failure message if the run failed")
     started_at: datetime = Field(default_factory=datetime.now)

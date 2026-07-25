@@ -132,6 +132,9 @@ async def capabilities(current_user=Depends(get_current_user)):
         features.append("jobs")
         if settings.ingestion.async_deltatable_upsert:
             features.append("deltatables.async_upsert")
+        # Needs somewhere to record the job, so it is only usable with jobs on.
+        if settings.ingestion.browser_trigger:
+            features.append("ingestion.browser_trigger")
 
     return {
         "api_version": get_version(),

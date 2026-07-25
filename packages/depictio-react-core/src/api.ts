@@ -3244,6 +3244,71 @@ export async function fetchProjectIngestionRuns(
   };
 }
 
+/** Whether this project can be re-ingested from the browser.
+ *
+ *  `enabled` is whether the server offers the feature at all (hide the control
+ *  when false); `available` is whether this caller can use it now (disable and
+ *  show `reason` when false). A 404 means the server predates the endpoint —
+ *  reported as not enabled, which is the correct rendering. */
+export interface IngestionTriggerStatus {
+  enabled: boolean;
+  available: boolean;
+  reason: string | null;
+  unreachable_locations?: string[];
+}
+
+export async function fetchIngestionTriggerStatus(
+  projectId: string,
+): Promise<IngestionTriggerStatus> {
+  const res = await fetch(`${API_BASE}/projects/ingestion/trigger-status/${projectId}`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) return { enabled: false, available: false, reason: null };
+  return res.json();
+}
+
+/** Start a server-side ingestion. Returns the job to poll and the run_id it
+ *  will be recorded under. `already_running` means an ingestion for this
+ *  project was already in flight and its job was handed back instead. */
+export interface IngestionTriggerResult {
+  job_id: string;
+  run_id: string | null;
+  already_running: boolean;
+}
+
+export async function triggerProjectIngestion(
+  projectId: string,
+  opts: { overwrite?: boolean } = {},
+): Promise<IngestionTriggerResult> {
+  const qs = opts.overwrite ? '?overwrite=true' : '';
+  const res = await fetch(`${API_BASE}/projects/ingestion/trigger/${projectId}${qs}`, {
+    method: 'POST',
+    headers: authHeaders(),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to start ingestion');
+  return res.json();
+}
+
+/** One offloaded job's status. Mirrors the JobStatus model; `poll_after_seconds`
+ *  is the server telling the client how long to wait before asking again. */
+export interface JobStatusResponse {
+  job_id: string;
+  kind: string;
+  status: 'pending' | 'running' | 'success' | 'failed' | 'cancelled';
+  step?: string | null;
+  detail?: string | null;
+  progress?: { current?: number; total?: number } | null;
+  result?: Record<string, unknown> | null;
+  error?: string | null;
+  poll_after_seconds?: number | null;
+}
+
+export async function fetchJob(jobId: string): Promise<JobStatusResponse> {
+  const res = await fetch(`${API_BASE}/jobs/${jobId}`, { headers: authHeaders() });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to read job status');
+  return res.json();
+}
+
 /** List live CLI agents (watchers). Admin-scoped, or project-scoped when a
  *  projectId is given. A 404 means this server predates agents — treated as an
  *  empty list rather than an error, so the pane degrades to "none" instead of

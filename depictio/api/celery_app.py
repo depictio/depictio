@@ -43,6 +43,7 @@ celery_app.conf.update(
     task_default_queue="celery",
     task_routes={
         "depictio.deltatable.finalize_upsert": {"queue": settings.celery.ingestion_queue},
+        "depictio.ingestion.run_project": {"queue": settings.celery.ingestion_queue},
     },
 )
 

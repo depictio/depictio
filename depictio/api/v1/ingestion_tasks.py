@@ -4,9 +4,16 @@ Separate module from ``celery_tasks.py`` so the ingestion worker's task set is
 legible at a glance and can be routed to its own queue without pattern-matching
 task names.
 
-The one task here finishes what ``POST /deltatables/upsert`` deliberately left
-undone: reading the freshly written Delta table to compute its column specs and
-content hash. That read is the whole reason the endpoint used to time out.
+Two tasks live here:
+
+``finalize_upsert`` finishes what ``POST /deltatables/upsert`` deliberately
+left undone: reading the freshly written Delta table to compute its column
+specs and content hash. That read is the whole reason the endpoint used to
+time out.
+
+``run_project`` runs a whole project ingestion — scan, process, joins — on the
+server, for the browser-triggered path. It only works where the API can see the
+same filesystem the data sits on, which the endpoint checks before dispatching.
 """
 
 from __future__ import annotations
@@ -144,6 +151,257 @@ def finalize_deltatable_upsert(self, payload: dict[str, Any]) -> dict[str, Any]:
         except Exception as inner:  # pragma: no cover - defensive
             logger.error(f"finalize_upsert: could not record failure for {job_id}: {inner}")
         raise
+
+
+def build_server_cli_config(user_id: str):
+    """Assemble a CLIConfig that acts as ``user_id`` against this same API.
+
+    Server-side ingestion reuses the CLI's scan/process code unchanged, and that
+    code talks to the API over HTTP — so it needs a token. The token is looked
+    up here, at execution time, rather than carried in the Celery payload:
+    broker messages are persisted and visible to anything with Redis access,
+    and a bearer token has no business sitting in a queue.
+
+    Raises when the user has no unexpired token, which is the honest outcome —
+    running the ingestion as somebody else (an admin, say) would silently
+    escalate whatever the requester could do.
+    """
+    from datetime import datetime as _datetime
+
+    from depictio.api.v1.configs.config import settings
+    from depictio.api.v1.db import tokens_collection, users_collection
+    from depictio.models.models.cli import CLIConfig
+
+    user = users_collection.find_one({"_id": ObjectId(user_id)})
+    if not user:
+        raise ValueError(f"User {user_id} no longer exists")
+
+    token = tokens_collection.find_one(
+        {"user_id": ObjectId(user_id), "expire_datetime": {"$gt": _datetime.now()}},
+        sort=[("expire_datetime", -1)],
+    )
+    if not token:
+        raise ValueError(
+            "No unexpired token for the requesting user — sign in again and retry the ingestion"
+        )
+
+    return CLIConfig.model_validate(
+        {
+            "user": {
+                "id": str(user["_id"]),
+                "email": user["email"],
+                "is_admin": user.get("is_admin", False),
+                "token": {
+                    "user_id": token["user_id"],
+                    "access_token": token["access_token"],
+                    "refresh_token": token["refresh_token"],
+                    "token_type": token.get("token_type", "bearer"),
+                    "token_lifetime": token.get("token_lifetime", "short-lived"),
+                    "expire_datetime": token["expire_datetime"],
+                    "refresh_expire_datetime": token["refresh_expire_datetime"],
+                    "name": token.get("name"),
+                    "created_at": token.get("created_at"),
+                },
+            },
+            "api_base_url": settings.fastapi.url,
+            "s3_storage": settings.minio.model_dump(),
+        }
+    )
+
+
+@celery_app.task(
+    bind=True,
+    name="depictio.ingestion.run_project",
+    soft_time_limit=7200,
+    time_limit=7500,
+    # Deliberately NOT acks_late, unlike finalize_upsert. A redelivered project
+    # ingestion would re-walk the filesystem and rewrite every Delta table —
+    # expensive, and it would fabricate commits that no user asked for. A worker
+    # that dies mid-ingestion instead leaves the job in `running` until its TTL
+    # expires, which is visible and harmless.
+    acks_late=False,
+)
+def run_project_ingestion(self, payload: dict[str, Any]) -> dict[str, Any]:
+    """Scan, process and join a whole project, server-side.
+
+    Expects::
+
+        {"job_id", "run_id", "project_id", "user_id", "overwrite"}
+
+    This is the same pipeline ``depictio run`` executes, driven from the API
+    instead of a workstation — the CLI's scan/process helpers are called
+    directly rather than reimplemented, so the two paths cannot drift.
+
+    Records an ``IngestionRun`` with ``trigger="ui"`` as it goes, so a
+    browser-triggered ingestion appears in the same ledger and the same panes
+    as every other run.
+    """
+    from depictio.api.v1.db import projects_collection
+    from depictio.api.v1.jobs import store as jobs_store
+    from depictio.api.v1.monitoring import store as monitoring_store
+    from depictio.models.models.monitoring import IngestionRun
+    from depictio.models.models.projects import Project, ProjectBeanie
+
+    job_id = payload["job_id"]
+    run_id = payload["run_id"]
+    project_id = payload["project_id"]
+    user_id = payload["user_id"]
+    overwrite = bool(payload.get("overwrite", False))
+
+    run_opened = False
+    try:
+        jobs_store.mark_job_running(job_id, step="prepare", detail="Loading project")
+
+        project_doc = projects_collection.find_one({"_id": ObjectId(project_id)})
+        if not project_doc:
+            raise ValueError(f"Project {project_id} no longer exists")
+        project = Project.model_validate(ProjectBeanie.from_mongo(project_doc).model_dump())
+
+        cli_config = build_server_cli_config(user_id)
+
+        monitoring_store.create_ingestion_run(
+            IngestionRun(
+                run_id=run_id,
+                source="ui",
+                cli_instance_label="Web UI",
+                user_id=user_id,
+                email=cli_config.user.email,
+                project_id=project_id,
+                project_name=project.name,
+                command="run",
+                trigger="ui",
+                trigger_reason="Triggered from the project page",
+            )
+        )
+        run_opened = True
+
+        from depictio.cli.cli.utils.helpers import process_project_helper
+
+        # Scan every workflow's data collections in one pass. Scanning DC by DC
+        # would skip already-seen runs for every DC after the first — the same
+        # trap the reference-dataset processor documents.
+        for workflow in project.workflows:
+            _step(run_id, "scan", "running", f"Scanning {workflow.name}")
+            process_project_helper(
+                CLI_config=cli_config,
+                project_config=project,
+                mode="scan",
+                workflow_name=workflow.name,
+                data_collection_tag=None,
+            )
+        _step(run_id, "scan", "success", f"{len(project.workflows)} workflow(s) scanned")
+
+        processed = 0
+        failed: list[str] = []
+        total_dcs = sum(len(wf.data_collections) for wf in project.workflows)
+        for workflow in project.workflows:
+            for dc in workflow.data_collections:
+                tag = dc.data_collection_tag
+                _step(run_id, "process", "running", f"Processing {tag}")
+                jobs_store.update_job_progress(
+                    job_id,
+                    step="process",
+                    detail=tag,
+                    progress={"current": processed + len(failed), "total": total_dcs},
+                )
+                try:
+                    process_project_helper(
+                        CLI_config=cli_config,
+                        project_config=project,
+                        mode="process",
+                        workflow_name=workflow.name,
+                        data_collection_tag=tag,
+                        command_parameters={"overwrite": overwrite},
+                    )
+                    processed += 1
+                except Exception as exc:  # noqa: BLE001 - one bad DC must not sink the run
+                    logger.error(f"run_project: DC {tag} failed: {exc}")
+                    failed.append(tag)
+        _step(
+            run_id,
+            "process",
+            "failed" if failed and not processed else ("partial" if failed else "success"),
+            f"{processed} processed / {len(failed)} failed",
+            counters={"data_collections": processed},
+        )
+
+        joins_detail = "no joins defined"
+        if getattr(project, "joins", None):
+            _step(run_id, "joins", "running", "Executing joins")
+            from depictio.cli.cli.utils.joins import process_project_joins
+
+            join_result = process_project_joins(
+                project=project,
+                CLI_config=cli_config,
+                join_name=None,
+                preview_only=False,
+                overwrite=overwrite,
+                auto_process_dependencies=True,
+            )
+            n_ok = len(join_result.get("processed") or [])
+            n_err = len(join_result.get("errors") or [])
+            joins_detail = f"{n_ok} processed / {n_err} failed"
+            _step(run_id, "joins", "success" if not n_err else "partial", joins_detail)
+        else:
+            _step(run_id, "joins", "skipped", joins_detail)
+
+        status = "failed" if failed and not processed else ("partial" if failed else "success")
+        outcome = {
+            "project_id": project_id,
+            "run_id": run_id,
+            "data_collections_processed": processed,
+            "data_collections_failed": failed,
+            "joins": joins_detail,
+        }
+        monitoring_store.finish_ingestion_run(
+            run_id,
+            status=status,
+            error=f"{len(failed)} data collection(s) failed: {', '.join(failed)}"
+            if failed
+            else None,
+        )
+        jobs_store.finish_job(
+            job_id,
+            status="success" if status != "failed" else "failed",
+            result=outcome,
+            error=None if status != "failed" else f"All {len(failed)} data collections failed",
+        )
+        logger.info(f"run_project: {project_id} finished {status} ({processed} DCs)")
+        return outcome
+
+    except Exception as exc:
+        logger.exception(f"run_project failed for job {job_id}: {exc}")
+        if run_opened:
+            try:
+                monitoring_store.finish_ingestion_run(run_id, status="failed", error=str(exc))
+            except Exception as inner:  # pragma: no cover - defensive
+                logger.error(f"run_project: could not close run {run_id}: {inner}")
+        try:
+            jobs_store.finish_job(job_id, status="failed", error=str(exc))
+        except Exception as inner:  # pragma: no cover - defensive
+            logger.error(f"run_project: could not record failure for {job_id}: {inner}")
+        raise
+
+
+def _step(run_id: str, name: str, status: str, detail: str | None = None, **extra: Any) -> None:
+    """Record one ingestion step, best-effort.
+
+    Monitoring must never be able to fail an ingestion — the same rule the CLI's
+    StepReporter follows.
+    """
+    from depictio.api.v1.monitoring import store as monitoring_store
+
+    try:
+        monitoring_store.upsert_ingestion_step(
+            run_id,
+            step={"name": name, "status": status, "detail": detail, **extra},
+            current_step=name if status == "running" else None,
+            # A terminal step must blank current_step explicitly, or the UI keeps
+            # a spinner on a phase that already ended.
+            clear_current_step=status != "running",
+        )
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.debug(f"run_project: step {name} not recorded: {exc}")
 
 
 def _publish_dc_update(dc_id: str) -> None:

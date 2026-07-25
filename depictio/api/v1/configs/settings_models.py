@@ -895,6 +895,16 @@ class IngestionConfig(BaseSettings):
             "to record the job and stays on the synchronous path."
         ),
     )
+    browser_trigger: bool = Field(
+        default=False,
+        description=(
+            "Allow project owners and editors to start an ingestion from the "
+            "project page. Only meaningful where the API can read the same "
+            "filesystem the data sits on (a shared PVC, a mounted export) — on a "
+            "deployment whose data lives on an HPC node the API cannot see, the "
+            "endpoint rejects the request. Requires DEPICTIO_JOBS_ENABLED=true."
+        ),
+    )
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_INGESTION_")
 
