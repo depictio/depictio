@@ -247,6 +247,49 @@ services:
       - depictio-backend
       - minio
 
+  # Dev counterpart of the ingestion worker (see docker-compose.yaml for why it
+  # is separate from depictio-celery-worker). Behind a profile so the default
+  # `up` is unchanged; bring it up with:
+  #   docker compose -f docker-compose.dev.yaml --profile ingestion up -d depictio-ingestion-worker
+  depictio-ingestion-worker:
+    container_name: depictio-ingestion-worker
+    profiles: ["ingestion"]
+    image: ${DEPICTIO_WORKER_VERSION:-depictio-worker:dev}
+    build:
+      dockerfile: docker-images/Dockerfile.worker
+      context: .
+    volumes:
+      - ./depictio:/app/depictio
+      - ./packages/plotly-complexheatmap:/app/packages/plotly-complexheatmap
+      - ./packages/plotly-upset:/app/packages/plotly-upset
+      - ./docker-images/run_celery_worker.sh:/app/run_celery_worker.sh
+      - ./${DATA_DIR}/cache:/app/cache
+    env_file:
+      - docker-compose/.env
+    environment:
+        DEPICTIO_DEV_MODE: "${DEPICTIO_DEV_MODE:-false}"
+        DEPICTIO_LOGGING_VERBOSITY_LEVEL: "${DEPICTIO_LOGGING_VERBOSITY_LEVEL:-DEBUG}"
+        DEPICTIO_AUTH_SINGLE_USER_MODE: "${DEPICTIO_AUTH_SINGLE_USER_MODE:-false}"
+        DEPICTIO_CONTEXT: "server"
+        DEPICTIO_EVENTS_ENABLED: "${DEPICTIO_EVENTS_ENABLED:-false}"
+        DEPICTIO_S3_CACHE_DIR: "/app/cache/s3_files"
+        DEPICTIO_DELTA_CACHE_DIR: "/app/cache/delta_cache"
+        DEPICTIO_CELERY_QUEUES: "ingestion"
+        DEPICTIO_CELERY_WORKERS: "${DEPICTIO_INGESTION_WORKER_CONCURRENCY:-2}"
+        DEPICTIO_CELERY_PREFETCH: "1"
+        DEPICTIO_CELERY_MAX_TASKS_PER_CHILD: "10"
+        DEPICTIO_CELERY_NODENAME: "ingestion@%h"
+        PYTHONPATH: "/app:/app/packages/plotly-upset:/app/packages/plotly-complexheatmap"
+    command: ["/app/run_celery_worker.sh"]
+    user: "${UID:-1000}:${GID:-1000}"
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    depends_on:
+      - mongo
+      - redis
+      - depictio-backend
+      - minio
+
   # Optional Celery monitoring UI. Enable with `docker compose --profile monitoring up`.
   # Bound to 127.0.0.1 only — do not expose without auth.
   flower:

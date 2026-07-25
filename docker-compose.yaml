@@ -145,6 +145,54 @@ services:
       depictio-backend:
         condition: service_healthy
 
+  # Dedicated worker for offloaded ingestion (the "ingestion" queue).
+  #
+  # Separate from depictio-celery-worker on purpose: an ingestion task can hold
+  # a worker for 20+ minutes reading a large Delta table, and sharing a pool
+  # with the dashboard editor would make design mode hang behind it.
+  #
+  # Reuses the SAME prebuilt image — only the environment differs — so bringing
+  # it up requires no rebuild. Idle unless both DEPICTIO_JOBS_ENABLED and
+  # DEPICTIO_INGESTION_ASYNC_DELTATABLE_UPSERT are true; nothing is published
+  # to its queue otherwise, so running it early is harmless.
+  depictio-ingestion-worker:
+    container_name: depictio-ingestion-worker
+    image: ghcr.io/depictio/depictio-worker:${DEPICTIO_VERSION:-1.2.1}
+    volumes:
+      - depictio_keys:/app/depictio/keys
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DEPICTIO_CONTEXT: "server"
+      DEPICTIO_AUTH_SINGLE_USER_MODE: "${DEPICTIO_AUTH_SINGLE_USER_MODE:-true}"
+      DEPICTIO_MINIO_ROOT_USER: "${DEPICTIO_MINIO_ROOT_USER:-minio}"
+      DEPICTIO_MINIO_ROOT_PASSWORD: "${DEPICTIO_MINIO_ROOT_PASSWORD:-minio123}"
+      DEPICTIO_CELERY_QUEUES: "ingestion"
+      # Low concurrency: each task holds a full DataFrame plus its pandas and
+      # numpy copies, so RAM binds well before CPU does.
+      DEPICTIO_CELERY_WORKERS: "${DEPICTIO_INGESTION_WORKER_CONCURRENCY:-2}"
+      DEPICTIO_CELERY_PREFETCH: "1"
+      DEPICTIO_CELERY_MAX_TASKS_PER_CHILD: "10"
+      DEPICTIO_CELERY_NODENAME: "ingestion@%h"
+    command: ["/app/run_celery_worker.sh"]
+    healthcheck:
+      # Must target ingestion@, not celery@: the node name is set above, and
+      # pinging the wrong one reports this container permanently unhealthy.
+      test: ["CMD-SHELL", "celery -A depictio.api.celery_worker:celery_app inspect ping -d ingestion@$$HOSTNAME || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      depictio-backend:
+        condition: service_healthy
+
 volumes:
   mongo_data:
     driver: local
