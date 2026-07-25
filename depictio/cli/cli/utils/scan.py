@@ -660,13 +660,28 @@ def scan_run_for_multiple_data_collections(
                     # /files/upsert_batch uses $setOnInsert when update=False, which
                     # would silently discard the new metadata of a file that already
                     # exists — so pushing changed files has to ask for $set.
-                    api_create_files_chunked(
+                    responses = api_create_files_chunked(
                         files=files_to_upload,
                         CLI_config=CLI_config,
                         update=update_files or sync_changed,
                         chunk_size=upload_chunk_size,
                         concurrency=concurrency,
                     )
+                    # A rejected chunk means those files were never registered.
+                    # Unchecked, the scan reports success and the Delta table is
+                    # then built from an incomplete file set with nothing
+                    # anywhere saying so. Reachable, not theoretical: the server
+                    # enforces a 5000-file ceiling per batch.
+                    failed = [r for r in responses if r is None or r.status_code != 200]
+                    if failed:
+                        codes = sorted(
+                            {"transport" if r is None else str(r.status_code) for r in failed}
+                        )
+                        raise RuntimeError(
+                            f"{len(failed)} of {len(responses)} file batches failed for "
+                            f"'{dc.data_collection_tag}' (HTTP {', '.join(codes)}). "
+                            "Files are only partially registered — re-run the scan."
+                        )
 
             # Handle missing files
             missing_files_location = set(existing_files_for_dc.keys()) - set(
