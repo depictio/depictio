@@ -11,8 +11,8 @@ from depictio.cli.cli.utils.api_calls import (
     api_create_files,
     api_create_files_chunked,
     api_delete_file,
-    api_delete_files_concurrent,
-    api_delete_runs_concurrent,
+    api_delete_files,
+    api_delete_runs,
     api_get_files_by_dc_id,
     api_get_runs_by_wf_id,
     api_upsert_runs_batch,
@@ -686,7 +686,7 @@ def scan_run_for_multiple_data_collections(
                         "info",
                     )
                 else:
-                    api_delete_files_concurrent(missing_files, CLI_config, concurrency=concurrency)
+                    api_delete_files(missing_files, CLI_config, concurrency=concurrency)
 
             # Collect all files for this run
             all_processed_files.extend(files_to_upload)
@@ -1131,8 +1131,8 @@ def scan_files_for_workflow(
                     file_id for run_id in missing_runs for file_id in files_by_run.get(run_id, [])
                 ]
 
-                api_delete_runs_concurrent(missing_runs, CLI_config, concurrency=concurrency)
-                api_delete_files_concurrent(orphaned_files, CLI_config, concurrency=concurrency)
+                api_delete_runs(missing_runs, CLI_config, concurrency=concurrency)
+                api_delete_files(orphaned_files, CLI_config, concurrency=concurrency)
 
                 rich_print_checked_statement(
                     f"Removed {len(missing_runs)} runs and {len(orphaned_files)} related "

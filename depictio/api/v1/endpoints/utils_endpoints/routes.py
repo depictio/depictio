@@ -102,6 +102,37 @@ async def status():
     return {"status": "online", "version": get_version()}
 
 
+@utils_endpoint_router.get("/capabilities")
+async def capabilities(current_user=Depends(get_current_user)):
+    """
+    What this server supports, so a client can adapt instead of guessing.
+
+    Feature strings are emitted only when the corresponding capability is
+    actually usable, so this reflects runtime configuration rather than build
+    version. Clients treat a 404 as "empty feature set" — which is exactly what
+    a server predating this endpoint returns — and read ``limits`` to size their
+    requests rather than discovering a ceiling by being rejected.
+
+    Authenticated rather than public: the limits and feature set are
+    operational detail, and /status already covers liveness.
+    """
+    from depictio.api.v1.endpoints.files_endpoints.routes import MAX_FILES_PER_BATCH
+
+    return {
+        "api_version": get_version(),
+        "features": [
+            "files.delete_batch",
+            "runs.delete_batch",
+            "deltatables.history",
+            "deltatables.provenance",
+        ],
+        "limits": {
+            "max_files_per_batch": MAX_FILES_PER_BATCH,
+            "max_ids_per_delete_batch": 5000,
+        },
+    }
+
+
 @utils_endpoint_router.get("/health/initialization")
 async def check_initialization_health():
     """Check if initialization completed successfully including data registration."""

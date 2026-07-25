@@ -430,6 +430,54 @@ def _delete_concurrently(
     return deleted
 
 
+def _delete_batch_or_fallback(
+    ids: list[str],
+    *,
+    endpoint: str,
+    payload_key: str,
+    CLI_config: CLIConfig,
+    fallback,
+    concurrency: int,
+    chunk_size: int = 5000,
+) -> int:
+    """Delete via the batch endpoint, falling back to per-id when unavailable.
+
+    A 404 means the server predates /…/delete_batch. Falling back keeps a new
+    CLI working against an older API instead of silently leaving stale records
+    behind, which is the failure mode that matters here — cleanup that quietly
+    does nothing looks identical to cleanup that had nothing to do.
+    """
+    if not ids:
+        return 0
+
+    deleted = 0
+    for start in range(0, len(ids), chunk_size):
+        chunk = ids[start : start + chunk_size]
+        url = f"{CLI_config.api_base_url}/depictio/api/v1/{endpoint}"
+        try:
+            response = request_with_retry(
+                "POST",
+                url,
+                json={payload_key: chunk},
+                headers=generate_api_headers(CLI_config),
+                timeout=120.0,
+                idempotent=True,
+            )
+        except httpx.HTTPError as exc:
+            logger.warning(f"Batch delete failed ({exc}); falling back to per-id deletes.")
+            return fallback(ids, CLI_config, concurrency=concurrency)
+
+        if response.status_code == 404:
+            logger.info("Server has no batch delete endpoint; falling back to per-id deletes.")
+            return fallback(ids, CLI_config, concurrency=concurrency)
+        if response.status_code >= 400:
+            logger.warning(f"Batch delete returned {response.status_code}: {response.text}")
+            continue
+        deleted += response.json().get("deleted", 0)
+
+    return deleted
+
+
 def api_delete_files_concurrent(
     file_ids: list[str], CLI_config: CLIConfig, *, concurrency: int = 4
 ) -> int:
@@ -448,6 +496,30 @@ def api_delete_runs_concurrent(
         run_ids,
         lambda run_id, config: api_delete_run(run_id=run_id, CLI_config=config),
         CLI_config,
+        concurrency=concurrency,
+    )
+
+
+def api_delete_files(file_ids: list[str], CLI_config: CLIConfig, *, concurrency: int = 4) -> int:
+    """Remove files, preferring one batch request over N round-trips."""
+    return _delete_batch_or_fallback(
+        file_ids,
+        endpoint="files/delete_batch",
+        payload_key="file_ids",
+        CLI_config=CLI_config,
+        fallback=api_delete_files_concurrent,
+        concurrency=concurrency,
+    )
+
+
+def api_delete_runs(run_ids: list[str], CLI_config: CLIConfig, *, concurrency: int = 4) -> int:
+    """Remove runs, preferring one batch request over N round-trips."""
+    return _delete_batch_or_fallback(
+        run_ids,
+        endpoint="runs/delete_batch",
+        payload_key="run_ids",
+        CLI_config=CLI_config,
+        fallback=api_delete_runs_concurrent,
         concurrency=concurrency,
     )
 

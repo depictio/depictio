@@ -471,6 +471,135 @@ async def batch_check_deltatables_exist(
     }
 
 
+def _read_delta_history(delta_location: str, limit: int) -> list[dict]:
+    """Delta commit history for a table. Synchronous; call via to_thread.
+
+    Reads only the last ``limit`` ``_delta_log`` commits — a handful of small
+    objects, not the table itself — which is why this stays a plain endpoint
+    rather than going through the job protocol.
+    """
+    from deltalake import DeltaTable
+
+    table = DeltaTable(delta_location, storage_options=polars_s3_config)
+    entries = []
+    for entry in table.history(limit):
+        metrics = entry.get("operationMetrics") or {}
+
+        def _metric(*names: str) -> int | None:
+            # deltalake 0.24 emits snake_case, 1.x camelCase.
+            for name in names:
+                if name in metrics:
+                    try:
+                        return int(metrics[name])
+                    except (TypeError, ValueError):
+                        return None
+            return None
+
+        raw_timestamp = entry.get("timestamp")
+        entries.append(
+            {
+                "version": entry.get("version"),
+                "timestamp": (
+                    datetime.fromtimestamp(raw_timestamp / 1000).isoformat()
+                    if isinstance(raw_timestamp, (int, float))
+                    else None
+                ),
+                "operation": entry.get("operation"),
+                "rows_added": _metric("num_added_rows", "numOutputRows"),
+                "files_added": _metric("num_added_files", "numAddedFiles", "numFiles"),
+                "files_removed": _metric("num_removed_files", "numRemovedFiles"),
+                # Custom commit metadata is flattened into the entry by delta-rs.
+                "metadata": {
+                    key: str(value) for key, value in entry.items() if key.startswith("depictio.")
+                },
+            }
+        )
+    return entries
+
+
+@deltatables_endpoint_router.get("/history/{data_collection_id}")
+async def get_delta_history(
+    data_collection_id: PyObjectId,
+    limit: int = 20,
+    current_user: User = Depends(get_user_or_anonymous),
+):
+    """
+    Commit history of a data collection's Delta table, newest first.
+
+    Merges what Delta itself records (version, timestamp, operation, row and
+    file counts, plus depictio's own commit metadata) with what Mongo knows
+    about each aggregation (who ran it). Degrades to the Mongo-only view when
+    the object store is unreachable, so a transient S3 problem shows a partial
+    history rather than an error page.
+    """
+    limit = max(1, min(limit, 200))
+
+    pipeline = _build_permission_pipeline(data_collection_id, current_user)
+    if not list(projects_collection.aggregate(pipeline)):
+        raise HTTPException(status_code=404, detail="Data collection not found or access denied.")
+
+    record = deltatables_collection.find_one({"data_collection_id": data_collection_id})
+    if not record:
+        raise HTTPException(
+            status_code=404, detail=f"No DeltaTable found for data collection {data_collection_id}"
+        )
+
+    delta_location = record.get("delta_table_location", "")
+
+    # Mongo side: one entry per aggregation, keyed by the Delta version it wrote
+    # when the writer reported one. Older aggregations have no delta_version and
+    # simply do not join.
+    by_version: dict[int, dict] = {}
+    mongo_only: list[dict] = []
+    for aggregation in record.get("aggregation", []) or []:
+        entry = {
+            "aggregation_version": aggregation.get("aggregation_version"),
+            "aggregation_time": (
+                aggregation["aggregation_time"].isoformat()
+                if isinstance(aggregation.get("aggregation_time"), datetime)
+                else aggregation.get("aggregation_time")
+            ),
+            "by_email": (aggregation.get("aggregation_by") or {}).get("email"),
+            "run_id": aggregation.get("ingestion_run_id"),
+            "trigger": aggregation.get("trigger"),
+            "write_mode": aggregation.get("write_mode"),
+            "rows_total": aggregation.get("rows_total"),
+        }
+        delta_version = aggregation.get("delta_version")
+        if delta_version is None:
+            mongo_only.append({**entry, "origin": "mongo"})
+        else:
+            by_version[int(delta_version)] = entry
+
+    degraded = False
+    delta_entries: list[dict] = []
+    try:
+        delta_entries = await asyncio.to_thread(_read_delta_history, delta_location, limit)
+    except Exception as exc:  # noqa: BLE001 - a missing object store is not a 500
+        logger.warning(f"Delta history unavailable for {delta_location}: {exc}")
+        degraded = True
+
+    merged = []
+    for entry in delta_entries:
+        version = entry.get("version")
+        mongo_entry = by_version.pop(int(version), None) if version is not None else None
+        merged.append(
+            {**entry, **(mongo_entry or {}), "origin": "both" if mongo_entry else "delta"}
+        )
+
+    # Aggregations whose Delta commit fell outside the requested window, plus
+    # anything written before delta_version was recorded.
+    merged.extend(mongo_only)
+    merged.extend({**entry, "origin": "mongo"} for entry in by_version.values())
+
+    return {
+        "delta_table_location": delta_location,
+        "current_version": delta_entries[0]["version"] if delta_entries else None,
+        "degraded": degraded,
+        "versions": merged[:limit],
+    }
+
+
 @deltatables_endpoint_router.get("/specs/{data_collection_id}")
 async def specs(
     data_collection_id: PyObjectId,

@@ -2,7 +2,7 @@ import asyncio
 
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from pymongo import UpdateOne
 from pymongo.errors import BulkWriteError
 
@@ -72,6 +72,48 @@ async def get_run(run_id: PyObjectId, current_user: User = Depends(get_current_u
         raise HTTPException(status_code=404, detail=f"Run '{run_id}' not found.")
 
     return WorkflowRun.from_mongo(run)
+
+
+class DeleteRunsBatchRequest(BaseModel):
+    run_ids: list[str] = Field(..., min_length=1, max_length=5000)
+
+
+@runs_endpoint_router.post("/delete_batch")
+async def delete_runs_batch(
+    payload: DeleteRunsBatchRequest, current_user: User = Depends(get_current_user)
+):
+    """
+    Delete many runs in one request.
+
+    Deliberately does *not* cascade to the runs' files: ``delete_run`` has never
+    done so, and changing that here would turn a performance fix into a silent
+    behaviour change. The CLI deletes orphaned files explicitly via
+    /files/delete_batch.
+    """
+    if not current_user:
+        raise HTTPException(status_code=401, detail="User not found.")
+
+    oids = []
+    invalid = 0
+    for raw_id in payload.run_ids:
+        try:
+            oids.append(ObjectId(raw_id))
+        except Exception:
+            invalid += 1
+
+    if not oids:
+        return {"requested": len(payload.run_ids), "deleted": 0, "not_found": len(payload.run_ids)}
+
+    query: dict = {"_id": {"$in": oids}}
+    if not current_user.is_admin:
+        query["permissions.owners._id"] = ObjectId(current_user.id)
+
+    result = await asyncio.to_thread(runs_collection.delete_many, query)
+    return {
+        "requested": len(payload.run_ids),
+        "deleted": result.deleted_count,
+        "not_found": len(payload.run_ids) - result.deleted_count,
+    }
 
 
 @runs_endpoint_router.delete("/delete/{run_id}")
