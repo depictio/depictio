@@ -43,9 +43,27 @@ class DeltaTableColumn(BaseModel):
 class Aggregation(MongoModel):
     aggregation_time: datetime = Field(default_factory=datetime.now)
     aggregation_by: UserBase
+    #: Depictio's own counter, and — importantly — the salt for the API's
+    #: DataFrame cache keys. Distinct from ``delta_version`` below, which is the
+    #: physical Delta commit number. Do not conflate them.
     aggregation_version: int = 1
     aggregation_hash: str
     aggregation_columns_specs: list[DeltaTableColumn] = []
+
+    # Delta Lake provenance. Every field is optional with a default so documents
+    # written before this existed still validate: Aggregation inherits
+    # MongoModel, which is extra="forbid", and from_mongo runs over historical
+    # documents on every read.
+    delta_version: int | None = None
+    delta_commit_timestamp: datetime | None = None
+    write_mode: str | None = None
+    rows_total: int | None = None
+    rows_added: int | None = None
+    files_added: int | None = None
+    run_tags: list[str] = []
+    ingestion_run_id: str | None = None
+    #: How the write was initiated: manual CLI run, watcher cycle, UI upload.
+    trigger: str | None = None
 
     @field_validator("aggregation_version")
     def validate_version(cls, value):
@@ -86,3 +104,16 @@ class UpsertDeltaTableAggregated(BaseModel):
     delta_table_location: str
     update: bool = False
     deltatable_size_bytes: int | None = None
+
+    # Delta provenance reported by the writer. All optional: an older CLI sends
+    # none of it, and pydantic's default extra="ignore" means a newer CLI
+    # talking to an older server simply has these dropped.
+    delta_version: int | None = None
+    delta_commit_timestamp: datetime | None = None
+    write_mode: str | None = None
+    rows_total: int | None = None
+    rows_added: int | None = None
+    files_added: int | None = None
+    run_tags: list[str] = []
+    ingestion_run_id: str | None = None
+    trigger: str | None = None

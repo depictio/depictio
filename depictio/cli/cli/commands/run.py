@@ -13,6 +13,7 @@ from depictio.cli.cli.utils.api_calls import (
     api_sync_project_config_to_server,
 )
 from depictio.cli.cli.utils.common import (
+    cli_version,
     generate_api_headers,
     get_http_client,
     load_depictio_config,
@@ -29,22 +30,9 @@ from depictio.cli.cli_logging import logger
 from depictio.models.s3_utils import S3_storage_checks
 from depictio.models.utils import convert_model_to_dict
 
-
-def _cli_version() -> str | None:
-    """Installed depictio-cli version, or ``None`` if it can't be determined.
-
-    Best-effort metadata for the monitoring ledger — never raises.
-    """
-    try:
-        from importlib.metadata import PackageNotFoundError
-        from importlib.metadata import version as _pkg_version
-
-        try:
-            return _pkg_version("depictio-cli")
-        except PackageNotFoundError:
-            return "dev"
-    except Exception:
-        return None
+#: Moved to cli.utils.common so the Delta commit-metadata builder can stamp the
+#: same value without importing from a command module.
+_cli_version = cli_version
 
 
 # CLI options whose *value* is a secret and must never reach the monitoring ledger.
@@ -323,6 +311,16 @@ def register_run_command(app: typer.Typer):
         # Process options
         overwrite: bool = typer.Option(
             False, "--overwrite", help="Overwrite the workflow if it already exists"
+        ),
+        write_mode: str = typer.Option(
+            "overwrite",
+            "--write-mode",
+            help=(
+                "overwrite: rewrite the whole table (historical behaviour). "
+                "replace-runs: partition by run and rewrite only the runs present in "
+                "this batch, leaving the others untouched. "
+                "append: add rows without replacing (only sensible with --sync-changed)."
+            ),
         ),
         preview_recipes: bool = typer.Option(
             False,
@@ -806,8 +804,11 @@ def register_run_command(app: typer.Typer):
                         if local_hash == remote_hash:
                             command_parameters = {
                                 "overwrite": overwrite,
+                                "write_mode": write_mode,
                                 "rich_tables": rich_tables,
                                 "preview_recipes": preview_recipes,
+                                "project_id": str(project_config.id),
+                                "ingestion_run_id": ingestion_run_id,
                             }
 
                             process_result = process_project_helper(

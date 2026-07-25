@@ -1,3 +1,4 @@
+import json
 import os
 from typing import Annotated
 
@@ -6,8 +7,14 @@ import typer
 from depictio.cli.cli.utils.api_calls import api_get_project_from_id, api_get_project_from_name
 from depictio.cli.cli.utils.common import get_http_client
 from depictio.cli.cli.utils.config import validate_project_config_and_check_S3_storage
+from depictio.cli.cli.utils.delta_versioning import (
+    METADATA_PREFIX,
+    list_delta_versions,
+    vacuum_delta_table,
+)
 from depictio.cli.cli.utils.helpers import process_project_helper
 from depictio.cli.cli.utils.rich_utils import (
+    render_records_table,
     rich_print_checked_statement,
     rich_print_command_usage,
     rich_print_section_separator,
@@ -19,6 +26,7 @@ from depictio.cli.cli.utils.watch import (
     project_lock,
 )
 from depictio.cli.cli_logging import logger
+from depictio.models.s3_utils import turn_S3_config_into_polars_storage_options
 
 app = typer.Typer()
 
@@ -197,6 +205,175 @@ def scan(
     # process_project_helper(cli_config, project_config, headers, update, scan_files, data_collection_tag)
 
     # remote_upload_files(response["CLI_config"], project_config_path, data_collection_tag)
+
+
+def _resolve_data_collection(project_config, data_collection_tag: str):
+    """Find a data collection by tag across every workflow of a project."""
+    for workflow in project_config.workflows:
+        for dc in workflow.data_collections:
+            if dc.data_collection_tag == data_collection_tag:
+                return dc
+    return None
+
+
+def _delta_location(CLI_config, data_collection) -> str:
+    """Where a data collection's Delta table lives. Mirrors client_aggregate_data."""
+    return f"s3://{CLI_config.s3_storage.bucket}/{str(data_collection.id)}"
+
+
+def _load_project_or_exit(CLI_config_path: str, project_config_path: str):
+    CLI_config, response = validate_project_config_and_check_S3_storage(
+        CLI_config_path=CLI_config_path, project_config_path=project_config_path
+    )
+    if not response["success"]:
+        rich_print_checked_statement("Depictio Project configuration validation failed", "error")
+        raise typer.Exit(code=1)
+    return CLI_config, response["project_config"]
+
+
+@app.command()
+def versions(
+    data_collection_tag: Annotated[
+        str, typer.Argument(help="Data collection whose Delta history to list")
+    ],
+    CLI_config_path: Annotated[
+        str, typer.Option("--CLI-config-path", help="Path to the CLI configuration file")
+    ] = "~/.depictio/CLI.yaml",
+    project_config_path: Annotated[
+        str, typer.Option("--project-config-path", help="Path to the pipeline configuration file")
+    ] = "",
+    limit: int = typer.Option(20, "--limit", help="Number of commits to show"),
+    json_output: bool = typer.Option(False, "--json", help="Emit machine-readable JSON"),
+):
+    """
+    List the Delta Lake commit history of a data collection.
+
+    Every ingestion has always produced a new Delta version; this surfaces the
+    history that was already there, along with depictio's own commit metadata
+    (which run wrote it, what triggered it, which write mode was used).
+    """
+    if not json_output:
+        rich_print_command_usage("versions")
+
+    CLI_config, project_config = _load_project_or_exit(CLI_config_path, project_config_path)
+
+    data_collection = _resolve_data_collection(project_config, data_collection_tag)
+    if data_collection is None:
+        rich_print_checked_statement(
+            f"Data collection '{data_collection_tag}' not found in this project.", "error"
+        )
+        raise typer.Exit(code=1)
+
+    storage_options = turn_S3_config_into_polars_storage_options(CLI_config.s3_storage)
+    destination = _delta_location(CLI_config, data_collection)
+    history = list_delta_versions(destination, storage_options, limit=limit)
+
+    if not history:
+        if json_output:
+            typer.echo(json.dumps({"location": destination, "versions": []}))
+        else:
+            rich_print_checked_statement(f"No Delta table at {destination} yet.", "warning")
+        return
+
+    records = [
+        {
+            "version": commit.version,
+            "timestamp": commit.timestamp.isoformat() if commit.timestamp else "",
+            "operation": commit.operation or "",
+            "write_mode": commit.custom_metadata.get(f"{METADATA_PREFIX}write_mode", ""),
+            "trigger": commit.custom_metadata.get(f"{METADATA_PREFIX}trigger", ""),
+            "rows_added": commit.rows_added if commit.rows_added is not None else "",
+            "files_added": commit.files_added if commit.files_added is not None else "",
+            "runs": commit.custom_metadata.get(f"{METADATA_PREFIX}run_count", ""),
+            "ingestion_run": commit.custom_metadata.get(f"{METADATA_PREFIX}ingestion_run_id", ""),
+        }
+        for commit in history
+    ]
+
+    if json_output:
+        # Plain stdout, not console.print_json: the shared rich Console does not
+        # force a TTY, but its markup would still corrupt piped JSON.
+        typer.echo(json.dumps({"location": destination, "versions": records}, indent=2))
+        return
+
+    render_records_table(
+        records,
+        title=f"Delta history — {data_collection_tag}",
+    )
+    rich_print_checked_statement(f"Location: {destination}", "info")
+
+
+@app.command()
+def vacuum(
+    data_collection_tag: Annotated[
+        str, typer.Argument(help="Data collection whose stale Delta files to remove")
+    ],
+    CLI_config_path: Annotated[
+        str, typer.Option("--CLI-config-path", help="Path to the CLI configuration file")
+    ] = "~/.depictio/CLI.yaml",
+    project_config_path: Annotated[
+        str, typer.Option("--project-config-path", help="Path to the pipeline configuration file")
+    ] = "",
+    retention_hours: int = typer.Option(
+        168,
+        "--retention-hours",
+        help="Keep files needed by versions newer than this. Going below the "
+        "168h default breaks readers that are mid-query.",
+    ),
+    apply: bool = typer.Option(
+        False, "--apply", help="Actually delete. Without this the command only reports."
+    ),
+):
+    """
+    Remove Delta files no longer referenced by any retained version.
+
+    Nothing in depictio has ever vacuumed, so every re-ingestion has left its
+    predecessor's files behind and a data collection's physical footprint grows
+    without bound — a watcher accelerates that considerably.
+
+    Deliberately dry-run by default and never wired into an ingestion path:
+    vacuuming below the retention window pulls files out from under an API
+    worker that is part-way through reading the table.
+    """
+    rich_print_command_usage("vacuum")
+
+    CLI_config, project_config = _load_project_or_exit(CLI_config_path, project_config_path)
+
+    data_collection = _resolve_data_collection(project_config, data_collection_tag)
+    if data_collection is None:
+        rich_print_checked_statement(
+            f"Data collection '{data_collection_tag}' not found in this project.", "error"
+        )
+        raise typer.Exit(code=1)
+
+    storage_options = turn_S3_config_into_polars_storage_options(CLI_config.s3_storage)
+    destination = _delta_location(CLI_config, data_collection)
+
+    try:
+        removed = vacuum_delta_table(
+            destination,
+            storage_options,
+            retention_hours=retention_hours,
+            dry_run=not apply,
+        )
+    except Exception as exc:  # noqa: BLE001 - surfaced to the user, not swallowed
+        rich_print_checked_statement(f"Vacuum failed: {exc}", "error")
+        raise typer.Exit(code=1) from exc
+
+    if not removed:
+        rich_print_checked_statement("Nothing to remove.", "success")
+        return
+
+    if apply:
+        rich_print_checked_statement(
+            f"Removed {len(removed)} file(s) from {destination}", "success"
+        )
+    else:
+        rich_print_checked_statement(
+            f"[dry-run] {len(removed)} file(s) would be removed from {destination}. "
+            "Re-run with --apply to delete them.",
+            "info",
+        )
 
 
 @app.command()
@@ -412,6 +589,16 @@ def process(
     rich_tables: bool = typer.Option(
         False, "--rich-tables", help="Display rich tables in the output"
     ),
+    write_mode: str = typer.Option(
+        "overwrite",
+        "--write-mode",
+        help=(
+            "overwrite: rewrite the whole table (historical behaviour). "
+            "replace-runs: partition by run and rewrite only the runs present in "
+            "this batch, leaving the others untouched. "
+            "append: add rows without replacing (only sensible with --sync-changed)."
+        ),
+    ),
     preview_recipes: bool = typer.Option(
         False,
         "--preview-recipes",
@@ -422,6 +609,10 @@ def process(
     Process data collections for a specific tag.
     """
     rich_print_command_usage("process")
+
+    if write_mode not in ("overwrite", "append", "replace-runs"):
+        rich_print_checked_statement(f"Invalid --write-mode '{write_mode}'", "error")
+        raise typer.Exit(code=1)
 
     # Validate configurations and prepare headers
     CLI_config, response = validate_project_config_and_check_S3_storage(
@@ -458,8 +649,10 @@ def process(
 
                 command_parameters = {
                     "overwrite": overwrite,
+                    "write_mode": write_mode,
                     "rich_tables": rich_tables,
                     "preview_recipes": preview_recipes,
+                    "project_id": str(project_config.id),
                 }
 
                 rich_print_section_separator("Processing files")
