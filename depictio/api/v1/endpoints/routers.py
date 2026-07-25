@@ -25,6 +25,7 @@ from depictio.api.v1.endpoints.datacollections_endpoints.routes import (
 )
 from depictio.api.v1.endpoints.deltatables_endpoints.routes import deltatables_endpoint_router
 from depictio.api.v1.endpoints.events_endpoints.routes import events_router
+from depictio.api.v1.endpoints.export_endpoints.routes import export_endpoint_router
 from depictio.api.v1.endpoints.figure_endpoints.routes import figure_endpoint_router
 from depictio.api.v1.endpoints.files_endpoints.routes import files_endpoint_router
 from depictio.api.v1.endpoints.jbrowse_endpoints.routes import jbrowse_endpoints_router
@@ -127,6 +128,15 @@ router.include_router(
     advanced_viz_endpoint_router,
     prefix="/advanced_viz",
     tags=["Advanced Viz"],
+)
+
+# Always mounted so the routes self-report why they are unavailable; each handler
+# checks settings.fastapi.embed_enabled and 404s with an actionable message when
+# embedding is off.
+router.include_router(
+    export_endpoint_router,
+    prefix="/export",
+    tags=["Export"],
 )
 
 router.include_router(

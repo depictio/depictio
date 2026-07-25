@@ -1,11 +1,16 @@
 /**
- * Standalone single-file build for `depictio catalog preview`.
+ * Standalone single-file build for the component export API (`format=html`).
  *
  * Produces ONE self-contained HTML (JS + CSS inlined) that renders the viewer's
  * real `ComponentRenderer` from an embedded payload — no API, fully offline. The
- * `catalog-api-shim` plugin redirects every `depictio-react-core` import of the
- * real `api.ts` to `src/offline/mockApi.ts` (which itself imports the
- * real api), so the renderers read embedded payloads instead of fetching.
+ * `offline-api-shim` plugin redirects every `depictio-react-core` import of the
+ * real `api.ts` to `src/offline/mockApi.ts` (which itself imports the real api),
+ * so the renderers read the embedded payload instead of fetching.
+ *
+ * Sibling of vite.catalog-preview.config.ts — same shim, same aliases, same
+ * dedupe list. The two differ only in entry point and output directory. Keep the
+ * `dedupe` list in sync between them: a duplicated React or Plotly copy breaks
+ * hooks and doubles an already-large bundle.
  */
 import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
@@ -16,7 +21,7 @@ const REAL_API = path.resolve(__dirname, '../../packages/depictio-react-core/src
 const SHIM = path.resolve(__dirname, 'src/offline/mockApi.ts');
 
 const apiShim = (): Plugin => ({
-  name: 'catalog-api-shim',
+  name: 'offline-api-shim',
   enforce: 'pre',
   async resolveId(source, importer, options) {
     // The shim itself imports the real api — let that through.
@@ -31,13 +36,13 @@ export default defineConfig({
   base: './',
   plugins: [react(), apiShim(), viteSingleFile()],
   build: {
-    outDir: 'dist-catalog-preview',
+    outDir: 'dist-embed',
     emptyOutDir: true,
     sourcemap: false,
     assetsInlineLimit: 100_000_000,
     cssCodeSplit: false,
     rollupOptions: {
-      input: path.resolve(__dirname, 'catalog-preview.html'),
+      input: path.resolve(__dirname, 'embed.html'),
     },
   },
   resolve: {

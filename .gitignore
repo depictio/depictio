@@ -390,6 +390,10 @@ dev/advanced_viz_docs_screenshots/fixtures/
 # Generated catalog-preview single-file bundle (built via pnpm run build:catalog-preview)
 depictio/viewer/dist-catalog-preview/
 
+# Generated component-embed single-file bundle (built via pnpm run build:embed).
+# The API image builds and copies this in; see docker-images/Dockerfile.api.
+depictio/viewer/dist-embed/
+
 # Nextflow runtime artifacts (from local pipeline validation runs)
 .nextflow/
 .nextflow.log*
