@@ -164,6 +164,18 @@ async def upsert_deltatable(
             aggregation_version=version,
             aggregation_hash=final_hash,
             aggregation_columns_specs=results,
+            # Delta provenance as reported by the writer. An older CLI sends
+            # none of these and they stay None, which is the honest answer for
+            # a write whose commit we never observed.
+            delta_version=payload.delta_version,
+            delta_commit_timestamp=payload.delta_commit_timestamp,
+            write_mode=payload.write_mode,
+            rows_total=payload.rows_total,
+            rows_added=payload.rows_added,
+            files_added=payload.files_added,
+            run_tags=payload.run_tags,
+            ingestion_run_id=payload.ingestion_run_id,
+            trigger=payload.trigger,
         )
     )
 

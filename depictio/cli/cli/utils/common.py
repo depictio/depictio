@@ -77,6 +77,24 @@ def generate_api_headers(CLI_config: CLIConfig | dict) -> dict:
     return headers
 
 
+def cli_version() -> str | None:
+    """Installed depictio-cli version, or ``None`` if it can't be determined.
+
+    Best-effort provenance for the monitoring ledger and Delta commit metadata —
+    never raises.
+    """
+    try:
+        from importlib.metadata import PackageNotFoundError
+        from importlib.metadata import version as _pkg_version
+
+        try:
+            return _pkg_version("depictio-cli")
+        except PackageNotFoundError:
+            return "dev"
+    except Exception:
+        return None
+
+
 @validate_call(validate_return=True)
 def format_timestamp(timestamp: float) -> str:
     """

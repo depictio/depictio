@@ -655,6 +655,7 @@ def api_upsert_deltatable(
     CLI_config: CLIConfig,
     update: bool = False,
     deltatable_size_bytes: int | None = None,
+    delta_provenance: dict | None = None,
 ) -> httpx.Response:
     """
     Create or update a Delta Table on the server using a bulk upsert.
@@ -663,6 +664,11 @@ def api_upsert_deltatable(
         deltaTable (UpsertDeltaTableAggregated): Delta Table to send.
         CLI_config (CLIConfig): Configuration object containing API base URL and credentials.
         deltatable_size_bytes (int, optional): Size of the deltatable in bytes to store in flexible_metadata.
+        delta_provenance (dict, optional): Commit facts observed after the write —
+            delta_version, delta_commit_timestamp, write_mode, row/file counts,
+            run_tags, ingestion_run_id, trigger. Sent only when present, so an
+            older server (which ignores unknown fields) and an older CLI (which
+            sends none) both keep working.
 
     Returns:
         httpx.Response: The response from the server.
@@ -678,6 +684,9 @@ def api_upsert_deltatable(
     # Add deltatable size to payload if provided
     if deltatable_size_bytes is not None:
         payload["deltatable_size_bytes"] = deltatable_size_bytes
+
+    if delta_provenance:
+        payload.update({k: v for k, v in delta_provenance.items() if v is not None})
 
     url = f"{CLI_config.api_base_url}/depictio/api/v1/deltatables/upsert"
 

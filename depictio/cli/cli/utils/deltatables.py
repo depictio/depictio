@@ -9,6 +9,14 @@ from depictio.cli.cli.utils.api_calls import (
     api_get_files_by_dc_id,
     api_upsert_deltatable,
 )
+from depictio.cli.cli.utils.common import cli_version as _cli_version
+from depictio.cli.cli.utils.delta_versioning import (
+    MAX_RUN_TAGS_IN_METADATA,
+    RUN_ID_COLUMN,
+    build_commit_metadata,
+    plan_partitioning,
+    write_delta_table_versioned,
+)
 from depictio.cli.cli.utils.multiqc_processor import process_multiqc_data_collection
 from depictio.cli.cli.utils.rich_utils import rich_print_checked_statement
 from depictio.cli.cli_logging import logger
@@ -298,41 +306,55 @@ def write_delta_table(
     aggregated_df: pl.DataFrame,
     destination_file: str,
     storage_options: PolarsStorageOptions,
+    *,
+    write_mode: str = "overwrite",
+    commit_metadata: dict[str, str] | None = None,
+    partition: bool = False,
+    replace_run_tags: list[str] | None = None,
 ) -> dict:
     """
     Write the aggregated DataFrame as a Delta Lake table.
 
+    Thin wrapper over :func:`write_delta_table_versioned` that keeps the
+    historical dict return shape for the three existing call sites (standard
+    aggregation, recipes, joins). The defaults reproduce the previous behaviour
+    exactly — a full overwrite, no commit metadata, no partitioning — and the
+    dict simply gains the commit facts observed after the write.
+
     Args:
         aggregated_df (pl.DataFrame): The aggregated DataFrame.
         destination_file (str): The destination path for the Delta table.
+        write_mode: overwrite | append | replace-runs.
+        commit_metadata: depictio provenance to stamp into the Delta commit.
+        partition: Whether to partition by ``depictio_run_id``.
+        replace_run_tags: Runs the overwrite is scoped to, for ``replace-runs``.
 
     Raises:
         Exception: If writing the Delta table fails.
     """
-    # try:
     logger.debug(f"Writing aggregated DataFrame to Delta table at {destination_file}.")
     logger.debug(f"Aggregated DataFrame schema: {aggregated_df.schema}")
-    logger.debug(f"Aggregated DataFrame head: {aggregated_df.head(5)}")
     logger.debug(f"Storage options: {storage_options}")
 
-    aggregated_df.write_delta(
+    outcome = write_delta_table_versioned(
+        aggregated_df,
         destination_file,
-        storage_options=storage_options.model_dump(),
-        delta_write_options={"schema_mode": "overwrite"},
-        mode="overwrite",
+        storage_options,
+        write_mode=write_mode,  # type: ignore[arg-type]
+        commit_metadata=commit_metadata,
+        partition=partition,
+        replace_run_tags=replace_run_tags,
     )
 
-    logger.info(f"Aggregated Delta table written to {destination_file}.")
-
     return {
-        "result": "success",
-        "message": f"Aggregated Delta table written to {destination_file}.",
+        "result": outcome.result,
+        "message": outcome.message,
+        "delta_version": outcome.delta_version,
+        "delta_commit_timestamp": outcome.delta_timestamp,
+        "write_mode": outcome.write_mode,
+        "rows_total": outcome.rows_written,
+        "partitioned": outcome.partitioned,
     }
-    # except Exception as e:
-    #     error_msg = f"Error writing aggregated Delta table: {e}"
-    #     logger.error(error_msg)
-
-    #     return {"result": "error", "message": error_msg}
 
 
 def read_delta_table(
@@ -414,12 +436,15 @@ def client_aggregate_data(
         dict: Result dictionary with success/error status and message.
     """
 
+    command_parameters = command_parameters or {}
     if command_parameters:
         overwrite = command_parameters.get("overwrite", False)
         rich_tables = command_parameters.get("rich_tables", False)
         preview_recipes = command_parameters.get("preview_recipes", False)
+        write_mode = command_parameters.get("write_mode", "overwrite")
     else:
         overwrite = False
+        write_mode = "overwrite"
         preview_recipes = False
 
     # Handle MultiQC data collections specially - copy parquet files to S3 and extract metadata
@@ -561,10 +586,46 @@ def client_aggregate_data(
             f"DataFrame head: {aggregated_df.head(2) if aggregated_df.height > 0 else 'DataFrame is empty'}"
         )
 
+    # Decide the write strategy. plan_partitioning declines — with a reason —
+    # whenever partitioning would fail or make things worse (no run column,
+    # a single run, path-unsafe tags, too many partitions, or an existing table
+    # with different partitioning, which delta-rs rejects outright).
+    run_tags = (
+        [str(tag) for tag in aggregated_df[RUN_ID_COLUMN].unique().to_list() if tag is not None]
+        if RUN_ID_COLUMN in aggregated_df.columns
+        else []
+    )
+    partition, decline_reason = plan_partitioning(
+        aggregated_df, destination_prefix, storage_options, write_mode
+    )
+    if decline_reason and write_mode == "replace-runs":
+        logger.warning(
+            f"Falling back to a full overwrite for {data_collection.data_collection_tag}: "
+            f"{decline_reason}"
+        )
+
+    commit_metadata = build_commit_metadata(
+        data_collection_id=str(dc_id),
+        data_collection_tag=data_collection.data_collection_tag,
+        write_mode=write_mode if partition else "overwrite",
+        run_tags=run_tags,
+        file_count=len(files) if files else None,
+        row_count=aggregated_df.height,
+        ingestion_run_id=command_parameters.get("ingestion_run_id"),
+        project_id=command_parameters.get("project_id"),
+        trigger=command_parameters.get("trigger"),
+        cli_version=_cli_version(),
+        user_email=getattr(CLI_config.user, "email", None),
+    )
+
     result = write_delta_table(
         aggregated_df=aggregated_df,
         destination_file=destination_prefix,
         storage_options=storage_options,
+        write_mode=write_mode if partition else "overwrite",
+        commit_metadata=commit_metadata,
+        partition=partition,
+        replace_run_tags=run_tags if partition else None,
     )
 
     extended = True if rich_tables else False
@@ -591,6 +652,19 @@ def client_aggregate_data(
         delta_table_location=destination_prefix,
         update=overwrite,
         deltatable_size_bytes=deltatable_size_bytes,
+        delta_provenance={
+            "delta_version": result.get("delta_version"),
+            "delta_commit_timestamp": (
+                result["delta_commit_timestamp"].isoformat()
+                if result.get("delta_commit_timestamp")
+                else None
+            ),
+            "write_mode": result.get("write_mode"),
+            "rows_total": result.get("rows_total"),
+            "run_tags": run_tags[:MAX_RUN_TAGS_IN_METADATA] or None,
+            "ingestion_run_id": command_parameters.get("ingestion_run_id"),
+            "trigger": command_parameters.get("trigger"),
+        },
     )
     logger.info(f"🔍 DEBUG: API upsert response status: {api_upsert_result.status_code}")
     if api_upsert_result.status_code != 200:
