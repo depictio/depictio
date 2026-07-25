@@ -3160,6 +3160,33 @@ export async function fetchAppLogs(opts: {
   return Array.isArray(data?.logs) ? (data.logs as MonitoringAppLog[]) : [];
 }
 
+/** Ingestion-run history for one project, permission-scoped.
+ *
+ * Distinct from `fetchIngestionRuns`, which is admin-only across all projects.
+ * `redacted` tells the UI that operator-machine fields (local paths, hostname,
+ * command line) were stripped because the caller is not an owner/editor — worth
+ * surfacing, so a viewer understands why those columns are empty rather than
+ * assuming the data is missing.
+ *
+ * A 404 means monitoring is off on this server; treated as an empty history.
+ */
+export async function fetchProjectIngestionRuns(
+  projectId: string,
+  opts: { limit?: number; skip?: number } = {},
+): Promise<{ runs: MonitoringIngestionRun[]; redacted: boolean }> {
+  const qs = monitoringQuery({ limit: opts.limit, skip: opts.skip });
+  const res = await fetch(`${API_BASE}/projects/ingestion-runs/${projectId}${qs}`, {
+    headers: authHeaders(),
+  });
+  if (res.status === 404) return { runs: [], redacted: false };
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to load ingestion history');
+  const data = await res.json();
+  return {
+    runs: Array.isArray(data?.runs) ? (data.runs as MonitoringIngestionRun[]) : [],
+    redacted: Boolean(data?.redacted),
+  };
+}
+
 /** List live CLI agents (watchers). Admin-scoped, or project-scoped when a
  *  projectId is given. A 404 means this server predates agents — treated as an
  *  empty list rather than an error, so the pane degrades to "none" instead of

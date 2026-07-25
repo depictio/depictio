@@ -157,6 +157,7 @@ export {
   fetchIngestionRuns,
   fetchIngestionRun,
   fetchCliAgents,
+  fetchProjectIngestionRuns,
   fetchAppLogs,
   fetchMonitoringHealth,
   fetchLogCaptureLevel,

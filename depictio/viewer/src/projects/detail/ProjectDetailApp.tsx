@@ -13,6 +13,7 @@ import {
   Loader,
   Paper,
   ScrollArea,
+  SegmentedControl,
   SimpleGrid,
   Stack,
   Table,
@@ -72,6 +73,7 @@ import { useCurrentUser } from '../../hooks/useCurrentUser';
 import { AppSidebar } from '../../chrome';
 import JoinsGraph from './JoinsGraph';
 import IngestionReportPanel from './IngestionReportPanel';
+import ProjectIngestionHistoryPanel from './ProjectIngestionHistoryPanel';
 import { parseTemplate, TemplateChip, templateDocsUrl } from '../template';
 import { DcTypeIcon } from '../dcTypeIcon';
 
@@ -287,9 +289,18 @@ const ProjectDetailApp: React.FC = () => {
   // dashboard banner / settings drawer) and is controlled so the ingestion
   // report can switch back to Overview when previewing a data collection.
   const [activeTab, setActiveTab] = useState<string | null>(
-    typeof window !== 'undefined' && window.location.hash === '#ingestion'
+    typeof window !== 'undefined' &&
+      ['#ingestion', '#ingestion-history'].includes(window.location.hash)
       ? 'ingestion'
       : 'overview',
+  );
+  // Which half of the Ingestion tab is showing. `#ingestion-history` deep-links
+  // straight to the run history, which is what a "your ingestion failed" link
+  // should open.
+  const [ingestionView, setIngestionView] = useState<'report' | 'history'>(
+    typeof window !== 'undefined' && window.location.hash === '#ingestion-history'
+      ? 'history'
+      : 'report',
   );
   const [refreshKey, setRefreshKey] = useState(0);
   // Scroll-to + auto-open the DC viewer when a preview was requested from the
@@ -600,19 +611,35 @@ const ProjectDetailApp: React.FC = () => {
                       </Tabs.List>
                       <Tabs.Panel value="overview">{overviewSections}</Tabs.Panel>
                       <Tabs.Panel value="ingestion">
-                        <IngestionReportPanel
-                          projectId={projectId}
-                          dcIdByTag={dcIdByTag}
-                          onPreviewDc={(dcId) => {
-                            // Jump to the Overview tab with this DC selected so
-                            // its table/preview shows in the DataCollectionViewer,
-                            // then scroll it into view (see the effect above).
-                            scrollToDcRef.current = true;
-                            setSelectedWorkflowId(null);
-                            setSelectedDcId(dcId);
-                            setActiveTab('overview');
-                          }}
-                        />
+                        <Stack gap="md">
+                          <SegmentedControl
+                            size="xs"
+                            w="fit-content"
+                            value={ingestionView}
+                            onChange={(v: string) => setIngestionView(v as 'report' | 'history')}
+                            data={[
+                              { value: 'report', label: 'Report' },
+                              { value: 'history', label: 'History' },
+                            ]}
+                          />
+                          {ingestionView === 'report' ? (
+                            <IngestionReportPanel
+                              projectId={projectId}
+                              dcIdByTag={dcIdByTag}
+                              onPreviewDc={(dcId) => {
+                                // Jump to the Overview tab with this DC selected so
+                                // its table/preview shows in the DataCollectionViewer,
+                                // then scroll it into view (see the effect above).
+                                scrollToDcRef.current = true;
+                                setSelectedWorkflowId(null);
+                                setSelectedDcId(dcId);
+                                setActiveTab('overview');
+                              }}
+                            />
+                          ) : (
+                            <ProjectIngestionHistoryPanel projectId={projectId} />
+                          )}
+                        </Stack>
                       </Tabs.Panel>
                     </Tabs>
                   ) : (
