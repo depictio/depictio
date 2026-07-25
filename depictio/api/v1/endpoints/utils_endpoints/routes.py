@@ -123,6 +123,7 @@ async def capabilities(current_user=Depends(get_current_user)):
         "runs.delete_batch",
         "deltatables.history",
         "deltatables.provenance",
+        "deltatables.preview_time_travel",
     ]
     # Runtime state, not build state: advertised only when the flag is actually
     # on, so a client can trust the list instead of inferring capability from a

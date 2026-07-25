@@ -1386,18 +1386,75 @@ export interface PreviewResult {
   rows: Array<Record<string, unknown>>;
   total_rows: number;
   total_columns: number;
+  /** Delta version actually read; null when the current table was read. */
+  version?: number | null;
 }
 
 export async function fetchDataCollectionPreview(
   dcId: string,
   limit = 100,
+  /** Read a historical Delta commit instead of the current table. */
+  version?: number | null,
 ): Promise<PreviewResult> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (version != null) params.set('version', String(version));
   const res = await fetch(
-    `${API_BASE}/deltatables/preview/${dcId}?limit=${limit}`,
+    `${API_BASE}/deltatables/preview/${dcId}?${params.toString()}`,
     { headers: authHeaders() },
   );
   if (!res.ok) {
     throw new Error(`Failed to fetch preview: ${res.status}`);
+  }
+  return res.json();
+}
+
+/** One commit in a data collection's Delta history.
+ *
+ *  Rows are a merge of two sources, hence the sparse fields: `origin: 'delta'`
+ *  is a commit Delta knows about but depictio never recorded (or recorded
+ *  before delta_version existed), `'mongo'` is an aggregation whose commit has
+ *  aged out of the requested window, `'both'` has the full picture. Callers
+ *  should render what is present rather than assuming any field is set.
+ *
+ *  `by_email` is populated only for project owners, editors and admins. */
+export interface DeltaVersionEntry {
+  version?: number | null;
+  timestamp?: string | null;
+  operation?: string | null;
+  rows_added?: number | null;
+  files_added?: number | null;
+  files_removed?: number | null;
+  metadata?: Record<string, string>;
+  aggregation_version?: number | null;
+  aggregation_time?: string | null;
+  by_email?: string | null;
+  run_id?: string | null;
+  trigger?: string | null;
+  write_mode?: string | null;
+  rows_total?: number | null;
+  origin: 'delta' | 'mongo' | 'both';
+}
+
+export interface DeltaHistoryResponse {
+  delta_table_location: string;
+  current_version: number | null;
+  /** True when the object store could not be reached and only Mongo's view is
+   *  present — the UI says so rather than implying the table has no history. */
+  degraded: boolean;
+  versions: DeltaVersionEntry[];
+}
+
+/** Commit history of a data collection's Delta table, newest first. */
+export async function fetchDeltaHistory(
+  dcId: string,
+  limit = 20,
+): Promise<DeltaHistoryResponse> {
+  const res = await fetch(
+    `${API_BASE}/deltatables/history/${dcId}?limit=${limit}`,
+    { headers: authHeaders() },
+  );
+  if (!res.ok) {
+    throw new Error(`Failed to fetch Delta history: ${res.status}`);
   }
   return res.json();
 }
@@ -2108,6 +2165,8 @@ export interface IngestionDataCollection {
   removal_reason: string | null;
   files_found: number;
   files_new: number;
+  /** Files whose content changed since the previous scan. */
+  files_updated: number;
   files_skipped: number;
   files_failed: number;
   ingested: boolean;
@@ -2127,6 +2186,10 @@ export interface IngestionRun {
   scan_time: string | null;
   /** 'ok' | 'partial' | 'no_scan' */
   status: string;
+  /** Tallies from this run's most recent scan, summed across its DCs. */
+  files_total: number;
+  files_new: number;
+  files_updated: number;
 }
 
 export interface IngestionSummary {
