@@ -36,6 +36,8 @@ import {
   type MonitoringAppLog,
   type MonitoringHealth,
   type MonitoringIngestionRun,
+  type MonitoringIngestionStep,
+  type MonitoringLiveEvent,
   type MonitoringTaskEvent,
 } from 'depictio-react-core';
 
@@ -65,7 +67,7 @@ import {
   PANE_SCROLL_H,
   statusColor,
 } from '../monitoring/tokens';
-import { usePolling } from '../monitoring/usePolling';
+import { usePolling, useLivePolling } from '../monitoring/usePolling';
 import { AgentsPane } from '../monitoring/AgentsPane';
 import { IngestionStepTimeline } from '../monitoring/IngestionStepTimeline';
 import { TriggerBadge } from '../monitoring/TriggerBadge';
@@ -283,18 +285,72 @@ const TasksPane: React.FC<{ liveSignal: number }> = ({ liveSignal }) => {
 
 // ── Ingestion pane ──────────────────────────────────────────────────────────
 
-const IngestionPane: React.FC<{ liveSignal: number }> = ({ liveSignal }) => {
+/**
+ * Apply a live ingestion event to the cached run list.
+ *
+ * Returns `null` to mean "I can't apply this" — no data yet, a different event
+ * kind, or a run we've never seen (one that started after our last fetch).
+ * `useLivePolling` turns that into a refetch, so an unknown run appears
+ * promptly instead of being dropped.
+ */
+function applyIngestionEvent(
+  current: MonitoringIngestionRun[] | null,
+  event: MonitoringLiveEvent,
+): MonitoringIngestionRun[] | null {
+  if (event.event_type !== 'ingestion_event' || !current) return null;
+  const payload = (event.payload ?? {}) as {
+    run_id?: string;
+    status?: string;
+    current_step?: string | null;
+    step?: MonitoringIngestionStep;
+    progress?: MonitoringIngestionRun['progress'];
+    counters?: Record<string, number>;
+  };
+  const runId = payload.run_id;
+  if (!runId) return null;
+
+  const index = current.findIndex((r) => r.run_id === runId);
+  if (index === -1) return null;
+
+  const run = current[index];
+  // Upsert the step by name — the server keys them the same way, so a step
+  // reported twice (start then finish) updates rather than duplicates.
+  let steps = run.steps ?? [];
+  if (payload.step) {
+    const stepIndex = steps.findIndex((s) => s.name === payload.step!.name);
+    steps =
+      stepIndex === -1
+        ? [...steps, payload.step]
+        : steps.map((s, i) => (i === stepIndex ? payload.step! : s));
+  }
+
+  const updated: MonitoringIngestionRun = {
+    ...run,
+    steps,
+    status: (payload.status as MonitoringIngestionRun['status']) ?? run.status,
+    current_step: payload.current_step !== undefined ? payload.current_step : run.current_step,
+    progress: payload.progress ?? run.progress,
+    counters: payload.counters ?? run.counters,
+  };
+  const next = [...current];
+  next[index] = updated;
+  return next;
+}
+
+const IngestionPane: React.FC<{ lastEvent: MonitoringLiveEvent | null }> = ({ lastEvent }) => {
   const [auto, setAuto] = useState(true);
   const [q, setQ] = useState('');
   // Controlled open rows: only the expanded run mounts its field grid + steps
   // table, keeping a large run list light on load and on refresh.
   const [open, setOpen] = useState<string[]>([]);
   const load = useCallback(() => fetchIngestionRuns({ limit: 200 }), []);
-  const { data, loading, error, refresh } = usePolling<MonitoringIngestionRun[]>(
-    load,
-    auto,
-    liveSignal,
-  );
+  // Patch in place rather than refetch: a run emits one event per step, so
+  // refetching 200 full runs each time would put this pane under continuous
+  // load for the whole of a run — and a watcher never stops producing them.
+  const { data, loading, error, refresh } = useLivePolling<
+    MonitoringIngestionRun[],
+    MonitoringLiveEvent
+  >(load, auto, lastEvent, { patch: applyIngestionEvent });
   const runs = (data ?? []).filter((r) =>
     matchesQuery(
       q,
@@ -795,21 +851,28 @@ const AdminMonitoringPanel: React.FC = () => {
   const { isPublicMode, isDemoMode, isSingleUserMode } = useCurrentUser();
   const [pane, setPane] = useState<Pane>('tasks');
   const [liveSignal, setLiveSignal] = useState(0);
+  const [lastEvent, setLastEvent] = useState<MonitoringLiveEvent | null>(null);
 
   // Match AdminApp's gate: single-user always allowed; only pure public/demo hides.
   const visible = isSingleUserMode || (!isPublicMode && !isDemoMode);
 
-  // Live push: bump a signal on each task/ingestion event so the active pane
-  // refreshes instantly. No-op (socket never delivers) when events are disabled.
+  // Live push. Two shapes on purpose: panes that refetch wholesale still use
+  // the counter, while the ingestion pane takes the event itself so it can
+  // patch one run in place. Ingestion is the only pane whose event rate scales
+  // with the work being done — the others fire a handful of times per run.
+  // No-op (socket never delivers) when events are disabled.
   const { status: liveStatus } = useMonitoringEvents({
     enabled: visible,
-    onEvent: useCallback(() => setLiveSignal((n) => n + 1), []),
+    onEvent: useCallback((event: MonitoringLiveEvent) => {
+      setLastEvent(event);
+      setLiveSignal((n) => n + 1);
+    }, []),
   });
 
   const body = useMemo(() => {
     switch (pane) {
       case 'ingestion':
-        return <IngestionPane liveSignal={liveSignal} />;
+        return <IngestionPane lastEvent={lastEvent} />;
       case 'agents':
         return <AgentsPane liveSignal={liveSignal} />;
       case 'logs':
@@ -819,7 +882,7 @@ const AdminMonitoringPanel: React.FC = () => {
       default:
         return <TasksPane liveSignal={liveSignal} />;
     }
-  }, [pane, liveSignal]);
+  }, [pane, liveSignal, lastEvent]);
 
   if (!visible) {
     return (
