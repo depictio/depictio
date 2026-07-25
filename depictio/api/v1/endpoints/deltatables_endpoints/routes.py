@@ -662,6 +662,31 @@ def _read_delta_history(delta_location: str, limit: int) -> list[dict]:
     return entries
 
 
+def _caller_is_project_operator(data_collection_id: PyObjectId, current_user: User) -> bool:
+    """True when the caller owns or edits the project holding this data collection.
+
+    Delta history names whoever ran each ingestion. Read access is a weaker bar
+    than that: ``is_public: True`` admits any authenticated *or* anonymous user,
+    so returning emails to everyone who may read the table would turn publishing
+    a project into publishing a roster of the people who work on it. Same
+    reasoning, and same owners/editors bar, as ``_redact_run`` in the projects
+    router.
+    """
+    if getattr(current_user, "is_admin", False):
+        return True
+    project = projects_collection.find_one(
+        {"workflows.data_collections._id": ObjectId(data_collection_id)},
+        {"permissions": 1},
+    )
+    permissions = (project or {}).get("permissions") or {}
+    user_id = str(current_user.id)
+    return any(
+        str(entry.get("_id")) == user_id
+        for group in ("owners", "editors")
+        for entry in (permissions.get(group) or [])
+    )
+
+
 @deltatables_endpoint_router.get("/history/{data_collection_id}")
 async def get_delta_history(
     data_collection_id: PyObjectId,
@@ -676,12 +701,17 @@ async def get_delta_history(
     about each aggregation (who ran it). Degrades to the Mongo-only view when
     the object store is unreachable, so a transient S3 problem shows a partial
     history rather than an error page.
+
+    Who ran an ingestion is shown to owners, editors and admins only — see
+    ``_caller_is_project_operator``.
     """
     limit = max(1, min(limit, 200))
 
     pipeline = _build_permission_pipeline(data_collection_id, current_user)
     if not list(projects_collection.aggregate(pipeline)):
         raise HTTPException(status_code=404, detail="Data collection not found or access denied.")
+
+    show_operator = _caller_is_project_operator(data_collection_id, current_user)
 
     record = deltatables_collection.find_one({"data_collection_id": data_collection_id})
     if not record:
@@ -704,7 +734,9 @@ async def get_delta_history(
                 if isinstance(aggregation.get("aggregation_time"), datetime)
                 else aggregation.get("aggregation_time")
             ),
-            "by_email": (aggregation.get("aggregation_by") or {}).get("email"),
+            "by_email": (
+                (aggregation.get("aggregation_by") or {}).get("email") if show_operator else None
+            ),
             "run_id": aggregation.get("ingestion_run_id"),
             "trigger": aggregation.get("trigger"),
             "write_mode": aggregation.get("write_mode"),
@@ -728,6 +760,14 @@ async def get_delta_history(
     for entry in delta_entries:
         version = entry.get("version")
         mongo_entry = by_version.pop(int(version), None) if version is not None else None
+        if not show_operator:
+            # The writer stamps depictio.user_email into the commit metadata, so
+            # dropping it from the Mongo side alone would not hide it.
+            entry["metadata"] = {
+                key: value
+                for key, value in (entry.get("metadata") or {}).items()
+                if key != "depictio.user_email"
+            }
         merged.append(
             {**entry, **(mongo_entry or {}), "origin": "both" if mongo_entry else "delta"}
         )
@@ -977,6 +1017,7 @@ async def get_preview(
     response: Response,
     data_collection_id: PyObjectId,
     limit: int = 100,
+    version: int | None = None,
     current_user: User = Depends(get_user_or_anonymous),
 ):
     """
@@ -988,6 +1029,14 @@ async def get_preview(
 
     Heavy work (Polars scan + collect) runs on Celery when
     `settings.celery.offload_preview` is true (default).
+
+    ``version`` reads an older Delta commit instead of the current table. Safe
+    to expose here specifically because this path scans the table directly
+    rather than going through ``load_deltatable_lite``: that function's cache is
+    salted with ``aggregation_version`` only, so a historical read served
+    through it would be stored under the *live* key and then handed to callers
+    who asked for current data. Do not wire time travel into any endpoint that
+    reads through the cache without salting the key with the version too.
     """
     pipeline = _build_permission_pipeline(data_collection_id, current_user)
     project_result = list(projects_collection.aggregate(pipeline))
@@ -1012,7 +1061,13 @@ async def get_preview(
     try:
         return await offload_or_run(
             preview_deltatable_task,
-            ({"delta_table_location": delta_table_location, "limit": limit},),
+            (
+                {
+                    "delta_table_location": delta_table_location,
+                    "limit": limit,
+                    "version": version,
+                },
+            ),
             offload=offload,
             label=f"deltatable_preview dc={data_collection_id}",
         )

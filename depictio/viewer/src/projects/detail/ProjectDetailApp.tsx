@@ -11,6 +11,7 @@ import {
   Collapse,
   Group,
   Loader,
+  LoadingOverlay,
   Paper,
   ScrollArea,
   SegmentedControl,
@@ -44,6 +45,7 @@ import {
 import {
   fetchProject,
   fetchDataCollectionPreview,
+  fetchDeltaHistory,
   fetchMultiQCByDataCollection,
   renameDataCollection,
   deleteDataCollection,
@@ -74,6 +76,7 @@ import { AppSidebar } from '../../chrome';
 import JoinsGraph from './JoinsGraph';
 import IngestionReportPanel from './IngestionReportPanel';
 import ProjectIngestionHistoryPanel from './ProjectIngestionHistoryPanel';
+import { DeltaVersionHistory } from './DeltaVersionHistory';
 import { parseTemplate, TemplateChip, templateDocsUrl } from '../template';
 import { DcTypeIcon } from '../dcTypeIcon';
 
@@ -86,14 +89,20 @@ interface DataCollectionShape {
   /** S3 path of the registered delta table (post-aggregation) — stamped on
    *  the DC by the project enrichment query. */
   delta_location?: string;
-  /** Last-aggregation snapshot. Shape depends on the DC type; we just
-   *  pull `aggregation_time` for the "Last Aggregated" line. */
+  /** Last-aggregation snapshot. Shape depends on the DC type; we pull
+   *  `aggregation_time` for the "Last Aggregated" line and `delta_version` for
+   *  the "Delta version" line. */
   last_aggregation?:
     | {
         aggregation_time?: string;
+        delta_version?: number | null;
         [k: string]: unknown;
       }
-    | Array<{ aggregation_time?: string; [k: string]: unknown }>;
+    | Array<{
+        aggregation_time?: string;
+        delta_version?: number | null;
+        [k: string]: unknown;
+      }>;
   /** Free-form metadata bag — backend stamps `deltatable_size_bytes` for
    *  table-typed DCs and `total_file_size_bytes` / `s3_location` for
    *  multiqc DCs. Mirrors `flexible_metadata` on the Pydantic model. */
@@ -184,6 +193,17 @@ function getDcLastAggregated(dc: DataCollectionShape): string {
   }
   const updated = dc.flexible_metadata?.deltatable_size_updated;
   return updated || 'Never';
+}
+
+/** Delta commit version of the latest aggregation, when the writer recorded
+ *  one. Read from the same `last_aggregation` bag as the timestamp — no extra
+ *  request. Aggregations written before versions were captured return null and
+ *  the row renders as unknown rather than as version 0. */
+function getDcDeltaVersion(dc: DataCollectionShape): number | null {
+  const la = dc.last_aggregation;
+  const latest = Array.isArray(la) ? la[la.length - 1] : la;
+  const version = latest?.delta_version;
+  return typeof version === 'number' ? version : null;
 }
 
 interface WorkflowShape {
@@ -2676,6 +2696,7 @@ const DataCollectionViewer: React.FC<{
   const isTable = type.toLowerCase() === 'table';
   const isCoordTable = dcHasCoordinates(dc);
   const isAggregate = isTable && (metatype || '').toLowerCase() !== 'metadata';
+  const deltaVersion = getDcDeltaVersion(dc);
 
   // Ranked viz-kind fit scores for this DC — surfaced in the viewer as
   // "compatible advanced visualizations" chips so users discover the affinity
@@ -2867,6 +2888,20 @@ const DataCollectionViewer: React.FC<{
                   label="Last Aggregated"
                   value={getDcLastAggregated(dc)}
                 />
+                <DetailRow
+                  label="Delta version"
+                  badge={
+                    deltaVersion != null ? (
+                      <Badge color="green" size="sm" radius="sm" variant="light">
+                        v{deltaVersion}
+                      </Badge>
+                    ) : (
+                      <Text size="sm" c="dimmed">
+                        Not recorded
+                      </Text>
+                    )
+                  }
+                />
                 {format && (
                   <DetailRow
                     label="Format"
@@ -2941,17 +2976,20 @@ const DataCollectionViewer: React.FC<{
          *  its own per-module preview elsewhere; image and JBrowse types
          *  don't fit a row/column grid. */}
         {!isMultiQC && type === 'table' && (
-          <Card withBorder radius="md" p="md">
-            <Group gap="xs" mb="md">
-              <Icon
-                icon="mdi:table"
-                width={20}
-                color="var(--mantine-color-teal-6)"
-              />
-              <Text fw={600}>Data Preview</Text>
-            </Group>
-            <DataPreviewPanel key={dcId} dcId={dcId} />
-          </Card>
+          <>
+            <Card withBorder radius="md" p="md">
+              <Group gap="xs" mb="md">
+                <Icon
+                  icon="mdi:table"
+                  width={20}
+                  color="var(--mantine-color-teal-6)"
+                />
+                <Text fw={600}>Data Preview</Text>
+              </Group>
+              <DataPreviewPanel key={dcId} dcId={dcId} />
+            </Card>
+            <DeltaVersionHistory key={`history-${dcId}`} dcId={dcId} />
+          </>
         )}
 
         {isMultiQC && <MultiQCReportsCard dcId={dcId} />}
@@ -3443,14 +3481,21 @@ const DataPreviewPanel: React.FC<{ dcId: string }> = ({ dcId }) => {
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Delta versions available for time travel. Fetched alongside the first
+  // preview rather than on mount: both reads touch the object store, so they
+  // should only happen once the user has asked to see the data.
+  const [versions, setVersions] = useState<number[]>([]);
+  const [currentVersion, setCurrentVersion] = useState<number | null>(null);
+  const [selectedVersion, setSelectedVersion] = useState<number | null>(null);
   const { colorScheme } = useMantineColorScheme();
 
-  const handleLoad = async () => {
+  const load = async (version: number | null) => {
     setLoading(true);
     setError(null);
     try {
-      const result = await fetchDataCollectionPreview(dcId, 100);
+      const result = await fetchDataCollectionPreview(dcId, 100, version);
       setPreview(result);
+      setSelectedVersion(version);
     } catch (err) {
       setError((err as Error).message || 'Failed to load preview.');
     } finally {
@@ -3458,7 +3503,46 @@ const DataPreviewPanel: React.FC<{ dcId: string }> = ({ dcId }) => {
     }
   };
 
-  if (!preview && !loading && !error) {
+  const handleLoad = async () => {
+    // The version list is a nicety; failing to get it must not stop the
+    // preview, so it is fetched independently and its failure swallowed.
+    void fetchDeltaHistory(dcId, 50)
+      .then((history) => {
+        setVersions(
+          history.versions
+            .map((entry) => entry.version)
+            .filter((v): v is number => typeof v === 'number'),
+        );
+        setCurrentVersion(history.current_version);
+      })
+      .catch(() => undefined);
+    await load(null);
+  };
+
+  // Pre-first-load states replace the whole panel. Once a preview exists the
+  // panel keeps its chrome (version picker, staleness warning) while a
+  // different version loads — otherwise the control you just used to switch
+  // version vanishes underneath you.
+  if (!preview) {
+    if (loading) {
+      return (
+        <Center py="md">
+          <Loader size="sm" />
+        </Center>
+      );
+    }
+    if (error) {
+      return (
+        <Stack gap="xs">
+          <Text size="sm" c="red">
+            {error}
+          </Text>
+          <Button size="xs" variant="subtle" onClick={handleLoad}>
+            Retry
+          </Button>
+        </Stack>
+      );
+    }
     return (
       <Button
         color="teal"
@@ -3471,26 +3555,6 @@ const DataPreviewPanel: React.FC<{ dcId: string }> = ({ dcId }) => {
       </Button>
     );
   }
-  if (loading) {
-    return (
-      <Center py="md">
-        <Loader size="sm" />
-      </Center>
-    );
-  }
-  if (error) {
-    return (
-      <Stack gap="xs">
-        <Text size="sm" c="red">
-          {error}
-        </Text>
-        <Button size="xs" variant="subtle" onClick={handleLoad}>
-          Retry
-        </Button>
-      </Stack>
-    );
-  }
-  if (!preview) return null;
 
   const columns = preview.columns ?? [];
   const rows = preview.rows ?? [];
@@ -3510,16 +3574,63 @@ const DataPreviewPanel: React.FC<{ dcId: string }> = ({ dcId }) => {
     resizable: true,
   }));
 
+  // Only worth offering when there is somewhere to travel to. A table with a
+  // single commit gets no picker rather than a picker with one entry.
+  const showVersionPicker = versions.length >= 2;
+  const isHistorical = selectedVersion != null && selectedVersion !== currentVersion;
+
   return (
     <Stack gap="xs">
-      <Text size="xs" c="dimmed">
-        Showing {rows.length} of {preview.total_rows ?? rows.length} rows ·{' '}
-        {preview.total_columns ?? columns.length} columns
-      </Text>
+      <Group gap="sm" justify="space-between" wrap="wrap">
+        <Text size="xs" c="dimmed">
+          Showing {rows.length} of {preview.total_rows ?? rows.length} rows ·{' '}
+          {preview.total_columns ?? columns.length} columns
+        </Text>
+        {showVersionPicker && (
+          <Group gap={6} wrap="nowrap">
+            <Text size="xs" c="dimmed">
+              At version
+            </Text>
+            <Select
+              size="xs"
+              w={140}
+              disabled={loading}
+              value={selectedVersion == null ? 'current' : String(selectedVersion)}
+              onChange={(value) => {
+                if (value == null) return;
+                void load(value === 'current' ? null : Number(value));
+              }}
+              data={[
+                { value: 'current', label: 'Current' },
+                ...versions.map((v) => ({
+                  value: String(v),
+                  label: v === currentVersion ? `v${v} (current)` : `v${v}`,
+                })),
+              ]}
+            />
+          </Group>
+        )}
+      </Group>
+      {isHistorical && (
+        <Alert
+          color="yellow"
+          variant="light"
+          icon={<Icon icon="mdi:history" width={16} />}
+          py={6}
+        >
+          Viewing v{selectedVersion} — this is not the current data.
+        </Alert>
+      )}
+      {error && (
+        <Text size="xs" c="red">
+          {error}
+        </Text>
+      )}
       <Box
         className={isDark ? 'ag-theme-alpine-dark' : 'ag-theme-alpine'}
-        style={{ height: 400, width: '100%' }}
+        style={{ height: 400, width: '100%', position: 'relative' }}
       >
+        <LoadingOverlay visible={loading} zIndex={1} />
         <AgGridReact
           rowData={rows as Record<string, unknown>[]}
           columnDefs={colDefs}
