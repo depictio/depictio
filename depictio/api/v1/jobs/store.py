@@ -110,6 +110,32 @@ def create_job(job: Job) -> tuple[Job, bool]:
         return Job.model_validate(existing), False
 
 
+def find_active_job(*, kind: str, project_id: str) -> Optional[dict[str, Any]]:
+    """The non-terminal job of this kind for this project, if one exists.
+
+    Deliberately not expressed as an idempotency key. A key answers "is this the
+    same submission" and stays valid for the document's whole retention window,
+    so keying a project ingestion on its project id would make the *second*
+    ingestion of the day silently return this morning's finished job. What is
+    actually wanted is a lock over in-flight work only, which is a status query.
+
+    There is a narrow race: two callers can both find nothing and both dispatch.
+    The cost is duplicated work, not corruption — every write on the ingestion
+    path is an upsert or a full overwrite — and the UI disables the control
+    while a job is in flight, so it takes two near-simultaneous API calls to
+    reach it.
+    """
+    return jobs_collection.find_one(
+        {
+            "kind": kind,
+            "project_id": project_id,
+            "status": {"$nin": list(TERMINAL_JOB_STATES)},
+        },
+        {"_id": 0},
+        sort=[("submitted_at", DESCENDING)],
+    )
+
+
 def attach_task(job_id: str, celery_task_id: str) -> None:
     jobs_collection.update_one({"job_id": job_id}, {"$set": {"celery_task_id": celery_task_id}})
 

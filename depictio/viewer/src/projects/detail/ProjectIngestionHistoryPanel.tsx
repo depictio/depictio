@@ -40,7 +40,13 @@ import { TriggerBadge } from '../../monitoring/TriggerBadge';
 const ACTIVE_POLL_MS = 3000;
 const IDLE_POLL_MS = 30000;
 
-const ProjectIngestionHistoryPanel: React.FC<{ projectId: string }> = ({ projectId }) => {
+const ProjectIngestionHistoryPanel: React.FC<{
+  projectId: string;
+  /** Bumped by the parent to force a refresh — e.g. when a browser-triggered
+   *  ingestion finishes, which the idle 30s cadence would otherwise take half a
+   *  minute to notice. */
+  refreshSignal?: number;
+}> = ({ projectId, refreshSignal = 0 }) => {
   const [auto, setAuto] = useState(true);
   const [q, setQ] = useState('');
   const [open, setOpen] = useState<string[]>([]);
@@ -54,7 +60,7 @@ const ProjectIngestionHistoryPanel: React.FC<{ projectId: string }> = ({ project
   // the render after a run appears and relaxes on the render after the last one
   // ends. Keeping it in state would mean a setState during render for no gain.
   const [intervalMs, setIntervalMs] = useState(IDLE_POLL_MS);
-  const { data, loading, error, refresh } = usePolling(load, auto, 0, intervalMs);
+  const { data, loading, error, refresh } = usePolling(load, auto, refreshSignal, intervalMs);
 
   const runs = useMemo(() => data?.runs ?? [], [data]);
   const redacted = data?.redacted ?? false;
