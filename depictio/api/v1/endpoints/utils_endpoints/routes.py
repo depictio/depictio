@@ -118,17 +118,26 @@ async def capabilities(current_user=Depends(get_current_user)):
     """
     from depictio.api.v1.endpoints.files_endpoints.routes import MAX_FILES_PER_BATCH
 
+    features = [
+        "files.delete_batch",
+        "runs.delete_batch",
+        "deltatables.history",
+        "deltatables.provenance",
+    ]
+    # Runtime state, not build state: advertised only when the flag is actually
+    # on, so a client can trust the list instead of inferring capability from a
+    # version number.
+    if settings.jobs.enabled:
+        features.append("jobs")
+        if settings.ingestion.async_deltatable_upsert:
+            features.append("deltatables.async_upsert")
+
     return {
         "api_version": get_version(),
-        "features": [
-            "files.delete_batch",
-            "runs.delete_batch",
-            "deltatables.history",
-            "deltatables.provenance",
-        ],
+        "features": features,
         "limits": {
             "max_files_per_batch": MAX_FILES_PER_BATCH,
-            "max_ids_per_delete_batch": 5000,
+            "max_ids_per_delete_batch": settings.ingestion.max_ids_per_delete_batch,
         },
     }
 

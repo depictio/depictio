@@ -77,6 +77,92 @@ def _compute_upsert_artifacts(
     return final_hash, results
 
 
+def _should_offload(requested: bool, is_multiqc: bool) -> bool:
+    """Whether to defer the expensive half of an upsert to a Celery task.
+
+    Three conditions, all required. The client asks (``async_mode``), the
+    deployment allows it, and the work is actually worth offloading — MultiQC
+    collections are stored as parquet with no Delta table to read, so there is
+    nothing expensive to defer.
+
+    ``jobs.enabled`` is part of the gate rather than an independent switch: the
+    job document *is* the client's only handle on deferred work, so offloading
+    without it would hand back a job_id pointing at nothing.
+    """
+    if not requested or is_multiqc:
+        return False
+    if not settings.ingestion.async_deltatable_upsert:
+        return False
+    if not settings.jobs.enabled:
+        logger.warning(
+            "upsert_deltatable: async_mode requested and ingestion offloading is on, "
+            "but jobs are disabled (DEPICTIO_JOBS_ENABLED) — running synchronously."
+        )
+        return False
+    return True
+
+
+def _dispatch_finalize(
+    *,
+    dc_id: str,
+    delta_table_location: str,
+    version: int,
+    user_id: str,
+    project_id: str | None,
+    ingestion_run_id: str | None,
+) -> str | None:
+    """Create the job record and enqueue its task. Returns the job_id.
+
+    Returns ``None`` if the job could not be created, which the caller must
+    treat as "this upsert is now incomplete" — the aggregation entry is already
+    stored with ``aggregation_status="pending"`` and nothing else will finish
+    it.
+    """
+    import uuid
+
+    from depictio.api.v1.ingestion_tasks import finalize_deltatable_upsert
+    from depictio.api.v1.jobs import store as jobs_store
+    from depictio.models.models.jobs import Job
+
+    idempotency_key = jobs_store.build_idempotency_key(
+        ingestion_run_id or "-", dc_id, delta_table_location, version, "deltatable.upsert"
+    )
+    job = Job(
+        job_id=uuid.uuid4().hex,
+        kind="deltatable.upsert",
+        user_id=user_id,
+        project_id=project_id,
+        data_collection_id=dc_id,
+        ingestion_run_id=ingestion_run_id,
+        idempotency_key=idempotency_key,
+    )
+    stored, created = jobs_store.create_job(job)
+    if not created:
+        # An identical submission is already in flight (CLI retry after a
+        # dropped response, or two watchers racing). Hand back the existing
+        # job so the client attaches to it instead of queueing a second full
+        # table read.
+        logger.info(
+            f"upsert_deltatable: reusing in-flight job {stored.job_id} for dc={dc_id} v{version}"
+        )
+        return stored.job_id
+
+    task = finalize_deltatable_upsert.apply_async(
+        args=[
+            {
+                "job_id": stored.job_id,
+                "data_collection_id": dc_id,
+                "delta_table_location": delta_table_location,
+                "aggregation_version": version,
+                "ingestion_run_id": ingestion_run_id,
+            }
+        ],
+        queue=settings.celery.ingestion_queue,
+    )
+    jobs_store.attach_task(stored.job_id, task.id)
+    return stored.job_id
+
+
 @deltatables_endpoint_router.post("/upsert")
 async def upsert_deltatable(
     payload: UpsertDeltaTableAggregated,
@@ -129,17 +215,32 @@ async def upsert_deltatable(
     dc_type = dc_data.get("config", {}).get("type", "")
     is_multiqc = dc_type.lower() == "multiqc"
 
-    # Off the event loop: the non-MultiQC branch reads the whole Delta table,
-    # copies it into pandas and hashes every row. Run inline, that pins the
-    # uvicorn worker for the duration — long enough on a large table to blow
-    # gunicorn's --timeout and kill the worker outright, which is what the CLI
-    # sees as a dropped connection rather than a clean 504.
-    final_hash, results = await asyncio.to_thread(
-        _compute_upsert_artifacts,
-        payload.delta_table_location,
-        dc_data,
-        is_multiqc,
-    )
+    # MultiQC has no Delta table to read, so offloading it would cost a broker
+    # round-trip to save nothing — it always runs inline.
+    offload = _should_offload(payload.async_mode, is_multiqc)
+
+    if offload:
+        # Record the aggregation now with a provisional hash and no column
+        # specs; a Celery task fills them in. The version bump below must stay
+        # synchronous regardless: it is the salt for every DataFrame cache key
+        # (`_generate_cache_keys`), so deferring it would let readers keep
+        # serving pre-write data under an unchanged key.
+        final_hash = hashlib.sha256(
+            f"{payload.delta_table_location}{datetime.now()}pending".encode()
+        ).hexdigest()
+        results = []
+    else:
+        # Off the event loop: the non-MultiQC branch reads the whole Delta table,
+        # copies it into pandas and hashes every row. Run inline, that pins the
+        # uvicorn worker for the duration — long enough on a large table to blow
+        # gunicorn's --timeout and kill the worker outright, which is what the CLI
+        # sees as a dropped connection rather than a clean 504.
+        final_hash, results = await asyncio.to_thread(
+            _compute_upsert_artifacts,
+            payload.delta_table_location,
+            dc_data,
+            is_multiqc,
+        )
 
     query_dt = deltatables_collection.find_one({"data_collection_id": data_collection_oid})
     if query_dt:
@@ -173,6 +274,7 @@ async def upsert_deltatable(
             rows_total=payload.rows_total,
             rows_added=payload.rows_added,
             files_added=payload.files_added,
+            aggregation_status="pending" if offload else "complete",
             run_tags=payload.run_tags,
             ingestion_run_id=payload.ingestion_run_id,
             trigger=payload.trigger,
@@ -285,6 +387,49 @@ async def upsert_deltatable(
                     }
                 },
             )
+
+    if offload:
+        job_id = await asyncio.to_thread(
+            _dispatch_finalize,
+            dc_id=str(data_collection_oid),
+            delta_table_location=str(payload.delta_table_location),
+            version=version,
+            user_id=str(current_user.id),
+            project_id=str(project.get("_id")) if project.get("_id") else None,
+            ingestion_run_id=payload.ingestion_run_id,
+        )
+        if job_id:
+            # 200, not 202. The current CLI checks `status_code != 200` and
+            # then `result == "error"`; a 202 leaking into any un-updated code
+            # path would be read as a failure. 202 is the right code and is
+            # documented as a future api_version 2 change — not one to make
+            # while old clients are still in the field.
+            return {
+                "message": "DeltaTableAggregated upserted; finalization offloaded",
+                "result": "success",
+                "job_id": job_id,
+                "aggregation_version": version,
+            }
+        # Job creation failed, so nothing will ever compute the column specs.
+        # Fall through to the synchronous path rather than leave the
+        # aggregation stuck at "pending" forever.
+        logger.warning(
+            "upsert_deltatable: could not create a job — finalizing synchronously instead"
+        )
+        final_hash, results = await asyncio.to_thread(
+            _compute_upsert_artifacts, payload.delta_table_location, dc_data, is_multiqc
+        )
+        deltatables_collection.update_one(
+            {"data_collection_id": data_collection_oid},
+            {
+                "$set": {
+                    "aggregation.$[a].aggregation_columns_specs": [r.mongo() for r in results],
+                    "aggregation.$[a].aggregation_hash": final_hash,
+                    "aggregation.$[a].aggregation_status": "complete",
+                }
+            },
+            array_filters=[{"a.aggregation_version": version}],
+        )
 
     # Broadcast a real-time event so connected dashboards refresh. The change
     # stream watcher only watches data_collections, not the deltatables

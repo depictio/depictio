@@ -28,7 +28,14 @@ _CHANNEL = f"depictio:events:dashboard:{ADMIN_MONITORING_CHANNEL}"
 _redis_client: Any = None
 
 
-def _get_redis() -> Any:
+def get_sync_redis() -> Any:
+    """Shared lazily-created sync Redis client.
+
+    Public because the rate limiter and the DC event publisher need the same
+    connection from the same sync contexts (Celery workers, request handlers
+    outside the loop); a second client per caller would multiply connections
+    for no benefit.
+    """
     global _redis_client
     if _redis_client is None:
         import redis  # sync client (redis-py); already a transitive dep of celery
@@ -52,7 +59,7 @@ def publish_monitoring_event(event_type: str, payload: dict[str, Any]) -> None:
             "dashboard_id": ADMIN_MONITORING_CHANNEL,
             "payload": payload,
         }
-        _get_redis().publish(_CHANNEL, json.dumps(message))
+        get_sync_redis().publish(_CHANNEL, json.dumps(message))
     except Exception as exc:  # pragma: no cover - defensive
         logger.debug(f"monitoring: live publish failed (non-fatal): {exc}")
 
