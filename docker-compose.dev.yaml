@@ -105,6 +105,12 @@ services:
         # Realtime event system — opt-in. Backend hosts the MongoDB watcher
         # and the WebSocket / SSE endpoints — both gated on this flag.
         DEPICTIO_EVENTS_ENABLED: "${DEPICTIO_EVENTS_ENABLED:-false}"
+        # Anonymous installation telemetry. Off by default in the DEV stack: this
+        # compose file is what maintainers and contributors run, and counting our
+        # own development boots as installations would be the fastest way to make
+        # the numbers useless. The shipped docker-compose.yaml has it on.
+        DEPICTIO_TELEMETRY_ENABLED: "${DEPICTIO_TELEMETRY_ENABLED:-false}"
+        DEPICTIO_TELEMETRY_DEPLOYMENT_KIND: "${DEPICTIO_TELEMETRY_DEPLOYMENT_KIND:-docker-compose}"
         # Belt-and-suspenders: the editable plotly-upset / plotly-complexheatmap
         # packages are installed into the venv at image build (uv sync). If the
         # build re-used a cached layer (pre-dating the package addition), the

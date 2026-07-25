@@ -232,6 +232,23 @@ def start_monitoring_storage(should_initialize: bool) -> None:
         logger.warning(f"Worker {WORKER_ID}: Monitoring storage setup failed: {exc}")
 
 
+def start_installation_telemetry() -> None:
+    """Start the anonymous installation-telemetry heartbeat. Never fails boot.
+
+    Note the missing ``should_initialize`` argument, unlike every other service
+    here. That flag is true only on a deployment's first-ever boot, so gating the
+    heartbeat on it would report an installation once and then never again. The
+    task therefore runs in every worker and deduplicates through a MongoDB guard —
+    see ``depictio/api/v1/telemetry/guard.py``.
+    """
+    try:
+        from depictio.api.v1.telemetry.tasks import start_telemetry
+
+        start_telemetry()
+    except Exception as exc:
+        logger.warning(f"Worker {WORKER_ID}: Telemetry startup failed: {exc}")
+
+
 def start_multiqc_prewarm(should_initialize: bool) -> None:
     """Fire-and-forget MultiQC prewarm for every dashboard at startup.
 
@@ -324,6 +341,7 @@ async def lifespan(_app: FastAPI):
     await start_event_services(should_initialize)
     start_monitoring_storage(should_initialize)
     start_multiqc_prewarm(should_initialize)
+    start_installation_telemetry()
 
     yield
 

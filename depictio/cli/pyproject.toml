@@ -66,6 +66,9 @@ packages = [
   "depictio.api.v1",
   "depictio.api.v1.configs",
   "depictio.recipes",
+  # Shared anonymous telemetry. The server-only half lives in
+  # depictio.api.v1.telemetry, which is deliberately NOT shipped here.
+  "depictio.telemetry",
 ]
 
 # Add explicit package data if needed

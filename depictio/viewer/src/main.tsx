@@ -38,11 +38,13 @@ import {
   clearSession,
   createTemporaryUser,
   fetchAuthStatus,
+  fetchPublicConfig,
   getAnonymousSession,
   persistSession,
   validateSession,
 } from 'depictio-react-core';
 import { depictioTheme } from './theme';
+import { initGoogleAnalytics } from './googleAnalytics';
 import { WalkthroughHost } from './walkthrough';
 
 // Client-side route resolution. FastAPI serves index.html for all paths under
@@ -216,6 +218,22 @@ async function bootstrapSession(): Promise<void> {
   }
 }
 
+/** Load per-deployment frontend config and act on it. Never blocks the render.
+ *
+ * Fire-and-forget on purpose: analytics is not worth a millisecond of time to
+ * first paint, and a backend that doesn't serve `/utils/public-config` (an older
+ * version) must leave the app entirely unaffected. */
+function bootstrapPublicConfig(): void {
+  void fetchPublicConfig()
+    .then((config) => {
+      const ga = config.google_analytics;
+      if (ga?.enabled && ga.tracking_id) {
+        initGoogleAnalytics(ga.tracking_id);
+      }
+    })
+    .catch(() => undefined);
+}
+
 // Bare SPA root → dashboards list. Vite/FastAPI mount the SPA at
 // `/dashboard/` so asset URLs resolve correctly, but that path on its
 // own has no dashboard id to render. Bounce unparameterized hits (`/`,
@@ -226,6 +244,7 @@ const isBareRoot = /^\/(dashboard\/?)?$/.test(window.location.pathname);
 if (isBareRoot) {
   window.location.replace('/dashboards');
 } else {
+  bootstrapPublicConfig();
   bootstrapSession().finally(() => {
     ReactDOM.createRoot(document.getElementById('root')!).render(
       <React.StrictMode>
