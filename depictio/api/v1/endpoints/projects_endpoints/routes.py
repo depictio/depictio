@@ -1,3 +1,5 @@
+import asyncio
+
 import boto3
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -249,6 +251,103 @@ async def get_ingestion_health(project_id: PyObjectId, current_user=Depends(get_
         raise HTTPException(status_code=401, detail="User not found.")
     project = _async_get_project_from_id(project_id, current_user, projects_collection)
     return build_ingestion_report(project).summary
+
+
+# Fields describing the *operator's machine* rather than the project's data:
+# absolute paths on someone's laptop or a login node, the hostname they ran on,
+# the exact command line. Interesting to whoever runs the ingestion, nobody
+# else's business.
+_OPERATOR_FIELDS = (
+    "command_line",
+    "cli_config_path",
+    "project_config_path",
+    "data_root",
+    "cli_hostname",
+)
+
+
+def _redact_run(run: dict, *, full: bool) -> dict:
+    """Strip operator-machine details from a run unless the caller may see them.
+
+    The case this exists for: a project with ``is_public: True`` passes
+    ``_async_get_project_from_id`` for *any* authenticated user, including an
+    anonymous one. Without redaction, publishing a project would also publish
+    `/home/alice/...` and `hpc-login1` to strangers.
+
+    Kept for everyone: status, steps and their counters, progress, per-DC
+    tallies, error messages, timings, instance label, trigger. That is what
+    makes the pane useful to a viewer trying to understand whether the data
+    they are looking at is current.
+    """
+    if full:
+        return run
+    redacted = {k: v for k, v in run.items() if k not in _OPERATOR_FIELDS}
+    # Emails of other users are a directory leak in a public project.
+    redacted.pop("email", None)
+    redacted.pop("user_id", None)
+    collections = redacted.get("data_collections")
+    if isinstance(collections, list):
+        redacted["data_collections"] = [
+            {k: v for k, v in dc.items() if k not in ("locations", "scan_pattern")}
+            if isinstance(dc, dict)
+            else dc
+            for dc in collections
+        ]
+    errors = redacted.get("errors")
+    if isinstance(errors, list):
+        redacted["errors"] = [
+            {k: v for k, v in err.items() if k != "file_path"} if isinstance(err, dict) else err
+            for err in errors
+        ]
+    # sample_rejected holds real paths from the scan — same class of leak.
+    for dc in redacted.get("data_collections") or []:
+        if isinstance(dc, dict):
+            dc.pop("sample_rejected", None)
+    return redacted
+
+
+@projects_endpoint_router.get("/ingestion-runs/{project_id}")
+async def get_project_ingestion_runs(
+    project_id: PyObjectId,
+    limit: int = 50,
+    skip: int = 0,
+    current_user=Depends(get_user_or_anonymous),
+):
+    """Ingestion-run history for one project, newest first.
+
+    Deliberately *not* an extension of the admin monitoring gate: that gate is
+    all-or-nothing across every project, whereas the people who most need this
+    are project editors who are not admins. Guarded instead by the same
+    ``_async_get_project_from_id`` the ingestion report already uses, so
+    visibility follows project permissions.
+
+    Owners, editors and admins see runs in full; everyone else gets the
+    operator-machine fields removed (see ``_redact_run``).
+    """
+    if not current_user:
+        raise HTTPException(status_code=401, detail="User not found.")
+    if not settings.monitoring.enabled:
+        raise HTTPException(status_code=404, detail="Monitoring is disabled.")
+
+    project = _async_get_project_from_id(project_id, current_user, projects_collection)
+
+    permissions = project.get("permissions") or {}
+    user_id = str(current_user.id)
+    full = bool(getattr(current_user, "is_admin", False)) or any(
+        str(entry.get("_id")) == user_id
+        for group in ("owners", "editors")
+        for entry in (permissions.get(group) or [])
+    )
+
+    from depictio.api.v1.monitoring import store as monitoring_store
+
+    runs = await asyncio.to_thread(
+        monitoring_store.query_ingestion_runs,
+        project_id=str(project_id),
+        limit=limit,
+        skip=skip,
+    )
+    return {"runs": [_redact_run(run, full=full) for run in runs], "redacted": not full}
 
 
 @projects_endpoint_router.post("/create")
