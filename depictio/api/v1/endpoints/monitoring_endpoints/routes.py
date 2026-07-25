@@ -238,7 +238,18 @@ def update_ingestion_step(
         raise HTTPException(status_code=404, detail="Ingestion run not found.")
     from depictio.api.v1.monitoring.publish import publish_ingestion_event
 
-    publish_ingestion_event(run_id, "running", None)
+    # Carry the step itself, not just a "something changed" ping: the client
+    # patches its copy of the run in place instead of refetching the whole list
+    # on every one of a run's ~50 step updates.
+    publish_ingestion_event(
+        run_id,
+        "running",
+        None,
+        current_step=body.current_step,
+        step=body.step.model_dump(mode="json"),
+        progress=body.progress,
+        counters=body.counters,
+    )
     return {"run_id": run_id, "step": body.step.name}
 
 
