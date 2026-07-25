@@ -16,10 +16,10 @@ import logging
 import socket
 import uuid
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from depictio.api.celery_app import celery_app
 from depictio.api.v1.configs.config import settings
@@ -108,6 +108,20 @@ class IngestionStartRequest(BaseModel):
     cli_config_path: Optional[str] = None
     project_config_path: Optional[str] = None
     data_root: Optional[str] = None
+    #: How the run was initiated. Optional so an older CLI, which sends nothing,
+    #: still opens a record — it defaults to "manual", which is what such a CLI
+    #: could only have been doing anyway. An unrecognised value is coerced to
+    #: "manual" rather than 422'd: a newer CLI inventing a trigger must not be
+    #: unable to open a monitoring record against an older server.
+    trigger: Optional[Literal["manual", "watch", "schedule", "ui"]] = None
+    trigger_reason: Optional[str] = None
+
+    @field_validator("trigger", mode="before")
+    @classmethod
+    def _coerce_unknown_trigger(cls, value):
+        if value is None:
+            return None
+        return value if value in ("manual", "watch", "schedule", "ui") else "manual"
 
 
 class IngestionFinishRequest(BaseModel):
@@ -163,6 +177,8 @@ def start_ingestion(
         cli_config_path=body.cli_config_path,
         project_config_path=body.project_config_path,
         data_root=body.data_root,
+        trigger=body.trigger or "manual",
+        trigger_reason=body.trigger_reason,
         status="running",
     )
     store.create_ingestion_run(run)
@@ -275,8 +291,23 @@ def agent_heartbeat(body: CliAgent, current_user: User = Depends(get_current_use
             "expires_at": datetime.now() + timedelta(seconds=ttl),
         }
     )
+    # Namespace the id by owner. agent_id is derived client-side from
+    # hostname:pid:project_id, which is guessable, and upsert keys on it — so
+    # without this any authenticated user could overwrite another user's agent
+    # record, including the status and error strings the admin UI renders.
+    agent = agent.model_copy(update={"agent_id": _scoped_agent_id(agent.agent_id, current_user)})
     store.upsert_cli_agent(agent)
     return {"agent_id": agent.agent_id, "expires_in": ttl}
+
+
+def _scoped_agent_id(agent_id: str, current_user: User) -> str:
+    """Bind a client-supplied agent id to its owner.
+
+    Two users on the same host can legitimately watch the same project, so the
+    id itself is not unique across users — and it is guessable, so it must not
+    be a bare primary key.
+    """
+    return f"{current_user.id}:{agent_id}"
 
 
 @monitoring_endpoint_router.delete("/agents/{agent_id}")
@@ -285,10 +316,21 @@ def deregister_agent(agent_id: str, current_user: User = Depends(get_current_use
 
     Without this the agent would linger until its TTL expires, which reads as
     "still running" for several minutes after a deliberate stop.
+
+    Scoped to the caller's own agents. The bare id is derived from
+    hostname:pid:project_id and is therefore enumerable, so deleting by it
+    alone would let anyone unregister anyone else's watcher — the process would
+    keep running while disappearing from the admin's view.
     """
     if not settings.monitoring.enabled:
         raise HTTPException(status_code=404, detail="Monitoring is disabled.")
-    return {"agent_id": agent_id, "removed": store.delete_cli_agent(agent_id)}
+    scoped = _scoped_agent_id(agent_id, current_user)
+    removed = store.delete_cli_agent(scoped)
+    if not removed and getattr(current_user, "is_admin", False):
+        # Admins may clean up a stale row left by an older CLI that registered
+        # before ids were owner-scoped.
+        removed = store.delete_cli_agent(agent_id)
+    return {"agent_id": agent_id, "removed": removed}
 
 
 @monitoring_endpoint_router.get("/agents")

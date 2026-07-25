@@ -9,6 +9,7 @@ from depictio.cli.cli.utils.api_calls import (
     api_login,
     api_monitoring_ingestion_finish,
     api_monitoring_ingestion_start,
+    api_monitoring_ingestion_step,
     api_provision_user,
     api_sync_project_config_to_server,
 )
@@ -26,6 +27,7 @@ from depictio.cli.cli.utils.rich_utils import (
     rich_print_section_separator,
 )
 from depictio.cli.cli.utils.scan import scan_project_files
+from depictio.cli.cli.utils.step_reporter import StepReporter
 from depictio.cli.cli_logging import logger
 from depictio.models.s3_utils import S3_storage_checks
 from depictio.models.utils import convert_model_to_dict
@@ -426,17 +428,31 @@ def register_run_command(app: typer.Typer):
 
         # Server-side monitoring record for this ingestion run (best-effort).
         ingestion_run_id: str | None = None
-        # Per-phase step ledger sent to the monitoring endpoint at finish. Populated
-        # by ``_rec`` from the very start so successful phases that ran before the
-        # record is opened (server/S3/validate) are still reported. Best-effort:
-        # recording must never affect the ingestion itself.
-        run_steps: list[dict] = []
+        # Per-phase step ledger. Populated by ``_rec`` from the very start so
+        # successful phases that ran before the record is opened (server / S3 /
+        # validate) are still reported, and mirrored to the server as the run
+        # proceeds once a run_id exists. The local list stays authoritative and
+        # is sent in full at finish, so a run whose live updates were all
+        # dropped still reports a complete history.
+        #
+        # Rebound to a live reporter right after the record is opened; until
+        # then it only accumulates.
+        reporter = StepReporter(send=lambda *_: True, run_id=None, enabled=False)
         # Server-side project id, resolved once available (post-sync); patched onto
         # the monitoring record at finish.
         resolved_project_id: str | None = None
 
-        def _rec(name: str, status: str, detail: str | None = None) -> None:
-            run_steps.append({"name": name, "status": status, "detail": detail})
+        def _rec(name: str, status: str, detail: str | None = None, **extra) -> None:
+            reporter.record(name, status, detail, **extra)
+
+        def _rec_start(name: str, detail: str | None = None, **extra) -> None:
+            """Announce a phase as it begins.
+
+            This is what makes the monitoring UI show anything *during* a run
+            rather than only after it: without a `running` record, a long scan
+            or process phase is indistinguishable from a hung CLI.
+            """
+            reporter.start(name, detail, **extra)
 
         # Step 0a (provisioning only): create-or-get the user and switch the run
         # to act as them by pointing CLI_config_path at a temporary per-user
@@ -647,9 +663,26 @@ def register_run_command(app: typer.Typer):
                     cli_config_path=str(CLI_config_path) if CLI_config_path else None,
                     project_config_path=str(project_config_path) or None,
                     data_root=str(data_root) if data_root else None,
+                    # `depictio run` is by definition a person typing a command.
+                    # The watcher opens its own record with trigger="watch".
+                    trigger="manual",
                 )
             except Exception:
                 ingestion_run_id = None
+
+            # Switch the reporter to live mode, carrying over the steps already
+            # recorded before the record existed, so the server sees the whole
+            # run rather than only the phases after this point.
+            if ingestion_run_id:
+                previous = reporter.steps
+                reporter = StepReporter(
+                    send=lambda run_id, step, current: api_monitoring_ingestion_step(
+                        CLI_config, run_id, step, current
+                    ),
+                    run_id=ingestion_run_id,
+                    enabled=True,
+                )
+                reporter.replay(previous)
 
         # Step 4: Sync project configuration to server
         if not skip_sync:
@@ -744,6 +777,7 @@ def register_run_command(app: typer.Typer):
         # Step 5: Scan data files
         if not skip_scan:
             rich_print_section_separator(f"Step 5/{total_steps}: Scanning data files")
+            _rec_start("scan")
             try:
                 if not dry_run:
                     # Get remote project configuration to compare hashes
@@ -808,6 +842,7 @@ def register_run_command(app: typer.Typer):
         # Step 6: Process data collections
         if not skip_process:
             rich_print_section_separator(f"Step 6/{total_steps}: Processing data collections")
+            _rec_start("process")
             try:
                 if not dry_run:
                     # Get remote project configuration again for processing
@@ -876,6 +911,7 @@ def register_run_command(app: typer.Typer):
         # Step 7: Execute table joins
         if not skip_join:
             rich_print_section_separator(f"Step 7/{total_steps}: Executing table joins")
+            _rec_start("joins")
             try:
                 if not dry_run:
                     # Check if project has joins defined
@@ -1044,14 +1080,18 @@ def register_run_command(app: typer.Typer):
         # Close the monitoring ingestion record (best-effort).
         if ingestion_run_id:
             final_status = "success" if success_count == total_steps else "partial"
-            # Send the per-phase step ledger recorded by ``_rec`` throughout the run.
-            # The overall status rides on ``status`` (shown as the header badge in
+            # Stop the background reporter first, with a short bounded wait: the
+            # complete ledger goes out below regardless, so blocking the user's
+            # command to re-send what the next call already carries is pointless.
+            reporter.close(timeout=2.0)
+            # Send the per-phase step ledger recorded throughout the run. The
+            # overall status rides on ``status`` (shown as the header badge in
             # the admin UI), so no separate summary row is needed.
             api_monitoring_ingestion_finish(
                 CLI_config=CLI_config,
                 run_id=ingestion_run_id,
                 status=final_status,
-                steps=run_steps,
+                steps=reporter.steps,
                 project_id=resolved_project_id,
                 data_collections=_ingestion_data_collections(locals().get("project_config")),
             )

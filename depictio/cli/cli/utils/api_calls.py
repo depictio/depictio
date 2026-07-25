@@ -600,6 +600,8 @@ def api_monitoring_ingestion_start(
     cli_config_path: str | None = None,
     project_config_path: str | None = None,
     data_root: str | None = None,
+    trigger: str | None = None,
+    trigger_reason: str | None = None,
 ) -> str | None:
     """Open a server-side ingestion-run record. Best-effort.
 
@@ -617,6 +619,8 @@ def api_monitoring_ingestion_start(
             "cli_config_path": cli_config_path,
             "project_config_path": project_config_path,
             "data_root": data_root,
+            "trigger": trigger,
+            "trigger_reason": trigger_reason,
         }
         response = get_http_client().post(
             url, json=payload, headers=generate_api_headers(CLI_config), timeout=30.0
@@ -627,6 +631,49 @@ def api_monitoring_ingestion_start(
     except Exception as exc:
         logger.debug(f"Monitoring ingestion start failed (non-fatal): {exc}")
     return None
+
+
+def api_monitoring_ingestion_step(
+    CLI_config: CLIConfig,
+    run_id: str,
+    step: dict,
+    current_step: str | None = None,
+    counters: dict | None = None,
+    progress: dict | None = None,
+) -> bool:
+    """Report one step of an in-flight run. Best-effort; never raises.
+
+    Returns False when the server does not accept step updates (older API), so
+    a caller can stop trying instead of retrying for the whole run.
+
+    Note the server answers 200 with ``{"throttled": true}`` rather than 429
+    when a run exceeds its update rate. A dropped progress ping is not an error
+    and must not trigger a client retry, so that still counts as success here.
+    """
+    try:
+        url = f"{CLI_config.api_base_url}/depictio/api/v1/monitoring/ingestion/{run_id}/step"
+        payload: dict = {"step": step}
+        if current_step is not None:
+            payload["current_step"] = current_step
+        if counters:
+            payload["counters"] = counters
+        if progress:
+            payload["progress"] = progress
+        response = get_http_client().post(
+            url, json=payload, headers=generate_api_headers(CLI_config), timeout=10.0
+        )
+        if response.status_code == 200:
+            return True
+        if response.status_code in (404, 422):
+            # 404: monitoring disabled or endpoint absent. 422: this server's
+            # IngestionStep is extra="forbid" and predates a field we send.
+            # Both are permanent for this run — tell the caller to give up.
+            logger.debug(f"Monitoring step updates unavailable (HTTP {response.status_code})")
+            return False
+        logger.debug(f"Monitoring step update skipped (HTTP {response.status_code})")
+    except Exception as exc:
+        logger.debug(f"Monitoring step update failed (non-fatal): {exc}")
+    return True
 
 
 def api_agent_heartbeat(CLI_config: CLIConfig, agent: dict) -> bool:
