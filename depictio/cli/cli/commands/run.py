@@ -327,6 +327,15 @@ def register_run_command(app: typer.Typer):
             "--preview-recipes",
             help="Show recipe input sources and transformed output before writing to Delta Lake",
         ),
+        repartition: bool = typer.Option(
+            False,
+            "--repartition",
+            help=(
+                "Allow --write-mode replace-runs to adopt run partitioning on a table "
+                "that does not have it yet. This rewrites every row, so it is never "
+                "done implicitly — and never by the watcher."
+            ),
+        ),
         async_upsert: bool = typer.Option(
             False,
             "--async-upsert",
@@ -820,6 +829,7 @@ def register_run_command(app: typer.Typer):
                                 "project_id": str(project_config.id),
                                 "ingestion_run_id": ingestion_run_id,
                                 "async_upsert": async_upsert,
+                                "repartition": repartition,
                             }
 
                             process_result = process_project_helper(

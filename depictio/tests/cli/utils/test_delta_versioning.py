@@ -316,6 +316,28 @@ class TestPartitionPlanning:
         assert partition is True
         assert reason is None
 
+    def test_repartition_opts_in_to_the_full_rewrite(self, destination, storage):
+        # Adopting run partitioning on an existing unpartitioned table rewrites
+        # every row. That is allowed, but only when explicitly asked for — the
+        # watcher never passes this.
+        write_delta_table_versioned(frame(["A", "B"]), destination, storage)
+        partition, reason = plan_partitioning(
+            frame(["A", "B"]), destination, storage, "replace-runs", repartition=True
+        )
+        assert partition is True
+        assert reason is None
+
+    def test_repartition_does_not_override_the_other_guards(self, destination, storage):
+        # --repartition only waives the "existing table is partitioned
+        # differently" objection. A path-unsafe tag is still a hard no, because
+        # rewriting would not make it safe.
+        write_delta_table_versioned(frame(["A", "B"]), destination, storage)
+        partition, reason = plan_partitioning(
+            frame(["A", "bad/tag"]), destination, storage, "replace-runs", repartition=True
+        )
+        assert partition is False
+        assert reason is not None and "path-safe" in reason
+
 
 class TestDeltaCommitInfoDefaults:
     def test_defaults_are_absent_not_zero(self):

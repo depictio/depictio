@@ -596,7 +596,11 @@ def client_aggregate_data(
         else []
     )
     partition, decline_reason = plan_partitioning(
-        aggregated_df, destination_prefix, storage_options, write_mode
+        aggregated_df,
+        destination_prefix,
+        storage_options,
+        write_mode,
+        repartition=bool(command_parameters.get("repartition")),
     )
     if decline_reason and write_mode == "replace-runs":
         logger.warning(

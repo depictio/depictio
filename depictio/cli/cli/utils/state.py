@@ -92,6 +92,11 @@ def state_dir() -> Path:
     return Path(override).expanduser() if override else DEFAULT_STATE_DIR.expanduser()
 
 
+def server_key(api_base_url: str) -> str:
+    """Short, stable directory name for one API server."""
+    return hashlib.sha256(api_base_url.encode()).hexdigest()[:12]
+
+
 def state_path(api_base_url: str, project_id: str) -> Path:
     """Where one project's state lives, namespaced by server.
 
@@ -100,8 +105,19 @@ def state_path(api_base_url: str, project_id: str) -> Path:
     independent registration states, and a signature match against one says
     nothing about the other.
     """
-    server_key = hashlib.sha256(api_base_url.encode()).hexdigest()[:12]
-    return state_dir() / server_key / f"{project_id}.json"
+    return state_dir() / server_key(api_base_url) / f"{project_id}.json"
+
+
+def lock_path(api_base_url: str, project_id: str) -> Path:
+    """Where the per-project ingestion lock lives.
+
+    Namespaced by server for the same reason as the state file, and for one
+    practical consequence: the project id comes from the YAML, so the same
+    config pointed at staging and at production yields the *same* id. An
+    unscoped lock would make those two watchers contend, and one would refuse
+    to start for no real reason.
+    """
+    return state_dir() / server_key(api_base_url) / f"{project_id}.lock"
 
 
 def load_state(

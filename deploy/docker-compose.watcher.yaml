@@ -1,0 +1,72 @@
+# Depictio ingestion watcher as a container.
+#
+# Parameterised entirely through the environment — copy `.env.example` from this
+# directory to `.env`, fill it in, and run:
+#
+#   docker compose -f deploy/docker-compose.watcher.yaml up -d
+#   docker compose -f deploy/docker-compose.watcher.yaml logs -f
+#
+# For several projects, run this file once per project with a different
+# COMPOSE_PROJECT_NAME and env file:
+#
+#   COMPOSE_PROJECT_NAME=watch-alpha \
+#     docker compose -f deploy/docker-compose.watcher.yaml --env-file alpha.env up -d
+
+services:
+  depictio-watcher:
+    image: ${DEPICTIO_CLI_IMAGE:-ghcr.io/depictio/depictio-cli:latest}
+    container_name: ${WATCHER_NAME:-depictio-watcher}
+    restart: unless-stopped
+
+    volumes:
+      # The watcher only ever reads the data root — mount it read-only so a
+      # misconfiguration cannot damage the source data.
+      - ${DEPICTIO_DATA_ROOT:?set DEPICTIO_DATA_ROOT}:${DEPICTIO_DATA_ROOT_MOUNT:-/data}:ro
+      - ${DEPICTIO_CLI_CONFIG:?set DEPICTIO_CLI_CONFIG}:/config/CLI.yaml:ro
+      - ${DEPICTIO_PROJECT_CONFIG:?set DEPICTIO_PROJECT_CONFIG}:/config/project.yaml:ro
+      # Named volume for the scan-state cache and the per-project lock. Losing
+      # it costs one full re-scan, not correctness — but keeping it makes the
+      # "nothing changed" cycle nearly free.
+      - depictio_watch_state:/root/.depictio/state
+
+    environment:
+      DEPICTIO_CONTEXT: "cli"
+
+    command:
+      - data
+      - watch
+      - --CLI-config-path
+      - /config/CLI.yaml
+      - --project-config-path
+      - /config/project.yaml
+      - --mode
+      - ${DEPICTIO_WATCH_MODE:-incremental}
+      # Pair incremental with replace-runs: on overwrite every new file rewrites
+      # the whole Delta table, which is exactly what a watch loop must not do.
+      - --write-mode
+      - ${DEPICTIO_WATCH_WRITE_MODE:-replace-runs}
+      # Inside a container the data root is almost always a bind mount, and
+      # inotify does not cross that boundary reliably on macOS/Windows hosts or
+      # network-backed volumes. Polling is the safe default here even though
+      # `auto` is right for a bare-metal watcher.
+      - --backend
+      - ${DEPICTIO_WATCH_BACKEND:-polling}
+      - --interval
+      - ${DEPICTIO_WATCH_INTERVAL:-300}
+      - --debounce
+      - ${DEPICTIO_WATCH_DEBOUNCE:-30}
+      - --settle
+      - ${DEPICTIO_WATCH_SETTLE:-5}
+
+    # SIGTERM lets the watcher finish the cycle in flight and flush its
+    # monitoring; the long grace period keeps a large ingestion from being
+    # killed mid-write on `docker compose down`.
+    stop_signal: SIGTERM
+    stop_grace_period: 900s
+
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+
+volumes:
+  depictio_watch_state:
+    driver: local
