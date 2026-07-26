@@ -3986,3 +3986,193 @@ export async function fetchCatalogPreviewPayload(
   if (!res.ok) await throwHttpDetailError(res, 'Failed to fetch catalog preview');
   return (await res.json()) as CatalogPreviewPayload;
 }
+
+// ── Dashboard version history ──────────────────────────────────────────────
+
+/** Which mechanism can reproduce a data collection's state at this version.
+ *  Depictio's data collections don't share a storage format, so coverage is
+ *  genuinely heterogeneous — `none` carries a `reason` the UI shows rather
+ *  than implying a fidelity it doesn't have. */
+export type DataVersionKind = 'delta' | 'manifest' | 'asset' | 'none';
+
+export type DashboardVersionKind = 'auto' | 'explicit' | 'restore' | 'import';
+
+export interface DataCollectionStamp {
+  dc_id: string;
+  dc_type?: string;
+  workflow_tag?: string;
+  data_collection_tag?: string;
+  version_kind: DataVersionKind;
+  schema_hash?: string;
+  columns?: Array<{ name: string; type: string }>;
+  row_count?: number | null;
+  delta_version?: number | null;
+  aggregation_version?: number | null;
+  delta_commit_timestamp?: string | null;
+  as_of?: string | null;
+  manifest_digest?: string | null;
+  s3_locations?: string[];
+  sample_count?: number | null;
+  asset_digest?: string | null;
+  asset_key?: string | null;
+  asset_bytes?: number | null;
+  /** Parts NOT covered by the stamp, e.g. `["image_pixels"]`. */
+  unversioned_parts?: string[];
+  reason?: string | null;
+}
+
+/** Timeline row. Deliberately without `tabs` — the snapshot is ~95% of a
+ *  record's bytes and the drawer lists far more often than it opens one. */
+export interface DashboardVersionSummary {
+  version_id: string;
+  family_id: string;
+  seq: number;
+  kind: DashboardVersionKind;
+  label?: string | null;
+  pinned: boolean;
+  author_id?: string | null;
+  author_email?: string | null;
+  created_at: string;
+  updated_at: string;
+  save_count: number;
+  content_hash: string;
+  tab_count: number;
+  component_count: number;
+  parent_version_id?: string | null;
+  data_version_kinds: Record<string, number>;
+}
+
+export interface DashboardVersionListResponse {
+  family_id: string;
+  total: number;
+  /** The entry matching the live dashboard, or null when the live state has
+   *  drifted from every stored version. */
+  current_version_id: string | null;
+  versions: DashboardVersionSummary[];
+}
+
+export interface DashboardVersionTab {
+  dashboard_id: string;
+  is_main_tab: boolean;
+  tab_order: number;
+  title: string;
+  subtitle?: string;
+  stored_metadata: Array<Record<string, unknown>>;
+  left_panel_layout_data: Array<Record<string, unknown>>;
+  right_panel_layout_data: Array<Record<string, unknown>>;
+  [key: string]: unknown;
+}
+
+export interface DashboardVersionDetail extends DashboardVersionSummary {
+  project_id: string;
+  tabs: DashboardVersionTab[];
+  data_collections: DataCollectionStamp[];
+}
+
+export interface RestoreVersionResult {
+  restored_from: string;
+  restored_from_seq: number | null;
+  new_version_id: string | null;
+  tabs_updated: number;
+  tabs_created: number;
+  tabs_deleted: number;
+}
+
+/** Version timeline for a dashboard family, newest first. */
+export async function fetchDashboardVersions(
+  dashboardId: string,
+  opts: { limit?: number; beforeSeq?: number; pinnedOnly?: boolean } = {},
+): Promise<DashboardVersionListResponse> {
+  const params = new URLSearchParams();
+  if (opts.limit != null) params.set('limit', String(opts.limit));
+  if (opts.beforeSeq != null) params.set('before_seq', String(opts.beforeSeq));
+  if (opts.pinnedOnly) params.set('pinned_only', 'true');
+  const qs = params.toString();
+  const res = await authFetch(
+    `${API_BASE}/dashboards/${dashboardId}/versions${qs ? `?${qs}` : ''}`,
+  );
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to fetch dashboard versions');
+  return (await res.json()) as DashboardVersionListResponse;
+}
+
+/** One version in full, including the snapshot. */
+export async function fetchDashboardVersion(
+  versionId: string,
+): Promise<DashboardVersionDetail> {
+  const res = await authFetch(`${API_BASE}/dashboards/versions/${versionId}`);
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to fetch dashboard version');
+  return (await res.json()) as DashboardVersionDetail;
+}
+
+/** Take a named snapshot of the current state. */
+export async function createDashboardVersion(
+  dashboardId: string,
+  label?: string | null,
+): Promise<{ version_id: string; seq: number; label: string | null }> {
+  const res = await authFetch(`${API_BASE}/dashboards/${dashboardId}/versions`, {
+    method: 'POST',
+    body: JSON.stringify({ label: label ?? null }),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to create version');
+  return await res.json();
+}
+
+/** Pin a version so retention can never remove it. Also seals it, so the next
+ *  autosave opens a fresh version rather than rewriting this one. */
+export async function pinDashboardVersion(
+  versionId: string,
+  label?: string | null,
+): Promise<DashboardVersionSummary> {
+  const res = await authFetch(`${API_BASE}/dashboards/versions/${versionId}/pin`, {
+    method: 'POST',
+    body: JSON.stringify({ label: label ?? null }),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to pin version');
+  return (await res.json()) as DashboardVersionSummary;
+}
+
+export async function unpinDashboardVersion(
+  versionId: string,
+): Promise<DashboardVersionSummary> {
+  const res = await authFetch(`${API_BASE}/dashboards/versions/${versionId}/pin`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to unpin version');
+  return (await res.json()) as DashboardVersionSummary;
+}
+
+export async function renameDashboardVersion(
+  versionId: string,
+  label: string | null,
+): Promise<DashboardVersionSummary> {
+  const res = await authFetch(`${API_BASE}/dashboards/versions/${versionId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ label }),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to rename version');
+  return (await res.json()) as DashboardVersionSummary;
+}
+
+/** Erase a version. Requires owner; a pinned version needs `force`. */
+export async function deleteDashboardVersion(
+  versionId: string,
+  force = false,
+): Promise<void> {
+  const res = await authFetch(
+    `${API_BASE}/dashboards/versions/${versionId}${force ? '?force=true' : ''}`,
+    { method: 'DELETE' },
+  );
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to delete version');
+}
+
+/** Put a past version back. Non-destructive: the current state is captured as
+ *  a version first, so the restore itself can be undone. */
+export async function restoreDashboardVersion(
+  versionId: string,
+): Promise<RestoreVersionResult> {
+  const res = await authFetch(`${API_BASE}/dashboards/versions/${versionId}/restore`, {
+    method: 'POST',
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to restore version');
+  return (await res.json()) as RestoreVersionResult;
+}

@@ -134,9 +134,9 @@ For matrices larger than 100,000 cells, `go.Heatmapgl` (WebGL) is used automatic
 ### Z-Score Normalisation
 
 ```python
-hm = ComplexHeatmap(df, normalize="row")    # per-row
-hm = ComplexHeatmap(df, normalize="column") # per-column
-hm = ComplexHeatmap(df, normalize="global") # whole matrix
+hm = ComplexHeatmap(df, normalize="row")  # per-row
+hm = ComplexHeatmap(df, normalize="column")  # per-column
+hm = ComplexHeatmap(df, normalize="global")  # whole matrix
 ```
 
 ## API Reference

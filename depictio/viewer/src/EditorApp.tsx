@@ -28,6 +28,7 @@ import React, {
   useMemo,
 } from 'react';
 import {
+  ActionIcon,
   AppShell,
   Button,
   Center,
@@ -38,6 +39,7 @@ import {
   Paper,
   Stack,
   Title,
+  Tooltip,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
@@ -79,6 +81,7 @@ import type {
 import LeftFilterPanel from './components/LeftFilterPanel';
 import GridItemEditOverlay from './components/GridItemEditOverlay';
 import { Header, Sidebar, SettingsDrawer, TabModal } from './chrome';
+import VersionHistoryDrawer from './versions/VersionHistoryDrawer';
 import type { TabModalSubmitPayload } from './chrome';
 import NotesFooter from './components/NotesFooter';
 import './chrome/chrome.css';
@@ -168,6 +171,7 @@ const EditorApp: React.FC = () => {
   // Persist across tab/page navigations (matches App.tsx + Dash app).
   const [desktopOpened, toggleDesktop] = useSidebarOpen();
   const [settingsOpened, { open: openSettings, close: closeSettings }] = useDisclosure(false);
+  const [versionsOpened, { open: openVersions, close: closeVersions }] = useDisclosure(false);
   const { user: currentUser, loading: userLoading } = useCurrentUser();
   // Tab modal state — `mode` decides between create vs edit. `target` is the
   // tab being edited (or null for create). `submitting` blocks Save while a
@@ -941,6 +945,19 @@ const EditorApp: React.FC = () => {
           isOwner={isOwner}
           rightExtras={
             <>
+              <Tooltip label="Version history" withArrow>
+                <ActionIcon
+                  variant="subtle"
+                  color="gray"
+                  size="md"
+                  onClick={openVersions}
+                  aria-label="Version history"
+                  data-testid="version-history-button"
+                  data-tour-id="editor-version-history"
+                >
+                  <Icon icon="mdi:history" width={18} />
+                </ActionIcon>
+              </Tooltip>
               {realtimeEnabled && (
                 <span data-tour-id="realtime-indicator" style={{ display: 'inline-flex' }}>
                   <RealtimeIndicator
@@ -1071,6 +1088,21 @@ const EditorApp: React.FC = () => {
         opened={settingsOpened}
         onClose={closeSettings}
         dashboard={dashboard}
+      />
+
+      {/* Restoring refetches rather than patching local state: a restore can
+          add or remove whole tabs, so the editor's in-memory copy of the
+          family is no longer trustworthy afterwards. */}
+      <VersionHistoryDrawer
+        opened={versionsOpened}
+        onClose={closeVersions}
+        dashboardId={dashboardId ?? null}
+        canEdit={isOwner}
+        canDelete={isOwner}
+        onRestored={() => {
+          if (!dashboardId) return;
+          void fetchDashboard(dashboardId).then(applyDashboard).catch(() => undefined);
+        }}
       />
 
       <TabModal
