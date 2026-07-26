@@ -333,6 +333,55 @@ def deregister_agent(agent_id: str, current_user: User = Depends(get_current_use
     return {"agent_id": agent_id, "removed": removed}
 
 
+@monitoring_endpoint_router.post("/agents/{agent_id}/trigger")
+def request_agent_run(agent_id: str, current_user: User = Depends(get_current_user)):
+    """Ask a running watcher to start an ingestion cycle now.
+
+    The registry is one-way — agents heartbeat in, and the server has no route
+    back out to a process on a login node behind a firewall — so this records a
+    request that the agent claims on its next command poll. The response says
+    the request was *recorded*, not that a cycle ran; the agent card shows it
+    turning into a run a few seconds later.
+
+    ``agent_id`` is the stored (owner-scoped) id, as returned by ``GET /agents``.
+    Authorised against the agent's recorded ``user_id`` rather than by parsing
+    that id, so a caller cannot drive someone else's watcher by constructing a
+    plausible-looking one.
+    """
+    if not settings.monitoring.enabled:
+        raise HTTPException(status_code=404, detail="Monitoring is disabled.")
+
+    agent = store.get_cli_agent(agent_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found, or no longer running.")
+    if agent.get("user_id") != str(current_user.id) and not getattr(
+        current_user, "is_admin", False
+    ):
+        raise HTTPException(status_code=403, detail="Not your agent.")
+
+    store.request_cli_agent_run(agent_id, requested_by=current_user.email)
+    logger.info(f"Run requested for agent {agent_id} by {current_user.email}")
+    return {"agent_id": agent_id, "requested": True}
+
+
+@monitoring_endpoint_router.post("/agents/{agent_id}/claim")
+def claim_agent_run(agent_id: str, current_user: User = Depends(get_current_user)):
+    """Claim a pending run request. Polled by the watcher itself.
+
+    Takes the bare id and scopes it to the caller, exactly as the heartbeat
+    does, so an agent can only ever claim its own requests.
+
+    Deliberately does not 404 on an unknown agent — it answers "nothing
+    pending". That keeps 404 meaning one thing to the CLI: this server predates
+    UI triggers, so stop polling.
+    """
+    if not settings.monitoring.enabled:
+        raise HTTPException(status_code=404, detail="Monitoring is disabled.")
+
+    claimed = store.claim_cli_agent_run(_scoped_agent_id(agent_id, current_user))
+    return {"agent_id": agent_id, "run_requested": bool(claimed)}
+
+
 @monitoring_endpoint_router.get("/agents")
 def list_agents(
     current_user: User = Depends(get_current_user),

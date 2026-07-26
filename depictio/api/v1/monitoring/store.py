@@ -253,10 +253,50 @@ def upsert_cli_agent(agent: CliAgent) -> None:
         {
             # started_at and runs_total belong to the agent's own view of
             # itself; everything else is refreshed on each beat.
-            "$set": agent.model_dump(exclude={"started_at"}),
+            #
+            # The run-request fields are server-owned and must survive a beat:
+            # they arrive on the agent object as None (the agent has no reason
+            # to send them), so including them here would silently cancel a
+            # "Run now" that landed between the request and the agent's claim.
+            "$set": agent.model_dump(
+                exclude={"started_at", "run_requested_at", "run_requested_by"}
+            ),
             "$setOnInsert": {"started_at": agent.started_at},
         },
         upsert=True,
+    )
+
+
+def get_cli_agent(agent_id: str) -> Optional[dict[str, Any]]:
+    doc = cli_agents_collection.find_one({"agent_id": agent_id}, {"_id": 0})
+    return _serialize(doc) if doc else None
+
+
+def request_cli_agent_run(agent_id: str, *, requested_by: Optional[str] = None) -> bool:
+    """Ask an agent to run a cycle at its next command poll.
+
+    A flag rather than a push: the agent lives on someone else's machine, often
+    behind a firewall, and the server has no route to it. Returns False when no
+    such agent exists — a watcher whose row has expired cannot be asked.
+    """
+    result = cli_agents_collection.update_one(
+        {"agent_id": agent_id},
+        {"$set": {"run_requested_at": datetime.now(), "run_requested_by": requested_by}},
+    )
+    return result.matched_count > 0
+
+
+def claim_cli_agent_run(agent_id: str) -> Optional[dict[str, Any]]:
+    """Take a pending run request, clearing it. Returns the request, or None.
+
+    Claim and clear are one atomic step so a request is honoured exactly once:
+    read-then-clear would run the cycle twice if two polls overlapped, and clear
+    a request the agent never saw if the process died in between.
+    """
+    return cli_agents_collection.find_one_and_update(
+        {"agent_id": agent_id, "run_requested_at": {"$ne": None}},
+        {"$set": {"run_requested_at": None, "run_requested_by": None}},
+        projection={"_id": 0, "run_requested_at": 1, "run_requested_by": 1},
     )
 
 

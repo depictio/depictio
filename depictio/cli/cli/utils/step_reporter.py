@@ -29,6 +29,73 @@ from depictio.cli.cli_logging import logger
 #: Sentinel that tells the worker thread to finish and exit.
 _STOP = object()
 
+# CLI options whose *value* is a secret and must never reach the monitoring ledger.
+_SENSITIVE_OPTS = {"--provisioning-key"}
+
+
+def redacted_command_line() -> str | None:
+    """Best-effort reconstruction of the CLI invocation with secrets redacted.
+
+    Renders as ``depictio-cli <args…>`` (argv[0] normalized to the entrypoint
+    name) and masks the value of any sensitive option. Never raises.
+    """
+    try:
+        import sys
+
+        out = ["depictio-cli"]
+        redact_next = False
+        for arg in sys.argv[1:]:
+            if redact_next:
+                out.append("***")
+                redact_next = False
+                continue
+            key = arg.split("=", 1)[0]
+            if key in _SENSITIVE_OPTS:
+                out.append(f"{key}=***" if "=" in arg else arg)
+                redact_next = "=" not in arg
+                continue
+            out.append(arg)
+        return " ".join(out)
+    except Exception:
+        return None
+
+
+def ingestion_data_collections(project_config) -> list[dict]:
+    """Per-DC summary (tag / type / format) + the local scan paths the CLI
+    resolved, walked from the validated project config. Best-effort; never raises."""
+    out: list[dict] = []
+    try:
+        for wf in getattr(project_config, "workflows", None) or []:
+            dl = getattr(wf, "data_location", None)
+            locations = [str(x) for x in (getattr(dl, "locations", None) or [])] if dl else []
+            for dc in getattr(wf, "data_collections", None) or []:
+                cfg = getattr(dc, "config", None)
+                scan = getattr(cfg, "scan", None) if cfg else None
+                mode = getattr(scan, "mode", None) if scan else None
+                params = getattr(scan, "scan_parameters", None) if scan else None
+                if mode == "single":
+                    pattern = getattr(params, "filename", None)
+                elif mode == "recursive":
+                    rc = getattr(params, "regex_config", None)
+                    pattern = getattr(rc, "pattern", None) if rc else None
+                else:
+                    pattern = None
+                dcsp = getattr(cfg, "dc_specific_properties", None) if cfg else None
+                out.append(
+                    {
+                        "tag": getattr(dc, "data_collection_tag", None) or "",
+                        "type": getattr(cfg, "type", None) if cfg else None,
+                        "format": getattr(dcsp, "format", None) if dcsp else None,
+                        "scan_mode": mode,
+                        "scan_pattern": pattern,
+                        "locations": locations,
+                        "file_count": None,
+                    }
+                )
+    except Exception:
+        return out
+    return out
+
 
 class StepReporter:
     """Records run steps locally and mirrors them to the server in the background.

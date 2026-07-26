@@ -117,6 +117,28 @@ any drift.
 --max-runs N      # stop after N cycles
 ```
 
+### Running a cycle on demand
+
+**Administration → Log & Task → Agents** lists every live watcher, and each card
+has a **Run now** button that starts a cycle without waiting for a change.
+
+![How a Run now request reaches a watcher](images/v0.12/react/schema_watch_trigger.png)
+
+The registry is one-way — a watcher on a login node heartbeats out, and the
+server has no route back in — so the button records a request that the watcher
+claims on its next poll, within about five seconds. The card shows *Requested*
+until it does. The request is a flag, not a queue — pressing repeatedly still
+produces one cycle — and it is only polled between cycles, so a request made
+while one is already running is honoured once that one finishes.
+
+![Agents pane with a watcher expanded](images/v0.12/react/admin_monitoring_agents_light.png)
+
+Cycles started this way are recorded with trigger `ui` rather than `watch`, in
+both the ingestion history and the Delta commit metadata, so a hand-started
+ingest stays distinguishable from an automatic one afterwards.
+
+Requests are scoped to the watcher's own user; admins can drive any of them.
+
 ---
 
 ## Delta dataset versioning

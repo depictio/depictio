@@ -3116,6 +3116,10 @@ export interface MonitoringCliAgent {
   last_trigger_at?: string | null;
   last_run_id?: string | null;
   last_error?: string | null;
+  /** Set while a "Run now" is waiting to be picked up by the agent; cleared the
+   *  moment it claims it, which is how the UI can show "requested" briefly. */
+  run_requested_at?: string | null;
+  run_requested_by?: string | null;
   runs_total?: number | null;
   started_at?: string | null;
   heartbeat_at?: string | null;
@@ -3153,6 +3157,19 @@ function monitoringQuery(params: Record<string, string | number | undefined>): s
   return s ? `?${s}` : '';
 }
 
+/*
+ * The monitoring readers below go through `authFetch` rather than the bare
+ * `fetch` + `authHeaders()` used by most of this module, because they are the
+ * ones on a timer.
+ *
+ * A one-shot request that 401s surfaces an error and stops. A pane polling
+ * every 8s with a token the server will never accept — one signed by another
+ * instance's key, say — retries forever, and each attempt costs a WARNING in
+ * the server's capped log ledger. One stale tab produced 89 of them in two
+ * minutes. `authFetch` refreshes once, then clears the session and sends the
+ * user to auth, which is the only outcome that actually ends the loop.
+ */
+
 export async function fetchMonitoringTasks(opts: {
   status?: string;
   kind?: string;
@@ -3167,7 +3184,7 @@ export async function fetchMonitoringTasks(opts: {
     limit: opts.limit,
     skip: opts.skip,
   });
-  const res = await fetch(`${API_BASE}/monitoring/tasks${qs}`, { headers: authHeaders() });
+  const res = await authFetch(`${API_BASE}/monitoring/tasks${qs}`);
   if (!res.ok) await throwHttpDetailError(res, 'Failed to load tasks');
   const data = await res.json();
   return Array.isArray(data?.tasks) ? (data.tasks as MonitoringTaskEvent[]) : [];
@@ -3193,7 +3210,7 @@ export async function fetchIngestionRuns(opts: {
     limit: opts.limit,
     skip: opts.skip,
   });
-  const res = await fetch(`${API_BASE}/monitoring/ingestion${qs}`, { headers: authHeaders() });
+  const res = await authFetch(`${API_BASE}/monitoring/ingestion${qs}`);
   if (!res.ok) await throwHttpDetailError(res, 'Failed to load ingestion runs');
   const data = await res.json();
   return Array.isArray(data?.runs) ? (data.runs as MonitoringIngestionRun[]) : [];
@@ -3211,7 +3228,7 @@ export async function fetchAppLogs(opts: {
   limit?: number;
 } = {}): Promise<MonitoringAppLog[]> {
   const qs = monitoringQuery({ level: opts.level, source: opts.source, limit: opts.limit });
-  const res = await fetch(`${API_BASE}/monitoring/logs${qs}`, { headers: authHeaders() });
+  const res = await authFetch(`${API_BASE}/monitoring/logs${qs}`);
   if (!res.ok) await throwHttpDetailError(res, 'Failed to load logs');
   const data = await res.json();
   return Array.isArray(data?.logs) ? (data.logs as MonitoringAppLog[]) : [];
@@ -3232,9 +3249,7 @@ export async function fetchProjectIngestionRuns(
   opts: { limit?: number; skip?: number } = {},
 ): Promise<{ runs: MonitoringIngestionRun[]; redacted: boolean }> {
   const qs = monitoringQuery({ limit: opts.limit, skip: opts.skip });
-  const res = await fetch(`${API_BASE}/projects/ingestion-runs/${projectId}${qs}`, {
-    headers: authHeaders(),
-  });
+  const res = await authFetch(`${API_BASE}/projects/ingestion-runs/${projectId}${qs}`);
   if (res.status === 404) return { runs: [], redacted: false };
   if (!res.ok) await throwHttpDetailError(res, 'Failed to load ingestion history');
   const data = await res.json();
@@ -3317,15 +3332,29 @@ export async function fetchCliAgents(
   opts: { projectId?: string; limit?: number } = {},
 ): Promise<MonitoringCliAgent[]> {
   const qs = monitoringQuery({ project_id: opts.projectId, limit: opts.limit });
-  const res = await fetch(`${API_BASE}/monitoring/agents${qs}`, { headers: authHeaders() });
+  const res = await authFetch(`${API_BASE}/monitoring/agents${qs}`);
   if (res.status === 404) return [];
   if (!res.ok) await throwHttpDetailError(res, 'Failed to load CLI agents');
   const data = await res.json();
   return Array.isArray(data?.agents) ? (data.agents as MonitoringCliAgent[]) : [];
 }
 
+/** Ask a running watcher to start a cycle now.
+ *
+ *  Resolves once the request is *recorded*, not once the cycle finishes: the
+ *  agent claims it on its next command poll (a few seconds), so the caller
+ *  should refresh rather than expect a result. `agentId` is the stored id from
+ *  `fetchCliAgents`. */
+export async function triggerCliAgentRun(agentId: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/monitoring/agents/${encodeURIComponent(agentId)}/trigger`, {
+    method: 'POST',
+    headers: authHeaders(),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to request a run');
+}
+
 export async function fetchMonitoringHealth(): Promise<MonitoringHealth> {
-  const res = await fetch(`${API_BASE}/monitoring/health`, { headers: authHeaders() });
+  const res = await authFetch(`${API_BASE}/monitoring/health`);
   if (!res.ok) await throwHttpDetailError(res, 'Failed to load monitoring health');
   return (await res.json()) as MonitoringHealth;
 }

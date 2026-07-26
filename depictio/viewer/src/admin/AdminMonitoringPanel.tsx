@@ -60,6 +60,7 @@ import {
   TimeText,
 } from '../monitoring/primitives';
 import {
+  ACCORDION_CLASSNAMES,
   ACCORDION_STYLES,
   CODE_STYLES,
   KIND_COLORS,
@@ -165,6 +166,7 @@ const TasksPane: React.FC<{ liveSignal: number }> = ({ liveSignal }) => {
             value={open}
             onChange={setOpen}
             styles={ACCORDION_STYLES}
+            classNames={ACCORDION_CLASSNAMES}
           >
             {tasks.map((t) => (
             <Accordion.Item key={t.task_id} value={t.task_id}>
@@ -393,6 +395,7 @@ const IngestionPane: React.FC<{ lastEvent: MonitoringLiveEvent | null }> = ({ la
             value={open}
             onChange={setOpen}
             styles={ACCORDION_STYLES}
+            classNames={ACCORDION_CLASSNAMES}
           >
             {runs.map((r) => (
             <Accordion.Item key={r.run_id} value={r.run_id}>
@@ -704,6 +707,7 @@ const LogsPane: React.FC = () => {
             value={open}
             onChange={setOpen}
             styles={ACCORDION_STYLES}
+            classNames={ACCORDION_CLASSNAMES}
           >
             {logs.map((l, i) => {
               const key = `${l.ts}-${i}`;

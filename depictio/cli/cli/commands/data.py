@@ -6,10 +6,14 @@ from typing import Annotated
 import typer
 
 from depictio.cli.cli.utils.api_calls import (
+    api_agent_claim_trigger,
     api_agent_deregister,
     api_agent_heartbeat,
     api_get_project_from_id,
     api_get_project_from_name,
+    api_monitoring_ingestion_finish,
+    api_monitoring_ingestion_start,
+    api_monitoring_ingestion_step,
 )
 from depictio.cli.cli.utils.common import cli_version, get_http_client
 from depictio.cli.cli.utils.config import validate_project_config_and_check_S3_storage
@@ -26,6 +30,11 @@ from depictio.cli.cli.utils.rich_utils import (
     rich_print_section_separator,
 )
 from depictio.cli.cli.utils.state import lock_path
+from depictio.cli.cli.utils.step_reporter import (
+    StepReporter,
+    ingestion_data_collections,
+    redacted_command_line,
+)
 from depictio.cli.cli.utils.watch import (
     ProjectWatcher,
     WatchConfig,
@@ -504,6 +513,35 @@ def watch(
     def run_cycle(cycle_mode: str, paths: set[str]) -> bool:
         if paths:
             logger.info(f"Ingesting after {len(paths)} settled change(s).")
+
+        # Open a monitoring record per cycle, exactly as `depictio run` does for
+        # a manual ingestion. Without it a watched project shows an empty
+        # Ingestion → History while its Delta table gains commit after commit —
+        # the one place someone looks to find out what the watcher has been
+        # doing. Best-effort in both directions: a monitoring outage must not
+        # stop the cycle, and a cycle that fails must still close its record.
+        ingestion_run_id = None
+        if not dry_run:
+            ingestion_run_id = api_monitoring_ingestion_start(
+                CLI_config=CLI_config,
+                command="watch",
+                project_id=str(project_config.id),
+                project_name=project_config.name,
+                cli_version=cli_version(),
+                command_line=redacted_command_line(),
+                cli_config_path=str(CLI_config_path) if CLI_config_path else None,
+                project_config_path=str(project_config_path) or None,
+                # The watcher decides why it fired — a settled batch, a poll, or
+                # someone pressing "Run now" — and a UI-requested cycle is
+                # recorded as such rather than being indistinguishable from an
+                # automatic one in the history.
+                trigger=watcher.trigger_kind,
+                trigger_reason=watcher.trigger_reason,
+            )
+            # Hand the id back so the agent card can link to the run it is
+            # executing; the watcher schedules cycles but does not open records.
+            watcher.note_run(ingestion_run_id)
+
         command_parameters = {
             # A full cycle re-walks and re-uploads everything; an incremental one
             # only acts on files whose metadata hash moved.
@@ -522,9 +560,23 @@ def watch(
             "state_cache": True,
             "concurrency": concurrency,
             "rich_tables": False,
-            "trigger": "watch",
+            "trigger": watcher.trigger_kind,
+            # Ties this cycle's Delta commit back to its monitoring record, the
+            # same link `depictio run` writes. Without it the commit history and
+            # the run ledger cannot be joined for watch-driven writes.
+            "ingestion_run_id": ingestion_run_id,
         }
+
+        reporter = StepReporter(
+            send=lambda run_id, step, current: api_monitoring_ingestion_step(
+                CLI_config, run_id, step, current
+            ),
+            run_id=ingestion_run_id,
+            enabled=bool(ingestion_run_id),
+        )
+        status, error = "success", None
         try:
+            reporter.start("scan", f"scanning in {cycle_mode} mode")
             process_project_helper(
                 CLI_config=CLI_config,
                 project_config=project_config,
@@ -533,6 +585,9 @@ def watch(
                 command_parameters=command_parameters,
                 mode="scan",
             )
+            reporter.finish("scan", "success", "data files scanned")
+
+            reporter.start("process", f"writing with {write_mode}")
             process_project_helper(
                 CLI_config=CLI_config,
                 project_config=project_config,
@@ -541,10 +596,31 @@ def watch(
                 command_parameters=command_parameters,
                 mode="process",
             )
+            reporter.finish("process", "success", "data collections processed")
             return True
         except Exception as exc:  # noqa: BLE001 - a watcher must outlive one bad cycle
             logger.error(f"Ingestion cycle failed: {exc}")
+            status, error = "failed", str(exc)
+            # Mark whichever phase was in flight, so a failed cycle shows where
+            # it stopped instead of leaving a step stuck on "running" forever.
+            for name in ("scan", "process"):
+                if reporter.steps and any(
+                    s["name"] == name and s.get("status") == "running" for s in reporter.steps
+                ):
+                    reporter.finish(name, "failed", str(exc))
             return False
+        finally:
+            if ingestion_run_id:
+                reporter.close(timeout=2.0)
+                api_monitoring_ingestion_finish(
+                    CLI_config=CLI_config,
+                    run_id=ingestion_run_id,
+                    status=status,
+                    steps=reporter.steps,
+                    error=error,
+                    project_id=str(project_config.id),
+                    data_collections=ingestion_data_collections(project_config),
+                )
 
     lock_file = lock_path(CLI_config.api_base_url, str(project_config.id))
     watcher = ProjectWatcher(roots=roots, config=config, run_cycle=run_cycle)
@@ -573,11 +649,31 @@ def watch(
             "status": status,
             "runs_total": int(extra.get("runs_total", 0)),
         }
+        # Both rendered on the agent card. Sent only when set, so a watcher that
+        # has not run a cycle yet leaves them null rather than clearing them.
+        if extra.get("last_run_id"):
+            payload["last_run_id"] = extra["last_run_id"]
+        if extra.get("last_trigger_at"):
+            payload["last_trigger_at"] = extra["last_trigger_at"].isoformat()
         if not api_agent_heartbeat(CLI_config, payload):
             logger.info("Server has no CLI-agent registry; skipping further heartbeats.")
             agents_supported["ok"] = False
 
+    commands_supported = {"ok": True}
+
+    def poll_command() -> bool:
+        """Whether the agent card's "Run now" has been pressed since the last poll."""
+        if not agents_supported["ok"] or not commands_supported["ok"]:
+            return False
+        requested = api_agent_claim_trigger(CLI_config, agent_id)
+        if requested is None:
+            logger.info("Server does not support UI-triggered runs; not polling for them.")
+            commands_supported["ok"] = False
+            return False
+        return requested
+
     watcher.on_status = report_status
+    watcher.on_poll_command = poll_command
     report_status("idle", {})
 
     rich_print_section_separator(f"Watching {len(roots)} location(s) — {watcher.backend} backend")

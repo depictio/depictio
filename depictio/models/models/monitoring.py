@@ -307,6 +307,12 @@ class CliAgent(BaseModel):
     last_run_id: Optional[str] = Field(default=None)
     last_trigger_at: Optional[datetime] = Field(default=None)
     runs_total: int = Field(default=0)
+    #: Set server-side when someone presses "Run now", cleared when the watcher
+    #: claims it on its next command poll. Server-owned: the agent never sends
+    #: these, and the heartbeat deliberately does not overwrite them, or a beat
+    #: landing between the request and the claim would drop the request.
+    run_requested_at: Optional[datetime] = Field(default=None)
+    run_requested_by: Optional[str] = Field(default=None)
     started_at: datetime = Field(default_factory=datetime.now)
     heartbeat_at: datetime = Field(default_factory=datetime.now)
     #: TTL anchor. Set to a few heartbeat intervals ahead so a missed beat does

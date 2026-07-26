@@ -305,6 +305,143 @@ class TestWatcherLoop:
         watcher = self._watcher(tmp_path, clock, cycle, once=True, backoff_initial_seconds=0.0)
         assert watcher.run() == 1
 
+    @staticmethod
+    def _ticking_sleep(clock, watcher, *, stop_after: int):
+        """A sleep that advances the clock one second and stops after N ticks.
+
+        Counts ticks rather than reading the clock, which starts at an arbitrary
+        offset rather than zero.
+        """
+        ticks = {"n": 0}
+
+        def sleep(_seconds: float) -> None:
+            ticks["n"] += 1
+            clock.advance(1.0)
+            if ticks["n"] >= stop_after:
+                watcher.request_stop()
+
+        return sleep
+
+    def test_an_idle_watcher_keeps_reporting(self, tmp_path, clock):
+        """A quiet watcher must stay visible to the server.
+
+        The agent record expires on a TTL measured from the last report, so a
+        watcher that only reported on state changes was declared wedged and
+        then evicted while sitting healthily in its loop.
+        """
+        reports = []
+        watcher = self._watcher(
+            tmp_path,
+            clock,
+            lambda mode, paths: True,
+            heartbeat_interval_seconds=10.0,
+        )
+        watcher.on_status = lambda status, extra: reports.append(status)
+
+        # Nothing ever changes in the data root, so no cycle can run.
+        watcher.sleep = self._ticking_sleep(clock, watcher, stop_after=35)
+        watcher.run()
+
+        assert reports == ["idle", "idle", "idle"]
+
+    def test_the_heartbeat_repeats_the_current_status(self, tmp_path, clock):
+        """A watcher backing off from failures must not beat "idle" over it."""
+        write(tmp_path / "seed.csv")
+        reports = []
+        watcher = self._watcher(
+            tmp_path,
+            clock,
+            lambda mode, paths: False,
+            external_writes=True,
+            max_runs=1,
+            debounce_seconds=0.0,
+            poll_interval_seconds=0.0,
+            settle_seconds=0.0,
+            backoff_initial_seconds=0.0,
+            heartbeat_interval_seconds=1.0,
+        )
+        watcher.on_status = lambda status, extra: reports.append(status)
+        watcher.run()
+
+        assert reports[0] == "ingesting"
+        assert reports[1] == "error"
+        # Every beat after the failed cycle carries the error forward.
+        assert set(reports[2:]) <= {"error"}
+
+    def test_no_heartbeat_before_the_interval_elapses(self, tmp_path, clock):
+        reports = []
+        watcher = self._watcher(
+            tmp_path,
+            clock,
+            lambda mode, paths: True,
+            heartbeat_interval_seconds=600.0,
+        )
+        watcher.on_status = lambda status, extra: reports.append(status)
+
+        watcher.sleep = self._ticking_sleep(clock, watcher, stop_after=5)
+        watcher.run()
+
+        assert reports == []
+
+    def test_a_requested_run_starts_a_cycle(self, tmp_path, clock):
+        """ "Run now" in the UI must reach a watcher with nothing to react to."""
+        calls = []
+        watcher = self._watcher(
+            tmp_path,
+            clock,
+            lambda mode, paths: calls.append(paths) or True,
+            max_runs=1,
+            command_poll_interval_seconds=0.0,
+        )
+        # Requested once; the server clears the flag, so later polls say no.
+        requests = iter([True])
+        watcher.on_poll_command = lambda: next(requests, False)
+        watcher.run()
+
+        assert calls == [set()]
+        assert watcher.trigger_kind == "ui"
+        assert watcher.trigger_reason == "requested from the web UI"
+
+    def test_a_requested_run_is_recorded_as_a_ui_trigger(self, tmp_path, clock):
+        """The history must distinguish a person pressing a button from a poll."""
+        watcher = self._watcher(tmp_path, clock, lambda mode, paths: True, once=True)
+        watcher.run()
+
+        assert watcher.trigger_kind == "watch"
+        assert watcher.trigger_reason == "single --once pass"
+
+    def test_the_command_poll_is_rate_limited(self, tmp_path, clock):
+        """The loop ticks every second; the server must not be asked that often."""
+        polls = []
+        watcher = self._watcher(
+            tmp_path,
+            clock,
+            lambda mode, paths: True,
+            command_poll_interval_seconds=10.0,
+        )
+        watcher.on_poll_command = lambda: polls.append(clock()) or False
+        watcher.sleep = self._ticking_sleep(clock, watcher, stop_after=35)
+        watcher.run()
+
+        assert len(polls) == 3
+
+    def test_a_failing_command_poll_is_survivable(self, tmp_path, clock):
+        """An unreachable server costs the feature, not the watcher."""
+        watcher = self._watcher(
+            tmp_path,
+            clock,
+            lambda mode, paths: True,
+            command_poll_interval_seconds=0.0,
+        )
+
+        def explode() -> bool:
+            raise RuntimeError("connection refused")
+
+        watcher.on_poll_command = explode
+        watcher.sleep = self._ticking_sleep(clock, watcher, stop_after=3)
+
+        assert watcher.run() == 0
+
     def test_stop_request_ends_the_loop(self, tmp_path, clock):
         watcher = self._watcher(tmp_path, clock, lambda mode, paths: True)
         watcher.request_stop()

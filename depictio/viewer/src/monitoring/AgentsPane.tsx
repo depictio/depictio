@@ -15,6 +15,7 @@ import {
   Accordion,
   Alert,
   Badge,
+  Button,
   Code,
   Group,
   Loader,
@@ -24,12 +25,13 @@ import {
   Text,
   Tooltip,
 } from '@mantine/core';
+import { notifications } from '@mantine/notifications';
 import { Icon } from '@iconify/react';
-import { fetchCliAgents, type MonitoringCliAgent } from 'depictio-react-core';
+import { fetchCliAgents, triggerCliAgentRun, type MonitoringCliAgent } from 'depictio-react-core';
 
 import { matchesQuery, parseTs, relTime } from './format';
-import { Field, PaneHeader, PathTip, SearchInput } from './primitives';
-import { ACCORDION_STYLES, PANE_SCROLL_H } from './tokens';
+import { Field, IdRow, PaneHeader, PathTip, SearchInput } from './primitives';
+import { ACCORDION_CLASSNAMES, ACCORDION_STYLES, PANE_SCROLL_H } from './tokens';
 import { usePolling } from './usePolling';
 
 const AGENT_STATUS_COLORS: Record<string, string> = {
@@ -51,9 +53,47 @@ function isStale(agent: MonitoringCliAgent): boolean {
   return Date.now() - beat > STALE_HEARTBEAT_MS;
 }
 
-const AgentRow: React.FC<{ agent: MonitoringCliAgent }> = ({ agent }) => {
+const AgentRow: React.FC<{ agent: MonitoringCliAgent; onTriggered: () => void }> = ({
+  agent,
+  onTriggered,
+}) => {
+  const [requesting, setRequesting] = useState(false);
   const stale = isStale(agent);
   const active = agent.status === 'scanning' || agent.status === 'ingesting';
+  const pending = Boolean(agent.run_requested_at);
+
+  // The button is only meaningful for a watcher that is listening and free. Each
+  // case gets its own reason rather than a bare disabled control, because "why
+  // can't I press this?" is otherwise unanswerable from the card.
+  const blocked = stale
+    ? 'No recent heartbeat — this watcher may never pick the request up'
+    : active
+      ? 'A cycle is already running'
+      : pending
+        ? 'Already requested — the watcher claims it within a few seconds'
+        : null;
+
+  const requestRun = async () => {
+    setRequesting(true);
+    try {
+      await triggerCliAgentRun(agent.agent_id);
+      notifications.show({
+        color: 'green',
+        title: 'Run requested',
+        message: 'The watcher starts a cycle at its next check, within a few seconds.',
+      });
+      onTriggered();
+    } catch (err) {
+      notifications.show({
+        color: 'red',
+        title: 'Could not request a run',
+        message: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setRequesting(false);
+    }
+  };
+
   return (
     <Accordion.Item value={agent.agent_id}>
       <Accordion.Control>
@@ -125,18 +165,34 @@ const AgentRow: React.FC<{ agent: MonitoringCliAgent }> = ({ agent }) => {
               <Text size="xs">{agent.last_error}</Text>
             </Alert>
           )}
-          <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="xs">
-            <Field label="Agent ID">
-              <Code fz="10px">{agent.agent_id}</Code>
-            </Field>
-            <Field label="PID">{agent.pid ?? '—'}</Field>
-            <Field label="CLI version">{agent.cli_version || '—'}</Field>
-            <Field label="Started">{relTime(agent.started_at)}</Field>
-            <Field label="Last trigger">{relTime(agent.last_trigger_at)}</Field>
-            <Field label="Last run">
-              {agent.last_run_id ? <Code fz="10px">{agent.last_run_id}</Code> : '—'}
-            </Field>
-          </SimpleGrid>
+          <Group justify="space-between" align="center" wrap="nowrap">
+            {/* Four short scalars, four columns: they line up and each is
+                readable at a glance. The long identifiers live below, where
+                they have the full width. */}
+            <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="xs" style={{ flex: 1, minWidth: 0 }}>
+              <Field label="PID">{agent.pid ?? '—'}</Field>
+              <Field label="CLI version">{agent.cli_version || '—'}</Field>
+              <Field label="Started">{relTime(agent.started_at)}</Field>
+              <Field label="Last trigger">{relTime(agent.last_trigger_at)}</Field>
+            </SimpleGrid>
+            <Tooltip label={blocked ?? 'Ingest now, without waiting for a change'} withArrow>
+              <Button
+                size="compact-xs"
+                variant="light"
+                loading={requesting}
+                disabled={Boolean(blocked)}
+                onClick={() => void requestRun()}
+                leftSection={<Icon icon={pending ? 'mdi:clock-outline' : 'mdi:play'} width={13} />}
+                style={{ flexShrink: 0 }}
+              >
+                {pending ? 'Requested' : 'Run now'}
+              </Button>
+            </Tooltip>
+          </Group>
+          <Stack gap={4}>
+            <IdRow label="Agent ID" value={agent.agent_id} />
+            <IdRow label="Last run" value={agent.last_run_id} />
+          </Stack>
           {agent.watching && agent.watching.length > 0 && (
             <Stack gap={2}>
               <Text size="10px" c="dimmed" tt="uppercase" fw={700} lts={0.4}>
@@ -219,9 +275,10 @@ export const AgentsPane: React.FC<{ liveSignal?: number; projectId?: string }> =
             value={open}
             onChange={setOpen}
             styles={ACCORDION_STYLES}
+            classNames={ACCORDION_CLASSNAMES}
           >
             {agents.map((agent) => (
-              <AgentRow key={agent.agent_id} agent={agent} />
+              <AgentRow key={agent.agent_id} agent={agent} onTriggered={() => void refresh()} />
             ))}
           </Accordion>
         </ScrollArea.Autosize>
