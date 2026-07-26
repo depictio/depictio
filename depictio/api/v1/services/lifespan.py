@@ -211,6 +211,24 @@ async def stop_event_services() -> None:
         await event_service.stop()
 
 
+def start_core_indexes(should_initialize: bool) -> None:
+    """Create indexes on the always-in-use collections. Never fails boot.
+
+    Kept out of ``start_monitoring_storage`` on purpose: that one returns early
+    when monitoring is disabled, and these indexes are not tied to any feature
+    flag — their absence just means collection scans.
+    """
+    if not should_initialize:
+        return
+    try:
+        from depictio.api.v1.core_indexes import ensure_core_indexes
+
+        ensure_core_indexes()
+        logger.info(f"Worker {WORKER_ID}: Core indexes ready")
+    except Exception as exc:
+        logger.warning(f"Worker {WORKER_ID}: Core index setup failed: {exc}")
+
+
 def start_monitoring_storage(should_initialize: bool) -> None:
     """Set up the monitoring ledger.
 
@@ -322,6 +340,7 @@ async def lifespan(_app: FastAPI):
     background_task = start_background_services(should_initialize)
     start_yaml_services(should_initialize)
     await start_event_services(should_initialize)
+    start_core_indexes(should_initialize)
     start_monitoring_storage(should_initialize)
     start_multiqc_prewarm(should_initialize)
 
