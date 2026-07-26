@@ -77,6 +77,15 @@ SCAN_FILE_ID_BUCKETS: tuple[str, ...] = (
     "changed_files",
     "skipped_files",
     "other_failure_files",
+    # A file that left the filesystem is the one event the run ledger could not
+    # describe: the ids were computed to drive the delete call and then thrown
+    # away, leaving only a count. Reconstructing "which files backed this data
+    # collection at time T" needs the identities, because the records themselves
+    # are hard-deleted under --sync-files. Split by fate, mirroring the stats
+    # keys: ``deleted_files`` were actually removed, ``missing_files`` merely
+    # went absent from the scan while their records were left in place.
+    "deleted_files",
+    "missing_files",
 )
 
 # Supported image extensions for S3 verification
@@ -640,6 +649,11 @@ def scan_run_for_multiple_data_collections(
             and sc.scan_result["reason"] not in NOT_UPLOADED_SCAN_REASONS
         ]
 
+        # Hoisted out of the `if` below so the id buckets are always defined:
+        # a data collection that matched nothing this cycle still needs an
+        # (empty) entry rather than a NameError at the assembly step.
+        missing_files: list[str] = []
+
         if dc_file_scan_results:
             # ``result`` already encodes "should this be uploaded": added always,
             # changed only under --sync-changed, updated only under --sync-files.
@@ -715,6 +729,10 @@ def scan_run_for_multiple_data_collections(
             "changed_files": files_changed,
             "skipped_files": files_skipped,
             "other_failure_files": files_other_failure,
+            # Same split as dc_stats below: under --sync-files the records were
+            # actually deleted, otherwise they were only absent from this scan.
+            "deleted_files": missing_files if update_files else [],
+            "missing_files": [] if update_files else missing_files,
         }
 
         # Calculate missing files count

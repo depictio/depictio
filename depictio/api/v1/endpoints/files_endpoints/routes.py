@@ -65,7 +65,22 @@ async def create_file(payload: UpsertFilesBatchRequest, current_user=Depends(get
         # Use a different update operator based on the `update` flag.
         if payload.update:
             # $set will update the file if it exists; upsert=True means it will insert if not found.
-            op = UpdateOne({"_id": file_obj.id}, {"$set": file_data}, upsert=True)
+            #
+            # `registration_time` is deliberately moved out of the $set payload and
+            # into $setOnInsert: it records when the file first entered depictio, so
+            # it must survive every later re-scan. The CLI never sends a value for it
+            # (File's default_factory stamps "now" on each scan) and `mongo()` uses
+            # exclude_unset=False, so a blanket $set would rewrite the original
+            # timestamp with the current scan's — and the watcher's default
+            # incremental mode sends update=True every cycle, which would converge
+            # every file's registration_time on "recently". Same discipline as
+            # `scan_results` in runs_endpoints/routes.py and `created_at` in
+            # monitoring/store.py.
+            set_data = {k: v for k, v in file_data.items() if k != "registration_time"}
+            update_doc: dict = {"$set": set_data}
+            if "registration_time" in file_data:
+                update_doc["$setOnInsert"] = {"registration_time": file_data["registration_time"]}
+            op = UpdateOne({"_id": file_obj.id}, update_doc, upsert=True)
         else:
             # $setOnInsert will only insert the file if it doesn't already exist.
             op = UpdateOne({"_id": file_obj.id}, {"$setOnInsert": file_data}, upsert=True)

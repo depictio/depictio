@@ -222,6 +222,17 @@ def start_monitoring_storage(should_initialize: bool) -> None:
     deployment can reasonably want job offloading without the admin ledger, or
     the reverse — so each is guarded separately.
     """
+    # Not feature-gated: these are plain indexes on collections that are always
+    # in use, and their absence only ever costs collection scans.
+    if should_initialize:
+        try:
+            from depictio.api.v1.core_indexes import ensure_core_indexes
+
+            ensure_core_indexes()
+            logger.info(f"Worker {WORKER_ID}: Core indexes ready")
+        except Exception as exc:
+            logger.warning(f"Worker {WORKER_ID}: Core index setup failed: {exc}")
+
     if settings.monitoring.enabled:
         try:
             from depictio.api.v1.monitoring.log_handler import install_app_log_handler
