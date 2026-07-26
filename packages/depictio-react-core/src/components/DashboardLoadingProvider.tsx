@@ -9,8 +9,9 @@ import React, {
 import type { StoredMetadata } from '../api';
 
 /** Per-component load lifecycle, as reported by each data renderer.
- *  ``deferred``/off-screen components simply never appear in the registry —
- *  they are counted as pending against the metadata-derived total. */
+ *  Off-screen components simply never appear in the registry — renderers report
+ *  ``null`` until ``useInView`` flips, so registry membership *is* the set of
+ *  components that reached the viewport and started fetching. */
 export type ComponentLoadStatus = 'loading' | 'ready' | 'error';
 
 /**
@@ -98,17 +99,19 @@ export function useReportLoadStatus(index: string, status: ComponentLoadStatus |
 }
 
 export interface DashboardLoadSummary {
-  /** Panels finished (data rendered). Includes the whole card group when its
-   *  bulk-compute has settled. */
+  /** In-view panels finished (data rendered). Includes the whole card group when
+   *  its bulk-compute has settled. */
   ready: number;
-  /** Panels actively fetching right now. */
+  /** In-view panels actively fetching right now. */
   loading: number;
-  /** Panels that errored on their initial load. */
+  /** In-view panels that errored on their initial load. */
   error: number;
-  /** Panels neither ready nor loading — chiefly off-screen ones deferred until
-   *  scrolled into view. */
-  pending: number;
-  /** All tracked panels + cards. */
+  /** Panels that have *not* reached the viewport, so have not started fetching.
+   *  Excluded from ``total`` — reported only so the tooltip can say what the bar
+   *  is deliberately not counting. */
+  deferred: number;
+  /** The bar's denominator: panels that reached the viewport and started
+   *  loading, plus cards. */
   total: number;
   /** ``ready / total`` in [0, 1]. */
   fraction: number;
@@ -118,6 +121,14 @@ export interface DashboardLoadSummary {
  * Aggregate the registry against the dashboard metadata into counts for the
  * progress bar. Cards are treated as one group keyed off ``cardsLoading`` (they
  * load together via the bulk-compute endpoint, not per-panel).
+ *
+ * Scoped to the viewport: only panels that actually started loading count
+ * toward ``total``. A dashboard of 30 panels with 4 scrolled into view reads
+ * ``x / 4``, and reaches 100%. Counting all 30 pinned the bar near-empty and
+ * never let it complete, since off-screen panels defer their fetch
+ * indefinitely. The denominator grows as scrolling brings more panels in, so
+ * the fill can legitimately step backwards — that is the honest reading of
+ * "what is loading right now".
  */
 export function useDashboardLoadSummary(
   metadataList: StoredMetadata[],
@@ -128,7 +139,7 @@ export function useDashboardLoadSummary(
     let ready = 0;
     let loading = 0;
     let error = 0;
-    let dataTotal = 0;
+    let trackedTotal = 0;
     let cardCount = 0;
     for (const m of metadataList) {
       if (m.component_type === 'card') {
@@ -136,19 +147,21 @@ export function useDashboardLoadSummary(
         continue;
       }
       if (!TRACKED_LOAD_TYPES.has(m.component_type)) continue;
-      dataTotal += 1;
+      trackedTotal += 1;
       const s = statuses[m.index];
       if (s === 'ready') ready += 1;
       else if (s === 'loading') loading += 1;
       else if (s === 'error') error += 1;
     }
+    // Panels in the registry are exactly the ones that reached the viewport.
+    const inView = ready + loading + error;
+    const deferred = Math.max(0, trackedTotal - inView);
     if (cardCount > 0) {
       if (cardsLoading) loading += cardCount;
       else ready += cardCount;
     }
-    const total = dataTotal + cardCount;
-    const pending = Math.max(0, total - ready - loading - error);
+    const total = inView + cardCount;
     const fraction = total > 0 ? ready / total : 0;
-    return { ready, loading, error, pending, total, fraction };
+    return { ready, loading, error, deferred, total, fraction };
   }, [statuses, metadataList, cardsLoading]);
 }

@@ -66,7 +66,8 @@ import { useSidebarOpen } from './hooks/useSidebarOpen';
 import { useCurrentUser } from './hooks/useCurrentUser';
 import { isDashboardOwner } from './lib/dashboardOwnership';
 import NotesFooter from './components/NotesFooter';
-import DashboardLoadingBar from './components/DashboardLoadingBar';
+import DashboardLoadIndicator from './components/DashboardLoadIndicator';
+import BootSplash from './components/BootSplash';
 
 /**
  * Top-level SPA. Layout:
@@ -443,9 +444,6 @@ const App: React.FC = () => {
       transitionDuration={300}
       transitionTimingFunction="ease"
     >
-      {dashboard && !loading && !error && (
-        <DashboardLoadingBar metadataList={rightComponents} cardsLoading={cardsLoading} />
-      )}
       <AppShell.Header data-tour-id="header-title">
         <Header
           dashboardId={dashboardId}
@@ -459,6 +457,11 @@ const App: React.FC = () => {
           onOpenSettings={openSettings}
           cardsLoading={cardsLoading}
           isOwner={isOwner}
+          titleExtras={
+            dashboard && !loading && !error ? (
+              <DashboardLoadIndicator metadataList={rightComponents} cardsLoading={cardsLoading} />
+            ) : undefined
+          }
           rightExtras={
             <>
               {realtimeEnabled && (
@@ -563,12 +566,10 @@ const App: React.FC = () => {
               </Paper>
             );
           })()}
-        {loading && (
-          <Group p="lg">
-            <Loader size="sm" />
-            <Text>Loading dashboard…</Text>
-          </Group>
-        )}
+        {/* Dashboard-document fetch: no panels exist yet, so there is nothing
+            for the header indicator to count. No prose — the title is already on
+            screen, so naming the phase adds nothing. */}
+        {loading && <BootSplash />}
         {error && <Text c="red" p="lg">{error}</Text>}
         {dashboard && !loading && !error && (
           <div
