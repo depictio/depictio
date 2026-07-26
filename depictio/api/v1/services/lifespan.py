@@ -233,6 +233,17 @@ def start_monitoring_storage(should_initialize: bool) -> None:
         except Exception as exc:
             logger.warning(f"Worker {WORKER_ID}: Core index setup failed: {exc}")
 
+    if settings.dashboard_versions.enabled and should_initialize:
+        try:
+            from depictio.api.v1.endpoints.dashboards_endpoints.version_store import (
+                ensure_dashboard_version_storage,
+            )
+
+            ensure_dashboard_version_storage()
+            logger.info(f"Worker {WORKER_ID}: Dashboard version storage ready")
+        except Exception as exc:
+            logger.warning(f"Worker {WORKER_ID}: Dashboard version storage setup failed: {exc}")
+
     if settings.monitoring.enabled:
         try:
             from depictio.api.v1.monitoring.log_handler import install_app_log_handler
