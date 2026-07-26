@@ -1,0 +1,113 @@
+/**
+ * Presentation helpers for the version timeline.
+ */
+
+import type { DashboardVersionSummary } from 'depictio-react-core';
+
+/** Parse a backend ISO timestamp to epoch ms.
+ *
+ *  The API stamps with `datetime.now()` inside UTC containers and serialises
+ *  without an offset, so an offset-less value has to be read as UTC —
+ *  otherwise JS treats it as local time and a fresh version reads hours off
+ *  for anyone not on UTC. */
+export function parseTs(iso?: string | null): number {
+  if (!iso) return NaN;
+  const hasTz = /([zZ]|[+-]\d{2}:?\d{2})$/.test(iso);
+  return new Date(hasTz ? iso : `${iso}Z`).getTime();
+}
+
+/** Compact relative time — "3m ago", "2d ago". */
+export function relTime(iso?: string | null): string {
+  if (!iso) return '—';
+  const then = parseTs(iso);
+  if (Number.isNaN(then)) return '—';
+  const secs = Math.max(0, Math.round((Date.now() - then) / 1000));
+  if (secs < 60) return `${secs}s ago`;
+  const mins = Math.round(secs / 60);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.round(hrs / 24)}d ago`;
+}
+
+/** Exact local date and time, for the tooltip behind a relative label. */
+export function absTime(iso?: string | null): string {
+  const ms = parseTs(iso);
+  if (Number.isNaN(ms)) return '—';
+  return new Date(ms).toLocaleString(undefined, { hour12: false });
+}
+
+/** Day bucket label: "Today" / "Yesterday" / "3 Mar 2026". */
+export function dayLabel(iso?: string | null): string {
+  const ms = parseTs(iso);
+  if (Number.isNaN(ms)) return 'Unknown date';
+
+  const then = new Date(ms);
+  const now = new Date();
+  const startOf = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const days = Math.round((startOf(now) - startOf(then)) / 86_400_000);
+
+  if (days <= 0) return 'Today';
+  if (days === 1) return 'Yesterday';
+  if (days < 7) return `${days} days ago`;
+  return then.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+/** Group versions into day buckets, preserving the newest-first order. */
+export function groupByDay(
+  versions: DashboardVersionSummary[],
+): Array<{ label: string; versions: DashboardVersionSummary[] }> {
+  const groups: Array<{ label: string; versions: DashboardVersionSummary[] }> = [];
+  for (const version of versions) {
+    const label = dayLabel(version.created_at);
+    const last = groups[groups.length - 1];
+    if (last && last.label === label) last.versions.push(version);
+    else groups.push({ label, versions: [version] });
+  }
+  return groups;
+}
+
+/** "12 saves over 4 min" — only meaningful once saves have folded together. */
+export function saveSpanLabel(version: DashboardVersionSummary): string | null {
+  if (!version.save_count || version.save_count <= 1) return null;
+  const start = parseTs(version.created_at);
+  const end = parseTs(version.updated_at);
+  if (Number.isNaN(start) || Number.isNaN(end) || end <= start) {
+    return `${version.save_count} saves`;
+  }
+  const mins = Math.max(1, Math.round((end - start) / 60_000));
+  return `${version.save_count} saves over ${mins} min`;
+}
+
+/** What to call a version in the UI. A user label wins; otherwise "v12". */
+export function versionTitle(version: DashboardVersionSummary): string {
+  return version.label?.trim() || `v${version.seq}`;
+}
+
+export const KIND_META: Record<string, { icon: string; color: string; label: string }> = {
+  auto: { icon: 'mdi:content-save-outline', color: 'gray', label: 'Autosave' },
+  explicit: { icon: 'mdi:content-save', color: 'blue', label: 'Saved' },
+  restore: { icon: 'mdi:backup-restore', color: 'yellow', label: 'Restored' },
+  import: { icon: 'mdi:import', color: 'grape', label: 'Imported' },
+};
+
+export function kindMeta(kind: string) {
+  return KIND_META[kind] ?? { icon: 'mdi:circle-small', color: 'gray', label: kind };
+}
+
+/**
+ * One-line summary of how reproducible a version's data is.
+ *
+ * Coverage is genuinely heterogeneous — a dashboard can pin a Delta version
+ * for one collection while another has no provenance at all — so this states
+ * the split rather than implying uniform fidelity.
+ */
+export function dataCoverageLabel(kinds: Record<string, number>): string | null {
+  const total = Object.values(kinds).reduce((a, b) => a + b, 0);
+  if (!total) return null;
+
+  const pinned = (kinds.delta ?? 0) + (kinds.manifest ?? 0) + (kinds.asset ?? 0);
+  if (pinned === 0) return `${total} data collection${total === 1 ? '' : 's'} · live data`;
+  if (pinned === total) return `${total} data collection${total === 1 ? '' : 's'} pinned`;
+  return `${pinned} of ${total} data collections pinned`;
+}

@@ -153,6 +153,7 @@ import type { SectionKind, SectionOp } from './components/sections/sectionMutati
 import { Header, Sidebar, RunParametersHost, SettingsDrawer, TabIntro, TabModal } from './chrome';
 import type { TabDefaults, TabModalSubmitPayload } from './chrome';
 import { useTabGroupActions } from './chrome/useTabGroupActions';
+import VersionHistoryDrawer from './versions/VersionHistoryDrawer';
 import NotesFooter from './components/NotesFooter';
 import { dashboardHref } from './dashboards/lib/dashboardLinks';
 import './chrome/chrome.css';
@@ -300,6 +301,7 @@ const EditorApp: React.FC = () => {
   // component chrome and no inspect action is rendered anywhere.
   const { control: inspectorControl, aside: inspectorAside } =
     useInspectorChrome(inspectorEnabled);
+  const [versionsOpened, { open: openVersions, close: closeVersions }] = useDisclosure(false);
   // Tab modal state — `mode` decides between create vs edit. `target` is the
   // tab being edited (or null for create). `submitting` blocks Save while a
   // request is in flight.
@@ -2304,6 +2306,19 @@ const EditorApp: React.FC = () => {
                   {groupsSection}
                 </GroupingHeaderControl>
               )}
+              <Tooltip label="Version history" withArrow>
+                <ActionIcon
+                  variant="subtle"
+                  color="gray"
+                  size="md"
+                  onClick={openVersions}
+                  aria-label="Version history"
+                  data-testid="version-history-button"
+                  data-tour-id="editor-version-history"
+                >
+                  <Icon icon="mdi:history" width={18} />
+                </ActionIcon>
+              </Tooltip>
               {realtimeEnabled && (
                 <span data-tour-id="realtime-indicator" style={{ display: 'inline-flex' }}>
                   <RealtimeIndicator
@@ -2695,6 +2710,21 @@ const EditorApp: React.FC = () => {
       />
 
       {tabGroupActions.modals}
+      {/* Restoring refetches rather than patching local state: a restore can
+          add or remove whole tabs, so the editor's in-memory copy of the
+          family is no longer trustworthy afterwards. */}
+      <VersionHistoryDrawer
+        opened={versionsOpened}
+        onClose={closeVersions}
+        dashboardId={dashboardId ?? null}
+        canEdit={isOwner}
+        canDelete={isOwner}
+        onRestored={() => {
+          if (!dashboardId) return;
+          void fetchDashboard(dashboardId).then(applyDashboard).catch(() => undefined);
+        }}
+      />
+
       <TabModal
         opened={tabModalState.open}
         mode={tabModalState.mode}
