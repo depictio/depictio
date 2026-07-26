@@ -19,6 +19,9 @@ Managed with **uv** (`uv.lock`). No venv is checked in — CI does
 ```bash
 uv run pytest -xvs -n auto     # testpaths (pyproject.toml) = tests/{api,models,cli,unit}
 
+# Frontend typecheck (no JS unit-test runner exists in this repo)
+cd depictio/viewer && ./node_modules/.bin/tsc --noEmit
+
 # E2E (Playwright — the suite CI runs)
 cd depictio/tests/e2e-playwright && npx playwright test
 # targets depictio-viewer-dev; override with PLAYWRIGHT_BASE_URL / PLAYWRIGHT_API_URL
@@ -51,8 +54,14 @@ pre-commit run --all-files         # mandatory after all code changes
 ## Conventions & Rules
 
 ### Frontend
-- **Mantine 7** for all new components; the Dash/DMC frontend is fully removed
+- **Mantine 7** for all new components; the Dash/DMC frontend is fully removed.
+  Stale comments across the Python codebase still reference `depictio/dash/layouts/*` — ignore them.
+- `@iconify/react` for icons (`mdi:*`, `tabler:*`)
 - Never hardcode colors — prefer Mantine native theming, CSS variables as last resort
+- The whole API client is one file: `packages/depictio-react-core/src/api.ts`.
+  Prefer `authFetch` (token refresh + 401 retry) over the older `authHeaders()` helper.
+- No react-query and no JS unit tests in this tree — polling is manual `setInterval`,
+  frontend coverage is Playwright E2E only
 
 ### Environment & Config
 - Config source of truth: `depictio/api/v1/configs/settings_models.py`
@@ -86,6 +95,15 @@ pre-commit run --all-files         # mandatory after all code changes
 
 Route dispatch is plain regex in `depictio/viewer/src/main.tsx` +
 `src/builder/routeMatch.ts` — no router lib.
+- Each route prefix needs a matching handler in `depictio/api/main.py` returning `index.html`;
+  the dashboard prefixes are `:path` catch-alls, so query params need no backend change
+- Session in `localStorage['local-store']`, theme in `theme-store`
+
+### Dashboard Versioning
+- Every save snapshots the whole tab family into `dashboard_versions` (`dashboards_endpoints/versioning.py`)
+- Autosaves coalesce within an anchored window; an unchanged save writes nothing
+- Snapshots are content-only — `permissions`/`is_public`/`project_id` always come from the live doc
+- Retention is `version_store.prune_family()`, not a TTL index (a TTL cannot exempt pins)
 
 ### Screenshot System
 - Playwright drives the React SPA; composite targeting via `.react-grid-item`
@@ -102,6 +120,14 @@ Route dispatch is plain regex in `depictio/viewer/src/main.tsx` +
 
 ### Data Flow
 CLI ingests data → Delta/S3/MongoDB → API serves → React viewer renders
+
+### Data Collection Storage Families
+Six types (`table`, `jbrowse2`, `multiqc`, `image`, `geojson`, `phylogeny`) with three storage shapes:
+- **Delta** — `table`, `image` (manifest only), joined/transformed: Delta table at `s3://{bucket}/{dc_id}`
+- **Content-addressed objects** — `multiqc`: `s3://{bucket}/{dc_id}/{sha256}/multiqc.parquet`, immutable per ingest
+- **Opaque blobs** — `geojson` (fixed S3 key), `phylogeny` (bare filesystem path, never uploaded)
+
+`metatype` is a free-form unvalidated string — never key behaviour on it.
 
 ### Auth & Storage
 - JWT tokens, role-based access (users, groups, projects); single-user mode via

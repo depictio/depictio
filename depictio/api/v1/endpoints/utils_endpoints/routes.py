@@ -128,6 +128,9 @@ async def capabilities(current_user=Depends(get_current_user)):
     # Runtime state, not build state: advertised only when the flag is actually
     # on, so a client can trust the list instead of inferring capability from a
     # version number.
+    if settings.dashboard_versions.enabled:
+        features.append("dashboards.versions")
+
     if settings.jobs.enabled:
         features.append("jobs")
         if settings.ingestion.async_deltatable_upsert:
