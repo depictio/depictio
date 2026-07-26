@@ -217,108 +217,89 @@ body.sidebar-transitioning .react-grid-layout {
   border-radius: 6px;
 }
 
-/* ── Dashboard-wide loading bar ────────────────────────────────────────────
- * Determinate progress bar pinned just below the 50px header, reflecting how
- * many panels have finished loading (ready / total). The visible line is 3px;
- * the container is taller to give the hover tooltip a comfortable target.
- * Colours come from the Mantine primary/red tokens so it tracks light/dark.
- * See DashboardLoadingBar.tsx. */
-.depictio-loading-bar {
+/* ── Boot splash ───────────────────────────────────────────────────────────
+ * Shown while the route chunk downloads and while the dashboard document is in
+ * flight — phases with no panel list yet, so nothing can report a fraction.
+ *
+ * The mark and its animation are lifted from depictio-docs (`extra.css`:
+ * `triangular-pulse`, staggered per triangle). The seven triangles carry their
+ * own brand fills inside the SVG, so no colour is set here.
+ *
+ * `transform-box: fill-box` is what makes each triangle scale about its own
+ * centre; without it `transform-origin: center` resolves against the SVG
+ * viewport and the shapes swing instead of pulsing.
+ *
+ * Fixed and viewport-centred so both boot phases paint the mark in the same
+ * place and it doesn't jump when one hands over to the other.
+ * See BootSplash.tsx. */
+.depictio-boot-splash {
   position: fixed;
-  top: 50px;
-  left: 0;
-  right: 0;
-  z-index: 300;
-  height: 9px; /* hover zone; the drawn line is 3px at the top */
+  inset: 0;
+  z-index: 400;
+  display: grid;
+  place-items: center;
   pointer-events: none;
 }
-/* Full-height transparent strip = the tooltip hover target. */
-.depictio-loading-bar__track {
-  position: absolute;
-  inset: 0;
-  pointer-events: auto;
+.depictio-boot-splash svg {
+  width: 108px;
+  height: 108px;
+  overflow: visible;
 }
-/* The faint 3px line the fill runs along. */
-.depictio-loading-bar__track::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 3px;
-  background: color-mix(in srgb, var(--mantine-color-default-border) 45%, transparent);
+.depictio-boot-splash [id^='shape-'] {
+  transform-origin: center;
+  transform-box: fill-box;
+  animation: depictio-triangular-pulse 1s ease-in-out infinite;
 }
-.depictio-loading-bar__fill {
-  position: absolute;
-  top: 0;
-  left: 0;
-  height: 3px;
-  min-width: 2px;
-  border-radius: 0 3px 3px 0;
-  overflow: hidden; /* clip the sheen sweep to the filled width */
-  background: linear-gradient(
-    90deg,
-    var(--mantine-primary-color-7),
-    var(--mantine-primary-color-4)
-  );
-  box-shadow: 0 0 10px 0 color-mix(in srgb, var(--mantine-primary-color-5) 55%, transparent);
-  transition:
-    width 450ms cubic-bezier(0.22, 1, 0.36, 1),
-    background 300ms ease;
+/* Sequential stagger — the triangles chase each other around the mark rather
+   than breathing as one blob. Matches the docs' 0.1s step. */
+.depictio-boot-splash #shape-1 {
+  animation-delay: 0s;
 }
-/* Glossy sheen that sweeps across the filled width while actively loading. */
-.depictio-loading-bar__fill::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    color-mix(in srgb, var(--mantine-color-white) 55%, transparent),
-    transparent
-  );
-  transform: translateX(-100%);
+.depictio-boot-splash #shape-2 {
+  animation-delay: 0.1s;
 }
-/* While actively loading: sweep the sheen and pulse the glow. */
-.depictio-loading-bar[data-loading='true'] .depictio-loading-bar__fill::before {
-  animation: depictio-progress-sheen 1.4s ease-in-out infinite;
+.depictio-boot-splash #shape-3 {
+  animation-delay: 0.2s;
 }
-.depictio-loading-bar[data-loading='true'] .depictio-loading-bar__fill {
-  animation: depictio-progress-glow 1.3s ease-in-out infinite;
+.depictio-boot-splash #shape-4 {
+  animation-delay: 0.3s;
 }
-.depictio-loading-bar[data-error='true'] .depictio-loading-bar__fill {
-  background: linear-gradient(
-    90deg,
-    var(--mantine-color-red-7),
-    var(--mantine-color-red-4)
-  );
-  box-shadow: 0 0 10px 0 color-mix(in srgb, var(--mantine-color-red-5) 55%, transparent);
-  animation: none; /* a failed panel isn't "in progress" — hold steady */
+.depictio-boot-splash #shape-5 {
+  animation-delay: 0.4s;
 }
-@keyframes depictio-progress-sheen {
-  0% {
-    transform: translateX(-100%);
-  }
-  60%,
-  100% {
-    transform: translateX(100%);
-  }
+.depictio-boot-splash #shape-6 {
+  animation-delay: 0.5s;
 }
-@keyframes depictio-progress-glow {
+.depictio-boot-splash #shape-7 {
+  animation-delay: 0.6s;
+}
+@keyframes depictio-triangular-pulse {
   0%,
   100% {
-    box-shadow: 0 0 8px 0 color-mix(in srgb, var(--mantine-primary-color-5) 45%, transparent);
+    transform: scale(1);
   }
   50% {
-    box-shadow: 0 0 16px 1px color-mix(in srgb, var(--mantine-primary-color-4) 75%, transparent);
+    transform: scale(1.15);
   }
 }
+/* Reduced motion: softened, not frozen. A loading indicator that holds still
+   fails at the one thing it is there to say. The pulse is a small scale about
+   each shape's own centre — no travel, no rotation — so easing it down rather
+   than removing it keeps the signal without the trigger. */
 @media (prefers-reduced-motion: reduce) {
-  .depictio-loading-bar__fill,
-  .depictio-loading-bar__fill::before {
-    animation: none !important;
+  .depictio-boot-splash [id^='shape-'] {
+    animation-duration: 2.4s;
+    animation-name: depictio-triangular-pulse-subtle;
   }
-  .depictio-loading-bar__fill {
-    transition: none;
+  @keyframes depictio-triangular-pulse-subtle {
+    0%,
+    100% {
+      transform: scale(1);
+      opacity: 0.75;
+    }
+    50% {
+      transform: scale(1.05);
+      opacity: 1;
+    }
   }
 }

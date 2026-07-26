@@ -64,6 +64,10 @@ interface HeaderProps {
   isOwner?: boolean;
   /** Optional element rendered next to the action group (e.g. RealtimeIndicator). */
   rightExtras?: React.ReactNode;
+  /** Optional element rendered right after the title (e.g. the dashboard load
+   *  indicator). Replaces the bare `cardsLoading` spinner when provided, since
+   *  an indicator of its own already accounts for the card group. */
+  titleExtras?: React.ReactNode;
 }
 
 /**
@@ -89,6 +93,7 @@ const Header: React.FC<HeaderProps> = ({
   onSave,
   isOwner = true,
   rightExtras,
+  titleExtras,
 }) => {
   const { colorScheme } = useMantineColorScheme();
   const theme: 'light' | 'dark' = colorScheme === 'dark' ? 'dark' : 'light';
@@ -201,7 +206,7 @@ const Header: React.FC<HeaderProps> = ({
         >
           {titleText}
         </Title>
-        {cardsLoading && <Loader size="xs" />}
+        {titleExtras ?? (cardsLoading && <Loader size="xs" />)}
       </Group>
 
       {/* Spacer */}

@@ -1,6 +1,6 @@
 import React, { Suspense } from 'react';
 import ReactDOM from 'react-dom/client';
-import { Center, Loader, MantineProvider } from '@mantine/core';
+import { MantineProvider } from '@mantine/core';
 import { Notifications } from '@mantine/notifications';
 import { DatesProvider } from '@mantine/dates';
 import '@mantine/core/styles.css';
@@ -49,6 +49,7 @@ import {
   persistSession,
   validateSession,
 } from 'depictio-react-core';
+import BootSplash from './components/BootSplash';
 import { depictioTheme } from './theme';
 import { WalkthroughHost } from './walkthrough';
 
@@ -243,13 +244,7 @@ if (isBareRoot) {
           <DatesProvider settings={{ locale: 'en', firstDayOfWeek: 1 }}>
             <Notifications position="bottom-right" />
             <ErrorBoundary>
-              <Suspense
-                fallback={
-                  <Center h="100vh">
-                    <Loader />
-                  </Center>
-                }
-              >
+              <Suspense fallback={<BootSplash />}>
                 {resolveTree()}
               </Suspense>
             </ErrorBoundary>
