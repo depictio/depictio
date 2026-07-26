@@ -14,8 +14,11 @@ Default: `depictio-venv-dash-v3/bin/python`
 ```bash
 pytest depictio/tests/ -xvs -n auto
 
-# E2E (Cypress)
-cd depictio/tests/e2e-tests && /Users/tweber/.nvm/versions/node/v20.16.0/bin/npx cypress run --config screenshotsFolder=cypress/screenshots,videosFolder=cypress/videos,trashAssetsBeforeRuns=false,video=true,screenshotOnRunFailure=true
+# Frontend typecheck (no JS unit-test runner exists in this repo)
+cd depictio/viewer && ./node_modules/.bin/tsc --noEmit
+
+# E2E — Playwright is the current suite; Cypress is legacy and being migrated away from
+cd depictio/tests/e2e-playwright && npx playwright test
 ```
 
 ### Code Quality
@@ -28,18 +31,24 @@ pre-commit run --all-files                 # mandatory after all code changes
 ## Entry Points & Key Dependencies
 
 - **API**: `depictio/api/main.py` (FastAPI + Beanie ODM)
-- **Dash**: `depictio/dash/app.py` (Plotly Dash + DMC 2.0)
+- **Frontend**: `depictio/viewer/` (React SPA) + `packages/depictio-react-core/` (shared components + API client)
 - **CLI**: `depictio/cli/depictio_cli.py` (Typer)
 - **Models**: `depictio/models/` (Pydantic, shared across all components)
-- Key deps: FastAPI, Dash/Plotly, Beanie, Polars, Delta Lake, Pydantic
+- Key deps: FastAPI, React, Mantine, Plotly, Beanie, Polars, Delta Lake, Pydantic
 - Config: `pyproject.toml`, `pixi.toml`, `docker-compose.dev.yaml`
 
 ## Conventions & Rules
 
 ### Frontend
-- Use **DMC 2.0+** for all new components (detail in `depictio/dash/CLAUDE.md`)
-- Never hardcode colors — prefer DMC native theming, CSS variables as last resort
-- Dash v3: use `app.run()` not `run_server()`
+- **The Dash app is gone.** `depictio/dash/` no longer exists; the frontend is a React SPA.
+  Stale comments across the Python codebase still reference `depictio/dash/layouts/*` — ignore them.
+- **Mantine 7.14+** for all components; `@iconify/react` for icons (`mdi:*`, `tabler:*`)
+- Never hardcode colors — prefer Mantine theming, CSS variables as last resort
+- The whole API client is one file: `packages/depictio-react-core/src/api.ts`.
+  Prefer `authFetch` (token refresh + 401 retry) over the older `authHeaders()` helper.
+- No react-query and no JS unit tests in this tree — polling is manual `setInterval`,
+  frontend coverage is Playwright E2E only
+- `depictio/react-frontend/` is a dead scaffold — ignore it
 
 ### Environment & Config
 - Config source of truth: `depictio/api/v1/configs/settings_models.py`
@@ -62,10 +71,18 @@ pre-commit run --all-files                 # mandatory after all code changes
 
 ## Architecture Pointers
 
-### Dash Multi-App Architecture (3 apps)
-Management (`/dashboards`) | Viewer (`/dashboard/{id}`) | Editor (`/dashboard/{id}/edit`)
-- Shared stores in `depictio/dash/layouts/shared_app_shell.py:create_shared_stores()`
-- **Detail**: see `depictio/dash/CLAUDE.md`
+### React SPA (one bundle, three surfaces)
+Management (`/dashboards`) | Viewer (`/dashboard/{id}`) | Editor (`/dashboard-edit/{id}`)
+- Routing is `pathname.startsWith` dispatch in `depictio/viewer/src/main.tsx:resolveTree()` — no react-router
+- Each route prefix needs a matching handler in `depictio/api/main.py` returning `index.html`;
+  the dashboard prefixes are `:path` catch-alls, so query params need no backend change
+- Session in `localStorage['local-store']`, theme in `theme-store`
+
+### Dashboard Versioning
+- Every save snapshots the whole tab family into `dashboard_versions` (`dashboards_endpoints/versioning.py`)
+- Autosaves coalesce within an anchored window; an unchanged save writes nothing
+- Snapshots are content-only — `permissions`/`is_public`/`project_id` always come from the live doc
+- Retention is `version_store.prune_family()`, not a TTL index (a TTL cannot exempt pins)
 
 ### Screenshot System
 - Component-based composite targeting via `.react-grid-item`
@@ -78,7 +95,15 @@ Management (`/dashboards`) | Viewer (`/dashboard/{id}`) | Editor (`/dashboard/{i
 - Multi-tab dashboards: main tab = `dashboard_multiqc.json`, child tabs = separate JSON files
 
 ### Data Flow
-CLI ingests data → Delta/S3/MongoDB → API serves → Dash renders
+CLI ingests data → Delta/S3/MongoDB → API serves → React renders
+
+### Data Collection Storage Families
+Six types (`table`, `jbrowse2`, `multiqc`, `image`, `geojson`, `phylogeny`) with three storage shapes:
+- **Delta** — `table`, `image` (manifest only), joined/transformed: Delta table at `s3://{bucket}/{dc_id}`
+- **Content-addressed objects** — `multiqc`: `s3://{bucket}/{dc_id}/{sha256}/multiqc.parquet`, immutable per ingest
+- **Opaque blobs** — `geojson` (fixed S3 key), `phylogeny` (bare filesystem path, never uploaded)
+
+`metatype` is a free-form unvalidated string — never key behaviour on it.
 
 ### Auth & Storage
 - JWT tokens, role-based access (users, groups, projects)
