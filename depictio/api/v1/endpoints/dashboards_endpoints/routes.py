@@ -631,6 +631,24 @@ async def save_dashboard(
         # Convert dashboard_id to string to ensure proper JSON serialization
         dashboard_id_str = str(dashboard_id)
 
+        # Snapshot the tab family into the version ledger. Runs *after* the
+        # write and re-reads from Mongo, so the version holds exactly what a
+        # subsequent GET would return rather than whatever the client sent.
+        #
+        # `force_screenshot` is only ever set by the editor's explicit Save
+        # button — autosaves omit it — so it doubles as a free "the user meant
+        # this one" signal, marking a version that never coalesces away.
+        #
+        # capture_quietly swallows everything: a missing version is a lost
+        # undo step, a failed save is lost work.
+        from depictio.api.v1.endpoints.dashboards_endpoints.versioning import capture_quietly
+
+        capture_quietly(
+            dashboard_id,
+            kind="explicit" if force_screenshot else "auto",
+            author=current_user,
+        )
+
         # Auto-queue screenshot regeneration so /dashboards and any
         # other listing surface picks up the latest dashboard state.
         # The `_should_enqueue_screenshot` debounce throttles implicit

@@ -169,6 +169,12 @@ class MongoDBConfig(ServiceConfig):
         deltatables_collection: str = Field(default="deltatables")
         jbrowse_collection: str = Field(default="jbrowse")
         dashboards_collection: str = Field(default="dashboards")
+        dashboard_versions_collection: str = Field(default="dashboard_versions")
+        #: One counter document per dashboard family, holding the next `seq`.
+        #: Kept apart from the versions themselves so the allocation is a single
+        #: atomic $inc rather than a max()+1 read that two concurrent saves
+        #: could both win.
+        dashboard_version_counters_collection: str = Field(default="dashboard_version_counters")
         initialization_collection: str = Field(default="initialization")
         projects_collection: str = Field(default="projects")
         multiqc_collection: str = Field(default="multiqc")
@@ -826,6 +832,43 @@ class MonitoringConfig(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_MONITORING_")
 
 
+class DashboardVersionsConfig(BaseSettings):
+    """Version history for dashboards — the timeline, pins, and restore.
+
+    Retention is a prune function rather than a Mongo TTL index, for two
+    reasons: a TTL index cannot exempt pinned versions, and the thinning
+    policy below (keep one per day past a threshold) is application logic no
+    index can express. The prune runs opportunistically after a capture,
+    because this deployment has no Celery beat schedule — anything scheduled
+    would simply never fire.
+    """
+
+    enabled: bool = Field(default=True, description="Capture a version on each dashboard save")
+    coalesce_window_seconds: int = Field(
+        default=300,
+        description="How long consecutive autosaves by the same author fold into one "
+        "version. Anchored at the version's creation, not sliding, so a long "
+        "editing session yields a reviewable series rather than one entry.",
+    )
+    max_versions_per_family: int = Field(
+        default=100, description="Cap on retained unpinned autosave versions per dashboard family"
+    )
+    retention_days: int = Field(
+        default=90, description="Age cap for unpinned versions. Pinned versions never expire."
+    )
+    keep_daily_for_days: int = Field(
+        default=30,
+        description="Past this age, thin unpinned versions to the last one of each day",
+    )
+    max_snapshot_bytes: int = Field(
+        default=8 * 1024 * 1024,
+        description="Skip (and log) a capture larger than this rather than risk the "
+        "16 MB BSON document limit. A version must never break a save.",
+    )
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_DASHBOARD_VERSIONS_")
+
+
 class DashboardYAMLConfig(BaseSettings):
     """Configuration for YAML-based dashboard management.
 
@@ -1109,6 +1152,7 @@ class Settings(BaseSettings):
     backup: BackupConfig = Field(default_factory=BackupConfig)
     events: EventsConfig = Field(default_factory=EventsConfig)
     monitoring: MonitoringConfig = Field(default_factory=MonitoringConfig)
+    dashboard_versions: DashboardVersionsConfig = Field(default_factory=DashboardVersionsConfig)
     dashboard_yaml: DashboardYAMLConfig = Field(default_factory=DashboardYAMLConfig)
 
     # Observability & development

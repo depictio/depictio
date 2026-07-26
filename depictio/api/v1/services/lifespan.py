@@ -229,6 +229,21 @@ def start_core_indexes(should_initialize: bool) -> None:
         logger.warning(f"Worker {WORKER_ID}: Core index setup failed: {exc}")
 
 
+def start_dashboard_version_storage(should_initialize: bool) -> None:
+    """Create the dashboard version-ledger indexes. Never fails boot."""
+    if not (settings.dashboard_versions.enabled and should_initialize):
+        return
+    try:
+        from depictio.api.v1.endpoints.dashboards_endpoints.version_store import (
+            ensure_dashboard_version_storage,
+        )
+
+        ensure_dashboard_version_storage()
+        logger.info(f"Worker {WORKER_ID}: Dashboard version storage ready")
+    except Exception as exc:
+        logger.warning(f"Worker {WORKER_ID}: Dashboard version storage setup failed: {exc}")
+
+
 def start_monitoring_storage(should_initialize: bool) -> None:
     """Set up the monitoring ledger.
 
@@ -341,6 +356,7 @@ async def lifespan(_app: FastAPI):
     start_yaml_services(should_initialize)
     await start_event_services(should_initialize)
     start_core_indexes(should_initialize)
+    start_dashboard_version_storage(should_initialize)
     start_monitoring_storage(should_initialize)
     start_multiqc_prewarm(should_initialize)
 
