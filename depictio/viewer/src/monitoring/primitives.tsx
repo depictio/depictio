@@ -72,10 +72,58 @@ export const Field: React.FC<{ label: string; children: React.ReactNode }> = ({
     <Text size="10px" c="dimmed" tt="uppercase" fw={700} lts={0.4}>
       {label}
     </Text>
-    <Text size="xs" style={{ lineHeight: 1.35 }}>
+    {/* A div, not the default <p>: callers pass Code and Badge, which render
+        block elements, and a block inside a paragraph is invalid HTML that
+        React reports as a nesting error at runtime. */}
+    <Text component="div" size="xs" style={{ lineHeight: 1.35 }}>
       {children}
     </Text>
   </Box>
+);
+
+/** A long identifier on its own full-width row: caption, then the value in
+ *  monospace, ellipsized to the available width and click-to-copy.
+ *
+ *  Identifiers do not belong in the same grid as PIDs and timestamps — a 60
+ *  character agent id in a quarter-width cell is unreadable *and* makes every
+ *  short field beside it column-align to nothing. Here it gets the full width,
+ *  and the value that matters (the one you paste elsewhere) is one click away. */
+export const IdRow: React.FC<{ label: string; value?: string | null }> = ({ label, value }) => (
+  <Group gap="xs" wrap="nowrap">
+    <Text size="10px" c="dimmed" tt="uppercase" fw={700} lts={0.4} w={78} style={{ flexShrink: 0 }}>
+      {label}
+    </Text>
+    {value ? (
+      <CopyButton value={value} timeout={1500}>
+        {({ copied, copy }) => (
+          <Tooltip
+            label={copied ? 'Copied!' : `${value}  (click to copy)`}
+            withArrow
+            multiline
+            maw={560}
+          >
+            <Code
+              fz="10px"
+              onClick={copy}
+              style={{
+                cursor: 'pointer',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                minWidth: 0,
+              }}
+            >
+              {value}
+            </Code>
+          </Tooltip>
+        )}
+      </CopyButton>
+    ) : (
+      <Text size="xs" c="dimmed">
+        —
+      </Text>
+    )}
+  </Group>
 );
 
 export const TimeText: React.FC<{ iso?: string | null }> = ({ iso }) => (

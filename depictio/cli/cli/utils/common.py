@@ -1,6 +1,7 @@
 import atexit
 import os
 from datetime import datetime
+from pathlib import Path
 
 import httpx
 import typer
@@ -78,11 +79,30 @@ def generate_api_headers(CLI_config: CLIConfig | dict) -> dict:
 
 
 def cli_version() -> str | None:
-    """Installed depictio-cli version, or ``None`` if it can't be determined.
+    """Version of the depictio-cli that is *running*, or ``None`` if unknowable.
 
-    Best-effort provenance for the monitoring ledger and Delta commit metadata —
-    never raises.
+    The repository ``VERSION`` file wins when it is next to this source tree,
+    because that is the file bump2version keeps in step with the code — the same
+    one the API reports. ``importlib.metadata`` answers a different question:
+    what was recorded when the distribution was last installed. In a development
+    checkout those diverge silently and indefinitely, and since this string is
+    stamped into Delta commit metadata and every monitoring run, the provenance
+    then names a version that never ran.
+
+    A released wheel has no ``VERSION`` beside it, so it falls through to the
+    install record, which is authoritative there.
+
+    Best-effort provenance — never raises.
     """
+    # .../<repo>/depictio/cli/cli/utils/common.py -> <repo>/VERSION
+    version_file = Path(__file__).resolve().parents[4] / "VERSION"
+    try:
+        version = version_file.read_text(encoding="utf-8").strip()
+        if version:
+            return version
+    except OSError:
+        pass
+
     try:
         from importlib.metadata import PackageNotFoundError
         from importlib.metadata import version as _pkg_version

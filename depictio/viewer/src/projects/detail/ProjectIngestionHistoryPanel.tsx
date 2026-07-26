@@ -32,7 +32,7 @@ import {
 
 import { absTime, formatDuration, matchesQuery, spanMs, stepTally } from '../../monitoring/format';
 import { Field, PaneHeader, SearchInput, TimeText } from '../../monitoring/primitives';
-import { ACCORDION_STYLES, statusColor } from '../../monitoring/tokens';
+import { ACCORDION_CLASSNAMES, ACCORDION_STYLES, statusColor } from '../../monitoring/tokens';
 import { usePolling } from '../../monitoring/usePolling';
 import { IngestionStepTimeline } from '../../monitoring/IngestionStepTimeline';
 import { TriggerBadge } from '../../monitoring/TriggerBadge';
@@ -125,6 +125,7 @@ const ProjectIngestionHistoryPanel: React.FC<{
           value={open}
           onChange={setOpen}
           styles={ACCORDION_STYLES}
+            classNames={ACCORDION_CLASSNAMES}
         >
           {filtered.map((r) => (
             <Accordion.Item key={r.run_id} value={r.run_id}>

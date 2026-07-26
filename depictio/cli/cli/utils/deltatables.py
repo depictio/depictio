@@ -622,6 +622,25 @@ def client_aggregate_data(
         user_email=getattr(CLI_config.user, "email", None),
     )
 
+    # A dry run stops here, at the last point before anything leaves the client.
+    # The guard sits at the write itself rather than in the callers because
+    # everything above is pure computation — the scan diagnostics, the
+    # partitioning decision and the row counts are exactly what the run is meant
+    # to report, and they are only knowable by getting this far.
+    if command_parameters.get("dry_run"):
+        scope = f"{len(run_tags)} run(s) via {write_mode}" if partition else "the whole table"
+        logger.info(
+            f"DRY RUN: would write {aggregated_df.height} row(s) to {destination_prefix}, "
+            f"replacing {scope}. Nothing was written."
+        )
+        return {
+            "result": "success",
+            "message": (
+                f"DRY RUN: {aggregated_df.height} row(s) would be written to "
+                f"{destination_prefix} ({scope})."
+            ),
+        }
+
     result = write_delta_table(
         aggregated_df=aggregated_df,
         destination_file=destination_prefix,

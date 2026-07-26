@@ -158,6 +158,7 @@ export {
   fetchIngestionRuns,
   fetchIngestionRun,
   fetchCliAgents,
+  triggerCliAgentRun,
   fetchProjectIngestionRuns,
   fetchIngestionTriggerStatus,
   triggerProjectIngestion,

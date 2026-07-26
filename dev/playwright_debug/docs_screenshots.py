@@ -63,6 +63,8 @@ class ShotContext:
     dashboard_id: str
     output_dir: Path
     theme: str = "light"
+    #: Project name used to pick the ingestion row of a watcher-driven cycle.
+    watch_project_name: str = "Watcher Demo"
 
 
 ShotFn = Callable[[ShotContext], Awaitable[None]]
@@ -373,6 +375,34 @@ async def _mon_ingestion_live(ctx: ShotContext) -> None:
     await _mon_expand_shot(ctx, "Viralrecon", _rb(f"admin_monitoring_ingestion_live_{ctx.theme}"))
 
 
+@register("admin_monitoring_agents")
+async def _mon_agents(ctx: ShotContext) -> None:
+    """Agents pane with the first watcher expanded: fields, "Run now", watched paths.
+
+    Needs a live `depictio data watch` registered against the stack — an empty
+    registry produces an empty-state shot rather than a failure.
+    """
+    await _open_monitoring(ctx, "Agents")
+    control = ctx.page.locator("button.mantine-Accordion-control").first
+    await control.wait_for(state="visible", timeout=10_000)
+    await control.click()
+    await ctx.page.wait_for_timeout(600)
+    await _page_shot_current(ctx, _rb(f"admin_monitoring_agents_{ctx.theme}"))
+
+
+@register("admin_monitoring_ingestion_watch")
+async def _mon_ingestion_watch(ctx: ShotContext) -> None:
+    """Ingestion detail for a watcher cycle: trigger badge/reason + per-phase steps.
+
+    Matches on the project name of the watched project, so a stack where that
+    project has never been watched will pick the wrong row — pass
+    `--watch-project-name` to point it at whichever project has watch runs.
+    """
+    await _mon_expand_shot(
+        ctx, ctx.watch_project_name, _rb(f"admin_monitoring_ingestion_watch_{ctx.theme}")
+    )
+
+
 # ---- Real-time events shots -----------------------------------------------
 # Driven against a dashboard in a project with `realtime.enabled: true`. The
 # event log lives in localStorage (`depictio.realtime.journal`), so a fresh
@@ -551,6 +581,11 @@ def run(
         "--output-root",
         help="Parent dir for <version>/ subfolders.",
     ),
+    watch_project_name: str = typer.Option(
+        "Watcher Demo",
+        "--watch-project-name",
+        help="Project name whose watcher-driven ingestion run should be captured.",
+    ),
     theme: str = typer.Option(
         "light",
         "--theme",
@@ -597,6 +632,7 @@ def run(
             viewport_height,
             headless,
             theme,
+            watch_project_name,
             journal,
             seed_auth,
         )
@@ -613,6 +649,7 @@ async def _run(
     vh: int,
     headless: bool,
     theme: str,
+    watch_project_name: str,
     journal: Path | None = None,
     seed_auth: bool = True,
 ) -> None:
@@ -648,6 +685,7 @@ async def _run(
             dashboard_id=dashboard_id,
             output_dir=output_dir,
             theme=theme,
+            watch_project_name=watch_project_name,
         )
         for name in names:
             typer.echo(f"• {name}")

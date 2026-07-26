@@ -698,6 +698,36 @@ def api_agent_heartbeat(CLI_config: CLIConfig, agent: dict) -> bool:
         return True
 
 
+def api_agent_claim_trigger(CLI_config: CLIConfig, agent_id: str) -> bool | None:
+    """Claim a "Run now" pressed in the web UI. Best-effort; never raises.
+
+    ``True`` means a run was requested and is now this process's to perform —
+    the server cleared it atomically, so it will not be handed out twice.
+
+    ``None`` means the server has no such route (an older API), so the caller
+    can stop polling instead of issuing a doomed request every few seconds for
+    the lifetime of the watcher. An unknown agent is not a 404 here; it answers
+    "nothing pending", which is why the two cases can be told apart.
+
+    Any other failure returns ``False``: a watcher that cannot reach the server
+    should keep watching on its own triggers, not stop.
+    """
+    try:
+        url = f"{CLI_config.api_base_url}/depictio/api/v1/monitoring/agents/{agent_id}/claim"
+        response = get_http_client().post(
+            url, headers=generate_api_headers(CLI_config), timeout=10.0
+        )
+        if response.status_code == 404:
+            return None
+        if response.status_code >= 400:
+            logger.debug(f"Trigger claim rejected (HTTP {response.status_code})")
+            return False
+        return bool(response.json().get("run_requested"))
+    except Exception as exc:
+        logger.debug(f"Trigger claim failed (non-fatal): {exc}")
+        return False
+
+
 def api_agent_deregister(CLI_config: CLIConfig, agent_id: str) -> None:
     """Remove an agent on clean shutdown. Best-effort; never raises.
 

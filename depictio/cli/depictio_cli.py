@@ -83,13 +83,12 @@ def display_depictio_cli_logo() -> None:
         "pink": "#E6779F",
     }
 
-    from importlib.metadata import PackageNotFoundError
-    from importlib.metadata import version as _pkg_version
+    # Same resolution as the version stamped into Delta commits and monitoring
+    # records, so the banner cannot claim one version while the provenance
+    # records another.
+    from depictio.cli.cli.utils.common import cli_version as _resolve_cli_version
 
-    try:
-        cli_version = _pkg_version("depictio-cli")
-    except PackageNotFoundError:
-        cli_version = "dev"
+    cli_version = _resolve_cli_version() or "dev"
 
     # Pre-rendered favicon (20x8 chars), generated offline from the logo PNG by
     # snapping each pixel to the nearest brand colour - sharp wedge edges without

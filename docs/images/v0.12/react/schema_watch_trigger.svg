@@ -1,0 +1,104 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="540" viewBox="0 0 1180 540">
+  <rect width="1180" height="540" fill="#ffffff"/>
+  <text x="46.0" y="52.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="25" fill="#1e1e1e" text-anchor="start" font-weight="normal">“Run now”: a request the server cannot deliver</text>
+  <text x="46.0" y="78.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="15" fill="#5c5c5c" text-anchor="start" font-weight="normal">the watcher pulls, so it works from a login node the API can never reach</text>
+  <rect x="46.0" y="118.0" width="268.0" height="92.0" rx="6" fill="#e7f5ff"/>
+  <path d="M46.1,117.8 C134.8,116.9 225.1,116.6 313.3,118.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M45.9,118.5 C133.9,117.8 223.3,116.7 313.4,117.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M314.8,117.3 C314.4,150.1 314.2,179.0 314.6,209.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M313.5,118.1 C312.9,147.4 313.4,180.3 314.2,209.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M314.3,209.9 C224.8,208.6 133.9,209.1 45.7,210.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M313.6,210.1 C224.5,209.4 136.3,210.6 46.0,210.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M45.9,210.4 C46.7,178.7 47.5,147.4 45.4,118.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M46.6,209.7 C44.5,179.9 46.8,148.9 46.3,118.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="180.0" y="145.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">Agents pane</text>
+  <text x="180.0" y="169.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">Admin → Log &amp; Task</text>
+  <text x="180.0" y="190.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">press “Run now”</text>
+  <rect x="430.0" y="118.0" width="300.0" height="92.0" rx="6" fill="#fff9db"/>
+  <path d="M430.0,118.3 C530.3,117.9 631.1,119.4 729.3,118.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M429.8,118.3 C530.5,119.6 631.0,117.3 729.2,117.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M729.4,117.6 C728.9,147.4 728.6,180.2 729.8,210.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M730.5,118.6 C728.7,148.5 730.2,180.6 729.6,209.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M729.5,209.6 C629.5,211.2 531.5,208.9 429.6,210.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M729.8,210.1 C630.3,209.2 528.4,209.7 430.7,210.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M430.6,210.4 C430.0,179.7 430.6,147.2 430.6,118.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M429.3,209.3 C429.7,179.0 428.7,149.1 429.5,117.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="580.0" y="145.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">API</text>
+  <text x="580.0" y="169.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">POST …/agents/…/trigger</text>
+  <text x="580.0" y="190.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">records a flag, not a push</text>
+  <rect x="846.0" y="118.0" width="288.0" height="92.0" rx="6" fill="#ebfbee"/>
+  <path d="M845.4,117.8 C941.5,116.6 1036.4,116.9 1133.2,118.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M845.8,117.4 C942.4,116.9 1037.2,117.5 1134.6,118.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1133.7,117.6 C1133.9,148.6 1132.7,178.1 1134.5,209.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1134.1,117.2 C1132.5,150.1 1134.1,178.2 1134.0,210.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1133.5,210.4 C1039.2,210.6 941.2,209.6 846.1,210.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1134.6,210.5 C1037.5,209.1 943.0,211.6 846.5,210.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M845.2,209.6 C845.1,179.4 845.5,147.2 845.6,118.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M846.7,209.8 C847.5,179.2 847.4,150.2 845.6,117.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="990.0" y="145.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">What it leaves behind</text>
+  <text x="990.0" y="169.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">a run in Ingestion → History</text>
+  <text x="990.0" y="190.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">trigger “ui”, not “watch”</text>
+  <rect x="430.0" y="368.0" width="300.0" height="104.0" rx="6" fill="#f3f0ff"/>
+  <path d="M430.5,368.0 C529.0,367.1 630.4,369.3 730.2,368.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M430.4,368.0 C528.7,368.5 631.3,368.9 729.5,368.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M729.8,368.7 C729.5,403.6 731.5,437.0 730.4,471.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M729.4,368.5 C728.8,401.6 731.3,438.3 730.8,472.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M730.8,472.2 C629.5,472.2 528.8,470.4 430.0,472.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M729.6,471.7 C629.8,473.2 531.0,471.1 429.6,472.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M429.8,471.9 C429.2,437.1 428.8,404.0 430.1,368.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M430.0,471.2 C429.7,438.7 430.0,402.8 429.9,367.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="580.0" y="395.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">depictio data watch</text>
+  <text x="580.0" y="419.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">polls …/claim every 5s</text>
+  <text x="580.0" y="440.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">claim clears it atomically</text>
+  <text x="580.0" y="461.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">→ honoured exactly once</text>
+  <rect x="846.0" y="368.0" width="288.0" height="104.0" rx="6" fill="#ffe8cc"/>
+  <path d="M846.4,368.1 C940.4,369.0 1037.0,367.9 1133.7,368.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M845.6,367.6 C942.2,368.9 1036.7,368.2 1134.4,368.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1134.2,368.0 C1134.2,403.5 1135.3,437.2 1134.0,472.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1134.3,368.6 C1133.8,402.8 1133.9,438.7 1134.7,471.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1133.4,471.9 C1038.2,473.4 943.1,470.8 845.3,471.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1133.4,472.3 C1036.6,472.5 942.9,473.3 846.3,471.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M845.8,472.0 C847.2,438.8 845.1,404.1 846.8,368.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M845.5,471.7 C844.9,437.1 846.0,402.2 846.4,367.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="990.0" y="395.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">One cycle</text>
+  <text x="990.0" y="419.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">scan → process</text>
+  <text x="990.0" y="440.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">steps stream in live</text>
+  <path d="M322.2,164.0 C354.9,163.8 385.4,163.3 419.1,165.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M321.1,164.6 C355.8,165.9 385.8,163.1 419.5,163.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M419.6,164.4 C415.7,162.6 412.4,159.1 407.7,157.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M419.6,164.4 C415.1,165.3 412.1,168.2 407.8,170.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M537.9,219.7 C536.3,266.8 536.3,312.1 538.1,356.9" fill="none" stroke="#c92a2a" stroke-width="1.7" stroke-linecap="round" stroke-dasharray="9 7"/>
+  <path d="M537.2,219.3 C537.1,263.9 538.1,309.6 537.1,355.4" fill="none" stroke="#c92a2a" stroke-width="1.7" stroke-linecap="round" stroke-dasharray="9 7"/>
+  <path d="M518.0,279.6 C530.9,272.9 545.3,266.2 557.8,259.4" fill="none" stroke="#c92a2a" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M517.6,260.0 C530.7,265.5 545.2,273.5 558.5,279.5" fill="none" stroke="#c92a2a" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="506.0" y="250.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#c92a2a" text-anchor="end" font-weight="normal">no route in</text>
+  <path d="M625.8,356.0 C627.3,310.4 626.0,266.7 626.4,221.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M625.8,355.7 C625.4,312.0 626.8,265.9 625.1,219.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M625.6,220.3 C623.0,224.6 621.1,227.6 619.8,232.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M625.7,219.9 C627.8,223.6 630.0,228.2 632.3,232.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="640.0" y="252.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="15" fill="#1e1e1e" text-anchor="start" font-weight="normal">claim</text>
+  <text x="640.0" y="272.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="13" fill="#5c5c5c" text-anchor="start" font-weight="normal">(a pull)</text>
+  <path d="M737.6,419.7 C772.6,420.2 802.3,421.9 835.0,419.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M737.0,419.5 C770.6,420.0 802.1,420.0 835.2,419.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M836.1,420.0 C831.0,416.9 827.4,415.1 823.9,413.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M836.5,419.6 C832.3,422.9 827.5,424.0 823.9,426.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M990.5,356.6 C988.2,312.0 991.6,265.8 989.3,220.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M990.2,356.8 C990.0,312.0 991.2,266.6 990.4,220.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M989.6,220.3 C987.3,223.2 984.9,228.0 983.5,232.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M990.3,220.2 C992.4,224.5 994.4,227.2 996.6,232.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="974.0" y="252.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="13" fill="#5c5c5c" text-anchor="end" font-weight="normal">the Delta commit</text>
+  <text x="974.0" y="272.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="13" fill="#5c5c5c" text-anchor="end" font-weight="normal">carries the run id</text>
+  <path d="M423.4,401.7 C400.4,400.8 376.7,401.3 352.3,401.6" fill="none" stroke="#5c5c5c" stroke-width="1.5" stroke-linecap="round"/>
+  <path d="M424.0,402.3 C400.7,403.3 376.0,401.7 352.4,402.2" fill="none" stroke="#5c5c5c" stroke-width="1.5" stroke-linecap="round"/>
+  <path d="M352.3,401.7 C352.4,415.5 351.0,430.6 352.1,445.3" fill="none" stroke="#5c5c5c" stroke-width="1.5" stroke-linecap="round"/>
+  <path d="M352.2,401.7 C350.8,416.0 352.5,431.9 352.0,446.0" fill="none" stroke="#5c5c5c" stroke-width="1.5" stroke-linecap="round"/>
+  <path d="M352.7,446.6 C375.9,444.9 401.1,445.2 423.3,445.9" fill="none" stroke="#5c5c5c" stroke-width="1.5" stroke-linecap="round"/>
+  <path d="M351.6,446.6 C376.9,447.3 399.9,445.4 423.6,446.1" fill="none" stroke="#5c5c5c" stroke-width="1.5" stroke-linecap="round"/>
+  <text x="340.0" y="412.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="end" font-weight="normal">heartbeat</text>
+  <text x="340.0" y="432.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="13" fill="#5c5c5c" text-anchor="end" font-weight="normal">every 60s</text>
+  <text x="340.0" y="452.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="13" fill="#5c5c5c" text-anchor="end" font-weight="normal">(TTL 5 min)</text>
+  <text x="46.0" y="232.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="start" font-weight="normal">server</text>
+  <text x="46.0" y="348.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="start" font-weight="normal">the machine with the data</text>
+  <path d="M46.6,300.0 C407.2,300.1 773.1,298.5 1134.8,300.4" fill="none" stroke="#adb5bd" stroke-width="1.2" stroke-linecap="round" stroke-dasharray="9 7"/>
+  <text x="1134.0" y="514.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="end" font-weight="normal">a request while a cycle runs is picked up when that cycle ends</text>
+</svg>

@@ -39,6 +39,7 @@ import time
 from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
@@ -94,6 +95,19 @@ class WatchConfig:
     #: Failure backoff bounds. A broken server must not be hammered.
     backoff_initial_seconds: float = 30.0
     backoff_max_seconds: float = 900.0
+    #: How often to re-report the current status while nothing is happening.
+    #: The server expires an agent after DEPICTIO_MONITORING_AGENT_TTL_SECONDS
+    #: (300s) and the UI reddens it after 180s, both measured from the last
+    #: report — so a watcher that only reported on state changes was declared
+    #: wedged, then evicted, while sitting healthily in its poll loop. Several
+    #: beats inside both windows, so one dropped beat changes nothing.
+    heartbeat_interval_seconds: float = 60.0
+    #: How often to ask the server whether someone pressed "Run now" in the UI.
+    #: Short, because this one is a person waiting for a button to do something;
+    #: the request is cheap (a single conditional update that writes nothing
+    #: when no run is pending) and it is only issued while the watcher is
+    #: otherwise idle.
+    command_poll_interval_seconds: float = 5.0
 
 
 @dataclass(slots=True)
@@ -386,7 +400,23 @@ class ProjectWatcher:
         #: Optional telemetry sink. Called with (status, extra) on each state
         #: change; a watcher nobody can see is a watcher nobody can debug.
         self.on_status: Callable[[str, dict], None] | None = None
+        #: Optional command source. Returns True when a run has been requested
+        #: from outside — today, the "Run now" button on the agent card. The
+        #: watcher pulls rather than being pushed to, because it typically runs
+        #: on a machine the server cannot open a connection to.
+        self.on_poll_command: Callable[[], bool] | None = None
+        #: Why the cycle now in flight was started, and under which trigger kind
+        #: it should be recorded. Read by the ingestion callback, which owns the
+        #: monitoring record but not the reason it exists.
+        self.trigger_kind: str = "watch"
+        self.trigger_reason: str | None = None
         self._last_run_id: str | None = None
+        self._last_trigger_at: datetime | None = None
+        self._last_command_poll: float = now()
+        #: Status last published, so the keepalive beat repeats the truth rather
+        #: than asserting "idle" over an error the loop is still backing off from.
+        self._status = "idle"
+        self._last_report_at: float | None = None
 
         if self.backend in ("polling", "both") and (
             config.debounce_seconds < config.poll_interval_seconds
@@ -450,18 +480,77 @@ class ProjectWatcher:
             return "full"
         return "incremental"
 
+    def note_run(self, run_id: str | None) -> None:
+        """Adopt the monitoring run id the cycle callback just opened.
+
+        The watcher schedules cycles but does not own the monitoring record —
+        ``run_cycle`` opens it — so the id has to come back in, otherwise the
+        agent card can never link to the run it is executing.
+        """
+        if run_id:
+            self._last_run_id = run_id
+
     def _report(self, status: str, **extra: object) -> None:
         """Publish a status change, if anyone is listening. Never raises."""
+        self._status = status
+        self._last_report_at = self.now()
         if self.on_status is None:
             return
+        payload = {
+            "runs_total": self._cycles,
+            "last_run_id": self._last_run_id,
+            "last_trigger_at": self._last_trigger_at,
+            **extra,
+        }
         try:
-            self.on_status(status, {"runs_total": self._cycles, **extra})
+            self.on_status(status, payload)
         except Exception as exc:  # noqa: BLE001 - telemetry must not break the loop
             logger.debug(f"Status report failed (non-fatal): {exc}")
 
-    def _execute(self, paths: set[str]) -> None:
+    def _heartbeat(self) -> None:
+        """Re-publish the current status if the last report is going stale.
+
+        Liveness and state changes are different questions, and the server can
+        only answer the first from the timestamp of the last report. A quiet
+        watcher makes no state changes for hours, so without this it looks
+        identical to one whose process died.
+        """
+        if self._last_report_at is None:
+            return
+        if self.now() - self._last_report_at < self.config.heartbeat_interval_seconds:
+            return
+        self._report(self._status)
+
+    def _poll_command(self) -> bool:
+        """Whether a run has been requested from outside since the last check.
+
+        Rate-limited to ``command_poll_interval_seconds`` rather than run on
+        every loop tick, which turns over once a second. Never raises: an
+        unreachable server must cost the watcher nothing but this feature.
+        """
+        if self.on_poll_command is None:
+            return False
+        if self.now() - self._last_command_poll < self.config.command_poll_interval_seconds:
+            return False
+        self._last_command_poll = self.now()
+        try:
+            return bool(self.on_poll_command())
+        except Exception as exc:  # noqa: BLE001 - a remote button must not kill the loop
+            logger.debug(f"Command poll failed (non-fatal): {exc}")
+            return False
+
+    def _execute(
+        self, paths: set[str], *, trigger: str = "watch", reason: str | None = None
+    ) -> None:
         mode = self._mode_for_cycle()
+        self.trigger_kind = trigger
+        self.trigger_reason = reason or (
+            f"{len(paths)} settled change(s)" if paths else "scheduled poll"
+        )
         self._cycles += 1
+        # Wall-clock, not the injected monotonic clock: this one is rendered to
+        # a person in the admin UI, not used for interval arithmetic.
+        self._last_trigger_at = datetime.now()
         self._report("ingesting", mode=mode, changed_paths=len(paths))
         try:
             succeeded = self.run_cycle(mode, paths)
@@ -488,7 +577,7 @@ class ProjectWatcher:
     def run(self) -> int:
         """Watch until stopped. Returns a process exit code."""
         if self.config.once:
-            self._execute(set())
+            self._execute(set(), reason="single --once pass")
             return 0 if self._consecutive_failures == 0 else 1
 
         observer = None
@@ -501,6 +590,11 @@ class ProjectWatcher:
 
         self.prime()
         last_poll = self.now()
+        # The caller registers the agent just before run(); treat that as the
+        # first beat so the keepalive clock starts even for a watcher that never
+        # reaches a cycle — which is precisely the one that looked dead.
+        if self._last_report_at is None:
+            self._last_report_at = self.now()
 
         try:
             while not self._stop:
@@ -509,7 +603,17 @@ class ProjectWatcher:
                         self.poll_once()
                         last_poll = self.now()
 
-                if self.accumulator.ready():
+                if self._poll_command():
+                    # Take whatever has settled along with it: the cycle rescans
+                    # everything regardless, so running the request and the
+                    # pending changes as one pass beats running two.
+                    logger.info("Run requested from the web UI; starting a cycle.")
+                    self._execute(
+                        self.accumulator.drain(),
+                        trigger="ui",
+                        reason="requested from the web UI",
+                    )
+                elif self.accumulator.ready():
                     paths = self.accumulator.drain()
                     # Events arriving while this runs land in the accumulator and
                     # are coalesced into exactly one follow-up pass by the next
@@ -520,6 +624,7 @@ class ProjectWatcher:
                     logger.info(f"Reached --watch-max-runs={self.config.max_runs}; stopping.")
                     break
 
+                self._heartbeat()
                 self.sleep(1.0)
         finally:
             if observer is not None:

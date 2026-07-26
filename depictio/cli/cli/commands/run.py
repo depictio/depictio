@@ -27,7 +27,11 @@ from depictio.cli.cli.utils.rich_utils import (
     rich_print_section_separator,
 )
 from depictio.cli.cli.utils.scan import scan_project_files
-from depictio.cli.cli.utils.step_reporter import StepReporter
+from depictio.cli.cli.utils.step_reporter import (
+    StepReporter,
+    ingestion_data_collections,
+    redacted_command_line,
+)
 from depictio.cli.cli_logging import logger
 from depictio.models.s3_utils import S3_storage_checks
 from depictio.models.utils import convert_model_to_dict
@@ -35,74 +39,6 @@ from depictio.models.utils import convert_model_to_dict
 #: Moved to cli.utils.common so the Delta commit-metadata builder can stamp the
 #: same value without importing from a command module.
 _cli_version = cli_version
-
-
-# CLI options whose *value* is a secret and must never reach the monitoring ledger.
-_SENSITIVE_OPTS = {"--provisioning-key"}
-
-
-def _redacted_command_line() -> str | None:
-    """Best-effort reconstruction of the CLI invocation with secrets redacted.
-
-    Renders as ``depictio-cli <args…>`` (argv[0] normalized to the entrypoint
-    name) and masks the value of any sensitive option. Never raises.
-    """
-    try:
-        import sys
-
-        out = ["depictio-cli"]
-        redact_next = False
-        for arg in sys.argv[1:]:
-            if redact_next:
-                out.append("***")
-                redact_next = False
-                continue
-            key = arg.split("=", 1)[0]
-            if key in _SENSITIVE_OPTS:
-                out.append(f"{key}=***" if "=" in arg else arg)
-                redact_next = "=" not in arg
-                continue
-            out.append(arg)
-        return " ".join(out)
-    except Exception:
-        return None
-
-
-def _ingestion_data_collections(project_config) -> list[dict]:
-    """Per-DC summary (tag / type / format) + the local scan paths the CLI
-    resolved, walked from the validated project config. Best-effort; never raises."""
-    out: list[dict] = []
-    try:
-        for wf in getattr(project_config, "workflows", None) or []:
-            dl = getattr(wf, "data_location", None)
-            locations = [str(x) for x in (getattr(dl, "locations", None) or [])] if dl else []
-            for dc in getattr(wf, "data_collections", None) or []:
-                cfg = getattr(dc, "config", None)
-                scan = getattr(cfg, "scan", None) if cfg else None
-                mode = getattr(scan, "mode", None) if scan else None
-                params = getattr(scan, "scan_parameters", None) if scan else None
-                if mode == "single":
-                    pattern = getattr(params, "filename", None)
-                elif mode == "recursive":
-                    rc = getattr(params, "regex_config", None)
-                    pattern = getattr(rc, "pattern", None) if rc else None
-                else:
-                    pattern = None
-                dcsp = getattr(cfg, "dc_specific_properties", None) if cfg else None
-                out.append(
-                    {
-                        "tag": getattr(dc, "data_collection_tag", None) or "",
-                        "type": getattr(cfg, "type", None) if cfg else None,
-                        "format": getattr(dcsp, "format", None) if dcsp else None,
-                        "scan_mode": mode,
-                        "scan_pattern": pattern,
-                        "locations": locations,
-                        "file_count": None,
-                    }
-                )
-    except Exception:
-        return out
-    return out
 
 
 def _write_provisioned_cli_config(base_raw_config: dict, provision: dict) -> str:
@@ -659,7 +595,7 @@ def register_run_command(app: typer.Typer):
                     command="run",
                     project_name=getattr(_proj, "name", None),
                     cli_version=_cli_version(),
-                    command_line=_redacted_command_line(),
+                    command_line=redacted_command_line(),
                     cli_config_path=str(CLI_config_path) if CLI_config_path else None,
                     project_config_path=str(project_config_path) or None,
                     data_root=str(data_root) if data_root else None,
@@ -1093,7 +1029,7 @@ def register_run_command(app: typer.Typer):
                 status=final_status,
                 steps=reporter.steps,
                 project_id=resolved_project_id,
-                data_collections=_ingestion_data_collections(locals().get("project_config")),
+                data_collections=ingestion_data_collections(locals().get("project_config")),
             )
 
         # A run that did not complete every step is a failure for automation
