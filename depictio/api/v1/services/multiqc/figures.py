@@ -408,9 +408,10 @@ def create_multiqc_plot(
     baseline.
     """
     # ``multiqc`` is needed for the reparse-retry diagnostics below.
-    # ``build_multiqc_figure`` registers the mantine_light/mantine_dark Plotly
-    # templates it uses, so the worker prerender path (no endpoint-level guard)
-    # is covered without an explicit ``ensure_mantine_templates()`` call here.
+    # Template registration is handled by ``get_theme_template`` itself, so it
+    # holds on the cached return below too — which never reaches
+    # ``build_multiqc_figure``, and whose figure a caller may re-template for the
+    # other theme.
     import multiqc
 
     cache = get_cache()

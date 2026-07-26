@@ -102,12 +102,19 @@ def ensure_mantine_templates() -> None:
 def get_theme_template(theme: str) -> str:
     """Return the Plotly template name for the given UI theme.
 
+    Registers the templates as a side effect: a bare name is only usable if it
+    resolves in ``pio.templates``, and every caller asking for one is about to
+    hand it to Plotly. Leaving registration to the figure *build* meant any path
+    that skipped the build — a warm figure cache returning ``go.Figure(dict)``,
+    then re-templated for the other theme — got a name Plotly rejects.
+
     Args:
         theme: theme name (e.g. "light", "dark"); empty / falsy values fall back to light.
 
     Returns:
         "mantine_dark" or "mantine_light".
     """
+    ensure_mantine_templates()
     if not theme or theme == {} or theme == "{}":
         theme = "light"
     return "mantine_dark" if theme == "dark" else "mantine_light"
