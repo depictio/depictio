@@ -87,6 +87,13 @@ pre-commit run --all-files         # mandatory after all code changes
 Route dispatch is plain regex in `depictio/viewer/src/main.tsx` +
 `src/builder/routeMatch.ts` — no router lib.
 
+### Dashboard Versioning
+- Every save snapshots the whole tab family into `dashboard_versions` (`dashboards_endpoints/versioning.py`)
+- Autosaves coalesce within an anchored window; an unchanged save writes nothing
+- Snapshots are content-only — `permissions`/`is_public`/`project_id` always come from the live doc
+- Retention is `version_store.prune_family()`, not a TTL index (a TTL cannot exempt pins)
+- `?version=` on the viewer renders a past version read-only (`_overlay_version` in `routes.py`)
+
 ### Screenshot System
 - Playwright drives the React SPA; composite targeting via `.react-grid-item`
 - **Detail**: see `depictio/api/v1/endpoints/utils_endpoints/CLAUDE.md`
@@ -102,6 +109,14 @@ Route dispatch is plain regex in `depictio/viewer/src/main.tsx` +
 
 ### Data Flow
 CLI ingests data → Delta/S3/MongoDB → API serves → React viewer renders
+
+### Data Collection Storage Families
+Six types (`table`, `jbrowse2`, `multiqc`, `image`, `geojson`, `phylogeny`) with three storage shapes:
+- **Delta** — `table`, `image` (manifest only), joined/transformed: Delta table at `s3://{bucket}/{dc_id}`
+- **Content-addressed objects** — `multiqc`: `s3://{bucket}/{dc_id}/{sha256}/multiqc.parquet`, immutable per ingest
+- **Opaque blobs** — `geojson` (fixed S3 key), `phylogeny` (bare filesystem path, never uploaded)
+
+`metatype` is a free-form unvalidated string — never key behaviour on it.
 
 ### Auth & Storage
 - JWT tokens, role-based access (users, groups, projects); single-user mode via
