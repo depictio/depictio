@@ -233,8 +233,27 @@ class TestPostHogBody:
         assert body["api_key"] == "phc_test"
         assert body["event"] == "some_event"
         assert body["distinct_id"] == "abc123"
-        assert body["properties"] == {"k": 1}
+        assert body["properties"]["k"] == 1
         assert body["timestamp"].endswith("+00:00")
+
+    def test_every_event_is_marked_anonymous(self):
+        """Without this the collector creates a person profile per installation.
+
+        That would contradict what docs/telemetry.md promises operators, and
+        identified events cost up to 4x more than anonymous ones. Asserted on the
+        shared builder, so no sender can omit it.
+        """
+        body = build_body("server_heartbeat", "inst", {}, api_key="phc_test")
+        assert body["properties"]["$process_person_profile"] is False
+
+    def test_caller_properties_cannot_override_the_anonymity_flag(self):
+        body = build_body(
+            "server_heartbeat",
+            "inst",
+            {"$process_person_profile": True},
+            api_key="phc_test",
+        )
+        assert body["properties"]["$process_person_profile"] is False
 
     def test_debug_render_redacts_the_key(self):
         """The debug log is meant to be pasted into an issue; it must not leak the key."""

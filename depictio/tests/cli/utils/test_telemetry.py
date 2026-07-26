@@ -158,7 +158,34 @@ class TestCliSuppression:
         assert suppression_reason() == "disabled_by_config"
 
     def test_missing_api_key_suppresses(self, monkeypatch):
-        """A build without a configured collector must stay silent."""
+        """A build with no collector token at all must stay silent.
+
+        The shipped default is non-empty, so this blanks it to exercise the
+        fork-or-source-build case.
+        """
+        monkeypatch.delenv("DO_NOT_TRACK", raising=False)
+        monkeypatch.delenv("DEPICTIO_TELEMETRY_ENABLED", raising=False)
+        monkeypatch.delenv("DEPICTIO_TELEMETRY_API_KEY", raising=False)
+        with (
+            patch("depictio.cli.cli.utils.telemetry._DEFAULT_API_KEY", ""),
+            patch("depictio.telemetry.gates.detect_pytest", return_value=False),
+            patch("depictio.telemetry.gates.detect_ci", return_value=False),
+        ):
+            assert suppression_reason() == "no_api_key_configured"
+
+    def test_shipped_default_routes_to_the_project(self, monkeypatch):
+        """With no env overrides the CLI must reach Depictio's own collector.
+
+        Guards the whole point of baking the token in: an empty default would
+        leave every installed CLI permanently silent, and nothing else would say so.
+        """
+        from depictio.cli.cli.utils import telemetry as cli_telemetry
+        from depictio.telemetry.constants import DEFAULT_API_KEY, DEFAULT_ENDPOINT
+
+        assert cli_telemetry._DEFAULT_API_KEY == DEFAULT_API_KEY
+        assert DEFAULT_API_KEY.startswith("phc_")
+        assert DEFAULT_ENDPOINT.startswith("https://eu.i.posthog.com")
+
         monkeypatch.delenv("DO_NOT_TRACK", raising=False)
         monkeypatch.delenv("DEPICTIO_TELEMETRY_ENABLED", raising=False)
         monkeypatch.delenv("DEPICTIO_TELEMETRY_API_KEY", raising=False)
@@ -166,7 +193,7 @@ class TestCliSuppression:
             patch("depictio.telemetry.gates.detect_pytest", return_value=False),
             patch("depictio.telemetry.gates.detect_ci", return_value=False),
         ):
-            assert suppression_reason() == "no_api_key_configured"
+            assert suppression_reason() is None
 
     def test_send_is_a_no_op_when_suppressed(self, monkeypatch):
         monkeypatch.setenv("DO_NOT_TRACK", "1")

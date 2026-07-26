@@ -23,8 +23,11 @@ jobs:
     runs-on: ubuntu-latest
     # Declared at job level so the guard on the forwarding step can read it —
     # a step's own `env:` block is not visible to that step's `if:`.
+    # Falls back to the public write-only project token that ships in the source
+    # anyway, so this works without any repository secret; set the secret only to
+    # redirect the snapshot elsewhere.
     env:
-      POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+      POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY || 'phc_Auxev6EYhAUhApdp9QXRfGUWFhti3mgVjyowXjpmcgQw' }}
     steps:
       - uses: actions/checkout@v7
 

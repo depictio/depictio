@@ -147,6 +147,9 @@ export function capture(event: string, properties: Record<string, unknown> = {})
           ...properties,
           source: config.source,
           ...(config.version ? { version: config.version } : {}),
+          // Anonymous event: no person profile is created for this browser.
+          // Mirrors what the Python senders set in build_body().
+          $process_person_profile: false,
         },
         timestamp: new Date().toISOString(),
       }),
