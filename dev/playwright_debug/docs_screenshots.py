@@ -8,13 +8,21 @@ Prerequisites:
 
 Usage:
     python dev/playwright_debug/docs_screenshots.py list
-    python dev/playwright_debug/docs_screenshots.py run --version v0.12 \\
+    python dev/playwright_debug/docs_screenshots.py run \\
         --project-id 646b0f3c1e4a2d7f8e5b8c9a \\
         --shot link_create_modal --shot manage_dc_modal --shot create_dc_modal_table
 
+    # realtime shots need a dashboard in a `realtime.enabled` project, and a
+    # journal export to populate the event log (see --journal)
+    python dev/playwright_debug/docs_screenshots.py run \\
+        --viewer-url http://localhost:5600 --no-seed-auth \\
+        --project-id 750a1b2c3d4e5f6a7b8c9d0e --dashboard-id 6a5e584b269ea7d0acdc7ffa \\
+        --journal /tmp/journal.json --theme dark --shot realtime_live_menu
+
 Shots register themselves in REGISTRY; future releases add new shots in this file
-and select them via repeated --shot flags. No release version is hardcoded outside
-that single --version flag.
+and select them via repeated --shot flags. Output lands in <output-root>/react/,
+which is what the docs site reads; --version inserts an extra subdirectory for
+one-off captures that shouldn't overwrite the published set.
 """
 
 from __future__ import annotations
@@ -98,6 +106,15 @@ def _load_token_payload() -> str:
     return json.dumps({k: v for k, v in payload.items() if v is not None})
 
 
+def _rel(path: Path) -> str:
+    """Workspace-relative path for logging, falling back to the absolute path
+    when the output root sits outside the workspace (e.g. a scratch dir)."""
+    try:
+        return str(path.relative_to(REPO_ROOT.parent))
+    except ValueError:
+        return str(path)
+
+
 async def _shot(ctx: ShotContext, selector: str, name: str) -> None:
     locator = ctx.page.locator(selector).first
     await locator.wait_for(state="visible", timeout=15_000)
@@ -106,7 +123,7 @@ async def _shot(ctx: ShotContext, selector: str, name: str) -> None:
     target = ctx.output_dir / f"{name}.png"
     target.parent.mkdir(parents=True, exist_ok=True)
     await locator.screenshot(path=str(target))
-    typer.echo(f"  → {target.relative_to(REPO_ROOT.parent)}")
+    typer.echo(f"  → {_rel(target)}")
 
 
 async def _page_shot_current(ctx: ShotContext, name: str) -> None:
@@ -118,7 +135,7 @@ async def _page_shot_current(ctx: ShotContext, name: str) -> None:
     target = ctx.output_dir / f"{name}.png"
     target.parent.mkdir(parents=True, exist_ok=True)
     await ctx.page.screenshot(path=str(target), full_page=False)
-    typer.echo(f"  → {target.relative_to(REPO_ROOT.parent)}")
+    typer.echo(f"  → {_rel(target)}")
 
 
 async def _page_shot(ctx: ShotContext, route: str, name: str, wait_ms: int = 1200) -> None:
@@ -341,7 +358,7 @@ async def _mon_expand_shot(ctx: ShotContext, has_text: str | None, out_name: str
     target = ctx.output_dir / f"{out_name}.png"
     target.parent.mkdir(parents=True, exist_ok=True)
     await item.screenshot(path=str(target))
-    typer.echo(f"  → {target.relative_to(REPO_ROOT.parent)}")
+    typer.echo(f"  → {_rel(target)}")
 
 
 @register("admin_monitoring_ingestion_detail")
@@ -354,6 +371,144 @@ async def _mon_ingestion_detail(ctx: ShotContext) -> None:
 async def _mon_ingestion_live(ctx: ShotContext) -> None:
     """Ingestion detail for an in-flight run (running status + current-step highlight)."""
     await _mon_expand_shot(ctx, "Viralrecon", _rb(f"admin_monitoring_ingestion_live_{ctx.theme}"))
+
+
+# ---- Real-time events shots -----------------------------------------------
+# Driven against a dashboard in a project with `realtime.enabled: true`. The
+# event log lives in localStorage (`depictio.realtime.journal`), so a fresh
+# browser context starts empty — pass `--journal <file.json>` with a journal
+# exported from a browser that watched a real stream to capture the log,
+# hover-card and highlight states without re-running the acquisition.
+
+REALTIME_JOURNAL_KEY = "depictio.realtime.journal"
+
+# The footer Box carries no test id, so find it structurally: walk up from the
+# last component chrome to the ancestor that owns the 1px top border — that Box
+# *is* the pinned footer. Returns the element, or null before it mounts.
+_FOOTER_JS = """() => {
+    const chrome = [...document.querySelectorAll('.depictio-component-chrome')].pop();
+    if (!chrome) return null;
+    let n = chrome;
+    while (n && n !== document.body) {
+        const bw = parseFloat(getComputedStyle(n).borderTopWidth || '0');
+        if (bw > 0 && n.getBoundingClientRect().width > window.innerWidth * 0.7) return n;
+        n = n.parentElement;
+    }
+    return null;
+}"""
+
+
+async def _open_realtime_dashboard(ctx: ShotContext) -> None:
+    """Navigate to the dashboard and wait until the timeline footer has settled.
+
+    The footer mounts well after the grid and then renders "Loading timeline…"
+    until its data collection resolves. Both stages have to pass — polling only
+    the text would succeed instantly, before the footer even exists.
+    """
+    await ctx.page.goto(
+        f"{ctx.viewer_url}/dashboard/{ctx.dashboard_id}", wait_until="domcontentloaded"
+    )
+    await wait_for_theme_applied(ctx.page, ctx.theme)
+    try:
+        await ctx.page.wait_for_function(
+            f"() => {{ const f = ({_FOOTER_JS})();"
+            f" return !!f && !f.innerText.includes('Loading timeline'); }}",
+            timeout=30_000,
+        )
+    except Exception:
+        typer.echo("  ! no settled timeline footer — capturing anyway", err=True)
+    await ctx.page.wait_for_timeout(2_000)
+    await dismiss_notifications(ctx.page)
+
+
+async def _clip_shot(ctx: ShotContext, box: dict, name: str) -> None:
+    """Viewport screenshot cropped to `box` ({x, y, width, height})."""
+    target = ctx.output_dir / f"{name}.png"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    await ctx.page.screenshot(path=str(target), clip=box)
+    typer.echo(f"  → {_rel(target)}")
+
+
+async def _open_realtime_menu(ctx: ShotContext) -> None:
+    await ctx.page.locator('[aria-label="Real-time updates"]').click()
+    await ctx.page.locator(".mantine-Menu-dropdown").first.wait_for(state="visible", timeout=10_000)
+    await ctx.page.wait_for_timeout(500)
+
+
+@register("realtime_dashboard")
+async def _realtime_dashboard(ctx: ShotContext) -> None:
+    """Live dashboard: status pill top-right, pinned acquisition-window footer."""
+    await _open_realtime_dashboard(ctx)
+    await _page_shot_current(ctx, _rb(f"realtime_dashboard_{ctx.theme}"))
+
+
+@register("realtime_indicator")
+async def _realtime_indicator(ctx: ShotContext) -> None:
+    """Header strip cropped to the real-time status pill."""
+    await _open_realtime_dashboard(ctx)
+    box = await ctx.page.locator('[aria-label="Real-time updates"]').bounding_box()
+    if not box:
+        raise RuntimeError("real-time indicator not found — is `realtime` enabled?")
+    # Widen leftwards so the neighbouring header controls give the pill context,
+    # and run to the viewport edge so the pill itself isn't shaved.
+    left = max(0.0, box["x"] - 380)
+    width = await ctx.page.evaluate("() => window.innerWidth")
+    await _clip_shot(
+        ctx,
+        {"x": left, "y": 0, "width": width - left, "height": 50},
+        _rb(f"realtime_indicator_{ctx.theme}"),
+    )
+
+
+@register("realtime_timeline_footer")
+async def _realtime_timeline_footer(ctx: ShotContext) -> None:
+    """The full-width acquisition-window scrubber pinned below the columns."""
+    await _open_realtime_dashboard(ctx)
+    box = await ctx.page.evaluate(
+        f"() => {{ const f = ({_FOOTER_JS})(); if (!f) return null;"
+        f" const r = f.getBoundingClientRect();"
+        f" return {{ x: r.x, y: r.y, width: r.width, height: r.height }}; }}"
+    )
+    if not box:
+        raise RuntimeError("timeline footer not found — no top-placement component?")
+    await _clip_shot(ctx, box, _rb(f"realtime_timeline_footer_{ctx.theme}"))
+
+
+@register("realtime_live_menu")
+async def _realtime_live_menu(ctx: ShotContext) -> None:
+    """Live updates dropdown: mode/pause switches over the captured event log."""
+    await _open_realtime_dashboard(ctx)
+    await _open_realtime_menu(ctx)
+    await _shot(ctx, ".mantine-Menu-dropdown", _rb(f"realtime_live_menu_{ctx.theme}"))
+
+
+@register("realtime_event_detail")
+async def _realtime_event_detail(ctx: ShotContext) -> None:
+    """Hover-card on an event-log row — row delta, versions, new ids, payload."""
+    await _open_realtime_dashboard(ctx)
+    await _open_realtime_menu(ctx)
+    await ctx.page.locator(".mantine-Menu-dropdown [style*='border-left']").first.hover()
+    await ctx.page.locator(".mantine-HoverCard-dropdown").first.wait_for(
+        state="visible", timeout=10_000
+    )
+    await ctx.page.wait_for_timeout(600)
+    await _page_shot_current(ctx, _rb(f"realtime_event_detail_{ctx.theme}"))
+
+
+@register("realtime_highlight")
+async def _realtime_highlight(ctx: ShotContext) -> None:
+    """A past batch pinned via the highlight button — row stays marked, and a
+    Clear highlight link appears in the log header."""
+    await _open_realtime_dashboard(ctx)
+    await _open_realtime_menu(ctx)
+    await ctx.page.locator('[aria-label="Highlight this batch"]').first.click()
+    # Park the cursor off the dropdown: leaving it on the button keeps both the
+    # "Highlighted" tooltip and the row hover-card up, hiding the Clear
+    # highlight link and the highlighted points behind them. Aim for the filter
+    # panel — parking over the grid pops a Plotly modebar into the shot.
+    await ctx.page.mouse.move(150, 620)
+    await ctx.page.wait_for_timeout(1_200)
+    await _page_shot_current(ctx, _rb(f"realtime_highlight_{ctx.theme}"))
 
 
 # ---- CLI ------------------------------------------------------------------
@@ -369,9 +524,11 @@ def list_shots() -> None:
 @app.command()
 def run(
     version: str = typer.Option(
-        ...,
+        "",
         "--version",
-        help="Release tag; used as output subdirectory (e.g. v0.12).",
+        help="Optional release tag used as an output subdirectory. Omit to write "
+        "straight into <output-root>/react/, which is where the docs site now "
+        "reads its images from.",
     ),
     shot: list[str] = typer.Option(
         None,
@@ -400,6 +557,19 @@ def run(
         help="Colour scheme to seed (light|dark). Theme-aware shots suffix the "
         "filename with _<theme>; run once per theme for the docs light/dark pair.",
     ),
+    journal: Path = typer.Option(
+        None,
+        "--journal",
+        help="JSON file seeded into localStorage as the realtime event log "
+        "(depictio.realtime.journal). Needed by the realtime_* shots, whose log, "
+        "hover-card and highlight states only exist once events have been seen.",
+    ),
+    seed_auth: bool = typer.Option(
+        True,
+        "--seed-auth/--no-seed-auth",
+        help="Seed the local admin token into localStorage. Disable when driving "
+        "an instance in unauthenticated mode that the local token doesn't belong to.",
+    ),
     viewport_width: int = typer.Option(1440, "--viewport-width"),
     viewport_height: int = typer.Option(900, "--viewport-height"),
     headless: bool = typer.Option(True, "--headless/--headed"),
@@ -407,6 +577,8 @@ def run(
     """Capture one or more named shots into <output-root>/<version>/."""
     if theme not in ("light", "dark"):
         raise typer.BadParameter(f"--theme must be 'light' or 'dark', got {theme!r}.")
+    if journal is not None and not journal.exists():
+        raise typer.BadParameter(f"--journal file not found: {journal}")
     output_dir = output_root / version
     output_dir.mkdir(parents=True, exist_ok=True)
     names = shot or sorted(REGISTRY)
@@ -425,6 +597,8 @@ def run(
             viewport_height,
             headless,
             theme,
+            journal,
+            seed_auth,
         )
     )
 
@@ -439,8 +613,9 @@ async def _run(
     vh: int,
     headless: bool,
     theme: str,
+    journal: Path | None = None,
+    seed_auth: bool = True,
 ) -> None:
-    token_payload = _load_token_payload()
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=headless)
         context = await browser.new_context(viewport={"width": vw, "height": vh})
@@ -448,7 +623,23 @@ async def _run(
         # BEFORE any page script runs — early API calls (listProjectLinks,
         # listChildTabs) and the SPA's readInitialColorScheme both fire on first
         # paint, so a post-navigation setItem is too late.
-        await context.add_init_script(build_localstorage_init_script(token_payload, theme))
+        if seed_auth:
+            init_script = build_localstorage_init_script(_load_token_payload(), theme)
+        else:
+            # Theme only — writing an empty `local-store` would look like a
+            # broken session rather than no session at all.
+            init_script = (
+                f"localStorage.setItem('theme-store',"
+                f" {json.dumps(json.dumps({'colorScheme': theme}))});"
+            )
+        await context.add_init_script(init_script)
+        if journal is not None:
+            # Same reasoning: the RealtimeIndicator reads the journal in a
+            # useState initialiser, i.e. on first render.
+            await context.add_init_script(
+                f"localStorage.setItem({json.dumps(REALTIME_JOURNAL_KEY)},"
+                f" {json.dumps(journal.read_text())});"
+            )
         page = await context.new_page()
         ctx = ShotContext(
             page=page,
