@@ -40,6 +40,7 @@ import {
 } from 'depictio-react-core';
 
 import { groupByDay, versionTitle } from './format';
+import VersionCompatibilityPanel from './VersionCompatibilityPanel';
 import VersionTimelineItem from './VersionTimelineItem';
 import { useVersionHistory } from './useVersionHistory';
 
@@ -306,6 +307,7 @@ const VersionHistoryDrawer: React.FC<VersionHistoryDrawerProps> = ({
             This replaces the dashboard's current content with{' '}
             <strong>{pending ? versionTitle(pending.version) : ''}</strong>.
           </Text>
+          <VersionCompatibilityPanel versionId={pending?.version.version_id ?? null} />
           <Alert color="blue" variant="light" icon={<Icon icon="mdi:information" width={16} />}>
             The current state is saved as a version first, so you can undo this.
             Access permissions are never changed by a restore.

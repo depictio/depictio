@@ -218,6 +218,34 @@ async def current_dashboard_version(
     }
 
 
+@dashboard_versions_endpoint_router.get("/versions/{version_id}/compatibility")
+async def dashboard_version_compatibility(
+    version_id: str,
+    current_user: User = Depends(get_user_or_anonymous),
+):
+    """Can this version still render against today's data?
+
+    Answered per data collection, naming the columns that changed and the
+    components that reference them — a pair of schema hashes can only say
+    "different", which is not something anyone can act on.
+    """
+    from depictio.api.v1.endpoints.dashboards_endpoints import schema_integrity
+
+    record = _guarded_version(version_id, current_user, "viewer")
+
+    components = [
+        component
+        for tab in (record.get("tabs") or [])
+        for component in (tab.get("stored_metadata") or [])
+    ]
+    report = schema_integrity.build_compatibility_report(
+        components, record.get("data_collections") or []
+    )
+    report["version_id"] = version_id
+    report["seq"] = record.get("seq")
+    return convert_objectid_to_str(report)
+
+
 @dashboard_versions_endpoint_router.get("/versions/{version_id}")
 async def get_dashboard_version(
     version_id: str,
