@@ -216,15 +216,98 @@ def get_project_visibility(project_id: PyObjectId) -> bool:
     return project.get("is_public", False)
 
 
+#: Snapshot fields overlaid when a past version is requested.
+#:
+#: Narrower than the restore path's field list on purpose: that one also writes
+#: ``tab_order`` and ``is_main_tab``, which are family *structure*. Structure is
+#: meaningful when writing tabs back, but misleading on a read — the sidebar
+#: builds the tab strip from the live family, so a stale order here would
+#: disagree with the tabs actually on screen.
+_PREVIEW_OVERLAY_FIELDS: tuple[str, ...] = (
+    "title",
+    "subtitle",
+    "main_tab_name",
+    "tab_icon",
+    "tab_icon_color",
+    "icon",
+    "icon_color",
+    "icon_variant",
+    "workflow_system",
+    "notes_content",
+    "stored_metadata",
+    "left_panel_layout_data",
+    "right_panel_layout_data",
+)
+
+
+def _overlay_version(
+    dashboard_dict: dict,
+    live_doc: dict,
+    dashboard_id: PyObjectId,
+    version_id: str,
+) -> dict:
+    """Return ``dashboard_dict`` with a version's content laid over it.
+
+    Raises 404 when the version is unknown, belongs to another dashboard
+    family, or predates this tab — a caller must not be able to read another
+    project's snapshot by pairing a dashboard they can see with a guessed
+    ``version_id``.
+    """
+    from depictio.api.v1.endpoints.dashboards_endpoints import version_store, versioning
+
+    record = version_store.get_version(version_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Version not found.")
+
+    family_id = versioning.resolve_family_id(live_doc)
+    if family_id is None or record.get("family_id") != str(family_id):
+        raise HTTPException(
+            status_code=404, detail="That version does not belong to this dashboard."
+        )
+
+    tab = next(
+        (t for t in (record.get("tabs") or []) if t.get("dashboard_id") == str(dashboard_id)),
+        None,
+    )
+    if tab is None:
+        raise HTTPException(
+            status_code=404,
+            detail="This tab did not exist at that version.",
+        )
+
+    merged = dict(dashboard_dict)
+    for field in _PREVIEW_OVERLAY_FIELDS:
+        if field in tab:
+            merged[field] = tab[field]
+
+    # Everything the banner needs, so the client does not need a second call.
+    merged["preview"] = {
+        "version_id": record.get("version_id"),
+        "seq": record.get("seq"),
+        "label": record.get("label"),
+        "kind": record.get("kind"),
+        "pinned": bool(record.get("pinned", False)),
+        "created_at": record.get("created_at"),
+        "author_email": record.get("author_email"),
+    }
+    return merged
+
+
 @dashboards_endpoint_router.get("/get/{dashboard_id}")
 async def get_dashboard(
     dashboard_id: PyObjectId,
+    version_id: str | None = None,
     current_user: User = Depends(get_user_or_anonymous),
 ):
     """
     Fetch dashboard data related to a dashboard ID.
     Now uses project-based permissions instead of dashboard-specific permissions.
     For child tabs, includes parent_dashboard_title for header display.
+
+    ``version_id`` renders a past version instead of the live content. Only
+    content is overlaid — ``permissions``, ``is_public``, ``project_id`` and
+    the realtime config always come from the live document, so a stale
+    snapshot can never widen access.
     """
     dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
     if not dashboard_data:
@@ -243,6 +326,14 @@ async def get_dashboard(
 
     dashboard = DashboardData.from_mongo(dashboard_data)
     dashboard_dict = dashboard.model_dump()
+
+    # Overlay a past version's content, if one was asked for. Done here so
+    # everything downstream — the MultiQC prewarm check, the ObjectId
+    # normalisation — sees the state that will actually be rendered.
+    previewing = False
+    if version_id:
+        dashboard_dict = _overlay_version(dashboard_dict, dashboard_data, dashboard_id, version_id)
+        previewing = True
 
     # For child tabs, fetch parent dashboard title for header display
     parent_title = get_parent_dashboard_title(dashboard_dict)
@@ -267,7 +358,9 @@ async def get_dashboard(
     # is idempotent (skips already-cached entries), so repeated GETs from
     # multiple users don't pile up real work — they each enqueue a task that
     # mostly no-ops. Cold viewer load drops from ~14 s to <1 s once warm.
-    has_multiqc = any(
+    # Not while previewing: the task re-reads the live document, so it would
+    # warm current data for a historical view — cost with no benefit.
+    has_multiqc = not previewing and any(
         m.get("component_type") == "multiqc" for m in (dashboard_dict.get("stored_metadata") or [])
     )
     if has_multiqc:

@@ -254,12 +254,33 @@ export interface DashboardData {
    *  Persisted as HTML via the NotesFooter TipTap editor (see
    *  depictio/viewer/src/components/NotesFooter.tsx). */
   notes_content?: string;
+  /** Present only when a past version was requested. Carries everything the
+   *  read-only banner needs, so previewing costs one request, not two. */
+  preview?: DashboardPreviewInfo;
   [key: string]: unknown;
 }
 
-/** Fetch dashboard including stored_metadata. Mirrors what the Dash viewer reads. */
-export async function fetchDashboard(dashboardId: string): Promise<DashboardData> {
-  const res = await fetch(`${API_BASE}/dashboards/get/${dashboardId}`, {
+export interface DashboardPreviewInfo {
+  version_id: string;
+  seq: number;
+  label?: string | null;
+  kind?: string | null;
+  pinned?: boolean;
+  created_at?: string | null;
+  author_email?: string | null;
+}
+
+/** Fetch dashboard including stored_metadata.
+ *
+ *  With `versionId`, the server overlays that version's *content* over the
+ *  live document. Permissions, visibility and the realtime config still come
+ *  from the live document, so a preview can never widen access. */
+export async function fetchDashboard(
+  dashboardId: string,
+  versionId?: string | null,
+): Promise<DashboardData> {
+  const qs = versionId ? `?version_id=${encodeURIComponent(versionId)}` : '';
+  const res = await fetch(`${API_BASE}/dashboards/get/${dashboardId}${qs}`, {
     headers: authHeaders(),
   });
   if (!res.ok) throw new Error(`Failed to fetch dashboard: ${res.status}`);

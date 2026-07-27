@@ -273,6 +273,7 @@ export type {
   WorkflowEntry,
   DcShapeResponse,
   PreviewResult,
+  DashboardPreviewInfo,
   DataVersionKind,
   DashboardVersionKind,
   DataCollectionStamp,
