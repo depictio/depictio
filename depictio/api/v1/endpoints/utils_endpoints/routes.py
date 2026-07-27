@@ -102,6 +102,74 @@ async def status():
     return {"status": "online", "version": get_version()}
 
 
+@utils_endpoint_router.get("/public-config")
+async def public_config():
+    """Runtime configuration the frontend needs before a user is known.
+
+    The viewer is a static nginx-served Vite build, so it has no access to the
+    deployment's environment at runtime — per-deployment settings like the Google
+    Analytics measurement ID cannot be baked in at image build time and have to be
+    fetched. This endpoint is that channel.
+
+    Public and unauthenticated, like ``/status``, because it is read before login.
+    Only values that are safe for anyone who can reach the frontend belong here: a
+    GA measurement ID is already visible in the page's network traffic once
+    injected, so exposing it changes nothing.
+    """
+    ga = settings.google_analytics
+    return {
+        "google_analytics": {
+            "enabled": ga.is_configured,
+            # Withheld unless actually enabled, so a half-configured deployment
+            # does not leak a property ID it is not using.
+            "tracking_id": ga.tracking_id if ga.is_configured else None,
+        },
+    }
+
+
+@utils_endpoint_router.get("/telemetry/preview")
+async def telemetry_preview(current_user=Depends(get_current_user)):
+    """Show exactly what anonymous installation telemetry would send. Admin only.
+
+    Telemetry defaults to on, so operators are owed a way to verify the claim that
+    it carries nothing identifying — on their own deployment, with their own data,
+    rather than by trusting the documentation. This returns the real payload built
+    by the real builder.
+
+    Reads the send guard rather than claiming it, so inspecting the payload never
+    consumes the day's slot and suppresses the actual heartbeat.
+    """
+    if not getattr(current_user, "is_admin", False):
+        raise HTTPException(status_code=403, detail="User is not an admin.")
+
+    from depictio.api.v1.telemetry.guard import has_sent
+    from depictio.api.v1.telemetry.payload import build_heartbeat_properties
+    from depictio.api.v1.telemetry.tasks import suppression_reason
+    from depictio.telemetry.schema import EVENT_HEARTBEAT, EVENT_INSTALL
+
+    suppressed_because = suppression_reason()
+
+    try:
+        instance_id, properties = build_heartbeat_properties()
+        payload = properties.model_dump(mode="json", exclude_none=True)
+    except Exception as exc:
+        logger.warning(f"Telemetry preview could not build a payload: {exc}")
+        raise HTTPException(status_code=500, detail="Could not build telemetry payload.")
+
+    return {
+        "enabled": suppressed_because is None,
+        "suppressed_because": suppressed_because,
+        "endpoint": settings.telemetry.endpoint,
+        "debug_mode": settings.telemetry.debug,
+        "interval_hours": settings.telemetry.interval_hours,
+        "instance_id": instance_id,
+        "install_event_already_sent": has_sent(EVENT_INSTALL, daily=False),
+        "heartbeat_already_sent_today": has_sent(EVENT_HEARTBEAT, daily=True),
+        "payload": payload,
+        "how_to_disable": "Set DEPICTIO_TELEMETRY_ENABLED=false or DO_NOT_TRACK=1.",
+    }
+
+
 @utils_endpoint_router.get("/health/initialization")
 async def check_initialization_health():
     """Check if initialization completed successfully including data registration."""

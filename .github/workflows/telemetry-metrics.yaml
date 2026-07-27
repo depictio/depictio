@@ -1,0 +1,123 @@
+# Snapshots the distribution metrics that no runtime telemetry can see.
+#
+# The heartbeat in depictio/api/v1/telemetry/ counts *running* installations. This
+# workflow captures the funnel in front of that — downloads, clones, and Tools
+# Studio contributions — none of which any deployed instance knows about.
+#
+# The GitHub traffic API is the reason this runs on a schedule rather than on
+# demand: GitHub retains only the last 14 days of clone and view counts, so
+# unsampled history is lost permanently. Everything else here is cumulative and
+# could be fetched at any time.
+name: Telemetry metrics snapshot
+
+on:
+  schedule:
+    - cron: "0 5 * * 1" # Mondays 05:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    # Declared at job level so the guard on the forwarding step can read it —
+    # a step's own `env:` block is not visible to that step's `if:`.
+    env:
+      POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Collect PyPI download counts
+        id: pypi
+        run: |
+          set -euo pipefail
+          # pypistats' public API, no auth required. `last_month` is the least
+          # noisy of the available windows — daily numbers swing wildly with CI.
+          for pkg in depictio-cli depictio; do
+            url="https://pypistats.org/api/packages/${pkg}/recent"
+            if downloads=$(curl -sSf --max-time 30 "$url"); then
+              echo "${pkg}: ${downloads}"
+              echo "${pkg}=${downloads}" >> "$GITHUB_OUTPUT"
+            else
+              # A metrics workflow must never fail the repo's checks over an
+              # upstream outage.
+              echo "::warning::Could not fetch PyPI stats for ${pkg}"
+            fi
+          done
+
+      - name: Collect repository traffic
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # Requires a token with repo scope; the default GITHUB_TOKEN suffices
+          # for the repository the workflow runs in.
+          for endpoint in clones views; do
+            if data=$(curl -sSf --max-time 30 \
+                -H "Authorization: Bearer ${GH_TOKEN}" \
+                -H "Accept: application/vnd.github+json" \
+                "https://api.github.com/repos/${GITHUB_REPOSITORY}/traffic/${endpoint}"); then
+              echo "${endpoint}: ${data}"
+            else
+              echo "::warning::Could not fetch ${endpoint} traffic"
+            fi
+          done
+
+      - name: Count Tools Studio contributions
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # The Tools Studio opens PRs from branches prefixed `tools-studio/`
+          # (see packages/catalog-studio/src/catalog/github.ts). Counting them
+          # measures completed contributions — the only Studio metric that
+          # reflects someone finishing the flow rather than merely loading it.
+          query='repo:${{ github.repository }} is:pr head:tools-studio/'
+          if data=$(curl -sSf --max-time 30 \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              --get --data-urlencode "q=${query}" \
+              "https://api.github.com/search/issues"); then
+            echo "tools-studio PRs: $(echo "$data" | python -c 'import json,sys; print(json.load(sys.stdin)["total_count"])')"
+          else
+            echo "::warning::Could not count Tools Studio PRs"
+          fi
+
+      - name: Forward to the telemetry collector
+        if: env.POSTHOG_API_KEY != ''
+        env:
+          PYPI_DEPICTIO_CLI: ${{ steps.pypi.outputs.depictio-cli }}
+          PYPI_DEPICTIO: ${{ steps.pypi.outputs.depictio }}
+        run: |
+          set -euo pipefail
+          # Sent as a server-side event so distribution metrics land in the same
+          # place as the runtime heartbeat, instead of needing a second dashboard.
+          python - <<'EOF'
+          import json
+          import os
+          import urllib.request
+
+          body = {
+              "api_key": os.environ["POSTHOG_API_KEY"],
+              "event": "distribution_snapshot",
+              "distinct_id": "depictio-ci-metrics",
+              "properties": {
+                  "pypi_depictio_cli": os.environ.get("PYPI_DEPICTIO_CLI", ""),
+                  "pypi_depictio": os.environ.get("PYPI_DEPICTIO", ""),
+                  "repository": os.environ.get("GITHUB_REPOSITORY", ""),
+              },
+          }
+          request = urllib.request.Request(
+              "https://eu.i.posthog.com/i/v0/e/",
+              data=json.dumps(body).encode(),
+              headers={"Content-Type": "application/json"},
+          )
+          with urllib.request.urlopen(request, timeout=15) as response:
+              print("collector responded", response.status)
+          EOF

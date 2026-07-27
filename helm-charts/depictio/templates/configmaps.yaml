@@ -69,6 +69,14 @@ data:
   DEPICTIO_ANALYTICS_CLEANUP_DAYS: {{ .Values.backend.env.DEPICTIO_ANALYTICS_CLEANUP_DAYS | default "90" | quote }}
   DEPICTIO_ANALYTICS_TRACK_ANONYMOUS_USERS: {{ .Values.backend.env.DEPICTIO_ANALYTICS_TRACK_ANONYMOUS_USERS | default "true" | quote }}
   DEPICTIO_ANALYTICS_CLEANUP_ENABLED: {{ .Values.backend.env.DEPICTIO_ANALYTICS_CLEANUP_ENABLED | default "true" | quote }}
+  # Anonymous installation telemetry (see docs/telemetry.md). Enabled by default;
+  # set backend.env.DEPICTIO_TELEMETRY_ENABLED=false to opt out. The deployment
+  # kind is stated outright rather than guessed — a Helm pod and a Compose
+  # container are indistinguishable from the inside.
+  DEPICTIO_TELEMETRY_ENABLED: {{ .Values.backend.env.DEPICTIO_TELEMETRY_ENABLED | default "true" | quote }}
+  DEPICTIO_TELEMETRY_DEPLOYMENT_KIND: {{ .Values.backend.env.DEPICTIO_TELEMETRY_DEPLOYMENT_KIND | default "kubernetes" | quote }}
+  DEPICTIO_TELEMETRY_INCLUDE_USAGE_METRICS: {{ .Values.backend.env.DEPICTIO_TELEMETRY_INCLUDE_USAGE_METRICS | default "true" | quote }}
+  DEPICTIO_TELEMETRY_DEBUG: {{ .Values.backend.env.DEPICTIO_TELEMETRY_DEBUG | default "false" | quote }}
   DEPICTIO_GOOGLE_ANALYTICS_ENABLED: {{ .Values.backend.env.DEPICTIO_GOOGLE_ANALYTICS_ENABLED | default "false" | quote }}
   {{- if .Values.googleAnalytics }}
   DEPICTIO_GOOGLE_ANALYTICS_TRACKING_ID: {{ .Values.googleAnalytics.DEPICTIO_GOOGLE_ANALYTICS_TRACKING_ID | default "G-XXXXXXXXXX" | quote }}

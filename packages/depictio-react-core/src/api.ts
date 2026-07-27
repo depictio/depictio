@@ -1442,6 +1442,33 @@ export async function fetchServerStatus(): Promise<ServerStatusResponse> {
   return res.json();
 }
 
+/**
+ * Runtime configuration the frontend cannot know at build time.
+ *
+ * The viewer ships as a static nginx-served bundle, so per-deployment values like
+ * the Google Analytics measurement ID cannot be baked into the image — every
+ * operator would need their own build. This endpoint supplies them at boot
+ * instead. Public and unauthenticated, since it is read before login.
+ */
+export interface PublicConfigResponse {
+  google_analytics?: {
+    enabled: boolean;
+    tracking_id: string | null;
+  };
+}
+
+export async function fetchPublicConfig(): Promise<PublicConfigResponse> {
+  try {
+    const res = await fetch(`${API_BASE}/utils/public-config`, { cache: 'no-cache' });
+    if (!res.ok) return {};
+    return await res.json();
+  } catch {
+    // Optional configuration. An older backend without this route, or a network
+    // blip, must not stop the app from starting.
+    return {};
+  }
+}
+
 /** Current user — anonymous-tolerant. Returns null for missing/invalid token. */
 export interface CurrentUser {
   id?: string;

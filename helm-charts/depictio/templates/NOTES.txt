@@ -62,6 +62,23 @@ on different nodes, they won't be able to share the volume. In multi-node cluste
 ReadWriteMany if your storage class supports it.
 {{- end }}
 
+{{ if ne (.Values.backend.env.DEPICTIO_TELEMETRY_ENABLED | toString) "false" -}}
+ANONYMOUS TELEMETRY: this release sends an anonymous daily heartbeat (a random
+installation ID, the version, how it was deployed, which features are enabled, and
+deployment size as coarse buckets) so the project can count installations. No
+emails, names, hostnames, URLs, IPs, paths or secrets are ever sent.
+
+  Inspect exactly what would be sent, on this deployment:
+    GET /depictio/api/v1/utils/telemetry/preview   (admin token required)
+
+  Opt out:
+    --set backend.env.DEPICTIO_TELEMETRY_ENABLED=false
+
+  Details: https://github.com/depictio/depictio/blob/main/docs/telemetry.md
+{{- else -}}
+Anonymous telemetry is disabled for this release.
+{{- end }}
+
 To check the status of your pods:
   kubectl get pods -l release={{ .Release.Name }}
 

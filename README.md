@@ -34,6 +34,11 @@
 [![Test Status](https://img.shields.io/github/actions/workflow/status/depictio/depictio/depictio-ci.yaml?label=tests&style=flat-square&logo=github-actions)](https://github.com/depictio/depictio/actions/workflows/depictio-ci.yaml)
 [![GitHub issues](https://img.shields.io/github/issues/depictio/depictio?style=flat-square&logo=github)](https://github.com/depictio/depictio/issues)
 
+## Adoption
+
+[![PyPI downloads](https://img.shields.io/pypi/dm/depictio-cli?style=flat-square&logo=pypi&label=depictio-cli)](https://pypistats.org/packages/depictio-cli)
+[![PyPI version](https://img.shields.io/pypi/v/depictio-cli?style=flat-square&logo=pypi)](https://pypi.org/project/depictio-cli/)
+
 ## Documentation
 
 [![Documentation](https://img.shields.io/badge/docs-latest-blue?style=flat-square&logo=gitbook)](https://depictio.github.io/depictio-docs/latest/)
@@ -47,5 +52,12 @@
 Depictio is a self-hosrd modern, interactive platform that enables dashboards creation from bioinformatics workflows outputs.
 
 **Homepage**: [depictio.github.io](https://depictio.github.io/depictio-docs/latest/)
+
+**Telemetry**: Depictio sends an anonymous daily heartbeat (a random installation
+ID, the version, how it was deployed, which features are enabled, and deployment
+size as coarse buckets) so the project can count installations. No personal data,
+names, hostnames or content are ever sent. See [docs/telemetry.md](docs/telemetry.md)
+for the exact payload, how to inspect it on your own deployment, and how to disable
+it (`DEPICTIO_TELEMETRY_ENABLED=false` or `DO_NOT_TRACK=1`).
 
 Copyright(c) 2023-2026 Thomas Weber <thomas.weber@embl.de> (see LICENSE)

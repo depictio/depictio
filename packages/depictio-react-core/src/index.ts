@@ -159,6 +159,7 @@ export {
   renderMultiQC,
   renderMultiQCGeneralStats,
   fetchServerStatus,
+  fetchPublicConfig,
   fetchCurrentUser,
   updateTab,
   deleteTab,
@@ -382,6 +383,7 @@ export type {
   TableResponse,
   JBrowseSessionResponse,
   ServerStatusResponse,
+  PublicConfigResponse,
   CurrentUser,
   UpdateTabPayload,
   TabOrderEntry,
@@ -455,3 +457,8 @@ export type {
   AdvancedVizKindDescriptor,
   AdvancedVizDataResponse,
 } from './api';
+
+// Anonymous browser telemetry — shared with the Tools Studio, which aliases this
+// package in its Vite config so both apps use one consent implementation.
+export { capture, initTelemetry, isOptedOut, setOptOut } from './telemetry';
+export type { TelemetryConfig } from './telemetry';
