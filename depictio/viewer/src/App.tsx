@@ -538,9 +538,19 @@ const App: React.FC = () => {
         {dashboard && !loading && !error && (
           <div
             style={{
+              display: 'flex',
+              flexDirection: 'column',
+              height: '100%',
+              width: '100%',
+              overflow: 'hidden',
+            }}
+          >
+          <div
+            style={{
               display: 'grid',
               gridTemplateColumns: '20vw 1fr',
-              height: '100%',
+              flex: 1,
+              minHeight: 0,
               width: '100%',
               gap: 4,
               overflow: 'hidden',
@@ -627,14 +637,6 @@ const App: React.FC = () => {
                 flexDirection: 'column',
               }}
             >
-              {topComponents.length > 0 && (
-                <TopPanel
-                  components={topComponents}
-                  filters={filters}
-                  onFilterChange={handleFilterChange}
-                  refreshTick={refreshTick}
-                />
-              )}
               <Box style={{ flex: 1, minHeight: 0 }}>
                 {rightComponents.length === 0 ? (
                   <Center style={{ height: '100%', minHeight: 320 }}>
@@ -693,6 +695,30 @@ const App: React.FC = () => {
                 )}
               </Box>
             </Box>
+          </div>
+          {/* Full-width footer spanning both the filter panel and the content
+              column. Hosts top-placement interactive controls (the Timeline
+              scrubber) as an always-visible global filter, pinned below the
+              scrollable columns. */}
+          {topComponents.length > 0 && (
+            <Box
+              px="md"
+              py={6}
+              style={{
+                flexShrink: 0,
+                width: '100%',
+                borderTop: '1px solid var(--mantine-color-default-border)',
+                background: 'var(--mantine-color-body)',
+              }}
+            >
+              <TopPanel
+                components={topComponents}
+                filters={filters}
+                onFilterChange={handleFilterChange}
+                refreshTick={refreshTick}
+              />
+            </Box>
+          )}
           </div>
         )}
         {dashboard && dashboardId && (

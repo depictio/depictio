@@ -307,7 +307,12 @@ const TimelineRenderer: React.FC<{
       </Text>
     );
   }
-  if (!Number.isFinite(minMs) || !Number.isFinite(maxMs) || (maxMs as number) <= (minMs as number)) {
+  // Only genuinely-missing bounds (non-finite) are "unavailable". A single
+  // distinct timestamp (min === max) is a normal early-stream state for a
+  // real-time collection — one acquisition so far — so we still render a
+  // usable scrubber by padding the collapsed range into a small window
+  // centred on that timestamp, rather than dropping to an error message.
+  if (!Number.isFinite(minMs) || !Number.isFinite(maxMs)) {
     return (
       <Text size="xs" c="dimmed">
         Timeline unavailable for column "{metadata.column_name}".
@@ -315,8 +320,10 @@ const TimelineRenderer: React.FC<{
     );
   }
 
-  const lo = minMs as number;
-  const hi = maxMs as number;
+  const SINGLE_STAMP_PAD_MS = 60_000; // ±1 min window for a lone timestamp
+  const collapsed = (maxMs as number) <= (minMs as number);
+  const lo = collapsed ? (minMs as number) - SINGLE_STAMP_PAD_MS : (minMs as number);
+  const hi = collapsed ? (maxMs as number) + SINGLE_STAMP_PAD_MS : (maxMs as number);
   const value: [number, number] = selected ?? [lo, hi];
   const ctx = buildFormatContext(lo, hi);
 
@@ -412,15 +419,20 @@ const TimelineRenderer: React.FC<{
   const title = metadata.title || (metadata.column_name ? `Timeline · ${metadata.column_name}` : 'Timeline');
 
   return (
-    <Stack gap="xs">
-      {/* Title is `md` so its line-height pushes the slider track well
-       * below the chrome's hover-floating action icons (MetadataPopover /
-       * Reset / etc., positioned at top: 12px / right: 12px in chrome.css).
-       * Smaller sizes left the right RangeSlider thumb in the same vertical
-       * band as the icons and they overlapped on hover. */}
-      <Text size="md" fw={600} truncate>
-        {title}
-      </Text>
+    <Stack gap={6}>
+      {/* Compact header: title left, selected-range readout right. Keeps the
+       * footer to two rows (header + slider/timescale row below). */}
+      <Group gap="xs" wrap="nowrap" align="center" justify="space-between">
+        <Text size="sm" fw={600} truncate style={{ minWidth: 0 }}>
+          {title}
+        </Text>
+        <Text size="xs" c="dimmed" truncate style={{ flexShrink: 0 }}>
+          {fmt(value[0])} → {fmt(value[1])}
+        </Text>
+      </Group>
+      {/* Main row: range slider (flex) + timescale picker share one line so
+       * the footer stays compact. */}
+      <Group gap="sm" wrap="nowrap" align="center">
       <Box
         ref={sliderRef}
         pos="relative"
@@ -428,6 +440,7 @@ const TimelineRenderer: React.FC<{
         pb={marksVisible ? 28 : 4}
         px={8}
         className="depictio-timeline-slider"
+        style={{ flex: 1, minWidth: 0 }}
       >
         <RangeSlider
           size="sm"
@@ -473,18 +486,12 @@ const TimelineRenderer: React.FC<{
           </div>
         )}
       </Box>
-      {/* Footer row: selected-range readout left, timescale picker right.
-       * Moved out of the header so the long readout doesn't push the
-       * SegmentedControl off-screen on narrow grid cells. */}
-      <Group gap="xs" wrap="nowrap" align="center" justify="space-between">
-        <Text size="xs" c="dimmed" truncate style={{ minWidth: 0 }}>
-          {fmt(value[0])} → {fmt(value[1])}
-        </Text>
         <SegmentedControl
           size="xs"
           data={TIMESCALES.map((s) => ({ value: s, label: TIMESCALE_LABELS[s] }))}
           value={scale}
           onChange={(v) => setScale(v as Timescale)}
+          style={{ flexShrink: 0 }}
         />
       </Group>
     </Stack>

@@ -451,6 +451,7 @@ class DashboardDataLite(BaseModel):
             "table": [
                 # optional user-defined
                 "columns",
+                "compact",
                 "page_size",
                 "sortable",
                 "filterable",
@@ -827,6 +828,8 @@ class DashboardDataLite(BaseModel):
             elif comp_type == "table":
                 if comp.get("columns"):
                     lite_comp["columns"] = comp["columns"]
+                if comp.get("compact"):
+                    lite_comp["compact"] = comp["compact"]
                 if comp.get("page_size") and comp["page_size"] != 10:
                     lite_comp["page_size"] = comp["page_size"]
                 if comp.get("sortable") is False:
@@ -1078,6 +1081,8 @@ class DashboardDataLite(BaseModel):
                         "page_size": comp_dict.get("page_size", 10),
                         "sortable": comp_dict.get("sortable", True),
                         "filterable": comp_dict.get("filterable", True),
+                        # Compact row/header heights in the React TableRenderer.
+                        "compact": comp_dict.get("compact", False),
                         # Row selection filtering fields
                         "row_selection_enabled": comp_dict.get("row_selection_enabled", False),
                         "row_selection_column": comp_dict.get("row_selection_column"),

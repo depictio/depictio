@@ -121,8 +121,16 @@ const TableRenderer: React.FC<TableRendererProps> = ({
         // dashboard agree on which columns are visible.
         const colsJson =
           (metadata.cols_json as Record<string, { hide?: boolean }> | undefined) ?? {};
+        // Optional YAML `columns` allowlist ("Columns to display"). When
+        // non-empty, restrict the grid to exactly those columns (the
+        // /render_table endpoint still returns every column). Combined with
+        // the per-column cols_json[].hide flag from the builder.
+        const allowList =
+          Array.isArray(metadata.columns) && metadata.columns.length > 0
+            ? new Set(metadata.columns)
+            : null;
         const visibleColumns = res.columns.filter(
-          (c) => colsJson[c.field]?.hide !== true,
+          (c) => colsJson[c.field]?.hide !== true && (!allowList || allowList.has(c.field)),
         );
         // Default sort: prefer whatever column the server picked (it does
         // its own ``acquisition*`` lookup so ingest order matches the image

@@ -12,6 +12,7 @@ cat > .env <<'EOF'
 DEPICTIO_VERSION=1.1.4-b3
 DEPICTIO_AUTH_SINGLE_USER_MODE=true                 # admin, no login (compose default)
 DEPICTIO_EVENTS_ENABLED=true                        # opens /events/ws + the React RealtimeIndicator
+DEPICTIO_SEED_PROJECTS=iris                          # seed just the iris sample (blank = all reference projects)
 EOF
 
 docker compose up -d
