@@ -728,6 +728,23 @@ async def delete_dashboard(
     result = dashboards_collection.delete_one({"dashboard_id": dashboard_id})
 
     if result.deleted_count > 0:
+        # Drop the version ledger with the dashboard. Versions are keyed on the
+        # family id, so without this every deleted dashboard leaves its whole
+        # history — and its sequence counter — behind with nothing able to
+        # reach them again. Only for a main tab: a child tab's versions belong
+        # to the family timeline, which outlives it.
+        if dashboard.get("is_main_tab", True):
+            try:
+                from depictio.api.v1.endpoints.dashboards_endpoints.version_store import (
+                    delete_family,
+                )
+
+                removed = delete_family(str(dashboard_id))
+                if removed:
+                    logger.info(f"Removed {removed} version(s) for dashboard {dashboard_id}")
+            except Exception as exc:  # noqa: BLE001 — cleanup must not fail the delete
+                logger.warning(f"Could not clear version ledger for {dashboard_id}: {exc}")
+
         message = f"Dashboard with ID '{str(dashboard_id)}' deleted successfully."
         if child_tabs_deleted > 0:
             message += f" Also deleted {child_tabs_deleted} child tabs."

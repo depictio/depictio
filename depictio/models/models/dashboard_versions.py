@@ -177,6 +177,17 @@ class DashboardVersion(BaseModel):
     tabs: list[TabSnapshot] = Field(default_factory=list)
     data_collections: list[DataCollectionStamp] = Field(default_factory=list)
 
+    #: Denormalised counts, stored rather than derived.
+    #:
+    #: The timeline lists versions far more often than it opens one, so the
+    #: list endpoint projects ``tabs`` away — which means anything computed
+    #: *from* ``tabs`` is unavailable exactly where it is displayed. These
+    #: must therefore be real persisted fields: a ``@property`` would not be
+    #: serialised by ``model_dump`` at all, and a fallback over the projected
+    #: document would silently read zero.
+    tab_count: int = 0
+    component_count: int = 0
+
     #: Set on ``kind="restore"``: the version whose content was restored.
     parent_version_id: Optional[str] = None
 
@@ -186,9 +197,11 @@ class DashboardVersion(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    @property
-    def component_count(self) -> int:
-        return sum(len(tab.stored_metadata) for tab in self.tabs)
+    def recount(self) -> "DashboardVersion":
+        """Refresh the denormalised counts from ``tabs``. Returns self."""
+        self.tab_count = len(self.tabs)
+        self.component_count = sum(len(tab.stored_metadata) for tab in self.tabs)
+        return self
 
 
 class DashboardVersionSummary(BaseModel):

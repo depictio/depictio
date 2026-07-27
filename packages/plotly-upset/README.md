@@ -14,13 +14,11 @@ pip install plotly-upset
 import pandas as pd
 from plotly_upset import UpSetPlot
 
-df = pd.DataFrame(
-    {
-        "Set A": [1, 1, 0, 0, 1],
-        "Set B": [1, 0, 1, 0, 1],
-        "Set C": [0, 1, 1, 1, 0],
-    }
-)
+df = pd.DataFrame({
+    "Set A": [1, 1, 0, 0, 1],
+    "Set B": [1, 0, 1, 0, 1],
+    "Set C": [0, 1, 1, 1, 0],
+})
 
 plot = UpSetPlot(df, title="Set Intersections")
 fig = plot.to_plotly()

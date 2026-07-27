@@ -963,7 +963,9 @@ class ComplexHeatmap:
         # tick-mark plus tickfont.
         max_col_label_len = max((len(lbl) for lbl in self._col_labels), default=0)
         col_tickangle_deg = 90 if len(self._col_labels) > 20 else 45
-        col_label_px = int(max_col_label_len * 6 * (1.0 if col_tickangle_deg == 90 else 0.7))
+        col_label_px = int(
+            max_col_label_len * 6 * (1.0 if col_tickangle_deg == 90 else 0.7)
+        )
         bottom_margin = max(20, col_label_px + 14)
 
         fig.update_layout(

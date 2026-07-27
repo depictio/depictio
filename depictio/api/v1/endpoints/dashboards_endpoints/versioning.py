@@ -414,7 +414,7 @@ def capture_dashboard_version(
         tabs=tabs,
         data_collections=stamps,
         parent_version_id=parent_version_id,
-    )
+    ).recount()
 
     # mode="python" so datetimes stay real datetimes: they are stored as BSON
     # dates and read back as datetimes, which the coalescing window and the
@@ -438,6 +438,10 @@ def capture_dashboard_version(
                 "data_collections": payload["data_collections"],
                 "content_hash": content_hash,
                 "updated_at": now,
+                # The folded content can add or remove components and tabs, so
+                # the denormalised counts have to move with it.
+                "tab_count": record.tab_count,
+                "component_count": record.component_count,
             },
         )
         record.version_id = latest["version_id"]
