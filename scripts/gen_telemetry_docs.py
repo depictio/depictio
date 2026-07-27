@@ -100,6 +100,9 @@ features get used.
 
 This page describes exactly what is sent, why, and how to turn it off.
 
+![Anonymous installation telemetry: who reports, what is refused, how it is
+deduplicated, and where it lands](images/telemetry-architecture.png)
+
 {GENERATED_MARKER}
 
 ## Why this exists
