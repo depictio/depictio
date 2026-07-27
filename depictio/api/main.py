@@ -150,12 +150,29 @@ _SECURITY_HEADERS: dict[str, str] = {
 }
 
 
+# Component-embed HTML is the one response that must escape the baseline above:
+# it is meant to be framed cross-origin, and `X-Frame-Options: SAMEORIGIN` has no
+# "allow these origins" form, so it cannot be loosened — only omitted. `setdefault`
+# lets a handler override a header but never remove one, so the exemption has to
+# live here. The embed handler sets its own CSP (with explicit frame-ancestors and
+# per-script hashes); see services/export/embed.py::build_embed_csp.
+_EMBED_PATH_RE = re.compile(r"^/depictio/api/v\d+/export/")
+
+_EMBED_OWNED_HEADERS = ("X-Frame-Options", "Content-Security-Policy")
+
+
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """Attach baseline security headers to every API response."""
 
     async def dispatch(self, request: Request, call_next: Any) -> Response:
         response = await call_next(request)
+        # Scoped to HTML so the JSON export format keeps the strict defaults.
+        embed_html = bool(_EMBED_PATH_RE.match(request.url.path)) and response.headers.get(
+            "content-type", ""
+        ).startswith("text/html")
         for header, value in _SECURITY_HEADERS.items():
+            if embed_html and header in _EMBED_OWNED_HEADERS:
+                continue
             response.headers.setdefault(header, value)
         # HSTS only meaningful behind TLS; relying on X-Forwarded-Proto from
         # the nginx viewer / ingress to avoid emitting it on plain-HTTP dev.

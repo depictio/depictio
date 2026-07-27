@@ -1,10 +1,42 @@
 # -----------------------------
 # Depictio API image (FastAPI only)
 # -----------------------------
-# Carries only what `depictio.api.main:app` needs at runtime: Python +
-# uv-installed deps. No Playwright (worker owns screenshots), no Node,
-# no Dash assets.
+# Carries what `depictio.api.main:app` needs at runtime: Python +
+# uv-installed deps. No Playwright (worker owns screenshots).
+#
+# Node appears only in the discarded `offline-bundles` stage below, which
+# prebuilds the self-contained HTML bundles the API serves (component embeds and
+# catalog previews). Those are single HTML files copied into the final image; no
+# Node reaches runtime.
 # -----------------------------
+
+# -----------------------------
+# Offline bundle stage (discarded)
+# -----------------------------
+# Builds the single-file React bundles that `GET /export/.../components/{id}
+# ?format=html` and `GET /catalog/output/{id}/preview-html` inject payloads into.
+# Both are gitignored build artifacts, so without this stage they are simply
+# absent at runtime and those endpoints answer 503 / 422.
+FROM node:20-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0 AS offline-bundles
+WORKDIR /build
+RUN corepack enable && corepack prepare pnpm@10 --activate
+
+COPY pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY packages/depictio-components/package.json ./packages/depictio-components/
+COPY packages/depictio-react-core/package.json ./packages/depictio-react-core/
+COPY depictio/viewer/package.json ./depictio/viewer/
+RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile
+
+COPY packages ./packages/
+COPY depictio/viewer ./depictio/viewer/
+
+# Same memory knobs as Dockerfile.viewer — sourcemaps off, heap capped so the
+# build fits typical 6 GB container limits.
+RUN VITE_NO_SOURCEMAP=true NODE_OPTIONS="--max-old-space-size=4096" \
+    pnpm --filter depictio-viewer build:embed && \
+    VITE_NO_SOURCEMAP=true NODE_OPTIONS="--max-old-space-size=4096" \
+    pnpm --filter depictio-viewer build:catalog-preview
 
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim@sha256:e5b65587bce7de595f299855d7385fe7fca39b8a74baa261ba1b7147afa78e58 AS base
 
@@ -47,6 +79,21 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # re-run this fast step, not the dependency install above.
 COPY --chown=depictio:depictio VERSION ./
 COPY --chown=depictio:depictio depictio ./depictio/
+
+# Prebuilt offline bundles. Paths must match EMBED_TEMPLATE_PATH in
+# services/export/embed.py and TEMPLATE_PATH in depictio/catalog/payload.py,
+# both of which resolve relative to the depictio package.
+COPY --from=offline-bundles --chown=depictio:depictio \
+    /build/depictio/viewer/dist-embed/embed.html \
+    ./depictio/viewer/dist-embed/embed.html
+COPY --from=offline-bundles --chown=depictio:depictio \
+    /build/depictio/viewer/dist-catalog-preview/catalog-preview.html \
+    ./depictio/viewer/dist-catalog-preview/catalog-preview.html
+# The bundles reference these logos by server-relative path; the Python side
+# inlines them as data URIs at inject time, so they must be present.
+COPY --from=offline-bundles --chown=depictio:depictio \
+    /build/depictio/viewer/public/logos ./depictio/viewer/public/logos
+
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev || uv sync --no-dev
 
