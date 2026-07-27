@@ -3903,3 +3903,41 @@ export async function restoreDashboardVersion(
   if (!res.ok) await throwHttpDetailError(res, 'Failed to restore version');
   return (await res.json()) as RestoreVersionResult;
 }
+
+export interface CompatibilityCheck {
+  dc_id: string;
+  data_collection_tag?: string;
+  workflow_tag?: string;
+  dc_type?: string;
+  version_kind?: DataVersionKind;
+  delta_version?: number | null;
+  found: boolean;
+  schema_match: boolean;
+  columns_removed: string[];
+  columns_added: string[];
+  columns_retyped: Array<{ name: string; from: string; to: string }>;
+  /** Component indices that reference a column which no longer exists — what
+   *  turns a schema diff into something actionable. */
+  affected_components: string[];
+  issues: string[];
+}
+
+export interface CompatibilityReport {
+  version_id: string;
+  seq: number;
+  severity: 'ok' | 'info' | 'warning' | 'error';
+  /** Schema drift never blocks a restore; it is shown beforehand instead. */
+  renderable: boolean;
+  checks: CompatibilityCheck[];
+}
+
+/** Whether a version can still render against today's data. */
+export async function fetchVersionCompatibility(
+  versionId: string,
+): Promise<CompatibilityReport> {
+  const res = await authFetch(
+    `${API_BASE}/dashboards/versions/${versionId}/compatibility`,
+  );
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to check version compatibility');
+  return (await res.json()) as CompatibilityReport;
+}

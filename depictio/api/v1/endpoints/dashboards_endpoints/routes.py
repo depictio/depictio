@@ -240,6 +240,24 @@ _PREVIEW_OVERLAY_FIELDS: tuple[str, ...] = (
 )
 
 
+def _capture_version_quietly(
+    dashboard_id: PyObjectId | ObjectId | str,
+    current_user: Any,
+    kind: str = "auto",
+) -> None:
+    """Record a version after a write that does not go through ``/save``.
+
+    Lazily imported and never allowed to raise: a missing version costs an undo
+    step, a failed write costs work. Same posture as the screenshot dispatch.
+    """
+    try:
+        from depictio.api.v1.endpoints.dashboards_endpoints.versioning import capture_quietly
+
+        capture_quietly(dashboard_id, kind=kind, author=current_user)  # type: ignore[arg-type]
+    except Exception as exc:  # noqa: BLE001 — versioning must never break a write
+        logger.warning(f"Version capture failed for {dashboard_id}: {exc}")
+
+
 def _overlay_version(
     dashboard_dict: dict,
     live_doc: dict,
@@ -652,6 +670,10 @@ async def edit_dashboard(
     )
 
     if result:
+        # Title/icon edits are content too — without this they would be the one
+        # kind of change the timeline cannot show. `auto`, so a rename burst
+        # coalesces like any other edit.
+        _capture_version_quietly(dashboard_id, current_user)
         return {
             "message": "Dashboard updated successfully.",
             "updated_fields": list(update_data.keys()),
@@ -924,6 +946,7 @@ async def update_tab(
     )
 
     if result:
+        _capture_version_quietly(dashboard_id, current_user)
         return {
             "success": True,
             "message": "Tab updated successfully.",
@@ -985,6 +1008,11 @@ async def delete_tab(
     result = dashboards_collection.delete_one({"dashboard_id": dashboard_id})
 
     if result.deleted_count > 0:
+        # Anchored on the parent — the deleted tab can no longer resolve its
+        # own family. `explicit`, because losing a tab is the single thing most
+        # worth being able to undo, and it must not coalesce away.
+        if parent_dashboard_id:
+            _capture_version_quietly(parent_dashboard_id, current_user, kind="explicit")
         return {
             "success": True,
             "message": f"Tab '{tab_title}' deleted successfully.",
@@ -1055,6 +1083,10 @@ async def reorder_tabs(
 
     # Perform the reorder
     updated_count = reorder_child_tabs(PyObjectId(parent_dashboard_id), tab_orders)
+
+    # `tab_order` is part of the snapshot and of the content hash, so a reorder
+    # is a genuine change rather than a no-op the hash would swallow.
+    _capture_version_quietly(ObjectId(parent_dashboard_id), current_user)
 
     return {
         "success": True,

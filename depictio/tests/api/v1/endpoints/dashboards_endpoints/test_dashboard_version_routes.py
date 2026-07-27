@@ -43,6 +43,7 @@ def ctx(monkeypatch: pytest.MonkeyPatch):
     """A live app wired to in-memory Mongo, with permissions under test control."""
     from depictio.api.v1.endpoints.dashboards_endpoints import routes as dash_routes
     from depictio.api.v1.endpoints.dashboards_endpoints import (
+        schema_integrity,
         version_store,
         versioning,
         versions_routes,
@@ -63,6 +64,8 @@ def ctx(monkeypatch: pytest.MonkeyPatch):
     # without these it reaches for the real Mongo and hangs on connect.
     monkeypatch.setattr(dash_routes, "dashboards_collection", dashboards)
     monkeypatch.setattr(dash_routes, "projects_collection", db["projects"])
+    monkeypatch.setattr(schema_integrity, "deltatables_collection", db["deltatables"])
+    monkeypatch.setattr(schema_integrity, "projects_collection", db["projects"])
 
     granted = {"level": "owner"}
 
@@ -85,6 +88,8 @@ def ctx(monkeypatch: pytest.MonkeyPatch):
         "versions": db["dashboard_versions"],
         "granted": granted,
         "versioning": versioning,
+        "deltatables": db["deltatables"],
+        "projects": db["projects"],
     }
 
 
@@ -93,6 +98,13 @@ API = "/depictio/api/v1/dashboards"
 
 def _make_dashboard(ctx, *, title="Main", components=None, parent=None, tab_order=0, did=None):
     did = did or ObjectId()
+    # Real components always carry a `dc_config` with the collection's type —
+    # it is what tells the capture path which versioning family applies, and
+    # therefore whether a schema is worth recording. Mirror that here so the
+    # fixtures exercise the same path production does.
+    for component in components or []:
+        if component.get("dc_id") and "dc_config" not in component:
+            component["dc_config"] = {"type": "table"}
     ctx["dashboards"].insert_one(
         {
             "_id": did,
@@ -489,3 +501,154 @@ def test_preview_of_a_tab_that_did_not_exist_yet(ctx) -> None:
     later = _make_dashboard(ctx, title="Added later", parent=main, tab_order=1)
 
     assert _get(ctx, later, record.version_id).status_code == 404
+
+
+# ── Compatibility report ────────────────────────────────────────────────────
+
+
+def _register_dc(ctx, dc_id, columns, *, exists=True):
+    """Give a data collection a current schema (and optionally a project)."""
+    ctx["deltatables"].insert_one(
+        {
+            "data_collection_id": dc_id,
+            "aggregation": [
+                {
+                    "aggregation_version": 1,
+                    "aggregation_columns_specs": [{"name": n, "type": t} for n, t in columns],
+                    "rows_total": 10,
+                    "delta_version": 3,
+                }
+            ],
+        }
+    )
+    if exists:
+        ctx["projects"].insert_one({"workflows": [{"data_collections": [{"_id": dc_id}]}]})
+
+
+def _compat(ctx, version_id):
+    return ctx["client"].get(f"{API}/versions/{version_id}/compatibility")
+
+
+def test_compatibility_is_clean_when_nothing_changed(ctx) -> None:
+    dc_id = ObjectId()
+    _register_dc(ctx, dc_id, [("body_mass_g", "float64")])
+    did = _make_dashboard(
+        ctx, components=[{"index": "card-1", "dc_id": dc_id, "column_name": "body_mass_g"}]
+    )
+    record = _capture(ctx, did, kind="explicit")
+
+    body = _compat(ctx, record.version_id).json()
+
+    assert body["severity"] == "ok", body
+
+
+def test_compatibility_names_the_missing_column_and_components(ctx) -> None:
+    """The whole point: a hash pair cannot tell you which boxes break."""
+    dc_id = ObjectId()
+    _register_dc(ctx, dc_id, [("body_mass_g", "float64")])
+    did = _make_dashboard(
+        ctx,
+        components=[
+            {"index": "card-1", "dc_id": dc_id, "column_name": "body_mass_g"},
+            {"index": "card-2", "dc_id": dc_id, "column_name": "body_mass_g"},
+            {"index": "text-1", "dc_id": None},
+        ],
+    )
+    record = _capture(ctx, did, kind="explicit")
+
+    # The column goes away underneath the version.
+    ctx["deltatables"].update_one(
+        {"data_collection_id": dc_id},
+        {
+            "$set": {
+                "aggregation.0.aggregation_columns_specs": [{"name": "species", "type": "object"}]
+            }
+        },
+    )
+
+    body = _compat(ctx, record.version_id).json()
+    check = next(c for c in body["checks"] if c["dc_id"] == str(dc_id))
+
+    assert body["severity"] == "error"
+    assert "body_mass_g" in check["columns_removed"]
+    assert sorted(check["affected_components"]) == ["card-1", "card-2"]
+
+
+def test_compatibility_flags_a_retyped_column_as_warning(ctx) -> None:
+    dc_id = ObjectId()
+    _register_dc(ctx, dc_id, [("n", "int64")])
+    did = _make_dashboard(ctx, components=[{"index": "c", "dc_id": dc_id, "column_name": "n"}])
+    record = _capture(ctx, did, kind="explicit")
+
+    ctx["deltatables"].update_one(
+        {"data_collection_id": dc_id},
+        {"$set": {"aggregation.0.aggregation_columns_specs": [{"name": "n", "type": "object"}]}},
+    )
+
+    body = _compat(ctx, record.version_id).json()
+    check = next(c for c in body["checks"] if c["dc_id"] == str(dc_id))
+
+    assert body["severity"] == "warning"
+    assert check["columns_retyped"] == [{"name": "n", "from": "int64", "to": "object"}]
+
+
+def test_compatibility_reports_a_deleted_data_collection(ctx) -> None:
+    dc_id = ObjectId()
+    _register_dc(ctx, dc_id, [("a", "int64")], exists=False)
+    did = _make_dashboard(ctx, components=[{"index": "c", "dc_id": dc_id, "column_name": "a"}])
+    record = _capture(ctx, did, kind="explicit")
+
+    body = _compat(ctx, record.version_id).json()
+    check = next(c for c in body["checks"] if c["dc_id"] == str(dc_id))
+
+    assert body["severity"] == "error"
+    assert check["found"] is False
+    assert check["affected_components"] == ["c"]
+
+
+def test_compatibility_ignores_a_removed_column_nothing_uses(ctx) -> None:
+    """Drift that breaks nothing must not read as an error."""
+    dc_id = ObjectId()
+    _register_dc(ctx, dc_id, [("used", "int64"), ("spare", "int64")])
+    did = _make_dashboard(ctx, components=[{"index": "c", "dc_id": dc_id, "column_name": "used"}])
+    record = _capture(ctx, did, kind="explicit")
+
+    ctx["deltatables"].update_one(
+        {"data_collection_id": dc_id},
+        {"$set": {"aggregation.0.aggregation_columns_specs": [{"name": "used", "type": "int64"}]}},
+    )
+
+    body = _compat(ctx, record.version_id).json()
+
+    assert body["severity"] == "info", body
+    assert body["renderable"] is True
+
+
+def test_compatibility_requires_viewer(ctx) -> None:
+    did = _make_dashboard(ctx, components=[{"index": "a"}])
+    record = _capture(ctx, did, kind="explicit")
+    ctx["granted"]["level"] = "none"
+
+    assert _compat(ctx, record.version_id).status_code == 403
+
+
+def test_compatibility_covers_map_columns(ctx) -> None:
+    """A map alone references seven columns; a card-only check would miss it."""
+    dc_id = ObjectId()
+    _register_dc(ctx, dc_id, [("lat", "float64"), ("lon", "float64")])
+    did = _make_dashboard(
+        ctx,
+        components=[{"index": "map-1", "dc_id": dc_id, "lat_column": "lat", "lon_column": "lon"}],
+    )
+    record = _capture(ctx, did, kind="explicit")
+
+    ctx["deltatables"].update_one(
+        {"data_collection_id": dc_id},
+        {"$set": {"aggregation.0.aggregation_columns_specs": [{"name": "lat", "type": "float64"}]}},
+    )
+
+    check = next(
+        c for c in _compat(ctx, record.version_id).json()["checks"] if c["dc_id"] == str(dc_id)
+    )
+
+    assert check["affected_components"] == ["map-1"]
