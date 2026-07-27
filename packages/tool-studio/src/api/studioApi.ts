@@ -10,7 +10,7 @@
  * `TableRenderer`, `ComponentRenderer` — run here unmodified, against the
  * fixture in the browser instead of FastAPI.
  *
- * This is the same seam `depictio/viewer/src/catalog-preview/mockApi.ts` uses,
+ * This is the same seam `depictio/viewer/src/offline/mockApi.ts` uses,
  * with one difference: that shim *looks payloads up* (Python precomputed them
  * into the bundle), while this one *computes them*, because the Studio's
  * fixture is whatever the user just dropped.

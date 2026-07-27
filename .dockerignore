@@ -9,6 +9,7 @@ depictio/viewer/dist/
 # its catalog-preview-builder stage, so a host build must not ride along in the
 # `COPY depictio ./depictio/` layer.
 depictio/viewer/dist-catalog-preview/
+depictio/viewer/dist-embed/
 
 # -----------------------------
 # Exclude Legacy Directories
