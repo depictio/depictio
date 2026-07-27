@@ -141,7 +141,9 @@ def _summarise(record: dict[str, Any]) -> dict[str, Any]:
         "updated_at": record.get("updated_at"),
         "save_count": record.get("save_count", 1),
         "content_hash": record.get("content_hash", ""),
-        "tab_count": record.get("tab_count", len(record.get("tabs") or [])),
+        # Read the persisted counts, not a derivation over `tabs` — the list
+        # query projects `tabs` away, so deriving here would always yield 0.
+        "tab_count": record.get("tab_count", 0),
         "component_count": record.get("component_count", 0),
         "parent_version_id": record.get("parent_version_id"),
         "data_version_kinds": kinds,

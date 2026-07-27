@@ -382,3 +382,46 @@ def test_oversized_snapshot_is_skipped_not_raised(store, monkeypatch) -> None:
 
     assert _capture(did, author=ALICE, now=BASE) is None
     assert store["versions"].count_documents({}) == 0
+
+
+# ── Denormalised counts ─────────────────────────────────────────────────────
+#
+# The timeline query projects `tabs` away, so anything derived from `tabs` is
+# unavailable exactly where the counts are displayed. They must be persisted.
+
+
+def test_counts_are_persisted_not_derived(store) -> None:
+    main = _make_dashboard(store, title="Main", components=[{"index": "a"}, {"index": "b"}])
+    _make_dashboard(store, title="Tab 2", parent=main, is_main_tab=False, tab_order=1)
+
+    _capture(main, kind="explicit", author=ALICE, now=BASE)
+
+    doc = store["versions"].find_one({})
+    assert doc["component_count"] == 2
+    assert doc["tab_count"] == 2
+
+
+def test_counts_survive_the_list_projection(store) -> None:
+    """The regression: the drawer read 0 components for every version."""
+    from depictio.api.v1.endpoints.dashboards_endpoints import version_store
+
+    did = _make_dashboard(store, components=[{"index": "a"}, {"index": "b"}, {"index": "c"}])
+    _capture(did, kind="explicit", author=ALICE, now=BASE)
+
+    row = version_store.list_versions(str(did))[0]
+
+    assert "tabs" not in row, "the timeline query must not ship the snapshot"
+    assert row["component_count"] == 3, "counts must survive without `tabs` to derive from"
+    assert row["tab_count"] == 1
+
+
+def test_counts_follow_a_coalesced_edit(store) -> None:
+    """Folding replaces the content, so the counts must move with it."""
+    did = _make_dashboard(store, components=[{"index": "a"}])
+    _capture(did, author=ALICE, now=BASE)
+
+    _set_components(store, did, [{"index": "a"}, {"index": "b"}, {"index": "c"}])
+    _capture(did, author=ALICE, now=BASE + timedelta(seconds=5))
+
+    assert store["versions"].count_documents({}) == 1, "precondition: the saves coalesced"
+    assert store["versions"].find_one({})["component_count"] == 3
