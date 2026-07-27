@@ -5,7 +5,7 @@
  * real `ComponentRenderer` from an embedded payload — no API, fully offline. The
  * shared `apiShimPlugin` (packages/depictio-react-core/viteApiShim.ts) redirects
  * every `depictio-react-core` import of the real `api.ts` to
- * `src/catalog-preview/mockApi.ts` (which itself imports the real api), so the
+ * `src/offline/mockApi.ts` (which itself imports the real api), so the
  * renderers read embedded payloads instead of fetching. Tool Studio uses the
  * same plugin with a shim that computes payloads instead of looking them up.
  */
@@ -15,7 +15,7 @@ import { viteSingleFile } from 'vite-plugin-singlefile';
 import path from 'path';
 import { apiShimPlugin } from '../../packages/depictio-react-core/viteApiShim';
 
-const SHIM = path.resolve(__dirname, 'src/catalog-preview/mockApi.ts');
+const SHIM = path.resolve(__dirname, 'src/offline/mockApi.ts');
 
 export default defineConfig({
   base: './',
