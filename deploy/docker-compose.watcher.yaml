@@ -45,6 +45,11 @@ services:
       # the whole Delta table, which is exactly what a watch loop must not do.
       - --write-mode
       - ${DEPICTIO_WATCH_WRITE_MODE:-replace-runs}
+      # Rewrite only the runs that changed, instead of rebuilding the whole
+      # table from every registered file. Opt-in, and a flag rather than a
+      # variable because compose cannot pass one conditionally: uncomment it
+      # once a full cycle has worked on this project.
+      # - --incremental-write
       # Inside a container the data root is almost always a bind mount, and
       # inotify does not cross that boundary reliably on macOS/Windows hosts or
       # network-backed volumes. Polling is the safe default here even though

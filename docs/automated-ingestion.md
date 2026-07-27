@@ -17,11 +17,13 @@ no new flags behaves exactly as before.
 depictio data watch \
   --CLI-config-path ~/.depictio/CLI.yaml \
   --project-config-path ./project.yaml \
-  --write-mode replace-runs
+  --write-mode replace-runs --incremental-write
 ```
 
 That polls and/or listens for changes, waits for writes to settle, and
-re-ingests only what changed.
+re-ingests only what changed: a collection nothing touched is left at its
+current Delta version, and a collection that did change has only its changed
+runs rewritten.
 
 Watch it from the UI under **Admin → Log & Task → Agents**, or on a project's
 **Ingestion → History** tab.
@@ -103,6 +105,9 @@ any drift.
   `~/.depictio/state/{server}/{project_id}.lock`. This also stops a second
   watcher, or a manual `depictio run`, from overlapping with a cycle in flight.
 - **Events during a cycle coalesce into one follow-up pass**, not N queued ones.
+- **Joins are rebuilt at the end of every cycle**, as `depictio run` does, so a
+  project with a `joins:` block cannot end up with fresh source tables and a
+  joined one frozen at whatever the last manual run produced.
 - **Failures back off** 30s → 15min, reset on the first success, so an API
   restart does not turn into a hammering loop.
 - **SIGINT/SIGTERM** stops accepting triggers, finishes the current cycle,
@@ -176,12 +181,19 @@ Mongo.
 ```bash
 --write-mode overwrite      # default — rewrite the whole table (historical behaviour)
 --write-mode replace-runs   # partition by run, rewrite only the runs in this batch
---write-mode append         # add rows without replacing (only with --sync-changed)
 ```
 
 `replace-runs` partitions on `depictio_run_id` and uses a `replaceWhere`
 predicate, so re-ingesting run A replaces exactly A's rows in one atomic commit
 and leaves B and C alone. Duplicates become structurally impossible.
+
+There is deliberately no append mode. A run is always rebuilt by re-parsing
+every file registered for it, so what depictio has in hand is *all* of that
+run's rows, never just the new ones — appending them would duplicate a run whose
+file was edited, and could not remove the rows of a file that has since
+disappeared. Replacing the run's partition says "upsert this run" exactly, and
+for a genuinely new run the predicate finds nothing to remove, so it costs no
+more than an append would have.
 
 It falls back to `overwrite`, with a warning, when partitioning would not help
 or would hurt:
@@ -201,6 +213,66 @@ depictio data process --project-config-path ./project.yaml \
 Without it, `replace-runs` falls back to `overwrite` and says why. The watcher
 never passes `--repartition` — a full rewrite is not something a background
 loop should decide to do.
+
+### Rewriting only the runs that changed
+
+`--write-mode replace-runs` on its own partitions the table, but still rebuilds
+the frame from *every* registered file, so the predicate ends up covering every
+run: a partitioned full rewrite. `--incremental-write` makes it real — the file
+list is filtered to the runs the scan reported as changed, and the predicate
+covers only those.
+
+```bash
+depictio data watch --project-config-path ./project.yaml \
+  --write-mode replace-runs --incremental-write
+```
+
+It is opt-in, and it declines — falling back to a full rebuild, with the reason
+in the log — whenever a partial write could not be trusted:
+
+- a run disappeared from the data root (a subset write cannot express "these
+  rows should no longer exist")
+- the scan could not vouch for the whole picture: a dry run, or without
+  `--rescan-folders`, where already-registered runs are skipped unchecked
+- the collection is not one the run-based scan walks (single-file, MultiQC,
+  GeoJSON, phylogeny, recipes, joins)
+- the table does not exist yet, or is not partitioned by run — see
+  `--repartition` above
+- a changed run's files have all vanished, so the subset would be empty
+- a column's type changed relative to the table (see below)
+
+Declining is always the safe direction: it does *more* work, never less.
+
+### Untouched collections are left alone
+
+A cycle where nothing moved no longer writes anything. The scan reports which
+collections gained, lost or changed a file, and a collection absent from that
+list keeps its current Delta version — no read, no parse, no commit.
+
+The watcher does this by itself on incremental cycles, but only after a cycle
+that actually succeeded: a failure, or a fresh start, rebuilds everything. For
+`depictio run` it is the explicit `--skip-unchanged`, off by default so that
+re-running stays a way to repair a project that drifted.
+
+Nothing is skipped silently: the collections left alone are named in the CLI
+output, and the process step reports "N changed, M left unchanged" in the live
+step timeline.
+
+### When the schema drifts
+
+Between two scans of the same collection, a source file can gain a column, lose
+one, or change a column's type.
+
+| Change | What happens |
+|---|---|
+| A column appears | Merged into the table schema; earlier runs read back as null for it |
+| A column disappears from the changed runs | Kept in the table; the rewritten rows are null for it |
+| A column's type changes | Full rebuild, so every row ends up in one type |
+
+The first two are handled inside the partial write. The third cannot be: only
+the changed runs would be rewritten in the new type, leaving the untouched runs
+in the old one under a schema claiming otherwise. It is detected before anything
+is written, and the collection is rebuilt in full instead.
 
 ---
 
@@ -270,6 +342,7 @@ DEPICTIO_CLI_CONFIG=/home/alice/.depictio/CLI.yaml
 DEPICTIO_PROJECT_CONFIG=/srv/projects/myproject/project.yaml
 DEPICTIO_WATCH_MODE=incremental
 DEPICTIO_WATCH_WRITE_MODE=replace-runs
+DEPICTIO_WATCH_INCREMENTAL_WRITE=1
 DEPICTIO_WATCH_BACKEND=auto
 DEPICTIO_WATCH_INTERVAL=300
 DEPICTIO_WATCH_DEBOUNCE=30
@@ -305,7 +378,15 @@ rejected, and example rejected paths — usually the pattern, or a `data_root`
 pointing one level too high or too low.
 
 **The watcher rewrites the whole table every cycle.**
-You are on `--write-mode overwrite`. Use `replace-runs`.
+You are on `--write-mode overwrite`. Use `--write-mode replace-runs
+--incremental-write`. If you already are, the log says which condition sent it
+back to a full rebuild — most often a table that predates run partitioning, in
+which case one `depictio data process --write-mode replace-runs --repartition`
+converts it.
+
+**A collection was not rewritten and I expected it to be.**
+Its files did not move, so it was left alone. `--mode full`, or `depictio run`
+without `--skip-unchanged`, rebuilds it regardless.
 
 **Storage keeps growing.**
 Nothing vacuums automatically. Run `depictio data vacuum <dc-tag>` to see what

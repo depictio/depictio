@@ -21,7 +21,10 @@ from depictio.api.v1.celery_tasks import preview_deltatable as preview_deltatabl
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import deltatables_collection, projects_collection, users_collection
-from depictio.api.v1.endpoints.deltatables_endpoints.utils import precompute_columns_specs
+from depictio.api.v1.endpoints.deltatables_endpoints.utils import (
+    build_aggregation_hash,
+    precompute_columns_specs,
+)
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user, get_user_or_anonymous
 from depictio.api.v1.s3 import polars_s3_config
 from depictio.api.v1.utils import agg_functions
@@ -53,28 +56,20 @@ def sanitize_for_json(obj):
 def _compute_upsert_artifacts(
     delta_table_location: str, dc_data: dict, is_multiqc: bool
 ) -> tuple[str, list]:
-    """Content hash and column specs for a data collection's table.
+    """Aggregation hash and column specs for a data collection's table.
 
-    Synchronous and CPU/IO-heavy by nature (full table read, pandas
-    materialisation, row hashing), so it lives outside the request coroutine and
-    is called via ``asyncio.to_thread``.
+    Still IO-heavy by nature — ``precompute_columns_specs`` reads the whole
+    table and materialises it in pandas — so it lives outside the request
+    coroutine and is called via ``asyncio.to_thread``.
     """
     if is_multiqc:
         # MultiQC is stored as raw parquet, not a Delta table: there is nothing
         # to read, and column specs are not computed for it.
-        final_hash = hashlib.sha256(f"{delta_table_location}{datetime.now()}".encode()).hexdigest()
-        return final_hash, []
+        return build_aggregation_hash(delta_table_location), []
 
     df = pl.read_delta(delta_table_location, storage_options=polars_s3_config)
     results = precompute_columns_specs(df, agg_functions, dc_data)
-
-    hash_series = df.hash_rows(seed=0)
-    hash_bytes = hash_series.to_numpy().tobytes()
-    hash_df = hashlib.sha256(hash_bytes).hexdigest()
-    final_hash = hashlib.sha256(
-        f"{delta_table_location}{datetime.now()}{hash_df}".encode()
-    ).hexdigest()
-    return final_hash, results
+    return build_aggregation_hash(delta_table_location), results
 
 
 def _should_offload(requested: bool, is_multiqc: bool) -> bool:

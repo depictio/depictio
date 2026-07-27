@@ -16,7 +16,9 @@
 #
 # Optional (defaults shown):
 #   DEPICTIO_WATCH_MODE=incremental        incremental | full
-#   DEPICTIO_WATCH_WRITE_MODE=overwrite    overwrite | replace-runs | append
+#   DEPICTIO_WATCH_WRITE_MODE=overwrite    overwrite | replace-runs
+#   DEPICTIO_WATCH_INCREMENTAL_WRITE=0     1 rewrites only the runs that changed
+#                                          (needs WRITE_MODE=replace-runs)
 #   DEPICTIO_WATCH_BACKEND=auto            auto | native | polling | both
 #   DEPICTIO_WATCH_INTERVAL=300            poll period, seconds
 #   DEPICTIO_WATCH_DEBOUNCE=30             quiet period before a cycle, seconds
@@ -40,6 +42,7 @@ EnvironmentFile=/etc/depictio/%i.env
 # Environment= before EnvironmentFile=, so the file wins.
 Environment=DEPICTIO_WATCH_MODE=incremental
 Environment=DEPICTIO_WATCH_WRITE_MODE=overwrite
+Environment=DEPICTIO_WATCH_INCREMENTAL_WRITE=0
 Environment=DEPICTIO_WATCH_BACKEND=auto
 Environment=DEPICTIO_WATCH_INTERVAL=300
 Environment=DEPICTIO_WATCH_DEBOUNCE=30
@@ -51,6 +54,7 @@ ExecStart=/bin/sh -c 'exec "$DEPICTIO_CLI_BIN" data watch \
   --project-config-path "$DEPICTIO_PROJECT_CONFIG" \
   --mode "$DEPICTIO_WATCH_MODE" \
   --write-mode "$DEPICTIO_WATCH_WRITE_MODE" \
+  $([ "$DEPICTIO_WATCH_INCREMENTAL_WRITE" = 1 ] && echo --incremental-write) \
   --backend "$DEPICTIO_WATCH_BACKEND" \
   --interval "$DEPICTIO_WATCH_INTERVAL" \
   --debounce "$DEPICTIO_WATCH_DEBOUNCE" \

@@ -1,7 +1,7 @@
 import os
 import re
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 
 from bson import ObjectId
@@ -64,6 +64,7 @@ SCAN_STAT_KEYS: tuple[str, ...] = (
     "unchanged_files",
     "missing_files",
     "deleted_files",
+    "vanished_files",
     "skipped_files",
     "other_failure_files",
 )
@@ -640,6 +641,14 @@ def scan_run_for_multiple_data_collections(
             and sc.scan_result["reason"] not in NOT_UPLOADED_SCAN_REASONS
         ]
 
+        # Registered files this scan did not encounter. Computed here rather
+        # than inside the branch below: a data collection that matched nothing
+        # in this run still needs the number, and that is precisely the case
+        # where every one of its files under this run has disappeared.
+        missing_files_location = set(existing_files_for_dc.keys()) - {
+            str(sc.file.file_location) for sc in dc_file_scan_results
+        }
+
         if dc_file_scan_results:
             # ``result`` already encodes "should this be uploaded": added always,
             # changed only under --sync-changed, updated only under --sync-files.
@@ -684,9 +693,6 @@ def scan_run_for_multiple_data_collections(
                         )
 
             # Handle missing files
-            missing_files_location = set(existing_files_for_dc.keys()) - set(
-                [str(sc.file.file_location) for sc in dc_file_scan_results]
-            )
             missing_files = [
                 str(existing_files_for_dc[file_location]["_id"])
                 for file_location in missing_files_location
@@ -717,10 +723,26 @@ def scan_run_for_multiple_data_collections(
             "other_failure_files": files_other_failure,
         }
 
-        # Calculate missing files count
+        # Calculate missing files count.
+        #
+        # Careful with this number: ``existing_files_for_dc`` spans every run of
+        # the collection while ``dc_file_scan_results`` covers only this one, so
+        # for a multi-run collection it counts most of the other runs' files as
+        # "missing". It is kept as-is because the summary tables have always
+        # shown it, but nothing may decide anything on it.
         missing_files_count = (
             len(existing_files_for_dc) - len(dc_file_scan_results) if existing_files_for_dc else 0
         )
+
+        # A registered file that lives under *this* run and was not seen this
+        # time has genuinely disappeared. Unlike the count above this one is
+        # scoped correctly, which is what lets a deletion mark the collection as
+        # changed instead of the table quietly keeping rows for a file that is
+        # no longer on disk.
+        run_prefix = os.path.join(run_location, "")
+        vanished_files = [
+            location for location in missing_files_location if str(location).startswith(run_prefix)
+        ]
 
         # Store stats for this data collection - THIS IS KEY!
         dc_stats[dc.data_collection_tag] = {
@@ -731,6 +753,7 @@ def scan_run_for_multiple_data_collections(
             "unchanged_files": len(files_unchanged),
             "missing_files": missing_files_count if not update_files else 0,
             "deleted_files": missing_files_count if update_files else 0,
+            "vanished_files": len(vanished_files),
             "skipped_files": len(files_skipped),
             "other_failure_files": len(files_other_failure),
         }
@@ -816,6 +839,12 @@ class _PendingLocation:
     location: str
     structure: str
     runs: list[_PendingRun]
+    #: Every run tag found on disk under this location, including the ones that
+    #: did not need a scan. The missing-run cleanup compares the registry
+    #: against *this*, not against the runs that were scanned: a run skipped
+    #: because the state cache proved it unchanged is still very much present,
+    #: and deleting it would take its files with it.
+    present_tags: list[str] = field(default_factory=list)
 
 
 def _fetch_existing_files(
@@ -920,10 +949,12 @@ def _resolve_pending_runs(
             raise ValueError(f"'{location}' is not a directory.")
 
         runs: list[_PendingRun] = []
+        present_tags: list[str] = []
 
         if structure == "flat":
             # Treat the provided directory as a single run
             run_tag = os.path.basename(os.path.normpath(location))
+            present_tags.append(run_tag)
             candidate = _consider(location, run_tag)
             if candidate:
                 runs.append(candidate)
@@ -938,11 +969,16 @@ def _resolve_pending_runs(
             for run in sorted(os.listdir(location)):
                 run_path = os.path.join(location, run)
                 if os.path.isdir(run_path) and re.match(runs_regex, run):
+                    present_tags.append(run)
                     candidate = _consider(run_path, run)
                     if candidate:
                         runs.append(candidate)
 
-        pending.append(_PendingLocation(location=location, structure=structure, runs=runs))
+        pending.append(
+            _PendingLocation(
+                location=location, structure=structure, runs=runs, present_tags=present_tags
+            )
+        )
 
     return pending
 
@@ -1119,10 +1155,16 @@ def scan_files_for_workflow(
     # against only the runs scanned *so far*. With a single configured location
     # that is equivalent; with several it deleted every run belonging to a
     # location that had not been walked yet.
+    #
+    # It compares against every run *present on disk*, not against the runs that
+    # were scanned. Those differ as soon as the state cache is warm: an
+    # unchanged run is deliberately not rescanned, and treating "not scanned" as
+    # "no longer there" deleted it and every one of its files on the second
+    # cycle of a watch — which is exactly when the cache first has an answer.
+    missing_runs_tag: set[str] = set()
     if rescan_folders:
-        missing_runs_tag = set(existing_runs_reformated.keys()) - set(
-            [run.run_tag for run in all_workflow_runs if run]
-        )
+        present_run_tags = {tag for pending in pending_locations for tag in pending.present_tags}
+        missing_runs_tag = set(existing_runs_reformated.keys()) - present_run_tags
         missing_runs = [str(existing_runs_reformated[run_tag].id) for run_tag in missing_runs_tag]
 
         if missing_runs:
@@ -1202,7 +1244,77 @@ def scan_files_for_workflow(
         "success",
     )
 
-    return {"result": "success", "runs_scanned": len(all_workflow_runs)}
+    return {
+        "result": "success",
+        "runs_scanned": len(all_workflow_runs),
+        **_change_signal(
+            all_workflow_runs,
+            data_collections,
+            missing_runs_tag,
+            rescan_folders=rescan_folders,
+            dry_run=dry_run,
+        ),
+    }
+
+
+#: Per-data-collection counters that mean "this collection's rows changed".
+#:
+#: ``unchanged_files`` and ``skipped_files`` deliberately do not appear — they
+#: are the bulk of a steady-state scan. Neither do ``missing_files`` and
+#: ``deleted_files``: both are derived from a count that compares the whole
+#: collection's registry against a single run's matches, so on a multi-run
+#: collection they are large and meaningless. ``vanished_files`` is the
+#: run-scoped version and is the one that can be trusted.
+CHANGED_STAT_KEYS = ("new_files", "changed_files", "updated_files", "vanished_files")
+
+
+def _change_signal(
+    workflow_runs: list,
+    data_collections: list[DataCollection],
+    missing_runs_tag: set[str],
+    *,
+    rescan_folders: bool,
+    dry_run: bool,
+) -> dict:
+    """Which data collections actually changed, and which runs changed in them.
+
+    The scan already computes this per run and per data collection; it just had
+    nowhere to go. Returning it is what lets the process step leave an untouched
+    Delta table alone instead of rebuilding every table in the project on every
+    cycle.
+
+    ``complete`` is the honesty flag. The signal is only trustworthy when every
+    run on disk was either scanned or proven unchanged, which is what
+    ``rescan_folders`` buys; without it, already-registered runs are skipped
+    with no check at all and "nothing changed" would be a guess. A dry run
+    likewise reports what *would* happen, so it cannot authorise a skip.
+    """
+    tag_to_id = {dc.data_collection_tag: str(dc.id) for dc in data_collections}
+
+    changed: dict[str, list[str]] = {}
+    for run in workflow_runs:
+        if not run:
+            continue
+        for dc_tag, stats in (getattr(run, "_dc_stats_for_display", None) or {}).items():
+            if not any(stats.get(key, 0) for key in CHANGED_STAT_KEYS):
+                continue
+            dc_id = tag_to_id.get(dc_tag)
+            if dc_id is None:
+                # A tag with no matching collection cannot be acted on; say so
+                # rather than dropping it, since the result gates real work.
+                logger.warning(f"Scan reported changes for unknown data collection '{dc_tag}'")
+                continue
+            changed.setdefault(dc_id, []).append(run.run_tag)
+
+    return {
+        "changed_dcs": {dc_id: sorted(set(tags)) for dc_id, tags in changed.items()},
+        # Only these collections were walked here, so only these can be reported
+        # as unchanged. Anything absent — single-file collections, MultiQC,
+        # recipes, joins — is not covered and must always be processed.
+        "covered_dcs": sorted(tag_to_id.values()),
+        "removed_runs": sorted(missing_runs_tag),
+        "complete": bool(rescan_folders) and not dry_run,
+    }
 
 
 def scan_files_for_data_collection(
@@ -1386,6 +1498,12 @@ def scan_project_files(
             raise Exception(f"Workflow '{workflow_name}' not found in project")
 
     total_runs_scanned = 0
+    # Merged across workflows. A project-wide signal is what the process step
+    # needs, since it iterates workflows itself.
+    changed_dcs: dict[str, list[str]] = {}
+    covered_dcs: set[str] = set()
+    removed_runs: set[str] = set()
+    signal_complete = True
 
     for workflow in workflows_to_scan:
         rich_print_checked_statement(
@@ -1470,6 +1588,12 @@ def scan_project_files(
 
             total_runs_scanned += scan_result.get("runs_scanned", 0)
 
+            for dc_id, run_tags in (scan_result.get("changed_dcs") or {}).items():
+                changed_dcs.setdefault(dc_id, []).extend(run_tags)
+            covered_dcs.update(scan_result.get("covered_dcs") or [])
+            removed_runs.update(scan_result.get("removed_runs") or [])
+            signal_complete = signal_complete and bool(scan_result.get("complete"))
+
         # Scan single data collections individually (existing approach)
         for dc in single_data_collections:
             scan_mode = dc.config.scan.mode.title() if dc.config.scan else "No scan config"
@@ -1504,7 +1628,14 @@ def scan_project_files(
             f"Workflow {workflow.workflow_tag} processed successfully", "success"
         )
 
-    return {"result": "success", "total_runs_scanned": total_runs_scanned}
+    return {
+        "result": "success",
+        "total_runs_scanned": total_runs_scanned,
+        "changed_dcs": {dc_id: sorted(set(tags)) for dc_id, tags in changed_dcs.items()},
+        "covered_dcs": sorted(covered_dcs),
+        "removed_runs": sorted(removed_runs),
+        "complete": signal_complete,
+    }
 
 
 # Legacy functions for backwards compatibility

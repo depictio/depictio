@@ -18,8 +18,6 @@ same filesystem the data sits on, which the endpoint checks before dispatching.
 
 from __future__ import annotations
 
-import hashlib
-from datetime import datetime
 from typing import Any
 
 from bson import ObjectId
@@ -57,7 +55,10 @@ def finalize_deltatable_upsert(self, payload: dict[str, Any]) -> dict[str, Any]:
     import polars as pl
 
     from depictio.api.v1.db import deltatables_collection, projects_collection
-    from depictio.api.v1.endpoints.deltatables_endpoints.utils import precompute_columns_specs
+    from depictio.api.v1.endpoints.deltatables_endpoints.utils import (
+        build_aggregation_hash,
+        precompute_columns_specs,
+    )
     from depictio.api.v1.jobs import store as jobs_store
     from depictio.api.v1.s3 import polars_s3_config
     from depictio.api.v1.utils import agg_functions
@@ -89,10 +90,7 @@ def finalize_deltatable_upsert(self, payload: dict[str, Any]) -> dict[str, Any]:
         jobs_store.update_job_progress(job_id, step="column_specs", detail="Profiling columns")
         specs = precompute_columns_specs(df, agg_functions, dc_data)
 
-        jobs_store.update_job_progress(job_id, step="hash_rows", detail="Hashing rows")
-        hash_bytes = df.hash_rows(seed=0).to_numpy().tobytes()
-        hash_df = hashlib.sha256(hash_bytes).hexdigest()
-        final_hash = hashlib.sha256(f"{location}{datetime.now()}{hash_df}".encode()).hexdigest()
+        final_hash = build_aggregation_hash(location)
 
         # Patch exactly the entry this job owns. Not a whole-array rewrite: a
         # concurrent upsert on the same DC may have appended version+1 while we
@@ -280,15 +278,17 @@ def run_project_ingestion(self, payload: dict[str, Any]) -> dict[str, Any]:
         # Scan every workflow's data collections in one pass. Scanning DC by DC
         # would skip already-seen runs for every DC after the first — the same
         # trap the reference-dataset processor documents.
+        scan_signal: dict = {}
         for workflow in project.workflows:
             _step(run_id, "scan", "running", f"Scanning {workflow.name}")
-            process_project_helper(
+            result = process_project_helper(
                 CLI_config=cli_config,
                 project_config=project,
                 mode="scan",
                 workflow_name=workflow.name,
                 data_collection_tag=None,
             )
+            scan_signal = _merge_scan_signals(scan_signal, result)
         _step(run_id, "scan", "success", f"{len(project.workflows)} workflow(s) scanned")
 
         processed = 0
@@ -311,7 +311,18 @@ def run_project_ingestion(self, payload: dict[str, Any]) -> dict[str, Any]:
                         mode="process",
                         workflow_name=workflow.name,
                         data_collection_tag=tag,
-                        command_parameters={"overwrite": overwrite},
+                        command_parameters={
+                            "overwrite": overwrite,
+                            # Without these the Delta commits this task writes
+                            # carry no provenance at all, so the commit history
+                            # cannot be joined back to the run ledger — for the
+                            # one trigger that has a run ledger entry by
+                            # construction.
+                            "ingestion_run_id": run_id,
+                            "project_id": project_id,
+                            "trigger": "ui",
+                            "scan_signal": scan_signal,
+                        },
                     )
                     processed += 1
                 except Exception as exc:  # noqa: BLE001 - one bad DC must not sink the run
@@ -381,6 +392,31 @@ def run_project_ingestion(self, payload: dict[str, Any]) -> dict[str, Any]:
         except Exception as inner:  # pragma: no cover - defensive
             logger.error(f"run_project: could not record failure for {job_id}: {inner}")
         raise
+
+
+def _merge_scan_signals(accumulated: dict, result: Any) -> dict:
+    """Fold one workflow's scan result into the project-wide change signal.
+
+    ``complete`` is an AND across workflows: a signal that cannot speak for one
+    workflow cannot authorise skipping anything in the project.
+    """
+    if not isinstance(result, dict):
+        return {**accumulated, "complete": False}
+
+    changed = dict(accumulated.get("changed_dcs") or {})
+    for dc_id, run_tags in (result.get("changed_dcs") or {}).items():
+        changed[dc_id] = sorted(set(changed.get(dc_id, [])) | set(run_tags))
+
+    return {
+        "changed_dcs": changed,
+        "covered_dcs": sorted(
+            set(accumulated.get("covered_dcs") or []) | set(result.get("covered_dcs") or [])
+        ),
+        "removed_runs": sorted(
+            set(accumulated.get("removed_runs") or []) | set(result.get("removed_runs") or [])
+        ),
+        "complete": bool(accumulated.get("complete", True)) and bool(result.get("complete")),
+    }
 
 
 def _step(run_id: str, name: str, status: str, detail: str | None = None, **extra: Any) -> None:

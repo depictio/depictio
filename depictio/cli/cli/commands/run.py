@@ -256,8 +256,25 @@ def register_run_command(app: typer.Typer):
             help=(
                 "overwrite: rewrite the whole table (historical behaviour). "
                 "replace-runs: partition by run and rewrite only the runs present in "
-                "this batch, leaving the others untouched. "
-                "append: add rows without replacing (only sensible with --sync-changed)."
+                "this batch, leaving the others untouched."
+            ),
+        ),
+        incremental_write: bool = typer.Option(
+            False,
+            "--incremental-write",
+            help=(
+                "With --write-mode replace-runs, rewrite only the runs that changed instead of "
+                "rebuilding the whole table. Falls back to a full rebuild whenever that cannot "
+                "be done safely (run removed, table not partitioned by run, column type changed)."
+            ),
+        ),
+        skip_unchanged: bool = typer.Option(
+            False,
+            "--skip-unchanged",
+            help=(
+                "Leave a data collection's Delta table untouched when the scan found no new, "
+                "changed or removed file for it. Off by default so that re-running is always "
+                "a way to rebuild a project that drifted."
             ),
         ),
         preview_recipes: bool = typer.Option(
@@ -320,6 +337,10 @@ def register_run_command(app: typer.Typer):
         # lazily and honours this only on the first call.
         get_http_client(concurrency=concurrency)
 
+        if write_mode not in ("overwrite", "replace-runs"):
+            rich_print_checked_statement(f"Invalid --write-mode '{write_mode}'", "error")
+            raise typer.Exit(code=1)
+
         # Validate template/project-config-path mutual exclusivity
         if template and project_config_path:
             rich_print_checked_statement(
@@ -361,6 +382,9 @@ def register_run_command(app: typer.Typer):
 
         success_count = 0
         total_steps = 8 if is_template_mode else 7
+        # What the scan found, handed to the process step. Empty when the scan
+        # was skipped, which correctly reads as "no information" downstream.
+        scan_signal: dict = {}
 
         # Server-side monitoring record for this ingestion run (best-effort).
         ingestion_run_id: str | None = None
@@ -757,6 +781,11 @@ def register_run_command(app: typer.Typer):
                             if result["result"] != "success":
                                 raise Exception("Data scanning failed")
 
+                            # Which collections and runs moved. The process step
+                            # below uses it to scope writes, and — only when
+                            # asked — to leave untouched collections alone.
+                            scan_signal = result
+
                         else:
                             raise Exception("Local and remote project configurations do not match")
                     else:
@@ -799,8 +828,15 @@ def register_run_command(app: typer.Typer):
                                 "preview_recipes": preview_recipes,
                                 "project_id": str(project_config.id),
                                 "ingestion_run_id": ingestion_run_id,
+                                "trigger": "cli",
                                 "async_upsert": async_upsert,
                                 "repartition": repartition,
+                                "scan_signal": scan_signal,
+                                "incremental_write": incremental_write,
+                                # Off by default: an explicit `depictio run` is
+                                # how someone rebuilds a project that drifted,
+                                # so it must not quietly decide to do nothing.
+                                "skip_unchanged": skip_unchanged,
                             }
 
                             process_result = process_project_helper(

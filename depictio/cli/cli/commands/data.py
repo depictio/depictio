@@ -445,7 +445,16 @@ def watch(
     write_mode: str = typer.Option(
         "overwrite",
         "--write-mode",
-        help="Delta write strategy passed to the process step (overwrite, append, replace-runs)",
+        help="Delta write strategy passed to the process step (overwrite, replace-runs)",
+    ),
+    incremental_write: bool = typer.Option(
+        False,
+        "--incremental-write",
+        help=(
+            "With --write-mode replace-runs, rewrite only the runs that changed instead of "
+            "rebuilding the whole table. Falls back to a full rebuild whenever that cannot be "
+            "done safely (run removed, table not partitioned by run, column type changed)."
+        ),
     ),
     concurrency: int = typer.Option(
         4, "--concurrency", "-c", help="Parallel HTTP requests during each cycle"
@@ -468,6 +477,9 @@ def watch(
     if backend not in ("auto", "native", "polling", "both"):
         rich_print_checked_statement(f"Invalid --backend '{backend}'", "error", exit=True)
         raise typer.Exit(code=1)
+    if write_mode not in ("overwrite", "replace-runs"):
+        rich_print_checked_statement(f"Invalid --write-mode '{write_mode}'", "error", exit=True)
+        raise typer.Exit(code=1)
 
     get_http_client(concurrency=concurrency)
 
@@ -488,15 +500,21 @@ def watch(
         raise typer.Exit(code=1)
 
     if mode == "incremental" and write_mode == "overwrite":
-        # Worth saying plainly: with the default write mode, every new file
-        # rewrites the whole Delta table. That is exactly what a watch loop
-        # should not do, and the reason --write-mode replace-runs exists.
+        # Worth saying plainly: with the default write mode, a collection whose
+        # files moved has its whole Delta table rewritten. Collections that did
+        # not move are left alone regardless.
         rich_print_checked_statement(
-            "Incremental watching with --write-mode overwrite rewrites the entire Delta "
-            "table on every cycle. Use --write-mode replace-runs to rewrite only the runs "
-            "that changed.",
+            "Incremental watching with --write-mode overwrite rewrites a changed collection's "
+            "entire Delta table. Use --write-mode replace-runs --incremental-write to rewrite "
+            "only the runs that changed.",
             "warning",
         )
+    if incremental_write and write_mode != "replace-runs":
+        rich_print_checked_statement(
+            "--incremental-write only applies to --write-mode replace-runs; ignoring it.",
+            "warning",
+        )
+        incremental_write = False
 
     config = WatchConfig(
         mode=mode,  # type: ignore[arg-type]
@@ -509,6 +527,11 @@ def watch(
         once=once,
         max_runs=max_runs,
     )
+
+    # Gate for skipping unchanged collections. Starts closed on purpose: the
+    # first cycle after a watcher starts rebuilds everything, which is also how
+    # a project left inconsistent by a previous process recovers.
+    last_cycle_ok = {"value": False}
 
     def run_cycle(cycle_mode: str, paths: set[str]) -> bool:
         if paths:
@@ -565,6 +588,13 @@ def watch(
             # same link `depictio run` writes. Without it the commit history and
             # the run ledger cannot be joined for watch-driven writes.
             "ingestion_run_id": ingestion_run_id,
+            # Leave untouched collections alone — but only on an incremental
+            # cycle whose predecessor succeeded. After any failure, and on every
+            # full cycle, everything is rebuilt: that is what makes a Delta
+            # table that fell behind (a write that died between the object store
+            # and Mongo, say) catch up on its own instead of staying skipped.
+            "skip_unchanged": cycle_mode == "incremental" and last_cycle_ok["value"],
+            "incremental_write": incremental_write,
         }
 
         reporter = StepReporter(
@@ -577,7 +607,7 @@ def watch(
         status, error = "success", None
         try:
             reporter.start("scan", f"scanning in {cycle_mode} mode")
-            process_project_helper(
+            scan_result = process_project_helper(
                 CLI_config=CLI_config,
                 project_config=project_config,
                 workflow_name=None,
@@ -587,8 +617,13 @@ def watch(
             )
             reporter.finish("scan", "success", "data files scanned")
 
+            # The scan knows which collections and which runs moved; the process
+            # step is the only thing that can act on it.
+            command_parameters["scan_signal"] = scan_result or {}
+            changed = len((scan_result or {}).get("changed_dcs") or {})
+
             reporter.start("process", f"writing with {write_mode}")
-            process_project_helper(
+            process_result = process_project_helper(
                 CLI_config=CLI_config,
                 project_config=project_config,
                 workflow_name=None,
@@ -596,20 +631,57 @@ def watch(
                 command_parameters=command_parameters,
                 mode="process",
             )
-            reporter.finish("process", "success", "data collections processed")
+            left_alone = len((process_result or {}).get("skipped_unchanged") or [])
+            reporter.finish(
+                "process",
+                "success",
+                f"{changed} data collection(s) changed, {left_alone} left unchanged"
+                if left_alone
+                else "data collections processed",
+            )
+
+            # Joins, like `depictio run` and the UI trigger both do. Without
+            # this a watched project with a `joins:` block keeps rebuilding its
+            # source tables while the joined ones stay frozen at whatever the
+            # last manual run produced — silently, since nothing reports a join
+            # that was never attempted.
+            if getattr(project_config, "joins", None) and not dry_run:
+                from depictio.cli.cli.utils.joins import process_project_joins
+
+                reporter.start("joins", "executing table joins")
+                join_result = process_project_joins(
+                    project=project_config,
+                    CLI_config=CLI_config,
+                    join_name=None,
+                    preview_only=False,
+                    overwrite=True,
+                    auto_process_dependencies=True,
+                )
+                join_errors = join_result.get("errors") or []
+                if join_result.get("result") not in ("success", "partial"):
+                    raise Exception(f"Join execution failed: {join_result.get('message', '')}")
+                reporter.finish(
+                    "joins",
+                    "partial" if join_errors else "success",
+                    f"{len(join_result.get('processed') or [])} processed"
+                    + (f", {len(join_errors)} failed" if join_errors else ""),
+                )
             return True
         except Exception as exc:  # noqa: BLE001 - a watcher must outlive one bad cycle
             logger.error(f"Ingestion cycle failed: {exc}")
             status, error = "failed", str(exc)
             # Mark whichever phase was in flight, so a failed cycle shows where
             # it stopped instead of leaving a step stuck on "running" forever.
-            for name in ("scan", "process"):
+            for name in ("scan", "process", "joins"):
                 if reporter.steps and any(
                     s["name"] == name and s.get("status") == "running" for s in reporter.steps
                 ):
                     reporter.finish(name, "failed", str(exc))
             return False
         finally:
+            # A dry run never wrote anything, so it cannot vouch for the next
+            # cycle being allowed to skip.
+            last_cycle_ok["value"] = status == "success" and not dry_run
             if ingestion_run_id:
                 reporter.close(timeout=2.0)
                 api_monitoring_ingestion_finish(
@@ -732,8 +804,7 @@ def process(
         help=(
             "overwrite: rewrite the whole table (historical behaviour). "
             "replace-runs: partition by run and rewrite only the runs present in "
-            "this batch, leaving the others untouched. "
-            "append: add rows without replacing (only sensible with --sync-changed)."
+            "this batch, leaving the others untouched."
         ),
     ),
     preview_recipes: bool = typer.Option(
@@ -766,7 +837,7 @@ def process(
     """
     rich_print_command_usage("process")
 
-    if write_mode not in ("overwrite", "append", "replace-runs"):
+    if write_mode not in ("overwrite", "replace-runs"):
         rich_print_checked_statement(f"Invalid --write-mode '{write_mode}'", "error")
         raise typer.Exit(code=1)
 

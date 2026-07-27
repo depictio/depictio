@@ -20,6 +20,8 @@ from depictio.cli.cli.utils.delta_versioning import (
     build_commit_metadata,
     list_delta_versions,
     plan_partitioning,
+    plan_scoped_write,
+    probe_delta_table,
     read_delta_commit_info,
     write_delta_table_versioned,
 )
@@ -248,10 +250,12 @@ class TestReplaceRuns:
         )
         assert rows(destination) == [("B", 2), ("o'brien", 9)]
 
-    def test_append_adds_without_replacing(self, destination, storage):
+    def test_a_full_frame_replaces_rather_than_accumulates(self, destination, storage):
+        # There is no append mode: a run's frame always holds every row of that
+        # run, so adding it to what is already there would duplicate it.
         write_delta_table_versioned(frame(["A"], [1]), destination, storage)
-        write_delta_table_versioned(frame(["B"], [2]), destination, storage, write_mode="append")
-        assert rows(destination) == [("A", 1), ("B", 2)]
+        write_delta_table_versioned(frame(["B"], [2]), destination, storage)
+        assert rows(destination) == [("B", 2)]
 
 
 class TestPartitionPlanning:
@@ -346,3 +350,241 @@ class TestDeltaCommitInfoDefaults:
         info = DeltaCommitInfo(version=0)
         assert info.rows_added is None
         assert info.custom_metadata == {}
+
+
+def probe(destination, storage, **overrides):
+    real = probe_delta_table(destination, storage, with_schema=True)
+    for key, value in overrides.items():
+        setattr(real, key, value)
+    return real
+
+
+def partitioned_table(destination, storage, run_ids=("A", "B", "C")):
+    write_delta_table_versioned(
+        frame(list(run_ids)), destination, storage, write_mode="replace-runs", partition=True
+    )
+
+
+class TestScopedWriteSafety:
+    """The invariants that make a partial frame safe to write."""
+
+    def test_a_subset_write_refuses_to_overwrite_the_whole_table(self, destination, storage):
+        # Without partitioning, mode="overwrite" replaces every row — with a
+        # subset in hand that deletes every run the subset does not contain.
+        partitioned_table(destination, storage)
+        with pytest.raises(ValueError, match="subset of its runs"):
+            write_delta_table_versioned(
+                frame(["A"], [99]),
+                destination,
+                storage,
+                write_mode="replace-runs",
+                partition=False,
+                scoped=True,
+            )
+        assert rows(destination) == [("A", 0), ("B", 1), ("C", 2)]
+
+    def test_replace_run_tags_without_partitioning_is_refused(self, destination, storage):
+        partitioned_table(destination, storage)
+        with pytest.raises(ValueError, match="meaningless without partitioning"):
+            write_delta_table_versioned(
+                frame(["A"], [99]),
+                destination,
+                storage,
+                write_mode="replace-runs",
+                partition=False,
+                replace_run_tags=["A"],
+            )
+
+    def test_one_changed_run_leaves_the_others_alone(self, destination, storage):
+        # The nominal case, and the one that would be catastrophic if the
+        # single-run guard sent it down the full-overwrite path.
+        partitioned_table(destination, storage)
+        write_delta_table_versioned(
+            frame(["A"], [99]),
+            destination,
+            storage,
+            write_mode="replace-runs",
+            partition=True,
+            replace_run_tags=["A"],
+            scoped=True,
+        )
+        assert rows(destination) == [("A", 99), ("B", 1), ("C", 2)]
+
+    def test_a_scoped_write_does_not_drop_a_column_it_lacks(self, destination, storage):
+        # Measured: with schema_mode="overwrite" this drops `keep` for every run
+        # on deltalake 1.6.1 and leaves the table unreadable on 0.24.
+        pl.DataFrame({RUN_ID_COLUMN: ["A", "B"], "v": [1, 2], "keep": ["x", "y"]}).write_delta(
+            destination,
+            mode="overwrite",
+            delta_write_options={"schema_mode": "overwrite", "partition_by": [RUN_ID_COLUMN]},
+        )
+        write_delta_table_versioned(
+            pl.DataFrame({RUN_ID_COLUMN: ["A"], "v": [99]}),
+            destination,
+            storage,
+            write_mode="replace-runs",
+            partition=True,
+            replace_run_tags=["A"],
+            scoped=True,
+        )
+        table = pl.read_delta(destination).sort(RUN_ID_COLUMN)
+        assert "keep" in table.columns, "the untouched run's column must survive"
+        assert table.filter(pl.col(RUN_ID_COLUMN) == "B")["keep"].to_list() == ["y"]
+
+    def test_a_scoped_write_can_add_a_column(self, destination, storage):
+        partitioned_table(destination, storage, run_ids=("A", "B"))
+        write_delta_table_versioned(
+            pl.DataFrame({RUN_ID_COLUMN: ["A"], "v": [99], "extra": ["new"]}),
+            destination,
+            storage,
+            write_mode="replace-runs",
+            partition=True,
+            replace_run_tags=["A"],
+            scoped=True,
+        )
+        table = pl.read_delta(destination).sort(RUN_ID_COLUMN)
+        assert table.filter(pl.col(RUN_ID_COLUMN) == "A")["extra"].to_list() == ["new"]
+        assert table.filter(pl.col(RUN_ID_COLUMN) == "B")["extra"].to_list() == [None]
+
+    def test_a_type_conflict_fails_loudly_rather_than_corrupting(self, destination, storage):
+        # schema_mode="merge" refuses; schema_mode="overwrite" would "succeed"
+        # and leave a table whose schema disagrees with its retained files.
+        partitioned_table(destination, storage, run_ids=("A", "B"))
+        with pytest.raises(Exception):  # noqa: B017 - delta-rs error type varies by version
+            write_delta_table_versioned(
+                pl.DataFrame({RUN_ID_COLUMN: ["A"], "v": ["not-an-int"]}),
+                destination,
+                storage,
+                write_mode="replace-runs",
+                partition=True,
+                replace_run_tags=["A"],
+                scoped=True,
+            )
+
+
+class TestPlanScopedWrite:
+    """Every path that must end in a full rebuild rather than a partial write."""
+
+    def base(self, destination, storage, **overrides):
+        partitioned_table(destination, storage)
+        kwargs = {
+            "probe": probe(destination, storage),
+            "changed_runs": ["A"],
+            "removed_runs": [],
+            "write_mode": "replace-runs",
+            "incremental_write": True,
+            "signal_complete": True,
+            "covered": True,
+        }
+        kwargs.update(overrides)
+        return plan_scoped_write(**kwargs)
+
+    def test_the_nominal_case_is_scoped(self, destination, storage):
+        plan = self.base(destination, storage)
+        assert plan.scoped is True
+        assert plan.run_tags == ["A"]
+
+    def test_a_single_changed_run_is_not_declined(self, destination, storage):
+        # plan_partitioning declines a one-run frame because partitioning buys
+        # nothing there. Here it is the whole point.
+        plan = self.base(destination, storage, changed_runs=["B"])
+        assert plan.scoped is True
+
+    def test_off_by_default(self, destination, storage):
+        plan = self.base(destination, storage, incremental_write=False)
+        assert plan.scoped is False
+
+    def test_needs_replace_runs(self, destination, storage):
+        plan = self.base(destination, storage, write_mode="overwrite")
+        assert plan.scoped is False
+        assert plan.declined is not None and "replace-runs" in plan.declined
+
+    def test_an_incomplete_signal_declines(self, destination, storage):
+        plan = self.base(destination, storage, signal_complete=False)
+        assert plan.scoped is False
+        assert plan.declined is not None and "vouch" in plan.declined
+
+    def test_an_uncovered_collection_declines(self, destination, storage):
+        plan = self.base(destination, storage, covered=False)
+        assert plan.scoped is False
+        assert plan.declined is not None and "not covered" in plan.declined
+
+    def test_a_removed_run_forces_a_rebuild(self, destination, storage):
+        # A predicate can replace runs; it cannot express "this one is gone".
+        plan = self.base(destination, storage, removed_runs=["C"])
+        assert plan.scoped is False
+        assert plan.declined is not None and "disappeared" in plan.declined
+
+    def test_no_table_yet_declines(self, destination, storage):
+        plan = self.base(destination, storage, probe=None)
+        assert plan.scoped is False
+        assert plan.declined is not None and "no table" in plan.declined
+
+    def test_an_unpartitioned_table_declines(self, destination, storage):
+        write_delta_table_versioned(frame(["A", "B"]), destination, storage)
+        plan = plan_scoped_write(
+            probe=probe_delta_table(destination, storage, with_schema=True),
+            changed_runs=["A"],
+            removed_runs=[],
+            write_mode="replace-runs",
+            incremental_write=True,
+            signal_complete=True,
+            covered=True,
+        )
+        assert plan.scoped is False
+        assert plan.declined is not None and "partitioned by" in plan.declined
+
+    def test_an_unreadable_schema_declines(self, destination, storage):
+        # Without the table's schema there is nothing to align the partial frame
+        # against, and an unaligned subset is what narrows a table.
+        partitioned_table(destination, storage)
+        plan = plan_scoped_write(
+            probe=probe(destination, storage, schema=None),
+            changed_runs=["A"],
+            removed_runs=[],
+            write_mode="replace-runs",
+            incremental_write=True,
+            signal_complete=True,
+            covered=True,
+        )
+        assert plan.scoped is False
+        assert plan.declined is not None and "schema" in plan.declined
+
+    def test_an_unsafe_tag_declines(self, destination, storage):
+        plan = self.base(destination, storage, changed_runs=["ok", "bad/tag"])
+        assert plan.scoped is False
+        assert plan.declined is not None and "path-safe" in plan.declined
+
+    def test_too_many_runs_declines(self, destination, storage):
+        plan = self.base(destination, storage, changed_runs=[f"r{i}" for i in range(5001)])
+        assert plan.scoped is False
+        assert plan.declined is not None and "partition guard" in plan.declined
+
+    def test_no_changed_run_declines(self, destination, storage):
+        plan = self.base(destination, storage, changed_runs=[])
+        assert plan.scoped is False
+
+
+class TestProbe:
+    def test_absent_table_probes_as_none(self, tmp_path, storage):
+        assert probe_delta_table(str(tmp_path / "nothing"), storage) is None
+
+    def test_partition_columns_and_version_are_read(self, destination, storage):
+        partitioned_table(destination, storage)
+        found = probe_delta_table(destination, storage)
+        assert found is not None
+        assert found.partitioned_by_run is True
+        assert found.version == 0
+        assert found.size_bytes and found.size_bytes > 0
+
+    def test_the_schema_is_only_read_when_asked(self, destination, storage):
+        partitioned_table(destination, storage)
+        assert probe_delta_table(destination, storage).schema is None
+        schema = probe_delta_table(destination, storage, with_schema=True).schema
+        assert schema is not None
+        # Order differs between deltalake 0.24 and 1.6, so only names matter.
+        assert set(schema) == {RUN_ID_COLUMN, "v"}
+
+    def test_an_unpartitioned_table_is_not_partitioned_by_run(self, destination, storage):
+        write_delta_table_versioned(frame(["A", "B"]), destination, storage)
+        assert probe_delta_table(destination, storage).partitioned_by_run is False

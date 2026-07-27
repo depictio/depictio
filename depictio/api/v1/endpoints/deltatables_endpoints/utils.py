@@ -1,5 +1,7 @@
 import collections
+import hashlib
 import os
+from datetime import datetime
 
 import numpy as np
 import polars as pl
@@ -11,6 +13,23 @@ from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import files_collection
 from depictio.api.v1.s3 import s3_client
 from depictio.api.v1.utils import numpy_to_python
+
+
+def build_aggregation_hash(delta_table_location: str) -> str:
+    """A fresh identifier for one aggregation of a data collection's table.
+
+    Deliberately *not* a content hash, and it never was one. The previous
+    implementation hashed every row of the table and then folded that digest
+    into ``sha256(location + datetime.now() + row_digest)`` — so two upserts of
+    byte-identical content already produced different values. The row pass cost
+    O(rows) on every single upsert while contributing nothing the timestamp did
+    not already provide.
+
+    What the consumers need is "did this change": the stored field, the realtime
+    event payload and the viewer's RealtimeIndicator all compare for inequality.
+    The DataFrame cache is salted by ``aggregation_version``, not by this.
+    """
+    return hashlib.sha256(f"{delta_table_location}{datetime.now()}".encode()).hexdigest()
 
 
 def get_s3_folder_size(bucket_name, prefix):
