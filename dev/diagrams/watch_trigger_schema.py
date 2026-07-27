@@ -230,7 +230,7 @@ def build() -> str:
         300,
         104,
         VIOLET,
-        "depictio data watch",
+        "depictio watch",
         ("polls …/claim every 5s", "claim clears it atomically", "→ honoured exactly once"),
     )
     cycle = Box(846, 368, 288, 104, ORANGE, "One cycle", ("scan → process", "steps stream in live"))

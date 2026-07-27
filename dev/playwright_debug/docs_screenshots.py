@@ -362,7 +362,7 @@ async def _mon_ingestion_live(ctx: ShotContext) -> None:
 async def _mon_agents(ctx: ShotContext) -> None:
     """Agents pane with the first watcher expanded: fields, "Run now", watched paths.
 
-    Needs a live `depictio data watch` registered against the stack — an empty
+    Needs a live `depictio watch` registered against the stack — an empty
     registry produces an empty-state shot rather than a failure.
     """
     await _open_monitoring(ctx, "Agents")

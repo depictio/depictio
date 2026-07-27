@@ -1,5 +1,5 @@
 /**
- * Live CLI agents (`depictio data watch` processes).
+ * Live CLI agents (`depictio watch` processes).
  *
  * A watcher is a daemon that can run for weeks on a login node without anyone
  * watching it. Without this pane the only evidence it is alive is whether new
@@ -261,7 +261,7 @@ export const AgentsPane: React.FC<{ liveSignal?: number; projectId?: string }> =
               Start one to re-ingest automatically when files change:
             </Text>
             <Code block fz="10px">
-              depictio data watch --CLI-config-path ~/.depictio/CLI.yaml \{'\n'}
+              depictio watch --CLI-config-path ~/.depictio/CLI.yaml \{'\n'}
               {'  '}--project-config-path ./project.yaml --write-mode replace-runs
             </Code>
           </Stack>

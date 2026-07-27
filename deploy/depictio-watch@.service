@@ -49,7 +49,7 @@ Environment=DEPICTIO_WATCH_DEBOUNCE=30
 Environment=DEPICTIO_WATCH_SETTLE=5
 Environment=DEPICTIO_CLI_BIN=depictio
 
-ExecStart=/bin/sh -c 'exec "$DEPICTIO_CLI_BIN" data watch \
+ExecStart=/bin/sh -c 'exec "$DEPICTIO_CLI_BIN" watch \
   --CLI-config-path "$DEPICTIO_CLI_CONFIG" \
   --project-config-path "$DEPICTIO_PROJECT_CONFIG" \
   --mode "$DEPICTIO_WATCH_MODE" \

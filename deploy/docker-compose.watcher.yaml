@@ -33,7 +33,6 @@ services:
       DEPICTIO_CONTEXT: "cli"
 
     command:
-      - data
       - watch
       - --CLI-config-path
       - /config/CLI.yaml

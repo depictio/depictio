@@ -3098,7 +3098,7 @@ export interface MonitoringIngestionDataCollection {
   sample_rejected?: string[];
 }
 
-/** A long-running CLI agent (a `depictio data watch` process) as the server
+/** A long-running CLI agent (a `depictio watch` process) as the server
  *  last heard from it. Rows expire via TTL a few heartbeats after one dies, so
  *  a listed agent is a live one. */
 export interface MonitoringCliAgent {

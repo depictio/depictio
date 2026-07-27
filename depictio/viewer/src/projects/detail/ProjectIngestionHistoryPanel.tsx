@@ -111,7 +111,7 @@ const ProjectIngestionHistoryPanel: React.FC<{
               To keep it up to date automatically as new files land:
             </Text>
             <Code block fz="10px">
-              depictio data watch --CLI-config-path ~/.depictio/CLI.yaml \{'\n'}
+              depictio watch --CLI-config-path ~/.depictio/CLI.yaml \{'\n'}
               {'  '}--project-config-path ./project.yaml --write-mode replace-runs
             </Code>
           </Stack>

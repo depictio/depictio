@@ -14,7 +14,7 @@ no new flags behaves exactly as before.
 ## Quick start
 
 ```bash
-depictio data watch \
+depictio watch \
   --CLI-config-path ~/.depictio/CLI.yaml \
   --project-config-path ./project.yaml \
   --write-mode replace-runs --incremental-write
@@ -223,7 +223,7 @@ list is filtered to the runs the scan reported as changed, and the predicate
 covers only those.
 
 ```bash
-depictio data watch --project-config-path ./project.yaml \
+depictio watch --project-config-path ./project.yaml \
   --write-mode replace-runs --incremental-write
 ```
 

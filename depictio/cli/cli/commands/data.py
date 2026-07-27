@@ -391,7 +391,6 @@ def vacuum(
         )
 
 
-@app.command()
 def watch(
     CLI_config_path: Annotated[
         str,
@@ -766,6 +765,17 @@ def watch(
             api_agent_deregister(CLI_config, agent_id)
 
     raise typer.Exit(code=exit_code)
+
+
+def register_watch_command(cli_app: typer.Typer) -> None:
+    """Register ``watch`` at the top level, next to ``run``.
+
+    It lives in this module because it reuses the scan/process plumbing around
+    it, but it is not a `data` subcommand: it is `depictio run` on a loop, and
+    belongs at the same level as the command it repeats rather than one level
+    down among the collection-level verbs.
+    """
+    cli_app.command(name="watch")(watch)
 
 
 def _project_data_roots(project_config) -> list[str]:

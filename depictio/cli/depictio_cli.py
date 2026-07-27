@@ -10,6 +10,7 @@ from depictio.cli.cli.commands.catalog import app as catalog
 from depictio.cli.cli.commands.config import app as config
 from depictio.cli.cli.commands.dashboard import app as dashboard
 from depictio.cli.cli.commands.data import app as data
+from depictio.cli.cli.commands.data import register_watch_command
 from depictio.cli.cli.commands.dev import app as dev
 from depictio.cli.cli.commands.images import app as images
 from depictio.cli.cli.commands.migrate import app as migrate
@@ -26,6 +27,9 @@ register_standalone_commands(app)
 
 # Register the run command
 register_run_command(app)
+
+# `watch` is `run` on a loop, so it sits next to it rather than under `data`.
+register_watch_command(app)
 
 
 @app.callback()
