@@ -59,6 +59,10 @@ def ctx(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(versioning, "dashboards_collection", dashboards)
     monkeypatch.setattr(versioning, "deltatables_collection", db["deltatables"])
     monkeypatch.setattr(versions_routes, "dashboards_collection", dashboards)
+    # `GET /dashboards/get/{id}` lives in routes.py and holds its own handles;
+    # without these it reaches for the real Mongo and hangs on connect.
+    monkeypatch.setattr(dash_routes, "dashboards_collection", dashboards)
+    monkeypatch.setattr(dash_routes, "projects_collection", db["projects"])
 
     granted = {"level": "owner"}
 
@@ -382,3 +386,106 @@ def test_restore_records_a_restore_point(ctx) -> None:
 
 def test_restore_of_unknown_version_is_404(ctx) -> None:
     assert ctx["client"].post(f"{API}/versions/deadbeef/restore").status_code == 404
+
+
+# ── Previewing a past version through the normal load path ──────────────────
+
+
+def _get(ctx, did, version_id=None):
+    qs = f"?version_id={version_id}" if version_id else ""
+    return ctx["client"].get(f"{API}/get/{did}{qs}")
+
+
+def test_preview_returns_snapshot_content(ctx) -> None:
+    did = _make_dashboard(ctx, title="Original", components=[{"index": "old"}])
+    record = _capture(ctx, did, kind="explicit")
+
+    ctx["dashboards"].update_one(
+        {"_id": did}, {"$set": {"title": "Renamed", "stored_metadata": [{"index": "new"}]}}
+    )
+
+    body = _get(ctx, did, record.version_id).json()
+
+    assert body["stored_metadata"] == [{"index": "old"}]
+    assert body["title"] == "Original"
+
+
+def test_preview_never_returns_snapshot_permissions(ctx) -> None:
+    """The invariant that matters: a preview must not widen access.
+
+    The restore path already pins this; this is the same guarantee on the read
+    path, where a stale snapshot would otherwise be handed straight to a client
+    that decides what to render from it.
+    """
+    did = _make_dashboard(ctx, components=[{"index": "a"}])
+    record = _capture(ctx, did, kind="explicit")
+
+    ctx["dashboards"].update_one(
+        {"_id": did},
+        {
+            "$set": {
+                "permissions": {"owners": [{"email": "new-owner@example.com"}]},
+                "is_public": True,
+            }
+        },
+    )
+
+    body = _get(ctx, did, record.version_id).json()
+
+    assert body["permissions"]["owners"][0]["email"] == "new-owner@example.com"
+    assert body["is_public"] is True
+
+
+def test_preview_carries_banner_metadata(ctx) -> None:
+    """One request, not two — the banner should not need a second round trip."""
+    did = _make_dashboard(ctx, components=[{"index": "a"}])
+    record = _capture(ctx, did, kind="explicit")
+    ctx["client"].post(f"{API}/versions/{record.version_id}/pin", json={"label": "Known good"})
+
+    preview = _get(ctx, did, record.version_id).json()["preview"]
+
+    assert preview["version_id"] == record.version_id
+    assert preview["label"] == "Known good"
+    assert preview["pinned"] is True
+    assert preview["seq"] == record.seq
+
+
+def test_live_get_has_no_preview_block(ctx) -> None:
+    did = _make_dashboard(ctx, components=[{"index": "a"}])
+    _capture(ctx, did, kind="explicit")
+
+    assert "preview" not in _get(ctx, did).json()
+
+
+def test_preview_rejects_a_version_from_another_dashboard(ctx) -> None:
+    """Otherwise viewer rights on A would read B's snapshot via a guessed id."""
+    mine = _make_dashboard(ctx, title="Mine", components=[{"index": "a"}])
+    theirs = _make_dashboard(ctx, title="Theirs", components=[{"index": "secret"}])
+    other_version = _capture(ctx, theirs, kind="explicit")
+
+    response = _get(ctx, mine, other_version.version_id)
+
+    assert response.status_code == 404
+
+
+def test_preview_of_unknown_version_is_404(ctx) -> None:
+    did = _make_dashboard(ctx, components=[{"index": "a"}])
+
+    assert _get(ctx, did, "deadbeef").status_code == 404
+
+
+def test_preview_requires_viewer(ctx) -> None:
+    did = _make_dashboard(ctx, components=[{"index": "a"}])
+    record = _capture(ctx, did, kind="explicit")
+    ctx["granted"]["level"] = "none"
+
+    assert _get(ctx, did, record.version_id).status_code == 403
+
+
+def test_preview_of_a_tab_that_did_not_exist_yet(ctx) -> None:
+    """A deep link to a tab added after the version must not render blank."""
+    main = _make_dashboard(ctx, title="Main")
+    record = _capture(ctx, main, kind="explicit")
+    later = _make_dashboard(ctx, title="Added later", parent=main, tab_order=1)
+
+    assert _get(ctx, later, record.version_id).status_code == 404

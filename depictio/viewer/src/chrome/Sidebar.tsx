@@ -212,6 +212,9 @@ interface SidebarProps {
     onOpen: () => void;
     onClose: () => void;
   };
+  /** Carried onto every tab link so a version preview survives a tab switch —
+   *  tab navigation is a full page load, which would otherwise drop `?version=`. */
+  versionId?: string | null;
 }
 
 /**
@@ -238,6 +241,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   onMoveTabToGroup,
   brandTheme,
   guide,
+  versionId,
 }) => {
   const { colorScheme } = useMantineColorScheme();
   const theme: 'light' | 'dark' = colorScheme === 'dark' ? 'dark' : 'light';
@@ -418,7 +422,7 @@ const Sidebar: React.FC<SidebarProps> = ({
         renderRoot={(props) => (
           <a
             {...props}
-            href={dashboardHref(d.dashboard_id, linkMode)}
+            href={dashboardHref(d.dashboard_id, linkMode, versionId)}
             // With the Guide open, the tab it was opened from is one click
             // away: a plain click closes the Guide rather than reloading the
             // tab underneath it.
