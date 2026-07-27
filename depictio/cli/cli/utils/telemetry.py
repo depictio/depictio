@@ -27,7 +27,11 @@ from typing import Any, Final
 
 from depictio.cli.cli_logging import logger
 from depictio.telemetry.buckets import bucket_seconds
-from depictio.telemetry.constants import CLI_TIMEOUT_SECONDS, DEFAULT_ENDPOINT
+from depictio.telemetry.constants import (
+    CLI_TIMEOUT_SECONDS,
+    DEFAULT_API_KEY,
+    DEFAULT_ENDPOINT,
+)
 from depictio.telemetry.env import detect_ci, detect_deployment_kind, platform_info
 from depictio.telemetry.gates import telemetry_allowed
 from depictio.telemetry.schema import EVENT_CLI_COMMAND, CliCommandProperties
@@ -43,11 +47,9 @@ API_KEY_ENV: Final[str] = "DEPICTIO_TELEMETRY_API_KEY"
 #: people invoke the CLI without getting anywhere.
 UNKNOWN_COMMAND: Final[str] = "<none>"
 
-#: Collector token shipped with the CLI. A PostHog project token is public and
-#: write-only, so distributing it in a client is its intended usage. Empty until
-#: the project's own key is filled in, which keeps the CLI silent by default for
-#: anyone building from source.
-_DEFAULT_API_KEY: Final[str] = ""
+#: Collector token shipped with the CLI. Sourced from the one shared constant so
+#: the CLI and the server cannot drift onto different projects.
+_DEFAULT_API_KEY: Final[str] = DEFAULT_API_KEY
 
 
 def cli_version() -> str:

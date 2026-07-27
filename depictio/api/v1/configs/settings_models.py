@@ -7,6 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Import kept to the dependency-free constants module on purpose — this file is
 # the earliest import in every context and must not pull in httpx.
+from depictio.telemetry.constants import DEFAULT_API_KEY as DEFAULT_TELEMETRY_API_KEY
 from depictio.telemetry.constants import DEFAULT_ENDPOINT as DEFAULT_TELEMETRY_ENDPOINT
 
 # Passwords we refuse to accept on a server boot. Lower-cased before comparison.
@@ -1164,10 +1165,11 @@ class TelemetryConfig(BaseSettings):
         description="Collector ingestion URL (PostHog-compatible capture endpoint).",
     )
     api_key: str = Field(
-        default="",
+        default=DEFAULT_TELEMETRY_API_KEY,
         description=(
             "Collector project token. Public write-only key; carries no read access. "
-            "Empty disables sending."
+            "Defaults to Depictio's own PostHog project — override only to point at "
+            "your own collector. Empty disables sending."
         ),
     )
     interval_hours: int = Field(

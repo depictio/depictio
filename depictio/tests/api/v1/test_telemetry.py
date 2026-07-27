@@ -309,3 +309,34 @@ class TestSchemaForbidsUndeclaredFields:
                 id_ephemeral=False,
                 hostname="leaky-server-01",
             )
+
+
+class TestShippedDefaultsRouteToTheProject:
+    """The server must reach Depictio's own collector with no env overrides.
+
+    An empty default would leave every deployment permanently silent while every
+    other test still passed, so this is asserted explicitly.
+    """
+
+    def test_settings_default_is_the_project_token(self):
+        from depictio.api.v1.configs.settings_models import TelemetryConfig
+        from depictio.telemetry.constants import DEFAULT_API_KEY, DEFAULT_ENDPOINT
+
+        field = TelemetryConfig.model_fields["api_key"]
+        assert field.default == DEFAULT_API_KEY
+        assert DEFAULT_API_KEY.startswith("phc_")
+        assert TelemetryConfig.model_fields["endpoint"].default == DEFAULT_ENDPOINT
+
+    def test_endpoint_is_the_eu_region(self):
+        """EU keeps event data in the EEA; a US host would silently drop
+        events for an EU-region project anyway."""
+        from depictio.telemetry.constants import DEFAULT_ENDPOINT
+
+        assert DEFAULT_ENDPOINT == "https://eu.i.posthog.com/i/v0/e/"
+
+    def test_server_and_cli_share_one_project(self):
+        """Two different tokens would split the counts across two projects."""
+        from depictio.api.v1.configs.settings_models import TelemetryConfig
+        from depictio.cli.cli.utils.telemetry import _DEFAULT_API_KEY
+
+        assert TelemetryConfig.model_fields["api_key"].default == _DEFAULT_API_KEY

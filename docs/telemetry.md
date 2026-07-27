@@ -192,6 +192,10 @@ Events are sent to PostHog Cloud's **EU** region (`https://eu.i.posthog.com/i/v0
 event data stays inside the EEA. The project token embedded in Depictio is a
 public, write-only ingestion key — it grants no read access to anything.
 
+Every event is flagged `$process_person_profile: false`, so the collector stores
+no person profile for your installation. There is no user record on the receiving
+end to enrich, segment or export — only counts.
+
 ## All configuration
 
 | Variable | Default | Effect |

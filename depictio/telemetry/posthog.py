@@ -50,12 +50,24 @@ def build_body(
     would go over the wire without sending it — the payload an operator inspects
     is then the payload by construction, not a second implementation that could
     drift from it.
+
+    Every event is marked anonymous. Applied here, in the one place all three
+    senders (server, CLI, browser) pass through, so it cannot be forgotten at a
+    call site.
     """
     return {
         "api_key": api_key,
         "event": event,
         "distinct_id": distinct_id,
-        "properties": properties,
+        "properties": {
+            **properties,
+            # Suppresses person-profile creation at the collector. Two reasons:
+            # a profile per installation ID would make PostHog hold a person
+            # record for every Depictio deployment, which sits badly against
+            # what docs/telemetry.md promises operators; and identified events
+            # cost up to 4x more than anonymous ones.
+            "$process_person_profile": False,
+        },
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
