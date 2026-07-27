@@ -216,6 +216,9 @@ loop should decide to do.
 
 ### Rewriting only the runs that changed
 
+![What a cycle costs, before and after](images/v0.12/react/schema_cycle_cost.png)
+
+
 `--write-mode replace-runs` on its own partitions the table, but still rebuilds
 the frame from *every* registered file, so the predicate ends up covering every
 run: a partitioned full rewrite. `--incremental-write` makes it real — the file
@@ -243,6 +246,8 @@ in the log — whenever a partial write could not be trusted:
 
 Declining is always the safe direction: it does *more* work, never less.
 
+![How each write is chosen](images/v0.12/react/schema_write_decision.png)
+
 ### Untouched collections are left alone
 
 A cycle where nothing moved no longer writes anything. The scan reports which
@@ -262,6 +267,8 @@ step timeline.
 
 Between two scans of the same collection, a source file can gain a column, lose
 one, or change a column's type.
+
+![What each schema change does](images/v0.12/react/schema_column_drift.png)
 
 | Change | What happens |
 |---|---|
