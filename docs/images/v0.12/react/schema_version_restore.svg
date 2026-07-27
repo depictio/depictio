@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1240" height="620" viewBox="0 0 1240 620">
+  <rect width="1240" height="620" fill="#ffffff"/>
+  <text x="46.0" y="52.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="25" fill="#1e1e1e" text-anchor="start" font-weight="normal">Restore puts the past back without losing the present</text>
+  <text x="46.0" y="78.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="15" fill="#5c5c5c" text-anchor="start" font-weight="normal">the state being replaced is captured first, so the restore itself is undoable</text>
+  <rect x="60.0" y="180.0" width="250.0" height="112.0" rx="6" fill="#f3f0ff"/>
+  <path d="M60.1,179.9 C144.7,181.4 227.9,178.7 310.0,179.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M59.2,179.3 C142.3,179.8 225.8,179.9 310.3,179.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M310.5,180.1 C310.0,218.1 309.5,253.3 310.3,292.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M310.1,180.3 C311.5,216.9 310.8,254.2 309.7,291.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M310.2,291.5 C226.6,292.7 143.6,291.8 59.5,291.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M309.3,291.6 C227.7,291.0 142.1,290.7 60.1,292.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M60.4,292.1 C59.5,254.2 59.3,216.7 59.6,179.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M60.1,292.7 C60.9,255.3 61.1,216.5 60.1,180.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="185.0" y="207.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">v12 — pinned</text>
+  <text x="185.0" y="231.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">“Before the Q3 re-run”</text>
+  <text x="185.0" y="252.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">content only</text>
+  <rect x="390.0" y="180.0" width="272.0" height="112.0" rx="6" fill="#fff9db"/>
+  <path d="M389.2,180.5 C479.6,181.5 569.9,179.7 662.3,180.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M390.4,179.8 C481.6,181.4 571.5,181.6 662.8,179.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M662.7,180.7 C661.0,216.0 661.9,253.7 661.5,291.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M661.6,179.9 C662.1,216.3 662.1,255.7 662.6,291.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M662.3,291.9 C570.8,293.3 481.7,293.3 390.3,292.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M662.4,292.1 C571.8,291.2 480.0,291.7 390.1,292.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M390.5,291.6 C388.7,255.1 389.5,217.5 390.7,179.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M390.0,291.9 C390.2,254.8 389.2,217.5 390.3,179.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="526.0" y="207.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">Capture the present</text>
+  <text x="526.0" y="231.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">current state → a version,</text>
+  <text x="526.0" y="252.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">before a single write</text>
+  <rect x="742.0" y="180.0" width="272.0" height="112.0" rx="6" fill="#ebfbee"/>
+  <path d="M741.5,180.3 C832.3,180.9 922.2,181.2 1013.5,179.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M742.3,180.1 C832.4,178.7 924.0,179.9 1014.1,180.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1014.6,180.0 C1013.4,218.6 1012.7,255.9 1014.4,292.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1013.7,180.7 C1014.3,216.7 1013.4,254.2 1013.7,291.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1013.6,291.6 C923.1,293.0 832.6,292.2 741.3,291.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1013.9,291.4 C922.6,293.1 832.7,290.8 742.1,291.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M742.8,292.2 C743.1,253.9 743.1,216.5 741.3,180.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M741.3,292.4 C741.3,254.2 740.9,218.4 741.8,180.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="878.0" y="207.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">Write the content</text>
+  <text x="878.0" y="231.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">per tab: update · recreate</text>
+  <text x="878.0" y="252.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">· delete tabs added since</text>
+  <rect x="1064.0" y="180.0" width="116.0" height="112.0" rx="6" fill="#ffe8cc"/>
+  <path d="M1063.5,180.8 C1102.0,178.7 1142.7,180.5 1180.7,179.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1064.0,180.3 C1101.1,180.4 1140.2,180.7 1180.1,180.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1179.4,179.3 C1181.0,217.7 1180.3,254.1 1180.6,291.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1180.6,179.9 C1179.8,216.7 1180.4,254.8 1179.8,292.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1180.8,292.8 C1142.1,293.4 1102.1,293.2 1063.4,291.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1180.4,292.4 C1142.2,293.1 1101.2,291.7 1064.1,291.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1064.5,292.1 C1063.7,253.3 1063.4,217.1 1063.9,179.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1064.5,292.1 C1063.4,255.2 1063.8,216.3 1064.7,180.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="1122.0" y="207.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">Mark</text>
+  <text x="1122.0" y="231.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">kind =</text>
+  <text x="1122.0" y="252.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">“restore”</text>
+  <rect x="742.0" y="450.0" width="272.0" height="112.0" rx="6" fill="#ffe3e3"/>
+  <path d="M742.8,450.3 C833.1,449.8 923.7,451.3 1013.9,449.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M741.3,449.8 C833.8,449.7 923.0,448.6 1014.8,450.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1014.2,449.3 C1014.7,487.9 1013.3,523.6 1014.1,562.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1013.4,450.2 C1014.1,486.1 1012.6,524.6 1013.7,562.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1013.8,562.8 C924.1,562.3 832.8,561.0 741.6,561.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1014.7,561.2 C923.3,562.1 833.6,561.3 742.5,562.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M742.3,561.4 C743.3,523.6 742.6,488.8 742.7,450.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M742.5,562.4 C740.8,525.7 740.7,486.0 742.7,450.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="878.0" y="477.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">permissions · is_public</text>
+  <text x="878.0" y="501.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">never come from a snapshot —</text>
+  <text x="878.0" y="522.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">TabSnapshot cannot hold them</text>
+  <path d="M320.3,236.8 C339.4,235.1 359.0,238.0 377.4,236.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M319.4,235.1 C340.3,234.3 359.9,234.7 378.3,235.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M378.1,236.1 C374.8,232.8 370.4,232.1 365.9,229.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M378.0,236.4 C373.2,238.8 369.5,240.5 365.6,242.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M672.7,235.4 C689.7,235.3 711.3,236.4 730.6,236.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M672.2,235.9 C689.9,234.6 711.0,237.9 730.0,236.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M730.3,236.3 C725.9,233.9 721.9,232.5 717.4,229.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M729.6,236.0 C726.5,238.6 722.7,241.2 717.5,242.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1023.5,235.7 C1033.3,237.9 1043.7,234.4 1052.8,235.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1024.2,237.0 C1032.0,236.2 1041.7,234.2 1052.6,236.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1051.9,235.6 C1047.2,233.9 1044.0,232.1 1040.1,229.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1051.6,235.9 C1048.4,238.1 1044.3,240.1 1039.6,242.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M877.3,306.8 C877.6,350.0 877.5,393.6 878.9,435.0" fill="none" stroke="#c92a2a" stroke-width="1.7" stroke-linecap="round" stroke-dasharray="9 7"/>
+  <path d="M878.5,306.5 C879.4,350.4 878.8,391.1 878.3,436.9" fill="none" stroke="#c92a2a" stroke-width="1.7" stroke-linecap="round" stroke-dasharray="9 7"/>
+  <path d="M866.8,361.0 C875.2,368.6 882.5,375.0 889.0,383.5" fill="none" stroke="#c92a2a" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M866.9,383.2 C874.6,375.9 881.9,369.2 889.1,360.9" fill="none" stroke="#c92a2a" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="844.0" y="366.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="15" fill="#c92a2a" text-anchor="end" font-weight="normal">never written</text>
+  <text x="60.0" y="348.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="17" fill="#1e1e1e" text-anchor="start" font-weight="bold">the boundary</text>
+  <text x="60.0" y="378.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="start" font-weight="normal">restoring a months-old version must</text>
+  <text x="60.0" y="402.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="start" font-weight="normal">never bring back access that has</text>
+  <text x="60.0" y="426.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="start" font-weight="normal">since been revoked — a restore is</text>
+  <text x="60.0" y="450.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="start" font-weight="normal">not a way to escalate.</text>
+  <text x="60.0" y="562.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="15" fill="#5c5c5c" text-anchor="start" font-weight="normal">undo a restore by restoring the version it captured on the way in</text>
+  <text x="60.0" y="590.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="15" fill="#5c5c5c" text-anchor="start" font-weight="normal">deleting a version needs owner — the one action a restore cannot reverse</text>
+</svg>
