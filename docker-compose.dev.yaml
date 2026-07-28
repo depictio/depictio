@@ -62,6 +62,13 @@ services:
       - 127.0.0.1:${FASTAPI_PORT:-8058}:8058
     volumes:
       - ./depictio:/app/depictio
+      # Masque le venv CLI de l'hôte (~10 300 fichiers, construit pour macOS).
+      # Il n'arrive ici que via le bind mount ci-dessus — .dockerignore l'exclut
+      # déjà de l'image, et ses shebangs absolus le rendent inutilisable dans le
+      # conteneur. Sans ce masque, le reloader uvicorn de dev mode (StatReload,
+      # faute de watchfiles) le rglob+stat 4x/s : ~95% de son travail, et ~20-30%
+      # de CPU backend en idle.
+      - /app/depictio/cli/.venv
       - ./dashboards:/app/dashboards
       - ./pyproject.toml:/app/pyproject.toml
       - ./packages/plotly-complexheatmap:/app/packages/plotly-complexheatmap
@@ -198,6 +205,13 @@ services:
       context: .
     volumes:
       - ./depictio:/app/depictio
+      # Mêmes raisons que le backend, plus depictio/tests : en dev mode le worker
+      # tourne sous watchmedo --debug-force-polling, qui prend un snapshot stat()
+      # de tout /app/depictio chaque seconde (--patterns filtre les événements,
+      # pas le walk). Ces deux arbres pèsent ~92% des ~19 700 entrées et ne sont
+      # jamais importés par le worker. Tous deux sont déjà exclus de l'image.
+      - /app/depictio/cli/.venv
+      - /app/depictio/tests
       - ./dashboards:/app/dashboards
       - ./packages/plotly-complexheatmap:/app/packages/plotly-complexheatmap
       - ./packages/plotly-upset:/app/packages/plotly-upset
