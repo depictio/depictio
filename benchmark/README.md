@@ -32,18 +32,42 @@ them:
 | `links-adversarial` | `datagen.py` — N symmetric collections | `individual_id`, **unique per row** (millions) | a deliberate worst case |
 
 `links` builds three collections at three grains — one row per sample, one per
-(sample, tool), one per (sample, feature) — connected in a star *and* a chain:
+(sample, tool), one per (sample, feature) — linked on `sample_id` in **both
+directions**, i.e. every ordered pair:
 
 ```
-metadata ──sample_id──> metrics ──sample_id──> features
-    └──────────sample_id──────────────────────────┘
+metadata <──sample_id──> metrics <──sample_id──> features
+    └<─────────────sample_id────────────────────────┘
 ```
 
 so one project exercises 1-hop propagation, the 2-hop chain
-(`filter_links._link_paths` / `_walk_link_path`), and two competing routes to the
-same target. Rows follow the size tier through the per-sample fan-out; the join
+(`filter_links._link_paths` / `_walk_link_path`), and two competing routes to
+every target. Rows follow the size tier through the per-sample fan-out; the join
 key does not — that is the property the whole dataset exists to hold, and it is
-what keeps a filter translation in the hundreds of values.
+what keeps a filter translation in the hundreds of values, in either direction.
+
+The reverse routes are what make the dashboard behave like a project rather than
+a test fixture: without `features -> metadata`, a filter on `feature_class`
+narrowed only the tiles reading `features` and every card, figure and table on
+the other two collections kept its unfiltered value. Every filter now reaches
+every component, so a round times the whole dashboard whichever collection the
+filter started on.
+
+The dashboard the linked cell generates is built the same way:
+
+- **a left panel of 12 filters** (`configgen._LINKED_FILTERS`) over all three
+  collections, grouped into cards of 3 — experiment / donor / QC / features. The
+  three groups sit on three different resolution costs: off a 500-row sample
+  sheet, off a 10 k-row QC table, and off the multi-million-row feature matrix.
+- **no two components showing the same thing** (`_LINKED_FIGURES`,
+  `_LINKED_TABLES`, one advanced-viz kind each). Ten identical tables and every
+  chart twice — what the plain visu rotation produced — cannot show whether a
+  filter did anything. Most tiles still read `features` (that is the render cost
+  the size tier is about); the rest read the sample sheet and the QC table, which
+  is where *propagation* is visible. Every row carries its own `dc_tag`, so the
+  grains stay separable in the report.
+- **a card per grain**, so the strip at the top says at a glance whether the last
+  filter reached all three collections.
 
 `links-adversarial` is the previous default. Its join key is unique per row, so
 filtering a 3-value column translates into millions of values, materialised as a
@@ -106,11 +130,14 @@ python -m benchmark.cli run \
   --dashboard-load --filter-rounds 3
 ```
 
-On the linked topology this runs **one sweep of rounds per filter origin**: a
-filter on `metadata.condition` (translated across 1 and 2 links before `features`
-can be narrowed) and one on `features.feature_class` (applied natively, no
-propagation). They are reported apart — they are different mechanisms, and their
-mean describes neither. Each round also probes every link route directly against
+On the linked topology this runs **one sweep of rounds per filter origin** — one
+per collection a filter can start on: `metadata.condition`, `metrics.tool`, and
+`features.feature_class`. All three now narrow the whole dashboard, so what
+separates them is what the *translation* costs: resolving off a 500-row sample
+sheet, off a 10 k-row QC table, or off the multi-million-row feature matrix,
+which has to be scanned to collect the sample set the filter corresponds to.
+They are reported apart — they are different mechanisms, and their mean describes
+none of them. Each round also probes every link route directly against
 `POST /links/{project}/resolve` and records how many values the translation
 produced (`kind="link_resolution"`).
 

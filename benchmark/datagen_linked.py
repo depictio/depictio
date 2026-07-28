@@ -86,7 +86,6 @@ _BATCHES = ("batch_A", "batch_B", "batch_C", "batch_D")
 _TIMEPOINTS = ("T0", "T6", "T24")
 _TISSUES = ("liver", "kidney", "lung")
 _SEX = ("male", "female")
-_TOOLS = ("fastqc", "samtools", "picard", "qualimap", "bcftools")
 _METRICS = ("reads", "coverage", "insert_size", "error_rate")
 _FEATURE_CLASSES = ("protein_coding", "lncRNA", "pseudogene")
 # Synthetic genomic + taxonomy columns on the features grain. They exist so the
@@ -98,10 +97,47 @@ _FEATURE_CLASSES = ("protein_coding", "lncRNA", "pseudogene")
 _CHROMOSOMES = tuple(f"chr{i}" for i in range(1, 23)) + ("chrX", "chrY")
 _TAXO_RANKS = ("phylum", "class", "order", "family", "genus")
 
-# One row per (sample, tool, metric): 5 x 4 = 20 metric rows per sample.
-METRICS_PER_SAMPLE = len(_TOOLS) * len(_METRICS)
+# ── Per-sample structure ────────────────────────────────────────────────────
+# The categorical columns of ``metrics`` and ``features`` are NOT drawn
+# independently per row. If they were, every sample would carry every value, and
+# translating a filter on one of them back to the sample sheet would return all
+# ``n_samples`` — a link that resolves successfully and narrows nothing. Half the
+# dashboard would then sit at its unfiltered value whenever the user touched a
+# QC or feature attribute, which is exactly the behaviour the reverse links in
+# ``configgen.LINKED_ROUTES`` exist to remove.
+#
+# So each sample is assigned a *panel* of tools and a *palette* of feature
+# classes / taxonomic ranks, deterministically from its index. Filtering on a
+# value not shared by every panel selects a strict subset of samples, and the
+# reverse translation has something real to say. This is also how projects
+# actually look: not every sample goes through every tool.
+_TOOL_PANELS: tuple[tuple[str, ...], ...] = (
+    ("fastqc", "samtools", "picard", "qualimap"),
+    ("fastqc", "samtools", "bcftools", "mosdepth"),
+)
+# Tools common to every panel — a filter on one of these selects every sample,
+# which is a legitimate outcome and worth keeping representable.
+_TOOLS: tuple[str, ...] = tuple(dict.fromkeys(t for panel in _TOOL_PANELS for t in panel))
+
+_FEATURE_CLASS_PALETTES: tuple[tuple[str, ...], ...] = (
+    ("protein_coding", "lncRNA"),
+    ("protein_coding", "pseudogene"),
+    ("lncRNA", "pseudogene"),
+)
+# Three consecutive ranks per sample, so each rank is present in a subset.
+_RANK_PALETTES: tuple[tuple[str, ...], ...] = tuple(
+    _TAXO_RANKS[i : i + 3] for i in range(len(_TAXO_RANKS) - 2)
+)
+
+# One row per (sample, tool, metric): 4 tools per panel x 4 metrics.
+METRICS_PER_SAMPLE = len(_TOOL_PANELS[0]) * len(_METRICS)
 
 DEFAULT_N_SAMPLES = 500
+
+# Bumped whenever the generated *content* changes for the same (size, samples).
+# The idempotency marker compares it, so a generator change regenerates instead
+# of silently reusing CSVs written by an older definition of the schema.
+SCHEMA_VERSION = 2
 
 
 @dataclass
@@ -124,6 +160,17 @@ def _sample_ids(start: int, count: int) -> list[str]:
     return [f"SAMPLE_{i:05d}" for i in range(start, start + count)]
 
 
+def _sample_index(sample_id: str) -> int:
+    """The global index encoded in a sample id.
+
+    Per-sample structure is keyed on this rather than on the position within a
+    shard, so a sample's tool panel and feature palette are the same whichever
+    run it lands in — the sharding is a file-layout detail and must not change
+    the data.
+    """
+    return int(sample_id.rsplit("_", 1)[1])
+
+
 def _metadata_batch(sample_ids: list[str], seed: int):
     import numpy as np
     import polars as pl
@@ -144,14 +191,19 @@ def _metadata_batch(sample_ids: list[str], seed: int):
 
 
 def _metrics_batch(sample_ids: list[str], seed: int):
-    """One row per (sample, tool, metric) — the QC grain."""
+    """One row per (sample, tool, metric) — the QC grain.
+
+    The tools are the sample's *panel*, not the whole pool, so a filter on a
+    panel-specific tool resolves back to the samples that ran it.
+    """
     import numpy as np
     import polars as pl
 
     rng = np.random.default_rng(seed)
+    panels = [_TOOL_PANELS[_sample_index(s) % len(_TOOL_PANELS)] for s in sample_ids]
     repeated = [s for s in sample_ids for _ in range(METRICS_PER_SAMPLE)]
-    tools = [t for _ in sample_ids for t in _TOOLS for _ in _METRICS]
-    metrics = [m for _ in sample_ids for _ in _TOOLS for m in _METRICS]
+    tools = [t for panel in panels for t in panel for _ in _METRICS]
+    metrics = [m for panel in panels for _ in panel for m in _METRICS]
     n = len(repeated)
     return pl.DataFrame(
         {
@@ -167,7 +219,12 @@ def _metrics_batch(sample_ids: list[str], seed: int):
 
 
 def _features_batch(sample_ids: list[str], features_per_sample: int, seed: int):
-    """One row per (sample, feature) — the heavy grain."""
+    """One row per (sample, feature) — the heavy grain.
+
+    ``feature_class`` and ``rank`` are drawn from the sample's palette rather
+    than from the full set, so filtering either one selects a strict subset of
+    samples and the reverse links have something to translate.
+    """
     import numpy as np
     import polars as pl
 
@@ -175,6 +232,14 @@ def _features_batch(sample_ids: list[str], features_per_sample: int, seed: int):
     repeated = [s for s in sample_ids for _ in range(features_per_sample)]
     feature_ids = [f"FEAT_{i:06d}" for _ in sample_ids for i in range(features_per_sample)]
     n = len(repeated)
+    classes: list[str] = []
+    ranks: list[str] = []
+    for s in sample_ids:
+        idx = _sample_index(s)
+        palette = _FEATURE_CLASS_PALETTES[idx % len(_FEATURE_CLASS_PALETTES)]
+        rank_palette = _RANK_PALETTES[idx % len(_RANK_PALETTES)]
+        classes.extend(rng.choice(palette, features_per_sample))
+        ranks.extend(rng.choice(rank_palette, features_per_sample))
     return pl.DataFrame(
         {
             "sample_id": repeated,
@@ -183,12 +248,15 @@ def _features_batch(sample_ids: list[str], features_per_sample: int, seed: int):
             "effect_size": rng.normal(0.0, 2.5, n).round(3),
             "neg_log10_p": rng.exponential(1.5, n).round(3),
             "mean_expression": rng.uniform(0.0, 14.0, n).round(3),
-            "feature_class": rng.choice(_FEATURE_CLASSES, n),
+            "feature_class": classes,
             # Synthetic genomic + taxonomy roles (see the constants above).
+            # ``chr`` stays uniform: every sample is sequenced against the same
+            # reference, so a chromosome filter narrows the feature rows but not
+            # the sample set — a link that legitimately resolves to everything.
             "chr": rng.choice(_CHROMOSOMES, n),
             "position": rng.integers(1, 250_000_000, n),
             "frac_expressing": rng.uniform(0.0, 1.0, n).round(3),
-            "rank": rng.choice(_TAXO_RANKS, n),
+            "rank": ranks,
         }
     )
 
@@ -222,7 +290,11 @@ def generate_linked_dataset(
     ``features_per_sample`` is derived so that ``n_samples`` — the join-key
     cardinality — stays where it is while the row count follows the tier.
 
-    Idempotent via a ``.manifest`` marker, like the symmetric generator.
+    Idempotent via a ``.manifest`` marker, like the symmetric generator — but
+    the marker also records :data:`SCHEMA_VERSION`, so changing what the
+    generator *writes* (not just how much of it) invalidates data on disk. Size
+    and sample count alone would not: a checkout that already had the old CSVs
+    would keep serving them under the new code, and the mismatch is invisible.
     """
     import polars as pl  # noqa: F401  (clear error if polars is absent)
 
@@ -235,8 +307,10 @@ def generate_linked_dataset(
         existing = dict(
             line.split("=", 1) for line in marker.read_text().splitlines() if "=" in line
         )
-        if existing.get("size_bytes") == str(size_bytes) and existing.get("n_samples") == str(
-            n_samples
+        if (
+            existing.get("size_bytes") == str(size_bytes)
+            and existing.get("n_samples") == str(n_samples)
+            and existing.get("schema_version") == str(SCHEMA_VERSION)
         ):
             return _manifest_from_marker(dataset_dir, existing)
 
@@ -276,6 +350,7 @@ def generate_linked_dataset(
             [
                 f"size_bytes={size_bytes}",
                 f"n_samples={n_samples}",
+                f"schema_version={SCHEMA_VERSION}",
                 f"features_per_sample={features_per_sample}",
                 f"n_runs={n_runs}",
                 f"bytes_per_feature_row={bytes_per_row:.4f}",

@@ -19,11 +19,15 @@ Key decisions (mirroring known-good authored projects like ``penguins``):
     the resulting ``joined_<name>`` tables.
   - ``links``       -> one ``links:`` entry from dc_0 to each dc_i.
   - ``independent`` -> components bind round-robin across the raw DCs.
-- **filters**: every dashboard gets two ``interactive`` components (a species
-  MultiSelect + a body-mass RangeSlider) so filtering responsiveness is
-  benchmarkable across all connect modes. They bind to the tag components
-  render from (the joined table for joins; ``dc_0`` for links, where link
-  resolution propagates the filter to the linked DCs).
+- **filters**: every dashboard gets ``interactive`` components so filtering
+  responsiveness is benchmarkable across all connect modes. The generic modes
+  get two (a species MultiSelect + a body-mass RangeSlider) bound to the tag
+  components render from (the joined table for joins; ``dc_0`` for
+  links-adversarial, where link resolution propagates the filter to the linked
+  DCs). The realistic ``links`` topology gets a full left panel — see
+  :data:`_LINKED_FILTERS` — spread over all three collections, and every
+  component on it is a distinct plot of the data (:data:`_LINKED_FIGURES` /
+  :data:`_LINKED_TABLES`), so a filter's effect is visible tile by tile.
 """
 
 from __future__ import annotations
@@ -102,13 +106,32 @@ def _dc_block(tag: str, dc_id: str, columns_description: dict[str, str] | None =
     }
 
 
-# The realistic link topology, as (source, target) tags. Both routes to
-# ``features`` are declared on purpose: the direct one and the one through
-# ``metrics``. They must not produce contradictory filters.
+# The realistic link topology, as (source, target) tags — every ordered pair of
+# the three collections, i.e. a complete directed graph.
+#
+# Downstream routes (metadata -> metrics -> features) are the classic shape: the
+# sample sheet narrows the QC table and the feature matrix. The *reverse* routes
+# matter just as much and used to be missing: without ``features -> metadata`` a
+# filter on ``feature_class`` narrowed only the components reading ``features``,
+# and every card, figure and table on the other two collections stayed at their
+# unfiltered value — a dashboard where half the tiles ignore the filter you just
+# moved. Declaring both directions is what makes *every* left-panel filter reach
+# *every* component.
+#
+# Reversing is affordable precisely because of the property this dataset holds:
+# ``sample_id`` has ``n_samples`` distinct values, so resolving from the 17 M-row
+# ``features`` collection back to ``metadata`` returns hundreds of values, not
+# millions. The cycles are safe — ``filter_links._link_paths`` walks breadth-first
+# and never revisits a collection within a path.
 LINKED_ROUTES: tuple[tuple[str, str], ...] = (
+    # downstream: sample sheet -> QC -> features (star + chain)
     (METADATA_TAG, METRICS_TAG),
     (METADATA_TAG, FEATURES_TAG),
     (METRICS_TAG, FEATURES_TAG),
+    # upstream: a filter on a feature/QC attribute narrows the sample set too
+    (METRICS_TAG, METADATA_TAG),
+    (FEATURES_TAG, METADATA_TAG),
+    (FEATURES_TAG, METRICS_TAG),
 )
 
 
@@ -351,8 +374,10 @@ def bindable_tags(cell: Cell) -> list[str]:
     if cell.connect is ConnectMode.JOINS:
         return [f"joined_join_0_{i}" for i in range(1, cell.n_dcs)]
     if cell.connect is ConnectMode.LINKS:
-        # The heavy collection is what the timed components read; metadata and
-        # metrics drive the filters and cards.
+        # The heavy collection: the default binding, and where most of the timed
+        # components sit. Individual components override it from the catalogues
+        # (:data:`_LINKED_FIGURES` / :data:`_LINKED_TABLES`) so the dashboard also
+        # renders its sample sheet and its QC table, as a real project would.
         return [FEATURES_TAG]
     return [f"dc_{i}" for i in range(cell.n_dcs)]
 
@@ -444,6 +469,9 @@ def _linked_figure_kwargs(visu_type: str) -> dict:
     ``bar`` binds a low-cardinality categorical x (``feature_class``, 3 values)
     so the aggregation service's exact group-by stays tiny; ``line`` is a sampled
     mark-per-row plot. See ``matrix.FIGURE_VISU_ROTATION``.
+
+    Used for the *symmetric-shaped* fallback only; the linked dashboard itself
+    draws from :data:`_LINKED_FIGURES`, where each entry is a distinct plot.
     """
     return {
         "scatter": {"x": "mean_expression", "y": "expression", "color": "feature_class"},
@@ -452,6 +480,122 @@ def _linked_figure_kwargs(visu_type: str) -> dict:
         "bar": {"x": "feature_class", "y": "expression"},
         "line": {"x": "mean_expression", "y": "expression"},
     }.get(visu_type, {"x": "mean_expression", "y": "expression"})
+
+
+@dataclass(frozen=True)
+class _LinkedFigure:
+    """One figure in the linked dashboard, bound to a named plot."""
+
+    dc_tag: str
+    visu_type: str
+    kwargs: dict
+    title: str
+
+
+@dataclass(frozen=True)
+class _LinkedTable:
+    """One table in the linked dashboard.
+
+    ``columns`` is the display allowlist (``TableLiteComponent.columns``). The
+    React grid restricts itself to those fields; the server still returns the
+    whole row, so this changes what the user reads, not what the render costs.
+    An empty list shows every column.
+    """
+
+    dc_tag: str
+    columns: tuple[str, ...]
+    title: str
+
+
+# Every figure/table in the linked dashboard is a *different* plot of the
+# project's data. Rotating a handful of visu types over one collection — which is
+# what the generic path does — produced ten identical tables and each chart twice,
+# so a dashboard of 30 components showed maybe 12 distinct things and no filter
+# could be told apart from the next by looking at it.
+#
+# The bindings are spread across all three collections on purpose. Most of the
+# heavy work stays on ``features`` (that is the render cost the tier is about),
+# but a project that renders nothing from its sample sheet or its QC table is not
+# a project — and with the complete link graph those small components are exactly
+# where a filter's *propagation* shows up. Results are recorded per component with
+# their ``dc_tag`` (``RenderResult``), so the grains stay separable in the report.
+#
+# Bar/box x-columns stay low-cardinality so the figure aggregation service's exact
+# group-by stays under its ``_MAX_GROUPS`` ceiling (rank: 5, metric: 4, tool: 5).
+_LINKED_FIGURES: tuple[_LinkedFigure, ...] = (
+    _LinkedFigure(
+        FEATURES_TAG,
+        "scatter",
+        {"x": "mean_expression", "y": "expression", "color": "feature_class"},
+        "Expression vs mean expression",
+    ),
+    _LinkedFigure(
+        FEATURES_TAG,
+        "scatter",
+        {"x": "effect_size", "y": "neg_log10_p", "color": "rank"},
+        "Effect size vs significance",
+    ),
+    _LinkedFigure(
+        FEATURES_TAG,
+        "box",
+        {"x": "feature_class", "y": "expression"},
+        "Expression by feature class",
+    ),
+    _LinkedFigure(FEATURES_TAG, "histogram", {"x": "neg_log10_p"}, "Significance distribution"),
+    _LinkedFigure(FEATURES_TAG, "bar", {"x": "rank", "y": "expression"}, "Expression by rank"),
+    _LinkedFigure(
+        FEATURES_TAG,
+        "line",
+        {"x": "position", "y": "frac_expressing"},
+        "Detection along the position axis",
+    ),
+    _LinkedFigure(METRICS_TAG, "box", {"x": "tool", "y": "value"}, "Metric value by QC tool"),
+    _LinkedFigure(METRICS_TAG, "histogram", {"x": "mapped_pct"}, "Mapped % distribution"),
+    _LinkedFigure(
+        METRICS_TAG,
+        "bar",
+        {"x": "metric", "y": "duplication_pct"},
+        "Duplication % by metric",
+    ),
+    _LinkedFigure(METADATA_TAG, "histogram", {"x": "age"}, "Donor age distribution"),
+)
+
+_LINKED_TABLES: tuple[_LinkedTable, ...] = (
+    _LinkedTable(METADATA_TAG, (), "Sample sheet"),
+    _LinkedTable(METADATA_TAG, ("sample_id", "tissue", "sex", "age"), "Donor attributes"),
+    _LinkedTable(METRICS_TAG, ("sample_id", "tool", "metric", "value"), "QC metric values"),
+    _LinkedTable(
+        METRICS_TAG,
+        ("sample_id", "mapped_pct", "duplication_pct", "gc_pct"),
+        "Alignment rates",
+    ),
+    _LinkedTable(FEATURES_TAG, (), "Feature matrix (every column)"),
+    _LinkedTable(
+        FEATURES_TAG,
+        ("sample_id", "feature_id", "expression", "mean_expression"),
+        "Expression per feature",
+    ),
+    _LinkedTable(
+        FEATURES_TAG,
+        ("feature_id", "effect_size", "neg_log10_p"),
+        "Differential statistics",
+    ),
+    _LinkedTable(
+        FEATURES_TAG,
+        ("feature_id", "chr", "position", "feature_class"),
+        "Genomic coordinates",
+    ),
+    _LinkedTable(
+        FEATURES_TAG,
+        ("sample_id", "rank", "feature_class", "expression"),
+        "Taxonomic assignment",
+    ),
+    _LinkedTable(
+        FEATURES_TAG,
+        ("sample_id", "feature_id", "frac_expressing"),
+        "Detection rate per feature",
+    ),
+)
 
 
 def _figure_kwargs(visu_type: str) -> dict:
@@ -550,83 +694,189 @@ def _advanced_viz_config(viz_kind: str, feature_id_col: str = "individual_id") -
         raise ValueError(f"Unsupported benchmark viz_kind {viz_kind!r}")
 
 
-def _linked_filter_components(workflow_tag: str) -> list[dict]:
-    """Filter strip for the linked topology: filters on metadata, cards on metrics.
+@dataclass(frozen=True)
+class _LinkedFilter:
+    """One interactive filter in the linked dashboard's left panel."""
 
-    The filters deliberately do NOT sit on the collection the components read.
-    That is the topology being measured: a filter on ``metadata`` has to travel
-    a link to reach ``metrics`` (1 hop) and ``features`` (1 hop directly, 2 hops
-    through metrics).
+    column: str
+    dc_tag: str
+    kind: str  # interactive_component_type
+    column_type: str
+    title: str
+    group: str  # filters sharing a group render inside one card (max 3)
+    icon: str  # Iconify name shown next to the filter's title
+
+
+# One accent colour per group, so the left panel reads as four blocks rather
+# than twelve identical rows — and the colour says which collection the filter
+# starts on, which is the thing that differs between them.
+_LINKED_FILTER_COLORS: dict[str, str] = {
+    "Experiment": "#377EB8",  # blue   - metadata
+    "Donor": "#984EA3",  # purple - metadata
+    "Quality control": "#DD8452",  # orange - metrics
+    "Features": "#8BC34A",  # green  - features (the heavy collection)
+}
+
+
+# The left panel, as it would be on a real project: filters on every collection,
+# bucketed into cards by what they describe rather than by which table they
+# happen to live on.
+#
+# Every one of them reaches every component, because ``LINKED_ROUTES`` is a
+# complete graph — that is the point of the expansion. They also cover the three
+# resolution costs that differ: a filter on ``metadata`` (500 rows) resolves off
+# a tiny table, one on ``metrics`` (10 k rows) off a small one, and one on
+# ``features`` (millions) has to scan the heavy collection to collect the sample
+# set it corresponds to.
+#
+# Groups hold at most 3 members (``DashboardDataLite.validate_interactive_groups``),
+# so the buckets are sized to that.
+_LINKED_FILTERS: tuple[_LinkedFilter, ...] = (
+    # ── the sample sheet ────────────────────────────────────────────────────
+    _LinkedFilter(
+        "condition", METADATA_TAG, "MultiSelect", "object", "Condition", "Experiment", "mdi:flask"
+    ),
+    _LinkedFilter(
+        "timepoint",
+        METADATA_TAG,
+        "MultiSelect",
+        "object",
+        "Timepoint",
+        "Experiment",
+        "mdi:clock-outline",
+    ),
+    _LinkedFilter(
+        "batch",
+        METADATA_TAG,
+        "MultiSelect",
+        "object",
+        "Batch",
+        "Experiment",
+        "mdi:layers-triple",
+    ),
+    _LinkedFilter(
+        "tissue", METADATA_TAG, "MultiSelect", "object", "Tissue", "Donor", "mdi:heart-pulse"
+    ),
+    _LinkedFilter(
+        "sex", METADATA_TAG, "MultiSelect", "object", "Sex", "Donor", "mdi:gender-male-female"
+    ),
+    _LinkedFilter(
+        "age", METADATA_TAG, "RangeSlider", "int64", "Age", "Donor", "mdi:calendar-account"
+    ),
+    # ── QC, one hop away from the sample sheet ──────────────────────────────
+    _LinkedFilter(
+        "tool", METRICS_TAG, "MultiSelect", "object", "QC tool", "Quality control", "mdi:tools"
+    ),
+    _LinkedFilter(
+        "metric", METRICS_TAG, "MultiSelect", "object", "Metric", "Quality control", "mdi:ruler"
+    ),
+    _LinkedFilter(
+        "mapped_pct",
+        METRICS_TAG,
+        "RangeSlider",
+        "float64",
+        "Mapped %",
+        "Quality control",
+        "mdi:target",
+    ),
+    # ── the heavy collection: filters that apply natively there and travel
+    #    *back* to the other two ─────────────────────────────────────────────
+    _LinkedFilter(
+        "feature_class",
+        FEATURES_TAG,
+        "MultiSelect",
+        "object",
+        "Feature class",
+        "Features",
+        "mdi:shape",
+    ),
+    _LinkedFilter(
+        "chr", FEATURES_TAG, "MultiSelect", "object", "Chromosome", "Features", "mdi:dna"
+    ),
+    _LinkedFilter(
+        "rank", FEATURES_TAG, "MultiSelect", "object", "Taxonomic rank", "Features", "mdi:file-tree"
+    ),
+)
+
+
+@dataclass(frozen=True)
+class _LinkedCard:
+    """One metric card in the strip above the linked dashboard's components."""
+
+    tag: str
+    dc_tag: str
+    column: str
+    column_type: str
+    aggregation: str
+    title: str
+
+
+# One card per collection plus a second QC metric, so the strip itself shows
+# whether a filter reached every grain: with the complete link graph all four
+# must move when any filter moves. Cards were the clearest symptom of the old
+# one-directional topology — the metrics cards sat frozen through the whole
+# ``features`` sweep.
+_LINKED_CARDS: tuple[_LinkedCard, ...] = (
+    _LinkedCard("card-samples", METADATA_TAG, "sample_id", "object", "nunique", "Samples"),
+    _LinkedCard(
+        "card-mean-metric", METRICS_TAG, "value", "float64", "average", "Mean metric value"
+    ),
+    _LinkedCard("card-mapped", METRICS_TAG, "mapped_pct", "float64", "average", "Mean mapped %"),
+    _LinkedCard(
+        "card-mean-expression", FEATURES_TAG, "expression", "float64", "average", "Mean expression"
+    ),
+)
+
+
+def _linked_filter_components(workflow_tag: str) -> list[dict]:
+    """The left panel + card strip for the linked topology.
+
+    Filters sit on all three collections on purpose. Most of them still do NOT
+    sit on the collection a given component reads — that is the topology being
+    measured, and with the complete link graph it now runs in both directions: a
+    filter on ``metadata`` travels down to ``metrics`` (1 hop) and ``features``
+    (1 hop directly, 2 through metrics), and one on ``features`` travels back up
+    the same edges.
     """
     # Filters and cards are laid out from y=0 *independently*: the dashboard
     # import splits them into two grids — interactives go to
     # ``left_panel_layout_data``, everything else to ``right_panel_layout_data``
     # — so reserving the filters' height in the components' panel would leave an
     # empty band at the top of it and push the cards down a row.
-    meta = {"workflow_tag": workflow_tag, "data_collection_tag": METADATA_TAG}
-    metrics = {"workflow_tag": workflow_tag, "data_collection_tag": METRICS_TAG}
-    return [
+    components: list[dict] = [
         {
-            "tag": "filter-condition",
+            "tag": f"filter-{f.column.replace('_', '-')}",
             "component_type": "interactive",
-            **meta,
-            "interactive_component_type": "MultiSelect",
-            "column_name": "condition",
-            "column_type": "object",
-            "title": "Condition",
-            "layout": _filter_layout(0),
-        },
-        {
-            "tag": "filter-batch",
-            "component_type": "interactive",
-            **meta,
-            "interactive_component_type": "MultiSelect",
-            "column_name": "batch",
-            "column_type": "object",
-            "title": "Batch",
-            "layout": _filter_layout(1),
-        },
-        {
-            "tag": "filter-age",
-            "component_type": "interactive",
-            **meta,
-            "interactive_component_type": "RangeSlider",
-            "column_name": "age",
-            "column_type": "int64",
-            "title": "Age",
-            "layout": _filter_layout(2),
-        },
-        {
-            "tag": "card-mean-metric",
-            "component_type": "card",
-            **metrics,
-            "column_name": "value",
-            "column_type": "float64",
-            "aggregation": "average",
-            "title": "Mean metric value",
-            "layout": _strip_layout(0),
-        },
-        {
-            "tag": "card-tools",
-            "component_type": "card",
-            **metrics,
-            "column_name": "tool",
-            "column_type": "object",
-            "aggregation": "nunique",
-            "title": "Distinct QC tools",
-            "layout": _strip_layout(1),
-        },
-        {
-            "tag": "card-mapped",
-            "component_type": "card",
-            **metrics,
-            "column_name": "mapped_pct",
-            "column_type": "float64",
-            "aggregation": "average",
-            "title": "Mean mapped %",
-            "layout": _strip_layout(2),
-        },
+            "workflow_tag": workflow_tag,
+            "data_collection_tag": f.dc_tag,
+            "interactive_component_type": f.kind,
+            "column_name": f.column,
+            "column_type": f.column_type,
+            "group": f.group,
+            "title": f.title,
+            # Colour by group (i.e. by originating collection), icon by what the
+            # column means.
+            "custom_color": _LINKED_FILTER_COLORS[f.group],
+            "icon_name": f.icon,
+            "layout": _filter_layout(i),
+        }
+        for i, f in enumerate(_LINKED_FILTERS)
     ]
+    components += [
+        {
+            "tag": card.tag,
+            "component_type": "card",
+            "workflow_tag": workflow_tag,
+            "data_collection_tag": card.dc_tag,
+            "column_name": card.column,
+            "column_type": card.column_type,
+            "aggregation": card.aggregation,
+            "title": card.title,
+            "layout": _strip_layout(i),
+        }
+        for i, card in enumerate(_LINKED_CARDS)
+    ]
+    return components
 
 
 def _filter_tag(cell: Cell) -> str:
@@ -705,6 +955,22 @@ def _filter_components(cell: Cell, workflow_tag: str) -> list[dict]:
     ]
 
 
+# What each advanced-viz kind is showing, in the linked dashboard's terms. The
+# generic path keeps "Advanced viz N (kind)" — there the kind IS the identity.
+_ADVANCED_VIZ_TITLES: dict[str, str] = {
+    "volcano": "Volcano - effect size vs significance",
+    "ma": "MA - fold change vs mean intensity",
+    "manhattan": "Manhattan - significance along the genome",
+    "qq": "QQ - observed vs expected p-values",
+    "lollipop": "Lollipop - effect size by position",
+    "da_barplot": "Differential abundance by feature class",
+    "sunburst": "Sunburst - rank then feature class",
+    "sankey": "Sankey - rank to feature class",
+    "stacked_taxonomy": "Stacked taxonomy per sample",
+    "dot_plot": "Dot plot - expression and detection",
+}
+
+
 def _timed_components(
     cell: Cell,
     workflow_tag: str,
@@ -716,14 +982,21 @@ def _timed_components(
     """The components whose render latency is measured, rotating through ``visu``.
 
     ``linked`` selects the column bindings: the linked topology's ``features``
-    collection has its own schema. ``y_offset`` is where the strip ends, so the
-    timed components never overlap the filters however many there are.
+    collection has its own schema, and its figures/tables come from the
+    :data:`_LINKED_FIGURES` / :data:`_LINKED_TABLES` catalogues so that no two
+    components on the dashboard show the same thing. Past the length of a
+    catalogue (10 of each, i.e. 30 components with the full ``visu`` rotation)
+    the entries repeat — a cell asking for more gets duplicates again, which is
+    a size question, not a modelling one.
+
+    ``y_offset`` is where the strip ends, so the timed components never overlap
+    the filters however many there are.
     """
     figure_kwargs = _linked_figure_kwargs if linked else _figure_kwargs
     feature_id_col = "feature_id" if linked else "individual_id"
 
     components: list[dict] = []
-    fig_i = av_i = 0
+    fig_i = tbl_i = av_i = 0
     for i in range(cell.n_components):
         visu = cell.visu[i % len(cell.visu)]
         base = {"workflow_tag": workflow_tag, "data_collection_tag": tags[i % len(tags)]}
@@ -736,7 +1009,14 @@ def _timed_components(
         )
 
         if visu is VisuType.FIGURE:
-            visu_type = FIGURE_VISU_ROTATION[fig_i % len(FIGURE_VISU_ROTATION)]
+            if linked:
+                spec = _LINKED_FIGURES[fig_i % len(_LINKED_FIGURES)]
+                visu_type, kwargs, title = spec.visu_type, dict(spec.kwargs), spec.title
+                base = {"workflow_tag": workflow_tag, "data_collection_tag": spec.dc_tag}
+            else:
+                visu_type = FIGURE_VISU_ROTATION[fig_i % len(FIGURE_VISU_ROTATION)]
+                kwargs = figure_kwargs(visu_type)
+                title = f"Figure {i} ({visu_type})"
             fig_i += 1
             components.append(
                 {
@@ -744,21 +1024,27 @@ def _timed_components(
                     "component_type": "figure",
                     **base,
                     "visu_type": visu_type,
-                    "dict_kwargs": figure_kwargs(visu_type),
-                    "title": f"Figure {i} ({visu_type})",
+                    "dict_kwargs": kwargs,
+                    "title": title,
                     "layout": layout,
                 }
             )
         elif visu is VisuType.TABLE:
-            components.append(
-                {
-                    "tag": f"tbl-{i}",
-                    "component_type": "table",
-                    **base,
-                    "title": f"Table {i}",
-                    "layout": layout,
-                }
-            )
+            table: dict = {
+                "tag": f"tbl-{i}",
+                "component_type": "table",
+                **base,
+                "title": f"Table {i}",
+                "layout": layout,
+            }
+            if linked:
+                spec_t = _LINKED_TABLES[tbl_i % len(_LINKED_TABLES)]
+                table["data_collection_tag"] = spec_t.dc_tag
+                table["title"] = spec_t.title
+                if spec_t.columns:
+                    table["columns"] = list(spec_t.columns)
+            tbl_i += 1
+            components.append(table)
         elif visu is VisuType.ADVANCED_VIZ:
             viz_kind = ADVANCED_VIZ_ROTATION[av_i % len(ADVANCED_VIZ_ROTATION)]
             av_i += 1
@@ -769,7 +1055,11 @@ def _timed_components(
                     **base,
                     "viz_kind": viz_kind,
                     "config": _advanced_viz_config(viz_kind, feature_id_col=feature_id_col),
-                    "title": f"Advanced viz {i} ({viz_kind})",
+                    "title": (
+                        _ADVANCED_VIZ_TITLES.get(viz_kind, viz_kind)
+                        if linked
+                        else f"Advanced viz {i} ({viz_kind})"
+                    ),
                     "layout": layout,
                 }
             )
@@ -786,10 +1076,9 @@ def build_dashboard(cell: Cell, project: dict) -> dict:
     # benchmarkable across all connect modes (previously links-only).
     if linked:
         filters = _linked_filter_components(workflow_tag)
-        n_filters = 3
     else:
         filters = _filter_components(cell, workflow_tag)
-        n_filters = 2
+    n_filters = sum(1 for c in filters if c["component_type"] == "interactive")
 
     return {
         "version": 1,
@@ -869,15 +1158,26 @@ _FEATURE_CLASS_ROUNDS: tuple[tuple[str, ...], ...] = (
     ("pseudogene",),
     ("protein_coding", "lncRNA"),
 )
+# Panel-specific tools (see ``datagen_linked._TOOL_PANELS``): each selects the
+# samples that ran it, so the translation back to the sample sheet narrows.
+# ``fastqc`` / ``samtools`` are in every panel and would resolve to every sample.
+_TOOL_ROUNDS: tuple[tuple[str, ...], ...] = (
+    ("picard",),
+    ("bcftools",),
+    ("qualimap",),
+    ("picard", "bcftools"),
+)
 
 
 def _reachable_tags(origin: str, routes: tuple[tuple[str, str], ...]) -> frozenset[str]:
     """``origin`` plus everything reachable from it by following ``routes``.
 
-    Links are directed: ``metadata -> features`` does not let a filter on
-    ``features`` narrow ``metadata``. Knowing which collections a given origin
-    can reach is what makes the propagated and native sweeps comparable — the
-    components outside the set never filter at all.
+    Links are directed, so reachability has to be computed rather than assumed:
+    ``metadata -> features`` alone would not let a filter on ``features`` narrow
+    ``metadata``. :data:`LINKED_ROUTES` declares both directions precisely so
+    that every origin reaches everything — but the adversarial topology does not,
+    and a component outside the set renders unfiltered. Counting one of those in
+    a round's window would compare two different amounts of work between origins.
     """
     reached = {origin}
     frontier = [origin]
@@ -893,26 +1193,46 @@ def _reachable_tags(origin: str, routes: tuple[tuple[str, str], ...]) -> frozens
 def filter_plans(cell: Cell) -> list[FilterPlan]:
     """Filter origins to time for this cell, in the order they should run."""
     if cell.connect is ConnectMode.LINKS:
+        # One sweep per collection a filter can start on. With the complete link
+        # graph all three reach the whole dashboard, so what differs between them
+        # is no longer *how much* they narrow but what the translation costs:
+        # resolving off a 500-row sample sheet, a 10 k-row QC table, or the
+        # multi-million-row feature matrix. Averaging them would describe none of
+        # the three, so they stay apart.
+        #
+        # ``hops`` is the longest route the resolver may walk to a component:
+        # every pair is one hop apart directly, and ``_link_paths`` also returns
+        # the 2-hop alternative through the third collection.
         return [
             FilterPlan(
                 dc_tag=METADATA_TAG,
                 column="condition",
                 values=_CONDITION_ROUNDS,
-                # metadata -> metrics (1) and metadata -> metrics -> features (2)
                 hops=2,
-                label="metadata-propagated",
+                label="metadata-origin",
                 sequential_value=("treated", "recovery"),
                 reachable_tags=_reachable_tags(METADATA_TAG, LINKED_ROUTES),
+            ),
+            FilterPlan(
+                dc_tag=METRICS_TAG,
+                column="tool",
+                values=_TOOL_ROUNDS,
+                hops=2,
+                label="metrics-origin",
+                sequential_value=("mosdepth",),
+                reachable_tags=_reachable_tags(METRICS_TAG, LINKED_ROUTES),
             ),
             FilterPlan(
                 dc_tag=FEATURES_TAG,
                 column="feature_class",
                 values=_FEATURE_CLASS_ROUNDS,
-                hops=0,
-                label="features-native",
+                hops=2,
+                label="features-origin",
                 sequential_value=("lncRNA", "pseudogene"),
-                # features has no outgoing link, so this filter narrows nothing
-                # else — the cards on metrics stay unfiltered in this sweep.
+                # Applies natively to the components on ``features`` and travels
+                # back up the reverse links to narrow ``metrics`` and
+                # ``metadata`` — the resolution that has to scan the heavy
+                # collection to collect its sample set.
                 reachable_tags=_reachable_tags(FEATURES_TAG, LINKED_ROUTES),
             ),
         ]
