@@ -15,15 +15,11 @@ is already pinned in pyproject, so use the project interpreter:
 Auth defaults to sending no Authorization header. On a deployment running in
 public mode that is equivalent to the temporary-user session the browser creates,
 so the run reproduces what an ordinary visitor sees. Pass --token-file with an
-admin bearer token to also cover private dashboards. On a K8s deployment, mint
-one from the backend pod's per-admin config (note the file is named
-{username}_config.yaml, not admin_config.yaml)::
-
-    NS=datasci-depictio-project-demo-dev
-    POD=$(kubectl -n $NS get pods -o name | grep -m1 depictio-backend | sed 's|pod/||')
-    kubectl -n $NS exec $POD -c depictio-backend -- python3 -c \
-      "import yaml;print(yaml.safe_load(open('/app/depictio/.depictio/thomas.weber_config.yaml'))['user']['token']['access_token'])" \
-      > /tmp/demo_admin_token
+admin bearer token to also cover private dashboards. On a Kubernetes deployment
+that token lives in the backend pod, in the per-admin config under
+/app/depictio/.depictio/ at user.token.access_token. The file is named after the
+admin account (<username>_config.yaml), not admin_config.yaml, so glob for
+*_config.yaml rather than assuming a fixed name.
 
 Exit code is 0 unless the deployment is unreachable or preflight fails. Pass
 --strict to also exit 1 when any component fails.
