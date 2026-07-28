@@ -3,6 +3,18 @@
 - Bring up Depictio, import the `adapt_feedb_ms` demo, watch its dashboard refresh live over WebSocket as rows land.
 - Tested on `1.1.4-b3`. Needs Docker + Python 3.11 (CLI). All local — no external S3/DB.
 
+## Demo
+
+[![Real-time events streaming into the Microscopy Real-time Monitor dashboard](images/realtime-events-demo.jpg)](https://vimeo.com/1213687131)
+
+*1:46 screen recording, [watch on Vimeo](https://vimeo.com/1213687131).*
+
+This is the SVLT path from §5. The simulator acquires images, `svltx-depictio` exports each
+acquisition to MinIO and notifies the API, and the API broadcasts over `/events/ws`. The
+dashboard on the left is open the whole time: it refetches on each broadcast, so the cells,
+images and cards move on their own while the terminal on the right streams acquisitions. No
+page reload, no manual refresh.
+
 ## 1. Stack
 
 ```bash
@@ -131,7 +143,8 @@ additionally auto-derives ports + MinIO creds from `.env.instance` (and can fall
 back to the checkout's `admin_config.yaml` for the token).
 
 Open `http://localhost:5080/dashboard/750a1b2c3d4e5f6a7b8c9d20` and watch acquisitions land
-live — same refresh as §4, but with real segmented-cell images and morphology.
+live — same refresh as §4, but with real segmented-cell images and morphology. The
+[demo video](#demo) at the top of this page is a recording of exactly this run.
 
 ### 5.3 Two details the script handles for you
 
