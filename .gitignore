@@ -392,6 +392,10 @@ dev/advanced_viz_docs_screenshots/fixtures/
 # Generated catalog-preview single-file bundle (built via pnpm run build:catalog-preview)
 depictio/viewer/dist-catalog-preview/
 
+# Generated Iconify icon subset (emitted by depictio/viewer/scripts/generate-icon-subset.mjs,
+# which every `pnpm dev` / `pnpm build` runs first). Regenerate with `pnpm run icons`.
+depictio/viewer/src/generated/
+
 # Nextflow runtime artifacts (from local pipeline validation runs)
 .nextflow/
 .nextflow.log*

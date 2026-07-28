@@ -1,3 +1,8 @@
+// REQUIRED FIRST: registers the bundled Iconify icons. Without it every
+// <Icon/> tries to fetch its data from the public Iconify API, which the
+// deployed CSP blocks, and all icons render empty. See src/icons.ts.
+import './icons';
+
 import React, { Suspense } from 'react';
 import ReactDOM from 'react-dom/client';
 import { MantineProvider } from '@mantine/core';
