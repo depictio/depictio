@@ -1,34 +1,41 @@
-# RFC — Static dashboard export (serverless viewing)
+# RFC — Serverless Depictio (backend-less deployment)
 
 **Status:** Draft / design only (no code).
 **Audience:** maintainers.
 **Related:** `depictio/viewer/vite.catalog-preview.config.ts` + `depictio/viewer/src/catalog-preview/`
-(the working precedent this extends), `depictio/catalog/payload.py`,
-`depictio/api/v1/deltatables_utils.py`, `depictio/api/v1/services/figure/figure_builder.py`.
+(the working precedent this generalises), `depictio/catalog/payload.py`,
+`depictio/api/v1/deltatables_utils.py`, `depictio/api/v1/services/figure/figure_builder.py`,
+`docs/design/rfc-reshape-on-render.md` (see §11).
 
 > This RFC is design-only. It is **not** a deliverable of the change that
 > introduced it; it captures a direction to validate before any code is written.
+
+> **On the word "serverless".** Used here in its literal sense — *no backend at all*, the page runs
+> entirely in the browser. Not the cloud-industry sense (FaaS / Lambda), where a server still exists
+> and is merely unmanaged. "Backend-less" is the precise term; "serverless deployment" is the one
+> we use in conversation.
 
 ## 1. Context
 
 Viewing a dashboard today requires the whole stack: FastAPI + MongoDB + Redis + MinIO + a Celery
 worker. Every filter interaction is a network round-trip that ends in Polars reading a Delta Lake
 table from S3. So a dashboard cannot be handed to someone — as a paper supplement, a GitHub Pages
-demo, a reviewer artifact — without also deploying a backend.
+demo, a reviewer artifact, a zero-install trial — without also deploying a backend.
 
-The target: **preformatted data in → Depictio renders with no server → host it anywhere** (GH Pages,
-an S3 website, a file on disk), with interactive filtering still working.
+The target capability: **preformatted data in → Depictio renders with no server → host it anywhere**
+(GH Pages, an S3 website, a file on disk), with interactive filtering still working.
 
 Two facts make this tractable rather than a rewrite:
 
 1. **Rendering is already 100% client-side React.** `packages/depictio-react-core/` holds the real
    renderers; the remaining Python is a *data + figure-JSON service*.
-2. **A working zero-backend build already ships.** `depictio catalog preview --out x.html` emits one
+2. **A working backend-less build already ships.** `depictio catalog preview --out x.html` emits one
    self-contained HTML that runs the **real** `ComponentRenderer` with no network, via a Vite
    `resolveId` plugin that swaps `api.ts` for a payload-reading shim.
 
 The gap is narrow and specific: that shim **ignores the `filters` argument everywhere**
-(`mockApi.ts` returns `filter_applied: false`), so the existing offline mode is a frozen snapshot.
+(`mockApi.ts` returns `filter_applied: false`), so the existing backend-less mode is a frozen
+snapshot.
 
 > Note: `CLAUDE.md` still documents a "Dash Multi-App Architecture" and `depictio/dash/app.py`.
 > That directory no longer exists — the Dash → React migration is complete. The stale doc misleads
@@ -38,17 +45,34 @@ The gap is narrow and specific: that shim **ignores the `filters` argument every
 
 ## 2. Problem
 
-Making the existing offline bundle *interactive* means moving four server responsibilities into the
-browser: filtering, aggregation, figure construction, and cross-DC link resolution. A naive reading
-says that's a rewrite of the ~4.9k-line `dashboards_endpoints/routes.py` render layer plus the
-~1.6k-line `deltatables_utils.py` load layer.
+### 2.1 Framing: a deployment mode, not an export
+
+An earlier draft of this RFC was scoped as "static dashboard export" and centred on a CLI that
+snapshots a *running* instance. That framing was wrong in a way that mattered:
+
+- It named a **workflow** rather than the **capability**. Export is one route to backend-less
+  rendering, not the thing itself.
+- It made a live backend a **prerequisite**. But "preformatted data → render" needs no server at
+  all: a dashboard spec plus local Parquet is sufficient input.
+- It hid the real contract. The durable artifact is the **manifest schema** (§3.1), not any one
+  command. Once the manifest is the interface, producers are plural and cheap.
+
+So this RFC is structured as three layers: a **contract**, a **runtime** that consumes it, and
+**producers** that emit it. Export-from-instance is one producer among others.
+
+### 2.2 The technical problem
+
+Making the existing backend-less bundle *interactive* means moving four server responsibilities into
+the browser: filtering, aggregation, figure construction, and cross-DC link resolution. A naive
+reading says that's a rewrite of the ~4.9k-line `dashboards_endpoints/routes.py` render layer plus
+the ~1.6k-line `deltatables_utils.py` load layer.
 
 It is much smaller than that, but only if three specific traps are avoided. Sections 4–6 are those
-three traps and their resolutions.
+traps and their resolutions.
 
-### 2.1 What the reference dashboards actually contain
+### 2.3 What the reference dashboards actually contain
 
-Measured across all 50 `.db_seeds/*.json` (251 components), because the design hinges on it:
+Measured across all 50 `.db_seeds/*.json` (251 components), because the tiering rests on it:
 
 | type | count | | type | count |
 |---|---|---|---|---|
@@ -71,7 +95,7 @@ Measured across all 50 `.db_seeds/*.json` (251 components), because the design h
   ~32 already render client-side from `POST /advanced_viz/data`.
 - Dashboard documents are 3–35 KB of JSON. Largest single table is a 25 MB Parquet; most are 1–3 MB.
 
-### 2.2 What cannot cross over
+### 2.4 What cannot cross over
 
 - **6 Celery computes are filter-dependent** (`filter_metadata` is in their payload): embedding
   (pca/umap/tsne/pcoa), complex_heatmap (scipy clustering), upset, sankey, coverage_track.
@@ -85,16 +109,14 @@ Measured across all 50 `.db_seeds/*.json` (251 components), because the design h
 high-cardinality MultiSelects (`sample`, `Phylum`) with **continuous** RangeSliders (`AF`, `lfc`,
 `rel_abundance`), so the filter state space is unbounded. Frozen means frozen at the default state.
 
-## 3. Proposal — three tiers, one bundle
+## 3. Proposal — contract, runtime, producers
 
-- **Live:** `figure` (ui-mode, and recognised code-mode — §6), `card`, `table`, `interactive`,
-  `text`, advanced_viz data-path kinds. Filters re-query in the browser.
-- **Partial:** components whose fidelity degrades (e.g. a DC above `FIGURE_MAX_POINTS`, where the
-  export samples before filtering rather than after).
-- **Frozen:** everything in §2.2. Ships its precomputed default-filter result with a **visible
-  badge**, never dropped and never silently wrong.
+### 3.1 The contract: a bundle manifest
 
-Three delivery modes share one manifest schema; only `data_refs[].uri` changes:
+One schema, describing a dashboard's layout, its data references, its per-component liveness, and
+its frozen payloads. This is the interface; everything else plugs into it.
+
+Three delivery modes share the schema; only `data_refs[].uri` changes:
 
 | | `single-file` | `static-dir` | `remote` |
 |---|---|---|---|
@@ -104,41 +126,69 @@ Three delivery modes share one manifest schema; only `data_refs[].uri` changes:
 | CORS | none | none | required on bucket |
 | ceiling | ~40 MB | ~GB | ~GB |
 
-Triggers: a CLI command (`depictio dashboard export-static`, modelled on `catalog.py:138`) and an
-API endpoint beside `GET /dashboards/{id}/json`. A `--check` / preflight mode prints the
-per-component live/frozen table with reasons and writes nothing — this is what makes the feature
-usable, because authors can see *why* a component froze.
+All runtime URI resolution goes through one `resolveUri(manifest, uri)` helper, so base-path bugs
+have exactly one place to live.
 
-### 3.1 Why not Pyodide
+### 3.2 The runtime: three component tiers
+
+- **Live:** `figure` (ui-mode, and recognised code-mode — §7), `card`, `table`, `interactive`,
+  `text`, advanced_viz data-path kinds. Filters re-query in the browser.
+- **Partial:** components whose fidelity degrades (e.g. a DC above `FIGURE_MAX_POINTS`, where the
+  build samples before filtering rather than after).
+- **Frozen:** everything in §2.4. Ships a precomputed default-filter result with a **visible badge**
+  — never dropped, never silently wrong.
+
+The runtime is the existing viewer with three modules shimmed out (§8). It does not know or care
+which producer built its manifest.
+
+### 3.3 The producers
+
+| producer | needs a backend? | tiers it can emit | use case |
+|---|---|---|---|
+| **A — export from instance**<br>`depictio dashboard export-static <id>` | yes (Mongo + S3 + API) | live · partial · frozen | snapshot an existing dashboard; full fidelity |
+| **B — build from spec**<br>`depictio dashboard build-static --spec d.yaml --data ./parquet/` | **no** | live · partial only | author against local files; never run a server |
+| **C — API endpoint**<br>`POST /dashboards/{id}/export-static` | yes | same as A | an "Export static" button in the UI |
+
+**Producer B is the one the earlier framing missed**, and it is close to free once the manifest
+exists: joins are already materialised at ingest (`depictio/cli/cli/utils/joins.py:316`), so one
+component reads one flat table and there is no query planner to stand up.
+
+**Its honest limit:** the frozen tier is computed by real Python (MultiQC, the Celery computes,
+code-mode scaffolds). Producer B therefore *omits* those components rather than freezing them.
+Full-fidelity bundles need producer A. This must be reported by `--check`, not discovered later.
+
+A `--check` / preflight mode prints the per-component live/frozen/omitted table with reasons and
+writes nothing. This is what makes the feature usable: authors can see *why* a component degraded.
+
+### 3.4 Why not Pyodide
 
 Ruled out on evidence. The data layer cannot go there: `polars` and `deltalake` are Rust,
 `pymongo`/`motor`/`redis` need raw sockets, `umap-learn` pulls `numba`/`llvmlite` (no Pyodide
 support at all), `multiqc` is a large tree. Only `plotly` + `narwhals` would port — and plotly.js is
 already in the bundle. Pyodide buys a ~30 MB runtime and leaves the data problem unsolved.
 
-### 3.2 Why not DuckDB-WASM as the primary engine
+### 3.5 Why not DuckDB-WASM as the primary engine
 
 It was the obvious choice and it is the wrong one **for the inlined single-file mode**: its `eh`
 bundle is tens of MB of wasm, which base64-inlined dwarfs the payload. For reference, the existing
-catalog-preview bundle is **7.27 MB (2.20 MB gzip)** — that is the floor for mode (a), and the
+catalog-preview bundle is **7.27 MB (2.20 MB gzip)** — that is the floor for `single-file`, and the
 budget DuckDB-WASM would blow.
 
 It is also unnecessary. The query surface is **single-table, no joins** — `load_deltatable_lite`
 raises `NotImplementedError` on joined DC ids (`deltatables_utils.py:~1140`) and
-`join_deltatables_dev` (`:1567`) is dead, because joins are materialised at ingest
-(`depictio/cli/cli/utils/joins.py:316`). One component reads one flat table. The operations are
-7 predicates, ~12 scalar reductions, one `group_by+sort+head`, `unique`, `min/max`, `sort+slice`.
+`join_deltatables_dev` (`:1567`) is dead. The operations are 7 predicates, ~12 scalar reductions,
+one `group_by+sort+head`, `unique`, `min/max`, `sort+slice`.
 
 Proposal: **`hyparquet` (pure-JS Parquet reader, ~30 KB, async byte-range reader) plus hand-written
 kernels over typed arrays in a Web Worker**, behind a `QueryEngine` interface. hyparquet's async
-reader gives mode (c) range requests for free, mode (b) via plain `fetch`, mode (a) via a
+reader gives `remote` range requests for free, `static-dir` via plain `fetch`, `single-file` via a
 `Uint8Array` over an inlined blob. No `SharedArrayBuffer` → **no COOP/COEP → GH Pages works
 unmodified**. DuckDB-WASM stays a pluggable second engine behind the same interface if datasets
 outgrow the browser heap.
 
 > **Open question / first task.** The bundle-size figure above is reasoned, not measured. Measure it
-> before committing. If DuckDB-WASM proves acceptable for modes (b)/(c), the interface makes that a
-> config choice rather than a rewrite.
+> before committing. If DuckDB-WASM proves acceptable for `static-dir`/`remote`, the interface makes
+> that a config choice rather than a rewrite.
 
 ## 4. Trap 1 — do not port plotly-express. Bind and refill.
 
@@ -150,9 +200,9 @@ invariant:
 
 So the trace set built on unfiltered data is always a superset of any filtered view.
 
-**At export:** build the figure with the **real** `create_figure_from_data(...)` on the unfiltered
-frame — layout, colorway, faceting, hovertemplates, coloraxis and the mantine template are all
-authentic. Then compute px's grouping columns in order
+**At build time:** build the figure with the **real** `create_figure_from_data(...)` on the
+unfiltered frame — layout, colorway, faceting, hovertemplates, coloraxis and the mantine template
+are all authentic. Then compute px's grouping columns in order
 (`[color, symbol, line_dash, line_group, pattern_shape, facet_row, facet_col]`), match each trace to
 exactly one group tuple via `legendgroup`/`name` (facet cells disambiguated by `xaxis`/`yaxis`), and
 emit a **binding table**: per trace, its group predicates and which column feeds which field.
@@ -178,13 +228,13 @@ silently tolerated:
 | `marker.sizeref` | recomputed on filtered data | fixed at unfiltered max | ours is better (stable bubble scale) |
 | `coloraxis.cmin/cmax` | recomputed on filtered | global range | ours is better |
 | categorical axis ticks | vanished category disappears | tick retained, trace hidden | arguably better; visible diff |
-| `FIGURE_MAX_POINTS` (50k) | `sample(seed=0)` *after* filtering | export samples, runtime masks | real loss → `partial` + badge |
+| `FIGURE_MAX_POINTS` (50k) | `sample(seed=0)` *after* filtering | build samples, runtime masks | real loss → `partial` + badge |
 | `area`/`stackgroup` | stacks the filtered frame | stacks refilled arrays | low risk; note it |
 
 ## 5. Trap 2 — do not port Polars' string and date semantics. Materialise them.
 
 The filter translator is one function — `add_filter` (`deltatables_utils.py:125`), 7 predicates —
-but two of them hide most of the project's fidelity risk. Push that work to export time instead:
+but two of them hide most of the project's fidelity risk. Push that work to build time instead:
 
 ```python
 # categorical filters (Select/MultiSelect/SegmentedControl) and DC-link columns
@@ -212,7 +262,7 @@ This removes three problems outright:
   spans filtered or unfiltered rows), and nothing currently uses it.
 
 Import these from **one shared helper** so they cannot drift from `add_filter`; ideally refactor
-`add_filter`'s date branch to *call* that helper so export and server share one expression.
+`add_filter`'s date branch to *call* that helper so build and server share one expression.
 
 Two remaining subtleties that must be ported verbatim or cause quiet systematic drift:
 
@@ -227,7 +277,23 @@ Aggregation traps for the differential suite: Polars `std`/`var` default **ddof=
 counts null as a distinct value; `count` is `drop_nulls().len()`, not row count; `median` uses
 `interpolation="linear"`; `box_plot_stats` uses Tukey fences with a min/max fallback when IQR=0.
 
-## 6. Trap 3 — the code-mode transpiler is small, because §4 already did the hard part
+## 6. Trap 3 — re-export Parquet, do not copy Delta part-files
+
+Globbing `data/**/*.parquet` from a Delta table is unsafe: `_delta_log` is the source of truth for
+which files are live, and files removed by an overwrite stay on disk until `VACUUM`, so a naive glob
+**double-counts rows**. Depictio rewrites DCs on re-ingest (hence `_get_aggregation_version`), so
+tombstones exist in the wild. Being correct would mean reimplementing delta-rs in JS.
+
+Re-export is wanted anyway: column pruning, codec control, row-group sizing for range requests, and
+the §5 companion columns. Pruning unions `referenced_columns()` (`figure_builder.py:54`) per figure,
+`_filter_columns()` (`deltatables_utils.py:640`) per interactive component, card columns, link
+columns, and all columns for tables — then intersects with the real schema. Expect 2–5 of 80+
+columns for figures.
+
+Producer B skips the Delta step entirely: its input is already plain Parquet. It still applies
+pruning and companion columns.
+
+## 7. The code-mode transpiler is small, because §4 already did the hard part
 
 Code-mode figures are two-thirds of the reference figures, so freezing them all would gut the
 feature on exactly the dashboards that matter. They are also not lowerable to ui-mode kwargs — they
@@ -243,15 +309,15 @@ fig.for_each_annotation(lambda a: a.update(text=a.text.split('=')[-1], ...))
 ```
 
 But under bind-and-refill you **do not translate the `px` call or the `fig.update_*` chain at all** —
-the real Python runs once at export to produce the scaffold. Only the **data prologue** needs
+the real Python runs once at build time to produce the scaffold. Only the **data prologue** needs
 translating so it can re-run on filtered data, and prologue ops are all SQL-native. Measured across
 the 18 real code-mode figures:
 
 | prologue shape | count | treatment |
 |---|---|---|
 | no reshape (`df.to_pandas()` then px) | 6 | **live for free** — binds to the base table, zero transpilation |
-| `group_by(...).agg(...)` (+ `sort`/`rename`/`reset_index`) | ~9 | transpiler phase 5a — the dominant shape |
-| `unpivot` / `pivot` (+ `filter`) | 2 | transpiler phase 5b |
+| `group_by(...).agg(...)` (+ `sort`/`rename`/`reset_index`) | ~9 | transpiler stage 1 — the dominant shape |
+| `unpivot` / `pivot` (+ `filter`) | 2 | transpiler stage 2 |
 | whole-frame viz (`scatter_matrix`, `sunburst`) | 3 | **frozen regardless** — not in `ALLOWED_VISUALIZATIONS` |
 
 Realistic ceiling ≈ **15 of 18 code-mode figures live**, i.e. ~24 of 27 figures overall. The
@@ -259,72 +325,70 @@ Realistic ceiling ≈ **15 of 18 code-mode figures live**, i.e. ~24 of 27 figure
 scaffold. Grammar is a closed allowlist; anything unrecognised freezes. Reuse the existing analysis
 machinery (`services/figure/code_mode.py::analyze_constrained_code`) rather than writing a new parser.
 
-## 7. Supporting decisions
+Note this is a producer-A capability: it needs the real Python to build the scaffold. See §11 for
+why `rfc-reshape-on-render.md` could lift that restriction.
 
-**Re-export Parquet; do not copy Delta part-files.** Globbing `data/**/*.parquet` is unsafe:
-`_delta_log` is the source of truth for which files are live, and files removed by overwrite stay on
-disk until `VACUUM`, so a naive glob **double-counts rows**. Depictio rewrites DCs on re-ingest
-(hence `_get_aggregation_version`), so tombstones exist in the wild. Re-export is wanted anyway for
-column pruning, codec control, row-group sizing, and the §5 companion columns.
-
-**Column pruning** unions `referenced_columns()` (`figure_builder.py:54`) per figure,
-`_filter_columns()` (`deltatables_utils.py:640`) per interactive component, card columns, link
-columns, and all columns for tables — then intersects with the real schema. Expect 2–5 of 80+
-columns for figures.
+## 8. Supporting decisions
 
 **DC Links are mostly live, not merely precomputable.** The resolvers are pure functions of
 `(source_values, link_config)` (~60 LOC to port). Only `_translate_filter_values` reads data, and it
 is `SELECT DISTINCT link_col WHERE filter_col IN (...)` — runnable client-side when the source DC is
-exported (tier A), precomputed as a value-mapping table when it is not (tier B), or a freeze signal
-when that table would be too large (tier C). Port `regex`/`wildcard` as the pass-through the server
-currently does; "fixing" it client-side would make the export *diverge* from the server.
+in the bundle (tier A), precomputed as a value-mapping table when it is not (tier B), or a freeze
+signal when that table would be too large (tier C). Port `regex`/`wildcard` as the pass-through the
+server currently does; "fixing" it client-side would make the bundle *diverge* from the server.
 
 **Reuse `App.tsx`, do not reimplement it.** It owns filter orchestration (736 LOC). A sibling
 reimplementation guarantees drift — exactly the trap `payload.py` fell into by reimplementing
-aggregation and figure logic instead of calling `figure_builder`. For the same reason the new
-`depictio/export/` package must call the *real* server code paths, not re-derive them.
+aggregation and figure logic instead of calling `figure_builder`. For the same reason the new build
+package must call the *real* server code paths, not re-derive them.
 
 **Three module shims are needed, not one.** Beyond `api.ts`, `App.tsx` pulls `useCurrentUser`
 (`viewer/src/hooks/useCurrentUser.ts:87`, raw `fetch`, not via `api.ts`) and `useDataCollectionUpdates`
 (`packages/depictio-react-core/src/realtime.ts:169`, raw `WebSocket`). `bootstrapSession()` is not
 bypassed — a separate entry HTML simply never imports it, exactly as `src/catalog-preview/main.tsx`
-already does.
+already does. Extract the existing `catalog-api-shim` plugin into a shared `moduleShim(map)` helper
+so both bundles use one implementation.
 
 **Badge placement.** Thread a `staticBadge` prop through `wrapWithChrome`
 (`components/chrome/index.ts:27`) from a React context, so all 10 call sites in `ComponentRenderer`
 are untouched and the normal server build renders nothing. Pin it **top-left and always visible** —
 not in the hover-revealed action row, since a viewer must see it without hovering.
 
-**Permissions.** `viewer` for preflight, **`owner`** for the export itself: an export is bulk data
-exfiltration and should not be available to every viewer.
+**Permissions (producers A and C).** `viewer` for preflight, **`owner`** for the build itself: a
+bundle is bulk data exfiltration and should not be available to every viewer.
 
-## 8. Phasing
+## 9. Phasing
 
 Roughly 9–12 engineer-weeks for someone fluent in the codebase; ~3 months part-time.
 
 | phase | scope | est. |
 |---|---|---|
-| 0 | Frozen bundle end-to-end + engine measurement. Manifest models, `depictio/export/`, shim-plugin extraction, static-export entry, `--tier frozen`, `--check`. Every component frozen and badged. | 1 wk |
-| 1 | Data layer + live cards / interactive / text. Parquet re-export, pruning, companions, query kernels. | 2 wk |
-| 2 | Live tables (sort + slice over the mask). | 0.5 wk |
-| 3 | Live advanced_viz data-path kinds (~14 of 20 renderers, ~30 LOC of shim). | 0.75 wk |
-| 4 | Live ui-mode figures via bind-and-refill. **Highest risk.** | 2.5 wk |
-| 5 | Code-mode transpiler (5a no-reshape + group_by; 5b unpivot/pivot). | 1.5 wk |
-| 6 | DC Links + maps. | 1 wk |
-| 7 | API endpoint + Celery job + artifact lifecycle. | 1 wk |
-| 8 | Remote mode, base paths, size budgets, GH Pages recipe. | 1 wk |
+| 0 | **Manifest schema + runtime against a hand-written fixture.** Shim-plugin extraction, static entry, badge, all tiers frozen. No Mongo, no S3, no producer. | 1 wk |
+| 1 | **Producer B** (build from spec + local Parquet) + the data layer: Parquet ingest, pruning, companions, query kernels. Live cards / interactive / text. | 2 wk |
+| 2 | **Producer A** (export from instance) + the frozen tier. | 1 wk |
+| 3 | Live tables (sort + slice over the mask). | 0.5 wk |
+| 4 | Live advanced_viz data-path kinds (~14 of 20 renderers, ~30 LOC of shim). | 0.75 wk |
+| 5 | Live ui-mode figures via bind-and-refill. **Highest risk.** | 2.5 wk |
+| 6 | Code-mode transpiler (stage 1 no-reshape + group_by; stage 2 unpivot/pivot). | 1.5 wk |
+| 7 | DC Links + maps. | 1 wk |
+| 8 | Producer C (API endpoint + Celery job + artifact lifecycle). | 1 wk |
+| 9 | Remote mode, base paths, size budgets, GH Pages recipe. | 1 wk |
 
-Phase 0 is deliberately first: it is most of the perceived value and it de-risks all the plumbing
-before a single query kernel is written. Phase 3 is the best value-per-effort and should precede
-figures. Phase 4 is where the schedule will slip; the mitigation is structural (binding failure →
-frozen + badge), so it can ship at partial coverage and improve incrementally.
+Phase 0 changed under the §2.1 reframing and is better for it: rendering a **fixture** manifest
+decouples all the TypeScript from Mongo/S3, so it is testable with zero infrastructure and pins the
+contract before any producer exists. Producer B now precedes producer A, because it is simpler, has
+no infrastructure dependency, and exercises the same manifest.
+
+Phase 4 is the best value-per-effort and should precede figures. Phase 5 is where the schedule will
+slip; the mitigation is structural (binding failure → frozen + badge), so it can ship at partial
+coverage and improve incrementally.
 
 **Out of scope:** dashboard editing; unrecognised code-mode prologues; `heatmap` /
 `plotly_complexheatmap`; whole-frame vizzes; live MultiQC; the 6 Celery advanced_viz computes;
 JBrowse; live images; realtime/WebSocket; notes persistence; auth and sharing; multi-dashboard site
 export; any write path; `.over()` `filter_expr`; Pyodide.
 
-## 9. Verification
+## 10. Verification
 
 **Differential testing is the core of the strategy** — it is the only thing that makes client-side
 filtering trustworthy. Per seed dashboard, generate N filter states (empty; each control alone at
@@ -332,7 +396,7 @@ filtering trustworthy. Per seed dashboard, generate N filter states (empty; each
 Produce the golden side by calling the real endpoint *bodies* in-process
 (`bulk_compute_cards`, `render_table_endpoint`, `build_figure_preview`, `fetch_advanced_viz_data`)
 and commit the fixtures so CI needs no Mongo/S3. Replay the same states against the TS kernels over
-the exported Parquet and compare.
+the bundled Parquet and compare.
 
 Comparison rules stated up front: ints exact; floats `|a-b| <= 1e-9*max(1,|a|)`; row *sets* exact;
 row *order* exact only where a sort is specified; figure traces compared as
@@ -345,18 +409,26 @@ Supporting layers: unit tests shaped like `depictio/tests/catalog/test_payload.p
 `test_companion_columns_match_add_filter` equivalence test, Playwright specs under
 `depictio/tests/e2e-playwright/` (`no-network`, `filter-parity`, `badges`, `base-path`,
 `range-requests`), and a CI byte-budget guard on the single-file bundle — bundle bloat is the
-failure mode that silently ruins mode (a).
+failure mode that silently ruins `single-file`.
 
-## 10. Open questions
+## 11. Open questions
 
-- **Engine choice** (§3.2) — measure DuckDB-WASM's real inlined cost before committing to hyparquet.
+- **Engine choice** (§3.5) — measure DuckDB-WASM's real inlined cost before committing to hyparquet.
 - **Trace-binding match rate** (§4) — the logic is sound, but matching against
-  `legendgroup`/`name`/`xaxis`/`yaxis` is empirical. The honest measure of phase 4 is the match rate
+  `legendgroup`/`name`/`xaxis`/`yaxis` is empirical. The honest measure of phase 5 is the match rate
   across the 27 seed figures, which nobody has measured yet.
+- **Does producer B need its own spec format?** Reusing `DashboardDataLite`
+  (`depictio/models/models/dashboards.py`) is attractive — a dashboard authored for a server and one
+  authored for a static build would be the same document — but it carries `wf_id`/`dc_id` ObjectIds
+  that are meaningless without a backend. Either the spec gains symbolic DC references resolved
+  against `--data`, or producer B is restricted to specs previously exported from an instance, which
+  would undercut the "never run a server" claim. **This is the main unresolved design question.**
 - **Staleness semantics.** A bundle is a point-in-time snapshot: link translation tables, frozen
   prerenders and Parquet all go stale together when a DC is re-ingested. Should the manifest carry
-  the source DC versions and warn on mismatch when re-exported?
+  source DC versions and warn on mismatch when rebuilt?
 - **Relationship to `rfc-reshape-on-render.md`.** A lazy `recipe@render` reshape is the same shape of
-  problem as §6's prologue transpiler — both need "re-run a declared reshape against filtered data".
+  problem as §7's prologue transpiler — both need "re-run a declared reshape against filtered data".
   If that RFC lands first, code-mode figures expressed as declarative renders become live for free,
-  and the transpiler shrinks to a migration aid. Worth sequencing deliberately.
+  the transpiler shrinks to a migration aid, **and producer B gains reshaping without needing
+  Python** — which would materially widen what a backend-less build can express. Worth sequencing
+  deliberately.
