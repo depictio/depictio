@@ -5,6 +5,7 @@ Provides CRUD operations for DeltaTableAggregated objects including
 upsert, fetch, batch existence checks, and shape queries.
 """
 
+import asyncio
 import hashlib
 import math
 from datetime import datetime
@@ -20,7 +21,10 @@ from depictio.api.v1.celery_tasks import preview_deltatable as preview_deltatabl
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import deltatables_collection, projects_collection, users_collection
-from depictio.api.v1.endpoints.deltatables_endpoints.utils import precompute_columns_specs
+from depictio.api.v1.endpoints.deltatables_endpoints.utils import (
+    build_aggregation_hash,
+    precompute_columns_specs,
+)
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user, get_user_or_anonymous
 from depictio.api.v1.s3 import polars_s3_config
 from depictio.api.v1.utils import agg_functions
@@ -47,6 +51,111 @@ def sanitize_for_json(obj):
         if math.isnan(obj) or math.isinf(obj):
             return None
     return obj
+
+
+def _compute_upsert_artifacts(
+    delta_table_location: str, dc_data: dict, is_multiqc: bool
+) -> tuple[str, list]:
+    """Aggregation hash and column specs for a data collection's table.
+
+    Still IO-heavy by nature — ``precompute_columns_specs`` reads the whole
+    table and materialises it in pandas — so it lives outside the request
+    coroutine and is called via ``asyncio.to_thread``.
+    """
+    if is_multiqc:
+        # MultiQC is stored as raw parquet, not a Delta table: there is nothing
+        # to read, and column specs are not computed for it.
+        return build_aggregation_hash(delta_table_location), []
+
+    df = pl.read_delta(delta_table_location, storage_options=polars_s3_config)
+    results = precompute_columns_specs(df, agg_functions, dc_data)
+    return build_aggregation_hash(delta_table_location), results
+
+
+def _should_offload(requested: bool, is_multiqc: bool) -> bool:
+    """Whether to defer the expensive half of an upsert to a Celery task.
+
+    Three conditions, all required. The client asks (``async_mode``), the
+    deployment allows it, and the work is actually worth offloading — MultiQC
+    collections are stored as parquet with no Delta table to read, so there is
+    nothing expensive to defer.
+
+    ``jobs.enabled`` is part of the gate rather than an independent switch: the
+    job document *is* the client's only handle on deferred work, so offloading
+    without it would hand back a job_id pointing at nothing.
+    """
+    if not requested or is_multiqc:
+        return False
+    if not settings.ingestion.async_deltatable_upsert:
+        return False
+    if not settings.jobs.enabled:
+        logger.warning(
+            "upsert_deltatable: async_mode requested and ingestion offloading is on, "
+            "but jobs are disabled (DEPICTIO_JOBS_ENABLED) — running synchronously."
+        )
+        return False
+    return True
+
+
+def _dispatch_finalize(
+    *,
+    dc_id: str,
+    delta_table_location: str,
+    version: int,
+    user_id: str,
+    project_id: str | None,
+    ingestion_run_id: str | None,
+) -> str | None:
+    """Create the job record and enqueue its task. Returns the job_id.
+
+    Returns ``None`` if the job could not be created, which the caller must
+    treat as "this upsert is now incomplete" — the aggregation entry is already
+    stored with ``aggregation_status="pending"`` and nothing else will finish
+    it.
+    """
+    import uuid
+
+    from depictio.api.v1.ingestion_tasks import finalize_deltatable_upsert
+    from depictio.api.v1.jobs import store as jobs_store
+    from depictio.models.models.jobs import Job
+
+    idempotency_key = jobs_store.build_idempotency_key(
+        ingestion_run_id or "-", dc_id, delta_table_location, version, "deltatable.upsert"
+    )
+    job = Job(
+        job_id=uuid.uuid4().hex,
+        kind="deltatable.upsert",
+        user_id=user_id,
+        project_id=project_id,
+        data_collection_id=dc_id,
+        ingestion_run_id=ingestion_run_id,
+        idempotency_key=idempotency_key,
+    )
+    stored, created = jobs_store.create_job(job)
+    if not created:
+        # An identical submission is already in flight (CLI retry after a
+        # dropped response, or two watchers racing). Hand back the existing
+        # job so the client attaches to it instead of queueing a second full
+        # table read.
+        logger.info(
+            f"upsert_deltatable: reusing in-flight job {stored.job_id} for dc={dc_id} v{version}"
+        )
+        return stored.job_id
+
+    task = finalize_deltatable_upsert.apply_async(
+        args=[
+            {
+                "job_id": stored.job_id,
+                "data_collection_id": dc_id,
+                "delta_table_location": delta_table_location,
+                "aggregation_version": version,
+                "ingestion_run_id": ingestion_run_id,
+            }
+        ],
+        queue=settings.celery.ingestion_queue,
+    )
+    jobs_store.attach_task(stored.job_id, task.id)
+    return stored.job_id
 
 
 @deltatables_endpoint_router.post("/upsert")
@@ -101,24 +210,32 @@ async def upsert_deltatable(
     dc_type = dc_data.get("config", {}).get("type", "")
     is_multiqc = dc_type.lower() == "multiqc"
 
-    # For MultiQC, skip delta table validation since it's stored as raw parquet
-    if is_multiqc:
-        # Create minimal hash for MultiQC without reading the file
-        final_hash = hashlib.sha256(
-            f"{payload.delta_table_location}{datetime.now()}".encode()
-        ).hexdigest()
-        results = []  # Column specs not computed for MultiQC (empty list required by Pydantic)
-    else:
-        # Standard delta table validation and column spec computation
-        df = pl.read_delta(payload.delta_table_location, storage_options=polars_s3_config)
-        results = precompute_columns_specs(df, agg_functions, dc_data)
+    # MultiQC has no Delta table to read, so offloading it would cost a broker
+    # round-trip to save nothing — it always runs inline.
+    offload = _should_offload(payload.async_mode, is_multiqc)
 
-        hash_series = df.hash_rows(seed=0)
-        hash_bytes = hash_series.to_numpy().tobytes()
-        hash_df = hashlib.sha256(hash_bytes).hexdigest()
+    if offload:
+        # Record the aggregation now with a provisional hash and no column
+        # specs; a Celery task fills them in. The version bump below must stay
+        # synchronous regardless: it is the salt for every DataFrame cache key
+        # (`_generate_cache_keys`), so deferring it would let readers keep
+        # serving pre-write data under an unchanged key.
         final_hash = hashlib.sha256(
-            f"{payload.delta_table_location}{datetime.now()}{hash_df}".encode()
+            f"{payload.delta_table_location}{datetime.now()}pending".encode()
         ).hexdigest()
+        results = []
+    else:
+        # Off the event loop: the non-MultiQC branch reads the whole Delta table,
+        # copies it into pandas and hashes every row. Run inline, that pins the
+        # uvicorn worker for the duration — long enough on a large table to blow
+        # gunicorn's --timeout and kill the worker outright, which is what the CLI
+        # sees as a dropped connection rather than a clean 504.
+        final_hash, results = await asyncio.to_thread(
+            _compute_upsert_artifacts,
+            payload.delta_table_location,
+            dc_data,
+            is_multiqc,
+        )
 
     query_dt = deltatables_collection.find_one({"data_collection_id": data_collection_oid})
     if query_dt:
@@ -143,6 +260,19 @@ async def upsert_deltatable(
             aggregation_version=version,
             aggregation_hash=final_hash,
             aggregation_columns_specs=results,
+            # Delta provenance as reported by the writer. An older CLI sends
+            # none of these and they stay None, which is the honest answer for
+            # a write whose commit we never observed.
+            delta_version=payload.delta_version,
+            delta_commit_timestamp=payload.delta_commit_timestamp,
+            write_mode=payload.write_mode,
+            rows_total=payload.rows_total,
+            rows_added=payload.rows_added,
+            files_added=payload.files_added,
+            aggregation_status="pending" if offload else "complete",
+            run_tags=payload.run_tags,
+            ingestion_run_id=payload.ingestion_run_id,
+            trigger=payload.trigger,
         )
     )
 
@@ -253,6 +383,49 @@ async def upsert_deltatable(
                 },
             )
 
+    if offload:
+        job_id = await asyncio.to_thread(
+            _dispatch_finalize,
+            dc_id=str(data_collection_oid),
+            delta_table_location=str(payload.delta_table_location),
+            version=version,
+            user_id=str(current_user.id),
+            project_id=str(project.get("_id")) if project.get("_id") else None,
+            ingestion_run_id=payload.ingestion_run_id,
+        )
+        if job_id:
+            # 200, not 202. The current CLI checks `status_code != 200` and
+            # then `result == "error"`; a 202 leaking into any un-updated code
+            # path would be read as a failure. 202 is the right code and is
+            # documented as a future api_version 2 change — not one to make
+            # while old clients are still in the field.
+            return {
+                "message": "DeltaTableAggregated upserted; finalization offloaded",
+                "result": "success",
+                "job_id": job_id,
+                "aggregation_version": version,
+            }
+        # Job creation failed, so nothing will ever compute the column specs.
+        # Fall through to the synchronous path rather than leave the
+        # aggregation stuck at "pending" forever.
+        logger.warning(
+            "upsert_deltatable: could not create a job — finalizing synchronously instead"
+        )
+        final_hash, results = await asyncio.to_thread(
+            _compute_upsert_artifacts, payload.delta_table_location, dc_data, is_multiqc
+        )
+        deltatables_collection.update_one(
+            {"data_collection_id": data_collection_oid},
+            {
+                "$set": {
+                    "aggregation.$[a].aggregation_columns_specs": [r.mongo() for r in results],
+                    "aggregation.$[a].aggregation_hash": final_hash,
+                    "aggregation.$[a].aggregation_status": "complete",
+                }
+            },
+            array_filters=[{"a.aggregation_version": version}],
+        )
+
     # Broadcast a real-time event so connected dashboards refresh. The change
     # stream watcher only watches data_collections, not the deltatables
     # collection, so an upsert would otherwise complete silently. Mirrors the
@@ -279,7 +452,10 @@ async def _broadcast_dc_update(dc_id: str) -> None:
     # live row count) so the RealtimeIndicator journal has something to show.
     # Runs after the upsert recorded a fresh aggregation entry, so the version/
     # hash/time reflect the write that just landed. Best-effort, never raises.
-    payload = _build_event_payload(dc_id, operation="upsert")
+    # Also off the event loop: _build_event_payload reads the table and its
+    # previous Delta version to compute the row delta, so it is as heavy as the
+    # upsert artifacts it follows.
+    payload = await asyncio.to_thread(_build_event_payload, dc_id, "upsert")
 
     event = EventMessage(
         event_type=EventType.DATA_COLLECTION_UPDATED,
@@ -432,6 +608,175 @@ async def batch_check_deltatables_exist(
             "delta_table_location": found_deltatables.get(str(dc_id)),
         }
         for dc_id in data_collection_ids
+    }
+
+
+def _read_delta_history(delta_location: str, limit: int) -> list[dict]:
+    """Delta commit history for a table. Synchronous; call via to_thread.
+
+    Reads only the last ``limit`` ``_delta_log`` commits — a handful of small
+    objects, not the table itself — which is why this stays a plain endpoint
+    rather than going through the job protocol.
+    """
+    from deltalake import DeltaTable
+
+    table = DeltaTable(delta_location, storage_options=polars_s3_config)
+    entries = []
+    for entry in table.history(limit):
+        metrics = entry.get("operationMetrics") or {}
+
+        def _metric(*names: str) -> int | None:
+            # deltalake 0.24 emits snake_case, 1.x camelCase.
+            for name in names:
+                if name in metrics:
+                    try:
+                        return int(metrics[name])
+                    except (TypeError, ValueError):
+                        return None
+            return None
+
+        raw_timestamp = entry.get("timestamp")
+        entries.append(
+            {
+                "version": entry.get("version"),
+                "timestamp": (
+                    datetime.fromtimestamp(raw_timestamp / 1000).isoformat()
+                    if isinstance(raw_timestamp, (int, float))
+                    else None
+                ),
+                "operation": entry.get("operation"),
+                "rows_added": _metric("num_added_rows", "numOutputRows"),
+                "files_added": _metric("num_added_files", "numAddedFiles", "numFiles"),
+                "files_removed": _metric("num_removed_files", "numRemovedFiles"),
+                # Custom commit metadata is flattened into the entry by delta-rs.
+                "metadata": {
+                    key: str(value) for key, value in entry.items() if key.startswith("depictio.")
+                },
+            }
+        )
+    return entries
+
+
+def _caller_is_project_operator(data_collection_id: PyObjectId, current_user: User) -> bool:
+    """True when the caller owns or edits the project holding this data collection.
+
+    Delta history names whoever ran each ingestion. Read access is a weaker bar
+    than that: ``is_public: True`` admits any authenticated *or* anonymous user,
+    so returning emails to everyone who may read the table would turn publishing
+    a project into publishing a roster of the people who work on it. Same
+    reasoning, and same owners/editors bar, as ``_redact_run`` in the projects
+    router.
+    """
+    if getattr(current_user, "is_admin", False):
+        return True
+    project = projects_collection.find_one(
+        {"workflows.data_collections._id": ObjectId(data_collection_id)},
+        {"permissions": 1},
+    )
+    permissions = (project or {}).get("permissions") or {}
+    user_id = str(current_user.id)
+    return any(
+        str(entry.get("_id")) == user_id
+        for group in ("owners", "editors")
+        for entry in (permissions.get(group) or [])
+    )
+
+
+@deltatables_endpoint_router.get("/history/{data_collection_id}")
+async def get_delta_history(
+    data_collection_id: PyObjectId,
+    limit: int = 20,
+    current_user: User = Depends(get_user_or_anonymous),
+):
+    """
+    Commit history of a data collection's Delta table, newest first.
+
+    Merges what Delta itself records (version, timestamp, operation, row and
+    file counts, plus depictio's own commit metadata) with what Mongo knows
+    about each aggregation (who ran it). Degrades to the Mongo-only view when
+    the object store is unreachable, so a transient S3 problem shows a partial
+    history rather than an error page.
+
+    Who ran an ingestion is shown to owners, editors and admins only — see
+    ``_caller_is_project_operator``.
+    """
+    limit = max(1, min(limit, 200))
+
+    pipeline = _build_permission_pipeline(data_collection_id, current_user)
+    if not list(projects_collection.aggregate(pipeline)):
+        raise HTTPException(status_code=404, detail="Data collection not found or access denied.")
+
+    show_operator = _caller_is_project_operator(data_collection_id, current_user)
+
+    record = deltatables_collection.find_one({"data_collection_id": data_collection_id})
+    if not record:
+        raise HTTPException(
+            status_code=404, detail=f"No DeltaTable found for data collection {data_collection_id}"
+        )
+
+    delta_location = record.get("delta_table_location", "")
+
+    # Mongo side: one entry per aggregation, keyed by the Delta version it wrote
+    # when the writer reported one. Older aggregations have no delta_version and
+    # simply do not join.
+    by_version: dict[int, dict] = {}
+    mongo_only: list[dict] = []
+    for aggregation in record.get("aggregation", []) or []:
+        entry = {
+            "aggregation_version": aggregation.get("aggregation_version"),
+            "aggregation_time": (
+                aggregation["aggregation_time"].isoformat()
+                if isinstance(aggregation.get("aggregation_time"), datetime)
+                else aggregation.get("aggregation_time")
+            ),
+            "by_email": (
+                (aggregation.get("aggregation_by") or {}).get("email") if show_operator else None
+            ),
+            "run_id": aggregation.get("ingestion_run_id"),
+            "trigger": aggregation.get("trigger"),
+            "write_mode": aggregation.get("write_mode"),
+            "rows_total": aggregation.get("rows_total"),
+        }
+        delta_version = aggregation.get("delta_version")
+        if delta_version is None:
+            mongo_only.append({**entry, "origin": "mongo"})
+        else:
+            by_version[int(delta_version)] = entry
+
+    degraded = False
+    delta_entries: list[dict] = []
+    try:
+        delta_entries = await asyncio.to_thread(_read_delta_history, delta_location, limit)
+    except Exception as exc:  # noqa: BLE001 - a missing object store is not a 500
+        logger.warning(f"Delta history unavailable for {delta_location}: {exc}")
+        degraded = True
+
+    merged = []
+    for entry in delta_entries:
+        version = entry.get("version")
+        mongo_entry = by_version.pop(int(version), None) if version is not None else None
+        if not show_operator:
+            # The writer stamps depictio.user_email into the commit metadata, so
+            # dropping it from the Mongo side alone would not hide it.
+            entry["metadata"] = {
+                key: value
+                for key, value in (entry.get("metadata") or {}).items()
+                if key != "depictio.user_email"
+            }
+        merged.append(
+            {**entry, **(mongo_entry or {}), "origin": "both" if mongo_entry else "delta"}
+        )
+
+    # Aggregations whose Delta commit fell outside the requested window, plus
+    # anything written before delta_version was recorded.
+    merged.extend(mongo_only)
+    merged.extend({**entry, "origin": "mongo"} for entry in by_version.values())
+
+    return {
+        "delta_table_location": delta_location,
+        "current_version": delta_entries[0]["version"] if delta_entries else None,
+        "degraded": degraded,
+        "versions": merged[:limit],
     }
 
 
@@ -667,6 +1012,7 @@ async def get_preview(
     response: Response,
     data_collection_id: PyObjectId,
     limit: int = 100,
+    version: int | None = None,
     current_user: User = Depends(get_user_or_anonymous),
 ):
     """
@@ -678,6 +1024,14 @@ async def get_preview(
 
     Heavy work (Polars scan + collect) runs on Celery when
     `settings.celery.offload_preview` is true (default).
+
+    ``version`` reads an older Delta commit instead of the current table. Safe
+    to expose here specifically because this path scans the table directly
+    rather than going through ``load_deltatable_lite``: that function's cache is
+    salted with ``aggregation_version`` only, so a historical read served
+    through it would be stored under the *live* key and then handed to callers
+    who asked for current data. Do not wire time travel into any endpoint that
+    reads through the cache without salting the key with the version too.
     """
     pipeline = _build_permission_pipeline(data_collection_id, current_user)
     project_result = list(projects_collection.aggregate(pipeline))
@@ -702,7 +1056,13 @@ async def get_preview(
     try:
         return await offload_or_run(
             preview_deltatable_task,
-            ({"delta_table_location": delta_table_location, "limit": limit},),
+            (
+                {
+                    "delta_table_location": delta_table_location,
+                    "limit": limit,
+                    "version": version,
+                },
+            ),
             offload=offload,
             label=f"deltatable_preview dc={data_collection_id}",
         )

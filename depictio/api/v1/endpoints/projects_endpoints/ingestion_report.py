@@ -128,6 +128,10 @@ class IngestionDataCollection(BaseModel):
     removal_reason: str | None = None
     files_found: int = 0
     files_new: int = 0
+    # Files whose content changed since the last scan. The CLI has always
+    # reported this in dc_stats; nothing surfaced it, so a re-ingested run was
+    # indistinguishable from an untouched one.
+    files_updated: int = 0
     files_skipped: int = 0
     files_failed: int = 0
     ingested: bool = False
@@ -142,6 +146,11 @@ class IngestionRun(BaseModel):
     run_location: str | None = None
     scan_time: str | None = None
     status: str  # ok | partial | no_scan
+    # Per-run tallies from the run's most recent scan, so the runs table can
+    # answer "which run brought in the new data" without expanding every DC.
+    files_total: int = 0
+    files_new: int = 0
+    files_updated: int = 0
 
 
 class IngestionSummary(BaseModel):
@@ -265,13 +274,22 @@ def _aggregate_run_stats(
 
         dc_stats = (latest or {}).get("dc_stats") or {}
         run_failures = 0
+        run_totals = {"total_files": 0, "new_files": 0, "updated_files": 0}
         for tag, stats in dc_stats.items():
             agg = per_dc.setdefault(
                 tag,
-                {"total_files": 0, "new_files": 0, "skipped_files": 0, "other_failure_files": 0},
+                {
+                    "total_files": 0,
+                    "new_files": 0,
+                    "updated_files": 0,
+                    "skipped_files": 0,
+                    "other_failure_files": 0,
+                },
             )
             for key in agg:
                 agg[key] += int(stats.get(key, 0) or 0)
+            for key in run_totals:
+                run_totals[key] += int(stats.get(key, 0) or 0)
             run_failures += int(stats.get("other_failure_files", 0) or 0)
 
         if latest is None:
@@ -286,6 +304,9 @@ def _aggregate_run_stats(
                 run_location=run.get("run_location"),
                 scan_time=scan_time,
                 status=status,
+                files_total=run_totals["total_files"],
+                files_new=run_totals["new_files"],
+                files_updated=run_totals["updated_files"],
             )
         )
 
@@ -378,6 +399,7 @@ def build_ingestion_report(project: dict) -> IngestionReport:
                 removal_reason=entry.get("removal_reason"),
                 files_found=files_found,
                 files_new=int(stats.get("new_files", 0) or 0),
+                files_updated=int(stats.get("updated_files", 0) or 0),
                 files_skipped=int(stats.get("skipped_files", 0) or 0),
                 files_failed=int(stats.get("other_failure_files", 0) or 0),
                 ingested=ingested,

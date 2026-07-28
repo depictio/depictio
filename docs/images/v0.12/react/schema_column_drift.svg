@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1160" height="600" viewBox="0 0 1160 600">
+  <rect width="1160" height="600" fill="#ffffff"/>
+  <text x="46.0" y="52.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="25" fill="#1e1e1e" text-anchor="start" font-weight="normal">A column moves between two scans</text>
+  <text x="46.0" y="78.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="15" fill="#5c5c5c" text-anchor="start" font-weight="normal">measured on deltalake 0.24 and 1.6.1, writing one partition of a partitioned table</text>
+  <text x="555.0" y="138.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">schema_mode = "merge"</text>
+  <text x="555.0" y="158.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="13" fill="#5c5c5c" text-anchor="middle" font-weight="normal">what a scoped write now uses</text>
+  <text x="945.0" y="138.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">schema_mode = "overwrite"</text>
+  <text x="945.0" y="158.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="13" fill="#5c5c5c" text-anchor="middle" font-weight="normal">what the code used to use</text>
+  <text x="46.0" y="238.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="17" fill="#1e1e1e" text-anchor="start" font-weight="normal">The subset adds a column</text>
+  <rect x="380.0" y="180.0" width="350.0" height="106.0" rx="6" fill="#ebfbee"/>
+  <path d="M379.4,179.4 C495.1,178.8 613.0,180.6 729.6,180.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M380.1,179.9 C495.5,180.8 613.9,178.8 729.9,180.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M729.5,179.7 C728.7,213.8 731.4,250.4 729.8,286.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M730.7,180.5 C729.1,214.4 730.3,250.8 729.8,285.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M730.6,286.2 C614.4,287.6 495.2,286.8 379.5,286.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M729.3,285.7 C614.1,285.0 497.1,285.1 379.7,285.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M380.8,286.5 C380.5,251.7 381.5,216.9 379.7,179.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M379.5,286.7 C380.4,250.8 380.6,214.0 380.2,180.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="555.0" y="228.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="15" fill="#1e1e1e" text-anchor="middle" font-weight="normal">absorbed into the schema;</text>
+  <text x="555.0" y="252.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="15" fill="#1e1e1e" text-anchor="middle" font-weight="normal">other runs read back null</text>
+  <rect x="770.0" y="180.0" width="350.0" height="106.0" rx="6" fill="#ebfbee"/>
+  <path d="M770.8,179.5 C885.4,179.7 1004.6,180.5 1119.9,180.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M769.4,180.8 C886.5,180.9 1003.5,178.8 1119.4,179.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1120.0,180.5 C1119.5,216.0 1121.1,250.6 1119.6,285.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1119.4,180.4 C1120.4,215.8 1118.5,249.4 1120.3,286.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1119.8,285.2 C1004.2,285.2 887.5,287.6 769.8,285.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1119.3,286.2 C1002.3,284.5 885.5,287.2 769.5,285.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M770.3,286.0 C771.0,250.0 769.0,215.2 770.6,179.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M769.9,285.4 C770.1,251.4 769.9,216.0 769.4,180.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="945.0" y="228.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="15" fill="#1e1e1e" text-anchor="middle" font-weight="normal">also fine</text>
+  <text x="46.0" y="356.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="17" fill="#1e1e1e" text-anchor="start" font-weight="normal">The subset lacks a column</text>
+  <rect x="380.0" y="298.0" width="350.0" height="106.0" rx="6" fill="#ebfbee"/>
+  <path d="M379.5,298.6 C497.5,299.4 613.9,298.3 729.4,297.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M380.3,298.1 C495.5,297.6 612.7,297.8 729.6,298.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M730.6,297.6 C730.8,334.4 728.5,369.0 729.5,404.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M729.5,297.5 C729.6,333.0 731.0,368.3 729.8,404.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M730.2,404.0 C612.9,404.9 495.3,403.2 380.0,404.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M729.7,404.0 C612.6,403.0 495.2,403.9 379.2,403.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M380.1,403.8 C379.6,369.5 379.4,334.7 380.4,297.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M379.4,404.1 C380.3,369.8 380.1,332.8 379.5,297.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="555.0" y="346.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="15" fill="#1e1e1e" text-anchor="middle" font-weight="normal">kept; the rewritten rows</text>
+  <text x="555.0" y="370.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="15" fill="#1e1e1e" text-anchor="middle" font-weight="normal">are null for it</text>
+  <rect x="770.0" y="298.0" width="350.0" height="106.0" rx="6" fill="#ffe3e3"/>
+  <path d="M770.6,297.7 C886.8,299.4 1003.9,298.1 1119.8,298.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M769.6,298.3 C886.8,297.1 1003.0,299.0 1119.3,298.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1119.3,297.6 C1120.6,332.8 1121.5,369.6 1120.0,404.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1119.9,298.1 C1118.9,331.9 1119.4,367.2 1119.9,403.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1120.0,404.3 C1001.8,405.0 886.5,403.9 770.6,404.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1120.6,403.3 C1004.1,403.5 885.6,402.7 770.1,404.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M770.3,404.5 C769.4,368.3 769.7,334.8 769.3,298.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M770.7,404.4 C769.8,368.4 771.0,334.1 770.7,297.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="945.0" y="346.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="15" fill="#1e1e1e" text-anchor="middle" font-weight="normal">1.6.1 — dropped for every run</text>
+  <text x="945.0" y="370.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="15" fill="#1e1e1e" text-anchor="middle" font-weight="normal">0.24 — table unreadable</text>
+  <path d="M1085.1,313.4 C1091.1,319.7 1096.9,324.1 1103.4,330.6" fill="none" stroke="#c92a2a" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1084.9,330.8 C1090.7,324.3 1096.6,320.1 1102.7,312.9" fill="none" stroke="#c92a2a" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="46.0" y="474.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="17" fill="#1e1e1e" text-anchor="start" font-weight="normal">A column's type changed</text>
+  <rect x="380.0" y="416.0" width="350.0" height="106.0" rx="6" fill="#fff9db"/>
+  <path d="M379.6,416.6 C497.2,415.5 612.3,415.1 729.5,416.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M379.9,415.3 C495.4,416.9 612.6,416.9 729.4,416.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M730.0,415.3 C730.1,451.3 729.5,487.3 730.2,521.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M730.3,416.2 C731.1,451.5 730.9,485.5 730.6,522.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M730.1,522.5 C613.5,522.3 497.5,521.2 380.2,522.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M730.2,521.4 C614.5,523.5 495.9,520.6 380.8,522.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M379.9,521.5 C380.1,487.7 381.2,450.2 379.9,415.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M380.5,521.7 C381.2,486.2 379.6,452.6 380.0,416.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="555.0" y="464.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="15" fill="#1e1e1e" text-anchor="middle" font-weight="normal">fails loudly:</text>
+  <text x="555.0" y="488.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="15" fill="#1e1e1e" text-anchor="middle" font-weight="normal">DeltaError: Cannot cast</text>
+  <rect x="770.0" y="416.0" width="350.0" height="106.0" rx="6" fill="#ffe3e3"/>
+  <path d="M770.3,416.4 C885.7,414.8 1004.5,414.9 1120.1,415.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M770.2,415.7 C887.8,416.9 1002.0,417.3 1119.5,415.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1119.3,415.9 C1121.0,452.4 1119.5,485.6 1119.7,521.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1120.0,415.5 C1119.4,452.4 1118.6,486.4 1119.3,521.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1120.6,521.7 C1002.2,523.5 887.8,522.7 769.6,522.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1120.3,522.6 C1003.7,523.4 886.2,521.7 769.5,521.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M769.4,522.3 C768.4,486.9 771.4,451.6 770.2,415.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M769.5,521.9 C771.3,487.2 770.0,450.8 769.8,415.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="945.0" y="464.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="15" fill="#1e1e1e" text-anchor="middle" font-weight="normal">"succeeds" —</text>
+  <text x="945.0" y="488.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="15" fill="#1e1e1e" text-anchor="middle" font-weight="normal">table left unreadable</text>
+  <path d="M1085.0,431.3 C1091.4,437.4 1098.1,444.1 1102.9,448.9" fill="none" stroke="#c92a2a" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1084.8,449.4 C1091.2,444.2 1095.9,436.9 1103.5,431.0" fill="none" stroke="#c92a2a" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="46.0" y="556.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="15" fill="#5c5c5c" text-anchor="start" font-weight="normal">so a scoped write always merges — and a type conflict is caught before the write, and rebuilds in full</text>
+</svg>

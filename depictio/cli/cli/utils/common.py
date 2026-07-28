@@ -1,6 +1,7 @@
 import atexit
 import os
 from datetime import datetime
+from pathlib import Path
 
 import httpx
 import typer
@@ -18,11 +19,27 @@ from depictio.models.utils import get_config
 _http_client: httpx.Client | None = None
 
 
-def get_http_client() -> httpx.Client:
-    """Return the shared, lazily-created :class:`httpx.Client`."""
+def get_http_client(concurrency: int | None = None) -> httpx.Client:
+    """Return the shared, lazily-created :class:`httpx.Client`.
+
+    ``concurrency`` sizes the connection pool for the parallel upload/delete
+    paths. httpx's default pool (10 keep-alive, 100 total) becomes the real
+    ceiling once several worker threads share this client, so the pool has to
+    be at least as wide as the thread pool or workers just queue on it.
+
+    Honoured on the **first** call only: the client is process-wide, and
+    rebuilding it mid-run would drop live keep-alive connections. Command entry
+    points should therefore prime it once, before any request is issued.
+    """
     global _http_client
     if _http_client is None:
-        _http_client = httpx.Client()
+        workers = concurrency or 4
+        _http_client = httpx.Client(
+            limits=httpx.Limits(
+                max_connections=max(20, 2 * workers),
+                max_keepalive_connections=max(10, workers),
+            )
+        )
         atexit.register(_http_client.close)
     return _http_client
 
@@ -59,6 +76,43 @@ def generate_api_headers(CLI_config: CLIConfig | dict) -> dict:
         headers["X-Depictio-CLI-Instance"] = str(instance_label)
 
     return headers
+
+
+def cli_version() -> str | None:
+    """Version of the depictio-cli that is *running*, or ``None`` if unknowable.
+
+    The repository ``VERSION`` file wins when it is next to this source tree,
+    because that is the file bump2version keeps in step with the code — the same
+    one the API reports. ``importlib.metadata`` answers a different question:
+    what was recorded when the distribution was last installed. In a development
+    checkout those diverge silently and indefinitely, and since this string is
+    stamped into Delta commit metadata and every monitoring run, the provenance
+    then names a version that never ran.
+
+    A released wheel has no ``VERSION`` beside it, so it falls through to the
+    install record, which is authoritative there.
+
+    Best-effort provenance — never raises.
+    """
+    # .../<repo>/depictio/cli/cli/utils/common.py -> <repo>/VERSION
+    version_file = Path(__file__).resolve().parents[4] / "VERSION"
+    try:
+        version = version_file.read_text(encoding="utf-8").strip()
+        if version:
+            return version
+    except OSError:
+        pass
+
+    try:
+        from importlib.metadata import PackageNotFoundError
+        from importlib.metadata import version as _pkg_version
+
+        try:
+            return _pkg_version("depictio-cli")
+        except PackageNotFoundError:
+            return "dev"
+    except Exception:
+        return None
 
 
 @validate_call(validate_return=True)

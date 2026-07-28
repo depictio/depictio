@@ -1,13 +1,24 @@
 import os
 from datetime import datetime
+from typing import Any
 
 import polars as pl
-from deltalake.exceptions import TableNotFoundError
 from pydantic import validate_call
 
 from depictio.cli.cli.utils.api_calls import (
     api_get_files_by_dc_id,
     api_upsert_deltatable,
+)
+from depictio.cli.cli.utils.common import cli_version as _cli_version
+from depictio.cli.cli.utils.delta_versioning import (
+    MAX_RUN_TAGS_IN_METADATA,
+    RUN_ID_COLUMN,
+    ScopedWritePlan,
+    build_commit_metadata,
+    plan_partitioning,
+    plan_scoped_write,
+    probe_delta_table,
+    write_delta_table_versioned,
 )
 from depictio.cli.cli.utils.multiqc_processor import process_multiqc_data_collection
 from depictio.cli.cli.utils.rich_utils import rich_print_checked_statement
@@ -45,14 +56,23 @@ def calculate_dataframe_size_bytes(df: pl.DataFrame) -> int:
         return estimated_size
 
 
+class NoFilesForRunsError(Exception):
+    """A run-restricted fetch found nothing left to read."""
+
+
 @validate_call
-def fetch_file_data(dc_id: str, CLI_config: CLIConfig) -> list[File]:
+def fetch_file_data(
+    dc_id: str, CLI_config: CLIConfig, run_tags: set[str] | None = None
+) -> list[File]:
     """
     Call the API to list files for the given DataCollection.
 
     Args:
         dc_id (str): Data Collection ID.
         CLI_config (CLIConfig): CLI configuration containing API URL and credentials.
+        run_tags: Restrict to files belonging to these runs. Filtering happens on
+            the raw documents, before ``File`` construction and before the
+            existence check below — both of which cost syscalls per file.
 
     Returns:
         list: List of file dictionaries returned by the API.
@@ -68,6 +88,23 @@ def fetch_file_data(dc_id: str, CLI_config: CLIConfig) -> list[File]:
 
     files_data = response.json()
     logger.info(f"Retrieved {len(files_data)} file(s) for Data Collection {dc_id}.")
+
+    if run_tags is not None:
+        total = len(files_data)
+        files_data = [fd for fd in files_data if str(fd.get("run_tag")) in run_tags]
+        logger.info(
+            f"Restricted to {len(files_data)} of {total} file(s) "
+            f"across {len(run_tags)} changed run(s)."
+        )
+        if not files_data:
+            # Every file of the changed runs is gone. A scoped write cannot
+            # express "these rows should no longer exist" — writing an empty
+            # frame under a predicate is not the same thing — so this has to
+            # become a full rebuild, which drops them naturally.
+            raise NoFilesForRunsError(
+                f"none of the {len(run_tags)} changed run(s) still have files"
+            )
+
     if not files_data:
         error_msg = f"No files found for Data Collection {dc_id}."
         logger.debug(
@@ -219,7 +256,17 @@ def read_files_lazy(files: list, file_format: str, polars_kwargs: dict) -> list:
     return lazy_frames
 
 
-def align_lazy_schemas(lazy_frames: list) -> list:
+class SchemaConflictError(Exception):
+    """A partial frame's column type disagrees with the table it would join.
+
+    Only raised for scoped writes. Coercing there would leave the runs that were
+    *not* rewritten sitting in the old type under a schema claiming the new one
+    — which delta-rs turns into an unreadable table. Rebuilding every run in one
+    consistent type is the correct answer, and the caller does exactly that.
+    """
+
+
+def align_lazy_schemas(lazy_frames: list, target_schema: dict | None = None) -> list:
     """
     Align column types across all LazyFrames for aggregation.
 
@@ -228,6 +275,11 @@ def align_lazy_schemas(lazy_frames: list) -> list:
 
     Args:
         lazy_frames (list): List of Polars LazyFrames.
+        target_schema: The existing Delta table's schema, when this batch is
+            only part of that table. Columns it already has are kept at their
+            existing type and order-insensitively re-added when this batch does
+            not carry them; a genuine type disagreement raises rather than
+            silently coercing.
 
     Returns:
         list: List of LazyFrames with aligned schemas.
@@ -244,6 +296,20 @@ def align_lazy_schemas(lazy_frames: list) -> list:
                 # If types differ, default to Utf8
                 if unified_schema[col] != dtype:
                     unified_schema[col] = pl.Utf8
+
+    if target_schema is not None:
+        conflicts = [
+            f"{col} is {unified_schema[col]} here but {dtype} in the table"
+            for col, dtype in target_schema.items()
+            if col in unified_schema and unified_schema[col] != dtype
+        ]
+        if conflicts:
+            raise SchemaConflictError("; ".join(conflicts))
+        # Columns this batch does not carry stay in the frame as typed nulls, so
+        # the write cannot narrow the table. Matching is by name: delta-rs 0.24
+        # and 1.6 order the partition column differently.
+        for col, dtype in target_schema.items():
+            unified_schema.setdefault(col, dtype)
 
     # Adjust each lazy frame: for missing columns, add a literal null; for existing columns, cast.
     aligned_lfs = []
@@ -262,7 +328,7 @@ def align_lazy_schemas(lazy_frames: list) -> list:
     return aligned_lfs
 
 
-def aggregate_lazy_dataframes(lazy_frames: list) -> pl.DataFrame:
+def aggregate_lazy_dataframes(lazy_frames: list, target_schema: dict | None = None) -> pl.DataFrame:
     """
     Concatenate LazyFrames (after aligning schemas) and add an aggregation timestamp.
 
@@ -270,12 +336,13 @@ def aggregate_lazy_dataframes(lazy_frames: list) -> pl.DataFrame:
 
     Args:
         lazy_frames (list): List of Polars LazyFrames.
+        target_schema: Existing table schema to align against, for a partial batch.
 
     Returns:
         pl.DataFrame: The aggregated DataFrame (materialized).
     """
     logger.debug("Aligning LazyFrame schemas.")
-    aligned_lfs = align_lazy_schemas(lazy_frames)
+    aligned_lfs = align_lazy_schemas(lazy_frames, target_schema=target_schema)
     logger.debug("Concatenating LazyFrames.")
     # Concatenate all lazy frames into one lazy frame.
     concatenated_lf = pl.concat(aligned_lfs)
@@ -298,41 +365,62 @@ def write_delta_table(
     aggregated_df: pl.DataFrame,
     destination_file: str,
     storage_options: PolarsStorageOptions,
+    *,
+    write_mode: str = "overwrite",
+    commit_metadata: dict[str, str] | None = None,
+    partition: bool = False,
+    replace_run_tags: list[str] | None = None,
+    scoped: bool = False,
 ) -> dict:
     """
     Write the aggregated DataFrame as a Delta Lake table.
 
+    Thin wrapper over :func:`write_delta_table_versioned` that keeps the
+    historical dict return shape for the three existing call sites (standard
+    aggregation, recipes, joins). The defaults reproduce the previous behaviour
+    exactly — a full overwrite, no commit metadata, no partitioning — and the
+    dict simply gains the commit facts observed after the write.
+
     Args:
         aggregated_df (pl.DataFrame): The aggregated DataFrame.
         destination_file (str): The destination path for the Delta table.
+        write_mode: overwrite | append | replace-runs.
+        commit_metadata: depictio provenance to stamp into the Delta commit.
+        partition: Whether to partition by ``depictio_run_id``.
+        replace_run_tags: Runs the overwrite is scoped to, for ``replace-runs``.
+        scoped: The frame holds only some of the table's runs.
 
     Raises:
         Exception: If writing the Delta table fails.
     """
-    # try:
     logger.debug(f"Writing aggregated DataFrame to Delta table at {destination_file}.")
     logger.debug(f"Aggregated DataFrame schema: {aggregated_df.schema}")
-    logger.debug(f"Aggregated DataFrame head: {aggregated_df.head(5)}")
     logger.debug(f"Storage options: {storage_options}")
 
-    aggregated_df.write_delta(
+    outcome = write_delta_table_versioned(
+        aggregated_df,
         destination_file,
-        storage_options=storage_options.model_dump(),
-        delta_write_options={"schema_mode": "overwrite"},
-        mode="overwrite",
+        storage_options,
+        write_mode=write_mode,  # type: ignore[arg-type]
+        commit_metadata=commit_metadata,
+        partition=partition,
+        replace_run_tags=replace_run_tags,
+        scoped=scoped,
     )
 
-    logger.info(f"Aggregated Delta table written to {destination_file}.")
-
     return {
-        "result": "success",
-        "message": f"Aggregated Delta table written to {destination_file}.",
+        "result": outcome.result,
+        "message": outcome.message,
+        "delta_version": outcome.delta_version,
+        "delta_commit_timestamp": outcome.delta_timestamp,
+        "write_mode": outcome.write_mode,
+        # A scoped write only ever saw part of the table, so it knows how many
+        # rows it wrote and nothing about the total. Reporting the subset as
+        # `rows_total` would publish a wrong row count to the history UI.
+        "rows_total": None if scoped else outcome.rows_written,
+        "rows_added": outcome.rows_written if scoped else None,
+        "partitioned": outcome.partitioned,
     }
-    # except Exception as e:
-    #     error_msg = f"Error writing aggregated Delta table: {e}"
-    #     logger.error(error_msg)
-
-    #     return {"result": "error", "message": error_msg}
 
 
 def read_delta_table(
@@ -384,12 +472,55 @@ def read_delta_table(
         return {"result": "error", "message": error_msg}
 
 
+def skip_unchanged_reason(
+    data_collection: DataCollection,
+    probe,
+    command_parameters: dict,
+) -> str | None:
+    """Why this data collection can be left alone this cycle, or None to process it.
+
+    Every condition has to hold, and each of them exists because skipping on a
+    wrong answer means a Delta table that silently never catches up:
+
+    * the caller asked for skipping at all. The watcher only asks after a cycle
+      that succeeded, so a failed cycle is always followed by a full one and the
+      whole mechanism is self-healing;
+    * the scan signal is ``complete`` — every run on disk was either scanned or
+      proven unchanged. Without ``--rescan-folders`` it is a guess, not a fact;
+    * this collection was actually covered by that scan. Single-file
+      collections, MultiQC, recipes and joins never are, and reach this function
+      only to be told to carry on;
+    * no run disappeared. A removal has to be rebuilt, not skipped;
+    * nothing in this collection changed;
+    * the table is really there. A first ingestion, or one whose write failed
+      halfway, has no version to leave alone.
+    """
+    if not command_parameters.get("skip_unchanged"):
+        return None
+
+    signal = command_parameters.get("scan_signal") or {}
+    if not signal.get("complete"):
+        return None
+
+    dc_id = str(data_collection.id)
+    if dc_id not in set(signal.get("covered_dcs") or []):
+        return None
+    if signal.get("removed_runs"):
+        return None
+    if dc_id in (signal.get("changed_dcs") or {}):
+        return None
+    if probe is None:
+        return None
+
+    return f"no file changed; Delta table left at version {probe.version}"
+
+
 def client_aggregate_data(
     data_collection: DataCollection,
     CLI_config: CLIConfig,
     command_parameters: dict = {},
     workflow=None,  # Optional workflow for MultiQC processing
-) -> dict[str, str]:
+) -> dict[str, Any]:
     """
     Aggregate files from a DataCollection into a Delta Lake object or handle MultiQC files.
 
@@ -414,12 +545,15 @@ def client_aggregate_data(
         dict: Result dictionary with success/error status and message.
     """
 
+    command_parameters = command_parameters or {}
     if command_parameters:
         overwrite = command_parameters.get("overwrite", False)
         rich_tables = command_parameters.get("rich_tables", False)
         preview_recipes = command_parameters.get("preview_recipes", False)
+        write_mode = command_parameters.get("write_mode", "overwrite")
     else:
         overwrite = False
+        write_mode = "overwrite"
         preview_recipes = False
 
     # Handle MultiQC data collections specially - copy parquet files to S3 and extract metadata
@@ -453,7 +587,12 @@ def client_aggregate_data(
         and data_collection.config.transform is not None
     ):
         return process_recipe_data_collection(
-            data_collection, CLI_config, overwrite, workflow, preview=preview_recipes
+            data_collection,
+            CLI_config,
+            overwrite,
+            workflow,
+            preview=preview_recipes,
+            command_parameters=command_parameters,
         )
 
     # Generate destination prefix using the data collection id - should be a S3 path
@@ -470,28 +609,42 @@ def client_aggregate_data(
     if not destination_prefix.startswith("s3://"):
         raise ValueError("Invalid destination prefix. It should be an S3 path.")
 
-    destination_exists = False
+    # Metadata only. This used to be a full eager read of the whole table whose
+    # result was logged at head(5) and thrown away — one complete download per
+    # data collection per cycle to decide a boolean.
     logger.info("Checking if destination Delta table exists.")
-    # logger.info(f"Destination prefix: {destination_prefix}")
-    # logger.info(f"Storage options: {storage_options}")
-    try:
-        response_read_table = read_delta_table(destination_prefix, storage_options=storage_options)
-        # logger.info(f"Response read table: {response_read_table}")
+    probe = probe_delta_table(
+        destination_prefix,
+        storage_options,
+        # The schema is only needed to align a partial frame against the table
+        # that is already there, so it is only fetched when that is on the table.
+        with_schema=bool(command_parameters.get("incremental_write")),
+    )
+    destination_exists = probe is not None
+    if probe:
+        logger.debug(
+            f"Existing Delta table found at version {probe.version} "
+            f"(partitioned by {probe.partition_columns or 'nothing'})"
+        )
+    else:
+        logger.info("Destination does not exist yet, will create it during processing")
 
-        if response_read_table["result"] == "success" and "data" in response_read_table:
-            existing_df = response_read_table["data"]
-            destination_exists = True
-            logger.debug("Existing Delta table found, using it as base")
-            assert type(existing_df) is pl.DataFrame
-            logger.debug(f"Existing Delta table head: {existing_df.head(5)}")
-        else:
-            logger.debug("No data returned from read_delta_table, will create it during processing")
-            destination_exists = False
-            logger.warning("No data returned, will create it during processing")
-    except TableNotFoundError:
-        destination_exists = False
-        logger.warning("Destination prefix does not exist yet, will create it during processing")
-    # logger.info(f"Destination exists: {destination_exists}")
+    # Nothing in this collection moved: leave its table exactly where it is.
+    # This is the difference between a quiet watcher cycle costing one metadata
+    # read per collection and costing a full rebuild of every table in the
+    # project. Said out loud rather than logged at debug, because a silent skip
+    # is indistinguishable from a silent failure.
+    skip_reason = skip_unchanged_reason(data_collection, probe, command_parameters)
+    if skip_reason:
+        rich_print_checked_statement(
+            f"Skipped {data_collection.data_collection_tag}: {skip_reason}", "info"
+        )
+        logger.info(f"Skipping {data_collection.data_collection_tag}: {skip_reason}")
+        return {
+            "result": "success",
+            "skipped": True,
+            "message": f"Left unchanged: {skip_reason}.",
+        }
 
     # if destination_exists:
 
@@ -515,22 +668,49 @@ def client_aggregate_data(
     logger.debug(f"Aggregating data for Data Collection {dc_id}.")
     logger.debug(f"Data Collection config: {data_collection_config}")
 
-    # 1. Fetch file data from the server
-    files = fetch_file_data(str(dc_id), CLI_config)
-    logger.debug(f"Files data: {files}")
-    # logger.info(f"Files data: {files}")
+    # 1. Decide the scope of this write *before* fetching anything. A frame
+    # restricted to the runs that changed must only ever be built once a
+    # partitioned, predicate-scoped write is guaranteed — see plan_scoped_write.
+    signal = command_parameters.get("scan_signal") or {}
+    plan = plan_scoped_write(
+        probe=probe,
+        changed_runs=(signal.get("changed_dcs") or {}).get(str(data_collection.id), []),
+        removed_runs=list(signal.get("removed_runs") or []),
+        write_mode=write_mode,
+        incremental_write=bool(command_parameters.get("incremental_write")),
+        signal_complete=bool(signal.get("complete")),
+        covered=str(data_collection.id) in set(signal.get("covered_dcs") or []),
+    )
+    if plan.declined and command_parameters.get("incremental_write"):
+        logger.info(f"Rebuilding {data_collection.data_collection_tag} in full: {plan.declined}")
 
-    # 3. Read files using Polars
+    # 2. Read the files this write covers, and aggregate them
     data_collection_config = convert_objectid_to_str(data_collection_config.model_dump())
-    # logger.info(f"Data Collection config: {data_collection_config}")
     logger.debug(f"Data Collection config: {data_collection_config}")
     dc_props = data_collection_config.get("dc_specific_properties", {})
     file_format = dc_props.get("format", "csv").lower()
     polars_kwargs = dict(dc_props.get("polars_kwargs", {}))
-    lazy_frames = read_files_lazy(files, file_format, polars_kwargs)
 
-    # 4. Aggregate LazyFrames and materialize the result
-    aggregated_df = aggregate_lazy_dataframes(lazy_frames)
+    def _build(run_tags: set[str] | None, target_schema: dict | None):
+        collected = fetch_file_data(str(dc_id), CLI_config, run_tags=run_tags)
+        frames = read_files_lazy(collected, file_format, polars_kwargs)
+        return collected, aggregate_lazy_dataframes(frames, target_schema=target_schema)
+
+    if plan.scoped:
+        try:
+            files, aggregated_df = _build(set(plan.run_tags), probe.schema if probe else None)
+        except (SchemaConflictError, NoFilesForRunsError) as exc:
+            # Both are found before anything large is read — the type conflict
+            # from the lazy frames' headers, the empty fetch from the file list
+            # — so the retry costs one more listing, not a re-read.
+            logger.warning(
+                f"{data_collection.data_collection_tag}: {exc}. Rebuilding every run instead."
+            )
+            plan = ScopedWritePlan(scoped=False, declined=str(exc))
+            files, aggregated_df = _build(None, None)
+    else:
+        files, aggregated_df = _build(None, None)
+
     logger.debug(f"Aggregated DataFrame shape: {aggregated_df.shape}")
     logger.debug(f"Aggregated DataFrame schema: {aggregated_df.schema}")
     logger.info(f"Aggregated DataFrame head: {aggregated_df.head(5)}")
@@ -545,26 +725,100 @@ def client_aggregate_data(
         )
         logger.info("S3 Destination does not exist, will create it during processing")
 
-    # Calculate DataFrame size before writing (more accurate than S3 file size estimation)
-    logger.info(f"Aggregated DataFrame shape before size calculation: {aggregated_df.shape}")
-    logger.debug(f"Aggregated DataFrame columns: {aggregated_df.columns}")
-    deltatable_size_bytes = calculate_dataframe_size_bytes(aggregated_df)
+    run_tags = (
+        [str(tag) for tag in aggregated_df[RUN_ID_COLUMN].unique().to_list() if tag is not None]
+        if RUN_ID_COLUMN in aggregated_df.columns
+        else []
+    )
 
-    # Enhanced debugging for size calculation
-    logger.info(f"🔍 DEBUG: Calculated deltatable_size_bytes = {deltatable_size_bytes}")
-    logger.info(f"🔍 DEBUG: Size in MB = {deltatable_size_bytes / (1024 * 1024):.2f} MB")
-
-    if deltatable_size_bytes == 0:
-        logger.warning("DataFrame size calculated as 0 bytes - this indicates an empty DataFrame")
-        logger.debug(f"DataFrame shape: {aggregated_df.shape}")
-        logger.debug(
-            f"DataFrame head: {aggregated_df.head(2) if aggregated_df.height > 0 else 'DataFrame is empty'}"
+    if plan.scoped:
+        # Already decided, and not up for renegotiation: plan_partitioning's
+        # fall-back is a full overwrite, which with this frame would delete
+        # every run it does not contain.
+        partition = True
+        replace_run_tags = plan.run_tags
+    else:
+        # Decide the write strategy. plan_partitioning declines — with a reason —
+        # whenever partitioning would fail or make things worse (no run column,
+        # a single run, path-unsafe tags, too many partitions, or an existing table
+        # with different partitioning, which delta-rs rejects outright).
+        partition, decline_reason = plan_partitioning(
+            aggregated_df,
+            destination_prefix,
+            storage_options,
+            write_mode,
+            repartition=bool(command_parameters.get("repartition")),
+            probe=probe,
         )
+        replace_run_tags = run_tags if partition else None
+        if decline_reason and write_mode == "replace-runs":
+            logger.warning(
+                f"Falling back to a full overwrite for {data_collection.data_collection_tag}: "
+                f"{decline_reason}"
+            )
+
+    # Size: from the frame for a full rewrite, since the frame *is* the table.
+    # A scoped write only holds part of it, so the table's real size comes from
+    # the Delta metadata instead — shrinking the stored size to the subset's
+    # would be a straightforward lie.
+    if plan.scoped:
+        deltatable_size_bytes = probe.size_bytes if probe else None
+    else:
+        deltatable_size_bytes = calculate_dataframe_size_bytes(aggregated_df)
+        if deltatable_size_bytes == 0:
+            logger.warning(
+                "DataFrame size calculated as 0 bytes - this indicates an empty DataFrame"
+            )
+    logger.info(f"Delta table size to report: {deltatable_size_bytes} bytes")
+
+    commit_metadata = build_commit_metadata(
+        data_collection_id=str(dc_id),
+        data_collection_tag=data_collection.data_collection_tag,
+        write_mode=write_mode if partition else "overwrite",
+        run_tags=run_tags,
+        file_count=len(files) if files else None,
+        # A partial frame's height is not the table's row count.
+        row_count=None if plan.scoped else aggregated_df.height,
+        ingestion_run_id=command_parameters.get("ingestion_run_id"),
+        project_id=command_parameters.get("project_id"),
+        trigger=command_parameters.get("trigger"),
+        cli_version=_cli_version(),
+        user_email=getattr(CLI_config.user, "email", None),
+    )
+
+    # A dry run stops here, at the last point before anything leaves the client.
+    # The guard sits at the write itself rather than in the callers because
+    # everything above is pure computation — the scan diagnostics, the
+    # partitioning decision and the row counts are exactly what the run is meant
+    # to report, and they are only knowable by getting this far.
+    if command_parameters.get("dry_run"):
+        if plan.scoped:
+            scope = f"{len(plan.run_tags)} changed run(s) via replace-runs"
+        elif partition:
+            scope = f"{len(run_tags)} run(s) via {write_mode}"
+        else:
+            scope = "the whole table"
+        logger.info(
+            f"DRY RUN: would write {aggregated_df.height} row(s) to {destination_prefix}, "
+            f"replacing {scope}. Nothing was written."
+        )
+        return {
+            "result": "success",
+            "message": (
+                f"DRY RUN: {aggregated_df.height} row(s) would be written to "
+                f"{destination_prefix} ({scope})."
+            ),
+        }
 
     result = write_delta_table(
         aggregated_df=aggregated_df,
         destination_file=destination_prefix,
         storage_options=storage_options,
+        write_mode=write_mode if partition else "overwrite",
+        commit_metadata=commit_metadata,
+        partition=partition,
+        replace_run_tags=replace_run_tags,
+        scoped=plan.scoped,
     )
 
     extended = True if rich_tables else False
@@ -591,6 +845,25 @@ def client_aggregate_data(
         delta_table_location=destination_prefix,
         update=overwrite,
         deltatable_size_bytes=deltatable_size_bytes,
+        delta_provenance={
+            "delta_version": result.get("delta_version"),
+            "delta_commit_timestamp": (
+                result["delta_commit_timestamp"].isoformat()
+                if result.get("delta_commit_timestamp")
+                else None
+            ),
+            "write_mode": result.get("write_mode"),
+            "rows_total": result.get("rows_total"),
+            "rows_added": result.get("rows_added"),
+            # The runs this commit actually touched, which for a scoped write is
+            # the changed ones rather than everything in the table.
+            "run_tags": (
+                (plan.run_tags if plan.scoped else run_tags)[:MAX_RUN_TAGS_IN_METADATA] or None
+            ),
+            "ingestion_run_id": command_parameters.get("ingestion_run_id"),
+            "trigger": command_parameters.get("trigger"),
+        },
+        async_mode=bool(command_parameters.get("async_upsert")),
     )
     logger.info(f"🔍 DEBUG: API upsert response status: {api_upsert_result.status_code}")
     if api_upsert_result.status_code != 200:
@@ -603,10 +876,45 @@ def client_aggregate_data(
         assert type(result["message"]) is str
         return result
 
+    # A job_id means the server accepted the write but deferred profiling the
+    # table. No job_id means it finished inline — including on any server that
+    # predates offloading, which is why this is a presence check rather than a
+    # version check.
+    job_outcome = _await_upsert_job(result, CLI_config)
+    if job_outcome is not None and not job_outcome.ok:
+        return {
+            "result": "error",
+            "message": f"Delta table finalization failed: {job_outcome.error}",
+        }
+
     return {
         "result": "success",
         "message": f"Aggregated data written to {destination_prefix}.",
     }
+
+
+def _await_upsert_job(response_payload: dict, CLI_config: CLIConfig):
+    """Block until an offloaded upsert finishes. Returns None if none was opened.
+
+    A polling failure is reported as a failed outcome rather than raised: the
+    Delta table itself is already written and its aggregation recorded, so the
+    ingestion is not lost — only the column specs are missing, and the caller
+    should say so rather than crash.
+    """
+    from depictio.cli.cli.utils.jobs import JobOutcome, JobPollError, maybe_wait_for_job
+
+    try:
+        return maybe_wait_for_job(
+            response_payload,
+            api_base_url=CLI_config.api_base_url,
+            token=CLI_config.user.token.access_token,
+            on_update=lambda st: logger.info(
+                f"  … {st.get('step') or 'working'}: {st.get('detail') or ''}"
+            ),
+        )
+    except JobPollError as exc:
+        logger.error(f"Delta table finalization could not be tracked: {exc}")
+        return JobOutcome(status="failed", error=str(exc))
 
 
 def process_geojson_data_collection(
@@ -819,6 +1127,7 @@ def process_recipe_data_collection(
     overwrite: bool = False,
     workflow=None,
     preview: bool = False,
+    command_parameters: dict | None = None,
 ) -> dict[str, str]:
     """Process a transformed (recipe-based) data collection.
 
@@ -831,10 +1140,14 @@ def process_recipe_data_collection(
         overwrite: Whether to overwrite existing data.
         workflow: Optional Workflow object to resolve data_dir from data_location.
         preview: If True, display input/output tables and skip Delta Lake write.
+        command_parameters: Ingestion context (run id, project, trigger) stamped
+            into the Delta commit so a recipe-derived table is attributable like
+            any other.
 
     Returns:
         Result dict with success/error status.
     """
+    command_parameters = command_parameters or {}
     try:
         from depictio.recipes import RecipeError, execute_recipe
         from depictio.recipes import load_recipe as _load_recipe
@@ -1009,10 +1322,34 @@ def process_recipe_data_collection(
     storage_options = turn_S3_config_into_polars_storage_options(CLI_config.s3_storage)
 
     deltatable_size_bytes = calculate_dataframe_size_bytes(result_df)
+
+    # Recipe collections are written like any other: a full overwrite, but with
+    # the same provenance. Without it their commits carry no depictio metadata
+    # and their aggregations land with delta_version=None, which drops them out
+    # of the joined view in /history and leaves a recipe-derived table looking
+    # like it was never ingested by anyone.
+    run_tags = (
+        [str(tag) for tag in result_df[RUN_ID_COLUMN].unique().to_list() if tag is not None]
+        if RUN_ID_COLUMN in result_df.columns
+        else []
+    )
+    commit_metadata = build_commit_metadata(
+        data_collection_id=str(data_collection.id),
+        data_collection_tag=data_collection.data_collection_tag,
+        write_mode="overwrite",
+        run_tags=run_tags,
+        row_count=result_df.height,
+        ingestion_run_id=command_parameters.get("ingestion_run_id"),
+        project_id=command_parameters.get("project_id"),
+        trigger=command_parameters.get("trigger"),
+        cli_version=_cli_version(),
+        user_email=getattr(CLI_config.user, "email", None),
+    )
     write_result = write_delta_table(
         aggregated_df=result_df,
         destination_file=destination_prefix,
         storage_options=storage_options,
+        commit_metadata=commit_metadata,
     )
 
     if write_result.get("result") == "error":
@@ -1025,6 +1362,19 @@ def process_recipe_data_collection(
         delta_table_location=destination_prefix,
         update=overwrite,
         deltatable_size_bytes=deltatable_size_bytes,
+        delta_provenance={
+            "delta_version": write_result.get("delta_version"),
+            "delta_commit_timestamp": (
+                write_result["delta_commit_timestamp"].isoformat()
+                if write_result.get("delta_commit_timestamp")
+                else None
+            ),
+            "write_mode": write_result.get("write_mode"),
+            "rows_total": write_result.get("rows_total"),
+            "run_tags": run_tags[:MAX_RUN_TAGS_IN_METADATA] or None,
+            "ingestion_run_id": command_parameters.get("ingestion_run_id"),
+            "trigger": command_parameters.get("trigger"),
+        },
     )
     if api_upsert_result.status_code != 200:
         return {"result": "error", "message": f"API upsert failed: {api_upsert_result.text}"}
