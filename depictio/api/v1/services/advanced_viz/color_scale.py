@@ -54,6 +54,16 @@ SCALES: dict[str, list[tuple[float, RGB]]] = {
         (0.5, (227, 109, 99)),
         (1.0, (122, 4, 102)),
     ],
+    # Diverging, used by the embedding renderer for continuous colour. Not a
+    # plotly.js builtin despite the familiar name, so it *must* be emitted as
+    # stops or the trace renders with no colour mapping at all.
+    "Spectral": [
+        (0.0, (158, 1, 66)),
+        (0.25, (244, 109, 67)),
+        (0.5, (255, 255, 191)),
+        (0.75, (102, 194, 165)),
+        (1.0, (94, 79, 162)),
+    ],
 }
 
 #: WCAG crossover: above this luminance, dark text wins.
@@ -86,6 +96,35 @@ def sample_colorscale(name: str, t: float) -> RGB:
                 _round_half_up(c0[2] + (c1[2] - c0[2]) * k),
             )
     return stops[-1][1]
+
+
+def plotly_colorscale(name: object) -> object:
+    """Explicit ``[[t, 'rgb(...)'], …]`` stops for a named scale.
+
+    Mirrors ``plotlyColorscale`` in colorScale.ts, and exists for the same
+    reason: **never hand plotly.js a bare scale name we also define ourselves.**
+
+    plotly.js ships its own legacy ``Blues`` that runs dark blue → light grey,
+    the *inverse* of the ColorBrewer ramp in :data:`SCALES` that everything else
+    here assumes. Exporting the name alone renders the ramp backwards, and —
+    worse — the annotation colours picked by
+    :func:`contrasting_text_for_value` are then computed against the opposite
+    background, so the labels that most need to be readable (the big diagonal
+    counts) come out white on near-white.
+
+    Emitting stops makes the exported figure show the same ramp the in-app
+    renderer does, and makes the baked-in text colours correct by construction.
+    Unknown names pass through untouched, so a genuine plotly.js builtin such as
+    ``Portland`` still works, as does a caller that already holds explicit stops
+    (``enrichment``'s two-bucket NES-sign scale is built inline rather than
+    named, and must survive this function unchanged).
+    """
+    if not isinstance(name, str):
+        return name
+    stops = SCALES.get(name)
+    if not stops:
+        return name
+    return [[t, f"rgb({r},{g},{b})"] for t, (r, g, b) in stops]
 
 
 def _srgb_to_linear(channel: int) -> float:

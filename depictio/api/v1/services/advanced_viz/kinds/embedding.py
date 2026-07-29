@@ -27,6 +27,7 @@ from __future__ import annotations
 import math
 from typing import Any
 
+from depictio.api.v1.services.advanced_viz.color_scale import plotly_colorscale
 from depictio.api.v1.services.advanced_viz.figure_registry import register
 from depictio.api.v1.services.advanced_viz.palette import TAB10_PALETTE, stable_color_map
 
@@ -126,7 +127,7 @@ def build(
             marker.update(
                 {
                     "color": numeric,
-                    "colorscale": "Spectral",
+                    "colorscale": plotly_colorscale("Spectral"),
                     "showscale": True,
                     "colorbar": {"title": {"text": str(color_col)}, "thickness": 12, "len": 0.9},
                 }
