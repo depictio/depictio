@@ -1,0 +1,35 @@
+/*
+ * Version timeline density.
+ *
+ * Mantine separates timeline items with `margin-top: var(--mantine-spacing-xl)`
+ * — 32px, sized for an item that is a title plus a paragraph. A version row is
+ * four short lines, so the default leaves more space *between* versions than
+ * inside one, which inverts the grouping the eye picks up and makes a session's
+ * worth of autosaves tiring to scan.
+ *
+ * Lives in CSS rather than the `styles` prop for the same reason as
+ * `monitoring.css`: the rule being overridden is
+ * `.m_436178ff:where(:not(:first-of-type))`, and Mantine's `styles` are inline,
+ * so they cannot express a `:not()` selector. Setting a plain `marginTop`
+ * inline would also hit the first item and push it away from its date heading.
+ *
+ * `:where()` in Mantine's own selector contributes no specificity, so a single
+ * class here wins without `!important`.
+ */
+
+.depictio-version-timeline .mantine-Timeline-item:not(:first-of-type) {
+  margin-top: var(--mantine-spacing-sm);
+}
+
+/* The body carries the row's four detail lines; Mantine's bottom padding is
+   there to separate it from the next item's title, which the tightened margin
+   above now handles. */
+.depictio-version-timeline .mantine-Timeline-itemBody {
+  padding-bottom: 0;
+}
+
+/* The connecting line is drawn to `bottom: calc(spacing-xl * -1)` so it spans
+   the old 32px gap. Left alone it would now overshoot into the next bullet. */
+.depictio-version-timeline .mantine-Timeline-item::before {
+  bottom: calc(var(--mantine-spacing-sm) * -1);
+}

@@ -43,6 +43,7 @@ import {
 import { groupByDay, versionTitle } from './format';
 import VersionTimelineItem from './VersionTimelineItem';
 import { useVersionHistory } from './useVersionHistory';
+import './versions.css';
 
 interface VersionHistoryDrawerProps {
   opened: boolean;
@@ -204,11 +205,15 @@ const VersionHistoryDrawer: React.FC<VersionHistoryDrawerProps> = ({
                 </Text>
               }
             />
-            {/* `bulletSize`/`lineWidth` drive Mantine's own item spacing, and
-                the default leaves each entry taller than its content. These
-                are tuned down so a session's worth of versions is scannable
-                without scrolling past mostly whitespace. */}
-            <Timeline active={-1} bulletSize={16} lineWidth={2}>
+            {/* Density overrides live in versions.css — the rule being beaten
+                is a `:not(:first-of-type)` selector, which Mantine's inline
+                `styles` prop cannot express. */}
+            <Timeline
+              active={-1}
+              bulletSize={16}
+              lineWidth={2}
+              className="depictio-version-timeline"
+            >
               {group.versions.map((version) => (
                 <VersionTimelineItem
                   key={version.version_id}
@@ -253,8 +258,21 @@ const VersionHistoryDrawer: React.FC<VersionHistoryDrawerProps> = ({
           </Group>
         }
         data-testid="version-drawer"
+        // Fill the drawer's height so the list runs to the bottom edge.
+        //
+        // Mantine's drawer body is a plain block sized to its content, so the
+        // timeline had no height to fill; the previous `mah: calc(100vh -
+        // 260px)` was a guess at the chrome above it and always stopped short.
+        // A flex column delegates that measurement to the browser instead.
+        // `minHeight: 0` is what lets the inner ScrollArea shrink rather than
+        // grow past the viewport — the usual reason a nested scroller quietly
+        // refuses to scroll.
+        styles={{
+          content: { display: 'flex', flexDirection: 'column' },
+          body: { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' },
+        }}
       >
-        <Stack gap="md">
+        <Stack gap="md" style={{ flex: 1, minHeight: 0 }}>
           {canEdit && (
             <Paper withBorder radius="md" p="sm" bg="var(--mantine-color-body)">
               <Group justify="space-between" wrap="nowrap" gap="sm" align="center">
@@ -281,8 +299,12 @@ const VersionHistoryDrawer: React.FC<VersionHistoryDrawerProps> = ({
               </Group>
             </Paper>
           )}
-          <ScrollArea.Autosize
-            mah="calc(100vh - 260px)"
+          {/* Plain ScrollArea, not `.Autosize`: Autosize wraps its child in an
+              `overflow: auto` box that grows to fit content, which is the
+              opposite of filling a fixed pane and would leave the drawer's own
+              scrollbar competing with this one. */}
+          <ScrollArea
+            style={{ flex: 1, minHeight: 0 }}
             type="hover"
             // Reserve the gutter rather than overlaying it. Mantine's default
             // floating scrollbar sits on top of the content, which lands
@@ -292,7 +314,7 @@ const VersionHistoryDrawer: React.FC<VersionHistoryDrawerProps> = ({
             scrollbarSize={8}
           >
             {body}
-          </ScrollArea.Autosize>
+          </ScrollArea>
         </Stack>
       </Drawer>
 

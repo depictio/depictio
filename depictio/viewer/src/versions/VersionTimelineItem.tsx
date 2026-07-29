@@ -133,11 +133,7 @@ const VersionTimelineItem: React.FC<VersionTimelineItemProps> = ({
         </Group>
       }
       data-testid="version-timeline-item"
-      // Mantine's default item padding assumes a title plus a paragraph. These
-      // rows are three short lines, so the default leaves more gap than
-      // content and a session's worth of versions stops being scannable.
       lineVariant="solid"
-      styles={{ itemBody: { paddingBottom: 2 }, item: { paddingLeft: 20 } }}
     >
       <Stack gap={1}>
         <Group gap={6} wrap="nowrap">
