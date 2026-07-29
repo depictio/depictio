@@ -10,13 +10,16 @@ DRAFT NOTE (remove before publishing):
   (e.g. ../../images/guides/advanced-visualizations/volcano_light.webp), which the build resolves.
   LOGO: uses this repo's docs/images/logo_hd.png (../images/logo_hd.png) so it renders on GitHub;
   in depictio-docs repoint to that repo's images/logo/logo_hd.svg (or logo_hd.png).
-  VIDEO: the two performance screencasts are Vimeo embeds (the docs repo commits no video files and
-  caps added files at 2 MB). It will not render in GitHub's markdown preview, only in mkdocs.
+  VIDEO: three Vimeo embeds (the docs repo commits no video files and caps added files at 2 MB).
+  1194664914 is the existing docs landing-page video, reused for the React section; the other two
+  are the performance screencasts. They will not render in GitHub's markdown preview, only in mkdocs.
   The advanced-viz images come as light/dark pairs (volcano_light.webp / volcano_dark.webp). Draft
   uses the light one only (GitHub renders both variants, looking like a duplicate). In mkdocs you can
   use the theme-aware pattern: img#only-light + img#only-dark to switch with the site theme.
-- NUMBERS: GitHub stars (47) and forks (4) are REAL as of 2026-07 (GitHub API). Deployment count and
-  container-image pulls are PLACEHOLDERS [N] - GHCR pull counts are not exposed by any API, fill by hand.
+- NUMBERS: star/fork counts and the [N] placeholders were dropped per author feedback; the "today"
+  section now names deployments instead. VERIFY before publishing: EMBL + SciLifeLab Serve as
+  production, and GHGA / MGnify (EMBL-EBI) / ISCIII as trials - these came from the author, not a
+  public source. The SciLifeLab webinar link and Serve availability ARE verified public pages.
   Performance numbers come from benchmark/PERF_REPORT_v2.md (single run, 12,019,500 rows, M1 Max /
   Colima, 1 dev API worker). v1's numbers described a different dataset AND a different dashboard -
   do not mix the two. Full report to be published alongside the follow-up post.
@@ -40,34 +43,74 @@ categories:
 
 <p align="center"><img src="../images/logo_hd.png" alt="Depictio" width="280"></p>
 
-When Depictio went live last year, I'll be honest, it was still a prototype. A
-promising one, running real dashboards for real people, but a prototype all the
-same, with the rough edges in performance and stability that come with that.
-Releasing 1.0 is me saying something different this time: Depictio is now a
-stable, production-ready product. This post is about what that actually means,
-and about everything that went into getting here.
+Depictio went live last year, and it worked. People built real dashboards with
+it and shared them. It was also slow on anything larger than a demo file, and it
+had bugs I found out about because someone else hit them first. Both of those
+things were true at once, and the second one is what the past year went into.
+
+1.0 is the version where that is fixed. Not "feature complete", which no tool
+ever is, but fast on real data, stable enough to leave running, and settled
+enough that building on top of it is a reasonable thing to do. Here is what
+changed.
 
 ![A Depictio dashboard in the viewer, with interactive filters](https://depictio.github.io/depictio-docs/images/v0.12/react-beta/page_dashboard_viewer.png)
 
 <!-- more -->
 
-## ✅ What 1.0 really means
+## ✅ What stopped moving
 
-A version number is a kind of promise. With 1.0, the promise is that the core has
-stopped moving: the data model, the API, and the viewer are stable enough that
-you can deploy Depictio for a lab, a core facility, or a consortium and build on
-top of it without the ground shifting under you.
+The practical meaning of 1.0 is that the data model, the API and the viewer are
+now stable. Projects you ingest today keep working. Dashboards you build today
+keep opening. Code you write against the API does not need rewriting at the next
+release.
 
-That is the real change here. Everything before was "you can try this." 1.0 is
-"you can rely on this." Depictio is no longer an experiment I'm asking people to
-test, it's a product I'm asking people to depend on, and that shift shaped every
-decision in this release.
+That matters more than it sounds. A dashboard is something you set up once and
+then come back to months later with new samples, often after the person who
+built it has moved on. That only works if the thing underneath holds still, and
+until now it did not.
+
+## ⚛️ The front end is now React
+
+The biggest structural change since launch is one you feel more than you see.
+
+<div style="max-width: 1200px; margin: 1.5rem auto 2rem auto;">
+<div style="padding: 64.29% 0 0 0; position: relative">
+  <iframe
+    src="https://player.vimeo.com/video/1194664914?h=4155d79379&amp;badge=0&amp;autopause=0&amp;player_id=0&amp;app_id=58479&amp;autoplay=1&amp;loop=1&amp;muted=1"
+    frameborder="0"
+    allow="autoplay; fullscreen; picture-in-picture; clipboard-write; encrypted-media; web-share"
+    referrerpolicy="strict-origin-when-cross-origin"
+    style="position: absolute; top: 0; left: 0; width: 100%; height: 100%"
+    title="Depictio, from project to dashboard"
+  ></iframe>
+  </div>
+  <p style="text-align: center; margin-top: 0.5rem; font-style: italic; color: #666;">🎬 Depictio end to end, on the React frontend.</p>
+</div>
+
+The entire front end was rebuilt in React and TypeScript, and the old Dash
+codebase is gone. Importantly, the interface looks the same: Dash is itself built
+on top of React, and Depictio's UI was made of Dash Mantine Components, so moving
+to React with Mantine directly let us keep the exact same visual identity while
+gaining full control over it.
+
+The bigger win is under the hood. Depictio used to run two servers side by side,
+FastAPI for the API and a Flask server under Dash for the interface. Now there's
+a single FastAPI backend with a cleanly decoupled React frontend talking to it.
+One server instead of two, a real separation between front and back, and as a
+nice bonus the automatic dashboard screenshots came out roughly twice as fast on
+the new stack.
+
+![The Depictio dashboards landing page on the new React frontend](https://depictio.github.io/depictio-docs/images/v0.12/react-beta/page_dashboards.png)
+
+That rebuild is also what made the next part possible: with the rendering path
+under our own control, we could go after what was actually slow.
 
 ## ⚡ A serious step forward in performance
 
-This is the part I'm most proud of, and it's the least visible in a screenshot.
-A lot of the past year went into making Depictio fast on real, large data
-instead of tidy little demo files. So here it is in motion instead.
+This is the one that had to be solved. Depictio was usable on demo files and
+painful on real ones, and that is the gap between a tool people try and a tool
+people keep. It is also the least visible thing in a screenshot, so here it is in
+motion instead.
 
 <div style="max-width: 1200px; margin: 1.5rem auto 2rem auto;">
 <div style="padding: 62.19% 0 0 0; position: relative">
@@ -83,15 +126,16 @@ instead of tidy little demo files. So here it is in motion instead.
   <p style="text-align: center; margin-top: 0.5rem; font-style: italic; color: #666;">🎬 A dashboard using the full range of components, over three linked collections, captured in the browser.</p>
 </div>
 
-Figures and cards now read straight from your Delta tables and pull only the
-columns they actually need, backed by a schema cache, so a chart doesn't drag the
-whole table across just to draw a few series. The figure engine is Polars-native
-now, with downsampling and Arrow for moving data around efficiently. Heavy
-rendering is pushed off to background workers with higher concurrency and gzip on
-the wire, which keeps the interface responsive while the expensive work happens
-somewhere else. MultiQC reports, which can get large, get filter-aware caching
-and prewarming so they don't recompute from scratch every time you touch a
-filter.
+Whatever you hand Depictio, CSV, TSV, Parquet or Excel, gets normalised into
+Delta tables at ingest, and every component then reads from those. Figures,
+cards, tables and the advanced visualisations all pull only the columns they
+actually need, backed by a schema cache, so a chart doesn't drag the whole table
+across just to draw a few series. The figure engine is Polars-native now, with
+downsampling and Arrow for moving data around efficiently. Heavy rendering is
+pushed off to background workers with higher concurrency and gzip on the wire,
+which keeps the interface responsive while the expensive work happens somewhere
+else. MultiQC reports, which can get large, get filter-aware caching and
+prewarming so they don't recompute from scratch every time you touch a filter.
 
 Some numbers, so those aren't just adjectives. On a dataset of **12 million rows**
 across three linked collections (1 GB raw, 1.4 GB as Delta), running on a laptop
@@ -130,34 +174,18 @@ exact, not sampled. That's half the figure renders in the run (114 of 225).
 Across the whole run, the largest data frame ever held in memory was **1.6 MB**,
 with a median of 439 KB.
 
-Honest caveats: this is a single run on one machine, and a production deployment
-runs several API workers rather than the one measured here, so these are on the
-pessimistic side. Density still costs, and past a point it stops being a matter of
-seconds: on the densest dashboards the four background workers stop clearing the
-queue of figure builds, and 44 renders over the run hit the configured 30 s
-ceiling and were cut off rather than finishing late, 28 of them in the
-thirty-component filter rounds alone. That's where the next round of work goes.
-No table, card, advanced visualisation or filter render failed. The full
-report, with methodology and the numbers that didn't flatter us, comes with the
-follow-up post.
+And one thing worth stressing about those numbers: they are a floor, not a
+ceiling. That run is a single laptop with **one API worker in dev mode**, with
+the auto-reloader attached. A real deployment runs several workers on server
+hardware, so it should comfortably beat everything above.
 
-## ⚛️ The front end is now React, same look, cleaner architecture
-
-The biggest structural change since launch is one you feel more than you see. The
-entire front end was rebuilt in React and TypeScript, and the old Dash codebase
-is gone. Importantly, the interface looks the same: Dash is itself built on top
-of React, and Depictio's UI was made of Dash Mantine Components, so moving to
-React with Mantine directly let us keep the exact same visual identity while
-gaining full control over it.
-
-The bigger win is under the hood. Depictio used to run two servers side by side,
-FastAPI for the API and a Flask server under Dash for the interface. Now there's
-a single FastAPI backend with a cleanly decoupled React frontend talking to it.
-One server instead of two, a real separation between front and back, and as a
-nice bonus the automatic dashboard screenshots came out roughly twice as fast on
-the new stack.
-
-![The Depictio dashboards landing page on the new React frontend](https://depictio.github.io/depictio-docs/images/v0.12/react-beta/page_dashboards.png)
+Where it does still hurt is density. On the heaviest dashboards the background
+workers stop clearing the queue of figure builds, and 44 renders over the run hit
+the configured 30 s ceiling and were cut off rather than finishing late, 28 of
+them in the thirty-component filter rounds alone. No table, card, advanced
+visualisation or filter render failed. That queue is where the next round of work
+goes. The full report, with methodology and the numbers that didn't flatter us,
+comes with the follow-up post.
 
 ## 🧬 Visualisations built for biology
 
@@ -225,15 +253,24 @@ can read every line if you want to.
 
 ## 📊 Where Depictio is today
 
-1.0 is also a good moment to look up from the code for a second. Depictio has been
-in the making for about three years, it's MIT-licensed, and as of this release it
-has 47 stars and 4 forks on GitHub. Small numbers, honest ones, and growing.
+1.0 is also a good moment to look up from the code for a second. Depictio has
+been in the making for about three years, it's MIT-licensed, and it is running in
+production in two places.
 
-Beyond GitHub, please fill in the real figures before publishing:
+At **EMBL**, where it started, it serves dashboards for groups across the
+institute. And at **SciLifeLab**, Depictio is available on
+[SciLifeLab Serve](https://serve.scilifelab.se/), the Swedish national platform
+for hosting research applications: any life-science researcher at a Swedish
+university can spin up their own Depictio instance there for free, no
+infrastructure and no sysadmin required. That is the deployment story I care most
+about, because it takes "self-hosted" and removes the part where you have to host
+it yourself. If you want to see it end to end, I presented exactly that workflow,
+building a dashboard privately and then publishing it to a public URL on Serve,
+in a [SciLifeLab webinar](https://www.scilifelab.se/event/depictio_dashboards/)
+as part of their Tools for AI/ML research in life sciences series.
 
-- deployed across **[N]** labs and core facilities, including several groups at
-  EMBL,
-- container images pulled more than **[N]** times.
+Beyond that, Depictio is being trialled at **GHGA** (the German Human Genome
+Phenome Archive), **MGnify** at EMBL-EBI, and **ISCIII** in Spain.
 
 None of that happened by accident, and all of it is why 1.0 felt worth doing
 properly.
