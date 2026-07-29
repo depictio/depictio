@@ -133,15 +133,19 @@ const VersionHistoryDrawer: React.FC<VersionHistoryDrawerProps> = ({
     [reload, onRestored, closeModal],
   );
 
-  const handlePreview = useCallback((version: DashboardVersionSummary) => {
-    // The viewer renders `?version=` read-only, behind an unmissable banner.
-    // A new tab, so the editor's unsaved state is left untouched.
-    window.open(
-      `/dashboard/${version.family_id}?version=${version.version_id}`,
-      '_blank',
-      'noopener',
-    );
-  }, []);
+  const handlePreview = useCallback(
+    (version: DashboardVersionSummary) => {
+      // Preview the tab the user is *on*, not the family's main tab. A version
+      // covers the whole family, so `family_id` is always the main tab's id —
+      // opening that would silently move a user previewing "Tab 3" onto a
+      // different tab and show them content they did not ask about.
+      const target = dashboardId || version.family_id;
+      // The viewer renders `?version=` read-only, behind an unmissable banner.
+      // A new tab, so the editor's unsaved state is left untouched.
+      window.open(`/dashboard/${target}?version=${version.version_id}`, '_blank', 'noopener');
+    },
+    [dashboardId],
+  );
 
   const handleTogglePin = useCallback(
     (version: DashboardVersionSummary) => {

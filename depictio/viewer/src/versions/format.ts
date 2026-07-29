@@ -11,6 +11,29 @@ import type { DashboardVersionSummary } from 'depictio-react-core';
 export { absTime, parseTs, relTime } from '../monitoring/format';
 import { parseTs } from '../monitoring/format';
 
+/**
+ * Full date and time for one version, e.g. "29 Jul 2026, 14:32:07".
+ *
+ * The monitoring `absTime` gives time-of-day only, which is right for a live
+ * log where every row is from today. A version timeline spans months, and a
+ * bare "14:32:07" against a version from March is actively misleading — the
+ * day-group heading is easy to scroll past, and the row is what gets read when
+ * choosing what to restore.
+ */
+export function absDateTime(iso?: string | null): string {
+  const ms = parseTs(iso);
+  if (Number.isNaN(ms)) return '—';
+  return new Date(ms).toLocaleString(undefined, {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  });
+}
+
 /** Day bucket label: "Today" / "Yesterday" / "3 Mar 2026". */
 export function dayLabel(iso?: string | null): string {
   const ms = parseTs(iso);

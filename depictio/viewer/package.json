@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "check:preview": "esbuild dev/preview_contract_check.mjs --bundle --platform=node --format=esm --outfile=node_modules/.cache/preview_check.mjs --log-level=error && node node_modules/.cache/preview_check.mjs",
     "build:catalog-preview": "vite build --config vite.catalog-preview.config.ts",
     "preview": "vite preview"
   },

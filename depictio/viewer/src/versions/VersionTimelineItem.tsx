@@ -12,7 +12,7 @@ import { ActionIcon, Badge, Group, Menu, Stack, Text, Timeline } from '@mantine/
 import { Icon } from '@iconify/react';
 import type { DashboardVersionSummary } from 'depictio-react-core';
 
-import { absTime, dataCoverageLabel, kindMeta, relTime, saveSpanLabel, versionTitle } from './format';
+import { absDateTime, dataCoverageLabel, kindMeta, relTime, saveSpanLabel, versionTitle } from './format';
 
 interface VersionTimelineItemProps {
   version: DashboardVersionSummary;
@@ -141,12 +141,12 @@ const VersionTimelineItem: React.FC<VersionTimelineItemProps> = ({
     >
       <Stack gap={1}>
         <Group gap={6} wrap="nowrap">
-          {/* Both stamps, not one. Relative time answers "how long ago" at a
-              glance, but picking the right version out of a day's worth of
-              autosaves needs the wall-clock time — and a tooltip cannot be
-              scanned down a list. */}
+          {/* Full date and time, not just the clock. Relative time answers "how
+              long ago" at a glance, but choosing between a day's worth of
+              autosaves needs the wall clock, and choosing between months needs
+              the date — the day-group heading scrolls out of view. */}
           <Text size="xs" c="dimmed" style={{ flexShrink: 0 }}>
-            {absTime(version.created_at)}
+            {absDateTime(version.created_at)}
           </Text>
           <Text size="xs" c="dimmed" style={{ flexShrink: 0 }}>
             · {relTime(version.created_at)}

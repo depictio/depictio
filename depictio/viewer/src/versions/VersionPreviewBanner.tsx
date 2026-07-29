@@ -16,20 +16,12 @@ import { Alert, Anchor, Badge, Group, Text } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import type { DashboardVersionDetail } from 'depictio-react-core';
 
+import { absDateTime } from './format';
+
 interface VersionPreviewBannerProps {
   version: DashboardVersionDetail;
   /** Where "back to current" goes — the same dashboard without `?version=`. */
   liveHref: string;
-}
-
-/** Human label for the timestamp, in the browser's locale. */
-function when(raw?: string | null): string {
-  if (!raw) return 'unknown time';
-  // The API emits offset-less UTC stamps; the monitoring helpers exist for
-  // this, but a banner should not pull in that module for one string.
-  const iso = /[zZ]|[+-]\d{2}:\d{2}$/.test(raw) ? raw : `${raw}Z`;
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? raw : d.toLocaleString();
 }
 
 const VersionPreviewBanner: React.FC<VersionPreviewBannerProps> = ({ version, liveHref }) => {
@@ -54,7 +46,7 @@ const VersionPreviewBanner: React.FC<VersionPreviewBannerProps> = ({ version, li
           Read-only
         </Badge>
         <Text size="sm" c="dimmed">
-          saved {when(version.created_at)}
+          saved {absDateTime(version.created_at)}
           {version.author_email ? ` by ${version.author_email}` : ''}
         </Text>
         <Anchor href={liveHref} size="sm" fw={500}>

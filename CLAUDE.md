@@ -112,8 +112,13 @@ Route dispatch is plain regex in `depictio/viewer/src/main.tsx` +
 - Retention is `version_store.prune_family()`, not a TTL index (a TTL cannot exempt pins)
 - UI: entry point is in the Settings drawer, not the header. `/dashboard/{id}?version={vid}`
   renders a snapshot read-only in the viewer (`src/versions/preview.ts`)
+- Preview **merges** the snapshot onto the live document — a `TabSnapshot` has no
+  `project_id`/`permissions` by design, so rendering it alone breaks data resolution.
+  Guarded by `npm run check:preview` (no JS test runner in this tree)
 - Version history covers **layout and components only**. Charts always read current data;
-  `DataCollectionStamp` records what the data *was*, but nothing reads it back yet
+  `DataCollectionStamp` records what the data *was*, but nothing reads it back yet.
+  Time travel is blocked on `deltatables_utils._generate_cache_keys`: the key is salted
+  with `aggregation_version` only, so a historical read would be cached under the live key
 
 ### Screenshot System
 - Playwright drives the React SPA; composite targeting via `.react-grid-item`
