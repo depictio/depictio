@@ -573,20 +573,35 @@ def _get_delta_location(
     return file_id
 
 
-def _create_delta_scan(file_id: str, dc_type: str | None = None) -> pl.LazyFrame:
+def _create_delta_scan(
+    file_id: str, dc_type: str | None = None, delta_version: int | None = None
+) -> pl.LazyFrame:
     """
     Create a Polars LazyFrame scan from Delta table location or parquet files.
 
     Args:
         file_id: S3 path or local path to Delta table or parquet files.
         dc_type: Data collection type (e.g., "MultiQC", "Table"). If "MultiQC", uses parquet scan.
+        delta_version: Delta commit to read, for time travel. ``None`` reads the
+            latest, which is every existing caller's behaviour.
 
     Returns:
         Polars LazyFrame for the Delta table or parquet files.
+
+    Raises:
+        ValueError: If ``delta_version`` is given for a non-Delta (parquet)
+            collection, which has no commit log to travel through. Failing is
+            the point — silently returning current data under a historical
+            label is the one outcome worth avoiding here.
     """
     # MultiQC data is stored as parquet, not delta tables
     # Case-insensitive check for MultiQC type
     if dc_type and dc_type.lower() == "multiqc":
+        if delta_version is not None:
+            raise ValueError(
+                f"Time travel is not available for '{dc_type}' collections: they are "
+                "stored as plain parquet with no commit log."
+            )
         # Handle both directory and file paths
         # If file_id ends with .parquet, it's a direct file path
         if file_id.endswith(".parquet"):
@@ -602,12 +617,13 @@ def _create_delta_scan(file_id: str, dc_type: str | None = None) -> pl.LazyFrame
             return pl.scan_parquet(f"{cache_path}/**/*.parquet")
         return pl.scan_parquet(parquet_pattern, storage_options=polars_s3_config)
 
-    # Standard delta table scan
+    # Standard delta table scan. `version=None` is polars' own default, so the
+    # non-time-travel path is byte-for-byte what it was.
     if USE_LOCAL_FILES:
         cache_path = cache_delta_table_from_s3(file_id, polars_s3_config)
-        return pl.scan_delta(cache_path)
+        return pl.scan_delta(cache_path, version=delta_version)
 
-    return pl.scan_delta(file_id, storage_options=polars_s3_config)
+    return pl.scan_delta(file_id, storage_options=polars_s3_config, version=delta_version)
 
 
 def _get_cached_schema(
@@ -1097,6 +1113,7 @@ def load_deltatable_lite(
     load_for_preview: bool = False,
     select_columns: list[str] | None = None,
     init_data: dict[str, dict] | None = None,
+    delta_version: int | None = None,
 ) -> pl.DataFrame:
     """
     Load a Delta table with adaptive memory management based on DataFrame size.
@@ -1125,6 +1142,9 @@ def load_deltatable_lite(
         select_columns: Columns to select for projection (None = all columns).
         init_data: Dashboard initialization data to avoid API/DB calls.
             Structure: {"dc_id": {"delta_location": str, "size_bytes": int}}
+        delta_version: Read this Delta commit instead of the latest — the data
+            time-travel path. ``None`` (the default) means "current", so every
+            existing caller is unaffected.
 
     Returns:
         The loaded and optionally filtered DataFrame.
@@ -1165,7 +1185,7 @@ def load_deltatable_lite(
                 else data_collection_id
             )
             dc_type = _get_dc_type_from_db(data_collection_id_obj)
-        delta_scan = _create_delta_scan(file_id, dc_type)
+        delta_scan = _create_delta_scan(file_id, dc_type, delta_version)
         delta_scan = _project_scan(delta_scan, effective_cols, data_collection_id_str, None)
         if limit_rows:
             delta_scan = delta_scan.limit(limit_rows)
@@ -1175,13 +1195,25 @@ def load_deltatable_lite(
     # CACHING ENABLED PATH
     _log_cache_status()
 
-    # Salt the cache keys with the latest aggregation_version so realtime
-    # ingest naturally invalidates this worker's per-process memory cache —
-    # `invalidate_data_collection_cache` from the WS handler only reaches the
-    # one worker that received the event, so without a per-version key the
-    # other 3 default workers keep serving the stale dataframe. The version
-    # bumps on every CLI rewrite, so the new fetch lands on a new key.
+    # Salt the cache keys so a frame is never served under a key that describes
+    # different data. Two things vary:
+    #
+    # 1. Latest `aggregation_version` — realtime ingest bumps it, which
+    #    naturally invalidates this worker's per-process cache.
+    #    `invalidate_data_collection_cache` from the WS handler only reaches
+    #    the one worker that received the event, so without a per-version key
+    #    the other 3 default workers keep serving the stale dataframe.
+    #
+    # 2. The requested `delta_version` — time travel. This one is a
+    #    *correctness* requirement, not an optimisation: salting on the latest
+    #    version alone would file a historical read under the live key and then
+    #    hand that historical frame to every caller asking for current data.
+    #    Silently wrong numbers, no error. Keyed as `_dvN` so a pinned read of
+    #    the newest commit still can't collide with an unpinned one — they are
+    #    equal today but diverge the moment the next commit lands.
     version_salt = _get_aggregation_version(data_collection_id_str)
+    if delta_version is not None:
+        version_salt = f"{version_salt or ''}_dv{delta_version}"
 
     # Generate cache keys
     base_cache_key, filtered_cache_key, filter_hash = _generate_cache_keys(
@@ -1237,7 +1269,7 @@ def load_deltatable_lite(
 
     # Get delta location and create scan
     file_id = _get_delta_location(data_collection_id_str, workflow_id_str, init_data, TOKEN)
-    delta_scan = _create_delta_scan(file_id, dc_type)
+    delta_scan = _create_delta_scan(file_id, dc_type, delta_version)
 
     # Apply column projection at scan level (schema-guarded; see _project_scan)
     delta_scan = _project_scan(delta_scan, effective_cols, data_collection_id_str, version_salt)

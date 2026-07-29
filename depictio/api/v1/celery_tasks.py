@@ -48,7 +48,9 @@ def build_figure_preview(payload: dict) -> dict:
             "selection_column"  (optional, render only),
           },
           "filter_metadata": [...],     # cleaned filters list
-          "theme": "light" | "dark"
+          "theme": "light" | "dark",
+          "delta_version": <int|None>   # optional; pin the read to a past
+                                        # Delta commit (data time travel)
         }
 
     Returns:
@@ -106,6 +108,7 @@ def build_figure_preview(payload: dict) -> dict:
         metadata=filter_metadata or None,
         select_columns=select_columns,
         init_data=init_data,
+        delta_version=payload.get("delta_version"),
     )
     load_ms = int((time.monotonic() - started) * 1000)
 

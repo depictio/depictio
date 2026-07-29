@@ -21,6 +21,10 @@ from depictio.api.v1.endpoints.dashboards_endpoints.core_functions import (
     reorder_child_tabs,
     sync_tab_family_permissions,
 )
+from depictio.api.v1.endpoints.dashboards_endpoints.data_versions import (
+    DataVersionPins,
+    resolve_data_versions,
+)
 from depictio.api.v1.endpoints.user_endpoints.routes import (
     get_current_user,
     get_user_or_anonymous,
@@ -40,6 +44,21 @@ _SCREENSHOTS_DIR = "/app/depictio/api/static/screenshots"
 # Mirrors the Dash auto-screenshot callback's 1h heuristic so the two
 # trigger sites agree on "stale".
 _SCREENSHOT_STALE_AFTER_S = 3600
+
+
+def _data_pins(request: dict) -> DataVersionPins:
+    """Time-travel pins for a render request, or empty pins for a live read.
+
+    Every render endpoint takes an untyped ``request`` body, so this is the one
+    place that reads the two time-travel keys. A malformed ``as_of_version``
+    (a version that no longer exists) is a 400 rather than a silent fallback to
+    current data: the caller asked for a specific past state, and answering
+    with today's numbers under that label is worse than an error.
+    """
+    try:
+        return resolve_data_versions(request)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 def _should_enqueue_screenshot(dashboard_id: str, now_s: float | None = None) -> bool:
@@ -1541,6 +1560,7 @@ def bulk_compute_cards(
     from depictio.api.v1.deltatables_utils import load_deltatable_lite
 
     filters = request.get("filters") or []
+    pins = _data_pins(request)
     requested_ids: list[str] | None = request.get("component_ids")
 
     dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
@@ -1669,7 +1689,12 @@ def bulk_compute_cards(
                 for fm in card_filters
             )
         )
-        return (str(wf_id), str(dc_id), filter_sig)
+        # The pinned Delta version is part of the identity of the frame, not a
+        # property of how it is read: two cards on the same collection at
+        # different commits hold genuinely different data and must not share a
+        # cache entry. Constant per collection today, but keyed anyway so that
+        # stays true if per-component pins ever land in one request.
+        return (str(wf_id), str(dc_id), filter_sig, pins.for_dc(str(dc_id)))
 
     # Column projection (#7) pre-pass: the slow Delta load is shared across
     # every card with the same (wf_id, dc_id, filter) signature, so the
@@ -1714,7 +1739,13 @@ def bulk_compute_cards(
         # aggregation_columns_specs. Mirrors what the Dash callback does via
         # compute_value's `cols_json` short-circuit. Avoids touching raw Delta
         # data — necessary for DCs whose Delta file has corrupted columns.
-        if not has_filters:
+        #
+        # Skipped entirely when this collection is pinned to an older commit:
+        # the specs describe the *latest* aggregation, so using them for a
+        # historical read would report today's mean under a past label — the
+        # one failure mode this feature exists to prevent. The slow path reads
+        # the pinned commit and is correct by construction.
+        if not has_filters and pins.for_dc(str(dc_id)) is None:
             specs = _get_specs(str(dc_id))
             col_specs = specs.get(column) or {}
             specs_value = col_specs.get(aggregation)
@@ -1770,6 +1801,7 @@ def bulk_compute_cards(
                     metadata=card_filters if card_filters else None,
                     select_columns=project_cols,
                     init_data=init_data,
+                    delta_version=pins.for_dc(str(dc_id)),
                 )
                 logger.debug(
                     f"bulk_compute_cards: loaded {cache_key}: shape={df.shape if df is not None else None}"
@@ -1923,6 +1955,7 @@ async def render_figure_endpoint(
         {"figure": <plotly fig dict>, "metadata": {visu_type, ...}}
     """
     filters = request.get("filters") or []
+    pins = _data_pins(request)
     theme = request.get("theme") or "light"
 
     dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
@@ -1990,7 +2023,12 @@ async def render_figure_endpoint(
     )
     response.headers["X-Celery-Path"] = "offloaded" if offload else "inline"
 
-    payload = {"metadata": metadata, "filter_metadata": filter_metadata, "theme": theme}
+    payload = {
+        "metadata": metadata,
+        "filter_metadata": filter_metadata,
+        "theme": theme,
+        "delta_version": pins.for_dc(str(dc_id)),
+    }
     try:
         return await offload_or_run(
             build_figure_preview_task,
@@ -2039,6 +2077,7 @@ def render_table_endpoint(
     from depictio.api.v1.deltatables_utils import load_deltatable_lite
 
     filters = request.get("filters") or []
+    pins = _data_pins(request)
     start = int(request.get("start") or 0)
     limit = int(request.get("limit") or 100)
     limit = max(1, min(limit, 500))
@@ -2102,6 +2141,7 @@ def render_table_endpoint(
             data_collection_id=str(dc_id),
             metadata=filter_metadata or None,
             init_data=init_data,
+            delta_version=pins.for_dc(str(dc_id)),
         )
     except Exception as e:
         logger.error(f"render_table: DC load failed: {e}", exc_info=True)
@@ -2183,6 +2223,7 @@ def render_image_paths_endpoint(
 
     body = request or {}
     filters = body.get("filters") or []
+    pins = _data_pins(body)
     body_max = body.get("max")
     chosen_max = body_max if body_max is not None else max
     limit = int(chosen_max) if chosen_max and int(chosen_max) > 0 else 50
@@ -2249,6 +2290,7 @@ def render_image_paths_endpoint(
             data_collection_id=str(dc_id),
             metadata=filter_metadata or None,
             init_data=init_data,
+            delta_version=pins.for_dc(str(dc_id)),
         )
     except Exception as e:
         logger.error(f"render_image_paths: DC load failed: {e}", exc_info=True)
@@ -2364,6 +2406,7 @@ def render_map_endpoint(
     from depictio.api.v1.services.map.render import render_map
 
     filters = request.get("filters") or []
+    pins = _data_pins(request)
     theme = request.get("theme") or "light"
 
     dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
@@ -2421,6 +2464,7 @@ def render_map_endpoint(
             data_collection_id=str(dc_id),
             metadata=filter_metadata or None,
             init_data=init_data,
+            delta_version=pins.for_dc(str(dc_id)),
         )
     except Exception as e:
         logger.error(f"render_map: DC load failed for {dc_id}: {e}", exc_info=True)
