@@ -202,6 +202,26 @@ consume the day's report.
 To watch without transmitting anything, set `DEPICTIO_TELEMETRY_DEBUG=true`. Every
 payload is then written to the application log instead of being sent.
 
+### Prove the pipeline end to end
+
+Three scripts run the real send path — the real payload builder against your real
+database, the real gates, the real HTTP client — against a throwaway collector
+started in-process, so they verify the behaviour without transmitting anything:
+
+```bash
+# from inside the API container / your Depictio environment
+python scripts/telemetry_e2e_check.py    # payload, leak scan, transport
+python scripts/telemetry_boot_check.py   # boot path, send-once guard, opt-out
+python scripts/telemetry_cli_check.py    # cli_command, argument scrubbing
+```
+
+They assert what this page promises rather than restating it. The leak scan walks
+your entire live settings tree and fails if any configured string — hostname,
+credential, bucket, endpoint — appears in a payload. The CLI check invokes real
+commands with credentials, paths and S3 URIs in the arguments and fails if any of
+it reaches the collector. `telemetry_e2e_check.py --live` sends to the configured
+collector instead, and prints the installation ID so the events can be found.
+
 ## How to turn it off
 
 Any one of these is enough:
