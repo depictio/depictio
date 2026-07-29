@@ -8,6 +8,7 @@ import Plot from 'react-plotly.js';
 import Plotly from 'plotly.js';
 
 import { renderFigure, InteractiveFilter, StoredMetadata } from '../api';
+import { useDataVersionRequest } from '../dataVersions';
 import { extractScatterSelection } from '../selection';
 import { useInView } from '../hooks/useInView';
 import { useNewItemIds } from '../hooks/useNewItemIds';
@@ -54,6 +55,10 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { colorScheme } = useMantineColorScheme();
+  // Data time travel: `body` merges into the request, `key` goes in the fetch
+  // effect's deps so a pin change actually refetches instead of relabelling
+  // stale data.
+  const { body: versionBody, key: versionKey } = useDataVersionRequest();
   const theme: 'light' | 'dark' = colorScheme === 'dark' ? 'dark' : 'light';
   const [containerRef, inView] = useInView<HTMLDivElement>('200px');
 
@@ -94,7 +99,7 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
     let cancelled = false;
     setLoading(true);
     setError(null);
-    renderFigure(dashboardId, metadata.index, filtersForFetch, theme)
+    renderFigure(dashboardId, metadata.index, filtersForFetch, theme, versionBody)
       .then((res) => {
         if (cancelled) return;
         // Keep the previous figure mounted while the next response is in
@@ -114,7 +119,7 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dashboardId, metadata.index, JSON.stringify(filtersForFetch), theme, inView, refreshTick]);
+  }, [dashboardId, metadata.index, JSON.stringify(filtersForFetch), theme, inView, refreshTick, versionKey]);
 
   // First-paint loader vs refetch overlay: only show the big "Rendering…"
   // block until we have something to show; subsequent fetches keep the

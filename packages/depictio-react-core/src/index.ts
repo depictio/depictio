@@ -249,6 +249,18 @@ export {
   useAvailableSet,
 } from './availableValues';
 
+// Data time travel: which Delta commit each collection is read at. Set by the
+// viewer, consumed by every renderer's fetch.
+export {
+  DataVersionProvider,
+  useDataVersions,
+  useDataVersionFor,
+  useDataVersionRequest,
+  useIsTimeTravelling,
+  dataVersionBody,
+} from './dataVersions';
+export type { DataVersionPins, DataVersionState } from './dataVersions';
+
 // Real-time event subscription (WebSocket /events/ws)
 export { useDataCollectionUpdates, useMonitoringEvents, ADMIN_MONITORING_CHANNEL } from './realtime';
 export type {

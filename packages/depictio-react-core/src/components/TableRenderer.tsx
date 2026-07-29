@@ -14,6 +14,7 @@ import type {
 } from 'ag-grid-community';
 
 import { renderTable, InteractiveFilter, StoredMetadata } from '../api';
+import { useDataVersionRequest } from '../dataVersions';
 import { extractRowSelection } from '../selection';
 import { useInView } from '../hooks/useInView';
 import { useNewItemIds } from '../hooks/useNewItemIds';
@@ -64,6 +65,10 @@ const TableRenderer: React.FC<TableRendererProps> = ({
   const [total, setTotal] = useState(0);
   const [ready, setReady] = useState(false);
   const { colorScheme } = useMantineColorScheme();
+  // Data time travel: `body` merges into the request, `key` goes in the fetch
+  // effect's deps so a pin change actually refetches instead of relabelling
+  // stale data.
+  const { body: versionBody, key: versionKey } = useDataVersionRequest();
   const isDark = colorScheme === 'dark';
   const [containerRef, inView] = useInView<HTMLDivElement>('200px');
 
@@ -109,7 +114,7 @@ const TableRenderer: React.FC<TableRendererProps> = ({
     let cancelled = false;
     setLoading(true);
     setError(null);
-    renderTable(dashboardId, metadata.index, filtersForFetch, 0, 1)
+    renderTable(dashboardId, metadata.index, filtersForFetch, 0, 1, null, 'desc', versionBody)
       .then((res) => {
         if (cancelled) return;
         const selectionOn =
@@ -222,7 +227,7 @@ const TableRenderer: React.FC<TableRendererProps> = ({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dashboardId, metadata.index, inView, ready]);
+  }, [dashboardId, metadata.index, inView, ready, versionKey]);
 
   const showInitialLoader = !inView || (!ready && loading);
   const showRefetchOverlay = ready && loading;
@@ -257,7 +262,7 @@ const TableRenderer: React.FC<TableRendererProps> = ({
       typeof metadata.page_size === 'number'
         ? Math.min(Math.max(metadata.page_size as number, 1), 200)
         : 50;
-    renderTable(dashboardId, metadata.index, filtersForFetch, 0, pageSize)
+    renderTable(dashboardId, metadata.index, filtersForFetch, 0, pageSize, null, 'desc', versionBody)
       .then((res) => {
         if (cancelled) return;
         const ids: string[] = [];
@@ -274,7 +279,7 @@ const TableRenderer: React.FC<TableRendererProps> = ({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dashboardId, metadata.index, ready, rowIdColumn, JSON.stringify(filtersForFetch), refreshTick]);
+  }, [dashboardId, metadata.index, ready, rowIdColumn, JSON.stringify(filtersForFetch), refreshTick, versionKey]);
 
   const newRowIds = useNewItemIds(snapshotIds, refreshTick);
   const highlightDurationMs =
@@ -347,6 +352,7 @@ const TableRenderer: React.FC<TableRendererProps> = ({
           limit,
           sortRef.current.sortBy,
           sortRef.current.sortDir,
+          versionBody,
         )
           .then((res) => {
             // lastRow tells the grid the total — required so the scrollbar is
@@ -364,7 +370,11 @@ const TableRenderer: React.FC<TableRendererProps> = ({
           });
       },
     }),
-    [dashboardId, metadata.index],
+    // `versionBody` is captured in the closure above, so the datasource has to
+    // be rebuilt when the pin changes — otherwise the grid keeps calling the
+    // old one and pages in rows from the previous Delta commit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [dashboardId, metadata.index, versionKey],
   );
 
   // When the user clicks a header to sort (or clears a sort), capture the

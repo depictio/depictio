@@ -14,8 +14,10 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import {
   Alert,
+  Badge,
   Box,
   Button,
+  Collapse,
   Divider,
   Drawer,
   Group,
@@ -38,9 +40,12 @@ import {
   restoreDashboardVersion,
   unpinDashboardVersion,
   type DashboardVersionSummary,
+  type DataVersionPins,
+  type StoredMetadata,
 } from 'depictio-react-core';
 
 import { groupByDay, versionTitle } from './format';
+import DatasetVersionPicker from './DatasetVersionPicker';
 import VersionTimelineItem from './VersionTimelineItem';
 import { useVersionHistory } from './useVersionHistory';
 import './versions.css';
@@ -65,6 +70,20 @@ interface VersionHistoryDrawerProps {
   previewTarget?: 'new-tab' | 'same-tab';
   /** Called after a restore lands so the host can refetch the dashboard. */
   onRestored?: () => void;
+
+  // ── Data time travel ──────────────────────────────────────────────────
+  // Absent in hosts that cannot time travel (the editor), where the whole
+  // section is hidden rather than shown inert.
+  /** Components of the dashboard on screen — used to find its collections. */
+  dashboardMetadata?: StoredMetadata[];
+  /** Per-collection Delta pins currently applied. */
+  dataPins?: DataVersionPins;
+  onDataPinsChange?: (pins: DataVersionPins) => void;
+  /** Stored version whose data stamps are driving the view, if any. */
+  asOfVersionId?: string | null;
+  /** `label` is for the banner, so it can name the version rather than say
+   *  "historical". Called with (null, null) to return to current data. */
+  onAsOfChange?: (versionId: string | null, label: string | null) => void;
 }
 
 type PendingAction =
@@ -98,6 +117,11 @@ const VersionHistoryDrawer: React.FC<VersionHistoryDrawerProps> = ({
   canSnapshot,
   previewTarget = 'new-tab',
   onRestored,
+  dashboardMetadata,
+  dataPins,
+  onDataPinsChange,
+  asOfVersionId,
+  onAsOfChange,
 }) => {
   const showSnapshot = canSnapshot ?? canEdit;
   const { versions, currentVersionId, total, loading, error, reload } = useVersionHistory(
@@ -163,6 +187,27 @@ const VersionHistoryDrawer: React.FC<VersionHistoryDrawerProps> = ({
       }
     },
     [dashboardId, previewTarget],
+  );
+
+  // Toggling: picking the version already driving the view returns to current
+  // data, so the same row both enters and leaves time travel. One affordance,
+  // no separate "stop" the user has to find.
+  const [datasetsOpen, setDatasetsOpen] = useState(false);
+  const toggleDatasets = useCallback(() => setDatasetsOpen((v) => !v), []);
+  const pinnedCount = Object.values(dataPins ?? {}).filter(
+    (v) => typeof v === 'number',
+  ).length;
+
+  const handleUseData = useCallback(
+    (version: DashboardVersionSummary) => {
+      if (!onAsOfChange) return;
+      if (version.version_id === asOfVersionId) {
+        onAsOfChange(null, null);
+      } else {
+        onAsOfChange(version.version_id, versionTitle(version));
+      }
+    },
+    [onAsOfChange, asOfVersionId],
   );
 
   const handleTogglePin = useCallback(
@@ -247,6 +292,8 @@ const VersionHistoryDrawer: React.FC<VersionHistoryDrawerProps> = ({
                   }}
                   onRestore={(v) => setPending({ type: 'restore', version: v })}
                   onDelete={(v) => setPending({ type: 'delete', version: v })}
+                  onUseData={onAsOfChange ? handleUseData : undefined}
+                  dataActive={version.version_id === asOfVersionId}
                 />
               ))}
             </Timeline>
@@ -330,7 +377,57 @@ const VersionHistoryDrawer: React.FC<VersionHistoryDrawerProps> = ({
             offsetScrollbars
             scrollbarSize={8}
           >
-            {body}
+            <Stack gap="md">
+              {/* Dataset versions sit *above* the timeline because they answer
+                  the coarser question — which data — while the timeline
+                  answers which layout. Collapsed by default so the common
+                  case (browsing layout history) is unchanged, and because
+                  opening it is what triggers the history fetches. */}
+              {onDataPinsChange && (
+                <Box>
+                  <Group
+                    justify="space-between"
+                    wrap="nowrap"
+                    gap="xs"
+                    style={{ cursor: 'pointer' }}
+                    onClick={toggleDatasets}
+                    data-testid="dataset-versions-toggle"
+                  >
+                    <Group gap={6} wrap="nowrap">
+                      <Icon icon="mdi:database-clock-outline" width={15} />
+                      <Text size="sm" fw={600}>
+                        Dataset version
+                      </Text>
+                      {pinnedCount > 0 && (
+                        <Badge size="xs" color="yellow" variant="filled">
+                          {pinnedCount}
+                        </Badge>
+                      )}
+                    </Group>
+                    <Icon
+                      icon={datasetsOpen ? 'tabler:chevron-up' : 'tabler:chevron-down'}
+                      width={15}
+                    />
+                  </Group>
+                  <Collapse in={datasetsOpen}>
+                    <Stack gap="xs" pt="xs">
+                      <Text size="xs" c="dimmed">
+                        Draw this dashboard from an earlier state of its data.
+                        Nothing is saved — reloading returns to current data.
+                      </Text>
+                      <DatasetVersionPicker
+                        metadata={dashboardMetadata}
+                        active={datasetsOpen}
+                        pins={dataPins ?? {}}
+                        onPinsChange={onDataPinsChange}
+                      />
+                    </Stack>
+                  </Collapse>
+                  <Divider mt="md" />
+                </Box>
+              )}
+              {body}
+            </Stack>
           </ScrollArea>
         </Stack>
       </Drawer>

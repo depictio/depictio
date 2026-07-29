@@ -25,6 +25,11 @@ interface VersionTimelineItemProps {
   onRename: (version: DashboardVersionSummary) => void;
   onRestore: (version: DashboardVersionSummary) => void;
   onDelete: (version: DashboardVersionSummary) => void;
+  /** Show this version's *data* without touching the layout. Absent in hosts
+   *  that cannot time travel (the editor), where the option would be dead. */
+  onUseData?: (version: DashboardVersionSummary) => void;
+  /** True when this version's data is the one currently on screen. */
+  dataActive?: boolean;
 }
 
 const VersionTimelineItem: React.FC<VersionTimelineItemProps> = ({
@@ -38,10 +43,15 @@ const VersionTimelineItem: React.FC<VersionTimelineItemProps> = ({
   onRename,
   onRestore,
   onDelete,
+  onUseData,
+  dataActive = false,
 }) => {
   const meta = kindMeta(version.kind);
   const span = saveSpanLabel(version);
   const coverage = dataCoverageLabel(version.data_version_kinds || {});
+  // Only a version that recorded a Delta commit can be travelled to. Offering
+  // it otherwise would promise a pin the backend has to decline.
+  const hasPinnableData = (version.data_version_kinds?.delta ?? 0) > 0;
 
   return (
     <Timeline.Item
@@ -69,6 +79,11 @@ const VersionTimelineItem: React.FC<VersionTimelineItemProps> = ({
                 Restored
               </Badge>
             )}
+            {dataActive && (
+              <Badge size="xs" variant="filled" color="yellow">
+                Data
+              </Badge>
+            )}
           </Group>
 
           <Menu position="bottom-end" withinPortal width={190}>
@@ -92,6 +107,21 @@ const VersionTimelineItem: React.FC<VersionTimelineItemProps> = ({
               >
                 Preview
               </Menu.Item>
+              {onUseData && (
+                <Menu.Item
+                  leftSection={
+                    <Icon
+                      icon={dataActive ? 'mdi:database-check' : 'mdi:database-clock-outline'}
+                      width={14}
+                    />
+                  }
+                  onClick={() => onUseData(version)}
+                  disabled={!hasPinnableData}
+                  data-testid="version-use-data"
+                >
+                  {dataActive ? 'Back to current data' : 'Use this data'}
+                </Menu.Item>
+              )}
               <Menu.Item
                 leftSection={
                   <Icon icon={version.pinned ? 'mdi:pin-off' : 'mdi:pin'} width={14} />

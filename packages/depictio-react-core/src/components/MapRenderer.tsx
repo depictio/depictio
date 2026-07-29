@@ -3,6 +3,7 @@ import { Paper, Loader, Text, Stack, useMantineColorScheme } from '@mantine/core
 import Plot from 'react-plotly.js';
 
 import { renderMap, InteractiveFilter, StoredMetadata } from '../api';
+import { useDataVersionRequest } from '../dataVersions';
 import { extractScatterSelection } from '../selection';
 import RefetchOverlay from './RefetchOverlay';
 
@@ -39,6 +40,10 @@ const MapRenderer: React.FC<MapRendererProps> = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { colorScheme } = useMantineColorScheme();
+  // Data time travel: `body` merges into the request, `key` goes in the fetch
+  // effect's deps so a pin change actually refetches instead of relabelling
+  // stale data.
+  const { body: versionBody, key: versionKey } = useDataVersionRequest();
   const theme: 'light' | 'dark' = colorScheme === 'dark' ? 'dark' : 'light';
 
   const mapType = (metadata.map_type as string) || 'scatter_map';
@@ -69,7 +74,7 @@ const MapRenderer: React.FC<MapRendererProps> = ({
     let cancelled = false;
     setLoading(true);
     setError(null);
-    renderMap(dashboardId, metadata.index, filtersForFetch, theme)
+    renderMap(dashboardId, metadata.index, filtersForFetch, theme, versionBody)
       .then((res) => {
         if (cancelled) return;
         // Keep the previous map mounted while the next response is in
@@ -88,7 +93,7 @@ const MapRenderer: React.FC<MapRendererProps> = ({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dashboardId, metadata.index, JSON.stringify(filtersForFetch), theme, refreshTick]);
+  }, [dashboardId, metadata.index, JSON.stringify(filtersForFetch), theme, refreshTick, versionKey]);
 
   const isInitialLoad = figure === null;
   const showInitialLoader = isInitialLoad && loading;

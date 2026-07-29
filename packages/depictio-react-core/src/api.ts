@@ -435,13 +435,18 @@ export async function bulkComputeCards(
   dashboardId: string,
   filters: InteractiveFilter[],
   componentIds?: string[],
+  dataVersions?: Record<string, unknown>,
 ): Promise<BulkComputeResponse> {
   const res = await fetch(
     `${API_BASE}/dashboards/bulk_compute_cards/${dashboardId}`,
     {
       method: 'POST',
       headers: authHeaders(),
-      body: JSON.stringify({ filters, component_ids: componentIds }),
+      body: JSON.stringify({
+        filters,
+        component_ids: componentIds,
+        ...(dataVersions ?? {}),
+      }),
     },
   );
   if (!res.ok) throw new Error(`Failed to bulk-compute cards: ${res.status}`);
@@ -459,13 +464,14 @@ export async function renderFigure(
   componentId: string,
   filters: InteractiveFilter[],
   theme: 'light' | 'dark' = 'light',
+  dataVersions?: Record<string, unknown>,
 ): Promise<FigureResponse> {
   const res = await fetch(
     `${API_BASE}/dashboards/render_figure/${dashboardId}/${componentId}`,
     {
       method: 'POST',
       headers: authHeaders(),
-      body: JSON.stringify({ filters, theme }),
+      body: JSON.stringify({ filters, theme, ...(dataVersions ?? {}) }),
     },
   );
   if (!res.ok) throw new Error(`Failed to render figure: ${res.status}`);
@@ -927,6 +933,7 @@ export async function renderTable(
   limit = 100,
   sortBy?: string | null,
   sortDir: 'asc' | 'desc' = 'desc',
+  dataVersions?: Record<string, unknown>,
 ): Promise<TableResponse> {
   const res = await fetch(
     `${API_BASE}/dashboards/render_table/${dashboardId}/${componentId}`,
@@ -939,6 +946,7 @@ export async function renderTable(
         limit,
         sort_by: sortBy ?? null,
         sort_dir: sortDir,
+        ...(dataVersions ?? {}),
       }),
     },
   );
@@ -977,13 +985,20 @@ export async function fetchImagePaths(
   filters: InteractiveFilter[] = [],
   sortBy?: string | null,
   sortDir: 'asc' | 'desc' = 'desc',
+  dataVersions?: Record<string, unknown>,
 ): Promise<ImageGridResponse> {
   const res = await fetch(
     `${API_BASE}/dashboards/render_image_paths/${dashboardId}/${componentId}`,
     {
       method: 'POST',
       headers: authHeaders(),
-      body: JSON.stringify({ filters, max, sort_by: sortBy ?? null, sort_dir: sortDir }),
+      body: JSON.stringify({
+        filters,
+        max,
+        sort_by: sortBy ?? null,
+        sort_dir: sortDir,
+        ...(dataVersions ?? {}),
+      }),
     },
   );
   if (!res.ok) throw new Error(`Failed to fetch image paths: ${res.status}`);
@@ -996,13 +1011,14 @@ export async function renderMap(
   componentId: string,
   filters: InteractiveFilter[],
   theme: 'light' | 'dark' = 'light',
+  dataVersions?: Record<string, unknown>,
 ): Promise<FigureResponse> {
   const res = await fetch(
     `${API_BASE}/dashboards/render_map/${dashboardId}/${componentId}`,
     {
       method: 'POST',
       headers: authHeaders(),
-      body: JSON.stringify({ filters, theme }),
+      body: JSON.stringify({ filters, theme, ...(dataVersions ?? {}) }),
     },
   );
   if (!res.ok) throw new Error(`Failed to render map: ${res.status}`);

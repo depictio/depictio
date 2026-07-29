@@ -21,6 +21,8 @@ import {
   fetchAllDashboards,
   bulkComputeCards,
   AvailableFilterValuesProvider,
+  DataVersionProvider,
+  dataVersionBody,
   ComponentRenderer,
   DashboardGrid,
   InteractiveGroupCard,
@@ -38,6 +40,7 @@ import {
   fetchDashboardVersion,
 } from 'depictio-react-core';
 import type {
+  DataVersionPins,
   DashboardData,
   DashboardPermissions,
   DashboardSummary,
@@ -52,6 +55,8 @@ import { parseTemplateOrigin } from './projects/template';
 import { dashboardFromVersion, extractPreviewVersionId } from './versions/preview';
 import VersionPreviewBanner from './versions/VersionPreviewBanner';
 import VersionHistoryDrawer from './versions/VersionHistoryDrawer';
+import DataVersionBanner from './versions/DataVersionBanner';
+import { collectDataCollections } from './versions/useDatasetHistories';
 
 /** localStorage key for the dismissed ingestion banner, scoped per project so
  *  the dismissal sticks across the dashboard's sibling tabs. */
@@ -96,6 +101,46 @@ const App: React.FC = () => {
   const [desktopOpened, toggleDesktop] = useSidebarOpen();
   const [settingsOpened, { open: openSettings, close: closeSettings }] = useDisclosure(false);
   const [versionsOpened, { open: openVersions, close: closeVersions }] = useDisclosure(false);
+  // Data time travel. Deliberately view-state, not persisted: a dashboard
+  // silently stuck on old data is a trap, and a reload should return you to
+  // the present.
+  //   `dataPins`      — per-collection Delta commits (the manual grain).
+  //   `asOfVersionId` — a stored dashboard version whose stamps the backend
+  //                     expands into pins for every collection at once.
+  const [dataPins, setDataPins] = useState<DataVersionPins>({});
+  const [asOfVersionId, setAsOfVersionId] = useState<string | null>(null);
+  // Request fragment + a stable dependency key. The key has to reach every
+  // fetch effect: without it the body would change while the effect never
+  // re-ran, leaving stale numbers under a new label.
+  const versionBody = useMemo(
+    () => dataVersionBody({ asOfVersionId, pins: dataPins }),
+    [asOfVersionId, dataPins],
+  );
+  const versionKey = JSON.stringify(versionBody);
+  const timeTravelling = Object.keys(versionBody).length > 0;
+
+  // Collections are named by tag in the banner — an ObjectId tells the reader
+  // nothing about which dataset is pinned.
+  const pinnedLabels = useMemo(() => {
+    const byId = new Map(
+      collectDataCollections(dashboard?.stored_metadata).map((c) => [c.dcId, c.label]),
+    );
+    return Object.entries(dataPins)
+      .filter(([, v]) => typeof v === 'number')
+      .map(([dcId, version]) => ({
+        label: byId.get(dcId) ?? dcId,
+        version: version as number,
+      }));
+  }, [dataPins, dashboard?.stored_metadata]);
+
+  const clearDataVersions = useCallback(() => {
+    setDataPins({});
+    setAsOfVersionId(null);
+  }, []);
+
+  // Set by the drawer when the user picks "use this data" on a timeline row,
+  // so the banner can say *which* version rather than just "historical".
+  const [asOfLabel, setAsOfLabel] = useState<string | null>(null);
   const { user: currentUser } = useCurrentUser();
   const isOwner = isDashboardOwner(dashboard, currentUser?.email ?? null);
   const dashboardId = extractDashboardId();
@@ -219,7 +264,7 @@ const App: React.FC = () => {
       // snap every card back to ``…`` on every keystroke / drag step.
       if (bulkCtrl.current) bulkCtrl.current.abort();
       bulkCtrl.current = new AbortController();
-      bulkComputeCards(dashboardId, filters, cardIds)
+      bulkComputeCards(dashboardId, filters, cardIds, versionBody)
         .then((res) => {
           setCardValues(res.values);
           setCardSecondaryValues(res.secondary_values || {});
@@ -230,7 +275,7 @@ const App: React.FC = () => {
         .finally(() => setCardsLoading(false));
     }, 250);
     return () => clearTimeout(timer);
-  }, [dashboard, dashboardId, stableFilterKey(filters), refreshTick]);
+  }, [dashboard, dashboardId, stableFilterKey(filters), refreshTick, versionKey]);
 
   const handleFilterChange = useCallback(
     (update: InteractiveFilter) => {
@@ -429,6 +474,10 @@ const App: React.FC = () => {
       dashboardMetadata={dashboard?.stored_metadata}
       projectId={dashboard?.project_id}
     >
+      {/* Every renderer reads its pin from here rather than taking it as a
+          prop: the fetch happens deep in the shared component package, and
+          the decision is made up here. */}
+      <DataVersionProvider asOfVersionId={asOfVersionId} pins={dataPins}>
       <AppShell
       header={{ height: 50 }}
       navbar={{
@@ -493,6 +542,13 @@ const App: React.FC = () => {
           <VersionPreviewBanner
             version={previewVersion}
             liveHref={`/dashboard/${dashboardId}`}
+          />
+        )}
+        {timeTravelling && (
+          <DataVersionBanner
+            pinned={pinnedLabels}
+            asOfLabel={asOfLabel}
+            onClear={clearDataVersions}
           />
         )}
         {ingestionHealth &&
@@ -791,6 +847,18 @@ const App: React.FC = () => {
         // one on screen behind the drawer.
         canSnapshot={isOwner && !previewVersionId}
         previewTarget="same-tab"
+        dashboardMetadata={dashboard?.stored_metadata}
+        dataPins={dataPins}
+        onDataPinsChange={setDataPins}
+        asOfVersionId={asOfVersionId}
+        onAsOfChange={(versionId, label) => {
+          setAsOfVersionId(versionId);
+          setAsOfLabel(label);
+          // A dashboard-level "as of" supersedes hand-picked collection pins;
+          // leaving them would silently override the version the user just
+          // asked for, on exactly the collections they had touched before.
+          if (versionId) setDataPins({});
+        }}
         onRestored={() => {
           if (previewVersionId && dashboardId) {
             window.location.href = `/dashboard/${dashboardId}`;
@@ -800,6 +868,7 @@ const App: React.FC = () => {
         }}
       />
     </AppShell>
+      </DataVersionProvider>
     </AvailableFilterValuesProvider>
   );
 };
