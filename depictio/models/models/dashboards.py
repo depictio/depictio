@@ -18,6 +18,7 @@ Component Architecture:
 """
 
 import re
+import uuid
 from pathlib import Path
 from typing import Any, ClassVar, Optional
 
@@ -204,6 +205,36 @@ class DashboardDataLite(BaseModel):
         "multiqc": MultiQCLiteComponent,
         "map": MapLiteComponent,
     }
+
+    @model_validator(mode="after")
+    def validate_component_tags_unique(self) -> "DashboardDataLite":
+        """Reject duplicate component tags.
+
+        A tag becomes the component's ``index`` on import, and the index is what
+        addresses a component: an export URL, a filter binding, a layout entry.
+        Two components sharing one would collide silently — the second would
+        overwrite the first's layout, and a filter would bind to whichever the
+        lookup happened to find. Nothing enforced this before because the index
+        was a fresh UUID that could not collide.
+        """
+        seen: dict[str, int] = {}
+        duplicates: list[str] = []
+        for position, comp in enumerate(self.components):
+            data = comp if isinstance(comp, dict) else comp.model_dump()
+            tag = data.get("tag")
+            if not tag:
+                continue
+            if tag in seen:
+                duplicates.append(
+                    f"component[{position}] reuses tag {tag!r} from component[{seen[tag]}]"
+                )
+            else:
+                seen[tag] = position
+        if duplicates:
+            raise ValueError(
+                "Component tags must be unique within a dashboard:\n" + "\n".join(duplicates)
+            )
+        return self
 
     @model_validator(mode="after")
     def validate_components_domain(self) -> "DashboardDataLite":
@@ -400,8 +431,18 @@ class DashboardDataLite(BaseModel):
 
     @staticmethod
     def _is_uuid_like(value: str) -> bool:
-        """Check whether a string looks like an auto-generated UUID."""
-        return value.count("-") >= 4 or len(value) > 30
+        """Is this string an actual auto-generated UUID?
+
+        Parsed rather than guessed by shape. The old heuristic ("4+ hyphens, or
+        longer than 30 characters") also matched descriptive tags such as
+        ``multiqc-general-statistics-panel``, and since tags now become indices
+        that would drop a *meaningful* index from the exported YAML.
+        """
+        try:
+            uuid.UUID(value)
+        except ValueError:
+            return False
+        return True
 
     @staticmethod
     def _is_empty_value(value: Any) -> bool:
@@ -526,8 +567,12 @@ class DashboardDataLite(BaseModel):
             value = comp[key]
             if DashboardDataLite._is_empty_value(value):
                 continue
-            if key == "index" and isinstance(value, str) and DashboardDataLite._is_uuid_like(value):
-                continue
+            # Drop the index when re-importing would reproduce it: a generated
+            # UUID carries no meaning, and an index equal to the tag is derived
+            # from it. Anything else is a real id the round trip must preserve.
+            if key == "index" and isinstance(value, str):
+                if DashboardDataLite._is_uuid_like(value) or value == comp.get("tag"):
+                    continue
             if is_table and key in table_defaults and value == table_defaults[key]:
                 continue
             if key in mandatory_keys:
@@ -943,7 +988,10 @@ class DashboardDataLite(BaseModel):
         def build_base_component(comp_dict: dict[str, Any]) -> dict[str, Any]:
             """Build base component with common fields."""
             base: dict[str, Any] = {
-                "index": comp_dict.get("index") or str(uuid.uuid4()),
+                # `tag` is the identifier the YAML author wrote; `BaseLiteComponent.
+                # ensure_index` already promotes it to `index`, but a raw dict
+                # component skips that model, so honour it here too.
+                "index": comp_dict.get("index") or comp_dict.get("tag") or str(uuid.uuid4()),
                 "component_type": comp_dict.get("component_type", "figure"),
                 "title": comp_dict.get("title", ""),
                 "workflow_tag": comp_dict.get("workflow_tag"),

@@ -75,9 +75,21 @@ class BaseLiteComponent(BaseModel):
 
     @model_validator(mode="after")
     def ensure_index(self) -> "BaseLiteComponent":
-        """Auto-generate index UUID if not provided."""
+        """Derive the index from ``tag``, falling back to a fresh UUID.
+
+        ``index`` is what addresses a component from outside the dashboard: an
+        export URL, a saved embed, a host page pinning one panel. Minting a UUID
+        here meant every re-import produced new ids, so editing one component in
+        a YAML silently invalidated every reference to every component on that
+        dashboard.
+
+        ``tag`` is already documented as the user-facing identifier and is
+        required to be unique within a dashboard, so using it as the index is
+        what makes re-import idempotent. A component with no tag still gets a
+        UUID, which keeps the old behaviour for anything that never named itself.
+        """
         if not self.index:
-            self.index = str(uuid.uuid4())
+            self.index = self.tag or str(uuid.uuid4())
         return self
 
 
