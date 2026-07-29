@@ -956,3 +956,34 @@ def test_metric_ci_bars_treats_a_missing_bound_as_no_interval() -> None:
     spec = build("metric_ci_bars", config=CI_CONFIG, rows=rows, theme="light")
     by_label = dict(zip(spec["data"][0]["y"], spec["data"][0]["error_x"]["arrayminus"]))
     assert by_label["deepvariant"] == pytest.approx(0.0)
+
+
+def test_confusion_matrix_labels_stay_legible_on_dark_cells() -> None:
+    """A server-built figure bakes annotation colours in, so a wrong contrast
+    rule makes labels vanish into the cell rather than degrading gracefully."""
+    spec = build("confusion_matrix", config=CONFUSION_CONFIG, rows=BENCH_ROWS, theme="light")
+    by_cell = {(a["y"], a["x"]): a["font"]["color"] for a in spec["layout"]["annotations"]}
+    z = {
+        row: dict(zip(spec["data"][0]["x"], values))
+        for row, values in zip(spec["data"][0]["y"], spec["data"][0]["z"])
+    }
+    for (row, caller), color in by_cell.items():
+        # TP dominates every column, so its cell is dark and needs white text;
+        # the sparse classes are pale and need dark text.
+        expected = "#ffffff" if z[row][caller] > 0.6 else "#1a1a1a"
+        assert color == expected, f"{row}/{caller} at {z[row][caller]:.2f} got {color}"
+
+
+def test_color_scale_sampling_matches_the_typescript_stops() -> None:
+    from depictio.api.v1.services.advanced_viz.color_scale import (
+        contrasting_text,
+        sample_colorscale,
+    )
+
+    assert sample_colorscale("Blues", 0.0) == (247, 251, 255)
+    assert sample_colorscale("Blues", 1.0) == (8, 48, 107)
+    # Midpoint interpolates between the 0.25 and 0.5 stops.
+    assert sample_colorscale("Blues", 0.375) == (153, 197, 227)
+    assert contrasting_text((247, 251, 255)) == "#1a1a1a", "pale cell takes dark text"
+    assert contrasting_text((8, 48, 107)) == "#ffffff", "dark cell takes white text"
+    assert sample_colorscale("NoSuchScale", 0.0) == (247, 251, 255), "falls back to Blues"

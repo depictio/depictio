@@ -65,11 +65,15 @@ def build_etag(
     export_format: str,
     theme: str,
     filters: list[dict] | None,
+    controls: dict | None = None,
 ) -> str:
     """Weak ETag over everything that varies the response body.
 
-    Filters are serialised with ``sort_keys`` so two equivalent filter sets that
-    differ only in key order do not produce different tags and defeat the cache.
+    Filters and controls are serialised with ``sort_keys`` so two equivalent
+    sets that differ only in key order do not produce different tags and defeat
+    the cache. ``controls`` has to be in here: a ROC and a PR curve come from the
+    same component at the same dashboard version, and omitting it would serve one
+    from cache when the caller asked for the other.
     """
     revision = dashboard_revision(dashboard_doc)
     material = json.dumps(
@@ -82,6 +86,7 @@ def build_etag(
             "format": export_format,
             "theme": theme,
             "filters": filters or [],
+            "controls": controls or {},
         },
         sort_keys=True,
         default=str,
