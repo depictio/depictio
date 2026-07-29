@@ -26,11 +26,8 @@ from __future__ import annotations
 import math
 from typing import Any
 
+from depictio.api.v1.services.advanced_viz.color_scale import contrasting_text_for_value
 from depictio.api.v1.services.advanced_viz.figure_registry import register
-
-#: Luminance above which dark text reads better than white. Same threshold as
-#: ``contrastingText`` in utils/colorScale.ts.
-_LUMINANCE_PIVOT = 0.179
 
 
 def _columns(config: dict[str, Any]) -> list[str | None]:
@@ -49,16 +46,6 @@ def _as_float(value: Any) -> float:
     except (TypeError, ValueError):
         return 0.0
     return result if math.isfinite(result) else 0.0
-
-
-def _text_color(fraction: float) -> str:
-    """Dark or white label, whichever survives on a Blues cell at this value.
-
-    Approximates the scale's luminance ramp rather than sampling the real
-    colorscale: Blues runs light-to-dark monotonically, so the crossover is a
-    single threshold. Getting this wrong makes labels vanish into the cell.
-    """
-    return "#1a1a1a" if (1.0 - fraction) > _LUMINANCE_PIVOT else "#ffffff"
 
 
 def _format_count(value: float) -> str:
@@ -106,6 +93,7 @@ def build(
     ] + ([tn_col] if tn_col else [])
     counts = [[_as_float(v) for v in (rows.get(column) or [])] for column in class_columns]
 
+    colorscale = str(config.get("colorscale") or "Blues")
     mode = str(controls.get("normalize_mode", config.get("normalize_mode", "per_caller")))
     show_fractions = bool(controls.get("normalize", config.get("normalize", False)))
     show_colorbar = bool(controls.get("show_colorbar", True))
@@ -146,7 +134,12 @@ def build(
                 )
             ),
             "showarrow": False,
-            "font": {"size": font_size, "color": _text_color(z[row_index][column])},
+            # Sampled off the real colorscale rather than approximated: a
+            # linear guess puts white text on a pale cell and loses the label.
+            "font": {
+                "size": font_size,
+                "color": contrasting_text_for_value(colorscale, z[row_index][column]),
+            },
         }
         for row_index, name in enumerate(y_order)
         for column, caller in enumerate(callers)
@@ -160,7 +153,7 @@ def build(
                 "y": y_order,
                 "z": z,
                 "customdata": z_counts,
-                "colorscale": config.get("colorscale", "Blues"),
+                "colorscale": colorscale,
                 # Pinned domain: with per-column normalisation every value is
                 # already a fraction, and letting Plotly autoscale would make
                 # two matrices with different maxima look identical.
