@@ -73,7 +73,6 @@ def is_degenerate(record: dict) -> bool:
     return json_rec["status"].startswith("http") or html_rec["status"].startswith("http")
 
 
-
 def export_one(entry: dict, out_dir: Path, token: str, theme: str) -> dict:
     """Export one component in both formats, recording what each one did."""
     did = entry["dashboard_id"]
@@ -151,10 +150,11 @@ def fmt_line(record: dict) -> str:
     return f"{record['type']:36} json={cell(record['json'])}   html={cell(record['html'])}"
 
 
-
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--all", action="store_true", help="export every component, not one per type")
+    parser.add_argument(
+        "--all", action="store_true", help="export every component, not one per type"
+    )
     parser.add_argument("--theme", default="light", choices=["light", "dark"])
     parser.add_argument("--clean", action="store_true", help="wipe exports/ first")
     args = parser.parse_args()
@@ -181,10 +181,14 @@ def main() -> int:
             continue
         reachable += 1
         for entry in entries:
-            by_type[type_key(entry)].append({**entry, "dashboard_id": did, "dashboard_title": title})
+            by_type[type_key(entry)].append(
+                {**entry, "dashboard_id": did, "dashboard_title": title}
+            )
 
-    print(f"{reachable}/{len(dashboards)} dashboards reachable, "
-          f"{sum(len(v) for v in by_type.values())} components, {len(by_type)} distinct types\n")
+    print(
+        f"{reachable}/{len(dashboards)} dashboards reachable, "
+        f"{sum(len(v) for v in by_type.values())} components, {len(by_type)} distinct types\n"
+    )
 
     index: list[dict] = []
     for key in sorted(by_type):

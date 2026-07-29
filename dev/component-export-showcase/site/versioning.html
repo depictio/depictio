@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Versioning, freezing and filters — Depictio component export</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..700&family=Inter+Tight:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/shared.css">
+<link rel="stylesheet" href="/versioning.css">
+<script src="/vendor/plotly.min.js"></script>
+</head>
+<body class="docs">
+
+<nav class="sitenav" id="sitenav"></nav>
+
+<header class="docs-head">
+  <div class="docs-wrap">
+    <p class="eyebrow">Operating an embedded figure</p>
+    <h1>Staying current,<br>or deliberately not</h1>
+    <p class="deck">
+      A figure on someone else's page has a problem a dashboard does not: the
+      dashboard it came from will change, and the page will not know. These are
+      the parameters that decide what happens when it does.
+    </p>
+  </div>
+</header>
+
+<div class="docs-wrap">
+
+  <section class="docs-section" id="params">
+    <h2><span class="rule"></span>The parameter surface</h2>
+    <p class="section-note">
+      Everything the export URL accepts. All are optional; the defaults render
+      the component exactly as the dashboard has it persisted.
+    </p>
+    <table class="paramtable">
+      <thead>
+        <tr><th>Parameter</th><th>Values</th><th>What it decides</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>format</code></td>
+          <td><code>json</code> · <code>html</code></td>
+          <td>A Plotly spec you render yourself, or a self-contained page you frame. <b>Prefer <code>json</code>.</b></td>
+        </tr>
+        <tr>
+          <td><code>theme</code></td>
+          <td><code>light</code> · <code>dark</code></td>
+          <td>Which palette the server bakes in. Usually irrelevant for <code>json</code>, since you restyle anyway.</td>
+        </tr>
+        <tr>
+          <td><code>filters</code></td>
+          <td>JSON array</td>
+          <td>Narrows the data before the figure is built. Same predicates the live dashboard applies.</td>
+        </tr>
+        <tr>
+          <td><code>controls</code></td>
+          <td>JSON object</td>
+          <td>Intra-viz state: which case a multi-view renderer shows, a normalisation mode, a top-N.</td>
+        </tr>
+        <tr>
+          <td><code>expect_version</code></td>
+          <td>integer</td>
+          <td>Pin. Answers <code>409</code> instead of silently serving a figure built from a newer dashboard.</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="aside">
+      <code>POST</code> to the same path takes <code>filters</code>,
+      <code>controls</code> and <code>theme</code> in the body, for payloads too
+      large to URL-encode.
+    </p>
+  </section>
+
+  <section class="docs-section" id="freshness">
+    <h2><span class="rule"></span>Three postures</h2>
+    <p class="section-note">
+      Pick one deliberately. The failure mode of not choosing is a page that
+      looks current and is not.
+    </p>
+
+    <div class="postures">
+      <article class="posture live">
+        <h3>Track the dashboard</h3>
+        <p class="how">Fetch on load. No version pin.</p>
+        <p>
+          The figure always shows what the dashboard shows. Correct for a
+          surveillance page, a status board, anything whose job is to be current.
+        </p>
+        <p class="cost">Risk: a dashboard edit changes your page with no review.</p>
+      </article>
+
+      <article class="posture pinned">
+        <h3>Pin to a version</h3>
+        <p class="how"><code>?expect_version=7</code></p>
+        <p>
+          Fetch live, but fail loudly if the dashboard has moved past the version
+          you were built against. The <code>409</code> names both versions, so a
+          CI check can surface drift as a diff rather than a surprise.
+        </p>
+        <p class="cost">Correct for a report that cites specific numbers.</p>
+      </article>
+
+      <article class="posture frozen">
+        <h3>Freeze the bytes</h3>
+        <p class="how">Save the JSON. Commit it.</p>
+        <p>
+          The response carries its provenance in <code>meta</code>, so a
+          committed <code>.json</code> still says which dashboard version and
+          which contract produced it, months later with no headers left.
+        </p>
+        <p class="cost">Correct for a published figure. It must never move.</p>
+      </article>
+    </div>
+  </section>
+
+  <section class="docs-section" id="etag">
+    <h2><span class="rule"></span>Checking cheaply</h2>
+    <p class="section-note">
+      Every response carries a weak <code>ETag</code> over everything that varies
+      the body — dashboard version, save time, component, format, theme, filters
+      and controls. Re-fetching a 300 KB figure to learn nothing changed is the
+      thing to avoid.
+    </p>
+    <div class="etag-demo">
+      <div class="etag-panel">
+        <h4>Live check</h4>
+        <div class="etag-log" id="etag-log">running…</div>
+      </div>
+      <div class="etag-panel">
+        <h4>The exchange</h4>
+        <pre class="snippet">GET …?format=json
+→ 200  ETag: W/"3dfd84…"        <span class="c">full body</span>
+
+GET …?format=json
+If-None-Match: W/"3dfd84…"
+→ 304                           <span class="c">no body, ~200 bytes</span></pre>
+      </div>
+    </div>
+    <p class="aside">
+      The tag is <b>weak</b> on purpose. <code>meta.generated_at</code> is fresh
+      on every call, so two builds are semantically identical but never
+      byte-identical; a strong validator would be a lie.
+    </p>
+  </section>
+
+  <section class="docs-section" id="filters">
+    <h2><span class="rule"></span>Filtering, two ways</h2>
+    <p class="section-note">
+      A filter is a Depictio component like any other, so you can either embed
+      the real control or build your own from the values it advertises. Both
+      drive the same <code>?filters=</code> parameter.
+    </p>
+
+    <div class="filter-demo">
+      <div class="filter-controls">
+        <h4>Your own control</h4>
+        <p class="hint">
+          Built from the manifest's <code>filter.options</code>. No Depictio
+          JavaScript on this page — a plain <code>&lt;select&gt;</code>.
+        </p>
+        <label for="habitat">Habitat</label>
+        <select id="habitat" multiple size="5"></select>
+        <button id="apply" type="button">Apply filter</button>
+        <p class="hint" id="filter-state">no filter</p>
+      </div>
+      <div class="filter-figure">
+        <div class="filter-stage" id="filter-stage"></div>
+        <div id="filter-req"></div>
+      </div>
+    </div>
+
+    <div class="two-col">
+      <div>
+        <h4>Discovering the contract</h4>
+        <pre class="snippet">GET /export/dashboards/{id}/components
+      ?include_filter_options=true
+
+→ { "component_type": "interactive",
+    "dc_id": "646b0f…ca5",
+    "filter": {
+      "interactive_component_type": "MultiSelect",
+      "column_name": "habitat",
+      "options": { "kind": "categorical",
+                   "values": ["Groundwater", "Riverwater",
+                              "Sediment", "Soil"] } } }</pre>
+      </div>
+      <div>
+        <h4>Applying it</h4>
+        <pre class="snippet">GET …/components/{figure_id}?format=json
+      &amp;filters=[{"interactive_component_type":"MultiSelect",
+                 "column_name":"habitat",
+                 "value":["Soil"]}]
+
+→ meta.filter_applied: true</pre>
+        <p class="aside">
+          <code>dc_id</code> is what tells you which filters govern which
+          figures: a control only applies to components over the same data
+          collection.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section class="docs-section" id="controls">
+    <h2><span class="rule"></span>Multi-view components</h2>
+    <p class="section-note">
+      Some renderers present several views of one component — in the dashboard
+      that is a tab bar. Over the API it is <code>?controls=</code>, and without
+      it an export can only ever produce the persisted default.
+    </p>
+    <div class="mode-demo">
+      <div class="mode-tabs" id="mode-tabs"></div>
+      <div class="mode-stage" id="mode-stage"></div>
+      <div id="mode-req"></div>
+    </div>
+  </section>
+
+  <section class="docs-section" id="scenarios">
+    <h2><span class="rule"></span>Where else this fits</h2>
+    <div class="scenarios" id="scenarios"></div>
+  </section>
+
+</div>
+
+<footer>
+  <p>Depictio component export · <code>GET /depictio/api/v1/export/dashboards/{id}/components/{cid}</code></p>
+</footer>
+
+<script src="/shared.js"></script>
+<script src="/versioning.js"></script>
+</body>
+</html>
