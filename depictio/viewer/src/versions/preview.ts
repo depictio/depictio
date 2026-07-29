@@ -88,3 +88,42 @@ export function dashboardFromVersion(
     right_panel_layout_data: tab.right_panel_layout_data || [],
   } as DashboardData;
 }
+
+/**
+ * The snapshot's component definitions, keyed by component index, in the shape
+ * the render endpoints accept as `component_overrides`.
+ *
+ * Needed because overlaying the snapshot is only half the job. The overlay is
+ * client-side: it decides what the viewer *labels* each component and where it
+ * sits. Every value and every trace comes from a render endpoint, and those
+ * read the component from the **live** dashboard document — so without this a
+ * preview drew a past version's data through today's definition and presented
+ * the result under the past version's title.
+ *
+ * On this repo's own demo that produced a card headed "Mean Petal Length
+ * (Average)" showing 1.9, which is the *max* — the aggregation the same
+ * component id was later changed to. A wrong number under a confident label is
+ * worse than a blank, because nothing on screen contradicts it.
+ *
+ * Sends the whole stored component rather than a hand-picked subset: the server
+ * narrows it to a per-type allow-list of presentation fields (`_DEFINITION_FIELDS`
+ * in `routes.py`), and duplicating that list here would be a second copy to
+ * keep in sync. `wf_id` / `dc_id` / `dc_config` are rejected there, so this
+ * cannot redirect a read at another collection.
+ */
+export function overridesFromVersion(
+  // Deliberately the snapshot's own looser shape rather than `StoredMetadata`.
+  // A `TabSnapshot` stores components as plain records — an older version can
+  // hold a component whose fields no longer satisfy today's stricter type, and
+  // refusing to read it would break history for exactly the versions history
+  // exists to reach.
+  metadata: Record<string, unknown>[] | undefined,
+): Record<string, Record<string, unknown>> {
+  const out: Record<string, Record<string, unknown>> = {};
+  for (const meta of metadata || []) {
+    const index = String(meta.index ?? '');
+    if (!index) continue;
+    out[index] = meta;
+  }
+  return out;
+}

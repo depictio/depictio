@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "check:preview": "esbuild dev/preview_contract_check.mjs --bundle --platform=node --format=esm --outfile=node_modules/.cache/preview_check.mjs --log-level=error && node node_modules/.cache/preview_check.mjs",
+    "check:preview": "esbuild dev/preview_contract_check.mjs --bundle --platform=node --format=esm --external:react --external:react/jsx-runtime --outfile=node_modules/.cache/preview_check.mjs --log-level=error && node node_modules/.cache/preview_check.mjs",
     "build:catalog-preview": "vite build --config vite.catalog-preview.config.ts",
     "preview": "vite preview",
     "check:dataversions": "esbuild dev/data_version_body_check.mjs --bundle --platform=node --format=esm --external:react --external:react-dom/server --external:react/jsx-runtime --outfile=node_modules/.cache/dv_check.mjs --log-level=error && node node_modules/.cache/dv_check.mjs",

@@ -59,7 +59,13 @@ REQUIRED = {
     "/src/EditorApp.tsx": ["DataVersionProvider", "ComponentVersionModal"],
     # The viewer must NOT offer to re-point live data; that is edit-mode only.
     # Asserted as an absence below.
-    "/src/App.tsx": ["DataVersionProvider"],
+    # `componentOverrides` is required, not optional: a `?version=` preview that
+    # sends only data pins renders a past version's numbers through today's
+    # component definitions and labels the result as the past. That was a real
+    # bug, and it is invisible in source review because both halves are correct
+    # on their own.
+    "/src/App.tsx": ["DataVersionProvider", "componentOverrides"],
+    "/src/versions/preview.ts": ["overridesFromVersion"],
 }
 
 #: module path -> markers that must be ABSENT. Time travel controls belong to

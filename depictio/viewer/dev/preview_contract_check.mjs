@@ -17,7 +17,12 @@
 import {
   dashboardFromVersion,
   extractPreviewVersionId,
+  overridesFromVersion,
 } from '../src/versions/preview.ts';
+// Straight at the source file, as the sibling checks do: importing the package
+// entry pulls in every React component it re-exports, which esbuild cannot
+// resolve under Yarn PnP from this directory.
+import { dataVersionBody } from '../../../packages/depictio-react-core/src/dataVersions';
 
 let failures = 0;
 function check(label, actual, expected) {
@@ -122,6 +127,34 @@ global.window = { location: { search: '' } };
 check('absent -> null', extractPreviewVersionId(), null);
 global.window = { location: { search: '?version=%20%20' } };
 check('blank -> null', extractPreviewVersionId(), null);
+
+// A preview overlays the snapshot client-side, which fixes titles and layout.
+// Values and traces come from render endpoints that read the component off the
+// *live* document, so the snapshot's definitions have to travel with the
+// request. Without that, a card stored as `average` rendered the live `max`
+// under the label "Average" — the number was wrong and nothing said so.
+console.log('— the snapshot travels as component_overrides —');
+const overrides = overridesFromVersion(version.tabs[0].stored_metadata);
+check('every component is keyed by index', Object.keys(overrides).sort(), ['a', 'b']);
+check('the stored definition is carried whole', overrides.a, { index: 'a' });
+check('a component with no index is skipped', overridesFromVersion([{ title: 'x' }]), {});
+check('undefined metadata is empty, not a throw', overridesFromVersion(undefined), {});
+
+// The seam that actually matters: the overrides have to survive into the
+// request body. Checking `overridesFromVersion` alone would pass even if
+// App.tsx never passed the result on.
+const body = dataVersionBody({
+  asOfVersionId: 'v-abc',
+  pins: {},
+  componentOverrides: overrides,
+});
+check('as_of_version reaches the body', body.as_of_version, 'v-abc');
+check('component_overrides reaches the body', Object.keys(body.component_overrides ?? {}).sort(), [
+  'a',
+  'b',
+]);
+const liveBody = dataVersionBody({ asOfVersionId: null, pins: {} });
+check('a live read sends neither key', Object.keys(liveBody), []);
 
 console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

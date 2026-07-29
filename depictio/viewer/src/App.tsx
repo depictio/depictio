@@ -52,7 +52,11 @@ import type {
   DashboardVersionDetail,
 } from 'depictio-react-core';
 import { parseTemplateOrigin } from './projects/template';
-import { dashboardFromVersion, extractPreviewVersionId } from './versions/preview';
+import {
+  dashboardFromVersion,
+  extractPreviewVersionId,
+  overridesFromVersion,
+} from './versions/preview';
 import VersionPreviewBanner from './versions/VersionPreviewBanner';
 import DataVersionBanner from './versions/DataVersionBanner';
 import { collectDataCollections } from './versions/useDatasetHistories';
@@ -114,12 +118,37 @@ const App: React.FC = () => {
   // the editor, but nothing in this host writes to it.
   const dataPins: DataVersionPins = EMPTY_PINS;
   const [asOfVersionId, setAsOfVersionId] = useState<string | null>(null);
+  // The full snapshot record backing a preview. Declared here rather than
+  // beside the other preview state because `versionBody` below derives the
+  // component definitions from it, and a hook cannot read a later `useState`.
+  const [previewVersion, setPreviewVersion] = useState<DashboardVersionDetail | null>(null);
+  // A preview must send the snapshot's component definitions, not just its data
+  // pins: the render endpoints read each component from the live document, so
+  // pinning only the data draws yesterday's numbers through today's definition
+  // and labels the result as yesterday. See `overridesFromVersion`.
+  const previewOverrides = useMemo(() => {
+    if (!previewVersion) return undefined;
+    const tabs = previewVersion.tabs || [];
+    // Same tab resolution as `dashboardFromVersion`, so the definitions sent
+    // describe exactly the components being displayed.
+    const tab =
+      tabs.find((t) => String(t.dashboard_id) === String(extractDashboardId())) ??
+      tabs.find((t) => t.is_main_tab) ??
+      tabs[0];
+    const overrides = overridesFromVersion(tab?.stored_metadata);
+    return Object.keys(overrides).length ? overrides : undefined;
+  }, [previewVersion]);
   // Request fragment + a stable dependency key. The key has to reach every
   // fetch effect: without it the body would change while the effect never
   // re-ran, leaving stale numbers under a new label.
   const versionBody = useMemo(
-    () => dataVersionBody({ asOfVersionId, pins: dataPins }),
-    [asOfVersionId, dataPins],
+    () =>
+      dataVersionBody({
+        asOfVersionId,
+        pins: dataPins,
+        componentOverrides: previewOverrides,
+      }),
+    [asOfVersionId, dataPins, previewOverrides],
   );
   const versionKey = JSON.stringify(versionBody);
   const timeTravelling = Object.keys(versionBody).length > 0;
@@ -169,9 +198,6 @@ const App: React.FC = () => {
     if (!previewVersionId) return;
     setAsOfVersionId((current) => current ?? previewVersionId);
   }, [previewVersionId]);
-  // The full snapshot record backing a preview, kept only to render the
-  // banner — the dashboard itself is already projected into `dashboard`.
-  const [previewVersion, setPreviewVersion] = useState<DashboardVersionDetail | null>(null);
   const bulkCtrl = useRef<AbortController | null>(null);
 
   // Ingestion-health banner: for template-derived dashboards, surface a
@@ -498,7 +524,11 @@ const App: React.FC = () => {
       {/* Every renderer reads its pin from here rather than taking it as a
           prop: the fetch happens deep in the shared component package, and
           the decision is made up here. */}
-      <DataVersionProvider asOfVersionId={asOfVersionId} pins={dataPins}>
+      <DataVersionProvider
+        asOfVersionId={asOfVersionId}
+        pins={dataPins}
+        componentOverrides={previewOverrides}
+      >
       <AppShell
       header={{ height: 50 }}
       navbar={{
