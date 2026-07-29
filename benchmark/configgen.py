@@ -801,7 +801,13 @@ _LINKED_FILTERS: tuple[_LinkedFilter, ...] = (
 
 @dataclass(frozen=True)
 class _LinkedCard:
-    """One metric card in the strip above the linked dashboard's components."""
+    """One multi-metric card in the strip above the linked dashboard.
+
+    A hero number alone moves when a filter moves but says nothing about *how*
+    the filtered set differs. The secondary strip is what carries that:
+    ``top_n`` breaks the hero down by another column of the same collection,
+    ``box_plot`` draws the Tukey five-number summary of a numeric one.
+    """
 
     tag: str
     dc_tag: str
@@ -809,21 +815,76 @@ class _LinkedCard:
     column_type: str
     aggregation: str
     title: str
+    color: str
+    icon: str
+    aggregations: tuple[str, ...] = ()
+    secondary_layout: str = "vertical"
+    breakdown_col: str | None = None
+    top_n_count: int = 3
 
 
-# One card per collection plus a second QC metric, so the strip itself shows
-# whether a filter reached every grain: with the complete link graph all four
-# must move when any filter moves. Cards were the clearest symptom of the old
+# The strip covers every collection, so it shows at a glance whether a filter
+# reached all three grains: with the complete link graph all four cards must
+# move when any filter moves. Cards were the clearest symptom of the old
 # one-directional topology — the metrics cards sat frozen through the whole
 # ``features`` sweep.
+#
+# Four cards at w=2 fill the 8-column row exactly; three would leave a gap that
+# reads as a tile that failed to load. Colours match the filter groups the cards
+# correspond to (``_LINKED_FILTER_COLORS``).
+#
+# They are also the heavier card path on purpose: ``box_plot_stats`` computes
+# quantiles and ``top_n`` a group-by, both against the *filtered* frame once a
+# filter is set. On ``features`` that is a real reduction over millions of rows,
+# which is what a card on a heavy collection actually costs in a real project.
 _LINKED_CARDS: tuple[_LinkedCard, ...] = (
-    _LinkedCard("card-samples", METADATA_TAG, "sample_id", "object", "nunique", "Samples"),
     _LinkedCard(
-        "card-mean-metric", METRICS_TAG, "value", "float64", "average", "Mean metric value"
+        "card-samples",
+        METADATA_TAG,
+        "sample_id",
+        "object",
+        "nunique",
+        "Samples",
+        "#377EB8",
+        "mdi:flask",
+        secondary_layout="top_n",
+        breakdown_col="condition",
     ),
-    _LinkedCard("card-mapped", METRICS_TAG, "mapped_pct", "float64", "average", "Mean mapped %"),
     _LinkedCard(
-        "card-mean-expression", FEATURES_TAG, "expression", "float64", "average", "Mean expression"
+        "card-age",
+        METADATA_TAG,
+        "age",
+        "int64",
+        "median",
+        "Donor age",
+        "#984EA3",
+        "mdi:calendar-account",
+        aggregations=("box_plot_stats",),
+        secondary_layout="box_plot",
+    ),
+    _LinkedCard(
+        "card-qc-tools",
+        METRICS_TAG,
+        "tool",
+        "object",
+        "nunique",
+        "QC tools",
+        "#DD8452",
+        "mdi:tools",
+        secondary_layout="top_n",
+        breakdown_col="tool",
+    ),
+    _LinkedCard(
+        "card-expression",
+        FEATURES_TAG,
+        "expression",
+        "float64",
+        "median",
+        "Expression",
+        "#8BC34A",
+        "mdi:chart-bell-curve",
+        aggregations=("box_plot_stats",),
+        secondary_layout="box_plot",
     ),
 )
 
@@ -862,8 +923,8 @@ def _linked_filter_components(workflow_tag: str) -> list[dict]:
         }
         for i, f in enumerate(_LINKED_FILTERS)
     ]
-    components += [
-        {
+    for i, card in enumerate(_LINKED_CARDS):
+        component = {
             "tag": card.tag,
             "component_type": "card",
             "workflow_tag": workflow_tag,
@@ -872,10 +933,18 @@ def _linked_filter_components(workflow_tag: str) -> list[dict]:
             "column_type": card.column_type,
             "aggregation": card.aggregation,
             "title": card.title,
+            "secondary_layout": card.secondary_layout,
+            "icon_name": card.icon,
+            "icon_color": card.color,
+            "title_color": card.color,
             "layout": _strip_layout(i),
         }
-        for i, card in enumerate(_LINKED_CARDS)
-    ]
+        if card.aggregations:
+            component["aggregations"] = list(card.aggregations)
+        if card.breakdown_col:
+            component["breakdown_col"] = card.breakdown_col
+            component["top_n_count"] = card.top_n_count
+        components.append(component)
     return components
 
 
