@@ -20,8 +20,12 @@ Moved here when the draft-note comment was stripped off the top of the post.
 - Advanced-viz images come as light/dark pairs; the draft uses light only. In
   mkdocs you can use img#only-light + img#only-dark to follow the site theme.
 - VIDEO: four Vimeo embeds, none of which render in GitHub's preview.
-  1194664914 landing page (React section), 1213942946 filtering screencast
+  1194664914 landing page (opens the post), 1213942946 filtering screencast
   (interactivity), 1213726629 + 1213726492 performance screencasts.
+- SCREENSHOTS all come from the nf-core ampliseq / viralrecon template pages
+  under images/pipeline-templates/nf-core/. They are real template dashboards,
+  which is why the post can claim nothing was laid out by hand. Dark variants
+  do NOT exist for these, unlike the advanced-viz crops they replaced.
 - VERIFY BEFORE PUBLISHING: EMBL + SciLifeLab Serve as production, and
   GHGA / MGnify (EMBL-EBI) / ISCIII as trials came from the author, not a
   public source. The SciLifeLab webinar link and Serve availability are
