@@ -2,6 +2,37 @@
 SOCIAL COPY for the Depictio 1.0 blog post. Not published by mkdocs; delete or
 move before the docs build if it ends up in the docs tree.
 
+--------------------------------------------------------------------------
+PUBLISHING CHECKLIST for the article itself (docs/blog/depictio-1-0.md).
+Moved here when the draft-note comment was stripped off the top of the post.
+
+- Publishes to the depictio-docs blog. Move the file there, or PR it across.
+- `authors: thomas-weber` must exist in depictio-docs `.authors.yml`.
+- Version framing: celebrate "1.0" as the milestone (repo tag is now 1.1.4).
+- IMAGES are ABSOLUTE URLs so the draft previews on GitHub. The deployed site
+  serves them from an UNVERSIONED root (/depictio-docs/images/...); version
+  prefixes like /v1.2.0/images/ 404, and the react screenshots live under
+  images/react/, NOT images/v0.12/react-beta/. All URLs verified 200 in 2026-07.
+  When merging into depictio-docs, switch to repo-relative paths
+  (e.g. ../../images/guides/advanced-visualizations/volcano_light.webp).
+- LOGO points at this repo's docs/images/logo_hd.png so it renders on GitHub.
+  In depictio-docs repoint to images/logo/logo_hd.svg.
+- Advanced-viz images come as light/dark pairs; the draft uses light only. In
+  mkdocs you can use img#only-light + img#only-dark to follow the site theme.
+- VIDEO: four Vimeo embeds, none of which render in GitHub's preview.
+  1194664914 landing page (React section), 1213942946 filtering screencast
+  (interactivity), 1213726629 + 1213726492 performance screencasts.
+- VERIFY BEFORE PUBLISHING: EMBL + SciLifeLab Serve as production, and
+  GHGA / MGnify (EMBL-EBI) / ISCIII as trials came from the author, not a
+  public source. The SciLifeLab webinar link and Serve availability are
+  verified public pages.
+- Performance numbers are from benchmark/PERF_REPORT_v2.md (single run,
+  12,019,500 rows, M1 Max / Colima, 1 dev API worker). v1 measured a different
+  dataset AND a different dashboard, so do not mix the two.
+- Deliberately NOT covered: real-time dashboards, and nf-core pipelines /
+  templates / tools catalog beyond the teaser (separate article).
+--------------------------------------------------------------------------
+
 IMPORTANT FRAMING NOTE:
 The Depictio company page ALREADY announced v1.0.0 (~1 month ago,
 linkedin.com/posts/depictio_multiqc-bioinformatics-opensource-activity-7472199374719102977-IJh8).
