@@ -311,6 +311,91 @@ def _overlay_version(
     return merged
 
 
+class RenderContext:
+    """What a render endpoint needs before it can touch any data.
+
+    Every ``render_*`` endpoint opened with the same five steps — find the
+    dashboard, read its ``project_id``, check viewer permission, scan
+    ``stored_metadata`` for the component, then reject one missing ``wf_id`` /
+    ``dc_id``. Six copies of that meant six places for the permission check to
+    drift, and six places a version-aware render would have to be threaded
+    through. This holds the resolved result instead.
+    """
+
+    __slots__ = ("dashboard", "project_id", "stored_metadata", "component")
+
+    def __init__(
+        self,
+        dashboard: dict,
+        project_id: Any,
+        stored_metadata: list[dict],
+        component: dict | None,
+    ) -> None:
+        self.dashboard = dashboard
+        self.project_id = project_id
+        self.stored_metadata = stored_metadata
+        self.component = component
+
+    def require_data_source(self, *extra_fields: str) -> tuple[Any, ...]:
+        """``(wf_id, dc_id, *extra)`` off the component, or 400 naming the gap.
+
+        Kept as a method rather than resolved eagerly because ``bulk_compute_cards``
+        has no single component, and the image endpoint needs a third field.
+        """
+        assert self.component is not None, "require_data_source needs a component"
+        values = [self.component.get("wf_id"), self.component.get("dc_id")]
+        values.extend(self.component.get(field) for field in extra_fields)
+        if not all(values):
+            missing = ", ".join(
+                name for name, value in zip(("wf_id", "dc_id", *extra_fields), values) if not value
+            )
+            raise HTTPException(status_code=400, detail=f"Component missing {missing}.")
+        return tuple(values)
+
+
+def resolve_render_context(
+    dashboard_id: PyObjectId,
+    current_user: Any,
+    *,
+    component_type: str | None = None,
+    component_id: str | None = None,
+    component_label: str | None = None,
+) -> RenderContext:
+    """Load a dashboard, authorise the caller, and find the component to render.
+
+    Raises 404 for an unknown dashboard or component, 403 for a caller without
+    viewer rights — the same statuses, in the same order, as the inline blocks
+    it replaces.
+    """
+    dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
+    if not dashboard_data:
+        raise HTTPException(status_code=404, detail=f"Dashboard '{dashboard_id}' not found.")
+
+    project_id = dashboard_data.get("project_id")
+    if not project_id or not check_project_permission(project_id, current_user, "viewer"):
+        raise HTTPException(status_code=403, detail="Permission denied.")
+
+    stored_metadata = dashboard_data.get("stored_metadata") or []
+
+    component = None
+    if component_id is not None and component_type is not None:
+        component = next(
+            (
+                m
+                for m in stored_metadata
+                if str(m.get("index")) == component_id and m.get("component_type") == component_type
+            ),
+            None,
+        )
+        if component is None:
+            label = component_label or component_type.capitalize()
+            raise HTTPException(
+                status_code=404, detail=f"{label} component '{component_id}' not found."
+            )
+
+    return RenderContext(dashboard_data, project_id, stored_metadata, component)
+
+
 @dashboards_endpoint_router.get("/get/{dashboard_id}")
 async def get_dashboard(
     dashboard_id: PyObjectId,
@@ -1654,15 +1739,9 @@ def bulk_compute_cards(
     filters = request.get("filters") or []
     requested_ids: list[str] | None = request.get("component_ids")
 
-    dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
-    if not dashboard_data:
-        raise HTTPException(status_code=404, detail=f"Dashboard '{dashboard_id}' not found.")
-
-    project_id = dashboard_data.get("project_id")
-    if not project_id or not check_project_permission(project_id, current_user, "viewer"):
-        raise HTTPException(status_code=403, detail="Permission denied.")
-
-    stored_metadata = dashboard_data.get("stored_metadata") or []
+    context = resolve_render_context(dashboard_id, current_user)
+    project_id = context.project_id
+    stored_metadata = context.stored_metadata
 
     # Collect card components (optionally filtered by component_ids)
     requested = set(requested_ids) if requested_ids else None
@@ -2036,29 +2115,13 @@ async def render_figure_endpoint(
     filters = request.get("filters") or []
     theme = request.get("theme") or "light"
 
-    dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
-    if not dashboard_data:
-        raise HTTPException(status_code=404, detail=f"Dashboard '{dashboard_id}' not found.")
-
-    project_id = dashboard_data.get("project_id")
-    if not project_id or not check_project_permission(project_id, current_user, "viewer"):
-        raise HTTPException(status_code=403, detail="Permission denied.")
-
-    component = next(
-        (
-            m
-            for m in (dashboard_data.get("stored_metadata") or [])
-            if str(m.get("index")) == component_id and m.get("component_type") == "figure"
-        ),
-        None,
+    context = resolve_render_context(
+        dashboard_id, current_user, component_type="figure", component_id=component_id
     )
-    if component is None:
-        raise HTTPException(status_code=404, detail=f"Figure component '{component_id}' not found.")
-
-    wf_id = component.get("wf_id")
-    dc_id = component.get("dc_id")
-    if not wf_id or not dc_id:
-        raise HTTPException(status_code=400, detail="Component missing wf_id/dc_id.")
+    project_id = context.project_id
+    component = context.component
+    assert component is not None
+    wf_id, dc_id = context.require_data_source()
 
     merged_filters = _resolve_link_filters(
         filters=filters,
@@ -2158,29 +2221,13 @@ def render_table_endpoint(
     if sort_dir not in {"asc", "desc"}:
         sort_dir = "desc"
 
-    dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
-    if not dashboard_data:
-        raise HTTPException(status_code=404, detail=f"Dashboard '{dashboard_id}' not found.")
-
-    project_id = dashboard_data.get("project_id")
-    if not project_id or not check_project_permission(project_id, current_user, "viewer"):
-        raise HTTPException(status_code=403, detail="Permission denied.")
-
-    component = next(
-        (
-            m
-            for m in (dashboard_data.get("stored_metadata") or [])
-            if str(m.get("index")) == component_id and m.get("component_type") == "table"
-        ),
-        None,
+    context = resolve_render_context(
+        dashboard_id, current_user, component_type="table", component_id=component_id
     )
-    if component is None:
-        raise HTTPException(status_code=404, detail=f"Table component '{component_id}' not found.")
-
-    wf_id = component.get("wf_id")
-    dc_id = component.get("dc_id")
-    if not wf_id or not dc_id:
-        raise HTTPException(status_code=400, detail="Component missing wf_id/dc_id.")
+    project_id = context.project_id
+    component = context.component
+    assert component is not None
+    wf_id, dc_id = context.require_data_source()
 
     merged_filters = _resolve_link_filters(
         filters=filters,
@@ -2304,30 +2351,13 @@ def render_image_paths_endpoint(
     if sort_dir not in {"asc", "desc"}:
         sort_dir = "desc"
 
-    dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
-    if not dashboard_data:
-        raise HTTPException(status_code=404, detail=f"Dashboard '{dashboard_id}' not found.")
-
-    project_id = dashboard_data.get("project_id")
-    if not project_id or not check_project_permission(project_id, current_user, "viewer"):
-        raise HTTPException(status_code=403, detail="Permission denied.")
-
-    component = next(
-        (
-            m
-            for m in (dashboard_data.get("stored_metadata") or [])
-            if str(m.get("index")) == component_id and m.get("component_type") == "image"
-        ),
-        None,
+    context = resolve_render_context(
+        dashboard_id, current_user, component_type="image", component_id=component_id
     )
-    if component is None:
-        raise HTTPException(status_code=404, detail=f"Image component '{component_id}' not found.")
-
-    wf_id = component.get("wf_id")
-    dc_id = component.get("dc_id")
-    image_column = component.get("image_column")
-    if not (wf_id and dc_id and image_column):
-        raise HTTPException(status_code=400, detail="Component missing wf_id/dc_id/image_column.")
+    project_id = context.project_id
+    component = context.component
+    assert component is not None
+    wf_id, dc_id, image_column = context.require_data_source("image_column")
 
     merged_filters = _resolve_link_filters(
         filters=filters,
@@ -2477,29 +2507,13 @@ def render_map_endpoint(
     filters = request.get("filters") or []
     theme = request.get("theme") or "light"
 
-    dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
-    if not dashboard_data:
-        raise HTTPException(status_code=404, detail=f"Dashboard '{dashboard_id}' not found.")
-
-    project_id = dashboard_data.get("project_id")
-    if not project_id or not check_project_permission(project_id, current_user, "viewer"):
-        raise HTTPException(status_code=403, detail="Permission denied.")
-
-    component = next(
-        (
-            m
-            for m in (dashboard_data.get("stored_metadata") or [])
-            if str(m.get("index")) == component_id and m.get("component_type") == "map"
-        ),
-        None,
+    context = resolve_render_context(
+        dashboard_id, current_user, component_type="map", component_id=component_id
     )
-    if component is None:
-        raise HTTPException(status_code=404, detail=f"Map component '{component_id}' not found.")
-
-    wf_id = component.get("wf_id")
-    dc_id = component.get("dc_id")
-    if not wf_id or not dc_id:
-        raise HTTPException(status_code=400, detail="Component missing wf_id/dc_id.")
+    project_id = context.project_id
+    component = context.component
+    assert component is not None
+    wf_id, dc_id = context.require_data_source()
 
     merged_filters = _resolve_link_filters(
         filters=filters,
@@ -3009,26 +3023,17 @@ def render_multiqc_endpoint(
     filters = request.get("filters") or []
     theme = request.get("theme") or "light"
 
-    dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
-    if not dashboard_data:
-        raise HTTPException(status_code=404, detail=f"Dashboard '{dashboard_id}' not found.")
-
-    project_id = dashboard_data.get("project_id")
-    if not project_id or not check_project_permission(project_id, current_user, "viewer"):
-        raise HTTPException(status_code=403, detail="Permission denied.")
-
-    component = next(
-        (
-            m
-            for m in (dashboard_data.get("stored_metadata") or [])
-            if str(m.get("index")) == component_id and m.get("component_type") == "multiqc"
-        ),
-        None,
+    context = resolve_render_context(
+        dashboard_id,
+        current_user,
+        component_type="multiqc",
+        component_id=component_id,
+        component_label="MultiQC",
     )
-    if component is None:
-        raise HTTPException(
-            status_code=404, detail=f"MultiQC component '{component_id}' not found."
-        )
+    dashboard_data = context.dashboard
+    project_id = context.project_id
+    component = context.component
+    assert component is not None
 
     selected_module, selected_plot, selected_dataset, is_gs = _resolve_selected_keys(component)
 
@@ -3351,26 +3356,17 @@ def render_multiqc_general_stats_endpoint(
     """
     import hashlib
 
-    dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
-    if not dashboard_data:
-        raise HTTPException(status_code=404, detail=f"Dashboard '{dashboard_id}' not found.")
-
-    project_id = dashboard_data.get("project_id")
-    if not project_id or not check_project_permission(project_id, current_user, "viewer"):
-        raise HTTPException(status_code=403, detail="Permission denied.")
-
-    component = next(
-        (
-            m
-            for m in (dashboard_data.get("stored_metadata") or [])
-            if str(m.get("index")) == component_id and m.get("component_type") == "multiqc"
-        ),
-        None,
+    context = resolve_render_context(
+        dashboard_id,
+        current_user,
+        component_type="multiqc",
+        component_id=component_id,
+        component_label="MultiQC",
     )
-    if component is None:
-        raise HTTPException(
-            status_code=404, detail=f"MultiQC component '{component_id}' not found."
-        )
+    dashboard_data = context.dashboard
+    project_id = context.project_id
+    component = context.component
+    assert component is not None
 
     s3_locations = component.get("s3_locations") or []
     dc_id = component.get("dc_id") or component.get("data_collection_id")
