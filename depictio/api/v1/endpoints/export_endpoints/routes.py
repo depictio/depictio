@@ -39,6 +39,7 @@ from depictio.api.v1.services.export.capabilities import (
     resolve_viz_kind,
     unsupported_reason,
 )
+from depictio.api.v1.services.export.filter_options import filter_options
 from depictio.api.v1.services.export.plotly_export import build_plotly_export
 from depictio.api.v1.services.export.resolve import (
     resolve_dashboard,
@@ -178,6 +179,14 @@ def _apply_embed_cors(request: Request, response: Any) -> None:
 @export_endpoint_router.get("/dashboards/{dashboard_id}/components")
 async def list_exportable_components(
     dashboard_id: PyObjectId,
+    include_filter_options: bool = Query(
+        False,
+        description=(
+            "Also return each interactive component's value universe (distinct "
+            "values, or min/max) so an external page can build its own control. "
+            "Off by default: it reads every filtered column."
+        ),
+    ),
     current_user: User = Depends(get_embed_user),
 ) -> list[dict[str, Any]]:
     """Report every component on a dashboard and which formats it supports.
@@ -215,6 +224,10 @@ async def list_exportable_components(
                 "column_name": component.get("column_name"),
                 "column_type": component.get("column_type"),
             }
+            if include_filter_options:
+                options = await filter_options(component, current_user)
+                if options:
+                    entry["filter"]["options"] = options
 
         manifest.append(entry)
     return manifest
