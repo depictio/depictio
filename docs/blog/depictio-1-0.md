@@ -48,12 +48,15 @@ it and shared them. It was also slow on anything larger than a demo file, and it
 had bugs I found out about because someone else hit them first. Both of those
 things were true at once, and the second one is what the past year went into.
 
-1.0 is the version where that is fixed. Not "feature complete", which no tool
-ever is, but fast on real data, stable enough to leave running, and settled
-enough that building on top of it is a reasonable thing to do. Here is what
-changed.
+The idea never changed: point Depictio at the outputs of a pipeline, tell it how
+those datasets relate, and get a dashboard where filtering one thing filters
+everything. What changed is that it now does that on real data, at speed.
 
-![A Depictio dashboard in the viewer, with interactive filters](https://depictio.github.io/depictio-docs/images/v0.12/react-beta/page_dashboard_viewer.png)
+1.0 is the version where that is fixed. Not "feature complete", which no tool
+ever is, but fast, stable enough to leave running, and settled enough that
+building on top of it is a reasonable thing to do. Here is what changed.
+
+![A Depictio dashboard in the viewer: the filter panel on the left narrows every component at once](https://depictio.github.io/depictio-docs/images/v0.12/react-beta/page_dashboard_viewer.png)
 
 <!-- more -->
 
@@ -102,8 +105,42 @@ the new stack.
 
 ![The Depictio dashboards landing page on the new React frontend](https://depictio.github.io/depictio-docs/images/v0.12/react-beta/page_dashboards.png)
 
-That rebuild is also what made the next part possible: with the rendering path
-under our own control, we could go after what was actually slow.
+That rebuild is also what made the next two parts possible: with the rendering
+path under our own control, we could make the whole dashboard react as one, and
+then make it fast.
+
+## 🔗 Everything filters everything
+
+This is still what Depictio is for. Not a grid of charts that happen to sit on
+the same page, but a set of datasets that know about each other, where narrowing
+one narrows all of them.
+
+A project holds several data collections, and you declare how they relate: which
+column in the sample sheet corresponds to which column in the feature matrix,
+which sample names in a MultiQC report map back to which samples. Depictio
+resolves those links in both directions, so it does not matter where a filter
+starts. Pick a condition on the 500-row sample sheet and the twelve-million-row
+feature table narrows to match. Pick a set of features and the sample sheet
+narrows the other way. Names rarely line up exactly across tools, so links can
+resolve by direct match, by pattern (`{sample}.bam`), by regex, by wildcard, or
+through an explicit mapping for the one-to-many case where `S1` means both
+`S1_R1` and `S1_R2` in a MultiQC report.
+
+The left panel is the obvious way to drive that: dropdowns and multi-selects for
+categories, sliders and range sliders for numbers, date ranges, switches,
+segmented controls, all built from the actual column type. But the more useful
+interaction is often the one where the *plot* is the filter:
+
+- **Box-select or lasso points on a scatter plot** and every other component on
+  the dashboard reduces to those points.
+- **Select rows in a table** and the same thing happens from the table.
+- **Select markers or a region on a map** and the dashboard follows the geography.
+
+Those selections behave like any other filter and compose with the panel rather
+than fighting it, so you can drop the range slider to a window, lasso a cluster
+inside it, and read the cards for exactly that subset. Each selection is tagged
+by where it came from, so you can clear the chart selections and keep the panel
+filters, or the reverse.
 
 ## ⚡ A serious step forward in performance
 
@@ -150,14 +187,16 @@ screen in **133 to 270 ms** whether it holds 4 components or 30. A sixteen-compo
 dashboard (thirty fetches, counting the filter panel) has its first chart up at
 **190 ms** and everything drawn in **3.3 s** cold, 3.1 s warm.
 
-Change a filter, and the dashboard starts responding in **around 100 to 200 ms**
-and is fully caught up in **1.7 s** at four components, 2.0 s at eight and 4.1 s
-at sixteen, across all three collections. Where the filter starts barely matters:
-one on the 12-million-row feature matrix costs about the same as one on the
-500-row sample sheet (2.0 s against 2.4 s median), because both resolve to a few
-hundred sample ids in **25 ms** before any data is touched. Per component, the
-median render is **11 ms** for a filter widget, **222 ms** for a table and
-**822 ms** for a volcano plot reading several million rows off the feature matrix.
+The number that matters most, given the section above, is what a filter costs.
+The dashboard starts responding in **around 100 to 200 ms** and is fully caught
+up in **1.7 s** at four components, 2.0 s at eight and 4.1 s at sixteen, with all
+three collections re-filtered. And the bidirectional linking holds up under
+measurement: a filter starting on the twelve-million-row feature matrix costs
+about the same as one starting on the 500-row sample sheet (2.0 s against 2.4 s
+median), because both resolve to a few hundred sample ids in **25 ms** before any
+data is touched. Per component, the median render is **11 ms** for a filter
+widget, **222 ms** for a table and **822 ms** for a volcano plot reading several
+million rows off the feature matrix.
 
 <div style="max-width: 1200px; margin: 1.5rem auto 2rem auto;">
 <div style="padding: 62.19% 0 0 0; position: relative">
@@ -222,13 +261,14 @@ thresholds and a Manhattan knows how to order chromosomes.
 
 *Four of the eighteen advanced visualisations in the catalog, each shown with its own controls panel open. [Browse the full gallery in the docs.](https://depictio.github.io/depictio-docs/latest/features/components/#advanced-visualizations)*
 
-Those controls are additional, not a replacement. The interactive filters in the
-left panel still apply, narrowing the underlying data across every component on
-the dashboard at once. On top of that, each advanced visualisation exposes its
-own parameters for how that data gets drawn: normalisation and clustering method
-on the heatmap, significance and effect-size cutoffs on the volcano, mutation
-sorting on the oncoplot, layout and colouring on the tree. You filter down to the
-samples you care about, then tune the plot itself without leaving the dashboard.
+Those controls are additional, not a replacement. Everything from the section
+above still applies: panel filters and selections made on other components narrow
+what these plots draw, like any other component. On top of that, each advanced
+visualisation exposes its own parameters for how that data gets drawn:
+normalisation and clustering method on the heatmap, significance and effect-size
+cutoffs on the volcano, mutation sorting on the oncoplot, layout and colouring on
+the tree. You filter down to the samples you care about, then tune the plot
+itself without leaving the dashboard.
 
 The heavier steps, dimensionality reduction and clustering, run in the background
 with caching, so you can compute an embedding and then explore it without the
