@@ -220,3 +220,65 @@ def test_v3_virginica_filter_selects_real_rows(batches) -> None:
     # the tile cannot do the job it was added for.
     previous = apply_filter_expr(batches[BATCH_ORDER[1]], component["filter_expr"])
     assert abs(previous["petal.length"].median() - selected["petal.length"].median()) > 0.3
+
+
+# ── the documented sequence, executed ───────────────────────────────────────
+
+
+def test_the_documented_ingest_sequence_produces_three_versions(tmp_path) -> None:
+    """Run the README's sequence against a real Delta table.
+
+    Everything above validates the fixture's *inputs*. This validates the claim
+    the README actually makes: stage a batch, ingest, repeat, and end up with
+    three Delta versions you can time-travel between.
+
+    Uses the same `write_delta_table_versioned` the CLI calls, against a local
+    path — no Mongo, no S3, no API — so the claim is executed rather than
+    reasoned about.
+
+    The last assertion is the one that matters for any future dataset-version
+    picker: two versions with identical row counts and identical varieties must
+    still be distinguishable by value, or a time-travel read that silently
+    returned current data would look correct.
+    """
+    from deltalake import DeltaTable
+
+    from depictio.cli.cli.utils.delta_versioning import write_delta_table_versioned
+
+    class _NoStorageOptions:
+        """The writer calls `.model_dump()`; a local path needs no credentials."""
+
+        def model_dump(self) -> dict:
+            return {}
+
+    table_path = str(tmp_path / "iris_versioned_delta")
+
+    for expected_version, name in enumerate(BATCH_ORDER):
+        frame = pl.read_csv(BATCHES_DIR / name / "iris.csv").with_columns(
+            pl.lit(name).alias("depictio_run_id")
+        )
+        result = write_delta_table_versioned(
+            frame,
+            table_path,
+            _NoStorageOptions(),  # type: ignore[arg-type]
+            write_mode="overwrite",
+            commit_metadata={"depictio.run_tags": name},
+        )
+        assert result.delta_version == expected_version
+
+    assert len(DeltaTable(table_path).history()) == 3
+
+    at_v0 = pl.read_delta(table_path, version=0)
+    at_v1 = pl.read_delta(table_path, version=1)
+    at_v2 = pl.read_delta(table_path, version=2)
+
+    assert at_v0.height == 100
+    assert set(at_v0["variety"].unique()) == {"Setosa", "Versicolor"}
+    assert at_v1.height == at_v2.height == 150
+
+    median_v1 = at_v1.filter(pl.col("variety") == "Virginica")["petal.length"].median()
+    median_v2 = at_v2.filter(pl.col("variety") == "Virginica")["petal.length"].median()
+    assert abs(median_v1 - median_v2) > 0.3, (
+        "two versions of the same shape must differ by value, or a time-travel "
+        "read that returned current data would be indistinguishable from a correct one"
+    )
