@@ -3,6 +3,7 @@ import json
 import os
 import sys
 import warnings
+from typing import Literal
 
 import httpx
 import polars as pl
@@ -27,6 +28,41 @@ DELTA_CACHE_DIR = os.getenv("DEPICTIO_DELTA_CACHE_DIR", "/app/cache/delta_cache"
 # invalidates the entry — the same discriminator the dataframe cache keys use.
 _DELTA_SCHEMA_CACHE: dict[tuple[str, str], frozenset[str]] = {}
 _DELTA_SCHEMA_CACHE_MAX = 512  # bounded; the version salt churns keys over time
+
+#: Why a requested Delta version could not be read.
+#:
+#: - ``vacuumed``      — the commit exists in the log but its data files are gone.
+#: - ``not_versioned`` — this collection is not Delta-backed at all (MultiQC is
+#:                       raw parquet), so there is no history to travel through.
+#: - ``out_of_range``  — the version predates the table or postdates its head.
+#: - ``read_failed``   — the object store said no; transient rather than final.
+DeltaUnavailableReason = Literal["vacuumed", "not_versioned", "out_of_range", "read_failed"]
+
+
+class DeltaVersionUnavailable(Exception):
+    """A historical Delta read was asked for and cannot be served.
+
+    Raised rather than silently falling back, because "you asked for version 3
+    and got the current table" is the exact failure this whole feature exists to
+    prevent. Callers that can degrade (the render endpoints) catch it, read live
+    and say so; callers that cannot let it propagate.
+    """
+
+    def __init__(
+        self,
+        dc_id: str,
+        requested_version: int | None,
+        reason: DeltaUnavailableReason,
+        detail: str = "",
+    ) -> None:
+        self.dc_id = dc_id
+        self.requested_version = requested_version
+        self.reason = reason
+        self.detail = detail
+        message = f"Delta version {requested_version} unavailable for {dc_id} ({reason})"
+        if detail:
+            message = f"{message}: {detail}"
+        super().__init__(message)
 
 
 def get_local_cache_path(s3_path: str) -> str:
@@ -485,6 +521,74 @@ def _get_aggregation_version(data_collection_id_str: str) -> str | None:
         return None
 
 
+def build_cache_salt(
+    aggregation_version: str | int | None, delta_version: int | None
+) -> str | int | None:
+    """The discriminator every cache key for a data collection is salted with.
+
+    A live read is salted with ``aggregation_version`` alone, exactly as before.
+    A historical read gets ``{agg}@dv{n}`` appended, and that suffix is what
+    makes the two key spaces provably disjoint: ``aggregation_version`` is
+    always an integer string, so the literal ``@dv`` can never appear in a live
+    salt. Without this, a frame read at version 3 would be stored under the
+    live key and then handed to the next caller asking for current data —
+    silent wrong data, no error anywhere.
+
+    Returns ``None`` only when there is nothing to discriminate on, i.e. a live
+    read of a collection with no aggregation record. A historical read always
+    yields a salt even when ``aggregation_version`` is unknown, because an
+    unsalted historical key is precisely the poisoning case.
+    """
+    if delta_version is None:
+        return aggregation_version
+    return f"{aggregation_version if aggregation_version is not None else ''}@dv{delta_version}"
+
+
+#: Memoized results of `check_delta_version_available`, keyed on
+#: ``(delta_location, version)`` with a monotonic expiry. `bulk_compute_cards`
+#: renders every card on a dashboard in one request, so an un-memoized probe
+#: would read the Delta log once per card for the same table.
+_DELTA_AVAILABILITY_CACHE: dict[tuple[str, int], tuple[float, DeltaUnavailableReason | None]] = {}
+_DELTA_AVAILABILITY_TTL_SECONDS = 60.0
+_DELTA_AVAILABILITY_CACHE_MAX = 256
+
+
+def check_delta_version_available(
+    delta_location: str, version: int
+) -> DeltaUnavailableReason | None:
+    """``None`` if this commit can be read, otherwise why it cannot.
+
+    Reads the ``_delta_log`` only — a handful of small objects, not the table —
+    and memoizes for ~60s. Callers use it to decide *once per render batch*
+    whether to attempt historical reads at all, so an unavailable version costs
+    one probe rather than one failed scan per component.
+    """
+    import time
+
+    now = time.monotonic()
+    key = (delta_location, version)
+    hit = _DELTA_AVAILABILITY_CACHE.get(key)
+    if hit is not None and hit[0] > now:
+        return hit[1]
+
+    reason: DeltaUnavailableReason | None
+    try:
+        from deltalake import DeltaTable
+
+        table = DeltaTable(delta_location, storage_options=polars_s3_config)
+        # `version()` is the head; a commit above it was never written, and one
+        # below may still have been vacuumed — which only the read finds out.
+        reason = "out_of_range" if version > table.version() or version < 0 else None
+    except Exception as exc:  # noqa: BLE001 - an unreachable store is not fatal
+        logger.debug(f"check_delta_version_available({delta_location}, {version}) failed: {exc}")
+        reason = _classify_delta_read_failure(exc)
+
+    if len(_DELTA_AVAILABILITY_CACHE) >= _DELTA_AVAILABILITY_CACHE_MAX:
+        _DELTA_AVAILABILITY_CACHE.clear()
+    _DELTA_AVAILABILITY_CACHE[key] = (now + _DELTA_AVAILABILITY_TTL_SECONDS, reason)
+    return reason
+
+
 def _get_dc_type_from_db(data_collection_id: ObjectId) -> str | None:
     """
     Fetch data collection type from MongoDB.
@@ -573,20 +677,44 @@ def _get_delta_location(
     return file_id
 
 
-def _create_delta_scan(file_id: str, dc_type: str | None = None) -> pl.LazyFrame:
+def _create_delta_scan(
+    file_id: str,
+    dc_type: str | None = None,
+    version: int | None = None,
+    dc_id: str = "",
+) -> pl.LazyFrame:
     """
     Create a Polars LazyFrame scan from Delta table location or parquet files.
 
     Args:
         file_id: S3 path or local path to Delta table or parquet files.
         dc_type: Data collection type (e.g., "MultiQC", "Table"). If "MultiQC", uses parquet scan.
+        version: Delta commit to read instead of the current table. ``None``
+            leaves every existing code path byte-identical — ``version=`` is
+            never passed to Polars on the default path.
+        dc_id: Data collection id, for error reporting only.
 
     Returns:
         Polars LazyFrame for the Delta table or parquet files.
+
+    Raises:
+        DeltaVersionUnavailable: if ``version`` is set and this collection has
+            no Delta history to read it from.
     """
     # MultiQC data is stored as parquet, not delta tables
     # Case-insensitive check for MultiQC type
     if dc_type and dc_type.lower() == "multiqc":
+        if version is not None:
+            # Parquet has no commit log. Ignoring the version here would return
+            # the current sample set under the caller's belief that it is
+            # historical — the exact silent-wrong-data failure this raises to
+            # prevent. MultiQC's own time travel is the manifest mechanism.
+            raise DeltaVersionUnavailable(
+                dc_id or file_id,
+                version,
+                "not_versioned",
+                "MultiQC collections are stored as parquet, not Delta",
+            )
         # Handle both directory and file paths
         # If file_id ends with .parquet, it's a direct file path
         if file_id.endswith(".parquet"):
@@ -603,11 +731,48 @@ def _create_delta_scan(file_id: str, dc_type: str | None = None) -> pl.LazyFrame
         return pl.scan_parquet(parquet_pattern, storage_options=polars_s3_config)
 
     # Standard delta table scan
-    if USE_LOCAL_FILES:
+    if USE_LOCAL_FILES and version is None:
         cache_path = cache_delta_table_from_s3(file_id, polars_s3_config)
         return pl.scan_delta(cache_path)
 
-    return pl.scan_delta(file_id, storage_options=polars_s3_config)
+    # A versioned read deliberately bypasses the local mirror. The mirror is
+    # built by `scan_delta(current).collect()` + `write_delta(mode="overwrite")`,
+    # which materialises a fresh single-commit table: asking it for version 3
+    # returns *current* data without erroring. Read S3 directly instead.
+    if version is None:
+        return pl.scan_delta(file_id, storage_options=polars_s3_config)
+
+    # `scan_delta` is lazy, so a bad version surfaces as a DeltaError out of
+    # `.collect()` — far from here, wrapped by whichever caller collected, and
+    # indistinguishable from a genuine read failure. Probe the log first (one
+    # memoized round-trip, shared across a render batch) so the caller gets a
+    # classified DeltaVersionUnavailable at the point it asked for the version.
+    reason = check_delta_version_available(file_id, version)
+    if reason is not None:
+        raise DeltaVersionUnavailable(dc_id or file_id, version, reason)
+
+    try:
+        return pl.scan_delta(file_id, version=version, storage_options=polars_s3_config)
+    except Exception as exc:  # noqa: BLE001 - classified and re-raised below
+        raise DeltaVersionUnavailable(
+            dc_id or file_id, version, _classify_delta_read_failure(exc), str(exc)
+        ) from exc
+
+
+def _classify_delta_read_failure(exc: Exception) -> DeltaUnavailableReason:
+    """Best-effort reason for a failed historical read, from the error text.
+
+    delta-rs does not expose typed errors for these cases, so this reads the
+    message. It only ever affects the wording shown to the user — every reason
+    degrades to a live read identically — so a misclassification is cosmetic.
+    """
+    text = str(exc).lower()
+    if "invalid version" in text or "version" in text and "not found" in text:
+        return "out_of_range"
+    if "no such file" in text or "not found" in text or "nosuchkey" in text:
+        # Files referenced by a commit that still exists in the log: vacuum.
+        return "vacuumed"
+    return "read_failed"
 
 
 def _get_cached_schema(
@@ -1097,6 +1262,7 @@ def load_deltatable_lite(
     load_for_preview: bool = False,
     select_columns: list[str] | None = None,
     init_data: dict[str, dict] | None = None,
+    delta_version: int | None = None,
 ) -> pl.DataFrame:
     """
     Load a Delta table with adaptive memory management based on DataFrame size.
@@ -1125,6 +1291,14 @@ def load_deltatable_lite(
         select_columns: Columns to select for projection (None = all columns).
         init_data: Dashboard initialization data to avoid API/DB calls.
             Structure: {"dc_id": {"delta_location": str, "size_bytes": int}}
+        delta_version: Read this Delta commit instead of the current table.
+            Scalar on purpose — this function loads exactly one collection. A
+            join needs a per-collection map, which lives one level up in
+            ``join_deltatables_dev``.
+
+            The resulting frame is cached under a key salted with the version
+            (``build_cache_salt``), so a historical frame can never be served to
+            a caller that asked for current data.
 
     Returns:
         The loaded and optionally filtered DataFrame.
@@ -1132,6 +1306,7 @@ def load_deltatable_lite(
     Raises:
         Exception: If the HTTP request to load the Delta table fails (legacy path).
         NotImplementedError: If attempting to load a joined DC format (deprecated).
+        DeltaVersionUnavailable: If ``delta_version`` is set and cannot be read.
     """
     data_collection_id_str = str(data_collection_id)
     workflow_id_str = str(workflow_id)
@@ -1165,8 +1340,20 @@ def load_deltatable_lite(
                 else data_collection_id
             )
             dc_type = _get_dc_type_from_db(data_collection_id_obj)
-        delta_scan = _create_delta_scan(file_id, dc_type)
-        delta_scan = _project_scan(delta_scan, effective_cols, data_collection_id_str, None)
+        delta_scan = _create_delta_scan(
+            file_id, dc_type, version=delta_version, dc_id=data_collection_id_str
+        )
+        # This path does not cache DataFrames, but `_project_scan` still consults
+        # `_DELTA_SCHEMA_CACHE`, which is keyed on the salt. Passing a literal
+        # `None` (as this branch did) filed every schema under (dc_id, "None"),
+        # so an ingest never invalidated it and a historical read shared an entry
+        # with the live one. It gets the same compound salt as the cached path.
+        delta_scan = _project_scan(
+            delta_scan,
+            effective_cols,
+            data_collection_id_str,
+            build_cache_salt(_get_aggregation_version(data_collection_id_str), delta_version),
+        )
         if limit_rows:
             delta_scan = delta_scan.limit(limit_rows)
         df = delta_scan.collect()
@@ -1181,7 +1368,10 @@ def load_deltatable_lite(
     # one worker that received the event, so without a per-version key the
     # other 3 default workers keep serving the stale dataframe. The version
     # bumps on every CLI rewrite, so the new fetch lands on a new key.
-    version_salt = _get_aggregation_version(data_collection_id_str)
+    #
+    # A historical read compounds `@dv{n}` onto that salt, which is what keeps
+    # its frames out of the live key space entirely. See `build_cache_salt`.
+    version_salt = build_cache_salt(_get_aggregation_version(data_collection_id_str), delta_version)
 
     # Generate cache keys
     base_cache_key, filtered_cache_key, filter_hash = _generate_cache_keys(
@@ -1237,7 +1427,9 @@ def load_deltatable_lite(
 
     # Get delta location and create scan
     file_id = _get_delta_location(data_collection_id_str, workflow_id_str, init_data, TOKEN)
-    delta_scan = _create_delta_scan(file_id, dc_type)
+    delta_scan = _create_delta_scan(
+        file_id, dc_type, version=delta_version, dc_id=data_collection_id_str
+    )
 
     # Apply column projection at scan level (schema-guarded; see _project_scan)
     delta_scan = _project_scan(delta_scan, effective_cols, data_collection_id_str, version_salt)
@@ -1317,95 +1509,13 @@ def get_deltatable_size_from_db(data_collection_id: ObjectId) -> int:
         return -1  # Special value to indicate dynamic estimation needed
 
 
-def evict_oldest_cached_dataframe():
-    """
-    Evict the oldest cached DataFrame to free memory.
-    Uses LRU (Least Recently Used) strategy.
-    """
-    global _total_memory_usage
-
-    if not _cache_metadata:
-        return
-
-    # Find oldest cached DataFrame by timestamp
-    oldest_key = min(_cache_metadata.keys(), key=lambda k: _cache_metadata[k]["timestamp"])
-
-    # Remove from cache and update memory usage
-    if oldest_key in _dataframe_memory_cache:
-        size_bytes = _cache_metadata[oldest_key]["size_bytes"]
-        del _dataframe_memory_cache[oldest_key]
-        del _cache_metadata[oldest_key]
-        _total_memory_usage -= size_bytes
-
-
-def load_and_cache_dataframe(cache_key: str, size_bytes: int, delta_scan) -> pl.DataFrame:
-    """
-    Load DataFrame and cache it in Redis and memory if space allows.
-
-    Args:
-        cache_key: Unique identifier for this DataFrame
-        size_bytes: Expected size of the DataFrame in bytes
-        delta_scan: Polars LazyFrame to materialize
-
-    Returns:
-        Materialized DataFrame
-    """
-    global _total_memory_usage
-    import time
-
-    # Evict oldest entries if adding this would exceed threshold
-    while _total_memory_usage + size_bytes > MEMORY_THRESHOLD_BYTES and _cache_metadata:
-        evict_oldest_cached_dataframe()
-
-    # Materialize the DataFrame
-    df = delta_scan.collect()
-
-    # PERFORMANCE: Use fast row count instead of expensive estimated_size() for small datasets
-    # For datasets < 100KB, pickling overhead exceeds recalculation cost - skip Redis entirely
-    row_count = df.height
-    REDIS_SKIP_THRESHOLD_ROWS = 1000  # Skip Redis for datasets < 1000 rows (~100KB)
-
-    if row_count < REDIS_SKIP_THRESHOLD_ROWS:
-        # TINY DATASET: Skip Redis pickling overhead, use memory-only cache
-        actual_size = size_bytes  # Use estimate, avoid expensive df.estimated_size() scan
-
-        # Memory cache only (much faster than Redis for tiny datasets)
-        if _total_memory_usage + actual_size <= MEMORY_THRESHOLD_BYTES:
-            _dataframe_memory_cache[cache_key] = df
-            _cache_metadata[cache_key] = {
-                "size_bytes": actual_size,
-                "timestamp": time.time(),
-            }
-            _total_memory_usage += actual_size
-
-        return df
-
-    # LARGER DATASET: Use Redis + memory caching
-    # Use fast estimate (df.estimated_size() scan disabled for performance)
-    actual_size = df.height * df.width * 8  # 8 bytes per cell average
-
-    # Try to cache in Redis first (persistent across page refreshes)
-    try:
-        from depictio.api.cache import cache_dataframe
-
-        cache_dataframe(cache_key, df)
-    except Exception:
-        pass
-
-    # Also cache in memory if it fits the per-item cap AND the total threshold
-    # (faster access during session). Oversized frames stay in Redis only.
-    if (
-        actual_size <= MEMORY_PER_ITEM_MAX_BYTES
-        and _total_memory_usage + actual_size <= MEMORY_THRESHOLD_BYTES
-    ):
-        _dataframe_memory_cache[cache_key] = df
-        _cache_metadata[cache_key] = {
-            "size_bytes": actual_size,
-            "timestamp": time.time(),
-        }
-        _total_memory_usage += actual_size
-
-    return df
+# ``load_and_cache_dataframe`` / ``evict_oldest_cached_dataframe`` lived here and
+# had no callers: the live path caches through ``_cache_dataframe_to_stores``.
+# They are removed rather than left in place because the former derived its own
+# cache key instead of taking one from ``_generate_cache_keys`` — the single
+# place the version salt is applied — so it stood as a working counterexample to
+# the invariant the historical-read path depends on. ``MEMORY_PER_ITEM_MAX_BYTES``
+# above is likewise unapplied by the live path; that gap is real and separate.
 
 
 def apply_runtime_filters(df: pl.DataFrame, metadata: list[dict] | None) -> pl.DataFrame:
@@ -1565,11 +1675,24 @@ def invalidate_data_collection_cache(data_collection_id: str) -> int:
 
 
 def join_deltatables_dev(
-    wf_id: str, joins: list, metadata: dict | None = None, TOKEN: str | None = None
+    wf_id: str,
+    joins: list,
+    metadata: dict | None = None,
+    TOKEN: str | None = None,
+    delta_versions: dict[str, int] | None = None,
 ) -> pl.DataFrame:
-    """Development function for joining deltatables."""
+    """Development function for joining deltatables.
+
+    ``delta_versions`` maps data collection id → Delta commit, because a join
+    pulls several collections and each was ingested on its own schedule: one
+    scalar version would be meaningless across them. ``load_deltatable_lite``
+    stays scalar — it loads exactly one collection — so the map is unpacked
+    here, at the only level that knows which collections are involved. A
+    collection absent from the map reads live.
+    """
     if metadata is None:
         metadata = {}
+    versions = delta_versions or {}
 
     loaded_dfs = {}
 
@@ -1583,6 +1706,7 @@ def join_deltatables_dev(
                     ObjectId(dc_id1),
                     [e for e in metadata if e["metadata"]["dc_id"] == dc_id1],
                     TOKEN=TOKEN,
+                    delta_version=versions.get(dc_id1),
                 )
             if dc_id2 not in loaded_dfs:
                 loaded_dfs[dc_id2] = load_deltatable_lite(
@@ -1590,6 +1714,7 @@ def join_deltatables_dev(
                     ObjectId(dc_id2),
                     [e for e in metadata if e["metadata"]["dc_id"] == dc_id2],
                     TOKEN=TOKEN,
+                    delta_version=versions.get(dc_id2),
                 )
 
     # Initialize merged_df with the first join
