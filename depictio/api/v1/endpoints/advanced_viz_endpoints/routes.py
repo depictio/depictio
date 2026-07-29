@@ -139,6 +139,26 @@ def _apply_link_filters_to_payload(
 
 
 _KIND_METADATA: dict[AdvancedVizKind, dict[str, Any]] = {
+    "pr_benchmark": {
+        "label": "Precision-recall benchmark",
+        "description": "Recall vs precision per callset with F1 iso-contours and y=x diagonal — top-right is best.",
+        "icon": "tabler:target-arrow",
+    },
+    "roc_pr_curve": {
+        "label": "ROC / PR curve",
+        "description": "Threshold-sweep precision-recall curve with AUC, one line per tool / caller.",
+        "icon": "tabler:chart-line",
+    },
+    "confusion_matrix": {
+        "label": "Confusion matrix",
+        "description": "TP / FP / FN (/ TN) counts per callset as a compact heatmap; optional row-normalisation.",
+        "icon": "tabler:grid-dots",
+    },
+    "metric_ci_bars": {
+        "label": "Metric bars with CI",
+        "description": "Precision / recall / F1 bars with 95% confidence-interval whiskers.",
+        "icon": "tabler:chart-bar",
+    },
     "phylogenetic": {
         "label": "Phylogenetic tree",
         "description": "Newick tree + tip metadata (Microreact-style): 5 layouts, tip search, subtree highlight.",

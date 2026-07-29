@@ -107,6 +107,12 @@ AV_JSON_SOURCE: dict[str, AvJsonSource] = {
     "sunburst": "python",
     "oncoplot": "client_only",
     "coverage_track": "client_only",
+    # Benchmarking kinds (nf-core/variantbenchmarking). Ported alongside the
+    # rest; see services/advanced_viz/kinds/.
+    "roc_pr_curve": "python",
+    "pr_benchmark": "python",
+    "confusion_matrix": "python",
+    "metric_ci_bars": "python",
 }
 
 

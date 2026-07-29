@@ -1,0 +1,220 @@
+version: 1
+main_dashboard:
+  title: Variant Benchmarking — Germline small variants
+  subtitle: "analysis=germline · variant_type=small — SNV + INDEL, hap.py / rtg-tools vcfeval (HG002 / GIAB)"
+  project_tag: Variant Benchmarking — Germline small variants
+  main_tab_name: Benchmark
+  tab_icon: mdi:target-arrow
+  tab_icon_color: indigo
+  workflow_system: none
+  components:
+  - component_type: text
+    tag: small-bench-intro
+    title: Germline small-variant benchmarking
+    order: 1
+    alignment: left
+    body: >
+      How well does each callset recover the GIAB / HG002 truth set? The
+      precision–recall benchmark (F1 iso-contours, top-right is best) is the
+      signature view; the confusion matrix gives the TP/FP/FN counts and the
+      hap.py curve sweeps the quality threshold.
+    workflow_tag: variantbenchmarking
+    data_collection_tag: vcfeval_summary
+    layout: {x: 0, y: 0, w: 8, h: 2}
+
+  - component_type: card
+    workflow_tag: variantbenchmarking
+    data_collection_tag: vcfeval_summary
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: f1
+    column_type: float64
+    display: {icon_name: 'mdi:trophy', icon_color: '#3F51B5', title_color: '#3F51B5'}
+    tag: small-card-f1
+    title: F1
+    layout: {x: 0, y: 2, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: variantbenchmarking
+    data_collection_tag: vcfeval_summary
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: precision
+    column_type: float64
+    display: {icon_name: 'mdi:bullseye-arrow', icon_color: '#00897B', title_color: '#00897B'}
+    tag: small-card-prec
+    title: Precision
+    layout: {x: 2, y: 2, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: variantbenchmarking
+    data_collection_tag: vcfeval_summary
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: recall
+    column_type: float64
+    display: {icon_name: 'mdi:magnet', icon_color: '#F2A93B', title_color: '#F2A93B'}
+    tag: small-card-recall
+    title: Recall
+    layout: {x: 4, y: 2, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: variantbenchmarking
+    data_collection_tag: vcfeval_summary
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: tp_comp
+    column_type: int64
+    display: {icon_name: 'mdi:check-decagram', icon_color: '#7E57C2', title_color: '#7E57C2'}
+    tag: small-card-tp
+    title: True positives
+    layout: {x: 6, y: 2, w: 2, h: 2}
+
+  - component_type: interactive
+    workflow_tag: variantbenchmarking
+    data_collection_tag: vcfeval_summary
+    interactive_component_type: MultiSelect
+    column_name: label
+    column_type: object
+    display: {title_size: md, custom_color: '#3F51B5', icon_name: 'mdi:flask'}
+    tag: small-filter-sample
+    index: small-sample-filter
+    title: Sample
+    layout: {x: 0, y: 4, w: 1, h: 2}
+
+  - component_type: advanced_viz
+    workflow_tag: variantbenchmarking
+    data_collection_tag: vcfeval_summary
+    use: rtgtools/pr_scatter
+    config: {support_col: tp_comp}
+    tag: small-av-pr
+    title: Precision–recall benchmark
+    description: Each point is a sample; size = true positives, colour = F1, dotted lines = equal-F1 contours. Top-right is best.
+    layout: {x: 0, y: 4, w: 5, h: 7}
+  - component_type: figure
+    workflow_tag: variantbenchmarking
+    data_collection_tag: vcfeval_summary
+    visu_type: scatter
+    dict_kwargs: {x: f1, y: label, color: f1, size: f1, size_max: 26, color_continuous_scale: Tealgrn}
+    tag: small-fig-f1
+    title: F1 by sample
+    description: Ranked accuracy per sample (x-axis zoomed to the data).
+    title_size: h3
+    layout: {x: 5, y: 4, w: 3, h: 7}
+
+  - component_type: advanced_viz
+    workflow_tag: variantbenchmarking
+    data_collection_tag: vcfeval_summary
+    use: rtgtools/confusion
+    tag: small-av-confusion
+    title: Confusion matrix
+    description: TP / FP / FN per sample — cell shade = share of that callset's calls, label = raw count.
+    layout: {x: 0, y: 11, w: 8, h: 4}
+
+  - component_type: figure
+    workflow_tag: variantbenchmarking
+    data_collection_tag: happy_summary
+    visu_type: scatter
+    dict_kwargs: {x: f1, y: variant_type, color: variant_type, size: f1, size_max: 22}
+    tag: small-fig-happy-type
+    title: hap.py — F1 by variant type
+    description: "SNP vs INDEL F1, pooled across samples. ALL and PASS are identical in this run (no hard-filtered variants), so the two filters overlap."
+    title_size: h3
+    layout: {x: 0, y: 15, w: 4, h: 5}
+  - component_type: advanced_viz
+    workflow_tag: variantbenchmarking
+    data_collection_tag: happy_roc
+    use: happy/pr_curve
+    config: {threshold_col: quality}
+    tag: small-av-roc
+    title: hap.py threshold sweep
+    description: PR curve with AUC; switch to "vs threshold" in the panel settings. (This test subset has only 2 thresholds — a full run yields a full curve.)
+    layout: {x: 4, y: 15, w: 4, h: 5}
+
+  - component_type: table
+    workflow_tag: variantbenchmarking
+    data_collection_tag: vcfeval_summary
+    row_selection_enabled: false
+    tag: small-table-vcfeval
+    title: vcfeval summary
+    description: Per-sample TP / FP / FN and precision / recall / F1.
+    title_size: h3
+    layout: {x: 0, y: 20, w: 8, h: 5}
+
+tabs:
+- title: MultiQC
+  subtitle: MultiQC report — small-variant run (bcftools stats · hap.py)
+  tab_order: 1
+  tab_icon: /assets/images/logos/multiqc_icon_color.svg
+  tab_icon_color: orange
+  workflow_system: none
+  components:
+  - component_type: text
+    tag: small-qc-intro
+    title: MultiQC — small-variant run
+    order: 1
+    alignment: left
+    body: >
+      The pipeline's MultiQC report for the germline small-variant run: bcftools
+      general statistics per callset, hap.py SNP / INDEL panels, and variant
+      substitution / indel-length distributions.
+    workflow_tag: variantbenchmarking
+    data_collection_tag: multiqc_data
+    layout: {x: 0, y: 0, w: 8, h: 2}
+
+  - component_type: interactive
+    workflow_tag: variantbenchmarking
+    data_collection_tag: multiqc_data
+    interactive_component_type: MultiSelect
+    column_name: sample
+    display: {title_size: md, custom_color: '#26A69A', icon_name: 'mdi:flask'}
+    tag: small-qc-filter-sample
+    index: small-qc-sample-filter
+    title: Sample
+    layout: {x: 0, y: 2, w: 1, h: 2}
+
+  - component_type: multiqc
+    workflow_tag: variantbenchmarking
+    data_collection_tag: multiqc_data
+    selected_module: general_stats
+    selected_plot: general_stats
+    tag: small-qc-general-stats
+    title: General statistics
+    layout: {x: 0, y: 2, w: 8, h: 4}
+
+  - component_type: multiqc
+    workflow_tag: variantbenchmarking
+    data_collection_tag: multiqc_data
+    selected_module: happy
+    selected_plot: SNP
+    tag: small-qc-happy-snp
+    title: hap.py — SNP
+    layout: {x: 0, y: 6, w: 4, h: 5}
+
+  - component_type: multiqc
+    workflow_tag: variantbenchmarking
+    data_collection_tag: multiqc_data
+    selected_module: happy
+    selected_plot: INDEL
+    tag: small-qc-happy-indel
+    title: hap.py — INDEL
+    layout: {x: 4, y: 6, w: 4, h: 5}
+
+  - component_type: multiqc
+    workflow_tag: variantbenchmarking
+    data_collection_tag: multiqc_data
+    selected_module: bcftools
+    selected_plot: Variant Substitution Types
+    tag: small-qc-bcftools-subtypes
+    title: bcftools — variant substitution types
+    layout: {x: 0, y: 11, w: 8, h: 5}
+
+  - component_type: multiqc
+    workflow_tag: variantbenchmarking
+    data_collection_tag: multiqc_data
+    selected_module: bcftools
+    selected_plot: Indel Distribution
+    tag: small-qc-bcftools-indel
+    title: bcftools — indel distribution
+    layout: {x: 0, y: 16, w: 8, h: 5}

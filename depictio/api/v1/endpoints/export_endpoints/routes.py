@@ -44,10 +44,22 @@ from depictio.api.v1.services.export.resolve import (
     resolve_dashboard,
     resolve_dashboard_component,
 )
+from depictio.api.v1.services.export.revision import (
+    build_etag,
+    dashboard_revision,
+    etag_matches,
+)
 from depictio.models.models.base import PyObjectId
 from depictio.models.models.users import User
 
 export_endpoint_router = APIRouter()
+
+#: Revalidate on every use, but allow a 304. `no-cache` is not `no-store`: the
+#: client may keep the copy, it just may not serve it without asking first. That
+#: is what makes an embed track the dashboard while still costing ~200 bytes per
+#: check. `private` because a figure can be permission-scoped and must not land
+#: in a shared proxy cache.
+_CACHE_CONTROL = "private, no-cache"
 
 
 def _require_embed_enabled() -> None:
@@ -188,6 +200,14 @@ async def export_component(
     filters: str | None = Query(
         None, description="URL-encoded JSON array of interactive filter values."
     ),
+    expect_version: int | None = Query(
+        None,
+        description=(
+            "Pin the dashboard version this caller was built against. If the "
+            "dashboard has moved on, answer 409 rather than silently serving "
+            "something different."
+        ),
+    ),
     current_user: User = Depends(get_embed_user),
     access_token: Annotated[str | None, Depends(oauth2_scheme_optional)] = None,
 ) -> Any:
@@ -202,6 +222,7 @@ async def export_component(
         filters=_parse_filters(filters),
         current_user=current_user,
         access_token=access_token,
+        expect_version=expect_version,
     )
 
 
@@ -245,6 +266,7 @@ async def _export(
     filters: list[dict],
     current_user: User,
     access_token: str | None,
+    expect_version: int | None = None,
 ) -> Any:
     """Shared body of the GET and POST export routes."""
     try:
@@ -257,6 +279,7 @@ async def _export(
             filters=filters,
             current_user=current_user,
             access_token=access_token,
+            expect_version=expect_version,
         )
     except HTTPException as exc:
         # Error bodies here are actionable — they name the supported formats and
@@ -278,10 +301,49 @@ async def _export_inner(
     filters: list[dict],
     current_user: User,
     access_token: str | None,
+    expect_version: int | None = None,
 ) -> Any:
     dashboard_data, component, _ = resolve_dashboard_component(
         dashboard_id, component_id, current_user
     )
+
+    revision = dashboard_revision(dashboard_data)
+
+    # Pin check first: a caller that asked for a specific version wants to hear
+    # about drift, not receive a different figure with a 200.
+    if expect_version is not None and revision["dashboard_version"] != expect_version:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "version_mismatch",
+                "message": (
+                    f"Dashboard is at version {revision['dashboard_version']}, "
+                    f"caller expected {expect_version}. Drop expect_version to take "
+                    "the current figure, or re-pin after reviewing the change."
+                ),
+                "current_version": revision["dashboard_version"],
+                "expected_version": expect_version,
+                "last_saved_ts": revision["last_saved_ts"],
+            },
+        )
+
+    etag = build_etag(
+        dashboard_doc=dashboard_data,
+        component_id=component_id,
+        export_format=export_format.value,
+        theme=theme,
+        filters=filters,
+    )
+    if etag_matches(request.headers.get("if-none-match"), etag):
+        # 304 must not carry a body, but must carry the validators — otherwise the
+        # client's cached copy has nothing to revalidate against next time.
+        from fastapi import Response
+
+        not_modified = Response(status_code=304)
+        not_modified.headers["ETag"] = etag
+        not_modified.headers["Cache-Control"] = _CACHE_CONTROL
+        _apply_embed_cors(request, not_modified)
+        return not_modified
 
     if export_format is ExportFormat.HTML:
         from depictio.api.v1.services.export.embed import render_component_embed
@@ -300,7 +362,8 @@ async def _export_inner(
         # value, and CSP frame-ancestors supersedes it. The middleware exempts
         # this path from re-adding it.
         response.headers["Content-Security-Policy"] = csp
-        response.headers["Cache-Control"] = "private, max-age=0, must-revalidate"
+        response.headers["Cache-Control"] = _CACHE_CONTROL
+        response.headers["ETag"] = etag
         _apply_embed_cors(request, response)
         return response
 
@@ -316,11 +379,19 @@ async def _export_inner(
         current_user=current_user,
         html_url=_html_url(request, dashboard_id, component_id, theme),
     )
+    # Provenance travels *inside* the payload as well as in headers: a figure
+    # saved to a file keeps no headers, and "which version produced this" is
+    # exactly the question you ask months later looking at a committed .json.
+    if isinstance(payload, dict) and isinstance(payload.get("meta"), dict):
+        payload["meta"].update(revision)
+        payload["meta"]["etag"] = etag
     logger.info(
         "export: served component=%s format=json type=%s",
         component_id,
         component.get("component_type"),
     )
     response = JSONResponse(content=payload)
+    response.headers["Cache-Control"] = _CACHE_CONTROL
+    response.headers["ETag"] = etag
     _apply_embed_cors(request, response)
     return response
