@@ -65,7 +65,15 @@ REQUIRED = {
 #: module path -> markers that must be ABSENT. Time travel controls belong to
 #: the editor, and a stale bundle could keep serving a removed one.
 FORBIDDEN = {
-    "/src/App.tsx": ["ComponentVersionModal", "onDataPinsChange"],
+    # Version history in full: the drawer itself, the per-component modal, and
+    # the dataset picker's callback. All of it either writes or re-points the
+    # dashboard at data it was not saved with, so all of it is edit-mode.
+    "/src/App.tsx": [
+        "VersionHistoryDrawer",
+        "ComponentVersionModal",
+        "onDataPinsChange",
+        "onOpenVersionHistory",
+    ],
 }
 
 failures: list[str] = []

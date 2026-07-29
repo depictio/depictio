@@ -54,7 +54,6 @@ import type {
 import { parseTemplateOrigin } from './projects/template';
 import { dashboardFromVersion, extractPreviewVersionId } from './versions/preview';
 import VersionPreviewBanner from './versions/VersionPreviewBanner';
-import VersionHistoryDrawer from './versions/VersionHistoryDrawer';
 import DataVersionBanner from './versions/DataVersionBanner';
 import { collectDataCollections } from './versions/useDatasetHistories';
 
@@ -104,7 +103,6 @@ const App: React.FC = () => {
   // `sidebar-collapsed` localStorage key the Dash app writes.
   const [desktopOpened, toggleDesktop] = useSidebarOpen();
   const [settingsOpened, { open: openSettings, close: closeSettings }] = useDisclosure(false);
-  const [versionsOpened, { open: openVersions, close: closeVersions }] = useDisclosure(false);
   // Data time travel, read-only in the viewer.
   //
   // Choosing which data to draw from is an editing act and lives in the
@@ -852,44 +850,18 @@ const App: React.FC = () => {
         )}
       </AppShell.Main>
 
+      {/* No `onOpenVersionHistory`: version history is an editing surface.
+          Everything it offers either writes (restore, snapshot, delete) or
+          re-points the dashboard at data it was not saved with, and the viewer
+          is where people go to *read* a dashboard.
+
+          The viewer still renders `?version=` previews, which is how the
+          editor's Preview opens a past version — read-only, banner-marked, and
+          pinned to the data that version recorded. */}
       <SettingsDrawer
         opened={settingsOpened}
         onClose={closeSettings}
         dashboard={dashboard}
-        onOpenVersionHistory={isOwner ? openVersions : undefined}
-      />
-
-      {/* The viewer holds no unsaved edits, so a restore just needs the page to
-          re-read the dashboard. Reloading rather than refetching also clears
-          every component's resolved data, which a restore can invalidate
-          wholesale. When a preview is pinned we leave `?version=` behind on the
-          way out: the restored content *is* the live dashboard now, and staying
-          on the preview URL would keep showing it as a read-only past version. */}
-      <VersionHistoryDrawer
-        opened={versionsOpened}
-        onClose={closeVersions}
-        dashboardId={dashboardId}
-        canEdit={isOwner}
-        canDelete={isOwner}
-        // Withheld while previewing: it names the *live* state, not the past
-        // one on screen behind the drawer.
-        canSnapshot={isOwner && !previewVersionId}
-        previewTarget="same-tab"
-        // No `onDataPinsChange` / `onAsOfChange`: choosing which data to draw
-        // from is an editing act and lives in the editor. The viewer still
-        // lists the timeline, so a past layout can be previewed or restored,
-        // but it does not offer to re-point the live dashboard at old data.
-        //
-        // `?version=` preview is unaffected: it pins the data that version
-        // recorded, which is what makes the preview a coherent snapshot rather
-        // than a past layout over today's numbers.
-        onRestored={() => {
-          if (previewVersionId && dashboardId) {
-            window.location.href = `/dashboard/${dashboardId}`;
-          } else {
-            window.location.reload();
-          }
-        }}
       />
     </AppShell>
       </DataVersionProvider>

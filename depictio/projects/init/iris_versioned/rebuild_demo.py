@@ -45,6 +45,7 @@ resolve):
 from __future__ import annotations
 
 import argparse
+import json
 import subprocess
 import sys
 import time
@@ -71,7 +72,7 @@ BASELINE_LABEL = "Before first tracked change"
 
 # What the finished demo must look like. Asserted at the end, and by --verify.
 EXPECTED_ROWS = [50, 100, 100, 150]
-EXPECTED_COMPONENTS = [5, 8, 8, 9]
+EXPECTED_COMPONENTS = [5, 8, 7, 9]
 
 
 class Fail(Exception):
@@ -443,7 +444,52 @@ def verify(api: Api) -> None:
     for index in sorted(changed):
         _log(f"      {per_version[0][index]!r} -> {per_version[-1][index]!r}")
 
+    # Stronger: a component that survives a step and does *not* change between
+    # those two versions shows two identical renders in its own history, which
+    # reads as the feature being broken. regenerate_dashboards.py enforces this
+    # on the YAML; this asserts it survived import.
+    # Compared on what each component *draws*, not on its title: a filter that
+    # changes from a dropdown to a segmented control, or a chart from a box to
+    # a bar, keeps its name while looking completely different.
+    renders = [_component_renders(api, v["version_id"]) for v in labelled]
+    for position in range(len(renders) - 1):
+        before, after = renders[position], renders[position + 1]
+        stale = [i for i in set(before) & set(after) if before[i] == after[i]]
+        if stale:
+            names = ", ".join(sorted(per_version[position][i] for i in stale))
+            raise Fail(
+                f"{labels[position]} -> {labels[position + 1]}: "
+                f"unchanged component(s) {names}; their history shows nothing"
+            )
+    _log("  ✓ every surviving component changes at each step")
+
     _log(f"\n  dashboard_id: {did}")
+
+
+#: What has to differ for a component's history to show two distinct renders.
+_RENDERED_FIELDS = (
+    "title",
+    "component_type",
+    "aggregation",
+    "column_name",
+    "visu_type",
+    "dict_kwargs",
+    "interactive_component_type",
+)
+
+
+def _component_renders(api: Api, version_id: str) -> dict[str, str]:
+    """Component index -> a fingerprint of what it draws."""
+    detail = api.ok(api.get(f"/dashboards/versions/{version_id}"), "version detail")
+    return {
+        str(component["index"]): json.dumps(
+            {field: component.get(field) for field in _RENDERED_FIELDS},
+            sort_keys=True,
+            default=str,
+        )
+        for tab in detail.get("tabs") or []
+        for component in tab.get("stored_metadata") or []
+    }
 
 
 def _component_titles(api: Api, version_id: str) -> dict[str, str]:
