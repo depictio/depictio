@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timedelta
 from typing import cast
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -1229,28 +1230,49 @@ class TestInvalidJwtReporting:
         yield
         core_functions._invalid_jwt_seen.clear()
 
+    @pytest.fixture(autouse=True)
+    def _capture_warnings(self, caplog):
+        """Let WARNING records from the `depictio` logger reach caplog.
+
+        `caplog.at_level` alone is not enough here, and the failure is silent:
+        it sets the level on the *root* logger, but `LoggingConfig.verbosity_level`
+        defaults to ERROR, so `logging.getLogger("depictio")` drops the record
+        before propagation ever happens. Every assertion in this class then reads
+        an empty `caplog` and fails on a claim about the code that is actually
+        true.
+
+        Set on the named logger, and restored after, so a test that runs with a
+        real config (`DEPICTIO_LOGGING_VERBOSITY_LEVEL=INFO` in
+        `docker-compose/.env`) behaves identically to one that does not.
+        """
+        depictio_logger = logging.getLogger("depictio")
+        previous = depictio_logger.level
+        depictio_logger.setLevel(logging.WARNING)
+        with caplog.at_level(logging.WARNING, logger="depictio"):
+            yield
+        depictio_logger.setLevel(previous)
+
     def test_the_first_rejection_warns(self, caplog):
-        with caplog.at_level("WARNING"):
-            core_functions._report_invalid_jwt("token-a", "Signature verification failed")
+        core_functions._report_invalid_jwt("token-a", "Signature verification failed")
 
         assert len(caplog.records) == 1
         assert "Signature verification failed" in caplog.records[0].getMessage()
 
     def test_a_repeating_client_warns_once(self, caplog):
-        with caplog.at_level("WARNING"):
-            for _ in range(89):
-                core_functions._report_invalid_jwt("token-a", "Signature verification failed")
+        for _ in range(89):
+            core_functions._report_invalid_jwt("token-a", "Signature verification failed")
 
         # 89 identical warnings was the observed real-world flood.
-        assert len(caplog.records) == 1
+        warnings = [r for r in caplog.records if r.levelname == "WARNING"]
+        assert len(warnings) == 1
 
     def test_distinct_tokens_each_warn(self, caplog):
-        with caplog.at_level("WARNING"):
-            core_functions._report_invalid_jwt("token-a", "boom")
-            core_functions._report_invalid_jwt("token-b", "boom")
+        core_functions._report_invalid_jwt("token-a", "boom")
+        core_functions._report_invalid_jwt("token-b", "boom")
 
         # One stuck client and two stuck clients are different situations.
-        assert len(caplog.records) == 2
+        warnings = [r for r in caplog.records if r.levelname == "WARNING"]
+        assert len(warnings) == 2
 
     def test_the_next_window_reports_what_was_suppressed(self, caplog, monkeypatch):
         clock = {"t": 1000.0}
@@ -1261,8 +1283,7 @@ class TestInvalidJwtReporting:
         clock["t"] += core_functions._INVALID_JWT_WINDOW_SECONDS + 1
         caplog.clear()
 
-        with caplog.at_level("WARNING"):
-            core_functions._report_invalid_jwt("token-a", "boom")
+        core_functions._report_invalid_jwt("token-a", "boom")
 
         warnings = [r for r in caplog.records if r.levelname == "WARNING"]
         assert len(warnings) == 1
@@ -1278,8 +1299,10 @@ class TestInvalidJwtReporting:
 
     def test_the_token_never_reaches_the_log(self, caplog):
         secret = "eyJhbGciOiJSUzI1NiJ9.super-secret-token-body.signature"
-        with caplog.at_level("WARNING"):
-            core_functions._report_invalid_jwt(secret, "Signature verification failed")
+        core_functions._report_invalid_jwt(secret, "Signature verification failed")
 
+        # A non-empty caplog is load-bearing for the first assertion: an empty
+        # one satisfies "the secret is absent" while proving nothing at all.
+        assert caplog.text
         assert secret not in caplog.text
         assert core_functions._token_fingerprint(secret) in caplog.text

@@ -115,15 +115,38 @@ Route dispatch is plain regex in `depictio/viewer/src/main.tsx` +
 - Preview **merges** the snapshot onto the live document — a `TabSnapshot` has no
   `project_id`/`permissions` by design, so rendering it alone breaks data resolution.
   Guarded by `npm run check:preview` (no JS test runner in this tree)
-- Version history covers **layout and components only**. Charts always read current data;
-  `DataCollectionStamp` records what the data *was*, but nothing reads it back yet.
-  Time travel is blocked on `deltatables_utils._generate_cache_keys`: the key is salted
-  with `aggregation_version` only, so a historical read would be cached under the live key
+- Version history covers **layout, components and data**. `DataCollectionStamp` is read
+  back: `as_of_version` expands a version's stamps into per-collection pins, and
+  `data_versions: {dc_id: N}` overrides one. A stale version id is a **400**, never a
+  silent fall back to current data
+- A time-travelling render needs **both halves** in the request body: `as_of_version` /
+  `data_versions` for the data, and `component_overrides` for the definition. Sending
+  only the pins renders a past version's data through today's chart config and labels it
+  as the past. Both halves were missing once, and neither failure raised
+- `component_overrides` is narrowed server-side by `_DEFINITION_FIELDS` (per component
+  type, presentation fields only). `wf_id`/`dc_id`/`dc_config` are absent from every
+  allow-list: they decide *which collection is read*, and honouring them from a request
+  body would read data the dashboard does not reference and whose permissions were never
+  checked
+- Cache keys are salted with the pin, so a historical read is its own entry rather than
+  colliding with the live one
+- Component ids come from a UUID5 of stable content, **not** regenerated on import.
+  Three places must agree; `_regenerate_component_indices` runs on import and will
+  silently undo it. Without stable ids no component-level history can match anything
+- Time-travel UI is **edit mode only** (timeline, dataset picker, component history) —
+  all of it writes or re-points data. The viewer keeps only the `?version=` preview.
+  `check_served_bundle.py` asserts that split in the *served bundle*, in both directions
 - Deleting a main tab drops its ledger + seq counter; a child tab's versions belong to
   the family and must survive
 - `depictio/projects/init/iris_versioned/` is the fixture for exercising any of this:
-  3 data versions (batch 2 vs 3 differ only in values) and 3 dashboard versions.
-  Not auto-seeded — see its README
+  4 data versions at 50/100/100/150 rows and 4 dashboard versions. Batch 2 vs 3 have the
+  **same row count** and differ only in values, which is what makes a read that silently
+  serves current data visible rather than merely plausible. Build it with
+  `rebuild_demo.py`; not auto-seeded — see its README
+- Batch N must be ingested *before* dashboard version N is saved. Ingest everything first
+  and all four versions stamp the newest commit: labels, counts and stamps all look
+  right, and "restore v1's data" quietly shows the complete survey. `rebuild_demo.py`
+  asserts the stamps ascend
 
 ### Screenshot System
 - Playwright drives the React SPA; composite targeting via `.react-grid-item`
