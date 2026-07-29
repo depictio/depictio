@@ -28,7 +28,10 @@ Moved here when the draft-note comment was stripped off the top of the post.
   exist for these, unlike the advanced-viz crops they replaced.
   The three under docs/images/blog/v1.0/ are captured locally by
   dev/playwright_debug/blog_shots.py against a running dev stack (1920x1080 at
-  1x). Copy them into depictio-docs alongside the post. Regenerate with:
+  1x). They are GITIGNORED in this repo and committed only to depictio-docs
+  (PR #148), matching the convention that docs/images/ here holds logos and
+  favicons only. They stay on disk so the draft previews locally. Regenerate
+  with:
     python dev/playwright_debug/blog_shots.py --viewer-url http://localhost:5601 \
       --scale 1 --width 1920 --height 1080 --out /tmp/shots
   and for a dashboard tab, add --dashboard-id <tab id> --prefix <name>.

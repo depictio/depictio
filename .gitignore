@@ -212,6 +212,14 @@ depictio/.depictio/
 depictio/.depictio/*.yaml
 
 
+## Blog screenshots
+# Blog images live in the depictio-docs repo, not here. docs/images/ in this
+# repo carries only logos and favicons; every screenshot is committed to
+# depictio-docs, which serves them from one unversioned root (see that repo's
+# hooks/shared_images.py). Drafts staged here reference them, but the binaries
+# must not enter this repo's history.
+docs/images/blog/
+
 ## Screenshots
 screenshot_*.png
 # Ignore all screenshots recursively
