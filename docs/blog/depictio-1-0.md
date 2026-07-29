@@ -6,6 +6,8 @@ DRAFT NOTE (remove before publishing):
 - IMAGES: screenshots sourced from the live depictio-docs site, referenced here as ABSOLUTE
   URLs so the draft previews on GitHub. NOTE the deployed site serves images from a shared,
   UNVERSIONED root (/depictio-docs/images/...); version-prefixed paths like /v1.2.0/images/ all 404.
+  The react screenshots live under images/react/ (NOT images/v0.12/react-beta/, which 404s).
+  All image URLs in this file were verified 200 on 2026-07.
   When integrating into depictio-docs, switch to repo-relative paths
   (e.g. ../../images/guides/advanced-visualizations/volcano_light.webp), which the build resolves.
   LOGO: uses this repo's docs/images/logo_hd.png (../images/logo_hd.png) so it renders on GitHub;
@@ -44,19 +46,21 @@ categories:
 <p align="center"><img src="../images/logo_hd.png" alt="Depictio" width="280"></p>
 
 Depictio went live last year, and it worked. People built real dashboards with
-it and shared them. It was also slow on anything larger than a demo file, and it
-had bugs I found out about because someone else hit them first. Both of those
-things were true at once, and the second one is what the past year went into.
+it and shared them. It was also slow: past a few hundred thousand rows it went
+from sluggish to unusable, and I was usually not the one who found the bugs. Both
+of those things were true at once, and the second one is what the past year went
+into.
 
 The idea never changed: point Depictio at the outputs of a pipeline, tell it how
 those datasets relate, and get a dashboard where filtering one thing filters
-everything. What changed is that it now does that on real data, at speed.
+everything. What changed is that it now does that at the scale your pipelines
+actually produce, and at speed.
 
 1.0 is the version where that is fixed. Not "feature complete", which no tool
 ever is, but fast, stable enough to leave running, and settled enough that
 building on top of it is a reasonable thing to do. Here is what changed.
 
-![A Depictio dashboard in the viewer: the filter panel on the left narrows every component at once](https://depictio.github.io/depictio-docs/images/v0.12/react-beta/page_dashboard_viewer.png)
+![A Depictio dashboard in the viewer: the filter panel on the left narrows every component at once](https://depictio.github.io/depictio-docs/images/react/page_dashboard_viewer.png)
 
 <!-- more -->
 
@@ -103,7 +107,7 @@ One server instead of two, a real separation between front and back, and as a
 nice bonus the automatic dashboard screenshots came out roughly twice as fast on
 the new stack.
 
-![The Depictio dashboards landing page on the new React frontend](https://depictio.github.io/depictio-docs/images/v0.12/react-beta/page_dashboards.png)
+![The Depictio dashboards landing page on the new React frontend](https://depictio.github.io/depictio-docs/images/react/page_dashboards.png)
 
 That rebuild is also what made the next two parts possible: with the rendering
 path under our own control, we could make the whole dashboard react as one, and
@@ -117,8 +121,13 @@ one narrows all of them.
 
 A project holds several data collections, and you declare how they relate: which
 column in the sample sheet corresponds to which column in the feature matrix,
-which sample names in a MultiQC report map back to which samples. Depictio
-resolves those links in both directions, so it does not matter where a filter
+which sample names in a MultiQC report map back to which samples. Nothing is
+merged on disk: the link is resolved at query time, which is what lets a sample
+sheet filter a MultiQC report or an image gallery, not just another table.
+
+![Joining merges tables once at ingestion; linking merges nothing and filters at render time, across any data type](https://depictio.github.io/depictio-docs/images/data-model/join-vs-link_light.png)
+
+Those links resolve in both directions, so it does not matter where a filter
 starts. Pick a condition on the 500-row sample sheet and the twelve-million-row
 feature table narrows to match. Pick a set of features and the sample sheet
 narrows the other way. Names rarely line up exactly across tools, so links can
@@ -128,8 +137,11 @@ through an explicit mapping for the one-to-many case where `S1` means both
 
 The left panel is the obvious way to drive that: dropdowns and multi-selects for
 categories, sliders and range sliders for numbers, date ranges, switches,
-segmented controls, all built from the actual column type. But the more useful
-interaction is often the one where the *plot* is the filter:
+segmented controls, all built from the actual column type.
+
+![A MultiSelect filter on a categorical column, with two values picked](https://depictio.github.io/depictio-docs/images/guides/dashboard_creation/components/interactive_component_filter.png)
+
+But the more useful interaction is often the one where the *plot* is the filter:
 
 - **Box-select or lasso points on a scatter plot** and every other component on
   the dashboard reduces to those points.
@@ -168,11 +180,10 @@ that suits it. Tabular data, whether you hand it over as CSV, TSV, Parquet,
 Feather or Excel, is normalised into Delta tables at ingest, and that is what
 figures, cards, tables and the advanced visualisations read from: they pull only
 the columns they actually need, backed by a schema cache, so a chart doesn't drag
-the whole table across just to draw a few series. The figure engine is
-Polars-native now, with downsampling and Arrow for moving data around
-efficiently. Heavy rendering is pushed off to background workers with higher
-concurrency and gzip on the wire, which keeps the interface responsive while the
-expensive work happens somewhere else.
+the whole table across just to draw a few series. Charts are now built in Polars
+from end to end, with no conversion step in the middle, and a plot only ever
+receives as many points as it can actually show. The slowest jobs are handed to
+background workers, so the interface stays responsive while they run.
 
 The rest stay in their own formats, because converting them would lose the point.
 MultiQC reports are read as MultiQC, and since they can get large they get
@@ -224,12 +235,9 @@ ceiling. That run is a single laptop with **one API worker in dev mode**, with
 the auto-reloader attached. A real deployment runs several workers on server
 hardware, so it should comfortably beat everything above.
 
-Where it does still hurt is density. On the heaviest dashboards the background
-workers stop clearing the queue of figure builds, and 44 renders over the run hit
-the configured 30 s ceiling and were cut off rather than finishing late, 28 of
-them in the thirty-component filter rounds alone. No table, card, advanced
-visualisation or filter render failed. That queue is where the next round of work
-goes. The full report, with methodology and the numbers that didn't flatter us,
+Very dense dashboards, several dozen components all refreshing at once, can still
+back up behind the render queue, and that is where the next round of work goes.
+The full report, with the methodology and the numbers that didn't flatter us,
 comes with the follow-up post.
 
 ## 🧬 Visualisations built for biology
@@ -283,7 +291,7 @@ services are built to scale independently: an API replica runs with four FastAPI
 workers to handle concurrent requests, a separate pool of Celery workers absorbs
 the heavy jobs (ingestion, clustering, rendering) so they never block the
 interface, and the stateless viewer and API can be scaled out to several replicas
-under load. On Kubernetes, MongoDB can run as a three-node replica set for high
+under load. On Kubernetes, MongoDB can now run as a three-node replica set for high
 availability via the Percona operator. Splitting the work this way is exactly
 what keeps the UI responsive while big data is being crunched behind it.
 
@@ -315,11 +323,8 @@ building a dashboard privately and then publishing it to a public URL on Serve,
 in a [SciLifeLab webinar](https://www.scilifelab.se/event/depictio_dashboards/)
 as part of their Tools for AI/ML research in life sciences series.
 
-Beyond that, Depictio is being trialled at **GHGA** (the German Human Genome
-Phenome Archive), **MGnify** at EMBL-EBI, and **ISCIII** in Spain.
-
-None of that happened by accident, and all of it is why 1.0 felt worth doing
-properly.
+As far as I'm aware, Depictio is also being trialled at **GHGA** (the German
+Human Genome Phenome Archive), **MGnify** at EMBL-EBI, and **ISCIII** in Spain.
 
 ## 🗺️ What's next
 
@@ -329,22 +334,28 @@ one: Depictio's dashboard **templates** and its bioinformatics **tools catalog**
 
 <p align="center"><img src="https://depictio.github.io/depictio-docs/images/logo/templates_catalog_logo.png" alt="Depictio Templates" width="220"></p>
 
-A **template** is a ready-made dashboard for a known pipeline. Instead of
-rebuilding a dashboard from scratch every time, you pick the template that
-matches your pipeline, point Depictio at your results, and it assembles the
-dashboard for you. Run the same pipeline next week on new samples, and it's the
-same template with new data: a populated, interactive dashboard in minutes.
+A **template** is a ready-made dashboard for a known pipeline, curated by the
+community and by the pipeline developers themselves, who know better than anyone
+what their output deserves to look like. Instead of rebuilding a dashboard from
+scratch every time, you pick the template that matches your pipeline, point
+Depictio at your results, and it assembles the dashboard for you. Run the same
+pipeline next week on new samples, and it's the same template with new data: a
+populated, interactive dashboard in minutes. That fits **nf-core** pipelines
+especially well, where the outputs are already standardised across every run of
+the same workflow.
 
 <p align="center"><img src="https://depictio.github.io/depictio-docs/images/logo/tools_catalog_logo.png" alt="Depictio Tools Catalog" width="220"></p>
 
-The **tools catalog** is the library that makes templates possible. For each
-bioinformatics tool, it records what the tool's output looks like and which
-visualisation renders it best, so a differential-expression table knows it should
-become a volcano plot, and a taxonomy table knows it should become a stacked bar.
-A template is really just an assembly of catalog entries. And the catalog is
-built to be community-extensible: adding a new tool is a small config
-contribution, not a code change, which is how the coverage grows beyond what I
-could ever map on my own.
+The **tools catalog** is the library that makes both dashboards and templates
+easier to build. For each bioinformatics tool, it records what the tool's output
+looks like and which visualisation renders it best, so a differential-expression
+table knows it should become a volcano plot, and a taxonomy table knows it should
+become a stacked bar. Think of it as extending what MultiQC does for QC into the
+downstream analysis, where the results actually get interpreted. A template is
+really just an assembly of catalog entries. And the catalog is built to be
+community-extensible: adding a new tool is a small config contribution, not a
+code change, and it will be possible through a web interface rather than a pull
+request.
 
 Put together, that's how Depictio goes from "a dashboard builder" to "the
 dashboard your pipeline should have shipped with." That's the next story, along
@@ -352,10 +363,7 @@ with the full performance report behind the numbers above. More soon.
 
 ## 🚀 Try it
 
-- **Live demo:** explore the pre-loaded datasets, or upload your own.
-- **Docs:** start with "Your first dashboard in 15 minutes."
-- **GitHub:** star the repo, open an issue, tell me what breaks.
+- **Live demo:** [demo.depictio.embl.org](https://demo.depictio.embl.org/dashboards), explore the pre-loaded datasets, or upload your own.
+- **Docs:** start with [Your first dashboard in 15 minutes](https://depictio.github.io/depictio-docs/latest/).
+- **GitHub:** [depictio/depictio](https://github.com/depictio/depictio), star the repo, open an issue, tell me what breaks.
 
-A year ago Depictio went live as a prototype. Today it's 1.0, stable, faster, and
-ready to be relied on. Thank you to everyone who tested it, filed issues, and
-pushed me to get it here.
