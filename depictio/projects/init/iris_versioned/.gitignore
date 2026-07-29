@@ -1,0 +1,11 @@
+# `data/` is the staging area: `stage_batch.sh` swaps one batch in at a time,
+# and it is the directory the project's `locations` point at. Its contents are
+# a copy of whichever batch is currently staged, so committing it would just
+# duplicate `batches/` and create a misleading diff every time someone advances
+# the demo.
+#
+# The directory itself is kept (via .gitkeep) because `depictio run` resolves
+# the configured location before scanning, and a missing directory fails the
+# project's DirectoryPath validation rather than scanning zero files.
+data/*
+!data/.gitkeep

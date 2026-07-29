@@ -1,0 +1,133 @@
+# Iris Versioned — dashboard v2: Virginica arrives.
+#
+# Second of three. Everything from v1 is kept verbatim, so restoring v1 from
+# the version drawer is a visible subtraction rather than an unrelated layout.
+# Added here: a sepal/petal scatter and a range filter — the components a third
+# variety makes worth having.
+#
+# Pair with data version 1 (batch 2 ingested). The variety card jumps 2 → 3,
+# which is the easiest change to see in the timeline.
+version: 1
+
+title: "Iris Versioned — Extended Survey"
+subtitle: "Batch 2: Virginica added, 150 flowers"
+project_tag: "Iris Versioned Demo"
+
+components:
+  - tag: text-intro
+    component_type: text
+    title: "Extended survey"
+    order: 2
+    alignment: left
+    body: "*Virginica* has been added, bringing the survey to 150 flowers across three varieties. The new variety separates cleanly on petal length."
+    layout: {x: 0, y: 0, w: 8, h: 1}
+
+  - tag: sample-count
+    component_type: card
+    workflow_tag: python/iris_versioned_workflow
+    data_collection_tag: iris_versioned_table
+    aggregation: count
+    column_name: variety
+    column_type: object
+    icon_name: mdi:counter
+    icon_color: "#4CAF50"
+    title_color: "#4CAF50"
+    title_font_size: xl
+    value_font_size: xl
+    title: "Flowers Measured"
+    layout: {x: 0, y: 1, w: 4, h: 2}
+
+  - tag: variety-count
+    component_type: card
+    workflow_tag: python/iris_versioned_workflow
+    data_collection_tag: iris_versioned_table
+    aggregation: nunique
+    column_name: variety
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: variety
+    top_n_count: 3
+    icon_name: mdi:flower-tulip
+    icon_color: "#2196F3"
+    title_color: "#2196F3"
+    title_font_size: xl
+    value_font_size: xl
+    title: "Varieties Surveyed"
+    layout: {x: 4, y: 1, w: 4, h: 2}
+
+  # New in v2. Median rather than mean: batch 3 shifts Virginica's petals, and
+  # a median moves cleanly without being dragged by the other two varieties.
+  - tag: petal-median
+    component_type: card
+    workflow_tag: python/iris_versioned_workflow
+    data_collection_tag: iris_versioned_table
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: petal.length
+    column_type: float64
+    icon_name: mdi:leaf
+    icon_color: "#43A047"
+    title_color: "#43A047"
+    title_font_size: xl
+    value_font_size: xl
+    title: "Median Petal Length"
+    layout: {x: 0, y: 3, w: 4, h: 2}
+
+  - tag: variety-filter
+    component_type: interactive
+    workflow_tag: python/iris_versioned_workflow
+    data_collection_tag: iris_versioned_table
+    interactive_component_type: MultiSelect
+    column_name: variety
+    column_type: object
+    custom_color: "#DD8452"
+    icon_name: mdi:filter-variant
+    title: "Variety"
+    layout: {x: 0, y: 0, w: 1, h: 3}
+
+  # New in v2.
+  - tag: petal-length-filter
+    component_type: interactive
+    workflow_tag: python/iris_versioned_workflow
+    data_collection_tag: iris_versioned_table
+    interactive_component_type: RangeSlider
+    column_name: petal.length
+    column_type: float64
+    custom_color: "#55A467"
+    icon_name: mdi:ruler
+    title: "Petal length (cm)"
+    layout: {x: 0, y: 3, w: 1, h: 3}
+
+  - tag: petal-box
+    component_type: figure
+    workflow_tag: python/iris_versioned_workflow
+    data_collection_tag: iris_versioned_table
+    visu_type: box
+    title: "Petal Length by Variety"
+    description: "Watch this tile across data versions: batch 3 recalibrates Virginica's petal lengths."
+    title_size: h3
+    dict_kwargs:
+      x: variety
+      y: petal.length
+      color: variety
+      points: all
+      color_discrete_map: '{"Setosa": "#4C72B0", "Versicolor": "#DD8452", "Virginica": "#55A467"}'
+    layout: {x: 0, y: 5, w: 8, h: 5}
+
+  # New in v2: three varieties make a bivariate view worth the space.
+  - tag: sepal-petal-scatter
+    component_type: figure
+    workflow_tag: python/iris_versioned_workflow
+    data_collection_tag: iris_versioned_table
+    visu_type: scatter
+    title: "Sepal vs Petal Length"
+    description: "Colour = variety. Virginica occupies the upper right; batch 3 shifts it left."
+    title_size: h3
+    dict_kwargs:
+      x: sepal.length
+      y: petal.length
+      color: variety
+      opacity: 0.85
+      color_discrete_map: '{"Setosa": "#4C72B0", "Versicolor": "#DD8452", "Virginica": "#55A467"}'
+    layout: {x: 0, y: 10, w: 8, h: 5}

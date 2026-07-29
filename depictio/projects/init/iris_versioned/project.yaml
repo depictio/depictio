@@ -1,0 +1,59 @@
+# Iris (versioned) — demo project for dataset + dashboard version history.
+#
+# A deliberate companion to the plain `iris` project. That one is a single
+# static CSV, which makes it useless for demonstrating versioning: there is
+# only ever one state to look at.
+#
+# Here the data arrives as three batches under `data/`, each picked up as its
+# own `depictio_run_id` by the `sequencing-runs` scanner. Ingesting them one at
+# a time produces three Delta versions whose content genuinely differs — see
+# README.md for the sequence and what each version holds.
+#
+# `sequencing-runs` rather than `flat` is what makes this work: it gives each
+# batch directory a run tag, which is what `--write-mode replace-runs`
+# partitions on. With `flat` all three CSVs would be scanned as one collection
+# and there would be nothing to version.
+#
+# Fixed ids so the seeds, the dashboards and the README can all refer to the
+# same project across a re-seed.
+id: "646b0f3c1e4a2d7f8e5b9001"
+name: "Iris Versioned Demo"
+project_type: "basic"
+is_public: true
+workflows:
+  - id: "646b0f3c1e4a2d7f8e5b9002"
+    name: "iris_versioned_workflow"
+    engine:
+      name: "python"
+    description: "Three-batch iris survey: initial, extended, recalibrated."
+    data_location:
+      structure: "sequencing-runs"
+      locations:
+        - /app/depictio/projects/init/iris_versioned/data
+      # Each batch directory is one run. Anchored so only the batch dirs match
+      # and nothing else under `data/` is mistaken for a run.
+      runs_regex: "^batch_\\d{2}_.*$"
+    data_collections:
+      - id: "646b0f3c1e4a2d7f8e5b9003"
+        data_collection_tag: "iris_versioned_table"
+        description: "Iris measurements, ingested in three batches"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: recursive
+            scan_parameters:
+              regex_config:
+                pattern: "iris.csv"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              separator: ","
+            columns_description:
+              "sepal.length": "Length of the sepal in cm"
+              "sepal.width": "Width of the sepal in cm"
+              "petal.length": "Length of the petal in cm (recalibrated for Virginica in batch 3)"
+              "petal.width": "Width of the petal in cm"
+              "variety": "Species of the iris flower"
+              "depictio_run_id": "Ingestion batch this row arrived in"
+              "aggregation_time": "Timestamp of the aggregation"

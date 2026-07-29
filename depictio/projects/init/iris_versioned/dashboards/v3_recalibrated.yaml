@@ -1,0 +1,176 @@
+# Iris Versioned — dashboard v3: after the recalibration.
+#
+# Third of three. Keeps everything from v2 and adds the tiles that only earn
+# their place once the data has been corrected: a per-batch comparison and a
+# table exposing `depictio_run_id`, so which rows came from which ingestion is
+# visible rather than asserted.
+#
+# Pair with data version 2 (batch 3 ingested). This is the pairing that makes
+# the demo's point: v2 and v3 have the same row count and the same varieties,
+# so nothing on the dashboard distinguishes them *except* the values — which is
+# exactly when you need the version drawer to tell you what you are looking at.
+version: 1
+
+title: "Iris Versioned — Recalibrated"
+subtitle: "Batch 3: Virginica petal lengths corrected"
+project_tag: "Iris Versioned Demo"
+
+components:
+  - tag: text-intro
+    component_type: text
+    title: "After recalibration"
+    order: 2
+    alignment: left
+    body: "Virginica's petal lengths were re-measured after a calibration fix — about 0.6 cm shorter. Same 150 flowers, same three varieties: **only the values changed**, so the data version is the only way to tell this state from the previous one."
+    layout: {x: 0, y: 0, w: 8, h: 1}
+
+  - tag: sample-count
+    component_type: card
+    workflow_tag: python/iris_versioned_workflow
+    data_collection_tag: iris_versioned_table
+    aggregation: count
+    column_name: variety
+    column_type: object
+    icon_name: mdi:counter
+    icon_color: "#4CAF50"
+    title_color: "#4CAF50"
+    title_font_size: xl
+    value_font_size: xl
+    title: "Flowers Measured"
+    layout: {x: 0, y: 1, w: 4, h: 2}
+
+  - tag: variety-count
+    component_type: card
+    workflow_tag: python/iris_versioned_workflow
+    data_collection_tag: iris_versioned_table
+    aggregation: nunique
+    column_name: variety
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: variety
+    top_n_count: 3
+    icon_name: mdi:flower-tulip
+    icon_color: "#2196F3"
+    title_color: "#2196F3"
+    title_font_size: xl
+    value_font_size: xl
+    title: "Varieties Surveyed"
+    layout: {x: 4, y: 1, w: 4, h: 2}
+
+  - tag: petal-median
+    component_type: card
+    workflow_tag: python/iris_versioned_workflow
+    data_collection_tag: iris_versioned_table
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: petal.length
+    column_type: float64
+    icon_name: mdi:leaf
+    icon_color: "#43A047"
+    title_color: "#43A047"
+    title_font_size: xl
+    value_font_size: xl
+    title: "Median Petal Length"
+    layout: {x: 0, y: 3, w: 4, h: 2}
+
+  # New in v3. Scoped to Virginica, which is the only variety batch 3 touched:
+  # this is the single number that separates data version 1 from version 2.
+  - tag: virginica-petal-median
+    component_type: card
+    workflow_tag: python/iris_versioned_workflow
+    data_collection_tag: iris_versioned_table
+    aggregation: median
+    column_name: petal.length
+    column_type: float64
+    filter_expr: "col('variety') == 'Virginica'"
+    icon_name: mdi:tune-variant
+    icon_color: "#C44E52"
+    title_color: "#C44E52"
+    title_font_size: lg
+    value_font_size: xl
+    title: "Virginica Petal (median)"
+    layout: {x: 4, y: 3, w: 4, h: 2}
+
+  - tag: variety-filter
+    component_type: interactive
+    workflow_tag: python/iris_versioned_workflow
+    data_collection_tag: iris_versioned_table
+    interactive_component_type: MultiSelect
+    column_name: variety
+    column_type: object
+    custom_color: "#DD8452"
+    icon_name: mdi:filter-variant
+    title: "Variety"
+    layout: {x: 0, y: 0, w: 1, h: 3}
+
+  - tag: petal-length-filter
+    component_type: interactive
+    workflow_tag: python/iris_versioned_workflow
+    data_collection_tag: iris_versioned_table
+    interactive_component_type: RangeSlider
+    column_name: petal.length
+    column_type: float64
+    custom_color: "#55A467"
+    icon_name: mdi:ruler
+    title: "Petal length (cm)"
+    layout: {x: 0, y: 3, w: 1, h: 3}
+
+  # New in v3: filter by ingestion batch. `depictio_run_id` is added by the
+  # scanner, so it only exists once the data has actually been ingested.
+  - tag: batch-filter
+    component_type: interactive
+    workflow_tag: python/iris_versioned_workflow
+    data_collection_tag: iris_versioned_table
+    interactive_component_type: MultiSelect
+    column_name: depictio_run_id
+    column_type: object
+    custom_color: "#8172B3"
+    icon_name: mdi:database-clock-outline
+    title: "Ingestion batch"
+    layout: {x: 0, y: 6, w: 1, h: 3}
+
+  - tag: petal-box
+    component_type: figure
+    workflow_tag: python/iris_versioned_workflow
+    data_collection_tag: iris_versioned_table
+    visu_type: box
+    title: "Petal Length by Variety"
+    description: "Virginica's box sits lower than in the previous data version."
+    title_size: h3
+    dict_kwargs:
+      x: variety
+      y: petal.length
+      color: variety
+      points: all
+      color_discrete_map: '{"Setosa": "#4C72B0", "Versicolor": "#DD8452", "Virginica": "#55A467"}'
+    layout: {x: 0, y: 5, w: 8, h: 5}
+
+  - tag: sepal-petal-scatter
+    component_type: figure
+    workflow_tag: python/iris_versioned_workflow
+    data_collection_tag: iris_versioned_table
+    visu_type: scatter
+    title: "Sepal vs Petal Length"
+    description: "Colour = variety. Virginica's cloud has shifted down relative to the previous data version."
+    title_size: h3
+    dict_kwargs:
+      x: sepal.length
+      y: petal.length
+      color: variety
+      opacity: 0.85
+      color_discrete_map: '{"Setosa": "#4C72B0", "Versicolor": "#DD8452", "Virginica": "#55A467"}'
+    layout: {x: 0, y: 10, w: 8, h: 5}
+
+  # New in v3: the receipts. Shows `depictio_run_id` per row, so the claim that
+  # batch 3 replaced batch 2's rows is checkable rather than asserted.
+  - tag: data-table
+    component_type: table
+    workflow_tag: python/iris_versioned_workflow
+    data_collection_tag: iris_versioned_table
+    title: "Measurements by ingestion batch"
+    description: "Sort or filter on depictio_run_id to see which batch each row arrived in."
+    title_size: h3
+    title_align: left
+    page_size: 15
+    layout: {x: 0, y: 15, w: 8, h: 5}

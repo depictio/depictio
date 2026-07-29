@@ -1,0 +1,87 @@
+# Iris Versioned — dashboard v1: the original two-variety survey.
+#
+# The first of three dashboards in this demo, matching the first of three data
+# versions. Import it, then edit it into v2 and v3 (see README.md) so the
+# version drawer shows a real progression rather than three unrelated imports.
+#
+# Deliberately plain: two cards and one figure. The later versions add to it,
+# so the timeline's "N components" actually changes between entries — with a
+# constant component count the drawer teaches nothing.
+version: 1
+
+title: "Iris Versioned — Survey"
+subtitle: "Batch 1: Setosa and Versicolor only"
+project_tag: "Iris Versioned Demo"
+
+components:
+  - tag: text-intro
+    component_type: text
+    title: "Initial survey"
+    order: 2
+    alignment: left
+    body: "First collection batch: *Setosa* and *Versicolor* only, 100 flowers. Virginica has not been surveyed yet."
+    layout: {x: 0, y: 0, w: 8, h: 1}
+
+  - tag: sample-count
+    component_type: card
+    workflow_tag: python/iris_versioned_workflow
+    data_collection_tag: iris_versioned_table
+    aggregation: count
+    column_name: variety
+    column_type: object
+    icon_name: mdi:counter
+    icon_color: "#4CAF50"
+    title_color: "#4CAF50"
+    title_font_size: xl
+    value_font_size: xl
+    title: "Flowers Measured"
+    layout: {x: 0, y: 1, w: 4, h: 2}
+
+  # The headline number for this demo. It moves at every step: 2 varieties in
+  # v1, 3 in v2, still 3 in v3 — which is exactly why v3 needs the petal
+  # median below to be distinguishable at all.
+  - tag: variety-count
+    component_type: card
+    workflow_tag: python/iris_versioned_workflow
+    data_collection_tag: iris_versioned_table
+    aggregation: nunique
+    column_name: variety
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: variety
+    top_n_count: 3
+    icon_name: mdi:flower-tulip
+    icon_color: "#2196F3"
+    title_color: "#2196F3"
+    title_font_size: xl
+    value_font_size: xl
+    title: "Varieties Surveyed"
+    layout: {x: 4, y: 1, w: 4, h: 2}
+
+  - tag: variety-filter
+    component_type: interactive
+    workflow_tag: python/iris_versioned_workflow
+    data_collection_tag: iris_versioned_table
+    interactive_component_type: MultiSelect
+    column_name: variety
+    column_type: object
+    custom_color: "#DD8452"
+    icon_name: mdi:filter-variant
+    title: "Variety"
+    layout: {x: 0, y: 0, w: 1, h: 3}
+
+  - tag: petal-box
+    component_type: figure
+    workflow_tag: python/iris_versioned_workflow
+    data_collection_tag: iris_versioned_table
+    visu_type: box
+    title: "Petal Length by Variety"
+    description: "Watch this tile across data versions: batch 3 recalibrates Virginica's petal lengths."
+    title_size: h3
+    dict_kwargs:
+      x: variety
+      y: petal.length
+      color: variety
+      points: all
+      color_discrete_map: '{"Setosa": "#4C72B0", "Versicolor": "#DD8452", "Virginica": "#55A467"}'
+    layout: {x: 0, y: 3, w: 8, h: 5}
