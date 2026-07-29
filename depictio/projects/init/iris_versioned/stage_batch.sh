@@ -44,9 +44,17 @@ usage() {
 
 [[ $# -eq 1 ]] || usage
 
-if [[ "$1" == "reset" ]]; then
+reset_dest() {
   rm -rf "${DEST:?}"
   mkdir -p "$DEST"
+  # `data/` is gitignored except for this marker, and the directory has to
+  # exist for the project's DirectoryPath validation to pass. Recreating it
+  # here keeps `git status` clean after staging.
+  touch "$DEST/.gitkeep"
+}
+
+if [[ "$1" == "reset" ]]; then
+  reset_dest
   echo "Reset: data/ is empty."
   exit 0
 fi
@@ -54,8 +62,7 @@ fi
 [[ "$1" =~ ^[1-3]$ ]] || usage
 batch="${BATCHES[$(($1 - 1))]}"
 
-rm -rf "${DEST:?}"
-mkdir -p "$DEST"
+reset_dest
 cp -R "$SRC/$batch" "$DEST/$batch"
 
 rows=$(($(wc -l < "$DEST/$batch/iris.csv") - 1))

@@ -47,21 +47,38 @@ project's `locations` point at. So the batches live in `batches/` and
 the complete state of the survey at that point, so exactly one is staged at a
 time — side by side, the scanner would read the same flowers three times over.
 
+Run the CLI wherever the paths in `project.yaml` resolve. They are container
+paths (`/app/depictio/...`), so in a docker deployment that means inside the
+backend container:
+
 ```bash
 cd depictio/projects/init/iris_versioned
+CFG=/app/depictio/.depictio/admin_config.yaml
+PROJ=/app/depictio/projects/init/iris_versioned
 
 # 1. Register the project (once).
-depictio config create-project --project-config-path project.yaml
+depictio config sync --CLI-config-path $CFG --project-config-path $PROJ/project.yaml
 
 # 2. Stage and ingest each batch in turn. Each run writes a new Delta commit,
 #    so this produces three data versions.
-./stage_batch.sh 1 && depictio run --project-name "Iris Versioned Demo"
-./stage_batch.sh 2 && depictio run --project-name "Iris Versioned Demo"
-./stage_batch.sh 3 && depictio run --project-name "Iris Versioned Demo"
+#
+#    --overwrite is required from the second run onward: the S3 destination
+#    already exists, and the CLI refuses to replace it silently.
+./stage_batch.sh 1
+depictio run --CLI-config-path $CFG --project-config-path $PROJ/project.yaml --skip-sync
 
-# 3. Import the first dashboard.
-depictio dashboard import dashboards/v1_survey.yaml
+./stage_batch.sh 2
+depictio run --CLI-config-path $CFG --project-config-path $PROJ/project.yaml --skip-sync --overwrite
+
+./stage_batch.sh 3
+depictio run --CLI-config-path $CFG --project-config-path $PROJ/project.yaml --skip-sync --overwrite
+
+# 3. Import the first dashboard. Note: `--config`, not `--CLI-config-path`.
+depictio dashboard import $PROJ/dashboards/v1_survey.yaml --config $CFG
 ```
+
+`--skip-sync` after the first `config sync`, because `run` re-syncs by default
+and refuses when the project already exists.
 
 The default `overwrite` write mode is deliberate here, rather than
 `replace-runs`. Only one run is ever staged, so `replace-runs` would decline to
@@ -73,11 +90,18 @@ either way, so the history is identical.
 Check the Delta history on the project page, or:
 
 ```bash
-depictio data versions iris_versioned_table --project-config-path project.yaml
+depictio data versions iris_versioned_table \
+    --CLI-config-path $CFG --project-config-path $PROJ/project.yaml
 ```
 
-You should see three commits. `--json` includes the write mode and run tags
-depictio stamps into each one.
+Three commits, at 100 / 150 / 150 rows:
+
+```
+ version   operation   write_mode   rows_after   runs
+ 2         WRITE       overwrite    150          1
+ 1         WRITE       overwrite    150          1
+ 0         WRITE       overwrite    100          1
+```
 
 ## The dashboard versions
 
@@ -101,6 +125,12 @@ listed for v2 (the YAML files are the reference for what each contains). Use
 **Settings → Version history → Bookmark this state → Name it** at each step, so
 the timeline reads `v1 Survey` / `v2 Extended` / `v3 Recalibrated` rather than
 three anonymous autosaves.
+
+Note that `dashboard import` writes the document directly and does **not**
+record a version — the ledger is fed by `POST /dashboards/save`, which is what
+the editor calls. So the timeline is empty until the first edit, and that first
+save seeds a `Before first tracked change` baseline holding the as-imported
+state. That baseline is what makes the imported layout restorable at all.
 
 ## What this demonstrates, and what it does not
 
