@@ -400,36 +400,36 @@ def process_multiqc_data_collection(
                                 f"[yellow]🔄 Overwriting existing report:[/yellow] [cyan]{report_id}[/cyan] [dim]({display_path})[/dim]"
                             )
 
-                            # Extract S3 key from existing S3 location to preserve path
-                            # Format: s3://bucket/data_collection_id/timestamp_id/multiqc.parquet
+                            # Always mint a fresh content-addressed key, even on
+                            # overwrite.
+                            #
+                            # This branch used to parse the existing
+                            # `s3_location` and write the new bytes back to it,
+                            # "preserving" the key. But the key's middle segment
+                            # *is* the content hash, and duplicate detection is
+                            # on (data_collection_id, original_file_path) rather
+                            # than on content — so an overwrite wrote new bytes
+                            # to an address that claims to describe the old
+                            # ones. Any dashboard version pinned to that key
+                            # then silently resolved to different data, which is
+                            # the one thing content addressing exists to
+                            # prevent.
+                            #
+                            # Writing a new key instead leaves the previous
+                            # object in place, orphaned but intact — the same
+                            # property the append path already relies on. Object
+                            # lifecycle is the orphan GC's business, not this
+                            # function's.
+                            file_name = "multiqc.parquet"
+                            content_hash = compute_file_hash(file_path, truncate=12)
+                            s3_key = f"{str(data_collection.id)}/{content_hash}/{file_name}"
                             if existing_s3_location:
-                                try:
-                                    s3_path = existing_s3_location.replace("s3://", "")
-                                    if "/" in s3_path:
-                                        # Skip bucket name, get the rest as s3_key
-                                        s3_key = s3_path.split("/", 1)[1]
-                                        logger.info(f"Preserving S3 key: {s3_key}")
-                                    else:
-                                        # Fallback: generate new key if parsing fails
-                                        logger.warning(
-                                            "Failed to parse S3 location, generating new key"
-                                        )
-                                        s3_key = None
-                                except Exception as parse_error:
-                                    logger.warning(
-                                        f"Error parsing S3 location: {parse_error}, generating new key"
-                                    )
-                                    s3_key = None
+                                logger.info(
+                                    f"Overwrite: minting content key {s3_key} "
+                                    f"(previous object {existing_s3_location} left intact)"
+                                )
                             else:
-                                logger.warning("No existing S3 location found, generating new key")
-                                s3_key = None
-
-                            # Upload to the SAME S3 location (overwrite in S3) or create new if parsing failed
-                            if not s3_key:
-                                file_name = "multiqc.parquet"
-                                content_hash = compute_file_hash(file_path, truncate=12)
-                                s3_key = f"{str(data_collection.id)}/{content_hash}/{file_name}"
-                                logger.info(f"Using new S3 key (hash-based): {s3_key}")
+                                logger.info(f"Using content-addressed S3 key: {s3_key}")
 
                             logger.info(f"Uploading file to S3: {file_path} -> {s3_key}")
                             # Use put_object to avoid multipart upload issues with MinIO

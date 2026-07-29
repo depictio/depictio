@@ -216,14 +216,20 @@ def _dc_type_from_components(tabs: list[TabSnapshot], dc_id: str) -> str:
     return ""
 
 
-def build_dc_stamps(tabs: list[TabSnapshot]) -> list[DataCollectionStamp]:
+def build_dc_stamps(
+    tabs: list[TabSnapshot], now: datetime | None = None
+) -> list[DataCollectionStamp]:
     """Record what data each referenced collection was at, right now.
 
     Reads only Mongo — no object-store round trip — because this runs on the
     save path. A collection with no aggregation record yields a ``none``
     stamp carrying the reason, which the UI shows rather than implying the
     version is fully reproducible.
+
+    ``now`` is injectable so a test can pin the ``as_of`` instant a manifest
+    stamp records, the same discipline the coalescing clock already follows.
     """
+    now = now or datetime.now()
     stamps: list[DataCollectionStamp] = []
 
     for dc_id in collect_dc_ids(tabs):
@@ -259,13 +265,29 @@ def build_dc_stamps(tabs: list[TabSnapshot]) -> list[DataCollectionStamp]:
             else:
                 stamp.version_kind = "delta"
         elif kind == "manifest":
-            # Populated in the manifest stage; the stamp records the intent and
-            # the instant so a later backfill has an anchor.
-            stamp.version_kind = "none"
-            stamp.reason = "manifest_versioning_not_enabled"
+            # MultiQC parquet is content-addressed and never rewritten in place,
+            # so pinning the *set* of object keys reproduces the collection
+            # exactly — no copying, no bucket versioning. `latest_manifest` is
+            # one indexed Mongo read, which keeps this on the save path's
+            # no-object-store-round-trip budget.
             if latest:
                 stamp.columns = _columns_from_aggregation(latest)
                 stamp.schema_hash = generate_schema_hash(stamp.columns)
+
+            manifest = _latest_manifest(dc_id)
+            if manifest:
+                stamp.version_kind = "manifest"
+                stamp.manifest_digest = manifest.get("digest")
+                stamp.s3_locations = list(manifest.get("s3_locations") or [])
+                stamp.sample_count = manifest.get("sample_count")
+                stamp.as_of = manifest.get("created_at")
+            else:
+                # A collection ingested before manifests existed. `as_of` still
+                # gives a later backfill an anchor, and the read path can fall
+                # back to "newest generation at or before this instant".
+                stamp.version_kind = "none"
+                stamp.reason = "no_manifest_recorded"
+                stamp.as_of = now
         elif kind == "asset":
             stamp.version_kind = "none"
             stamp.reason = "asset_versioning_not_enabled"
@@ -277,6 +299,22 @@ def build_dc_stamps(tabs: list[TabSnapshot]) -> list[DataCollectionStamp]:
         stamps.append(stamp)
 
     return stamps
+
+
+def _latest_manifest(dc_id: str) -> Optional[dict[str, Any]]:
+    """The newest recorded MultiQC generation for a collection, or ``None``.
+
+    Lazily imported and swallowed on failure, like every other read on this
+    path: a missing stamp costs the ability to replay one version's sample set,
+    a raised exception costs the save.
+    """
+    try:
+        from depictio.api.v1.services.multiqc.manifests import latest_manifest
+
+        return latest_manifest(dc_id)
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.debug(f"versioning: manifest lookup failed for {dc_id}: {exc}")
+        return None
 
 
 def _columns_from_aggregation(aggregation: dict[str, Any]) -> list[dict[str, str]]:
@@ -396,7 +434,7 @@ def capture_dashboard_version(
         version_store.touch_version(latest["version_id"], now)
         return None
 
-    stamps = build_dc_stamps(tabs)
+    stamps = build_dc_stamps(tabs, now)
 
     record = DashboardVersion(
         version_id=uuid.uuid4().hex,

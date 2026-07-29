@@ -239,6 +239,14 @@ def start_dashboard_version_storage(should_initialize: bool) -> None:
         )
 
         ensure_dashboard_version_storage()
+
+        # The MultiQC manifest ledger is read on the same paths — a version
+        # stamp on save, a pinned lookup on render — so its indexes belong to
+        # the same setup step rather than a second one that could be skipped
+        # independently.
+        from depictio.api.v1.services.multiqc.manifests import ensure_indexes
+
+        ensure_indexes()
         logger.info(f"Worker {WORKER_ID}: Dashboard version storage ready")
     except Exception as exc:
         logger.warning(f"Worker {WORKER_ID}: Dashboard version storage setup failed: {exc}")

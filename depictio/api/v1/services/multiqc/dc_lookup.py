@@ -5,13 +5,18 @@ data-collection id, used by the celery prerender tasks and FastAPI
 render endpoints.
 """
 
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from depictio.models.logging import logger
 
 
 def fetch_s3_locations_from_dc(
-    data_collection_id: str, project_id: Optional[str] = None
+    data_collection_id: str,
+    project_id: Optional[str] = None,
+    *,
+    manifest: Optional[str] = None,
+    as_of: Optional[datetime] = None,
 ) -> List[str]:
     """Fetch S3 locations from data collection config.
 
@@ -25,14 +30,39 @@ def fetch_s3_locations_from_dc(
     reports collection lookup yields nothing (covers minimal YAML imports
     that ship that field but no per-report rows).
 
+    With ``manifest`` (a digest) or ``as_of`` (an instant), returns the object
+    set the collection consisted of *then* instead of now. This is the whole of
+    MultiQC time travel: the parquet objects are content-addressed and are never
+    rewritten in place, so a pinned key set still resolves. Everything
+    downstream — figure builders, sample lists, the prerender cache key — is
+    derived from this list, so the change propagates without further plumbing.
+
+    A pin that cannot be resolved falls back to live rather than returning
+    nothing: a version whose objects were swept should render current data, not
+    an empty dashboard.
+
     Args:
         data_collection_id: Data collection ID.
         project_id: Optional project ID for the YAML-minimal fallback path.
+        manifest: Manifest digest to pin to, as stamped on a dashboard version.
+        as_of: Instant to pin to, for versions recorded before manifests existed.
 
     Returns:
-        List of S3 locations — one per ingested report, or single-element
-        from the DC config fallback, or empty if nothing is found.
+        List of S3 locations — one per report in the resolved generation, or
+        single-element from the DC config fallback, or empty if nothing is found.
     """
+    if manifest or as_of is not None:
+        from depictio.api.v1.services.multiqc.manifests import get_manifest
+
+        pinned = get_manifest(str(data_collection_id), digest=manifest, as_of=as_of)
+        locations = list((pinned or {}).get("s3_locations") or [])
+        if locations:
+            return locations
+        logger.warning(
+            f"MultiQC manifest {manifest or as_of} not resolvable for DC "
+            f"{data_collection_id}; falling back to the current report set."
+        )
+
     try:
         # Primary path: walk multiqc_reports — this is where every appended
         # report's S3 location lives.

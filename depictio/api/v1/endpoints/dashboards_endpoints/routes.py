@@ -313,7 +313,7 @@ def _overlay_version(
     # Everything the banner needs, so the client does not need a second call —
     # including whether "show me the data this was authored on" is even offerable,
     # and if not, why. A disabled control with no reason attached reads as a bug.
-    delta_versions, degraded = _resolve_delta_versions(record.get("data_collections") or [])
+    delta_versions, manifests, degraded = _resolve_data_pins(record.get("data_collections") or [])
 
     merged["preview"] = {
         "version_id": record.get("version_id"),
@@ -324,6 +324,7 @@ def _overlay_version(
         "created_at": record.get("created_at"),
         "author_email": record.get("author_email"),
         "data_versions": delta_versions,
+        "data_manifests": {dc_id: pin.get("digest") for dc_id, pin in manifests.items()},
         "data_warnings": degraded,
     }
     return merged
@@ -347,6 +348,7 @@ class RenderContext:
         "component",
         "version_id",
         "delta_versions",
+        "manifests",
         "degraded",
     )
 
@@ -358,6 +360,7 @@ class RenderContext:
         component: dict | None,
         version_id: str | None = None,
         delta_versions: dict[str, int] | None = None,
+        manifests: dict[str, dict] | None = None,
         degraded: list[dict] | None = None,
     ) -> None:
         self.dashboard = dashboard
@@ -370,6 +373,11 @@ class RenderContext:
         #: whose commits are still readable. A collection absent from the map
         #: reads live — see ``degraded``.
         self.delta_versions = delta_versions or {}
+        #: dc_id → {"digest", "as_of"} for MultiQC collections this version
+        #: pinned. A separate map from `delta_versions` because the mechanism is
+        #: different: a manifest names an immutable set of content-addressed
+        #: objects, not a commit in a log.
+        self.manifests = manifests or {}
         #: Collections this version pinned but that cannot be served at that
         #: commit, each with the reason. Rendered as a warning beside a 200
         #: rather than failing the request: a vacuumed table should degrade to
@@ -386,6 +394,10 @@ class RenderContext:
         extras: dict = {"version_id": self.version_id}
         if self.delta_versions:
             extras["delta_versions"] = dict(self.delta_versions)
+        if self.manifests:
+            extras["manifests"] = {
+                dc_id: pin.get("digest") for dc_id, pin in self.manifests.items()
+            }
         if self.degraded:
             extras["data_degraded"] = True
             extras["data_warnings"] = list(self.degraded)
@@ -394,6 +406,17 @@ class RenderContext:
     def delta_version_for(self, dc_id: Any) -> int | None:
         """The pinned commit for one collection, or ``None`` to read live."""
         return self.delta_versions.get(str(dc_id))
+
+    def manifest_for(self, dc_id: Any) -> dict:
+        """``{"manifest": digest, "as_of": dt}`` for a pinned MultiQC collection.
+
+        Spread straight into ``fetch_s3_locations_from_dc``; empty for a live
+        render, so that call is byte-identical to what it was.
+        """
+        pin = self.manifests.get(str(dc_id))
+        if not pin:
+            return {}
+        return {"manifest": pin.get("digest"), "as_of": pin.get("as_of")}
 
     def require_data_source(self, *extra_fields: str) -> tuple[Any, ...]:
         """``(wf_id, dc_id, *extra)`` off the component, or 400 naming the gap.
@@ -412,26 +435,40 @@ class RenderContext:
         return tuple(values)
 
 
-def _resolve_delta_versions(stamps: list[dict]) -> tuple[dict[str, int], list[dict]]:
-    """Split a version's data stamps into "readable at that commit" and "not".
+def _resolve_data_pins(stamps: list[dict]) -> tuple[dict[str, int], dict[str, dict], list[dict]]:
+    """Turn a version's data stamps into what the render path can actually use.
 
-    Availability is probed **once here**, per render request, rather than per
-    component: ``bulk_compute_cards`` renders every card on a dashboard in one
-    call and would otherwise read the Delta log once per card. The probe itself
-    is memoized ~60s on top of that.
+    Returns ``(delta_versions, manifests, degraded)``. The two pin maps are
+    separate because the mechanisms are: a Delta stamp names a commit in a log,
+    a manifest stamp names an immutable set of content-addressed objects. An
+    ``asset`` stamp reproduces its collection by yet another mechanism and a
+    ``none`` stamp records that nothing was captured; neither appears here.
 
-    Only ``version_kind == "delta"`` stamps participate. A ``manifest`` or
-    ``asset`` stamp reproduces its collection by a different mechanism, and a
-    ``none`` stamp records that nothing was captured — neither is a Delta commit
-    and neither belongs in this map.
+    Delta availability is probed **once here**, per render request, rather than
+    per component: ``bulk_compute_cards`` renders every card on a dashboard in
+    one call and would otherwise read the Delta log once per card. The probe
+    itself is memoized ~60s on top of that.
+
+    A manifest is not probed. Resolving one is a single indexed Mongo read that
+    ``fetch_s3_locations_from_dc`` already performs, and it degrades to live on
+    its own — so a second lookup here would cost a query to learn nothing.
     """
     from depictio.api.v1.deltatables_utils import check_delta_version_available
 
     versions: dict[str, int] = {}
+    manifests: dict[str, dict] = {}
     degraded: list[dict] = []
 
     for stamp in stamps:
-        if stamp.get("version_kind") != "delta":
+        kind = stamp.get("version_kind")
+        if kind == "manifest":
+            dc_id = str(stamp.get("dc_id") or "")
+            digest = stamp.get("manifest_digest")
+            as_of = stamp.get("as_of")
+            if dc_id and (digest or as_of):
+                manifests[dc_id] = {"digest": digest, "as_of": as_of}
+            continue
+        if kind != "delta":
             continue
         dc_id = str(stamp.get("dc_id") or "")
         delta_version = stamp.get("delta_version")
@@ -451,7 +488,7 @@ def _resolve_delta_versions(stamps: list[dict]) -> tuple[dict[str, int], list[di
         else:
             degraded.append({"dc_id": dc_id, "requested_version": delta_version, "reason": reason})
 
-    return versions, degraded
+    return versions, manifests, degraded
 
 
 def _delta_location_for(dc_id: str) -> str | None:
@@ -500,12 +537,15 @@ def resolve_render_context(
 
     stored_metadata = dashboard_data.get("stored_metadata") or []
     delta_versions: dict[str, int] = {}
+    manifests: dict[str, dict] = {}
     degraded: list[dict] = []
 
     if version_id:
         tab, record = _guarded_version_tab(dashboard_data, dashboard_id, version_id)
         stored_metadata = tab.get("stored_metadata") or []
-        delta_versions, degraded = _resolve_delta_versions(record.get("data_collections") or [])
+        delta_versions, manifests, degraded = _resolve_data_pins(
+            record.get("data_collections") or []
+        )
 
     component = None
     if component_id is not None and component_type is not None:
@@ -530,6 +570,7 @@ def resolve_render_context(
         component,
         version_id=version_id,
         delta_versions=delta_versions,
+        manifests=manifests,
         degraded=degraded,
     )
 
@@ -3253,7 +3294,14 @@ def render_multiqc_endpoint(
     if dc_id:
         from depictio.api.v1.services.multiqc.dc_lookup import fetch_s3_locations_from_dc
 
-        live_locations = fetch_s3_locations_from_dc(str(dc_id), str(project_id))
+        # A pinned manifest wins over live. Both of these sites deliberately
+        # prefer live over the component's stored snapshot, because that
+        # snapshot goes stale after an append. A manifest is the opposite case:
+        # it is an explicit, verified record of what the collection *was*, so
+        # it must not be overridden by what it is now.
+        live_locations = fetch_s3_locations_from_dc(
+            str(dc_id), str(project_id), **context.manifest_for(dc_id)
+        )
         logger.info(
             f"render_multiqc: fetch_s3_locations_from_dc"
             f"(dc={dc_id!s}, project={project_id!s})"
@@ -3587,7 +3635,10 @@ def render_multiqc_general_stats_endpoint(
     if dc_id:
         from depictio.api.v1.services.multiqc.dc_lookup import fetch_s3_locations_from_dc
 
-        live_locations = fetch_s3_locations_from_dc(str(dc_id), str(project_id))
+        # Same inversion as render_multiqc: a pinned manifest beats live.
+        live_locations = fetch_s3_locations_from_dc(
+            str(dc_id), str(project_id), **context.manifest_for(dc_id)
+        )
         if live_locations:
             s3_locations = live_locations
 

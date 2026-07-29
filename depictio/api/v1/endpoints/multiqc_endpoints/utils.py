@@ -151,8 +151,8 @@ def _invalidate_multiqc_caches_for_dc(dc_id: str) -> None:
         logger.warning(f"Prerender ledger reset failed for dc={dc_id}: {exc}")
 
 
-def _invalidate_and_prewarm_for_dc(dc_id: str) -> dict:
-    """Drop the DC's caches then enqueue two async rebuilds.
+def _invalidate_and_prewarm_for_dc(dc_id: str, *, trigger: str | None = None) -> dict:
+    """Record the new manifest generation, drop the DC's caches, rebuild.
 
     Called from append/replace right before returning success, plus from the
     initial-upload path. Two tasks fire:
@@ -162,7 +162,15 @@ def _invalidate_and_prewarm_for_dc(dc_id: str) -> dict:
         builder_options. Powers the DC Viewer Preview Accordion.
     Both share the same Redis lock so they can't fight; the second is a no-op
     if the first is still running.
+
+    The manifest is recorded *before* the caches are dropped, and never raises:
+    this is the single point every server-side MultiQC mutation passes through
+    on its way to success, which is exactly where "what did this collection
+    consist of" has to be captured.
     """
+    from depictio.api.v1.services.multiqc.manifests import record_generation
+
+    record_generation(str(dc_id), trigger=trigger)
     _invalidate_multiqc_caches_for_dc(dc_id)
     enqueued_tasks: list[str] = []
     try:
@@ -747,9 +755,19 @@ def _replace_multiqc_dc_uploads(
             decoded_files, temp_dir
         )
 
-        # Wipe Mongo + S3 before reprocessing — caller asked for "Replace all".
+        # Drop the Mongo rows, but leave the S3 objects alone.
+        #
+        # "Replace all" is about which reports the collection *currently*
+        # consists of, not about erasing what it used to consist of. The append
+        # path already leaves superseded parquets in place, orphaned but intact,
+        # and a dashboard version that pinned them resolves correctly because of
+        # it. Deleting them here made replace the one ingest path that could
+        # retroactively break an already-recorded version.
+        #
+        # Nothing leaks indefinitely: `cleanup_orphaned_s3_files` removes the
+        # whole `{dc_id}/` prefix once the data collection itself is gone.
         delete_result = asyncio.run(
-            delete_all_multiqc_reports_for_dc(data_collection_id, delete_s3_files=True)
+            delete_all_multiqc_reports_for_dc(data_collection_id, delete_s3_files=False)
         )
 
         workflow.data_location.locations = [temp_dir]
@@ -787,7 +805,7 @@ def _replace_multiqc_dc_uploads(
             _rollback_reports(rollback_ids, context="replace uniformity rollback")
             raise
 
-        prewarm_stats = _invalidate_and_prewarm_for_dc(str(dc.id))
+        prewarm_stats = _invalidate_and_prewarm_for_dc(str(dc.id), trigger="replace")
 
         return {
             "success": True,
@@ -946,7 +964,7 @@ def _append_multiqc_dc_uploads(
                 cleanup_failed += 1
                 logger.warning(f"Append cleanup: stale report {rid} delete failed: {exc}")
 
-        prewarm_stats = _invalidate_and_prewarm_for_dc(str(dc.id))
+        prewarm_stats = _invalidate_and_prewarm_for_dc(str(dc.id), trigger="append")
 
         return {
             "success": True,

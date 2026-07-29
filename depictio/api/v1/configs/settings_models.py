@@ -179,6 +179,13 @@ class MongoDBConfig(ServiceConfig):
         projects_collection: str = Field(default="projects")
         multiqc_collection: str = Field(default="multiqc")
         multiqc_prerender_collection: str = Field(default="multiqc_prerender")
+        #: One document per (data collection, ingest) recording which
+        #: content-addressed parquet objects the collection consisted of at that
+        #: moment. Separate documents rather than a list embedded on a per-DC
+        #: record, because a long-lived collection accumulates generations and
+        #: each generation carries every location — the two multiply, and a
+        #: single document would eventually meet the 16 MB BSON ceiling.
+        multiqc_manifests_collection: str = Field(default="multiqc_manifests")
         task_events_collection: str = Field(default="task_events")
         ingestion_runs_collection: str = Field(default="ingestion_runs")
         app_logs_collection: str = Field(default="app_logs")

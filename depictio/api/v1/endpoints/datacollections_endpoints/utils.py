@@ -403,6 +403,21 @@ async def _update_dc_specific_properties(
     logger.info(
         f"Updated dc_specific_properties for DC {data_collection_id}: {list(properties.keys())}"
     )
+
+    # A CLI MultiQC ingest creates its reports one at a time and finishes here,
+    # with a single call carrying the aggregated metadata — so this is the one
+    # point in that path that fires exactly once per ingest, which is the
+    # granularity a manifest generation needs. Recording per report would make
+    # one generation per file and describe a state that never existed as a whole.
+    #
+    # Keyed on the payload's shape rather than on the DC type, because the type
+    # would need another project lookup and this call is already the MultiQC
+    # processor's own completion signal.
+    if "modules" in properties and "plots" in properties:
+        from depictio.api.v1.services.multiqc.manifests import record_generation
+
+        record_generation(str(data_collection_id), trigger="ingest")
+
     return {"message": "dc_specific_properties updated successfully"}
 
 
