@@ -35,6 +35,7 @@ import {
   batchIdsFromPayload,
   fetchProjectFromDashboard,
   fetchIngestionHealth,
+  fetchDashboardVersion,
 } from 'depictio-react-core';
 import type {
   DashboardData,
@@ -45,8 +46,11 @@ import type {
   ActiveHighlight,
   RealtimeJournalEntry,
   IngestionSummary,
+  DashboardVersionDetail,
 } from 'depictio-react-core';
 import { parseTemplateOrigin } from './projects/template';
+import { dashboardFromVersion, extractPreviewVersionId } from './versions/preview';
+import VersionPreviewBanner from './versions/VersionPreviewBanner';
 
 /** localStorage key for the dismissed ingestion banner, scoped per project so
  *  the dismissal sticks across the dashboard's sibling tabs. */
@@ -92,8 +96,14 @@ const App: React.FC = () => {
   const [settingsOpened, { open: openSettings, close: closeSettings }] = useDisclosure(false);
   const { user: currentUser } = useCurrentUser();
   const isOwner = isDashboardOwner(dashboard, currentUser?.email ?? null);
-
   const dashboardId = extractDashboardId();
+  // Non-null when the URL carries `?version=` — the viewer is showing a stored
+  // snapshot rather than the live dashboard. Read once per load, since a
+  // change to it reloads the page anyway.
+  const previewVersionId = useMemo(() => extractPreviewVersionId(), []);
+  // The full snapshot record backing a preview, kept only to render the
+  // banner — the dashboard itself is already projected into `dashboard`.
+  const [previewVersion, setPreviewVersion] = useState<DashboardVersionDetail | null>(null);
   const bulkCtrl = useRef<AbortController | null>(null);
 
   // Ingestion-health banner: for template-derived dashboards, surface a
@@ -112,14 +122,29 @@ const App: React.FC = () => {
     }
   }, [dashboard?.title, dashboardId]);
 
-  // Fetch dashboard + tab list in parallel
+  // Fetch dashboard + tab list in parallel.
+  //
+  // `?version=<id>` renders a past snapshot instead of the live document. The
+  // snapshot's tab is projected onto the same DashboardData shape the viewer
+  // already renders, so every component path below is unchanged — the only
+  // difference is where `stored_metadata` and the layouts came from. Read-only
+  // by construction: this route never writes, and the editor refuses to open
+  // with a version pinned.
   useEffect(() => {
     if (!dashboardId) {
       setError('No dashboard ID in URL. Expected /dashboard/<id>.');
       setLoading(false);
       return;
     }
-    Promise.all([fetchDashboard(dashboardId), fetchAllDashboards()])
+    Promise.all([
+      previewVersionId
+        ? fetchDashboardVersion(previewVersionId).then((version) => {
+            setPreviewVersion(version);
+            return dashboardFromVersion(version, dashboardId);
+          })
+        : fetchDashboard(dashboardId),
+      fetchAllDashboards(),
+    ])
       .then(([dash, all]) => {
         setDashboard(dash);
         setAllDashboards(all);
@@ -128,7 +153,7 @@ const App: React.FC = () => {
         setError(`Failed to load dashboard: ${err.message || err}`);
       })
       .finally(() => setLoading(false));
-  }, [dashboardId]);
+  }, [dashboardId, previewVersionId]);
 
   // Resolve the parent project and its ingestion health (template projects only).
   useEffect(() => {
@@ -423,7 +448,10 @@ const App: React.FC = () => {
           onToggleDesktop={toggleDesktop}
           onOpenSettings={openSettings}
           cardsLoading={cardsLoading}
-          isOwner={isOwner}
+          // A preview must never offer Edit: the editor autosaves, so one
+          // stray drag on a snapshot would write a months-old state over the
+          // present. Owner-ness is unchanged; only this route's affordance is.
+          isOwner={isOwner && !previewVersionId}
           rightExtras={
             <>
               {realtimeEnabled && (
@@ -457,6 +485,12 @@ const App: React.FC = () => {
       </AppShell.Navbar>
 
       <AppShell.Main style={{ height: 'calc(100vh - 50px)' }}>
+        {previewVersion && dashboardId && (
+          <VersionPreviewBanner
+            version={previewVersion}
+            liveHref={`/dashboard/${dashboardId}`}
+          />
+        )}
         {ingestionHealth &&
           ingestionProjectId &&
           !ingestionBannerDismissed &&

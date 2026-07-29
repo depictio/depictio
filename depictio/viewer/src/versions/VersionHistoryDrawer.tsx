@@ -21,6 +21,7 @@ import {
   Group,
   Loader,
   Modal,
+  Paper,
   ScrollArea,
   Stack,
   Text,
@@ -61,7 +62,22 @@ type PendingAction =
   | { type: 'pin'; version: DashboardVersionSummary }
   | { type: 'restore'; version: DashboardVersionSummary }
   | { type: 'delete'; version: DashboardVersionSummary }
+  | { type: 'snapshot' }
   | null;
+
+/** The version a pending action targets, or null for the snapshot action —
+ *  which names the *current* state and so has no version to point at. Keeps
+ *  the union's narrowing in one place instead of at each of its six readers. */
+function pendingVersion(pending: PendingAction): DashboardVersionSummary | null {
+  return pending && pending.type !== 'snapshot' ? pending.version : null;
+}
+
+/** Display name of the version a confirm modal is about. Empty while the modal
+ *  is closing, when `pending` has already been cleared but the fade is running. */
+function pendingTitle(pending: PendingAction): string {
+  const version = pendingVersion(pending);
+  return version ? versionTitle(version) : '';
+}
 
 const VersionHistoryDrawer: React.FC<VersionHistoryDrawerProps> = ({
   opened,
@@ -87,13 +103,21 @@ const VersionHistoryDrawer: React.FC<VersionHistoryDrawerProps> = ({
     setLabelDraft('');
   }, []);
 
+  /**
+   * Run a mutating action, then refresh the timeline.
+   *
+   * `reloadsDashboard` is opt-in rather than the default: pin, rename and
+   * delete change only the ledger, and refetching the dashboard for those
+   * would discard the editor's unsaved in-memory state for no reason. Only a
+   * restore actually changes what the dashboard *is*.
+   */
   const run = useCallback(
-    async (work: () => Promise<string>) => {
+    async (work: () => Promise<string>, opts: { reloadsDashboard?: boolean } = {}) => {
       setBusy(true);
       try {
         const message = await work();
         await reload();
-        onRestored?.();
+        if (opts.reloadsDashboard) onRestored?.();
         notifications.show({ color: 'teal', title: 'Version history', message });
         closeModal();
       } catch (err) {
@@ -110,8 +134,8 @@ const VersionHistoryDrawer: React.FC<VersionHistoryDrawerProps> = ({
   );
 
   const handlePreview = useCallback((version: DashboardVersionSummary) => {
-    // The viewer honours ?version=; opening a new tab leaves the editor's
-    // unsaved state untouched.
+    // The viewer renders `?version=` read-only, behind an unmissable banner.
+    // A new tab, so the editor's unsaved state is left untouched.
     window.open(
       `/dashboard/${version.family_id}?version=${version.version_id}`,
       '_blank',
@@ -136,11 +160,9 @@ const VersionHistoryDrawer: React.FC<VersionHistoryDrawerProps> = ({
 
   const handleSnapshot = useCallback(() => {
     if (!dashboardId) return;
-    void run(async () => {
-      const created = await createDashboardVersion(dashboardId, null);
-      return `Saved version v${created.seq}.`;
-    });
-  }, [dashboardId, run]);
+    setLabelDraft('');
+    setPending({ type: 'snapshot' });
+  }, [dashboardId]);
 
   const body = (() => {
     if (loading && versions.length === 0) {
@@ -226,31 +248,63 @@ const VersionHistoryDrawer: React.FC<VersionHistoryDrawerProps> = ({
       >
         <Stack gap="md">
           {canEdit && (
-            <Button
-              variant="light"
-              size="xs"
-              leftSection={<Icon icon="mdi:content-save-plus" width={14} />}
-              onClick={handleSnapshot}
-              loading={busy}
-              data-testid="version-snapshot"
-            >
-              Save a version now
-            </Button>
+            <Paper withBorder radius="md" p="sm" bg="var(--mantine-color-body)">
+              <Group justify="space-between" wrap="nowrap" gap="sm" align="center">
+                <Stack gap={2} style={{ minWidth: 0 }}>
+                  <Text size="sm" fw={600}>
+                    Bookmark this state
+                  </Text>
+                  <Text size="xs" c="dimmed">
+                    Saving already records a version. Give the current one a name
+                    so it stays findable and is never cleaned up.
+                  </Text>
+                </Stack>
+                <Button
+                  variant="light"
+                  size="xs"
+                  leftSection={<Icon icon="mdi:bookmark-plus-outline" width={14} />}
+                  onClick={handleSnapshot}
+                  disabled={busy}
+                  data-testid="version-snapshot"
+                  style={{ flexShrink: 0 }}
+                >
+                  Name it
+                </Button>
+              </Group>
+            </Paper>
           )}
-          <ScrollArea.Autosize mah="calc(100vh - 220px)" type="hover">
+          <ScrollArea.Autosize mah="calc(100vh - 260px)" type="hover">
             {body}
           </ScrollArea.Autosize>
         </Stack>
       </Drawer>
 
-      {/* Naming a version — used for both pin and rename. */}
+      {/* Naming a version — shared by snapshot, pin and rename, because all
+          three ask the same question and differ only in what they do with the
+          answer. */}
       <Modal
-        opened={pending?.type === 'pin' || pending?.type === 'rename'}
+        opened={
+          pending?.type === 'pin' ||
+          pending?.type === 'rename' ||
+          pending?.type === 'snapshot'
+        }
         onClose={closeModal}
-        title={pending?.type === 'pin' ? 'Pin this version' : 'Rename version'}
+        title={
+          pending?.type === 'snapshot'
+            ? 'Name the current state'
+            : pending?.type === 'pin'
+              ? 'Pin this version'
+              : 'Rename version'
+        }
         centered
       >
         <Stack gap="md">
+          {pending?.type === 'snapshot' && (
+            <Text size="sm" c="dimmed">
+              A named version is kept indefinitely and never folds into a later
+              autosave, so it stays exactly as it is now.
+            </Text>
+          )}
           {pending?.type === 'pin' && (
             <Text size="sm" c="dimmed">
               Pinned versions are never removed by retention, and later autosaves
@@ -272,10 +326,22 @@ const VersionHistoryDrawer: React.FC<VersionHistoryDrawerProps> = ({
             <Button
               size="xs"
               loading={busy}
+              disabled={pending?.type === 'snapshot' && !labelDraft.trim()}
               onClick={() => {
                 if (!pending) return;
-                const version = pending.version;
                 const label = labelDraft.trim() || null;
+
+                if (pending.type === 'snapshot') {
+                  if (!dashboardId || !label) return;
+                  void run(async () => {
+                    const created = await createDashboardVersion(dashboardId, label);
+                    return `Saved “${label}” as v${created.seq}.`;
+                  });
+                  return;
+                }
+
+                const version = pendingVersion(pending);
+                if (!version) return;
                 if (pending.type === 'pin') {
                   void run(async () => {
                     await pinDashboardVersion(version.version_id, label);
@@ -289,7 +355,11 @@ const VersionHistoryDrawer: React.FC<VersionHistoryDrawerProps> = ({
                 }
               }}
             >
-              {pending?.type === 'pin' ? 'Pin' : 'Rename'}
+              {pending?.type === 'snapshot'
+                ? 'Save'
+                : pending?.type === 'pin'
+                  ? 'Pin'
+                  : 'Rename'}
             </Button>
           </Group>
         </Stack>
@@ -304,7 +374,7 @@ const VersionHistoryDrawer: React.FC<VersionHistoryDrawerProps> = ({
         <Stack gap="md">
           <Text size="sm">
             This replaces the dashboard's current content with{' '}
-            <strong>{pending ? versionTitle(pending.version) : ''}</strong>.
+            <strong>{pendingTitle(pending)}</strong>.
           </Text>
           <Alert color="blue" variant="light" icon={<Icon icon="mdi:information" width={16} />}>
             The current state is saved as a version first, so you can undo this.
@@ -320,15 +390,15 @@ const VersionHistoryDrawer: React.FC<VersionHistoryDrawerProps> = ({
               loading={busy}
               data-testid="version-restore-confirm"
               onClick={() => {
-                if (!pending) return;
-                const version = pending.version;
+                const version = pendingVersion(pending);
+                if (!version) return;
                 void run(async () => {
                   const result = await restoreDashboardVersion(version.version_id);
                   const bits = [`Restored ${versionTitle(version)}`];
                   if (result.tabs_created) bits.push(`${result.tabs_created} tab(s) recreated`);
                   if (result.tabs_deleted) bits.push(`${result.tabs_deleted} tab(s) removed`);
                   return `${bits.join(' · ')}.`;
-                });
+                }, { reloadsDashboard: true });
               }}
             >
               Restore
@@ -345,7 +415,7 @@ const VersionHistoryDrawer: React.FC<VersionHistoryDrawerProps> = ({
       >
         <Stack gap="md">
           <Text size="sm">
-            <strong>{pending ? versionTitle(pending.version) : ''}</strong> will be removed
+            <strong>{pendingTitle(pending)}</strong> will be removed
             permanently.
           </Text>
           <Alert color="red" variant="light" icon={<Icon icon="mdi:alert" width={16} />}>
@@ -361,8 +431,8 @@ const VersionHistoryDrawer: React.FC<VersionHistoryDrawerProps> = ({
               loading={busy}
               data-testid="version-delete-confirm"
               onClick={() => {
-                if (!pending) return;
-                const version = pending.version;
+                const version = pendingVersion(pending);
+                if (!version) return;
                 void run(async () => {
                   await deleteDashboardVersion(version.version_id, version.pinned);
                   return `Deleted ${versionTitle(version)}.`;

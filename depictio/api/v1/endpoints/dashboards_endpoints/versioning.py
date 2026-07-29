@@ -390,9 +390,13 @@ def capture_dashboard_version(
 
     latest = version_store.latest_version(family_key)
 
-    # Nothing changed. An explicit save still deserves a marker, so it falls
-    # through to the normal path; an autosave leaves no trace at all.
-    if latest and latest.get("content_hash") == content_hash and kind == "auto":
+    # Nothing changed, so there is no new state to preserve.
+    #
+    # This applies to every kind, not just autosaves. Without it, a restore
+    # whose target is already live — or any deliberate snapshot of an
+    # unchanged dashboard — writes a second entry that says nothing, which is
+    # what made a single restore appear as two versions.
+    if latest and latest.get("content_hash") == content_hash:
         version_store.touch_version(latest["version_id"], now)
         return None
 
@@ -437,6 +441,8 @@ def capture_dashboard_version(
                 "tabs": payload["tabs"],
                 "data_collections": payload["data_collections"],
                 "content_hash": content_hash,
+                "tab_count": payload["tab_count"],
+                "component_count": payload["component_count"],
                 "updated_at": now,
             },
         )
@@ -463,4 +469,51 @@ def capture_quietly(dashboard_id: ObjectId | str, **kwargs: Any) -> Optional[Das
         return capture_dashboard_version(dashboard_id, **kwargs)
     except Exception as exc:  # noqa: BLE001 — versioning must never break a save
         logger.warning(f"versioning: capture failed for {dashboard_id}: {exc}")
+        return None
+
+
+def ensure_baseline_quietly(
+    dashboard_id: ObjectId | str, *, author: Any = None
+) -> Optional[DashboardVersion]:
+    """Record the state a dashboard is in *before* its first tracked write.
+
+    Capture runs after a save, so every version describes a state the user has
+    already moved to. For a dashboard that predates the ledger — which is every
+    existing dashboard — that leaves its original state permanently
+    unreachable: the first edit is recorded, but the thing being edited is not.
+    Users read that as "restore does not go back to the original", and they are
+    right.
+
+    So the very first write to a family seeds a baseline from the live document
+    first. Called *before* the write, unlike every other capture. It is a
+    one-time cost per family: the ledger is non-empty from then on, and the
+    check is a single indexed count.
+
+    Labelled rather than left bare, because "v1" for a state the user never
+    explicitly saved needs to explain itself in the timeline.
+    """
+    try:
+        if not settings.dashboard_versions.enabled:
+            return None
+
+        anchor = dashboards_collection.find_one({"dashboard_id": ObjectId(str(dashboard_id))}) or (
+            dashboards_collection.find_one({"_id": ObjectId(str(dashboard_id))})
+        )
+        if not anchor:
+            return None
+
+        family_id = resolve_family_id(anchor)
+        if family_id is None:
+            return None
+        if version_store.count_versions(str(family_id)) > 0:
+            return None
+
+        return capture_dashboard_version(
+            family_id,
+            kind="explicit",
+            author=author,
+            label="Before first tracked change",
+        )
+    except Exception as exc:  # noqa: BLE001 — must never break a save
+        logger.warning(f"versioning: baseline capture failed for {dashboard_id}: {exc}")
         return None

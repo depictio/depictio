@@ -33,7 +33,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 #: How a version came to exist. ``auto`` is an autosave (subject to
 #: coalescing); ``explicit`` is a deliberate Save click or a named snapshot;
@@ -177,6 +177,13 @@ class DashboardVersion(BaseModel):
     tabs: list[TabSnapshot] = Field(default_factory=list)
     data_collections: list[DataCollectionStamp] = Field(default_factory=list)
 
+    #: Denormalised counts, stored on the record rather than derived on read.
+    #: The list endpoint projects ``tabs`` away — it is ~95% of a record's
+    #: bytes — so a timeline row has nothing left to count from. Kept in step
+    #: with ``tabs`` by the validator below rather than by each writer.
+    tab_count: int = 0
+    component_count: int = 0
+
     #: Set on ``kind="restore"``: the version whose content was restored.
     parent_version_id: Optional[str] = None
 
@@ -186,9 +193,21 @@ class DashboardVersion(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    @property
-    def component_count(self) -> int:
-        return sum(len(tab.stored_metadata) for tab in self.tabs)
+    @model_validator(mode="after")
+    def _sync_counts(self) -> "DashboardVersion":
+        """Derive the counts from ``tabs`` whenever the snapshot is present.
+
+        A caller can never set them inconsistently, and a coalescing fold that
+        replaces ``tabs`` gets the matching counts for free. Records read back
+        from Mongo arrive with ``tabs`` projected away, so an explicit zero is
+        only trusted when there is genuinely nothing to count.
+        """
+        if self.tabs:
+            object.__setattr__(self, "tab_count", len(self.tabs))
+            object.__setattr__(
+                self, "component_count", sum(len(tab.stored_metadata) for tab in self.tabs)
+            )
+        return self
 
 
 class DashboardVersionSummary(BaseModel):

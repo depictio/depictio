@@ -101,9 +101,19 @@ Route dispatch is plain regex in `depictio/viewer/src/main.tsx` +
 
 ### Dashboard Versioning
 - Every save snapshots the whole tab family into `dashboard_versions` (`dashboards_endpoints/versioning.py`)
-- Autosaves coalesce within an anchored window; an unchanged save writes nothing
+- Autosaves coalesce within an anchored window; an unchanged save writes nothing, **whatever its kind**
+- The first save on a family seeds a baseline first (`ensure_baseline_quietly`), so the
+  pre-edit state is restorable — capture otherwise only ever records states already left
+- `tab_count`/`component_count` are **stored**, not derived: the list endpoint projects
+  `tabs` away, so a timeline row has nothing left to count
 - Snapshots are content-only — `permissions`/`is_public`/`project_id` always come from the live doc
+- Snapshots stringify ObjectIds to hash deterministically; restore calls `_rehydrate_ids`
+  to undo that, or components come back with string `dc_id`s that match no lookup
 - Retention is `version_store.prune_family()`, not a TTL index (a TTL cannot exempt pins)
+- UI: entry point is in the Settings drawer, not the header. `/dashboard/{id}?version={vid}`
+  renders a snapshot read-only in the viewer (`src/versions/preview.ts`)
+- Version history covers **layout and components only**. Charts always read current data;
+  `DataCollectionStamp` records what the data *was*, but nothing reads it back yet
 
 ### Screenshot System
 - Playwright drives the React SPA; composite targeting via `.react-grid-item`

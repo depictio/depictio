@@ -16,7 +16,7 @@ route is exercised against a caller who lacks the required level.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import mongomock
 import pytest
@@ -382,3 +382,184 @@ def test_restore_records_a_restore_point(ctx) -> None:
 
 def test_restore_of_unknown_version_is_404(ctx) -> None:
     assert ctx["client"].post(f"{API}/versions/deadbeef/restore").status_code == 404
+
+
+# ── regressions ─────────────────────────────────────────────────────────────
+#
+# Each of these reproduces something the timeline actually showed a user, and
+# each failure mode was silent: the endpoint returned 200 every time.
+
+
+def test_timeline_rows_report_what_a_version_holds(ctx) -> None:
+    """Every row read "0 components", because the counts were never stored.
+
+    ``component_count`` was a Python ``@property``, so it did not survive
+    ``model_dump`` into Mongo — and the list endpoint projects ``tabs`` away,
+    leaving nothing to count from on read. The timeline claimed every version
+    was empty, which makes the whole surface untrustworthy: a user cannot pick
+    a version to restore if none of them appear to contain anything.
+    """
+    main = _make_dashboard(ctx, components=[{"index": "a"}, {"index": "b"}])
+    _make_dashboard(ctx, title="Tab 2", parent=main, tab_order=1, components=[{"index": "c"}])
+    _capture(ctx, main, kind="explicit")
+
+    row = ctx["client"].get(f"{API}/{main}/versions").json()["versions"][0]
+
+    assert row["component_count"] == 3, "components across the whole family, not just the main tab"
+    assert row["tab_count"] == 2
+
+
+def test_coalescing_keeps_the_counts_in_step(ctx) -> None:
+    """A folded save rewrites ``tabs``; the counts must follow it."""
+    did = _make_dashboard(ctx, components=[{"index": "a"}])
+    _capture(ctx, did)
+
+    ctx["dashboards"].update_one(
+        {"_id": did}, {"$set": {"stored_metadata": [{"index": "a"}, {"index": "b"}]}}
+    )
+    _capture(ctx, did, now=BASE + timedelta(seconds=30))
+
+    row = ctx["client"].get(f"{API}/{did}/versions").json()["versions"][0]
+    assert row["save_count"] == 2, "precondition: the second save folded into the first"
+    assert row["component_count"] == 2
+
+
+def test_restore_adds_exactly_one_version(ctx) -> None:
+    """A restore appeared as two entries, not one.
+
+    The pre-restore capture used ``kind="explicit"``, and an explicit capture
+    bypassed the unchanged-content check — so restoring wrote a redundant
+    snapshot of a state already at the top of the timeline, plus the restore
+    point itself.
+    """
+    did = _make_dashboard(ctx, components=[{"index": "a"}])
+    target = _capture(ctx, did, kind="explicit")
+    ctx["dashboards"].update_one({"_id": did}, {"$set": {"stored_metadata": [{"index": "b"}]}})
+    _capture(ctx, did, kind="auto", now=BASE + timedelta(hours=1))
+
+    before = ctx["versions"].count_documents({})
+    ctx["client"].post(f"{API}/versions/{target.version_id}/restore")
+    after = ctx["versions"].count_documents({})
+
+    assert after - before == 1
+
+
+def test_restoring_the_live_state_is_a_no_op(ctx) -> None:
+    """Restoring what is already on screen must not grow the timeline."""
+    did = _make_dashboard(ctx, components=[{"index": "a"}])
+    record = _capture(ctx, did, kind="explicit")
+
+    before = ctx["versions"].count_documents({})
+    response = ctx["client"].post(f"{API}/versions/{record.version_id}/restore")
+
+    assert response.status_code == 200, response.text
+    assert ctx["versions"].count_documents({}) == before
+
+
+def test_restore_gives_components_back_their_object_ids(ctx) -> None:
+    """A restored dashboard rendered no data, because its ids came back as text.
+
+    Snapshots stringify ObjectIds so the payload is plain JSON and hashes
+    deterministically. Writing that straight back left components carrying a
+    string ``dc_id``, which no ``{"data_collection_id": ObjectId(...)}`` lookup
+    on the read path matches — the dashboard returned intact but empty, which
+    a user reads as "restore did nothing".
+    """
+    dc_id = ObjectId()
+    did = _make_dashboard(ctx, components=[{"index": "a", "dc_id": dc_id}])
+    record = _capture(ctx, did, kind="explicit")
+
+    ctx["dashboards"].update_one({"_id": did}, {"$set": {"stored_metadata": []}})
+    ctx["client"].post(f"{API}/versions/{record.version_id}/restore")
+
+    live = ctx["dashboards"].find_one({"_id": did})
+    assert live["stored_metadata"][0]["dc_id"] == dc_id
+    assert isinstance(live["stored_metadata"][0]["dc_id"], ObjectId)
+
+
+def test_naming_an_unchanged_state_labels_it_instead_of_failing(ctx) -> None:
+    """Naming the current state used to 409 whenever nothing had changed.
+
+    Which is almost always: every save already records a version, so by the
+    time the user opens the drawer the live state *is* the newest version.
+    The button was therefore broken in its most common case.
+    """
+    did = _make_dashboard(ctx, components=[{"index": "a"}])
+    existing = _capture(ctx, did, kind="auto")
+
+    response = ctx["client"].post(f"{API}/{did}/versions", json={"label": "Known good"})
+
+    assert response.status_code == 200, response.text
+    assert response.json()["version_id"] == existing.version_id
+    assert ctx["versions"].count_documents({}) == 1, "naming must not duplicate the version"
+
+    stored = ctx["versions"].find_one({"version_id": existing.version_id})
+    assert stored["label"] == "Known good"
+    assert stored["kind"] == "explicit"
+    assert stored["coalesce_until"] == stored["created_at"], (
+        "a named version must be sealed, or the next autosave rewrites what was named"
+    )
+
+
+def test_naming_a_changed_state_creates_a_version(ctx) -> None:
+    did = _make_dashboard(ctx, components=[{"index": "a"}])
+    _capture(ctx, did, kind="auto")
+    ctx["dashboards"].update_one({"_id": did}, {"$set": {"stored_metadata": [{"index": "b"}]}})
+
+    response = ctx["client"].post(f"{API}/{did}/versions", json={"label": "After the change"})
+
+    assert response.status_code == 200, response.text
+    assert ctx["versions"].count_documents({}) == 2
+    assert response.json()["label"] == "After the change"
+
+
+def test_naming_requires_editor(ctx) -> None:
+    did = _make_dashboard(ctx, components=[{"index": "a"}])
+    _capture(ctx, did, kind="auto")
+    ctx["granted"]["level"] = "viewer"
+
+    response = ctx["client"].post(f"{API}/{did}/versions", json={"label": "nope"})
+
+    assert response.status_code == 403
+
+
+def test_version_detail_carries_what_the_preview_renders(ctx) -> None:
+    """The viewer renders `?version=` from this payload, so it must be complete.
+
+    ``GET /versions/{id}`` is the only endpoint that returns ``tabs`` — the
+    list endpoint projects them away. The preview picks its tab out of this
+    response and renders it through the live component tree, so a missing
+    layout array is a blank dashboard rather than an error.
+    """
+    main = _make_dashboard(ctx, components=[{"index": "a"}])
+    child = _make_dashboard(ctx, title="Tab 2", parent=main, tab_order=1)
+    ctx["dashboards"].update_one(
+        {"_id": main}, {"$set": {"right_panel_layout_data": [{"i": "a", "x": 0, "y": 0}]}}
+    )
+    record = _capture(ctx, main, kind="explicit")
+
+    body = ctx["client"].get(f"{API}/versions/{record.version_id}").json()
+
+    by_id = {t["dashboard_id"]: t for t in body["tabs"]}
+    assert str(main) in by_id and str(child) in by_id, "the preview addresses tabs by id"
+
+    tab = by_id[str(main)]
+    assert tab["stored_metadata"] == [{"index": "a"}]
+    assert tab["right_panel_layout_data"] == [{"i": "a", "x": 0, "y": 0}]
+    assert "left_panel_layout_data" in tab
+    assert tab["is_main_tab"] is True
+
+
+def test_version_detail_never_leaks_access_control(ctx) -> None:
+    """A snapshot the viewer renders must not carry permissions at all.
+
+    Structural, not filtered: ``TabSnapshot`` has no such fields, so there is
+    nothing for a preview — or a restore — to write back.
+    """
+    did = _make_dashboard(ctx, components=[{"index": "a"}])
+    record = _capture(ctx, did, kind="explicit")
+
+    tab = ctx["client"].get(f"{API}/versions/{record.version_id}").json()["tabs"][0]
+
+    for field in ("permissions", "is_public", "project_id"):
+        assert field not in tab, f"{field} must never travel inside a snapshot"

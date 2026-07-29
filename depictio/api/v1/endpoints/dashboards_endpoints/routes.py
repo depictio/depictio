@@ -595,6 +595,11 @@ async def save_dashboard(
     save_payload = data.mongo()
     save_payload["last_saved_ts"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+    from depictio.api.v1.endpoints.dashboards_endpoints.versioning import (
+        capture_quietly,
+        ensure_baseline_quietly,
+    )
+
     if existing_dashboard:
         project_id = existing_dashboard.get("project_id")
         if not project_id:
@@ -606,6 +611,13 @@ async def save_dashboard(
             raise HTTPException(
                 status_code=403, detail="You don't have permission to update this dashboard."
             )
+
+        # Seed the ledger with the pre-write state, once per family. Every
+        # other capture runs *after* a write and so describes a state the user
+        # has already moved to; without this, the state being edited right now
+        # is the one state no version can ever restore. No-ops from the second
+        # save onwards, and runs only once the caller is known to be an editor.
+        ensure_baseline_quietly(dashboard_id, author=current_user)
 
         result = dashboards_collection.find_one_and_update(
             {"dashboard_id": dashboard_id},
@@ -641,8 +653,6 @@ async def save_dashboard(
         #
         # capture_quietly swallows everything: a missing version is a lost
         # undo step, a failed save is lost work.
-        from depictio.api.v1.endpoints.dashboards_endpoints.versioning import capture_quietly
-
         capture_quietly(
             dashboard_id,
             kind="explicit" if force_screenshot else "auto",

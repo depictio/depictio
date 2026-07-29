@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import {
   Anchor,
   Badge,
+  Button,
   Code,
   CopyButton,
   Divider,
@@ -22,6 +23,11 @@ interface SettingsDrawerProps {
   opened: boolean;
   onClose: () => void;
   dashboard: DashboardData | null;
+  /** Opens the version history drawer. Version history lives behind Settings
+   *  rather than as its own header control: it is an occasional, deliberate
+   *  action, and the header is reserved for the ones used continuously.
+   *  Omitted by the read-only viewer, which has no history surface. */
+  onOpenVersionHistory?: () => void;
 }
 
 /** "yyyy-mm-dd HH:MM" — same format the dashboards list uses. */
@@ -50,6 +56,7 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
   opened,
   onClose,
   dashboard,
+  onOpenVersionHistory,
 }) => {
   const [projectName, setProjectName] = useState<string | null>(null);
   // Raw template_origin blob from the dashboard's owning project (when
@@ -241,6 +248,34 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
           {dashboardId && <CopyableId label="Dashboard ID" value={dashboardId} />}
           {projectId && <CopyableId label="Project ID" value={projectId} />}
         </Stack>
+
+        {onOpenVersionHistory && (
+          <>
+            <Divider label="History" labelPosition="left" my="xs" />
+            <Stack gap="xs">
+              <Text size="sm" c="dimmed">
+                Every save is recorded. Browse past states of this dashboard and
+                its tabs, and put one back.
+              </Text>
+              <Button
+                variant="light"
+                color="gray"
+                leftSection={<Icon icon="mdi:history" width={16} />}
+                onClick={() => {
+                  // Close first: two right-hand drawers stacked on top of each
+                  // other would leave the user unsure which Escape dismisses.
+                  onClose();
+                  onOpenVersionHistory();
+                }}
+                data-testid="open-version-history"
+                data-tour-id="editor-version-history"
+                fullWidth
+              >
+                Version history
+              </Button>
+            </Stack>
+          </>
+        )}
       </Stack>
     </Drawer>
   );

@@ -382,3 +382,89 @@ def test_oversized_snapshot_is_skipped_not_raised(store, monkeypatch) -> None:
 
     assert _capture(did, author=ALICE, now=BASE) is None
     assert store["versions"].count_documents({}) == 0
+
+
+# ── Baseline ────────────────────────────────────────────────────────────────
+#
+# Capture runs *after* a save, so without a baseline every version describes a
+# state the user has already left. For a dashboard that predates the ledger —
+# which is every existing dashboard — that makes its original state the one
+# state no version can restore, and "restore doesn't go back to the original"
+# is exactly what a user reports.
+
+
+def _ensure_baseline(did, **kwargs):
+    from depictio.api.v1.endpoints.dashboards_endpoints.versioning import (
+        ensure_baseline_quietly,
+    )
+
+    return ensure_baseline_quietly(did, **kwargs)
+
+
+def test_baseline_makes_the_pre_edit_state_restorable(store) -> None:
+    """The state before the first tracked edit must be reachable."""
+    original = [{"index": "a"}, {"index": "b"}, {"index": "c"}]
+    did = _make_dashboard(store, components=original)
+
+    # First tracked write: seed the baseline, then the edit is captured.
+    _ensure_baseline(did, author=ALICE)
+    _set_components(store, did, original[:1])
+    _capture(did, author=ALICE, now=BASE)
+
+    reachable = [
+        len(v["tabs"][0]["stored_metadata"]) for v in store["versions"].find({}).sort("seq", 1)
+    ]
+    assert len(original) in reachable, (
+        f"the pristine {len(original)}-component state must be restorable; got {reachable}"
+    )
+
+
+def test_baseline_is_labelled_so_it_explains_itself(store) -> None:
+    did = _make_dashboard(store, components=[{"index": "a"}])
+
+    record = _ensure_baseline(did, author=ALICE)
+
+    assert record is not None
+    assert record.label == "Before first tracked change"
+    assert record.kind == "explicit", "a baseline must never be thinned as an autosave"
+
+
+def test_baseline_is_seeded_only_once(store) -> None:
+    """A per-save baseline would double the ledger for no added recoverability."""
+    did = _make_dashboard(store, components=[{"index": "a"}])
+
+    _ensure_baseline(did, author=ALICE)
+    _set_components(store, did, [{"index": "b"}])
+    _capture(did, author=ALICE, now=BASE)
+    _ensure_baseline(did, author=ALICE)
+
+    assert store["versions"].count_documents({"label": "Before first tracked change"}) == 1
+
+
+def test_baseline_belongs_to_the_family_not_the_tab(store) -> None:
+    """Saving a child tab must seed the family's baseline, not a second one."""
+    main = _make_dashboard(store, components=[{"index": "main-a"}])
+    child = _make_dashboard(
+        store, title="Tab 2", components=[{"index": "child-a"}], is_main_tab=False, parent=main
+    )
+
+    _ensure_baseline(child, author=ALICE)
+
+    assert store["versions"].count_documents({}) == 1
+    doc = store["versions"].find_one({})
+    assert doc["family_id"] == str(main)
+    assert doc["tab_count"] == 2, "a baseline covers the whole family, as every version does"
+
+
+def test_baseline_never_raises(store, monkeypatch) -> None:
+    """A version is a nice-to-have; a saved dashboard is not."""
+    from depictio.api.v1.endpoints.dashboards_endpoints import versioning
+
+    did = _make_dashboard(store, components=[{"index": "a"}])
+    monkeypatch.setattr(
+        versioning,
+        "capture_dashboard_version",
+        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("mongo is down")),
+    )
+
+    assert _ensure_baseline(did, author=ALICE) is None

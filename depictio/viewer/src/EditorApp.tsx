@@ -28,7 +28,6 @@ import React, {
   useMemo,
 } from 'react';
 import {
-  ActionIcon,
   AppShell,
   Button,
   Center,
@@ -39,7 +38,6 @@ import {
   Paper,
   Stack,
   Title,
-  Tooltip,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
@@ -865,6 +863,28 @@ const EditorApp: React.FC = () => {
     [tabSiblings, allDashboards, refreshTabList],
   );
 
+  /**
+   * Reload the family after a restore landed on the server.
+   *
+   * Cancels the pending debounced save first. Without that, a drag from just
+   * before the restore fires ~500 ms later and POSTs the *pre-restore* state
+   * back over the freshly restored document — the dashboard visibly reverts a
+   * moment after the success notification, which reads as "restore did not
+   * work". The layout listeners also fire on remount with the new layout,
+   * which `layoutsEqual` then correctly treats as a no-op.
+   */
+  const handleRestored = useCallback(() => {
+    if (!dashboardId) return;
+    if (saveTimer.current) {
+      clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+    }
+    setSaveStatus('idle');
+    void fetchDashboard(dashboardId)
+      .then(applyDashboard)
+      .catch(() => undefined);
+  }, [dashboardId, applyDashboard]);
+
   /** Force-save: cancel any pending debounce and POST current state now.
    *  Mirrors depictio/dash/layouts/save.py:save_dashboard_minimal — uses
    *  Mantine notifications for success/failure feedback (no persistent header
@@ -945,19 +965,6 @@ const EditorApp: React.FC = () => {
           isOwner={isOwner}
           rightExtras={
             <>
-              <Tooltip label="Version history" withArrow>
-                <ActionIcon
-                  variant="subtle"
-                  color="gray"
-                  size="md"
-                  onClick={openVersions}
-                  aria-label="Version history"
-                  data-testid="version-history-button"
-                  data-tour-id="editor-version-history"
-                >
-                  <Icon icon="mdi:history" width={18} />
-                </ActionIcon>
-              </Tooltip>
               {realtimeEnabled && (
                 <span data-tour-id="realtime-indicator" style={{ display: 'inline-flex' }}>
                   <RealtimeIndicator
@@ -1088,6 +1095,7 @@ const EditorApp: React.FC = () => {
         opened={settingsOpened}
         onClose={closeSettings}
         dashboard={dashboard}
+        onOpenVersionHistory={isOwner ? openVersions : undefined}
       />
 
       {/* Restoring refetches rather than patching local state: a restore can
@@ -1099,10 +1107,7 @@ const EditorApp: React.FC = () => {
         dashboardId={dashboardId ?? null}
         canEdit={isOwner}
         canDelete={isOwner}
-        onRestored={() => {
-          if (!dashboardId) return;
-          void fetchDashboard(dashboardId).then(applyDashboard).catch(() => undefined);
-        }}
+        onRestored={handleRestored}
       />
 
       <TabModal
