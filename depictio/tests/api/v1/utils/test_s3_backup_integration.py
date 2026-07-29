@@ -17,13 +17,46 @@ try:
 except ImportError:
     testcontainers_available = False
 
+
 from depictio.api.v1.backup_strategy_manager import (
     S3BackupStrategyManager,
     create_backup_with_strategy,
 )
 
 
-@pytest.mark.skipif(not testcontainers_available, reason="testcontainers not available")
+def _docker_reachable() -> bool:
+    """Can a container actually be started here?
+
+    The import check above is necessary and not sufficient: `testcontainers` is
+    a plain dev dependency, so it imports fine on a machine with no Docker
+    daemon — and then every test in this class *errors* in fixture setup with a
+    `DockerException`, rather than skipping.
+
+    Three noisy errors on every local `pytest` run train people to ignore the
+    summary line, which is where a real regression would appear. CI runs on
+    `ubuntu-22.04` with a daemon present, so nothing is lost there.
+
+    Probed once at import: the daemon does not appear mid-session, and doing it
+    per fixture would pay the connection timeout for each test.
+    """
+    if not testcontainers_available:
+        return False
+    try:
+        import docker
+
+        docker.from_env().ping()
+        return True
+    except Exception:
+        return False
+
+
+#: Probed once at module import; see `_docker_reachable`.
+docker_available = _docker_reachable()
+
+
+@pytest.mark.skipif(
+    not docker_available, reason="needs testcontainers and a reachable Docker daemon"
+)
 class TestS3BackupIntegration:
     """Integration tests using real MinIO containers."""
 
