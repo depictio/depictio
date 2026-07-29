@@ -22,7 +22,7 @@ Guard documents expire via a TTL index so the collection cannot grow without
 bound.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Final
 
 from pymongo.errors import DuplicateKeyError, OperationFailure
@@ -38,6 +38,12 @@ _TTL_INDEX_NAME: Final[str] = "telemetry_guard_ttl"
 
 def ensure_guard_index() -> None:
     """Create the TTL index on guard documents. Never raises.
+
+    ``expireAfterSeconds=0`` does not mean "expire immediately". It selects
+    MongoDB's expire-at-a-timestamp mode, where a document is removed once the
+    indexed date field is in the past — so the lifetime lives in the value written
+    by :func:`claim_send`, not here. Getting that backwards silently un-guards
+    every send, which is the failure this subsystem can least afford.
 
     Only guard documents carry ``guard_expires_at``; the identity document does
     not, and MongoDB's TTL monitor ignores documents where the indexed field is
@@ -90,9 +96,18 @@ def claim_send(event: str, *, daily: bool = True) -> bool:
             {
                 "_id": _guard_id(event, daily=daily),
                 "sent_at": now,
-                # Indexed by the TTL index above; presence is what marks a document
-                # as a disposable guard rather than the durable identity.
-                "guard_expires_at": now,
+                # The TTL index above uses expireAfterSeconds=0, which is MongoDB's
+                # "expire *at* the indexed timestamp" idiom — so this field must be
+                # the expiry moment, not the write moment. Writing `now` here made
+                # every guard eligible for deletion the instant it was created, and
+                # the TTL monitor removed it within a minute: `server_install` then
+                # re-fired on the next restart and heartbeats could repeat within a
+                # day, inflating the very installation count this guard exists to
+                # keep honest.
+                #
+                # Its presence is also what marks a document as a disposable guard
+                # rather than the durable identity, which carries no such field.
+                "guard_expires_at": now + timedelta(seconds=GUARD_TTL_SECONDS),
             }
         )
         return True

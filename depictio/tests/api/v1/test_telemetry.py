@@ -153,6 +153,36 @@ class TestSendGuard:
         assert guard is not None
         assert "guard_expires_at" in guard
 
+    def test_guard_expiry_is_in_the_future(self, telemetry_db):
+        """The expiry must be a future timestamp, not the moment of writing.
+
+        The TTL index is created with ``expireAfterSeconds=0``, which is MongoDB's
+        expire-*at*-the-indexed-timestamp mode rather than "expire immediately".
+        Writing ``now`` into the field therefore made every guard eligible for
+        deletion the instant it was created, and the TTL monitor removed it within
+        a minute — so ``server_install`` re-fired on each restart and heartbeats
+        could repeat within a day, inflating the installation count this guard
+        exists to keep honest.
+
+        Asserting merely that the field is *present* cannot catch that, which is
+        why this checks the value.
+        """
+        before = datetime.now(timezone.utc)
+        claim_send("server_heartbeat", daily=True)
+
+        guard = telemetry_db.telemetry.find_one({"_id": {"$ne": IDENTITY_DOC_ID}})
+        assert guard is not None
+
+        expires_at = guard["guard_expires_at"]
+        # mongomock/pymongo round-trip datetimes as naive UTC.
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+
+        assert expires_at > before, "guard would be deleted immediately by the TTL monitor"
+        # Must also outlive a daily send interval, or a restart late in the day
+        # could re-send after the guard had already been collected.
+        assert expires_at - before >= timedelta(days=1)
+
 
 class TestCliVersionRecording:
     @pytest.mark.parametrize("version", ["1.2.1", "1.3.0-b1", "2.0.0.dev1"])
