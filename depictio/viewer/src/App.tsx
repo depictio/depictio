@@ -141,7 +141,13 @@ const App: React.FC = () => {
   const clearDataVersions = useCallback(() => {
     setDataPins({});
     setAsOfVersionId(null);
+    setAsOfUnresolved([]);
   }, []);
+
+  // Collections the chosen version recorded no data version for. Reported in
+  // the banner because a partly-pinned dashboard is the one genuinely mixed
+  // state here, and it looks identical to a fully pinned one.
+  const [asOfUnresolved, setAsOfUnresolved] = useState<string[]>([]);
 
   // Set by the drawer when the user picks "use this data" on a timeline row,
   // so the banner can say *which* version rather than just "historical".
@@ -576,6 +582,7 @@ const App: React.FC = () => {
           <DataVersionBanner
             pinned={pinnedLabels}
             asOfLabel={asOfLabel}
+            unresolved={asOfUnresolved}
             onClear={clearDataVersions}
           />
         )}
@@ -899,9 +906,10 @@ const App: React.FC = () => {
         dataPins={dataPins}
         onDataPinsChange={setDataPins}
         asOfVersionId={asOfVersionId}
-        onAsOfChange={(versionId, label) => {
+        onAsOfChange={(versionId, label, unresolved) => {
           setAsOfVersionId(versionId);
           setAsOfLabel(label);
+          setAsOfUnresolved(unresolved ?? []);
           // A dashboard-level "as of" supersedes hand-picked collection pins;
           // leaving them would silently override the version the user just
           // asked for, on exactly the collections they had touched before.

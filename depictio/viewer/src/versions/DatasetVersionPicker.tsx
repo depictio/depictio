@@ -26,8 +26,6 @@ import {
   Alert,
   Badge,
   Box,
-  Button,
-  Divider,
   Group,
   Loader,
   Paper,
@@ -165,36 +163,3 @@ const DatasetVersionPicker: React.FC<DatasetVersionPickerProps> = ({
 };
 
 export default DatasetVersionPicker;
-
-/** The "show everything as of this dashboard version" affordance, rendered on
- *  a timeline row. Separated so the timeline owns its own layout. */
-export const AsOfVersionButton: React.FC<{
-  active: boolean;
-  onToggle: () => void;
-  disabled?: boolean;
-  /** Collections this version recorded no data provenance for. Shown as a
-   *  caveat rather than silently serving them live. */
-  unresolvedCount?: number;
-}> = ({ active, onToggle, disabled, unresolvedCount = 0 }) => (
-  <Box>
-    <Button
-      size="compact-xs"
-      variant={active ? 'filled' : 'light'}
-      color={active ? 'yellow' : 'gray'}
-      leftSection={<Icon icon="mdi:database-clock-outline" width={13} />}
-      onClick={onToggle}
-      disabled={disabled}
-    >
-      {active ? 'Showing this data' : 'Use this data'}
-    </Button>
-    {active && unresolvedCount > 0 && (
-      <>
-        <Divider my={4} />
-        <Text size="xs" c="dimmed">
-          {unresolvedCount} collection{unresolvedCount === 1 ? '' : 's'} had no recorded
-          version and {unresolvedCount === 1 ? 'is' : 'are'} showing current data.
-        </Text>
-      </>
-    )}
-  </Box>
-);

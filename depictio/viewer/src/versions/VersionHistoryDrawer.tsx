@@ -35,6 +35,7 @@ import { Icon } from '@iconify/react';
 import {
   createDashboardVersion,
   deleteDashboardVersion,
+  fetchDashboardVersion,
   pinDashboardVersion,
   renameDashboardVersion,
   restoreDashboardVersion,
@@ -82,8 +83,14 @@ interface VersionHistoryDrawerProps {
   /** Stored version whose data stamps are driving the view, if any. */
   asOfVersionId?: string | null;
   /** `label` is for the banner, so it can name the version rather than say
-   *  "historical". Called with (null, null) to return to current data. */
-  onAsOfChange?: (versionId: string | null, label: string | null) => void;
+   *  "historical"; `unresolved` names the collections that version recorded
+   *  no data version for, which the banner reports because they keep showing
+   *  current data. Called with (null, null, []) to return to current data. */
+  onAsOfChange?: (
+    versionId: string | null,
+    label: string | null,
+    unresolved?: string[],
+  ) => void;
 }
 
 type PendingAction =
@@ -199,13 +206,27 @@ const VersionHistoryDrawer: React.FC<VersionHistoryDrawerProps> = ({
   ).length;
 
   const handleUseData = useCallback(
-    (version: DashboardVersionSummary) => {
+    async (version: DashboardVersionSummary) => {
       if (!onAsOfChange) return;
       if (version.version_id === asOfVersionId) {
-        onAsOfChange(null, null);
-      } else {
-        onAsOfChange(version.version_id, versionTitle(version));
+        onAsOfChange(null, null, []);
+        return;
       }
+      // Fetch the detail for its stamps: the summary carries only a count by
+      // kind, and the banner needs to name the collections that will keep
+      // showing current data. A failure here must not block the pin — the
+      // backend resolves the stamps regardless, so the worst case is a
+      // less specific banner.
+      let unresolved: string[] = [];
+      try {
+        const detail = await fetchDashboardVersion(version.version_id);
+        unresolved = (detail.data_collections || [])
+          .filter((stamp) => stamp.version_kind !== 'delta')
+          .map((stamp) => stamp.data_collection_tag || String(stamp.dc_id));
+      } catch {
+        unresolved = [];
+      }
+      onAsOfChange(version.version_id, versionTitle(version), unresolved);
     },
     [onAsOfChange, asOfVersionId],
   );

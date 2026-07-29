@@ -17,12 +17,18 @@ interface DataVersionBannerProps {
   pinned: Array<{ label: string; version: number }>;
   /** Set when the pin came from "as of" a stored dashboard version. */
   asOfLabel?: string | null;
+  /** Collections the chosen version recorded no data version for. They are
+   *  showing *current* data while everything around them shows the past —
+   *  the one state in this feature that is genuinely mixed, so it has to be
+   *  said out loud rather than left to look uniform. */
+  unresolved?: string[];
   onClear: () => void;
 }
 
 const DataVersionBanner: React.FC<DataVersionBannerProps> = ({
   pinned,
   asOfLabel,
+  unresolved = [],
   onClear,
 }) => {
   if (pinned.length === 0 && !asOfLabel) return null;
@@ -54,8 +60,9 @@ const DataVersionBanner: React.FC<DataVersionBannerProps> = ({
         </Anchor>
       </Group>
       <Text size="xs" c="dimmed" mt={4}>
-        Every value on this dashboard is computed from the pinned dataset
-        version, not from the latest ingestion.
+        {unresolved.length === 0
+          ? 'Every value on this dashboard is computed from the pinned dataset version, not from the latest ingestion.'
+          : `Values are computed from the pinned dataset version, except ${unresolved.length} collection${unresolved.length === 1 ? '' : 's'} with no recorded version (${unresolved.join(', ')}), which still read current data.`}
       </Text>
     </Alert>
   );
