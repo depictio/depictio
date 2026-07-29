@@ -28,6 +28,7 @@ from depictio.api.v1.endpoints.user_endpoints.routes import (
     get_user_or_anonymous,
     oauth2_scheme_optional,
 )
+from depictio.api.v1.services.advanced_viz.data import load_tidy_columns
 from depictio.models.components.advanced_viz.schemas import (
     CANONICAL_SCHEMAS,
     role_dtype_specs,
@@ -314,11 +315,6 @@ def fetch_advanced_viz_data(
         component_type="advanced_viz/data",
     )
 
-    # Cap at 100k rows by default — advanced viz are rendered client-side and
-    # plotly chokes on huge frames. Recipes are the right place to pre-reduce.
-    if limit_rows is None:
-        limit_rows = 100_000
-
     try:
         wf_oid = ObjectId(str(wf_id))
         dc_oid = ObjectId(str(dc_id))
@@ -330,121 +326,13 @@ def fetch_advanced_viz_data(
     # DC's data by supplying its IDs. Mirror the deltatables access check.
     _assert_dc_access(dc_oid, current_user)
 
-    from depictio.api.v1.db import deltatables_collection
-    from depictio.api.v1.deltatables_utils import load_deltatable_lite
-
-    # Resolve delta-table location directly from MongoDB and hand it to
-    # load_deltatable_lite via init_data so it does NOT take the legacy
-    # HTTP fallback (`GET /deltatables/get/{dc_id}`) — that path needs an
-    # auth token we don't carry across worker boundaries and 401s here.
-    # Mirrors the pattern used by celery_tasks.build_figure_preview.
-    init_data: dict[str, dict] = {}
-    dt_doc = deltatables_collection.find_one({"data_collection_id": dc_oid})
-    if dt_doc and dt_doc.get("delta_table_location"):
-        init_data[str(dc_id)] = {
-            "delta_location": dt_doc["delta_table_location"],
-            "dc_type": "table",
-            "size_bytes": (dt_doc.get("flexible_metadata") or {}).get("deltatable_size_bytes", 0),
-        }
-    else:
-        logger.warning("advanced_viz/data: no materialised delta table for dc_id=%s", dc_id)
-        raise HTTPException(
-            status_code=404,
-            detail="Data collection has no materialised Delta table yet.",
-        )
-
-    # Merge filter columns into the projection so the scan-level column
-    # projection doesn't prune the columns the filters need. Without this,
-    # `select_columns=[feature_id, position, category]` would drop `GENE`
-    # before `apply_runtime_filters` runs, then the filter on `GENE` would
-    # silently no-op because the column isn't present on the projected df.
-    #
-    # Schema-guarded: filters from link-resolved cross-DC filtering may name
-    # columns that don't exist on this DC (e.g. a `habitat` filter coming via
-    # metadata applied to sankey_canonical, which only has `Habitat` row+col).
-    # Reading the lazy schema once lets us (a) drop the unusable filter from
-    # the metadata list and (b) avoid passing missing columns to .select(),
-    # which would otherwise fail at collect() with ColumnNotFoundError.
-    try:
-        from depictio.api.v1.deltatables_utils import _create_delta_scan
-
-        _scan = _create_delta_scan(
-            init_data[str(dc_id)]["delta_location"],
-            init_data[str(dc_id)].get("dc_type"),
-        )
-        available_cols = set(_scan.collect_schema().names())
-    except Exception as _exc:
-        logger.warning("advanced_viz/data: schema introspection failed: %s", _exc)
-        available_cols = None
-
-    filter_cols: set[str] = set()
-    if filter_metadata:
-        kept_filters: list[dict] = []
-        for f in filter_metadata:
-            nested = f.get("metadata") if isinstance(f, dict) else None
-            col = (f.get("column_name") if isinstance(f, dict) else None) or (
-                (nested or {}).get("column_name") if nested else None
-            )
-            # Drop filters that don't carry a column at all — link resolution
-            # can synthesise filter dicts where target_column resolves to None
-            # (source_filter has no column_name and the link has no target_field
-            # override), which would later crash _generate_filter_hash's sort
-            # with `'<' not supported between NoneType and str`.
-            if not col:
-                # Always a resolver bug upstream (filter_links can produce a
-                # link_filter with target_column=None when both the resolved
-                # value and link_config.target_field are absent). Log at
-                # WARNING so it shows up in ops aggregators.
-                logger.warning(
-                    "advanced_viz/data: dropping filter with no column_name (dc_id=%s)",
-                    dc_id,
-                )
-                continue
-            if available_cols is not None and col not in available_cols:
-                logger.info(
-                    "advanced_viz/data: dropping cross-DC filter on column %r — not in DC %s",
-                    col,
-                    dc_id,
-                )
-                continue
-            filter_cols.add(col)
-            kept_filters.append(f)
-        filter_metadata = kept_filters
-
-    projection = list(dict.fromkeys([*columns, *filter_cols]))
-    if available_cols is not None:
-        projection = [c for c in projection if c in available_cols]
-
-    try:
-        df = load_deltatable_lite(
-            workflow_id=wf_oid,
-            data_collection_id=str(dc_oid),
-            metadata=filter_metadata or None,
-            limit_rows=limit_rows,
-            select_columns=projection,
-            init_data=init_data,
-        )
-    except Exception as exc:
-        logger.warning(
-            "advanced_viz/data: load_deltatable_lite failed for dc_id=%s: %s",
-            dc_id,
-            exc,
-            exc_info=True,
-        )
-        raise HTTPException(
-            status_code=500, detail=f"Failed to load data collection: {exc}"
-        ) from exc
-
-    # Drop any requested columns that didn't survive projection (e.g. user
-    # bound an optional column the recipe didn't emit). The renderer
-    # decides what to do with missing optional columns.
-    present = [c for c in columns if c in df.columns]
-    return {
-        "columns": present,
-        "rows": {c: df.get_column(c).to_list() for c in present},
-        "row_count": int(df.height),
-        "filter_applied": bool(filter_metadata),
-    }
+    return load_tidy_columns(
+        wf_id=str(wf_oid),
+        dc_id=str(dc_oid),
+        columns=columns,
+        filter_metadata=filter_metadata,
+        limit_rows=limit_rows,
+    )
 
 
 _CACHE_KEY_VERSION = "v3"
