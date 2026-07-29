@@ -9,10 +9,16 @@ Depictio instance, not rendered output.
 
 ## The two formats, and why coverage differs
 
-| Format | What you get | Coverage |
-|---|---|---|
-| `json` | `{data, layout, config, meta}` — a Plotly spec for your own plotly.js | Only where a figure is built server-side |
-| `html` | One self-contained HTML file, no network calls | Every component type except `jbrowse` |
+| Format | What you get | Size | Coverage |
+|---|---|---|---|
+| `json` | `{data, layout, config, meta}` — a Plotly spec for your own plotly.js | ~1–500 KB | Where a figure is built server-side |
+| `html` | One self-contained HTML file, no network calls | ~7 MB | Every component type except `jbrowse` |
+
+**Prefer `json`.** Depictio is visualisation-oriented and the consumer already
+has the data, so what they want is a finished figure they can drop into their own
+page and restyle. `html` is the fallback for component types with no server-side
+figure, and for archiving a result next to a manuscript. It is ~7 MB because it
+inlines the whole React renderer, of which the actual payload is 1–400 KB.
 
 The asymmetry is not arbitrary. `html` injects a payload into a prebuilt React
 bundle that runs the viewer's **real** `ComponentRenderer`, so component types with
@@ -27,7 +33,7 @@ equivalent. `json` can only serve what Python can build.
 | `figure` | ✅ | ✅ | `services/figure/figure_builder.py` |
 | `map` | ✅ | ✅ | `services/map/render.py` |
 | `multiqc` | ✅ | ✅ | 503 while the figure cache warms; `html` waits it out |
-| `advanced_viz` | partial | ✅ | see below |
+| `advanced_viz` | 12 of 18 kinds | ✅ | see below |
 | `table` | ❌ | ✅ | AG Grid, not Plotly |
 | `card` | ❌ | ✅ | scalar + DOM |
 | `image` | ❌ | ✅ | S3 path list |
@@ -39,8 +45,11 @@ equivalent. `json` can only serve what Python can build.
 
 - **Server-built already** — `complex_heatmap`, `upset_plot`, `sankey`. Their Celery
   compute tasks return a figure, so `json` works.
-- **Ported to Python** — `volcano`, `ma`, `qq` (`services/advanced_viz/kinds/`).
-- **Client-only** — the remaining 12. `json` answers **501** with
+- **Ported to Python** — `volcano`, `ma`, `qq`, `manhattan`, `embedding`,
+  `stacked_taxonomy`, `da_barplot`, `enrichment`, `sunburst`
+  (`services/advanced_viz/kinds/`).
+- **Client-only** — the remaining 6: `rarefaction`, `dot_plot`, `lollipop`,
+  `oncoplot`, `coverage_track`, `phylogenetic`. `json` answers **501** with
   `html_available: true` and an `html_url`; `html` works today.
 
 Adding a module under `services/advanced_viz/kinds/` is the only change needed to
