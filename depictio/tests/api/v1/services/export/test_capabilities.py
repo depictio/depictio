@@ -98,3 +98,49 @@ def test_unknown_inputs_do_not_raise() -> None:
     assert advanced_viz_json_source("not_a_kind") is None
     assert "Unknown component type" in (unsupported_reason("not_a_type") or "")
     assert "Unknown advanced_viz kind" in (unsupported_reason("advanced_viz", "nope") or "")
+
+
+# --- filter options ---------------------------------------------------------
+
+
+class TestFilterOptionShapes:
+    """The two shapes an external control needs, and the degradation contract.
+
+    A manifest that 500s because one column could not be read is worse than one
+    that omits its options, so every failure path here must return None.
+    """
+
+    def test_categorical_controls_are_classified_as_such(self) -> None:
+        from depictio.api.v1.services.export.filter_options import (
+            _CATEGORICAL_TYPES,
+            _RANGE_TYPES,
+        )
+
+        assert {"Select", "MultiSelect", "SegmentedControl"} <= _CATEGORICAL_TYPES
+        assert {"Slider", "RangeSlider", "DateRangePicker", "Timeline"} <= _RANGE_TYPES
+        assert not (_CATEGORICAL_TYPES & _RANGE_TYPES), "a control is one or the other"
+
+    def test_column_specs_reads_both_api_shapes(self) -> None:
+        """`/deltatables/specs` returns a list; other call sites hand back a dict."""
+        from depictio.api.v1.services.export.filter_options import _column_specs
+
+        as_list = [{"name": "abundance", "specs": {"min": 0.0, "max": 1.0}}]
+        assert _column_specs(as_list, "abundance") == {"min": 0.0, "max": 1.0}
+
+        as_dict = {"abundance": {"specs": {"min": 0.0, "max": 1.0}}}
+        assert _column_specs(as_dict, "abundance") == {"min": 0.0, "max": 1.0}
+
+        assert _column_specs(as_list, "missing") == {}
+        assert _column_specs(None, "abundance") == {}
+
+    @pytest.mark.asyncio
+    async def test_non_filter_components_have_no_options(self) -> None:
+        from depictio.api.v1.services.export.filter_options import filter_options
+
+        assert await filter_options({"component_type": "figure"}, None) is None
+        assert (
+            await filter_options(
+                {"interactive_component_type": "MultiSelect", "column_name": None}, None
+            )
+            is None
+        )
