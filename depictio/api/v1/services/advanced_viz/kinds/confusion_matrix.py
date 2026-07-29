@@ -26,7 +26,10 @@ from __future__ import annotations
 import math
 from typing import Any
 
-from depictio.api.v1.services.advanced_viz.color_scale import contrasting_text_for_value
+from depictio.api.v1.services.advanced_viz.color_scale import (
+    contrasting_text_for_value,
+    plotly_colorscale,
+)
 from depictio.api.v1.services.advanced_viz.figure_registry import register
 
 
@@ -153,7 +156,7 @@ def build(
                 "y": y_order,
                 "z": z,
                 "customdata": z_counts,
-                "colorscale": colorscale,
+                "colorscale": plotly_colorscale(colorscale),
                 # Pinned domain: with per-column normalisation every value is
                 # already a fraction, and letting Plotly autoscale would make
                 # two matrices with different maxima look identical.

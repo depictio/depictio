@@ -25,6 +25,7 @@ from __future__ import annotations
 import math
 from typing import Any
 
+from depictio.api.v1.services.advanced_viz.color_scale import plotly_colorscale
 from depictio.api.v1.services.advanced_viz.figure_registry import register
 
 
@@ -119,7 +120,7 @@ def build(
                 "marker": {
                     "size": point_size,
                     "color": xs,
-                    "colorscale": config.get("colorscale", "Tealgrn"),
+                    "colorscale": plotly_colorscale(str(config.get("colorscale") or "Tealgrn")),
                     "cmin": low,
                     "cmax": high,
                     "line": {"width": 1, "color": "#fff"},

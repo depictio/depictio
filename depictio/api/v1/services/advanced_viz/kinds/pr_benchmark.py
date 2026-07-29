@@ -26,6 +26,7 @@ from __future__ import annotations
 import math
 from typing import Any
 
+from depictio.api.v1.services.advanced_viz.color_scale import plotly_colorscale
 from depictio.api.v1.services.advanced_viz.figure_registry import register
 
 _PALETTE: tuple[str, ...] = (
@@ -166,7 +167,7 @@ def build(
         marker.update(
             {
                 "color": f1,
-                "colorscale": config.get("colorscale", "Viridis"),
+                "colorscale": plotly_colorscale(str(config.get("colorscale") or "Viridis")),
                 # Pinned to the metric's own domain: F1 is defined on [0, 1] and
                 # autoscaling would make two panels incomparable.
                 "cmin": 0,

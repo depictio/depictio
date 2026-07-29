@@ -48,6 +48,16 @@ const SCALES: Record<string, Array<[number, RGB]>> = {
     [0.5, [227, 109, 99]],
     [1.0, [122, 4, 102]],
   ],
+  // Diverging, used by the embedding renderer for continuous colour. Not a
+  // plotly.js builtin despite the familiar name, so it must be emitted as
+  // stops or the trace renders with no colour mapping at all.
+  Spectral: [
+    [0.0, [158, 1, 66]],
+    [0.25, [244, 109, 67]],
+    [0.5, [255, 255, 191]],
+    [0.75, [102, 194, 165]],
+    [1.0, [94, 79, 162]],
+  ],
 };
 
 /** Named scales available to viz colour-scale selectors. */

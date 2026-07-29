@@ -539,7 +539,10 @@ def test_embedding_uses_a_colorbar_for_numeric_bindings() -> None:
     spec = build("embedding", config=config, rows=EMBEDDING_ROWS, theme="light")
     assert len(spec["data"]) == 1
     marker = spec["data"][0]["marker"]
-    assert marker["colorscale"] == "Spectral"
+    # Stops, not the bare name: plotly.js has no builtin `Spectral`, so a name
+    # here would render the points with no colour mapping at all.
+    assert isinstance(marker["colorscale"], list)
+    assert marker["colorscale"][0][1] == "rgb(158,1,66)"
     assert marker["color"] == [0.1, 0.2, 0.3, 0.4]
     assert spec["layout"]["showlegend"] is False
 
@@ -987,3 +990,39 @@ def test_color_scale_sampling_matches_the_typescript_stops() -> None:
     assert contrasting_text((247, 251, 255)) == "#1a1a1a", "pale cell takes dark text"
     assert contrasting_text((8, 48, 107)) == "#ffffff", "dark cell takes white text"
     assert sample_colorscale("NoSuchScale", 0.0) == (247, 251, 255), "falls back to Blues"
+
+
+def test_exported_colorscales_are_explicit_stops_not_bare_names() -> None:
+    """Never emit a bare scale name that plotly.js also defines.
+
+    Two distinct failures hide behind a bare name, and this test exists because
+    the contrast test above passed happily through both:
+
+    * plotly.js's legacy ``Blues``/``Greens``/``YlOrRd`` run dark→light, the
+      inverse of the ColorBrewer ramps in ``SCALES``. The figure renders
+      backwards, and the annotation colours — computed against *our* ramp — end
+      up on the opposite background, so the largest counts turn white-on-white.
+    * ``Tealgrn``/``Sunsetdark``/``Spectral`` are Plotly-Express names that
+      plotly.js does not know at all, so the trace loses its colour mapping.
+
+    Emitting stops removes both, and asserting on the trace is what makes the
+    guarantee real: sampling the right ramp for text colour is worthless if the
+    figure paints a different one.
+    """
+    from depictio.api.v1.services.advanced_viz.color_scale import SCALES, plotly_colorscale
+
+    for name in SCALES:
+        scale = plotly_colorscale(name)
+        assert isinstance(scale, list), f"{name} must export as stops"
+        assert scale[0][0] == 0.0 and scale[-1][0] == 1.0, f"{name} must span the unit domain"
+        assert all(str(colour).startswith("rgb(") for _, colour in scale)
+
+    # A genuine plotly.js builtin we do not redefine passes through untouched.
+    assert plotly_colorscale("Portland") == "Portland"
+
+    spec = build("confusion_matrix", config=CONFUSION_CONFIG, rows=BENCH_ROWS, theme="light")
+    colorscale = spec["data"][0]["colorscale"]
+    assert isinstance(colorscale, list), "confusion matrix must ship stops, not 'Blues'"
+    # Light at the low end is what makes the baked-in text colours correct.
+    assert colorscale[0][1] == "rgb(247,251,255)"
+    assert colorscale[-1][1] == "rgb(8,48,107)"

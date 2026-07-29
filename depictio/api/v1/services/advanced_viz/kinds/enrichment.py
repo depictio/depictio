@@ -20,6 +20,7 @@ from __future__ import annotations
 import math
 from typing import Any
 
+from depictio.api.v1.services.advanced_viz.color_scale import plotly_colorscale
 from depictio.api.v1.services.advanced_viz.figure_registry import register
 
 #: Floor for -log10 so a reported padj of 0 does not become infinity.
@@ -141,7 +142,7 @@ def build(
     marker: dict[str, Any] = {
         "size": sizes,
         "color": color_values,
-        "colorscale": colorscale,
+        "colorscale": plotly_colorscale(colorscale),
         "showscale": True,
         "colorbar": {
             "title": {"text": colorbar_title, "side": "right"},
