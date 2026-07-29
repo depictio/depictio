@@ -287,6 +287,12 @@ def run(
     ),
     viewport_width: int = typer.Option(1440, "--viewport-width"),
     viewport_height: int = typer.Option(900, "--viewport-height"),
+    scale: float = typer.Option(
+        1.0,
+        "--scale",
+        help="Device scale factor. 2 or 3 renders the same layout at 2x/3x pixel "
+        "density, which is what you want for docs/blog images on HiDPI screens.",
+    ),
     headless: bool = typer.Option(True, "--headless/--headed"),
 ) -> None:
     """Capture one or more named shots into <output-root>/<version>/."""
@@ -296,7 +302,7 @@ def run(
     unknown = [n for n in names if n not in REGISTRY]
     if unknown:
         raise typer.BadParameter(f"Unknown shot(s): {unknown}. Run `list` to see available names.")
-    typer.echo(f"📸 Capturing {len(names)} shot(s) into {output_dir}")
+    typer.echo(f"📸 Capturing {len(names)} shot(s) into {output_dir} at {scale}x")
     asyncio.run(
         _run(
             names,
@@ -307,6 +313,7 @@ def run(
             viewport_width,
             viewport_height,
             headless,
+            scale,
         )
     )
 
@@ -320,11 +327,14 @@ async def _run(
     vw: int,
     vh: int,
     headless: bool,
+    scale: float = 1.0,
 ) -> None:
     token_payload = _load_token_payload()
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=headless)
-        context = await browser.new_context(viewport={"width": vw, "height": vh})
+        context = await browser.new_context(
+            viewport={"width": vw, "height": vh}, device_scale_factor=scale
+        )
         # Seed auth + theme in localStorage via init script so they are present
         # BEFORE any page script runs — early API calls (listProjectLinks,
         # listChildTabs) and the SPA's readInitialColorScheme both fire on first

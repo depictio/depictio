@@ -70,9 +70,26 @@ One server instead of two, a real separation between front and back, and as a
 nice bonus the automatic dashboard screenshots came out roughly twice as fast on
 the new stack.
 
-![A MultiQC QC overview inside a Depictio dashboard, built from nf-core/viralrecon output](https://depictio.github.io/depictio-docs/images/pipeline-templates/nf-core/viralrecon/multiqc_light.png)
+<div style="max-width: 1200px; margin: 1.5rem auto 2rem auto; display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem;">
+  <figure style="margin: 0;">
+    <img src="../images/blog/v1.0/page_dashboards.png" alt="The Depictio dashboards landing page, with saved dashboards as thumbnail cards grouped into nf-core and demo sections" style="width: 100%; border-radius: 4px;" />
+    <figcaption style="text-align: center; font-style: italic; font-size: 0.8em; color: #666; margin-top: 0.4rem;"><strong>Dashboards.</strong> Saved objects with a live thumbnail, an owner and a visibility setting.</figcaption>
+  </figure>
+  <figure style="margin: 0;">
+    <img src="../images/blog/v1.0/page_projects.png" alt="The Depictio projects page, a table of projects with type, visibility, bound pipeline template and data-collection counts" style="width: 100%; border-radius: 4px;" />
+    <figcaption style="text-align: center; font-style: italic; font-size: 0.8em; color: #666; margin-top: 0.4rem;"><strong>Projects.</strong> Data collections, the links between them, and the template a project came from.</figcaption>
+  </figure>
+  <figure style="margin: 0;">
+    <img src="../images/blog/v1.0/ampliseq_community_sunburst.png" alt="An ampliseq community-composition dashboard showing a taxonomic sunburst from Kingdom down to Class" style="width: 100%; border-radius: 4px;" />
+    <figcaption style="text-align: center; font-style: italic; font-size: 0.8em; color: #666; margin-top: 0.4rem;"><strong>ampliseq &middot; community.</strong> A taxonomic sunburst, drillable from Kingdom down to Class.</figcaption>
+  </figure>
+  <figure style="margin: 0;">
+    <img src="https://depictio.github.io/depictio-docs/images/pipeline-templates/nf-core/viralrecon/multiqc_light.png" alt="A viralrecon MultiQC dashboard with a general-statistics table over fastp, Kraken2, bowtie2 and mosdepth panels" style="width: 100%; border-radius: 4px;" />
+    <figcaption style="text-align: center; font-style: italic; font-size: 0.8em; color: #666; margin-top: 0.4rem;"><strong>viralrecon &middot; QC.</strong> MultiQC rendered inside the dashboard, not linked as a separate report.</figcaption>
+  </figure>
+</div>
 
-*Every screenshot in this post comes from the [nf-core/viralrecon](https://depictio.github.io/depictio-docs/latest/pipeline-templates/nf-core/viralrecon/) and [nf-core/ampliseq](https://depictio.github.io/depictio-docs/latest/pipeline-templates/nf-core/ampliseq/) template dashboards, assembled from real pipeline output rather than mocked up.*
+*The two landing pages, and tabs from the [nf-core/ampliseq](https://depictio.github.io/depictio-docs/latest/pipeline-templates/nf-core/ampliseq/) and [nf-core/viralrecon](https://depictio.github.io/depictio-docs/latest/pipeline-templates/nf-core/viralrecon/) template dashboards, built from real pipeline output.*
 
 That rebuild is also what made the next two parts possible: with the rendering
 path under our own control, we could make the whole dashboard react as one, and
@@ -231,15 +248,7 @@ thresholds and a Manhattan knows how to order chromosomes.
 
 ![An ampliseq differential-abundance dashboard: ANCOM-BC volcano over a per-contrast differential-abundance barplot, with contrast, phylum and log-fold-change filters](https://depictio.github.io/depictio-docs/images/pipeline-templates/nf-core/ampliseq/differential_light.png)
 
-*ANCOM-BC differentials from the ampliseq template: a volcano and a DA barplot, driven by the same contrast and log-fold-change filters.*
-
-![An ampliseq ordination dashboard: PCoA on Bray-Curtis distances, a clustered sample distance matrix and a clustered taxonomy heatmap with habitat annotation tracks](https://depictio.github.io/depictio-docs/images/pipeline-templates/nf-core/ampliseq/ordination_light.png)
-
-*Sample relationships in the same project: PCoA, a Bray-Curtis distance matrix and a clustered taxonomy heatmap, three views of one structure.*
-
-![An ampliseq phylogeny dashboard: a rooted ASV tree with tips coloured by phylum, above metric cards for total and classified ASVs](https://depictio.github.io/depictio-docs/images/pipeline-templates/nf-core/ampliseq/phylogeny_light.png)
-
-*And a rooted ASV tree from Newick, tips coloured by phylum, next to the cards that count what is in it. These are three tabs of one ampliseq dashboard; the catalog has eighteen visualisation types in total. [Browse them in the docs.](https://depictio.github.io/depictio-docs/latest/features/components/#advanced-visualizations)*
+*ANCOM-BC differentials from the [nf-core/ampliseq](https://depictio.github.io/depictio-docs/latest/pipeline-templates/nf-core/ampliseq/) template: a volcano and a DA barplot, driven by the same contrast and log-fold-change filters. The catalog has eighteen visualisation types in total. [Browse them in the docs.](https://depictio.github.io/depictio-docs/latest/features/components/#advanced-visualizations)*
 
 Those controls are additional, not a replacement. Everything from the section
 above still applies: panel filters and selections made on other components narrow
@@ -248,6 +257,10 @@ visualisation exposes its own parameters for how that data gets drawn:
 normalisation and clustering method on the heatmap, significance and effect-size
 cutoffs on the volcano, layout and colouring on the tree. You filter down to the
 samples you care about, then tune the plot itself without leaving the dashboard.
+
+![An ampliseq ordination dashboard: PCoA on Bray-Curtis distances, a clustered sample distance matrix and a clustered taxonomy heatmap with habitat annotation tracks](https://depictio.github.io/depictio-docs/images/pipeline-templates/nf-core/ampliseq/ordination_light.png)
+
+*Sample relationships in the same project: PCoA, a Bray-Curtis distance matrix and a clustered taxonomy heatmap. The clustering runs server-side.*
 
 The heavier steps, dimensionality reduction and clustering, run in the background
 with caching, so you can compute an embedding and then explore it without the
@@ -315,9 +328,9 @@ populated, interactive dashboard in minutes. That fits **nf-core** pipelines
 especially well, where the outputs are already standardised across every run of
 the same workflow.
 
-![An ampliseq community-composition dashboard: mean relative abundance by habitat and a per-sample stacked taxonomy bar chart, with sample, habitat, kingdom and phylum filters](https://depictio.github.io/depictio-docs/images/pipeline-templates/nf-core/ampliseq/community_light.png)
+![A viralrecon lineage and clustering dashboard: Pangolin and Nextclade distributions, a classification Sankey and a variant-profile PCA](https://depictio.github.io/depictio-docs/images/pipeline-templates/nf-core/viralrecon/lineage_clustering_light.png)
 
-*Community composition from the ampliseq template. Nothing here was laid out by hand: the template describes the dashboard, the CLI points it at a results directory, and this is what comes out. Templates for [ampliseq](https://depictio.github.io/depictio-docs/latest/pipeline-templates/nf-core/ampliseq/) and [viralrecon](https://depictio.github.io/depictio-docs/latest/pipeline-templates/nf-core/viralrecon/) already exist.*
+*Lineage and clustering from the viralrecon template. Nothing here was laid out by hand: the template describes the dashboard, the CLI points it at a results directory, and this is what comes out. Templates for [ampliseq](https://depictio.github.io/depictio-docs/latest/pipeline-templates/nf-core/ampliseq/) and [viralrecon](https://depictio.github.io/depictio-docs/latest/pipeline-templates/nf-core/viralrecon/) already exist.*
 
 <p align="center"><img src="https://depictio.github.io/depictio-docs/images/logo/tools_catalog_logo.png" alt="Depictio Tools Catalog" width="220"></p>
 

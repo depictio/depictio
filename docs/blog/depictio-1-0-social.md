@@ -22,10 +22,16 @@ Moved here when the draft-note comment was stripped off the top of the post.
 - VIDEO: four Vimeo embeds, none of which render in GitHub's preview.
   1194664914 landing page (opens the post), 1213942946 filtering screencast
   (interactivity), 1213726629 + 1213726492 performance screencasts.
-- SCREENSHOTS all come from the nf-core ampliseq / viralrecon template pages
-  under images/pipeline-templates/nf-core/. They are real template dashboards,
-  which is why the post can claim nothing was laid out by hand. Dark variants
-  do NOT exist for these, unlike the advanced-viz crops they replaced.
+- SCREENSHOTS: template-dashboard shots come from the docs
+  (images/pipeline-templates/nf-core/), and are real template dashboards, which
+  is why the post can claim nothing was laid out by hand. Dark variants do NOT
+  exist for these, unlike the advanced-viz crops they replaced.
+  The three under docs/images/blog/v1.0/ are captured locally by
+  dev/playwright_debug/blog_shots.py against a running dev stack (1920x1080 at
+  1x). Copy them into depictio-docs alongside the post. Regenerate with:
+    python dev/playwright_debug/blog_shots.py --viewer-url http://localhost:5601 \
+      --scale 1 --width 1920 --height 1080 --out /tmp/shots
+  and for a dashboard tab, add --dashboard-id <tab id> --prefix <name>.
 - VERIFY BEFORE PUBLISHING: EMBL + SciLifeLab Serve as production, and
   GHGA / MGnify (EMBL-EBI) / ISCIII as trials came from the author, not a
   public source. The SciLifeLab webinar link and Serve availability are
