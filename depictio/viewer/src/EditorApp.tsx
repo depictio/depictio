@@ -1127,6 +1127,10 @@ const EditorApp: React.FC = () => {
                 editMode={true}
                 onDeleteComponent={handleDeleteComponent}
                 onDuplicateComponent={handleDuplicateComponent}
+                // Same gate as the right-hand grid: no versions, no menu item.
+                onOpenComponentHistory={
+                  familyVersions.length > 0 ? handleOpenComponentHistory : undefined
+                }
               />
             </Box>
             <Box

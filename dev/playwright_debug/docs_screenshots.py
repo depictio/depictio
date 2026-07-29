@@ -403,6 +403,225 @@ async def _mon_ingestion_watch(ctx: ShotContext) -> None:
     )
 
 
+# ---- Dashboard / dataset version shots ------------------------------------
+# All of these live in the **editor** (`/dashboard-edit/{id}`), because every
+# affordance here either writes or re-points the dashboard at data it was not
+# saved with. The one exception is the read-only `?version=` preview, which is
+# a viewer route by design.
+#
+# They need a dashboard with real version history and, for the dataset shots, a
+# Delta-backed data collection with several commits. `depictio/projects/init/
+# iris_versioned/rebuild_demo.py` produces exactly that; against a dashboard
+# with no versions these shots capture empty states rather than failing.
+
+
+async def _open_editor(ctx: ShotContext, wait_ms: int = 5_000) -> None:
+    """Load the editor and let the grid settle before touching any control."""
+    await ctx.page.goto(
+        f"{ctx.viewer_url}/dashboard-edit/{ctx.dashboard_id}", wait_until="domcontentloaded"
+    )
+    await wait_for_theme_applied(ctx.page, ctx.theme)
+    await ctx.page.wait_for_timeout(wait_ms)
+    await dismiss_notifications(ctx.page)
+
+
+async def _open_version_drawer(ctx: ShotContext) -> None:
+    """Editor → Settings → Version history.
+
+    Two drawers deep on purpose: the entry point is inside Settings rather than
+    the header, so a shot that jumped straight to the drawer would document a
+    path that does not exist.
+    """
+    await _open_editor(ctx)
+    await ctx.page.get_by_role("button", name="Settings").click()
+    await ctx.page.get_by_test_id("open-version-history").click()
+    # Wait on the drawer *panel*, not the element carrying the test id: Mantine
+    # puts `data-testid` on the Drawer root, which stays `visibility: hidden`
+    # for the whole transition and never satisfies `state="visible"`.
+    await ctx.page.locator(".mantine-Drawer-content").last.wait_for(
+        state="visible", timeout=15_000
+    )
+    # The timeline fetch resolves after the drawer mounts; without this the shot
+    # is a drawer with a loader in it.
+    await ctx.page.wait_for_timeout(1_600)
+
+
+@register("version_timeline")
+async def _version_timeline(ctx: ShotContext) -> None:
+    """Version history drawer: date-grouped timeline, pins, per-row actions."""
+    await _open_version_drawer(ctx)
+    await _page_shot_current(ctx, _rb(f"version_timeline_{ctx.theme}"))
+
+
+@register("version_row_actions")
+async def _version_row_actions(ctx: ShotContext) -> None:
+    """A timeline row's action menu — preview, use this data, pin, restore."""
+    await _open_version_drawer(ctx)
+    # Deliberately not the first row. The newest entry *is* the current state,
+    # so Restore is disabled there and the shot would document a dead action.
+    menus = ctx.page.get_by_test_id("version-actions")
+    await menus.nth(1 if await menus.count() > 1 else 0).click()
+    await ctx.page.locator(".mantine-Menu-dropdown").first.wait_for(
+        state="visible", timeout=10_000
+    )
+    await ctx.page.wait_for_timeout(500)
+    await _page_shot_current(ctx, _rb(f"version_row_actions_{ctx.theme}"))
+
+
+@register("version_dataset_picker")
+async def _version_dataset_picker(ctx: ShotContext) -> None:
+    """Dataset version picker expanded: per-collection Delta commit selection.
+
+    Collapsed by default, and opening it is what triggers the Delta history
+    fetches — hence the settle after the click rather than before it.
+    """
+    await _open_version_drawer(ctx)
+    await ctx.page.get_by_test_id("dataset-versions-toggle").click()
+    await ctx.page.wait_for_timeout(2_200)
+    # Open the commit list. Closed, the picker reads as a single inert field and
+    # says nothing about what time travel offers; open, it shows the actual
+    # commits with their row counts.
+    try:
+        # The picker labels each Select "Data version for <collection tag>", so
+        # match the prefix rather than guessing at DOM order.
+        select = ctx.page.locator('input[aria-label^="Data version for"]').first
+        await select.click(timeout=5_000)
+        await ctx.page.wait_for_timeout(700)
+    except Exception:
+        typer.echo("  ! no commit dropdown — collection may not be Delta-backed", err=True)
+    await _page_shot_current(ctx, _rb(f"version_dataset_picker_{ctx.theme}"))
+
+
+async def _open_component_history(ctx: ShotContext) -> None:
+    """Open the per-component History modal from a grid item's action menu.
+
+    The menu icon only exists on hover, and the History item only when the
+    dashboard has recorded versions, so both are waited for rather than assumed.
+    """
+    await _open_editor(ctx)
+    # A figure, not whatever happens to be first. The first grid item is usually
+    # a card, whose history is two numbers side by side — true but uninformative.
+    # A chart that changed kind between versions is what the modal is for.
+    item = ctx.page.locator(".react-grid-item").filter(has=ctx.page.locator(".js-plotly-plot")).first
+    if not await item.count():
+        item = ctx.page.locator(".react-grid-item").first
+    await item.wait_for(state="visible", timeout=20_000)
+    await item.scroll_into_view_if_needed()
+    await item.hover()
+    await ctx.page.wait_for_timeout(400)
+    # `force`: the chrome cluster fades in on hover and Playwright's own
+    # stability check can catch it mid-transition and give up.
+    await item.get_by_label("Component actions").first.click(force=True)
+    await ctx.page.get_by_test_id("component-history-action").click()
+    # Same Mantine trap as the drawer: `data-testid` sits on the Modal root,
+    # which stays `visibility: hidden`. Wait on the content instead.
+    await ctx.page.locator(".mantine-Modal-content").last.wait_for(
+        state="visible", timeout=15_000
+    )
+    # The modal renders the component at the selected version through the same
+    # render endpoint the grid uses, so it needs a real settle.
+    await ctx.page.wait_for_timeout(4_000)
+    # Step back to a genuinely past version. The modal opens on the newest
+    # entry, which *is* the current state — a shot of that documents nothing,
+    # because the whole point is seeing what the component used to be.
+    for _ in range(3):
+        older = ctx.page.get_by_test_id("component-version-older")
+        if await older.is_disabled():
+            break
+        await older.click()
+        await ctx.page.wait_for_timeout(2_500)
+    # Park the cursor off the figure: hovering a Plotly plot pops its modebar
+    # into the corner of every shot.
+    await ctx.page.mouse.move(60, 860)
+    await ctx.page.wait_for_timeout(600)
+
+
+@register("component_history")
+async def _component_history(ctx: ShotContext) -> None:
+    """Component history modal: one component at a past version, with its stamp."""
+    await _open_component_history(ctx)
+    await _page_shot_current(ctx, _rb(f"component_history_{ctx.theme}"))
+
+
+async def _enable_compare(ctx: ShotContext) -> None:
+    """Turn on the modal's side-by-side comparison.
+
+    Mantine's Switch puts the test id on a visually-hidden `<input>` parked
+    outside the viewport, so clicking it directly fails however much force is
+    applied. Drive the label the user actually clicks, which is what forwards to
+    the input.
+    """
+    await ctx.page.locator(
+        "label", has=ctx.page.get_by_test_id("component-version-compare-toggle")
+    ).first.click()
+    await ctx.page.wait_for_timeout(4_500)
+
+
+@register("component_history_compare")
+async def _component_history_compare(ctx: ShotContext) -> None:
+    """Compare mode: the stored version beside current, each with its own data axis."""
+    await _open_component_history(ctx)
+    await _enable_compare(ctx)
+    await ctx.page.mouse.move(60, 860)
+    await ctx.page.wait_for_timeout(600)
+    await _page_shot_current(ctx, _rb(f"component_history_compare_{ctx.theme}"))
+
+
+@register("component_history_compare_menu")
+async def _component_history_compare_menu(ctx: ShotContext) -> None:
+    """The past pane's dataset selector, open, while comparing.
+
+    The two panes carry independent data axes, which is the part of compare mode
+    that a static shot cannot show: with the selector closed, the two dropdowns
+    look like one duplicated control rather than two questions. Open, the commits
+    are visible and "hold the data constant to isolate the config change" becomes
+    a thing you can see rather than a claim in the prose.
+    """
+    await _open_component_history(ctx)
+    await _enable_compare(ctx)
+    await ctx.page.get_by_test_id("component-version-data-select-past").click()
+    # Wait on the *visible* popover. A bare `[role=listbox]` also matches the
+    # dashboard's own MultiSelect filters, which keep a permanently hidden
+    # options node — first() lands on one of those and never resolves.
+    await ctx.page.locator(
+        ".mantine-Combobox-dropdown:visible, .mantine-Select-dropdown:visible"
+    ).first.wait_for(state="visible", timeout=10_000)
+    await ctx.page.wait_for_timeout(700)
+    await _page_shot_current(ctx, _rb(f"component_history_compare_menu_{ctx.theme}"))
+
+
+@register("version_preview")
+async def _version_preview(ctx: ShotContext) -> None:
+    """Read-only `?version=` preview in the viewer, behind its banner.
+
+    Resolves the oldest version through the API rather than hard-coding an id,
+    so the shot shows a layout that visibly differs from the current one.
+    """
+    await _open_editor(ctx, wait_ms=1_500)
+    version_id = await ctx.page.evaluate(
+        """async (dashboardId) => {
+            const store = JSON.parse(localStorage.getItem('local-store') || '{}');
+            const res = await fetch(
+                `/depictio/api/v1/dashboards/${dashboardId}/versions`,
+                { headers: { Authorization: `Bearer ${store.access_token}` } },
+            );
+            if (!res.ok) return null;
+            const body = await res.json();
+            const versions = body.versions || [];
+            return versions.length ? versions[versions.length - 1].version_id : null;
+        }""",
+        ctx.dashboard_id,
+    )
+    if not version_id:
+        raise RuntimeError("dashboard has no recorded versions — nothing to preview")
+    await _page_shot(
+        ctx,
+        f"/dashboard/{ctx.dashboard_id}?version={version_id}",
+        _rb(f"version_preview_{ctx.theme}"),
+        wait_ms=9_000,
+    )
+
+
 # ---- Real-time events shots -----------------------------------------------
 # Driven against a dashboard in a project with `realtime.enabled: true`. The
 # event log lives in localStorage (`depictio.realtime.journal`), so a fresh

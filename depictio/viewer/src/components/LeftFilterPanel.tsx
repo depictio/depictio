@@ -34,6 +34,17 @@ interface LeftFilterPanelProps {
   editMode: boolean;
   onDeleteComponent: (componentId: string) => void;
   onDuplicateComponent?: (componentId: string) => void;
+  /**
+   * Opens the per-component history modal. Optional for the same reason as on
+   * the right-hand grid: the caller withholds it on a dashboard with no
+   * recorded versions so the menu item hides rather than opening an empty pane.
+   *
+   * Filters need this as much as charts do — arguably more. An interactive
+   * component that changes from a dropdown to a segmented control keeps its
+   * title and its column, so its history is the only place the change is
+   * visible at all.
+   */
+  onOpenComponentHistory?: (componentId: string) => void;
   /** Width to render the grid at — typically the panel's measured width. */
   width?: number;
 }
@@ -106,6 +117,7 @@ const LeftFilterPanel: React.FC<LeftFilterPanelProps> = ({
   editMode,
   onDeleteComponent,
   onDuplicateComponent,
+  onOpenComponentHistory,
   width,
 }) => {
   const layout = useMemo(
@@ -205,6 +217,7 @@ const LeftFilterPanel: React.FC<LeftFilterPanelProps> = ({
                       onDelete={onDeleteComponent}
                       onDuplicate={onDuplicateComponent}
                       componentType={m.component_type}
+                      onOpenHistory={onOpenComponentHistory}
                     />
                   ) : undefined
                 }
