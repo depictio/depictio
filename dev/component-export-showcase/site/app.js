@@ -1,22 +1,26 @@
 /* Bench Notes — gallery behaviour.
  *
- * Three delivery modes per specimen, each proving a different property of the
- * export API:
+ * JSON-first, deliberately. Depictio is visualisation-oriented and the consumer
+ * already has the data, so the deliverable is a finished Plotly figure spec they
+ * re-render in their own page with their own plotly.js. Cards therefore default
+ * to `spec` wherever the API offers it.
  *
- *   live  <iframe src="…format=html">   cross-origin framing works
- *   file  <iframe src="/exports/…">     the saved file is genuinely standalone,
- *                                       served by THIS origin with Depictio out
- *                                       of the loop
- *   spec  fetch(…format=json) + plotly  the JSON is a real Plotly figure this
- *                                       page can restyle
+ * The two iframe modes are the fallback for component types with no server-side
+ * figure, and they are labelled as such:
  *
- * Frames are only created when a card scrolls into view: each embed is a ~7 MB
- * document, and mounting 24 of them at once is what a demo does, not a page.
+ *   spec  fetch(…format=json) + our plotly.js   no iframe, restyleable, ~80 KB
+ *   live  <iframe src="…format=html">           whole component, needs Depictio
+ *   file  <iframe src="/exports/…">             same, saved to disk, ~7 MB
  */
 
-const MODE_LABEL = { live: 'live frame', file: 'saved file', spec: 'plotly spec' };
+const MODE_LABEL = { spec: 'plotly spec', live: 'live frame', file: 'saved file' };
 
 const ROUTE = {
+  spec: [
+    ['tag spec', 'depictio'],
+    ['hop', 'json spec'],
+    ['hop', 'our plotly.js'],
+  ],
   live: [
     ['tag live', 'depictio'],
     ['hop', 'renders on request'],
@@ -27,14 +31,58 @@ const ROUTE = {
     ['hop', 'exported html on disk'],
     ['hop', 'iframe'],
   ],
-  spec: [
-    ['tag spec', 'depictio'],
-    ['hop', 'json spec'],
-    ['hop', 'our plotly.js'],
-  ],
 };
 
+const MODES = ['spec', 'live', 'file'];
+
 const state = { data: null, forcedMode: null };
+
+/* Live embeds all come from the Depictio origin, so the browser puts them in one
+ * process that shares a WebGL context budget (~16). Several advanced-viz
+ * renderers draw with scattergl, so mounting six at once makes the later frames
+ * fail with "WebGL is not supported" — a limit of this page, not of the export.
+ *
+ * So: mount at most MAX_LIVE_FRAMES iframes, oldest evicted first, and mount
+ * them one at a time. An evicted card keeps its place and remounts on demand. */
+const MAX_LIVE_FRAMES = 3;
+const live = { mounted: [], queue: [], busy: false };
+
+function enqueueMount(stage, build) {
+  live.queue.push({ stage, build });
+  pumpQueue();
+}
+
+function pumpQueue() {
+  if (live.busy || !live.queue.length) return;
+  const { stage, build } = live.queue.shift();
+  live.busy = true;
+
+  while (live.mounted.length >= MAX_LIVE_FRAMES) {
+    evict(live.mounted.shift());
+  }
+
+  const frame = build();
+  live.mounted.push(stage);
+  const release = () => {
+    live.busy = false;
+    pumpQueue();
+  };
+  frame.addEventListener('load', release, { once: true });
+  // A frame that never fires load must not wedge the queue.
+  setTimeout(release, 4000);
+}
+
+function evict(stage) {
+  if (!stage || !stage.isConnected) return;
+  stage.replaceChildren();
+  const note = document.createElement('div');
+  note.className = 'empty';
+  note.innerHTML = `<strong>frame released</strong>
+    <span class="why">Only ${MAX_LIVE_FRAMES} live frames are kept mounted, because they
+    share one WebGL budget. Scroll back or press the mode button to remount.</span>`;
+  stage.appendChild(note);
+  stage.__evicted = true;
+}
 
 async function boot() {
   document.getElementById('origin-self').textContent = location.origin;
@@ -44,7 +92,7 @@ async function boot() {
   // headless browser asked for all of them at once simply stops responding.
   const params = new URLSearchParams(location.search);
   const requested = params.get('mode');
-  if (['live', 'file', 'spec'].includes(requested)) state.forcedMode = requested;
+  if (MODES.includes(requested)) state.forcedMode = requested;
   const limit = Number.parseInt(params.get('limit') ?? '', 10);
 
   const res = await fetch('/site-data.json');
@@ -78,13 +126,19 @@ async function boot() {
 /* ---------- hero ---------- */
 
 function mountHero(components) {
-  const pick = components.find((c) => c.htmlStatus === 'ok') || components[0];
-  document.getElementById('hero-title').textContent =
-    `${pick.title} — live from ${new URL(state.data.apiBase).origin}`;
-  document.getElementById('hero-url').textContent = pick.liveUrl;
+  // The hero must demonstrate the recommended path, so it renders a JSON spec
+  // with this page's own plotly.js — no iframe anywhere in the opening statement.
+  const pick =
+    components.find((c) => c.jsonStatus === 'ok' && c.jsonTraces) || components[0];
+  document.getElementById('hero-title').textContent = `${pick.title} — our plotly.js`;
+  document.getElementById('hero-url').textContent = pick.jsonUrl || pick.liveUrl;
 
   const stage = document.getElementById('hero-stage');
-  if (pick.liveUrl) stage.appendChild(frameFor(pick.liveUrl, pick.title));
+  if (pick.jsonStatus === 'ok') {
+    drawSpec(stage, pick, { hero: true });
+  } else if (pick.liveUrl) {
+    stage.appendChild(frameFor(pick.liveUrl, pick.title));
+  }
 }
 
 function frameFor(src, title) {
@@ -100,8 +154,9 @@ function frameFor(src, title) {
 
 function mountGallery(components) {
   const gallery = document.getElementById('gallery');
+  const asSpec = components.filter((c) => c.jsonStatus === 'ok').length;
   document.getElementById('gallery-count').textContent =
-    `${components.length} types · ${state.data.counts.html} embeddable · ${state.data.counts.json} as spec`;
+    `${asSpec} of ${components.length} available as a Plotly spec · the rest need a frame`;
 
   const observer = new IntersectionObserver(
     (entries) => {
@@ -150,7 +205,7 @@ function buildCard(component) {
   };
 
   const buttons = card.querySelector('.route');
-  for (const mode of ['live', 'file', 'spec']) {
+  for (const mode of MODES) {
     const button = document.createElement('button');
     button.type = 'button';
     button.textContent = MODE_LABEL[mode];
@@ -163,9 +218,9 @@ function buildCard(component) {
 
   const stage = card.querySelector('.stage');
   stage.__component = component;
-  const order = state.forcedMode
-    ? [state.forcedMode, 'live', 'file', 'spec']
-    : ['live', 'file', 'spec'];
+  // JSON-first: prefer `spec` (no iframe) and fall back only when the API
+  // offers no server-side figure for this component type.
+  const order = state.forcedMode ? [state.forcedMode, ...MODES] : MODES;
   stage.__initial = order.find((mode) => available[mode]) || null;
   return card;
 }
@@ -187,9 +242,17 @@ function select(card, component, mode) {
   stage.replaceChildren();
 
   if (mode === 'live') {
-    stage.appendChild(frameFor(component.liveUrl, component.title));
+    enqueueMount(stage, () => {
+      const frame = frameFor(component.liveUrl, component.title);
+      stage.replaceChildren(frame);
+      return frame;
+    });
   } else if (mode === 'file') {
-    stage.appendChild(frameFor(component.savedHtml, `${component.title} (saved)`));
+    enqueueMount(stage, () => {
+      const frame = frameFor(component.savedHtml, `${component.title} (saved)`);
+      stage.replaceChildren(frame);
+      return frame;
+    });
   } else if (mode === 'spec') {
     drawSpec(stage, component);
   } else {
@@ -227,7 +290,7 @@ function drawRoute(host, mode, component) {
   }
 }
 
-async function drawSpec(stage, component) {
+async function drawSpec(stage, component, { hero = false } = {}) {
   const host = document.createElement('div');
   host.className = 'plot';
   stage.appendChild(host);
@@ -235,18 +298,23 @@ async function drawSpec(stage, component) {
     const res = await fetch(component.savedJson || component.jsonUrl);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const spec = await res.json();
-    // Restyled on purpose: proving the caller owns the figure, not just displays it.
+    // Restyled on purpose: proving the caller owns the figure, not just displays
+    // it. `height`/`width` are dropped rather than overridden because Plotly
+    // treats an explicit height as authoritative and the figure would paint
+    // outside its card; without them it fills the container and stays responsive.
+    const { height: _h, width: _w, ...inherited } = spec.layout || {};
     const layout = {
-      ...spec.layout,
+      ...inherited,
+      autosize: true,
       paper_bgcolor: '#ffffff',
       plot_bgcolor: '#fbfaf7',
-      font: { family: "'Inter Tight', system-ui, sans-serif", size: 11, color: '#55524a' },
+      font: { family: "'Inter Tight', system-ui, sans-serif", size: hero ? 12 : 11, color: '#55524a' },
       margin: { l: 46, r: 16, t: 34, b: 40 },
       showlegend: false,
     };
     await Plotly.newPlot(host, spec.data, layout, {
       ...spec.config,
-      displayModeBar: false,
+      displayModeBar: hero,
       responsive: true,
     });
   } catch (err) {
@@ -275,20 +343,20 @@ function mountMatrix(components) {
       const kind = component.vizKind
         ? `${component.componentType}:${component.vizKind}`
         : component.componentType;
-      const html = component.formats.includes('html');
       const json = component.formats.includes('json');
-      const why = json ? '' : component.jsonReason || '';
+      const html = component.formats.includes('html');
+      const size = component.jsonBytes ? `${(component.jsonBytes / 1e3).toFixed(0)} KB` : '';
       return `<tr>
         <td class="kind">${escapeHtml(kind)}</td>
-        <td class="${html ? 'yes' : 'no'}">${html ? 'yes' : '—'}</td>
-        <td class="${json ? 'yes' : 'no'}">${json ? 'yes' : '—'}</td>
-        <td class="why">${escapeHtml(trim(why))}</td>
+        <td class="${json ? 'yes' : 'no'}">${json ? `spec · ${size}` : '—'}</td>
+        <td class="${html ? 'yes' : 'no'}">${html ? 'frame' : '—'}</td>
+        <td class="why">${escapeHtml(trim(json ? '' : component.jsonReason || ''))}</td>
       </tr>`;
     })
     .join('');
 
   document.getElementById('matrix').innerHTML = `
-    <thead><tr><th>component</th><th>embed</th><th>spec</th><th>why not</th></tr></thead>
+    <thead><tr><th>component</th><th>plotly spec</th><th>frame</th><th>why no spec yet</th></tr></thead>
     <tbody>${rows}</tbody>`;
 }
 

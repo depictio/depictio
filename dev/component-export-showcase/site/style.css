@@ -328,7 +328,12 @@ main { max-width: 1400px; margin: 0 auto; }
 .route-path .tag.file { background: var(--plate); }
 .route-path .tag.spec { background: var(--reagent); }
 
-.stage { height: 340px; position: relative; background: #fff; }
+/* `overflow: hidden` is load-bearing. An exported spec can carry a layout
+ * height from the dashboard tile it came from, and Plotly honours it — a tall
+ * heatmap or upset then paints straight over the cards below. Clipping here
+ * keeps the grid intact; drawSpec also strips the height so the plot resizes
+ * into the card instead of being cropped. */
+.stage { height: 340px; position: relative; background: #fff; overflow: hidden; }
 .stage iframe { width: 100%; height: 100%; border: 0; display: block; }
 .stage .plot { width: 100%; height: 100%; }
 

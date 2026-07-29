@@ -17,8 +17,8 @@
     <p class="eyebrow">Sequencing &amp; Analysis Core — internal notes</p>
     <h1>Bench<br>Notes</h1>
     <p class="standfirst">
-      Everything below is rendered by <strong>Depictio</strong>, which runs somewhere else.
-      This page only holds a slot open and points at it.
+      Every figure below was built by <strong>Depictio</strong> and handed over as a
+      Plotly spec. This page draws them with its own plotly.js.
     </p>
     <dl class="origins">
       <div><dt>this page</dt><dd id="origin-self">—</dd></div>
@@ -39,34 +39,36 @@
   <aside class="hero-note">
     <h2>What you are looking at</h2>
     <p>
-      A single dashboard component, requested from Depictio as one self-contained
-      HTML file and framed here. No Depictio JavaScript is installed on this site,
-      no build step ran, and the frame makes no calls back out.
+      A dashboard component fetched as <code>format=json</code> and rendered by this
+      page's own plotly.js. No iframe, no Depictio JavaScript, no build step. The
+      response is <code>{data, layout, config}</code>, so the styling you see here
+      is ours, not Depictio's.
     </p>
     <p class="fineprint" id="hero-url">—</p>
   </aside>
 </section>
 
 <section class="modes">
-  <h2 class="section-head"><span class="rule"></span>Three ways to take a component with you</h2>
+  <h2 class="section-head"><span class="rule"></span>How to take a component with you</h2>
   <div class="mode-cards">
+    <article class="mode-card spec">
+      <h3>Plotly spec <em>— start here</em></h3>
+      <p>Ask for <code>format=json</code>, get <code>{data, layout, config}</code>,
+         render it yourself. Yours to restyle, resize, and theme.</p>
+      <p class="mode-cost">~80 KB · needs a server-side figure</p>
+    </article>
     <article class="mode-card live">
       <h3>Live frame</h3>
-      <p>Point an <code>&lt;iframe&gt;</code> at the export URL. Depictio renders on
-         request, so the embed tracks the dashboard.</p>
-      <p class="mode-cost">needs Depictio reachable</p>
+      <p>For component types with no server-side figure. Point an
+         <code>&lt;iframe&gt;</code> at <code>format=html</code> and Depictio renders
+         the whole component on request.</p>
+      <p class="mode-cost">~7 MB · needs Depictio reachable</p>
     </article>
     <article class="mode-card file">
       <h3>Saved file</h3>
-      <p>Download the same URL once and keep the HTML. It carries its own data and
-         renderer, so it works with Depictio switched off.</p>
-      <p class="mode-cost">frozen at download time</p>
-    </article>
-    <article class="mode-card spec">
-      <h3>Plotly spec</h3>
-      <p>Ask for <code>format=json</code> and get <code>{data, layout, config}</code>.
-         Render it with your own plotly.js and restyle it freely.</p>
-      <p class="mode-cost">only where a figure is built server-side</p>
+      <p>The same page downloaded once. Carries its own renderer, so it survives
+         Depictio being switched off — useful for archiving.</p>
+      <p class="mode-cost">~7 MB · frozen at download time</p>
     </article>
   </div>
 </section>
@@ -79,10 +81,11 @@
 </main>
 
 <section class="matrix-wrap">
-  <h2 class="section-head"><span class="rule"></span>What each type could offer</h2>
+  <h2 class="section-head"><span class="rule"></span>Spec coverage</h2>
   <p class="matrix-note">
-    Read straight off the manifest endpoint, not written by hand. A blank
-    <em>spec</em> cell is the API declining, with its reason.
+    Read straight off the manifest endpoint, not written by hand. A component
+    without a spec has no server-side figure yet: its Plotly traces are assembled
+    in TypeScript in the browser, so a frame is the only way to get it today.
   </p>
   <table class="matrix" id="matrix"></table>
 </section>

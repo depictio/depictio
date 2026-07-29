@@ -59,18 +59,25 @@ and the backend container, so nothing is hardcoded to one machine.
 
 | | count |
 |---|---|
-| exported as HTML | 23 / 24 |
-| exported as JSON | 8 / 24 |
-| declined JSON, by design | 15 |
+| exported as a Plotly spec (`json`) | 14 / 24 |
+| exported as a frame (`html`) | 23 / 24 |
+| no spec, by design | 9 |
 | failed | 1 (`phylogenetic`, data gap — see below) |
 
-The JSON number is not a shortfall. `html` injects a payload into a prebuilt
-React bundle that runs the viewer's real `ComponentRenderer`, so tables, cards,
-text and the client-built advanced-viz kinds all render with no Python
-equivalent. `json` can only serve what Python builds, so it covers `figure`,
-`map`, `multiqc`, the Celery-backed advanced-viz kinds (`complex_heatmap`,
-`upset_plot`, `sankey`) and the three ported to Python (`volcano`, `ma`, `qq`).
-Everything else answers 501 with a reason and a working `html_url`.
+`json` is the number that matters, because a spec is what a consumer can
+actually reuse. It covers `figure`, `multiqc`, `map`, the Celery-backed
+advanced-viz kinds (`complex_heatmap`, `upset_plot`, `sankey`) and the nine
+ported to Python under `services/advanced_viz/kinds/`.
+
+The remaining types split into two groups:
+
+* **six advanced-viz kinds** — `rarefaction`, `dot_plot`, `lollipop`,
+  `oncoplot`, `coverage_track`, `phylogenetic`. These *are* Plotly figures; their
+  traces are just still assembled in TypeScript. Each becomes JSON-exportable by
+  adding one module under `services/advanced_viz/kinds/`.
+* **four types that are not Plotly at all** — `table` (AG Grid), `card` (a
+  scalar), `text`, `interactive` (a filter control). A frame is the right answer
+  for these, not a missing feature.
 
 `advanced_viz:phylogenetic` fails on **both** formats here with
 `Data collection has no materialised Delta table yet.` That is this instance's
@@ -80,14 +87,29 @@ ingested, so the live dashboard cannot render it either.
 ## The external site
 
 `serve_site.py` runs on `:8899` while Depictio is on `:8102`. Different origin,
-different server, no shared code — which is the point. Each card offers three
-delivery modes, and each one proves something distinct:
+different server, no shared code — which is the point.
+
+The page is **JSON-first**: every card defaults to `plotly spec` where the API
+offers one, and the gallery sorts spec-capable components ahead of the rest so
+the coverage gap is visible rather than mixed in. The two iframe modes are the
+labelled fallback.
 
 | mode | route | proves |
 |---|---|---|
+| plotly spec | `fetch` → our own plotly.js | **the recommended path.** The JSON is a real figure the caller owns; restyled here to show it |
 | live frame | `<iframe>` → Depictio | cross-origin framing works: CSP `frame-ancestors` names this origin and no `X-Frame-Options` is sent |
 | saved file | `<iframe>` → this server's copy | the download is genuinely standalone; Depictio is not in the loop |
-| plotly spec | `fetch` → our own plotly.js | the JSON is a real figure the caller owns, restyled here to show it |
+
+Two limits worth knowing before you reach for an iframe, both found by building
+this page:
+
+* **WebGL contexts are per-origin and finite** (~16). Every live embed comes from
+  the Depictio origin and several advanced-viz renderers use `scattergl`, so past
+  a handful of concurrent frames the later ones render "WebGL is not supported".
+  `site/app.js` caps mounted frames at 3 and evicts oldest-first. The `spec` mode
+  has no such limit — it is one `<div>` per figure in this page's own context.
+* **Each frame is ~7 MB**, of which 99% is the same React bundle repeated. A spec
+  for the same component is 1–500 KB.
 
 To confirm the headers yourself:
 
