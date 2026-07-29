@@ -6,6 +6,7 @@ import { renderMultiQC, InteractiveFilter, StoredMetadata } from '../../api';
 import { useInView } from '../../hooks/useInView';
 import { readMultiqcSelection } from '../../utils/multiqcSelection';
 import MultiQCGeneralStats from './MultiQCGeneralStats';
+import { useDataVersion } from '../../dataVersion';
 
 interface MultiQCFigureProps {
   dashboardId: string;
@@ -58,6 +59,8 @@ const MultiQCFigureBody: React.FC<MultiQCFigureProps> = ({
   filters,
   refreshTick,
 }) => {
+  // Which data the render calls read: the version being browsed, or live.
+  const dataVersion = useDataVersion();
   const [figure, setFigure] = useState<
     { data?: unknown[]; layout?: Record<string, unknown> } | null
   >(null);
@@ -77,7 +80,7 @@ const MultiQCFigureBody: React.FC<MultiQCFigureProps> = ({
     const attempt = (): void => {
       setLoading(true);
       setError(null);
-      renderMultiQC(dashboardId, metadata.index, filters, theme)
+      renderMultiQC(dashboardId, metadata.index, filters, theme, dataVersion)
         .then((res) => {
           if (cancelled) return;
           if (res.status === 'preparing') {
@@ -107,7 +110,15 @@ const MultiQCFigureBody: React.FC<MultiQCFigureProps> = ({
       if (timeoutId !== null) clearTimeout(timeoutId);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dashboardId, metadata.index, JSON.stringify(filters), theme, inView, refreshTick]);
+  }, [
+    dashboardId,
+    metadata.index,
+    JSON.stringify(filters),
+    theme,
+    inView,
+    refreshTick,
+    dataVersion,
+  ]);
 
   const titleText =
     (metadata.title as string | undefined) ||

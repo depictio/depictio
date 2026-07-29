@@ -22,6 +22,7 @@ import {
   renderMultiQCGeneralStats,
 } from '../../api';
 import { useInView } from '../../hooks/useInView';
+import { useDataVersion } from '../../dataVersion';
 
 interface MultiQCGeneralStatsProps {
   dashboardId: string;
@@ -147,6 +148,8 @@ const MultiQCGeneralStats: React.FC<MultiQCGeneralStatsProps> = ({
   filters,
   refreshTick,
 }) => {
+  // Which data the render calls read: the version being browsed, or live.
+  const dataVersion = useDataVersion();
   const [payload, setPayload] = useState<GeneralStatsPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -165,7 +168,7 @@ const MultiQCGeneralStats: React.FC<MultiQCGeneralStatsProps> = ({
     let cancelled = false;
     setLoading(true);
     setError(null);
-    renderMultiQCGeneralStats(dashboardId, metadata.index, filters)
+    renderMultiQCGeneralStats(dashboardId, metadata.index, filters, dataVersion)
       .then((res) => {
         if (cancelled) return;
         setPayload(res);
@@ -183,7 +186,7 @@ const MultiQCGeneralStats: React.FC<MultiQCGeneralStatsProps> = ({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dashboardId, metadata.index, filtersSig, inView, refreshTick]);
+  }, [dashboardId, metadata.index, filtersSig, inView, refreshTick, dataVersion]);
 
   const titleText = (metadata.title as string | undefined) || 'MultiQC General Statistics';
 

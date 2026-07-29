@@ -5,6 +5,7 @@ import Plot from 'react-plotly.js';
 import { renderMap, InteractiveFilter, StoredMetadata } from '../api';
 import { extractScatterSelection } from '../selection';
 import RefetchOverlay from './RefetchOverlay';
+import { useDataVersion } from '../dataVersion';
 
 interface MapRendererProps {
   dashboardId: string;
@@ -35,6 +36,8 @@ const MapRenderer: React.FC<MapRendererProps> = ({
   onFilterChange,
   refreshTick,
 }) => {
+  // Which data the render calls read: the version being browsed, or live.
+  const dataVersion = useDataVersion();
   const [figure, setFigure] = useState<{ data?: unknown[]; layout?: Record<string, unknown> } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -69,7 +72,7 @@ const MapRenderer: React.FC<MapRendererProps> = ({
     let cancelled = false;
     setLoading(true);
     setError(null);
-    renderMap(dashboardId, metadata.index, filtersForFetch, theme)
+    renderMap(dashboardId, metadata.index, filtersForFetch, theme, dataVersion)
       .then((res) => {
         if (cancelled) return;
         // Keep the previous map mounted while the next response is in
@@ -88,7 +91,14 @@ const MapRenderer: React.FC<MapRendererProps> = ({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dashboardId, metadata.index, JSON.stringify(filtersForFetch), theme, refreshTick]);
+  }, [
+    dashboardId,
+    metadata.index,
+    JSON.stringify(filtersForFetch),
+    theme,
+    refreshTick,
+    dataVersion,
+  ]);
 
   const isInitialLoad = figure === null;
   const showInitialLoader = isInitialLoad && loading;

@@ -20,6 +20,7 @@ import { useNewItemIds } from '../hooks/useNewItemIds';
 import { useTransientFlag } from '../hooks/useTransientFlag';
 import { ActiveHighlight } from '../highlight';
 import RefetchOverlay from './RefetchOverlay';
+import { useDataVersion } from '../dataVersion';
 
 interface TableRendererProps {
   dashboardId: string;
@@ -58,6 +59,8 @@ const TableRenderer: React.FC<TableRendererProps> = ({
   refreshTick,
   activeHighlight,
 }) => {
+  // Which data the render calls read: the version being browsed, or live.
+  const dataVersion = useDataVersion();
   const [colDefs, setColDefs] = useState<ColDef[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -109,7 +112,7 @@ const TableRenderer: React.FC<TableRendererProps> = ({
     let cancelled = false;
     setLoading(true);
     setError(null);
-    renderTable(dashboardId, metadata.index, filtersForFetch, 0, 1)
+    renderTable(dashboardId, metadata.index, filtersForFetch, 0, 1, undefined, 'desc', dataVersion)
       .then((res) => {
         if (cancelled) return;
         const selectionOn =
@@ -236,7 +239,7 @@ const TableRenderer: React.FC<TableRendererProps> = ({
       gridApiRef.current.purgeInfiniteCache();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(filtersForFetch), ready, refreshTick]);
+  }, [JSON.stringify(filtersForFetch), ready, refreshTick, dataVersion]);
 
   // ── New-row highlight pipeline ────────────────────────────────────────────
   // Snapshot the first page's IDs (by ``row_selection_column`` if defined,
@@ -257,7 +260,16 @@ const TableRenderer: React.FC<TableRendererProps> = ({
       typeof metadata.page_size === 'number'
         ? Math.min(Math.max(metadata.page_size as number, 1), 200)
         : 50;
-    renderTable(dashboardId, metadata.index, filtersForFetch, 0, pageSize)
+    renderTable(
+      dashboardId,
+      metadata.index,
+      filtersForFetch,
+      0,
+      pageSize,
+      undefined,
+      'desc',
+      dataVersion,
+    )
       .then((res) => {
         if (cancelled) return;
         const ids: string[] = [];
@@ -274,7 +286,15 @@ const TableRenderer: React.FC<TableRendererProps> = ({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dashboardId, metadata.index, ready, rowIdColumn, JSON.stringify(filtersForFetch), refreshTick]);
+  }, [
+    dashboardId,
+    metadata.index,
+    ready,
+    rowIdColumn,
+    JSON.stringify(filtersForFetch),
+    refreshTick,
+    dataVersion,
+  ]);
 
   const newRowIds = useNewItemIds(snapshotIds, refreshTick);
   const highlightDurationMs =
@@ -347,6 +367,7 @@ const TableRenderer: React.FC<TableRendererProps> = ({
           limit,
           sortRef.current.sortBy,
           sortRef.current.sortDir,
+          dataVersion,
         )
           .then((res) => {
             // lastRow tells the grid the total — required so the scrollbar is

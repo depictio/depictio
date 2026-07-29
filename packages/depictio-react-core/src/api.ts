@@ -260,6 +260,13 @@ export interface DashboardData {
   [key: string]: unknown;
 }
 
+/** Why one collection cannot be read at the commit this version pinned. */
+export interface DataVersionWarning {
+  dc_id: string;
+  requested_version: number;
+  reason: 'vacuumed' | 'not_versioned' | 'out_of_range' | 'read_failed';
+}
+
 export interface DashboardPreviewInfo {
   version_id: string;
   seq: number;
@@ -268,6 +275,12 @@ export interface DashboardPreviewInfo {
   pinned?: boolean;
   created_at?: string | null;
   author_email?: string | null;
+  /** dc_id → Delta commit, for collections this version pinned that are still
+   *  readable. Empty means "as authored" has nothing to offer. */
+  data_versions?: Record<string, number>;
+  /** Collections this version pinned that cannot be served at that commit.
+   *  Non-empty alongside a non-empty `data_versions` means partial coverage. */
+  data_warnings?: DataVersionWarning[];
 }
 
 /** Fetch dashboard including stored_metadata.
@@ -452,17 +465,26 @@ export interface BulkComputeResponse {
   filter_count: number;
 }
 
+/** `{version_id}` when a past version's data was asked for, `{}` otherwise.
+ *
+ *  Spread into a render body so a live request is byte-identical to what it was
+ *  before versioned rendering existed — no key, not a null key. */
+function versionBody(versionId?: string | null): Record<string, string> {
+  return versionId ? { version_id: versionId } : {};
+}
+
 export async function bulkComputeCards(
   dashboardId: string,
   filters: InteractiveFilter[],
   componentIds?: string[],
+  versionId?: string | null,
 ): Promise<BulkComputeResponse> {
   const res = await fetch(
     `${API_BASE}/dashboards/bulk_compute_cards/${dashboardId}`,
     {
       method: 'POST',
       headers: authHeaders(),
-      body: JSON.stringify({ filters, component_ids: componentIds }),
+      body: JSON.stringify({ filters, component_ids: componentIds, ...versionBody(versionId) }),
     },
   );
   if (!res.ok) throw new Error(`Failed to bulk-compute cards: ${res.status}`);
@@ -480,13 +502,14 @@ export async function renderFigure(
   componentId: string,
   filters: InteractiveFilter[],
   theme: 'light' | 'dark' = 'light',
+  versionId?: string | null,
 ): Promise<FigureResponse> {
   const res = await fetch(
     `${API_BASE}/dashboards/render_figure/${dashboardId}/${componentId}`,
     {
       method: 'POST',
       headers: authHeaders(),
-      body: JSON.stringify({ filters, theme }),
+      body: JSON.stringify({ filters, theme, ...versionBody(versionId) }),
     },
   );
   if (!res.ok) throw new Error(`Failed to render figure: ${res.status}`);
@@ -948,6 +971,7 @@ export async function renderTable(
   limit = 100,
   sortBy?: string | null,
   sortDir: 'asc' | 'desc' = 'desc',
+  versionId?: string | null,
 ): Promise<TableResponse> {
   const res = await fetch(
     `${API_BASE}/dashboards/render_table/${dashboardId}/${componentId}`,
@@ -960,6 +984,7 @@ export async function renderTable(
         limit,
         sort_by: sortBy ?? null,
         sort_dir: sortDir,
+        ...versionBody(versionId),
       }),
     },
   );
@@ -998,13 +1023,20 @@ export async function fetchImagePaths(
   filters: InteractiveFilter[] = [],
   sortBy?: string | null,
   sortDir: 'asc' | 'desc' = 'desc',
+  versionId?: string | null,
 ): Promise<ImageGridResponse> {
   const res = await fetch(
     `${API_BASE}/dashboards/render_image_paths/${dashboardId}/${componentId}`,
     {
       method: 'POST',
       headers: authHeaders(),
-      body: JSON.stringify({ filters, max, sort_by: sortBy ?? null, sort_dir: sortDir }),
+      body: JSON.stringify({
+        filters,
+        max,
+        sort_by: sortBy ?? null,
+        sort_dir: sortDir,
+        ...versionBody(versionId),
+      }),
     },
   );
   if (!res.ok) throw new Error(`Failed to fetch image paths: ${res.status}`);
@@ -1017,13 +1049,14 @@ export async function renderMap(
   componentId: string,
   filters: InteractiveFilter[],
   theme: 'light' | 'dark' = 'light',
+  versionId?: string | null,
 ): Promise<FigureResponse> {
   const res = await fetch(
     `${API_BASE}/dashboards/render_map/${dashboardId}/${componentId}`,
     {
       method: 'POST',
       headers: authHeaders(),
-      body: JSON.stringify({ filters, theme }),
+      body: JSON.stringify({ filters, theme, ...versionBody(versionId) }),
     },
   );
   if (!res.ok) throw new Error(`Failed to render map: ${res.status}`);
@@ -1085,13 +1118,14 @@ export async function renderMultiQC(
   componentId: string,
   filters: InteractiveFilter[],
   theme: 'light' | 'dark' = 'light',
+  versionId?: string | null,
 ): Promise<MultiQCRenderResult> {
   const res = await fetch(
     `${API_BASE}/dashboards/render_multiqc/${dashboardId}/${componentId}`,
     {
       method: 'POST',
       headers: authHeaders(),
-      body: JSON.stringify({ filters, theme }),
+      body: JSON.stringify({ filters, theme, ...versionBody(versionId) }),
     },
   );
   if (res.status === 202) {
@@ -1152,13 +1186,14 @@ export async function renderMultiQCGeneralStats(
   dashboardId: string,
   componentId: string,
   filters: InteractiveFilter[] = [],
+  versionId?: string | null,
 ): Promise<GeneralStatsPayload> {
   const res = await fetch(
     `${API_BASE}/dashboards/render_multiqc_general_stats/${dashboardId}/${componentId}`,
     {
       method: 'POST',
       headers: authHeaders(),
-      body: JSON.stringify({ filters }),
+      body: JSON.stringify({ filters, ...versionBody(versionId) }),
     },
   );
   if (!res.ok) await throwHttpDetailError(res, 'Failed to render MultiQC General Stats');

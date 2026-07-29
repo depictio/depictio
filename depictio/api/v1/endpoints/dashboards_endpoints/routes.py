@@ -258,18 +258,18 @@ def _capture_version_quietly(
         logger.warning(f"Version capture failed for {dashboard_id}: {exc}")
 
 
-def _overlay_version(
-    dashboard_dict: dict,
+def _guarded_version_tab(
     live_doc: dict,
     dashboard_id: PyObjectId,
     version_id: str,
-) -> dict:
-    """Return ``dashboard_dict`` with a version's content laid over it.
+) -> tuple[dict, dict]:
+    """``(tab_snapshot, version_record)`` for this tab, or 404.
 
-    Raises 404 when the version is unknown, belongs to another dashboard
-    family, or predates this tab — a caller must not be able to read another
-    project's snapshot by pairing a dashboard they can see with a guessed
-    ``version_id``.
+    The security boundary for every read of a snapshot: a version is resolved
+    only through the family recorded *on the version itself*, so a caller
+    cannot read another project's snapshot by pairing a dashboard they can see
+    with a guessed ``version_id``. Both the preview overlay and the version-aware
+    render path go through here rather than repeating the check.
     """
     from depictio.api.v1.endpoints.dashboards_endpoints import version_store, versioning
 
@@ -293,12 +293,28 @@ def _overlay_version(
             detail="This tab did not exist at that version.",
         )
 
+    return tab, record
+
+
+def _overlay_version(
+    dashboard_dict: dict,
+    live_doc: dict,
+    dashboard_id: PyObjectId,
+    version_id: str,
+) -> dict:
+    """Return ``dashboard_dict`` with a version's content laid over it."""
+    tab, record = _guarded_version_tab(live_doc, dashboard_id, version_id)
+
     merged = dict(dashboard_dict)
     for field in _PREVIEW_OVERLAY_FIELDS:
         if field in tab:
             merged[field] = tab[field]
 
-    # Everything the banner needs, so the client does not need a second call.
+    # Everything the banner needs, so the client does not need a second call —
+    # including whether "show me the data this was authored on" is even offerable,
+    # and if not, why. A disabled control with no reason attached reads as a bug.
+    delta_versions, degraded = _resolve_delta_versions(record.get("data_collections") or [])
+
     merged["preview"] = {
         "version_id": record.get("version_id"),
         "seq": record.get("seq"),
@@ -307,6 +323,8 @@ def _overlay_version(
         "pinned": bool(record.get("pinned", False)),
         "created_at": record.get("created_at"),
         "author_email": record.get("author_email"),
+        "data_versions": delta_versions,
+        "data_warnings": degraded,
     }
     return merged
 
@@ -322,7 +340,15 @@ class RenderContext:
     through. This holds the resolved result instead.
     """
 
-    __slots__ = ("dashboard", "project_id", "stored_metadata", "component")
+    __slots__ = (
+        "dashboard",
+        "project_id",
+        "stored_metadata",
+        "component",
+        "version_id",
+        "delta_versions",
+        "degraded",
+    )
 
     def __init__(
         self,
@@ -330,11 +356,44 @@ class RenderContext:
         project_id: Any,
         stored_metadata: list[dict],
         component: dict | None,
+        version_id: str | None = None,
+        delta_versions: dict[str, int] | None = None,
+        degraded: list[dict] | None = None,
     ) -> None:
         self.dashboard = dashboard
         self.project_id = project_id
         self.stored_metadata = stored_metadata
         self.component = component
+        #: The version being rendered, or ``None`` for a live render.
+        self.version_id = version_id
+        #: dc_id → Delta commit, for the collections this version pinned and
+        #: whose commits are still readable. A collection absent from the map
+        #: reads live — see ``degraded``.
+        self.delta_versions = delta_versions or {}
+        #: Collections this version pinned but that cannot be served at that
+        #: commit, each with the reason. Rendered as a warning beside a 200
+        #: rather than failing the request: a vacuumed table should degrade to
+        #: current data with a note, not blank the dashboard.
+        self.degraded = degraded or []
+
+    def response_extras(self) -> dict:
+        """Version provenance to merge into a render response, or ``{}``.
+
+        Empty for a live render, so no existing response shape changes.
+        """
+        if not self.version_id:
+            return {}
+        extras: dict = {"version_id": self.version_id}
+        if self.delta_versions:
+            extras["delta_versions"] = dict(self.delta_versions)
+        if self.degraded:
+            extras["data_degraded"] = True
+            extras["data_warnings"] = list(self.degraded)
+        return extras
+
+    def delta_version_for(self, dc_id: Any) -> int | None:
+        """The pinned commit for one collection, or ``None`` to read live."""
+        return self.delta_versions.get(str(dc_id))
 
     def require_data_source(self, *extra_fields: str) -> tuple[Any, ...]:
         """``(wf_id, dc_id, *extra)`` off the component, or 400 naming the gap.
@@ -353,6 +412,62 @@ class RenderContext:
         return tuple(values)
 
 
+def _resolve_delta_versions(stamps: list[dict]) -> tuple[dict[str, int], list[dict]]:
+    """Split a version's data stamps into "readable at that commit" and "not".
+
+    Availability is probed **once here**, per render request, rather than per
+    component: ``bulk_compute_cards`` renders every card on a dashboard in one
+    call and would otherwise read the Delta log once per card. The probe itself
+    is memoized ~60s on top of that.
+
+    Only ``version_kind == "delta"`` stamps participate. A ``manifest`` or
+    ``asset`` stamp reproduces its collection by a different mechanism, and a
+    ``none`` stamp records that nothing was captured — neither is a Delta commit
+    and neither belongs in this map.
+    """
+    from depictio.api.v1.deltatables_utils import check_delta_version_available
+
+    versions: dict[str, int] = {}
+    degraded: list[dict] = []
+
+    for stamp in stamps:
+        if stamp.get("version_kind") != "delta":
+            continue
+        dc_id = str(stamp.get("dc_id") or "")
+        delta_version = stamp.get("delta_version")
+        if not dc_id or delta_version is None:
+            continue
+
+        location = _delta_location_for(dc_id)
+        if not location:
+            degraded.append(
+                {"dc_id": dc_id, "requested_version": delta_version, "reason": "read_failed"}
+            )
+            continue
+
+        reason = check_delta_version_available(location, int(delta_version))
+        if reason is None:
+            versions[dc_id] = int(delta_version)
+        else:
+            degraded.append({"dc_id": dc_id, "requested_version": delta_version, "reason": reason})
+
+    return versions, degraded
+
+
+def _delta_location_for(dc_id: str) -> str | None:
+    """A data collection's Delta table location, or ``None``."""
+    from depictio.api.v1.db import deltatables_collection
+
+    try:
+        record = deltatables_collection.find_one(
+            {"data_collection_id": ObjectId(dc_id)}, {"delta_table_location": 1}
+        )
+    except Exception as exc:  # noqa: BLE001 - a lookup failure degrades to live
+        logger.debug(f"_delta_location_for({dc_id}) failed: {exc}")
+        return None
+    return (record or {}).get("delta_table_location")
+
+
 def resolve_render_context(
     dashboard_id: PyObjectId,
     current_user: Any,
@@ -360,12 +475,20 @@ def resolve_render_context(
     component_type: str | None = None,
     component_id: str | None = None,
     component_label: str | None = None,
+    version_id: str | None = None,
 ) -> RenderContext:
     """Load a dashboard, authorise the caller, and find the component to render.
 
     Raises 404 for an unknown dashboard or component, 403 for a caller without
     viewer rights — the same statuses, in the same order, as the inline blocks
     it replaces.
+
+    With ``version_id``, the component spec comes from the **snapshot** rather
+    than the live document. That is not a nicety: rendering a version against
+    today's spec shows a since-edited chart under a historical banner, and 404s
+    outright on a component that only existed then. The version's data stamps
+    also become a per-collection Delta map, so the render reads the data the
+    version was authored against.
     """
     dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
     if not dashboard_data:
@@ -376,6 +499,13 @@ def resolve_render_context(
         raise HTTPException(status_code=403, detail="Permission denied.")
 
     stored_metadata = dashboard_data.get("stored_metadata") or []
+    delta_versions: dict[str, int] = {}
+    degraded: list[dict] = []
+
+    if version_id:
+        tab, record = _guarded_version_tab(dashboard_data, dashboard_id, version_id)
+        stored_metadata = tab.get("stored_metadata") or []
+        delta_versions, degraded = _resolve_delta_versions(record.get("data_collections") or [])
 
     component = None
     if component_id is not None and component_type is not None:
@@ -393,7 +523,15 @@ def resolve_render_context(
                 status_code=404, detail=f"{label} component '{component_id}' not found."
             )
 
-    return RenderContext(dashboard_data, project_id, stored_metadata, component)
+    return RenderContext(
+        dashboard_data,
+        project_id,
+        stored_metadata,
+        component,
+        version_id=version_id,
+        delta_versions=delta_versions,
+        degraded=degraded,
+    )
 
 
 @dashboards_endpoint_router.get("/get/{dashboard_id}")
@@ -1738,8 +1876,11 @@ def bulk_compute_cards(
 
     filters = request.get("filters") or []
     requested_ids: list[str] | None = request.get("component_ids")
+    # Optional: render this component as of a past dashboard version, against
+    # the data that version was authored on. Absent on every existing client.
+    version_id = request.get("version_id")
 
-    context = resolve_render_context(dashboard_id, current_user)
+    context = resolve_render_context(dashboard_id, current_user, version_id=version_id)
     project_id = context.project_id
     stored_metadata = context.stored_metadata
 
@@ -1753,7 +1894,12 @@ def bulk_compute_cards(
     ]
 
     if not cards:
-        return {"values": {}, "filter_applied": bool(filters), "filter_count": len(filters)}
+        return {
+            "values": {},
+            "filter_applied": bool(filters),
+            "filter_count": len(filters),
+            **context.response_extras(),
+        }
 
     # Build init_data mapping for load_deltatable_lite to avoid per-card API calls
     init_data: dict[str, dict] = {}
@@ -1960,6 +2106,7 @@ def bulk_compute_cards(
                     metadata=card_filters if card_filters else None,
                     select_columns=project_cols,
                     init_data=init_data,
+                    delta_version=context.delta_version_for(dc_id),
                 )
                 logger.debug(
                     f"bulk_compute_cards: loaded {cache_key}: shape={df.shape if df is not None else None}"
@@ -2073,6 +2220,7 @@ def bulk_compute_cards(
         "aggregations": aggregations_per_card,
         "filter_applied": len(base_filter_metadata) > 0,
         "filter_count": len(base_filter_metadata),
+        **context.response_extras(),
     }
 
 
@@ -2114,9 +2262,16 @@ async def render_figure_endpoint(
     """
     filters = request.get("filters") or []
     theme = request.get("theme") or "light"
+    # Optional: render this component as of a past dashboard version, against
+    # the data that version was authored on. Absent on every existing client.
+    version_id = request.get("version_id")
 
     context = resolve_render_context(
-        dashboard_id, current_user, component_type="figure", component_id=component_id
+        dashboard_id,
+        current_user,
+        component_type="figure",
+        component_id=component_id,
+        version_id=version_id,
     )
     project_id = context.project_id
     component = context.component
@@ -2165,13 +2320,21 @@ async def render_figure_endpoint(
     response.headers["X-Celery-Path"] = "offloaded" if offload else "inline"
 
     payload = {"metadata": metadata, "filter_metadata": filter_metadata, "theme": theme}
+    # Optional in both directions: an older worker ignores the key, and a newer
+    # worker reads live when it is absent. Deploy the worker before the API.
+    pinned_version = context.delta_version_for(dc_id)
+    if pinned_version is not None:
+        payload["delta_version"] = pinned_version
     try:
-        return await offload_or_run(
+        result = await offload_or_run(
             build_figure_preview_task,
             (payload,),
             offload=offload,
             label=f"render_figure cid={component_id} dc={dc_id}",
         )
+        if isinstance(result, dict):
+            result = {**result, **context.response_extras()}
+        return result
     except HTTPException:
         raise
     except Exception as e:
@@ -2213,6 +2376,9 @@ def render_table_endpoint(
     from depictio.api.v1.deltatables_utils import load_deltatable_lite
 
     filters = request.get("filters") or []
+    # Optional: render this component as of a past dashboard version, against
+    # the data that version was authored on. Absent on every existing client.
+    version_id = request.get("version_id")
     start = int(request.get("start") or 0)
     limit = int(request.get("limit") or 100)
     limit = max(1, min(limit, 500))
@@ -2222,7 +2388,11 @@ def render_table_endpoint(
         sort_dir = "desc"
 
     context = resolve_render_context(
-        dashboard_id, current_user, component_type="table", component_id=component_id
+        dashboard_id,
+        current_user,
+        component_type="table",
+        component_id=component_id,
+        version_id=version_id,
     )
     project_id = context.project_id
     component = context.component
@@ -2260,6 +2430,7 @@ def render_table_endpoint(
             data_collection_id=str(dc_id),
             metadata=filter_metadata or None,
             init_data=init_data,
+            delta_version=context.delta_version_for(dc_id),
         )
     except Exception as e:
         logger.error(f"render_table: DC load failed: {e}", exc_info=True)
@@ -2307,6 +2478,7 @@ def render_table_endpoint(
         "total": total,
         "sort_by": chosen_sort,
         "sort_dir": sort_dir,
+        **context.response_extras(),
     }
 
 
@@ -2341,6 +2513,9 @@ def render_image_paths_endpoint(
 
     body = request or {}
     filters = body.get("filters") or []
+    # Optional: render this component as of a past dashboard version, against
+    # the data that version was authored on. Absent on every existing client.
+    version_id = body.get("version_id")
     body_max = body.get("max")
     chosen_max = body_max if body_max is not None else max
     limit = int(chosen_max) if chosen_max and int(chosen_max) > 0 else 50
@@ -2352,7 +2527,11 @@ def render_image_paths_endpoint(
         sort_dir = "desc"
 
     context = resolve_render_context(
-        dashboard_id, current_user, component_type="image", component_id=component_id
+        dashboard_id,
+        current_user,
+        component_type="image",
+        component_id=component_id,
+        version_id=version_id,
     )
     project_id = context.project_id
     component = context.component
@@ -2390,6 +2569,7 @@ def render_image_paths_endpoint(
             data_collection_id=str(dc_id),
             metadata=filter_metadata or None,
             init_data=init_data,
+            delta_version=context.delta_version_for(dc_id),
         )
     except Exception as e:
         logger.error(f"render_image_paths: DC load failed: {e}", exc_info=True)
@@ -2476,6 +2656,7 @@ def render_image_paths_endpoint(
         "paths": paths,
         "filter_applied": bool(filter_metadata),
         "filter_count": len(filter_metadata),
+        **context.response_extras(),
     }
 
 
@@ -2506,9 +2687,16 @@ def render_map_endpoint(
 
     filters = request.get("filters") or []
     theme = request.get("theme") or "light"
+    # Optional: render this component as of a past dashboard version, against
+    # the data that version was authored on. Absent on every existing client.
+    version_id = request.get("version_id")
 
     context = resolve_render_context(
-        dashboard_id, current_user, component_type="map", component_id=component_id
+        dashboard_id,
+        current_user,
+        component_type="map",
+        component_id=component_id,
+        version_id=version_id,
     )
     project_id = context.project_id
     component = context.component
@@ -2546,6 +2734,7 @@ def render_map_endpoint(
             data_collection_id=str(dc_id),
             metadata=filter_metadata or None,
             init_data=init_data,
+            delta_version=context.delta_version_for(dc_id),
         )
     except Exception as e:
         logger.error(f"render_map: DC load failed for {dc_id}: {e}", exc_info=True)
@@ -2588,6 +2777,7 @@ def render_map_endpoint(
                 "displayed_count": data_info.get("displayed_count"),
                 "total_count": data_info.get("total_count"),
             },
+            **context.response_extras(),
         }
     except HTTPException:
         raise
@@ -2797,6 +2987,7 @@ def _resolve_multiqc_sample_filter(
     dashboard_data: dict,
     component: dict,
     filters: list[dict],
+    delta_versions: dict[str, int] | None = None,
 ) -> list[str]:
     """Resolve a list of dashboard interactive filters into a sample-name list.
 
@@ -2969,6 +3160,11 @@ def _resolve_multiqc_sample_filter(
                 data_collection_id=str(metadata_dc_id),
                 metadata=indirect_filter_metadata,
                 init_data=init_data or None,
+                # The metadata collection is pinned too when a version is being
+                # rendered: resolving today's sample list against a historical
+                # MultiQC report would filter it down to samples that did not
+                # exist yet.
+                delta_version=(delta_versions or {}).get(str(metadata_dc_id)),
             )
             if meta_df is not None and not meta_df.is_empty():
                 if link_source_column not in meta_df.columns:
@@ -3022,6 +3218,9 @@ def render_multiqc_endpoint(
     """
     filters = request.get("filters") or []
     theme = request.get("theme") or "light"
+    # Optional: render this component as of a past dashboard version, against
+    # the data that version was authored on. Absent on every existing client.
+    version_id = request.get("version_id")
 
     context = resolve_render_context(
         dashboard_id,
@@ -3029,6 +3228,7 @@ def render_multiqc_endpoint(
         component_type="multiqc",
         component_id=component_id,
         component_label="MultiQC",
+        version_id=version_id,
     )
     dashboard_data = context.dashboard
     project_id = context.project_id
@@ -3105,7 +3305,9 @@ def render_multiqc_endpoint(
     timings: dict[str, float] = {}
 
     try:
-        selected_samples = _resolve_multiqc_sample_filter(dashboard_data, component, filters)
+        selected_samples = _resolve_multiqc_sample_filter(
+            dashboard_data, component, filters, context.delta_versions
+        )
         timings["resolve_filter_ms"] = (_time.perf_counter() - t0) * 1000
         filter_applied = bool(selected_samples)
         filter_sig: str | None = None
@@ -3356,12 +3558,17 @@ def render_multiqc_general_stats_endpoint(
     """
     import hashlib
 
+    # Optional: render this component as of a past dashboard version, against
+    # the data that version was authored on. Absent on every existing client.
+    version_id = request.get("version_id")
+
     context = resolve_render_context(
         dashboard_id,
         current_user,
         component_type="multiqc",
         component_id=component_id,
         component_label="MultiQC",
+        version_id=version_id,
     )
     dashboard_data = context.dashboard
     project_id = context.project_id
@@ -3396,7 +3603,9 @@ def render_multiqc_general_stats_endpoint(
     show_hidden = bool(request.get("show_hidden", True))
     filters = request.get("filters") or []
 
-    selected_samples = _resolve_multiqc_sample_filter(dashboard_data, component, filters)
+    selected_samples = _resolve_multiqc_sample_filter(
+        dashboard_data, component, filters, context.delta_versions
+    )
 
     # The violin figure built by `_create_violin_plot` uses the `mantine_light`
     # / `mantine_dark` Plotly templates. Register them on cold workers — same

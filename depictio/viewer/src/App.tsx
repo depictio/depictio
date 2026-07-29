@@ -58,7 +58,8 @@ import { useSidebarOpen } from './hooks/useSidebarOpen';
 import { useCurrentUser } from './hooks/useCurrentUser';
 import { isDashboardOwner } from './lib/dashboardOwnership';
 import NotesFooter from './components/NotesFooter';
-import VersionPreviewBanner from './versions/VersionPreviewBanner';
+import { DataVersionProvider } from 'depictio-react-core';
+import VersionPreviewBanner, { type DataMode } from './versions/VersionPreviewBanner';
 
 /**
  * Top-level SPA. Layout:
@@ -104,6 +105,20 @@ const App: React.FC = () => {
   //: existing tooltip already handles.
   const canEditNow = isOwner && !previewVersionId;
   const bulkCtrl = useRef<AbortController | null>(null);
+
+  //: Whether the data under a previewed version is the data it was authored on
+  //: or today's. Starts at 'current', which is what this page did before
+  //: versioned reads existed — so opening a preview looks exactly as it used
+  //: to until the user opts in. Reset whenever the version changes, since the
+  //: new version may pin nothing at all.
+  const [dataMode, setDataMode] = useState<DataMode>('current');
+  useEffect(() => {
+    setDataMode('current');
+  }, [previewVersionId]);
+
+  //: The version whose *data* to read, as opposed to the version whose layout
+  //: is on screen. Null in every case except an explicit "as authored" choice.
+  const dataVersionId = previewVersionId && dataMode === 'authored' ? previewVersionId : null;
 
   /** Restore straight from the preview banner, then drop back to the live view.
    *  A full navigation rather than a state update: a restore can add or remove
@@ -219,7 +234,7 @@ const App: React.FC = () => {
       // snap every card back to ``…`` on every keystroke / drag step.
       if (bulkCtrl.current) bulkCtrl.current.abort();
       bulkCtrl.current = new AbortController();
-      bulkComputeCards(dashboardId, filters, cardIds)
+      bulkComputeCards(dashboardId, filters, cardIds, dataVersionId)
         .then((res) => {
           setCardValues(res.values);
           setCardSecondaryValues(res.secondary_values || {});
@@ -230,7 +245,10 @@ const App: React.FC = () => {
         .finally(() => setCardsLoading(false));
     }, 250);
     return () => clearTimeout(timer);
-  }, [dashboard, dashboardId, stableFilterKey(filters), refreshTick]);
+    // `dataVersionId` belongs here for the same reason `refreshTick` does:
+    // flipping the banner's data toggle must recompute every card, and nothing
+    // else in this dep list changes when it flips.
+  }, [dashboard, dashboardId, stableFilterKey(filters), refreshTick, dataVersionId]);
 
   const handleFilterChange = useCallback(
     (update: InteractiveFilter) => {
@@ -431,6 +449,11 @@ const App: React.FC = () => {
       dashboardMetadata={dashboard?.stored_metadata}
       projectId={dashboard?.project_id}
     >
+      {/* Every `render_*` call below reads this. Null outside a preview, and
+          null inside one until the user picks "as authored" — so the default
+          request bodies are byte-identical to what they were before versioned
+          reads existed. */}
+      <DataVersionProvider versionId={dataVersionId}>
       <AppShell
       header={{ height: 50 }}
       navbar={{
@@ -493,6 +516,8 @@ const App: React.FC = () => {
             preview={dashboard.preview}
             canRestore={isOwner}
             onRestore={handleRestorePreview}
+            dataMode={dataMode}
+            onDataModeChange={setDataMode}
           />
         )}
         {ingestionHealth &&
@@ -778,6 +803,7 @@ const App: React.FC = () => {
         dashboard={dashboard}
       />
     </AppShell>
+      </DataVersionProvider>
     </AvailableFilterValuesProvider>
   );
 };

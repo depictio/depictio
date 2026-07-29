@@ -29,6 +29,7 @@ import { useNewItemIds } from '../hooks/useNewItemIds';
 import { useTransientFlag } from '../hooks/useTransientFlag';
 import { ActiveHighlight } from '../highlight';
 import RefetchOverlay from './RefetchOverlay';
+import { useDataVersion } from '../dataVersion';
 
 interface ImageRendererProps {
   dashboardId: string;
@@ -82,6 +83,8 @@ const ImageRenderer: React.FC<ImageRendererProps> = ({
       ? (metadata.max_images as number)
       : 50;
 
+  // Which data the render calls read: the version being browsed, or live.
+  const dataVersion = useDataVersion();
   const [response, setResponse] = useState<ImageGridResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -141,7 +144,15 @@ const ImageRenderer: React.FC<ImageRendererProps> = ({
     }
     setLoading(true);
     setError(null);
-    fetchImagePaths(dashboardId, metadata.index, maxImages, filtersForFetch, sortBy, sortDir)
+    fetchImagePaths(
+      dashboardId,
+      metadata.index,
+      maxImages,
+      filtersForFetch,
+      sortBy,
+      sortDir,
+      dataVersion,
+    )
       .then((res) => {
         if (cancelled) return;
         setResponse(res);
@@ -168,6 +179,7 @@ const ImageRenderer: React.FC<ImageRendererProps> = ({
     refreshTick,
     sortBy,
     sortDir,
+    dataVersion,
   ]);
 
   const rows = response ? response.rows : null;

@@ -250,6 +250,11 @@ export {
   useAvailableSet,
 } from './availableValues';
 
+// Which data every render call on the page reads — the version being browsed,
+// or live. Defaults to live outside a provider, so the editor and the catalog
+// preview are unaffected.
+export { DataVersionProvider, useDataVersion } from './dataVersion';
+
 // Real-time event subscription (WebSocket /events/ws)
 export { useDataCollectionUpdates, useMonitoringEvents, ADMIN_MONITORING_CHANNEL } from './realtime';
 export type {

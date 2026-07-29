@@ -48,8 +48,15 @@ def build_figure_preview(payload: dict) -> dict:
             "selection_column"  (optional, render only),
           },
           "filter_metadata": [...],     # cleaned filters list
-          "theme": "light" | "dark"
+          "theme": "light" | "dark",
+          "delta_version": int | None,  # optional; see below
         }
+
+    ``delta_version`` reads a past Delta commit instead of the current table,
+    set when the API is rendering a historical dashboard version. It is optional
+    in both directions — an older worker ignores the key, and a newer worker
+    reads live when it is absent — so **the worker can be deployed before the
+    API**, which is the order this must be rolled out in.
 
     Returns:
         {"figure": <plotly fig dict>, "metadata": {"visu_type": str, "filter_applied": bool}}
@@ -106,6 +113,7 @@ def build_figure_preview(payload: dict) -> dict:
         metadata=filter_metadata or None,
         select_columns=select_columns,
         init_data=init_data,
+        delta_version=payload.get("delta_version"),
     )
     load_ms = int((time.monotonic() - started) * 1000)
 
@@ -496,6 +504,7 @@ def compute_embedding(payload: dict) -> dict:
         data_collection_id=str(dc_id),
         metadata=filter_metadata or None,
         init_data=init_data,
+        delta_version=payload.get("delta_version"),
     )
     load_ms = int((time.monotonic() - started) * 1000)
     logger.info("compute_embedding[%s]: loaded %d rows in %dms", method, df.height, load_ms)
@@ -687,6 +696,7 @@ def compute_complex_heatmap(payload: dict) -> dict:
         data_collection_id=str(dc_id),
         metadata=filter_metadata or None,
         init_data=init_data,
+        delta_version=payload.get("delta_version"),
     )
     load_ms = int((time.monotonic() - started) * 1000)
     logger.info("compute_complex_heatmap: loaded %d rows in %dms", df.height, load_ms)
@@ -1016,6 +1026,7 @@ def compute_upset(payload: dict) -> dict:
         data_collection_id=str(dc_id),
         metadata=filter_metadata or None,
         init_data=init_data,
+        delta_version=payload.get("delta_version"),
     )
     load_ms = int((time.monotonic() - started) * 1000)
     logger.info("compute_upset: loaded %d rows in %dms", df.height, load_ms)
@@ -1218,6 +1229,7 @@ def compute_coverage_track(payload: dict) -> dict:
         metadata=filter_metadata or None,
         select_columns=project_cols,
         init_data=init_data,
+        delta_version=payload.get("delta_version"),
     )
     load_ms = int((time.monotonic() - started) * 1000)
     logger.info("compute_coverage_track: loaded %d rows in %dms", df.height, load_ms)
@@ -1371,6 +1383,7 @@ def compute_sankey(payload: dict) -> dict:
         metadata=filter_metadata or None,
         select_columns=project_cols,
         init_data=init_data,
+        delta_version=payload.get("delta_version"),
     )
     load_ms = int((time.monotonic() - started) * 1000)
     logger.info("compute_sankey: loaded %d rows in %dms", df.height, load_ms)

@@ -15,6 +15,7 @@ import { useTransientFlag } from '../hooks/useTransientFlag';
 import { ActiveHighlight } from '../highlight';
 import { asNumberArray, extractCustomdataIds } from '../plotlyData';
 import RefetchOverlay from './RefetchOverlay';
+import { useDataVersion } from '../dataVersion';
 
 interface FigureRendererProps {
   dashboardId: string;
@@ -50,6 +51,8 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
   refreshTick,
   activeHighlight,
 }) => {
+  // Which data the render calls read: the version being browsed, or live.
+  const dataVersion = useDataVersion();
   const [figure, setFigure] = useState<{ data?: unknown[]; layout?: Record<string, unknown> } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -94,7 +97,7 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
     let cancelled = false;
     setLoading(true);
     setError(null);
-    renderFigure(dashboardId, metadata.index, filtersForFetch, theme)
+    renderFigure(dashboardId, metadata.index, filtersForFetch, theme, dataVersion)
       .then((res) => {
         if (cancelled) return;
         // Keep the previous figure mounted while the next response is in
@@ -114,7 +117,15 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dashboardId, metadata.index, JSON.stringify(filtersForFetch), theme, inView, refreshTick]);
+  }, [
+    dashboardId,
+    metadata.index,
+    JSON.stringify(filtersForFetch),
+    theme,
+    inView,
+    refreshTick,
+    dataVersion,
+  ]);
 
   // First-paint loader vs refetch overlay: only show the big "Rendering…"
   // block until we have something to show; subsequent fetches keep the
