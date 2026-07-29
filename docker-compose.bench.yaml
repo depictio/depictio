@@ -91,7 +91,23 @@ services:
     volumes:
       - bench_redis:/data
     # 2G, not the chart's 512M: the observed working set was already ~855 MB of
-    # cached frames, and DEPICTIO_CACHE_REDIS_MAX_MEMORY_MB defaults to 1024.
+    # cached frames.
+    #
+    # The cap has to be set HERE. `DEPICTIO_CACHE_REDIS_MAX_MEMORY_MB`
+    # (settings_models.py) is declared and never read by anything — no code path
+    # issues a CONFIG SET, and the base command carries no --maxmemory. So Redis
+    # grew unbounded until the cgroup OOM-killed it mid-run, which takes the
+    # Celery broker down with the cache: every figure offload then fails with
+    # `Error 111 connecting to redis:6379`, and the run keeps going against a
+    # stack that can no longer cache or offload anything.
+    #
+    # volatile-lru, not allkeys-lru: this Redis is both the cache (db 0) and the
+    # Celery broker (db 1), and maxmemory-policy is server-wide. Every cache
+    # write goes through `setex` (api/cache.py), so cache entries carry a TTL and
+    # broker keys do not — volatile-lru can only evict the cache.
+    command: >
+      redis-server --dir /data --save 60 1
+      --maxmemory 1500mb --maxmemory-policy volatile-lru
     deploy:
       resources:
         limits: {cpus: "0.5", memory: 2G}
