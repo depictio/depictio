@@ -1,4 +1,3 @@
-import hashlib
 import json
 import os
 import re
@@ -24,6 +23,7 @@ from depictio.api.v1.db import (
     workflows_collection,
 )
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
+from depictio.api.v1.services.content_digest import compute_file_sha256, read_sidecar
 from depictio.models.models.users import User
 
 backup_endpoint_router = APIRouter()
@@ -66,35 +66,13 @@ def _resolve_backup_path(backup_dir: str, backup_id: str) -> str:
     return str(candidate)
 
 
-def _compute_file_sha256(file_path: str) -> str:
-    """Compute the SHA-256 hex digest of a file's contents (streamed)."""
-    sha256 = hashlib.sha256()
-    with open(file_path, "rb") as fh:
-        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
-            sha256.update(chunk)
-    return sha256.hexdigest()
-
-
-def _read_expected_checksum(checksum_path: str) -> str | None:
-    """Read the expected SHA-256 digest from a ``.sha256`` sidecar file.
-
-    The sidecar follows the ``sha256sum`` convention ("<hexdigest>  <filename>").
-    Returns the lowercase hex digest, or ``None`` if the sidecar is missing or
-    malformed.
-    """
-    if not os.path.exists(checksum_path):
-        return None
-    try:
-        with open(checksum_path, "r") as fh:
-            first_line = fh.readline().strip()
-    except OSError:
-        return None
-    if not first_line:
-        return None
-    digest = first_line.split()[0].strip().lower()
-    if re.fullmatch(r"[0-9a-f]{64}", digest):
-        return digest
-    return None
+# Both of these moved to `services/content_digest`, which the asset-versioning
+# path also needs — the sidecar discipline invented here (tolerate missing,
+# never tolerate wrong) is exactly what pinning an asset by digest requires.
+# Kept as module-level aliases so this file reads unchanged and so anything
+# importing them by their old names still works.
+_compute_file_sha256 = compute_file_sha256
+_read_expected_checksum = read_sidecar
 
 
 def _verify_backup_integrity(backup_path: str, allow_unverified: bool) -> None:

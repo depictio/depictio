@@ -344,6 +344,45 @@ async def _update_data_collection_name(
     return {"message": f"Data collection name updated to '{new_name}' successfully"}
 
 
+def _prepare_asset_version(payload: dict, dc_oid) -> dict:
+    """Validate one asset generation and stamp its monotonic counter.
+
+    The counter is derived from what is already stored rather than sent by the
+    client: the CLI has no way to know how many generations exist, and two
+    concurrent ingests that both computed it locally would collide.
+    """
+    from depictio.models.models.data_collections_types.asset_versions import AssetVersion
+
+    existing = 0
+    document = projects_collection.find_one(
+        {"workflows.data_collections._id": dc_oid},
+        {"workflows.data_collections._id": 1, "workflows.data_collections.config": 1},
+    )
+    for workflow in (document or {}).get("workflows", []):
+        for dc in workflow.get("data_collections", []):
+            if str(dc.get("_id")) != str(dc_oid):
+                continue
+            props = (dc.get("config") or {}).get("dc_specific_properties") or {}
+            existing = len(props.get("versions") or [])
+
+    # Built field by field rather than `AssetVersion(**payload)`. The model is
+    # `extra="forbid"`, so a splat turns any unexpected key from a client into a
+    # validation error and a 500 on an otherwise-successful ingest — and it
+    # erases the field types, which is the same reason `ty` cannot check it.
+    def _int_or_none(value: Any) -> int | None:
+        return int(value) if isinstance(value, (int, float)) else None
+
+    version = AssetVersion(
+        digest=str(payload.get("digest") or ""),
+        s3_location=str(payload.get("s3_location") or ""),
+        filename=str(payload.get("filename") or ""),
+        size_bytes=_int_or_none(payload.get("size_bytes")),
+        generation=existing + 1,
+        source_path=str(payload["source_path"]) if payload.get("source_path") else None,
+    )
+    return version.model_dump(mode="python")
+
+
 async def _update_dc_specific_properties(
     data_collection_id: str, properties: dict, current_user
 ) -> dict:
@@ -383,15 +422,34 @@ async def _update_dc_specific_properties(
     if not project:
         raise HTTPException(status_code=404, detail="Data collection not found or access denied")
 
+    # `asset_version` is an append, not a set: it records one generation of a
+    # single-blob collection (GeoJSON, phylogeny) and the whole point is that
+    # earlier generations survive. Pulled out of the $set payload so a caller
+    # cannot accidentally overwrite the history by sending the key.
+    asset_version = properties.pop("asset_version", None)
+
     # Build $set paths for each property key
     set_fields = {
         f"workflows.$[].data_collections.$[dc].config.dc_specific_properties.{key}": value
         for key, value in properties.items()
     }
 
+    update: dict = {}
+    if set_fields:
+        update["$set"] = set_fields
+    if isinstance(asset_version, dict):
+        update["$push"] = {
+            "workflows.$[].data_collections.$[dc].config.dc_specific_properties.versions": (
+                _prepare_asset_version(asset_version, dc_oid)
+            )
+        }
+
+    if not update:
+        raise HTTPException(status_code=400, detail="properties dict must not be empty")
+
     result = projects_collection.update_one(
         {"_id": project["_id"], "workflows.data_collections._id": dc_oid},
-        {"$set": set_fields},
+        update,
         array_filters=[{"dc._id": dc_oid}],
     )
 

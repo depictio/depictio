@@ -289,8 +289,23 @@ def build_dc_stamps(
                 stamp.reason = "no_manifest_recorded"
                 stamp.as_of = now
         elif kind == "asset":
-            stamp.version_kind = "none"
-            stamp.reason = "asset_versioning_not_enabled"
+            # GeoJSON and phylogeny are each one opaque blob, uploaded to a
+            # content-addressed key. Pinning the digest is enough: a PUT to a
+            # content key is idempotent, so the bytes behind a digest cannot
+            # change without the key changing too.
+            asset = _latest_asset_version(dc_id)
+            if asset:
+                stamp.version_kind = "asset"
+                stamp.asset_digest = asset.get("digest")
+                stamp.asset_key = asset.get("s3_location")
+                stamp.asset_bytes = asset.get("size_bytes")
+                stamp.as_of = asset.get("uploaded_at")
+            else:
+                # Uploaded by a CLI predating content addressing, so the object
+                # sits at a fixed key that a re-upload overwrites in place —
+                # nothing to pin, and saying so is the honest answer.
+                stamp.version_kind = "none"
+                stamp.reason = "no_asset_version_recorded"
         else:
             stamp.reason = (
                 "unknown_data_collection_type" if not dc_type else "no_aggregation_record"
@@ -315,6 +330,32 @@ def _latest_manifest(dc_id: str) -> Optional[dict[str, Any]]:
     except Exception as exc:  # pragma: no cover - defensive
         logger.debug(f"versioning: manifest lookup failed for {dc_id}: {exc}")
         return None
+
+
+def _latest_asset_version(dc_id: str) -> Optional[dict[str, Any]]:
+    """The newest recorded upload of a single-blob collection, or ``None``.
+
+    Reads the embedded project document, because data collections live at
+    ``projects.workflows[].data_collections[]`` — ``data_collections_collection``
+    is never written to anywhere.
+    """
+    try:
+        from depictio.api.v1.db import projects_collection
+
+        document = projects_collection.find_one(
+            {"workflows.data_collections._id": ObjectId(dc_id)},
+            {"workflows.data_collections._id": 1, "workflows.data_collections.config": 1},
+        )
+        for workflow in (document or {}).get("workflows", []):
+            for dc in workflow.get("data_collections", []):
+                if str(dc.get("_id")) != str(dc_id):
+                    continue
+                props = (dc.get("config") or {}).get("dc_specific_properties") or {}
+                versions = props.get("versions") or []
+                return versions[-1] if versions else None
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.debug(f"versioning: asset version lookup failed for {dc_id}: {exc}")
+    return None
 
 
 def _columns_from_aggregation(aggregation: dict[str, Any]) -> list[dict[str, str]]:

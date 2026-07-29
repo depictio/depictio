@@ -1129,6 +1129,26 @@ def get_phylogeny_newick(
     # readable and fall through to the project doc otherwise.
     candidates: list[str] = []
 
+    project_doc = projects_collection.find_one(
+        {"workflows.data_collections._id": dc_oid},
+    )
+
+    # The uploaded object comes first. It is the only candidate guaranteed to
+    # be readable from the backend — the other two are filesystem paths, and
+    # the `files_collection` one in particular is whatever path the operator's
+    # own machine saw when they ran the CLI. Preferring it is both the fix for
+    # "the tree does not load in Docker" and what makes a pinned version
+    # resolvable.
+    if project_doc:
+        for wf in project_doc.get("workflows", []) or []:
+            for dc in wf.get("data_collections", []) or []:
+                if (dc.get("_id") or dc.get("id")) != dc_oid:
+                    continue
+                props = (dc.get("config") or {}).get("dc_specific_properties") or {}
+                uploaded = props.get("s3_location")
+                if uploaded:
+                    candidates.append(str(uploaded))
+
     # `deleted_at: None` covers both a live file and every document written
     # before soft deletion existed; without it this can pick a tombstone and
     # serve a tree whose file is gone.
@@ -1136,9 +1156,6 @@ def get_phylogeny_newick(
     if file_doc and file_doc.get("file_location"):
         candidates.append(str(file_doc["file_location"]))
 
-    project_doc = projects_collection.find_one(
-        {"workflows.data_collections._id": dc_oid},
-    )
     if project_doc:
         for wf in project_doc.get("workflows", []) or []:
             for dc in wf.get("data_collections", []) or []:

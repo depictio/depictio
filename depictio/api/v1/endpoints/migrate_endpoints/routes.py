@@ -27,7 +27,6 @@ from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import (
     dashboards_collection,
-    data_collections_collection,
     deltatables_collection,
     files_collection,
     jbrowse_collection,
@@ -122,17 +121,42 @@ def _collect_s3_locations_for_project(dc_ids: list[ObjectId], source_bucket: str
         raw = dt.get("delta_table_location") or dt.get("location")
         add(_normalize_s3_path(raw, source_bucket) if raw else None)
 
-    # GeoJSON and Image (stored in data_collections.config.dc_specific_properties)
-    for dc in data_collections_collection.find({"_id": {"$in": dc_ids}}):
-        props = dc.get("config", {}).get("dc_specific_properties", {}) or {}
-        # GeoJSON
-        geojson_loc = props.get("s3_location")
-        if geojson_loc:
-            add(_normalize_s3_path(geojson_loc, source_bucket))
-        # Image base folder (prefix-based)
-        image_folder = props.get("s3_base_folder")
-        if image_folder:
-            add(_normalize_s3_path(image_folder, source_bucket))
+    # GeoJSON, phylogeny and Image, from config.dc_specific_properties.
+    #
+    # Read from the *embedded* documents. This loop used to query
+    # `data_collections_collection`, which nothing in the tree ever writes to —
+    # collections live at `projects.workflows[].data_collections[]` — so it
+    # silently collected nothing and every GeoJSON and image prefix was missed
+    # by both the migrate copy and the project-delete cleanup that reuses this.
+    # (Same shape as the broken lookups #919 rewrote in `schema_integrity`.)
+    dc_id_strings = {str(dc_id) for dc_id in dc_ids}
+    for project in projects_collection.find(
+        {"workflows.data_collections._id": {"$in": dc_ids}},
+        {"workflows.data_collections._id": 1, "workflows.data_collections.config": 1},
+    ):
+        for workflow in project.get("workflows", []) or []:
+            for dc in workflow.get("data_collections", []) or []:
+                if str(dc.get("_id")) not in dc_id_strings:
+                    continue
+                props = (dc.get("config") or {}).get("dc_specific_properties") or {}
+                # GeoJSON and phylogeny both record their current object here;
+                # phylogeny had no object at all until it gained an upload, and
+                # was consequently absent from every sweep.
+                current = props.get("s3_location")
+                if current:
+                    add(_normalize_s3_path(current, source_bucket))
+                # Superseded generations. Content keys mean the old objects are
+                # still there and still referenced by any dashboard version that
+                # pinned them, so a migration that dropped them would move a
+                # project and leave its history behind.
+                for version in props.get("versions") or []:
+                    raw_version_loc = version.get("s3_location")
+                    if raw_version_loc:
+                        add(_normalize_s3_path(raw_version_loc, source_bucket))
+                # Image base folder (prefix-based)
+                image_folder = props.get("s3_base_folder")
+                if image_folder:
+                    add(_normalize_s3_path(image_folder, source_bucket))
 
     # MultiQC reports
     for report in multiqc_collection.find({"data_collection_id": dc_query}):

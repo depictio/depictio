@@ -23,6 +23,7 @@ from depictio.cli.cli.utils.delta_versioning import (
 from depictio.cli.cli.utils.multiqc_processor import process_multiqc_data_collection
 from depictio.cli.cli.utils.rich_utils import rich_print_checked_statement
 from depictio.cli.cli_logging import logger
+from depictio.models.content_digest import compute_file_sha256, content_key
 from depictio.models.models.base import convert_objectid_to_str
 from depictio.models.models.cli import CLIConfig
 from depictio.models.models.data_collections import DataCollection
@@ -564,17 +565,10 @@ def client_aggregate_data(
     if data_collection.config.type.lower() == "geojson":
         return process_geojson_data_collection(data_collection, CLI_config, overwrite)
 
-    # Phylogeny DCs are file-backed; the scan phase registers the .nwk in
-    # `files`, and the Newick-serving endpoint reads it on demand. No delta
-    # table, no further processing.
+    # Phylogeny DCs have no delta table, but the tree file now goes to object
+    # storage rather than being referenced where it happened to be scanned.
     if data_collection.config.type.lower() == "phylogeny":
-        return {
-            "result": "success",
-            "message": (
-                "Phylogeny DC registered; tree file served on demand "
-                "(no delta-table materialisation needed)."
-            ),
-        }
+        return process_phylogeny_data_collection(data_collection, CLI_config, overwrite)
 
     # Handle transformed (recipe-based) data collections.
     # Init seeding for reference datasets pops the `transform` block while
@@ -917,6 +911,114 @@ def _await_upsert_job(response_payload: dict, CLI_config: CLIConfig):
         return JobOutcome(status="failed", error=str(exc))
 
 
+def process_phylogeny_data_collection(
+    data_collection: DataCollection,
+    CLI_config: CLIConfig,
+    overwrite: bool = False,
+) -> dict[str, str]:
+    """Upload a phylogeny tree to S3 under a content-addressed key.
+
+    Phylogeny used to be the only data collection type with no object-store
+    presence at all: this function returned immediately, and the serving
+    endpoint probed the local filesystem for a path recorded by whichever
+    machine ran the scan. On a containerised backend that path usually does not
+    exist, so the tree failed to load — a plain bug, quite apart from versioning.
+
+    Uploading fixes that and makes the collection pinnable at the same time:
+    ``{dc_id}/versions/{sha256}/{filename}`` is idempotent, so re-running an
+    ingest over an unchanged tree writes to the same key and changes nothing,
+    while a *changed* tree lands beside its predecessor rather than on top of it.
+
+    Failure is not fatal. The local-path fallback in ``get_phylogeny_newick``
+    still works, so a collection that cannot be uploaded — no S3, no
+    credentials, a stale CLI — behaves exactly as it did before.
+    """
+    from pathlib import Path
+
+    logger.info(f"Processing phylogeny data collection: {data_collection.data_collection_tag}")
+
+    dc_id = str(data_collection.id)
+
+    try:
+        files = fetch_file_data(dc_id, CLI_config)
+    except Exception as e:
+        return {"result": "error", "message": f"No files found for phylogeny DC: {e}"}
+
+    if not files:
+        return {"result": "error", "message": "No files found for phylogeny data collection"}
+
+    file_path = files[0].file_location
+    if file_path.startswith("s3://"):
+        return {
+            "result": "success",
+            "message": "Phylogeny DC already references an object-store location.",
+        }
+
+    if not Path(file_path).is_file():
+        # The scan registered it, so this means it moved or was removed between
+        # scan and process. Nothing to upload, and nothing worth failing over.
+        logger.warning(f"Phylogeny file no longer readable at {file_path}; skipping upload.")
+        return {
+            "result": "success",
+            "message": "Phylogeny DC registered; tree file not readable for upload.",
+        }
+
+    try:
+        import boto3
+
+        storage_options = turn_S3_config_into_polars_storage_options(CLI_config.s3_storage)
+        s3_client = boto3.client(
+            "s3",
+            endpoint_url=storage_options.endpoint_url,
+            aws_access_key_id=storage_options.aws_access_key_id,
+            aws_secret_access_key=storage_options.aws_secret_access_key,
+            region_name=storage_options.region,
+        )
+
+        digest = compute_file_sha256(file_path)
+        s3_key = content_key(dc_id, digest, Path(file_path).name)
+        logger.info(f"Uploading phylogeny tree to S3: {file_path} -> {s3_key}")
+        s3_client.upload_file(file_path, CLI_config.s3_storage.bucket, s3_key)
+        s3_location = f"s3://{CLI_config.s3_storage.bucket}/{s3_key}"
+        file_size = Path(file_path).stat().st_size
+        logger.info(f"Successfully uploaded phylogeny to {s3_location} (sha256 {digest[:12]})")
+    except Exception as e:
+        # Serving still falls back to the local path, so this degrades to the
+        # previous behaviour rather than failing the ingest.
+        logger.warning(f"Phylogeny upload failed for {dc_id} ({e}); serving from local path.")
+        return {
+            "result": "success",
+            "message": f"Phylogeny DC registered; upload skipped ({e}).",
+        }
+
+    from depictio.cli.cli.utils.api_calls import api_update_dc_specific_properties
+
+    response = api_update_dc_specific_properties(
+        data_collection_id=dc_id,
+        properties={
+            "s3_location": s3_location,
+            "file_size_bytes": file_size,
+            "asset_version": {
+                "digest": digest,
+                "s3_location": s3_location,
+                "filename": Path(file_path).name,
+                "size_bytes": file_size,
+                "source_path": str(file_path),
+            },
+        },
+        CLI_config=CLI_config,
+    )
+    if response.status_code != 200:
+        logger.warning(
+            f"Phylogeny uploaded but its location could not be registered: {response.text}"
+        )
+
+    return {
+        "result": "success",
+        "message": f"Phylogeny DC uploaded to {s3_location}.",
+    }
+
+
 def process_geojson_data_collection(
     data_collection: DataCollection,
     CLI_config: CLIConfig,
@@ -1011,12 +1113,25 @@ def process_geojson_data_collection(
                 region_name=storage_options.region,
             )
 
-            # Upload to S3 under the DC ID
-            s3_key = f"{dc_id}/geojson_data.geojson"
+            # Content-addressed, so a re-upload of different geometry cannot
+            # destroy the old. This used to write to one fixed key,
+            # `{dc_id}/geojson_data.geojson`, and overwrite it in place — which
+            # made the previous content unrecoverable and left any dashboard
+            # version referencing it silently pointing at different data.
+            #
+            # `{dc_id}/versions/{sha256}/{filename}` keeps the object under the
+            # collection's own prefix, so the migrate sweep and the
+            # project-delete cleanup — both of which treat a returned path as a
+            # prefix — keep working with no change.
+            digest = compute_file_sha256(file_path)
+            s3_key = content_key(dc_id, digest, Path(file_path).name or "geojson_data.geojson")
             logger.info(f"Uploading GeoJSON to S3: {file_path} -> {s3_key}")
+            # A PUT to a content key is idempotent: identical bytes produce the
+            # same key, so re-running an ingest costs a transfer and changes
+            # nothing.
             s3_client.upload_file(file_path, CLI_config.s3_storage.bucket, s3_key)
             s3_location = f"s3://{CLI_config.s3_storage.bucket}/{s3_key}"
-            logger.info(f"Successfully uploaded GeoJSON to {s3_location}")
+            logger.info(f"Successfully uploaded GeoJSON to {s3_location} (sha256 {digest[:12]})")
 
         except Exception as e:
             return {"result": "error", "message": f"Failed to upload GeoJSON to S3: {e}"}
@@ -1037,6 +1152,34 @@ def process_geojson_data_collection(
             "result": "error",
             "message": f"Failed to register GeoJSON location: {api_upsert_result.text}",
         }
+
+    # Record the generation on the DC config as well. The deltatable upsert
+    # above tracks the *current* location, which is what every existing reader
+    # uses; this is the history a dashboard version pins into. Best-effort —
+    # losing it costs the ability to replay one version, not the ingest.
+    if not file_path.startswith("s3://"):
+        try:
+            from pathlib import Path
+
+            from depictio.cli.cli.utils.api_calls import api_update_dc_specific_properties
+
+            api_update_dc_specific_properties(
+                data_collection_id=dc_id,
+                properties={
+                    "s3_location": s3_location,
+                    "file_size_bytes": file_size,
+                    "asset_version": {
+                        "digest": digest,
+                        "s3_location": s3_location,
+                        "filename": Path(file_path).name,
+                        "size_bytes": file_size,
+                        "source_path": str(file_path),
+                    },
+                },
+                CLI_config=CLI_config,
+            )
+        except Exception as exc:
+            logger.warning(f"GeoJSON asset version not recorded for {dc_id}: {exc}")
 
     result = api_upsert_result.json()
     if result.get("result") == "error":
