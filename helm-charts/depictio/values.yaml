@@ -299,8 +299,10 @@ backend:
     # Audit the exact payload: GET /depictio/api/v1/utils/telemetry/preview
     # Details: docs/telemetry.md
     DEPICTIO_TELEMETRY_ENABLED: "true"
-    # Stated explicitly by this chart rather than auto-detected.
-    DEPICTIO_TELEMETRY_DEPLOYMENT_KIND: "kubernetes"
+    # Stated explicitly by this chart rather than auto-detected — distinguishes a
+    # Helm install from a hand-rolled deployment, which would otherwise both just
+    # look like "kubernetes" from inside the pod.
+    DEPICTIO_TELEMETRY_DEPLOYMENT_KIND: "helm"
     # Set false to send only the install identity and version, no size metrics.
     DEPICTIO_TELEMETRY_INCLUDE_USAGE_METRICS: "true"
     # Set true to log the payload instead of sending it.

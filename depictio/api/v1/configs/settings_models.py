@@ -1181,8 +1181,9 @@ class TelemetryConfig(BaseSettings):
     deployment_kind: str | None = Field(
         default=None,
         description=(
-            "Override the detected deployment kind: kubernetes, docker-compose, "
-            "docker, devcontainer or local. Auto-detected when unset."
+            "Override the detected deployment kind: helm, kubernetes, "
+            "docker-compose, docker-compose-dev, docker, devcontainer or local. "
+            "Auto-detected when unset."
         ),
     )
     include_usage_metrics: bool = Field(

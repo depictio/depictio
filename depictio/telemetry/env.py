@@ -10,7 +10,15 @@ import platform
 import sys
 from typing import Final, Literal
 
-DeploymentKind = Literal["kubernetes", "docker-compose", "docker", "devcontainer", "local"]
+DeploymentKind = Literal[
+    "kubernetes",
+    "helm",
+    "docker-compose",
+    "docker-compose-dev",
+    "docker",
+    "devcontainer",
+    "local",
+]
 
 #: Env var an operator (or our own Helm chart / compose files) can set to state the
 #: deployment kind outright, rather than relying on the heuristics below.
@@ -21,7 +29,9 @@ DEPLOYMENT_KIND_ENV: Final[str] = "DEPICTIO_TELEMETRY_DEPLOYMENT_KIND"
 #: :func:`detect_deployment_kind`.
 VALID_DEPLOYMENT_KINDS: Final[tuple[str, ...]] = (
     "kubernetes",
+    "helm",
     "docker-compose",
+    "docker-compose-dev",
     "docker",
     "devcontainer",
     "local",
@@ -46,10 +56,16 @@ def detect_deployment_kind() -> DeploymentKind:
     """Work out how this process was deployed.
 
     An explicit ``DEPICTIO_TELEMETRY_DEPLOYMENT_KIND`` always wins — the Helm
-    chart sets ``kubernetes`` and the compose files set ``docker-compose``, which
-    is more reliable than any heuristic and is the only way to tell those two
-    apart (a Helm-deployed pod and a compose container both just look like
-    "a container" from the inside).
+    chart sets ``helm``, the production Compose file sets ``docker-compose`` and
+    the dev Compose file sets ``docker-compose-dev``, which is more reliable than
+    any heuristic and is the only way to tell them apart (a Helm-deployed pod and
+    a plain Compose container both just look like "a container" from the inside,
+    and the two Compose files are the same process with a different flag flipped).
+
+    ``kubernetes`` itself is never stated by anything we ship — it is what a
+    hand-rolled deployment (raw manifests, no Helm) falls back to, so it keeps
+    meaning "Kubernetes, not through our chart" rather than being shadowed by the
+    much larger population of Helm installs.
 
     The fallbacks exist for hand-rolled deployments that never set the var:
 
@@ -63,8 +79,12 @@ def detect_deployment_kind() -> DeploymentKind:
     explicit = os.getenv(DEPLOYMENT_KIND_ENV, "").strip().lower()
     if explicit == "kubernetes":
         return "kubernetes"
+    if explicit == "helm":
+        return "helm"
     if explicit == "docker-compose":
         return "docker-compose"
+    if explicit == "docker-compose-dev":
+        return "docker-compose-dev"
     if explicit == "docker":
         return "docker"
     if explicit == "devcontainer":

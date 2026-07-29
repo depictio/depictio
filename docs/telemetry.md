@@ -42,7 +42,7 @@ one installation are not counted as many.
 | Field | Type | What it is |
 | --- | --- | --- |
 | `depictio_version` | string | Depictio version reporting the event, e.g. `1.2.1`. |
-| `deployment_kind` | string | How this Depictio was deployed: `kubernetes`, `docker-compose`, `docker`, `devcontainer` or `local`. |
+| `deployment_kind` | string | How this Depictio was deployed: `helm` (our Helm chart), `kubernetes` (hand-rolled manifests, no chart), `docker-compose` (the production Compose file), `docker-compose-dev` (the dev Compose file), `docker`, `devcontainer` or `local`. |
 | `os` | string | Operating system family, e.g. `Linux`. Never the hostname. |
 | `arch` | string | CPU architecture, e.g. `x86_64` or `arm64`. |
 | `python_version` | string | Python version running Depictio, e.g. `3.11.9`. |

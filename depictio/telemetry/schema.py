@@ -45,8 +45,10 @@ class CommonProperties(_StrictBase):
     )
     deployment_kind: str = Field(
         description=(
-            "How this Depictio was deployed: `kubernetes`, `docker-compose`, "
-            "`docker`, `devcontainer` or `local`."
+            "How this Depictio was deployed: `helm` (our Helm chart), `kubernetes` "
+            "(hand-rolled manifests, no chart), `docker-compose` (the production "
+            "Compose file), `docker-compose-dev` (the dev Compose file), `docker`, "
+            "`devcontainer` or `local`."
         ),
     )
     os: str = Field(description="Operating system family, e.g. `Linux`. Never the hostname.")
