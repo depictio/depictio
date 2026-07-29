@@ -243,6 +243,7 @@ uv run python check_time_travel.py       # pins reach the data
 uv run python check_render_paths.py      # ...on figures and tables too
 uv run python check_component_history.py # the modal shows what it claims
 uv run python check_component_restore.py # one component, nothing else
+uv run python check_bypass_capture.py    # a deleted tab is still recoverable
 uv run python check_served_bundle.py     # the browser has the current code
 ```
 
@@ -272,6 +273,14 @@ Highlights of what they pin down, all of which were real bugs at some point:
   correct in source, correct in the API, and broken on screen because Vite
   cached a transform from a moment when an import failed to resolve. If that
   check fails, restart the viewer container rather than reading the source.
+* Deleting a tab records a version, and some *earlier* version still holds the
+  deleted tab. Four routes bypass `/save` — rename, tab edit, tab delete,
+  reorder — and every one of them once mutated a dashboard while recording
+  nothing. The tab delete is the one worth an end-to-end check: its capture is
+  anchored on the parent, because the tab cannot resolve its own family once it
+  is gone, and getting that wrong produces a version that exists and is empty
+  rather than an error. Checking only that the count went up would pass on
+  exactly that failure.
 
 Override the defaults with `DEPICTIO_API`, `DEPICTIO_CLI_CONFIG` and
 `DASHBOARD_TITLE`.
