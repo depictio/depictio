@@ -232,12 +232,28 @@ code, .mono { font-family: var(--mono); font-size: .82em; }
 
 main { max-width: 1400px; margin: 0 auto; }
 
+/* Twelve columns so a card can claim a third, a half, two thirds or the lot.
+ * A uniform auto-fill grid flatters nothing: a manhattan plot is unreadable at
+ * a third width, and a scalar card looks absurd stretched across the page. The
+ * span travels with the component *type* (see SPAN in serve_site.py) rather
+ * than its position, so the layout does not reshuffle when the export set
+ * changes. */
 .gallery {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(390px, 1fr));
+  grid-template-columns: repeat(12, 1fr);
   gap: var(--gap);
   padding: 1.25rem var(--pad) 0;
 }
+
+.specimen[data-span='full']   { grid-column: span 12; }
+.specimen[data-span='wide']   { grid-column: span 6; }
+.specimen[data-span='normal'] { grid-column: span 4; }
+.specimen[data-span='narrow'] { grid-column: span 3; }
+
+/* Taller stage for the wide formats — a heatmap at 340px is a colour smear. */
+.specimen[data-span='full'] .stage  { height: 420px; }
+.specimen[data-span='wide'] .stage  { height: 400px; }
+.specimen[data-span='narrow'] .stage { height: 260px; }
 
 .specimen {
   border: 1px solid var(--ink);
@@ -417,8 +433,52 @@ footer p { margin: 0; max-width: 1400px; margin-inline: auto; }
 
 /* ---------- responsive ---------- */
 
+/* ---------- site nav ---------- */
+
+.sitenav {
+  border-bottom: 1px solid var(--line);
+  padding: 0 var(--pad);
+  background: var(--paper-deep);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+.sitenav ul {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  gap: .25rem;
+  flex-wrap: wrap;
+}
+.sitenav a {
+  display: block;
+  padding: .6rem .9rem;
+  font-family: var(--mono);
+  font-size: .7rem;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+}
+.sitenav a:hover { color: var(--ink); }
+.sitenav a[aria-current='page'] {
+  color: var(--ink);
+  border-bottom-color: var(--reagent);
+}
+
+/* ---------- responsive ---------- */
+
+@media (max-width: 1100px) {
+  .specimen[data-span='normal'] { grid-column: span 6; }
+  .specimen[data-span='narrow'] { grid-column: span 4; }
+}
+
 @media (max-width: 900px) {
   .masthead-inner { grid-template-columns: 1fr; }
   .hero { grid-template-columns: 1fr; }
   .gallery { grid-template-columns: 1fr; }
+  .specimen[data-span] { grid-column: span 1; }
 }

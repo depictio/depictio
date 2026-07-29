@@ -84,8 +84,23 @@ function evict(stage) {
   stage.__evicted = true;
 }
 
+function mountNav(pages) {
+  const host = document.getElementById('sitenav');
+  if (!host) return;
+  const here = location.pathname.replace(/\/$/, '') || '/';
+  host.innerHTML = `<ul>${pages
+    .map((page) => {
+      const current = (page.href.replace(/\/$/, '') || '/') === here;
+      return `<li><a href="${page.href}"${current ? ' aria-current="page"' : ''}>${escapeHtml(
+        page.label,
+      )}</a></li>`;
+    })
+    .join('')}</ul>`;
+}
+
 async function boot() {
-  document.getElementById('origin-self').textContent = location.origin;
+  const originSelf = document.getElementById('origin-self');
+  if (originSelf) originSelf.textContent = location.origin;
 
   // ?mode=live|file|spec pins every card to one mode, and ?limit=N caps how many
   // cards exist. Both are for capture runs: each embed is a ~7 MB document, and a
@@ -97,7 +112,9 @@ async function boot() {
 
   const res = await fetch('/site-data.json');
   state.data = await res.json();
-  document.getElementById('origin-api').textContent = new URL(state.data.apiBase).origin;
+  mountNav(state.data.pages || []);
+  const originApi = document.getElementById('origin-api');
+  if (originApi) originApi.textContent = new URL(state.data.apiBase).origin;
 
   let components = state.data.components;
   if (state.forcedMode) {
@@ -179,6 +196,7 @@ function mountGallery(components) {
 function buildCard(component) {
   const card = document.createElement('article');
   card.className = 'specimen';
+  card.dataset.span = component.span || 'normal';
 
   const kind = component.vizKind
     ? `${component.componentType} · ${component.vizKind}`

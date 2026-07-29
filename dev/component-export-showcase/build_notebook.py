@@ -19,7 +19,11 @@ NOTEBOOK = Path(__file__).resolve().parent / "component_export_tour.ipynb"
 
 
 def md(text: str) -> dict:
-    return {"cell_type": "markdown", "metadata": {}, "source": text.strip().splitlines(keepends=True)}
+    return {
+        "cell_type": "markdown",
+        "metadata": {},
+        "source": text.strip().splitlines(keepends=True),
+    }
 
 
 def code(text: str) -> dict:
@@ -62,7 +66,9 @@ Before running: the instance needs `DEPICTIO_FASTAPI_EMBED_ENABLED=true` and the
 embed bundle built (`cd depictio/viewer && pnpm run build:embed`).
         """
     ),
-    md("## 1. Connect\n\nPorts and token come from the worktree's `.env.instance`, so nothing is hardcoded."),
+    md(
+        "## 1. Connect\n\nPorts and token come from the worktree's `.env.instance`, so nothing is hardcoded."
+    ),
     code(
         """
 import json
@@ -121,7 +127,9 @@ whose figure is built in Python. That is a property of where the figure is
 assembled, not an oversight — see `docs/design/component-export.md`.
         """
     ),
-    md("## 3. A figure as JSON\n\nThe response is a plain Plotly spec. `go.Figure(spec)` accepts it directly."),
+    md(
+        "## 3. A figure as JSON\n\nThe response is a plain Plotly spec. `go.Figure(spec)` accepts it directly."
+    ),
     code(
         """
 import plotly.graph_objects as go

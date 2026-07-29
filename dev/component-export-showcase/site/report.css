@@ -1,0 +1,341 @@
+/* Swedish Pathogens Portal idiom.
+ *
+ * Tokens read out of the portal's own compiled stylesheet
+ * (portal.f55c915045c1.css), not approximated:
+ *
+ *   --color-pp-dark-blue   #295986
+ *   --color-pp-mid-blue    #4770b1
+ *   --color-pp-teal        #37ae94
+ *   --color-pp-lime-green  #d4de27
+ *   --color-pp-pale-grey   #d8d8d8
+ *   --color-pp-dark-grey   #55585a
+ *   --color-pp-almost-black #1a1c1a
+ *   body font: IBM Plex Sans, Helvetica, Arial, sans-serif
+ *   .container: max-width 80%
+ *
+ * The portal's structure is as distinctive as its palette: a white sticky
+ * header with two logos, a gradient section band under it, a tab strip where
+ * the current tab is an unlinked span with a white shadow "notch", and a grey
+ * three-column control deck sitting directly above the figure it drives. All of
+ * that is reproduced here, because the point of this page is that a host keeps
+ * its own idiom and puts Depictio behind it.
+ */
+
+:root {
+  --pp-dark-blue: #295986;
+  --pp-mid-blue: #4770b1;
+  --pp-teal: #37ae94;
+  --pp-lime: #d4de27;
+  --pp-pale-grey: #d8d8d8;
+  --pp-dark-grey: #55585a;
+  --pp-black: #1a1c1a;
+
+  /* Drive the shared request-details panel from this page's palette. */
+  --req-line: #e2e4e6;
+  --req-muted: #55585a;
+  --req-ink: #1a1c1a;
+  --req-accent: #295986;
+  --req-wash: #f7f8f9;
+}
+
+body.pp {
+  margin: 0;
+  background: #fff;
+  color: var(--pp-black);
+  font-family: 'IBM Plex Sans', Helvetica, Arial, sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+body.pp .sitenav { background: #fff; border-bottom: 1px solid var(--pp-pale-grey); }
+body.pp .sitenav a { color: var(--pp-dark-blue); font-family: 'IBM Plex Mono', monospace; }
+body.pp .sitenav a:hover { color: var(--pp-teal); }
+body.pp .sitenav a[aria-current='page'] { color: var(--pp-teal); border-bottom-color: var(--pp-teal); }
+
+/* The portal's .container is `max-width: 80%`, centred. */
+.pp-container { width: 80%; max-width: 1320px; margin: 0 auto; }
+
+/* ---------- masthead ---------- */
+
+.pp-header {
+  background: #fff;
+  border-bottom: 1px solid var(--pp-pale-grey);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .05);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+.pp-header-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 80px;
+}
+.pp-logos { display: flex; align-items: center; gap: 1.25rem; }
+.pp-logo { height: 40px; width: auto; display: block; }
+.pp-logo-sll { height: 34px; }
+.pp-divider { width: 1px; height: 36px; background: #d1d5db; }
+
+.pp-nav { display: flex; align-items: center; gap: 1.5rem; }
+.pp-nav-item {
+  color: var(--pp-dark-blue);
+  font-weight: 500;
+  font-size: .95rem;
+  cursor: default;
+}
+.pp-nav-item::after {
+  content: '▾';
+  font-size: .7em;
+  margin-left: .3rem;
+  opacity: .7;
+}
+@media (max-width: 1000px) { .pp-nav { display: none; } }
+
+/* ---------- gradient section band ---------- */
+
+.pp-band {
+  background: linear-gradient(to right, var(--pp-dark-blue), var(--pp-mid-blue), var(--pp-teal));
+  color: #fff;
+  padding: .25rem 0;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .05);
+}
+.pp-band h2 {
+  margin: 1rem 0;
+  font-size: 2.25rem;
+  font-weight: 400;
+  line-height: 1.2;
+}
+
+/* ---------- page body ---------- */
+
+.pp-main { padding: 1.25rem 0 2rem; }
+
+.pp-title {
+  margin: 1.5rem 0;
+  font-size: 1.875rem;
+  font-weight: 400;
+  line-height: 1.3;
+}
+
+/* The portal's own notice block: a full-width pale-grey paragraph. */
+.pp-notice {
+  margin: 1.5rem 0;
+  padding: 1rem;
+  background: var(--pp-pale-grey);
+  font-size: .95rem;
+}
+
+.pp-main h4 {
+  margin: 2rem 0 .75rem;
+  font-size: 1.5rem;
+  font-weight: 400;
+}
+.pp-main > p { margin: 0 0 1rem; max-width: 90ch; }
+.pp-main a { color: var(--pp-dark-blue); }
+.pp-main a:hover { color: var(--pp-teal); }
+.pp-main code {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: .88em;
+  background: #f2f4f6;
+  padding: .05rem .3rem;
+  border-radius: 2px;
+}
+
+/* ---------- tab strip ---------- */
+
+.pp-tabs {
+  display: flex;
+  justify-content: center;
+  margin: 1.25rem 0;
+  border-bottom: 1px solid var(--pp-dark-blue);
+  font-weight: 500;
+}
+.pp-tab {
+  margin: 0 1rem;
+  padding: .5rem 1.25rem .25rem;
+  color: var(--pp-dark-blue);
+  text-decoration: none;
+  border-radius: .5rem .5rem 0 0;
+}
+a.pp-tab:hover { background: #e5e7eb; }
+/* The current tab: bordered, bottomless, with a white shadow that punches
+ * through the strip's own rule. Straight from the portal. */
+.pp-tab-current {
+  font-weight: 400;
+  border: 1px solid var(--pp-pale-grey);
+  border-bottom: 0;
+  box-shadow: 0 4px white;
+}
+
+/* ---------- control deck ---------- */
+
+.pp-filters {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0;
+  justify-content: space-evenly;
+  padding-bottom: 1rem;
+  margin: 1.5rem 0;
+  background: #f9fafb;
+}
+@media (max-width: 900px) {
+  .pp-filters { grid-template-columns: 1fr; }
+}
+
+.pp-control-head {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  margin-bottom: 1rem;
+  padding: .375rem 2.25rem;
+  background: #e5e7eb;
+  font-weight: 500;
+}
+.pp-control-head-plain { padding: .375rem 2.25rem; }
+.pp-control-alt { font-weight: 400; font-size: .85rem; color: var(--pp-dark-grey); }
+
+/* The portal's switch: a black track with a white knob that slides and turns
+ * blue when checked. */
+.pp-switch { display: inline-flex; align-items: center; cursor: pointer; }
+.pp-switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+.pp-switch-track {
+  position: relative;
+  width: 1.75rem;
+  height: 1rem;
+  background: #000;
+  border-radius: 999px;
+  transition: background .15s;
+}
+.pp-switch-track::after {
+  content: '';
+  position: absolute;
+  top: .125rem;
+  left: .125rem;
+  width: .75rem;
+  height: .75rem;
+  background: #fff;
+  border-radius: 999px;
+  transition: transform .15s;
+}
+.pp-switch input:checked + .pp-switch-track { background: #2563eb; }
+.pp-switch input:checked + .pp-switch-track::after { transform: translateX(100%); }
+.pp-switch input:focus-visible + .pp-switch-track { outline: 2px solid var(--pp-teal); outline-offset: 2px; }
+
+.pp-control-body { padding: 0 2.25rem; }
+/* Mirrors the portal's `peer-has-[input:not(:checked)]` pair: the inactive
+ * half of a toggle is dimmed and inert rather than hidden, so the reader can
+ * see what the other option would offer. */
+.pp-control-body.is-disabled { opacity: .3; pointer-events: none; }
+.pp-control-hint { padding-bottom: .5rem; font-size: .875rem; }
+.pp-control-body select,
+.pp-dates input {
+  font: inherit;
+  font-size: .95rem;
+  padding: .5rem;
+  border: 1px solid #d1d5db;
+  background: #fff;
+  color: var(--pp-black);
+}
+.pp-control-body select:focus-visible,
+.pp-dates input:focus-visible { outline: 2px solid var(--pp-teal); outline-offset: 1px; }
+.pp-dates { display: flex; gap: .5rem; flex-wrap: wrap; }
+
+.pp-filter-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+.pp-chips { display: flex; flex-wrap: wrap; gap: .4rem; }
+.pp-chip {
+  background: rgba(55, 174, 148, .2);
+  color: #14503f;
+  border-radius: .25rem;
+  padding: .15rem .55rem;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: .75rem;
+}
+.pp-chip b { font-weight: 500; opacity: .7; margin-right: .3rem; }
+.pp-chip-empty { font-size: .875rem; color: var(--pp-dark-grey); }
+
+/* ---------- figure panels ---------- */
+
+.pp-panel { margin: 0 0 1.75rem; }
+/* The portal dims a panel while htmx is in flight; same affordance, same
+ * reason — a figure that silently swaps underneath you is hard to trust. */
+.pp-panel.is-loading { opacity: .4; transition: opacity .15s; }
+
+.pp-stage { width: 100%; height: 450px; }
+.pp-stage-short { height: 340px; }
+
+.pp-panel-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+}
+@media (max-width: 900px) {
+  .pp-panel-pair { grid-template-columns: 1fr; }
+}
+
+.pp-panel-foot {
+  display: flex;
+  justify-content: flex-end;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: .72rem;
+  color: var(--pp-dark-grey);
+}
+
+.pp-error {
+  min-height: 450px;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  color: #ef4444;
+}
+.pp-error span { display: block; font-size: .8rem; color: var(--pp-dark-grey); margin-top: .5rem; }
+
+/* ---------- embedded Depictio control ---------- */
+
+.pp-embed {
+  border: 1px solid var(--pp-pale-grey);
+  background: #f9fafb;
+  padding: 1rem;
+  margin-bottom: 2rem;
+}
+.pp-control-frame {
+  width: 100%;
+  height: 190px;
+  border: 1px solid var(--pp-pale-grey);
+  background: #fff;
+}
+
+/* ---------- footer ---------- */
+
+.pp-footer {
+  background: linear-gradient(to bottom right, var(--pp-dark-blue), var(--pp-mid-blue));
+  color: #fff;
+  margin-top: 2.5rem;
+  padding: 1.5rem 0;
+}
+.pp-footer-inner {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 1.5rem;
+  align-items: start;
+}
+@media (max-width: 800px) {
+  .pp-footer-inner { grid-template-columns: 1fr; }
+}
+.pp-logo-footer { height: 40px; width: auto; margin-bottom: .5rem; }
+.pp-footer p { margin: 0; font-size: .875rem; line-height: 1.6; max-width: 46ch; }
+.pp-footer-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .75rem;
+  font-size: .875rem;
+}
+.pp-footer-links a { color: #fff; text-decoration: none; }
+.pp-footer-links a:hover { color: var(--pp-lime); }
