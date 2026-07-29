@@ -64,8 +64,11 @@ import {
   RealtimeIndicator,
   useRealtimeJournal,
   batchIdsFromPayload,
+  DataVersionProvider,
+  dataVersionBody,
 } from 'depictio-react-core';
 import type {
+  DataVersionPins,
   DashboardData,
   DashboardPermissions,
   DashboardSummary,
@@ -80,6 +83,8 @@ import LeftFilterPanel from './components/LeftFilterPanel';
 import GridItemEditOverlay from './components/GridItemEditOverlay';
 import { Header, Sidebar, SettingsDrawer, TabModal } from './chrome';
 import VersionHistoryDrawer from './versions/VersionHistoryDrawer';
+import DataVersionBanner from './versions/DataVersionBanner';
+import { collectDataCollections } from './versions/useDatasetHistories';
 import type { TabModalSubmitPayload } from './chrome';
 import NotesFooter from './components/NotesFooter';
 import './chrome/chrome.css';
@@ -183,6 +188,35 @@ const EditorApp: React.FC = () => {
 
   const dashboardId = extractDashboardId();
   const bulkCtrl = useRef<AbortController | null>(null);
+
+  // Data time travel, same contract as the viewer: view-state only, never
+  // persisted, cleared by a reload.
+  const [dataPins, setDataPins] = useState<DataVersionPins>({});
+  const [asOfVersionId, setAsOfVersionId] = useState<string | null>(null);
+  const [asOfLabel, setAsOfLabel] = useState<string | null>(null);
+  const [asOfUnresolved, setAsOfUnresolved] = useState<string[]>([]);
+  const versionBody = useMemo(
+    () => dataVersionBody({ asOfVersionId, pins: dataPins }),
+    [asOfVersionId, dataPins],
+  );
+  const versionKey = JSON.stringify(versionBody);
+  const timeTravelling = Object.keys(versionBody).length > 0;
+  const pinnedLabels = useMemo(() => {
+    const byId = new Map(
+      collectDataCollections(dashboard?.stored_metadata).map((c) => [c.dcId, c.label]),
+    );
+    return Object.entries(dataPins)
+      .filter(([, v]) => typeof v === 'number')
+      .map(([dcId, version]) => ({
+        label: byId.get(dcId) ?? dcId,
+        version: version as number,
+      }));
+  }, [dataPins, dashboard?.stored_metadata]);
+  const clearDataVersions = useCallback(() => {
+    setDataPins({});
+    setAsOfVersionId(null);
+    setAsOfUnresolved([]);
+  }, []);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Latest dashboard ref so the debounced save uses fresh state. We update
   // it synchronously alongside setDashboard via `applyDashboard` — relying on
@@ -251,7 +285,7 @@ const EditorApp: React.FC = () => {
       // snapping to ``…``. See App.tsx for the matching change.
       if (bulkCtrl.current) bulkCtrl.current.abort();
       bulkCtrl.current = new AbortController();
-      bulkComputeCards(dashboardId, filters, cardIds)
+      bulkComputeCards(dashboardId, filters, cardIds, versionBody)
         .then((res) => {
           setCardValues(res.values);
           setCardSecondaryValues(res.secondary_values || {});
@@ -264,7 +298,7 @@ const EditorApp: React.FC = () => {
         .finally(() => setCardsLoading(false));
     }, 250);
     return () => clearTimeout(timer);
-  }, [dashboard, dashboardId, stableFilterKey(filters)]);
+  }, [dashboard, dashboardId, stableFilterKey(filters), versionKey]);
 
   const handleFilterChange = useCallback(
     (update: InteractiveFilter) => {
@@ -936,6 +970,8 @@ const EditorApp: React.FC = () => {
 
   return (
     <>
+    {/* Renderers read their pin from here, same as the viewer. */}
+    <DataVersionProvider asOfVersionId={asOfVersionId} pins={dataPins}>
     <AppShell
       header={{ height: 50 }}
       navbar={{
@@ -1004,6 +1040,19 @@ const EditorApp: React.FC = () => {
       </AppShell.Navbar>
 
       <AppShell.Main style={{ height: 'calc(100vh - 50px)' }}>
+        {/* Louder here than in the viewer by consequence: this surface saves,
+            and a chart edited against data you did not realise was historical
+            is the mistake worth preventing. Saving still writes only layout
+            and component config — never data — but the point is that you know
+            what you were looking at. */}
+        {timeTravelling && (
+          <DataVersionBanner
+            pinned={pinnedLabels}
+            asOfLabel={asOfLabel}
+            unresolved={asOfUnresolved}
+            onClear={clearDataVersions}
+          />
+        )}
         {loading && (
           <Group p="lg">
             <Loader size="sm" />
@@ -1108,6 +1157,21 @@ const EditorApp: React.FC = () => {
         canEdit={isOwner}
         canDelete={isOwner}
         onRestored={handleRestored}
+        // The editor gets the same dataset picker as the viewer. It only
+        // changes what is *displayed* — a save writes layout and component
+        // config, never data — but a banner still says so, because editing a
+        // chart against data you did not realise was historical is the
+        // mistake worth preventing.
+        dashboardMetadata={dashboard?.stored_metadata}
+        dataPins={dataPins}
+        onDataPinsChange={setDataPins}
+        asOfVersionId={asOfVersionId}
+        onAsOfChange={(versionId, label, unresolved) => {
+          setAsOfVersionId(versionId);
+          setAsOfLabel(label);
+          setAsOfUnresolved(unresolved ?? []);
+          if (versionId) setDataPins({});
+        }}
       />
 
       <TabModal
@@ -1119,6 +1183,7 @@ const EditorApp: React.FC = () => {
         submitting={tabModalState.submitting}
       />
     </AppShell>
+    </DataVersionProvider>
     </>
   );
 };
