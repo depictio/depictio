@@ -245,6 +245,7 @@ uv run python check_component_history.py # the modal shows what it claims
 uv run python check_component_restore.py # one component, nothing else
 uv run python check_bypass_capture.py    # a deleted tab is still recoverable
 uv run python check_served_bundle.py     # the browser has the current code
+uv run python check_restore_in_browser.py  # Restore redraws the grid, and is undoable
 ```
 
 And one that needs no running stack, since it reads the committed PNGs:
@@ -295,6 +296,14 @@ Highlights of what they pin down, all of which were real bugs at some point:
   threaded through, which stays light inside dark chrome. Counts near-white
   pixels rather than comparing means, because a mean hides a white panel behind
   a dark surround.
+* **Restore reaches the screen.** Restoring `v1 Survey` takes the grid from 9
+  components to 5 *without a reload*, and restoring back returns it to 9. This
+  is the one check that has to drive a browser: a restore which writes the right
+  document and leaves the grid showing the old one passes every API assertion
+  you can write, and that was the real failure twice here (a figure that redrew
+  only after a reload, and a component that kept a stale render key). The second
+  half also exercises rather than asserts the non-destructive guarantee — the
+  undo is only possible because a restore captures the pre-restore state first.
 
 Override the defaults with `DEPICTIO_API`, `DEPICTIO_CLI_CONFIG` and
 `DASHBOARD_TITLE`.
