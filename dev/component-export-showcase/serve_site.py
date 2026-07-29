@@ -33,7 +33,7 @@ import showcase_lib as s  # noqa: E402
 SITE_DIR = Path(__file__).resolve().parent / "site"
 EXPORT_DIR = s.EXPORT_DIR
 
-#: Curated order for the gallery. Anything not listed sorts after, alphabetically.
+#: Curated order within each tier. Anything unlisted sorts after, alphabetically.
 FEATURED = [
     "figure",
     "advanced_viz--volcano",
@@ -55,9 +55,17 @@ def site_data() -> dict:
     index_path = EXPORT_DIR / "index.json"
     records = json.loads(index_path.read_text()) if index_path.exists() else []
 
-    def rank(record: dict) -> tuple[int, str]:
+    def rank(record: dict) -> tuple[int, int, str]:
+        """JSON-capable components first, then the curated order.
+
+        The gallery leads with what the API can hand over as a Plotly spec,
+        because that is the recommended integration; the iframe-only types
+        follow so the gap is visible rather than mixed in.
+        """
         key = record["type"]
-        return (FEATURED.index(key), "") if key in FEATURED else (len(FEATURED), key)
+        tier = 0 if record.get("json", {}).get("status") == "ok" else 1
+        position = FEATURED.index(key) if key in FEATURED else len(FEATURED)
+        return (tier, position, key)
 
     entries = []
     for record in sorted(records, key=rank):
