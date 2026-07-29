@@ -20,6 +20,33 @@ components:
   workflow_tag: advanced_viz_demo
   data_collection_tag: roc_curve_demo
   layout: {x: 0, y: 0, w: 8, h: 1}
+# ── Filters ────────────────────────────────────────────────────────────────
+# A different data collection: the curve table is one row per threshold, so
+# `quality` is the sweep axis and clipping it is how you zoom into the part of
+# the curve that matters.
+- component_type: interactive
+  tag: roc-filter-tool
+  workflow_tag: advanced_viz_demo
+  data_collection_tag: roc_curve_demo
+  interactive_component_type: MultiSelect
+  column_name: tool
+  column_type: object
+  custom_color: "#00897B"
+  icon_name: mdi:filter-variant
+  title: Caller
+  layout: {x: 0, y: 1, w: 4, h: 3}
+- component_type: interactive
+  tag: roc-filter-quality
+  workflow_tag: advanced_viz_demo
+  data_collection_tag: roc_curve_demo
+  interactive_component_type: RangeSlider
+  column_name: quality
+  column_type: float64
+  custom_color: "#5E35B1"
+  icon_name: mdi:tune
+  title: Quality threshold
+  layout: {x: 4, y: 1, w: 4, h: 3}
+
 - component_type: advanced_viz
   workflow_tag: advanced_viz_demo
   data_collection_tag: roc_curve_demo
@@ -33,4 +60,4 @@ components:
     group_col: tool
   tag: roc-demo-viz
   title: ROC / PR curve
-  layout: {x: 0, y: 1, w: 8, h: 10}
+  layout: {x: 0, y: 4, w: 8, h: 10}

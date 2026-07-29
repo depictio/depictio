@@ -19,6 +19,43 @@ components:
   workflow_tag: advanced_viz_demo
   data_collection_tag: benchmark_demo
   layout: {x: 0, y: 0, w: 8, h: 1}
+# ── Filters ────────────────────────────────────────────────────────────────
+# The confusion matrix is the panel where a false-positive bound is most
+# directly readable, so the fp slider earns its place beside it.
+- component_type: interactive
+  tag: cm-filter-tool
+  workflow_tag: advanced_viz_demo
+  data_collection_tag: benchmark_demo
+  interactive_component_type: MultiSelect
+  column_name: tool
+  column_type: object
+  custom_color: "#1E88E5"
+  icon_name: mdi:filter-variant
+  title: Caller
+  layout: {x: 0, y: 1, w: 3, h: 3}
+- component_type: interactive
+  tag: cm-filter-fp
+  workflow_tag: advanced_viz_demo
+  data_collection_tag: benchmark_demo
+  interactive_component_type: RangeSlider
+  column_name: fp
+  column_type: int64
+  custom_color: "#E64A19"
+  icon_name: mdi:alert-decagram
+  title: False positives
+  layout: {x: 3, y: 1, w: 3, h: 3}
+- component_type: interactive
+  tag: cm-filter-fn
+  workflow_tag: advanced_viz_demo
+  data_collection_tag: benchmark_demo
+  interactive_component_type: RangeSlider
+  column_name: fn
+  column_type: int64
+  custom_color: "#F9A825"
+  icon_name: mdi:help-circle
+  title: False negatives
+  layout: {x: 6, y: 1, w: 2, h: 3}
+
 - component_type: advanced_viz
   workflow_tag: advanced_viz_demo
   data_collection_tag: benchmark_demo
@@ -31,4 +68,4 @@ components:
     fn_col: fn
   tag: cm-demo-viz
   title: Confusion matrix
-  layout: {x: 0, y: 1, w: 8, h: 9}
+  layout: {x: 0, y: 4, w: 8, h: 9}
