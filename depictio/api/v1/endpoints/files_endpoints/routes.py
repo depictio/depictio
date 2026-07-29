@@ -1,6 +1,7 @@
 import asyncio
 import mimetypes
 import posixpath
+from datetime import datetime
 from urllib.parse import unquote
 
 from bson import ObjectId
@@ -34,6 +35,20 @@ MAX_FILES_PER_BATCH = 5000
 class UpsertFilesBatchRequest(BaseModel):
     files: list[File] = Field(..., max_length=MAX_FILES_PER_BATCH)
     update: bool = False
+
+
+#: Selects files that are still part of their data collection.
+#:
+#: A soft-deleted file carries a ``deleted_at`` timestamp; every document
+#: written before soft deletion existed carries no such field at all. Mongo
+#: treats a missing field as equal to ``None``, so this one predicate covers
+#: both shapes and needs no migration.
+#:
+#: Every read that means "the files in this collection" must apply it. A reader
+#: that forgets will silently resurrect departed files — which is the whole
+#: regression risk of this change, and why the predicate is a named constant
+#: rather than an inline dict copied around.
+LIVE_FILES: dict = {"deleted_at": None}
 
 
 @files_endpoint_router.post("/upsert_batch")
@@ -77,6 +92,11 @@ async def create_file(payload: UpsertFilesBatchRequest, current_user=Depends(get
             # `scan_results` in runs_endpoints/routes.py and `created_at` in
             # monitoring/store.py.
             set_data = {k: v for k, v in file_data.items() if k != "registration_time"}
+            # A file that comes back is alive again. `File.deleted_at` defaults
+            # to None, so the model already carries the clear — but only because
+            # `mongo()` uses exclude_unset=False. Spelled out here so a later
+            # change to that does not quietly resurrect tombstones.
+            set_data["deleted_at"] = None
             update_doc: dict = {"$set": set_data}
             if "registration_time" in file_data:
                 update_doc["$setOnInsert"] = {"registration_time": file_data["registration_time"]}
@@ -118,9 +138,21 @@ async def create_file(payload: UpsertFilesBatchRequest, current_user=Depends(get
 
 
 @files_endpoint_router.get("/list/{data_collection_id}")
-async def list_registered_files(data_collection_id: str, current_user=Depends(get_current_user)):
+async def list_registered_files(
+    data_collection_id: str,
+    include_deleted: bool = False,
+    current_user=Depends(get_current_user),
+):
     """
     Fetch all files registered from a Data Collection registered into a workflow.
+
+    Departed files are excluded by default, which is what every existing caller
+    means by "the files in this collection" — the ingest paths in particular
+    would otherwise rebuild a Delta table from files that are gone.
+
+    ``include_deleted=true`` returns the tombstones as well, each carrying a
+    ``deleted_at``. That is the reconstruction path: "which files backed this
+    collection at time T" is answerable only from records that still exist.
     """
 
     if not current_user:
@@ -145,8 +177,15 @@ async def list_registered_files(data_collection_id: str, current_user=Depends(ge
         permission_match: dict = {}
     else:
         permission_match = {"permissions.owners._id": user_oid}
+    live_match = {} if include_deleted else LIVE_FILES
     pipeline = [
-        {"$match": {**permission_match, "data_collection_id": target_data_collection_id}},
+        {
+            "$match": {
+                **permission_match,
+                **live_match,
+                "data_collection_id": target_data_collection_id,
+            }
+        },
     ]
 
     result = files_collection.aggregate(pipeline)
@@ -196,11 +235,19 @@ async def delete_files_batch(
     if not current_user.is_admin:
         query["permissions.owners._id"] = ObjectId(current_user.id)
 
-    result = await asyncio.to_thread(files_collection.delete_many, query)
+    # Soft delete. The response shape is unchanged — `deleted` still means "how
+    # many of the ids you sent are now gone from the collection" — so the CLI's
+    # scan cleanup reconciles exactly as before.
+    query.update(LIVE_FILES)
+    result = await asyncio.to_thread(
+        files_collection.update_many,
+        query,
+        {"$set": {"deleted_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}},
+    )
     return {
         "requested": len(payload.file_ids),
-        "deleted": result.deleted_count,
-        "not_found": len(payload.file_ids) - result.deleted_count,
+        "deleted": result.modified_count,
+        "not_found": len(payload.file_ids) - result.modified_count,
     }
 
 
@@ -236,8 +283,11 @@ async def delete_file(file_id: str, current_user=Depends(get_current_user)):
             "permissions.owners._id": user_oid,
         }
 
-    result = files_collection.delete_one(query)
-    if result.deleted_count == 0:
+    query.update(LIVE_FILES)
+    result = files_collection.update_one(
+        query, {"$set": {"deleted_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}}
+    )
+    if result.modified_count == 0:
         raise HTTPException(
             status_code=404,
             detail=f"No file with id {file_id} found for the current user.",

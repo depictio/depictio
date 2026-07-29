@@ -38,6 +38,14 @@ def ensure_core_indexes() -> None:
             name="dc_registration_time",
         )
         files_collection.create_index("file_location", name="file_location")
+        # Every "the files in this collection" read now also filters
+        # ``deleted_at: None``. Without this the tombstone predicate turns each
+        # of those into a scan of the collection's whole history rather than
+        # its live set.
+        files_collection.create_index(
+            [("data_collection_id", ASCENDING), ("deleted_at", ASCENDING)],
+            name="dc_deleted_at",
+        )
     except Exception as exc:  # pragma: no cover - defensive
         logger.warning(f"core_indexes: failed to ensure files indexes: {exc}")
 

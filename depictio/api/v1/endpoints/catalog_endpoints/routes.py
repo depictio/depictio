@@ -205,7 +205,7 @@ async def compose_project(
     # Bulk-resolve recursive DCs via the files collection (one query).
     if recursive_dc_ids:
         for file_doc in files_collection.find(
-            {"data_collection_id": {"$in": recursive_dc_ids}},
+            {"data_collection_id": {"$in": recursive_dc_ids}, "deleted_at": None},
             {"file_location": 1, "filename": 1, "data_collection_id": 1},
         ):
             dc_oid = file_doc.get("data_collection_id")

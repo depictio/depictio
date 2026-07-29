@@ -112,7 +112,12 @@ def _dc_file_count(dc_id: str | None) -> int:
     candidates = _as_object_ids(dc_id)
     if not candidates:
         return 0
-    return files_collection.count_documents({"data_collection_id": {"$in": candidates}})
+    # Departed files carry a `deleted_at` tombstone rather than being removed,
+    # so an unfiltered count would keep reporting files the collection no longer
+    # has — and this number sits next to a file list that does filter.
+    return files_collection.count_documents(
+        {"data_collection_id": {"$in": candidates}, "deleted_at": None}
+    )
 
 
 class IngestionVariable(BaseModel):

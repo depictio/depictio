@@ -1129,7 +1129,10 @@ def get_phylogeny_newick(
     # readable and fall through to the project doc otherwise.
     candidates: list[str] = []
 
-    file_doc = files_collection.find_one({"data_collection_id": dc_oid})
+    # `deleted_at: None` covers both a live file and every document written
+    # before soft deletion existed; without it this can pick a tombstone and
+    # serve a tree whose file is gone.
+    file_doc = files_collection.find_one({"data_collection_id": dc_oid, "deleted_at": None})
     if file_doc and file_doc.get("file_location"):
         candidates.append(str(file_doc["file_location"]))
 

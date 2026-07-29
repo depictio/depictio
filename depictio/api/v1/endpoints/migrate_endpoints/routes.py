@@ -427,7 +427,12 @@ async def export_project(
     if mode in ("all", "metadata"):
         if dc_ids:
             dc_query = _dc_ids_query(dc_ids)
-            files_docs = list(files_collection.find({"data_collection_id": dc_query}))
+            # Export what the project *has*, not what it has ever had: a
+            # tombstone restored on the target would name a path that never
+            # existed there.
+            files_docs = list(
+                files_collection.find({"data_collection_id": dc_query, "deleted_at": None})
+            )
             deltatables_docs = list(deltatables_collection.find({"data_collection_id": dc_query}))
             # MultiQC / JBrowse report docs hold the dc_id → s3_location mapping the
             # renderers read; without them the target 404s on "missing s3_locations".

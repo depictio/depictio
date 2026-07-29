@@ -34,6 +34,19 @@ class File(MongoModel):
     registration_time: str = Field(
         default_factory=lambda: datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     )
+    #: When this file left the data collection, or ``None`` while it is present.
+    #:
+    #: A tombstone rather than a hard delete, because "which files backed this
+    #: data collection at time T" cannot be answered from records that no
+    #: longer exist. ``--sync-files`` used to remove the documents outright, so
+    #: a dashboard version saved before a cleanup could name a file set that was
+    #: unreconstructable a minute later.
+    #:
+    #: Absent on every document written before this existed, and Mongo treats a
+    #: missing field as equal to ``None``, so ``{"deleted_at": None}`` selects
+    #: live files across both shapes with no migration.
+    deleted_at: str | None = None
+
     file_hash: str
     filesize: int
     permissions: Permission
