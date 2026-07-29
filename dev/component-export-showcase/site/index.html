@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bench Notes — embedded Depictio components</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..700&family=Inter+Tight:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+<script src="/vendor/plotly.min.js"></script>
+</head>
+<body>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <p class="eyebrow">Sequencing &amp; Analysis Core — internal notes</p>
+    <h1>Bench<br>Notes</h1>
+    <p class="standfirst">
+      Everything below is rendered by <strong>Depictio</strong>, which runs somewhere else.
+      This page only holds a slot open and points at it.
+    </p>
+    <dl class="origins">
+      <div><dt>this page</dt><dd id="origin-self">—</dd></div>
+      <div><dt>depictio</dt><dd id="origin-api">—</dd></div>
+      <div><dt>shared code</dt><dd>none</dd></div>
+    </dl>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="hero-frame">
+    <div class="hero-label">
+      <span class="dot live"></span>
+      <span id="hero-title">loading…</span>
+    </div>
+    <div class="hero-stage" id="hero-stage"></div>
+  </div>
+  <aside class="hero-note">
+    <h2>What you are looking at</h2>
+    <p>
+      A single dashboard component, requested from Depictio as one self-contained
+      HTML file and framed here. No Depictio JavaScript is installed on this site,
+      no build step ran, and the frame makes no calls back out.
+    </p>
+    <p class="fineprint" id="hero-url">—</p>
+  </aside>
+</section>
+
+<section class="modes">
+  <h2 class="section-head"><span class="rule"></span>Three ways to take a component with you</h2>
+  <div class="mode-cards">
+    <article class="mode-card live">
+      <h3>Live frame</h3>
+      <p>Point an <code>&lt;iframe&gt;</code> at the export URL. Depictio renders on
+         request, so the embed tracks the dashboard.</p>
+      <p class="mode-cost">needs Depictio reachable</p>
+    </article>
+    <article class="mode-card file">
+      <h3>Saved file</h3>
+      <p>Download the same URL once and keep the HTML. It carries its own data and
+         renderer, so it works with Depictio switched off.</p>
+      <p class="mode-cost">frozen at download time</p>
+    </article>
+    <article class="mode-card spec">
+      <h3>Plotly spec</h3>
+      <p>Ask for <code>format=json</code> and get <code>{data, layout, config}</code>.
+         Render it with your own plotly.js and restyle it freely.</p>
+      <p class="mode-cost">only where a figure is built server-side</p>
+    </article>
+  </div>
+</section>
+
+<main>
+  <h2 class="section-head" id="gallery-head">
+    <span class="rule"></span>Specimens<span class="count" id="gallery-count"></span>
+  </h2>
+  <div id="gallery" class="gallery"></div>
+</main>
+
+<section class="matrix-wrap">
+  <h2 class="section-head"><span class="rule"></span>What each type could offer</h2>
+  <p class="matrix-note">
+    Read straight off the manifest endpoint, not written by hand. A blank
+    <em>spec</em> cell is the API declining, with its reason.
+  </p>
+  <table class="matrix" id="matrix"></table>
+</section>
+
+<footer>
+  <p>Depictio component export · <code>GET /depictio/api/v1/export/dashboards/{id}/components/{cid}</code></p>
+</footer>
+
+<script src="/app.js"></script>
+</body>
+</html>
