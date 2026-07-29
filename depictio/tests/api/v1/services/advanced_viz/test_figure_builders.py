@@ -744,3 +744,215 @@ def test_sunburst_needs_two_ranks() -> None:
     spec = build("sunburst", config=config, rows=SUNBURST_ROWS, theme="light")
     assert spec["data"] == []
     assert "at least two rank columns" in spec["layout"]["annotations"][0]["text"]
+
+
+# --- benchmarking kinds (nf-core/variantbenchmarking) -----------------------
+
+BENCH_ROWS = {
+    "tool": ["deepvariant", "gatk", "strelka2"],
+    "precision": [0.99, 0.95, 0.97],
+    "recall": [0.98, 0.96, 0.91],
+    "f1": [0.985, 0.955, 0.939],
+    "tp": [48000, 47000, 44500],
+    "fp": [480, 2400, 1370],
+    "fn": [980, 1960, 4400],
+    "recall_lower": [0.977, 0.955, 0.905],
+    "recall_upper": [0.983, 0.965, 0.915],
+}
+
+PR_CONFIG = {
+    "label_col": "tool",
+    "recall_col": "recall",
+    "precision_col": "precision",
+    "f1_col": "f1",
+    "support_col": "tp",
+}
+
+
+def _marker_trace(spec: dict) -> dict:
+    return next(t for t in spec["data"] if str(t.get("mode", "")).startswith("markers"))
+
+
+def test_pr_benchmark_draws_iso_f1_contours_behind_the_points() -> None:
+    """Without the contours there is no way to compare two operating points."""
+    spec = build("pr_benchmark", config=PR_CONFIG, rows=BENCH_ROWS, theme="light")
+    iso = [t for t in spec["data"] if str(t.get("name", "")).startswith("F1=")]
+    assert len(iso) == 4
+    assert spec["data"].index(_marker_trace(spec)) > spec["data"].index(iso[0]), (
+        "points must be drawn after the contours so they sit on top"
+    )
+
+
+def test_pr_benchmark_iso_contour_satisfies_the_f1_identity() -> None:
+    spec = build("pr_benchmark", config=PR_CONFIG, rows=BENCH_ROWS, theme="light")
+    contour = next(t for t in spec["data"] if t.get("name") == "F1=0.8")
+    for recall, precision in zip(contour["x"], contour["y"]):
+        f1 = 2 * precision * recall / (precision + recall)
+        assert f1 == pytest.approx(0.8, abs=1e-6)
+
+
+def test_pr_benchmark_sizes_points_by_support() -> None:
+    spec = build("pr_benchmark", config=PR_CONFIG, rows=BENCH_ROWS, theme="light")
+    sizes = _marker_trace(spec)["marker"]["size"]
+    assert sizes[0] > sizes[2], "deepvariant has the most TPs and the largest marker"
+
+
+def test_pr_benchmark_pins_the_f1_colour_domain() -> None:
+    """Autoscaling would make two panels with different F1 spreads incomparable."""
+    marker = _marker_trace(build("pr_benchmark", config=PR_CONFIG, rows=BENCH_ROWS, theme="light"))[
+        "marker"
+    ]
+    assert (marker["cmin"], marker["cmax"]) == (0, 1)
+
+
+ROC_ROWS = {
+    "tool": ["a"] * 4,
+    # Deliberately not in recall order: a threshold sweep arrives sorted by
+    # quality, and integrating unsorted points gives a plausible wrong AUC.
+    "quality": [30.0, 10.0, 20.0, 40.0],
+    "recall": [0.6, 1.0, 0.8, 0.4],
+    "precision": [0.8, 0.5, 0.7, 0.9],
+    "fpr": [0.2, 0.6, 0.4, 0.1],
+}
+
+ROC_CONFIG = {
+    "recall_col": "recall",
+    "precision_col": "precision",
+    "fpr_col": "fpr",
+    "threshold_col": "quality",
+    "group_col": "tool",
+}
+
+
+def test_roc_pr_curve_defaults_to_precision_recall() -> None:
+    spec = build("roc_pr_curve", config=ROC_CONFIG, rows=ROC_ROWS, theme="light")
+    assert spec["layout"]["xaxis"]["title"]["text"] == "Recall"
+    assert spec["layout"]["yaxis"]["title"]["text"] == "Precision"
+    assert spec["layout"]["shapes"] == [], "no chance diagonal outside ROC mode"
+
+
+def test_roc_mode_adds_the_chance_diagonal() -> None:
+    """A ROC without its diagonal gives 'above the line' nothing to be above."""
+    spec = build(
+        "roc_pr_curve", config=ROC_CONFIG, rows=ROC_ROWS, theme="light", controls={"mode": "roc"}
+    )
+    assert spec["layout"]["xaxis"]["title"]["text"] == "False positive rate"
+    diagonal = spec["layout"]["shapes"][0]
+    assert (diagonal["x0"], diagonal["y0"], diagonal["x1"], diagonal["y1"]) == (0, 0, 1, 1)
+
+
+def test_roc_mode_falls_back_when_fpr_is_unbound() -> None:
+    config = {k: v for k, v in ROC_CONFIG.items() if k != "fpr_col"}
+    spec = build(
+        "roc_pr_curve", config=config, rows=ROC_ROWS, theme="light", controls={"mode": "roc"}
+    )
+    assert spec["layout"]["xaxis"]["title"]["text"] == "Recall", "must degrade to PR, not break"
+
+
+def test_roc_pr_curve_orders_the_sweep_by_threshold() -> None:
+    """Points are joined in threshold order, matching the TSX.
+
+    A PR curve traced in input order zig-zags; ordering it is what makes it a
+    curve. The key is the *threshold* when one is bound, not recall — raising a
+    quality cutoff lowers recall, so the resulting x values descend, and
+    asserting they ascend would encode the wrong model.
+    """
+    spec = build("roc_pr_curve", config=ROC_CONFIG, rows=ROC_ROWS, theme="light")
+    trace = spec["data"][0]
+    assert trace["customdata"] == [10.0, 20.0, 30.0, 40.0], "joined in threshold order"
+    assert trace["x"] == [1.0, 0.8, 0.6, 0.4], "recall falls as the cutoff rises"
+
+
+def test_roc_pr_curve_orders_by_recall_without_a_threshold() -> None:
+    config = {k: v for k, v in ROC_CONFIG.items() if k != "threshold_col"}
+    spec = build("roc_pr_curve", config=config, rows=ROC_ROWS, theme="light")
+    xs = spec["data"][0]["x"]
+    assert xs == sorted(xs)
+
+
+def test_roc_pr_curve_reports_a_plausible_auc() -> None:
+    spec = build("roc_pr_curve", config=ROC_CONFIG, rows=ROC_ROWS, theme="light")
+    name = spec["data"][0]["name"]
+    assert "AUC" in name
+    assert 0.0 <= float(name.split("AUC")[1].strip(" )")) <= 1.0
+
+
+def test_threshold_mode_emits_precision_and_recall_per_group() -> None:
+    spec = build(
+        "roc_pr_curve",
+        config=ROC_CONFIG,
+        rows=ROC_ROWS,
+        theme="light",
+        controls={"mode": "threshold"},
+    )
+    names = [t["name"] for t in spec["data"]]
+    assert names == ["a · precision", "a · recall"]
+    assert spec["data"][0]["x"] == [10.0, 20.0, 30.0, 40.0], "sorted by quality"
+
+
+CONFUSION_CONFIG = {"label_col": "tool", "tp_col": "tp", "fp_col": "fp", "fn_col": "fn"}
+
+
+def test_confusion_matrix_puts_tp_on_top() -> None:
+    """Plotly draws heatmap y bottom-to-top; unreversed, TP lands at the bottom."""
+    spec = build("confusion_matrix", config=CONFUSION_CONFIG, rows=BENCH_ROWS, theme="light")
+    assert spec["data"][0]["y"] == ["FN", "FP", "TP"]
+
+
+def test_confusion_matrix_normalises_per_caller_by_default() -> None:
+    """TP dwarfs FP/FN by orders of magnitude; a raw scale shows one bright row."""
+    spec = build("confusion_matrix", config=CONFUSION_CONFIG, rows=BENCH_ROWS, theme="light")
+    z = spec["data"][0]["z"]
+    for column in range(len(BENCH_ROWS["tool"])):
+        assert sum(row[column] for row in z) == pytest.approx(1.0)
+
+
+def test_confusion_matrix_labels_with_raw_counts_not_fractions() -> None:
+    """A fraction alone loses whether 3% is thirty calls or thirty thousand."""
+    spec = build("confusion_matrix", config=CONFUSION_CONFIG, rows=BENCH_ROWS, theme="light")
+    texts = {a["text"] for a in spec["layout"]["annotations"]}
+    assert "48,000" in texts
+
+
+def test_confusion_matrix_pins_the_colour_domain() -> None:
+    spec = build("confusion_matrix", config=CONFUSION_CONFIG, rows=BENCH_ROWS, theme="light")
+    assert (spec["data"][0]["zmin"], spec["data"][0]["zmax"]) == (0, 1)
+
+
+CI_CONFIG = {
+    "label_col": "tool",
+    "value_col": "recall",
+    "lower_col": "recall_lower",
+    "upper_col": "recall_upper",
+    "metric_name": "Recall",
+}
+
+
+def test_metric_ci_bars_puts_the_best_callset_on_top() -> None:
+    spec = build("metric_ci_bars", config=CI_CONFIG, rows=BENCH_ROWS, theme="light")
+    assert spec["data"][0]["y"][-1] == "deepvariant", "highest recall, drawn last = top"
+
+
+def test_metric_ci_bars_scales_the_axis_to_the_data() -> None:
+    """A [0,1] axis renders three near-identical points; the spread is the story."""
+    low, high = build("metric_ci_bars", config=CI_CONFIG, rows=BENCH_ROWS, theme="light")["layout"][
+        "xaxis"
+    ]["range"]
+    assert low > 0.8, "must zoom into the observed range, not anchor at zero"
+    assert high <= 1.0, "and never exceed the metric's domain"
+
+
+def test_metric_ci_bars_emits_asymmetric_error_bars() -> None:
+    spec = build("metric_ci_bars", config=CI_CONFIG, rows=BENCH_ROWS, theme="light")
+    error = spec["data"][0]["error_x"]
+    assert error["symmetric"] is False
+    assert all(v >= 0 for v in error["array"]), "upper offsets are non-negative"
+    assert all(v >= 0 for v in error["arrayminus"]), "lower offsets are non-negative"
+
+
+def test_metric_ci_bars_treats_a_missing_bound_as_no_interval() -> None:
+    """Defaulting a missing bound to zero would draw a whisker to the origin."""
+    rows = {**BENCH_ROWS, "recall_lower": [None, 0.955, 0.905]}
+    spec = build("metric_ci_bars", config=CI_CONFIG, rows=rows, theme="light")
+    by_label = dict(zip(spec["data"][0]["y"], spec["data"][0]["error_x"]["arrayminus"]))
+    assert by_label["deepvariant"] == pytest.approx(0.0)
