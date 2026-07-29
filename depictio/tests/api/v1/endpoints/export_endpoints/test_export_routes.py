@@ -56,6 +56,13 @@ STORED_METADATA = [
     _component("av-volcano", "advanced_viz", viz_kind="volcano", config={}),
     _component("av-phylo", "advanced_viz", viz_kind="phylogenetic", config={}),
     _component("av-sankey", "advanced_viz", viz_kind="sankey", config={}),
+    _component(
+        "filt-habitat",
+        "interactive",
+        interactive_component_type="MultiSelect",
+        column_name="habitat",
+        column_type="object",
+    ),
 ]
 
 DASHBOARD_DOC = {
@@ -161,6 +168,24 @@ class TestManifest:
         response = client.get(f"{API_PREFIX}/dashboards/{DASHBOARD_ID}/components")
         by_id = {entry["component_id"]: entry for entry in response.json()}
         assert by_id["av-volcano"]["viz_kind"] == "volcano"
+
+    def test_describes_interactive_components_as_a_filter_contract(self, client, mongo):
+        """An embedder driving ?filters= otherwise has to guess column names, and
+        a wrong guess filters to zero rows without erroring."""
+        response = client.get(f"{API_PREFIX}/dashboards/{DASHBOARD_ID}/components")
+        by_id = {entry["component_id"]: entry for entry in response.json()}
+        assert by_id["filt-habitat"]["filter"] == {
+            "interactive_component_type": "MultiSelect",
+            "column_name": "habitat",
+            "column_type": "object",
+        }
+        assert "filter" not in by_id["fig-1"], "only interactive components carry one"
+
+    def test_reports_dc_id_so_filters_can_be_matched_to_figures(self, client, mongo):
+        """A filter only applies to components over the same data collection."""
+        response = client.get(f"{API_PREFIX}/dashboards/{DASHBOARD_ID}/components")
+        by_id = {entry["component_id"]: entry for entry in response.json()}
+        assert by_id["filt-habitat"]["dc_id"] == by_id["fig-1"]["dc_id"]
         assert by_id["fig-1"]["viz_kind"] is None
 
 
