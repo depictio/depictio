@@ -438,9 +438,7 @@ async def _open_version_drawer(ctx: ShotContext) -> None:
     # Wait on the drawer *panel*, not the element carrying the test id: Mantine
     # puts `data-testid` on the Drawer root, which stays `visibility: hidden`
     # for the whole transition and never satisfies `state="visible"`.
-    await ctx.page.locator(".mantine-Drawer-content").last.wait_for(
-        state="visible", timeout=15_000
-    )
+    await ctx.page.locator(".mantine-Drawer-content").last.wait_for(state="visible", timeout=15_000)
     # The timeline fetch resolves after the drawer mounts; without this the shot
     # is a drawer with a loader in it.
     await ctx.page.wait_for_timeout(1_600)
@@ -461,9 +459,7 @@ async def _version_row_actions(ctx: ShotContext) -> None:
     # so Restore is disabled there and the shot would document a dead action.
     menus = ctx.page.get_by_test_id("version-actions")
     await menus.nth(1 if await menus.count() > 1 else 0).click()
-    await ctx.page.locator(".mantine-Menu-dropdown").first.wait_for(
-        state="visible", timeout=10_000
-    )
+    await ctx.page.locator(".mantine-Menu-dropdown").first.wait_for(state="visible", timeout=10_000)
     await ctx.page.wait_for_timeout(500)
     await _page_shot_current(ctx, _rb(f"version_row_actions_{ctx.theme}"))
 
@@ -502,7 +498,9 @@ async def _open_component_history(ctx: ShotContext) -> None:
     # A figure, not whatever happens to be first. The first grid item is usually
     # a card, whose history is two numbers side by side — true but uninformative.
     # A chart that changed kind between versions is what the modal is for.
-    item = ctx.page.locator(".react-grid-item").filter(has=ctx.page.locator(".js-plotly-plot")).first
+    item = (
+        ctx.page.locator(".react-grid-item").filter(has=ctx.page.locator(".js-plotly-plot")).first
+    )
     if not await item.count():
         item = ctx.page.locator(".react-grid-item").first
     await item.wait_for(state="visible", timeout=20_000)
@@ -515,9 +513,7 @@ async def _open_component_history(ctx: ShotContext) -> None:
     await ctx.page.get_by_test_id("component-history-action").click()
     # Same Mantine trap as the drawer: `data-testid` sits on the Modal root,
     # which stays `visibility: hidden`. Wait on the content instead.
-    await ctx.page.locator(".mantine-Modal-content").last.wait_for(
-        state="visible", timeout=15_000
-    )
+    await ctx.page.locator(".mantine-Modal-content").last.wait_for(state="visible", timeout=15_000)
     # The modal renders the component at the selected version through the same
     # render endpoint the grid uses, so it needs a real settle.
     await ctx.page.wait_for_timeout(4_000)
