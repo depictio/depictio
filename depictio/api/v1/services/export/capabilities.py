@@ -89,20 +89,22 @@ AV_JSON_SOURCE: dict[str, AvJsonSource] = {
     "complex_heatmap": "celery",
     "upset_plot": "celery",
     "sankey": "celery",
-    # Client-side today. Ported incrementally; see services/advanced_viz/kinds/.
-    "volcano": "client_only",
-    "embedding": "client_only",
-    "manhattan": "client_only",
-    "stacked_taxonomy": "client_only",
+    # Ported to Python; see services/advanced_viz/kinds/. Listed as client_only
+    # only until a builder lands — `_python_builder_kinds()` overrides this table
+    # from the registry, so these entries are documentation rather than a gate.
+    "volcano": "python",
+    "embedding": "python",
+    "manhattan": "python",
+    "stacked_taxonomy": "python",
     "phylogenetic": "client_only",
     "rarefaction": "client_only",
-    "da_barplot": "client_only",
-    "enrichment": "client_only",
-    "ma": "client_only",
+    "da_barplot": "python",
+    "enrichment": "python",
+    "ma": "python",
     "dot_plot": "client_only",
     "lollipop": "client_only",
-    "qq": "client_only",
-    "sunburst": "client_only",
+    "qq": "python",
+    "sunburst": "python",
     "oncoplot": "client_only",
     "coverage_track": "client_only",
 }
