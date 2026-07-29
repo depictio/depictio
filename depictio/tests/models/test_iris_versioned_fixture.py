@@ -146,6 +146,34 @@ def test_dashboards_validate() -> None:
         DashboardDataLite.model_validate(raw)
 
 
+def test_dashboard_validation_is_not_vacuous() -> None:
+    """Every component must resolve to a *typed* Lite model, not the dict arm.
+
+    ``components`` is ``list[LiteComponent | dict[str, Any]]`` and pydantic
+    resolves unions left to right, so a component with a bad field falls through
+    to ``dict`` — which always succeeds. `test_dashboards_validate` would then
+    pass having checked nothing at all.
+
+    This is what makes these fixtures trustworthy as a reference for what a
+    valid dashboard YAML looks like.
+    """
+    from depictio.models.models.dashboards import DashboardDataLite
+
+    for filename in DASHBOARD_ORDER:
+        raw = yaml.safe_load((DASHBOARDS_DIR / filename).read_text())
+        dashboard = DashboardDataLite.model_validate(raw)
+
+        untyped = [
+            component.get("tag", "<untagged>")
+            for component in dashboard.components
+            if isinstance(component, dict)
+        ]
+        assert not untyped, (
+            f"{filename}: {untyped} fell back to the dict union arm, so their "
+            "fields were never validated"
+        )
+
+
 def test_each_dashboard_version_extends_the_last() -> None:
     """Restoring an earlier version must be a visible change.
 
@@ -168,3 +196,27 @@ def test_dashboard_components_bind_to_this_project() -> None:
                 continue
             assert component["data_collection_tag"] == "iris_versioned_table"
             assert component["workflow_tag"] == "python/iris_versioned_workflow"
+
+
+def test_v3_virginica_filter_selects_real_rows(batches) -> None:
+    """The tile that separates data version 1 from 2 must not be empty.
+
+    Model validation only checks `filter_expr` *syntax*. An expression that
+    parses but matches nothing renders a card showing zero — a broken demo that
+    looks like a working one, and precisely the tile whose value is supposed to
+    reveal the recalibration.
+    """
+    from depictio.models.components.filter_expr import apply_filter_expr
+
+    raw = yaml.safe_load((DASHBOARDS_DIR / "v3_recalibrated.yaml").read_text())
+    component = next(c for c in raw["components"] if c["tag"] == "virginica-petal-median")
+
+    selected = apply_filter_expr(batches[BATCH_ORDER[2]], component["filter_expr"])
+
+    assert selected.height == 50, f"expected the 50 Virginica rows, got {selected.height}"
+    assert set(selected["variety"].unique()) == {"Virginica"}
+
+    # And the value it reports must differ from the previous data version, or
+    # the tile cannot do the job it was added for.
+    previous = apply_filter_expr(batches[BATCH_ORDER[1]], component["filter_expr"])
+    assert abs(previous["petal.length"].median() - selected["petal.length"].median()) > 0.3
