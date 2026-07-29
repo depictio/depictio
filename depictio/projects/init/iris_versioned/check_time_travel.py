@@ -1,9 +1,13 @@
 """End-to-end check of dataset time travel + component history on the live stack.
 
-Drives the real HTTP API against the ingested iris_versioned demo, which has
-three Delta commits (100 rows / 150 rows / 150 rows recalibrated) and a real
-dashboard. Everything here is a claim the features make to a user; if any of
-it is wrong the feature is lying, not merely broken.
+Drives the real HTTP API against the ingested iris_versioned demo: four Delta
+commits at 50 / 100 / 100 / 150 rows, and one dashboard whose four named
+versions were each saved while their own batch was the current data. Everything
+here is a claim the features make to a user; if any of it is wrong the feature
+is lying, not merely broken.
+
+Set the demo up with ``rebuild_demo.py``, which produces exactly that state and
+refuses to finish if it did not.
 """
 
 import os
@@ -125,6 +129,32 @@ live_now = requests.post(
     timeout=60,
 ).json()["values"][CARD]
 check("count as of newest version", res["values"][CARD], live_now)
+
+# The real test of `as_of_version` is an *old* version, not the one just
+# written. Each named demo version was saved while its own batch was the
+# current data, so v1 Survey stamped commit 0 and asking for it must produce
+# batch 1's 50 rows — not today's 150. Checking only the newest version passes
+# whether the stamps are honoured or ignored, because "as of now" and "now" are
+# the same read.
+named = {
+    v["label"]: v for v in versions["versions"] if v.get("label") and v["label"].startswith("v")
+}
+for label, want in (("v1 Survey", 50), ("v2 Extended", 100), ("v4 Complete", 150)):
+    stored = named.get(label)
+    if stored is None:
+        check(f"as of {label!r}", "missing version", want)
+        continue
+    res = requests.post(
+        f"{API}/dashboards/bulk_compute_cards/{DASH}",
+        headers=H,
+        json={
+            "filters": [],
+            "component_ids": [CARD],
+            "as_of_version": stored["version_id"],
+        },
+        timeout=60,
+    ).json()
+    check(f"count as of stored {label!r}", res["values"][CARD], want)
 
 print("\n4. Equal row counts, different values — a version-blind cache would pass on rows alone")
 # v1 and v2 both hold 100 rows and the same two varieties. Only Setosa's

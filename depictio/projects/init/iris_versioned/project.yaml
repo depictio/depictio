@@ -4,14 +4,14 @@
 # static CSV, which makes it useless for demonstrating versioning: there is
 # only ever one state to look at.
 #
-# Here the data arrives as three batches under `data/`, each picked up as its
+# Here the data arrives as four batches under `data/`, each picked up as its
 # own `depictio_run_id` by the `sequencing-runs` scanner. Ingesting them one at
-# a time produces three Delta versions whose content genuinely differs — see
+# a time produces four Delta versions whose content genuinely differs — see
 # README.md for the sequence and what each version holds.
 #
 # `sequencing-runs` rather than `flat` is what makes this work: it gives each
 # batch directory a run tag, which is what `--write-mode replace-runs`
-# partitions on. With `flat` all three CSVs would be scanned as one collection
+# partitions on. With `flat` all four CSVs would be scanned as one collection
 # and there would be nothing to version.
 #
 # Fixed ids so the seeds, the dashboards and the README can all refer to the
@@ -25,7 +25,7 @@ workflows:
     name: "iris_versioned_workflow"
     engine:
       name: "python"
-    description: "Three-batch iris survey: initial, extended, recalibrated."
+    description: "Four-batch iris survey: 50 / 100 / 100 recalibrated / 150 rows."
     data_location:
       structure: "sequencing-runs"
       locations:
@@ -36,7 +36,7 @@ workflows:
     data_collections:
       - id: "646b0f3c1e4a2d7f8e5b9003"
         data_collection_tag: "iris_versioned_table"
-        description: "Iris measurements, ingested in three batches"
+        description: "Iris measurements, ingested in four batches"
         config:
           type: "Table"
           metatype: "Metadata"
@@ -52,7 +52,7 @@ workflows:
             columns_description:
               "sepal.length": "Length of the sepal in cm"
               "sepal.width": "Width of the sepal in cm"
-              "petal.length": "Length of the petal in cm (recalibrated for Virginica in batch 3)"
+              "petal.length": "Length of the petal in cm (Setosa recalibrated in batch 3)"
               "petal.width": "Width of the petal in cm"
               "variety": "Species of the iris flower"
               "depictio_run_id": "Ingestion batch this row arrived in"

@@ -48,56 +48,90 @@ python depictio/projects/init/iris_versioned/generate_batches.py
 
 ## Setting it up
 
-There is no flag to ingest a single batch: `depictio run` scans everything the
-project's `locations` point at. So the batches live in `batches/` and
-`stage_batch.sh` swaps one at a time into `data/`. Each batch file is already
-the complete state of the survey at that point, so exactly one is staged at a
-time — side by side, the scanner would read the same flowers four times over.
-
-Run the CLI wherever the paths in `project.yaml` resolve. They are container
-paths (`/app/depictio/...`), so in a docker deployment that means inside the
-backend container:
+One command, run wherever the paths in `project.yaml` resolve. They are
+container paths (`/app/depictio/...`), so in a docker deployment that means
+inside the backend container:
 
 ```bash
-cd depictio/projects/init/iris_versioned
-CFG=/app/depictio/.depictio/admin_config.yaml
-PROJ=/app/depictio/projects/init/iris_versioned
-
-# 1. Register the project (once).
-depictio config sync --CLI-config-path $CFG --project-config-path $PROJ/project.yaml
-
-# 2. Stage and ingest each batch in turn. Each run writes a new Delta commit,
-#    so this produces four data versions.
-#
-#    --overwrite is required from the second run onward: the S3 destination
-#    already exists, and the CLI refuses to replace it silently.
-./stage_batch.sh 1
-depictio run --CLI-config-path $CFG --project-config-path $PROJ/project.yaml --skip-sync
-
-./stage_batch.sh 2
-depictio run --CLI-config-path $CFG --project-config-path $PROJ/project.yaml --skip-sync --overwrite
-
-./stage_batch.sh 3
-depictio run --CLI-config-path $CFG --project-config-path $PROJ/project.yaml --skip-sync --overwrite
-
-./stage_batch.sh 4
-depictio run --CLI-config-path $CFG --project-config-path $PROJ/project.yaml --skip-sync --overwrite
-
-# 3. Import the first dashboard. Note: `--config`, not `--CLI-config-path`.
-depictio dashboard import $PROJ/dashboards/v1_survey.yaml --config $CFG
+docker compose exec depictio-backend \
+    python /app/depictio/projects/init/iris_versioned/rebuild_demo.py
 ```
 
-`--skip-sync` after the first `config sync`, because `run` re-syncs by default
-and refuses when the project already exists.
+That tears down any previous copy of the demo and rebuilds all three moving
+parts, then asserts the result matches what this README describes and fails
+loudly if it does not. `--verify` checks an existing setup without touching it.
 
-The default `overwrite` write mode is deliberate here, rather than
-`replace-runs`. Only one run is ever staged, so `replace-runs` would decline to
-partition at all ("only one run in this data collection") — and its purpose is
-to leave *other* runs' files untouched, which in this layout would keep the
-previous batch's rows alive alongside the new one. Delta writes a new commit
-either way, so the history is identical.
+### Why a script rather than a list of commands
 
-Check the Delta history on the project page, or:
+This README used to say: run `depictio run` four times, then import v1 and edit
+it into v2/v3/v4 in the editor. That is a fine way to *demonstrate* the feature
+and a poor way to *build* the fixture. It cannot be repeated, cannot be
+verified, and a stray autosave in the middle leaves anonymous versions
+interleaved with the named ones.
+
+Worse, hand-setup makes it easy to get the ordering wrong in a way nothing
+catches. The batches must be ingested **interleaved** with the dashboard saves:
+
+```
+batch 1 -> save "v1 Survey"   -> stamps delta 0   (50 rows)
+batch 2 -> save "v2 Extended" -> stamps delta 1   (100 rows)
+batch 3 -> save "v3 Recalib." -> stamps delta 2   (100 recalibrated)
+batch 4 -> save "v4 Complete" -> stamps delta 3   (150 rows)
+```
+
+A dashboard version stamps the Delta commit of each collection it referenced
+**at the moment it was saved**. Ingest everything first and then save the four
+dashboards, and all four versions stamp commit 3 — the labels are right, the
+component counts are right, the stamps exist and say `delta`, and "restore v1's
+data" quietly shows the complete survey. The script asserts the stamps are
+strictly ascending, which is the one check that separates a working demo from
+one that merely looks like it.
+
+### What the script does
+
+1. Deletes the existing project (cascading to its Delta table) and dashboards.
+   The version ledger is keyed on the dashboard family and survives an
+   overwrite, so reusing an id would append to old history.
+2. `depictio config sync` to register the project.
+3. For each batch: `stage_batch.sh N`, then `depictio run`, then write the
+   matching dashboard YAML, then `POST /dashboards/save` and
+   `POST /{id}/versions` to name the state. Those last two are exactly what the
+   editor calls, so the ledger, the stamps and the coalescing all behave as
+   they would for a user with a mouse.
+4. Verifies: row progression, that Setosa's mean moved across the flat step,
+   the four labels in order, component counts `[5, 8, 8, 9]`, and ascending
+   Delta stamps.
+
+`stage_batch.sh` exists because there is no flag to ingest a single batch --
+`depictio run` scans everything the project's `locations` point at. Each batch
+file is the complete state of the survey at that point, so exactly one is
+staged at a time; side by side, the scanner would read the same flowers four
+times over.
+
+The default `overwrite` write mode is deliberate, rather than `replace-runs`.
+Only one run is ever staged, so `replace-runs` would decline to partition at
+all ("only one run in this data collection") -- and its purpose is to leave
+*other* runs' files untouched, which here would keep the previous batch's rows
+alive alongside the new one. Delta writes a new commit either way, so the
+history is identical.
+
+### Doing it by hand
+
+Still useful if you want to *watch* the versions accumulate. Run the CLI steps
+from the script one at a time, and after each `depictio run` open the editor,
+apply the next YAML's changes, and use **Settings -> Version history -> Bookmark
+this state -> Name it**. Keep the interleaving: ingest batch N before saving
+version N, or every version will stamp the newest commit.
+
+Note that `dashboard import` writes the document directly and does **not**
+record a version -- the ledger is fed by `POST /dashboards/save`, which is what
+the editor calls. So the timeline is empty until the first edit, and that first
+save seeds a `Before first tracked change` baseline holding the as-imported
+state. That baseline is what makes the imported layout restorable at all.
+
+### Checking the data
+
+On the project page, or:
 
 ```bash
 depictio data versions iris_versioned_table \
@@ -115,21 +149,18 @@ Four commits, at 50 / 100 / 100 / 150 rows:
 ```
 
 Versions 1 and 2 are the pair worth remembering: identical row counts, and the
-only difference is Setosa's re-measured petal lengths (mean 1.46 → 2.07).
+only difference is Setosa's re-measured petal lengths (mean 1.46 -> 2.07).
 
 ## The dashboard versions
 
-Import `v1_survey.yaml`, then **edit it into v2, v3 and v4 in the editor**
-rather than importing all four. Four imports create four unrelated dashboards;
-editing one creates one dashboard with four versions in its history, which is
-the thing being demonstrated.
+One dashboard, four versions in its history:
 
-| version | components | what changed |
-|---|---|---|
-| v1 Survey | 5 | baseline: counts, variety filter, petal **histogram** |
-| v2 Extended | 8 | histogram → **box plot**; "Mean Petal Length" card **retyped** to "Varieties Surveyed"; adds scatter + range filter |
-| v3 Recalibrated | 8 | scatter **removed**, replaced by a per-variety mean bar; adds a mean-petal card |
-| v4 Complete | 9 | range filter **removed**; bar → scatter again; adds a longest-petal card and a run table |
+| version | components | stamps | what changed |
+|---|---|---|---|
+| v1 Survey | 5 | delta 0 | baseline: counts, variety filter, petal **histogram** |
+| v2 Extended | 8 | delta 1 | histogram -> **box plot**; "Mean Petal Length" card **retyped** to "Varieties Surveyed"; adds scatter + range filter |
+| v3 Recalibrated | 8 | delta 2 | scatter **removed**, replaced by a per-variety mean bar; adds a mean-petal card |
+| v4 Complete | 9 | delta 3 | range filter **removed**; bar -> scatter again; adds a longest-petal card and a run table |
 
 Deliberately **not** a chain of supersets. A version diff that only appends is
 the easy half: it never exercises removal, never changes what an existing
@@ -137,20 +168,8 @@ component means, and lets a component-history modal look right while only
 pinning data. Here the same component id is a histogram in v1 and a box plot
 afterwards, and the card at `petal-mean` asks a different question in v1 (mean
 petal length, in cm) than in v2 onward (how many varieties). Open that card's
-history and the two are plainly different measurements — which is only true
+history and the two are plainly different measurements -- which is only true
 because the modal pins each version's *definition*, not just its data.
-
-To build the history: import v1, then open the editor and edit it into each
-later version in turn (the YAML files are the reference for what each holds).
-Use **Settings → Version history → Bookmark this state → Name it** at each step,
-so the timeline reads `v1 Survey` / `v2 Extended` / `v3 Recalibrated` /
-`v4 Complete` rather than four anonymous autosaves.
-
-Note that `dashboard import` writes the document directly and does **not**
-record a version — the ledger is fed by `POST /dashboards/save`, which is what
-the editor calls. So the timeline is empty until the first edit, and that first
-save seeds a `Before first tracked change` baseline holding the as-imported
-state. That baseline is what makes the imported layout restorable at all.
 
 ## What this demonstrates
 
@@ -181,11 +200,17 @@ uv run python depictio/projects/init/iris_versioned/check_time_travel.py
 ```
 
 It discovers the dashboard, its collection and a card from the running
-instance, then drives the real HTTP API: stamps record `delta_version=2`, the
-card reads 100/150/150 rows across the three commits, mean petal length differs
-between the two 150-row commits, a live read afterwards is still current (no
-cache poisoning), and the boundaries hold (a `dc_id` override is ignored, a
-stale `as_of_version` is a 400, a malformed override degrades to a 200).
+instance, then drives the real HTTP API:
+
+* a save writes a version whose stamps record a real Delta commit;
+* the card reads 50 / 100 / 100 / 150 across the four commits;
+* `as_of_version` on the **stored** `v1 Survey` returns 50 rows, not today's
+  150 — checking only the newest version would pass whether the stamps are
+  honoured or ignored, since "as of now" and "now" are the same read;
+* mean petal length differs between the two 100-row commits;
+* a live read afterwards is still current (no cache poisoning);
+* the boundaries hold: a `dc_id` override is ignored, a stale `as_of_version`
+  is a 400, a malformed override degrades to a 200.
 
 Override the defaults with `DEPICTIO_API`, `DEPICTIO_CLI_CONFIG` and
 `DASHBOARD_TITLE`.
