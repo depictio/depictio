@@ -197,11 +197,25 @@ async def list_exportable_components(
             "component_id": str(component.get("index")),
             "component_type": component_type,
             "viz_kind": viz_kind,
+            "dc_id": str(component.get("dc_id")) if component.get("dc_id") else None,
             "title": component.get("title") or "",
             "formats": sorted(f.value for f in supported),
         }
         if ExportFormat.JSON not in supported:
             entry["json_unavailable_reason"] = unsupported_reason(component_type, viz_kind)
+
+        # An interactive component IS the filter contract for its data
+        # collection: the dashboard's own control, described well enough that a
+        # consumer can drive `?filters=` from it instead of reverse-engineering
+        # column names. Without this an embedder has to guess, and a guess that
+        # names a column wrong filters to zero rows silently.
+        if component_type == "interactive":
+            entry["filter"] = {
+                "interactive_component_type": component.get("interactive_component_type"),
+                "column_name": component.get("column_name"),
+                "column_type": component.get("column_type"),
+            }
+
         manifest.append(entry)
     return manifest
 
