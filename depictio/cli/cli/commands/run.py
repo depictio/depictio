@@ -9,10 +9,16 @@ from depictio.cli.cli.utils.api_calls import (
     api_login,
     api_monitoring_ingestion_finish,
     api_monitoring_ingestion_start,
+    api_monitoring_ingestion_step,
     api_provision_user,
     api_sync_project_config_to_server,
 )
-from depictio.cli.cli.utils.common import generate_api_headers, load_depictio_config
+from depictio.cli.cli.utils.common import (
+    cli_version,
+    generate_api_headers,
+    get_http_client,
+    load_depictio_config,
+)
 from depictio.cli.cli.utils.config import validate_project_config_and_check_S3_storage
 from depictio.cli.cli.utils.helpers import process_project_helper
 from depictio.cli.cli.utils.rich_utils import (
@@ -21,94 +27,18 @@ from depictio.cli.cli.utils.rich_utils import (
     rich_print_section_separator,
 )
 from depictio.cli.cli.utils.scan import scan_project_files
+from depictio.cli.cli.utils.step_reporter import (
+    StepReporter,
+    ingestion_data_collections,
+    redacted_command_line,
+)
 from depictio.cli.cli_logging import logger
 from depictio.models.s3_utils import S3_storage_checks
 from depictio.models.utils import convert_model_to_dict
 
-
-def _cli_version() -> str | None:
-    """Installed depictio-cli version, or ``None`` if it can't be determined.
-
-    Best-effort metadata for the monitoring ledger — never raises.
-    """
-    try:
-        from importlib.metadata import PackageNotFoundError
-        from importlib.metadata import version as _pkg_version
-
-        try:
-            return _pkg_version("depictio-cli")
-        except PackageNotFoundError:
-            return "dev"
-    except Exception:
-        return None
-
-
-# CLI options whose *value* is a secret and must never reach the monitoring ledger.
-_SENSITIVE_OPTS = {"--provisioning-key"}
-
-
-def _redacted_command_line() -> str | None:
-    """Best-effort reconstruction of the CLI invocation with secrets redacted.
-
-    Renders as ``depictio-cli <args…>`` (argv[0] normalized to the entrypoint
-    name) and masks the value of any sensitive option. Never raises.
-    """
-    try:
-        import sys
-
-        out = ["depictio-cli"]
-        redact_next = False
-        for arg in sys.argv[1:]:
-            if redact_next:
-                out.append("***")
-                redact_next = False
-                continue
-            key = arg.split("=", 1)[0]
-            if key in _SENSITIVE_OPTS:
-                out.append(f"{key}=***" if "=" in arg else arg)
-                redact_next = "=" not in arg
-                continue
-            out.append(arg)
-        return " ".join(out)
-    except Exception:
-        return None
-
-
-def _ingestion_data_collections(project_config) -> list[dict]:
-    """Per-DC summary (tag / type / format) + the local scan paths the CLI
-    resolved, walked from the validated project config. Best-effort; never raises."""
-    out: list[dict] = []
-    try:
-        for wf in getattr(project_config, "workflows", None) or []:
-            dl = getattr(wf, "data_location", None)
-            locations = [str(x) for x in (getattr(dl, "locations", None) or [])] if dl else []
-            for dc in getattr(wf, "data_collections", None) or []:
-                cfg = getattr(dc, "config", None)
-                scan = getattr(cfg, "scan", None) if cfg else None
-                mode = getattr(scan, "mode", None) if scan else None
-                params = getattr(scan, "scan_parameters", None) if scan else None
-                if mode == "single":
-                    pattern = getattr(params, "filename", None)
-                elif mode == "recursive":
-                    rc = getattr(params, "regex_config", None)
-                    pattern = getattr(rc, "pattern", None) if rc else None
-                else:
-                    pattern = None
-                dcsp = getattr(cfg, "dc_specific_properties", None) if cfg else None
-                out.append(
-                    {
-                        "tag": getattr(dc, "data_collection_tag", None) or "",
-                        "type": getattr(cfg, "type", None) if cfg else None,
-                        "format": getattr(dcsp, "format", None) if dcsp else None,
-                        "scan_mode": mode,
-                        "scan_pattern": pattern,
-                        "locations": locations,
-                        "file_count": None,
-                    }
-                )
-    except Exception:
-        return out
-    return out
+#: Moved to cli.utils.common so the Delta commit-metadata builder can stamp the
+#: same value without importing from a command module.
+_cli_version = cli_version
 
 
 def _write_provisioned_cli_config(base_raw_config: dict, provision: dict) -> str:
@@ -278,6 +208,39 @@ def register_run_command(app: typer.Typer):
         sync_files: bool = typer.Option(
             False, "--sync-files", help="Update files for the data collection"
         ),
+        sync_changed: bool = typer.Option(
+            False,
+            "--sync-changed",
+            help=(
+                "Re-upload only files whose metadata hash moved since the last scan. "
+                "Narrower than --sync-files, which re-uploads every registered file."
+            ),
+        ),
+        legacy_scan_depth: bool = typer.Option(
+            False,
+            "--legacy-scan-depth",
+            help=(
+                "Ignore each data collection's scan max_depth/ignore, as releases before "
+                "1.2.2 did. Deprecated escape hatch; will be removed."
+            ),
+        ),
+        state_cache: bool = typer.Option(
+            True,
+            "--state-cache/--no-state-cache",
+            help=(
+                "Use the local scan-state cache to skip runs whose file tree is unchanged "
+                "since the last successful scan. Only applies when rescanning."
+            ),
+        ),
+        concurrency: int = typer.Option(
+            4,
+            "--concurrency",
+            "-c",
+            help="Parallel HTTP requests for file uploads and cleanup deletes",
+        ),
+        upload_chunk_size: int = typer.Option(
+            1000, "--upload-chunk-size", help="Files per /files/upsert_batch request"
+        ),
         rich_tables: bool = typer.Option(
             False,
             "--rich-tables",
@@ -287,10 +250,56 @@ def register_run_command(app: typer.Typer):
         overwrite: bool = typer.Option(
             False, "--overwrite", help="Overwrite the workflow if it already exists"
         ),
+        write_mode: str = typer.Option(
+            "overwrite",
+            "--write-mode",
+            help=(
+                "overwrite: rewrite the whole table (historical behaviour). "
+                "replace-runs: partition by run and rewrite only the runs present in "
+                "this batch, leaving the others untouched."
+            ),
+        ),
+        incremental_write: bool = typer.Option(
+            False,
+            "--incremental-write",
+            help=(
+                "With --write-mode replace-runs, rewrite only the runs that changed instead of "
+                "rebuilding the whole table. Falls back to a full rebuild whenever that cannot "
+                "be done safely (run removed, table not partitioned by run, column type changed)."
+            ),
+        ),
+        skip_unchanged: bool = typer.Option(
+            False,
+            "--skip-unchanged",
+            help=(
+                "Leave a data collection's Delta table untouched when the scan found no new, "
+                "changed or removed file for it. Off by default so that re-running is always "
+                "a way to rebuild a project that drifted."
+            ),
+        ),
         preview_recipes: bool = typer.Option(
             False,
             "--preview-recipes",
             help="Show recipe input sources and transformed output before writing to Delta Lake",
+        ),
+        repartition: bool = typer.Option(
+            False,
+            "--repartition",
+            help=(
+                "Allow --write-mode replace-runs to adopt run partitioning on a table "
+                "that does not have it yet. This rewrites every row, so it is never "
+                "done implicitly — and never by the watcher."
+            ),
+        ),
+        async_upsert: bool = typer.Option(
+            False,
+            "--async-upsert",
+            help=(
+                "Ask the server to profile the written table in the background and poll "
+                "until it finishes, instead of holding one long HTTP request open. "
+                "Ignored by servers without offloading enabled — the upsert then just "
+                "completes inline as before."
+            ),
         ),
         # General options
         continue_on_error: bool = typer.Option(
@@ -324,6 +333,14 @@ def register_run_command(app: typer.Typer):
         """
         rich_print_command_usage("run")
 
+        # Size the shared connection pool before the first request: it is created
+        # lazily and honours this only on the first call.
+        get_http_client(concurrency=concurrency)
+
+        if write_mode not in ("overwrite", "replace-runs"):
+            rich_print_checked_statement(f"Invalid --write-mode '{write_mode}'", "error")
+            raise typer.Exit(code=1)
+
         # Validate template/project-config-path mutual exclusivity
         if template and project_config_path:
             rich_print_checked_statement(
@@ -342,7 +359,9 @@ def register_run_command(app: typer.Typer):
                 "DRY RUN MODE - No actual operations will be performed", "info"
             )
 
-        if sync_files or overwrite:
+        # Any re-upload flag needs every run walked again; without this, runs
+        # already registered are skipped before a single file is looked at.
+        if sync_files or sync_changed or overwrite:
             rescan_folders = True
 
         if user and not provisioning_key:
@@ -363,20 +382,37 @@ def register_run_command(app: typer.Typer):
 
         success_count = 0
         total_steps = 8 if is_template_mode else 7
+        # What the scan found, handed to the process step. Empty when the scan
+        # was skipped, which correctly reads as "no information" downstream.
+        scan_signal: dict = {}
 
         # Server-side monitoring record for this ingestion run (best-effort).
         ingestion_run_id: str | None = None
-        # Per-phase step ledger sent to the monitoring endpoint at finish. Populated
-        # by ``_rec`` from the very start so successful phases that ran before the
-        # record is opened (server/S3/validate) are still reported. Best-effort:
-        # recording must never affect the ingestion itself.
-        run_steps: list[dict] = []
+        # Per-phase step ledger. Populated by ``_rec`` from the very start so
+        # successful phases that ran before the record is opened (server / S3 /
+        # validate) are still reported, and mirrored to the server as the run
+        # proceeds once a run_id exists. The local list stays authoritative and
+        # is sent in full at finish, so a run whose live updates were all
+        # dropped still reports a complete history.
+        #
+        # Rebound to a live reporter right after the record is opened; until
+        # then it only accumulates.
+        reporter = StepReporter(send=lambda *_: True, run_id=None, enabled=False)
         # Server-side project id, resolved once available (post-sync); patched onto
         # the monitoring record at finish.
         resolved_project_id: str | None = None
 
-        def _rec(name: str, status: str, detail: str | None = None) -> None:
-            run_steps.append({"name": name, "status": status, "detail": detail})
+        def _rec(name: str, status: str, detail: str | None = None, **extra) -> None:
+            reporter.record(name, status, detail, **extra)
+
+        def _rec_start(name: str, detail: str | None = None, **extra) -> None:
+            """Announce a phase as it begins.
+
+            This is what makes the monitoring UI show anything *during* a run
+            rather than only after it: without a `running` record, a long scan
+            or process phase is indistinguishable from a hung CLI.
+            """
+            reporter.start(name, detail, **extra)
 
         # Step 0a (provisioning only): create-or-get the user and switch the run
         # to act as them by pointing CLI_config_path at a temporary per-user
@@ -583,13 +619,30 @@ def register_run_command(app: typer.Typer):
                     command="run",
                     project_name=getattr(_proj, "name", None),
                     cli_version=_cli_version(),
-                    command_line=_redacted_command_line(),
+                    command_line=redacted_command_line(),
                     cli_config_path=str(CLI_config_path) if CLI_config_path else None,
                     project_config_path=str(project_config_path) or None,
                     data_root=str(data_root) if data_root else None,
+                    # `depictio run` is by definition a person typing a command.
+                    # The watcher opens its own record with trigger="watch".
+                    trigger="manual",
                 )
             except Exception:
                 ingestion_run_id = None
+
+            # Switch the reporter to live mode, carrying over the steps already
+            # recorded before the record existed, so the server sees the whole
+            # run rather than only the phases after this point.
+            if ingestion_run_id:
+                previous = reporter.steps
+                reporter = StepReporter(
+                    send=lambda run_id, step, current: api_monitoring_ingestion_step(
+                        CLI_config, run_id, step, current
+                    ),
+                    run_id=ingestion_run_id,
+                    enabled=True,
+                )
+                reporter.replay(previous)
 
         # Step 4: Sync project configuration to server
         if not skip_sync:
@@ -684,6 +737,7 @@ def register_run_command(app: typer.Typer):
         # Step 5: Scan data files
         if not skip_scan:
             rich_print_section_separator(f"Step 5/{total_steps}: Scanning data files")
+            _rec_start("scan")
             try:
                 if not dry_run:
                     # Get remote project configuration to compare hashes
@@ -706,6 +760,12 @@ def register_run_command(app: typer.Typer):
                             command_parameters = {
                                 "rescan_folders": rescan_folders,
                                 "sync_files": sync_files,
+                                "sync_changed": sync_changed,
+                                "legacy_scan_depth": legacy_scan_depth,
+                                "dry_run": dry_run,
+                                "state_cache": state_cache,
+                                "concurrency": concurrency,
+                                "upload_chunk_size": upload_chunk_size,
                                 "rich_tables": rich_tables,
                             }
 
@@ -720,6 +780,11 @@ def register_run_command(app: typer.Typer):
 
                             if result["result"] != "success":
                                 raise Exception("Data scanning failed")
+
+                            # Which collections and runs moved. The process step
+                            # below uses it to scope writes, and — only when
+                            # asked — to leave untouched collections alone.
+                            scan_signal = result
 
                         else:
                             raise Exception("Local and remote project configurations do not match")
@@ -742,6 +807,7 @@ def register_run_command(app: typer.Typer):
         # Step 6: Process data collections
         if not skip_process:
             rich_print_section_separator(f"Step 6/{total_steps}: Processing data collections")
+            _rec_start("process")
             try:
                 if not dry_run:
                     # Get remote project configuration again for processing
@@ -757,8 +823,20 @@ def register_run_command(app: typer.Typer):
                         if local_hash == remote_hash:
                             command_parameters = {
                                 "overwrite": overwrite,
+                                "write_mode": write_mode,
                                 "rich_tables": rich_tables,
                                 "preview_recipes": preview_recipes,
+                                "project_id": str(project_config.id),
+                                "ingestion_run_id": ingestion_run_id,
+                                "trigger": "cli",
+                                "async_upsert": async_upsert,
+                                "repartition": repartition,
+                                "scan_signal": scan_signal,
+                                "incremental_write": incremental_write,
+                                # Off by default: an explicit `depictio run` is
+                                # how someone rebuilds a project that drifted,
+                                # so it must not quietly decide to do nothing.
+                                "skip_unchanged": skip_unchanged,
                             }
 
                             process_result = process_project_helper(
@@ -805,6 +883,7 @@ def register_run_command(app: typer.Typer):
         # Step 7: Execute table joins
         if not skip_join:
             rich_print_section_separator(f"Step 7/{total_steps}: Executing table joins")
+            _rec_start("joins")
             try:
                 if not dry_run:
                     # Check if project has joins defined
@@ -973,16 +1052,20 @@ def register_run_command(app: typer.Typer):
         # Close the monitoring ingestion record (best-effort).
         if ingestion_run_id:
             final_status = "success" if success_count == total_steps else "partial"
-            # Send the per-phase step ledger recorded by ``_rec`` throughout the run.
-            # The overall status rides on ``status`` (shown as the header badge in
+            # Stop the background reporter first, with a short bounded wait: the
+            # complete ledger goes out below regardless, so blocking the user's
+            # command to re-send what the next call already carries is pointless.
+            reporter.close(timeout=2.0)
+            # Send the per-phase step ledger recorded throughout the run. The
+            # overall status rides on ``status`` (shown as the header badge in
             # the admin UI), so no separate summary row is needed.
             api_monitoring_ingestion_finish(
                 CLI_config=CLI_config,
                 run_id=ingestion_run_id,
                 status=final_status,
-                steps=run_steps,
+                steps=reporter.steps,
                 project_id=resolved_project_id,
-                data_collections=_ingestion_data_collections(locals().get("project_config")),
+                data_collections=ingestion_data_collections(locals().get("project_config")),
             )
 
         # A run that did not complete every step is a failure for automation

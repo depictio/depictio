@@ -102,6 +102,50 @@ async def status():
     return {"status": "online", "version": get_version()}
 
 
+@utils_endpoint_router.get("/capabilities")
+async def capabilities(current_user=Depends(get_current_user)):
+    """
+    What this server supports, so a client can adapt instead of guessing.
+
+    Feature strings are emitted only when the corresponding capability is
+    actually usable, so this reflects runtime configuration rather than build
+    version. Clients treat a 404 as "empty feature set" — which is exactly what
+    a server predating this endpoint returns — and read ``limits`` to size their
+    requests rather than discovering a ceiling by being rejected.
+
+    Authenticated rather than public: the limits and feature set are
+    operational detail, and /status already covers liveness.
+    """
+    from depictio.api.v1.endpoints.files_endpoints.routes import MAX_FILES_PER_BATCH
+
+    features = [
+        "files.delete_batch",
+        "runs.delete_batch",
+        "deltatables.history",
+        "deltatables.provenance",
+        "deltatables.preview_time_travel",
+    ]
+    # Runtime state, not build state: advertised only when the flag is actually
+    # on, so a client can trust the list instead of inferring capability from a
+    # version number.
+    if settings.jobs.enabled:
+        features.append("jobs")
+        if settings.ingestion.async_deltatable_upsert:
+            features.append("deltatables.async_upsert")
+        # Needs somewhere to record the job, so it is only usable with jobs on.
+        if settings.ingestion.browser_trigger:
+            features.append("ingestion.browser_trigger")
+
+    return {
+        "api_version": get_version(),
+        "features": features,
+        "limits": {
+            "max_files_per_batch": MAX_FILES_PER_BATCH,
+            "max_ids_per_delete_batch": settings.ingestion.max_ids_per_delete_batch,
+        },
+    }
+
+
 @utils_endpoint_router.get("/health/initialization")
 async def check_initialization_health():
     """Check if initialization completed successfully including data registration."""

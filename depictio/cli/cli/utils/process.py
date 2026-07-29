@@ -44,6 +44,7 @@ def process_project_data_collections(
     total_processed = 0
     failed_tags: list[str] = []
     skipped_optional: list[str] = []
+    skipped_unchanged: list[str] = []
 
     for workflow in workflows_to_process:
         rich_print_checked_statement(
@@ -82,7 +83,12 @@ def process_project_data_collections(
                     command_parameters=command_parameters,
                 )
 
-                if result["success"]:
+                if result["success"] and (result.get("data") or {}).get("skipped"):
+                    # Counted apart from processed collections: "12 processed"
+                    # when 11 were left untouched would be a lie, and the whole
+                    # point of the skip is that it is visible.
+                    skipped_unchanged.append(dc.data_collection_tag)
+                elif result["success"]:
                     rich_print_checked_statement(
                         f"  ✓ Data collection [italic]'{dc.data_collection_tag}'[/italic] processed successfully. {result['data']['message']}",
                         "success",
@@ -125,11 +131,12 @@ def process_project_data_collections(
             f"Workflow {workflow.workflow_tag} processing completed", "success"
         )
 
-    skipped_note = (
-        f" ({len(skipped_optional)} optional skipped: {', '.join(skipped_optional)})"
-        if skipped_optional
-        else ""
-    )
+    notes = []
+    if skipped_optional:
+        notes.append(f"{len(skipped_optional)} optional skipped: {', '.join(skipped_optional)}")
+    if skipped_unchanged:
+        notes.append(f"{len(skipped_unchanged)} unchanged: {', '.join(skipped_unchanged)}")
+    skipped_note = f" ({'; '.join(notes)})" if notes else ""
     if failed_tags:
         rich_print_checked_statement(
             f"Processing completed with failures: {total_processed} processed, "
@@ -149,6 +156,7 @@ def process_project_data_collections(
         "total_failed": len(failed_tags),
         "failed_tags": failed_tags,
         "skipped_optional": skipped_optional,
+        "skipped_unchanged": skipped_unchanged,
     }
 
 

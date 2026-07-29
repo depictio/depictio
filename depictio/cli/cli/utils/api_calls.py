@@ -1,6 +1,8 @@
 import io
 import json
 import zipfile
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import httpx
 import typer
@@ -11,6 +13,7 @@ from depictio.cli.cli.utils.common import (
     get_http_client,
     load_depictio_config,
 )
+from depictio.cli.cli.utils.http_retry import request_with_retry
 from depictio.cli.cli.utils.rich_utils import rich_print_checked_statement
 from depictio.cli.cli_logging import logger
 from depictio.models.models.base import BaseModel, PyObjectId
@@ -314,11 +317,15 @@ def api_create_files(
 
     logger.debug(f"Payload: {payload}")
 
-    response = get_http_client().post(
+    # Safe to retry: /files/upsert_batch is a true upsert keyed on file_location,
+    # so a replayed batch converges to the same registry state.
+    response = request_with_retry(
+        "POST",
         url,
         json=payload,
         headers=generate_api_headers(CLI_config),
         timeout=120.0,  # 2 minutes timeout for file batch operations
+        idempotent=True,
     )
     return response
 
@@ -339,12 +346,182 @@ def api_get_files_by_dc_id(dc_id: str, CLI_config: CLIConfig) -> httpx.Response:
     logger.debug(f"CLI Config: {CLI_config}")
     logger.info(f"{CLI_config.api_base_url}/depictio/api/v1/files/list/{dc_id}")
     logger.info(generate_api_headers(CLI_config))
-    response = get_http_client().get(
+    response = request_with_retry(
+        "GET",
         f"{CLI_config.api_base_url}/depictio/api/v1/files/list/{dc_id}",
         headers=generate_api_headers(CLI_config),
         timeout=60.0,  # Increase timeout to 60 seconds
+        idempotent=True,
     )
     return response
+
+
+def api_create_files_chunked(
+    files: list[File],
+    CLI_config: CLIConfig,
+    *,
+    update: bool = False,
+    chunk_size: int = 1000,
+    concurrency: int = 4,
+) -> list[httpx.Response]:
+    """Register files in bounded, concurrent batches.
+
+    The single unbounded POST this replaces sent every file of a data collection
+    in one JSON body against a 120 s timeout — a live failure mode on large
+    runs, not a theoretical one. ``/files/upsert_batch`` keys on
+    ``file_location``, so chunks are order-independent and each one is
+    individually retryable.
+
+    Returns every response so the caller can inspect failures; it does not
+    raise on a non-2xx, matching ``api_create_files``.
+    """
+    if not files:
+        return []
+
+    chunks = [files[i : i + chunk_size] for i in range(0, len(files), chunk_size)]
+    if len(chunks) == 1 or concurrency <= 1:
+        return [
+            api_create_files(files=chunk, CLI_config=CLI_config, update=update) for chunk in chunks
+        ]
+
+    logger.info(
+        f"Uploading {len(files)} files in {len(chunks)} chunk(s), concurrency={concurrency}"
+    )
+    responses: list[httpx.Response] = []
+    with ThreadPoolExecutor(max_workers=concurrency) as executor:
+        futures = [
+            executor.submit(api_create_files, files=chunk, CLI_config=CLI_config, update=update)
+            for chunk in chunks
+        ]
+        for future in as_completed(futures):
+            responses.append(future.result())
+    return responses
+
+
+def _delete_concurrently(
+    ids: list[str],
+    delete_one: Callable[[str, CLIConfig], httpx.Response],
+    CLI_config: CLIConfig,
+    *,
+    concurrency: int = 4,
+) -> int:
+    """Fan out per-id deletes and count the successes.
+
+    Interim measure until /files/delete_batch and /runs/delete_batch exist:
+    cleanup was one blocking round-trip per id, which on a large project meant
+    thousands of sequential requests.
+    """
+    if not ids:
+        return 0
+    if concurrency <= 1 or len(ids) == 1:
+        return sum(1 for item in ids if delete_one(item, CLI_config).status_code < 400)
+
+    deleted = 0
+    with ThreadPoolExecutor(max_workers=concurrency) as executor:
+        futures = [executor.submit(delete_one, item, CLI_config) for item in ids]
+        for future in as_completed(futures):
+            try:
+                if future.result().status_code < 400:
+                    deleted += 1
+            except httpx.HTTPError as exc:
+                # Cleanup is best-effort: a stale id that cannot be removed must
+                # not abort a scan that otherwise succeeded.
+                logger.warning(f"Delete failed during cleanup: {exc}")
+    return deleted
+
+
+def _delete_batch_or_fallback(
+    ids: list[str],
+    *,
+    endpoint: str,
+    payload_key: str,
+    CLI_config: CLIConfig,
+    fallback,
+    concurrency: int,
+    chunk_size: int = 5000,
+) -> int:
+    """Delete via the batch endpoint, falling back to per-id when unavailable.
+
+    A 404 means the server predates /…/delete_batch. Falling back keeps a new
+    CLI working against an older API instead of silently leaving stale records
+    behind, which is the failure mode that matters here — cleanup that quietly
+    does nothing looks identical to cleanup that had nothing to do.
+    """
+    if not ids:
+        return 0
+
+    deleted = 0
+    for start in range(0, len(ids), chunk_size):
+        chunk = ids[start : start + chunk_size]
+        url = f"{CLI_config.api_base_url}/depictio/api/v1/{endpoint}"
+        try:
+            response = request_with_retry(
+                "POST",
+                url,
+                json={payload_key: chunk},
+                headers=generate_api_headers(CLI_config),
+                timeout=120.0,
+                idempotent=True,
+            )
+        except httpx.HTTPError as exc:
+            logger.warning(f"Batch delete failed ({exc}); falling back to per-id deletes.")
+            return fallback(ids, CLI_config, concurrency=concurrency)
+
+        if response.status_code == 404:
+            logger.info("Server has no batch delete endpoint; falling back to per-id deletes.")
+            return fallback(ids, CLI_config, concurrency=concurrency)
+        if response.status_code >= 400:
+            logger.warning(f"Batch delete returned {response.status_code}: {response.text}")
+            continue
+        deleted += response.json().get("deleted", 0)
+
+    return deleted
+
+
+def api_delete_files_concurrent(
+    file_ids: list[str], CLI_config: CLIConfig, *, concurrency: int = 4
+) -> int:
+    return _delete_concurrently(
+        file_ids,
+        lambda file_id, config: api_delete_file(file_id=file_id, CLI_config=config),
+        CLI_config,
+        concurrency=concurrency,
+    )
+
+
+def api_delete_runs_concurrent(
+    run_ids: list[str], CLI_config: CLIConfig, *, concurrency: int = 4
+) -> int:
+    return _delete_concurrently(
+        run_ids,
+        lambda run_id, config: api_delete_run(run_id=run_id, CLI_config=config),
+        CLI_config,
+        concurrency=concurrency,
+    )
+
+
+def api_delete_files(file_ids: list[str], CLI_config: CLIConfig, *, concurrency: int = 4) -> int:
+    """Remove files, preferring one batch request over N round-trips."""
+    return _delete_batch_or_fallback(
+        file_ids,
+        endpoint="files/delete_batch",
+        payload_key="file_ids",
+        CLI_config=CLI_config,
+        fallback=api_delete_files_concurrent,
+        concurrency=concurrency,
+    )
+
+
+def api_delete_runs(run_ids: list[str], CLI_config: CLIConfig, *, concurrency: int = 4) -> int:
+    """Remove runs, preferring one batch request over N round-trips."""
+    return _delete_batch_or_fallback(
+        run_ids,
+        endpoint="runs/delete_batch",
+        payload_key="run_ids",
+        CLI_config=CLI_config,
+        fallback=api_delete_runs_concurrent,
+        concurrency=concurrency,
+    )
 
 
 # Optionally, if you also need to push runs, you could create a similar function:
@@ -365,7 +542,9 @@ def api_get_runs_by_wf_id(wf_id: str, CLI_config: CLIConfig) -> httpx.Response:
     logger.info(f"Getting runs for workflow ID: {wf_id}")
 
     url = f"{CLI_config.api_base_url}/depictio/api/v1/runs/list/{wf_id}"
-    response = get_http_client().get(url, headers=generate_api_headers(CLI_config), timeout=60.0)
+    response = request_with_retry(
+        "GET", url, headers=generate_api_headers(CLI_config), timeout=60.0, idempotent=True
+    )
     return response
 
 
@@ -399,11 +578,14 @@ def api_upsert_runs_batch(
     logger.debug(f"Payload runs upsert batch: {payload}")
     url = f"{CLI_config.api_base_url}/depictio/api/v1/runs/upsert_batch"
 
-    response = get_http_client().post(
+    # Safe to retry: /runs/upsert_batch is a true upsert keyed on run_tag.
+    response = request_with_retry(
+        "POST",
         url,
         json=payload,
         headers=generate_api_headers(CLI_config),
         timeout=120.0,  # 2 minutes timeout for runs batch operations
+        idempotent=True,
     )
     return response
 
@@ -418,6 +600,8 @@ def api_monitoring_ingestion_start(
     cli_config_path: str | None = None,
     project_config_path: str | None = None,
     data_root: str | None = None,
+    trigger: str | None = None,
+    trigger_reason: str | None = None,
 ) -> str | None:
     """Open a server-side ingestion-run record. Best-effort.
 
@@ -435,6 +619,8 @@ def api_monitoring_ingestion_start(
             "cli_config_path": cli_config_path,
             "project_config_path": project_config_path,
             "data_root": data_root,
+            "trigger": trigger,
+            "trigger_reason": trigger_reason,
         }
         response = get_http_client().post(
             url, json=payload, headers=generate_api_headers(CLI_config), timeout=30.0
@@ -445,6 +631,114 @@ def api_monitoring_ingestion_start(
     except Exception as exc:
         logger.debug(f"Monitoring ingestion start failed (non-fatal): {exc}")
     return None
+
+
+def api_monitoring_ingestion_step(
+    CLI_config: CLIConfig,
+    run_id: str,
+    step: dict,
+    current_step: str | None = None,
+    counters: dict | None = None,
+    progress: dict | None = None,
+) -> bool:
+    """Report one step of an in-flight run. Best-effort; never raises.
+
+    Returns False when the server does not accept step updates (older API), so
+    a caller can stop trying instead of retrying for the whole run.
+
+    Note the server answers 200 with ``{"throttled": true}`` rather than 429
+    when a run exceeds its update rate. A dropped progress ping is not an error
+    and must not trigger a client retry, so that still counts as success here.
+    """
+    try:
+        url = f"{CLI_config.api_base_url}/depictio/api/v1/monitoring/ingestion/{run_id}/step"
+        payload: dict = {"step": step}
+        if current_step is not None:
+            payload["current_step"] = current_step
+        if counters:
+            payload["counters"] = counters
+        if progress:
+            payload["progress"] = progress
+        response = get_http_client().post(
+            url, json=payload, headers=generate_api_headers(CLI_config), timeout=10.0
+        )
+        if response.status_code == 200:
+            return True
+        if response.status_code in (404, 422):
+            # 404: monitoring disabled or endpoint absent. 422: this server's
+            # IngestionStep is extra="forbid" and predates a field we send.
+            # Both are permanent for this run — tell the caller to give up.
+            logger.debug(f"Monitoring step updates unavailable (HTTP {response.status_code})")
+            return False
+        logger.debug(f"Monitoring step update skipped (HTTP {response.status_code})")
+    except Exception as exc:
+        logger.debug(f"Monitoring step update failed (non-fatal): {exc}")
+    return True
+
+
+def api_agent_heartbeat(CLI_config: CLIConfig, agent: dict) -> bool:
+    """Report that a long-running CLI agent is alive. Best-effort; never raises.
+
+    Returns False when the server does not support agents (404 on an older API)
+    so the caller can stop trying and log once, rather than warning on every
+    beat for the lifetime of the process.
+    """
+    try:
+        url = f"{CLI_config.api_base_url}/depictio/api/v1/monitoring/agents/heartbeat"
+        response = get_http_client().post(
+            url, json=agent, headers=generate_api_headers(CLI_config), timeout=15.0
+        )
+        if response.status_code == 404:
+            return False
+        if response.status_code >= 400:
+            logger.debug(f"Agent heartbeat rejected (HTTP {response.status_code})")
+        return True
+    except Exception as exc:
+        logger.debug(f"Agent heartbeat failed (non-fatal): {exc}")
+        return True
+
+
+def api_agent_claim_trigger(CLI_config: CLIConfig, agent_id: str) -> bool | None:
+    """Claim a "Run now" pressed in the web UI. Best-effort; never raises.
+
+    ``True`` means a run was requested and is now this process's to perform —
+    the server cleared it atomically, so it will not be handed out twice.
+
+    ``None`` means the server has no such route (an older API), so the caller
+    can stop polling instead of issuing a doomed request every few seconds for
+    the lifetime of the watcher. An unknown agent is not a 404 here; it answers
+    "nothing pending", which is why the two cases can be told apart.
+
+    Any other failure returns ``False``: a watcher that cannot reach the server
+    should keep watching on its own triggers, not stop.
+    """
+    try:
+        url = f"{CLI_config.api_base_url}/depictio/api/v1/monitoring/agents/{agent_id}/claim"
+        response = get_http_client().post(
+            url, headers=generate_api_headers(CLI_config), timeout=10.0
+        )
+        if response.status_code == 404:
+            return None
+        if response.status_code >= 400:
+            logger.debug(f"Trigger claim rejected (HTTP {response.status_code})")
+            return False
+        return bool(response.json().get("run_requested"))
+    except Exception as exc:
+        logger.debug(f"Trigger claim failed (non-fatal): {exc}")
+        return False
+
+
+def api_agent_deregister(CLI_config: CLIConfig, agent_id: str) -> None:
+    """Remove an agent on clean shutdown. Best-effort; never raises.
+
+    Without this the agent lingers until its TTL expires, which reads as "still
+    running" for minutes after a deliberate stop.
+    """
+    try:
+        url = f"{CLI_config.api_base_url}/depictio/api/v1/monitoring/agents/{agent_id}"
+        get_http_client().delete(url, headers=generate_api_headers(CLI_config), timeout=10.0)
+    except Exception as exc:
+        logger.debug(f"Agent deregistration failed (non-fatal): {exc}")
 
 
 def api_monitoring_ingestion_finish(
@@ -490,7 +784,10 @@ def api_delete_run(run_id: str, CLI_config: CLIConfig) -> httpx.Response:
     logger.info(f"Deleting run with ID: {run_id}")
 
     url = f"{CLI_config.api_base_url}/depictio/api/v1/runs/delete/{run_id}"
-    response = get_http_client().delete(url, headers=generate_api_headers(CLI_config), timeout=60.0)
+    # Deleting by id is idempotent: a replay simply finds nothing left to delete.
+    response = request_with_retry(
+        "DELETE", url, headers=generate_api_headers(CLI_config), timeout=60.0, idempotent=True
+    )
     return response
 
 
@@ -528,7 +825,10 @@ def api_delete_file(file_id: str, CLI_config: CLIConfig) -> httpx.Response:
     logger.info(f"Deleting file with ID: {file_id}")
 
     url = f"{CLI_config.api_base_url}/depictio/api/v1/files/delete/{file_id}"
-    response = get_http_client().delete(url, headers=generate_api_headers(CLI_config), timeout=60.0)
+    # Deleting by id is idempotent: a replay simply finds nothing left to delete.
+    response = request_with_retry(
+        "DELETE", url, headers=generate_api_headers(CLI_config), timeout=60.0, idempotent=True
+    )
     return response
 
 
@@ -539,6 +839,8 @@ def api_upsert_deltatable(
     CLI_config: CLIConfig,
     update: bool = False,
     deltatable_size_bytes: int | None = None,
+    delta_provenance: dict | None = None,
+    async_mode: bool = False,
 ) -> httpx.Response:
     """
     Create or update a Delta Table on the server using a bulk upsert.
@@ -547,6 +849,16 @@ def api_upsert_deltatable(
         deltaTable (UpsertDeltaTableAggregated): Delta Table to send.
         CLI_config (CLIConfig): Configuration object containing API base URL and credentials.
         deltatable_size_bytes (int, optional): Size of the deltatable in bytes to store in flexible_metadata.
+        delta_provenance (dict, optional): Commit facts observed after the write —
+            delta_version, delta_commit_timestamp, write_mode, row/file counts,
+            run_tags, ingestion_run_id, trigger. Sent only when present, so an
+            older server (which ignores unknown fields) and an older CLI (which
+            sends none) both keep working.
+        async_mode (bool): Ask the server to offload the expensive half of the
+            upsert and answer with a ``job_id``. A request, not a guarantee —
+            the server decides. A response without ``job_id`` means the work is
+            already complete, which is also exactly what an older server
+            returns, so no version negotiation is needed.
 
     Returns:
         httpx.Response: The response from the server.
@@ -559,20 +871,34 @@ def api_upsert_deltatable(
         "update": update,
     }
 
+    if async_mode:
+        payload["async_mode"] = True
+
     # Add deltatable size to payload if provided
     if deltatable_size_bytes is not None:
         payload["deltatable_size_bytes"] = deltatable_size_bytes
+
+    if delta_provenance:
+        payload.update({k: v for k, v in delta_provenance.items() if v is not None})
 
     url = f"{CLI_config.api_base_url}/depictio/api/v1/deltatables/upsert"
 
     logger.debug(f"Payload: {payload}")
 
     try:
-        response = get_http_client().post(
+        # NOT idempotent. This endpoint *appends* an Aggregation and derives the
+        # next version from aggregation[-1].aggregation_version + 1, so replaying
+        # it creates a duplicate entry and a phantom version bump — and
+        # aggregation_version salts the API's dataframe cache keys, so the damage
+        # surfaces later as silently invalidated caches rather than as an error.
+        # Only failures that provably never reached the server are retried.
+        response = request_with_retry(
+            "POST",
             url,
             json=payload,
             headers=generate_api_headers(CLI_config),
             timeout=300.0,  # 5 minutes timeout for large deltatable processing
+            idempotent=False,
         )
         return response
     except httpx.TimeoutException:

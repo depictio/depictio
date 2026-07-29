@@ -1,6 +1,8 @@
+import asyncio
+
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from pymongo import UpdateOne
 from pymongo.errors import BulkWriteError
 
@@ -70,6 +72,48 @@ async def get_run(run_id: PyObjectId, current_user: User = Depends(get_current_u
         raise HTTPException(status_code=404, detail=f"Run '{run_id}' not found.")
 
     return WorkflowRun.from_mongo(run)
+
+
+class DeleteRunsBatchRequest(BaseModel):
+    run_ids: list[str] = Field(..., min_length=1, max_length=5000)
+
+
+@runs_endpoint_router.post("/delete_batch")
+async def delete_runs_batch(
+    payload: DeleteRunsBatchRequest, current_user: User = Depends(get_current_user)
+):
+    """
+    Delete many runs in one request.
+
+    Deliberately does *not* cascade to the runs' files: ``delete_run`` has never
+    done so, and changing that here would turn a performance fix into a silent
+    behaviour change. The CLI deletes orphaned files explicitly via
+    /files/delete_batch.
+    """
+    if not current_user:
+        raise HTTPException(status_code=401, detail="User not found.")
+
+    oids = []
+    invalid = 0
+    for raw_id in payload.run_ids:
+        try:
+            oids.append(ObjectId(raw_id))
+        except Exception:
+            invalid += 1
+
+    if not oids:
+        return {"requested": len(payload.run_ids), "deleted": 0, "not_found": len(payload.run_ids)}
+
+    query: dict = {"_id": {"$in": oids}}
+    if not current_user.is_admin:
+        query["permissions.owners._id"] = ObjectId(current_user.id)
+
+    result = await asyncio.to_thread(runs_collection.delete_many, query)
+    return {
+        "requested": len(payload.run_ids),
+        "deleted": result.deleted_count,
+        "not_found": len(payload.run_ids) - result.deleted_count,
+    }
 
 
 @runs_endpoint_router.delete("/delete/{run_id}")
@@ -150,9 +194,18 @@ async def create_run(
             detail=f"User does not have permission on the project containing workflow '{workflow_id}'.",
         )
 
-    # If permission is granted, retrieve all runs for the given workflow.
-    runs_cursor = runs_collection.find({"workflow_id": workflow_oid})
-    existing_runs = list(runs_cursor)
+    # All of this is synchronous pymongo — a find, one find_one *per run* to diff
+    # scan_results, and a bulk_write — so it runs in a worker thread instead of
+    # pinning the event loop for the whole batch.
+    try:
+        return await asyncio.to_thread(_apply_run_upserts, payload, workflow_oid)
+    except BulkWriteError as bwe:
+        raise HTTPException(status_code=500, detail=bwe.details)
+
+
+def _apply_run_upserts(payload: UpsertWorkflowRunBatchRequest, workflow_oid: ObjectId) -> dict:
+    """Build and apply the run upsert operations. Synchronous by design."""
+    existing_runs = list(runs_collection.find({"workflow_id": workflow_oid}))
     existing_run_tags = {run["run_tag"] for run in existing_runs}
 
     operations = []
@@ -191,21 +244,17 @@ async def create_run(
     if not operations:
         return {"inserted_count": 0, "existing_count": len(payload.runs)}
 
-    try:
-        result = runs_collection.bulk_write(operations, ordered=False)
+    result = runs_collection.bulk_write(operations, ordered=False)
 
-        if payload.update:
-            return {
-                "matched_count": result.matched_count,
-                "modified_count": result.modified_count,
-                "upserted_count": result.upserted_count,
-            }
-        else:
-            inserted_count = result.upserted_count
-            existing_count = len(payload.runs) - inserted_count
-            return {
-                "inserted_count": inserted_count,
-                "existing_count": existing_count,
-            }
-    except BulkWriteError as bwe:
-        raise HTTPException(status_code=500, detail=bwe.details)
+    if payload.update:
+        return {
+            "matched_count": result.matched_count,
+            "modified_count": result.modified_count,
+            "upserted_count": result.upserted_count,
+        }
+
+    inserted_count = result.upserted_count
+    return {
+        "inserted_count": inserted_count,
+        "existing_count": len(payload.runs) - inserted_count,
+    }

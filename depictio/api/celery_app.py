@@ -12,17 +12,46 @@ from depictio.api.v1.configs.config import settings
 celery_app = Celery(
     __name__,
     broker=settings.celery.broker_url,
-    backend=settings.celery.broker_url,
+    # Results go to their own Redis DB (default 2), not the broker's (default
+    # 1). Sharing one DB meant result keys and broker queues lived in the same
+    # keyspace, so a `FLUSHDB` aimed at either one took out both. The two URLs
+    # were already configured separately; only this line disagreed.
+    #
+    # Deploy the API and the workers together: for the duration of a mixed
+    # rollout, a task enqueued by one and executed by the other writes its
+    # result where the poller is not looking.
+    backend=settings.celery.result_backend_url,
 )
 
-# Configure Celery - keep it simple for Dash background callbacks
-# celery_app.conf.update(
-#     task_serializer="json",
-#     accept_content=["json"],
-#     result_serializer="json",
-#     result_expires=7200,
-#     broker_connection_retry_on_startup=True,
-# )
+celery_app.conf.update(
+    task_serializer="json",
+    accept_content=["json"],
+    result_serializer="json",
+    # Celery's own default is 86400. CeleryConfig.result_expires is 3600, and
+    # applying that verbatim would be a regression: Celery reports PENDING both
+    # for an unknown task id and for an expired result, so any poller that
+    # looks away for an hour (`poll_compute_embedding`) would hang forever on a
+    # task that actually finished. Take the larger of the two.
+    result_expires=max(settings.celery.result_expires, 86400),
+    broker_connection_retry_on_startup=True,
+    # Must stay "celery". `CeleryConfig.default_queue` says "dashboard_tasks",
+    # but it was never applied — so every existing task is on "celery", and
+    # run_celery_worker.sh starts without -Q, i.e. consuming "celery". Setting
+    # the declared value here would route all new work to a queue nothing
+    # consumes: every existing task silently stops running. The ingestion queue
+    # is opted into per-task via task_routes instead.
+    task_default_queue="celery",
+    task_routes={
+        "depictio.deltatable.finalize_upsert": {"queue": settings.celery.ingestion_queue},
+        "depictio.ingestion.run_project": {"queue": settings.celery.ingestion_queue},
+    },
+)
+
+# Deliberately NOT set here: worker_concurrency, worker_prefetch_multiplier and
+# worker_max_tasks_per_child. They would silently re-tune the existing
+# interactive worker, which is sized for short dashboard callbacks. The
+# ingestion worker passes them as CLI flags instead, so the two pools stay
+# independently tunable.
 
 
 # Health check task for monitoring

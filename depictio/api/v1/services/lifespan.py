@@ -245,24 +245,37 @@ def start_dashboard_version_storage(should_initialize: bool) -> None:
 
 
 def start_monitoring_storage(should_initialize: bool) -> None:
-    """Set up the monitoring ledger.
+    """Set up the monitoring ledger and the job store.
 
     Index + capped-collection creation runs only on the initializing worker (no
     need for N workers to race), but the app-log handler attaches in every API
     worker so each process's logs are captured. Never fails boot.
-    """
-    if not settings.monitoring.enabled:
-        return
-    try:
-        from depictio.api.v1.monitoring.log_handler import install_app_log_handler
-        from depictio.api.v1.monitoring.store import ensure_monitoring_storage
 
-        if should_initialize:
-            ensure_monitoring_storage()
-        install_app_log_handler(source="api")
-        logger.info(f"Worker {WORKER_ID}: Monitoring storage ready")
-    except Exception as exc:
-        logger.warning(f"Worker {WORKER_ID}: Monitoring storage setup failed: {exc}")
+    Monitoring and jobs share this hook but not their enable flags — a
+    deployment can reasonably want job offloading without the admin ledger, or
+    the reverse — so each is guarded separately.
+    """
+    if settings.monitoring.enabled:
+        try:
+            from depictio.api.v1.monitoring.log_handler import install_app_log_handler
+            from depictio.api.v1.monitoring.store import ensure_monitoring_storage
+
+            if should_initialize:
+                ensure_monitoring_storage()
+            install_app_log_handler(source="api")
+            logger.info(f"Worker {WORKER_ID}: Monitoring storage ready")
+        except Exception as exc:
+            logger.warning(f"Worker {WORKER_ID}: Monitoring storage setup failed: {exc}")
+
+    if settings.jobs.enabled:
+        try:
+            from depictio.api.v1.jobs.store import ensure_jobs_storage
+
+            if should_initialize:
+                ensure_jobs_storage()
+            logger.info(f"Worker {WORKER_ID}: Jobs storage ready")
+        except Exception as exc:
+            logger.warning(f"Worker {WORKER_ID}: Jobs storage setup failed: {exc}")
 
 
 def start_multiqc_prewarm(should_initialize: bool) -> None:

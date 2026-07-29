@@ -68,6 +68,10 @@ class TaskEvent(BaseModel):
     args_repr: str = Field(default="", description="Truncated repr of task args/kwargs")
     dashboard_id: Optional[str] = Field(default=None, description="Dashboard id if applicable")
     dc_id: Optional[str] = Field(default=None, description="Data collection id if applicable")
+    #: Same correlation as AppLogRecord.run_id: lets a run's offloaded work be
+    #: listed alongside its steps instead of hunting through every task.
+    run_id: Optional[str] = Field(default=None, description="Ingestion run this task belongs to")
+    project_id: Optional[str] = Field(default=None, description="Project id if applicable")
     queue: Optional[str] = Field(default=None, description="Queue the task ran on")
     worker: Optional[str] = Field(default=None, description="Worker hostname that ran the task")
     started_at: Optional[datetime] = Field(default=None, description="When the task began running")
@@ -95,6 +99,55 @@ class IngestionStep(BaseModel):
     status: str = Field(default="running", description="Step status")
     detail: Optional[str] = Field(default=None, description="Optional human-readable detail")
 
+    # Live progress. All optional, because a step reported only at completion
+    # (the historical behaviour) has none of it.
+    started_at: Optional[datetime] = Field(default=None)
+    finished_at: Optional[datetime] = Field(default=None)
+    duration_ms: Optional[float] = Field(default=None)
+    index: Optional[int] = Field(default=None, description="Position in the run, for 'step 3 of 7'")
+    total: Optional[int] = Field(default=None, description="Total steps in the run")
+    progress: Optional[float] = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description="Fraction complete, only when a denominator exists",
+    )
+    #: Free-form counters rather than named fields, so the CLI can add one
+    #: without a coordinated server schema change. Well-known keys:
+    #: files_scanned, files_new, files_changed, files_updated, files_deleted,
+    #: files_skipped, bytes_written, rows_written.
+    counters: dict[str, int] = Field(default_factory=dict)
+    data_collection_tag: Optional[str] = Field(default=None)
+    job_id: Optional[str] = Field(default=None, description="Server-side job, for offloaded work")
+    error: Optional[str] = Field(default=None)
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class IngestionError(BaseModel):
+    """One failure encountered during a run, with enough context to act on it."""
+
+    stage: str = Field(..., description="Where it happened: scan, process, join, ...")
+    kind: str = Field(..., description="Short machine-readable classification")
+    message: str
+    dc_tag: Optional[str] = Field(default=None)
+    file_path: Optional[str] = Field(default=None)
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class IngestionProgress(BaseModel):
+    """Run-level progress. Every field optional — a percentage is only reported
+    when a real denominator exists, never synthesised from the step index."""
+
+    percent: Optional[float] = Field(default=None, ge=0.0, le=100.0)
+    steps_done: Optional[int] = Field(default=None)
+    steps_total: Optional[int] = Field(default=None)
+    dcs_done: Optional[int] = Field(default=None)
+    dcs_total: Optional[int] = Field(default=None)
+    files_done: Optional[int] = Field(default=None)
+    files_total: Optional[int] = Field(default=None)
+
     model_config = ConfigDict(extra="forbid")
 
 
@@ -118,6 +171,35 @@ class IngestionDataCollection(BaseModel):
         default_factory=list, description="Local base directories scanned (workflow data location)"
     )
     file_count: Optional[int] = Field(default=None, description="Files matched, when known")
+
+    # Outcome counters for this DC in this run.
+    status: Optional[str] = Field(default=None)
+    started_at: Optional[datetime] = Field(default=None)
+    finished_at: Optional[datetime] = Field(default=None)
+    duration_ms: Optional[float] = Field(default=None)
+    files_matched: Optional[int] = Field(default=None)
+    files_new: Optional[int] = Field(default=None)
+    files_changed: Optional[int] = Field(default=None)
+    files_updated: Optional[int] = Field(default=None)
+    files_skipped: Optional[int] = Field(default=None)
+    files_deleted: Optional[int] = Field(default=None)
+    files_failed: Optional[int] = Field(default=None)
+    rows_written: Optional[int] = Field(default=None)
+    delta_version: Optional[int] = Field(default=None)
+    write_mode: Optional[str] = Field(default=None)
+
+    # Scan diagnostics. These turn "No files found" from a dead end into a
+    # diagnosis: how much of the tree was walked, how many candidates the regex
+    # rejected, why files were skipped, and a few concrete paths that were seen
+    # but did not match.
+    dirs_walked: Optional[int] = Field(default=None)
+    files_seen: Optional[int] = Field(default=None)
+    regex_rejected: Optional[int] = Field(default=None)
+    skip_reasons: dict[str, int] = Field(default_factory=dict)
+    sample_rejected: list[str] = Field(
+        default_factory=list, description="Up to a handful of paths seen but not matched"
+    )
+    errors: list[IngestionError] = Field(default_factory=list)
 
     model_config = ConfigDict(extra="forbid")
 
@@ -162,23 +244,90 @@ class IngestionRun(BaseModel):
     )
     status: IngestionStatus = Field(default="running", description="Overall run status")
     steps: list[IngestionStep] = Field(default_factory=list, description="Per-step tally")
-    # Placeholder for future async/offloaded ingestion: a long-running ingestion
-    # can PATCH steps + current_step live (see POST /monitoring/ingestion/{run_id}/step)
-    # while status='running'. Synchronous CLI runs leave this None and report all
-    # steps at finish.
+    # Written while status='running', via POST /monitoring/ingestion/{run_id}/step:
+    # by the CLI's StepReporter for `depictio run` / `watch`, and by the
+    # server-side ingestion task for browser-triggered runs. Cleared when a step
+    # reaches a terminal status, so the UI does not keep a spinner on a phase
+    # that already ended. Runs recorded before live reporting existed leave it
+    # None and report their whole step list at finish.
     current_step: Optional[str] = Field(
-        default=None, description="Step currently running, for live async ingestion"
+        default=None, description="Step currently running, for live progress"
     )
     error: Optional[str] = Field(default=None, description="Failure message if the run failed")
     started_at: datetime = Field(default_factory=datetime.now)
     finished_at: Optional[datetime] = Field(default=None, description="When the run completed")
+
+    #: What started this run. A watcher cycle and a hand-typed command produce
+    #: very different expectations, and the ledger could not tell them apart.
+    trigger: Literal["manual", "watch", "schedule", "ui"] = Field(default="manual")
+    trigger_reason: Optional[str] = Field(
+        default=None, description="What changed, for automatic triggers"
+    )
+    progress: Optional[IngestionProgress] = Field(default=None)
+    counters: dict[str, int] = Field(default_factory=dict)
+    timings: dict[str, float] = Field(default_factory=dict, description="Per-phase milliseconds")
+    concurrency: Optional[int] = Field(default=None)
+    warnings: list[str] = Field(default_factory=list)
+    errors: list[IngestionError] = Field(default_factory=list)
+    errors_truncated: bool = Field(default=False)
+    logs_truncated: bool = Field(default=False)
+
+    model_config = ConfigDict(extra="forbid")
+
+
+# ── CLI agent registry ──────────────────────────────────────────────────────
+
+AgentStatus = Literal["idle", "settling", "scanning", "ingesting", "error"]
+
+
+class CliAgent(BaseModel):
+    """A long-running CLI process — today, a watcher — reporting that it is alive.
+
+    Stored in ``cli_agents`` with a TTL on ``expires_at``, so an agent that dies
+    disappears on its own rather than lingering as a phantom. A watcher that
+    nobody can see is a watcher nobody can debug: this is what makes "is it
+    actually running, and against what?" answerable.
+    """
+
+    agent_id: str = Field(..., description="Stable id for this agent process")
+    kind: Literal["watcher"] = Field(default="watcher")
+    instance_label: Optional[str] = Field(default=None)
+    hostname: Optional[str] = Field(default=None)
+    pid: Optional[int] = Field(default=None)
+    cli_version: Optional[str] = Field(default=None)
+    user_id: Optional[str] = Field(default=None)
+    email: Optional[str] = Field(default=None)
+    project_id: Optional[str] = Field(default=None)
+    project_name: Optional[str] = Field(default=None)
+    mode: Optional[str] = Field(default=None, description="incremental or full")
+    backend: Optional[str] = Field(default=None, description="native, polling or both")
+    watching: list[str] = Field(default_factory=list, description="Roots being watched")
+    status: AgentStatus = Field(default="idle")
+    last_error: Optional[str] = Field(default=None)
+    last_run_id: Optional[str] = Field(default=None)
+    last_trigger_at: Optional[datetime] = Field(default=None)
+    runs_total: int = Field(default=0)
+    #: Set server-side when someone presses "Run now", cleared when the watcher
+    #: claims it on its next command poll. Server-owned: the agent never sends
+    #: these, and the heartbeat deliberately does not overwrite them, or a beat
+    #: landing between the request and the claim would drop the request.
+    run_requested_at: Optional[datetime] = Field(default=None)
+    run_requested_by: Optional[str] = Field(default=None)
+    started_at: datetime = Field(default_factory=datetime.now)
+    heartbeat_at: datetime = Field(default_factory=datetime.now)
+    #: TTL anchor. Set to a few heartbeat intervals ahead so a missed beat does
+    #: not evict a healthy agent, but a dead one clears quickly.
+    expires_at: datetime = Field(default_factory=datetime.now)
 
     model_config = ConfigDict(extra="forbid")
 
 
 # ── Application log ledger ──────────────────────────────────────────────────
 
-LogSource = Literal["api", "celery"]
+#: "cli" covers log lines shipped from a CLI run. A run that fails on an HPC
+#: login node otherwise leaves nothing server-side but a one-line error, and the
+#: operator has to ask the user for their terminal scrollback.
+LogSource = Literal["api", "celery", "cli"]
 
 
 class AppLogRecord(BaseModel):
@@ -191,5 +340,9 @@ class AppLogRecord(BaseModel):
     message: str = Field(default="", description="Formatted log message")
     pathname: Optional[str] = Field(default=None, description="Source file path")
     lineno: Optional[int] = Field(default=None, description="Source line number")
+    #: Correlates a log line with the ingestion run that produced it, so the
+    #: admin UI can show a run's logs rather than making the operator grep a
+    #: shared stream by timestamp.
+    run_id: Optional[str] = Field(default=None, description="Ingestion run this line belongs to")
 
     model_config = ConfigDict(extra="forbid")

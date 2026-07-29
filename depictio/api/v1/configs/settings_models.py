@@ -182,6 +182,8 @@ class MongoDBConfig(ServiceConfig):
         task_events_collection: str = Field(default="task_events")
         ingestion_runs_collection: str = Field(default="ingestion_runs")
         app_logs_collection: str = Field(default="app_logs")
+        cli_agents_collection: str = Field(default="cli_agents")
+        jobs_collection: str = Field(default="jobs")
         test_collection: str = Field(default="test")
 
     collections: Collections = Field(default_factory=Collections)
@@ -558,7 +560,32 @@ class CeleryConfig(BaseSettings):
     result_expires: int = Field(default=3600, description="Task result expiration in seconds (1hr)")
 
     # Queue settings
-    default_queue: str = Field(default="dashboard_tasks", description="Default task queue name")
+    default_queue: str = Field(
+        default="dashboard_tasks",
+        description=(
+            "Historical value only — NOT applied. celery_app pins "
+            "task_default_queue to 'celery', which is the queue the shipped "
+            "worker command actually consumes. Applying this value would route "
+            "every task to a queue nothing listens on."
+        ),
+    )
+    ingestion_queue: str = Field(
+        default="ingestion",
+        description="Queue for offloaded ingestion tasks, consumed by the dedicated "
+        "ingestion worker so a 20-minute table read cannot starve dashboard callbacks.",
+    )
+    ingestion_worker_concurrency: int = Field(
+        default=2,
+        description="Prefork processes on the ingestion worker. Low on purpose: each "
+        "task holds a full DataFrame plus its pandas and numpy copies, so memory — "
+        "not CPU — is the binding constraint, and Polars is already multi-threaded.",
+    )
+    ingestion_task_soft_time_limit: int = Field(
+        default=1800, description="Soft time limit for ingestion tasks (30min)"
+    )
+    ingestion_task_time_limit: int = Field(
+        default=2100, description="Hard time limit for ingestion tasks (35min)"
+    )
 
     # Monitoring settings
     worker_send_task_events: bool = Field(default=True, description="Enable task event monitoring")
@@ -823,6 +850,16 @@ class MonitoringConfig(BaseSettings):
     app_log_capped_mb: int = Field(
         default=64, description="Size cap (MB) of the capped app_logs collection"
     )
+    agent_ttl_seconds: int = Field(
+        default=300,
+        description="How long a CLI agent's heartbeat stays valid. Several beats "
+        "long, so one missed heartbeat does not evict a healthy watcher.",
+    )
+    cli_log_shipping: bool = Field(
+        default=True,
+        description="Accept log lines shipped from CLI runs into the app_logs ledger. "
+        "Telemetry only — it can never affect an ingestion's outcome.",
+    )
     live_updates: bool = Field(
         default=True,
         description="Push live task/ingestion status changes over the events WebSocket "
@@ -867,6 +904,78 @@ class DashboardVersionsConfig(BaseSettings):
     )
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_DASHBOARD_VERSIONS_")
+
+
+class IngestionConfig(BaseSettings):
+    """Server-side limits and opt-ins for the data-ingestion path.
+
+    Everything that changes *behaviour* defaults to off, so an existing
+    deployment upgrades without any change in what it does. Only the limits —
+    which merely make an existing implicit ceiling explicit — are active by
+    default.
+    """
+
+    max_files_per_batch: int = Field(
+        default=5000, description="Largest accepted /files/upsert_batch payload"
+    )
+    max_ids_per_delete_batch: int = Field(
+        default=5000, description="Largest accepted delete_batch payload"
+    )
+    step_updates_per_minute: int = Field(
+        default=60,
+        description="Non-terminal ingestion-step updates accepted per run per minute. "
+        "Terminal steps always pass, so a run's final tally is never throttled away.",
+    )
+    delta_history_timeout_seconds: float = Field(
+        default=20.0, description="Deadline for reading a Delta table's commit history"
+    )
+    async_deltatable_upsert: bool = Field(
+        default=False,
+        description=(
+            "Offload the expensive half of /deltatables/upsert (column specs, row "
+            "hash, Delta history read) to a Celery task and return a job_id. "
+            "Requires DEPICTIO_JOBS_ENABLED=true — without it the API has nowhere "
+            "to record the job and stays on the synchronous path."
+        ),
+    )
+    browser_trigger: bool = Field(
+        default=False,
+        description=(
+            "Allow project owners and editors to start an ingestion from the "
+            "project page. Only meaningful where the API can read the same "
+            "filesystem the data sits on (a shared PVC, a mounted export) — on a "
+            "deployment whose data lives on an HPC node the API cannot see, the "
+            "endpoint rejects the request. Requires DEPICTIO_JOBS_ENABLED=true."
+        ),
+    )
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_INGESTION_")
+
+
+class JobsConfig(BaseSettings):
+    """User-facing job records for offloaded work (``jobs`` collection).
+
+    Off by default: enabling it creates a collection and its indexes, and
+    changes what ``/deltatables/upsert`` may return. Nothing consults a job
+    unless a client asked for one.
+    """
+
+    enabled: bool = Field(default=False, description="Expose the /jobs endpoints")
+    retention_hours: int = Field(
+        default=24, description="How long a successful job document is kept"
+    )
+    failed_retention_hours: int = Field(
+        default=168,
+        description="How long a failed or cancelled job is kept — longer than a "
+        "success, because a failure is what someone comes back to read.",
+    )
+    max_result_bytes: int = Field(
+        default=262144,
+        description="Results larger than this are dropped and flagged truncated "
+        "rather than risking the 16 MB BSON document ceiling.",
+    )
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_JOBS_")
 
 
 class DashboardYAMLConfig(BaseSettings):
@@ -1153,6 +1262,8 @@ class Settings(BaseSettings):
     events: EventsConfig = Field(default_factory=EventsConfig)
     monitoring: MonitoringConfig = Field(default_factory=MonitoringConfig)
     dashboard_versions: DashboardVersionsConfig = Field(default_factory=DashboardVersionsConfig)
+    ingestion: IngestionConfig = Field(default_factory=IngestionConfig)
+    jobs: JobsConfig = Field(default_factory=JobsConfig)
     dashboard_yaml: DashboardYAMLConfig = Field(default_factory=DashboardYAMLConfig)
 
     # Observability & development

@@ -36,317 +36,60 @@ import {
   type MonitoringAppLog,
   type MonitoringHealth,
   type MonitoringIngestionRun,
+  type MonitoringIngestionStep,
+  type MonitoringLiveEvent,
   type MonitoringTaskEvent,
 } from 'depictio-react-core';
 
 import { useCurrentUser } from '../hooks/useCurrentUser';
+import {
+  absTime,
+  formatDuration,
+  matchesQuery,
+  relTime,
+  spanMs,
+  stepTally,
+} from '../monitoring/format';
+import {
+  DetailBlock,
+  Field,
+  PaneHeader,
+  PathTip,
+  SearchInput,
+  SectionLabel,
+  TimeText,
+} from '../monitoring/primitives';
+import {
+  ACCORDION_CLASSNAMES,
+  ACCORDION_STYLES,
+  CODE_STYLES,
+  KIND_COLORS,
+  LOG_LEVEL_COLORS,
+  PANE_SCROLL_H,
+  statusColor,
+} from '../monitoring/tokens';
+import { usePolling, useLivePolling } from '../monitoring/usePolling';
+import { AgentsPane } from '../monitoring/AgentsPane';
+import { IngestionStepTimeline } from '../monitoring/IngestionStepTimeline';
+import { TriggerBadge } from '../monitoring/TriggerBadge';
 
 /**
  * Admin > Monitoring ("Log & Task") tab.
  *
- * Four panes (Tasks / Ingestion / Logs / Health) over a small-font, collapsible,
- * badge-tagged UI. Data is the durable MongoDB ledger surfaced by
- * `/depictio/api/v1/monitoring/*`. Refreshes on an interval (toggleable); a
- * future live-push layer rides the events WebSocket when enabled.
+ * Five panes (Tasks / Ingestion / Agents / Logs / Health) over a small-font,
+ * collapsible, badge-tagged UI. Data is the durable MongoDB ledger surfaced by
+ * `/depictio/api/v1/monitoring/*`. Refreshes on an interval (toggleable), with
+ * live push over the events WebSocket when enabled.
+ *
+ * The shared formatting helpers, visual tokens, primitives and polling hooks
+ * live in `../monitoring/` so the project-scoped panels reuse them rather than
+ * growing near-copies.
  *
  * Hidden in public/demo mode (no real admin surface) — the parent AdminApp
  * already gates on `is_admin`, and we additionally bail in those modes here.
  */
 
-type Pane = 'tasks' | 'ingestion' | 'logs' | 'health';
-
-const REFRESH_MS = 8000;
-
-const STATUS_COLORS: Record<string, string> = {
-  success: 'green',
-  failure: 'red',
-  failed: 'red',
-  started: 'yellow',
-  running: 'yellow',
-  retry: 'orange',
-  revoked: 'gray',
-  pending: 'gray',
-  partial: 'orange',
-};
-
-const KIND_COLORS: Record<string, string> = {
-  figure: 'blue',
-  screenshot: 'grape',
-  multiqc: 'teal',
-  advanced_viz: 'indigo',
-  deltatable: 'cyan',
-  other: 'gray',
-};
-
-const LOG_LEVEL_COLORS: Record<string, string> = {
-  DEBUG: 'gray',
-  INFO: 'blue',
-  WARNING: 'yellow',
-  ERROR: 'red',
-  CRITICAL: 'red',
-};
-
-/** Wrap long lines and reserve a right gutter so the CodeHighlight copy button
- *  never overlaps the code text. */
-const CODE_STYLES = {
-  code: { whiteSpace: 'pre-wrap', wordBreak: 'break-word', paddingRight: 44 },
-} as const;
-
-/** Ultra-compact accordion: strip every border/divider and shrink control +
- *  label padding to the minimum legible so rows sit directly on top of each
- *  other. Shared by the Tasks / Ingestion / Logs panes. */
-const ACCORDION_STYLES = {
-  root: { border: 'none' },
-  item: { border: 'none', background: 'transparent' },
-  control: { paddingTop: 0, paddingBottom: 0 },
-  label: { paddingTop: 3, paddingBottom: 3 },
-  content: { padding: '2px 8px 6px' },
-} as const;
-
-/** Viewport-relative height so the row list fills the available space under the
- *  pane header instead of a short fixed box. */
-const PANE_SCROLL_H = 'calc(100vh - 300px)';
-
-function statusColor(status?: string): string {
-  return STATUS_COLORS[(status || '').toLowerCase()] || 'gray';
-}
-
-/** Case-insensitive substring match of `q` against any of the given fields.
- *  Empty query matches everything. Shared by the pane search boxes. */
-function matchesQuery(q: string, ...fields: Array<string | number | null | undefined>): boolean {
-  const needle = q.trim().toLowerCase();
-  if (!needle) return true;
-  return fields.some((f) => f != null && String(f).toLowerCase().includes(needle));
-}
-
-/** Small search box used in each pane header. */
-const SearchInput: React.FC<{ value: string; onChange: (v: string) => void }> = ({
-  value,
-  onChange,
-}) => (
-  <TextInput
-    size="xs"
-    w={180}
-    placeholder="Search…"
-    leftSection={<Icon icon="mdi:magnify" width={14} />}
-    value={value}
-    onChange={(e) => onChange(e.currentTarget.value)}
-  />
-);
-
-/** Parse a backend ISO timestamp to epoch ms. The API stamps with
- *  `datetime.now()` in UTC containers and serializes without an offset, so an
- *  offset-less value must be read as UTC — otherwise JS treats it as local time
- *  (a fresh event reads hours off for non-UTC users). */
-function parseTs(iso?: string | null): number {
-  if (!iso) return NaN;
-  const hasTz = /([zZ]|[+-]\d{2}:?\d{2})$/.test(iso);
-  return new Date(hasTz ? iso : `${iso}Z`).getTime();
-}
-
-/** Compact relative-time string from an ISO timestamp, with absolute tooltip. */
-function relTime(iso?: string | null): string {
-  if (!iso) return '—';
-  const then = parseTs(iso);
-  if (Number.isNaN(then)) return '—';
-  const secs = Math.max(0, Math.round((Date.now() - then) / 1000));
-  if (secs < 60) return `${secs}s ago`;
-  const mins = Math.round(secs / 60);
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.round(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return `${Math.round(hrs / 24)}d ago`;
-}
-
-/** Exact local clock time (with seconds) from an ISO timestamp. */
-function absTime(iso?: string | null): string {
-  const ms = parseTs(iso);
-  if (Number.isNaN(ms)) return '—';
-  return new Date(ms).toLocaleTimeString(undefined, { hour12: false });
-}
-
-function formatDuration(ms?: number | null): string {
-  if (ms == null) return '—';
-  if (ms < 1000) return `${Math.round(ms)}ms`;
-  const s = ms / 1000;
-  if (s < 60) return `${s.toFixed(1)}s`;
-  return `${Math.floor(s / 60)}m ${Math.round(s % 60)}s`;
-}
-
-/** Wall-clock duration between two ISO timestamps, in ms (null if either is missing). */
-function spanMs(start?: string | null, end?: string | null): number | null {
-  const a = parseTs(start);
-  const b = parseTs(end);
-  if (Number.isNaN(a) || Number.isNaN(b)) return null;
-  return Math.max(0, b - a);
-}
-
-/** Compact "N ok · M failed · K skipped" tally from a run's step list. */
-function stepTally(steps?: { status: string }[]): string {
-  if (!steps || steps.length === 0) return '—';
-  const counts = { success: 0, failed: 0, skipped: 0, partial: 0, other: 0 };
-  for (const s of steps) {
-    const key = (s.status || '').toLowerCase();
-    if (key === 'success') counts.success += 1;
-    else if (key === 'failed' || key === 'failure') counts.failed += 1;
-    else if (key === 'skipped') counts.skipped += 1;
-    else if (key === 'partial' || key === 'running') counts.partial += 1;
-    else counts.other += 1;
-  }
-  const parts: string[] = [`${counts.success} ok`];
-  if (counts.failed) parts.push(`${counts.failed} failed`);
-  if (counts.skipped) parts.push(`${counts.skipped} skipped`);
-  if (counts.partial) parts.push(`${counts.partial} partial`);
-  if (counts.other) parts.push(`${counts.other} other`);
-  return parts.join(' · ');
-}
-
-/** Collapse a long filesystem path to `head/…/last-two-segments` so it fits on
- *  one line; the full value is surfaced via tooltip in `PathTip`. */
-function shortenPath(p: string, maxLen = 44): string {
-  if (p.length <= maxLen) return p;
-  const parts = p.split('/').filter(Boolean);
-  if (parts.length <= 2) return `…${p.slice(-(maxLen - 1))}`;
-  const lead = p.startsWith('/') ? '/' : '';
-  const tail = parts.slice(-2).join('/');
-  const short = `${lead}${parts[0]}/…/${tail}`;
-  return short.length <= maxLen ? short : `…/${tail}`;
-}
-
-/** A single-line, ellipsized path (monospace). The full path shows on hover, and
- *  clicking copies it to the clipboard (the shortened text isn't selectable). */
-const PathTip: React.FC<{ path?: string | null }> = ({ path }) =>
-  path ? (
-    <CopyButton value={path} timeout={1500}>
-      {({ copied, copy }) => (
-        <Tooltip label={copied ? 'Copied!' : `${path}  (click to copy)`} withArrow multiline maw={560}>
-          <Code
-            fz="10px"
-            onClick={copy}
-            style={{ whiteSpace: 'nowrap', cursor: 'pointer' }}
-          >
-            {shortenPath(path)}
-          </Code>
-        </Tooltip>
-      )}
-    </CopyButton>
-  ) : (
-    <>—</>
-  );
-
-/** One metadatum as a stacked label-over-value cell (uppercase caption above the
- *  value). Used in the ingestion detail field grid so values line up in columns
- *  instead of wrapping into an unreadable run-on. */
-const Field: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
-  <Box>
-    <Text size="10px" c="dimmed" tt="uppercase" fw={700} lts={0.4}>
-      {label}
-    </Text>
-    <Text size="xs" style={{ lineHeight: 1.35 }}>
-      {children}
-    </Text>
-  </Box>
-);
-
-const TimeText: React.FC<{ iso?: string | null }> = ({ iso }) => (
-  <Tooltip label={iso || 'n/a'} disabled={!iso} withArrow>
-    <Text component="span" size="xs" c="dimmed">
-      {relTime(iso)}
-    </Text>
-  </Tooltip>
-);
-
-/** Small uppercase caption used to title each block in an expanded detail panel. */
-const SectionLabel: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <Text size="xs" c="dimmed" tt="uppercase" fw={600}>
-    {children}
-  </Text>
-);
-
-/** A titled block: caption above arbitrary content (a CodeHighlight, an Alert…). */
-const DetailBlock: React.FC<{ label: string; children: React.ReactNode }> = ({
-  label,
-  children,
-}) => (
-  <Stack gap={2}>
-    <SectionLabel>{label}</SectionLabel>
-    {children}
-  </Stack>
-);
-
-/** Shared header: title + auto-refresh toggle + manual refresh + last-updated. */
-const PaneHeader: React.FC<{
-  title: string;
-  loading: boolean;
-  auto: boolean;
-  onAuto: (v: boolean) => void;
-  onRefresh: () => void;
-  extra?: React.ReactNode;
-}> = ({ title, loading, auto, onAuto, onRefresh, extra }) => (
-  <Group justify="space-between" wrap="nowrap">
-    <Group gap="xs">
-      <Title order={6}>{title}</Title>
-      {loading && <Loader size="xs" />}
-    </Group>
-    <Group gap="sm" wrap="nowrap">
-      {extra}
-      <Switch
-        size="xs"
-        label="Auto"
-        checked={auto}
-        onChange={(e) => onAuto(e.currentTarget.checked)}
-      />
-      <Tooltip label="Refresh now" withArrow>
-        <ActionIcon variant="subtle" color="gray" onClick={onRefresh} aria-label="Refresh">
-          <Icon icon="mdi:refresh" width={16} />
-        </ActionIcon>
-      </Tooltip>
-    </Group>
-  </Group>
-);
-
-/** Generic polling hook: runs `load` immediately and (when `auto`) every
- *  interval. Also refreshes whenever `liveSignal` increments — the panel bumps
- *  it on each live WebSocket push so the active pane updates instantly. */
-function usePolling<T>(
-  load: () => Promise<T>,
-  auto: boolean,
-  liveSignal = 0,
-): { data: T | null; loading: boolean; error: string | null; refresh: () => void } {
-  const [data, setData] = useState<T | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const loadRef = useRef(load);
-  loadRef.current = load;
-
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    try {
-      const result = await loadRef.current();
-      setData(result);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void refresh();
-    if (!auto) return undefined;
-    const id = setInterval(() => void refresh(), REFRESH_MS);
-    return () => clearInterval(id);
-  }, [auto, refresh]);
-
-  // Live push: refresh on each signal bump (skip the initial 0 to avoid a
-  // duplicate of the mount fetch above).
-  useEffect(() => {
-    if (liveSignal > 0) void refresh();
-  }, [liveSignal, refresh]);
-
-  return { data, loading, error, refresh };
-}
+type Pane = 'tasks' | 'ingestion' | 'agents' | 'logs' | 'health';
 
 // ── Tasks pane ────────────────────────────────────────────────────────────
 
@@ -423,6 +166,7 @@ const TasksPane: React.FC<{ liveSignal: number }> = ({ liveSignal }) => {
             value={open}
             onChange={setOpen}
             styles={ACCORDION_STYLES}
+            classNames={ACCORDION_CLASSNAMES}
           >
             {tasks.map((t) => (
             <Accordion.Item key={t.task_id} value={t.task_id}>
@@ -543,18 +287,72 @@ const TasksPane: React.FC<{ liveSignal: number }> = ({ liveSignal }) => {
 
 // ── Ingestion pane ──────────────────────────────────────────────────────────
 
-const IngestionPane: React.FC<{ liveSignal: number }> = ({ liveSignal }) => {
+/**
+ * Apply a live ingestion event to the cached run list.
+ *
+ * Returns `null` to mean "I can't apply this" — no data yet, a different event
+ * kind, or a run we've never seen (one that started after our last fetch).
+ * `useLivePolling` turns that into a refetch, so an unknown run appears
+ * promptly instead of being dropped.
+ */
+function applyIngestionEvent(
+  current: MonitoringIngestionRun[] | null,
+  event: MonitoringLiveEvent,
+): MonitoringIngestionRun[] | null {
+  if (event.event_type !== 'ingestion_event' || !current) return null;
+  const payload = (event.payload ?? {}) as {
+    run_id?: string;
+    status?: string;
+    current_step?: string | null;
+    step?: MonitoringIngestionStep;
+    progress?: MonitoringIngestionRun['progress'];
+    counters?: Record<string, number>;
+  };
+  const runId = payload.run_id;
+  if (!runId) return null;
+
+  const index = current.findIndex((r) => r.run_id === runId);
+  if (index === -1) return null;
+
+  const run = current[index];
+  // Upsert the step by name — the server keys them the same way, so a step
+  // reported twice (start then finish) updates rather than duplicates.
+  let steps = run.steps ?? [];
+  if (payload.step) {
+    const stepIndex = steps.findIndex((s) => s.name === payload.step!.name);
+    steps =
+      stepIndex === -1
+        ? [...steps, payload.step]
+        : steps.map((s, i) => (i === stepIndex ? payload.step! : s));
+  }
+
+  const updated: MonitoringIngestionRun = {
+    ...run,
+    steps,
+    status: (payload.status as MonitoringIngestionRun['status']) ?? run.status,
+    current_step: payload.current_step !== undefined ? payload.current_step : run.current_step,
+    progress: payload.progress ?? run.progress,
+    counters: payload.counters ?? run.counters,
+  };
+  const next = [...current];
+  next[index] = updated;
+  return next;
+}
+
+const IngestionPane: React.FC<{ lastEvent: MonitoringLiveEvent | null }> = ({ lastEvent }) => {
   const [auto, setAuto] = useState(true);
   const [q, setQ] = useState('');
   // Controlled open rows: only the expanded run mounts its field grid + steps
   // table, keeping a large run list light on load and on refresh.
   const [open, setOpen] = useState<string[]>([]);
   const load = useCallback(() => fetchIngestionRuns({ limit: 200 }), []);
-  const { data, loading, error, refresh } = usePolling<MonitoringIngestionRun[]>(
-    load,
-    auto,
-    liveSignal,
-  );
+  // Patch in place rather than refetch: a run emits one event per step, so
+  // refetching 200 full runs each time would put this pane under continuous
+  // load for the whole of a run — and a watcher never stops producing them.
+  const { data, loading, error, refresh } = useLivePolling<
+    MonitoringIngestionRun[],
+    MonitoringLiveEvent
+  >(load, auto, lastEvent, { patch: applyIngestionEvent });
   const runs = (data ?? []).filter((r) =>
     matchesQuery(
       q,
@@ -597,6 +395,7 @@ const IngestionPane: React.FC<{ liveSignal: number }> = ({ liveSignal }) => {
             value={open}
             onChange={setOpen}
             styles={ACCORDION_STYLES}
+            classNames={ACCORDION_CLASSNAMES}
           >
             {runs.map((r) => (
             <Accordion.Item key={r.run_id} value={r.run_id}>
@@ -679,6 +478,9 @@ const IngestionPane: React.FC<{ liveSignal: number }> = ({ liveSignal }) => {
                       )}
                     </Field>
                     <Field label="Steps">{stepTally(r.steps)}</Field>
+                    <Field label="Trigger">
+                      <TriggerBadge trigger={r.trigger} reason={r.trigger_reason} />
+                    </Field>
                   </SimpleGrid>
                   {r.command_line && (
                     <DetailBlock label="Command">
@@ -776,39 +578,12 @@ const IngestionPane: React.FC<{ liveSignal: number }> = ({ liveSignal }) => {
                     </DetailBlock>
                   )}
                   {r.steps && r.steps.length > 0 && (
-                    <Table withTableBorder withColumnBorders fz="xs">
-                      <Table.Thead>
-                        <Table.Tr>
-                          <Table.Th>Step</Table.Th>
-                          <Table.Th>Status</Table.Th>
-                          <Table.Th>Detail</Table.Th>
-                        </Table.Tr>
-                      </Table.Thead>
-                      <Table.Tbody>
-                        {r.steps.map((s, i) => {
-                          const isCurrent = r.status === 'running' && s.name === r.current_step;
-                          return (
-                            <Table.Tr
-                              key={`${r.run_id}-${i}`}
-                              bg={isCurrent ? 'var(--mantine-color-yellow-light)' : undefined}
-                            >
-                              <Table.Td>
-                                <Group gap={6} wrap="nowrap">
-                                  {isCurrent && <Loader size={10} color="yellow" />}
-                                  {s.name}
-                                </Group>
-                              </Table.Td>
-                              <Table.Td>
-                                <Badge size="xs" color={statusColor(s.status)} variant="light">
-                                  {s.status}
-                                </Badge>
-                              </Table.Td>
-                              <Table.Td>{s.detail || '—'}</Table.Td>
-                            </Table.Tr>
-                          );
-                        })}
-                      </Table.Tbody>
-                    </Table>
+                    <DetailBlock label="Steps">
+                      <IngestionStepTimeline
+                        steps={r.steps}
+                        currentStep={r.status === 'running' ? r.current_step : null}
+                      />
+                    </DetailBlock>
                   )}
                   {r.error && (
                     <Alert color="red" variant="light" p="xs">
@@ -932,6 +707,7 @@ const LogsPane: React.FC = () => {
             value={open}
             onChange={setOpen}
             styles={ACCORDION_STYLES}
+            classNames={ACCORDION_CLASSNAMES}
           >
             {logs.map((l, i) => {
               const key = `${l.ts}-${i}`;
@@ -1079,21 +855,30 @@ const AdminMonitoringPanel: React.FC = () => {
   const { isPublicMode, isDemoMode, isSingleUserMode } = useCurrentUser();
   const [pane, setPane] = useState<Pane>('tasks');
   const [liveSignal, setLiveSignal] = useState(0);
+  const [lastEvent, setLastEvent] = useState<MonitoringLiveEvent | null>(null);
 
   // Match AdminApp's gate: single-user always allowed; only pure public/demo hides.
   const visible = isSingleUserMode || (!isPublicMode && !isDemoMode);
 
-  // Live push: bump a signal on each task/ingestion event so the active pane
-  // refreshes instantly. No-op (socket never delivers) when events are disabled.
+  // Live push. Two shapes on purpose: panes that refetch wholesale still use
+  // the counter, while the ingestion pane takes the event itself so it can
+  // patch one run in place. Ingestion is the only pane whose event rate scales
+  // with the work being done — the others fire a handful of times per run.
+  // No-op (socket never delivers) when events are disabled.
   const { status: liveStatus } = useMonitoringEvents({
     enabled: visible,
-    onEvent: useCallback(() => setLiveSignal((n) => n + 1), []),
+    onEvent: useCallback((event: MonitoringLiveEvent) => {
+      setLastEvent(event);
+      setLiveSignal((n) => n + 1);
+    }, []),
   });
 
   const body = useMemo(() => {
     switch (pane) {
       case 'ingestion':
-        return <IngestionPane liveSignal={liveSignal} />;
+        return <IngestionPane lastEvent={lastEvent} />;
+      case 'agents':
+        return <AgentsPane liveSignal={liveSignal} />;
       case 'logs':
         return <LogsPane />;
       case 'health':
@@ -1101,7 +886,7 @@ const AdminMonitoringPanel: React.FC = () => {
       default:
         return <TasksPane liveSignal={liveSignal} />;
     }
-  }, [pane, liveSignal]);
+  }, [pane, liveSignal, lastEvent]);
 
   if (!visible) {
     return (
@@ -1121,6 +906,7 @@ const AdminMonitoringPanel: React.FC = () => {
           data={[
             { value: 'tasks', label: 'Tasks' },
             { value: 'ingestion', label: 'Ingestion' },
+            { value: 'agents', label: 'Agents' },
             { value: 'logs', label: 'Logs' },
             { value: 'health', label: 'Health' },
           ]}

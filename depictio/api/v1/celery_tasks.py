@@ -383,7 +383,11 @@ def preview_deltatable(payload: dict) -> dict:
     """Heavy body of `GET /deltatables/preview/{id}`.
 
     Input shape:
-        {"delta_table_location": str, "limit": int}
+        {"delta_table_location": str, "limit": int, "version": int | None}
+
+    ``version`` reads a historical Delta commit. The result is returned straight
+    to the caller and never cached, so a historical read cannot later be served
+    as if it were current data.
     """
     import polars as pl
 
@@ -392,17 +396,25 @@ def preview_deltatable(payload: dict) -> dict:
 
     delta_loc = payload["delta_table_location"]
     limit = max(1, min(int(payload.get("limit", 100)), 1000))
+    raw_version = payload.get("version")
+    version = int(raw_version) if raw_version is not None else None
+
+    scan_kwargs: dict = {"storage_options": polars_s3_config}
+    if version is not None:
+        scan_kwargs["version"] = version
 
     started = time.monotonic()
-    df = pl.scan_delta(delta_loc, storage_options=polars_s3_config).head(limit).collect()
-    total_rows, total_cols = (
-        pl.scan_delta(delta_loc, storage_options=polars_s3_config).collect().shape
-    )
+    df = pl.scan_delta(delta_loc, **scan_kwargs).head(limit).collect()
+    # Count at the same version as the rows: reading the current table here
+    # would report a total that disagrees with what is being displayed. select
+    # (pl.len()) reads metadata rather than materialising the frame.
+    total_rows = int(pl.scan_delta(delta_loc, **scan_kwargs).select(pl.len()).collect().item())
+    total_cols = len(df.columns)
     rows = sanitize_for_json(df.to_dicts())
     elapsed_ms = int((time.monotonic() - started) * 1000)
     logger.info(
         f"celery_tasks.preview_deltatable rows={limit}/{total_rows} cols={total_cols} "
-        f"elapsed_ms={elapsed_ms}"
+        f"version={'current' if version is None else version} elapsed_ms={elapsed_ms}"
     )
 
     return {
@@ -410,6 +422,7 @@ def preview_deltatable(payload: dict) -> dict:
         "rows": rows,
         "total_rows": total_rows,
         "total_columns": total_cols,
+        "version": version,
     }
 
 

@@ -1,16 +1,47 @@
+import json
+import os
+import socket
 from typing import Annotated
 
 import typer
 
-from depictio.cli.cli.utils.api_calls import api_get_project_from_id, api_get_project_from_name
+from depictio.cli.cli.utils.api_calls import (
+    api_agent_claim_trigger,
+    api_agent_deregister,
+    api_agent_heartbeat,
+    api_get_project_from_id,
+    api_get_project_from_name,
+    api_monitoring_ingestion_finish,
+    api_monitoring_ingestion_start,
+    api_monitoring_ingestion_step,
+)
+from depictio.cli.cli.utils.common import cli_version, get_http_client
 from depictio.cli.cli.utils.config import validate_project_config_and_check_S3_storage
+from depictio.cli.cli.utils.delta_versioning import (
+    METADATA_PREFIX,
+    list_delta_versions,
+    vacuum_delta_table,
+)
 from depictio.cli.cli.utils.helpers import process_project_helper
 from depictio.cli.cli.utils.rich_utils import (
+    render_records_table,
     rich_print_checked_statement,
     rich_print_command_usage,
     rich_print_section_separator,
 )
+from depictio.cli.cli.utils.state import lock_path
+from depictio.cli.cli.utils.step_reporter import (
+    StepReporter,
+    ingestion_data_collections,
+    redacted_command_line,
+)
+from depictio.cli.cli.utils.watch import (
+    ProjectWatcher,
+    WatchConfig,
+    project_lock,
+)
 from depictio.cli.cli_logging import logger
+from depictio.models.s3_utils import turn_S3_config_into_polars_storage_options
 
 app = typer.Typer()
 
@@ -39,6 +70,44 @@ def scan(
     sync_files: bool = typer.Option(
         False, "--sync-files", help="Update files for the data collection"
     ),
+    sync_changed: bool = typer.Option(
+        False,
+        "--sync-changed",
+        help=(
+            "Re-upload only files whose metadata hash moved since the last scan. "
+            "Narrower than --sync-files, which re-uploads every registered file."
+        ),
+    ),
+    legacy_scan_depth: bool = typer.Option(
+        False,
+        "--legacy-scan-depth",
+        help=(
+            "Ignore each data collection's scan max_depth/ignore, as releases before "
+            "1.2.2 did. Deprecated escape hatch; will be removed."
+        ),
+    ),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Report what would be registered or removed without writing to the server",
+    ),
+    state_cache: bool = typer.Option(
+        True,
+        "--state-cache/--no-state-cache",
+        help=(
+            "Use the local scan-state cache to skip runs whose file tree is unchanged "
+            "since the last successful scan. Only applies when rescanning."
+        ),
+    ),
+    concurrency: int = typer.Option(
+        4,
+        "--concurrency",
+        "-c",
+        help="Parallel HTTP requests for file uploads and cleanup deletes",
+    ),
+    upload_chunk_size: int = typer.Option(
+        1000, "--upload-chunk-size", help="Files per /files/upsert_batch request"
+    ),
     rich_tables: bool = typer.Option(
         False, "--rich-tables", help="Display rich tables in the output"
     ),
@@ -56,11 +125,23 @@ def scan(
     """
     rich_print_command_usage("scan")
 
-    if sync_files:
+    # Size the shared connection pool before the first request: it is created
+    # lazily and honours this only on the first call.
+    get_http_client(concurrency=concurrency)
+
+    # Both re-upload flags need every run walked again; without this, runs
+    # already registered are skipped before a single file is looked at.
+    if sync_files or sync_changed:
         rescan_folders = True
 
     logger.info(f"Reprocessing runs: {rescan_folders}")
     logger.info(f"Updating files: {sync_files}")
+    logger.info(f"Syncing changed files: {sync_changed}")
+
+    if dry_run:
+        rich_print_checked_statement(
+            "DRY RUN — reporting what would change, writing nothing", "info"
+        )
 
     # Validate configurations and prepare headers
     CLI_config, response = validate_project_config_and_check_S3_storage(
@@ -103,6 +184,12 @@ def scan(
                 command_parameters = {
                     "rescan_folders": rescan_folders,
                     "sync_files": sync_files,
+                    "sync_changed": sync_changed,
+                    "legacy_scan_depth": legacy_scan_depth,
+                    "dry_run": dry_run,
+                    "state_cache": state_cache,
+                    "concurrency": concurrency,
+                    "upload_chunk_size": upload_chunk_size,
                     "rich_tables": rich_tables,
                 }
 
@@ -135,6 +222,574 @@ def scan(
     # remote_upload_files(response["CLI_config"], project_config_path, data_collection_tag)
 
 
+def _resolve_data_collection(project_config, data_collection_tag: str):
+    """Find a data collection by tag across every workflow of a project."""
+    for workflow in project_config.workflows:
+        for dc in workflow.data_collections:
+            if dc.data_collection_tag == data_collection_tag:
+                return dc
+    return None
+
+
+def _delta_location(CLI_config, data_collection) -> str:
+    """Where a data collection's Delta table lives. Mirrors client_aggregate_data."""
+    return f"s3://{CLI_config.s3_storage.bucket}/{str(data_collection.id)}"
+
+
+def _load_project_or_exit(CLI_config_path: str, project_config_path: str):
+    CLI_config, response = validate_project_config_and_check_S3_storage(
+        CLI_config_path=CLI_config_path, project_config_path=project_config_path
+    )
+    if not response["success"]:
+        rich_print_checked_statement("Depictio Project configuration validation failed", "error")
+        raise typer.Exit(code=1)
+    return CLI_config, response["project_config"]
+
+
+@app.command()
+def versions(
+    data_collection_tag: Annotated[
+        str, typer.Argument(help="Data collection whose Delta history to list")
+    ],
+    CLI_config_path: Annotated[
+        str, typer.Option("--CLI-config-path", help="Path to the CLI configuration file")
+    ] = "~/.depictio/CLI.yaml",
+    project_config_path: Annotated[
+        str, typer.Option("--project-config-path", help="Path to the pipeline configuration file")
+    ] = "",
+    limit: int = typer.Option(20, "--limit", help="Number of commits to show"),
+    json_output: bool = typer.Option(False, "--json", help="Emit machine-readable JSON"),
+):
+    """
+    List the Delta Lake commit history of a data collection.
+
+    Every ingestion has always produced a new Delta version; this surfaces the
+    history that was already there, along with depictio's own commit metadata
+    (which run wrote it, what triggered it, which write mode was used).
+    """
+    if not json_output:
+        rich_print_command_usage("versions")
+
+    CLI_config, project_config = _load_project_or_exit(CLI_config_path, project_config_path)
+
+    data_collection = _resolve_data_collection(project_config, data_collection_tag)
+    if data_collection is None:
+        rich_print_checked_statement(
+            f"Data collection '{data_collection_tag}' not found in this project.", "error"
+        )
+        raise typer.Exit(code=1)
+
+    storage_options = turn_S3_config_into_polars_storage_options(CLI_config.s3_storage)
+    destination = _delta_location(CLI_config, data_collection)
+    history = list_delta_versions(destination, storage_options, limit=limit)
+
+    if not history:
+        if json_output:
+            typer.echo(json.dumps({"location": destination, "versions": []}))
+        else:
+            rich_print_checked_statement(f"No Delta table at {destination} yet.", "warning")
+        return
+
+    records = [
+        {
+            "version": commit.version,
+            "timestamp": commit.timestamp.isoformat() if commit.timestamp else "",
+            "operation": commit.operation or "",
+            "write_mode": commit.custom_metadata.get(f"{METADATA_PREFIX}write_mode", ""),
+            "trigger": commit.custom_metadata.get(f"{METADATA_PREFIX}trigger", ""),
+            "rows_added": commit.rows_added if commit.rows_added is not None else "",
+            "files_added": commit.files_added if commit.files_added is not None else "",
+            "runs": commit.custom_metadata.get(f"{METADATA_PREFIX}run_count", ""),
+            "ingestion_run": commit.custom_metadata.get(f"{METADATA_PREFIX}ingestion_run_id", ""),
+        }
+        for commit in history
+    ]
+
+    if json_output:
+        # Plain stdout, not console.print_json: the shared rich Console does not
+        # force a TTY, but its markup would still corrupt piped JSON.
+        typer.echo(json.dumps({"location": destination, "versions": records}, indent=2))
+        return
+
+    render_records_table(
+        records,
+        title=f"Delta history — {data_collection_tag}",
+    )
+    rich_print_checked_statement(f"Location: {destination}", "info")
+
+
+@app.command()
+def vacuum(
+    data_collection_tag: Annotated[
+        str, typer.Argument(help="Data collection whose stale Delta files to remove")
+    ],
+    CLI_config_path: Annotated[
+        str, typer.Option("--CLI-config-path", help="Path to the CLI configuration file")
+    ] = "~/.depictio/CLI.yaml",
+    project_config_path: Annotated[
+        str, typer.Option("--project-config-path", help="Path to the pipeline configuration file")
+    ] = "",
+    retention_hours: int = typer.Option(
+        168,
+        "--retention-hours",
+        help="Keep files needed by versions newer than this. Going below the "
+        "168h default breaks readers that are mid-query.",
+    ),
+    apply: bool = typer.Option(
+        False, "--apply", help="Actually delete. Without this the command only reports."
+    ),
+):
+    """
+    Remove Delta files no longer referenced by any retained version.
+
+    Nothing in depictio has ever vacuumed, so every re-ingestion has left its
+    predecessor's files behind and a data collection's physical footprint grows
+    without bound — a watcher accelerates that considerably.
+
+    Deliberately dry-run by default and never wired into an ingestion path:
+    vacuuming below the retention window pulls files out from under an API
+    worker that is part-way through reading the table.
+    """
+    rich_print_command_usage("vacuum")
+
+    CLI_config, project_config = _load_project_or_exit(CLI_config_path, project_config_path)
+
+    data_collection = _resolve_data_collection(project_config, data_collection_tag)
+    if data_collection is None:
+        rich_print_checked_statement(
+            f"Data collection '{data_collection_tag}' not found in this project.", "error"
+        )
+        raise typer.Exit(code=1)
+
+    storage_options = turn_S3_config_into_polars_storage_options(CLI_config.s3_storage)
+    destination = _delta_location(CLI_config, data_collection)
+
+    try:
+        removed = vacuum_delta_table(
+            destination,
+            storage_options,
+            retention_hours=retention_hours,
+            dry_run=not apply,
+        )
+    except Exception as exc:  # noqa: BLE001 - surfaced to the user, not swallowed
+        rich_print_checked_statement(f"Vacuum failed: {exc}", "error")
+        raise typer.Exit(code=1) from exc
+
+    if not removed:
+        rich_print_checked_statement("Nothing to remove.", "success")
+        return
+
+    if apply:
+        rich_print_checked_statement(
+            f"Removed {len(removed)} file(s) from {destination}", "success"
+        )
+    else:
+        rich_print_checked_statement(
+            f"[dry-run] {len(removed)} file(s) would be removed from {destination}. "
+            "Re-run with --apply to delete them.",
+            "info",
+        )
+
+
+def watch(
+    CLI_config_path: Annotated[
+        str,
+        typer.Option("--CLI-config-path", help="Path to the CLI configuration file"),
+    ] = "~/.depictio/CLI.yaml",
+    project_config_path: Annotated[
+        str,
+        typer.Option("--project-config-path", help="Path to the pipeline configuration file"),
+    ] = "",
+    mode: str = typer.Option(
+        "incremental",
+        "--mode",
+        help=(
+            "incremental: register new and changed files only. "
+            "full: re-scan and rewrite everything, as if --rescan-folders --sync-files "
+            "--overwrite were passed."
+        ),
+    ),
+    backend: str = typer.Option(
+        "auto",
+        "--backend",
+        help=(
+            "auto (detect), native (filesystem events only), polling (periodic re-walk), "
+            "or both. auto selects polling on network filesystems, where native events "
+            "do not see writes made from another host."
+        ),
+    ),
+    debounce: float = typer.Option(
+        30.0, "--debounce", help="Seconds of quiet before an ingestion cycle is triggered"
+    ),
+    settle: float = typer.Option(
+        5.0,
+        "--settle",
+        help="Seconds a file must hold the same size and mtime before it is ingested",
+    ),
+    interval: float = typer.Option(
+        300.0, "--interval", help="Seconds between polling walks (also the event-loss backstop)"
+    ),
+    max_delay: float = typer.Option(
+        300.0,
+        "--max-delay",
+        help="Ceiling on debouncing, so a continuously-written tree still gets ingested",
+    ),
+    full_every: int | None = typer.Option(
+        None, "--full-every", help="Run a full re-ingest every N incremental cycles"
+    ),
+    once: bool = typer.Option(False, "--once", help="Run a single cycle and exit"),
+    max_runs: int | None = typer.Option(
+        None, "--max-runs", help="Stop after this many ingestion cycles"
+    ),
+    write_mode: str = typer.Option(
+        "overwrite",
+        "--write-mode",
+        help="Delta write strategy passed to the process step (overwrite, replace-runs)",
+    ),
+    incremental_write: bool = typer.Option(
+        False,
+        "--incremental-write",
+        help=(
+            "With --write-mode replace-runs, rewrite only the runs that changed instead of "
+            "rebuilding the whole table. Falls back to a full rebuild whenever that cannot be "
+            "done safely (run removed, table not partitioned by run, column type changed)."
+        ),
+    ),
+    concurrency: int = typer.Option(
+        4, "--concurrency", "-c", help="Parallel HTTP requests during each cycle"
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Report each cycle's changes without writing to the server"
+    ),
+):
+    """
+    Watch the data root and re-run ingestion when it changes.
+
+    Runs until interrupted. SIGINT/SIGTERM finish the cycle in progress and then
+    exit cleanly, so it is safe to run under systemd or as a container command.
+    """
+    rich_print_command_usage("watch")
+
+    if mode not in ("incremental", "full"):
+        rich_print_checked_statement(f"Invalid --mode '{mode}'", "error", exit=True)
+        raise typer.Exit(code=1)
+    if backend not in ("auto", "native", "polling", "both"):
+        rich_print_checked_statement(f"Invalid --backend '{backend}'", "error", exit=True)
+        raise typer.Exit(code=1)
+    if write_mode not in ("overwrite", "replace-runs"):
+        rich_print_checked_statement(f"Invalid --write-mode '{write_mode}'", "error", exit=True)
+        raise typer.Exit(code=1)
+
+    get_http_client(concurrency=concurrency)
+
+    CLI_config, response = validate_project_config_and_check_S3_storage(
+        CLI_config_path=CLI_config_path, project_config_path=project_config_path
+    )
+    if not response["success"]:
+        rich_print_checked_statement("Depictio Project configuration validation failed", "error")
+        raise typer.Exit(code=1)
+
+    project_config = response["project_config"]
+
+    roots = _project_data_roots(project_config)
+    if not roots:
+        rich_print_checked_statement(
+            "No existing data locations to watch in this project.", "error"
+        )
+        raise typer.Exit(code=1)
+
+    if mode == "incremental" and write_mode == "overwrite":
+        # Worth saying plainly: with the default write mode, a collection whose
+        # files moved has its whole Delta table rewritten. Collections that did
+        # not move are left alone regardless.
+        rich_print_checked_statement(
+            "Incremental watching with --write-mode overwrite rewrites a changed collection's "
+            "entire Delta table. Use --write-mode replace-runs --incremental-write to rewrite "
+            "only the runs that changed.",
+            "warning",
+        )
+    if incremental_write and write_mode != "replace-runs":
+        rich_print_checked_statement(
+            "--incremental-write only applies to --write-mode replace-runs; ignoring it.",
+            "warning",
+        )
+        incremental_write = False
+
+    config = WatchConfig(
+        mode=mode,  # type: ignore[arg-type]
+        backend=backend,  # type: ignore[arg-type]
+        debounce_seconds=debounce,
+        settle_seconds=settle,
+        poll_interval_seconds=interval,
+        max_delay_seconds=max_delay,
+        full_every=full_every,
+        once=once,
+        max_runs=max_runs,
+    )
+
+    # Gate for skipping unchanged collections. Starts closed on purpose: the
+    # first cycle after a watcher starts rebuilds everything, which is also how
+    # a project left inconsistent by a previous process recovers.
+    last_cycle_ok = {"value": False}
+
+    def run_cycle(cycle_mode: str, paths: set[str]) -> bool:
+        if paths:
+            logger.info(f"Ingesting after {len(paths)} settled change(s).")
+
+        # Open a monitoring record per cycle, exactly as `depictio run` does for
+        # a manual ingestion. Without it a watched project shows an empty
+        # Ingestion → History while its Delta table gains commit after commit —
+        # the one place someone looks to find out what the watcher has been
+        # doing. Best-effort in both directions: a monitoring outage must not
+        # stop the cycle, and a cycle that fails must still close its record.
+        ingestion_run_id = None
+        if not dry_run:
+            ingestion_run_id = api_monitoring_ingestion_start(
+                CLI_config=CLI_config,
+                command="watch",
+                project_id=str(project_config.id),
+                project_name=project_config.name,
+                cli_version=cli_version(),
+                command_line=redacted_command_line(),
+                cli_config_path=str(CLI_config_path) if CLI_config_path else None,
+                project_config_path=str(project_config_path) or None,
+                # The watcher decides why it fired — a settled batch, a poll, or
+                # someone pressing "Run now" — and a UI-requested cycle is
+                # recorded as such rather than being indistinguishable from an
+                # automatic one in the history.
+                trigger=watcher.trigger_kind,
+                trigger_reason=watcher.trigger_reason,
+            )
+            # Hand the id back so the agent card can link to the run it is
+            # executing; the watcher schedules cycles but does not open records.
+            watcher.note_run(ingestion_run_id)
+
+        command_parameters = {
+            # A full cycle re-walks and re-uploads everything; an incremental one
+            # only acts on files whose metadata hash moved.
+            "rescan_folders": True,
+            "sync_files": cycle_mode == "full",
+            "sync_changed": cycle_mode == "incremental",
+            # Always true, including incremental cycles: client_aggregate_data
+            # refuses to write over an existing Delta table without it, so every
+            # cycle after the first would fail at the process step. Until
+            # --write-mode replace-runs makes the write partition-scoped, this
+            # does mean a full table rewrite per cycle — which is what the
+            # warning above is about.
+            "overwrite": True,
+            "write_mode": write_mode,
+            "dry_run": dry_run,
+            "state_cache": True,
+            "concurrency": concurrency,
+            "rich_tables": False,
+            "trigger": watcher.trigger_kind,
+            # Ties this cycle's Delta commit back to its monitoring record, the
+            # same link `depictio run` writes. Without it the commit history and
+            # the run ledger cannot be joined for watch-driven writes.
+            "ingestion_run_id": ingestion_run_id,
+            # Leave untouched collections alone — but only on an incremental
+            # cycle whose predecessor succeeded. After any failure, and on every
+            # full cycle, everything is rebuilt: that is what makes a Delta
+            # table that fell behind (a write that died between the object store
+            # and Mongo, say) catch up on its own instead of staying skipped.
+            "skip_unchanged": cycle_mode == "incremental" and last_cycle_ok["value"],
+            "incremental_write": incremental_write,
+        }
+
+        reporter = StepReporter(
+            send=lambda run_id, step, current: api_monitoring_ingestion_step(
+                CLI_config, run_id, step, current
+            ),
+            run_id=ingestion_run_id,
+            enabled=bool(ingestion_run_id),
+        )
+        status, error = "success", None
+        try:
+            reporter.start("scan", f"scanning in {cycle_mode} mode")
+            scan_result = process_project_helper(
+                CLI_config=CLI_config,
+                project_config=project_config,
+                workflow_name=None,
+                data_collection_tag=None,
+                command_parameters=command_parameters,
+                mode="scan",
+            )
+            reporter.finish("scan", "success", "data files scanned")
+
+            # The scan knows which collections and which runs moved; the process
+            # step is the only thing that can act on it.
+            command_parameters["scan_signal"] = scan_result or {}
+            changed = len((scan_result or {}).get("changed_dcs") or {})
+
+            reporter.start("process", f"writing with {write_mode}")
+            process_result = process_project_helper(
+                CLI_config=CLI_config,
+                project_config=project_config,
+                workflow_name=None,
+                data_collection_tag=None,
+                command_parameters=command_parameters,
+                mode="process",
+            )
+            left_alone = len((process_result or {}).get("skipped_unchanged") or [])
+            reporter.finish(
+                "process",
+                "success",
+                f"{changed} data collection(s) changed, {left_alone} left unchanged"
+                if left_alone
+                else "data collections processed",
+            )
+
+            # Joins, like `depictio run` and the UI trigger both do. Without
+            # this a watched project with a `joins:` block keeps rebuilding its
+            # source tables while the joined ones stay frozen at whatever the
+            # last manual run produced — silently, since nothing reports a join
+            # that was never attempted.
+            if getattr(project_config, "joins", None) and not dry_run:
+                from depictio.cli.cli.utils.joins import process_project_joins
+
+                reporter.start("joins", "executing table joins")
+                join_result = process_project_joins(
+                    project=project_config,
+                    CLI_config=CLI_config,
+                    join_name=None,
+                    preview_only=False,
+                    overwrite=True,
+                    auto_process_dependencies=True,
+                )
+                join_errors = join_result.get("errors") or []
+                if join_result.get("result") not in ("success", "partial"):
+                    raise Exception(f"Join execution failed: {join_result.get('message', '')}")
+                reporter.finish(
+                    "joins",
+                    "partial" if join_errors else "success",
+                    f"{len(join_result.get('processed') or [])} processed"
+                    + (f", {len(join_errors)} failed" if join_errors else ""),
+                )
+            return True
+        except Exception as exc:  # noqa: BLE001 - a watcher must outlive one bad cycle
+            logger.error(f"Ingestion cycle failed: {exc}")
+            status, error = "failed", str(exc)
+            # Mark whichever phase was in flight, so a failed cycle shows where
+            # it stopped instead of leaving a step stuck on "running" forever.
+            for name in ("scan", "process", "joins"):
+                if reporter.steps and any(
+                    s["name"] == name and s.get("status") == "running" for s in reporter.steps
+                ):
+                    reporter.finish(name, "failed", str(exc))
+            return False
+        finally:
+            # A dry run never wrote anything, so it cannot vouch for the next
+            # cycle being allowed to skip.
+            last_cycle_ok["value"] = status == "success" and not dry_run
+            if ingestion_run_id:
+                reporter.close(timeout=2.0)
+                api_monitoring_ingestion_finish(
+                    CLI_config=CLI_config,
+                    run_id=ingestion_run_id,
+                    status=status,
+                    steps=reporter.steps,
+                    error=error,
+                    project_id=str(project_config.id),
+                    data_collections=ingestion_data_collections(project_config),
+                )
+
+    lock_file = lock_path(CLI_config.api_base_url, str(project_config.id))
+    watcher = ProjectWatcher(roots=roots, config=config, run_cycle=run_cycle)
+    watcher.install_signal_handlers()
+
+    # Register with the server so the watcher is visible in the admin UI, and
+    # keep reporting as its state changes. Entirely best-effort: a server that
+    # does not support agents (or is simply down) must not stop the watching.
+    agent_id = f"{socket.gethostname()}:{os.getpid()}:{project_config.id}"
+    agents_supported = {"ok": True}
+
+    def report_status(status: str, extra: dict) -> None:
+        if not agents_supported["ok"]:
+            return
+        payload = {
+            "agent_id": agent_id,
+            "kind": "watcher",
+            "hostname": socket.gethostname(),
+            "pid": os.getpid(),
+            "cli_version": cli_version(),
+            "project_id": str(project_config.id),
+            "project_name": project_config.name,
+            "mode": mode,
+            "backend": watcher.backend,
+            "watching": roots,
+            "status": status,
+            "runs_total": int(extra.get("runs_total", 0)),
+        }
+        # Both rendered on the agent card. Sent only when set, so a watcher that
+        # has not run a cycle yet leaves them null rather than clearing them.
+        if extra.get("last_run_id"):
+            payload["last_run_id"] = extra["last_run_id"]
+        if extra.get("last_trigger_at"):
+            payload["last_trigger_at"] = extra["last_trigger_at"].isoformat()
+        if not api_agent_heartbeat(CLI_config, payload):
+            logger.info("Server has no CLI-agent registry; skipping further heartbeats.")
+            agents_supported["ok"] = False
+
+    commands_supported = {"ok": True}
+
+    def poll_command() -> bool:
+        """Whether the agent card's "Run now" has been pressed since the last poll."""
+        if not agents_supported["ok"] or not commands_supported["ok"]:
+            return False
+        requested = api_agent_claim_trigger(CLI_config, agent_id)
+        if requested is None:
+            logger.info("Server does not support UI-triggered runs; not polling for them.")
+            commands_supported["ok"] = False
+            return False
+        return requested
+
+    watcher.on_status = report_status
+    watcher.on_poll_command = poll_command
+    report_status("idle", {})
+
+    rich_print_section_separator(f"Watching {len(roots)} location(s) — {watcher.backend} backend")
+    for root in roots:
+        rich_print_checked_statement(f"  {root}", "info")
+
+    try:
+        with project_lock(lock_file):
+            exit_code = watcher.run()
+    except RuntimeError as exc:
+        rich_print_checked_statement(str(exc), "error")
+        raise typer.Exit(code=1) from exc
+    except KeyboardInterrupt:
+        rich_print_checked_statement("Interrupted.", "warning")
+        exit_code = 130
+    finally:
+        if agents_supported["ok"]:
+            api_agent_deregister(CLI_config, agent_id)
+
+    raise typer.Exit(code=exit_code)
+
+
+def register_watch_command(cli_app: typer.Typer) -> None:
+    """Register ``watch`` at the top level, next to ``run``.
+
+    It lives in this module because it reuses the scan/process plumbing around
+    it, but it is not a `data` subcommand: it is `depictio run` on a loop, and
+    belongs at the same level as the command it repeats rather than one level
+    down among the collection-level verbs.
+    """
+    cli_app.command(name="watch")(watch)
+
+
+def _project_data_roots(project_config) -> list[str]:
+    """Existing, distinct data locations across every workflow of a project."""
+    roots: list[str] = []
+    for workflow in project_config.workflows:
+        for location in workflow.data_location.locations or []:
+            if location not in roots and os.path.isdir(location):
+                roots.append(location)
+            elif not os.path.isdir(location):
+                logger.warning(f"Skipping non-existent data location: {location}")
+    return roots
+
+
 @app.command()
 def process(
     CLI_config_path: Annotated[
@@ -153,16 +808,48 @@ def process(
     rich_tables: bool = typer.Option(
         False, "--rich-tables", help="Display rich tables in the output"
     ),
+    write_mode: str = typer.Option(
+        "overwrite",
+        "--write-mode",
+        help=(
+            "overwrite: rewrite the whole table (historical behaviour). "
+            "replace-runs: partition by run and rewrite only the runs present in "
+            "this batch, leaving the others untouched."
+        ),
+    ),
     preview_recipes: bool = typer.Option(
         False,
         "--preview-recipes",
         help="Show recipe input sources and transformed output without writing to Delta Lake",
+    ),
+    repartition: bool = typer.Option(
+        False,
+        "--repartition",
+        help=(
+            "Allow --write-mode replace-runs to adopt run partitioning on a table "
+            "that does not have it yet. This rewrites every row, so it is never "
+            "done implicitly — and never by the watcher."
+        ),
+    ),
+    async_upsert: bool = typer.Option(
+        False,
+        "--async-upsert",
+        help=(
+            "Ask the server to profile the written table in the background and poll "
+            "until it finishes, instead of holding one long HTTP request open. "
+            "Ignored by servers without offloading enabled — the upsert then just "
+            "completes inline as before."
+        ),
     ),
 ):
     """
     Process data collections for a specific tag.
     """
     rich_print_command_usage("process")
+
+    if write_mode not in ("overwrite", "replace-runs"):
+        rich_print_checked_statement(f"Invalid --write-mode '{write_mode}'", "error")
+        raise typer.Exit(code=1)
 
     # Validate configurations and prepare headers
     CLI_config, response = validate_project_config_and_check_S3_storage(
@@ -199,8 +886,12 @@ def process(
 
                 command_parameters = {
                     "overwrite": overwrite,
+                    "write_mode": write_mode,
                     "rich_tables": rich_tables,
                     "preview_recipes": preview_recipes,
+                    "project_id": str(project_config.id),
+                    "async_upsert": async_upsert,
+                    "repartition": repartition,
                 }
 
                 rich_print_section_separator("Processing files")

@@ -10,6 +10,7 @@ from depictio.cli.cli.commands.catalog import app as catalog
 from depictio.cli.cli.commands.config import app as config
 from depictio.cli.cli.commands.dashboard import app as dashboard
 from depictio.cli.cli.commands.data import app as data
+from depictio.cli.cli.commands.data import register_watch_command
 from depictio.cli.cli.commands.dev import app as dev
 from depictio.cli.cli.commands.images import app as images
 from depictio.cli.cli.commands.migrate import app as migrate
@@ -26,6 +27,9 @@ register_standalone_commands(app)
 
 # Register the run command
 register_run_command(app)
+
+# `watch` is `run` on a loop, so it sits next to it rather than under `data`.
+register_watch_command(app)
 
 
 @app.callback()
@@ -83,13 +87,12 @@ def display_depictio_cli_logo() -> None:
         "pink": "#E6779F",
     }
 
-    from importlib.metadata import PackageNotFoundError
-    from importlib.metadata import version as _pkg_version
+    # Same resolution as the version stamped into Delta commits and monitoring
+    # records, so the banner cannot claim one version while the provenance
+    # records another.
+    from depictio.cli.cli.utils.common import cli_version as _resolve_cli_version
 
-    try:
-        cli_version = _pkg_version("depictio-cli")
-    except PackageNotFoundError:
-        cli_version = "dev"
+    cli_version = _resolve_cli_version() or "dev"
 
     # Pre-rendered favicon (20x8 chars), generated offline from the logo PNG by
     # snapping each pixel to the nearest brand colour - sharp wedge edges without
