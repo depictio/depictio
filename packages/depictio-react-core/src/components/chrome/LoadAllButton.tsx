@@ -27,7 +27,7 @@ export interface LoadAllState {
 const LoadAllButton: React.FC<{ state: LoadAllState }> = ({ state }) => {
   const label = state.full
     ? `Back to reduced view`
-    : `Load all ${state.noun} — may be slow on large datasets`;
+    : `Load all ${state.noun} (may be slow on large datasets)`;
   return (
     <Tooltip label={label} withArrow>
       <ActionIcon

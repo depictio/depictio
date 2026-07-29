@@ -50,140 +50,150 @@ app = typer.Typer(add_completion=False)
 # 1. Where the work got bounded.
 # --------------------------------------------------------------------------
 
-STAGES_W, STAGES_H = 1280, 700
+STAGES_W, STAGES_H = 1320, 560
+
+# The three stages own the same x ranges in both bands, so a column can be read
+# straight down: what the stage used to carry, and what it carries now.
+CUTS = (250, 540, 830, 1120)
+BEFORE_Y, AFTER_Y = 178, 330
+
+# Half-heights along the "now" band. Only the shape is quantitative: the taper
+# is what the reader measures, so it tracks how much of the table is still in
+# play at each boundary rather than being drawn freehand.
+AFTER_H = (52, 38, 18, 8)
+BEFORE_H = 52  # constant: nothing narrowed it
+
+
+def _segment(s: Sketch, i: int, fill: str, left_h: float, right_h: float, cy: float) -> None:
+    """One stage of a band, outlined on top and bottom only.
+
+    Leaving the verticals bare is what makes three segments read as one
+    continuous flow instead of as three separate boxes.
+    """
+    x1, x2 = CUTS[i], CUTS[i + 1]
+    s.poly(
+        [(x1, cy - left_h), (x2, cy - right_h), (x2, cy + right_h), (x1, cy + left_h)],
+        fill=fill,
+        edges=(0, 2),
+    )
 
 
 def build_stages() -> Sketch:
+    """Two bands: what used to travel the whole pipeline, and what does now.
+
+    This replaces a 3x3 grid of prose boxes, which read as a table to be parsed
+    rather than a picture to be taken in. Here the only thing to see is that the
+    lower band tapers and the upper one does not; the words just name the cause.
+    """
     s = Sketch(STAGES_W, STAGES_H)
 
     s.heading(
         46,
         52,
-        "Where the work got bounded",
-        "the same three stages, each asked to carry less of the table at once",
+        "How much of the table each stage still carries",
+        "same three stages in both rows; only the lower one narrows",
     )
 
-    cols = (210, 545, 880)
-    width = 300
+    fills = (PINK, BLUE, YELLOW)
+    for i, name in enumerate(("CLI ingest", "API serve", "Viewer render")):
+        s.text((CUTS[i] + CUTS[i + 1]) / 2, 106, name, size=19, weight="bold")
 
-    before = [
-        Box(
-            cols[0],
-            140,
-            width,
-            96,
-            PINK,
-            "the whole collection",
-            ("parsed and concatenated,", "then written in one go"),
-        ),
-        Box(
-            cols[1],
-            140,
-            width,
-            96,
-            PINK,
-            "the whole frame",
-            ("every row and column read,", "then filtered in Python"),
-        ),
-        Box(
-            cols[2],
-            140,
-            width,
-            96,
-            PINK,
-            "the whole bundle",
-            ("plotly, ag-grid, cytoscape", "parsed before first paint"),
-        ),
-    ]
-    stages = [
-        Box(
-            cols[0],
-            296,
-            width,
-            100,
-            BLUE,
-            "CLI ingest",
-            ("streamed Delta write", "parallel parse · clustering"),
-        ),
-        Box(
-            cols[1],
-            296,
-            width,
-            100,
-            YELLOW,
-            "API serve",
-            ("aggregation pushdown", "links resolved once per fan-out"),
-        ),
-        Box(
-            cols[2],
-            296,
-            width,
-            100,
-            VIOLET,
-            "Viewer render",
-            ("lazy routes and renderers", "viewport-gated mounting"),
-        ),
-    ]
-    after = [
-        Box(
-            cols[0],
-            452,
-            width,
-            104,
-            GREEN,
-            "chunks, not the table",
-            ("peak RSS bounded, and", "per-phase timing recorded"),
-        ),
-        Box(
-            cols[1],
-            452,
-            width,
-            104,
-            GREEN,
-            "a bounded slice",
-            ("row ceiling, scan-level paging,", "kind-aware reduction"),
-        ),
-        Box(
-            cols[2],
-            452,
-            width,
-            104,
-            GREEN,
-            "what is on screen",
-            ("one route tree, heavy vendors", "as shared async chunks"),
-        ),
-    ]
+    # Before: full width from storage to screen.
+    for i in range(3):
+        _segment(s, i, PINK, BEFORE_H, BEFORE_H, BEFORE_Y)
+    for i, line in enumerate(("the whole collection", "the whole frame", "the whole bundle")):
+        s.text((CUTS[i] + CUTS[i + 1]) / 2, BEFORE_Y + 6, line, size=16, colour=DIM)
 
-    for row in (before, stages, after):
-        for b in row:
-            s.box(b)
+    # After: the same three stages, each one narrowing the band.
+    for i in range(3):
+        _segment(s, i, fills[i], AFTER_H[i], AFTER_H[i + 1], AFTER_Y)
 
-    # The pipeline itself.
-    for left, right in zip(stages, stages[1:]):
-        s.arrow(left.right + 8, left.cy, right.x - 10, right.cy)
+    # Dividers only on the tapering band, where a column boundary is the thing
+    # that changed the height.
+    for i in (1, 2):
+        s.line(
+            CUTS[i],
+            AFTER_Y - AFTER_H[i],
+            CUTS[i],
+            AFTER_Y + AFTER_H[i],
+            colour=GREY,
+            width=1.4,
+            amount=1.0,
+            passes=1,
+        )
 
-    # What each stage stopped doing, and what replaced it.
-    for b, st, a in zip(before, stages, after):
-        s.arrow(st.cx, b.bottom + 8, st.cx, st.y - 10, dashed=True, colour=DIM)
-        s.arrow(st.cx, st.bottom + 8, st.cx, a.y - 10, dashed=True, colour=DIM)
+    # Row labels, and the endpoints that give the taper its scale. Both rows
+    # start from the same stored table, so a bracket says that once rather than
+    # repeating the number on each row.
+    s.text(CUTS[0] - 30, BEFORE_Y + 6, "before", size=17, weight="bold", anchor="end")
+    s.text(CUTS[0] - 30, AFTER_Y + 6, "now", size=17, weight="bold", anchor="end")
 
-    s.text(46, 182, "used to", size=15, colour=DIM, anchor="start")
-    s.text(46, 202, "materialise", size=15, colour=DIM, anchor="start")
-    s.text(46, 352, "the stage", size=15, colour=DIM, anchor="start")
-    s.text(46, 498, "now bounded", size=15, colour=DIM, anchor="start")
-    s.text(46, 518, "by", size=15, colour=DIM, anchor="start")
+    brace_x = CUTS[0] - 14
+    s.curve(
+        [
+            (brace_x + 10, BEFORE_Y - BEFORE_H),
+            (brace_x, BEFORE_Y - BEFORE_H),
+            (brace_x, AFTER_Y + AFTER_H[0]),
+            (brace_x + 10, AFTER_Y + AFTER_H[0]),
+        ],
+        colour=GREY,
+    )
+    s.text(
+        brace_x - 12,
+        (BEFORE_Y + AFTER_Y) / 2 - 4,
+        "the same",
+        size=14,
+        colour=DIM,
+        anchor="end",
+    )
+    s.text(
+        brace_x - 12,
+        (BEFORE_Y + AFTER_Y) / 2 + 16,
+        "17.2 M rows",
+        size=14,
+        colour=DIM,
+        anchor="end",
+    )
+
+    s.text(CUTS[-1] + 24, BEFORE_Y - 2, "17.2 M", size=17, weight="bold", anchor="start")
+    s.text(CUTS[-1] + 24, BEFORE_Y + 20, "reach the browser", size=14, colour=DIM, anchor="start")
+    s.text(CUTS[-1] + 24, AFTER_Y - 2, "≤ 10 k", size=17, weight="bold", anchor="start")
+    s.text(CUTS[-1] + 24, AFTER_Y + 20, "points drawn", size=14, colour=DIM, anchor="start")
+
+    # What narrows the band, under the column it narrows. Kept to three short
+    # lines per column so neighbouring captions cannot run into each other.
+    captions = (
+        ("streamed write,", "chunk by chunk"),
+        ("aggregates and filters", "inside the scan"),
+        ("mounts on scroll,", "downsamples what it draws"),
+    )
+    for i, lines in enumerate(captions):
+        cx = (CUTS[i] + CUTS[i + 1]) / 2
+        s.line(
+            cx,
+            AFTER_Y + AFTER_H[i + 1] + 8,
+            cx,
+            418,
+            dashed=True,
+            colour=GREY,
+            width=1.3,
+            amount=0.8,
+            passes=1,
+        )
+        for j, line in enumerate(lines):
+            s.text(cx, 440 + j * 21, line, size=14, colour=DIM)
 
     s.text(
         46,
-        STAGES_H - 40,
-        "every heavier behaviour is opt-in — defaults unchanged",
+        STAGES_H - 32,
+        "every heavier behaviour is opt-in, defaults unchanged",
         size=15,
         colour=DIM,
         anchor="start",
     )
     s.text(
         STAGES_W - 46,
-        STAGES_H - 40,
+        STAGES_H - 32,
         "measured end to end by the new benchmark/ harness",
         size=14,
         colour=DIM,

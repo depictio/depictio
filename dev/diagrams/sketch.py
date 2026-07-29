@@ -127,6 +127,29 @@ class Sketch:
         for x1, y1, x2, y2 in corners:
             self.line(x1, y1, x2, y2, amount=1.6, colour=colour, dashed=dashed)
 
+    def poly(
+        self,
+        points: list[tuple[float, float]],
+        *,
+        fill: str,
+        colour: str = INK,
+        edges: tuple[int, ...] | None = None,
+        amount: float = 1.6,
+    ) -> None:
+        """A filled polygon with hand-drawn edges.
+
+        ``edges`` selects which sides get an outline by their start-point
+        index; the default outlines all of them. Leaving a side bare is what
+        lets adjacent shapes read as one continuous band rather than as a row
+        of separate cells.
+        """
+        d = "M" + " L".join(f"{x:.1f},{y:.1f}" for x, y in points) + " Z"
+        self._parts.append(f'<path d="{d}" fill="{fill}" stroke="none"/>')
+        pairs = list(zip(points, points[1:] + points[:1]))
+        for i, ((x1, y1), (x2, y2)) in enumerate(pairs):
+            if edges is None or i in edges:
+                self.line(x1, y1, x2, y2, amount=amount, colour=colour)
+
     def arrow(
         self,
         x1: float,
