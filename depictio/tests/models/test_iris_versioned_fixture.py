@@ -3,7 +3,7 @@
 This fixture exists to give both version dimensions something real to show, and
 every way it can fail is silent: the dashboards still render, the project still
 seeds, the numbers just never move. So the properties that make it a *demo*
-rather than three copies of the same thing are asserted here.
+rather than four copies of the same thing are asserted here.
 
 Deliberately not marked ``integration``: this reads bundled files and validates
 them against the same models the loader uses. No database, no S3, no CLI.
@@ -27,13 +27,34 @@ BATCHES_DIR = PROJECT_DIR / "batches"
 DASHBOARDS_DIR = PROJECT_DIR / "dashboards"
 
 BATCH_ORDER = [
-    "batch_01_initial_survey",
-    "batch_02_virginica_added",
-    "batch_03_virginica_recalibrated",
+    "batch_01_setosa_only",
+    "batch_02_versicolor_added",
+    "batch_03_setosa_recalibrated",
+    "batch_04_virginica_added",
 ]
-DASHBOARD_ORDER = ["v1_survey.yaml", "v2_extended.yaml", "v3_recalibrated.yaml"]
+DASHBOARD_ORDER = [
+    "v1_survey.yaml",
+    "v2_extended.yaml",
+    "v3_recalibrated.yaml",
+    "v4_complete.yaml",
+]
 
 MEASUREMENTS = ["sepal.length", "sepal.width", "petal.length", "petal.width"]
+
+#: Fields whose change is visible on screen. Two consecutive versions of the
+#: same component must differ in at least one, or its history shows two
+#: identical renders and the feature reads as broken.
+VISIBLE_FIELDS = (
+    "component_type",
+    "aggregation",
+    "column_name",
+    "visu_type",
+    "dict_kwargs",
+    "interactive_component_type",
+    "title",
+    "body",
+    "layout",
+)
 
 
 @pytest.fixture(scope="module")
@@ -56,20 +77,21 @@ def test_measurements_are_numeric(batches) -> None:
             assert frame.schema[column] == pl.Float64, f"{name}:{column} is not numeric"
 
 
-def test_the_three_batches_tell_the_documented_story(batches) -> None:
-    b1, b2, b3 = (batches[n] for n in BATCH_ORDER)
+def test_the_four_batches_tell_the_documented_story(batches) -> None:
+    b1, b2, b3, b4 = (batches[n] for n in BATCH_ORDER)
 
-    assert b1.height == 100 and b2.height == 150 and b3.height == 150
-    assert set(b1["variety"].unique()) == {"Setosa", "Versicolor"}
-    assert set(b2["variety"].unique()) == {"Setosa", "Versicolor", "Virginica"}
-    assert set(b3["variety"].unique()) == {"Setosa", "Versicolor", "Virginica"}
+    assert [b1.height, b2.height, b3.height, b4.height] == [50, 100, 100, 150]
+    assert set(b1["variety"].unique()) == {"Setosa"}
+    assert set(b2["variety"].unique()) == {"Setosa", "Versicolor"}
+    assert set(b3["variety"].unique()) == {"Setosa", "Versicolor"}
+    assert set(b4["variety"].unique()) == {"Setosa", "Versicolor", "Virginica"}
 
 
 def test_batch_two_is_purely_additive(batches) -> None:
-    """v0 -> v1 must add Virginica without disturbing what was already there."""
+    """v0 -> v1 must add Versicolor without disturbing what was already there."""
     b1, b2 = batches[BATCH_ORDER[0]], batches[BATCH_ORDER[1]]
     kept_1 = b1.sort(MEASUREMENTS)
-    kept_2 = b2.filter(pl.col("variety") != "Virginica").sort(MEASUREMENTS)
+    kept_2 = b2.filter(pl.col("variety") != "Versicolor").sort(MEASUREMENTS)
     assert kept_1.equals(kept_2)
 
 
@@ -84,19 +106,36 @@ def test_batch_three_differs_only_in_values(batches) -> None:
     b2, b3 = batches[BATCH_ORDER[1]], batches[BATCH_ORDER[2]]
 
     assert b2.height == b3.height
+    assert set(b2["variety"].unique()) == set(b3["variety"].unique())
     assert not b2.sort(MEASUREMENTS).equals(b3.sort(MEASUREMENTS)), (
         "batch 2 and 3 are identical — the fixture demonstrates nothing"
     )
 
-    median_2 = b2.filter(pl.col("variety") == "Virginica")["petal.length"].median()
-    median_3 = b3.filter(pl.col("variety") == "Virginica")["petal.length"].median()
-    assert abs(median_2 - median_3) > 0.3, (
+    mean_2 = b2.filter(pl.col("variety") == "Setosa")["petal.length"].mean()
+    mean_3 = b3.filter(pl.col("variety") == "Setosa")["petal.length"].mean()
+    assert abs(mean_2 - mean_3) > 0.3, (
         "the recalibration must be visible on a chart, not lost in noise"
     )
 
-    untouched_2 = b2.filter(pl.col("variety") != "Virginica").sort(MEASUREMENTS)
-    untouched_3 = b3.filter(pl.col("variety") != "Virginica").sort(MEASUREMENTS)
-    assert untouched_2.equals(untouched_3), "batch 3 must touch Virginica only"
+    untouched_2 = b2.filter(pl.col("variety") != "Setosa").sort(MEASUREMENTS)
+    untouched_3 = b3.filter(pl.col("variety") != "Setosa").sort(MEASUREMENTS)
+    assert untouched_2.equals(untouched_3), "batch 3 must touch Setosa only"
+
+
+def test_the_recalibration_lands_on_a_variety_that_already_existed(batches) -> None:
+    """Setosa, not the newest arrival.
+
+    Correcting a variety that arrived with its own batch would be
+    indistinguishable from that batch simply adding rows. Changing one that the
+    *earlier* versions already held is what makes time travel to those versions
+    show something different — the hard half.
+    """
+    b1, b3 = batches[BATCH_ORDER[0]], batches[BATCH_ORDER[2]]
+
+    assert "Setosa" in set(b1["variety"].unique())
+    mean_first = b1["petal.length"].mean()
+    mean_after = b3.filter(pl.col("variety") == "Setosa")["petal.length"].mean()
+    assert abs(mean_first - mean_after) > 0.3
 
 
 # ── the project config ──────────────────────────────────────────────────────
@@ -133,9 +172,9 @@ def test_every_batch_is_seen_as_its_own_run() -> None:
 # ── the dashboard dimension ─────────────────────────────────────────────────
 
 
-def _dashboard_tags(filename: str) -> set[str]:
+def _components(filename: str) -> dict[str, dict]:
     raw = yaml.safe_load((DASHBOARDS_DIR / filename).read_text())
-    return {component["tag"] for component in raw["components"]}
+    return {component["tag"]: component for component in raw["components"]}
 
 
 def test_dashboards_validate() -> None:
@@ -174,17 +213,75 @@ def test_dashboard_validation_is_not_vacuous() -> None:
         )
 
 
-def test_each_dashboard_version_extends_the_last() -> None:
-    """Restoring an earlier version must be a visible change.
+def test_versions_are_not_a_chain_of_supersets() -> None:
+    """A diff that only appends never exercises removal.
 
-    Supersets rather than variations, so a restore removes components the user
-    can count — and the timeline's "N components" moves between rows, which is
-    the field that read 0 for every version before it was fixed.
+    The earlier fixture was a strict superset chain, which let the component
+    history modal look correct while only pinning data: nothing was ever
+    removed, and no existing component ever changed meaning.
     """
-    v1, v2, v3 = (_dashboard_tags(f) for f in DASHBOARD_ORDER)
+    sets = [set(_components(f)) for f in DASHBOARD_ORDER]
 
-    assert v1 < v2 < v3, "each version must be a strict superset of the previous"
-    assert len(v1) < len(v2) < len(v3)
+    removals = [
+        (DASHBOARD_ORDER[i], sorted(sets[i] - sets[i + 1]))
+        for i in range(len(sets) - 1)
+        if sets[i] - sets[i + 1]
+    ]
+    assert removals, "no version ever removes a component; restore is untested"
+
+    returning = sets[0].union(*sets)
+    assert any(
+        tag not in sets[i] and tag in sets[i + 1] and any(tag in s for s in sets[:i])
+        for tag in returning
+        for i in range(len(sets) - 1)
+    ), "no component is removed and later restored, which is the hardest restore case"
+
+
+def test_every_surviving_component_changes_between_versions() -> None:
+    """Otherwise its history shows two identical renders.
+
+    The failure this prevents is not an error: the modal renders both versions
+    perfectly and they look the same, which reads as the feature being broken
+    rather than as nothing having happened.
+
+    ``regenerate_dashboards.py`` enforces this when writing the YAMLs; this
+    asserts the files on disk still hold it.
+    """
+    previous: dict[str, dict] | None = None
+    previous_name = ""
+
+    for filename in DASHBOARD_ORDER:
+        current = _components(filename)
+        if previous is not None:
+            for tag in sorted(set(previous) & set(current)):
+                before = {k: previous[tag].get(k) for k in VISIBLE_FIELDS}
+                after = {k: current[tag].get(k) for k in VISIBLE_FIELDS}
+                assert before != after, (
+                    f"{tag} is identical in {previous_name} and {filename} — "
+                    "its component history would show two identical renders"
+                )
+        previous, previous_name = current, filename
+
+
+def test_a_component_changes_what_it_measures_not_just_where_it_sits() -> None:
+    """Layout churn alone would be a weak demo.
+
+    At least one component has to change the *question it asks* between
+    versions, since that is the case proving component history pins the stored
+    definition rather than recomputing with today's.
+    """
+    versions = [_components(f) for f in DASHBOARD_ORDER]
+    shared = set(versions[0]).intersection(*[set(v) for v in versions[1:]])
+
+    retyped = [
+        tag
+        for tag in shared
+        if len({(v[tag].get("aggregation"), v[tag].get("column_name")) for v in versions}) > 1
+    ]
+    assert retyped, (
+        "no component that exists in every version ever changes its aggregation "
+        "or column, so nothing proves the definition is pinned"
+    )
 
 
 def test_dashboard_components_bind_to_this_project() -> None:
@@ -198,48 +295,44 @@ def test_dashboard_components_bind_to_this_project() -> None:
             assert component["workflow_tag"] == "python/iris_versioned_workflow"
 
 
-def test_v3_virginica_filter_selects_real_rows(batches) -> None:
-    """The tile that separates data version 1 from 2 must not be empty.
+def test_figure_sequences_are_real_lists() -> None:
+    """A quoted list degrades the chart silently.
 
-    Model validation only checks `filter_expr` *syntax*. An expression that
-    parses but matches nothing renders a card showing zero — a broken demo that
-    looks like a working one, and precisely the tile whose value is supposed to
-    reveal the recalibration.
+    Plotly Express reads a string `color_discrete_sequence` as a sequence of
+    single characters, which knocks a histogram down to a scatter. It renders,
+    so nothing reports an error — this was a real bug in v1.
     """
-    from depictio.models.components.filter_expr import apply_filter_expr
-
-    raw = yaml.safe_load((DASHBOARDS_DIR / "v3_recalibrated.yaml").read_text())
-    component = next(c for c in raw["components"] if c["tag"] == "virginica-petal-median")
-
-    selected = apply_filter_expr(batches[BATCH_ORDER[2]], component["filter_expr"])
-
-    assert selected.height == 50, f"expected the 50 Virginica rows, got {selected.height}"
-    assert set(selected["variety"].unique()) == {"Virginica"}
-
-    # And the value it reports must differ from the previous data version, or
-    # the tile cannot do the job it was added for.
-    previous = apply_filter_expr(batches[BATCH_ORDER[1]], component["filter_expr"])
-    assert abs(previous["petal.length"].median() - selected["petal.length"].median()) > 0.3
+    for filename in DASHBOARD_ORDER:
+        raw = yaml.safe_load((DASHBOARDS_DIR / filename).read_text())
+        for component in raw["components"]:
+            kwargs = component.get("dict_kwargs") or {}
+            sequence = kwargs.get("color_discrete_sequence")
+            if sequence is None:
+                continue
+            assert isinstance(sequence, list), (
+                f"{filename}:{component['tag']} has a quoted "
+                "color_discrete_sequence; Plotly would read it character by character"
+            )
 
 
 # ── the documented sequence, executed ───────────────────────────────────────
 
 
-def test_the_documented_ingest_sequence_produces_three_versions(tmp_path) -> None:
+def test_the_documented_ingest_sequence_produces_four_versions(tmp_path) -> None:
     """Run the README's sequence against a real Delta table.
 
     Everything above validates the fixture's *inputs*. This validates the claim
     the README actually makes: stage a batch, ingest, repeat, and end up with
-    three Delta versions you can time-travel between.
+    four Delta versions you can time-travel between.
 
     Uses the same `write_delta_table_versioned` the CLI calls, against a local
     path — no Mongo, no S3, no API — so the claim is executed rather than
     reasoned about.
 
-    The last assertion is the one that matters for any future dataset-version
-    picker: two versions with identical row counts and identical varieties must
-    still be distinguishable by value, or a time-travel read that silently
-    returned current data would look correct.
+    The last assertion is the one that matters for the dataset-version picker:
+    two versions with identical row counts and identical varieties must still be
+    distinguishable by value, or a time-travel read that silently returned
+    current data would look correct.
     """
     from deltalake import DeltaTable
 
@@ -266,19 +359,17 @@ def test_the_documented_ingest_sequence_produces_three_versions(tmp_path) -> Non
         )
         assert result.delta_version == expected_version
 
-    assert len(DeltaTable(table_path).history()) == 3
+    assert len(DeltaTable(table_path).history()) == 4
 
-    at_v0 = pl.read_delta(table_path, version=0)
+    heights = [pl.read_delta(table_path, version=v).height for v in range(4)]
+    assert heights == [50, 100, 100, 150]
+
     at_v1 = pl.read_delta(table_path, version=1)
     at_v2 = pl.read_delta(table_path, version=2)
 
-    assert at_v0.height == 100
-    assert set(at_v0["variety"].unique()) == {"Setosa", "Versicolor"}
-    assert at_v1.height == at_v2.height == 150
-
-    median_v1 = at_v1.filter(pl.col("variety") == "Virginica")["petal.length"].median()
-    median_v2 = at_v2.filter(pl.col("variety") == "Virginica")["petal.length"].median()
-    assert abs(median_v1 - median_v2) > 0.3, (
+    mean_v1 = at_v1.filter(pl.col("variety") == "Setosa")["petal.length"].mean()
+    mean_v2 = at_v2.filter(pl.col("variety") == "Setosa")["petal.length"].mean()
+    assert abs(mean_v1 - mean_v2) > 0.3, (
         "two versions of the same shape must differ by value, or a time-travel "
         "read that returned current data would be indistinguishable from a correct one"
     )
