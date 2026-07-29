@@ -20,9 +20,9 @@
 # exactly what "the survey now looks like this" means.
 #
 # The history is not lost: Delta writes a new commit per ingestion regardless of
-# mode, so `depictio data versions` still walks all three.
+# mode, so `depictio data versions` still walks all four.
 #
-# Usage:  ./stage_batch.sh 1|2|3
+# Usage:  ./stage_batch.sh 1|2|3|4
 #         ./stage_batch.sh reset     # back to nothing staged
 
 set -euo pipefail
@@ -32,13 +32,14 @@ SRC="$HERE/batches"
 DEST="$HERE/data"
 
 BATCHES=(
-  batch_01_initial_survey
-  batch_02_virginica_added
-  batch_03_virginica_recalibrated
+  batch_01_setosa_only
+  batch_02_versicolor_added
+  batch_03_setosa_recalibrated
+  batch_04_virginica_added
 )
 
 usage() {
-  echo "usage: $(basename "$0") 1|2|3|reset" >&2
+  echo "usage: $(basename "$0") 1|2|3|4|reset" >&2
   exit 2
 }
 
@@ -59,7 +60,7 @@ if [[ "$1" == "reset" ]]; then
   exit 0
 fi
 
-[[ "$1" =~ ^[1-3]$ ]] || usage
+[[ "$1" =~ ^[1-4]$ ]] || usage
 batch="${BATCHES[$(($1 - 1))]}"
 
 reset_dest

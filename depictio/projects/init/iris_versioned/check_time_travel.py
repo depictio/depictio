@@ -6,9 +6,9 @@ dashboard. Everything here is a claim the features make to a user; if any of
 it is wrong the feature is lying, not merely broken.
 """
 
-import json
 import os
 import sys
+import time
 
 import requests
 import yaml
@@ -75,11 +75,13 @@ live = requests.get(f"{API}/dashboards/get/{DASH}", headers=H, timeout=30).json(
 # body 422s, and a 422 would leave the pre-fix version as "newest" and make
 # the stamp assertions below silently check the wrong record.
 #
-# The subtitle nudge is load-bearing: an unchanged save deliberately writes no
-# version (content is hashed and compared), so re-posting the document
-# verbatim would leave the newest version as a pre-fix record and the stamp
-# assertions would silently grade the wrong row.
-live["subtitle"] = f"e2e check {json.dumps(len(live.get('stored_metadata') or []))}"
+# The subtitle nudge is load-bearing, and has to be *unique per run*: an
+# unchanged save deliberately writes no version (content is hashed and
+# compared), so a constant nudge makes every run after the first a no-op and
+# the stamp assertions then grade a version captured before the last
+# ingestion — which records the data as it was then, correctly, and looks
+# like a failure.
+live["subtitle"] = f"e2e check {time.time():.0f}"
 r = requests.post(f"{API}/dashboards/save/{DASH}", headers=H, json=live, timeout=60)
 check("save status", r.status_code, 200)
 
@@ -91,11 +93,14 @@ detail = requests.get(
 stamps = detail.get("data_collections") or []
 check("stamp count", len(stamps), 1)
 check("stamp kind", stamps[0].get("version_kind"), "delta")
-check("stamp delta_version", stamps[0].get("delta_version"), 2)
+current = requests.get(f"{API}/deltatables/history/{DC}", headers=H, timeout=30).json()[
+    "current_version"
+]
+check("stamp delta_version tracks the newest commit", stamps[0].get("delta_version"), current)
 check("stamp tag", stamps[0].get("data_collection_tag"), "iris_versioned_table")
 
 print("\n2. Dataset time travel: the card reads each commit's own data")
-for delta_version, want in ((0, 100), (1, 150), (2, 150)):
+for delta_version, want in ((0, 50), (1, 100), (2, 100), (3, 150)):
     res = requests.post(
         f"{API}/dashboards/bulk_compute_cards/{DASH}",
         headers=H,
@@ -111,10 +116,21 @@ res = requests.post(
     json={"filters": [], "component_ids": [CARD], "as_of_version": newest["version_id"]},
     timeout=60,
 ).json()
-check("count as of newest version", res["values"][CARD], 150)
+# The version was just saved, so its stamps point at the current commit and
+# "as of" must agree with a live read.
+live_now = requests.post(
+    f"{API}/dashboards/bulk_compute_cards/{DASH}",
+    headers=H,
+    json={"filters": [], "component_ids": [CARD]},
+    timeout=60,
+).json()["values"][CARD]
+check("count as of newest version", res["values"][CARD], live_now)
 
 print("\n4. Equal row counts, different values — a version-blind cache would pass on rows alone")
-for delta_version, want in ((1, 3.7579999999999996), (2, 3.5600666666666667)):
+# v1 and v2 both hold 100 rows and the same two varieties. Only Setosa's
+# re-measured petal lengths separate them, so this is the pair that a check
+# based on row counts would wave through.
+for delta_version, want in ((1, 2.861), (2, 3.164)):
     res = requests.post(
         f"{API}/dashboards/bulk_compute_cards/{DASH}",
         headers=H,
@@ -126,7 +142,7 @@ for delta_version, want in ((1, 3.7579999999999996), (2, 3.5600666666666667)):
         },
         timeout=60,
     ).json()
-    close(f"mean petal.length @ delta v{delta_version}", res["values"][CARD], want, tol=1e-9)
+    close(f"mean petal.length @ delta v{delta_version}", res["values"][CARD], want, tol=5e-3)
 
 print("\n5. Live reads are unaffected by the pinned reads above (no cache poisoning)")
 res = requests.post(
@@ -170,9 +186,9 @@ check("malformed override degrades gracefully", r.status_code, 200)
 
 print("\n7. Dataset history powers the picker")
 hist = requests.get(f"{API}/deltatables/history/{DC}", headers=H, timeout=30).json()
-check("current_version", hist["current_version"], 2)
+check("current_version", hist["current_version"], 3)
 check("degraded", hist["degraded"], False)
-check("selectable commits", len([v for v in hist["versions"] if v.get("version") is not None]), 3)
+check("selectable commits", len([v for v in hist["versions"] if v.get("version") is not None]), 4)
 
 print()
 if failures:

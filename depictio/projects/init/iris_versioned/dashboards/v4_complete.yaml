@@ -1,31 +1,32 @@
-# Iris Versioned — dashboard v2: comparison becomes possible.
+# Iris Versioned — dashboard v4: the full dataset.
 #
-# Batch 2 adds Versicolor, so for the first time there are two groups to
-# compare. The changes here are structural, not additive:
+# Batch 4 adds Virginica on top of the corrected Setosa values, so the final
+# state carries both kinds of change at once: new rows AND revised ones.
 #
-#   REPLACED  the histogram becomes a box plot — one variety needed a
-#             distribution, two need a comparison
-#   RETYPED   "Mean Petal Length" becomes "Varieties Surveyed" (mean → nunique
-#             on a different column), which is the case that proves a component
-#             history modal has to pin the *definition* and not just the data
-#   ADDED     a scatter and a petal-length range filter
+# Changes from v3:
 #
-# A version diff that only ever appends is the easy half. This one changes what
-# existing components mean, which is what the component-history modal exists to
-# show.
+#   REMOVED   the petal-length range filter — three varieties separate cleanly
+#             by name, so filtering by measurement stopped earning its slot
+#   RETYPED   the bar chart becomes a scatter again, now that a third group
+#             makes the sepal/petal relationship worth seeing
+#   ADDED     a data table exposing `depictio_run_id`, so which rows came from
+#             which ingestion is visible rather than asserted
+#
+# Pair with data version 3. Restoring v1 from here is a visible subtraction of
+# six components across four batches, which is what the timeline is for.
 version: 1
 
 title: "Iris Versioned — Survey"
-subtitle: "Batch 2: Versicolor arrives"
+subtitle: "Batch 4: the complete survey"
 project_tag: "Iris Versioned Demo"
 
 components:
   - tag: text-intro
     component_type: text
-    title: "Two varieties"
+    title: "Complete survey"
     order: 2
     alignment: left
-    body: "**Setosa** and **Versicolor**, 100 flowers. Two groups means comparison is finally possible, so the distribution plot becomes a by-variety box plot."
+    body: "All three varieties, 150 flowers, with **Setosa's corrected measurements** carried through. This state has both new rows and revised ones."
     layout: {x: 0, y: 0, w: 8, h: 1}
 
   - tag: sample-count
@@ -41,11 +42,8 @@ components:
     title_font_size: xl
     value_font_size: xl
     title: "Flowers Measured"
-    layout: {x: 0, y: 1, w: 3, h: 2}
+    layout: {x: 0, y: 1, w: 2, h: 2}
 
-  # Same tag as v1's "Mean Petal Length", now a different question entirely.
-  # Open this component's history: v1 shows a mean in cm, v2 a variety count.
-  # Recomputing v1 with *this* definition would silently answer the wrong one.
   - tag: petal-mean
     component_type: card
     workflow_tag: python/iris_versioned_workflow
@@ -62,21 +60,36 @@ components:
     title_font_size: xl
     value_font_size: xl
     title: "Varieties Surveyed"
-    layout: {x: 3, y: 1, w: 3, h: 2}
+    layout: {x: 2, y: 1, w: 2, h: 2}
 
-  - tag: petal-median
+  - tag: setosa-petal-mean
     component_type: card
     workflow_tag: python/iris_versioned_workflow
     data_collection_tag: iris_versioned_table
-    aggregation: median
+    aggregation: average
     column_name: petal.length
     column_type: float64
     icon_name: mdi:ruler
+    icon_color: "#E64A19"
+    title_color: "#E64A19"
+    title_font_size: xl
+    value_font_size: xl
+    title: "Mean Petal Length"
+    layout: {x: 4, y: 1, w: 2, h: 2}
+
+  - tag: petal-max
+    component_type: card
+    workflow_tag: python/iris_versioned_workflow
+    data_collection_tag: iris_versioned_table
+    aggregation: max
+    column_name: petal.length
+    column_type: float64
+    icon_name: mdi:arrow-expand-up
     icon_color: "#9C27B0"
     title_color: "#9C27B0"
     title_font_size: xl
     value_font_size: xl
-    title: "Median Petal Length"
+    title: "Longest Petal"
     layout: {x: 6, y: 1, w: 2, h: 2}
 
   - tag: variety-filter
@@ -91,27 +104,13 @@ components:
     title: "Variety"
     layout: {x: 0, y: 0, w: 1, h: 3}
 
-  - tag: petal-length-filter
-    component_type: interactive
-    workflow_tag: python/iris_versioned_workflow
-    data_collection_tag: iris_versioned_table
-    interactive_component_type: RangeSlider
-    column_name: petal.length
-    column_type: float64
-    custom_color: "#4C72B0"
-    icon_name: mdi:arrow-left-right
-    title: "Petal length"
-    layout: {x: 0, y: 3, w: 1, h: 3}
-
-  # Replaces v1's histogram. Same slot, different visualisation: with two
-  # varieties the interesting shape is between groups, not within one.
   - tag: petal-hist
     component_type: figure
     workflow_tag: python/iris_versioned_workflow
     data_collection_tag: iris_versioned_table
     visu_type: box
     title: "Petal Length by Variety"
-    description: "Was a histogram in v1. Watch this tile across data versions — batch 3 recalibrates Setosa without changing the row count."
+    description: "Open this component's history to watch it change shape (histogram → box) and change data across four versions."
     title_size: h3
     dict_kwargs:
       x: variety
@@ -121,12 +120,15 @@ components:
       color_discrete_map: '{"Setosa": "#4C72B0", "Versicolor": "#DD8452", "Virginica": "#55A467"}'
     layout: {x: 0, y: 3, w: 4, h: 5}
 
+  # Back to a scatter, now that a third variety makes the relationship between
+  # sepal and petal worth seeing again.
   - tag: sepal-petal-scatter
     component_type: figure
     workflow_tag: python/iris_versioned_workflow
     data_collection_tag: iris_versioned_table
     visu_type: scatter
     title: "Sepal vs Petal"
+    description: "A bar chart in v3, a scatter in v2 and here."
     title_size: h3
     dict_kwargs:
       x: sepal.length
@@ -134,3 +136,11 @@ components:
       color: variety
       color_discrete_map: '{"Setosa": "#4C72B0", "Versicolor": "#DD8452", "Virginica": "#55A467"}'
     layout: {x: 4, y: 3, w: 4, h: 5}
+
+  - tag: data-table
+    component_type: table
+    workflow_tag: python/iris_versioned_workflow
+    data_collection_tag: iris_versioned_table
+    title: "All Measurements"
+    description: "Includes depictio_run_id, so which batch a row came from is visible rather than asserted."
+    layout: {x: 0, y: 8, w: 8, h: 5}

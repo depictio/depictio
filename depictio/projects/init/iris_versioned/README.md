@@ -7,11 +7,11 @@ stamps have nothing to distinguish.
 
 This project exists to give both dimensions something real to show:
 
-- **three dataset versions** — three ingestion batches whose content genuinely
-  differs, producing three Delta versions;
-- **three dashboard versions** — three layouts, each a superset of the last, so
-  the version timeline shows the component count moving and a restore is a
-  visible change rather than a no-op.
+- **four dataset versions** — four ingestion batches at 50 / 100 / 100 / 150
+  rows, producing four Delta commits whose content genuinely differs;
+- **four dashboard versions** — four layouts that *replace and remove*
+  components rather than only adding, so restoring one is a visible change and
+  the component-history modal has something real to show.
 
 Not seeded automatically. It is a demo fixture, and adding a fourth project to
 everyone's first run is a cost paid by people who did not ask for it. Set it up
@@ -19,19 +19,26 @@ with the steps below.
 
 ## The data
 
-Three batches under `data/`, each a directory the `sequencing-runs` scanner
+Four batches under `batches/`, each a directory the `sequencing-runs` scanner
 picks up as its own `depictio_run_id`:
 
-| batch | rows | varieties | what changed |
-|---|---|---|---|
-| `batch_01_initial_survey` | 100 | Setosa, Versicolor | the original survey |
-| `batch_02_virginica_added` | 150 | + Virginica | a third variety arrives |
-| `batch_03_virginica_recalibrated` | 150 | same three | Virginica petals re-measured, ~0.6 cm shorter |
+| batch | rows | varieties | mean Setosa petal | what changed |
+|---|---|---|---|---|
+| `batch_01_setosa_only` | 50 | Setosa | 1.46 | the first collection |
+| `batch_02_versicolor_added` | 100 | + Versicolor | 1.46 | the survey grows |
+| `batch_03_setosa_recalibrated` | 100 | same two | **2.07** | Setosa re-measured after a calibration fix |
+| `batch_04_virginica_added` | 150 | + Virginica | 2.07 | the complete survey |
 
 Batch 3 is the one that matters. It has the **same row count and the same
-varieties** as batch 2 — only the values differ. That is exactly the situation
+varieties** as batch 2 — only the values differ. Every other step moves the row
+count, which makes time travel obvious at a glance; a demo built only from
+those steps would pass while being wrong in the one way that counts. Batch 3 is
 where "which version of the data is this chart built on?" stops being
 rhetorical, because nothing on screen answers it.
+
+The correction lands on **Setosa**, which is present from batch 1, so it
+changes a value the earlier versions already had rather than one that arrived
+with the batch. Time travel that only ever adds rows is the easy half.
 
 Regenerate deterministically (fixed seed, byte-identical output):
 
@@ -45,7 +52,7 @@ There is no flag to ingest a single batch: `depictio run` scans everything the
 project's `locations` point at. So the batches live in `batches/` and
 `stage_batch.sh` swaps one at a time into `data/`. Each batch file is already
 the complete state of the survey at that point, so exactly one is staged at a
-time — side by side, the scanner would read the same flowers three times over.
+time — side by side, the scanner would read the same flowers four times over.
 
 Run the CLI wherever the paths in `project.yaml` resolve. They are container
 paths (`/app/depictio/...`), so in a docker deployment that means inside the
@@ -60,7 +67,7 @@ PROJ=/app/depictio/projects/init/iris_versioned
 depictio config sync --CLI-config-path $CFG --project-config-path $PROJ/project.yaml
 
 # 2. Stage and ingest each batch in turn. Each run writes a new Delta commit,
-#    so this produces three data versions.
+#    so this produces four data versions.
 #
 #    --overwrite is required from the second run onward: the S3 destination
 #    already exists, and the CLI refuses to replace it silently.
@@ -71,6 +78,9 @@ depictio run --CLI-config-path $CFG --project-config-path $PROJ/project.yaml --s
 depictio run --CLI-config-path $CFG --project-config-path $PROJ/project.yaml --skip-sync --overwrite
 
 ./stage_batch.sh 3
+depictio run --CLI-config-path $CFG --project-config-path $PROJ/project.yaml --skip-sync --overwrite
+
+./stage_batch.sh 4
 depictio run --CLI-config-path $CFG --project-config-path $PROJ/project.yaml --skip-sync --overwrite
 
 # 3. Import the first dashboard. Note: `--config`, not `--CLI-config-path`.
@@ -94,37 +104,47 @@ depictio data versions iris_versioned_table \
     --CLI-config-path $CFG --project-config-path $PROJ/project.yaml
 ```
 
-Three commits, at 100 / 150 / 150 rows:
+Four commits, at 50 / 100 / 100 / 150 rows:
 
 ```
  version   operation   write_mode   rows_after   runs
- 2         WRITE       overwrite    150          1
- 1         WRITE       overwrite    150          1
- 0         WRITE       overwrite    100          1
+ 3         WRITE       overwrite    150          1
+ 2         WRITE       overwrite    100          1
+ 1         WRITE       overwrite    100          1
+ 0         WRITE       overwrite    50           1
 ```
+
+Versions 1 and 2 are the pair worth remembering: identical row counts, and the
+only difference is Setosa's re-measured petal lengths (mean 1.46 → 2.07).
 
 ## The dashboard versions
 
-Import `v1_survey.yaml`, then **edit it into v2 and v3 in the editor** rather
-than importing all three. Three imports create three unrelated dashboards;
-editing one creates one dashboard with three versions in its history, which is
+Import `v1_survey.yaml`, then **edit it into v2, v3 and v4 in the editor**
+rather than importing all four. Four imports create four unrelated dashboards;
+editing one creates one dashboard with four versions in its history, which is
 the thing being demonstrated.
 
-| version | components | adds |
+| version | components | what changed |
 |---|---|---|
-| v1 Survey | 5 | baseline: counts, variety filter, petal box plot |
-| v2 Extended | 8 | median petal card, petal range filter, sepal/petal scatter |
-| v3 Recalibrated | 11 | Virginica-only median, batch filter, per-batch table |
+| v1 Survey | 5 | baseline: counts, variety filter, petal **histogram** |
+| v2 Extended | 8 | histogram → **box plot**; "Mean Petal Length" card **retyped** to "Varieties Surveyed"; adds scatter + range filter |
+| v3 Recalibrated | 8 | scatter **removed**, replaced by a per-variety mean bar; adds a mean-petal card |
+| v4 Complete | 9 | range filter **removed**; bar → scatter again; adds a longest-petal card and a run table |
 
-Each is a strict superset of the previous, so restoring v1 from v3 visibly
-removes six components — a restore you can confirm at a glance instead of
-squinting at a diff.
+Deliberately **not** a chain of supersets. A version diff that only appends is
+the easy half: it never exercises removal, never changes what an existing
+component means, and lets a component-history modal look right while only
+pinning data. Here the same component id is a histogram in v1 and a box plot
+afterwards, and the card at `petal-mean` asks a different question in v1 (mean
+petal length, in cm) than in v2 onward (how many varieties). Open that card's
+history and the two are plainly different measurements — which is only true
+because the modal pins each version's *definition*, not just its data.
 
-To build the history: import v1, then open the editor and add the components
-listed for v2 (the YAML files are the reference for what each contains). Use
-**Settings → Version history → Bookmark this state → Name it** at each step, so
-the timeline reads `v1 Survey` / `v2 Extended` / `v3 Recalibrated` rather than
-three anonymous autosaves.
+To build the history: import v1, then open the editor and edit it into each
+later version in turn (the YAML files are the reference for what each holds).
+Use **Settings → Version history → Bookmark this state → Name it** at each step,
+so the timeline reads `v1 Survey` / `v2 Extended` / `v3 Recalibrated` /
+`v4 Complete` rather than four anonymous autosaves.
 
 Note that `dashboard import` writes the document directly and does **not**
 record a version — the ledger is fed by `POST /dashboards/save`, which is what

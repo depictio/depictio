@@ -1,21 +1,25 @@
 #!/usr/bin/env python3
-"""Generate the three ingestion batches for the iris-versioned demo project.
+"""Generate the four ingestion batches for the iris-versioned demo project.
 
-Three batches, each a directory the ``sequencing-runs`` scanner picks up as its
-own ``depictio_run_id``. Ingesting them one at a time with
-``--write-mode replace-runs`` produces three Delta versions whose *content*
-genuinely differs, which is the point: a versioning demo where every version
-holds the same rows demonstrates nothing.
+Four batches, each a directory the ``sequencing-runs`` scanner picks up as its
+own ``depictio_run_id``. Ingesting them one at a time produces four Delta
+versions whose *content* genuinely differs, which is the point: a versioning
+demo where every version holds the same rows demonstrates nothing.
 
-The batches tell a story a reviewer can check by eye:
+The row counts are deliberately 50 / 100 / 100 / 150:
 
-  batch_01  Setosa + Versicolor, 100 rows      — the original survey
-  batch_02  adds Virginica, 150 rows           — a new variety arrives
-  batch_03  Virginica re-measured, 150 rows    — a correction, same row count
+  batch_01  Setosa only,                50 rows   — the first collection
+  batch_02  adds Versicolor,           100 rows   — the survey grows
+  batch_03  Setosa re-measured,        100 rows   — a correction, SAME count
+  batch_04  adds Virginica,            150 rows   — the full dataset
 
-Batch 3 matters most. It has the same shape as batch 2 and the same varieties,
-so the only way to tell them apart is the values — exactly the case where "which
-data version was this chart built on" stops being a rhetorical question.
+Every step changes the number *except* batch 3, and that asymmetry is the
+design. A row count moving 50 → 100 → 150 makes time travel obvious at a
+glance, so a demo made only of those steps would pass while being wrong in the
+one way that matters: batch 3 has the same count and the same varieties as
+batch 2, so the only thing distinguishing them is the values. That is the case
+where "which data version was this chart built on" stops being rhetorical, and
+the case a row-count check cannot catch.
 
 Derived from the bundled ``iris.csv`` rather than random draws, so the demo
 still looks like the dataset people recognise. Deterministic: fixed seed, and
@@ -43,8 +47,13 @@ BATCHES_DIR = HERE / "batches"
 #: *plausible*, not novel.
 SEED = 20260729
 
-#: Batch 3 re-measures Virginica after a calibration fix. Large enough to move
-#: a median visibly on a chart, small enough to stay biologically sensible.
+#: Batch 3 re-measures Setosa after a calibration fix. Large enough to move a
+#: mean visibly on a chart, small enough to stay biologically sensible.
+#:
+#: Applied to Setosa specifically because Setosa is present from batch 1: the
+#: correction therefore changes a value the earlier versions already had,
+#: rather than one that arrived with the batch. Time travel that only ever
+#: adds rows is the easy half.
 PETAL_CALIBRATION_CM = 0.6
 
 
@@ -76,32 +85,42 @@ def main() -> None:
     random.seed(SEED)
     header, rows = read_source()
 
-    # Batch 1 — the original survey: two varieties only.
-    batch_1 = [r for r in rows if r["variety"] in {"Setosa", "Versicolor"}]
+    # Batch 1 — the first collection: Setosa only.
+    batch_1 = [r for r in rows if r["variety"] == "Setosa"]
 
-    # Batch 2 — Virginica arrives. Everything from batch 1 is unchanged, so a
-    # diff between v0 and v1 is purely additive.
-    batch_2 = list(rows)
+    # Batch 2 — Versicolor arrives. Batch 1's rows are untouched, so the diff
+    # from v0 to v1 is purely additive.
+    batch_2 = [r for r in rows if r["variety"] in {"Setosa", "Versicolor"}]
 
-    # Batch 3 — Virginica petal lengths re-measured after a calibration fix.
-    # Same rows, same count, different values: only the data version tells them
-    # apart.
+    # Batch 3 — Setosa petal lengths re-measured after a calibration fix. Same
+    # rows, same count, same varieties as batch 2: only the values differ, so
+    # only the data version tells them apart. This is the batch that catches a
+    # time-travel bug a row count would sail past.
     batch_3 = []
-    for row in rows:
+    for row in batch_2:
         updated = dict(row)
-        if row["variety"] == "Virginica":
-            corrected = float(row["petal.length"]) - PETAL_CALIBRATION_CM
+        if row["variety"] == "Setosa":
+            corrected = float(row["petal.length"]) + PETAL_CALIBRATION_CM
             # A little jitter so it reads as a re-measurement rather than a
             # constant offset applied in a spreadsheet.
             corrected += random.uniform(-0.05, 0.05)
             updated["petal.length"] = f"{corrected:.2f}"
         batch_3.append(updated)
 
+    # Batch 4 — Virginica arrives, on top of the corrected Setosa values, so
+    # the final state carries both kinds of change.
+    corrected_by_key = {(r["sepal.length"], r["sepal.width"], r["variety"]): r for r in batch_3}
+    batch_4 = []
+    for row in rows:
+        key = (row["sepal.length"], row["sepal.width"], row["variety"])
+        batch_4.append(dict(corrected_by_key.get(key, row)))
+
     print("Writing iris_versioned batches:")
-    write_batch("batch_01_initial_survey", header, batch_1)
-    write_batch("batch_02_virginica_added", header, batch_2)
-    write_batch("batch_03_virginica_recalibrated", header, batch_3)
-    print("\nStage them into data/ with ./stage_batch.sh 1|2|3 — see README.md.")
+    write_batch("batch_01_setosa_only", header, batch_1)
+    write_batch("batch_02_versicolor_added", header, batch_2)
+    write_batch("batch_03_setosa_recalibrated", header, batch_3)
+    write_batch("batch_04_virginica_added", header, batch_4)
+    print("\nStage them into data/ with ./stage_batch.sh 1|2|3|4 — see README.md.")
 
 
 if __name__ == "__main__":
