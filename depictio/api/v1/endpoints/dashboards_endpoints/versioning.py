@@ -39,7 +39,7 @@ from pymongo import ASCENDING
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
-from depictio.api.v1.db import dashboards_collection, deltatables_collection
+from depictio.api.v1.db import dashboards_collection, deltatables_collection, projects_collection
 from depictio.api.v1.endpoints.dashboards_endpoints import version_store
 from depictio.models.models.dashboard_versions import (
     DashboardVersion,
@@ -202,6 +202,15 @@ def _dc_type_from_components(tabs: list[TabSnapshot], dc_id: str) -> str:
     Components carry a ``dc_config`` snapshot including ``type``. Using it
     avoids a project-document lookup per collection on the save path.
     """
+    return _component_field(tabs, dc_id, lambda c: (c.get("dc_config") or {}).get("type"))
+
+
+def _component_field(tabs: list[TabSnapshot], dc_id: str, pick) -> str:
+    """First non-empty value ``pick`` yields from a component using ``dc_id``.
+
+    Components referencing the same collection agree on these fields, so the
+    first hit is the answer; scanning past it only costs time.
+    """
     for tab in tabs:
         for component in tab.stored_metadata:
             if not isinstance(component, dict):
@@ -210,10 +219,62 @@ def _dc_type_from_components(tabs: list[TabSnapshot], dc_id: str) -> str:
             current = str(raw.get("$oid") if isinstance(raw, dict) else raw) if raw else ""
             if current != dc_id:
                 continue
-            config = component.get("dc_config") or {}
-            if isinstance(config, dict) and config.get("type"):
-                return str(config["type"])
+            try:
+                value = pick(component)
+            except Exception:  # pragma: no cover - defensive
+                continue
+            if value:
+                return str(value)
     return ""
+
+
+def _dc_types_from_project(dc_ids: list[str]) -> dict[str, str]:
+    """Data collection types read from the project documents that own them.
+
+    The authority for a collection's type, and the fallback whenever the
+    component's embedded ``dc_config`` has none — which is the common case, not
+    a rare one: components store a *projected* config whose ``type`` is
+    frequently null (confirmed on a freshly imported dashboard, where every
+    component carried ``dc_config.type == None`` while the project document
+    said ``table``). Without this, `_classify_dc` sees "" for every collection
+    and stamps the whole version ``version_kind="none"``, so nothing is
+    reproducible and data time travel has no version to travel to.
+
+    One query for the whole set rather than one per collection: this runs on
+    the save path, which is hot.
+    """
+    if not dc_ids:
+        return {}
+
+    object_ids = []
+    for dc_id in dc_ids:
+        try:
+            object_ids.append(ObjectId(dc_id))
+        except Exception:  # pragma: no cover - defensive
+            continue
+    if not object_ids:
+        return {}
+
+    types: dict[str, str] = {}
+    try:
+        cursor = projects_collection.find(
+            {"workflows.data_collections._id": {"$in": object_ids}},
+            {"workflows.data_collections._id": 1, "workflows.data_collections.config.type": 1},
+        )
+        wanted = {str(oid) for oid in object_ids}
+        for project in cursor:
+            for workflow in project.get("workflows") or []:
+                for dc in workflow.get("data_collections") or []:
+                    dc_id = str(dc.get("_id") or "")
+                    if dc_id not in wanted:
+                        continue
+                    dc_type = (dc.get("config") or {}).get("type")
+                    if dc_type:
+                        types[dc_id] = str(dc_type)
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.debug(f"versioning: project dc_type lookup failed: {exc}")
+
+    return types
 
 
 def build_dc_stamps(tabs: list[TabSnapshot]) -> list[DataCollectionStamp]:
@@ -226,10 +287,24 @@ def build_dc_stamps(tabs: list[TabSnapshot]) -> list[DataCollectionStamp]:
     """
     stamps: list[DataCollectionStamp] = []
 
-    for dc_id in collect_dc_ids(tabs):
-        dc_type = _dc_type_from_components(tabs, dc_id)
+    dc_ids = collect_dc_ids(tabs)
+    project_types = _dc_types_from_project(dc_ids)
+
+    for dc_id in dc_ids:
+        # Component config first (no extra I/O), project document second. The
+        # embedded copy is a projection and often has a null type.
+        dc_type = _dc_type_from_components(tabs, dc_id) or project_types.get(dc_id, "")
         kind = _classify_dc(dc_type)
-        stamp = DataCollectionStamp(dc_id=dc_id, dc_type=dc_type, version_kind="none")
+        stamp = DataCollectionStamp(
+            dc_id=dc_id,
+            dc_type=dc_type,
+            version_kind="none",
+            # Human-readable identity for the picker; components carry both.
+            workflow_tag=_component_field(tabs, dc_id, lambda c: c.get("workflow_tag")),
+            data_collection_tag=_component_field(
+                tabs, dc_id, lambda c: c.get("data_collection_tag")
+            ),
+        )
 
         # An image DC's manifest is versioned but its pixels are not: the blobs
         # live under a user-supplied prefix with no content addressing.

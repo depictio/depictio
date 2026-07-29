@@ -34,17 +34,20 @@ def store(monkeypatch: pytest.MonkeyPatch):
     counters = db["dashboard_version_counters"]
     dashboards = db["dashboards"]
     deltatables = db["deltatables"]
+    projects = db["projects"]
 
     monkeypatch.setattr(version_store, "dashboard_versions_collection", versions)
     monkeypatch.setattr(version_store, "dashboard_version_counters_collection", counters)
     monkeypatch.setattr(versioning, "dashboards_collection", dashboards)
     monkeypatch.setattr(versioning, "deltatables_collection", deltatables)
+    monkeypatch.setattr(versioning, "projects_collection", projects)
 
     return {
         "versions": versions,
         "counters": counters,
         "dashboards": dashboards,
         "deltatables": deltatables,
+        "projects": projects,
     }
 
 
@@ -468,3 +471,170 @@ def test_baseline_never_raises(store, monkeypatch) -> None:
     )
 
     assert _ensure_baseline(did, author=ALICE) is None
+
+
+# ── Data-collection stamps ──────────────────────────────────────────────────
+#
+# The stamp is what makes a version reproducible: it records which Delta
+# version each collection was at, so the dashboard can later be read against
+# that data rather than whatever landed since. A stamp that degrades to
+# ``version_kind="none"`` silently removes that ability, which is exactly what
+# was happening — every stamp on a real imported dashboard said
+# ``unknown_data_collection_type``.
+
+
+def _dc_component(dc_id: PyObjectId, *, dc_type: str | None, index: str = "c1") -> dict:
+    """A component as the editor stores it.
+
+    Note ``dc_config.type`` is nullable: the stored config is a projection and
+    real imported dashboards routinely carry ``None`` there.
+    """
+    return {
+        "index": index,
+        "component_type": "card",
+        "dc_id": str(dc_id),
+        "wf_id": str(PyObjectId()),
+        "workflow_tag": "iris_versioned",
+        "data_collection_tag": "iris_versioned_table",
+        "dc_config": {"type": dc_type, "data_collection_tag": "iris_versioned_table"},
+    }
+
+
+def _seed_delta(store, dc_id: PyObjectId, *, versions: list[tuple[int, int, int]]) -> None:
+    """versions: list of (aggregation_version, delta_version, rows_total)."""
+    store["deltatables"].insert_one(
+        {
+            "_id": PyObjectId(),
+            "data_collection_id": dc_id,
+            "aggregation": [
+                {
+                    "aggregation_version": av,
+                    "delta_version": dv,
+                    "delta_commit_timestamp": BASE + timedelta(minutes=dv),
+                    "rows_total": rows,
+                    "aggregation_columns_specs": [
+                        {"name": "sepal_length", "type": "float64"},
+                        {"name": "species", "type": "object"},
+                    ],
+                }
+                for av, dv, rows in versions
+            ],
+        }
+    )
+
+
+def _seed_project(store, dc_id: PyObjectId, *, dc_type: str = "table") -> None:
+    store["projects"].insert_one(
+        {
+            "_id": PyObjectId(),
+            "name": "Iris Versioned Demo",
+            "workflows": [
+                {
+                    "_id": PyObjectId(),
+                    "data_collections": [
+                        {"_id": dc_id, "data_collection_tag": "t", "config": {"type": dc_type}}
+                    ],
+                }
+            ],
+        }
+    )
+
+
+def _stamps_for(store, components: list[dict]):
+    from depictio.api.v1.endpoints.dashboards_endpoints.versioning import (
+        build_dc_stamps,
+        build_tab_snapshots,
+        load_family_docs,
+    )
+
+    did = _make_dashboard(store, components=components)
+    return build_dc_stamps(build_tab_snapshots(load_family_docs(did)))
+
+
+def test_stamp_records_the_delta_version(store) -> None:
+    """The whole point: a version knows which Delta commit it was authored on."""
+    dc_id = PyObjectId()
+    _seed_delta(store, dc_id, versions=[(1, 0, 100), (2, 1, 150), (3, 2, 150)])
+
+    (stamp,) = _stamps_for(store, [_dc_component(dc_id, dc_type="table")])
+
+    assert stamp.version_kind == "delta"
+    assert stamp.delta_version == 2, "the latest commit, not the first"
+    assert stamp.aggregation_version == 3
+    assert stamp.row_count == 150
+    assert stamp.schema_hash, "needed to detect schema drift on restore"
+
+
+def test_stamp_falls_back_to_the_project_for_the_type(store) -> None:
+    """Regression: `dc_config.type` is None on real dashboards.
+
+    Components store a projected config whose ``type`` is frequently null. When
+    that was the only source, every collection classified as unknown and the
+    stamp carried no Delta version at all, so nothing was reproducible.
+    """
+    dc_id = PyObjectId()
+    _seed_delta(store, dc_id, versions=[(1, 0, 100)])
+    _seed_project(store, dc_id, dc_type="table")
+
+    (stamp,) = _stamps_for(store, [_dc_component(dc_id, dc_type=None)])
+
+    assert stamp.version_kind == "delta", "must not degrade to none"
+    assert stamp.dc_type == "table"
+    assert stamp.delta_version == 0
+    assert stamp.reason is None
+
+
+def test_stamp_without_type_anywhere_explains_itself(store) -> None:
+    """No type in the component and no project row: say so, don't imply coverage."""
+    dc_id = PyObjectId()
+    _seed_delta(store, dc_id, versions=[(1, 0, 100)])
+
+    (stamp,) = _stamps_for(store, [_dc_component(dc_id, dc_type=None)])
+
+    assert stamp.version_kind == "none"
+    assert stamp.reason == "unknown_data_collection_type"
+
+
+def test_stamp_carries_human_readable_tags(store) -> None:
+    """The picker labels collections by tag, so the stamp has to hold them."""
+    dc_id = PyObjectId()
+    _seed_delta(store, dc_id, versions=[(1, 0, 100)])
+
+    (stamp,) = _stamps_for(store, [_dc_component(dc_id, dc_type="table")])
+
+    assert stamp.workflow_tag == "iris_versioned"
+    assert stamp.data_collection_tag == "iris_versioned_table"
+
+
+def test_stamp_without_delta_version_is_honest(store) -> None:
+    """Pre-provenance aggregations and UI uploads record no Delta version."""
+    dc_id = PyObjectId()
+    store["deltatables"].insert_one(
+        {
+            "_id": PyObjectId(),
+            "data_collection_id": dc_id,
+            "aggregation": [{"aggregation_version": 1, "rows_total": 10}],
+        }
+    )
+
+    (stamp,) = _stamps_for(store, [_dc_component(dc_id, dc_type="table")])
+
+    assert stamp.version_kind == "none"
+    assert stamp.reason == "no_delta_version_recorded"
+    assert stamp.aggregation_version == 1, "still worth recording what we do know"
+
+
+def test_components_without_a_collection_are_skipped(store) -> None:
+    """Text components carry no dc_id and must not produce an empty stamp."""
+    dc_id = PyObjectId()
+    _seed_delta(store, dc_id, versions=[(1, 0, 100)])
+
+    stamps = _stamps_for(
+        store,
+        [
+            {"index": "t1", "component_type": "text", "dc_id": None},
+            _dc_component(dc_id, dc_type="table"),
+        ],
+    )
+
+    assert [s.dc_id for s in stamps] == [str(dc_id)]
