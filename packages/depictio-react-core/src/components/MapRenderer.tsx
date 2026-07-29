@@ -4,6 +4,7 @@ import Plot from 'react-plotly.js';
 
 import { renderMap, InteractiveFilter, StoredMetadata } from '../api';
 import { useDataVersionRequest } from '../dataVersions';
+import { renderDefinitionKey } from '../renderKey';
 import { extractScatterSelection } from '../selection';
 import RefetchOverlay from './RefetchOverlay';
 
@@ -44,6 +45,10 @@ const MapRenderer: React.FC<MapRendererProps> = ({
   // effect's deps so a pin change actually refetches instead of relabelling
   // stale data.
   const { body: versionBody, key: versionKey } = useDataVersionRequest();
+  // `metadata.index` is identity and never moves, so a component whose
+  // *definition* was swapped underneath a mounted renderer (a restore, an
+  // in-place edit) would keep showing the old chart until a page reload.
+  const definitionKey = renderDefinitionKey(metadata);
   const theme: 'light' | 'dark' = colorScheme === 'dark' ? 'dark' : 'light';
 
   const mapType = (metadata.map_type as string) || 'scatter_map';
@@ -93,7 +98,7 @@ const MapRenderer: React.FC<MapRendererProps> = ({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dashboardId, metadata.index, JSON.stringify(filtersForFetch), theme, refreshTick, versionKey]);
+  }, [dashboardId, metadata.index, JSON.stringify(filtersForFetch), theme, refreshTick, versionKey, definitionKey]);
 
   const isInitialLoad = figure === null;
   const showInitialLoader = isInitialLoad && loading;

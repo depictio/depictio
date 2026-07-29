@@ -31,11 +31,30 @@ PKG = "/@fs/build/packages/depictio-react-core/src"
 #: these renderers has to read the pin from context and put the version in its
 #: fetch effect's dependency list. One without the other is the silent form of
 #: this bug — the request body changes while the fetch never re-runs.
+#: `definitionKey` is here for the same reason: a renderer whose definition is
+#: swapped in place (a single-component restore) must refetch, and without it
+#: the change only appears after a page reload.
 REQUIRED = {
-    f"{PKG}/components/FigureRenderer.tsx": ["useDataVersionRequest", "versionKey"],
-    f"{PKG}/components/TableRenderer.tsx": ["useDataVersionRequest", "versionKey"],
-    f"{PKG}/components/MapRenderer.tsx": ["useDataVersionRequest", "versionKey"],
-    f"{PKG}/components/ImageRenderer.tsx": ["useDataVersionRequest", "versionKey"],
+    f"{PKG}/components/FigureRenderer.tsx": [
+        "useDataVersionRequest",
+        "versionKey",
+        "definitionKey",
+    ],
+    f"{PKG}/components/TableRenderer.tsx": [
+        "useDataVersionRequest",
+        "versionKey",
+        "definitionKey",
+    ],
+    f"{PKG}/components/MapRenderer.tsx": [
+        "useDataVersionRequest",
+        "versionKey",
+        "definitionKey",
+    ],
+    f"{PKG}/components/ImageRenderer.tsx": [
+        "useDataVersionRequest",
+        "versionKey",
+        "definitionKey",
+    ],
     f"{PKG}/dataVersions.tsx": ["component_overrides", "data_versions"],
     "/src/EditorApp.tsx": ["DataVersionProvider", "ComponentVersionModal"],
     # The viewer must NOT offer to re-point live data; that is edit-mode only.

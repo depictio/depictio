@@ -26,6 +26,7 @@ import {
   StoredMetadata,
 } from '../api';
 import { useDataVersionRequest } from '../dataVersions';
+import { renderDefinitionKey } from '../renderKey';
 import { useNewItemIds } from '../hooks/useNewItemIds';
 import { useTransientFlag } from '../hooks/useTransientFlag';
 import { ActiveHighlight } from '../highlight';
@@ -74,6 +75,9 @@ const ImageRenderer: React.FC<ImageRendererProps> = ({
   // effect's deps so a pin change actually refetches instead of relabelling
   // stale data.
   const { body: versionBody, key: versionKey } = useDataVersionRequest();
+  // See FigureRenderer: identity does not move when a definition is
+  // replaced in place.
+  const definitionKey = renderDefinitionKey(metadata);
   const imageColumn = (metadata.image_column as string) || '';
   const s3BaseFolder = (metadata.s3_base_folder as string) || '';
   const thumbnailSize =
@@ -174,6 +178,7 @@ const ImageRenderer: React.FC<ImageRendererProps> = ({
     sortBy,
     sortDir,
     versionKey,
+    definitionKey,
   ]);
 
   const rows = response ? response.rows : null;

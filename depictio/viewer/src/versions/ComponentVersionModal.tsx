@@ -56,6 +56,7 @@ import {
   DataVersionProvider,
   dataVersionBody,
   fetchDashboardVersion,
+  renderDefinitionKey,
   restoreComponentFromVersion,
   type DashboardVersionDetail,
   type DashboardVersionSummary,
@@ -205,7 +206,7 @@ const VersionedComponent: React.FC<{
             // Remount per (config, data) pair. The renderers cache by component
             // id, and reusing the instance would show the previous version's
             // figure until the next fetch lands.
-            key={`${index}-${pinKey}-${String((metadata as Record<string, unknown>).last_updated ?? '')}`}
+            key={`${index}-${pinKey}-${renderDefinitionKey(metadata)}`}
             metadata={metadata}
             filters={[] as InteractiveFilter[]}
             dashboardId={dashboardId ?? undefined}

@@ -9,6 +9,7 @@ import Plotly from 'plotly.js';
 
 import { renderFigure, InteractiveFilter, StoredMetadata } from '../api';
 import { useDataVersionRequest } from '../dataVersions';
+import { renderDefinitionKey } from '../renderKey';
 import { extractScatterSelection } from '../selection';
 import { useInView } from '../hooks/useInView';
 import { useNewItemIds } from '../hooks/useNewItemIds';
@@ -59,6 +60,10 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
   // effect's deps so a pin change actually refetches instead of relabelling
   // stale data.
   const { body: versionBody, key: versionKey } = useDataVersionRequest();
+  // `metadata.index` is identity and never moves, so a component whose
+  // *definition* was swapped underneath a mounted renderer (a restore, an
+  // in-place edit) would keep showing the old chart until a page reload.
+  const definitionKey = renderDefinitionKey(metadata);
   const theme: 'light' | 'dark' = colorScheme === 'dark' ? 'dark' : 'light';
   const [containerRef, inView] = useInView<HTMLDivElement>('200px');
 
@@ -119,7 +124,7 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dashboardId, metadata.index, JSON.stringify(filtersForFetch), theme, inView, refreshTick, versionKey]);
+  }, [dashboardId, metadata.index, JSON.stringify(filtersForFetch), theme, inView, refreshTick, versionKey, definitionKey]);
 
   // First-paint loader vs refetch overlay: only show the big "Rendering…"
   // block until we have something to show; subsequent fetches keep the

@@ -15,6 +15,7 @@ import type {
 
 import { renderTable, InteractiveFilter, StoredMetadata } from '../api';
 import { useDataVersionRequest } from '../dataVersions';
+import { renderDefinitionKey } from '../renderKey';
 import { extractRowSelection } from '../selection';
 import { useInView } from '../hooks/useInView';
 import { useNewItemIds } from '../hooks/useNewItemIds';
@@ -69,6 +70,9 @@ const TableRenderer: React.FC<TableRendererProps> = ({
   // effect's deps so a pin change actually refetches instead of relabelling
   // stale data.
   const { body: versionBody, key: versionKey } = useDataVersionRequest();
+  // See FigureRenderer: identity does not move when a definition is
+  // replaced in place, so both the column and row fetches follow this.
+  const definitionKey = renderDefinitionKey(metadata);
   const isDark = colorScheme === 'dark';
   const [containerRef, inView] = useInView<HTMLDivElement>('200px');
 
@@ -227,7 +231,7 @@ const TableRenderer: React.FC<TableRendererProps> = ({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dashboardId, metadata.index, inView, ready, versionKey]);
+  }, [dashboardId, metadata.index, inView, ready, versionKey, definitionKey]);
 
   const showInitialLoader = !inView || (!ready && loading);
   const showRefetchOverlay = ready && loading;
@@ -279,7 +283,7 @@ const TableRenderer: React.FC<TableRendererProps> = ({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dashboardId, metadata.index, ready, rowIdColumn, JSON.stringify(filtersForFetch), refreshTick, versionKey]);
+  }, [dashboardId, metadata.index, ready, rowIdColumn, JSON.stringify(filtersForFetch), refreshTick, versionKey, definitionKey]);
 
   const newRowIds = useNewItemIds(snapshotIds, refreshTick);
   const highlightDurationMs =

@@ -260,6 +260,7 @@ export {
   useIsTimeTravelling,
   dataVersionBody,
 } from './dataVersions';
+export { renderDefinitionKey } from './renderKey';
 export type { DataVersionPins, DataVersionState } from './dataVersions';
 
 // Real-time event subscription (WebSocket /events/ws)
