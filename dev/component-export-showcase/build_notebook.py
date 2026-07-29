@@ -40,10 +40,15 @@ CELLS = [
 `GET /depictio/api/v1/export/dashboards/{dashboard_id}/components/{component_id}`
 hands you one dashboard component in one of two forms:
 
-| `format` | you get | good for |
-|---|---|---|
-| `json` | `{data, layout, config, meta}` — a Plotly figure spec | re-plotting, restyling, further analysis |
-| `html` | one self-contained file, no network calls | embedding anywhere, archiving a result |
+| `format` | you get | size | good for |
+|---|---|---|---|
+| `json` | `{data, layout, config, meta}` — a Plotly figure spec | ~1–500 KB | **re-plotting in your own page**, restyling, further analysis |
+| `html` | one self-contained file, no network calls | ~7 MB | types with no server-side figure; archiving a result |
+
+**Reach for `json` first.** It hands you a finished figure you own: restyle it,
+resize it, subset the traces, or pull the numbers out. `html` inlines the entire
+React renderer to carry component types that are not Plotly at all (tables,
+cards), which is why it costs ~7 MB to deliver a few hundred KB of data.
 
 This notebook does five things:
 
