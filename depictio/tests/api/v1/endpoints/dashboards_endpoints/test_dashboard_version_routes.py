@@ -665,9 +665,10 @@ def test_deleting_a_dashboard_deletes_its_history(ctx, monkeypatch) -> None:
 
     assert response.status_code == 200, response.text
     assert ctx["versions"].count_documents({"family_id": str(did)}) == 0
-    assert version_store.dashboard_version_counters_collection.count_documents(
-        {"family_id": str(did)}
-    ) == 0, "the seq counter must go too, or a recreated dashboard resumes at the old max"
+    assert (
+        version_store.dashboard_version_counters_collection.count_documents({"family_id": str(did)})
+        == 0
+    ), "the seq counter must go too, or a recreated dashboard resumes at the old max"
 
 
 def test_deleting_a_child_tab_keeps_the_family_history(ctx, monkeypatch) -> None:
