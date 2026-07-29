@@ -32,6 +32,7 @@ def _etag(**overrides) -> str:
         "export_format": "json",
         "theme": "light",
         "filters": [],
+        "controls": None,
     }
     kwargs.update(overrides)
     return build_etag(**kwargs)
@@ -85,3 +86,25 @@ def test_revision_survives_a_missing_timestamp() -> None:
     revision = dashboard_revision({"version": 1})
     assert revision["last_saved_ts"] == ""
     assert revision["dashboard_version"] == 1
+
+
+def test_etag_varies_with_intra_viz_controls() -> None:
+    """A ROC and a PR curve come from the same component at the same dashboard
+    version. Leaving controls out of the tag would serve one from cache when the
+    caller asked for the other."""
+    pr = _etag(controls={"mode": "pr"})
+    roc = _etag(controls={"mode": "roc"})
+    threshold = _etag(controls={"mode": "threshold"})
+    assert len({pr, roc, threshold}) == 3
+
+
+def test_etag_ignores_control_key_order() -> None:
+    a = _etag(controls={"mode": "roc", "show_auc": True})
+    b = _etag(controls={"show_auc": True, "mode": "roc"})
+    assert a == b
+
+
+def test_absent_controls_match_empty_controls() -> None:
+    """Omitting the parameter and passing {} are the same request, so they must
+    not split the cache."""
+    assert _etag() == _etag(controls={})

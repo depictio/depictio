@@ -278,9 +278,19 @@ def _celery_advanced_viz_spec(component: dict, filter_metadata: list[dict], kind
 
 
 def _python_advanced_viz_spec(
-    component: dict, filter_metadata: list[dict], kind: str, theme: str
+    component: dict,
+    filter_metadata: list[dict],
+    kind: str,
+    theme: str,
+    controls: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Build an advanced-viz figure from a registered Python builder."""
+    """Build an advanced-viz figure from a registered Python builder.
+
+    ``controls`` is the intra-viz state the live renderer keeps in the browser —
+    the ROC/PR/threshold tab, a normalisation mode, a top-N. Without it an export
+    can only ever produce the persisted default, so a component that presents
+    three cases in the dashboard would be reduced to one on the way out.
+    """
     from depictio.api.v1.services.advanced_viz.data import load_tidy_columns
     from depictio.api.v1.services.advanced_viz.figure_registry import build, required_columns
 
@@ -292,7 +302,7 @@ def _python_advanced_viz_spec(
         columns=columns,
         filter_metadata=filter_metadata,
     )
-    return build(kind, config=config, rows=tidy["rows"], theme=theme)
+    return build(kind, config=config, rows=tidy["rows"], theme=theme, controls=controls)
 
 
 async def build_plotly_export(
@@ -305,6 +315,7 @@ async def build_plotly_export(
     access_token: str | None,
     current_user: Any,
     html_url: str | None = None,
+    controls: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Produce the portable Plotly spec for one component.
 
@@ -349,7 +360,9 @@ async def build_plotly_export(
                 _celery_advanced_viz_spec(component, filter_metadata, str(viz_kind))
             )
         else:
-            spec = _python_advanced_viz_spec(component, filter_metadata, str(viz_kind), theme)
+            spec = _python_advanced_viz_spec(
+                component, filter_metadata, str(viz_kind), theme, controls
+            )
     else:  # pragma: no cover - guarded by the formats_for check above
         raise ExportUnsupported(
             status_code=422,
@@ -380,6 +393,10 @@ async def build_plotly_export(
                 "title": component.get("title") or "",
                 "theme": theme,
                 "filter_applied": bool(filter_metadata),
+                # Echo the intra-viz state so a saved figure records which case
+                # it depicts. A ROC and a PR curve from the same component are
+                # otherwise indistinguishable once the URL is gone.
+                "controls": controls or {},
                 "generated_at": datetime.now(timezone.utc).isoformat(),
             },
         }

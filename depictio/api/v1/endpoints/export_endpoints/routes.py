@@ -112,6 +112,27 @@ async def get_embed_user(
     return anonymous
 
 
+def _parse_controls(raw: str | None) -> dict:
+    """Decode the optional ``controls`` query parameter (a JSON object).
+
+    Intra-viz state that the live renderer keeps in browser state: which case a
+    multi-case renderer shows (``{"mode": "roc"}``), a normalisation choice, a
+    top-N. Without it an export can only reproduce the persisted default, so a
+    component offering three views in the dashboard collapses to one.
+    """
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(
+            status_code=400, detail=f"controls must be a JSON object: {exc}"
+        ) from exc
+    if not isinstance(parsed, dict):
+        raise HTTPException(status_code=400, detail="controls must be a JSON object.")
+    return parsed
+
+
 def _parse_filters(raw: str | None) -> list[dict]:
     """Decode the optional ``filters`` query parameter (a JSON array)."""
     if not raw:
@@ -200,6 +221,14 @@ async def export_component(
     filters: str | None = Query(
         None, description="URL-encoded JSON array of interactive filter values."
     ),
+    controls: str | None = Query(
+        None,
+        description=(
+            'URL-encoded JSON object of intra-viz state, e.g. {"mode": "roc"}. '
+            "Selects between the cases a multi-view renderer offers; without it "
+            "the export renders the component's persisted default."
+        ),
+    ),
     expect_version: int | None = Query(
         None,
         description=(
@@ -223,6 +252,7 @@ async def export_component(
         current_user=current_user,
         access_token=access_token,
         expect_version=expect_version,
+        controls=_parse_controls(controls),
     )
 
 
@@ -244,6 +274,9 @@ async def export_component_post(
     theme = body.get("theme") or "light"
     if theme not in ("light", "dark"):
         raise HTTPException(status_code=400, detail="theme must be 'light' or 'dark'.")
+    body_controls = body.get("controls") or {}
+    if not isinstance(body_controls, dict):
+        raise HTTPException(status_code=400, detail="controls must be a JSON object.")
     return await _export(
         request=request,
         dashboard_id=dashboard_id,
@@ -253,6 +286,7 @@ async def export_component_post(
         filters=body.get("filters") or [],
         current_user=current_user,
         access_token=access_token,
+        controls=body_controls,
     )
 
 
@@ -267,6 +301,7 @@ async def _export(
     current_user: User,
     access_token: str | None,
     expect_version: int | None = None,
+    controls: dict | None = None,
 ) -> Any:
     """Shared body of the GET and POST export routes."""
     try:
@@ -280,6 +315,7 @@ async def _export(
             current_user=current_user,
             access_token=access_token,
             expect_version=expect_version,
+            controls=controls,
         )
     except HTTPException as exc:
         # Error bodies here are actionable — they name the supported formats and
@@ -302,6 +338,7 @@ async def _export_inner(
     current_user: User,
     access_token: str | None,
     expect_version: int | None = None,
+    controls: dict | None = None,
 ) -> Any:
     dashboard_data, component, _ = resolve_dashboard_component(
         dashboard_id, component_id, current_user
@@ -333,6 +370,7 @@ async def _export_inner(
         export_format=export_format.value,
         theme=theme,
         filters=filters,
+        controls=controls,
     )
     if etag_matches(request.headers.get("if-none-match"), etag):
         # 304 must not carry a body, but must carry the validators — otherwise the
@@ -378,6 +416,7 @@ async def _export_inner(
         access_token=access_token,
         current_user=current_user,
         html_url=_html_url(request, dashboard_id, component_id, theme),
+        controls=controls,
     )
     # Provenance travels *inside* the payload as well as in headers: a figure
     # saved to a file keeps no headers, and "which version produced this" is
