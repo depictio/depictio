@@ -738,6 +738,27 @@ async def delete_dashboard(
     result = dashboards_collection.delete_one({"dashboard_id": dashboard_id})
 
     if result.deleted_count > 0:
+        # Drop the version ledger with it. Snapshots are the largest documents
+        # this deployment writes, and the retention policy is scoped per family
+        # — so an orphaned ledger is never pruned and never reachable, it just
+        # accumulates. Only for a main tab: a child tab's versions belong to its
+        # parent's timeline and must outlive the child.
+        #
+        # Best-effort, and after the delete: leftover history is a storage leak,
+        # while a failure here must not leave a deleted dashboard reported as
+        # still present.
+        if dashboard.get("is_main_tab", True):
+            try:
+                from depictio.api.v1.endpoints.dashboards_endpoints.version_store import (
+                    delete_family,
+                )
+
+                removed = delete_family(str(dashboard_id))
+                if removed:
+                    logger.info(f"Deleted {removed} version(s) for dashboard {dashboard_id}")
+            except Exception as exc:  # noqa: BLE001 — never fail a completed delete
+                logger.warning(f"Could not delete version history for {dashboard_id}: {exc}")
+
         message = f"Dashboard with ID '{str(dashboard_id)}' deleted successfully."
         if child_tabs_deleted > 0:
             message += f" Also deleted {child_tabs_deleted} child tabs."

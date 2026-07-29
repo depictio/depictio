@@ -637,3 +637,58 @@ def test_snapshot_carries_the_exact_layout_a_preview_needs(ctx) -> None:
 
     assert tab["right_panel_layout_data"] == layout, "geometry must survive verbatim"
     assert tab["title"] != "Renamed later", "the snapshot must not track later edits"
+
+
+def test_deleting_a_dashboard_deletes_its_history(ctx, monkeypatch) -> None:
+    """A deleted dashboard's ledger was orphaned in Mongo forever.
+
+    `delete_family` existed but nothing called it. Snapshots are the largest
+    documents this deployment writes, and retention is scoped per family — so
+    an orphaned ledger is never pruned and never reachable again, it only
+    accumulates. The sequence counter goes too, or recreating a dashboard with
+    the same id would resume numbering at the old maximum.
+    """
+    from depictio.api.v1.endpoints.dashboards_endpoints import routes as dash_routes
+    from depictio.api.v1.endpoints.dashboards_endpoints import version_store
+    from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
+
+    monkeypatch.setattr(dash_routes, "dashboards_collection", ctx["dashboards"])
+    ctx["client"].app.dependency_overrides[get_current_user] = lambda: CALLER
+
+    did = _make_dashboard(ctx, components=[{"index": "a"}])
+    _capture(ctx, did, kind="explicit")
+    ctx["dashboards"].update_one({"_id": did}, {"$set": {"stored_metadata": [{"index": "b"}]}})
+    _capture(ctx, did, kind="explicit", now=BASE + timedelta(hours=1))
+    assert ctx["versions"].count_documents({"family_id": str(did)}) == 2
+
+    response = ctx["client"].delete(f"{API}/delete/{did}")
+
+    assert response.status_code == 200, response.text
+    assert ctx["versions"].count_documents({"family_id": str(did)}) == 0
+    assert version_store.dashboard_version_counters_collection.count_documents(
+        {"family_id": str(did)}
+    ) == 0, "the seq counter must go too, or a recreated dashboard resumes at the old max"
+
+
+def test_deleting_a_child_tab_keeps_the_family_history(ctx, monkeypatch) -> None:
+    """A child tab's versions belong to its parent's timeline.
+
+    A version covers the whole family, so dropping the ledger when one tab is
+    removed would discard the history of every other tab with it — including
+    the record of the tab that was just deleted, which is exactly what someone
+    would want to restore.
+    """
+    from depictio.api.v1.endpoints.dashboards_endpoints import routes as dash_routes
+    from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
+
+    monkeypatch.setattr(dash_routes, "dashboards_collection", ctx["dashboards"])
+    ctx["client"].app.dependency_overrides[get_current_user] = lambda: CALLER
+
+    main = _make_dashboard(ctx, components=[{"index": "a"}])
+    child = _make_dashboard(ctx, title="Tab 2", parent=main, tab_order=1)
+    _capture(ctx, main, kind="explicit")
+    assert ctx["versions"].count_documents({"family_id": str(main)}) == 1
+
+    ctx["client"].delete(f"{API}/delete/{child}")
+
+    assert ctx["versions"].count_documents({"family_id": str(main)}) == 1
