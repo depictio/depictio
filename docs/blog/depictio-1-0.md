@@ -126,16 +126,23 @@ motion instead.
   <p style="text-align: center; margin-top: 0.5rem; font-style: italic; color: #666;">🎬 A dashboard using the full range of components, over three linked collections, captured in the browser.</p>
 </div>
 
-Whatever you hand Depictio, CSV, TSV, Parquet or Excel, gets normalised into
-Delta tables at ingest, and every component then reads from those. Figures,
-cards, tables and the advanced visualisations all pull only the columns they
-actually need, backed by a schema cache, so a chart doesn't drag the whole table
-across just to draw a few series. The figure engine is Polars-native now, with
-downsampling and Arrow for moving data around efficiently. Heavy rendering is
-pushed off to background workers with higher concurrency and gzip on the wire,
-which keeps the interface responsive while the expensive work happens somewhere
-else. MultiQC reports, which can get large, get filter-aware caching and
-prewarming so they don't recompute from scratch every time you touch a filter.
+Depictio takes several kinds of data collection, and each one gets the treatment
+that suits it. Tabular data, whether you hand it over as CSV, TSV, Parquet,
+Feather or Excel, is normalised into Delta tables at ingest, and that is what
+figures, cards, tables and the advanced visualisations read from: they pull only
+the columns they actually need, backed by a schema cache, so a chart doesn't drag
+the whole table across just to draw a few series. The figure engine is
+Polars-native now, with downsampling and Arrow for moving data around
+efficiently. Heavy rendering is pushed off to background workers with higher
+concurrency and gzip on the wire, which keeps the interface responsive while the
+expensive work happens somewhere else.
+
+The rest stay in their own formats, because converting them would lose the point.
+MultiQC reports are read as MultiQC, and since they can get large they get
+filter-aware caching and prewarming so they don't recompute from scratch every
+time you touch a filter. Images are served from object storage, GeoJSON feeds map
+boundaries, Newick and Nexus trees go to the phylogeny renderer, and JBrowse2
+tracks are handed to JBrowse2.
 
 Some numbers, so those aren't just adjectives. On a dataset of **12 million rows**
 across three linked collections (1 GB raw, 1.4 GB as Delta), running on a laptop
