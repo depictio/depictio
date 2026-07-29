@@ -234,7 +234,55 @@ def main() -> int:
             )
             failures += not check("body carries a timestamp", bool(body.get("timestamp")))
 
-    print("\n=== 5. CLI event ===")
+    print("\n=== 5. CLI version reporting ===")
+    # `cli_versions_seen` is the one payload field fed by an inbound *request
+    # header* rather than by settings or a database count, which makes it the only
+    # place attacker-controlled text can reach an outbound payload. Both ends are
+    # unit tested; this exercises the recorder and the reader together, including
+    # what happens when the header is hostile.
+    from depictio.api.v1.telemetry.cli_versions import (
+        CLI_VERSIONS_DOC_ID,
+        record_cli_version,
+    )
+    from depictio.api.v1.telemetry.payload import recent_cli_versions
+
+    from depictio.api.v1.db import telemetry_collection  # isort: skip
+
+    versions_doc_existed = telemetry_collection.find_one({"_id": CLI_VERSIONS_DOC_ID}) is not None
+    try:
+        record_cli_version("9.9.9-e2echeck")
+        failures += not check(
+            "a plausible version reaches the payload",
+            "9.9.9-e2echeck" in recent_cli_versions(),
+            str(recent_cli_versions()),
+        )
+
+        hostile = [
+            "1.0.0; DROP TABLE users",
+            "../../etc/passwd",
+            "alice@internal.example.org",
+            "<script>alert(1)</script>",
+            "x" * 500,
+        ]
+        for value in hostile:
+            record_cli_version(value)
+        reported = recent_cli_versions()
+        failures += not check(
+            "hostile version headers never reach the payload",
+            all(value not in reported for value in hostile),
+            str(reported),
+        )
+    finally:
+        if not versions_doc_existed:
+            telemetry_collection.delete_one({"_id": CLI_VERSIONS_DOC_ID})
+        else:
+            # Drop only the keys this check introduced, leaving real observations.
+            telemetry_collection.update_one(
+                {"_id": CLI_VERSIONS_DOC_ID},
+                {"$unset": {"versions.9_9_9-e2echeck": ""}},
+            )
+
+    print("\n=== 6. CLI event ===")
     from depictio.cli.cli.utils.telemetry import build_properties
 
     cli_payload = build_properties("data process", succeeded=True, duration_seconds=3.2)

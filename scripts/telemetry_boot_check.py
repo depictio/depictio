@@ -101,6 +101,26 @@ def main() -> int:
             claims.count(True) == 1,
             f"claims={claims}",
         )
+
+        # The guard is only useful if it outlives the interval it guards. The TTL
+        # index uses expireAfterSeconds=0 — MongoDB's expire-*at*-the-timestamp
+        # mode — so a guard written with `now` in this field is collected on the
+        # next TTL sweep, silently un-guarding every send. That bug shipped once
+        # and neither the unit tests nor the send-once check above noticed, because
+        # both finish long before the TTL monitor runs. Assert the value.
+        from datetime import datetime, timedelta, timezone
+
+        guard_doc = telemetry_collection.find_one({"_id": _guard_id(EVENT_HEARTBEAT, daily=True)})
+        expires_at = (guard_doc or {}).get("guard_expires_at")
+        if expires_at is not None and expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        now = datetime.now(timezone.utc)
+        failures += not check(
+            "guard expiry outlives a daily send interval",
+            expires_at is not None and expires_at - now >= timedelta(days=1),
+            f"expires_at={expires_at}",
+        )
+
         telemetry_collection.delete_one({"_id": _guard_id(EVENT_HEARTBEAT, daily=True)})
 
         print("\n=== 2. Boot path: start_telemetry -> one send of each event ===")
