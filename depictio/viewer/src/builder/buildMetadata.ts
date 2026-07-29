@@ -134,7 +134,9 @@ function buildFigure(
   const c = as<{
     selection_enabled?: boolean;
     selection_column?: string;
+    max_points?: number | null;
   }>(state.config);
+  const maxPoints = typeof c.max_points === 'number' ? c.max_points : null;
   if (state.figureMode === 'code') {
     return {
       ...existing,
@@ -157,6 +159,7 @@ function buildFigure(
     code_content: null,
     selection_enabled: Boolean(c.selection_enabled),
     selection_column: c.selection_column,
+    max_points: maxPoints,
   };
 }
 
@@ -204,6 +207,7 @@ function buildTable(
     striped?: boolean;
     compact?: boolean;
     export_csv?: boolean;
+    page_size?: number;
     row_selection_enabled?: boolean;
     row_selection_column?: string;
   }>(state.config);
@@ -214,6 +218,7 @@ function buildTable(
     striped: c.striped ?? true,
     compact: c.compact ?? false,
     export_csv: c.export_csv ?? false,
+    page_size: typeof c.page_size === 'number' ? c.page_size : 100,
     // Row selection drives `table_selection` filters in
     // packages/depictio-react-core/src/components/ComponentRenderer.tsx —
     // mirrors what map / figure do with `selection_enabled`.

@@ -12,6 +12,7 @@ import React, { useEffect, useMemo } from 'react';
 import {
   Accordion,
   Checkbox,
+  NumberInput,
   ScrollArea,
   Stack,
   Switch,
@@ -31,6 +32,7 @@ const TableBuilder: React.FC = () => {
     striped?: boolean;
     compact?: boolean;
     export_csv?: boolean;
+    page_size?: number;
     row_selection_enabled?: boolean;
     row_selection_column?: string;
   };
@@ -84,6 +86,17 @@ const TableBuilder: React.FC = () => {
                 checked={config.export_csv ?? true}
                 onChange={(e) =>
                   patchConfig({ export_csv: e.currentTarget.checked })
+                }
+              />
+              <NumberInput
+                label="Rows per page"
+                description="Server-paged; larger pages fetch more rows per request"
+                min={1}
+                max={500}
+                clampBehavior="strict"
+                value={config.page_size ?? 100}
+                onChange={(v) =>
+                  patchConfig({ page_size: typeof v === 'number' ? v : 100 })
                 }
               />
             </Stack>

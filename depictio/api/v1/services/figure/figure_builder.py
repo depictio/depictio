@@ -16,15 +16,37 @@ from depictio.api.v1.services.figure.error_figure import create_error_figure
 from depictio.api.v1.services.figure.heatmap import collect_heatmap_kwargs
 from depictio.api.v1.services.multiqc.themes import get_theme_template
 
-# Above this row count, per-marker scatter plots are downsampled before being
-# handed to Plotly: a 1M-row scatter serialises to tens of MB of trace JSON that
-# stalls the browser, and beyond ~50k markers the extra points are visually
-# indistinguishable. Only applied to per-row marker plots (scatter family) —
-# never to line/bar/box/histogram where every row matters or is aggregated.
+# Above this row count, per-marker plots are downsampled before being handed to
+# Plotly: a 1M-row scatter serialises to tens of MB of trace JSON that stalls the
+# browser, and beyond ~50k markers the extra points are visually indistinguishable.
 FIGURE_MAX_POINTS = 50_000
+
+# Scatter-family plots — one marker per row, and the only types we force to WebGL.
 _POINT_PLOT_TYPES = frozenset(
     {"scatter", "scatter_3d", "scatter_ternary", "scatter_polar", "strip"}
 )
+
+# Plot types that materialise one mark/vertex per row, so downsampling both cuts
+# the serialised payload and stays visually faithful: the scatter family plus
+# line/area (one vertex per row) and ecdf (one step per row).
+#
+# Deliberately NOT sampled — these aggregate or bin, so every row shapes the
+# result: box, violin, histogram, density_heatmap, density_contour, funnel.
+# They are instead computed as a Polars aggregation over the lazy scan (see
+# ``services/figure/aggregate.py``), which is both exact and far cheaper.
+#
+# ``bar`` was in this set and had to come out: px.bar does NOT aggregate, it
+# emits one stacked segment per row, so a random sample scales every bar's
+# height by the sample ratio — silently wrong output, not an approximation.
+# Bars now go through the same group-by aggregation as the other reducing types.
+#
+# Kept in sync with ``isPointPlot`` in viewer/src/builder/figure/FigureUIMode.tsx.
+_SAMPLABLE_PLOT_TYPES = _POINT_PLOT_TYPES | frozenset({"line", "area", "ecdf"})
+
+# Ordered (non-random) decimation applies to these: a series is defined by the
+# order of its vertices, so a random sample thins it unevenly and visibly
+# deforms the line. See ``_decimate_ordered``.
+_ORDERED_PLOT_TYPES = frozenset({"line", "area"})
 
 # Plotly Express keyword args whose value is a single DataFrame column name.
 _PX_COLUMN_PARAMS: frozenset[str] = frozenset(
@@ -102,6 +124,72 @@ def referenced_columns(visu_type: str, dict_kwargs: dict) -> set[str] | None:
     return cols or None
 
 
+def _decimate_ordered(plot_df, x_col: str | None, cap: int):
+    """Thin a series to ~``cap`` rows while preserving its visual shape.
+
+    Random sampling is wrong for line/area: the mark is defined by the *order*
+    of its vertices, so dropping rows uniformly at random thins dense and sparse
+    stretches alike and turns a smooth series into a jagged one — and it can drop
+    the spikes, which are usually the whole point of looking at the series.
+
+    This is the M4 idea: sort by x, cut into ``cap // 4`` equal-width buckets and
+    keep each bucket's first / last / min / max row. At the pixel resolution a
+    plot actually has, that is visually indistinguishable from the full series
+    (every vertical extent is preserved) at a fraction of the vertices.
+
+    Falls back to an ordered stride when there's no usable x column to sort on.
+    """
+    import polars as pl
+
+    if plot_df.height <= cap:
+        return plot_df
+
+    if not x_col or x_col not in plot_df.columns:
+        # No x to order by — take every k-th row. Still better than random:
+        # spacing stays uniform, so the series keeps its shape.
+        stride = max(1, plot_df.height // cap)
+        return plot_df.gather_every(stride)
+
+    n_buckets = max(1, cap // 4)
+    ordered = plot_df.sort(x_col, nulls_last=True).with_row_index("_row_idx")
+    # Bucket by position rather than by x value so irregularly-spaced series
+    # (gaps, bursts) still get an even vertex budget across their length.
+    bucket = (pl.col("_row_idx") * n_buckets // ordered.height).alias("_bucket")
+
+    y_candidates = [
+        c
+        for c, dt in zip(ordered.columns, ordered.dtypes)
+        if c not in (x_col, "_row_idx") and dt.is_numeric()
+    ]
+    keep = [
+        pl.col("_row_idx").first().alias("_k_first"),
+        pl.col("_row_idx").last().alias("_k_last"),
+    ]
+    if y_candidates:
+        # Preserve vertical extent on the first numeric column — that's the one
+        # carrying the spikes we must not lose.
+        y = y_candidates[0]
+        keep += [
+            pl.col("_row_idx").sort_by(pl.col(y)).first().alias("_k_min"),
+            pl.col("_row_idx").sort_by(pl.col(y)).last().alias("_k_max"),
+        ]
+
+    idx = (
+        ordered.with_columns(bucket)
+        .group_by("_bucket")
+        .agg(keep)
+        .select(pl.concat_list(pl.exclude("_bucket")).alias("_idx"))
+        .explode("_idx")
+        .unique()
+        .drop_nulls()
+    )
+    return (
+        ordered.join(idx, left_on="_row_idx", right_on="_idx", how="semi")
+        .sort("_row_idx")
+        .drop("_row_idx")
+    )
+
+
 def process_code_mode_figure(
     code_content: str,
     df: Any,
@@ -157,6 +245,8 @@ def create_figure_from_data(
     theme: str = "light",
     selection_enabled: bool = False,
     selection_column: str | None = None,
+    max_points: int | None = None,
+    render_stats: dict[str, Any] | None = None,
 ) -> go.Figure:
     """
     Create Plotly figure from DataFrame and parameters.
@@ -168,6 +258,11 @@ def create_figure_from_data(
         theme: Theme name (light or dark)
         selection_enabled: Whether to enable scatter selection filtering
         selection_column: Column to include in customdata for selection extraction
+        max_points: Point-plot downsampling target (falls back to
+            ``FIGURE_MAX_POINTS``). Only applies to the scatter family.
+        render_stats: Optional out-dict. When provided, it is populated with
+            ``{"displayed": int, "sampled": bool}`` reflecting the plotted marker
+            count so the caller can surface a "sampled" indicator to the client.
 
     Returns:
         Plotly Figure object
@@ -334,15 +429,38 @@ def create_figure_from_data(
                     f"NaN in size column '{size_col}'"
                 )
 
-        # Downsample very large point-style scatters and prefer WebGL so the
+        # Downsample very large mark-per-row plots and prefer WebGL so the
         # serialised figure stays small and the browser stays responsive.
-        if visu_type in _POINT_PLOT_TYPES and plot_df.height > FIGURE_MAX_POINTS:
+        # ``max_points``: None → module default; <= 0 → sampling disabled (the
+        # caller asked for a full, uncapped render); > 0 → explicit cap.
+        if max_points is None:
+            point_cap: int | None = FIGURE_MAX_POINTS
+        elif max_points <= 0:
+            point_cap = None
+        else:
+            point_cap = max_points
+        if (
+            point_cap is not None
+            and visu_type in _SAMPLABLE_PLOT_TYPES
+            and plot_df.height > point_cap
+        ):
             original_height = plot_df.height
-            plot_df = plot_df.sample(n=FIGURE_MAX_POINTS, seed=0)
+            if visu_type in _ORDERED_PLOT_TYPES:
+                # Series: thin by ordered decimation, never at random.
+                plot_df = _decimate_ordered(plot_df, cleaned_kwargs.get("x"), point_cap)
+                how = "decimated"
+            else:
+                plot_df = plot_df.sample(n=point_cap, seed=0)
+                how = "downsampled"
+            if render_stats is not None:
+                render_stats["sampled"] = True
             logger.info(
-                f"create_figure_from_data: downsampled {visu_type} from "
-                f"{original_height} to {FIGURE_MAX_POINTS} points to cap payload size"
+                f"create_figure_from_data: {how} {visu_type} from "
+                f"{original_height} to {plot_df.height} points to cap payload size"
             )
+        if render_stats is not None:
+            render_stats.setdefault("sampled", False)
+            render_stats["displayed"] = plot_df.height
         if visu_type == "scatter":
             # px.scatter renders SVG by default for small N; force WebGL so even
             # the capped point count draws on the GPU instead of as DOM/SVG nodes.

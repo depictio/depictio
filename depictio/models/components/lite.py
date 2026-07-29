@@ -509,7 +509,7 @@ class TableLiteComponent(BaseLiteComponent):
 
     # Table options (optional)
     columns: list[str] = Field(default_factory=list, description="Columns to display (empty = all)")
-    page_size: int = Field(default=10, description="Rows per page")
+    page_size: int = Field(default=100, description="Rows per page")
     sortable: bool = Field(default=True, description="Enable column sorting")
     filterable: bool = Field(default=True, description="Enable column filtering")
 

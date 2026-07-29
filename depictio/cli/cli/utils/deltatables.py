@@ -1,4 +1,5 @@
 import os
+from collections.abc import Iterable
 from datetime import datetime
 
 import polars as pl
@@ -9,6 +10,7 @@ from depictio.cli.cli.utils.api_calls import (
     api_get_files_by_dc_id,
     api_upsert_deltatable,
 )
+from depictio.cli.cli.utils.ingest_timing import record, timed
 from depictio.cli.cli.utils.multiqc_processor import process_multiqc_data_collection
 from depictio.cli.cli.utils.rich_utils import rich_print_checked_statement
 from depictio.cli.cli_logging import logger
@@ -262,6 +264,24 @@ def align_lazy_schemas(lazy_frames: list) -> list:
     return aligned_lfs
 
 
+def build_aggregated_lazyframe(lazy_frames: list) -> pl.LazyFrame:
+    """Align schemas, concatenate, and stamp an aggregation timestamp — lazily.
+
+    Deliberately returns the un-collected LazyFrame so callers can either
+    materialize it (:func:`aggregate_lazy_dataframes`) or stream it straight to
+    storage (:func:`sink_delta_table`). The "aggregation" here is a *vertical
+    concat plus a literal column* — there is no groupby — so streaming it is
+    semantically identical to collecting and writing.
+    """
+    logger.debug("Aligning LazyFrame schemas.")
+    aligned_lfs = align_lazy_schemas(lazy_frames)
+    logger.debug("Concatenating LazyFrames.")
+    concatenated_lf = pl.concat(aligned_lfs)
+    return concatenated_lf.with_columns(
+        pl.lit(datetime.now().strftime("%Y-%m-%d %H:%M:%S")).alias("aggregation_time")
+    )
+
+
 def aggregate_lazy_dataframes(lazy_frames: list) -> pl.DataFrame:
     """
     Concatenate LazyFrames (after aligning schemas) and add an aggregation timestamp.
@@ -274,15 +294,7 @@ def aggregate_lazy_dataframes(lazy_frames: list) -> pl.DataFrame:
     Returns:
         pl.DataFrame: The aggregated DataFrame (materialized).
     """
-    logger.debug("Aligning LazyFrame schemas.")
-    aligned_lfs = align_lazy_schemas(lazy_frames)
-    logger.debug("Concatenating LazyFrames.")
-    # Concatenate all lazy frames into one lazy frame.
-    concatenated_lf = pl.concat(aligned_lfs)
-    # Add an aggregation timestamp column lazily.
-    concatenated_lf = concatenated_lf.with_columns(
-        pl.lit(datetime.now().strftime("%Y-%m-%d %H:%M:%S")).alias("aggregation_time")
-    )
+    concatenated_lf = build_aggregated_lazyframe(lazy_frames)
     # Materialize the lazy operations.
     try:
         aggregated_df: pl.DataFrame = concatenated_lf.collect()  # type: ignore[unresolved-attribute]
@@ -292,6 +304,158 @@ def aggregate_lazy_dataframes(lazy_frames: list) -> pl.DataFrame:
         error_msg = f"Error collecting concatenated LazyFrame: {e}"
         logger.error(error_msg)
         raise Exception(error_msg)
+
+
+def streaming_write_enabled(command_parameters: dict | None = None) -> bool:
+    """Whether to stream the Delta write instead of materializing the frame.
+
+    Opt-in (default off) because ``LazyFrame.sink_delta`` is marked unstable in
+    polars 1.41.x. Enabled by ``depictio run --streaming`` or by exporting
+    ``DEPICTIO_INGEST_STREAMING_WRITE=true`` (the benchmark toggles the env var
+    to measure both paths of the same cell).
+    """
+    if command_parameters and command_parameters.get("streaming"):
+        return True
+    return os.getenv("DEPICTIO_INGEST_STREAMING_WRITE", "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+
+
+def link_columns_by_dc(project_config) -> dict[str, list[str]]:
+    """Per-DC join-key columns implied by the project's cross-DC links.
+
+    Links are declared on the *project* (``Project.links``), not on the data
+    collection, so a DC config alone cannot tell you it participates in one.
+
+    The two ends are not always searched by the same column name. The source is
+    filtered on ``source_column``; the target is filtered on whatever
+    ``filter_links._link_target_column`` resolves to, which prefers
+    ``link_config.target_field`` when the resolver renames across DCs (the
+    MultiQC ``sample_mapping`` case) and only then falls back to
+    ``source_column``. Clustering the target on ``source_column`` regardless
+    would sort it on a column it is never searched by — harmless, but the
+    speedup would silently not happen.
+
+    Returns ``{data_collection_id: [column, ...]}`` covering both ends of every
+    enabled link, so either side is clustered on the key it is searched by.
+
+    Note this keys on DC *ids*. A link written with ``source_dc_tag`` /
+    ``target_dc_tag`` and no id (template mode) contributes nothing — it would
+    need tag→id resolution that isn't available here. Such a DC is written
+    unsorted, which is the previous behaviour, not a new failure.
+    """
+    mapping: dict[str, list[str]] = {}
+    # ``links`` only exists on a full ``Project``; other config shapes reach the
+    # ingest path too, and they simply have nothing to cluster on.
+    for link in getattr(project_config, "links", None) or []:
+        if not link.enabled:
+            continue
+        link_config = link.link_config
+        target_field = getattr(link_config, "target_field", None) if link_config else None
+        ends = (
+            (link.source_dc_id, link.source_column),
+            (link.target_dc_id, target_field or link.source_column),
+        )
+        for dc_id, column in ends:
+            if not dc_id or not column:
+                continue
+            bucket = mapping.setdefault(str(dc_id), [])
+            if column not in bucket:
+                bucket.append(column)
+    return mapping
+
+
+def clustering_columns(
+    data_collection_config: dict,
+    available: Iterable[str],
+    link_columns: Iterable[str] | None = None,
+) -> list[str]:
+    """Columns to sort a Delta table by before writing it.
+
+    Parquet keeps min/max statistics per row group, so a scan can skip a whole
+    row group whose range excludes the predicate. Those statistics are only
+    *selective* if related rows sit together — on an unsorted table every row
+    group spans nearly the full value range and nothing can be skipped.
+
+    The keys a filtered render actually searches by are the cross-DC join keys,
+    which reach a DC two different ways:
+
+    - ``TableJoinConfig.on_columns`` for DCs joined at ingest, and
+    - the project's ``links`` for DCs wired for cross-DC filtering, passed in
+      as ``link_columns`` (see :func:`link_columns_by_dc`). This is the case the
+      benchmark's ``links`` topology exercises, and it declares no ``join`` at
+      all — keying only on ``join`` silently clusters nothing there.
+
+    Sorting takes a filtered read from ~18 ms to ~2 ms on 8 M rows, and that
+    multiplies with the typed filter predicate, which is what makes the
+    statistics reachable in the first place.
+
+    Returns ``[]`` when the DC has no join key or none of them are present, in
+    which case the caller writes unsorted as before.
+    """
+    join_cfg = (data_collection_config or {}).get("join") or {}
+    candidates = list(join_cfg.get("on_columns") or [])
+    for column in link_columns or []:
+        if column not in candidates:
+            candidates.append(column)
+    present = set(available)
+    return [c for c in candidates if c in present]
+
+
+def delta_table_stats(
+    destination_file: str, storage_options: PolarsStorageOptions
+) -> tuple[int, int]:
+    """Return ``(size_bytes, num_records)`` of a written Delta table.
+
+    Read from the transaction log's add-actions, so it reports the *real* on-disk
+    footprint rather than an in-memory estimate — and needs no materialized frame,
+    which is the point on the streaming path. Returns ``(0, 0)`` on any failure.
+    """
+    try:
+        from deltalake import DeltaTable
+
+        actions = DeltaTable(
+            destination_file, storage_options=storage_options.model_dump()
+        ).get_add_actions(flatten=True)
+        cols = actions.column_names
+        size = sum(actions.column("size_bytes").to_pylist()) if "size_bytes" in cols else 0
+        rows = sum(actions.column("num_records").to_pylist()) if "num_records" in cols else 0
+        return int(size), int(rows)
+    except Exception as e:
+        logger.warning(f"Could not read Delta stats for {destination_file}: {e}")
+        return 0, 0
+
+
+def sink_delta_table(
+    concatenated_lf: pl.LazyFrame,
+    destination_file: str,
+    storage_options: PolarsStorageOptions,
+) -> dict:
+    """Stream a LazyFrame straight to Delta, never materializing the full frame.
+
+    This is the memory fix for large ingests: the default path collects the whole
+    concatenated dataset into RAM before writing, which is what OOMs at scale.
+    """
+    logger.debug(f"Streaming (sink_delta) aggregated LazyFrame to {destination_file}.")
+    # Looked up dynamically: sink_delta is absent on older polars builds, and the
+    # resulting AttributeError is exactly what triggers the caller's fallback.
+    sink_delta = getattr(concatenated_lf, "sink_delta", None)
+    if sink_delta is None:
+        raise AttributeError("This polars build has no LazyFrame.sink_delta")
+    sink_delta(
+        destination_file,
+        storage_options=storage_options.model_dump(),
+        delta_write_options={"schema_mode": "overwrite"},
+        mode="overwrite",
+    )
+    logger.info(f"Aggregated Delta table streamed to {destination_file}.")
+    return {
+        "result": "success",
+        "message": f"Aggregated Delta table streamed to {destination_file}.",
+    }
 
 
 def write_delta_table(
@@ -420,6 +584,7 @@ def client_aggregate_data(
         preview_recipes = command_parameters.get("preview_recipes", False)
     else:
         overwrite = False
+        rich_tables = False
         preview_recipes = False
 
     # Handle MultiQC data collections specially - copy parquet files to S3 and extract metadata
@@ -527,15 +692,11 @@ def client_aggregate_data(
     dc_props = data_collection_config.get("dc_specific_properties", {})
     file_format = dc_props.get("format", "csv").lower()
     polars_kwargs = dict(dc_props.get("polars_kwargs", {}))
-    lazy_frames = read_files_lazy(files, file_format, polars_kwargs)
+    with timed("parse"):
+        lazy_frames = read_files_lazy(files, file_format, polars_kwargs)
+    record("n_files", len(files) if files else 0)
 
-    # 4. Aggregate LazyFrames and materialize the result
-    aggregated_df = aggregate_lazy_dataframes(lazy_frames)
-    logger.debug(f"Aggregated DataFrame shape: {aggregated_df.shape}")
-    logger.debug(f"Aggregated DataFrame schema: {aggregated_df.schema}")
-    logger.info(f"Aggregated DataFrame head: {aggregated_df.head(5)}")
-
-    # 5. Write the aggregated DataFrame to Delta Lake
+    # 4/5. Aggregate + write to Delta Lake.
     if destination_exists:
         rich_print_checked_statement("Overwriting existing Delta table", "info")
         logger.info("Overwriting existing Delta table")
@@ -545,53 +706,122 @@ def client_aggregate_data(
         )
         logger.info("S3 Destination does not exist, will create it during processing")
 
-    # Calculate DataFrame size before writing (more accurate than S3 file size estimation)
-    logger.info(f"Aggregated DataFrame shape before size calculation: {aggregated_df.shape}")
-    logger.debug(f"Aggregated DataFrame columns: {aggregated_df.columns}")
-    deltatable_size_bytes = calculate_dataframe_size_bytes(aggregated_df)
+    use_streaming = streaming_write_enabled(command_parameters)
+    aggregated_df: pl.DataFrame | None = None
+    result: dict = {}
+    deltatable_size_bytes = 0
 
-    # Enhanced debugging for size calculation
+    if use_streaming:
+        # Stream the concat straight to Delta — never materializes the full
+        # dataset, which is what OOMs on large ingests.
+        #
+        # Deliberately NOT clustered on the join keys: a sort is a blocking,
+        # whole-dataset operation, so applying it here would materialize
+        # exactly what this path exists to avoid. Streamed tables therefore
+        # keep unselective row-group statistics and read back slower under a
+        # filter — the trade is memory for filtered-read speed, and it is why
+        # this path stays opt-in.
+        try:
+            with timed("write"):
+                result = sink_delta_table(
+                    build_aggregated_lazyframe(lazy_frames),
+                    destination_file=destination_prefix,
+                    storage_options=storage_options,
+                )
+            deltatable_size_bytes, n_rows = delta_table_stats(destination_prefix, storage_options)
+            record("n_rows", n_rows)
+        except Exception as e:
+            # sink_delta is unstable in polars 1.41.x — never let it break an
+            # ingest; fall back to the proven collect-then-write path.
+            logger.warning(f"Streaming Delta write failed ({e}); falling back to collect+write.")
+            record("streaming_fallback", True)
+            use_streaming = False
+
+    record("streaming", use_streaming)
+
+    if not use_streaming:
+        with timed("collect"):
+            aggregated_df = aggregate_lazy_dataframes(lazy_frames)
+        record("n_rows", aggregated_df.height)
+        logger.debug(f"Aggregated DataFrame shape: {aggregated_df.shape}")
+        logger.debug(f"Aggregated DataFrame schema: {aggregated_df.schema}")
+        logger.info(f"Aggregated DataFrame head: {aggregated_df.head(5)}")
+
+        # Cluster on the join keys so parquet row-group statistics become
+        # selective for the filters a dashboard actually issues. Timed as its
+        # own phase: it is a real cost paid once at ingest to buy it back on
+        # every filtered render, and that trade has to be visible.
+        #
+        # Two caveats worth knowing before reading a benchmark number:
+        #  - ``link_columns_by_dc`` is injected by ``process_project_data_collections``,
+        #    so entry points that build their own ``command_parameters`` (join
+        #    repair in ``joins.py``, recipe/``transformed`` DCs, the API-side
+        #    ``table_manage`` write) get join-config clustering only. A project
+        #    can therefore hold both clustered and unclustered tables.
+        #  - the sort is not in-place, so it adds a frame copy to the peak of
+        #    the collect-then-write path — the same path HANDOFF_ingest_memory.md
+        #    describes as the memory ceiling. The streaming path skips it.
+        sort_cols = clustering_columns(
+            data_collection_config,
+            aggregated_df.columns,
+            (command_parameters or {}).get("link_columns_by_dc", {}).get(str(dc_id)),
+        )
+        if sort_cols:
+            try:
+                with timed("sort"):
+                    aggregated_df = aggregated_df.sort(sort_cols)
+                record("sorted_by", ",".join(sort_cols))
+                logger.info(f"Clustered Delta table on join columns {sort_cols}")
+            except Exception as e:
+                # Clustering is an optimisation, never a correctness
+                # requirement — an unsortable key (nested List/Struct dtype)
+                # must not fail an otherwise valid ingest.
+                logger.warning(f"Could not cluster on {sort_cols} ({e}); writing unsorted.")
+
+        # Calculate DataFrame size before writing (more accurate than S3 file size estimation)
+        deltatable_size_bytes = calculate_dataframe_size_bytes(aggregated_df)
+        if deltatable_size_bytes == 0:
+            logger.warning(
+                "DataFrame size calculated as 0 bytes - this indicates an empty DataFrame"
+            )
+
+        with timed("write"):
+            result = write_delta_table(
+                aggregated_df=aggregated_df,
+                destination_file=destination_prefix,
+                storage_options=storage_options,
+            )
+
+    record("delta_bytes", deltatable_size_bytes)
     logger.info(f"🔍 DEBUG: Calculated deltatable_size_bytes = {deltatable_size_bytes}")
     logger.info(f"🔍 DEBUG: Size in MB = {deltatable_size_bytes / (1024 * 1024):.2f} MB")
 
-    if deltatable_size_bytes == 0:
-        logger.warning("DataFrame size calculated as 0 bytes - this indicates an empty DataFrame")
-        logger.debug(f"DataFrame shape: {aggregated_df.shape}")
-        logger.debug(
-            f"DataFrame head: {aggregated_df.head(2) if aggregated_df.height > 0 else 'DataFrame is empty'}"
-        )
+    # Rich summaries need a materialized frame — unavailable on the streaming path.
+    if aggregated_df is not None:
+        if rich_tables:
+            aggregated_df.rich_print(  # type: ignore[unresolved-attribute]
+                title="Aggregated DataFrame - {data_collection.data_collection_tag}",
+                max_rows=10,
+                max_cols=10,
+                show_dtypes=True,
+            )
 
-    result = write_delta_table(
-        aggregated_df=aggregated_df,
-        destination_file=destination_prefix,
-        storage_options=storage_options,
-    )
+            aggregated_df.rich_describe()  # type: ignore[unresolved-attribute]
 
-    extended = True if rich_tables else False
-
-    if rich_tables:
-        aggregated_df.rich_print(  # type: ignore[unresolved-attribute]
-            title="Aggregated DataFrame - {data_collection.data_collection_tag}",
-            max_rows=10,
-            max_cols=10,
-            show_dtypes=True,
-        )
-
-        aggregated_df.rich_describe()  # type: ignore[unresolved-attribute]
-
-    aggregated_df.rich_info(extended)  # type: ignore[unresolved-attribute]
+        aggregated_df.rich_info(bool(rich_tables))  # type: ignore[unresolved-attribute]
 
     # 6. Upsert object in the remote DB with size information
     logger.info(
         f"🔍 DEBUG: About to call api_upsert_deltatable with deltatable_size_bytes={deltatable_size_bytes}"
     )
-    api_upsert_result = api_upsert_deltatable(
-        data_collection_id=str(dc_id),
-        CLI_config=CLI_config,
-        delta_table_location=destination_prefix,
-        update=overwrite,
-        deltatable_size_bytes=deltatable_size_bytes,
-    )
+    with timed("upsert"):
+        api_upsert_result = api_upsert_deltatable(
+            data_collection_id=str(dc_id),
+            CLI_config=CLI_config,
+            delta_table_location=destination_prefix,
+            update=overwrite,
+            deltatable_size_bytes=deltatable_size_bytes,
+        )
     logger.info(f"🔍 DEBUG: API upsert response status: {api_upsert_result.status_code}")
     if api_upsert_result.status_code != 200:
         error_msg = f"Error upserting Delta table metadata: {api_upsert_result.text}"

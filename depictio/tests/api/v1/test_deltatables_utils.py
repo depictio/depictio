@@ -762,11 +762,14 @@ class TestLoadDeltatablelite:
         mock_lazy_frame = MagicMock()
         mock_lazy_frame.filter.return_value = mock_lazy_frame
         mock_lazy_frame.collect.return_value = mock_df
-        # _load_large_dataframe now reads the DC schema to skip filters whose
-        # column isn't present (avoids polars ColumnNotFoundError on cross-DC
-        # filters). Surface the test's columns so the `category` filter is
-        # treated as applicable instead of being dropped as "missing column".
-        mock_lazy_frame.collect_schema.return_value.names.return_value = ["category", "value"]
+        # _load_large_dataframe reads the DC schema to skip filters whose column
+        # isn't present (avoids polars ColumnNotFoundError on cross-DC filters)
+        # and to type categorical predicates. Surface a real schema so the
+        # `category` filter is treated as applicable instead of being dropped as
+        # "missing column".
+        mock_lazy_frame.collect_schema.return_value = pl.Schema(
+            {"category": pl.String, "value": pl.Int64}
+        )
         mock_scan_delta.return_value = mock_lazy_frame
 
         metadata = [

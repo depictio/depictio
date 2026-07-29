@@ -1,34 +1,11 @@
-import React, { useRef } from 'react';
+import React, { lazy, Suspense, useRef } from 'react';
 import { DepictioCard } from 'depictio-components';
 import type { GridApi } from 'ag-grid-community';
 
 import { InteractiveFilter, StoredMetadata } from '../api';
-import FigureRenderer from './FigureRenderer';
-import TableRenderer from './TableRenderer';
 import ImageRenderer from './ImageRenderer';
-import MapRenderer from './MapRenderer';
 import TextRenderer from './TextRenderer';
-import JBrowseRenderer from './JBrowseRenderer';
-import MultiQCRenderer from './MultiQCRenderer';
-import VolcanoRenderer from './advanced_viz/VolcanoRenderer';
-import EmbeddingRenderer from './advanced_viz/EmbeddingRenderer';
-import ManhattanRenderer from './advanced_viz/ManhattanRenderer';
-import StackedTaxonomyRenderer from './advanced_viz/StackedTaxonomyRenderer';
-import PhylogeneticRenderer from './advanced_viz/PhylogeneticRenderer';
-import RarefactionRenderer from './advanced_viz/RarefactionRenderer';
-import DaBarplotRenderer from './advanced_viz/DaBarplotRenderer';
-import EnrichmentRenderer from './advanced_viz/EnrichmentRenderer';
-import ComplexHeatmapRenderer from './advanced_viz/ComplexHeatmapRenderer';
-import UpsetRenderer from './advanced_viz/UpsetRenderer';
-import MARenderer from './advanced_viz/MARenderer';
-import DotPlotRenderer from './advanced_viz/DotPlotRenderer';
-import LollipopRenderer from './advanced_viz/LollipopRenderer';
-import QQRenderer from './advanced_viz/QQRenderer';
-import SunburstRenderer from './advanced_viz/SunburstRenderer';
-import OncoplotRenderer from './advanced_viz/OncoplotRenderer';
-import CoverageTrackRenderer from './advanced_viz/CoverageTrackRenderer';
-import SankeyRenderer from './advanced_viz/SankeyRenderer';
-import { AdvancedVizExtrasProvider } from './advanced_viz/AdvancedVizExtras';
+import LazyMount, { CellPlaceholder } from './LazyMount';
 import MultiSelectRenderer from './interactive/MultiSelectRenderer';
 import RangeSliderRenderer from './interactive/RangeSliderRenderer';
 import SliderRenderer from './interactive/SliderRenderer';
@@ -38,7 +15,25 @@ import SegmentedControlRenderer from './interactive/SegmentedControlRenderer';
 import TimelineRenderer from './interactive/TimelineRenderer';
 import SecondaryMetrics from './card/SecondaryMetrics';
 import { wrapWithChrome } from './chrome';
+import LoadAllButton, { LoadAllState } from './chrome/LoadAllButton';
 import { ActiveHighlight } from '../highlight';
+
+// Heavy renderers are lazy-loaded so plotly / ag-grid / jbrowse resolve into
+// their own async chunks (see `manualChunks` in depictio/viewer/vite.config.ts)
+// instead of the entry bundle. A dashboard that uses none of them never parses
+// them, and first paint no longer blocks on the whole visualisation stack.
+// `figure` / `table` / `multiqc` already gate their own data fetch via an
+// internal `useInView`, so they just need the Suspense chunk boundary; the
+// branches that fetch on mount (`advanced_viz`, `jbrowse`) are additionally
+// viewport-gated with `LazyMount`. The whole advanced_viz family (its ~17
+// renderers + the ag-grid its data popover pulls in) collapses into one chunk
+// behind `AdvancedVizDispatch`.
+const FigureRenderer = lazy(() => import('./FigureRenderer'));
+const TableRenderer = lazy(() => import('./TableRenderer'));
+const MapRenderer = lazy(() => import('./MapRenderer'));
+const JBrowseRenderer = lazy(() => import('./JBrowseRenderer'));
+const MultiQCRenderer = lazy(() => import('./MultiQCRenderer'));
+const AdvancedVizDispatch = lazy(() => import('./advanced_viz/AdvancedVizDispatch'));
 
 interface ComponentRendererProps {
   metadata: StoredMetadata;
@@ -170,37 +165,17 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
   }
 
   if (metadata.component_type === 'figure' && dashboardId) {
-    // Only scatter / scatter_3d traces carry the per-row customdata we need
-    // for meaningful cross-filter selection. Aggregated visus (histogram,
-    // box, bar, pie, …) would emit per-bin envelopes — hide the reset
-    // affordance there too so chrome stays clean.
-    const isScatterLikeForSelection =
-      metadata.visu_type === 'scatter' || metadata.visu_type === 'scatter_3d';
-    const selectionEnabled =
-      Boolean(metadata.selection_enabled) && !!onFilterChange && isScatterLikeForSelection;
-    const onResetSelection =
-      selectionEnabled && onFilterChange
-        ? () =>
-            onFilterChange({
-              index: metadata.index,
-              value: [],
-              source: 'scatter_selection',
-            })
-        : undefined;
-    const sourceFilterActive = isSourceFilterActive(filters, metadata.index, 'scatter_selection');
-    return wrapWithChrome(
-      'figure',
-      metadata,
-      undefined,
-      <FigureRenderer
+    return (
+      <FigureBlock
         dashboardId={dashboardId}
         metadata={metadata}
         filters={filters}
         onFilterChange={onFilterChange}
         refreshTick={refreshTick}
         activeHighlight={activeHighlight}
-      />,
-      { onResetFilter: onResetSelection, extraActions, showDragHandle, sourceFilterActive },
+        extraActions={extraActions}
+        showDragHandle={showDragHandle}
+      />
     );
   }
 
@@ -267,28 +242,37 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
       'map',
       metadata,
       undefined,
-      <MapRenderer
-        dashboardId={dashboardId}
-        metadata={metadata}
-        filters={filters}
-        onFilterChange={onFilterChange}
-        refreshTick={refreshTick}
-      />,
+      <Suspense fallback={<CellPlaceholder />}>
+        <MapRenderer
+          dashboardId={dashboardId}
+          metadata={metadata}
+          filters={filters}
+          onFilterChange={onFilterChange}
+          refreshTick={refreshTick}
+        />
+      </Suspense>,
       { onResetFilter: onResetSelection, extraActions, showDragHandle, sourceFilterActive },
     );
   }
 
   if (metadata.component_type === 'jbrowse' && dashboardId) {
+    // JBrowse fetches its session on mount and pulls a heavy chunk, so gate the
+    // whole thing on the viewport — off-screen tracks neither fetch nor load
+    // their code until scrolled near. Chrome stays *outside* the gate (as for
+    // multiqc) so a deferred panel still shows its card border and title rather
+    // than a bare unframed shimmer.
     return wrapWithChrome(
       'jbrowse',
       metadata,
       undefined,
-      <JBrowseRenderer
-        dashboardId={dashboardId}
-        metadata={metadata}
-        filters={filters}
-        refreshTick={refreshTick}
-      />,
+      <LazyMount>
+        <JBrowseRenderer
+          dashboardId={dashboardId}
+          metadata={metadata}
+          filters={filters}
+          refreshTick={refreshTick}
+        />
+      </LazyMount>,
       { extraActions, showDragHandle },
     );
   }
@@ -304,29 +288,46 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
   }
 
   if (metadata.component_type === 'multiqc' && dashboardId) {
+    // LazyMount (viewport gate + Suspense boundary) so far-below-the-fold MultiQC
+    // panels defer their chunk load + mount until nearly visible — matching
+    // advanced_viz/jbrowse. The renderer also gates its own fetch via useInView,
+    // but LazyMount additionally spares the eager react-plotly chunk mount on a
+    // dense (e.g. 42-panel) dashboard.
     return wrapWithChrome(
       'multiqc',
       metadata,
       undefined,
-      <MultiQCRenderer
-        dashboardId={dashboardId}
-        metadata={metadata}
-        filters={filters}
-        refreshTick={refreshTick}
-      />,
+      <LazyMount>
+        <MultiQCRenderer
+          dashboardId={dashboardId}
+          metadata={metadata}
+          filters={filters}
+          refreshTick={refreshTick}
+        />
+      </LazyMount>,
       { extraActions, showDragHandle },
     );
   }
 
   if (metadata.component_type === 'advanced_viz') {
+    // Every advanced_viz renderer fires its data fetch on mount. Gate on the
+    // viewport so a 25–30 component dashboard doesn't enqueue all ~30 at once
+    // (and never fetches for panels the user scrolls past). LazyMount also
+    // supplies the Suspense boundary for the lazily-loaded dispatch chunk.
+    // Unlike jbrowse/multiqc the chrome can't be hoisted outside the gate here:
+    // AdvancedVizDispatch owns the wrapWithChrome call because the chrome's
+    // extraActions come from the renderer's own popovers, and that whole module
+    // is the lazy chunk. A deferred panel therefore shows a bare skeleton.
     return (
-      <AdvancedVizDispatch
-        metadata={metadata}
-        filters={filters}
-        refreshTick={refreshTick}
-        extraActions={extraActions}
-        showDragHandle={showDragHandle}
-      />
+      <LazyMount>
+        <AdvancedVizDispatch
+          metadata={metadata}
+          filters={filters}
+          refreshTick={refreshTick}
+          extraActions={extraActions}
+          showDragHandle={showDragHandle}
+        />
+      </LazyMount>
     );
   }
 
@@ -363,6 +364,7 @@ const TableBlock: React.FC<{
   showDragHandle,
 }) => {
   const agGridApiRef = useRef<GridApi | null>(null);
+  const [loadAllState, setLoadAllState] = React.useState<LoadAllState | null>(null);
   const selectionEnabled = Boolean(metadata.row_selection_enabled) && !!onFilterChange;
   const onResetSelection =
     selectionEnabled && onFilterChange
@@ -376,26 +378,100 @@ const TableBlock: React.FC<{
         }
       : undefined;
   const sourceFilterActive = isSourceFilterActive(filters, metadata.index, 'table_selection');
+  const combinedExtras =
+    loadAllState || extraActions ? (
+      <>
+        {loadAllState && <LoadAllButton state={loadAllState} />}
+        {extraActions}
+      </>
+    ) : undefined;
   return wrapWithChrome(
     'table',
     metadata,
     undefined,
-    <TableRenderer
-      dashboardId={dashboardId}
-      metadata={metadata}
-      filters={filters}
-      agGridApiRef={agGridApiRef}
-      onFilterChange={onFilterChange}
-      refreshTick={refreshTick}
-      activeHighlight={activeHighlight}
-    />,
+    <Suspense fallback={<CellPlaceholder variant="table" />}>
+      <TableRenderer
+        dashboardId={dashboardId}
+        metadata={metadata}
+        filters={filters}
+        agGridApiRef={agGridApiRef}
+        onFilterChange={onFilterChange}
+        refreshTick={refreshTick}
+        activeHighlight={activeHighlight}
+        onLoadAllState={setLoadAllState}
+      />
+    </Suspense>,
     {
       agGridApiRef,
       onResetFilter: onResetSelection,
-      extraActions,
+      extraActions: combinedExtras,
       showDragHandle,
       sourceFilterActive,
     },
+  );
+};
+
+const FigureBlock: React.FC<{
+  dashboardId: string;
+  metadata: StoredMetadata;
+  filters: InteractiveFilter[];
+  onFilterChange?: (filter: InteractiveFilter) => void;
+  refreshTick?: number;
+  activeHighlight?: ActiveHighlight | null;
+  extraActions?: React.ReactNode;
+  showDragHandle?: boolean;
+}> = ({
+  dashboardId,
+  metadata,
+  filters,
+  onFilterChange,
+  refreshTick,
+  activeHighlight,
+  extraActions,
+  showDragHandle,
+}) => {
+  const [loadAllState, setLoadAllState] = React.useState<LoadAllState | null>(null);
+  // Only scatter / scatter_3d traces carry the per-row customdata we need for
+  // meaningful cross-filter selection. Aggregated visus (histogram, box, bar,
+  // pie, …) would emit per-bin envelopes — hide the reset affordance there so
+  // chrome stays clean.
+  const isScatterLikeForSelection =
+    metadata.visu_type === 'scatter' || metadata.visu_type === 'scatter_3d';
+  const selectionEnabled =
+    Boolean(metadata.selection_enabled) && !!onFilterChange && isScatterLikeForSelection;
+  const onResetSelection =
+    selectionEnabled && onFilterChange
+      ? () =>
+          onFilterChange({
+            index: metadata.index,
+            value: [],
+            source: 'scatter_selection',
+          })
+      : undefined;
+  const sourceFilterActive = isSourceFilterActive(filters, metadata.index, 'scatter_selection');
+  const combinedExtras =
+    loadAllState || extraActions ? (
+      <>
+        {loadAllState && <LoadAllButton state={loadAllState} />}
+        {extraActions}
+      </>
+    ) : undefined;
+  return wrapWithChrome(
+    'figure',
+    metadata,
+    undefined,
+    <Suspense fallback={<CellPlaceholder />}>
+      <FigureRenderer
+        dashboardId={dashboardId}
+        metadata={metadata}
+        filters={filters}
+        onFilterChange={onFilterChange}
+        refreshTick={refreshTick}
+        activeHighlight={activeHighlight}
+        onLoadAllState={setLoadAllState}
+      />
+    </Suspense>,
+    { onResetFilter: onResetSelection, extraActions: combinedExtras, showDragHandle, sourceFilterActive },
   );
 };
 
@@ -574,94 +650,3 @@ function formatValue(v: unknown): string | number {
   }
   return String(v);
 }
-
-interface AdvancedVizDispatchProps {
-  metadata: StoredMetadata;
-  filters: InteractiveFilter[];
-  refreshTick?: number;
-  extraActions?: React.ReactNode;
-  showDragHandle?: boolean;
-}
-
-/**
- * Per-component sub-renderer for the advanced_viz family.
- *
- * Holds a useState for the Settings + Show-data popovers the framed renderer
- * publishes via AdvancedVizExtrasContext. The published JSX is appended to
- * the standard chrome icons (metadata + fullscreen + reset) via the
- * `extraActions` slot so all the action icons land in the same hover-revealed
- * row with matching Mantine styling.
- */
-const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
-  metadata,
-  filters,
-  refreshTick,
-  extraActions,
-  showDragHandle,
-}) => {
-  const [publishedExtras, setPublishedExtras] = React.useState<React.ReactNode>(null);
-
-  const vizKind = (metadata.viz_kind as string) || '';
-  const advProps = { metadata, filters, refreshTick };
-  let inner: React.ReactNode;
-  if (vizKind === 'volcano') {
-    inner = <VolcanoRenderer {...(advProps as any)} />;
-  } else if (vizKind === 'embedding') {
-    inner = <EmbeddingRenderer {...(advProps as any)} />;
-  } else if (vizKind === 'manhattan') {
-    inner = <ManhattanRenderer {...(advProps as any)} />;
-  } else if (vizKind === 'stacked_taxonomy') {
-    inner = <StackedTaxonomyRenderer {...(advProps as any)} />;
-  } else if (vizKind === 'phylogenetic') {
-    inner = <PhylogeneticRenderer {...(advProps as any)} />;
-  } else if (vizKind === 'rarefaction') {
-    inner = <RarefactionRenderer {...(advProps as any)} />;
-  } else if (vizKind === 'da_barplot' || vizKind === 'ancombc_differentials') {
-    // ancombc_differentials was collapsed into da_barplot — legacy persisted
-    // dashboards still carry the old kind string and need the same renderer.
-    inner = <DaBarplotRenderer {...(advProps as any)} />;
-  } else if (vizKind === 'enrichment') {
-    inner = <EnrichmentRenderer {...(advProps as any)} />;
-  } else if (vizKind === 'complex_heatmap') {
-    inner = <ComplexHeatmapRenderer {...(advProps as any)} />;
-  } else if (vizKind === 'upset_plot') {
-    inner = <UpsetRenderer {...(advProps as any)} />;
-  } else if (vizKind === 'ma') {
-    inner = <MARenderer {...(advProps as any)} />;
-  } else if (vizKind === 'dot_plot') {
-    inner = <DotPlotRenderer {...(advProps as any)} />;
-  } else if (vizKind === 'lollipop') {
-    inner = <LollipopRenderer {...(advProps as any)} />;
-  } else if (vizKind === 'qq') {
-    inner = <QQRenderer {...(advProps as any)} />;
-  } else if (vizKind === 'sunburst') {
-    inner = <SunburstRenderer {...(advProps as any)} />;
-  } else if (vizKind === 'oncoplot') {
-    inner = <OncoplotRenderer {...(advProps as any)} />;
-  } else if (vizKind === 'coverage_track') {
-    inner = <CoverageTrackRenderer {...(advProps as any)} />;
-  } else if (vizKind === 'sankey') {
-    inner = <SankeyRenderer {...(advProps as any)} />;
-  } else {
-    inner = (
-      <div className="dashboard-error" style={{ fontSize: '0.75rem' }}>
-        Unknown advanced viz kind: "{vizKind}"
-      </div>
-    );
-  }
-
-  const combinedExtras = publishedExtras || extraActions ? (
-    <>
-      {publishedExtras}
-      {extraActions}
-    </>
-  ) : undefined;
-
-  return wrapWithChrome(
-    'advanced_viz',
-    metadata,
-    undefined,
-    <AdvancedVizExtrasProvider onChange={setPublishedExtras}>{inner}</AdvancedVizExtrasProvider>,
-    { extraActions: combinedExtras, showDragHandle },
-  );
-};

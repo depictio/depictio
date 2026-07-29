@@ -347,6 +347,8 @@ cache/
 .env.instance
 .env
 data/depictio-*/
+# Generated MultiQC scale-test fixtures + their machine-local project configs
+data/scale_scenarios/
 .devcontainer/docker-compose.git-mount.yaml
 docker-compose.override.yaml
 
@@ -390,7 +392,16 @@ dev/advanced_viz_docs_screenshots/fixtures/
 # Generated catalog-preview single-file bundle (built via pnpm run build:catalog-preview)
 depictio/viewer/dist-catalog-preview/
 
+# Generated Iconify icon subset (emitted by depictio/viewer/scripts/generate-icon-subset.mjs,
+# which every `pnpm dev` / `pnpm build` runs first). Regenerate with `pnpm run icons`.
+depictio/viewer/src/generated/
+
 # Nextflow runtime artifacts (from local pipeline validation runs)
 .nextflow/
 .nextflow.log*
 work/
+
+# Benchmark harness generated artifacts (datasets + results are generated live,
+# never committed — see benchmark/README.md). The glob covers the per-run
+# directories a `--output` flag creates alongside the default one.
+benchmark/output*/

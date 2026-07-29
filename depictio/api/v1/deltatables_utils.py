@@ -2,6 +2,7 @@ import hashlib
 import json
 import os
 import sys
+import threading
 import warnings
 
 import httpx
@@ -22,10 +23,15 @@ DELTA_CACHE_DIR = os.getenv("DEPICTIO_DELTA_CACHE_DIR", "/app/cache/delta_cache"
 # Delta schema cache (#12). ``collect_schema()`` reads the Delta log; on the hot
 # render path (a card grid re-computing on every filter change, or a projected
 # figure load) that's a repeated round-trip for a schema that only changes when
-# ingest bumps the aggregation version. Cache the column names per
+# ingest bumps the aggregation version. Cache the full schema per
 # (data_collection_id, aggregation_version) so a new ingest naturally
 # invalidates the entry — the same discriminator the dataframe cache keys use.
-_DELTA_SCHEMA_CACHE: dict[tuple[str, str], frozenset[str]] = {}
+#
+# The dtypes are cached alongside the names because they are what lets
+# ``add_filter`` build a *typed* categorical predicate instead of wrapping the
+# column in a ``cast(Utf8)`` — see the comment there. Both come from the same
+# ``collect_schema()`` call, so keeping dtypes costs no extra round-trip.
+_DELTA_SCHEMA_CACHE: dict[tuple[str, str], dict[str, pl.DataType]] = {}
 _DELTA_SCHEMA_CACHE_MAX = 512  # bounded; the version salt churns keys over time
 
 
@@ -122,6 +128,100 @@ def _generate_filter_hash(metadata: list[dict] | None) -> str:
     return filter_hash
 
 
+# Synthetic ``interactive_component_type`` for "a cross-DC link resolved to no
+# target values". Not a user-facing component: it exists so an empty resolution
+# can be carried through the ordinary filter payload and still mean "no rows",
+# which an empty value list cannot express (see ``add_filter``).
+LINK_NO_MATCH = "__link_no_match__"
+
+
+def _categorical_predicate(column_name: str, values: list, dtype: pl.DataType | None) -> pl.Expr:
+    """Build the ``is_in`` predicate for Select/MultiSelect/SegmentedControl.
+
+    The values arrive stringified: ``unique_values`` stringifies for the React
+    MultiSelect, and scatter/table selections round-trip through the same path.
+    So an ``int64`` column compared against ``["1", "2"]`` must still match.
+
+    The obvious way to get that — ``pl.col(c).cast(pl.Utf8).is_in([...])`` — is
+    a performance trap. Wrapping the *column* in a cast makes the predicate
+    opaque to Polars' parquet reader: row-group min/max statistics can no
+    longer be used to skip, and dictionary pushdown is lost, so every filtered
+    read fully decodes the filter column across the whole table. Measured on
+    the 1 GB benchmark tier that turned a 100-row filtered table page into an
+    18-second load.
+
+    So we cast the *values* to the column's dtype instead, which leaves
+    ``pl.col(c)`` bare and keeps the predicate pushable. ``dtype`` comes from
+    the cached Delta schema; when it is unknown (no schema available) or of a
+    kind we don't convert confidently, we fall back to the original
+    column-cast form — correctness first, speed only when it is free.
+
+    How a value is converted depends on the dtype, and getting this wrong is
+    how a filter silently empties a component:
+
+    - numerics and ``Date`` — ``cast`` parses their string form directly.
+    - ``Datetime`` and ``Time`` — ``cast`` from string is a *numeric* parse and
+      returns null without raising, so casting is not merely slow, it drops
+      every row. They need the real parsers (``str.to_datetime`` /
+      ``str.to_time``), which also accept every rendering a client sends:
+      ``str()`` (``"2024-01-01 12:30:45"``), ``isoformat()`` (with ``T``), and
+      Polars' own ``cast(Utf8)`` (with microseconds). Note the column-cast form
+      matched *none* of those — it renders microseconds while clients send
+      seconds — so temporal categorical filters never matched anything before;
+      routing them through a parser fixes that as well as making them pushable.
+    - ``Duration`` — no parser, and its string form isn't castable at all, so
+      it keeps the fallback (which raises on contact; pre-existing).
+    - everything else (Boolean, Categorical, nested) keeps the fallback: the
+      conversion rules aren't obvious enough to risk a silent behaviour change.
+
+    A value that cannot be converted is dropped rather than matched: an int
+    column genuinely has no row equal to ``"abc"``, which is what the
+    column-cast form returned too. But if *nothing* converts we fall back
+    instead of returning "matches nothing" — an all-null conversion is far more
+    likely to mean "this dtype doesn't parse from text" than "the user picked
+    values this column cannot hold", and guessing wrong empties the component.
+    """
+    str_values = [str(v) for v in values]
+    fallback = pl.col(column_name).cast(pl.Utf8, strict=False).is_in(str_values)
+
+    if dtype is None:
+        return fallback
+
+    # Already text: no conversion needed on either side, and the bare column
+    # is directly pushable. The common case for categorical filters.
+    if dtype == pl.String:  # pl.Utf8 is the same dtype under an older name
+        return pl.col(column_name).is_in(str_values)
+
+    raw = pl.Series(str_values, dtype=pl.Utf8)
+    base = dtype.base_type()
+    try:
+        if dtype.is_numeric() or dtype == pl.Date:
+            converted = raw.cast(dtype, strict=False)
+        elif base == pl.Datetime:
+            # Parse naive, then cast to the column's own unit/zone. Verified to
+            # round-trip for naive, UTC and offset zones.
+            converted = raw.str.to_datetime(strict=False).cast(dtype, strict=False)
+        elif base == pl.Time:
+            converted = raw.str.to_time(strict=False)
+        else:
+            return fallback
+    except Exception as e:
+        logger.debug(
+            f"_categorical_predicate: cannot convert values to {dtype} for column "
+            f"{column_name!r} ({e}); using the string-cast predicate"
+        )
+        return fallback
+
+    typed_values = converted.drop_nulls().to_list()
+    if not typed_values:
+        logger.debug(
+            f"_categorical_predicate: no value converted to {dtype} for column "
+            f"{column_name!r}; using the string-cast predicate"
+        )
+        return fallback
+    return pl.col(column_name).is_in(typed_values)
+
+
 def add_filter(
     filter_list: list,
     interactive_component_type: str,
@@ -129,22 +229,33 @@ def add_filter(
     value,
     min_value=None,
     max_value=None,
+    dtype: pl.DataType | None = None,
 ) -> None:
-    """Add filter criteria to a filter list based on component type."""
-    if interactive_component_type in ["Select", "MultiSelect", "SegmentedControl"]:
+    """Add filter criteria to a filter list based on component type.
+
+    ``dtype`` is the column's Delta dtype when the caller knows it (from the
+    cached schema); it only affects categorical filters, where it enables a
+    pushable predicate. Omitting it preserves the previous behaviour exactly.
+    """
+    if interactive_component_type == LINK_NO_MATCH:
+        # A cross-DC link resolved to zero target values: the user's filter is
+        # satisfiable on the source but matches nothing on this DC, so the
+        # correct result is no rows.
+        #
+        # This cannot be expressed as an empty ``is_in`` list, because every
+        # branch below is guarded by ``if value:`` — an empty list falls through
+        # as "no filter at all" and the component renders EVERY row, which reads
+        # as "the filter did nothing" rather than "nothing matched". Hence an
+        # explicit component type carrying an always-false predicate.
+        filter_list.append(pl.lit(False))
+
+    elif interactive_component_type in ["Select", "MultiSelect", "SegmentedControl"]:
         if value:
             # Ensure value is a list for is_in() function
             if not isinstance(value, list):
                 value = [value]
 
-            # Cast both column and values to Utf8 so the filter is dtype-agnostic.
-            # The unique_values endpoint stringifies values for the React MultiSelect
-            # (and scatter/table selections round-trip through the same code path),
-            # so an int64 column compared against ["1", "2"] would otherwise
-            # silently return zero rows. Only safe for categorical (`is_in`) filters.
-            filter_list.append(
-                pl.col(column_name).cast(pl.Utf8, strict=False).is_in([str(v) for v in value])
-            )
+            filter_list.append(_categorical_predicate(column_name, value, dtype))
 
     elif interactive_component_type == "TextInput":
         if value:
@@ -245,13 +356,20 @@ def add_filter(
             )
 
 
-def process_metadata_and_filter(metadata: list) -> list:
+def process_metadata_and_filter(
+    metadata: list, schema: dict[str, pl.DataType] | None = None
+) -> list:
     """Process metadata and build a list of Polars filter expressions.
 
     If a component carries ``filter_expr`` (either at the top level or under
     ``metadata.filter_expr``), the compiled expression is appended alongside
     the value-based filter so downstream consumers see the source's row
     scoping in addition to the user's selection.
+
+    ``schema`` is the DC's ``{column: dtype}`` map when the caller has it (the
+    lazy scan path does, via the cached Delta schema). It is passed down so
+    categorical filters can be built as pushable typed predicates; without it
+    they keep their previous dtype-agnostic form.
     """
     filter_list = []
 
@@ -271,6 +389,7 @@ def process_metadata_and_filter(metadata: list) -> list:
             interactive_component_type=interactive_component_type,
             column_name=column_name,
             value=component["value"],
+            dtype=schema.get(column_name) if schema else None,
         )
 
         if filter_expr:
@@ -485,6 +604,38 @@ def _get_aggregation_version(data_collection_id_str: str) -> str | None:
         return None
 
 
+def _get_aggregation_hash(data_collection_id_str: str) -> str | None:
+    """Fetch the latest ``aggregation_hash`` for a DC from MongoDB.
+
+    Preferred over ``_get_aggregation_version`` as a cache-key salt: the version
+    is a counter the upsert increments, whereas the hash is derived from the
+    Delta log itself (table version + active files, see ``_delta_identity_hash``)
+    and therefore describes the *state of the data* rather than how many times
+    it has been written.
+
+    Note it is additionally salted with the write timestamp, so it is not a
+    content-identity hash: two upserts of byte-identical data produce different
+    hashes. For invalidation that bias is the safe one — it can cause a
+    redundant recompute, never a stale answer.
+
+    Returns ``None`` on lookup failure so callers can fall back.
+    """
+    try:
+        from depictio.api.v1.db import deltatables_collection as _dt_coll
+
+        dt = _dt_coll.find_one(
+            {"data_collection_id": ObjectId(data_collection_id_str)},
+            {"aggregation": 1},
+        )
+        agg_list = (dt or {}).get("aggregation") or []
+        if not agg_list:
+            return None
+        return str(agg_list[-1].get("aggregation_hash") or "")
+    except Exception as e:
+        logger.debug(f"_get_aggregation_hash({data_collection_id_str}) failed: {e}")
+        return None
+
+
 def _get_dc_type_from_db(data_collection_id: ObjectId) -> str | None:
     """
     Fetch data collection type from MongoDB.
@@ -610,6 +761,61 @@ def _create_delta_scan(file_id: str, dc_type: str | None = None) -> pl.LazyFrame
     return pl.scan_delta(file_id, storage_options=polars_s3_config)
 
 
+def _get_cached_dtypes(
+    delta_scan: pl.LazyFrame,
+    data_collection_id_str: str,
+    version_salt: str | int | None,
+) -> dict[str, pl.DataType] | None:
+    """Return a DC's Delta schema as ``{column: dtype}``, cached (#12).
+
+    On cache miss, reads the lazy schema once (a Delta-log round-trip, no data)
+    and memoizes it. Returns ``None`` if the schema can't be read, so callers
+    fall back to their pre-cache behaviour (no projection / no filter pruning /
+    untyped filter predicates).
+
+    ``version_salt`` is what makes a cached entry safe to reuse: an upsert
+    increments the aggregation version, so a re-ingest that changes a column's
+    dtype lands under a new key. When the version is *unknown* (``None`` — the
+    Mongo lookup failed, or the DC has no aggregation yet) that guarantee is
+    gone, and a stale dtype is worse than a stale name set: the predicate is
+    built for the wrong type and the scan raises instead of merely mispruning.
+    So an unknown version reads the schema fresh and does not memoize it.
+    """
+    if version_salt is None:
+        try:
+            schema = dict(delta_scan.collect_schema())
+        except Exception as e:
+            logger.debug(
+                f"_get_cached_dtypes: schema read failed for {data_collection_id_str}: {e}"
+            )
+            return None
+        return schema or None
+
+    cache_key = (data_collection_id_str, str(version_salt))
+    cached = _DELTA_SCHEMA_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+    try:
+        schema = dict(delta_scan.collect_schema())
+    except Exception as e:
+        logger.debug(f"_get_cached_dtypes: schema read failed for {data_collection_id_str}: {e}")
+        return None
+    if not schema:
+        # A columnless schema is not a real DC, and treating it as authoritative
+        # is actively dangerous: callers use the name set to decide which
+        # filters apply, so an empty answer silently drops *every* filter and
+        # renders unfiltered data. Report it as unreadable instead, which makes
+        # callers fall back to their unguarded behaviour.
+        logger.debug(f"_get_cached_dtypes: empty schema for {data_collection_id_str}; ignoring")
+        return None
+    # Simple bound: a schema is cheap to re-read, so clearing on overflow is
+    # fine and avoids tracking per-entry recency.
+    if len(_DELTA_SCHEMA_CACHE) >= _DELTA_SCHEMA_CACHE_MAX:
+        _DELTA_SCHEMA_CACHE.clear()
+    _DELTA_SCHEMA_CACHE[cache_key] = schema
+    return schema
+
+
 def _get_cached_schema(
     delta_scan: pl.LazyFrame,
     data_collection_id_str: str,
@@ -617,25 +823,12 @@ def _get_cached_schema(
 ) -> frozenset[str] | None:
     """Return a DC's Delta column names, cached per (collection, version) (#12).
 
-    On cache miss, reads the lazy schema once (a Delta-log round-trip, no data)
-    and memoizes it. Returns ``None`` if the schema can't be read, so callers
-    fall back to their pre-cache behaviour (no projection / no filter pruning).
+    Thin view over :func:`_get_cached_dtypes` — callers that only need to know
+    *which* columns exist (projection guards, filter pruning) keep taking a
+    name set, and share the one cached schema read with the dtype consumers.
     """
-    cache_key = (data_collection_id_str, str(version_salt))
-    cached = _DELTA_SCHEMA_CACHE.get(cache_key)
-    if cached is not None:
-        return cached
-    try:
-        names = frozenset(delta_scan.collect_schema().names())
-    except Exception as e:
-        logger.debug(f"_get_cached_schema: schema read failed for {data_collection_id_str}: {e}")
-        return None
-    # Simple bound: a schema is cheap to re-read, so clearing on overflow is
-    # fine and avoids tracking per-entry recency.
-    if len(_DELTA_SCHEMA_CACHE) >= _DELTA_SCHEMA_CACHE_MAX:
-        _DELTA_SCHEMA_CACHE.clear()
-    _DELTA_SCHEMA_CACHE[cache_key] = names
-    return names
+    schema = _get_cached_dtypes(delta_scan, data_collection_id_str, version_salt)
+    return None if schema is None else frozenset(schema)
 
 
 def _filter_columns(metadata: list[dict] | None) -> set[str]:
@@ -958,6 +1151,146 @@ def _load_and_cache_fresh_data(
     return df
 
 
+def _apply_scan_filters(
+    delta_scan: pl.LazyFrame,
+    metadata: list[dict] | None,
+    data_collection_id_str: str,
+    version_salt: str | int | None = None,
+) -> pl.LazyFrame:
+    """Push ``metadata`` filters onto a lazy Delta scan (schema-guarded).
+
+    Skips filters whose column isn't present on this DC — happens when a
+    cross-DC filter (e.g. metadata.habitat) is also being applied to a
+    canonical advanced-viz DC keyed on sample_id. The link resolver appends
+    the translated sample_id filter, so we can safely drop the untranslated
+    habitat filter here instead of failing the whole load with a polars
+    ColumnNotFoundError. Returns the scan unchanged when there are no filters.
+    """
+    if not metadata:
+        return delta_scan
+
+    schema = _get_cached_dtypes(delta_scan, data_collection_id_str, version_salt)
+
+    usable_metadata = metadata
+    if schema is not None:
+        usable_metadata = []
+        for component in metadata:
+            meta = component.get("metadata") or {}
+            col = component.get("column_name") or meta.get("column_name")
+            if col and col not in schema:
+                logger.info(
+                    "Skipping filter on column %r — not present in DC (available: %s)",
+                    col,
+                    sorted(schema),
+                )
+                continue
+            usable_metadata.append(component)
+
+    filter_expressions = process_metadata_and_filter(usable_metadata, schema)
+
+    if filter_expressions:
+        combined_filter = filter_expressions[0]
+        for filt in filter_expressions[1:]:
+            combined_filter &= filt
+        delta_scan = delta_scan.filter(combined_filter)
+
+    return delta_scan
+
+
+def _estimate_frame_size_bytes(delta_scan: pl.LazyFrame) -> int:
+    """Cheaply estimate a lazy frame's materialised footprint (bytes).
+
+    Reads the row count via Polars aggregation pushdown (Delta parquet stats —
+    no data scan) and the projected width via the lazy schema (a Delta-log read),
+    then applies the same ``rows × cols × 8`` heuristic the fresh-load path uses
+    for unknown sizes. Used to classify a DC whose ``size_bytes`` was never
+    recorded so the adaptive loader doesn't mistake a multi-GB table for a small
+    one. Returns ``-1`` if the estimate can't be computed (caller then keeps its
+    prior unknown-size behaviour).
+    """
+    try:
+        n_cols = len(delta_scan.collect_schema())
+        n_rows = int(delta_scan.select(pl.len()).collect().item())
+        return n_rows * max(n_cols, 1) * 8
+    except Exception as e:
+        logger.debug(f"_estimate_frame_size_bytes: estimate failed: {e}")
+        return -1
+
+
+def _open_sortable_scan(
+    workflow_id_str: str,
+    data_collection_id_str: str,
+    init_data: dict[str, dict] | None,
+    metadata: list[dict] | None,
+    effective_cols: list[str] | None,
+    version_salt: str | int | None,
+    TOKEN: str | None = None,
+) -> pl.LazyFrame | None:
+    """Build a filtered + projected lazy Delta scan (no collect).
+
+    Used by the sorted-page path so a large frame can be sorted + sliced lazily
+    (bounded memory) instead of going through the full-frame cache. Filters are
+    applied before projection; ``effective_cols`` already folds in the filter
+    columns (see ``_effective_projection``) so nothing a filter references is
+    projected away. Returns ``None`` if the scan can't be built, so the caller
+    falls back to the memoised full-sort path.
+    """
+    try:
+        if init_data and data_collection_id_str in init_data:
+            dc_type = init_data[data_collection_id_str].get("dc_type")
+        else:
+            dc_type = _get_dc_type_from_db(ObjectId(data_collection_id_str))
+        file_id = _get_delta_location(data_collection_id_str, workflow_id_str, init_data, TOKEN)
+        delta_scan = _create_delta_scan(file_id, dc_type)
+        delta_scan = _apply_scan_filters(delta_scan, metadata, data_collection_id_str, version_salt)
+        delta_scan = _project_scan(delta_scan, effective_cols, data_collection_id_str, version_salt)
+        return delta_scan
+    except Exception as e:
+        logger.debug(f"_open_sortable_scan: failed to build scan for {data_collection_id_str}: {e}")
+        return None
+
+
+def open_deltatable_scan(
+    workflow_id: ObjectId | str,
+    data_collection_id: ObjectId | str,
+    metadata: list[dict] | None = None,
+    init_data: dict[str, dict] | None = None,
+    select_columns: list[str] | None = None,
+    TOKEN: str | None = None,
+) -> pl.LazyFrame | None:
+    """Public entry point for a filtered + projected **lazy** Delta scan.
+
+    The counterpart to ``load_deltatable_lite`` for callers that want to express
+    their work as a Polars aggregation rather than receive rows: figure
+    aggregation (box/histogram/density), card metrics, and any other reduction
+    that parquet statistics + projection pushdown can answer without
+    materialising the frame. A ``mean`` over a 28 M-row table costs a column
+    scan here versus a full in-memory collect through the row-returning loader.
+
+    Resolves the aggregation ``version_salt`` and the effective projection (which
+    folds in the filter columns, so nothing a filter references is projected
+    away) exactly like the row loader, keeping filter semantics identical between
+    the two paths. Returns ``None`` when the scan can't be built — every caller
+    is expected to fall back to ``load_deltatable_lite``.
+
+    Note this deliberately bypasses the frame cache: the result of a scan is a
+    plan, not data, and the aggregates built on it are far smaller than the
+    frames the cache is sized for (they belong in the result cache instead).
+    """
+    data_collection_id_str = str(data_collection_id)
+    version_salt = _get_aggregation_version(data_collection_id_str)
+    effective_cols = _effective_projection(select_columns, metadata, False)
+    return _open_sortable_scan(
+        str(workflow_id),
+        data_collection_id_str,
+        init_data,
+        metadata,
+        effective_cols,
+        version_salt,
+        TOKEN,
+    )
+
+
 def _load_large_dataframe(
     delta_scan: pl.LazyFrame,
     data_collection_id_str: str,
@@ -985,37 +1318,7 @@ def _load_large_dataframe(
 
     # Apply filters at scan level for large DataFrames
     if metadata and not load_for_options:
-        # Skip filters whose column isn't present on this DC — happens when a
-        # cross-DC filter (e.g. metadata.habitat) is also being applied to a
-        # canonical advanced-viz DC keyed on sample_id. The link resolver
-        # appends the translated sample_id filter, so we can safely drop the
-        # untranslated habitat filter here instead of failing the whole load
-        # with a polars ColumnNotFoundError.
-        schema_names = _get_cached_schema(delta_scan, data_collection_id_str, version_salt)
-        available_cols = set(schema_names) if schema_names is not None else None
-
-        usable_metadata = metadata
-        if available_cols is not None:
-            usable_metadata = []
-            for component in metadata:
-                meta = component.get("metadata") or {}
-                col = component.get("column_name") or meta.get("column_name")
-                if col and col not in available_cols:
-                    logger.info(
-                        "Skipping filter on column %r — not present in DC (available: %s)",
-                        col,
-                        sorted(available_cols),
-                    )
-                    continue
-                usable_metadata.append(component)
-
-        filter_expressions = process_metadata_and_filter(usable_metadata)
-
-        if filter_expressions:
-            combined_filter = filter_expressions[0]
-            for filt in filter_expressions[1:]:
-                combined_filter &= filt
-            delta_scan = delta_scan.filter(combined_filter)
+        delta_scan = _apply_scan_filters(delta_scan, metadata, data_collection_id_str, version_salt)
 
     if limit_rows:
         delta_scan = delta_scan.limit(limit_rows)
@@ -1242,12 +1545,24 @@ def load_deltatable_lite(
     # Apply column projection at scan level (schema-guarded; see _project_scan)
     delta_scan = _project_scan(delta_scan, effective_cols, data_collection_id_str, version_salt)
 
+    # A DC whose in-memory footprint was never recorded (size_bytes None/0/-1)
+    # must NOT be assumed small: a multi-GB table would then take the
+    # cache-the-whole-frame branch below and fully collect every row on each
+    # paginated page fetch (and, being over the per-item cap, never even cache).
+    # Estimate the footprint cheaply from a pushdown row count × projected width
+    # so the adaptive branch routes big tables to the lazy limit-pushdown path.
+    if size_bytes is None or size_bytes <= 0:
+        size_bytes = _estimate_frame_size_bytes(delta_scan)
+
     # ADAPTIVE LOADING STRATEGY
     if size_bytes == -1 or size_bytes <= MEMORY_THRESHOLD_BYTES:
-        # Unknown or small DataFrame - load, cache, then filter in memory
-        if limit_rows:
-            delta_scan = delta_scan.limit(limit_rows)
-
+        # Unknown or small DataFrame - load, cache, then filter in memory.
+        # NOTE: cache the *full* frame and apply ``limit_rows`` only to the
+        # returned view (below). The cache key intentionally ignores
+        # ``limit_rows`` (see _generate_cache_keys), so caching a pre-limited
+        # frame here would poison the key for any later load of the same DC +
+        # filters with a different (or no) limit — e.g. paging a table (limit
+        # 10, then 20, …) or a 1-row schema peek followed by a real page.
         df = _load_and_cache_fresh_data(
             delta_scan,
             base_cache_key,
@@ -1258,6 +1573,8 @@ def load_deltatable_lite(
             load_for_options,
             size_bytes,
         )
+        if limit_rows:
+            df = df.limit(limit_rows)
     else:
         # Large DataFrame - use lazy loading with filters at scan level
         df = _load_large_dataframe(
@@ -1277,10 +1594,245 @@ def load_deltatable_lite(
     return df
 
 
+def load_sorted_deltatable_lite(
+    workflow_id: ObjectId,
+    data_collection_id: ObjectId | str,
+    sort_by: str,
+    descending: bool = True,
+    metadata: list[dict] | None = None,
+    init_data: dict[str, dict] | None = None,
+    nulls_last: bool = True,
+    select_columns: list[str] | None = None,
+    page: tuple[int, int] | None = None,
+) -> pl.DataFrame:
+    """Return a sorted (optionally filtered / projected) frame, or one page of it.
+
+    ``load_deltatable_lite`` already caches the *unsorted* frame, so the table
+    render endpoint's ``load`` is a cache hit on pages 2..N. The cost that kept
+    repeating was the ``df.sort(...)`` itself: AG Grid's infinite row model
+    fetches one block per scroll, and each block re-sorted the whole cached
+    frame. We memoise the *sorted* frame under a key derived from the same
+    base/filter key plus ``(cols, sort_by, sort_dir, nulls_last)`` so every block
+    after the first slices an already-sorted frame — no re-sort.
+
+    ``select_columns`` restricts the load to the columns the grid will actually
+    render (plus the sort column), cutting I/O + memory on wide tables; the memo
+    key reflects the projection so different projections don't collide.
+
+    ``page`` = ``(start, limit)`` returns only that window. Small frames are
+    fully sorted once and memoised, so later pages are free slices. A frame whose
+    estimated footprint exceeds the per-item memo cap is instead sorted **lazily**
+    and sliced at scan level — never fully materialised in memory — trading the
+    memo (deep pages re-sort) for bounded memory and a far cheaper first page.
+    ``page=None`` returns the whole sorted frame (memoised full-sort path).
+
+    The key embeds the dc_id and the aggregation ``version_salt`` (via
+    ``_generate_cache_keys``), so a realtime ingest that bumps the version — or
+    an explicit ``invalidate_data_collection_cache`` (dc_id substring match) —
+    busts this entry for free, exactly like the base frame.
+    """
+    import time
+
+    global _total_memory_usage
+
+    data_collection_id_str = str(data_collection_id)
+    workflow_id_str = str(workflow_id)
+
+    version_salt = _get_aggregation_version(data_collection_id_str)
+    effective_cols = _effective_projection(select_columns, metadata, False)
+    base_key, filtered_key, _ = _generate_cache_keys(
+        workflow_id_str,
+        data_collection_id_str,
+        load_for_preview=False,
+        select_columns=effective_cols,
+        metadata=metadata,
+        load_for_options=False,
+        version_salt=version_salt,
+    )
+    key_root = filtered_key or base_key
+    sort_key = (
+        f"{key_root}_sort_{sort_by}_{'desc' if descending else 'asc'}"
+        f"_{'nl' if nulls_last else 'nf'}"
+    )
+
+    def _page(frame: pl.DataFrame) -> pl.DataFrame:
+        return frame.slice(page[0], page[1]) if page is not None else frame
+
+    cached = _dataframe_memory_cache.get(sort_key)
+    if cached is not None:
+        update_cache_timestamp(sort_key)
+        return _page(cached)
+
+    # Per-key lock: this endpoint is a sync ``def`` (threadpool), and AG Grid's
+    # infinite row model fires the first few blocks for the same (dc, sort) key
+    # near-simultaneously. Without serialising the miss, each of those threads
+    # would run the full load + full-frame sort in parallel (thundering herd on
+    # exactly the first-paint moment we want to be fast) and each would add its
+    # own ``size_bytes`` to the shared budget while overwriting the single
+    # metadata entry — leaking the accounting. One thread computes; the rest wait
+    # and hit the cache via the double-check below.
+    with _sorted_cache_locks_guard:
+        key_lock = _sorted_cache_locks.setdefault(sort_key, threading.Lock())
+
+    with key_lock:
+        cached = _dataframe_memory_cache.get(sort_key)
+        if cached is not None:
+            update_cache_timestamp(sort_key)
+            return _page(cached)
+
+        # Lazy sorted-page path for large frames: estimate the footprint from the
+        # projected scan and, above the per-item memo cap, sort + slice lazily so
+        # we never materialise the whole sorted frame. Only when a page is
+        # requested — a full-frame caller needs every row anyway.
+        if page is not None:
+            scan = _open_sortable_scan(
+                workflow_id_str,
+                data_collection_id_str,
+                init_data,
+                metadata,
+                effective_cols,
+                version_salt,
+            )
+            if scan is not None:
+                est = _estimate_frame_size_bytes(scan)
+                if est == -1 or est > MEMORY_PER_ITEM_MAX_BYTES:
+                    start, limit = page
+                    # ``maintain_order`` keeps tie-breaking deterministic and
+                    # identical to the eager memo path below, so a table that
+                    # sits near the memo cap can't reorder equal-key rows between
+                    # requests (page boundaries stay stable). ~10% sort cost.
+                    page_df = (
+                        scan.sort(
+                            sort_by,
+                            descending=descending,
+                            nulls_last=nulls_last,
+                            maintain_order=True,
+                        )
+                        .slice(start, limit)
+                        .collect()
+                    )
+                    if "depictio_aggregation_time" in page_df.columns:
+                        page_df = page_df.drop("depictio_aggregation_time")
+                    return page_df
+
+        # Small frame (or full-frame request): full sort once + memoise so later
+        # pages are free slices of the cached frame.
+        df = load_deltatable_lite(
+            workflow_id=workflow_id,
+            data_collection_id=data_collection_id,
+            metadata=metadata,
+            init_data=init_data,
+            select_columns=select_columns,
+        )
+        sorted_df = df.sort(
+            sort_by, descending=descending, nulls_last=nulls_last, maintain_order=True
+        )
+
+        # Reuse the base cache's LRU budget + per-item cap so the sorted copy
+        # can't pin more RAM than a normal frame. ``estimated_size`` is cheap on
+        # an already materialised frame (buffer-size sum, no scan).
+        size_bytes = sorted_df.estimated_size()
+        if size_bytes <= MEMORY_PER_ITEM_MAX_BYTES:
+            while _total_memory_usage + size_bytes > MEMORY_THRESHOLD_BYTES and _cache_metadata:
+                evict_oldest_cached_dataframe()
+            _dataframe_memory_cache[sort_key] = sorted_df
+            _cache_metadata[sort_key] = {"size_bytes": size_bytes, "timestamp": time.time()}
+            _total_memory_usage += size_bytes
+
+        return _page(sorted_df)
+
+
+def count_deltatable_lite(
+    workflow_id: ObjectId,
+    data_collection_id: ObjectId | str,
+    metadata: list[dict] | None = None,
+    init_data: dict[str, dict] | None = None,
+    TOKEN: str | None = None,
+) -> int:
+    """Count rows of a (optionally filtered) Delta table without materialising it.
+
+    Runs ``scan.filter(...).select(pl.len())`` so the row count comes back via
+    Polars predicate/aggregation pushdown — no full-width, all-rows load. Used
+    by the figure/table render endpoints to report ``total_data_count`` cheaply
+    when the row payload itself is capped or paginated with pushdown.
+
+    Filters are applied with the same schema-guard as ``load_deltatable_lite``
+    (see ``_apply_scan_filters``). Returns 0 on any scan/collect error rather
+    than raising — a missing count only degrades the UI's "N of M" hint.
+    """
+    data_collection_id_str = str(data_collection_id)
+    workflow_id_str = str(workflow_id)
+
+    if isinstance(data_collection_id, str) and "--" in data_collection_id:
+        raise NotImplementedError(
+            f"Joined DC '{data_collection_id}' format is deprecated. "
+            "Use the pre-computed result data collection ID instead."
+        )
+
+    try:
+        if init_data and data_collection_id_str in init_data:
+            dc_type = init_data[data_collection_id_str].get("dc_type")
+        else:
+            dc_type = _get_dc_type_from_db(
+                ObjectId(data_collection_id)
+                if isinstance(data_collection_id, str)
+                else data_collection_id
+            )
+        version_salt = _get_aggregation_version(data_collection_id_str)
+        file_id = _get_delta_location(data_collection_id_str, workflow_id_str, init_data, TOKEN)
+        delta_scan = _create_delta_scan(file_id, dc_type)
+        delta_scan = _apply_scan_filters(delta_scan, metadata, data_collection_id_str, version_salt)
+        result = delta_scan.select(pl.len()).collect()
+        return int(result.item()) if result.height else 0
+    except Exception as e:
+        logger.warning(f"count_deltatable_lite failed for DC {data_collection_id_str}: {e}")
+        return 0
+
+
+def schema_deltatable_lite(
+    workflow_id: ObjectId,
+    data_collection_id: ObjectId | str,
+    init_data: dict[str, dict] | None = None,
+    TOKEN: str | None = None,
+) -> dict:
+    """Return the Delta table's column schema (name → dtype) without loading rows.
+
+    Reads only the Delta log via ``scan.collect_schema()`` — no data scan and no
+    cache interaction, so it can safely precede a cached ``load_deltatable_lite``
+    call. (A ``limit_rows=1`` peek would instead share the cache key and could
+    poison it.) Used by the table render endpoint to resolve the default sort
+    column and build AG Grid column defs before choosing a load strategy.
+    Returns ``{}`` on error; the caller degrades gracefully.
+    """
+    data_collection_id_str = str(data_collection_id)
+    workflow_id_str = str(workflow_id)
+    try:
+        if init_data and data_collection_id_str in init_data:
+            dc_type = init_data[data_collection_id_str].get("dc_type")
+        else:
+            dc_type = _get_dc_type_from_db(
+                ObjectId(data_collection_id)
+                if isinstance(data_collection_id, str)
+                else data_collection_id
+            )
+        file_id = _get_delta_location(data_collection_id_str, workflow_id_str, init_data, TOKEN)
+        schema = _create_delta_scan(file_id, dc_type).collect_schema()
+        return dict(schema)
+    except Exception as e:
+        logger.warning(f"schema_deltatable_lite failed for DC {data_collection_id_str}: {e}")
+        return {}
+
+
 # Memory management for DataFrames - new adaptive caching system
 _dataframe_memory_cache = {}
 _cache_metadata = {}  # Track size and timestamp for each cached DataFrame
 _total_memory_usage = 0
+# Per-sort-key locks so concurrent AG Grid block fetches for the same
+# (dc, filters, sort) compute the sorted frame once instead of stampeding.
+# ``_sorted_cache_locks_guard`` only protects the tiny setdefault of the
+# per-key lock, never the load/sort itself. See ``load_sorted_deltatable_lite``.
+_sorted_cache_locks: dict[str, threading.Lock] = {}
+_sorted_cache_locks_guard = threading.Lock()
 MEMORY_THRESHOLD_BYTES = 1024 * 1024 * 1024  # 1GB threshold (total in-process cache)
 # Per-item cap: a single large DataFrame must not be able to consume most of the
 # in-process cache and evict every smaller, frequently-reused frame. Above this
@@ -1469,7 +2021,10 @@ def apply_runtime_filters(df: pl.DataFrame, metadata: list[dict] | None) -> pl.D
         if valid_metadata:
             logger.info(f"  ✅ Continuing with {len(valid_metadata)} valid filter(s)")
 
-    filter_expressions = process_metadata_and_filter(valid_metadata)
+    # The frame is materialised, so its schema is free — and passing it keeps
+    # this path's categorical semantics identical to the lazy scan path, which
+    # also builds typed predicates.
+    filter_expressions = process_metadata_and_filter(valid_metadata, dict(df.schema))
 
     if filter_expressions:
         try:

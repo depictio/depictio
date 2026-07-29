@@ -4,6 +4,7 @@ import { Icon } from '@iconify/react';
 
 import { fetchUniqueValues, InteractiveFilter, StoredMetadata } from '../../api';
 import { useAvailableSet } from '../../availableValues';
+import ComponentSkeleton from '../ComponentSkeleton';
 
 /**
  * SegmentedControl renderer for the React viewer.
@@ -170,9 +171,7 @@ const SegmentedControlRenderer: React.FC<{
   if (loading) {
     return (
       <Frame>
-        <Text size="xs" c="dimmed">
-          Loading options…
-        </Text>
+        <ComponentSkeleton variant="control" withTitle={false} />
       </Frame>
     );
   }

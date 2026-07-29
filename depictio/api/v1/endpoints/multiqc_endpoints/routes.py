@@ -58,21 +58,30 @@ def _project_id_for_dc(data_collection_id: str) -> str | None:
     return str(project["_id"]) if project else None
 
 
-def _require_dc_editor_or_404(data_collection_id: str, user: User) -> None:
-    """Authorize a destructive call against a MultiQC DC.
+def _require_dc_permission_or_404(
+    data_collection_id: str, user: User, permission: str = "editor"
+) -> str:
+    """Authorize a call against a MultiQC DC and return its project id.
 
     Mirrors the project-permission check that the dashboard delete uses
     so a stolen JWT can't reach across tenants and wipe another user's
     MultiQC reports + S3 parquets via the bulk endpoint. Returns 404
     instead of 403 when the DC isn't found OR the user has no rights —
     don't leak existence to non-members.
+
+    Fail-*closed* on an unresolvable project: the underlying report lookups
+    (``fetch_s3_locations_from_dc``, the delete helpers) query
+    ``multiqc_collection`` by ``data_collection_id`` alone with no project
+    scoping, so skipping the check when ``_project_id_for_dc`` returns
+    ``None`` would hand a caller data for an orphaned DC.
     """
     project_id = _project_id_for_dc(data_collection_id)
-    if not project_id or not check_project_permission(project_id, user, "editor"):
+    if not project_id or not check_project_permission(project_id, user, permission):
         raise HTTPException(
             status_code=404,
             detail=f"Data collection {data_collection_id} not found",
         )
+    return project_id
 
 
 class MultiQCReportResponse(BaseModel):
@@ -285,7 +294,7 @@ async def delete_multiqc_report(
     if not report_doc:
         raise HTTPException(status_code=404, detail=f"Report {report_id} not found")
 
-    _require_dc_editor_or_404(str(report_doc["data_collection_id"]), current_user)
+    _require_dc_permission_or_404(str(report_doc["data_collection_id"]), current_user)
 
     return await delete_multiqc_report_by_id(report_id, delete_s3_file)
 
@@ -315,7 +324,7 @@ async def delete_all_reports_for_data_collection(
             status_code=400, detail=f"Invalid data collection id: {data_collection_id}"
         )
 
-    _require_dc_editor_or_404(data_collection_id, current_user)
+    _require_dc_permission_or_404(data_collection_id, current_user)
 
     result = await delete_all_multiqc_reports_for_dc(data_collection_id, delete_s3_files)
     from depictio.api.v1.endpoints.multiqc_endpoints.utils import _invalidate_multiqc_caches_for_dc
@@ -499,6 +508,43 @@ async def get_multiqc_builder_options(
         report.model_dump() if hasattr(report, "model_dump") else dict(report) for report in reports
     ]
     return _compute_multiqc_builder_options(report_dicts)
+
+
+@router.get(
+    "/prerender/{data_collection_id}/s3-locations",
+    response_model=dict,
+    summary="Full (unpaginated) set of MultiQC report S3 locations for a DC",
+)
+async def get_multiqc_prerender_s3_locations(
+    data_collection_id: str,
+    current_user: User = Depends(get_user_or_anonymous),
+):
+    """Return every MultiQC report's S3 parquet location for a data collection.
+
+    Authoritative full set — the same list the render path derives its figure
+    cache keys from (``fetch_s3_locations_from_dc``). The CLI offline prerender
+    calls this to decide whether this run is a fresh ingest (its local files
+    reproduce the full aggregation) before building figures under the matching
+    keys.
+
+    Order is preserved as ``fetch_s3_locations_from_dc`` returns it (insertion /
+    ``_id``-ascending) — the same order the API's own build paths parse reports
+    in. MultiQC's report merge is order-sensitive, so the CLI must parse in this
+    order to build figures identical to a later Celery rebuild. The cache key
+    itself is order-independent (it sorts internally).
+    """
+    from depictio.api.v1.services.multiqc.dc_lookup import fetch_s3_locations_from_dc
+
+    try:
+        ObjectId(data_collection_id)
+    except (InvalidId, TypeError):
+        raise HTTPException(
+            status_code=400, detail=f"Invalid data collection id: {data_collection_id}"
+        )
+
+    project_id = _require_dc_permission_or_404(data_collection_id, current_user, "viewer")
+
+    return {"s3_locations": fetch_s3_locations_from_dc(data_collection_id, project_id)}
 
 
 @router.post(

@@ -225,7 +225,14 @@ const UpsetRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
   useEffect(() => {
     if (!metadata.wf_id || !metadata.dc_id || previewCols.length < 1) return;
     let cancelled = false;
-    fetchAdvancedVizData(metadata.wf_id, metadata.dc_id, previewCols, filters, 200)
+    fetchAdvancedVizData({
+      wfId: metadata.wf_id,
+      dcId: metadata.dc_id,
+      columns: previewCols,
+      filters,
+      limitRows: 200,
+      vizKind: 'upset_plot',
+    })
       .then((res) => {
         if (!cancelled) setDataRows(res.rows);
       })

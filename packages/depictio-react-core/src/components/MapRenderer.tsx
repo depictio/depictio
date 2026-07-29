@@ -1,10 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Paper, Loader, Text, Stack, useMantineColorScheme } from '@mantine/core';
+import { Paper, Text, Stack, useMantineColorScheme } from '@mantine/core';
 import Plot from 'react-plotly.js';
 
 import { renderMap, InteractiveFilter, StoredMetadata } from '../api';
 import { extractScatterSelection } from '../selection';
 import RefetchOverlay from './RefetchOverlay';
+import ComponentSkeleton from './ComponentSkeleton';
+import { useReportLoadStatus } from './DashboardLoadingProvider';
 
 interface MapRendererProps {
   dashboardId: string;
@@ -94,6 +96,13 @@ const MapRenderer: React.FC<MapRendererProps> = ({
   const showInitialLoader = isInitialLoad && loading;
   const showRefetchOverlay = !isInitialLoad && loading;
 
+  // Report load status to the dashboard registry (maps fetch on mount, no
+  // viewport gate — so no deferred state).
+  useReportLoadStatus(
+    metadata.index,
+    figure != null ? 'ready' : error ? 'error' : 'loading',
+  );
+
   const emitSelection = (values: string[]) => {
     if (!onFilterChange) return;
     onFilterChange({
@@ -170,12 +179,7 @@ const MapRenderer: React.FC<MapRendererProps> = ({
           {metadata.title}
         </Text>
       )}
-      {showInitialLoader && (
-        <Stack align="center" justify="center" gap="xs" style={{ flex: 1 }}>
-          <Loader size="sm" />
-          <Text size="xs" c="dimmed">Rendering map…</Text>
-        </Stack>
-      )}
+      {showInitialLoader && <ComponentSkeleton variant="block" />}
       {error && isInitialLoad && (
         <Stack style={{ flex: 1 }} justify="center" align="center">
           <Text size="sm" c="red" className="dashboard-error">Map failed: {error}</Text>

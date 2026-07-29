@@ -10,7 +10,7 @@ import {
   useMantineColorScheme,
   useMantineTheme,
 } from '@mantine/core';
-import Plot from 'react-plotly.js';
+import AdvancedVizPlot from './AdvancedVizPlot';
 
 import {
   CoverageTrackResult,
@@ -761,7 +761,7 @@ const CoverageTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTick
       dataColumns={dataColumns}
     >
       {figureSpec ? (
-        <Plot
+        <AdvancedVizPlot
           data={applyDataTheme(figureSpec.data, isDark, theme) as any}
           layout={
             applyLayoutTheme(

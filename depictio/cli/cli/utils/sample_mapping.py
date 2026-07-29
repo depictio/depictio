@@ -27,9 +27,15 @@ def build_sample_mapping(samples: List[str]) -> Dict[str, List[str]]:
                                    "SRR10070130 - First read: Adapter 1", ...]}
     """
     # Pattern to extract canonical sample ID:
-    # - Capture everything before optional suffixes (_1, _2) or tool annotations (- ...)
-    # - Handles alphanumeric IDs with underscores, hyphens in the base name
-    canonical_pattern = re.compile(r"^([A-Za-z0-9_-]+?)(?:_[12])?(?:\s*-\s*.+)?$")
+    # - Capture everything before optional suffixes (_1, _2) or tool annotations
+    # - Handles alphanumeric IDs with underscores AND hyphens in the base name
+    #
+    # The tool-annotation delimiter is MultiQC's " - " — a hyphen with whitespace
+    # on both sides ("SRR10070130 - First read: Adapter 1"). Requiring the spaces
+    # (``\s+-\s+``, not ``\s*-\s*``) is what lets a hyphen INSIDE a sample name
+    # (e.g. "run01-SRR10070130", "sample-01") stay part of the canonical ID
+    # instead of collapsing everything after the first bare hyphen.
+    canonical_pattern = re.compile(r"^([A-Za-z0-9_-]+?)(?:_[12])?(?:\s+-\s+.+)?$")
 
     # Build mapping: canonical_id -> [variants]
     mapping: Dict[str, List[str]] = {}

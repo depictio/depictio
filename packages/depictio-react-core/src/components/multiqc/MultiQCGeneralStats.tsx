@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Group,
-  Loader,
   Pagination,
   Paper,
   SegmentedControl,
@@ -22,6 +21,10 @@ import {
   renderMultiQCGeneralStats,
 } from '../../api';
 import { useInView } from '../../hooks/useInView';
+import { enqueueFetch, isStaleFetch } from '../../fetchQueue';
+import ComponentSkeleton from '../ComponentSkeleton';
+import RefetchOverlay from '../RefetchOverlay';
+import { useReportLoadStatus } from '../DashboardLoadingProvider';
 
 interface MultiQCGeneralStatsProps {
   dashboardId: string;
@@ -158,6 +161,20 @@ const MultiQCGeneralStats: React.FC<MultiQCGeneralStatsProps> = ({
   const [page, setPage] = useState(1);
   const [containerRef, inView] = useInView<HTMLDivElement>('200px');
 
+  // First-load skeleton vs refetch overlay (mirrors MultiQCFigure): show the big
+  // table skeleton only before the first payload; a later refetch keeps the
+  // current table visible under a small overlay.
+  const isInitialLoad = payload === null;
+  const showInitialLoader = !inView || (isInitialLoad && loading);
+  const showRefetchOverlay = !isInitialLoad && loading;
+
+  // Report to the dashboard load registry (mirrors FigureRenderer) so the header
+  // progress bar counts the General-Statistics table.
+  useReportLoadStatus(
+    metadata.index,
+    !inView ? null : payload != null ? 'ready' : error ? 'error' : 'loading',
+  );
+
   const filtersSig = JSON.stringify(filters ?? []);
 
   useEffect(() => {
@@ -165,7 +182,12 @@ const MultiQCGeneralStats: React.FC<MultiQCGeneralStatsProps> = ({
     let cancelled = false;
     setLoading(true);
     setError(null);
-    renderMultiQCGeneralStats(dashboardId, metadata.index, filters)
+    // Queue the fetch (vertical position = priority) so a dense dashboard paints
+    // top-down instead of firing every panel at once — mirrors FigureRenderer.
+    enqueueFetch(
+      () => renderMultiQCGeneralStats(dashboardId, metadata.index, filters),
+      metadata.layout?.y ?? 0,
+    )
       .then((res) => {
         if (cancelled) return;
         setPayload(res);
@@ -173,7 +195,8 @@ const MultiQCGeneralStats: React.FC<MultiQCGeneralStatsProps> = ({
         setPage(1);
       })
       .catch((err) => {
-        if (cancelled) return;
+        // Superseded queue generation (filter changed) is not an error.
+        if (cancelled || isStaleFetch(err)) return;
         setError(err?.message || String(err));
       })
       .finally(() => {
@@ -384,22 +407,21 @@ const MultiQCGeneralStats: React.FC<MultiQCGeneralStatsProps> = ({
         position: 'relative',
       }}
     >
-      <Stack gap="xs" style={{ flex: 1, minHeight: 0 }}>
+      <Stack gap="xs" style={{ flex: 1, minHeight: 0, position: 'relative' }}>
         {renderControls()}
-        {(!inView || loading) && (
-          <Stack align="center" justify="center" gap="xs" style={{ flex: 1 }}>
-            <Loader size="sm" />
-            <Text size="xs" c="dimmed">Loading General Statistics…</Text>
-          </Stack>
-        )}
+        {/* Skeleton only on the empty first load; a refetch (filter / realtime
+            tick) keeps the current table mounted under a RefetchOverlay instead
+            of blanking it — mirrors MultiQCFigure / TableRenderer. */}
+        {showInitialLoader && <ComponentSkeleton variant="table" />}
         {error && !loading && (
           <Stack style={{ flex: 1 }} justify="center" align="center">
             <Text size="sm" c="red" className="dashboard-error">General Stats failed: {error}</Text>
           </Stack>
         )}
-        {mode && !loading && !error && (
+        {mode && !isInitialLoad && !error && (
           view === 'table' ? renderTable(mode) : renderViolin(mode)
         )}
+        <RefetchOverlay visible={showRefetchOverlay} />
       </Stack>
     </Paper>
   );

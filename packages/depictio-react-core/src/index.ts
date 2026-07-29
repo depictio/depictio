@@ -13,6 +13,22 @@ import './styles/realtime-highlight.css';
 export { default as DashboardGrid } from './components/DashboardGrid';
 export { default as ComponentRenderer } from './components/ComponentRenderer';
 export { default as ErrorBoundary } from './components/ErrorBoundary';
+export { default as ComponentSkeleton } from './components/ComponentSkeleton';
+export type { SkeletonVariant } from './components/ComponentSkeleton';
+
+// Dashboard-wide load registry: renderers report their status, the viewer's
+// progress bar reads the aggregate. Absent provider → reporting is a no-op.
+export {
+  DashboardLoadingProvider,
+  ComponentIndexContext,
+  useReportLoadStatus,
+  useDashboardLoadSummary,
+  TRACKED_LOAD_TYPES,
+} from './components/DashboardLoadingProvider';
+export type {
+  ComponentLoadStatus,
+  DashboardLoadSummary,
+} from './components/DashboardLoadingProvider';
 
 // Per-type renderers (top-level)
 export { default as FigureRenderer } from './components/FigureRenderer';
@@ -247,6 +263,18 @@ export { useRealtimeJournal } from './hooks/useRealtimeJournal';
 export type { RealtimeJournalEntry } from './hooks/useRealtimeJournal';
 export { batchIdsFromPayload } from './highlight';
 export type { ActiveHighlight } from './highlight';
+
+// Render-fetch queue. Apps that own the filter state call
+// ``bumpFetchGeneration`` when it changes, so requests queued for the previous
+// filter are dropped instead of running against a question nobody is asking.
+export {
+  bumpFetchGeneration,
+  currentFetchGeneration,
+  fetchQueueState,
+  isStaleFetch,
+  setFetchConcurrency,
+  StaleFetchError,
+} from './fetchQueue';
 
 export type {
   StoredMetadata,

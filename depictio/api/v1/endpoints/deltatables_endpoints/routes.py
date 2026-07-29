@@ -35,6 +35,49 @@ from depictio.models.models.users import User
 deltatables_endpoint_router = APIRouter()
 
 
+def _delta_identity_hash(delta_table_location: str, storage_options: dict) -> str:
+    """Hash the identity of a Delta table from its log, without reading data.
+
+    This replaces a ``df.hash_rows()`` over the fully materialised frame, which
+    on a ~14M-row data collection cost a full read plus a numpy round-trip and
+    contributed to OOM-killing the worker. The resulting digest is *not* a
+    content hash: it covers the table version and the active files (path, size,
+    modification time), which change whenever the data does. That is all the
+    value is ever used for — it is salted with ``datetime.now()`` by the caller,
+    so no two upserts ever produce comparable digests anyway; downstream
+    (``RealtimeIndicator``) only tests it for inequality.
+    """
+    from deltalake import DeltaTable
+
+    dt = DeltaTable(delta_table_location, storage_options=storage_options)
+    parts = [str(dt.version())]
+    try:
+        actions = pl.from_arrow(dt.get_add_actions(flatten=True))
+        if not isinstance(actions, pl.DataFrame):
+            # A single-column result comes back as a Series; the fallback below
+            # handles it rather than this branch guessing at its shape.
+            raise TypeError(f"get_add_actions yielded {type(actions).__name__}, not a table")
+        wanted = [c for c in ("path", "size_bytes", "modification_time") if c in actions.columns]
+        parts += ["|".join(str(v) for v in row) for row in sorted(actions.select(wanted).rows())]
+    except Exception as e:
+        logger.warning(f"get_add_actions unavailable ({e}); hashing the file list instead.")
+        parts += sorted(dt.file_uris())
+    return hashlib.sha256("\n".join(parts).encode()).hexdigest()
+
+
+def _previous_column_types(deltatable_doc: dict | None) -> dict[str, str]:
+    """Column name -> type recorded by the latest aggregation, if any.
+
+    Feeding these back into ``precompute_columns_specs`` keeps a re-ingest from
+    silently changing the type a saved dashboard component was built against.
+    """
+    aggregations = (deltatable_doc or {}).get("aggregation") or []
+    if not aggregations:
+        return {}
+    specs = aggregations[-1].get("aggregation_columns_specs") or []
+    return {s["name"]: s["type"] for s in specs if s.get("name") and s.get("type")}
+
+
 def sanitize_for_json(obj):
     """
     Recursively sanitizes data for JSON serialization by replacing NaN and Infinity with None.
@@ -101,6 +144,8 @@ async def upsert_deltatable(
     dc_type = dc_data.get("config", {}).get("type", "")
     is_multiqc = dc_type.lower() == "multiqc"
 
+    query_dt = deltatables_collection.find_one({"data_collection_id": data_collection_oid})
+
     # For MultiQC, skip delta table validation since it's stored as raw parquet
     if is_multiqc:
         # Create minimal hash for MultiQC without reading the file
@@ -109,18 +154,20 @@ async def upsert_deltatable(
         ).hexdigest()
         results = []  # Column specs not computed for MultiQC (empty list required by Pydantic)
     else:
-        # Standard delta table validation and column spec computation
-        df = pl.read_delta(payload.delta_table_location, storage_options=polars_s3_config)
-        results = precompute_columns_specs(df, agg_functions, dc_data)
+        # Standard delta table validation and column spec computation. The scan
+        # stays lazy: precompute_columns_specs only needs per-column
+        # aggregations, and materialising a multi-GB data collection here is
+        # what used to get the worker OOM-killed.
+        lf = pl.scan_delta(payload.delta_table_location, storage_options=polars_s3_config)
+        results = precompute_columns_specs(
+            lf, agg_functions, dc_data, previous_types=_previous_column_types(query_dt)
+        )
 
-        hash_series = df.hash_rows(seed=0)
-        hash_bytes = hash_series.to_numpy().tobytes()
-        hash_df = hashlib.sha256(hash_bytes).hexdigest()
+        hash_df = _delta_identity_hash(payload.delta_table_location, polars_s3_config)
         final_hash = hashlib.sha256(
             f"{payload.delta_table_location}{datetime.now()}{hash_df}".encode()
         ).hexdigest()
 
-    query_dt = deltatables_collection.find_one({"data_collection_id": data_collection_oid})
     if query_dt:
         deltatable = DeltaTableAggregated.from_mongo(query_dt)
         version = (
@@ -554,16 +601,25 @@ async def get_unique_values(
     if (dc_doc.get("config", {}).get("type") or "").lower() == "multiqc":
         from depictio.api.v1.db import multiqc_collection
 
-        mqc = multiqc_collection.find_one(
+        # multiqc_collection stores one document per report, each carrying only
+        # its own report's samples. A multi-report DC therefore has N docs, so a
+        # find_one() would surface just one arbitrary report's samples. Union
+        # canonical_samples (fallback samples) across ALL report docs so the
+        # filter dropdown reflects the aggregate — mirrors the all-docs
+        # aggregation in _resolve_multiqc_sample_filter.
+        union: set[str] = set()
+        for rep in multiqc_collection.find(
             {
                 "data_collection_id": {
                     "$in": [ObjectId(str(data_collection_id)), str(data_collection_id)]
                 }
-            }
-        )
-        md = (mqc or {}).get("metadata") or {}
-        samples = md.get("canonical_samples") or md.get("samples") or []
-        values_str = sorted({str(v) for v in samples})[:limit]
+            },
+            {"metadata.canonical_samples": 1, "metadata.samples": 1},
+        ):
+            md = rep.get("metadata") or {}
+            for v in md.get("canonical_samples") or md.get("samples") or []:
+                union.add(str(v))
+        values_str = sorted(union)[:limit]
         return {"column": column, "values": values_str}
 
     deltatables_list = list(deltatables_collection.find({"data_collection_id": data_collection_id}))
@@ -578,6 +634,28 @@ async def get_unique_values(
         raise HTTPException(
             status_code=404, detail="Delta table location not found in deltatable document."
         )
+
+    # Cached option lists. ``unique()`` has to see every value and Polars can't
+    # push ``limit`` through it, so this is a full column scan — repeated on every
+    # mount of every MultiSelect, on every dashboard load, for a list that only
+    # changes when the data does. The aggregation version salt is part of the key,
+    # so an ingest invalidates it for free (same contract as the frame cache).
+    from depictio.api.v1.deltatables_utils import _get_aggregation_version
+
+    dc_id_str = str(data_collection_id)
+    cache_key = (
+        f"unique_values_{dc_id_str}_{column}_{limit}_"
+        f"{filter_expr or 'nofilter'}_{_get_aggregation_version(dc_id_str)}"
+    )
+    try:
+        from depictio.api.cache import get_cache
+
+        cached = get_cache().get(cache_key)
+        if cached is not None:
+            logger.debug(f"unique_values: cache hit for {column} on {dc_id_str}")
+            return {"column": column, "values": cached}
+    except Exception as exc:  # the cache is an optimisation, never a dependency
+        logger.debug(f"unique_values: cache read failed for {cache_key}: {exc}")
 
     try:
         lazy = pl.scan_delta(delta_table_location, storage_options=polars_s3_config)
@@ -609,6 +687,12 @@ async def get_unique_values(
         values = df[column].drop_nulls().to_list()
         # Stable ordering — MultiSelect UX expects sorted strings.
         values_str = sorted({str(v) for v in values})
+        try:
+            from depictio.api.cache import get_cache
+
+            get_cache().set(cache_key, values_str)
+        except Exception as exc:
+            logger.debug(f"unique_values: cache write failed for {cache_key}: {exc}")
         return {"column": column, "values": values_str}
     except HTTPException:
         raise

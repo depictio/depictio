@@ -135,9 +135,17 @@ _SECURITY_HEADERS: dict[str, str] = {
     # CSP: the React SPA bundle requires its own assets only; ag-grid / Mantine
     # ship CSS-in-JS so 'unsafe-inline' is required for style-src. WebSockets to
     # the same origin are needed for the realtime events stream.
+    #
+    # 'unsafe-eval' is required for WebGL: Plotly draws `scattergl` / `scatter3d`
+    # through regl, which compiles each draw command at runtime via the Function
+    # constructor (`Function.apply(null, ...)` in the vendor-plotly chunk).
+    # Without it every gl trace throws EvalError at first draw, so Volcano,
+    # Manhattan, DotPlot, QQ, Lollipop and Embedding render nothing. The Vite
+    # dev server only appears to work because it sends no CSP at all.
+    # 'wasm-unsafe-eval' covers the Pyodide runtime behind figure Code Mode.
     "Content-Security-Policy": (
         "default-src 'self'; "
-        "script-src 'self'; "
+        "script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval'; "
         "style-src 'self' 'unsafe-inline'; "
         "img-src 'self' data: blob: https:; "
         "font-src 'self' data:; "

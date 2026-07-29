@@ -7,7 +7,6 @@ import {
   Group,
   HoverCard,
   Image,
-  Loader,
   Modal,
   Paper,
   ScrollArea,
@@ -29,6 +28,8 @@ import { useNewItemIds } from '../hooks/useNewItemIds';
 import { useTransientFlag } from '../hooks/useTransientFlag';
 import { ActiveHighlight } from '../highlight';
 import RefetchOverlay from './RefetchOverlay';
+import ComponentSkeleton from './ComponentSkeleton';
+import { useReportLoadStatus } from './DashboardLoadingProvider';
 
 interface ImageRendererProps {
   dashboardId: string;
@@ -101,6 +102,12 @@ const ImageRenderer: React.FC<ImageRendererProps> = ({
   // Last thumbnail the user clicked — used as the anchor for shift+click
   // range selection. Reset to null when the selection is externally cleared.
   const lastClickedRowIdRef = useRef<string | null>(null);
+
+  // Report load status to the dashboard registry (image grid fetches on mount).
+  useReportLoadStatus(
+    metadata.index,
+    response != null ? 'ready' : error ? 'error' : 'loading',
+  );
 
   // When the parent clears the filter (reset icon, "reset all filters"), we
   // need to drop the local selection so the cards reflect it. We detect
@@ -486,14 +493,7 @@ const ImageRenderer: React.FC<ImageRendererProps> = ({
 
       {/* Initial fetch (no response yet): show the big loader. Subsequent
           fetches keep the existing grid mounted with a small overlay. */}
-      {response === null && loading && (
-        <Stack align="center" justify="center" gap="xs" mih={200}>
-          <Loader size="sm" />
-          <Text size="xs" c="dimmed">
-            Loading images…
-          </Text>
-        </Stack>
-      )}
+      {response === null && loading && <ComponentSkeleton variant="image" />}
 
       {error && response === null && (
         <Stack mih={200} justify="center" align="center">

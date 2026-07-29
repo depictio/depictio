@@ -4,6 +4,8 @@
  * fallback that relies on get_user_or_anonymous middleware for anonymous mode.
  */
 
+import { enqueueFetch } from './fetchQueue';
+
 const API_BASE = '/depictio/api/v1';
 
 /** localStorage key shared with the Dash app — same payload shape. */
@@ -235,6 +237,9 @@ export interface StoredMetadata {
   columns?: string[];
   /** Compact table row + header heights. */
   compact?: boolean;
+  /** Grid placement. `y` doubles as the render-queue priority so components
+   *  nearer the top of the dashboard are fetched first (see `fetchQueue`). */
+  layout?: { x?: number; y?: number; w?: number; h?: number };
   [key: string]: unknown;
 }
 
@@ -451,7 +456,19 @@ export async function bulkComputeCards(
 /** Server-rendered Plotly figure for one component. */
 export interface FigureResponse {
   figure: { data?: unknown[]; layout?: Record<string, unknown> };
-  metadata: { visu_type?: string; filter_applied?: boolean };
+  metadata: {
+    visu_type?: string;
+    filter_applied?: boolean;
+    /** True when the scatter-family figure was downsampled / the source was
+     *  row-capped before plotting (see `full_data_loaded`). */
+    was_sampled?: boolean;
+    /** Points actually plotted (post-sampling). */
+    displayed_data_count?: number;
+    /** True source row count (post-filter), for the "N of M" indicator. */
+    total_data_count?: number;
+    /** True when every point was rendered (no cap applied / full_load). */
+    full_data_loaded?: boolean;
+  };
 }
 
 export async function renderFigure(
@@ -459,13 +476,16 @@ export async function renderFigure(
   componentId: string,
   filters: InteractiveFilter[],
   theme: 'light' | 'dark' = 'light',
+  fullLoad = false,
+  signal?: AbortSignal,
 ): Promise<FigureResponse> {
   const res = await fetch(
     `${API_BASE}/dashboards/render_figure/${dashboardId}/${componentId}`,
     {
       method: 'POST',
       headers: authHeaders(),
-      body: JSON.stringify({ filters, theme }),
+      body: JSON.stringify({ filters, theme, full_load: fullLoad }),
+      signal,
     },
   );
   if (!res.ok) throw new Error(`Failed to render figure: ${res.status}`);
@@ -575,33 +595,87 @@ export async function fetchVizSuggestions(
 export interface AdvancedVizDataResponse {
   columns: string[];
   rows: Record<string, unknown[]>;
+  /** Returned rows (== the sampled count when `sampled` is true). */
   row_count: number;
+  /** Rows before sampling — feeds the "N / M" reduction badge. */
+  total_rows?: number;
+  /** True when the server randomly downsampled the frame. */
+  sampled?: boolean;
+  /** Which reduction the server applied and whether the frame is the whole
+   *  filtered set. `degraded` is the one that matters to a renderer which
+   *  aggregates its rows: it means the frame was sampled anyway (the DC
+   *  exceeded the no-sample ceiling), so any sum or ranking taken off it is an
+   *  estimate rather than a total. */
+  sampling?: { policy: string; exact: boolean; degraded: boolean };
   filter_applied: boolean;
+}
+
+/** The rows a tail-preserving reduction must keep whole — the significant end
+ *  of `column`. Sent by the renderers that draw a threshold line, so the server
+ *  keeps exactly the rows the plot would mark as hits instead of guessing a
+ *  cutoff. `direction` is `low` for a raw p-value, `high` for a -log10 score,
+ *  `both` for a signed effect size. */
+export interface AdvancedVizTailSpec {
+  column: string;
+  direction: 'low' | 'high' | 'both';
+  threshold: number;
+}
+
+export interface AdvancedVizDataRequest {
+  wfId: string;
+  dcId: string;
+  columns: string[];
+  filters: InteractiveFilter[];
+  /** Explicit row cap. Suppresses sampling entirely — for callers that want a
+   *  specific bound (heatmap/upset previews), not a representative frame. */
+  limitRows?: number;
+  /** Bypass sampling and raise the scan cap — the renderer's Load-All toggle,
+   *  mirroring the scatter figure full-load contract. Ignored when `limitRows`
+   *  is given. */
+  fullLoad?: boolean;
+  /** Selects the server-side reduction policy. Renderers should always send
+   *  their own kind: without it the server samples uniformly, which is wrong
+   *  for any renderer that aggregates the rows it receives. Typed against the
+   *  union rather than `string` because an unrecognised kind is not an error
+   *  on the wire — it silently falls back to that uniform sample. */
+  vizKind?: AdvancedVizKind;
+  /** Role -> bound column name, so the server can find the column a policy
+   *  needs (e.g. which column carries significance). */
+  roles?: Record<string, string>;
+  tail?: AdvancedVizTailSpec;
 }
 
 /** Project a column subset from a DC + apply global filters. Rendering is
  *  done entirely on the client so intra-viz controls (thresholds, top-N,
  *  rank dropdown) don't round-trip to the server. */
 export async function fetchAdvancedVizData(
-  wfId: string,
-  dcId: string,
-  columns: string[],
-  filters: InteractiveFilter[],
-  limitRows?: number,
+  req: AdvancedVizDataRequest,
+  signal?: AbortSignal,
 ): Promise<AdvancedVizDataResponse> {
-  const res = await fetch(`${API_BASE}/advanced_viz/data`, {
-    method: 'POST',
-    headers: authHeaders(),
-    body: JSON.stringify({
-      wf_id: wfId,
-      dc_id: dcId,
-      columns,
-      filter_metadata: filters,
-      limit_rows: limitRows,
-    }),
+  // Queued here rather than at each call site: ~15 advanced-viz renderers each
+  // own an unguarded fetch, and this is the single choke point they all pass
+  // through. Bounding it keeps a dashboard's mount burst from saturating the
+  // API pool ahead of the figures and tables the user is looking at.
+  return enqueueFetch(async () => {
+    const res = await fetch(`${API_BASE}/advanced_viz/data`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({
+        wf_id: req.wfId,
+        dc_id: req.dcId,
+        columns: req.columns,
+        filter_metadata: req.filters,
+        limit_rows: req.limitRows,
+        full_load: req.fullLoad,
+        viz_kind: req.vizKind,
+        roles: req.roles,
+        tail: req.tail,
+      }),
+      signal,
+    });
+    if (!res.ok) throw new Error(`Failed to fetch advanced viz data: ${res.status}`);
+    return res.json();
   });
-  if (!res.ok) throw new Error(`Failed to fetch advanced viz data: ${res.status}`);
-  return res.json();
 }
 
 export interface ComputeEmbeddingPayload {
@@ -917,6 +991,14 @@ export interface TableResponse {
   sort_by?: string | null;
   /** Effective sort direction. */
   sort_dir?: 'asc' | 'desc';
+  /** True when the table is too large to sort (see `table_sort_max_rows`) and
+   *  rows come back in natural scan order. The grid must drop its sort
+   *  affordance rather than offer one the server will discard. */
+  sort_disabled?: boolean;
+  /** Data-collection aggregation version. Natural order is stable across
+   *  appends but a Delta compaction reorders the scan, so a change here means
+   *  cached row blocks may no longer line up and must be purged. */
+  data_version?: string | number | null;
 }
 
 export async function renderTable(
@@ -927,6 +1009,7 @@ export async function renderTable(
   limit = 100,
   sortBy?: string | null,
   sortDir: 'asc' | 'desc' = 'desc',
+  signal?: AbortSignal,
 ): Promise<TableResponse> {
   const res = await fetch(
     `${API_BASE}/dashboards/render_table/${dashboardId}/${componentId}`,
@@ -940,6 +1023,7 @@ export async function renderTable(
         sort_by: sortBy ?? null,
         sort_dir: sortDir,
       }),
+      signal,
     },
   );
   if (!res.ok) throw new Error(`Failed to render table: ${res.status}`);

@@ -17,6 +17,7 @@ import {
   InteractiveFilter,
   StoredMetadata,
 } from '../../api';
+import { adaptGlTrace, useWebglSlot } from '../../webglBudget';
 import AdvancedVizFrame, { TIER_COLORS } from './AdvancedVizFrame';
 import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragment } from './plotlyTheme';
 
@@ -123,7 +124,26 @@ const ManhattanRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetchAdvancedVizData(metadata.wf_id, metadata.dc_id, requiredCols, filters)
+    fetchAdvancedVizData({
+      wfId: metadata.wf_id,
+      dcId: metadata.dc_id,
+      columns: requiredCols,
+      filters,
+      vizKind: 'manhattan',
+      roles: { chr: config.chr_col, pos: config.pos_col, score: config.score_col },
+      // The threshold line the plot already draws is exactly the cut the server
+      // must not sample across, and `highlight` says which side of it is the
+      // population being looked at. Without a line there is no declared tail and
+      // the server falls back to reading the score column's range.
+      tail:
+        config.score_threshold != null && config.highlight !== 'none'
+          ? {
+              column: config.score_col,
+              direction: config.highlight === 'below' ? 'low' : 'high',
+              threshold: config.score_threshold,
+            }
+          : undefined,
+    })
       .then((res) => {
         if (!cancelled) setRows(res.rows);
       })
@@ -143,6 +163,11 @@ const ManhattanRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
     JSON.stringify(filters),
     refreshTick,
   ]);
+
+  // Variant clouds are the densest thing on a dashboard, so always compete for
+  // a WebGL slot; without one the trace renders as downsampled SVG — see
+  // webglBudget.
+  const glGranted = useWebglSlot(true);
 
   const { figure, allChrs, tiers, counts } = useMemo(() => {
     if (!rows)
@@ -522,7 +547,7 @@ const ManhattanRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
 
     return {
       figure: {
-        data: [mainTrace, ...legendTraces, ...numericColorbarTrace],
+        data: [adaptGlTrace(mainTrace, glGranted), ...legendTraces, ...numericColorbarTrace],
         layout: {
           ...plotlyThemeFragment(isDark, theme),
           // Slightly more right margin to give the colorbar / legend breathing
@@ -595,6 +620,7 @@ const ManhattanRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
     colorBy,
     colorScheme,
     theme,
+    glGranted,
   ]);
 
   // Memoised so AdvancedVizFrame's `extras` useMemo stays stable between

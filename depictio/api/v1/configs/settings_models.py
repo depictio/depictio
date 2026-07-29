@@ -950,6 +950,103 @@ class PerformanceConfig(BaseSettings):
     http_client_timeout: int = Field(default=30)
     api_request_timeout: int = Field(default=60)
 
+    # Component render caps — bound how many rows a single figure/table render
+    # materialises so large Delta tables stay responsive (and don't OOM).
+    figure_max_points: int = Field(
+        default=10_000,
+        description=(
+            "Target marker count for per-row point plots (scatter family). Above "
+            "this the figure is downsampled before serialising to Plotly — the "
+            "dominant cost is the serialised trace size + browser WebGL draw, so "
+            "this is kept modest for snappy interaction. Per-component "
+            "`max_points` overrides this."
+        ),
+    )
+    advanced_viz_no_sample_max_rows: int = Field(
+        default=2_000_000,
+        description=(
+            "Row ceiling for the advanced-viz kinds that must not be sampled. "
+            "Their renderers aggregate client-side (per-sample sums, top-N "
+            "rankings), so a sample changes the values rather than their "
+            "resolution — see `models/components/advanced_viz/sampling.py`. "
+            "Those kinds are served whole, but a data collection large enough "
+            "to exhaust the API process has to be reduced somehow: past this "
+            "count the request falls back to a uniform sample and the response "
+            "reports `sampling.exact = false` so the renderer can mark the "
+            "figure approximate instead of presenting an estimate as a total. "
+            "0 disables the ceiling (unbounded loads)."
+        ),
+    )
+    advanced_viz_tail_p_threshold: float = Field(
+        default=0.05,
+        description=(
+            "Significance cutoff below which a volcano/manhattan row is kept "
+            "whole rather than sampled. A uniform sample of a 17M-row DE table "
+            "keeps ~0.06% of the hits, i.e. none — the plot becomes a cloud "
+            "with nothing to label. Only a fallback: renderers send the "
+            "threshold their own plot draws its line at, and that wins."
+        ),
+    )
+    advanced_viz_tail_effect_threshold: float = Field(
+        default=1.0,
+        description=(
+            "Same, for the kinds whose tail is a signed effect size (MA's log2 "
+            "fold change): rows with |effect| at or above this are kept whole. "
+            "1.0 is a two-fold change, the conventional default line."
+        ),
+    )
+    box_sample_rows_per_group: int = Field(
+        default=0,
+        description=(
+            "Rows sampled per box-plot group before computing the quartiles; 0 "
+            "(the default) computes them exactly. A box plot's quartiles are "
+            "order statistics, so unlike the other aggregate figures they cannot "
+            "be answered by a pushdown — the scan has to be sorted. Sampling per "
+            "group (rather than globally) keeps small groups intact while "
+            "bounding the sort on the large ones, and min/max/count stay exact "
+            "either way, so the whiskers do not move. "
+            "Off by default because it trades a sort for an *extra scan*: the "
+            "exact extremes must be read before the per-group strides are known. "
+            "On warm local parquet that was a 3.7x win at 17M rows, but on a "
+            "cold S3-backed Delta table the read dominates and the second pass "
+            "can cost more than the sort it removes. Enable it only where the "
+            "sort has been measured to be the bottleneck."
+        ),
+    )
+    box_sample_max_groups: int = Field(
+        default=64,
+        description=(
+            "Group-count ceiling above which box quartiles are computed exactly "
+            "rather than sampled. Grouped quantiles get *cheaper* as cardinality "
+            "rises (each group's sort is smaller), so past this point sampling "
+            "costs more than it saves — measured at ~64 groups on a 14M-row frame."
+        ),
+    )
+    figure_max_load_rows: int = Field(
+        default=500_000,
+        description=(
+            "Row ceiling loaded from Delta for a point-plot / code-mode figure "
+            "(memory bound). Beyond it the figure samples the first N rows loaded "
+            "rather than the whole table. Bypassed when the client requests a full "
+            "load."
+        ),
+    )
+    table_sort_max_rows: int = Field(
+        default=1_000_000,
+        description=(
+            "Post-filter row count above which a table is served in natural "
+            "(scan) order instead of being sorted. A sort must see every row, so "
+            "it scales with the table while an unsorted page does not — measured "
+            "on one 100-row page: 87 ms sorted at 1M rows, 957 ms at 5M, 6254 ms "
+            "at 20M, against a flat ~6 ms unsorted. The response reports "
+            "`sort_disabled` so the grid can drop the sort affordance rather "
+            "than show unsorted rows under a sorted header. 0 disables the gate."
+        ),
+    )
+    # Table rows-per-page has no server-side default here: the component model
+    # (TableLiteComponent.page_size) already defaults to 100, and the React grid
+    # reads that value directly — a settings knob would be dead config.
+
     # Playwright/browser timeouts (in milliseconds)
     browser_navigation_timeout: int = Field(default=60000)  # 60s default
     browser_page_load_timeout: int = Field(default=90000)  # 90s default

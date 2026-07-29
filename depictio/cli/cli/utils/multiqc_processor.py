@@ -3,15 +3,18 @@ MultiQC processing utilities for extracting metadata from parquet files.
 Uses MultiQC Python module to extract samples, modules, and plots.
 """
 
+import os
 from pathlib import Path
 from typing import Any, Dict
 
 from depictio.cli.cli.utils.api_calls import (
     api_check_duplicate_multiqc_report,
     api_create_multiqc_report,
+    api_get_multiqc_s3_locations,
     api_update_multiqc_report,
 )
 from depictio.cli.cli.utils.file_utils import compute_file_hash
+from depictio.cli.cli.utils.ingest_timing import record, timed
 from depictio.cli.cli.utils.rich_utils import rich_print_multiqc_processing_summary
 from depictio.cli.cli_logging import logger
 
@@ -111,6 +114,268 @@ def extract_multiqc_metadata(parquet_path: str) -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"Failed to extract MultiQC metadata from {parquet_path}: {e}")
         raise
+
+
+def _is_parseable_multiqc_file(file_path: str) -> bool:
+    """Whether a registered file is a MultiQC parquet that still exists on disk."""
+    if not file_path.endswith(".parquet"):
+        logger.warning(f"Skipping non-parquet file: {file_path}")
+        return False
+    if not Path(file_path).exists():
+        logger.error(f"File not found: {file_path}")
+        return False
+    return True
+
+
+def _parse_multiqc_worker(file_path: str) -> Dict[str, Any]:
+    """Parse one report in a worker process — module-level so it stays picklable."""
+    return extract_multiqc_metadata(file_path)
+
+
+def multiqc_parse_workers() -> int:
+    """Number of processes to parse MultiQC reports with (1 = serial, the default).
+
+    ``multiqc.parse_logs`` dominates MultiQC ingestion (≈90-99% of the wall) and
+    is independent per file, so parsing several at once is the only real lever —
+    but MultiQC keeps *module-global* state, so it must be processes, not threads.
+
+    Opt-in via ``DEPICTIO_INGEST_MULTIQC_PARSE_WORKERS`` because each worker holds a
+    fully parsed report in memory; on a large report set that multiplies peak RSS,
+    which is not a trade a memory-capped deployment should make unasked.
+    """
+    raw = os.getenv("DEPICTIO_INGEST_MULTIQC_PARSE_WORKERS", "").strip()
+    if not raw:
+        return 1
+    try:
+        return max(1, int(raw))
+    except ValueError:
+        logger.warning(f"Invalid DEPICTIO_INGEST_MULTIQC_PARSE_WORKERS={raw!r}; parsing serially.")
+        return 1
+
+
+def _parse_multiqc_files(file_paths: list[str]) -> list[tuple[str, Dict[str, Any] | None]]:
+    """Parse each report, returning ``(path, metadata|None)`` in input order.
+
+    A file that fails to parse yields ``None`` rather than aborting the batch, so
+    one corrupt report cannot lose the whole data collection.
+    """
+    workers = min(multiqc_parse_workers(), len(file_paths))
+
+    if workers <= 1 or len(file_paths) <= 1:
+        return _parse_multiqc_files_serial(file_paths)
+
+    logger.info(f"Parsing {len(file_paths)} MultiQC files across {workers} processes")
+    try:
+        from concurrent.futures import ProcessPoolExecutor
+
+        with ProcessPoolExecutor(max_workers=workers) as executor:
+            futures = [executor.submit(_parse_multiqc_worker, p) for p in file_paths]
+            out: list[tuple[str, Dict[str, Any] | None]] = []
+            for path, future in zip(file_paths, futures):
+                try:
+                    out.append((path, future.result()))
+                except Exception as e:
+                    logger.error(f"Failed to process MultiQC file {path}: {e}")
+                    out.append((path, None))
+            return out
+    except Exception as e:
+        # Process pools can be unavailable (sandboxes, restricted containers) —
+        # never fail an ingest over a parallelism optimisation.
+        logger.warning(f"Parallel MultiQC parse unavailable ({e}); falling back to serial.")
+        return _parse_multiqc_files_serial(file_paths)
+
+
+def _parse_multiqc_files_serial(
+    file_paths: list[str],
+) -> list[tuple[str, Dict[str, Any] | None]]:
+    """Parse reports one at a time, isolating per-file failures."""
+    results: list[tuple[str, Dict[str, Any] | None]] = []
+    for i, path in enumerate(file_paths, 1):
+        logger.info(f"Processing file {i}/{len(file_paths)}: {path}")
+        try:
+            results.append((path, _parse_multiqc_worker(path)))
+        except Exception as e:
+            logger.error(f"Failed to process MultiQC file {path}: {e}")
+            results.append((path, None))
+    return results
+
+
+def multiqc_prerender_enabled() -> bool:
+    """Whether to build MultiQC figures offline at ingest and upload them to S3.
+
+    Opt-in via ``DEPICTIO_INGEST_MULTIQC_PRERENDER`` (``1``/``true``/``yes``). When on,
+    the CLI reuses the parse it already pays for metadata to also render every
+    present plot's Plotly JSON and ship it to ``s3://{bucket}/{dc_id}/prerender/``.
+    The API render path then serves those figures directly, skipping the
+    ~30-75 s cold ``parse_logs``/``get_plot`` build entirely. Off by default so
+    ingestion behaviour is unchanged unless explicitly requested.
+    """
+    return os.getenv("DEPICTIO_INGEST_MULTIQC_PRERENDER", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+
+
+def _iter_module_plots(entries: Any):
+    """Yield ``(plot_name, [dataset_ids])`` from a module's ``list_plots`` entry.
+
+    MultiQC's ``list_plots()[module]`` is a list whose items are either a plain
+    plot name (``str``) or a ``{plot_name: [dataset_id, ...]}`` dict for plots
+    that expose sub-datasets (e.g. ``{"Per Sequence GC Content": ["Percentages",
+    "Counts"]}``). This normalises both shapes.
+    """
+    for entry in entries or []:
+        if isinstance(entry, str):
+            yield entry, []
+        elif isinstance(entry, dict):
+            for plot_name, datasets in entry.items():
+                yield plot_name, (datasets if isinstance(datasets, list) else [])
+
+
+def _make_s3_client(storage_options):
+    """boto3 S3 client configured for MinIO (path-style addressing + s3v4).
+
+    Shared by the report-upload loop and the offline figure prerender so the
+    MinIO-compat config lives in one place.
+    """
+    import boto3
+    from botocore.config import Config as BotoConfig
+
+    return boto3.client(
+        "s3",
+        endpoint_url=storage_options.endpoint_url,
+        aws_access_key_id=storage_options.aws_access_key_id,
+        aws_secret_access_key=storage_options.aws_secret_access_key,
+        region_name=storage_options.region,
+        config=BotoConfig(signature_version="s3v4", s3={"addressing_style": "path"}),
+    )
+
+
+def _prerender_multiqc_figures(
+    data_collection,
+    CLI_config,
+    prerender_inputs: list[tuple[str, str]],
+    storage_options,
+) -> None:
+    """Build the DC's aggregated Plotly figures locally and upload them to S3.
+
+    Only runs on a *fresh ingest* — where the set of reports this run uploaded
+    equals the DC's full report set (queried from the API). On an append (the DC
+    already has reports this run didn't touch), the local files can't reproduce
+    the full aggregation, so we skip and let the Celery prerender fallback build
+    against the complete set. Figures are keyed by the exact same
+    ``multiqc_figure_cache_key`` the API render path uses, so the server resolves
+    them from S3 without re-parsing.
+    """
+    import gzip
+    import io
+    import json
+
+    from depictio.cli.cli.utils.mantine_templates import get_theme_template
+    from depictio.cli.cli.utils.multiqc_figures import (
+        build_multiqc_figure,
+        figure_cache_key_sha,
+        multiqc_figure_cache_key,
+    )
+
+    dc_id = str(data_collection.id)
+    if not prerender_inputs:
+        logger.info("Prerender: no local parquet inputs this run; skipping")
+        return
+
+    # Authoritative full report set for the DC, in the API's own order (the
+    # endpoint mirrors ``fetch_s3_locations_from_dc`` — insertion / _id-ascending).
+    # Only prerender when it matches exactly what we have locally (fresh ingest);
+    # otherwise the keys built here would never be looked up by the server (which
+    # keys over the full set).
+    full_locations = api_get_multiqc_s3_locations(dc_id, CLI_config)
+    local_by_loc = {loc: path for path, loc in prerender_inputs}
+    if not full_locations or set(full_locations) != set(local_by_loc):
+        logger.info(
+            f"Prerender: DC {dc_id} report set ({len(full_locations)}) differs from this "
+            f"run's local files ({len(local_by_loc)}); skipping (Celery fallback will build)"
+        )
+        return
+
+    # Parse in the SAME order the API build paths do (the order the endpoint
+    # returned). MultiQC's report merge is order-sensitive, so parsing in a
+    # different order (e.g. sorted) would build a figure whose sample/trace
+    # ordering differs from a later Celery rebuild under the *identical* cache
+    # key. ``multiqc_figure_cache_key`` sorts internally, so the key stays
+    # order-independent — no CLI-side sort of the parse order is wanted.
+    import multiqc
+
+    multiqc.reset()
+    parsed = 0
+    for loc in full_locations:
+        try:
+            multiqc.parse_logs(local_by_loc[loc])
+            parsed += 1
+        except Exception as e:
+            logger.warning(f"Prerender: parse failed for {loc}: {e}")
+    if parsed == 0:
+        logger.warning("Prerender: no files parsed; skipping")
+        return
+
+    modules = multiqc.list_modules()
+    plots = multiqc.list_plots()
+
+    s3_client = _make_s3_client(storage_options)
+    bucket = CLI_config.s3_storage.bucket
+
+    def _upload(cache_key: str, fig_dict: dict) -> None:
+        # Filename mirrors the API stores: the trailing hash of the bare key.
+        buf = io.BytesIO()
+        with gzip.GzipFile(fileobj=buf, mode="wb") as gz:
+            gz.write(json.dumps(fig_dict, separators=(",", ":")).encode("utf-8"))
+        s3_client.put_object(
+            Bucket=bucket,
+            Key=f"{dc_id}/prerender/{figure_cache_key_sha(cache_key)}.json.gz",
+            Body=buf.getvalue(),
+            ContentType="application/gzip",
+        )
+
+    built = 0
+    for module in modules:
+        for plot, datasets in _iter_module_plots(plots.get(module, [])):
+            # Always build the ``None`` variant (get_figure(dataset_id=0), i.e.
+            # the default dataset) in addition to each named dataset. A dashboard
+            # component with no dataset selected renders with ``selected_dataset=
+            # None`` — a DISTINCT cache key from the named datasets — so without
+            # the None variant those plots miss the prerender and fall back to the
+            # 120s-timeout on-demand build. ``dict.fromkeys`` de-dups if a caller
+            # ever lists None explicitly.
+            for dataset in dict.fromkeys([None, *datasets]):
+                try:
+                    fig = build_multiqc_figure(module, plot, dataset, "light")
+                except Exception as e:
+                    logger.debug(f"Prerender: build failed for {module}/{plot}/{dataset}: {e}")
+                    continue
+                light_dict = fig.to_dict()
+                light_key = multiqc_figure_cache_key(
+                    full_locations, module, plot, dataset, "light", dc_id=dc_id
+                )
+                # Dark theme differs only by layout template — swap it rather than
+                # rebuild the figure (the get_figure call is the expensive part).
+                fig.update_layout(template=get_theme_template("dark"))
+                dark_dict = fig.to_dict()
+                dark_key = multiqc_figure_cache_key(
+                    full_locations, module, plot, dataset, "dark", dc_id=dc_id
+                )
+                try:
+                    _upload(light_key, light_dict)
+                    _upload(dark_key, dark_dict)
+                except Exception as e:
+                    logger.warning(f"Prerender: S3 upload failed for {module}/{plot}: {e}")
+                    continue
+                built += 2
+
+    record("prerendered_figures", built)
+    logger.info(
+        f"Prerender: uploaded {built} figure(s) for DC {dc_id} "
+        f"({len(modules)} modules) to s3://{bucket}/{dc_id}/prerender/"
+    )
 
 
 def validate_multiqc_parquet(parquet_path: str) -> bool:
@@ -256,43 +521,31 @@ def process_multiqc_data_collection(
         individual_file_metadata = []
         processed_files = 0
         first_s3_location = None  # Track first S3 location for dc_specific_properties
+        # (local_parquet_path, s3_location) for every file this run touched —
+        # feeds the optional offline figure prerender so it can parse locally
+        # and key figures by the same S3 locations the API render path uses.
+        prerender_inputs: list[tuple[str, str]] = []
 
         logger.info(f"Starting to process {len(files)} MultiQC files...")
-        for i, file_obj in enumerate(files, 1):
-            file_path = file_obj.file_location
-            if not file_path.endswith(".parquet"):
-                logger.warning(f"Skipping non-parquet file: {file_path}")
-                continue
+        parseable = [f.file_location for f in files if _is_parseable_multiqc_file(f.file_location)]
 
-            if not Path(file_path).exists():
-                logger.error(f"File not found: {file_path}")
-                continue
+        with timed("parse"):
+            parsed = _parse_multiqc_files(parseable)
 
-            try:
-                # Extract MultiQC metadata from parquet file
-                logger.info(f"Processing file {i}/{len(files)}: {file_path}")
-                logger.info(f"Extracting metadata from: {file_path}")
-                metadata = extract_multiqc_metadata(file_path)
-
-                # Get file size for metadata
-                file_size = Path(file_path).stat().st_size
-                logger.info(f"Processing MultiQC file: {file_path} ({file_size} bytes)")
-
-                # Store individual file metadata for creating separate reports
-                individual_file_metadata.append(
-                    {
-                        "file_path": file_path,
-                        "file_size_bytes": file_size,
-                        "metadata": metadata,
-                        "multiqc_version": metadata.get("multiqc_version"),
-                    }
-                )
-
-                processed_files += 1
-
-            except Exception as e:
-                logger.error(f"Failed to process MultiQC file {file_path}: {e}")
-                continue
+        for file_path, metadata in parsed:
+            if metadata is None:
+                continue  # already logged by the parser
+            file_size = Path(file_path).stat().st_size
+            logger.info(f"Processing MultiQC file: {file_path} ({file_size} bytes)")
+            individual_file_metadata.append(
+                {
+                    "file_path": file_path,
+                    "file_size_bytes": file_size,
+                    "metadata": metadata,
+                    "multiqc_version": metadata.get("multiqc_version"),
+                }
+            )
+            processed_files += 1
 
         if processed_files == 0:
             return {
@@ -301,6 +554,7 @@ def process_multiqc_data_collection(
             }
 
         logger.info(f"Successfully processed {processed_files} MultiQC files")
+        record("n_files", processed_files)
 
         # Calculate merged metadata for summary (but don't use for DB storage)
         all_samples = []
@@ -324,24 +578,11 @@ def process_multiqc_data_collection(
         # Upload files to S3 and create individual MultiQC reports
         created_reports = []
         try:
-            import boto3
-            from botocore.config import Config as BotoConfig
-
             from depictio.models.models.multiqc_reports import MultiQCMetadata, MultiQCReport
 
-            # Create S3 client with storage options
-            # Use s3v4 signature and path-style addressing for MinIO compatibility
-            s3_client = boto3.client(
-                "s3",
-                endpoint_url=storage_options.endpoint_url,
-                aws_access_key_id=storage_options.aws_access_key_id,
-                aws_secret_access_key=storage_options.aws_secret_access_key,
-                region_name=storage_options.region,
-                config=BotoConfig(
-                    signature_version="s3v4",
-                    s3={"addressing_style": "path"},
-                ),
-            )
+            # S3 client (MinIO-compatible: s3v4 + path-style addressing). Raises
+            # ImportError if boto3 is unavailable — caught below like before.
+            s3_client = _make_s3_client(storage_options)
 
             logger.info(f"Processing {len(individual_file_metadata)} files individually...")
 
@@ -433,7 +674,7 @@ def process_multiqc_data_collection(
 
                             logger.info(f"Uploading file to S3: {file_path} -> {s3_key}")
                             # Use put_object to avoid multipart upload issues with MinIO
-                            with open(file_path, "rb") as f:
+                            with open(file_path, "rb") as f, timed("upload"):
                                 s3_client.put_object(
                                     Bucket=CLI_config.s3_storage.bucket,
                                     Key=s3_key,
@@ -441,6 +682,7 @@ def process_multiqc_data_collection(
                                 )
                             s3_location = f"s3://{CLI_config.s3_storage.bucket}/{s3_key}"
                             logger.info(f"Successfully uploaded {file_path} to {s3_location}")
+                            prerender_inputs.append((file_path, s3_location))
 
                             # Prepare updated report data
                             metadata_for_report = {
@@ -525,6 +767,12 @@ def process_multiqc_data_collection(
                                 "   [yellow]💡 Tip: Use --overwrite to replace this report[/yellow]"
                             )
 
+                            # The skipped file's content is identical to the
+                            # already-stored report (same content hash), so its
+                            # local path maps to the existing S3 location — record
+                            # it so a fresh-ingest prerender can still parse it.
+                            if existing_s3_location:
+                                prerender_inputs.append((file_path, existing_s3_location))
                             created_reports.append(report_id)
                             continue
 
@@ -545,14 +793,16 @@ def process_multiqc_data_collection(
                     from boto3.s3.transfer import TransferConfig
 
                     _single_part_cfg = TransferConfig(multipart_threshold=5 * 1024**3)
-                    s3_client.upload_file(
-                        file_path,
-                        CLI_config.s3_storage.bucket,
-                        s3_key,
-                        Config=_single_part_cfg,
-                    )
+                    with timed("upload"):
+                        s3_client.upload_file(
+                            file_path,
+                            CLI_config.s3_storage.bucket,
+                            s3_key,
+                            Config=_single_part_cfg,
+                        )
                     s3_location = f"s3://{CLI_config.s3_storage.bucket}/{s3_key}"
                     logger.info(f"Successfully uploaded {file_path} to {s3_location}")
+                    prerender_inputs.append((file_path, s3_location))
 
                     # Capture first S3 location for dc_specific_properties
                     if first_s3_location is None:
@@ -666,6 +916,21 @@ def process_multiqc_data_collection(
 
         except Exception as e:
             logger.error(f"Failed to update dc_specific_properties: {e}")
+
+        # Optional offline figure prerender: build the aggregated Plotly figures
+        # here (the reports are already parsed) and ship them to S3 so the viewer
+        # serves them without the API ever calling multiqc.parse_logs/get_plot.
+        # Opt-in, best-effort — a failure never fails the ingest.
+        if multiqc_prerender_enabled():
+            try:
+                with timed("prerender"):
+                    _prerender_multiqc_figures(
+                        data_collection, CLI_config, prerender_inputs, storage_options
+                    )
+            except Exception as e:
+                logger.warning(
+                    f"MultiQC figure prerender skipped ({e}); Celery fallback will build"
+                )
 
         # Display rich summary table
         try:

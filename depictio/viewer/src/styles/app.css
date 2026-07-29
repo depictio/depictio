@@ -216,3 +216,90 @@ body.sidebar-transitioning .react-grid-layout {
   animation: depictio-duplicate-flash 1.5s ease-out;
   border-radius: 6px;
 }
+
+/* ── Boot splash ───────────────────────────────────────────────────────────
+ * Shown while the route chunk downloads and while the dashboard document is in
+ * flight — phases with no panel list yet, so nothing can report a fraction.
+ *
+ * The mark and its animation are lifted from depictio-docs (`extra.css`:
+ * `triangular-pulse`, staggered per triangle). The seven triangles carry their
+ * own brand fills inside the SVG, so no colour is set here.
+ *
+ * `transform-box: fill-box` is what makes each triangle scale about its own
+ * centre; without it `transform-origin: center` resolves against the SVG
+ * viewport and the shapes swing instead of pulsing.
+ *
+ * Fixed and viewport-centred so both boot phases paint the mark in the same
+ * place and it doesn't jump when one hands over to the other.
+ * See BootSplash.tsx. */
+.depictio-boot-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 400;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+.depictio-boot-splash svg {
+  width: 108px;
+  height: 108px;
+  overflow: visible;
+}
+.depictio-boot-splash [id^='shape-'] {
+  transform-origin: center;
+  transform-box: fill-box;
+  animation: depictio-triangular-pulse 1s ease-in-out infinite;
+}
+/* Sequential stagger — the triangles chase each other around the mark rather
+   than breathing as one blob. Matches the docs' 0.1s step. */
+.depictio-boot-splash #shape-1 {
+  animation-delay: 0s;
+}
+.depictio-boot-splash #shape-2 {
+  animation-delay: 0.1s;
+}
+.depictio-boot-splash #shape-3 {
+  animation-delay: 0.2s;
+}
+.depictio-boot-splash #shape-4 {
+  animation-delay: 0.3s;
+}
+.depictio-boot-splash #shape-5 {
+  animation-delay: 0.4s;
+}
+.depictio-boot-splash #shape-6 {
+  animation-delay: 0.5s;
+}
+.depictio-boot-splash #shape-7 {
+  animation-delay: 0.6s;
+}
+@keyframes depictio-triangular-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.15);
+  }
+}
+/* Reduced motion: softened, not frozen. A loading indicator that holds still
+   fails at the one thing it is there to say. The pulse is a small scale about
+   each shape's own centre — no travel, no rotation — so easing it down rather
+   than removing it keeps the signal without the trigger. */
+@media (prefers-reduced-motion: reduce) {
+  .depictio-boot-splash [id^='shape-'] {
+    animation-duration: 2.4s;
+    animation-name: depictio-triangular-pulse-subtle;
+  }
+  @keyframes depictio-triangular-pulse-subtle {
+    0%,
+    100% {
+      transform: scale(1);
+      opacity: 0.75;
+    }
+    50% {
+      transform: scale(1.05);
+      opacity: 1;
+    }
+  }
+}

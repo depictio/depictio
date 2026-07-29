@@ -165,10 +165,14 @@ server {
     # baseline. CSP allows the SPA's own scripts + WS connections to same
     # origin only; Mantine / ag-grid require ``unsafe-inline`` for their
     # CSS-in-JS, which is acceptable because there is no inline *script*.
+    # ``unsafe-eval`` is required by regl, the WebGL backend Plotly uses for
+    # scattergl / scatter3d traces: it codegens draw commands through the
+    # Function constructor, and without it every gl trace fails to render.
+    # ``wasm-unsafe-eval`` covers the Pyodide runtime behind figure Code Mode.
     add_header X-Content-Type-Options "nosniff" always;
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
     add_header Permissions-Policy "camera=(), microphone=(), geolocation=(), interest-cohort=()" always;
-    add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' ws: wss:; frame-ancestors 'self'; object-src 'none'; base-uri 'self'; form-action 'self'" always;
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' ws: wss:; frame-ancestors 'self'; object-src 'none'; base-uri 'self'; form-action 'self'" always;
     add_header Strict-Transport-Security $depictio_hsts always;
 }
