@@ -21,9 +21,7 @@ from depictio.api.v1.endpoints.dashboards_endpoints.routes import (
 
 def test_definition_fields_are_honoured():
     """The point: a version's column/aggregation drives the recomputation."""
-    override = _card_definition_override(
-        {"column_name": "petal.length", "aggregation": "mean"}
-    )
+    override = _card_definition_override({"column_name": "petal.length", "aggregation": "mean"})
 
     assert override == {"column_name": "petal.length", "aggregation": "mean"}
 

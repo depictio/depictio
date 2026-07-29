@@ -51,9 +51,7 @@ def test_version_zero_is_a_real_pin():
 
 def test_unversioned_collections_are_reported_not_hidden():
     """The core honesty requirement: an unpinnable collection is named."""
-    pins = pins_from_stamps(
-        [_delta_stamp(DC_A, 1), _none_stamp(DC_B, "no_delta_version_recorded")]
-    )
+    pins = pins_from_stamps([_delta_stamp(DC_A, 1), _none_stamp(DC_B, "no_delta_version_recorded")])
 
     assert pins.for_dc(DC_A) == 1
     assert pins.for_dc(DC_B) is None, "reads current data"

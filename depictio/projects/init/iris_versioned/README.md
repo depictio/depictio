@@ -132,25 +132,47 @@ the editor calls. So the timeline is empty until the first edit, and that first
 save seeds a `Before first tracked change` baseline holding the as-imported
 state. That baseline is what makes the imported layout restorable at all.
 
-## What this demonstrates, and what it does not
+## What this demonstrates
 
-**Works today.** Dashboard version history: the timeline, naming, pinning,
-restore, and read-only preview of a past layout. Restoring v1 while the data is
-at batch 3 shows the old layout against current data.
+**Dashboard version history.** The timeline, naming, pinning, restore, and
+read-only preview of a past layout.
 
-**Recorded but not yet used.** Each dashboard version stamps the Delta version
-of every data collection it referenced (`DataCollectionStamp.delta_version`).
-Nothing reads it back, so a preview always renders **current** data — the banner
-says so rather than implying otherwise.
+**Dataset time travel.** Every dashboard version stamps the Delta version of
+each data collection it referenced, and those stamps are now read back:
 
-Wiring that up is blocked on one thing:
-`deltatables_utils._generate_cache_keys` salts its cache key with
-`aggregation_version` only. A historical read served through
-`load_deltatable_lite` would be cached under the *live* key and then handed to
-callers who asked for current data. The key has to carry the Delta version
-before any as-of read can be exposed. `deltatables_endpoints/routes.py` carries
-the same warning at its `version` parameter.
+* *Use this data* on a timeline row draws the dashboard from the commits that
+  version recorded (`as_of_version`).
+* The dataset picker pins a single collection to any commit
+  (`data_versions: {dc_id: N}`), for "current layout, last month's data".
+* The component-history modal shows one component across versions, pinning
+  both its stored config and its data.
 
-This project is the fixture that makes that work testable: batch 2 and batch 3
-differ only in values, so a time-travel read that silently returns current data
-is immediately visible instead of plausible.
+This project is the fixture that makes it testable. Batch 2 and batch 3 have
+the **same row count** and differ only in values, so a read that silently
+returns current data is immediately visible rather than merely plausible — a
+row-count check alone would pass while being wrong.
+
+### Verifying it
+
+With the demo ingested and a CLI config to hand:
+
+```bash
+uv run python depictio/projects/init/iris_versioned/check_time_travel.py
+```
+
+It discovers the dashboard, its collection and a card from the running
+instance, then drives the real HTTP API: stamps record `delta_version=2`, the
+card reads 100/150/150 rows across the three commits, mean petal length differs
+between the two 150-row commits, a live read afterwards is still current (no
+cache poisoning), and the boundaries hold (a `dc_id` override is ignored, a
+stale `as_of_version` is a 400, a malformed override degrades to a 200).
+
+Override the defaults with `DEPICTIO_API`, `DEPICTIO_CLI_CONFIG` and
+`DASHBOARD_TITLE`.
+
+### Still not covered
+
+Collections that are not Delta-backed. A MultiQC collection is plain parquet
+with no commit log, so it cannot be travelled to; the API refuses rather than
+quietly serving current data, and the UI reports which collections are showing
+live data instead of implying everything travelled.

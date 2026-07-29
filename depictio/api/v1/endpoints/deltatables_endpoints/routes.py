@@ -1030,13 +1030,14 @@ async def get_preview(
     Heavy work (Polars scan + collect) runs on Celery when
     `settings.celery.offload_preview` is true (default).
 
-    ``version`` reads an older Delta commit instead of the current table. Safe
-    to expose here specifically because this path scans the table directly
-    rather than going through ``load_deltatable_lite``: that function's cache is
-    salted with ``aggregation_version`` only, so a historical read served
-    through it would be stored under the *live* key and then handed to callers
-    who asked for current data. Do not wire time travel into any endpoint that
-    reads through the cache without salting the key with the version too.
+    ``version`` reads an older Delta commit instead of the current table. This
+    path scans directly rather than through ``load_deltatable_lite``, so it was
+    always safe here. Reading a past commit *through* the cache is now safe too:
+    ``load_deltatable_lite(delta_version=N)`` folds the requested version into
+    the cache-key salt, so a historical frame can no longer be stored under the
+    live key and handed to a caller who asked for current data. That salt is
+    the precondition for any cached time-travel read — see
+    ``deltatables_utils.load_deltatable_lite``.
     """
     pipeline = _build_permission_pipeline(data_collection_id, current_user)
     project_result = list(projects_collection.aggregate(pipeline))
