@@ -207,6 +207,7 @@ def _multiqc_spec(
     filters: list[dict],
     theme: str,
     current_user: Any,
+    component: dict | None = None,
 ) -> dict[str, Any]:
     """MultiQC component — delegates to the render endpoint's own handler.
 
@@ -217,10 +218,24 @@ def _multiqc_spec(
 
     It can answer 202 while the cache warms — a state an export cannot represent —
     so that becomes a 503 telling the caller to retry or use ``format=html``.
+
+    General Statistics is dispatched separately. It is a *table* in MultiQC's
+    model, so ``multiqc.get_plot("general_stats", …)`` cannot serve it and the
+    plot endpoint answers with a "refresh your browser" stub — advice that makes
+    no sense to an external host, which has no Depictio tab to refresh, and
+    which arrives as a successful 200 carrying zero traces. The GS payload does
+    contain a real figure (the violin summary the in-app renderer draws beside
+    the table), so export that instead.
     """
     from fastapi.responses import JSONResponse
 
-    from depictio.api.v1.endpoints.dashboards_endpoints.routes import render_multiqc_endpoint
+    from depictio.api.v1.endpoints.dashboards_endpoints.routes import (
+        _resolve_selected_keys,
+        render_multiqc_endpoint,
+    )
+
+    if component is not None and _resolve_selected_keys(component)[3]:
+        return _general_stats_spec(dashboard_id, component_id, filters, theme, current_user)
 
     result = render_multiqc_endpoint(
         dashboard_id=dashboard_id,
@@ -242,6 +257,49 @@ def _multiqc_spec(
             },
         )
     return _normalise_figure(result.get("figure"))
+
+
+def _general_stats_spec(
+    dashboard_id: Any,
+    component_id: str,
+    filters: list[dict],
+    theme: str,
+    current_user: Any,
+) -> dict[str, Any]:
+    """Violin summary for a MultiQC General Statistics component.
+
+    GS is primarily a table, and a table is not a Plotly figure, so the honest
+    thing to export is the violin the in-app renderer draws alongside it —
+    every numeric GS column as one violin, which is exactly the "how do my
+    samples compare" question the table answers by eye.
+
+    The paired-end payload carries several read modes; ``mean`` is the one the
+    UI opens on, so it is the one an export should reproduce.
+    """
+    from depictio.api.v1.endpoints.dashboards_endpoints.routes import (
+        render_multiqc_general_stats_endpoint,
+    )
+
+    payload = render_multiqc_general_stats_endpoint(
+        dashboard_id=dashboard_id,
+        component_id=component_id,
+        request={"filters": filters, "theme": theme},
+        current_user=current_user,
+    )
+
+    modes = (payload or {}).get("modes") or {}
+    mode = modes.get("mean") or next(iter(modes.values()), None)
+    figure = (mode or {}).get("violin_figure")
+    if not figure or not figure.get("data"):
+        raise ExportUnsupported(
+            status_code=422,
+            code="general_stats_table_only",
+            message=(
+                "This MultiQC General Statistics component has no numeric columns to "
+                "plot, so it exports as a table only. Use format=html to embed it."
+            ),
+        )
+    return _normalise_figure(figure)
 
 
 def _celery_advanced_viz_spec(component: dict, filter_metadata: list[dict], kind: str) -> Any:
@@ -352,7 +410,7 @@ async def build_plotly_export(
     elif component_type == "map":
         spec = _map_spec(component, filter_metadata, theme, access_token)
     elif component_type == "multiqc":
-        spec = _multiqc_spec(dashboard_id, component_id, filters, theme, current_user)
+        spec = _multiqc_spec(dashboard_id, component_id, filters, theme, current_user, component)
     elif component_type == "advanced_viz":
         source = advanced_viz_json_source(viz_kind)
         if source == "celery":
