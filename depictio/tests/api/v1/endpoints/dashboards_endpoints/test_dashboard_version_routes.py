@@ -563,3 +563,77 @@ def test_version_detail_never_leaks_access_control(ctx) -> None:
 
     for field in ("permissions", "is_public", "project_id"):
         assert field not in tab, f"{field} must never travel inside a snapshot"
+
+
+def test_legacy_records_still_report_their_counts(ctx) -> None:
+    """Rows kept reading "0 components" even after the counts became stored.
+
+    Storing them only fixes records written *since*. Every version already in
+    a deployed ledger has neither field, and the list endpoint projects `tabs`
+    away — so there was nothing left to derive them from and the timeline went
+    on claiming every version was empty. `list_versions` backfills the family
+    it is asked about, so an existing ledger heals on first view rather than
+    needing a migration to have been run.
+    """
+    main = _make_dashboard(ctx, components=[{"index": "a"}, {"index": "b"}])
+    _make_dashboard(ctx, title="Tab 2", parent=main, tab_order=1, components=[{"index": "c"}])
+    record = _capture(ctx, main, kind="explicit")
+
+    # Exactly what a record written by the previous code looks like.
+    ctx["versions"].update_one(
+        {"version_id": record.version_id},
+        {"$unset": {"tab_count": "", "component_count": ""}},
+    )
+
+    row = ctx["client"].get(f"{API}/{main}/versions").json()["versions"][0]
+
+    assert row["component_count"] == 3
+    assert row["tab_count"] == 2
+
+    stored = ctx["versions"].find_one({"version_id": record.version_id})
+    assert stored["component_count"] == 3, "the repair must persist, not recompute every listing"
+
+
+def test_backfill_leaves_current_records_alone(ctx) -> None:
+    """The repair must not touch records that already carry counts."""
+    from depictio.api.v1.endpoints.dashboards_endpoints import version_store
+
+    did = _make_dashboard(ctx, components=[{"index": "a"}])
+    _capture(ctx, did, kind="explicit")
+
+    assert version_store.backfill_counts(str(did)) == 0
+
+
+def test_snapshot_carries_the_exact_layout_a_preview_needs(ctx) -> None:
+    """Preview did not reproduce the layout the user had.
+
+    Two halves to that. The viewer merges the snapshot onto the *live*
+    document rather than rendering it alone — a `TabSnapshot` deliberately has
+    no `project_id`, so rendering it directly leaves nothing to resolve data
+    collections against. This pins the other half: the snapshot must carry the
+    layout arrays verbatim, geometry included, or there is nothing correct to
+    merge.
+    """
+    layout = [
+        {"i": "a", "x": 0, "y": 0, "w": 4, "h": 6},
+        {"i": "b", "x": 4, "y": 0, "w": 4, "h": 3},
+    ]
+    did = _make_dashboard(ctx, components=[{"index": "a"}, {"index": "b"}])
+    ctx["dashboards"].update_one({"_id": did}, {"$set": {"right_panel_layout_data": layout}})
+    record = _capture(ctx, did, kind="explicit")
+
+    # The user rearranges everything afterwards.
+    ctx["dashboards"].update_one(
+        {"_id": did},
+        {
+            "$set": {
+                "title": "Renamed later",
+                "right_panel_layout_data": [{"i": "a", "x": 0, "y": 0, "w": 8, "h": 2}],
+            }
+        },
+    )
+
+    tab = ctx["client"].get(f"{API}/versions/{record.version_id}").json()["tabs"][0]
+
+    assert tab["right_panel_layout_data"] == layout, "geometry must survive verbatim"
+    assert tab["title"] != "Renamed later", "the snapshot must not track later edits"

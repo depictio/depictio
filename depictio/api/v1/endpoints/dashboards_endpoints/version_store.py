@@ -99,23 +99,74 @@ def get_version(version_id: str) -> Optional[dict[str, Any]]:
 def list_versions(
     family_id: str, *, limit: int = 50, before_seq: int | None = None, pinned_only: bool = False
 ) -> list[dict[str, Any]]:
-    """Timeline page, newest first, with the snapshot payload projected away."""
+    """Timeline page, newest first, with the snapshot payload projected away.
+
+    ``tabs`` is ~95% of a record's bytes and the drawer lists far more often
+    than it opens one, so the row counts are read from the stored
+    ``tab_count`` / ``component_count`` rather than by shipping the snapshot.
+
+    Records written before those fields existed have neither, and projecting
+    ``tabs`` away leaves nothing to derive them from — every row would read
+    "0 components" forever. ``backfill_counts`` repairs a family the first
+    time it is listed, so the ledger heals itself on use rather than depending
+    on a startup pass having run.
+    """
     query: dict[str, Any] = {"family_id": family_id}
     if before_seq is not None:
         query["seq"] = {"$lt": before_seq}
     if pinned_only:
         query["pinned"] = True
 
-    # `tabs` is ~95% of a record's bytes and the drawer lists far more often
-    # than it opens; ship counts instead. `data_collections` is small and the
-    # timeline badges provenance coverage from it.
-    projection = {"tabs": 0}
+    backfill_counts(family_id)
+
     cursor = (
-        dashboard_versions_collection.find(query, projection)
+        dashboard_versions_collection.find(query, {"tabs": 0})
         .sort("seq", DESCENDING)
         .limit(max(1, min(limit, 200)))
     )
     return list(cursor)
+
+
+def backfill_counts(family_id: str | None = None) -> int:
+    """Write ``tab_count`` / ``component_count`` onto records that predate them.
+
+    Done in Python rather than an aggregation pipeline: summing a nested array
+    length across documents needs ``$map``, and the shape of that expression is
+    considerably harder to read than the loop — for a pass that runs at most
+    once per family.
+
+    The common case is a single indexed ``count_documents`` returning zero, so
+    calling this before every listing is cheap. Never raises: counts are a
+    display concern, and a listing that fails is worse than one showing stale
+    numbers.
+    """
+    query: dict[str, Any] = {"component_count": {"$exists": False}}
+    if family_id is not None:
+        query["family_id"] = family_id
+
+    updated = 0
+    try:
+        if dashboard_versions_collection.count_documents(query, limit=1) == 0:
+            return 0
+
+        for record in dashboard_versions_collection.find(query, {"tabs": 1, "version_id": 1}):
+            tabs = record.get("tabs") or []
+            dashboard_versions_collection.update_one(
+                {"version_id": record["version_id"]},
+                {
+                    "$set": {
+                        "tab_count": len(tabs),
+                        "component_count": sum(len(t.get("stored_metadata") or []) for t in tabs),
+                    }
+                },
+            )
+            updated += 1
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning(f"dashboard_versions: count backfill stopped early: {exc}")
+
+    if updated:
+        logger.info(f"dashboard_versions: backfilled counts on {updated} version(s)")
+    return updated
 
 
 def count_versions(family_id: str) -> int:

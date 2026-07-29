@@ -188,19 +188,23 @@ const VersionHistoryDrawer: React.FC<VersionHistoryDrawerProps> = ({
     }
 
     return (
-      <Stack gap="lg">
+      <Stack gap="md">
         {groups.map((group) => (
           <Box key={group.label}>
             <Divider
               labelPosition="left"
-              mb="xs"
+              mb={6}
               label={
                 <Text size="xs" c="dimmed" fw={600}>
                   {group.label}
                 </Text>
               }
             />
-            <Timeline active={-1} bulletSize={20} lineWidth={2}>
+            {/* `bulletSize`/`lineWidth` drive Mantine's own item spacing, and
+                the default leaves each entry taller than its content. These
+                are tuned down so a session's worth of versions is scannable
+                without scrolling past mostly whitespace. */}
+            <Timeline active={-1} bulletSize={16} lineWidth={2}>
               {group.versions.map((version) => (
                 <VersionTimelineItem
                   key={version.version_id}
@@ -273,7 +277,16 @@ const VersionHistoryDrawer: React.FC<VersionHistoryDrawerProps> = ({
               </Group>
             </Paper>
           )}
-          <ScrollArea.Autosize mah="calc(100vh - 260px)" type="hover">
+          <ScrollArea.Autosize
+            mah="calc(100vh - 260px)"
+            type="hover"
+            // Reserve the gutter rather than overlaying it. Mantine's default
+            // floating scrollbar sits on top of the content, which lands
+            // exactly on each row's action menu and makes it unclickable at
+            // the moment the user is scrolling to reach it.
+            offsetScrollbars
+            scrollbarSize={8}
+          >
             {body}
           </ScrollArea.Autosize>
         </Stack>

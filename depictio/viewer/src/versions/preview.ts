@@ -2,18 +2,41 @@
  * Rendering a stored version through the live viewer.
  *
  * A `DashboardVersion` holds the whole tab family; the viewer renders one tab
- * at a time. This module is the seam between the two: it picks the addressed
- * tab out of a snapshot and projects it onto the `DashboardData` shape every
- * component path already consumes, so preview reuses the real renderer rather
- * than a second, drifting one.
+ * at a time. This module is the seam between the two.
  *
- * Deliberately *not* a full `DashboardData`. `permissions`, `is_public` and
- * `project_id` are structurally absent from a `TabSnapshot` — a snapshot must
- * never be able to re-grant access that was since revoked — so they are taken
- * from nowhere and the preview is read-only regardless of who opens it.
+ * The snapshot is **merged onto the live dashboard document**, not used in its
+ * place. That is not a convenience — a `TabSnapshot` structurally omits
+ * `project_id`, `permissions` and `is_public` so a snapshot can never re-grant
+ * revoked access, which means rendering one directly leaves the viewer with no
+ * project to resolve data collections against and no permissions to gate the
+ * notes footer. The result looks like the right dashboard with the wrong (or
+ * missing) contents. Identity and access always come from the live document;
+ * only layout and components come from the version. Same split as the restore
+ * endpoint, for the same reason.
  */
 
 import type { DashboardData, DashboardVersionDetail } from 'depictio-react-core';
+
+/** Content fields a version owns. Everything else stays as the live document
+ *  has it: mirrors `_RESTORABLE_FIELDS` in `versions_routes.py`, so preview
+ *  shows exactly what restoring would produce. */
+const SNAPSHOT_CONTENT_FIELDS = [
+  'title',
+  'subtitle',
+  'main_tab_name',
+  'tab_icon',
+  'tab_icon_color',
+  'icon',
+  'icon_color',
+  'icon_variant',
+  'workflow_system',
+  'notes_content',
+  'stored_metadata',
+  'left_panel_layout_data',
+  'right_panel_layout_data',
+  'tab_order',
+  'is_main_tab',
+] as const;
 
 /** The version id in `?version=`, or null. Read once per load; the viewer has
  *  no router, so this mirrors how `extractDashboardId` reads the path. */
@@ -27,16 +50,17 @@ export function extractPreviewVersionId(): string | null {
 }
 
 /**
- * Project a version's snapshot of one tab onto the viewer's dashboard shape.
+ * Overlay a version's snapshot of one tab onto the live dashboard document.
  *
- * Falls back to the main tab when the addressed tab is not in the snapshot,
- * which is the normal case for a version taken before that tab existed —
- * showing the family's main tab is more useful than an empty screen, and the
- * banner already states that a past version is on screen.
+ * Falls back to the family's main tab when the addressed tab is absent from
+ * the snapshot — the normal case for a version taken before that tab existed.
+ * Showing the main tab beats an empty screen, and the banner already says a
+ * past version is on display.
  */
 export function dashboardFromVersion(
   version: DashboardVersionDetail,
   dashboardId: string,
+  live: DashboardData,
 ): DashboardData {
   const tabs = version.tabs || [];
   const tab =
@@ -45,14 +69,22 @@ export function dashboardFromVersion(
     tabs[0];
 
   if (!tab) {
-    throw new Error('This version holds no snapshot for that dashboard.');
+    throw new Error('This version holds no snapshot for this dashboard.');
+  }
+
+  const content: Record<string, unknown> = {};
+  for (const field of SNAPSHOT_CONTENT_FIELDS) {
+    if (field in tab) content[field] = (tab as Record<string, unknown>)[field];
   }
 
   return {
-    ...tab,
-    dashboard_id: dashboardId,
+    ...live,
+    ...content,
+    // Keep the live identity: the snapshot's `dashboard_id` may be the main
+    // tab's when we fell back above, and the viewer keys fetches off this.
+    dashboard_id: live.dashboard_id ?? dashboardId,
     stored_metadata: tab.stored_metadata || [],
     left_panel_layout_data: tab.left_panel_layout_data || [],
     right_panel_layout_data: tab.right_panel_layout_data || [],
-  } as unknown as DashboardData;
+  } as DashboardData;
 }

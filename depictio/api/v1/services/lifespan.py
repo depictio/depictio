@@ -236,10 +236,16 @@ def start_monitoring_storage(should_initialize: bool) -> None:
     if settings.dashboard_versions.enabled and should_initialize:
         try:
             from depictio.api.v1.endpoints.dashboards_endpoints.version_store import (
+                backfill_counts,
                 ensure_dashboard_version_storage,
             )
 
             ensure_dashboard_version_storage()
+            # Records written before the counts were stored would otherwise
+            # read "0 components" on every timeline row. `list_versions`
+            # derives them on read regardless; this just makes that the
+            # exception rather than the rule.
+            backfill_counts()
             logger.info(f"Worker {WORKER_ID}: Dashboard version storage ready")
         except Exception as exc:
             logger.warning(f"Worker {WORKER_ID}: Dashboard version storage setup failed: {exc}")

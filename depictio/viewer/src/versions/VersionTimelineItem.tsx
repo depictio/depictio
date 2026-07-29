@@ -8,7 +8,7 @@
  */
 
 import React from 'react';
-import { ActionIcon, Badge, Group, Menu, Stack, Text, Timeline, Tooltip } from '@mantine/core';
+import { ActionIcon, Badge, Group, Menu, Stack, Text, Timeline } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import type { DashboardVersionSummary } from 'depictio-react-core';
 
@@ -133,20 +133,31 @@ const VersionTimelineItem: React.FC<VersionTimelineItemProps> = ({
         </Group>
       }
       data-testid="version-timeline-item"
+      // Mantine's default item padding assumes a title plus a paragraph. These
+      // rows are three short lines, so the default leaves more gap than
+      // content and a session's worth of versions stops being scannable.
+      lineVariant="solid"
+      styles={{ itemBody: { paddingBottom: 2 }, item: { paddingLeft: 20 } }}
     >
-      <Stack gap={2}>
+      <Stack gap={1}>
         <Group gap={6} wrap="nowrap">
-          <Tooltip label={absTime(version.created_at)} withArrow withinPortal>
-            <Text size="xs" c="dimmed">
-              {relTime(version.created_at)}
-            </Text>
-          </Tooltip>
-          {version.author_email && (
-            <Text size="xs" c="dimmed" truncate>
-              · {version.author_email}
-            </Text>
-          )}
+          {/* Both stamps, not one. Relative time answers "how long ago" at a
+              glance, but picking the right version out of a day's worth of
+              autosaves needs the wall-clock time — and a tooltip cannot be
+              scanned down a list. */}
+          <Text size="xs" c="dimmed" style={{ flexShrink: 0 }}>
+            {absTime(version.created_at)}
+          </Text>
+          <Text size="xs" c="dimmed" style={{ flexShrink: 0 }}>
+            · {relTime(version.created_at)}
+          </Text>
         </Group>
+
+        {version.author_email && (
+          <Text size="xs" c="dimmed" truncate>
+            {version.author_email}
+          </Text>
+        )}
 
         <Group gap={6} wrap="nowrap">
           <Text size="xs" c="dimmed">

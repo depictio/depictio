@@ -124,12 +124,13 @@ const App: React.FC = () => {
 
   // Fetch dashboard + tab list in parallel.
   //
-  // `?version=<id>` renders a past snapshot instead of the live document. The
-  // snapshot's tab is projected onto the same DashboardData shape the viewer
-  // already renders, so every component path below is unchanged — the only
-  // difference is where `stored_metadata` and the layouts came from. Read-only
-  // by construction: this route never writes, and the editor refuses to open
-  // with a version pinned.
+  // `?version=<id>` overlays a past snapshot onto the live document. Always
+  // both fetches: the snapshot carries no `project_id` or `permissions` by
+  // design, so the live document supplies identity and access while the
+  // version supplies layout and components. Every component path below is
+  // unchanged — only where `stored_metadata` and the layouts came from
+  // differs. Read-only by construction: this route never writes, and Edit is
+  // withheld while a version is pinned.
   useEffect(() => {
     if (!dashboardId) {
       setError('No dashboard ID in URL. Expected /dashboard/<id>.');
@@ -137,17 +138,18 @@ const App: React.FC = () => {
       return;
     }
     Promise.all([
-      previewVersionId
-        ? fetchDashboardVersion(previewVersionId).then((version) => {
-            setPreviewVersion(version);
-            return dashboardFromVersion(version, dashboardId);
-          })
-        : fetchDashboard(dashboardId),
+      fetchDashboard(dashboardId),
       fetchAllDashboards(),
+      previewVersionId ? fetchDashboardVersion(previewVersionId) : Promise.resolve(null),
     ])
-      .then(([dash, all]) => {
-        setDashboard(dash);
+      .then(([live, all, version]) => {
         setAllDashboards(all);
+        if (version) {
+          setPreviewVersion(version);
+          setDashboard(dashboardFromVersion(version, dashboardId, live));
+        } else {
+          setDashboard(live);
+        }
       })
       .catch((err) => {
         setError(`Failed to load dashboard: ${err.message || err}`);
