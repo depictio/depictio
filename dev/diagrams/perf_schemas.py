@@ -149,13 +149,13 @@ def build_stages() -> Sketch:
     s.text(
         brace_x - 12,
         (BEFORE_Y + AFTER_Y) / 2 + 16,
-        "17.2 M rows",
+        "12.0 M rows",
         size=14,
         colour=DIM,
         anchor="end",
     )
 
-    s.text(CUTS[-1] + 24, BEFORE_Y - 2, "17.2 M", size=17, weight="bold", anchor="start")
+    s.text(CUTS[-1] + 24, BEFORE_Y - 2, "12.0 M", size=17, weight="bold", anchor="start")
     s.text(CUTS[-1] + 24, BEFORE_Y + 20, "reach the browser", size=14, colour=DIM, anchor="start")
     s.text(CUTS[-1] + 24, AFTER_Y - 2, "≤ 10 k", size=17, weight="bold", anchor="start")
     s.text(CUTS[-1] + 24, AFTER_Y + 20, "points drawn", size=14, colour=DIM, anchor="start")
