@@ -119,6 +119,11 @@ Route dispatch is plain regex in `depictio/viewer/src/main.tsx` +
   `DataCollectionStamp` records what the data *was*, but nothing reads it back yet.
   Time travel is blocked on `deltatables_utils._generate_cache_keys`: the key is salted
   with `aggregation_version` only, so a historical read would be cached under the live key
+- Deleting a main tab drops its ledger + seq counter; a child tab's versions belong to
+  the family and must survive
+- `depictio/projects/init/iris_versioned/` is the fixture for exercising any of this:
+  3 data versions (batch 2 vs 3 differ only in values) and 3 dashboard versions.
+  Not auto-seeded — see its README
 
 ### Screenshot System
 - Playwright drives the React SPA; composite targeting via `.react-grid-item`
