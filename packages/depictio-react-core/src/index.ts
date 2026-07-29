@@ -8,6 +8,8 @@
 // Realtime highlight keyframes (depictio-row-new / depictio-card-new). Imported
 // once here so consumers don't need to add the stylesheet manually.
 import './styles/realtime-highlight.css';
+// Version-diff canvas marks (data-version-diff), same reasoning.
+import './styles/version-diff.css';
 
 // Grid + top-level renderer
 export { default as DashboardGrid } from './components/DashboardGrid';
@@ -102,6 +104,7 @@ export {
   deleteDashboardVersion,
   restoreDashboardVersion,
   fetchVersionCompatibility,
+  fetchVersionDiff,
   fetchDeltaHistory,
   previewFigure,
   previewMultiQC,
@@ -297,6 +300,10 @@ export type {
   RestoreVersionResult,
   CompatibilityCheck,
   CompatibilityReport,
+  VersionComponentDiff,
+  VersionLayoutBox,
+  VersionTabDiff,
+  VersionDiff,
   DeltaVersionEntry,
   DeltaHistoryResponse,
   FigurePreviewRequest,

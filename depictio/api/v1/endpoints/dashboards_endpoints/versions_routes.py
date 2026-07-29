@@ -246,6 +246,91 @@ async def dashboard_version_compatibility(
     return convert_objectid_to_str(report)
 
 
+@dashboard_versions_endpoint_router.get("/versions/{version_id}/diff")
+async def dashboard_version_diff(
+    version_id: str,
+    against: str = "previous",
+    include_unchanged: bool = False,
+    current_user: User = Depends(get_user_or_anonymous),
+):
+    """What changed in this version — components added, removed, moved, retuned.
+
+    ``version_id`` is the *target*, matching how the drawer reads it ("what did
+    v12 change"). ``against`` is ``previous`` (the neighbouring version by seq),
+    ``current`` (the live dashboard), or another version's id.
+
+    Computed server-side rather than in the browser, for four reasons that
+    compound. The list endpoint projects ``tabs`` away, so the drawer never
+    holds a snapshot and a client-side diff would need two full fetches per
+    selection — each bounded only by ``max_snapshot_bytes`` (8 MB), and
+    arrow-key stepping makes that per keypress. "Against current" has no version
+    to fetch at all; here it is ``build_tab_snapshots(load_family_docs(...))``,
+    the exact construction the capture path uses, so the diff cannot disagree
+    with what a capture would have recorded. "Against previous" needs the
+    neighbouring record by seq, which the client only has if it paged the whole
+    timeline. And both sides go through one guard, so cross-family access is
+    refused in a single place rather than trusted to the caller.
+    """
+    from depictio.api.v1.endpoints.dashboards_endpoints import version_diff, versioning
+
+    target = _guarded_version(version_id, current_user, "viewer")
+    family_id = target["family_id"]
+
+    if against == "current":
+        base_tabs = [
+            snapshot.model_dump(mode="json")
+            for snapshot in versioning.build_tab_snapshots(
+                versioning.load_family_docs(ObjectId(family_id))
+            )
+        ]
+        base_meta: dict[str, Any] = {"base_version_id": None, "base_seq": None}
+        # Direction: the live state is *newer*, so it is the target and the
+        # selected version is the base — otherwise "what changed since v9" would
+        # read backwards.
+        report = version_diff.diff_tabs(
+            target.get("tabs") or [], base_tabs, include_unchanged=include_unchanged
+        )
+        return convert_objectid_to_str(
+            {
+                "base_version_id": version_id,
+                "base_seq": target.get("seq"),
+                "target_version_id": None,
+                "target_seq": None,
+                "against": "current",
+                **report,
+            }
+        )
+
+    if against == "previous":
+        base = version_store.previous_version(family_id, int(target.get("seq") or 0))
+        if base is None:
+            # The first version in a family, or the oldest one retention kept.
+            base = {"tabs": [], "seq": None, "version_id": None}
+        base_meta = {"base_version_id": base.get("version_id"), "base_seq": base.get("seq")}
+        resolved_against = "previous"
+    else:
+        base = _guarded_version(against, current_user, "viewer")
+        if base.get("family_id") != family_id:
+            raise HTTPException(
+                status_code=404, detail="Those versions belong to different dashboards."
+            )
+        base_meta = {"base_version_id": base.get("version_id"), "base_seq": base.get("seq")}
+        resolved_against = "version"
+
+    report = version_diff.diff_tabs(
+        base.get("tabs") or [], target.get("tabs") or [], include_unchanged=include_unchanged
+    )
+    return convert_objectid_to_str(
+        {
+            **base_meta,
+            "target_version_id": version_id,
+            "target_seq": target.get("seq"),
+            "against": resolved_against,
+            **report,
+        }
+    )
+
+
 @dashboard_versions_endpoint_router.get("/versions/{version_id}")
 async def get_dashboard_version(
     version_id: str,

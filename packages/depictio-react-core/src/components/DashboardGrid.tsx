@@ -34,6 +34,17 @@ interface DashboardGridProps {
   /** Whether the grid is being used in edit mode. Drives overlay rendering. */
   editMode?: boolean;
   /**
+   * How each component changed relative to another dashboard version, keyed by
+   * ``metadata.index`` — the same id already stamped as ``data-component-id``,
+   * so the diff report needs no translation to reach a tile.
+   *
+   * Rendered as a ``data-version-diff`` attribute rather than a style, so the
+   * treatment lives in CSS with Mantine's own colour variables and this file
+   * stays free of colour literals. Undefined by default, so the editor and the
+   * catalog preview are unaffected.
+   */
+  diffMarks?: Record<string, 'added' | 'modified' | 'moved'>;
+  /**
    * Fired on every drag/resize end. Only meaningful when `isDraggable` or
    * `isResizable` is true. We forward whatever react-grid-layout emits.
    */
@@ -71,6 +82,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
   cardSecondaryValues,
   cardValuesLoading,
   refreshTick,
+  diffMarks,
   activeHighlight,
   isDraggable = false,
   isResizable = false,
@@ -226,6 +238,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
         <div
           key={m.index}
           data-component-id={m.index}
+          data-version-diff={diffMarks?.[String(m.index)]}
           style={{
             height: '100%',
             display: 'flex',

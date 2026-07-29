@@ -25,6 +25,16 @@ interface VersionPreviewBannerProps {
   /** Present only when this version pinned data that can still be read. */
   dataMode?: DataMode;
   onDataModeChange?: (mode: DataMode) => void;
+  /** Clears the version in place. Falls back to a reload when absent, which is
+   *  what the editor-opened tab still needs. */
+  onExit?: () => void;
+  /** Outline what this version changed, on the canvas. Absent when no diff is
+   *  available, so the control never appears without something to show. */
+  showChanges?: boolean;
+  onShowChangesChange?: (value: boolean) => void;
+  /** "2 added, 1 removed" — sits next to the toggle so the count is legible
+   *  without turning the marks on. */
+  changeSummary?: string;
 }
 
 /** Why "as authored" is unavailable, in one sentence, or null if it is.
@@ -76,6 +86,10 @@ const VersionPreviewBanner: React.FC<VersionPreviewBannerProps> = ({
   onRestore,
   dataMode = 'current',
   onDataModeChange,
+  onExit,
+  showChanges = false,
+  onShowChangesChange,
+  changeSummary = '',
 }) => {
   const unavailable = authoredUnavailableReason(preview);
   const degraded = (preview.data_warnings ?? []).length > 0;
@@ -114,6 +128,24 @@ const VersionPreviewBanner: React.FC<VersionPreviewBannerProps> = ({
       </Group>
 
       <Group gap={8} wrap="nowrap">
+        {onShowChangesChange && (
+          <Tooltip
+            label={changeSummary || 'Outline the components this version changed'}
+            withArrow
+            withinPortal
+          >
+            <Button
+              size="xs"
+              variant={showChanges ? 'filled' : 'white'}
+              color={showChanges ? 'dark' : 'yellow'}
+              leftSection={<Icon icon="mdi:compare-horizontal" width={14} />}
+              onClick={() => onShowChangesChange(!showChanges)}
+              data-testid="version-banner-show-changes"
+            >
+              {changeSummary ? `Changes: ${changeSummary}` : 'Show changes'}
+            </Button>
+          </Tooltip>
+        )}
         {onDataModeChange && (
           <Tooltip
             label={
@@ -171,7 +203,7 @@ const VersionPreviewBanner: React.FC<VersionPreviewBannerProps> = ({
           size="xs"
           variant="white"
           color="yellow"
-          onClick={exitPreview}
+          onClick={onExit ?? exitPreview}
           data-testid="version-banner-exit"
         >
           Back to current

@@ -1,10 +1,12 @@
 /**
  * One row in the version timeline.
  *
- * Deliberately inert on click: selecting a version must never write anything.
- * Every mutating action is an explicit item in the row's menu, and the two
- * irreversible ones (restore, delete) route through a confirm modal owned by
- * the drawer.
+ * Selection is **pure**: clicking a row navigates the viewer to that version
+ * and writes nothing. Every mutating action stays an explicit item in the row's
+ * menu, and the two irreversible ones (restore, delete) route through a confirm
+ * modal owned by the drawer. Clicking is inert entirely when the host did not
+ * ask for selection — the editor, where loading a past version into editor
+ * state would risk autosaving it over the present.
  */
 
 import React from 'react';
@@ -14,9 +16,26 @@ import type { DashboardVersionSummary } from 'depictio-react-core';
 
 import { absTime, dataCoverageLabel, kindMeta, relTime, saveSpanLabel, versionTitle } from './format';
 
+/** Which mechanism reproduced each collection's data, as a badge.
+ *
+ *  `none` is included on purpose: "1 live" is information, and omitting it
+ *  would make a partially-pinned version look fully pinned. */
+const DATA_KIND_BADGES: { key: string; label: string; color: string }[] = [
+  { key: 'delta', label: 'delta', color: 'blue' },
+  { key: 'manifest', label: 'manifest', color: 'grape' },
+  { key: 'asset', label: 'asset', color: 'teal' },
+  { key: 'none', label: 'live', color: 'gray' },
+];
+
 interface VersionTimelineItemProps {
   version: DashboardVersionSummary;
   isCurrent: boolean;
+  /** The version currently on screen. */
+  isSelected?: boolean;
+  /** Whether clicking the row selects it (viewer) or does nothing (editor). */
+  selectable?: boolean;
+  /** Rendered under the row when selected — the diff panel. */
+  detail?: React.ReactNode;
   canEdit: boolean;
   canDelete: boolean;
   busy: boolean;
@@ -30,6 +49,9 @@ interface VersionTimelineItemProps {
 const VersionTimelineItem: React.FC<VersionTimelineItemProps> = ({
   version,
   isCurrent,
+  isSelected = false,
+  selectable = false,
+  detail = null,
   canEdit,
   canDelete,
   busy,
@@ -133,6 +155,12 @@ const VersionTimelineItem: React.FC<VersionTimelineItemProps> = ({
         </Group>
       }
       data-testid="version-timeline-item"
+      data-selected={isSelected ? 'true' : undefined}
+      lineVariant={isSelected ? 'solid' : 'dashed'}
+      // A pointer only where clicking does something, so the editor's rows do
+      // not advertise an interaction they do not have.
+      style={selectable ? { cursor: 'pointer' } : undefined}
+      onClick={selectable ? () => onPreview(version) : undefined}
     >
       <Stack gap={2}>
         <Group gap={6} wrap="nowrap">
@@ -161,10 +189,24 @@ const VersionTimelineItem: React.FC<VersionTimelineItemProps> = ({
         </Group>
 
         {coverage && (
-          <Text size="xs" c="dimmed">
-            {coverage}
-          </Text>
+          // One badge per mechanism that actually recorded something, with the
+          // sentence kept as the tooltip so "2 of 3 pinned" is not lost.
+          <Tooltip label={coverage} withArrow withinPortal>
+            <Group gap={4} wrap="nowrap">
+              {DATA_KIND_BADGES.map(({ key, label, color }) => {
+                const count = version.data_version_kinds?.[key] ?? 0;
+                if (!count) return null;
+                return (
+                  <Badge key={key} size="xs" variant="light" color={color}>
+                    {count} {label}
+                  </Badge>
+                );
+              })}
+            </Group>
+          </Tooltip>
         )}
+
+        {detail}
       </Stack>
     </Timeline.Item>
   );

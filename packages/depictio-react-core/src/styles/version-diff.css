@@ -1,0 +1,32 @@
+/*
+ * Canvas marks for "what changed in this version".
+ *
+ * Attribute-driven rather than inline styles, so `DashboardGrid` carries no
+ * colour literals and the whole treatment can be read in one place. The values
+ * are Mantine's own theme variables — this is the "CSS variables as a last
+ * resort" case the house rule allows, since a react-grid-layout child cannot
+ * take a Mantine `color` prop.
+ *
+ * An outline rather than a border or a background: a border would shift the
+ * grid item's box and re-flow the chart inside it, and a background would fight
+ * every renderer's own surface.
+ */
+
+[data-version-diff] {
+  outline-offset: -2px;
+  border-radius: var(--mantine-radius-md);
+}
+
+[data-version-diff='added'] {
+  outline: 2px solid var(--mantine-color-green-6);
+}
+
+[data-version-diff='modified'] {
+  outline: 2px solid var(--mantine-color-yellow-6);
+}
+
+/* Dashed, because "the same component somewhere else" is a weaker statement
+   than "this component is different". */
+[data-version-diff='moved'] {
+  outline: 2px dashed var(--mantine-color-blue-6);
+}

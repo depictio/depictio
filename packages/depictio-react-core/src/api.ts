@@ -4270,3 +4270,80 @@ export async function fetchVersionCompatibility(
   if (!res.ok) await throwHttpDetailError(res, 'Failed to check version compatibility');
   return (await res.json()) as CompatibilityReport;
 }
+
+/** How one component differs between two versions.
+ *
+ *  `change` is four-valued rather than six, because a component can be moved
+ *  *and* reconfigured in the same version — `moved` / `resized` /
+ *  `modified_config` are the qualifiers, and the canvas has four treatments. */
+export interface VersionComponentDiff {
+  index: string;
+  tab_id: string;
+  component_type?: string | null;
+  title?: string | null;
+  change: 'added' | 'removed' | 'modified' | 'unchanged';
+  /** True when the component's whole tab was added or removed, so the UI can
+   *  say "Tab 'QC' added (6 components)" instead of six separate adds. */
+  via_tab: boolean;
+  moved: boolean;
+  resized: boolean;
+  modified_config: boolean;
+  /** Dotted paths, capped — enough for "y axis, colour" rather than
+   *  "reconfigured". */
+  changed_fields: string[];
+  changed_fields_truncated: number;
+  layout_before?: VersionLayoutBox | null;
+  layout_after?: VersionLayoutBox | null;
+}
+
+export interface VersionLayoutBox {
+  panel: 'left' | 'right';
+  x?: number;
+  y?: number;
+  w?: number;
+  h?: number;
+}
+
+export interface VersionTabDiff {
+  tab_id: string;
+  title: string;
+  change: 'added' | 'removed' | 'changed' | 'unchanged';
+  changed_fields: string[];
+  components: VersionComponentDiff[];
+}
+
+export interface VersionDiff {
+  base_version_id: string | null;
+  base_seq: number | null;
+  target_version_id: string | null;
+  target_seq: number | null;
+  against: 'previous' | 'current' | 'version';
+  totals: {
+    added: number;
+    removed: number;
+    modified: number;
+    unchanged: number;
+    tabs_added: number;
+    tabs_removed: number;
+  };
+  tabs: VersionTabDiff[];
+}
+
+/** What a version changed, relative to the one before it or to the live state.
+ *
+ *  Server-side because the timeline endpoint projects `tabs` away, so the client
+ *  never holds a snapshot — a client-side diff would need two full fetches per
+ *  selection, and arrow-key stepping makes that per keypress. */
+export async function fetchVersionDiff(
+  versionId: string,
+  against: 'previous' | 'current' | string = 'previous',
+  opts: { includeUnchanged?: boolean } = {},
+): Promise<VersionDiff> {
+  const params = new URLSearchParams({ against });
+  if (opts.includeUnchanged) params.set('include_unchanged', 'true');
+  const res = await authFetch(
+    `${API_BASE}/dashboards/versions/${versionId}/diff?${params.toString()}`,
+  );
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to load version diff');
+  return (await res.json()) as VersionDiff;
+}

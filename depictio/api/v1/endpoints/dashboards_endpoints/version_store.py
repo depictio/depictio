@@ -71,6 +71,20 @@ def latest_version(family_id: str) -> Optional[dict[str, Any]]:
     )
 
 
+def previous_version(family_id: str, seq: int) -> Optional[dict[str, Any]]:
+    """The version immediately before ``seq`` in this family, or None.
+
+    A live query rather than ``seq - 1``: retention can prune what used to be
+    adjacent, so the answer is whatever is adjacent *now*. Callers must echo the
+    seq they actually got instead of assuming.
+
+    Rides the existing ``family_seq`` index.
+    """
+    return dashboard_versions_collection.find_one(
+        {"family_id": family_id, "seq": {"$lt": int(seq)}}, sort=[("seq", DESCENDING)]
+    )
+
+
 def insert_version(record: dict[str, Any]) -> dict[str, Any]:
     dashboard_versions_collection.insert_one(dict(record))
     return record

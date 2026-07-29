@@ -6,12 +6,17 @@
  * Selecting a version is **pure** — nothing is written until the user picks an
  * explicit action, and the two irreversible ones confirm first.
  *
- * Preview opens the **viewer** in a new tab rather than loading a snapshot
- * into the editor. A past version sitting in editor state is one stray drag
- * away from being autosaved over the present.
+ * Two modes, and the difference is a safety rule rather than a preference:
+ *
+ * - `modal` (the editor, and the default) opens the **viewer** in a new tab.
+ *   A past version sitting in editor state is one stray drag away from being
+ *   autosaved over the present, so the editor never loads one.
+ * - `inline` (the viewer) swaps the canvas in place with the drawer open
+ *   beside it. Safe there precisely because the viewer has no autosave: the
+ *   same guards that already disable editing during a preview cover it.
  */
 
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Box,
@@ -39,7 +44,8 @@ import {
   type DashboardVersionSummary,
 } from 'depictio-react-core';
 
-import { groupByDay, versionTitle } from './format';
+import { groupByDay, saveSpanLabel, versionTitle } from './format';
+import VersionDiffPanel from './VersionDiffPanel';
 import VersionCompatibilityPanel from './VersionCompatibilityPanel';
 import VersionTimelineItem from './VersionTimelineItem';
 import { useVersionHistory } from './useVersionHistory';
@@ -55,6 +61,23 @@ interface VersionHistoryDrawerProps {
   canDelete?: boolean;
   /** Called after a restore lands so the host can refetch the dashboard. */
   onRestored?: () => void;
+  /** `modal` opens a new tab (editor); `inline` hands selection to the host
+   *  (viewer). Defaults to `modal`, so the editor is untouched. */
+  mode?: 'modal' | 'inline';
+  /** Controlled by the host in `inline` mode, so the drawer holds no selection
+   *  state of its own and the two cannot disagree. */
+  selectedVersionId?: string | null;
+  onSelectVersion?: (versionId: string) => void;
+}
+
+/** "since the previous version (12 saves)".
+ *
+ *  Autosaves fold, so the neighbouring *version* can span a dozen edits — and
+ *  retention can prune whatever used to be adjacent, so the base is whatever
+ *  the server actually found. Both reasons to name it rather than imply it. */
+function diffContextLabel(version: DashboardVersionSummary): string {
+  const span = saveSpanLabel(version);
+  return span ? `since the previous version · ${span}` : 'since the previous version';
 }
 
 type PendingAction =
@@ -71,7 +94,11 @@ const VersionHistoryDrawer: React.FC<VersionHistoryDrawerProps> = ({
   canEdit = false,
   canDelete = false,
   onRestored,
+  mode = 'modal',
+  selectedVersionId = null,
+  onSelectVersion,
 }) => {
+  const inline = mode === 'inline' && Boolean(onSelectVersion);
   const { versions, currentVersionId, total, loading, error, reload } = useVersionHistory(
     dashboardId,
     opened,
@@ -110,15 +137,69 @@ const VersionHistoryDrawer: React.FC<VersionHistoryDrawerProps> = ({
     [reload, onRestored, closeModal],
   );
 
-  const handlePreview = useCallback((version: DashboardVersionSummary) => {
-    // The viewer honours ?version=; opening a new tab leaves the editor's
-    // unsaved state untouched.
-    window.open(
-      `/dashboard/${version.family_id}?version=${version.version_id}`,
-      '_blank',
-      'noopener',
-    );
-  }, []);
+  const handlePreview = useCallback(
+    (version: DashboardVersionSummary) => {
+      if (inline && onSelectVersion) {
+        onSelectVersion(version.version_id);
+        return;
+      }
+      // The viewer honours ?version=; opening a new tab leaves the editor's
+      // unsaved state untouched.
+      window.open(
+        `/dashboard/${version.family_id}?version=${version.version_id}`,
+        '_blank',
+        'noopener',
+      );
+    },
+    [inline, onSelectVersion],
+  );
+
+  // Arrow / j-k stepping through the flat list, so it crosses day boundaries —
+  // `groups` is a display grouping, not an order.
+  //
+  // Down is *older*, matching the visual order: the list is newest-first.
+  // Deliberately no shortcut for restore — arrow keys adjacent to a one-key
+  // destructive action is how someone loses a dashboard.
+  useEffect(() => {
+    if (!opened || !inline || !onSelectVersion) return;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      // The drawer holds a TextInput, and the page behind it holds filter
+      // inputs and a rich-text editor.
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        (target instanceof HTMLInputElement ||
+          target instanceof HTMLTextAreaElement ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      // A confirm modal is open; let it have the keys.
+      if (pending) return;
+
+      const step =
+        event.key === 'ArrowDown' || event.key === 'j'
+          ? 1
+          : event.key === 'ArrowUp' || event.key === 'k'
+            ? -1
+            : 0;
+      if (!step || versions.length === 0) return;
+
+      event.preventDefault();
+      const at = versions.findIndex((v) => v.version_id === selectedVersionId);
+      const next = at === -1 ? 0 : Math.min(versions.length - 1, Math.max(0, at + step));
+      const target_version = versions[next];
+      if (target_version && target_version.version_id !== selectedVersionId) {
+        onSelectVersion(target_version.version_id);
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    // Mandatory: StrictMode double-invokes effects in dev, and a leaked
+    // listener steps two versions per keypress.
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [opened, inline, onSelectVersion, pending, versions, selectedVersionId]);
 
   const handleTogglePin = useCallback(
     (version: DashboardVersionSummary) => {
@@ -185,9 +266,19 @@ const VersionHistoryDrawer: React.FC<VersionHistoryDrawerProps> = ({
                   key={version.version_id}
                   version={version}
                   isCurrent={version.version_id === currentVersionId}
+                  isSelected={version.version_id === selectedVersionId}
+                  selectable={inline}
                   canEdit={canEdit}
                   canDelete={canDelete}
                   busy={busy}
+                  detail={
+                    version.version_id === selectedVersionId ? (
+                      <VersionDiffPanel
+                        versionId={version.version_id}
+                        contextLabel={diffContextLabel(version)}
+                      />
+                    ) : null
+                  }
                   onPreview={handlePreview}
                   onTogglePin={handleTogglePin}
                   onRename={(v) => {

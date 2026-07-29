@@ -12,6 +12,7 @@ import {
   Title,
   Paper,
   Box,
+  Tooltip,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { Icon } from '@iconify/react';
@@ -60,6 +61,9 @@ import { isDashboardOwner } from './lib/dashboardOwnership';
 import NotesFooter from './components/NotesFooter';
 import { DataVersionProvider } from 'depictio-react-core';
 import VersionPreviewBanner, { type DataMode } from './versions/VersionPreviewBanner';
+import VersionHistoryDrawer from './versions/VersionHistoryDrawer';
+import { marksForTab, summariseDiff } from './versions/diffMarks';
+import { useVersionDiff } from './versions/useVersionDiff';
 
 /**
  * Top-level SPA. Layout:
@@ -94,9 +98,13 @@ const App: React.FC = () => {
   const [settingsOpened, { open: openSettings, close: closeSettings }] = useDisclosure(false);
   const { user: currentUser } = useCurrentUser();
   const dashboardId = extractDashboardId();
-  //: Read once per mount — a tab switch is a full navigation, so this cannot
-  //: change without remounting.
-  const previewVersionId = extractVersionId();
+  //: The version currently on screen. State rather than a one-time read of the
+  //: URL, so selecting another version in the drawer swaps the canvas in place:
+  //: the fetch effect below is already keyed on it, so making it state is most
+  //: of the mechanism.
+  const [previewVersionId, setPreviewVersionId] = useState<string | null>(() =>
+    extractVersionId(),
+  );
 
   const isOwner = isDashboardOwner(dashboard, currentUser?.email ?? null);
   //: Edit affordances are gated on this rather than `isOwner`: editing a past
@@ -119,6 +127,65 @@ const App: React.FC = () => {
   //: The version whose *data* to read, as opposed to the version whose layout
   //: is on screen. Null in every case except an explicit "as authored" choice.
   const dataVersionId = previewVersionId && dataMode === 'authored' ? previewVersionId : null;
+
+  const [versionsOpened, { open: openVersions, close: closeVersions }] = useDisclosure(false);
+  //: Whether the canvas outlines what changed. Off by default — the marks are
+  //: an answer to a question, and drawing them unasked would make every preview
+  //: look like an error state.
+  const [showChanges, setShowChanges] = useState(false);
+
+  /** Switch the canvas to another version — or back to live — without a reload.
+   *
+   *  `pushState`, not `replaceState`: browser Back should step back through the
+   *  versions you browsed, which is the behaviour anyone coming from a document
+   *  editor expects. The catalog preview already uses pushState+popstate in
+   *  this tree, so it is not a new idiom here. */
+  const selectVersion = useCallback((next: string | null) => {
+    setPreviewVersionId((current) => {
+      if (current === next) return current;
+
+      const url = new URL(window.location.href);
+      if (next) url.searchParams.set('version', next);
+      else url.searchParams.delete('version');
+      window.history.pushState(null, '', url.toString());
+
+      // A filter pinned to a component that does not exist in the target
+      // version is meaningless, and would still be posted with every render
+      // call. Card values are keyed by index, so a stale entry for an index the
+      // new version reuses differently paints a wrong number for a frame.
+      setFilters([]);
+      setCardValues({});
+      setCardSecondaryValues({});
+      setActiveHighlight(null);
+      bulkCtrl.current?.abort();
+      // Mandatory, not belt-and-braces: the renderers' effect deps hold
+      // `refreshTick` and the filters, nothing version-derived — so a component
+      // whose index survives the switch would never refetch on its own.
+      triggerRefresh();
+      return next;
+    });
+  }, []);
+
+  //: What the version on screen changed, for the drawer and the canvas outlines.
+  //: Only fetched while a version is actually being browsed.
+  const { diff: versionDiff } = useVersionDiff(
+    previewVersionId,
+    'previous',
+    Boolean(previewVersionId),
+  );
+  const diffMarks = useMemo(
+    () => (showChanges ? marksForTab(versionDiff, dashboardId) : {}),
+    [showChanges, versionDiff, dashboardId],
+  );
+
+  //: Back / Forward re-read the URL into state. The cleanup is not optional:
+  //: StrictMode double-invokes effects in dev, and a leaked listener would
+  //: apply every navigation twice.
+  useEffect(() => {
+    const onPopState = () => setPreviewVersionId(extractVersionId());
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
 
   /** Restore straight from the preview banner, then drop back to the live view.
    *  A full navigation rather than a state update: a restore can add or remove
@@ -480,6 +547,19 @@ const App: React.FC = () => {
           isOwner={canEditNow}
           rightExtras={
             <>
+              {/* Same control the editor has, so the two surfaces agree on
+                  where version history lives. */}
+              <Tooltip label="Version history" withArrow>
+                <ActionIcon
+                  variant="subtle"
+                  color="gray"
+                  onClick={openVersions}
+                  data-testid="version-history-button"
+                  aria-label="Version history"
+                >
+                  <Icon icon="mdi:history" width={18} />
+                </ActionIcon>
+              </Tooltip>
               {realtimeEnabled && (
                 <span data-tour-id="realtime-indicator" style={{ display: 'inline-flex' }}>
                   <RealtimeIndicator
@@ -518,6 +598,10 @@ const App: React.FC = () => {
             onRestore={handleRestorePreview}
             dataMode={dataMode}
             onDataModeChange={setDataMode}
+            onExit={() => selectVersion(null)}
+            showChanges={showChanges}
+            onShowChangesChange={versionDiff ? setShowChanges : undefined}
+            changeSummary={versionDiff ? summariseDiff(versionDiff) : ''}
           />
         )}
         {ingestionHealth &&
@@ -754,6 +838,7 @@ const App: React.FC = () => {
                     isDraggable={false}
                     isResizable={false}
                     editMode={false}
+                    diffMarks={diffMarks}
                   />
                 )}
               </Box>
@@ -801,6 +886,23 @@ const App: React.FC = () => {
         opened={settingsOpened}
         onClose={closeSettings}
         dashboard={dashboard}
+      />
+      <VersionHistoryDrawer
+        opened={versionsOpened}
+        onClose={closeVersions}
+        dashboardId={dashboardId}
+        canEdit={isOwner}
+        canDelete={isOwner}
+        mode="inline"
+        selectedVersionId={previewVersionId}
+        onSelectVersion={selectVersion}
+        onRestored={() => {
+          // A restore can add or remove whole tabs, so every derived list on
+          // this page is stale afterwards — reload rather than patch.
+          const url = new URL(window.location.href);
+          url.searchParams.delete('version');
+          window.location.assign(url.toString());
+        }}
       />
     </AppShell>
       </DataVersionProvider>
