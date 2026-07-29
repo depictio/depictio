@@ -418,7 +418,42 @@ def verify(api: Api) -> None:
             "current data, or every version claims the same commit"
         )
     _log(f"  ✓ delta stamps ascend with the versions: {stamps}")
+
+    # Component identity has to survive the four imports, or every
+    # component-level feature is dead: the history modal matches on `index`
+    # across snapshots, and fresh ids per import mean it never matches. That
+    # was the state until component indices were derived from the YAML tag.
+    per_version = [_component_titles(api, v["version_id"]) for v in labelled]
+    shared = set(per_version[0]) & set(per_version[-1])
+    if not shared:
+        raise Fail(
+            "no component id is shared between the first and last version; "
+            "component history cannot follow anything through time"
+        )
+    _log(f"  ✓ {len(shared)} component ids persist from v1 to v4")
+
+    # And at least one of those shared components must have *changed*, or the
+    # versions are a superset chain and the modal has nothing to show.
+    changed = [i for i in shared if per_version[0][i] != per_version[-1][i]]
+    if not changed:
+        raise Fail(
+            "every component that persists is identical across versions; "
+            "nothing demonstrates a component changing over time"
+        )
+    for index in sorted(changed):
+        _log(f"      {per_version[0][index]!r} -> {per_version[-1][index]!r}")
+
     _log(f"\n  dashboard_id: {did}")
+
+
+def _component_titles(api: Api, version_id: str) -> dict[str, str]:
+    """Component index -> title, for one stored version."""
+    detail = api.ok(api.get(f"/dashboards/versions/{version_id}"), "version detail")
+    return {
+        str(component["index"]): str(component.get("title") or "")
+        for tab in detail.get("tabs") or []
+        for component in tab.get("stored_metadata") or []
+    }
 
 
 def _delta_stamp(api: Api, version_id: str, dc_id: str) -> int:

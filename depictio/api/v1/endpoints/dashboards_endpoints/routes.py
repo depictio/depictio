@@ -31,6 +31,7 @@ from depictio.api.v1.endpoints.user_endpoints.routes import (
     oauth2_scheme_optional,
 )
 from depictio.api.v1.filter_links import extend_filters_via_links
+from depictio.models.components.lite import index_from_tag
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 from depictio.models.models.dashboards import DashboardData, DashboardDataLite
 from depictio.models.models.users import User
@@ -3586,8 +3587,50 @@ def _regenerate_component_fields(component: dict) -> None:
             )
 
 
-def _regenerate_component_indices(dashboard_dict: dict) -> None:
-    """Generate new UUIDs for UUID-like component indexes; preserve semantic ones."""
+def _tag_derived_indices(lite: Any) -> set[str]:
+    """Ids on this dashboard that were derived from a component's YAML tag.
+
+    Recomputed from the lite components rather than read off the built
+    document, because ``tag`` is intentionally not persisted. An id only counts
+    when it still equals what the tag derives, so an explicitly supplied
+    ``index`` is not mistaken for a derived one.
+    """
+    keep: set[str] = set()
+    for component in getattr(lite, "components", None) or []:
+        data = component if isinstance(component, dict) else component.model_dump()
+        tag = data.get("tag")
+        index = data.get("index")
+        if tag and index and str(index) == index_from_tag(str(tag)):
+            keep.add(str(index))
+    return keep
+
+
+def _regenerate_component_indices(
+    dashboard_dict: dict, *, keep_indices: set[str] | None = None
+) -> None:
+    """Give imported components fresh ids, except where identity is meant to persist.
+
+    Two kinds of index are deliberately left alone:
+
+    * **Semantic** (e.g. ``multiqc-sampling-date``) — hand-written, referenced
+      elsewhere, and never a UUID.
+    * **Tag-derived** — listed in ``keep_indices`` by the caller, which still
+      holds the lite components and so knows which ids came from a ``tag``.
+      Regenerating these is what made a re-imported dashboard a set of
+      brand-new components: every feature that follows one through time
+      (version history, single-component restore, comparing a chart against its
+      former self) matches on ``index`` across snapshots, so fresh ids leave
+      all of them unable to match anything. The failure is silent — the
+      component-history modal reports "did not exist in that version" for a
+      component that plainly did.
+
+      Passed in rather than recomputed here because ``tag`` is deliberately not
+      persisted onto ``stored_metadata``; adding it just to re-derive the id
+      would put the same fact in two places, free to disagree.
+
+    Everything else is regenerated as before, so two imports of an untagged
+    dashboard stay independent rather than colliding.
+    """
     if "stored_metadata" not in dashboard_dict:
         return
 
@@ -3600,6 +3643,11 @@ def _regenerate_component_indices(dashboard_dict: dict) -> None:
             old_index.count("-") >= 4 or len(old_index) > 30
         )
         if not is_uuid_like:
+            continue
+
+        # The author asked for this id by naming the component. Honouring it is
+        # the whole point of deriving it.
+        if keep_indices and old_index in keep_indices:
             continue
 
         new_index = str(uuid.uuid4())
@@ -3950,7 +3998,7 @@ def _import_multi_tab_dashboard(
         _regenerate_component_fields(component)
     # Hide components whose DC is absent/unpopulated (self-adapting dashboard)
     _filter_unresolved_components(main_dashboard_dict, project_id=project_id)
-    _regenerate_component_indices(main_dashboard_dict)
+    _regenerate_component_indices(main_dashboard_dict, keep_indices=_tag_derived_indices(main_lite))
 
     # Validate and insert/update main dashboard
     try:
@@ -4020,7 +4068,9 @@ def _import_multi_tab_dashboard(
             _resolve_workflow_tags(component, project_id=project_id)
             _regenerate_component_fields(component)
         _filter_unresolved_components(tab_dashboard_dict, project_id=project_id)
-        _regenerate_component_indices(tab_dashboard_dict)
+        _regenerate_component_indices(
+            tab_dashboard_dict, keep_indices=_tag_derived_indices(tab_lite)
+        )
 
         # Self-adapting dashboard: a tab is only worth showing if filtering left it
         # with at least one filter AND one non-metadata visualisation (its minimum
@@ -4260,7 +4310,7 @@ async def import_dashboard_from_yaml(
             component
         )  # Regenerate s3_base_folder, etc. after dc_config is populated
     _filter_unresolved_components(dashboard_dict, project_id=project_id)
-    _regenerate_component_indices(dashboard_dict)
+    _regenerate_component_indices(dashboard_dict, keep_indices=_tag_derived_indices(lite))
 
     try:
         dashboard = DashboardData.from_mongo(dashboard_dict)

@@ -149,4 +149,14 @@ def resolve_data_versions(request: dict[str, Any] | None) -> DataVersionPins:
                     f"{version!r} for dc {key}"
                 )
 
+    # Logged because "the picker does nothing" is indistinguishable, from the
+    # server's side, between a client that never sent a pin and a server that
+    # dropped one. One line naming the resolved pins turns a UI bug report into
+    # a bisected one: no line at all means the request arrived unpinned.
+    if resolved.active:
+        logger.info(
+            f"data time travel: as_of={resolved.as_of_version_id} "
+            f"pins={resolved.pins} unresolved={resolved.unresolved}"
+        )
+
     return resolved
