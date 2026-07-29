@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Depictio component export — worked examples</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..700&family=Inter+Tight:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared.css">
+</head>
+<body class="landing">
+
+<div class="landing-wrap">
+
+  <h1>Depictio<br>component export</h1>
+
+  <p class="lede">
+    Three worked examples of the same API, each in a different host context.
+    Every figure on every page is fetched live from a Depictio instance running
+    on <strong>another origin</strong> and drawn by the host page's own
+    plotly.js. <strong>No iframes, no Depictio JavaScript, no build step.</strong>
+  </p>
+  <p class="lede">
+    Each figure carries a collapsible panel showing the exact request that
+    produced it, and each page's controls are built from the export manifest, so
+    nothing here has to be taken on trust.
+  </p>
+
+  <div class="landing-origins">
+    <span>this site <b id="origin-self">—</b></span>
+    <span>depictio <b id="origin-api">—</b></span>
+    <span>shared code <b>none</b></span>
+    <span>components as a spec <b id="spec-count">—</b></span>
+  </div>
+
+  <nav class="cards">
+    <a class="card card-lead" href="/qc-report">
+      <span class="num">01</span>
+      <h2>QC report — everything as JSON</h2>
+      <p>
+        A submission report in an archive's house style: MultiQC panels, then the
+        variant benchmark. Every panel is a Plotly spec, and each section has its
+        own filter deck built from the manifest. Start here.
+      </p>
+      <span class="tag">11/11 as a spec · <em>live filters</em></span>
+    </a>
+
+    <a class="card card-lead" href="/example-limited">
+      <span class="num">02</span>
+      <h2>Where it stops</h2>
+      <p>
+        A whole dashboard as-is, including the components that cannot be a
+        figure. Same code as the QC report; the limitations are labelled, not
+        hidden.
+      </p>
+      <span class="tag">11/14 as a spec · <em>3 framed</em></span>
+    </a>
+
+    <a class="card" href="/report">
+      <span class="num">03</span>
+      <h2>Surveillance dashboard</h2>
+      <p>
+        A public-health portal's own dashboard layout, control deck and all, with
+        every control bound to a Depictio filter and every figure an export.
+      </p>
+      <span class="tag">host idiom · <em>Depictio behind it</em></span>
+    </a>
+
+    <a class="card" href="/gallery">
+      <span class="num">04</span>
+      <h2>Component gallery</h2>
+      <p>
+        One card per component type, at mixed widths. Compare the three delivery
+        modes side by side and see which types have no server-side figure.
+      </p>
+      <span class="tag">every type · <em>spec vs frame</em></span>
+    </a>
+
+    <a class="card" href="/versioning">
+      <span class="num">05</span>
+      <h2>Versioning &amp; freezing</h2>
+      <p>
+        The operational half: what the URL parameters do, how to pin a figure to
+        a dashboard version, and how to stay current without re-fetching.
+      </p>
+      <span class="tag">etag · pin · <em>filters</em></span>
+    </a>
+
+    <a class="card" href="/selftest">
+      <span class="num">06</span>
+      <h2>Filter self-test</h2>
+      <p>
+        Every filter these pages send, fetched twice and compared. A filter that
+        is accepted and then ignored returns a healthy-looking 200, so the only
+        honest check is whether the figure moved.
+      </p>
+      <span class="tag">13 cases · <em>pass/fail</em></span>
+    </a>
+  </nav>
+
+  <p class="landing-note">
+    Served by <code>serve_site.py</code> on port 8899 while Depictio runs on 8102.
+    The separation is the point: if the export API only worked same-origin, or
+    only through a frame, none of these pages would render.
+  </p>
+
+</div>
+
+<script src="/shared.js"></script>
+<script>
+  fetch('/site-data.json')
+    .then((r) => r.json())
+    .then((data) => {
+      document.getElementById('origin-self').textContent = location.origin;
+      document.getElementById('origin-api').textContent = new URL(data.apiBase).origin;
+      document.getElementById('spec-count').textContent =
+        `${data.counts.json} of ${data.counts.total}`;
+    })
+    .catch(() => {
+      document.getElementById('origin-self').textContent = location.origin;
+    });
+</script>
+</body>
+</html>

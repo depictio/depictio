@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Where the export stops</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/shared.css">
+<link rel="stylesheet" href="/example.css">
+<script src="/vendor/plotly.min.js"></script>
+</head>
+<body class="example example-limited">
+
+<nav class="sitenav" id="sitenav"></nav>
+
+<header class="ex-page-head">
+  <div class="ex-wrap">
+    <p class="ex-eyebrow">Worked example B</p>
+    <h1>A whole dashboard, limitations included</h1>
+    <p class="ex-lede">
+      The same rendering loop as the <a href="/qc-report">QC report</a>, pointed
+      at every component of <code>nf-core/viralrecon</code> in dashboard order —
+      nothing curated away. Panels that cannot be a Plotly spec say so and fall
+      back to an embedded HTML render.
+    </p>
+    <div id="scoreboard" class="scoreboard">Loading…</div>
+  </div>
+</header>
+
+<main class="ex-wrap">
+
+  <section class="ex-brief">
+    <div>
+      <h2>What the manifest promises, before any figure is fetched</h2>
+      <p>
+        A host does not have to discover limitations by hitting them. The
+        manifest declares <code>formats</code> per component, so a page can plan
+        its layout — and decide what to do about the gaps — from one request.
+      </p>
+      <ul id="manifest-summary" class="manifest-summary"></ul>
+      <div id="manifest-req"></div>
+    </div>
+    <aside class="ex-cost">
+      <h3>What a fallback costs</h3>
+      <p>
+        Each HTML fallback is a self-contained page carrying the whole React
+        bundle: <strong>~7 MB</strong> apiece, against a few hundred KB for a
+        spec. The fallback exists so nothing is missing, not because it is the
+        cheap option.
+      </p>
+      <p class="ex-cost-note">
+        This is the argument for JSON in one number, and it is why the
+        <code>text</code> and <code>interactive</code> panels below are the only
+        ones that should be framed.
+      </p>
+    </aside>
+  </section>
+
+  <div id="panels" class="ex-grid"></div>
+
+  <section class="ex-closing">
+    <h2>Two kinds of limitation</h2>
+    <p>
+      <strong>Inherent.</strong> A <code>text</code> block is prose and an
+      <code>interactive</code> component is a widget. Neither is a figure, so
+      neither will ever have a Plotly spec. <code>format=html</code> is the
+      correct answer permanently, not a stopgap — and for an interactive
+      component it is a genuinely good one, because the framed widget can post
+      its selection back to the host page and drive the figures around it.
+    </p>
+    <p>
+      <strong>Cost.</strong> The fallback works, but it is heavy. A page that
+      frames several components pays megabytes for what a spec delivers in
+      kilobytes, which is the whole reason to check the manifest first and
+      design around what exports cleanly.
+    </p>
+  </section>
+</main>
+
+<footer class="ex-foot">
+  <div class="ex-wrap">
+    Fetched live from Depictio · limitations shown rather than hidden
+  </div>
+</footer>
+
+<script src="/shared.js"></script>
+<script src="/example_engine.js"></script>
+<script src="/example_limited.js"></script>
+</body>
+</html>
