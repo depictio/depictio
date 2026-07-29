@@ -141,8 +141,7 @@ The rest stay in their own formats, because converting them would lose the point
 MultiQC reports are read as MultiQC, and since they can get large they get
 filter-aware caching and prewarming so they don't recompute from scratch every
 time you touch a filter. Images are served from object storage, GeoJSON feeds map
-boundaries, Newick and Nexus trees go to the phylogeny renderer, and JBrowse2
-tracks are handed to JBrowse2.
+boundaries, and Newick or Nexus trees go straight to the phylogeny renderer.
 
 Some numbers, so those aren't just adjectives. On a dataset of **12 million rows**
 across three linked collections (1 GB raw, 1.4 GB as Delta), running on a laptop
