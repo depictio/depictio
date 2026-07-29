@@ -58,8 +58,18 @@ function safeStorage(): Storage | null {
 
 /** True when the user has opted out, by our own toggle or by Do Not Track. */
 export function isOptedOut(): boolean {
-  const storage = safeStorage();
-  if (storage?.getItem(OPT_OUT_KEY) === 'true') return true;
+  // Both reads are guarded. `safeStorage` only protects *obtaining* the storage
+  // object, but the browsers that make it awkward — Safari private browsing,
+  // strict cookie policies, embedded webviews — throw on `getItem` too, and this
+  // function is called from `capture` before its own try block. An exception here
+  // would therefore escape into the host application, which is exactly what this
+  // module promises never to do. Treat any failure as "not opted out" and let the
+  // missing anonymous ID stop the send instead.
+  try {
+    if (safeStorage()?.getItem(OPT_OUT_KEY) === 'true') return true;
+  } catch {
+    // Storage unreadable; fall through to the Do Not Track check.
+  }
 
   try {
     if (navigator.doNotTrack === '1') return true;

@@ -204,7 +204,7 @@ payload is then written to the application log instead of being sent.
 
 ### Prove the pipeline end to end
 
-Three scripts run the real send path — the real payload builder against your real
+Four scripts run the real send path — the real payload builder against your real
 database, the real gates, the real HTTP client — against a throwaway collector
 started in-process, so they verify the behaviour without transmitting anything:
 
@@ -213,6 +213,7 @@ started in-process, so they verify the behaviour without transmitting anything:
 python scripts/telemetry_e2e_check.py    # payload, leak scan, transport
 python scripts/telemetry_boot_check.py   # boot path, send-once guard, opt-out
 python scripts/telemetry_cli_check.py    # cli_command, argument scrubbing
+node scripts/telemetry_browser_check.mjs # browser client, consent, opt-out
 ```
 
 They assert what this page promises rather than restating it. The leak scan walks
