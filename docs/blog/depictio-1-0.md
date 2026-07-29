@@ -12,9 +12,11 @@ DRAFT NOTE (remove before publishing):
   (e.g. ../../images/guides/advanced-visualizations/volcano_light.webp), which the build resolves.
   LOGO: uses this repo's docs/images/logo_hd.png (../images/logo_hd.png) so it renders on GitHub;
   in depictio-docs repoint to that repo's images/logo/logo_hd.svg (or logo_hd.png).
-  VIDEO: three Vimeo embeds (the docs repo commits no video files and caps added files at 2 MB).
-  1194664914 is the existing docs landing-page video, reused for the React section; the other two
-  are the performance screencasts. They will not render in GitHub's markdown preview, only in mkdocs.
+  VIDEO: four Vimeo embeds (the docs repo commits no video files and caps added files at 2 MB).
+  1194664914 is the existing docs landing-page video, reused for the React section; 1213942946 is
+  the filtering screencast (depictio-filtering-penguins) in the interactivity section;
+  1213726629 / 1213726492 are the performance screencasts. None render in GitHub's markdown
+  preview, only in mkdocs.
   The advanced-viz images come as light/dark pairs (volcano_light.webp / volcano_dark.webp). Draft
   uses the light one only (GitHub renders both variants, looking like a duplicate). In mkdocs you can
   use the theme-aware pattern: img#only-light + img#only-dark to switch with the site theme.
@@ -46,19 +48,18 @@ categories:
 <p align="center"><img src="../images/logo_hd.png" alt="Depictio" width="280"></p>
 
 Depictio went live last year, and it worked. People built real dashboards with
-it and shared them. It was also slow: past a few hundred thousand rows it went
-from sluggish to unusable, and I was usually not the one who found the bugs. Both
-of those things were true at once, and the second one is what the past year went
-into.
+it and shared them. It was also slow: past a few tens of thousands of rows it
+went from sluggish to unusable, and there were enough rough edges that using it
+meant working around them.
 
 The idea never changed: point Depictio at the outputs of a pipeline, tell it how
 those datasets relate, and get a dashboard where filtering one thing filters
 everything. What changed is that it now does that at the scale your pipelines
 actually produce, and at speed.
 
-1.0 is the version where that is fixed. Not "feature complete", which no tool
-ever is, but fast, stable enough to leave running, and settled enough that
-building on top of it is a reasonable thing to do. Here is what changed.
+That is what 1.0 means here. Not "feature complete", which no tool ever is, but
+fast, stable enough to leave running, and settled enough that building on top of
+it is a reasonable thing to do. Here is what changed.
 
 ![A Depictio dashboard in the viewer: the filter panel on the left narrows every component at once](https://depictio.github.io/depictio-docs/images/react/page_dashboard_viewer.png)
 
@@ -139,7 +140,19 @@ The left panel is the obvious way to drive that: dropdowns and multi-selects for
 categories, sliders and range sliders for numbers, date ranges, switches,
 segmented controls, all built from the actual column type.
 
-![A MultiSelect filter on a categorical column, with two values picked](https://depictio.github.io/depictio-docs/images/guides/dashboard_creation/components/interactive_component_filter.png)
+<div style="max-width: 1200px; margin: 1.5rem auto 2rem auto;">
+<div style="padding: 62.18% 0 0 0; position: relative">
+  <iframe
+    src="https://player.vimeo.com/video/1213942946?badge=0&amp;autopause=0&amp;player_id=0&amp;app_id=58479&amp;autoplay=1&amp;loop=1&amp;muted=1"
+    frameborder="0"
+    allow="autoplay; fullscreen; picture-in-picture; clipboard-write; encrypted-media; web-share"
+    referrerpolicy="strict-origin-when-cross-origin"
+    style="position: absolute; top: 0; left: 0; width: 100%; height: 100%"
+    title="Filtering a Depictio dashboard, with every component following along"
+  ></iframe>
+  </div>
+  <p style="text-align: center; margin-top: 0.5rem; font-style: italic; color: #666;">🎬 One filter, every linked component following it.</p>
+</div>
 
 But the more useful interaction is often the one where the *plot* is the filter:
 
@@ -355,7 +368,7 @@ downstream analysis, where the results actually get interpreted. A template is
 really just an assembly of catalog entries. And the catalog is built to be
 community-extensible: adding a new tool is a small config contribution, not a
 code change, and it will be possible through a web interface rather than a pull
-request.
+request. This will be the subject of the next post, and it is already in progress.
 
 Put together, that's how Depictio goes from "a dashboard builder" to "the
 dashboard your pipeline should have shipped with." That's the next story, along
@@ -366,4 +379,5 @@ with the full performance report behind the numbers above. More soon.
 - **Live demo:** [demo.depictio.embl.org](https://demo.depictio.embl.org/dashboards), explore the pre-loaded datasets, or upload your own.
 - **Docs:** start with [Your first dashboard in 15 minutes](https://depictio.github.io/depictio-docs/latest/).
 - **GitHub:** [depictio/depictio](https://github.com/depictio/depictio), star the repo, open an issue, tell me what breaks.
+- **Webinar:** [watch the recording](https://www.youtube.com/watch?v=KWWHo4esUfg) of the SciLifeLab session, a full walkthrough from project to public URL.
 
