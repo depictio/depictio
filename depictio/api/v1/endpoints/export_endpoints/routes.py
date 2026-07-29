@@ -39,6 +39,7 @@ from depictio.api.v1.services.export.capabilities import (
     resolve_viz_kind,
     unsupported_reason,
 )
+from depictio.api.v1.services.export.filter_binding import bind_filters
 from depictio.api.v1.services.export.filter_options import filter_options
 from depictio.api.v1.services.export.plotly_export import build_plotly_export
 from depictio.api.v1.services.export.resolve import (
@@ -167,7 +168,15 @@ def _embed_cors_headers(request: Request) -> dict[str, str]:
     """
     origin = request.headers.get("origin")
     if origin and origin in settings.fastapi.embed_allowed_origins:
-        return {"Access-Control-Allow-Origin": origin, "Vary": "Origin"}
+        return {
+            "Access-Control-Allow-Origin": origin,
+            "Vary": "Origin",
+            # Without this the browser hides ETag from JS, so a page cannot
+            # revalidate its own embed: fetch() sees `null` and has nothing to
+            # send back as If-None-Match. Response headers are not readable
+            # cross-origin unless named here.
+            "Access-Control-Expose-Headers": "ETag",
+        }
     return {}
 
 
@@ -178,6 +187,7 @@ def _apply_embed_cors(request: Request, response: Any) -> None:
 
 @export_endpoint_router.get("/dashboards/{dashboard_id}/components")
 async def list_exportable_components(
+    request: Request,
     dashboard_id: PyObjectId,
     include_filter_options: bool = Query(
         False,
@@ -230,7 +240,15 @@ async def list_exportable_components(
                     entry["filter"]["options"] = options
 
         manifest.append(entry)
-    return manifest
+
+    # The manifest is the route a host page hits *first* to discover what it can
+    # embed, so it needs the same CORS treatment as the components themselves.
+    # Without it the discovery step fails and every later request is a guess.
+    from fastapi.responses import JSONResponse
+
+    response = JSONResponse(content=manifest)
+    _apply_embed_cors(request, response)
+    return response
 
 
 @export_endpoint_router.get(
@@ -373,6 +391,13 @@ async def _export_inner(
 
     revision = dashboard_revision(dashboard_data)
 
+    # A host builds `?filters=` from the manifest, which names columns, but the
+    # MultiQC render path resolves a filter by the dashboard-internal `index`.
+    # Bind here so both paths agree, and keep the columns nothing matched so the
+    # response can say so rather than returning an unfiltered figure that claims
+    # to be filtered.
+    filters, unbound_filter_columns = bind_filters(dashboard_data, filters)
+
     # Pin check first: a caller that asked for a specific version wants to hear
     # about drift, not receive a different figure with a 200.
     if expect_version is not None and revision["dashboard_version"] != expect_version:
@@ -451,6 +476,10 @@ async def _export_inner(
     if isinstance(payload, dict) and isinstance(payload.get("meta"), dict):
         payload["meta"].update(revision)
         payload["meta"]["etag"] = etag
+        # Naming the columns that reached no control turns a silently-ignored
+        # filter into something a host page can detect and report.
+        if unbound_filter_columns:
+            payload["meta"]["unmatched_filter_columns"] = unbound_filter_columns
     logger.info(
         "export: served component=%s format=json type=%s",
         component_id,
