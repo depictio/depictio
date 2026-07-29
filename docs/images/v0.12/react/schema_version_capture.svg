@@ -1,0 +1,109 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1420" height="700" viewBox="0 0 1420 700">
+  <rect width="1420" height="700" fill="#ffffff"/>
+  <text x="46.0" y="52.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="25" fill="#1e1e1e" text-anchor="start" font-weight="normal">One editing session, a readable timeline</text>
+  <text x="46.0" y="78.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="15" fill="#5c5c5c" text-anchor="start" font-weight="normal">the editor saves on every drag — two gates decide what that leaves behind</text>
+  <rect x="60.0" y="190.0" width="250.0" height="118.0" rx="6" fill="#e7f5ff"/>
+  <path d="M60.0,190.1 C143.2,190.2 228.0,189.9 309.5,190.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M59.3,190.5 C143.7,190.9 225.4,189.4 310.3,189.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M309.5,189.2 C311.5,230.8 310.5,269.0 310.0,307.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M309.9,190.5 C309.0,228.5 308.5,268.6 310.0,308.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M310.8,308.8 C226.7,308.5 143.2,307.3 60.5,308.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M310.4,307.8 C226.1,307.1 142.7,306.6 60.6,307.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M60.7,308.0 C61.5,269.8 58.4,228.4 60.8,189.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M59.3,307.7 C58.6,269.1 60.9,228.6 60.7,190.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="185.0" y="217.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">Editor</text>
+  <text x="185.0" y="241.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">a save per layout change</text>
+  <text x="185.0" y="262.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">500 ms client debounce</text>
+  <text x="185.0" y="283.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">Save button ⇒ “explicit”</text>
+  <rect x="390.0" y="190.0" width="276.0" height="118.0" rx="6" fill="#fff9db"/>
+  <path d="M390.5,189.5 C480.8,189.2 572.7,188.6 666.1,189.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M389.4,189.9 C481.0,190.7 572.8,190.5 665.5,189.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M665.5,189.8 C667.5,230.3 665.4,269.9 666.6,308.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M666.4,189.7 C664.7,230.9 665.1,267.9 665.7,307.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M665.8,307.9 C572.7,308.3 481.2,308.3 390.7,308.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M666.7,308.5 C574.2,309.2 481.0,306.9 389.6,307.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M390.6,308.2 C390.8,270.1 389.0,230.8 389.9,189.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M389.6,308.5 C388.5,270.1 389.2,230.0 390.2,189.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="528.0" y="217.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">Same content?</text>
+  <text x="528.0" y="241.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">sha256 over the tab family</text>
+  <text x="528.0" y="262.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">ignores last_saved_ts</text>
+  <text x="528.0" y="283.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">and the dead Dash fields</text>
+  <rect x="746.0" y="190.0" width="276.0" height="118.0" rx="6" fill="#f3f0ff"/>
+  <path d="M746.1,190.6 C837.0,190.7 928.6,189.1 1022.2,189.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M745.9,189.3 C839.3,189.1 928.5,189.3 1021.5,189.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1022.8,190.3 C1022.2,228.2 1021.6,269.9 1022.3,308.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1022.3,190.7 C1020.8,227.8 1020.5,270.0 1021.2,308.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1021.3,308.1 C929.9,308.7 837.4,309.6 746.4,308.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1021.8,308.3 C930.8,308.7 838.9,309.3 746.6,308.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M746.2,307.8 C745.7,269.6 747.2,229.6 746.1,190.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M746.4,307.8 C744.7,269.1 747.6,230.5 746.4,190.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="884.0" y="217.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">Same session?</text>
+  <text x="884.0" y="241.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">same author, window open,</text>
+  <text x="884.0" y="262.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">latest not pinned or named</text>
+  <rect x="1102.0" y="190.0" width="258.0" height="118.0" rx="6" fill="#ebfbee"/>
+  <path d="M1101.2,190.2 C1187.8,191.1 1272.7,190.8 1360.0,189.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1101.6,189.2 C1188.6,190.0 1274.4,191.3 1359.7,190.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1359.9,190.6 C1359.0,228.3 1361.3,269.2 1359.7,308.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1360.6,189.8 C1359.0,229.1 1361.0,270.0 1360.1,307.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1360.3,308.7 C1272.8,308.0 1189.1,309.1 1101.6,307.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1360.2,308.0 C1273.8,307.3 1187.1,307.7 1101.7,308.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1102.6,307.3 C1103.5,268.5 1100.6,227.8 1102.3,190.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1101.9,307.2 C1101.4,269.6 1100.5,228.2 1102.5,189.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="1231.0" y="217.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">A new version</text>
+  <text x="1231.0" y="241.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">seq++, pruned later —</text>
+  <text x="1231.0" y="262.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">pins are never pruned</text>
+  <rect x="390.0" y="520.0" width="276.0" height="112.0" rx="6" fill="#f1f3f5"/>
+  <path d="M390.2,520.2 C480.9,518.6 574.4,519.8 666.5,520.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M389.2,520.0 C482.6,519.0 573.9,519.0 666.3,519.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M666.2,520.4 C665.3,556.8 666.6,594.7 665.8,632.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M665.4,519.9 C667.3,556.0 667.4,595.4 666.2,632.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M666.7,631.9 C573.6,632.2 483.2,632.9 390.2,631.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M665.5,632.6 C574.7,633.0 482.5,632.7 390.8,632.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M390.6,631.8 C390.1,595.6 389.4,558.6 389.3,519.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M390.5,631.3 C390.2,595.5 390.0,555.8 390.5,519.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="528.0" y="547.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">Nothing written</text>
+  <text x="528.0" y="571.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">a no-op save leaves no trace,</text>
+  <text x="528.0" y="592.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">the screenshot task included</text>
+  <rect x="746.0" y="520.0" width="276.0" height="112.0" rx="6" fill="#ffe8cc"/>
+  <path d="M746.0,520.4 C837.5,520.9 928.8,518.9 1022.5,520.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M745.6,520.0 C839.4,520.0 931.4,518.7 1021.7,520.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1021.7,519.8 C1022.4,557.4 1023.1,594.9 1022.6,632.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1022.1,519.5 C1021.1,558.5 1023.5,594.7 1022.1,632.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1021.8,632.5 C930.3,630.5 839.5,632.1 746.1,632.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1022.7,632.7 C930.6,630.6 838.1,631.7 745.6,632.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M746.0,631.7 C744.8,594.5 747.0,558.6 745.5,520.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M745.5,631.6 C747.4,593.5 746.9,555.8 746.3,519.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="884.0" y="547.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">Folded into the latest</text>
+  <text x="884.0" y="571.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">save_count++,</text>
+  <text x="884.0" y="592.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">“12 saves over 4 min”</text>
+  <path d="M319.2,249.0 C338.8,249.5 357.1,249.9 377.5,248.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M320.1,248.3 C339.5,248.7 358.2,248.7 377.4,249.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M378.4,248.7 C374.2,246.9 370.5,244.8 365.9,242.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M377.7,249.5 C374.7,250.8 369.4,254.2 366.0,255.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M676.7,248.8 C694.3,249.9 713.7,247.4 734.6,248.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M676.4,249.8 C694.9,249.7 712.7,247.8 734.9,248.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M733.7,248.6 C729.9,247.3 725.8,245.0 721.2,242.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M733.7,248.7 C730.0,251.2 725.9,252.7 722.0,256.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1031.9,249.5 C1053.0,247.4 1068.9,250.8 1089.7,248.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1032.4,249.7 C1051.4,248.7 1071.1,247.1 1089.4,248.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1090.0,248.5 C1086.4,246.6 1081.1,243.9 1078.0,242.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1090.1,249.0 C1086.3,251.9 1082.0,253.2 1078.1,255.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="1062.0" y="232.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="16" fill="#1e1e1e" text-anchor="middle" font-weight="normal">no</text>
+  <path d="M528.6,319.8 C527.0,383.6 529.0,445.1 528.8,506.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M528.4,319.1 C528.8,383.1 529.1,443.6 527.7,505.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M527.7,506.4 C529.2,501.6 532.7,498.0 534.7,493.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M528.5,506.1 C526.1,502.0 523.7,497.5 521.6,493.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="544.0" y="420.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="16" fill="#1e1e1e" text-anchor="start" font-weight="normal">yes</text>
+  <path d="M883.5,319.8 C885.9,380.1 884.5,445.0 883.1,505.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M884.1,320.0 C883.5,380.4 883.0,445.6 884.9,506.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M884.1,506.3 C887.2,502.2 889.0,496.9 890.1,494.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M884.1,505.6 C881.1,501.8 879.0,497.8 877.9,493.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="900.0" y="420.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="16" fill="#1e1e1e" text-anchor="start" font-weight="normal">yes</text>
+  <text x="60.0" y="396.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="16" fill="#1e1e1e" text-anchor="start" font-weight="bold">why the window is anchored</text>
+  <text x="60.0" y="424.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="start" font-weight="normal">a sliding window never lapses</text>
+  <text x="60.0" y="448.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="start" font-weight="normal">while you keep working, so a</text>
+  <text x="60.0" y="472.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="start" font-weight="normal">long session would collapse into</text>
+  <text x="60.0" y="496.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="start" font-weight="normal">one entry you cannot step back</text>
+  <text x="60.0" y="520.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="start" font-weight="normal">through.</text>
+  <text x="1360.0" y="670.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="15" fill="#5c5c5c" text-anchor="end" font-weight="normal">a version covers the whole tab family — so adding or deleting a tab is undoable</text>
+</svg>

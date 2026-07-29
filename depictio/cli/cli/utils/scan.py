@@ -39,6 +39,21 @@ from depictio.models.models.workflows import (
     WorkflowRunScan,
 )
 
+#: File-id buckets persisted on each ``WorkflowRunScan``. Deliberately narrower
+#: than the stat counters: unchanged files are the bulk of a steady-state scan
+#: and listing their ids would bloat the run document for no benefit, while a
+#: departure has to be identifiable — reconstructing "which files backed this
+#: data collection at time T" needs the ids, and under --sync-files the records
+#: themselves are gone.
+SCAN_FILE_ID_BUCKETS: tuple[str, ...] = (
+    "updated_files",
+    "new_files",
+    "skipped_files",
+    "other_failure_files",
+    "deleted_files",
+    "missing_files",
+)
+
 # Supported image extensions for S3 verification
 SUPPORTED_IMAGE_EXTENSIONS = {
     ".png",
@@ -448,6 +463,10 @@ def scan_run_for_multiple_data_collections(
         files_skipped = []
         files_other_failure = []
 
+        # Hoisted so the id buckets below are always defined: a data collection
+        # that matched nothing this cycle still needs an (empty) entry.
+        missing_files: list[str] = []
+
         if dc_file_scan_results:
             old_updated_files = [
                 sc.file.id
@@ -510,6 +529,15 @@ def scan_run_for_multiple_data_collections(
             "new_files": new_files,
             "skipped_files": files_skipped,
             "other_failure_files": files_other_failure,
+            # A file that left the filesystem was the one event the run ledger
+            # could not describe: the ids were computed to drive the delete call
+            # and then thrown away, leaving only a count — and under
+            # --sync-files the records are hard-deleted, so that count was the
+            # only surviving trace. Split by fate, mirroring dc_stats below:
+            # deleted_files were actually removed, missing_files merely went
+            # absent from the scan while their records were left in place.
+            "deleted_files": missing_files if update_files else [],
+            "missing_files": [] if update_files else missing_files,
         }
 
         # Calculate missing files count
@@ -549,27 +577,17 @@ def scan_run_for_multiple_data_collections(
 
     logger.debug(f"Aggregate Stats for run {run_tag}: {aggregate_stats}")
 
-    # Combine file IDs from all data collections
-    all_updated_files = []
-    all_new_files = []
-    all_skipped_files = []
-    all_other_failure_files = []
-
-    for dc_tag, file_ids in dc_file_ids.items():
-        all_updated_files.extend(file_ids["updated_files"])
-        all_new_files.extend(file_ids["new_files"])
-        all_skipped_files.extend(file_ids["skipped_files"])
-        all_other_failure_files.extend(file_ids["other_failure_files"])
+    # Combine file IDs from all data collections. Driven by the bucket names so
+    # a new bucket shows up in the run total without a second edit here.
+    combined_files_id: dict[str, list] = {bucket: [] for bucket in SCAN_FILE_ID_BUCKETS}
+    for file_ids in dc_file_ids.values():
+        for bucket in SCAN_FILE_ID_BUCKETS:
+            combined_files_id[bucket].extend(file_ids.get(bucket, []))
 
     # Create the WorkflowRunScan with dc_stats
     scan_result = WorkflowRunScan(
         stats=aggregate_stats,
-        files_id={
-            "updated_files": all_updated_files,
-            "new_files": all_new_files,
-            "skipped_files": all_skipped_files,
-            "other_failure_files": all_other_failure_files,
-        },
+        files_id=combined_files_id,
         dc_stats=dc_stats,  # Make sure this is set!
         scan_time=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     )

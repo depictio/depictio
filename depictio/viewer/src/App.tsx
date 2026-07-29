@@ -58,6 +58,7 @@ import { useSidebarOpen } from './hooks/useSidebarOpen';
 import { useCurrentUser } from './hooks/useCurrentUser';
 import { isDashboardOwner } from './lib/dashboardOwnership';
 import NotesFooter from './components/NotesFooter';
+import VersionPreviewBanner from './versions/VersionPreviewBanner';
 
 /**
  * Top-level SPA. Layout:
@@ -91,10 +92,38 @@ const App: React.FC = () => {
   const [desktopOpened, toggleDesktop] = useSidebarOpen();
   const [settingsOpened, { open: openSettings, close: closeSettings }] = useDisclosure(false);
   const { user: currentUser } = useCurrentUser();
-  const isOwner = isDashboardOwner(dashboard, currentUser?.email ?? null);
-
   const dashboardId = extractDashboardId();
+  //: Read once per mount — a tab switch is a full navigation, so this cannot
+  //: change without remounting.
+  const previewVersionId = extractVersionId();
+
+  const isOwner = isDashboardOwner(dashboard, currentUser?.email ?? null);
+  //: Edit affordances are gated on this rather than `isOwner`: editing a past
+  //: version makes no sense, and the editor would autosave it over the live
+  //: dashboard. House style is visible-but-disabled, which the Header's
+  //: existing tooltip already handles.
+  const canEditNow = isOwner && !previewVersionId;
   const bulkCtrl = useRef<AbortController | null>(null);
+
+  /** Restore straight from the preview banner, then drop back to the live view.
+   *  A full navigation rather than a state update: a restore can add or remove
+   *  whole tabs, so every derived list on this page is stale afterwards. */
+  const handleRestorePreview = useCallback(async () => {
+    if (!previewVersionId) return;
+    try {
+      const { restoreDashboardVersion } = await import('depictio-react-core');
+      await restoreDashboardVersion(previewVersionId);
+      const url = new URL(window.location.href);
+      url.searchParams.delete('version');
+      window.location.assign(url.toString());
+    } catch (err) {
+      notifications.show({
+        color: 'red',
+        title: 'Restore failed',
+        message: err instanceof Error ? err.message : 'Could not restore this version',
+      });
+    }
+  }, [previewVersionId]);
 
   // Ingestion-health banner: for template-derived dashboards, surface a
   // prominent prompt when a required data collection was not found during
@@ -119,7 +148,7 @@ const App: React.FC = () => {
       setLoading(false);
       return;
     }
-    Promise.all([fetchDashboard(dashboardId), fetchAllDashboards()])
+    Promise.all([fetchDashboard(dashboardId, previewVersionId), fetchAllDashboards()])
       .then(([dash, all]) => {
         setDashboard(dash);
         setAllDashboards(all);
@@ -128,7 +157,7 @@ const App: React.FC = () => {
         setError(`Failed to load dashboard: ${err.message || err}`);
       })
       .finally(() => setLoading(false));
-  }, [dashboardId]);
+  }, [dashboardId, previewVersionId]);
 
   // Resolve the parent project and its ingestion health (template projects only).
   useEffect(() => {
@@ -325,7 +354,9 @@ const App: React.FC = () => {
   // Only subscribe + render the indicator when the dashboard's project has
   // ``realtime.enabled === true`` in its YAML. Projects without that flag
   // never see live-update UI — keeps the chrome quiet for static dashboards.
-  const realtimeEnabled = Boolean(dashboard?.project_realtime?.enabled);
+  // Never while previewing a past version: a live data push would refresh the
+  // grid underneath a historical view, which is incoherent.
+  const realtimeEnabled = Boolean(dashboard?.project_realtime?.enabled) && !previewVersionId;
   const realtime = useDataCollectionUpdates(dashboardId, {
     enabled: realtimeEnabled && Boolean(dashboardId),
     mode: realtimeMode,
@@ -423,7 +454,7 @@ const App: React.FC = () => {
           onToggleDesktop={toggleDesktop}
           onOpenSettings={openSettings}
           cardsLoading={cardsLoading}
-          isOwner={isOwner}
+          isOwner={canEditNow}
           rightExtras={
             <>
               {realtimeEnabled && (
@@ -453,10 +484,17 @@ const App: React.FC = () => {
       </AppShell.Header>
 
       <AppShell.Navbar p="md" data-tour-id="sidebar">
-        <Sidebar tabs={tabSiblings} activeId={dashboardId} />
+        <Sidebar tabs={tabSiblings} activeId={dashboardId} versionId={previewVersionId} />
       </AppShell.Navbar>
 
       <AppShell.Main style={{ height: 'calc(100vh - 50px)' }}>
+        {dashboard?.preview && (
+          <VersionPreviewBanner
+            preview={dashboard.preview}
+            canRestore={isOwner}
+            onRestore={handleRestorePreview}
+          />
+        )}
         {ingestionHealth &&
           ingestionProjectId &&
           !ingestionBannerDismissed &&
@@ -660,7 +698,7 @@ const App: React.FC = () => {
                         </Title>
                         <Text size="sm" c="dimmed" ta="center">
                           No components have been added yet.
-                          {isOwner && ' Start editing to add visualizations, tables, and more.'}
+                          {canEditNow && ' Start editing to add visualizations, tables, and more.'}
                         </Text>
                       </Stack>
                       {isOwner && (
@@ -721,7 +759,11 @@ const App: React.FC = () => {
           )}
           </div>
         )}
-        {dashboard && dashboardId && (
+        {/* Unmounted while previewing. NotesFooter saves through
+            `saveDashboardNotes`, which re-reads the dashboard and POSTs it to
+            /save — during a preview that read returns the *snapshot*, so an
+            edit here would write a past version's content over the live one. */}
+        {dashboard && dashboardId && !previewVersionId && (
           <NotesFooter
             dashboardId={dashboardId}
             initialContent={(dashboard.notes_content as string) ?? ''}
@@ -748,6 +790,14 @@ function extractDashboardId(): string | null {
   const path = window.location.pathname;
   const match = path.match(/\/dashboard\/([^/?#]+)/);
   return match?.[1] || null;
+}
+
+/** The version being previewed, from `?version=`. Same idiom as the
+ *  walkthrough's `no-walkthrough` check. The dashboard-id regex above already
+ *  stops at `?`, so the two never interfere. */
+function extractVersionId(): string | null {
+  if (typeof window === 'undefined') return null;
+  return new URLSearchParams(window.location.search).get('version');
 }
 
 function stableFilterKey(filters: InteractiveFilter[]): string {

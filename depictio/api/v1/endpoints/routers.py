@@ -20,6 +20,9 @@ from depictio.api.v1.endpoints.catalog_endpoints.routes import catalog_endpoint_
 from depictio.api.v1.endpoints.celery_endpoints.routes import celery_endpoint_router
 from depictio.api.v1.endpoints.cli_endpoints.routes import cli_endpoint_router
 from depictio.api.v1.endpoints.dashboards_endpoints.routes import dashboards_endpoint_router
+from depictio.api.v1.endpoints.dashboards_endpoints.versions_routes import (
+    dashboard_versions_endpoint_router,
+)
 from depictio.api.v1.endpoints.datacollections_endpoints.routes import (
     datacollections_endpoint_router,
 )
@@ -109,6 +112,15 @@ router.include_router(
     cli_endpoint_router,
     prefix="/cli",
     tags=["CLI"],
+)
+
+# Registered BEFORE the main dashboards router: that one declares
+# `GET /{dashboard_id}/yaml` and `GET /{dashboard_id}/json`, whose greedy path
+# parameter would otherwise match `/versions/{version_id}` first.
+router.include_router(
+    dashboard_versions_endpoint_router,
+    prefix="/dashboards",
+    tags=["Dashboard Versions"],
 )
 
 router.include_router(

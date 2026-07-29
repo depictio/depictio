@@ -121,6 +121,9 @@ interface SidebarProps {
   onDeleteTab?: (tab: DashboardSummary) => void;
   onMoveTab?: (tab: DashboardSummary, direction: TabMoveDirection) => void;
   onAddTab?: () => void;
+  /** Carried onto every tab link so a version preview survives a tab switch —
+   *  tab navigation is a full page load, which would otherwise drop `?version=`. */
+  versionId?: string | null;
 }
 
 /**
@@ -139,6 +142,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   onDeleteTab,
   onMoveTab,
   onAddTab,
+  versionId,
 }) => {
   const { colorScheme } = useMantineColorScheme();
   const theme: 'light' | 'dark' = colorScheme === 'dark' ? 'dark' : 'light';
@@ -328,7 +332,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                       // Render the tab as an anchor so browser-level
                       // open-in-new-tab (middle/Cmd+Click) works natively.
                       renderRoot={(props) => (
-                        <a {...props} href={dashboardHref(d.dashboard_id, linkMode)} />
+                        <a {...props} href={dashboardHref(d.dashboard_id, linkMode, versionId)} />
                       )}
                     >
                       <span className="depictio-chrome-tab-label">{label}</span>

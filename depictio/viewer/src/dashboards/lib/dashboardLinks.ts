@@ -10,14 +10,24 @@ export type DashboardMode = 'view' | 'edit';
 export function dashboardHref(
   dashboardId: string,
   mode: DashboardMode = 'view',
+  versionId?: string | null,
 ): string {
-  return mode === 'edit'
-    ? `/dashboard-edit/${dashboardId}`
-    : `/dashboard/${dashboardId}`;
+  const base =
+    mode === 'edit' ? `/dashboard-edit/${dashboardId}` : `/dashboard/${dashboardId}`;
+  // A version snapshot is family-scoped, so the same id is valid on every
+  // sibling tab. Tab switching is a full page navigation, so without carrying
+  // the param the preview would silently drop back to live data on the first
+  // tab click.
+  if (!versionId || mode === 'edit') return base;
+  return `${base}?version=${encodeURIComponent(versionId)}`;
 }
 
-export function dashboardHrefFor(d: DashboardListEntry, mode: DashboardMode = 'view'): string {
-  return dashboardHref(String(d.dashboard_id), mode);
+export function dashboardHrefFor(
+  d: DashboardListEntry,
+  mode: DashboardMode = 'view',
+  versionId?: string | null,
+): string {
+  return dashboardHref(String(d.dashboard_id), mode, versionId);
 }
 
 /** Detect whether a mouse event should bypass SPA navigation and fall through
