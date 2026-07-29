@@ -84,13 +84,43 @@ check('body at commit 0', dataVersionBody({ pins: { [DC]: 0 } }), {
   data_versions: { [DC]: 0 },
 });
 
-console.log('\n5. The compare pane reads live data');
-// The "current" half is rendered with `pins={{}}` — hardcoded, not derived —
-// so this asserts the value that hardcoding must produce. A compare view whose
-// second pane inherited the pin would show the same thing twice.
-check('current pane body', dataVersionBody({ pins: {} }), {});
+console.log('\n5. Each compare pane picks its own commit');
+// The right pane resolves independently of the left, and deliberately ignores
+// `useHistoricalData` — that switch describes the version being examined, and
+// this pane is not it.
+function comparePane(compareOverride) {
+  return dataVersionBody({
+    pins: pinsForComponent(
+      DC,
+      resolveDataVersion({
+        dataOverride: compareOverride,
+        useHistoricalData: false,
+        versionDataVersion: undefined,
+      }),
+    ),
+  });
+}
 
-console.log('\n6. Each distinct selection produces a distinct effect key');
+// Default: live. "Compare against current" has to mean current.
+check('current pane defaults to live', comparePane(null), {});
+// Pointed at a commit, it reads that commit.
+check('current pane pinned to v1', comparePane(1), { data_versions: { [DC]: 1 } });
+// And commit 0 survives here too, on the pane whose default is `null` — the
+// one place where falsy-vs-null confusion is most likely.
+check('current pane pinned to v0', comparePane(0), { data_versions: { [DC]: 0 } });
+
+console.log('\n6. Holding the data equal isolates the configuration change');
+// The point of per-pane selection: with both sides on the same commit, the
+// only difference left between the two charts is the definition. If these
+// bodies diverge, the "same data on both sides" hint would be a lie.
+const leftAtV1 = bodyFor({
+  dataOverride: 1,
+  useHistoricalData: true,
+  versionDataVersion: 0,
+});
+check('left pinned to v1 matches right pinned to v1', leftAtV1, comparePane(1));
+
+console.log('\n7. Each distinct selection produces a distinct effect key');
 // The renderers key their fetch effects on this string. Two selections sharing
 // a key means the body changes while the fetch never re-runs — stale numbers
 // under a new label, which is exactly how this feature failed before.

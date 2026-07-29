@@ -220,6 +220,96 @@ if target is not None:
     else:
         fail("the two compare panes differ", f"identical: {live}")
 
+print("\n5. Same data both sides isolates the configuration change")
+# What per-pane data selection is for: hold the commit constant across both
+# compare panes, and the only difference left is the definition. If the two
+# agree here, a config change would be invisible; if they differ, the
+# difference can only have come from the config.
+if target is not None:
+    dc_id = str((component_in(last, target) or {}).get("dc_id") or "")
+    at_same_commit = {}
+    for label, detail in (("v1 config", first), ("v4 config", last)):
+        component = component_in(detail, target)
+        res = requests.post(
+            f"{API}/dashboards/bulk_compute_cards/{DASH}",
+            headers=H,
+            json={
+                "filters": [],
+                "component_ids": [target],
+                "component_overrides": {target: component},
+                # Both panes on the newest commit.
+                "data_versions": {dc_id: 3},
+            },
+            timeout=60,
+        )
+        at_same_commit[label] = res.json().get("values", {}).get(target)
+    print(f"  ....  v1 config @ data v3 -> {at_same_commit['v1 config']}")
+    print(f"  ....  v4 config @ data v3 -> {at_same_commit['v4 config']}")
+    if at_same_commit["v1 config"] != at_same_commit["v4 config"]:
+        ok(
+            "same data, different config, different answer",
+            f"{at_same_commit['v1 config']} vs {at_same_commit['v4 config']}",
+        )
+    else:
+        fail("same data, different config", f"identical: {at_same_commit['v1 config']}")
+
+print("\n6. A figure honours its past version's definition, not today's")
+# Cards had `component_overrides`; figures and tables did not, so the modal
+# drew a past version's data with today's chart definition. The demo turns a
+# histogram into a box plot between v1 and v2, which is visible in the trace
+# type the server returns.
+figure_target = None
+for index in sorted(shared):
+    kinds = {
+        (component_in(details[v["version_id"]], index) or {}).get("component_type") for v in named
+    }
+    if kinds == {"figure"}:
+        specs = {}
+        for v in named:
+            component = component_in(details[v["version_id"]], index)
+            specs[v["label"]] = (component or {}).get("visu_type")
+        if len(set(specs.values())) > 1:
+            figure_target = (index, specs)
+            break
+
+if figure_target is None:
+    print("  SKIP  no figure changes its visualisation type across versions")
+else:
+    index, specs = figure_target
+    seen_types = {}
+    for v in named:
+        component = component_in(details[v["version_id"]], index)
+        if component is None:
+            continue
+        res = requests.post(
+            f"{API}/dashboards/render_figure/{DASH}/{index}",
+            headers=H,
+            json={
+                "filters": [],
+                "theme": "light",
+                "component_overrides": {index: component},
+            },
+            timeout=90,
+        )
+        if res.status_code != 200:
+            fail(f"{v['label']} render_figure", f"HTTP {res.status_code}")
+            continue
+        traces = (res.json().get("figure") or {}).get("data") or []
+        kind = traces[0].get("type") if traces else None
+        seen_types[v["label"]] = kind
+        print(
+            f"  ....  {v['label']:18} stored visu_type={specs[v['label']]:12} "
+            f"rendered trace type={kind}"
+        )
+
+    if len(set(seen_types.values())) > 1:
+        ok("the rendered chart type follows the version", str(seen_types))
+    else:
+        fail(
+            "the rendered chart type follows the version",
+            f"all identical ({set(seen_types.values())}) — the override was ignored",
+        )
+
 print()
 if failures:
     print(f"FAILED ({len(failures)}): {', '.join(failures)}")

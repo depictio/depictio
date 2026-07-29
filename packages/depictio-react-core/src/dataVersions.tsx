@@ -33,6 +33,21 @@ export interface DataVersionState {
   asOfVersionId?: string | null;
   /** Per-collection overrides applied on top of `asOfVersionId`. */
   pins?: DataVersionPins;
+  /**
+   * Component definitions to render *instead of* the live ones, keyed by
+   * component index.
+   *
+   * Travels beside the pins because it answers the other half of the same
+   * question. A render endpoint reads the component from the live dashboard
+   * document, so pinning only the data draws a past version's numbers with
+   * today's chart definition — a histogram shown as the box plot it later
+   * became. Component history supplies both; every other caller supplies
+   * neither.
+   *
+   * The server narrows this to a per-type allow-list of presentation fields;
+   * nothing here can change which collection is read.
+   */
+  componentOverrides?: Record<string, Record<string, unknown>>;
 }
 
 const DataVersionContext = createContext<DataVersionState>({});
@@ -44,15 +59,17 @@ export interface DataVersionProviderProps extends DataVersionState {
 export const DataVersionProvider: React.FC<DataVersionProviderProps> = ({
   asOfVersionId,
   pins,
+  componentOverrides,
   children,
 }) => {
-  // Keyed on content, not identity: callers build `pins` inline, so a new
+  // Keyed on content, not identity: callers build these inline, so a new
   // object every render would re-run every renderer's fetch effect.
   const pinKey = JSON.stringify(pins ?? {});
+  const overrideKey = JSON.stringify(componentOverrides ?? {});
   const value = useMemo(
-    () => ({ asOfVersionId, pins }),
+    () => ({ asOfVersionId, pins, componentOverrides }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [asOfVersionId, pinKey],
+    [asOfVersionId, pinKey, overrideKey],
   );
 
   return (
@@ -96,6 +113,11 @@ export function dataVersionBody(
 
   if (Object.keys(pins).length > 0) body.data_versions = pins;
 
+  const overrides = state.componentOverrides;
+  if (overrides && Object.keys(overrides).length > 0) {
+    body.component_overrides = overrides;
+  }
+
   return body;
 }
 
@@ -125,7 +147,11 @@ export function useDataVersionRequest(): {
   const body = useMemo(
     () => dataVersionBody(state),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [state.asOfVersionId, JSON.stringify(state.pins ?? {})],
+    [
+      state.asOfVersionId,
+      JSON.stringify(state.pins ?? {}),
+      JSON.stringify(state.componentOverrides ?? {}),
+    ],
   );
   return { body, key: JSON.stringify(body) };
 }

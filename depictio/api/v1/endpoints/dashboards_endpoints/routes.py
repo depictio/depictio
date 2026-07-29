@@ -77,21 +77,91 @@ _CARD_DEFINITION_FIELDS = frozenset(
     }
 )
 
+#: Fields of a figure that decide what is plotted. `dict_kwargs` carries the
+#: axis/colour assignments and `visu_type` the chart kind, which is what makes
+#: "this was a histogram and is now a box plot" visible in component history.
+_FIGURE_DEFINITION_FIELDS = frozenset(
+    {
+        "dict_kwargs",
+        "visu_type",
+        "mode",
+        "code_content",
+        "title",
+        "cols_json",
+    }
+)
 
-def _card_definition_override(override: Any) -> dict:
-    """The subset of a client-supplied card definition we will honour.
+#: Fields of a table that decide what is shown. Column selection and ordering
+#: only.
+_TABLE_DEFINITION_FIELDS = frozenset(
+    {
+        "columns",
+        "visible_columns",
+        "column_order",
+        "title",
+        "cols_json",
+    }
+)
 
-    Returns `{}` for anything malformed, so a bad payload falls back to the
-    live definition rather than failing the whole bulk request — one broken
-    card in a modal should not blank the rest of the dashboard.
+#: Per component type, the fields a client may override on a render request.
+#:
+#: Allow-lists rather than a denylist, and identical in spirit across types:
+#: `wf_id` / `dc_id` / `dc_config` are absent from every one of them because
+#: those decide *which collection is read*. Honouring them from the request
+#: would let a caller compute over data the dashboard does not reference and
+#: whose permissions were never checked. Everything here is presentation.
+_DEFINITION_FIELDS: dict[str, frozenset[str]] = {
+    "card": _CARD_DEFINITION_FIELDS,
+    "figure": _FIGURE_DEFINITION_FIELDS,
+    "table": _TABLE_DEFINITION_FIELDS,
+}
+
+
+def _definition_override(override: Any, component_type: str) -> dict:
+    """The subset of a client-supplied component definition we will honour.
+
+    Returns `{}` for anything malformed or for a type with no allow-list, so a
+    bad payload falls back to the live definition rather than failing the
+    request — one broken component in a modal should not blank the rest of the
+    dashboard.
     """
     if not isinstance(override, dict):
         return {}
-    return {
-        key: value
-        for key, value in override.items()
-        if key in _CARD_DEFINITION_FIELDS and value is not None
-    }
+    allowed = _DEFINITION_FIELDS.get(component_type)
+    if not allowed:
+        return {}
+    return {key: value for key, value in override.items() if key in allowed and value is not None}
+
+
+def _card_definition_override(override: Any) -> dict:
+    """Back-compat alias for the card allow-list."""
+    return _definition_override(override, "card")
+
+
+def _apply_component_override(component: dict, request: dict) -> dict:
+    """Draw a component from a past version's stored definition.
+
+    A dashboard version records what each component *was*, but the render
+    endpoints read the component from the live document. Without this, the
+    component-history modal would draw a past version's data using today's
+    chart definition and label it as the past — a view that never existed.
+
+    Only ever narrows to the allow-list for the component's own type, which is
+    taken from the *live* component rather than the request: letting a caller
+    declare the type would let them pick which allow-list to be judged by.
+    """
+    overrides = request.get("component_overrides")
+    if not isinstance(overrides, dict) or not overrides:
+        return component
+    override = overrides.get(str(component.get("index")))
+    narrowed = _definition_override(override, str(component.get("component_type") or ""))
+    if not narrowed:
+        return component
+    logger.info(
+        f"component override on {component.get('index')}: {sorted(narrowed)} "
+        f"(type={component.get('component_type')})"
+    )
+    return {**component, **narrowed}
 
 
 def _should_enqueue_screenshot(dashboard_id: str, now_s: float | None = None) -> bool:
@@ -1627,12 +1697,8 @@ def bulk_compute_cards(
     # would let a caller compute over data this dashboard does not reference
     # (and whose permissions were never checked). A card not already on this
     # dashboard is likewise ignored, since the loop only visits `cards`.
-    overrides = request.get("component_overrides")
-    if isinstance(overrides, dict) and overrides:
-        cards = [
-            {**card, **_card_definition_override(overrides.get(str(card.get("index"))))}
-            for card in cards
-        ]
+    if isinstance(request.get("component_overrides"), dict):
+        cards = [_apply_component_override(card, request) for card in cards]
 
     if not cards:
         return {"values": {}, "filter_applied": bool(filters), "filter_count": len(filters)}
@@ -2029,6 +2095,11 @@ async def render_figure_endpoint(
     if component is None:
         raise HTTPException(status_code=404, detail=f"Figure component '{component_id}' not found.")
 
+    # Component history renders a *past* version of this figure. Without this
+    # the endpoint would draw that version's data with today's chart
+    # definition — a histogram shown as the box plot it later became.
+    component = _apply_component_override(component, request)
+
     wf_id = component.get("wf_id")
     dc_id = component.get("dc_id")
     if not wf_id or not dc_id:
@@ -2156,6 +2227,9 @@ def render_table_endpoint(
     )
     if component is None:
         raise HTTPException(status_code=404, detail=f"Table component '{component_id}' not found.")
+
+    # As in render_figure: a past version's column selection, not today's.
+    component = _apply_component_override(component, request)
 
     wf_id = component.get("wf_id")
     dc_id = component.get("dc_id")

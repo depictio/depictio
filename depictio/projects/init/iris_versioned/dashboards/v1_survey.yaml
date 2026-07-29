@@ -77,5 +77,8 @@ components:
     dict_kwargs:
       x: petal.length
       nbins: 20
-      color_discrete_sequence: '["#4C72B0"]'
+      # A real list, not a quoted one. Plotly Express silently treats a string
+      # here as a sequence of single characters, which knocks the histogram
+      # down to a scatter — it renders, so nothing reports an error.
+      color_discrete_sequence: ["#4C72B0"]
     layout: {x: 0, y: 3, w: 8, h: 5}

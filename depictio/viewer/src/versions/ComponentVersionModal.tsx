@@ -32,6 +32,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ActionIcon,
   Alert,
   Badge,
   Box,
@@ -41,8 +42,6 @@ import {
   Loader,
   Modal,
   Paper,
-  ScrollArea,
-  SegmentedControl,
   Select,
   Stack,
   Switch,
@@ -66,7 +65,11 @@ import {
 
 import { absDateTime, versionTitle } from './format';
 import { pinsForComponent, resolveDataVersion, type DataOverride } from './dataVersionChoice';
-import { describeCommit, useDatasetHistories } from './useDatasetHistories';
+import {
+  describeCommit,
+  useDatasetHistories,
+  type DatasetHistory,
+} from './useDatasetHistories';
 
 interface ComponentVersionModalProps {
   opened: boolean;
@@ -162,17 +165,21 @@ const VersionedComponent: React.FC<{
   const [cardLoading, setCardLoading] = useState(false);
   const pinKey = JSON.stringify(pins);
 
+  // The component's *definition* is versioned too, not just its data. Sent on
+  // every render path — cards via bulk-compute below, figures and tables via
+  // the context — because the render endpoints read the component from the
+  // live dashboard document, so pinning only the data would draw a past
+  // version's numbers with today's chart definition.
+  const overrides = useMemo(
+    () => ({ [index]: metadata as Record<string, unknown> }),
+    [index, metadata],
+  );
+
   useEffect(() => {
     if (!ready || !isCard || !dashboardId || !index) return;
     let cancelled = false;
     setCardLoading(true);
-    bulkComputeCards(dashboardId, [], [index], {
-      ...dataVersionBody({ pins }),
-      // The card's *definition* is versioned too — a changed column or
-      // aggregation must be honoured, or the value shown would be today's
-      // question asked of yesterday's data.
-      component_overrides: { [index]: metadata as Record<string, unknown> },
-    })
+    bulkComputeCards(dashboardId, [], [index], dataVersionBody({ pins, componentOverrides: overrides }))
       .then((res) => {
         if (cancelled) return;
         setCardValue(res.values?.[index]);
@@ -188,10 +195,10 @@ const VersionedComponent: React.FC<{
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, isCard, dashboardId, index, pinKey, metadata]);
+  }, [ready, isCard, dashboardId, index, pinKey, overrides]);
 
   return (
-    <DataVersionProvider pins={pins}>
+    <DataVersionProvider pins={pins} componentOverrides={overrides}>
       <Box style={{ height, minHeight: height }}>
         {ready ? (
           <ComponentRenderer
@@ -215,6 +222,69 @@ const VersionedComponent: React.FC<{
         )}
       </Box>
     </DataVersionProvider>
+  );
+};
+
+/**
+ * Which commit one pane reads.
+ *
+ * Used by both compare columns so they offer the same choices and read the
+ * same way. Pointing both at the same commit is the point: with the data held
+ * constant, the only difference left between the two charts is the definition,
+ * which is how you see what a config change actually did.
+ */
+const PaneDataPicker: React.FC<{
+  history: DatasetHistory | undefined;
+  /** Present only on the pane bound to a stored version. */
+  versionDataVersion?: number | undefined;
+  value: DataOverride;
+  onChange: (value: DataOverride) => void;
+  testId: string;
+}> = ({ history, versionDataVersion, value, onChange, testId }) => {
+  if (!history || history.commits.length === 0) return null;
+
+  const options = [
+    ...(versionDataVersion !== undefined
+      ? [
+          {
+            value: VERSION_DEFAULT,
+            label: `This version's data (v${versionDataVersion})`,
+          },
+        ]
+      : []),
+    {
+      value: LIVE,
+      label:
+        history.currentVersion !== null
+          ? `Current data (v${history.currentVersion})`
+          : 'Current data',
+    },
+    ...history.commits.map((commit) => {
+      const detailText = describeCommit(commit);
+      return {
+        value: String(commit.version),
+        label: `v${commit.version}${detailText ? ` — ${detailText}` : ''}`,
+      };
+    }),
+  ];
+
+  return (
+    <Select
+      size="xs"
+      data={options}
+      value={value === undefined ? VERSION_DEFAULT : value === null ? LIVE : String(value)}
+      onChange={(next) => {
+        if (!next || next === VERSION_DEFAULT) onChange(undefined);
+        else if (next === LIVE) onChange(null);
+        else onChange(Number(next));
+      }}
+      comboboxProps={{ withinPortal: true }}
+      allowDeselect={false}
+      searchable={history.commits.length > 8}
+      aria-label="Data version for this pane"
+      data-testid={testId}
+      style={{ minWidth: 0 }}
+    />
   );
 };
 
@@ -245,6 +315,13 @@ const ComponentVersionModal: React.FC<ComponentVersionModalProps> = ({
    *  select. Null means "follow the version", which is the default. */
   const [dataOverride, setDataOverride] = useState<DataOverride>(undefined);
   const [compare, setCompare] = useState(false);
+  /** The right-hand pane's data, independent of the left.
+   *
+   * Defaults to live, which is what "compare against current" means. Set it
+   * to the same commit as the left pane to hold the data constant, and the
+   * only remaining difference between the two charts is the definition —
+   * which is how you see what a config change actually did. */
+  const [compareOverride, setCompareOverride] = useState<DataOverride>(null);
   const [restoreLayout, setRestoreLayout] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const [confirmRestore, setConfirmRestore] = useState(false);
@@ -284,6 +361,7 @@ const ComponentVersionModal: React.FC<ComponentVersionModalProps> = ({
       setError(null);
       setDataOverride(undefined);
       setCompare(false);
+      setCompareOverride(null);
       setRestoreLayout(false);
       setConfirmRestore(false);
     }
@@ -331,6 +409,22 @@ const ComponentVersionModal: React.FC<ComponentVersionModalProps> = ({
   // showing — the comparison is a lens, not a mode switch.
   const pins = useMemo(() => pinsForComponent(dcId, dataVersion), [dcId, dataVersion]);
 
+  /** The compare pane reads whatever it was pointed at, defaulting to live.
+   *  `useHistoricalData` is deliberately not consulted: that switch describes
+   *  the version being examined, and this pane is not it. */
+  const compareDataVersion = useMemo(
+    () => resolveDataVersion({
+      dataOverride: compareOverride,
+      useHistoricalData: false,
+      versionDataVersion: undefined,
+    }),
+    [compareOverride],
+  );
+  const comparePins = useMemo(
+    () => pinsForComponent(dcId, compareDataVersion),
+    [dcId, compareDataVersion],
+  );
+
   // Commits available for the manual override. Fetched only while the modal is
   // open and the component actually has a collection.
   const { histories } = useDatasetHistories(
@@ -340,6 +434,17 @@ const ComponentVersionModal: React.FC<ComponentVersionModalProps> = ({
   const history = histories.find((h) => h.dcId === dcId);
 
   const selected = versions.find((v) => v.version_id === selectedId) || null;
+  const selectedIndex = versions.findIndex((v) => v.version_id === selectedId);
+
+  /** Move to a version, dropping any commit chosen for the previous one.
+   *
+   * A commit picked against one version is not meaningful against another —
+   * carrying it over would silently answer a question the user did not ask. */
+  const selectVersion = useCallback((versionId?: string) => {
+    if (!versionId) return;
+    setSelectedId(versionId);
+    setDataOverride(undefined);
+  }, []);
   const dataUnavailable =
     useHistoricalData &&
     dataOverride === undefined &&
@@ -373,9 +478,12 @@ const ComponentVersionModal: React.FC<ComponentVersionModalProps> = ({
     }
   }, [selectedId, index, restoreLayout, selected, onClose, onRestored]);
 
-  /** Height of one rendered pane. Halved when comparing so both fit without
-   *  the modal scrolling, which would defeat a side-by-side read. */
-  const paneHeight = compare ? 240 : 320;
+  /** Height of one rendered pane.
+   *
+   *  Equal in both modes: comparing side by side puts the two panes on one
+   *  row, so neither has to shrink to fit, and identical heights are what let
+   *  the eye read the difference rather than re-scale for it. */
+  const paneHeight = 320;
 
   const body = (() => {
     if (loadingVersions || (loading && !detail)) {
@@ -422,45 +530,76 @@ const ComponentVersionModal: React.FC<ComponentVersionModalProps> = ({
 
     if (!compare || !metadata) return past;
 
-    // Stacked rather than side by side: these are the same component at two
-    // points in time, and a vertical stack keeps both at full width so their
-    // axes line up and the difference is the only thing that moves.
-    return (
-      <Stack gap={4}>
-        <Group gap={6}>
-          <Badge size="xs" color="yellow" variant="light">
-            {selected ? versionTitle(selected) : 'Selected version'}
-          </Badge>
-          {typeof dataVersion === 'number' && (
-            <Text size="xs" c="dimmed">
-              data v{dataVersion}
-            </Text>
-          )}
-        </Group>
-        <Paper withBorder radius="md" p={4}>
-          {past}
-        </Paper>
+    // Side by side, past on the left. Two charts of the same shape are
+    // compared by scanning across at a fixed height, and a vertical stack
+    // makes that a scroll instead of a glance. `grow` keeps the columns equal
+    // so neither is rendered at a different scale — a difference in size would
+    // read as a difference in the data.
+    const sameData =
+      dcId &&
+      typeof dataVersion === typeof compareDataVersion &&
+      dataVersion === compareDataVersion;
 
-        <Group gap={6} mt={4}>
-          <Badge size="xs" color="blue" variant="light">
-            Current
-          </Badge>
-          <Text size="xs" c="dimmed">
-            live data
+    return (
+      <Stack gap={6}>
+        {/* Only the config differs once both panes read the same commit, so
+            say so — otherwise a reader cannot tell whether a difference they
+            are looking at came from the definition or the data. */}
+        {sameData && (
+          <Text size="xs" c="dimmed" ta="center">
+            <Icon
+              icon="mdi:equal"
+              width={12}
+              style={{ verticalAlign: '-1px', marginRight: 4 }}
+            />
+            Same data on both sides — any difference below is the configuration.
           </Text>
+        )}
+        <Group align="stretch" grow gap="sm" wrap="nowrap">
+          <Stack gap={4} style={{ minWidth: 0 }}>
+            <Group gap={6} wrap="nowrap">
+              <Badge size="xs" color="yellow" variant="light" style={{ flexShrink: 0 }}>
+                {selected ? versionTitle(selected) : 'Selected version'}
+              </Badge>
+            </Group>
+            <PaneDataPicker
+              history={history}
+              versionDataVersion={versionDataVersion}
+              value={dataOverride}
+              onChange={setDataOverride}
+              testId="component-version-data-select-past"
+            />
+            <Paper withBorder radius="md" p={4} style={{ minWidth: 0 }}>
+              {past}
+            </Paper>
+          </Stack>
+
+          <Stack gap={4} style={{ minWidth: 0 }}>
+            <Group gap={6} wrap="nowrap">
+              <Badge size="xs" color="blue" variant="light" style={{ flexShrink: 0 }}>
+                Current
+              </Badge>
+            </Group>
+            <PaneDataPicker
+              history={history}
+              // No "this version's data" here: this pane is the live component,
+              // which is not bound to a stored version.
+              value={compareOverride}
+              onChange={setCompareOverride}
+              testId="component-version-data-select-current"
+            />
+            <Paper withBorder radius="md" p={4} style={{ minWidth: 0 }}>
+              <VersionedComponent
+                metadata={metadata}
+                dashboardId={dashboardId}
+                index={index}
+                pins={comparePins}
+                height={paneHeight}
+                ready={ready}
+              />
+            </Paper>
+          </Stack>
         </Group>
-        <Paper withBorder radius="md" p={4}>
-          <VersionedComponent
-            metadata={metadata}
-            dashboardId={dashboardId}
-            index={index}
-            // Deliberately unpinned: "current" means the component and the data
-            // as they are now, which is the thing being compared against.
-            pins={{}}
-            height={paneHeight}
-            ready={ready}
-          />
-        </Paper>
       </Stack>
     );
   })();
@@ -492,22 +631,64 @@ const ComponentVersionModal: React.FC<ComponentVersionModalProps> = ({
     >
       <Stack gap="sm">
         {versions.length > 0 && (
-          <ScrollArea type="hover" scrollbarSize={6} offsetScrollbars>
-            <SegmentedControl
+          // A dropdown, not a segmented control: a dashboard accumulates a
+          // version per save, so the strip is a handful of tabs on day one and
+          // an unusable horizontal scroll by month three. The select stays one
+          // line at any length, is searchable once that matters, and has room
+          // for the label and timestamp that tell the versions apart — `v37`
+          // on a tab does not.
+          //
+          // Step buttons flank it because "the one before this" is the most
+          // common move in a comparison, and hunting for it in a list is worse
+          // than a click.
+          <Group gap={6} wrap="nowrap" align="flex-end">
+            <Tooltip label="Older version" withArrow openDelay={400}>
+              <ActionIcon
+                variant="default"
+                size="lg"
+                // `versions` is newest-first, so older is a *higher* index.
+                disabled={selectedIndex < 0 || selectedIndex >= versions.length - 1}
+                onClick={() => selectVersion(versions[selectedIndex + 1]?.version_id)}
+                aria-label="Older version"
+                data-testid="component-version-older"
+              >
+                <Icon icon="mdi:chevron-left" width={18} />
+              </ActionIcon>
+            </Tooltip>
+
+            <Select
               size="xs"
-              value={selectedId ?? ''}
-              onChange={(value) => {
-                setSelectedId(value);
-                // A commit chosen for the previous version is not meaningful
-                // against this one; fall back to what this version recorded.
-                setDataOverride(undefined);
-              }}
-              data={versions.map((v) => ({
+              label="Version"
+              style={{ flex: 1, minWidth: 0 }}
+              data={versions.map((v, position) => ({
                 value: v.version_id,
-                label: v.label ? `v${v.seq} · ${v.label}` : `v${v.seq}`,
+                label: `${position === 0 ? 'Latest · ' : ''}v${v.seq}${
+                  v.label ? ` · ${v.label}` : ''
+                } — ${absDateTime(v.created_at)}`,
               }))}
+              value={selectedId ?? ''}
+              onChange={(value) => selectVersion(value ?? undefined)}
+              // Searchable past the point where scanning stops being viable.
+              searchable={versions.length > 8}
+              comboboxProps={{ withinPortal: true }}
+              allowDeselect={false}
+              maxDropdownHeight={280}
+              data-testid="component-version-select"
             />
-          </ScrollArea>
+
+            <Tooltip label="Newer version" withArrow openDelay={400}>
+              <ActionIcon
+                variant="default"
+                size="lg"
+                disabled={selectedIndex <= 0}
+                onClick={() => selectVersion(versions[selectedIndex - 1]?.version_id)}
+                aria-label="Newer version"
+                data-testid="component-version-newer"
+              >
+                <Icon icon="mdi:chevron-right" width={18} />
+              </ActionIcon>
+            </Tooltip>
+          </Group>
         )}
 
         {selected && (
@@ -559,8 +740,12 @@ const ComponentVersionModal: React.FC<ComponentVersionModalProps> = ({
               {/* Dataset travel, independent of the version. The version sets
                   the default; this overrides it, which is how "same chart,
                   different data" and "different chart, same data" are both
-                  reachable. */}
-              {dcId && history && history.commits.length > 0 && (
+                  reachable.
+
+                  Hidden while comparing: each pane grows its own picker there,
+                  and two controls driving the same state is a way to make the
+                  one you are not looking at appear broken. */}
+              {!compare && dcId && history && history.commits.length > 0 && (
                 <Select
                   size="xs"
                   label="Data version"
