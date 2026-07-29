@@ -1,11 +1,13 @@
 ---
 date: 2026-07-15
+slug: depictio-1-0
 authors:
   - thomas-weber
 categories:
   - Announcements
   - Launch
   - Features
+glightbox: true
 ---
 
 # 🎉 Depictio 1.0: from prototype to production
@@ -70,6 +72,8 @@ One server instead of two, a real separation between front and back, and as a
 nice bonus the automatic dashboard screenshots came out roughly twice as fast on
 the new stack.
 
+<div class="shot-grid" markdown>
+
 | | |
 |:--:|:--:|
 | ![The Depictio dashboards landing page, with saved dashboards as thumbnail cards grouped into nf-core and demo sections](../images/blog/v1.0/page_dashboards.png) | ![The Depictio projects page, a table of projects with type, visibility, bound pipeline template and data-collection counts](../images/blog/v1.0/page_projects.png) |
@@ -77,7 +81,9 @@ the new stack.
 | ![An ampliseq community-composition dashboard showing a taxonomic sunburst from Kingdom down to Class](../images/blog/v1.0/ampliseq_community_sunburst.png) | ![A viralrecon MultiQC dashboard with a general-statistics table over fastp, Kraken2, bowtie2 and mosdepth panels](https://depictio.github.io/depictio-docs/images/pipeline-templates/nf-core/viralrecon/multiqc_light.png) |
 | **ampliseq &middot; community.** A taxonomic sunburst, drillable from Kingdom down to Class. | **viralrecon &middot; QC.** MultiQC rendered inside the dashboard, not linked as a separate report. |
 
-*The two landing pages, and tabs from the [nf-core/ampliseq](https://depictio.github.io/depictio-docs/latest/pipeline-templates/nf-core/ampliseq/) and [nf-core/viralrecon](https://depictio.github.io/depictio-docs/latest/pipeline-templates/nf-core/viralrecon/) template dashboards, built from real pipeline output.*
+</div>
+
+*The two landing pages, and tabs from the [nf-core/ampliseq](https://depictio.github.io/depictio-docs/latest/pipeline-templates/nf-core/ampliseq/) and [nf-core/viralrecon](https://depictio.github.io/depictio-docs/latest/pipeline-templates/nf-core/viralrecon/) template dashboards, built from real pipeline output. Click any screenshot to open it full size.*
 
 That rebuild is also what made the next two parts possible: with the rendering
 path under our own control, we could make the whole dashboard react as one, and
@@ -230,6 +236,8 @@ Manhattan plots, oncoplots, taxonomy bars, and more. Each one is a self-containe
 panel that comes with its own controls, so a volcano arrives with movable
 thresholds and a Manhattan knows how to order chromosomes.
 
+<div class="shot-grid" markdown>
+
 | | |
 |:--:|:--:|
 | ![ANCOM-BC volcano over a per-contrast differential-abundance barplot](https://depictio.github.io/depictio-docs/images/pipeline-templates/nf-core/ampliseq/differential_light.png) | ![PCoA on Bray-Curtis distances beside a clustered taxonomy heatmap with habitat annotation tracks](https://depictio.github.io/depictio-docs/images/pipeline-templates/nf-core/ampliseq/ordination_light.png) |
@@ -237,7 +245,9 @@ thresholds and a Manhattan knows how to order chromosomes.
 | ![A rooted ASV phylogenetic tree with tips coloured by phylum, above metric cards](https://depictio.github.io/depictio-docs/images/pipeline-templates/nf-core/ampliseq/phylogeny_light.png) | ![A per-position genome coverage track above a clustered amplicon coverage heatmap](https://depictio.github.io/depictio-docs/images/pipeline-templates/nf-core/viralrecon/coverage_depth_light.png) |
 | **Phylogenetic tree** &middot; ampliseq | **Coverage track + amplicon heatmap** &middot; viralrecon |
 
-*Four tabs from the two template dashboards. The volcano and DA barplot are driven by the same contrast filter; the PCoA, distance matrix and taxonomy heatmap are three views of one structure; the tree comes straight from Newick; the coverage track carries a SARS-CoV-2 gene axis under it. The catalog has eighteen visualisation types in total. [Browse them in the docs.](https://depictio.github.io/depictio-docs/latest/features/components/#advanced-visualizations)*
+</div>
+
+*Four tabs from the two template dashboards, click any of them to open it full size. The volcano and DA barplot are driven by the same contrast filter; the PCoA, distance matrix and taxonomy heatmap are three views of one structure; the tree comes straight from Newick; the coverage track carries a SARS-CoV-2 gene axis under it. The catalog has eighteen visualisation types in total. [Browse them in the docs.](https://depictio.github.io/depictio-docs/latest/features/components/#advanced-visualizations)*
 
 Those controls are additional, not a replacement. Everything from the section
 above still applies: panel filters and selections made on other components narrow
@@ -312,10 +322,6 @@ pipeline next week on new samples, and it's the same template with new data: a
 populated, interactive dashboard in minutes. That fits **nf-core** pipelines
 especially well, where the outputs are already standardised across every run of
 the same workflow.
-
-![A viralrecon lineage and clustering dashboard: Pangolin and Nextclade distributions, a classification Sankey and a variant-profile PCA](https://depictio.github.io/depictio-docs/images/pipeline-templates/nf-core/viralrecon/lineage_clustering_light.png)
-
-*Lineage and clustering from the viralrecon template. Nothing here was laid out by hand: the template describes the dashboard, the CLI points it at a results directory, and this is what comes out. Templates for [ampliseq](https://depictio.github.io/depictio-docs/latest/pipeline-templates/nf-core/ampliseq/) and [viralrecon](https://depictio.github.io/depictio-docs/latest/pipeline-templates/nf-core/viralrecon/) already exist.*
 
 <p align="center"><img src="https://depictio.github.io/depictio-docs/images/logo/tools_catalog_logo.png" alt="Depictio Tools Catalog" width="220"></p>
 

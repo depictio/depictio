@@ -24,8 +24,16 @@ Moved here when the draft-note comment was stripped off the top of the post.
   (interactivity), 1213726629 + 1213726492 performance screencasts.
 - SCREENSHOTS: template-dashboard shots come from the docs
   (images/pipeline-templates/nf-core/), and are real template dashboards, which
-  is why the post can claim nothing was laid out by hand. Dark variants do NOT
+  is why the post could claim nothing was laid out by hand. Dark variants do NOT
   exist for these, unlike the advanced-viz crops they replaced.
+  The viralrecon lineage/clustering shot and its "nothing was laid out by hand"
+  caption were dropped from 'What's next': that argument belongs in the
+  templates article, and the section already has two logos in it.
+  The remaining screenshots sit in two 2x2 grids wrapped in
+  <div class="shot-grid" markdown>. The tiles are pinned to one aspect ratio in
+  blog.css because the sources are 5120x3200, 2880x2200 and 1920x1080, and are
+  click-to-zoom via mkdocs-glightbox (opt-in per page: `glightbox: true` in the
+  front matter, `.off-glb` on the logos so they stay unclickable).
   The three under docs/images/blog/v1.0/ are captured locally by
   dev/playwright_debug/blog_shots.py against a running dev stack (1920x1080 at
   1x). They are GITIGNORED in this repo and committed only to depictio-docs
@@ -54,7 +62,14 @@ WRITE-UP: the numbers, the React rewrite, and where it runs. Framing is
 "here's what went into it", not "here's a new release".
 
 BEFORE POSTING:
-- [ ] Replace {BLOG_URL} with the published article URL.
+- [ ] Replace {BLOG_URL} with the published article URL. It is
+        https://depictio.github.io/depictio-docs/latest/blog/depictio-1-0/
+      The post carries an explicit `slug: depictio-1-0`; without it the blog
+      plugin derived the URL from the emoji heading and produced
+      /blog/-depictio-10-from-prototype-to-production/. Use `latest/`, not a
+      version number, so the link does not rot at the next release.
+- [ ] The LinkedIn posts state the link twice on purpose (near the top, where it
+      is visible before "see more", and again at the end). Keep both.
 - [ ] LinkedIn strips markdown. Bold is done with unicode math-bold chars
       (matching the previous Depictio post's style); keep or drop as you prefer.
 - [ ] Attach the filtering screencast (vimeo 1213942946) as NATIVE video to
@@ -75,28 +90,37 @@ All facts verified against the article and the repo on 2026-07.
 
 ## 1. LinkedIn, Depictio company page
 
-Product voice, matches the previous company post. Lead with the engineering.
+Product voice, matches the previous company post. The post's job is to get the
+click, not to be the article: the first two lines are all that show before "see
+more", so the hook and the fact that there is something to read go up top. Three
+numbers, not ten, and the link appears twice (top and bottom) because people
+skim to the end.
 
 ---
 
-𝗪𝗵𝗮𝘁 𝗶𝘁 𝘁𝗼𝗼𝗸 𝘁𝗼 𝗺𝗮𝗸𝗲 𝗗𝗲𝗽𝗶𝗰𝘁𝗶𝗼 𝟭.𝟬 𝗳𝗮𝘀𝘁 ⚡
+𝗡𝗲𝘄 𝗮𝗿𝘁𝗶𝗰𝗹𝗲: 𝘄𝗵𝗮𝘁 𝘄𝗲𝗻𝘁 𝗶𝗻𝘁𝗼 𝗗𝗲𝗽𝗶𝗰𝘁𝗶𝗼 𝟭.𝟬 ⚡
 
-We wrote up the year of work behind the 1.0 release. The short version: a dashboard over 12 million rows, spread across three linked collections, on a laptop running a single API worker in dev mode.
+A dashboard over 12 million rows, three linked collections, on a laptop with one API worker. Change a filter and every component catches up in under two seconds.
 
-→ First component on screen in 133-270 ms, whether the dashboard holds 4 components or 30.
-→ Change a filter and everything catches up in 1.7 to 4.1 s, across all three collections.
-→ A filter starting on the 12M-row feature matrix costs about the same as one starting on the 500-row sample sheet, because both resolve to a few hundred sample IDs in 25 ms before any data is touched.
-→ Box plots, histograms and bar charts are computed as aggregations straight over the stored files. Zero rows materialised, exact rather than sampled. The largest data frame held in memory across the whole run was 1.6 MB.
+We have written up how, in full, with the benchmark methodology and the numbers that did not flatter us:
 
-Those are floor numbers, not ceiling ones: one worker, dev mode, auto-reloader attached. A real deployment runs several workers on server hardware.
+📖 {BLOG_URL}
 
-The other half of the release is structural. The front end was rebuilt in React and TypeScript and the old Dash codebase is gone, which means one FastAPI backend instead of two servers side by side, and full control over the render path. That control is exactly what made the performance work possible.
+Three things from it:
 
-The point of all of it stays the same: link your data collections once, then filter from anywhere. A dropdown in the side panel, a lasso around points on a scatter plot, rows in a table, a region on a map. Every other component follows.
+→ 𝗜𝘁 𝗯𝗮𝗿𝗲𝗹𝘆 𝗺𝗮𝘁𝘁𝗲𝗿𝘀 𝘄𝗵𝗲𝗿𝗲 𝗮 𝗳𝗶𝗹𝘁𝗲𝗿 𝘀𝘁𝗮𝗿𝘁𝘀. Filtering the 12M-row feature matrix costs about the same as filtering the 500-row sample sheet, because both resolve to a few hundred sample IDs in 25 ms before any data is touched.
 
-Depictio is MIT-licensed and self-hosted, in production at EMBL and available free to Swedish life-science researchers through SciLifeLab Serve.
+→ 𝗕𝗼𝘅 𝗽𝗹𝗼𝘁𝘀, 𝗵𝗶𝘀𝘁𝗼𝗴𝗿𝗮𝗺𝘀 𝗮𝗻𝗱 𝗯𝗮𝗿 𝗰𝗵𝗮𝗿𝘁𝘀 𝗺𝗮𝘁𝗲𝗿𝗶𝗮𝗹𝗶𝘀𝗲 𝘇𝗲𝗿𝗼 𝗿𝗼𝘄𝘀. They are computed as aggregations directly over the stored files: exact, not sampled. Largest data frame held in memory across the whole run: 1.6 MB.
 
-📖 Full write-up → {BLOG_URL}
+→ 𝗧𝗵𝗲 𝗳𝗿𝗼𝗻𝘁 𝗲𝗻𝗱 𝗶𝘀 𝗻𝗼𝘄 𝗥𝗲𝗮𝗰𝘁 𝗮𝗻𝗱 𝗧𝘆𝗽𝗲𝗦𝗰𝗿𝗶𝗽𝘁, and the old Dash codebase is gone. One FastAPI backend instead of two servers, and full control of the render path, which is what made the performance work possible at all.
+
+Those timings are a floor, not a ceiling: one worker, dev mode, auto-reloader attached. A real deployment runs several workers on server hardware.
+
+What none of it changes is the point of the tool. Link your data collections once, then filter from anywhere: a dropdown in the side panel, a lasso around points on a scatter plot, rows in a table, a region on a map. Every other component follows.
+
+MIT-licensed and self-hosted. In production at EMBL, and free for life-science researchers at Swedish universities through SciLifeLab Serve.
+
+📖 Read it → {BLOG_URL}
 🚀 Live demo → https://demo.depictio.embl.org/dashboards
 ⭐ GitHub → https://github.com/depictio/depictio
 
@@ -107,25 +131,28 @@ Depictio is MIT-licensed and self-hosted, in production at EMBL and available fr
 ## 2. LinkedIn, Thomas's personal profile
 
 First person, reflective, shorter. Personal posts do better when they admit
-something. This one leads with the flaw rather than the fix.
+something, so this leads with the flaw rather than the fix. It says plainly that
+there is an article and what is in it, rather than trailing a bare URL at the
+end: a link with no description reads like an afterthought and gets treated as
+one.
 
 ---
 
 A year ago I put Depictio online and called it a prototype, which was generous. It worked, people built real dashboards with it, and it fell over on anything past a few tens of thousands of rows.
 
-I have just published the write-up of what went into fixing that, and I wanted to share the number I am most pleased with.
+I have just published the write-up of what went into fixing that. It is the long version, with the benchmark method and the results that did not flatter us, because a benchmark you only publish when it looks good is marketing.
 
-A dashboard over 12 million rows, three linked collections, running on my laptop with a single API worker in dev mode. Change a filter and the whole thing catches up in under two seconds. Not one chart. All of them, across all three collections.
+📖 The full article is here → {BLOG_URL}
+
+The number I am most pleased with: a dashboard over 12 million rows, three linked collections, running on my laptop with a single API worker in dev mode. Change a filter and the whole thing catches up in under two seconds. Not one chart. All of them, across all three collections.
 
 The part I did not expect going in: it barely matters where the filter starts. Filtering the 12-million-row feature matrix costs about the same as filtering the 500-row sample sheet, because both resolve down to a few hundred sample IDs in 25 milliseconds before any actual data gets touched. Getting the linking right turned out to matter more than any single optimisation.
 
 I also rewrote the entire front end in React and deleted the Dash codebase. Same interface, one server instead of two, and finally full control over how things render, which is what made the rest possible.
 
-The write-up includes the numbers that did not flatter us, because a benchmark you only publish when it looks good is marketing.
+The article covers all of it, plus where Depictio runs today and what I am building next. It is MIT-licensed and self-hosted: in production at EMBL, and any life-science researcher at a Swedish university can spin up an instance for free on SciLifeLab Serve.
 
-Depictio is MIT-licensed and self-hosted. It runs in production at EMBL, and any life-science researcher at a Swedish university can spin up an instance for free on SciLifeLab Serve.
-
-{BLOG_URL}
+If you only read one section, read the performance one → {BLOG_URL}
 
 ---
 
