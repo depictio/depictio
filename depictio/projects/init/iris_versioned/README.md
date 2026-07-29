@@ -247,6 +247,12 @@ uv run python check_bypass_capture.py    # a deleted tab is still recoverable
 uv run python check_served_bundle.py     # the browser has the current code
 ```
 
+And one that needs no running stack, since it reads the committed PNGs:
+
+```bash
+uv run --with pillow python check_dark_shots.py   # the dark shots are dark
+```
+
 Plus the front-end state checks, which execute the real functions rather than
 reading them:
 
@@ -281,6 +287,14 @@ Highlights of what they pin down, all of which were real bugs at some point:
   is gone, and getting that wrong produces a version that exists and is empty
   rather than an error. Checking only that the count went up would pass on
   exactly that failure.
+* Every `_dark` screenshot is actually dark. A dark capture that silently came
+  out light is invisible in review: the file exists, the name is right, and
+  nobody opens sixteen PNGs. Two things cause it and neither raises during
+  capture — a shot taken before `MantineProvider` applies the seeded colour
+  scheme, and a Plotly figure whose server-side `theme` argument was not
+  threaded through, which stays light inside dark chrome. Counts near-white
+  pixels rather than comparing means, because a mean hides a white panel behind
+  a dark surround.
 
 Override the defaults with `DEPICTIO_API`, `DEPICTIO_CLI_CONFIG` and
 `DASHBOARD_TITLE`.
