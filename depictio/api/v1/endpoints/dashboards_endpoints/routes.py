@@ -164,6 +164,58 @@ def _apply_component_override(component: dict, request: dict) -> dict:
     return {**component, **narrowed}
 
 
+def _ensure_baseline_quietly(
+    dashboard_id: PyObjectId | ObjectId | str,
+    current_user: Any,
+) -> None:
+    """Seed the pre-write state on the first tracked change to a family.
+
+    Every capture runs *after* a write, so it describes a state the user has
+    already left. On a family with no history that makes the state being changed
+    right now the one state no version can restore — a rename would record the
+    new title and nothing would hold the old one.
+
+    ``/save`` already does this. The bypass routes need it for the same reason,
+    and more sharply: a rename or a tab delete is often the *first* thing that
+    ever happens to a dashboard, so without it the very change most likely to
+    need undoing is the one with nothing behind it.
+
+    No-ops from the second write onwards, and never raises.
+    """
+    try:
+        from depictio.api.v1.endpoints.dashboards_endpoints.versioning import (
+            ensure_baseline_quietly,
+        )
+
+        ensure_baseline_quietly(dashboard_id, author=current_user)  # type: ignore[arg-type]
+    except Exception as exc:  # noqa: BLE001 — versioning must never break a write
+        logger.warning(f"Baseline capture failed for {dashboard_id}: {exc}")
+
+
+def _capture_version_quietly(
+    dashboard_id: PyObjectId | ObjectId | str,
+    current_user: Any,
+    kind: str = "auto",
+) -> None:
+    """Record a version after a write that does not go through ``/save``.
+
+    ``/save`` is not the only route that changes what a dashboard *is*. A
+    rename, a tab edit, a reorder and a tab delete all mutate content, and
+    without this none of them left a timeline entry — so the state before them
+    was unrecoverable. A deleted tab is the change most worth undoing and was
+    the least recoverable.
+
+    Lazily imported and never allowed to raise: a missing version costs an undo
+    step, a failed write costs work. Same posture as the screenshot dispatch.
+    """
+    try:
+        from depictio.api.v1.endpoints.dashboards_endpoints.versioning import capture_quietly
+
+        capture_quietly(dashboard_id, kind=kind, author=current_user)  # type: ignore[arg-type]
+    except Exception as exc:  # noqa: BLE001 — versioning must never break a write
+        logger.warning(f"Version capture failed for {dashboard_id}: {exc}")
+
+
 def _should_enqueue_screenshot(dashboard_id: str, now_s: float | None = None) -> bool:
     """Return True iff dual-theme PNGs are missing or older than 1h.
 
@@ -674,6 +726,9 @@ async def edit_dashboard(
             status_code=403, detail="You don't have permission to edit this dashboard."
         )
 
+    # Before the write, and only now that the caller is known to be an editor.
+    _ensure_baseline_quietly(dashboard_id, current_user)
+
     result = dashboards_collection.find_one_and_update(
         {"dashboard_id": dashboard_id},
         {"$set": update_data},
@@ -681,6 +736,10 @@ async def edit_dashboard(
     )
 
     if result:
+        # A rename is content. Captured after the write, so the version holds
+        # the new title and the entry before it holds the old one — which is
+        # what makes the rename undoable from the timeline.
+        _capture_version_quietly(dashboard_id, current_user)
         return {
             "message": "Dashboard updated successfully.",
             "updated_fields": list(update_data.keys()),
@@ -960,6 +1019,10 @@ async def update_tab(
     if not update_fields:
         raise HTTPException(status_code=400, detail="No valid fields provided for update.")
 
+    # Anchored on this tab: `resolve_family_id` walks to the parent, so a child
+    # tab seeds the family's baseline correctly.
+    _ensure_baseline_quietly(dashboard_id, current_user)
+
     result = dashboards_collection.find_one_and_update(
         {"dashboard_id": dashboard_id},
         {"$set": update_fields},
@@ -967,6 +1030,9 @@ async def update_tab(
     )
 
     if result:
+        # A version covers the whole tab family, so editing a child tab is
+        # recorded against the family and shows up on the parent's timeline.
+        _capture_version_quietly(dashboard_id, current_user)
         return {
             "success": True,
             "message": "Tab updated successfully.",
@@ -1025,9 +1091,23 @@ async def delete_tab(
     parent_dashboard_id = dashboard.get("parent_dashboard_id")
     tab_title = dashboard.get("title", "Untitled")
 
+    # Must precede the delete: afterwards the tab is gone from the family, so a
+    # baseline seeded then would not contain the tab being deleted — which is
+    # the only thing anyone would restore this for.
+    if parent_dashboard_id:
+        _ensure_baseline_quietly(parent_dashboard_id, current_user)
+
     result = dashboards_collection.delete_one({"dashboard_id": dashboard_id})
 
     if result.deleted_count > 0:
+        # Anchored on the *parent*: the tab is gone, so it can no longer resolve
+        # its own family, and a capture addressed to it would find nothing.
+        #
+        # `explicit` rather than `auto` because losing a tab is the change most
+        # worth undoing and must not coalesce into a neighbouring autosave — the
+        # entry has to stay steppable-back-to.
+        if parent_dashboard_id:
+            _capture_version_quietly(parent_dashboard_id, current_user, kind="explicit")
         return {
             "success": True,
             "message": f"Tab '{tab_title}' deleted successfully.",
@@ -1096,8 +1176,15 @@ async def reorder_tabs(
     if not check_project_permission(project_id, current_user, "editor"):
         raise HTTPException(status_code=403, detail="You don't have permission to reorder tabs.")
 
+    _ensure_baseline_quietly(parent_dashboard_id, current_user)
+
     # Perform the reorder
     updated_count = reorder_child_tabs(PyObjectId(parent_dashboard_id), tab_orders)
+
+    # Tab order is content — a snapshot records each tab's `tab_order`, so a
+    # reorder that recorded nothing would be restored away silently by the next
+    # restore of an older version.
+    _capture_version_quietly(parent_dashboard_id, current_user)
 
     return {
         "success": True,

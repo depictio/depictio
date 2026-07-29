@@ -693,3 +693,136 @@ def test_deleting_a_child_tab_keeps_the_family_history(ctx, monkeypatch) -> None
     ctx["client"].delete(f"{API}/delete/{child}")
 
     assert ctx["versions"].count_documents({"family_id": str(main)}) == 1
+
+
+# ── the routes that bypass /save ─────────────────────────────────────────────
+#
+# `/save` is not the only way a dashboard's content changes. A rename, a tab
+# edit, a reorder and a tab delete all mutate it, and each recorded nothing
+# until `_capture_version_quietly` was wired in. Every test below failed before
+# that, so they describe a fixed bug rather than restating the implementation.
+
+
+@pytest.fixture()
+def bypass(ctx, monkeypatch: pytest.MonkeyPatch):
+    """`ctx`, with the dashboard routes pointed at the same in-memory Mongo.
+
+    The version fixtures patch `versioning`/`version_store`; these routes read
+    and write through `routes.dashboards_collection`, which needs patching too
+    or a capture reads an empty collection and silently records nothing.
+
+    `core_functions` holds its own module-level handle, and `/tabs/reorder`
+    delegates the actual write to it — leave that one alone and the reorder goes
+    to the real database, which in CI is simply absent.
+    """
+    from depictio.api.v1.endpoints.dashboards_endpoints import core_functions
+    from depictio.api.v1.endpoints.dashboards_endpoints import routes as dash_routes
+    from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
+
+    monkeypatch.setattr(dash_routes, "dashboards_collection", ctx["dashboards"])
+    monkeypatch.setattr(core_functions, "dashboards_collection", ctx["dashboards"])
+    ctx["client"].app.dependency_overrides[get_current_user] = lambda: CALLER
+    return ctx
+
+
+def _family_versions(ctx, did):
+    return list(ctx["versions"].find({"family_id": str(did)}).sort("seq", 1))
+
+
+def test_renaming_a_dashboard_records_a_version(bypass) -> None:
+    """Otherwise the previous title is unrecoverable from the timeline."""
+    did = _make_dashboard(bypass, title="Q3 report", components=[{"index": "a"}])
+
+    response = bypass["client"].post(f"{API}/edit/{did}", json={"title": "Q4 report"})
+
+    assert response.status_code == 200, response.text
+    versions = _family_versions(bypass, did)
+    # Two: the baseline holding the pre-rename state, and the rename itself.
+    # The baseline is what makes the old title reachable at all.
+    assert len(versions) == 2
+    titles = [v["tabs"][0]["title"] for v in versions]
+    assert titles == ["Q3 report", "Q4 report"]
+
+
+def test_editing_a_tab_records_against_the_family(bypass) -> None:
+    """A version covers the whole family, so a child edit lands on the parent."""
+    main = _make_dashboard(bypass, components=[{"index": "a"}])
+    child = _make_dashboard(bypass, title="Tab 2", parent=main, tab_order=1)
+
+    response = bypass["client"].patch(f"{API}/tab/{child}", json={"title": "Renamed tab"})
+
+    assert response.status_code == 200, response.text
+    versions = _family_versions(bypass, main)
+    assert versions, "a child-tab edit must appear on the family timeline"
+    newest = versions[-1]
+    assert {t["title"] for t in newest["tabs"]} == {"Main", "Renamed tab"}
+
+
+def test_deleting_a_tab_records_an_explicit_version(bypass) -> None:
+    """The change most worth undoing, and the one that must not coalesce.
+
+    Anchored on the parent because the deleted tab can no longer resolve its own
+    family, and `explicit` so a following autosave opens a new entry instead of
+    folding the deletion into itself.
+    """
+    main = _make_dashboard(bypass, components=[{"index": "a"}])
+    child = _make_dashboard(bypass, title="Doomed", parent=main, tab_order=1)
+
+    response = bypass["client"].delete(f"{API}/tab/{child}")
+
+    assert response.status_code == 200, response.text
+    versions = _family_versions(bypass, main)
+    assert versions, "deleting a tab must be recoverable"
+    assert versions[-1]["kind"] == "explicit"
+    # The newest version is the post-delete state: one tab.
+    assert len(versions[-1]["tabs"]) == 1
+    # ...and the entry before it still holds the deleted tab, which is the whole
+    # point. Asserting only the count would pass on an empty snapshot.
+    assert "Doomed" in {t["title"] for t in versions[0]["tabs"]}
+
+
+def test_reordering_tabs_records_a_version(bypass) -> None:
+    """`tab_order` is snapshot content, so an unrecorded reorder is silently
+    undone by the next restore of an older version."""
+    main = _make_dashboard(bypass, components=[{"index": "a"}])
+    first = _make_dashboard(bypass, title="B", parent=main, tab_order=1)
+    second = _make_dashboard(bypass, title="C", parent=main, tab_order=2)
+
+    response = bypass["client"].post(
+        f"{API}/tabs/reorder",
+        json={
+            "parent_dashboard_id": str(main),
+            "tab_orders": [
+                {"dashboard_id": str(second), "tab_order": 1},
+                {"dashboard_id": str(first), "tab_order": 2},
+            ],
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    versions = _family_versions(bypass, main)
+    assert versions, "a reorder must be recoverable"
+    order = {t["title"]: t["tab_order"] for t in versions[-1]["tabs"]}
+    assert order["C"] < order["B"], f"the new order must be recorded, got {order}"
+
+
+def test_a_failing_capture_never_breaks_the_write(bypass, monkeypatch) -> None:
+    """Versioning is an undo step; the write is the user's work.
+
+    Pinned because the capture calls sit *after* a successful write, so an
+    exception there would turn a completed rename into a 500 and invite a retry
+    against a document that has already changed.
+    """
+    from depictio.api.v1.endpoints.dashboards_endpoints import versioning
+
+    did = _make_dashboard(bypass, title="Before", components=[{"index": "a"}])
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("ledger unavailable")
+
+    monkeypatch.setattr(versioning, "capture_quietly", boom)
+
+    response = bypass["client"].post(f"{API}/edit/{did}", json={"title": "After"})
+
+    assert response.status_code == 200, response.text
+    assert bypass["dashboards"].find_one({"dashboard_id": did})["title"] == "After"

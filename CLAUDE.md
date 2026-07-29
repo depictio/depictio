@@ -101,6 +101,12 @@ Route dispatch is plain regex in `depictio/viewer/src/main.tsx` +
 
 ### Dashboard Versioning
 - Every save snapshots the whole tab family into `dashboard_versions` (`dashboards_endpoints/versioning.py`)
+- **`/save` is not the only route that captures.** `POST /edit`, `PATCH /tab`,
+  `DELETE /tab` and `/tabs/reorder` all change content, so each seeds a baseline
+  *before* its write and captures *after* it. A tab delete anchors on the parent (the
+  deleted tab can no longer resolve its own family) and is `explicit`, so it never
+  coalesces into a neighbouring autosave. Adding a new content-mutating route without
+  both calls silently makes that change unrecoverable
 - Autosaves coalesce within an anchored window; an unchanged save writes nothing, **whatever its kind**
 - The first save on a family seeds a baseline first (`ensure_baseline_quietly`), so the
   pre-edit state is restorable — capture otherwise only ever records states already left
