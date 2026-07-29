@@ -123,6 +123,7 @@ const App: React.FC = () => {
   const versionKey = JSON.stringify(versionBody);
   const timeTravelling = Object.keys(versionBody).length > 0;
 
+
   // Collections are named by tag in the banner — an ObjectId tells the reader
   // nothing about which dataset is pinned.
   const pinnedLabels = useMemo(() => {
@@ -162,6 +163,15 @@ const App: React.FC = () => {
   // snapshot rather than the live dashboard. Read once per load, since a
   // change to it reloads the page anyway.
   const previewVersionId = useMemo(() => extractPreviewVersionId(), []);
+  // A `?version=` preview renders that version's *layout*; without this it
+  // drew that layout over today's data — half a past state, and the half that
+  // silently changes. Pinning here makes the preview URL mean one thing.
+  // A hand-picked pin still wins, so "that layout, but against today" stays
+  // reachable from the picker.
+  useEffect(() => {
+    if (!previewVersionId) return;
+    setAsOfVersionId((current) => current ?? previewVersionId);
+  }, [previewVersionId]);
   // The full snapshot record backing a preview, kept only to render the
   // banner — the dashboard itself is already projected into `dashboard`.
   const [previewVersion, setPreviewVersion] = useState<DashboardVersionDetail | null>(null);
@@ -558,7 +568,11 @@ const App: React.FC = () => {
             liveHref={`/dashboard/${dashboardId}`}
           />
         )}
-        {timeTravelling && (
+        {/* Only when the pin is *not* just the preview's own: the preview
+            banner already names the version, and two stacked yellow bars
+            saying the same thing is noise. A pin the user chose on top of a
+            preview still shows, because that one is not implied. */}
+        {timeTravelling && !(previewVersionId && asOfVersionId === previewVersionId) && (
           <DataVersionBanner
             pinned={pinnedLabels}
             asOfLabel={asOfLabel}

@@ -53,12 +53,16 @@ const VersionPreviewBanner: React.FC<VersionPreviewBannerProps> = ({ version, li
           Back to the current version
         </Anchor>
       </Group>
+      {/* States exactly how much of the past is on screen. A preview now pins
+          data as well as layout, but only for collections whose version was
+          actually recorded — anything else reads live, and saying so is the
+          difference between a reproducible view and one that merely looks it. */}
       <Text size="xs" c="dimmed" mt={4}>
         {totalData === 0
           ? 'Layout and components are from this version.'
           : pinnedData === totalData
-            ? `Layout and components are from this version. All ${totalData} data collection${totalData === 1 ? '' : 's'} recorded a data version, but charts still read today's data.`
-            : `Layout and components are from this version. Charts read today's data — ${pinnedData} of ${totalData} data collections recorded a data version at the time.`}
+            ? `Layout, components and data are all from this version (${totalData} data collection${totalData === 1 ? '' : 's'}).`
+            : `Layout and components are from this version. ${pinnedData} of ${totalData} data collections are pinned to the data of the time; the rest read current data.`}
       </Text>
     </Alert>
   );
