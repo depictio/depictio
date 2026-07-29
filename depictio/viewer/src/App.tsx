@@ -41,6 +41,7 @@ import {
 } from 'depictio-react-core';
 import type {
   DataVersionPins,
+  StoredMetadata,
   DashboardData,
   DashboardPermissions,
   DashboardSummary,
@@ -56,6 +57,9 @@ import { dashboardFromVersion, extractPreviewVersionId } from './versions/previe
 import VersionPreviewBanner from './versions/VersionPreviewBanner';
 import VersionHistoryDrawer from './versions/VersionHistoryDrawer';
 import DataVersionBanner from './versions/DataVersionBanner';
+import ComponentVersionModal from './versions/ComponentVersionModal';
+import ComponentHistoryAction from './versions/ComponentHistoryAction';
+import { useVersionHistory } from './versions/useVersionHistory';
 import { collectDataCollections } from './versions/useDatasetHistories';
 
 /** localStorage key for the dismissed ingestion banner, scoped per project so
@@ -141,9 +145,19 @@ const App: React.FC = () => {
   // Set by the drawer when the user picks "use this data" on a timeline row,
   // so the banner can say *which* version rather than just "historical".
   const [asOfLabel, setAsOfLabel] = useState<string | null>(null);
+
   const { user: currentUser } = useCurrentUser();
   const isOwner = isDashboardOwner(dashboard, currentUser?.email ?? null);
   const dashboardId = extractDashboardId();
+  // Component-level history. The version list is loaded once here rather than
+  // per modal open, so the per-cell action can hide itself when a dashboard
+  // has no versions instead of opening onto an empty pane.
+  const [historyComponent, setHistoryComponent] = useState<StoredMetadata | null>(null);
+  const { versions: familyVersions, loading: versionsLoading } = useVersionHistory(
+    dashboardId,
+    Boolean(dashboardId),
+  );
+
   // Non-null when the URL carries `?version=` — the viewer is showing a stored
   // snapshot rather than the live dashboard. Read once per load, since a
   // change to it reloads the page anyway.
@@ -785,6 +799,17 @@ const App: React.FC = () => {
                     isDraggable={false}
                     isResizable={false}
                     editMode={false}
+                    // Read-only overlay: the editor's is an edit menu, this is
+                    // "how did this component look before?", which a viewer
+                    // should offer precisely because it cannot change anything.
+                    overlayInViewMode
+                    renderItemOverlay={(_componentId: string, componentMetadata: StoredMetadata) => (
+                      <ComponentHistoryAction
+                        metadata={componentMetadata}
+                        onOpen={setHistoryComponent}
+                        disabled={familyVersions.length === 0}
+                      />
+                    )}
                   />
                 )}
               </Box>
@@ -829,6 +854,15 @@ const App: React.FC = () => {
         onClose={closeSettings}
         dashboard={dashboard}
         onOpenVersionHistory={isOwner ? openVersions : undefined}
+      />
+
+      <ComponentVersionModal
+        opened={historyComponent !== null}
+        onClose={() => setHistoryComponent(null)}
+        metadata={historyComponent}
+        dashboardId={dashboardId}
+        versions={familyVersions}
+        loadingVersions={versionsLoading}
       />
 
       {/* The viewer holds no unsaved edits, so a restore just needs the page to

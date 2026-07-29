@@ -47,6 +47,14 @@ interface DashboardGridProps {
     componentId: string,
     metadata: StoredMetadata,
   ) => React.ReactNode;
+  /**
+   * Render the overlay outside edit mode too. The editor's overlay is an
+   * *edit* menu, so gating it on `editMode` was right; the viewer's is a
+   * read-only "component history" action, which is exactly the thing a
+   * read-only dashboard should still offer. Opt-in, so no existing caller
+   * changes behaviour.
+   */
+  overlayInViewMode?: boolean;
 }
 
 /**
@@ -77,6 +85,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
   editMode = false,
   onLayoutChange,
   renderItemOverlay,
+  overlayInViewMode = false,
 }) => {
   const layouts = normalizeLayout(metadataList, layoutData, isDraggable || isResizable);
 
@@ -174,7 +183,8 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
     };
   }, []);
 
-  const showOverlays = editMode && typeof renderItemOverlay === 'function';
+  const showOverlays =
+    (editMode || overlayInViewMode) && typeof renderItemOverlay === 'function';
   const rootClass =
     'depictio-dashboard-grid' + (editMode ? ' depictio-edit-mode' : '');
 

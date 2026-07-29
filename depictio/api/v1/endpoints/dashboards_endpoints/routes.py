@@ -61,6 +61,38 @@ def _data_pins(request: dict) -> DataVersionPins:
         raise HTTPException(status_code=400, detail=str(exc))
 
 
+#: Card fields a stored version may override when recomputing a past value.
+#: Everything that decides *what* the card computes and how it is labelled —
+#: but nothing that decides *which collection* is read. See the call site.
+_CARD_DEFINITION_FIELDS = frozenset(
+    {
+        "column_name",
+        "aggregation",
+        "aggregations",
+        "breakdown_col",
+        "secondary_layout",
+        "title",
+        "cols_json",
+    }
+)
+
+
+def _card_definition_override(override: Any) -> dict:
+    """The subset of a client-supplied card definition we will honour.
+
+    Returns `{}` for anything malformed, so a bad payload falls back to the
+    live definition rather than failing the whole bulk request — one broken
+    card in a modal should not blank the rest of the dashboard.
+    """
+    if not isinstance(override, dict):
+        return {}
+    return {
+        key: value
+        for key, value in override.items()
+        if key in _CARD_DEFINITION_FIELDS and value is not None
+    }
+
+
 def _should_enqueue_screenshot(dashboard_id: str, now_s: float | None = None) -> bool:
     """Return True iff dual-theme PNGs are missing or older than 1h.
 
@@ -1581,6 +1613,25 @@ def bulk_compute_cards(
         if m.get("component_type") == "card"
         and (requested is None or str(m.get("index")) in requested)
     ]
+
+    # Historical card definitions, for the component-history modal. A card's
+    # *config* — column, aggregation, breakdown — is versioned alongside its
+    # layout, so computing a past version's value against the card's current
+    # definition would answer a question nobody asked: it would apply today's
+    # aggregation to yesterday's data and present it as "how it looked".
+    #
+    # Restricted to the presentation fields that decide what a card computes.
+    # `wf_id`/`dc_id`/`dc_config` are deliberately NOT overridable: those
+    # decide *which collection is read*, and taking them from the request
+    # would let a caller compute over data this dashboard does not reference
+    # (and whose permissions were never checked). A card not already on this
+    # dashboard is likewise ignored, since the loop only visits `cards`.
+    overrides = request.get("component_overrides")
+    if isinstance(overrides, dict) and overrides:
+        cards = [
+            {**card, **_card_definition_override(overrides.get(str(card.get("index"))))}
+            for card in cards
+        ]
 
     if not cards:
         return {"values": {}, "filter_applied": bool(filters), "filter_count": len(filters)}
