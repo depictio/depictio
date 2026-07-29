@@ -83,6 +83,8 @@ import LeftFilterPanel from './components/LeftFilterPanel';
 import GridItemEditOverlay from './components/GridItemEditOverlay';
 import { Header, Sidebar, SettingsDrawer, TabModal } from './chrome';
 import VersionHistoryDrawer from './versions/VersionHistoryDrawer';
+import ComponentVersionModal from './versions/ComponentVersionModal';
+import { useVersionHistory } from './versions/useVersionHistory';
 import DataVersionBanner from './versions/DataVersionBanner';
 import { collectDataCollections } from './versions/useDatasetHistories';
 import type { TabModalSubmitPayload } from './chrome';
@@ -187,6 +189,15 @@ const EditorApp: React.FC = () => {
   }>({ open: false, mode: 'create', target: null, submitting: false });
 
   const dashboardId = extractDashboardId();
+  // Component-level history. Loaded once here rather than per modal open, so
+  // the per-cell action can hide itself on a dashboard with no versions
+  // instead of opening onto an empty pane.
+  const [historyComponent, setHistoryComponent] = useState<StoredMetadata | null>(null);
+  const { versions: familyVersions, loading: versionsLoading } = useVersionHistory(
+    dashboardId,
+    Boolean(dashboardId),
+  );
+
   const bulkCtrl = useRef<AbortController | null>(null);
 
   // Data time travel, same contract as the viewer: view-state only, never
@@ -919,6 +930,23 @@ const EditorApp: React.FC = () => {
       .catch(() => undefined);
   }, [dashboardId, applyDashboard]);
 
+  /** Open component history for one grid cell.
+   *
+   * The overlay knows only the component id, since that is what the grid keys
+   * on; the modal needs the whole stored metadata to render the component as
+   * it is *now* for the compare view. Resolved here rather than passed down,
+   * so the grid does not have to carry the dashboard document.
+   */
+  const handleOpenComponentHistory = useCallback(
+    (componentId: string) => {
+      const found = (dashboardRef.current?.stored_metadata || []).find(
+        (m) => String(m.index) === String(componentId),
+      );
+      if (found) setHistoryComponent(found);
+    },
+    [],
+  );
+
   /** Force-save: cancel any pending debounce and POST current state now.
    *  Mirrors depictio/dash/layouts/save.py:save_dashboard_minimal — uses
    *  Mantine notifications for success/failure feedback (no persistent header
@@ -1127,6 +1155,9 @@ const EditorApp: React.FC = () => {
                 onDuplicateComponent={handleDuplicateComponent}
                 onAddComponent={handleAddComponent}
                 activeHighlight={activeHighlight}
+                onOpenComponentHistory={
+                  familyVersions.length > 0 ? handleOpenComponentHistory : undefined
+                }
               />
             </Box>
           </div>
@@ -1174,6 +1205,19 @@ const EditorApp: React.FC = () => {
         }}
       />
 
+      <ComponentVersionModal
+        opened={historyComponent !== null}
+        onClose={() => setHistoryComponent(null)}
+        metadata={historyComponent}
+        dashboardId={dashboardId ?? null}
+        versions={familyVersions}
+        loadingVersions={versionsLoading}
+        // Restoring one component writes, so it is offered only here and only
+        // to someone who could edit the dashboard anyway.
+        canRestore={isOwner}
+        onRestored={handleRestored}
+      />
+
       <TabModal
         opened={tabModalState.open}
         mode={tabModalState.mode}
@@ -1209,6 +1253,8 @@ interface RightComponentGridProps {
   onDuplicateComponent: (componentId: string) => void;
   onAddComponent: () => void;
   activeHighlight?: ActiveHighlight | null;
+  /** Absent when the dashboard has no versions, which hides the menu item. */
+  onOpenComponentHistory?: (componentId: string) => void;
 }
 
 /**
@@ -1234,6 +1280,7 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
   onDuplicateComponent,
   onAddComponent,
   activeHighlight,
+  onOpenComponentHistory,
 }) => {
   const allComponents = useMemo(
     () => [...cardComponents, ...otherComponents],
@@ -1292,7 +1339,7 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
       isResizable={true}
       editMode={true}
       onLayoutChange={onLayoutChange}
-      renderItemOverlay={(componentId, metadata) => (
+      renderItemOverlay={(componentId: string, metadata: StoredMetadata) => (
         <GridItemEditOverlay
           dashboardId={dashboardId}
           componentId={componentId}
@@ -1300,6 +1347,7 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
           onDelete={onDeleteComponent}
           onDuplicate={onDuplicateComponent}
           componentType={metadata.component_type}
+          onOpenHistory={onOpenComponentHistory}
         />
       )}
     />

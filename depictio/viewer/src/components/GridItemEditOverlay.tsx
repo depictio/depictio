@@ -11,8 +11,14 @@ import { Icon } from '@iconify/react';
  *
  *   - Edit:      navigates to the React edit page at
  *                /dashboard-edit/{id}/component/edit/{componentId}
+ *   - History:   fires `onOpenHistory` — opens this component across versions
  *   - Duplicate: fires `onDuplicate` — parent clones metadata + layout, POSTs /save
  *   - Delete:    fires `onDelete` — parent is responsible for the actual API call
+ *
+ * History lives in this menu rather than as its own hover icon because it is
+ * an editing affordance: it can restore the component, and it is offered only
+ * where the caller can write. A second always-visible icon would also compete
+ * with the chrome cluster this one deliberately joins.
  *
  * Hidden via the `editMode` prop so the same renderer tree can be reused for
  * read-only mode.
@@ -34,6 +40,12 @@ interface GridItemEditOverlayProps {
    * card/interactive/figure — other types (table/multiqc/text) hide the item.
    */
   componentType?: string;
+  /**
+   * Optional component-history handler. Hidden when absent, or when the
+   * dashboard has no recorded versions — an action that can only ever open an
+   * empty pane is worse than no action.
+   */
+  onOpenHistory?: (componentId: string) => void;
 }
 
 const GridItemEditOverlay: React.FC<GridItemEditOverlayProps> = ({
@@ -43,6 +55,7 @@ const GridItemEditOverlay: React.FC<GridItemEditOverlayProps> = ({
   onDelete,
   onDuplicate,
   componentType,
+  onOpenHistory,
 }) => {
   if (!editMode) return null;
 
@@ -79,6 +92,15 @@ const GridItemEditOverlay: React.FC<GridItemEditOverlayProps> = ({
         >
           Edit
         </Menu.Item>
+        {onOpenHistory && (
+          <Menu.Item
+            leftSection={<Icon icon="mdi:history" width={14} />}
+            onClick={() => onOpenHistory(componentId)}
+            data-testid="component-history-action"
+          >
+            History
+          </Menu.Item>
+        )}
         {showDuplicate && (
           <Menu.Item
             leftSection={<Icon icon="tabler:copy" width={14} />}

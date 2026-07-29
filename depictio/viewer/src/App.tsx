@@ -41,7 +41,6 @@ import {
 } from 'depictio-react-core';
 import type {
   DataVersionPins,
-  StoredMetadata,
   DashboardData,
   DashboardPermissions,
   DashboardSummary,
@@ -57,9 +56,6 @@ import { dashboardFromVersion, extractPreviewVersionId } from './versions/previe
 import VersionPreviewBanner from './versions/VersionPreviewBanner';
 import VersionHistoryDrawer from './versions/VersionHistoryDrawer';
 import DataVersionBanner from './versions/DataVersionBanner';
-import ComponentVersionModal from './versions/ComponentVersionModal';
-import ComponentHistoryAction from './versions/ComponentHistoryAction';
-import { useVersionHistory } from './versions/useVersionHistory';
 import { collectDataCollections } from './versions/useDatasetHistories';
 
 /** localStorage key for the dismissed ingestion banner, scoped per project so
@@ -72,6 +68,10 @@ import { useSidebarOpen } from './hooks/useSidebarOpen';
 import { useCurrentUser } from './hooks/useCurrentUser';
 import { isDashboardOwner } from './lib/dashboardOwnership';
 import NotesFooter from './components/NotesFooter';
+
+/** Module-level so the identity is stable: `DataVersionProvider` memoises on
+ *  content, but a fresh `{}` each render would still churn every consumer. */
+const EMPTY_PINS: DataVersionPins = {};
 
 /**
  * Top-level SPA. Layout:
@@ -105,13 +105,16 @@ const App: React.FC = () => {
   const [desktopOpened, toggleDesktop] = useSidebarOpen();
   const [settingsOpened, { open: openSettings, close: closeSettings }] = useDisclosure(false);
   const [versionsOpened, { open: openVersions, close: closeVersions }] = useDisclosure(false);
-  // Data time travel. Deliberately view-state, not persisted: a dashboard
-  // silently stuck on old data is a trap, and a reload should return you to
-  // the present.
-  //   `dataPins`      — per-collection Delta commits (the manual grain).
-  //   `asOfVersionId` — a stored dashboard version whose stamps the backend
-  //                     expands into pins for every collection at once.
-  const [dataPins, setDataPins] = useState<DataVersionPins>({});
+  // Data time travel, read-only in the viewer.
+  //
+  // Choosing which data to draw from is an editing act and lives in the
+  // editor. What remains here is the one case the viewer owns: a `?version=`
+  // preview, which pins the data that version recorded so the preview is a
+  // coherent snapshot rather than a past layout over today's numbers.
+  //
+  // `dataPins` stays because the request body and the banner are shared with
+  // the editor, but nothing in this host writes to it.
+  const dataPins: DataVersionPins = EMPTY_PINS;
   const [asOfVersionId, setAsOfVersionId] = useState<string | null>(null);
   // Request fragment + a stable dependency key. The key has to reach every
   // fetch effect: without it the body would change while the effect never
@@ -139,7 +142,6 @@ const App: React.FC = () => {
   }, [dataPins, dashboard?.stored_metadata]);
 
   const clearDataVersions = useCallback(() => {
-    setDataPins({});
     setAsOfVersionId(null);
     setAsOfUnresolved([]);
   }, []);
@@ -156,15 +158,6 @@ const App: React.FC = () => {
   const { user: currentUser } = useCurrentUser();
   const isOwner = isDashboardOwner(dashboard, currentUser?.email ?? null);
   const dashboardId = extractDashboardId();
-  // Component-level history. The version list is loaded once here rather than
-  // per modal open, so the per-cell action can hide itself when a dashboard
-  // has no versions instead of opening onto an empty pane.
-  const [historyComponent, setHistoryComponent] = useState<StoredMetadata | null>(null);
-  const { versions: familyVersions, loading: versionsLoading } = useVersionHistory(
-    dashboardId,
-    Boolean(dashboardId),
-  );
-
   // Non-null when the URL carries `?version=` — the viewer is showing a stored
   // snapshot rather than the live dashboard. Read once per load, since a
   // change to it reloads the page anyway.
@@ -820,17 +813,6 @@ const App: React.FC = () => {
                     isDraggable={false}
                     isResizable={false}
                     editMode={false}
-                    // Read-only overlay: the editor's is an edit menu, this is
-                    // "how did this component look before?", which a viewer
-                    // should offer precisely because it cannot change anything.
-                    overlayInViewMode
-                    renderItemOverlay={(_componentId: string, componentMetadata: StoredMetadata) => (
-                      <ComponentHistoryAction
-                        metadata={componentMetadata}
-                        onOpen={setHistoryComponent}
-                        disabled={familyVersions.length === 0}
-                      />
-                    )}
                   />
                 )}
               </Box>
@@ -877,15 +859,6 @@ const App: React.FC = () => {
         onOpenVersionHistory={isOwner ? openVersions : undefined}
       />
 
-      <ComponentVersionModal
-        opened={historyComponent !== null}
-        onClose={() => setHistoryComponent(null)}
-        metadata={historyComponent}
-        dashboardId={dashboardId}
-        versions={familyVersions}
-        loadingVersions={versionsLoading}
-      />
-
       {/* The viewer holds no unsaved edits, so a restore just needs the page to
           re-read the dashboard. Reloading rather than refetching also clears
           every component's resolved data, which a restore can invalidate
@@ -902,19 +875,14 @@ const App: React.FC = () => {
         // one on screen behind the drawer.
         canSnapshot={isOwner && !previewVersionId}
         previewTarget="same-tab"
-        dashboardMetadata={dashboard?.stored_metadata}
-        dataPins={dataPins}
-        onDataPinsChange={setDataPins}
-        asOfVersionId={asOfVersionId}
-        onAsOfChange={(versionId, label, unresolved) => {
-          setAsOfVersionId(versionId);
-          setAsOfLabel(label);
-          setAsOfUnresolved(unresolved ?? []);
-          // A dashboard-level "as of" supersedes hand-picked collection pins;
-          // leaving them would silently override the version the user just
-          // asked for, on exactly the collections they had touched before.
-          if (versionId) setDataPins({});
-        }}
+        // No `onDataPinsChange` / `onAsOfChange`: choosing which data to draw
+        // from is an editing act and lives in the editor. The viewer still
+        // lists the timeline, so a past layout can be previewed or restored,
+        // but it does not offer to re-point the live dashboard at old data.
+        //
+        // `?version=` preview is unaffected: it pins the data that version
+        // recorded, which is what makes the preview a coherent snapshot rather
+        // than a past layout over today's numbers.
         onRestored={() => {
           if (previewVersionId && dashboardId) {
             window.location.href = `/dashboard/${dashboardId}`;

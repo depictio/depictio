@@ -4192,3 +4192,44 @@ export async function restoreDashboardVersion(
   if (!res.ok) await throwHttpDetailError(res, 'Failed to restore version');
   return (await res.json()) as RestoreVersionResult;
 }
+
+export interface RestoreComponentResult {
+  restored_from: string;
+  restored_from_seq: number | null;
+  component_index: string;
+  /** True when the component had been deleted and was put back. */
+  readded: boolean;
+  layout_restored: boolean;
+  new_version_id: string | null;
+}
+
+/**
+ * Put one component back, leaving the rest of the dashboard alone.
+ *
+ * The narrow counterpart to `restoreDashboardVersion`. Recovering a single
+ * chart by restoring its whole version also reverts every other component and
+ * any work done since, which is rarely what was meant.
+ *
+ * `restoreLayout` is opt-in: the usual request is "give me back what this
+ * showed", and moving neighbours to reinstate an old grid position is a
+ * second, unasked-for change.
+ */
+export async function restoreComponentFromVersion(
+  versionId: string,
+  componentIndex: string,
+  restoreLayout = false,
+): Promise<RestoreComponentResult> {
+  const res = await authFetch(
+    `${API_BASE}/dashboards/versions/${versionId}/restore_component`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        component_index: componentIndex,
+        restore_layout: restoreLayout,
+      }),
+    },
+  );
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to restore component');
+  return (await res.json()) as RestoreComponentResult;
+}
