@@ -115,6 +115,32 @@ class FeatureFlags(_StrictBase):
     )
 
 
+class KubernetesResources(_StrictBase):
+    """Configured (not live) shape of a Helm-deployed backend.
+
+    ``replicas`` and the resource requests/limits are read from the chart's own
+    ``values.yaml`` at template time and passed through as env vars, the same
+    way ``deployment_kind`` is — no Kubernetes API calls, no new RBAC. That
+    also means these reflect what the chart asked for, not necessarily what is
+    running right now: they will not move with an HPA, and a manual
+    ``kubectl scale`` will not be reflected until the next Helm upgrade.
+    """
+
+    replicas: int = Field(description="Configured replica count for the backend Deployment.")
+    cpu_request_millicores: int | None = Field(
+        default=None, description="Configured CPU request, in millicores."
+    )
+    cpu_limit_millicores: int | None = Field(
+        default=None, description="Configured CPU limit, in millicores."
+    )
+    memory_request_mib: int | None = Field(
+        default=None, description="Configured memory request, in MiB."
+    )
+    memory_limit_mib: int | None = Field(
+        default=None, description="Configured memory limit, in MiB."
+    )
+
+
 class ServerHeartbeatProperties(CommonProperties):
     """Payload for `server_install` and `server_heartbeat`.
 
@@ -142,6 +168,13 @@ class ServerHeartbeatProperties(CommonProperties):
     usage: UsageBuckets | None = Field(
         default=None,
         description="Bucketed deployment size. Absent when usage metrics are disabled.",
+    )
+    kubernetes: KubernetesResources | None = Field(
+        default=None,
+        description=(
+            "Configured replica count and CPU/memory requests/limits. Present only "
+            "for Helm-deployed installs where the chart passed these through."
+        ),
     )
     cli_versions_seen: list[str] = Field(
         default_factory=list,

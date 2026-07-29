@@ -19,7 +19,13 @@ from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.telemetry.identity import get_or_create_instance_id, install_age_days
 from depictio.telemetry.buckets import bucket
 from depictio.telemetry.env import detect_deployment_kind, platform_info
-from depictio.telemetry.schema import FeatureFlags, ServerHeartbeatProperties, UsageBuckets
+from depictio.telemetry.k8s_resources import parse_cpu_millicores, parse_memory_mib
+from depictio.telemetry.schema import (
+    FeatureFlags,
+    KubernetesResources,
+    ServerHeartbeatProperties,
+    UsageBuckets,
+)
 from depictio.version import get_api_version, get_version
 
 #: Regenerated per process. Lets the collector tell a restart apart from a second
@@ -140,6 +146,24 @@ def _feature_flags() -> FeatureFlags:
     )
 
 
+def _kubernetes_resources() -> KubernetesResources | None:
+    """Configured replica count and resource requests/limits, Helm installs only.
+
+    ``replicas`` is required on the model, so absent that (i.e. outside Helm,
+    where nothing sets ``DEPICTIO_TELEMETRY_REPLICAS``) there is nothing to
+    build — ``None`` for the whole block, not a block of ``None`` guesses.
+    """
+    if settings.telemetry.replicas is None:
+        return None
+    return KubernetesResources(
+        replicas=settings.telemetry.replicas,
+        cpu_request_millicores=parse_cpu_millicores(settings.telemetry.cpu_request),
+        cpu_limit_millicores=parse_cpu_millicores(settings.telemetry.cpu_limit),
+        memory_request_mib=parse_memory_mib(settings.telemetry.memory_request),
+        memory_limit_mib=parse_memory_mib(settings.telemetry.memory_limit),
+    )
+
+
 def recent_cli_versions() -> list[str]:
     """Distinct ``depictio-cli`` versions that recently talked to this instance.
 
@@ -183,6 +207,7 @@ def build_heartbeat_properties() -> tuple[str, ServerHeartbeatProperties]:
         workers=settings.fastapi.workers,
         features=_feature_flags(),
         usage=_usage_buckets() if settings.telemetry.include_usage_metrics else None,
+        kubernetes=_kubernetes_resources(),
         cli_versions_seen=recent_cli_versions(),
     )
     return instance_id, properties

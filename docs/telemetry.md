@@ -57,6 +57,7 @@ one installation are not counted as many.
 | `workers` | integer | Configured number of API worker processes. |
 | `features` | FeatureFlags | Optional subsystems switched on. |
 | `usage` | UsageBuckets, optional | Bucketed deployment size. Absent when usage metrics are disabled. |
+| `kubernetes` | KubernetesResources, optional | Configured replica count and CPU/memory requests/limits. Present only for Helm-deployed installs where the chart passed these through. |
 | `cli_versions_seen` | array of strings | Distinct `depictio-cli` versions that talked to this instance recently, read from the CLI's request headers. Versions only — no host or user. |
 
 #### `features`
@@ -98,6 +99,24 @@ is it — while leaving the installation in a group with many others.
 | `deltatables` | string | Number of Delta tables, bucketed. |
 | `active_users_7d` | string | Users active in the last 7 days, bucketed. `unknown` unless the operator has also enabled the local analytics subsystem. |
 | `component_types` | object (string → string) | Bucketed count per dashboard component type (`figure`, `table`, `card`, …). Keys are Depictio's own component type names; no user-supplied string can appear here. |
+
+#### `kubernetes`
+
+Present only for Helm-deployed installs. Replica count and CPU/memory
+requests/limits are read from the chart's own `values.yaml` at template time and
+passed through as env vars — no Kubernetes API calls, no extra RBAC permissions.
+That also means these are the **configured** shape, not necessarily the live one:
+they will not move with an autoscaler, and a manual `kubectl scale` will not be
+reflected until the next Helm upgrade. A malformed value degrades to absent rather
+than being sent as-is — see `depictio/telemetry/k8s_resources.py`.
+
+| Field | Type | What it is |
+| --- | --- | --- |
+| `replicas` | integer | Configured replica count for the backend Deployment. |
+| `cpu_request_millicores` | int, optional | Configured CPU request, in millicores. |
+| `cpu_limit_millicores` | int, optional | Configured CPU limit, in millicores. |
+| `memory_request_mib` | int, optional | Configured memory request, in MiB. |
+| `memory_limit_mib` | int, optional | Configured memory limit, in MiB. |
 
 ### `cli_command`
 

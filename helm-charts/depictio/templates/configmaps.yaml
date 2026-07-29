@@ -75,6 +75,16 @@ data:
   # Kubernetes pod are indistinguishable from the inside.
   DEPICTIO_TELEMETRY_ENABLED: {{ .Values.backend.env.DEPICTIO_TELEMETRY_ENABLED | default "true" | quote }}
   DEPICTIO_TELEMETRY_DEPLOYMENT_KIND: {{ .Values.backend.env.DEPICTIO_TELEMETRY_DEPLOYMENT_KIND | default "helm" | quote }}
+  # Configured (not live) replica count and CPU/memory requests/limits, taken from
+  # backend.replicas / backend.resources — the chart already knows these at
+  # template time, so no Kubernetes API call or extra RBAC is needed to report
+  # them. Parsed into millicores/MiB server-side before they can reach the
+  # telemetry payload; never sent as raw strings. See docs/telemetry.md.
+  DEPICTIO_TELEMETRY_REPLICAS: {{ .Values.backend.env.DEPICTIO_TELEMETRY_REPLICAS | default .Values.backend.replicas | quote }}
+  DEPICTIO_TELEMETRY_CPU_REQUEST: {{ .Values.backend.env.DEPICTIO_TELEMETRY_CPU_REQUEST | default .Values.backend.resources.requests.cpu | quote }}
+  DEPICTIO_TELEMETRY_CPU_LIMIT: {{ .Values.backend.env.DEPICTIO_TELEMETRY_CPU_LIMIT | default .Values.backend.resources.limits.cpu | quote }}
+  DEPICTIO_TELEMETRY_MEMORY_REQUEST: {{ .Values.backend.env.DEPICTIO_TELEMETRY_MEMORY_REQUEST | default .Values.backend.resources.requests.memory | quote }}
+  DEPICTIO_TELEMETRY_MEMORY_LIMIT: {{ .Values.backend.env.DEPICTIO_TELEMETRY_MEMORY_LIMIT | default .Values.backend.resources.limits.memory | quote }}
   DEPICTIO_TELEMETRY_INCLUDE_USAGE_METRICS: {{ .Values.backend.env.DEPICTIO_TELEMETRY_INCLUDE_USAGE_METRICS | default "true" | quote }}
   DEPICTIO_TELEMETRY_DEBUG: {{ .Values.backend.env.DEPICTIO_TELEMETRY_DEBUG | default "false" | quote }}
   DEPICTIO_GOOGLE_ANALYTICS_ENABLED: {{ .Values.backend.env.DEPICTIO_GOOGLE_ANALYTICS_ENABLED | default "false" | quote }}

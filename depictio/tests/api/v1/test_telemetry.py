@@ -294,6 +294,7 @@ class TestPayloadContainsNothingIdentifying:
         with patch("depictio.api.v1.telemetry.payload.settings") as mock_settings:
             mock_settings.telemetry.include_usage_metrics = False
             mock_settings.telemetry.deployment_kind = None
+            mock_settings.telemetry.replicas = None
             mock_settings.analytics.enabled = False
             mock_settings.fastapi.workers = 4
             _instance_id, properties = build_heartbeat_properties()
@@ -312,6 +313,62 @@ class TestPayloadContainsNothingIdentifying:
         assert properties.usage is not None
         assert properties.usage.users == "unknown"
         assert properties.usage.projects == "2-5"
+
+
+class TestKubernetesResourcesInPayload:
+    """The Helm-only block: configured replicas and CPU/memory, never raw strings."""
+
+    def test_absent_outside_helm(self, seeded_db):
+        """No DEPICTIO_TELEMETRY_REPLICAS set means no kubernetes block at all."""
+        from depictio.api.v1.telemetry.payload import build_heartbeat_properties
+
+        _instance_id, properties = build_heartbeat_properties()
+        assert properties.kubernetes is None
+
+    def test_populated_and_parsed_when_helm_states_it(self, seeded_db):
+        from depictio.api.v1.telemetry.payload import build_heartbeat_properties
+
+        with patch("depictio.api.v1.telemetry.payload.settings") as mock_settings:
+            mock_settings.telemetry.include_usage_metrics = False
+            mock_settings.telemetry.deployment_kind = "helm"
+            mock_settings.telemetry.replicas = 3
+            mock_settings.telemetry.cpu_request = "0.5"
+            mock_settings.telemetry.cpu_limit = "2"
+            mock_settings.telemetry.memory_request = "1Gi"
+            mock_settings.telemetry.memory_limit = "4Gi"
+            mock_settings.analytics.enabled = False
+            mock_settings.fastapi.workers = 4
+            _instance_id, properties = build_heartbeat_properties()
+
+        assert properties.kubernetes is not None
+        assert properties.kubernetes.replicas == 3
+        assert properties.kubernetes.cpu_request_millicores == 500
+        assert properties.kubernetes.cpu_limit_millicores == 2000
+        assert properties.kubernetes.memory_request_mib == 1024
+        assert properties.kubernetes.memory_limit_mib == 4096
+
+        blob = json.dumps(properties.model_dump(mode="json"))
+        assert "0.5" not in blob, "the raw operator-typed CPU string must never reach the payload"
+        assert "Gi" not in blob, "the raw operator-typed memory string must never reach the payload"
+
+    def test_a_malformed_quantity_degrades_to_none_not_a_crash(self, seeded_db):
+        from depictio.api.v1.telemetry.payload import build_heartbeat_properties
+
+        with patch("depictio.api.v1.telemetry.payload.settings") as mock_settings:
+            mock_settings.telemetry.include_usage_metrics = False
+            mock_settings.telemetry.deployment_kind = "helm"
+            mock_settings.telemetry.replicas = 1
+            mock_settings.telemetry.cpu_request = "not-a-quantity"
+            mock_settings.telemetry.cpu_limit = None
+            mock_settings.telemetry.memory_request = None
+            mock_settings.telemetry.memory_limit = None
+            mock_settings.analytics.enabled = False
+            mock_settings.fastapi.workers = 4
+            _instance_id, properties = build_heartbeat_properties()
+
+        assert properties.kubernetes is not None
+        assert properties.kubernetes.replicas == 1
+        assert properties.kubernetes.cpu_request_millicores is None
 
 
 class TestSchemaForbidsUndeclaredFields:

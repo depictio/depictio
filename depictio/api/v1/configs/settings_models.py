@@ -1193,6 +1193,37 @@ class TelemetryConfig(BaseSettings):
             "Disable to send only the install identity and version."
         ),
     )
+    replicas: int | None = Field(
+        default=None,
+        description=(
+            "Configured backend replica count, stated by the Helm chart from its own "
+            "values.yaml. Unset outside Helm."
+        ),
+    )
+    cpu_request: str | None = Field(
+        default=None,
+        description=(
+            "Configured backend CPU request as a raw Kubernetes quantity (e.g. '0.5', "
+            "'500m'), stated by the Helm chart. Parsed to millicores before it can "
+            "reach the telemetry payload; never sent as-is."
+        ),
+    )
+    cpu_limit: str | None = Field(
+        default=None,
+        description="Configured backend CPU limit, same format and handling as cpu_request.",
+    )
+    memory_request: str | None = Field(
+        default=None,
+        description=(
+            "Configured backend memory request as a raw Kubernetes quantity (e.g. "
+            "'1Gi'), stated by the Helm chart. Parsed to MiB before it can reach the "
+            "telemetry payload; never sent as-is."
+        ),
+    )
+    memory_limit: str | None = Field(
+        default=None,
+        description="Configured backend memory limit, same format and handling as memory_request.",
+    )
     debug: bool = Field(
         default=False,
         description=(

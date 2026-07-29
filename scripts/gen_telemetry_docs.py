@@ -33,6 +33,7 @@ from depictio.telemetry.schema import (  # noqa: E402
     CliCommandProperties,
     CommonProperties,
     FeatureFlags,
+    KubernetesResources,
     ServerHeartbeatProperties,
     UsageBuckets,
 )
@@ -156,6 +157,18 @@ attached; the bucket answers the only question we actually have — roughly how 
 is it — while leaving the installation in a group with many others.
 
 {_field_table(UsageBuckets)}
+
+#### `kubernetes`
+
+Present only for Helm-deployed installs. Replica count and CPU/memory
+requests/limits are read from the chart's own `values.yaml` at template time and
+passed through as env vars — no Kubernetes API calls, no extra RBAC permissions.
+That also means these are the **configured** shape, not necessarily the live one:
+they will not move with an autoscaler, and a manual `kubectl scale` will not be
+reflected until the next Helm upgrade. A malformed value degrades to absent rather
+than being sent as-is — see `depictio/telemetry/k8s_resources.py`.
+
+{_field_table(KubernetesResources)}
 
 ### `{EVENT_CLI_COMMAND}`
 

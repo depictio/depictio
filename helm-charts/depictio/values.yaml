@@ -303,6 +303,10 @@ backend:
     # Helm install from a hand-rolled deployment, which would otherwise both just
     # look like "kubernetes" from inside the pod.
     DEPICTIO_TELEMETRY_DEPLOYMENT_KIND: "helm"
+    # Configured (not live) replica count and CPU/memory requests/limits are
+    # derived from backend.replicas / backend.resources below by
+    # templates/configmaps.yaml — not repeated here as literals that could drift
+    # out of sync with the actual deployment shape.
     # Set false to send only the install identity and version, no size metrics.
     DEPICTIO_TELEMETRY_INCLUDE_USAGE_METRICS: "true"
     # Set true to log the payload instead of sending it.

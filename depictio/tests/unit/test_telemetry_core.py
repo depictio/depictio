@@ -20,6 +20,7 @@ from depictio.telemetry.env import (
     platform_info,
 )
 from depictio.telemetry.gates import SuppressionReason, do_not_track, telemetry_allowed
+from depictio.telemetry.k8s_resources import parse_cpu_millicores, parse_memory_mib
 from depictio.telemetry.posthog import build_body, render_for_debug
 from depictio.telemetry.state import STATE_DIR_ENV, get_or_create_anonymous_id, state_dir
 
@@ -171,6 +172,51 @@ class TestEnvDetection:
         node = platform_module.node()
         if node:
             assert node not in info.values()
+
+
+class TestK8sResourceParsing:
+    """The one place in the pipeline that touches an operator-typed string."""
+
+    @pytest.mark.parametrize(
+        ("raw", "expected"),
+        [
+            ("500m", 500),
+            ("100m", 100),
+            ("0.5", 500),
+            ("1", 1000),
+            ("2", 2000),
+            ("0.25", 250),
+            (" 500m ", 500),
+        ],
+    )
+    def test_cpu_parses_equivalent_notations(self, raw, expected):
+        assert parse_cpu_millicores(raw) == expected
+
+    @pytest.mark.parametrize("raw", [None, "", "not-a-quantity", "500x", "-1", "-100m"])
+    def test_cpu_degrades_to_none_rather_than_raising(self, raw):
+        assert parse_cpu_millicores(raw) is None
+
+    @pytest.mark.parametrize(
+        ("raw", "expected"),
+        [
+            ("1Gi", 1024),
+            ("512Mi", 512),
+            ("4Gi", 4096),
+            ("1024Mi", 1024),
+            ("2048Ki", 2),
+            ("1048576", 1),  # bytes, no suffix
+        ],
+    )
+    def test_memory_parses_binary_notations(self, raw, expected):
+        assert parse_memory_mib(raw) == expected
+
+    def test_memory_decimal_suffix_differs_from_binary(self):
+        """1G (decimal) is less than 1Gi (binary) - the whole reason both exist."""
+        assert parse_memory_mib("1G") < parse_memory_mib("1Gi")
+
+    @pytest.mark.parametrize("raw", [None, "", "not-a-quantity", "1Xi", "-1Gi"])
+    def test_memory_degrades_to_none_rather_than_raising(self, raw):
+        assert parse_memory_mib(raw) is None
 
 
 class TestState:
