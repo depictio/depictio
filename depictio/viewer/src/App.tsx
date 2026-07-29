@@ -51,6 +51,7 @@ import type {
 import { parseTemplateOrigin } from './projects/template';
 import { dashboardFromVersion, extractPreviewVersionId } from './versions/preview';
 import VersionPreviewBanner from './versions/VersionPreviewBanner';
+import VersionHistoryDrawer from './versions/VersionHistoryDrawer';
 
 /** localStorage key for the dismissed ingestion banner, scoped per project so
  *  the dismissal sticks across the dashboard's sibling tabs. */
@@ -94,6 +95,7 @@ const App: React.FC = () => {
   // `sidebar-collapsed` localStorage key the Dash app writes.
   const [desktopOpened, toggleDesktop] = useSidebarOpen();
   const [settingsOpened, { open: openSettings, close: closeSettings }] = useDisclosure(false);
+  const [versionsOpened, { open: openVersions, close: closeVersions }] = useDisclosure(false);
   const { user: currentUser } = useCurrentUser();
   const isOwner = isDashboardOwner(dashboard, currentUser?.email ?? null);
   const dashboardId = extractDashboardId();
@@ -770,6 +772,32 @@ const App: React.FC = () => {
         opened={settingsOpened}
         onClose={closeSettings}
         dashboard={dashboard}
+        onOpenVersionHistory={isOwner ? openVersions : undefined}
+      />
+
+      {/* The viewer holds no unsaved edits, so a restore just needs the page to
+          re-read the dashboard. Reloading rather than refetching also clears
+          every component's resolved data, which a restore can invalidate
+          wholesale. When a preview is pinned we leave `?version=` behind on the
+          way out: the restored content *is* the live dashboard now, and staying
+          on the preview URL would keep showing it as a read-only past version. */}
+      <VersionHistoryDrawer
+        opened={versionsOpened}
+        onClose={closeVersions}
+        dashboardId={dashboardId}
+        canEdit={isOwner}
+        canDelete={isOwner}
+        // Withheld while previewing: it names the *live* state, not the past
+        // one on screen behind the drawer.
+        canSnapshot={isOwner && !previewVersionId}
+        previewTarget="same-tab"
+        onRestored={() => {
+          if (previewVersionId && dashboardId) {
+            window.location.href = `/dashboard/${dashboardId}`;
+          } else {
+            window.location.reload();
+          }
+        }}
       />
     </AppShell>
     </AvailableFilterValuesProvider>

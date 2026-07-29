@@ -54,6 +54,15 @@ interface VersionHistoryDrawerProps {
   /** Owner-level rights: delete. Erasing history is the one action a restore
    *  cannot undo, so it is gated harder than the rest. */
   canDelete?: boolean;
+  /** Whether to offer naming the current state. Defaults to `canEdit`.
+   *  The viewer withholds it while previewing a version: that button captures
+   *  the *live* dashboard, but the screen behind it is showing a past one, so
+   *  it would read as "name what I'm looking at" and do something else. */
+  canSnapshot?: boolean;
+  /** Where Preview opens. The editor uses a new tab so unsaved state is never
+   *  disturbed; the viewer navigates in place, since it holds no unsaved work
+   *  and stacking a tab per version examined gets old fast. */
+  previewTarget?: 'new-tab' | 'same-tab';
   /** Called after a restore lands so the host can refetch the dashboard. */
   onRestored?: () => void;
 }
@@ -86,8 +95,11 @@ const VersionHistoryDrawer: React.FC<VersionHistoryDrawerProps> = ({
   dashboardId,
   canEdit = false,
   canDelete = false,
+  canSnapshot,
+  previewTarget = 'new-tab',
   onRestored,
 }) => {
+  const showSnapshot = canSnapshot ?? canEdit;
   const { versions, currentVersionId, total, loading, error, reload } = useVersionHistory(
     dashboardId,
     opened,
@@ -142,10 +154,15 @@ const VersionHistoryDrawer: React.FC<VersionHistoryDrawerProps> = ({
       // different tab and show them content they did not ask about.
       const target = dashboardId || version.family_id;
       // The viewer renders `?version=` read-only, behind an unmissable banner.
-      // A new tab, so the editor's unsaved state is left untouched.
-      window.open(`/dashboard/${target}?version=${version.version_id}`, '_blank', 'noopener');
+      const href = `/dashboard/${target}?version=${version.version_id}`;
+      if (previewTarget === 'same-tab') {
+        window.location.href = href;
+      } else {
+        // A new tab, so the editor's unsaved state is left untouched.
+        window.open(href, '_blank', 'noopener');
+      }
     },
-    [dashboardId],
+    [dashboardId, previewTarget],
   );
 
   const handleTogglePin = useCallback(
@@ -273,7 +290,7 @@ const VersionHistoryDrawer: React.FC<VersionHistoryDrawerProps> = ({
         }}
       >
         <Stack gap="md" style={{ flex: 1, minHeight: 0 }}>
-          {canEdit && (
+          {showSnapshot && (
             <Paper withBorder radius="md" p="sm" bg="var(--mantine-color-body)">
               <Group justify="space-between" wrap="nowrap" gap="sm" align="center">
                 <Stack gap={2} style={{ minWidth: 0 }}>
