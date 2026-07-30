@@ -65,6 +65,10 @@ def _empty_data() -> dict[str, Any]:
         "unique": {},
         "ranges": {},
         "specs": {},
+        # `{dcId -> {column -> dtype}}`. Advanced-viz renderers read the DC schema
+        # to widen the column set their stored config names; without it here they
+        # fall back to fetching, which the embed's own CSP blocks.
+        "schemas": {},
         "advancedVizData": {},
         "compute": {},
     }
@@ -323,6 +327,33 @@ async def _add_interactive(data, component, synthetic_dc_id, user) -> None:
         data["unique"][f"{synthetic_dc_id}::{column}"] = []
 
 
+async def _add_dc_schema(data, component, synthetic_dc_id, user) -> None:
+    """Precompute the DC schema several advanced-viz renderers ask for.
+
+    ``ComplexHeatmap``, ``Upset``, ``Embedding`` and ``Rarefaction`` all call
+    ``fetchPolarsSchema`` to discover columns their stored config under-specifies.
+    They catch failures, so omitting this does not break a render — it just means
+    the request escapes the bundle and is refused by the embed's own
+    ``connect-src 'none'``, leaving a CSP violation in the host page's console.
+
+    Best-effort: a DC with no materialised Delta table simply has no schema, and
+    the renderers' fallback path handles that.
+    """
+    from depictio.api.v1.endpoints.datacollections_endpoints.utils import (
+        _get_data_collection_polars_schema,
+    )
+
+    real_dc_id = component.get("dc_id")
+    if not real_dc_id:
+        return
+    try:
+        data["schemas"][synthetic_dc_id] = await _get_data_collection_polars_schema(
+            PyObjectId(str(real_dc_id)), user
+        )
+    except Exception as exc:
+        logger.warning("export: schema lookup failed for dc=%s: %s", real_dc_id, exc)
+
+
 def _add_advanced_viz(data, component, synthetic_dc_id, filters, viz_kind, user) -> None:
     """Precompute whatever the advanced-viz renderer would have fetched.
 
@@ -447,6 +478,10 @@ async def build_component_embed_payload(
         await _add_interactive(data, component, synthetic, current_user)
     elif component_type == "advanced_viz":
         _add_advanced_viz(data, component, synthetic, filters, viz_kind, current_user)
+        # Several kinds read the DC schema on top of their tidy data. Fetched here
+        # rather than inside _add_advanced_viz because it applies across kinds and
+        # is independent of which of the three data shapes the kind uses.
+        await _add_dc_schema(data, component, synthetic, current_user)
     elif component_type == "text":
         pass  # Renders entirely from metadata.
     else:

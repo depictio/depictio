@@ -41,6 +41,9 @@ export interface OfflineData {
   unique: Record<string, string[]>;
   ranges: Record<string, { min: number | null; max: number | null }>;
   specs: Record<string, Record<string, unknown>>;
+  /** `{dcId -> {column -> dtype}}`. Several advanced-viz renderers read the DC
+   *  schema to discover columns the stored config under-specifies. */
+  schemas: Record<string, Record<string, string>>;
   advancedVizData: Record<string, unknown>;
   compute: Record<string, unknown>;
 }
@@ -161,6 +164,22 @@ export async function fetchColumnRange(dcId: string, columnName: string) {
 
 export async function fetchSpecs(dcId: string): Promise<Record<string, unknown>> {
   return need(DATA().specs, dcId, 'specs');
+}
+
+/** DC schema, read by several advanced-viz renderers to widen the column set the
+ *  stored config names.
+ *
+ *  Every renderer treats this as best-effort and catches, so leaving it out of the
+ *  shim did not break a render — it just meant the real `fetchPolarsSchema` ran
+ *  inside the bundle and hit the network, which an embed's own
+ *  `connect-src 'none'` CSP blocks. The result was a CSP violation in the host
+ *  page's console on every load, for a request that could never have succeeded.
+ *
+ *  Returns `{}` rather than throwing when a DC is absent: the callers' fallback
+ *  path is a legitimate outcome, unlike a genuinely missing figure payload.
+ */
+export async function fetchPolarsSchema(dcId: string): Promise<Record<string, string>> {
+  return DATA().schemas?.[dcId] ?? {};
 }
 
 // ---- image / multiqc (keyed by component id) ------------------------------
