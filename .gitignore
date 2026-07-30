@@ -220,6 +220,14 @@ depictio/.depictio/*.yaml
 # must not enter this repo's history.
 docs/images/blog/
 
+## Blog social copy
+# Launch copy for LinkedIn/X is working material, not documentation: it is
+# rewritten per attempt, never published by mkdocs, and carries unposted drafts.
+# It stays on disk so the drafts are to hand, but out of the repo's history.
+# The published article itself (docs/blog/*.md without the -social suffix) is
+# tracked as normal.
+docs/blog/*-social.md
+
 ## Screenshots
 screenshot_*.png
 # Ignore all screenshots recursively
