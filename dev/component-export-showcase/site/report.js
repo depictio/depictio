@@ -20,7 +20,9 @@
  */
 
 const API_HINT = '/site-data.json';
-const DASHBOARD = '646b0f3c1e4a2d7f8e5b8cb3';
+/* Resolved from /site-data.json at init, because a dashboard id is minted at
+ * import and pinning one here breaks the page on the next re-seed. */
+let DASHBOARD = null;
 
 /* Data collections. A filter only reaches a figure whose collection has the
  * column, so every figure declares which one it draws from. */
@@ -459,6 +461,7 @@ function mountEmbeddedControl(control) {
 async function init() {
   const site = await (await fetch(API_HINT)).json();
   state.apiBase = site.apiBase;
+  DASHBOARD = dashboardId(site, 'community');
   mountSharedNav(site.pages, { backHref: '/', backLabel: 'index' });
 
   const manifest = await (

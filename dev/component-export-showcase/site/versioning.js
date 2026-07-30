@@ -6,10 +6,15 @@
  * a plain <select> built out of the manifest.
  */
 
+/* Dashboards are named here and resolved to this instance's ids at boot. Pinning
+ * an ObjectId is what broke this page before: ids are minted at import, so
+ * re-seeding the benchmark dashboards silently invalidated the mode demo and it
+ * 404d. Component ids below are YAML tags and do survive a re-import. */
+
 /* Ampliseq community dashboard: a figure with a habitat filter over the same
  * data collection, which is what makes it a usable filtering demo. */
 const FILTER_DEMO = {
-  dashboard: '646b0f3c1e4a2d7f8e5b8cb3',
+  dashboard: 'community',
   figure: 'd595144f-eaab-45f9-9138-b6f342fe2582',
   column: 'habitat',
   control: 'MultiSelect',
@@ -17,8 +22,8 @@ const FILTER_DEMO = {
 
 /* The three cases roc_pr_curve serves from one component. */
 const MODE_DEMO = {
-  dashboard: '6a6a671b2b176f56bdcf5f30',
-  component: '436e0a78-2ac6-4c59-a716-472910c03f6f',
+  dashboard: 'bench_roc',
+  component: 'roc-demo-viz',
   modes: [
     ['pr', 'PR curve'],
     ['roc', 'ROC'],
@@ -64,6 +69,8 @@ const state = { apiBase: null, options: [], selected: [] };
 async function boot() {
   const meta = await fetch('/site-data.json').then((r) => r.json());
   state.apiBase = meta.apiBase;
+  FILTER_DEMO.dashboard = dashboardId(meta, FILTER_DEMO.dashboard);
+  MODE_DEMO.dashboard = dashboardId(meta, MODE_DEMO.dashboard);
   mountSharedNav(meta.pages || []);
 
   mountScenarios();

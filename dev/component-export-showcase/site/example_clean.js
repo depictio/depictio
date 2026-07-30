@@ -24,12 +24,15 @@
 
 const API_HINT = '/site-data.json';
 
-const VIRALRECON = '746b0f3c1e4a2d7f8e5b9ca2';
+/* Dashboards are named, not pinned by id. `resolveDashboards()` swaps these for
+ * this instance's real ObjectIds at init, from /site-data.json. An id baked in
+ * here is correct only until someone re-seeds, and then every panel 404s. */
+const VIRALRECON = 'viralrecon';
 const BENCH = {
-  ci: '6a6a671b2b176f56bdcf5f2a',
-  confusion: '6a6a671b2b176f56bdcf5f2c',
-  pr: '6a6a671b2b176f56bdcf5f2e',
-  roc: '6a6a671b2b176f56bdcf5f30',
+  ci: 'bench_ci',
+  confusion: 'bench_confusion',
+  pr: 'bench_pr',
+  roc: 'bench_roc',
 };
 
 /* GHGA palette — the --mat-sys-* tokens compiled into data.ghga.de's
@@ -639,9 +642,27 @@ function formatTs(value) {
   }
 }
 
+/* Swap the symbolic dashboard names in SECTIONS for this instance's ids.
+ *
+ * Done once, in place, so the rest of the page keeps reading `panel.dashboard`
+ * without every call site learning about the lookup. A name with no dashboard
+ * behind it throws here, naming the seed command, rather than producing a URL
+ * that 404s somewhere further down. */
+function resolveDashboards(site) {
+  for (const section of SECTIONS) {
+    for (const source of section.controlSources || []) {
+      source.dashboard = dashboardId(site, source.dashboard);
+    }
+    for (const panel of section.panels) {
+      panel.dashboard = dashboardId(site, panel.dashboard);
+    }
+  }
+}
+
 async function init() {
   const site = await (await fetch(API_HINT)).json();
   state.apiBase = site.apiBase;
+  resolveDashboards(site);
   mountSharedNav(site.pages, { backHref: '/', backLabel: 'index' });
 
   document.getElementById('subject').textContent =

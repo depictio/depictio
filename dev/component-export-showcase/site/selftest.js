@@ -16,11 +16,14 @@
 
 const API_HINT = '/site-data.json';
 
-const VIRALRECON = '746b0f3c1e4a2d7f8e5b9ca2';
-const BENCH_PR = '6a6a671b2b176f56bdcf5f2e';
-const BENCH_CI = '6a6a671b2b176f56bdcf5f2a';
-const BENCH_CM = '6a6a671b2b176f56bdcf5f2c';
-const BENCH_ROC = '6a6a671b2b176f56bdcf5f30';
+/* Names, not ids. `resolveDashboards()` substitutes this instance's real ids at
+ * run time — an ObjectId pinned here goes stale on the next re-seed, and a
+ * self-test that 404s because of its own hardcoding tests nothing. */
+const VIRALRECON = 'viralrecon';
+const BENCH_PR = 'bench_pr';
+const BENCH_CI = 'bench_ci';
+const BENCH_CM = 'bench_confusion';
+const BENCH_ROC = 'bench_roc';
 
 const SAMPLES = ['SAMPLE_01', 'SAMPLE_02', 'SAMPLE_03'];
 const CALLERS = ['deepvariant', 'strelka2'];
@@ -103,6 +106,7 @@ async function fetchSpec(apiBase, entry, filters) {
 
 async function run() {
   const site = await (await fetch(API_HINT)).json();
+  for (const entry of CASES) entry.dashboard = dashboardId(site, entry.dashboard);
   const rows = document.getElementById('rows');
   const summary = document.getElementById('summary');
 

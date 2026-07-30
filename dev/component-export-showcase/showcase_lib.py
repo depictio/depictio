@@ -111,8 +111,36 @@ class ExportError(RuntimeError):
         super().__init__(f"HTTP {status} on {url}: {detail}")
 
 
-def list_dashboards(token: str) -> list[dict]:
-    return request("/dashboards/list", token=token)
+def list_dashboards(token: str, include_child_tabs: bool = False) -> list[dict]:
+    """Dashboards visible to this token.
+
+    ``include_child_tabs`` matters here: the showcase embeds components from
+    per-topic tabs ("Community & Diversity", the benchmark demos), and the default
+    listing returns only main tabs, so without it those dashboards look absent.
+    """
+    params = {"include_child_tabs": "true"} if include_child_tabs else None
+    return request("/dashboards/list", token=token, params=params)
+
+
+def dashboards_by_title(token: str) -> dict[str, str]:
+    """``{title: dashboard_id}`` for this instance.
+
+    The site pages address dashboards by title rather than by ObjectId. A
+    dashboard's id is assigned at import and changes whenever the seed is
+    re-imported, so an id baked into a page is correct until someone re-seeds and
+    then 404s — which is exactly how the versioning page broke. A title is the
+    thing the YAML actually pins.
+
+    Reads ``dashboard_id``, *not* ``_id``. A dashboard document carries both and
+    they differ; every route — the export API included — looks a dashboard up by
+    ``dashboard_id``, so ``_id`` yields URLs that 404 while looking entirely
+    plausible.
+    """
+    return {
+        d["title"]: str(d.get("dashboard_id") or d["_id"])
+        for d in list_dashboards(token, include_child_tabs=True)
+        if d.get("title")
+    }
 
 
 def manifest(dashboard_id: str, token: str | None = None) -> list[dict]:

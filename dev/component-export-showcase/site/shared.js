@@ -11,6 +11,28 @@
 /* Single source of truth for the export parameter surface. Every page builds
  * its URLs through here, so adding a parameter is one edit and no page can
  * silently disagree about the contract. */
+
+/* Dashboard ids, resolved by title server-side and delivered in /site-data.json.
+ *
+ * Pages must not hardcode an ObjectId: it is minted at import, so re-seeding a
+ * dashboard changes it and every page pinning the old one 404s — with a
+ * well-formed request, so nothing looks wrong until a panel is simply missing.
+ * Component ids *are* safe to hardcode; they are the YAML tags.
+ *
+ * Throws rather than returning undefined, because `.../dashboards/undefined/...`
+ * fails later and further from the cause.
+ */
+function dashboardId(site, name) {
+  const id = (site.dashboards || {})[name];
+  if (!id) {
+    throw new Error(
+      `Dashboard "${name}" is not seeded on this instance. ` +
+        `Run: python seed_benchmark_dashboards.py`,
+    );
+  }
+  return id;
+}
+
 function exportUrl(apiBase, { dashboard, component, format = 'json', theme = 'light',
                              filters = null, controls = null, expectVersion = null } = {}) {
   const params = new URLSearchParams({ format, theme });
