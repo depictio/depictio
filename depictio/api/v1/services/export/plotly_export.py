@@ -36,6 +36,7 @@ from depictio.api.v1.services.export.capabilities import (
     resolve_viz_kind,
     unsupported_reason,
 )
+from depictio.api.v1.services.export.delta_location import init_data_for
 
 
 class ExportUnsupported(HTTPException):
@@ -105,30 +106,6 @@ def _normalise_figure(fig: Any) -> dict[str, Any]:
     return {"data": list(fig_dict.get("data") or []), "layout": layout}
 
 
-def _init_data_for(dc_id: Any, dc_config: dict) -> dict[str, dict]:
-    """Build the ``init_data`` hint ``load_deltatable_lite`` uses to skip a lookup.
-
-    Falls back to the deltatables collection when the component's stored snapshot
-    predates ``delta_location`` being persisted — same fallback as ``render_map``.
-    """
-    delta_loc = dc_config.get("delta_location")
-    if not delta_loc:
-        from depictio.api.v1.db import deltatables_collection
-
-        dt = deltatables_collection.find_one({"data_collection_id": ObjectId(str(dc_id))})
-        if dt:
-            delta_loc = dt.get("delta_table_location")
-    if not delta_loc:
-        return {}
-    return {
-        str(dc_id): {
-            "delta_location": delta_loc,
-            "dc_type": dc_config.get("type") or "table",
-            "size_bytes": dc_config.get("size_bytes", 0),
-        }
-    }
-
-
 async def _figure_spec(component: dict, filter_metadata: list[dict], theme: str) -> dict[str, Any]:
     """Figure component — reuses the exact Celery task the viewer render uses."""
     from depictio.api.v1.celery_dispatch import offload_or_run, should_offload_render
@@ -188,7 +165,7 @@ def _map_spec(
         workflow_id=ObjectId(str(wf_id)),
         data_collection_id=str(dc_id),
         metadata=filter_metadata or None,
-        init_data=_init_data_for(dc_id, component.get("dc_config") or {}),
+        init_data=init_data_for(dc_id, component.get("dc_config") or {}),
     )
     fig, _ = render_map(
         df=df,

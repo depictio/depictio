@@ -298,12 +298,23 @@ async def _add_interactive(data, component, synthetic_dc_id, user) -> None:
         from bson import ObjectId
 
         from depictio.api.v1.deltatables_utils import load_deltatable_lite
+        from depictio.api.v1.services.export.delta_location import init_data_for
+
+        # Without init_data the loader falls back to an authenticated HTTP call it
+        # cannot make from here, and the control renders with an empty option list
+        # while the response still looks healthy. See delta_location.py.
+        init_data = init_data_for(real_dc_id, component.get("dc_config") or {})
+        if not init_data:
+            raise LookupError(
+                f"data collection {real_dc_id} has no materialised Delta table"
+            )
 
         df = load_deltatable_lite(
             workflow_id=ObjectId(str(component.get("wf_id"))),
             data_collection_id=str(real_dc_id),
             select_columns=[column],
             load_for_options=True,
+            init_data=init_data,
         )
         values = [v for v in df.get_column(column).unique().to_list() if v is not None]
         data["unique"][f"{synthetic_dc_id}::{column}"] = sorted(str(v) for v in values)
