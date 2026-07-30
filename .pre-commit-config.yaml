@@ -55,6 +55,17 @@ repos:
         files: ^helm-charts/depictio/
         pass_filenames: false
 
+# Guard the shipped default dashboard thumbnails against drive-by regeneration
+-   repo: local
+    hooks:
+      - id: check-screenshot-churn
+        name: Guard default dashboard thumbnails
+        description: 'Block accidental commits of regenerated default screenshots (opt in with DEPICTIO_ALLOW_SCREENSHOT_UPDATE=1)'
+        entry: scripts/check-screenshot-churn.sh
+        language: system
+        files: ^depictio/api/static/screenshots/.*\.png$
+        pass_filenames: false
+
 # Clean jupyter notebooks
 -   repo: https://github.com/kynan/nbstripout
     rev: 0.9.1
