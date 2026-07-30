@@ -127,8 +127,15 @@ const DatePickerRenderer: React.FC<{
       .catch((err) => {
         if (cancelled) return;
         console.warn('[DatePickerRenderer] fetchColumnDateRange failed:', err);
+        // Drop the rejected promise so a later mount can retry.
         dateRangeCache.delete(cacheKey);
-        setError(err?.message || String(err));
+        // A failed spec fetch says nothing about whether this control is
+        // usable: a data collection whose deltatable document is missing
+        // answers /specs with a 404. Fall back to an unconstrained picker
+        // rather than replacing the control with a raw "Failed to fetch
+        // specs: 404" — the user can still pick dates and the filter still
+        // applies downstream.
+        setBounds({ min: null, max: null });
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
