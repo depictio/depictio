@@ -305,9 +305,7 @@ async def _add_interactive(data, component, synthetic_dc_id, user) -> None:
         # while the response still looks healthy. See delta_location.py.
         init_data = init_data_for(real_dc_id, component.get("dc_config") or {})
         if not init_data:
-            raise LookupError(
-                f"data collection {real_dc_id} has no materialised Delta table"
-            )
+            raise LookupError(f"data collection {real_dc_id} has no materialised Delta table")
 
         df = load_deltatable_lite(
             workflow_id=ObjectId(str(component.get("wf_id"))),

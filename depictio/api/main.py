@@ -226,6 +226,39 @@ if not _cors_origins:
         "Set DEPICTIO_FASTAPI_CORS_ALLOWED_ORIGINS to allow specific origins."
     )
 
+
+class EmbedPreflightMiddleware(BaseHTTPMiddleware):
+    """Answer CORS preflights for the export routes from the *embed* allowlist.
+
+    ``CORSMiddleware`` above reads ``DEPICTIO_FASTAPI_CORS_ALLOWED_ORIGINS``, is
+    credentialed, and is empty by default, so it answers 400 to a preflight from an
+    origin that is allow-listed only for embedding. Embeds deliberately use a
+    separate, uncredentialed allowlist
+    (``DEPICTIO_FASTAPI_EMBED_ALLOWED_ORIGINS``), and preflights never reach a
+    route handler, so this is the only place that grant can be applied.
+
+    Concretely, it is what makes a conditional GET work: ``If-None-Match`` is not
+    CORS-safelisted, so revalidating against the ETag every export already returns
+    is preflighted. Without this the ETag is served, exposed, and unusable.
+
+    Registered *after* ``CORSMiddleware`` because Starlette runs the most recently
+    added middleware outermost — this must see OPTIONS first. Anything it does not
+    recognise as an allow-listed embed preflight falls through to the global policy
+    untouched.
+    """
+
+    async def dispatch(self, request: Request, call_next: Any) -> Response:
+        if _EMBED_PATH_RE.match(request.url.path):
+            from depictio.api.v1.services.export.cors import preflight_response
+
+            handled = preflight_response(request)
+            if handled is not None:
+                return handled
+        return await call_next(request)
+
+
+app.add_middleware(cast(Any, EmbedPreflightMiddleware))
+
 # Add analytics middleware if enabled
 if settings.analytics.enabled:
     app.add_middleware(cast(Any, AnalyticsMiddleware), enabled=settings.analytics.enabled)
