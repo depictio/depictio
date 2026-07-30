@@ -39,6 +39,7 @@ from depictio.api.v1.services.export.capabilities import (
     resolve_viz_kind,
     unsupported_reason,
 )
+from depictio.api.v1.services.export.cors import apply_embed_cors, embed_cors_headers
 from depictio.api.v1.services.export.filter_binding import bind_filters
 from depictio.api.v1.services.export.filter_options import filter_options
 from depictio.api.v1.services.export.plotly_export import build_plotly_export
@@ -159,30 +160,10 @@ def _html_url(request: Request, dashboard_id: Any, component_id: str, theme: str
     )
 
 
-def _embed_cors_headers(request: Request) -> dict[str, str]:
-    """CORS headers reflecting an allow-listed embedder's Origin, uncredentialed.
-
-    The global CORS allowlist is empty by default and is credentialed; widening it
-    for embeds would be the wrong lever. Embeds are anonymous by design, so no
-    ``Access-Control-Allow-Credentials`` is sent and there is no CSRF surface.
-    """
-    origin = request.headers.get("origin")
-    if origin and origin in settings.fastapi.embed_allowed_origins:
-        return {
-            "Access-Control-Allow-Origin": origin,
-            "Vary": "Origin",
-            # Without this the browser hides ETag from JS, so a page cannot
-            # revalidate its own embed: fetch() sees `null` and has nothing to
-            # send back as If-None-Match. Response headers are not readable
-            # cross-origin unless named here.
-            "Access-Control-Expose-Headers": "ETag",
-        }
-    return {}
-
-
-def _apply_embed_cors(request: Request, response: Any) -> None:
-    for header, value in _embed_cors_headers(request).items():
-        response.headers[header] = value
+#: Simple GETs are decorated here on the way out; the matching *preflight* is
+#: answered by EmbedPreflightMiddleware in api/main.py, since OPTIONS never
+#: reaches a route handler. Both read the same embed allowlist.
+_apply_embed_cors = apply_embed_cors
 
 
 @export_endpoint_router.get("/dashboards/{dashboard_id}/components")
@@ -366,7 +347,7 @@ async def _export(
         # Error bodies here are actionable — they name the supported formats and
         # link to the HTML variant. Without CORS headers a cross-origin caller
         # gets an opaque network failure instead and never sees any of that.
-        cors = _embed_cors_headers(request)
+        cors = embed_cors_headers(request)
         if cors:
             exc.headers = {**(exc.headers or {}), **cors}
         raise
