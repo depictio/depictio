@@ -142,6 +142,31 @@ curl -sD - -o /dev/null -H "Origin: http://localhost:8899" \
 `X-Frame-Options` line at all — that header has no "allow these origins" form,
 so the export path has to skip it.
 
+## Sharing it with someone
+
+`freeze_site.py` writes the pages out as static files (5 MB), because their only
+server dependency is `/site-data.json`. Any static host will then serve them.
+
+```bash
+python freeze_site.py --out /tmp/showcase --api https://api.demo.example.org/depictio/api/v1
+```
+
+What cannot be frozen is the API the pages fetch from, so there are three levels:
+
+| what the recipient gets | needs |
+|---|---|
+| the screenshots in `screenshots/` | nothing |
+| static pages + `--snapshot` (adds ~160 MB of `exports/`) | nothing; figures render, nothing interactive works |
+| the live site | a reachable Depictio with `embed_enabled`, and the static host's origin in `embed_allowed_origins` |
+
+Verified: served by `python -m http.server` on a second origin, every page
+renders and the embedded control still filters. `--snapshot` is what makes the
+gallery's "saved file" mode resolve; without it those cards 404.
+
+Note that `embed_enabled` lets anonymous callers read **public projects** on that
+instance, which is the deliberate widening the flag exists for. Only put it on an
+instance whose public projects are ones you would publish.
+
 ## Files
 
 | path | role |
@@ -154,6 +179,7 @@ so the export path has to skip it.
 | `shoot_all.py` | one screenshot per page — stitched viewport captures, so cross-origin frames appear |
 | `shoot_site.py` | the gallery's three delivery modes, one shot each |
 | `shoot_page.py` | a single route, for iterating on one page's styling |
+| `freeze_site.py` | writes the site out as static files, for sharing |
 
 The notebook is generated rather than committed with outputs, because a
 committed `.ipynb` is JSON with embedded base64 and cannot be reviewed in a diff.
