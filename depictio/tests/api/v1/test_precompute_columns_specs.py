@@ -27,11 +27,12 @@ from __future__ import annotations
 
 import collections
 import math
-from datetime import datetime
+from datetime import date, datetime, time
 
 import numpy as np
 import polars as pl
 import pytest
+from bson import encode as bson_encode
 
 from depictio.api.v1.endpoints.deltatables_endpoints.utils import precompute_columns_specs
 from depictio.api.v1.utils import agg_functions as REAL_AGG_FUNCTIONS
@@ -408,3 +409,44 @@ def test_description_is_attached_from_dc_config() -> None:
         s["name"]: s["description"] for s in precompute_columns_specs(df, _AGG_FUNCTIONS, dc_data)
     }
     assert specs == {"c": "the c column", "other": None}
+
+
+# --------------------------------------------------------------------------
+# Temporal columns — the ampliseq ``metadata`` regression
+# --------------------------------------------------------------------------
+# Specs go straight into MongoDB, so every value has to be BSON-encodable.
+# polars hands back ``datetime.date`` for a Date column and ``datetime.time``
+# for a Time column, neither of which BSON can encode. The upsert answered 500
+# with ``InvalidDocument: cannot encode object: datetime.date(...)``, so no
+# deltatable document was written; the S3 prefix that had just been written was
+# then reaped as an orphan, and every component bound to the DC was left on a
+# 404. Hit in production by ampliseq's ``metadata`` DC, whose ``sampling_date``
+# is parsed by ``try_parse_dates``.
+def test_date_column_specs_are_bson_encodable() -> None:
+    df = pl.DataFrame({"sampling_date": [date(2023, 1, 5), date(2023, 3, 17)]})
+    [spec] = precompute_columns_specs(df, REAL_AGG_FUNCTIONS, _dc_data())
+
+    assert spec["type"] == "datetime"
+    # The exact call that used to raise.
+    bson_encode(spec["specs"])
+    assert spec["specs"]["min"] == datetime(2023, 1, 5)
+    assert spec["specs"]["max"] == datetime(2023, 3, 17)
+
+
+def test_datetime_column_specs_keep_their_time_component() -> None:
+    """``datetime`` is BSON-native and must not be truncated to midnight."""
+    stamps = [datetime(2023, 1, 5, 13, 45, 30), datetime(2023, 3, 17, 4, 20, 0)]
+    df = pl.DataFrame({"seen_at": stamps})
+    [spec] = precompute_columns_specs(df, REAL_AGG_FUNCTIONS, _dc_data())
+
+    bson_encode(spec["specs"])
+    assert spec["specs"]["min"] == stamps[0]
+    assert spec["specs"]["max"] == stamps[1]
+
+
+def test_time_column_specs_are_bson_encodable() -> None:
+    """A Time column normalizes to ``object``, whose mode is a ``datetime.time``."""
+    df = pl.DataFrame({"collected_at": [time(9, 30), time(17, 15)]})
+    [spec] = precompute_columns_specs(df, REAL_AGG_FUNCTIONS, _dc_data())
+
+    bson_encode(spec["specs"])

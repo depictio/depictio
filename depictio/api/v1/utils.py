@@ -1,6 +1,6 @@
 import os
 import re
-from datetime import datetime
+from datetime import date, datetime, time
 from pathlib import PosixPath
 
 import numpy as np
@@ -234,13 +234,31 @@ def serialize_for_mongo(data):
 
 
 def numpy_to_python(value):
-    """Converts numpy data types to native Python data types."""
+    """Converts numpy and temporal values to BSON-storable Python types.
+
+    Column specs are written straight into MongoDB, so every value that comes
+    out of a polars aggregation has to be BSON-encodable. numpy scalars need
+    unwrapping, and ``datetime.date`` / ``datetime.time`` have no BSON
+    representation at all: a Date column's min/max would otherwise fail the
+    whole Delta upsert with ``InvalidDocument: cannot encode object:
+    datetime.date(...)``, leaving the data collection with no deltatable
+    document and every component bound to it on a 404.
+    """
     if isinstance(value, (np.int64, np.int32, np.int16, np.int8)):
         return int(value)
     elif isinstance(value, (np.float64, np.float32, np.float16)):
         return float(value)
     elif isinstance(value, np.bool_):
         return bool(value)
+    # datetime subclasses date and is already BSON-native, so it must be
+    # matched before the date branch or it would be truncated to midnight.
+    elif isinstance(value, datetime):
+        return value
+    elif isinstance(value, date):
+        return datetime(value.year, value.month, value.day)
+    elif isinstance(value, time):
+        # BSON has no time type; ISO keeps it readable and sortable.
+        return value.isoformat()
     return value
 
 
