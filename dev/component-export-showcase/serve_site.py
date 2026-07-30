@@ -110,6 +110,41 @@ UNLISTED = [
 #: The landing page, served at the root.
 LANDING = ("/", "landing.html")
 
+#: Dashboards the hand-written pages reference, keyed by the short name they use.
+#:
+#: Resolved by *title* at request time rather than baked into the JavaScript as an
+#: ObjectId. An id is minted at import, so re-seeding a dashboard changes it and
+#: every page pinning the old one 404s — silently, since the request is perfectly
+#: well-formed. Titles come from the YAML and survive re-import.
+#:
+#: (Component ids are safe to hardcode: since `models: make a component's YAML tag
+#: its stable id` they are the tags in the YAML, not fresh UUIDs.)
+DASHBOARD_TITLES = {
+    "viralrecon": "nf-core/viralrecon",
+    "ampliseq": "nf-core/ampliseq",
+    "community": "Community & Diversity",
+    "bench_ci": "Metric ± CI forest (demo)",
+    "bench_confusion": "Confusion matrix (demo)",
+    "bench_pr": "Precision-recall benchmark (demo)",
+    "bench_roc": "ROC / PR curve (demo)",
+}
+
+
+def dashboard_ids() -> dict[str, str]:
+    """``{short name: dashboard_id}``, omitting any dashboard not on this instance.
+
+    Omission rather than a placeholder is deliberate: a page can then say "this
+    dashboard is not seeded here" instead of issuing a request guaranteed to 404.
+    """
+    try:
+        by_title = s.dashboards_by_title(s.admin_token())
+    except Exception as exc:  # instance down, or no admin token on this machine
+        print(f"  ! could not resolve dashboard ids: {exc}")
+        return {}
+    return {
+        name: by_title[title] for name, title in DASHBOARD_TITLES.items() if title in by_title
+    }
+
 
 def site_data() -> dict:
     """Gallery model: one entry per exported component, plus instance wiring."""
@@ -159,6 +194,7 @@ def site_data() -> dict:
     return {
         "apiBase": s.api_base(),
         "pages": [{"href": href, "label": label} for href, label, _ in PAGES],
+        "dashboards": dashboard_ids(),
         "components": entries,
         "counts": {
             "total": len(entries),
