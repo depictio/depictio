@@ -8,6 +8,28 @@
  * `dashboardId` is a placeholder — the offline api shim ignores it and reads the
  * embedded payload instead — but `ComponentRenderer` requires it to be truthy
  * before it will render figure / table / map / image / multiqc types.
+ *
+ * ## Embedding an interactive control
+ *
+ * An `interactive` component renders here as the real Depictio control, but a
+ * selection inside a cross-origin frame is invisible to the page around it —
+ * the host cannot read frame state, and the frame cannot reach into the host.
+ * `postMessage` is the only channel across that boundary, so a selection is
+ * posted out as:
+ *
+ *     { source: "depictio-embed", type: "filter",
+ *       componentId, dcId, filter: { interactive_component_type, column_name, value } }
+ *
+ * The host listens, and forwards the filter to its other components as
+ * `?filters=[…]`. That makes an embedded control usable as the filter UI for a
+ * page whose figures are plain JSON exports — the frame supplies the widget,
+ * the host owns the wiring.
+ *
+ * `targetOrigin` is `"*"` because the bundle is built once and served to every
+ * allow-listed embedder; it cannot know at build time which origin will frame
+ * it. Nothing sensitive travels in the message — it carries a column name and a
+ * value the user just picked — and the host must verify `event.origin` itself,
+ * which is the check that actually matters.
  */
 import React from 'react';
 import { Alert, Box } from '@mantine/core';
@@ -43,8 +65,43 @@ interface Props {
   payload: EmbedGlobal;
 }
 
+/** Wire protocol marker, so a host can tell our messages from anyone else's. */
+const MESSAGE_SOURCE = 'depictio-embed';
+
 const EmbedApp: React.FC<Props> = ({ payload }) => {
   const metadata = payload.component as unknown as StoredMetadata;
+
+  const publishFilter = React.useCallback(
+    (filter: unknown) => {
+      if (typeof window === 'undefined' || window.parent === window) return;
+      window.parent.postMessage(
+        {
+          source: MESSAGE_SOURCE,
+          type: 'filter',
+          componentId: String((metadata as { index?: unknown })?.index ?? ''),
+          dcId: String((metadata as { dc_id?: unknown })?.dc_id ?? ''),
+          filter,
+        },
+        '*',
+      );
+    },
+    [metadata],
+  );
+
+  // Tell the host the frame is live and what it is, so a page can lay out
+  // around a control before the user touches it.
+  React.useEffect(() => {
+    if (typeof window === 'undefined' || window.parent === window) return;
+    window.parent.postMessage(
+      {
+        source: MESSAGE_SOURCE,
+        type: 'ready',
+        componentId: String((metadata as { index?: unknown })?.index ?? ''),
+        componentType: metadata?.component_type ?? null,
+      },
+      '*',
+    );
+  }, [metadata]);
 
   if (!metadata || !metadata.component_type) {
     return (
@@ -70,6 +127,7 @@ const EmbedApp: React.FC<Props> = ({ payload }) => {
         <ComponentRenderer
           metadata={metadata}
           filters={[]}
+          onFilterChange={publishFilter}
           dashboardId="embed"
           cardValue={
             (payload.data?.cards?.values as Record<string, unknown> | undefined)?.[

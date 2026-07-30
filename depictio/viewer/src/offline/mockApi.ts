@@ -41,6 +41,8 @@ export interface OfflineData {
   unique: Record<string, string[]>;
   ranges: Record<string, { min: number | null; max: number | null }>;
   specs: Record<string, Record<string, unknown>>;
+  /** `{dcId -> {column -> dtype}}`. Several advanced-viz renderers read the DC
+   *  schema to discover columns the stored config under-specifies. */
   schemas: Record<string, Record<string, string>>;
   advancedVizData: Record<string, unknown>;
   compute: Record<string, unknown>;
@@ -167,9 +169,15 @@ export async function fetchSpecs(dcId: string): Promise<Record<string, unknown>>
 /** Column menus (an embedding's colour-by and hover extras, a rarefaction's
  *  grouping) read the DC schema to know what can be picked. The Python side
  *  fills `schemas` only for those kinds, and only with the columns it actually
- *  shipped, so anything this returns has values in `advancedVizData`. */
+ *  shipped, so anything this returns has values in `advancedVizData`.
+ *
+ *  Returns `{}` rather than throwing when a DC is absent: every caller treats
+ *  the schema as best-effort, and falling through to the real
+ *  `fetchPolarsSchema` would hit the network from inside a bundle whose
+ *  `connect-src 'none'` CSP blocks it.
+ */
 export async function fetchPolarsSchema(dcId: string): Promise<Record<string, string>> {
-  return need(DATA().schemas, dcId, 'polars-schema');
+  return DATA().schemas?.[dcId] ?? {};
 }
 
 // ---- image / multiqc (keyed by component id) ------------------------------
