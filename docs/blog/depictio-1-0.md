@@ -25,8 +25,20 @@ everything. What changed is that it now does that at the scale your pipelines
 actually produce, and at speed.
 
 That is what 1.0 means here. Not "feature complete", which no tool ever is, but
-fast, stable enough to leave running, and settled enough that building on top of
-it is a reasonable thing to do. Here is what changed.
+four specific things:
+
+- **It stopped moving.** The data model, the API and the viewer are stable, so a
+  project you ingest today still opens next year and code you write against the
+  API does not need rewriting at the next release.
+- **It is meant to be deployed.** Independently scaling API and worker pools,
+  Docker or Kubernetes, and health reporting when an ingestion goes wrong,
+  instead of a thing you babysit.
+- **It holds up on real data.** Millions of rows across linked collections, on
+  hardware you already have.
+- **A lot is already in it.** Eighteen advanced visualisation types, MultiQC
+  rendered inline, images, maps and trees, not a roadmap promising them.
+
+Here is what changed.
 
 <div style="max-width: 1200px; margin: 1.5rem auto 2rem auto;">
 <div style="padding: 64.29% 0 0 0; position: relative">
