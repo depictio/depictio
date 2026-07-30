@@ -68,10 +68,16 @@ BEFORE POSTING:
       plugin derived the URL from the emoji heading and produced
       /blog/-depictio-10-from-prototype-to-production/. Use `latest/`, not a
       version number, so the link does not rot at the next release.
-- [ ] The LinkedIn posts state the link twice on purpose (near the top, where it
-      is visible before "see more", and again at the end). Keep both.
-- [ ] LinkedIn strips markdown. Bold is done with unicode math-bold chars
-      (matching the previous Depictio post's style); keep or drop as you prefer.
+- [ ] LinkedIn: pick ONE from the company set (C1-C3) and ONE from the personal
+      set (P1-P3). Within a set the three take different angles on purpose, so
+      posting two of them reads as indecision rather than a campaign. C1 and P1
+      are the defaults. Posting one of each is fine and intended: the company page
+      and the personal profile have different audiences.
+- [ ] Unicode bold appears on the HOOK LINE ONLY, per the launch-kit rule in
+      docs/comms/launch-kit.md section 6. Screen readers announce those characters
+      one at a time and LinkedIn search does not index them, so it must never
+      carry load-bearing text or appear in a hashtag. Drop it if you prefer;
+      the hooks read fine unstyled.
 - [ ] Attach the filtering screencast (vimeo 1213942946) as NATIVE video to
       LinkedIn rather than a link. Native video gets far better reach, and a
       link in the post body suppresses it. If you link instead, put the URL in
@@ -88,75 +94,284 @@ All facts verified against the article and the repo on 2026-07.
 
 # Social copy: Depictio 1.0
 
-## 1. LinkedIn, Depictio company page
+## LinkedIn
 
-Product voice, matches the previous company post. The post's job is to get the
-click, not to be the article: the first two lines are all that show before "see
-more", so the hook and the fact that there is something to read go up top. Three
-numbers, not ten, and the link appears twice (top and bottom) because people
-skim to the end.
+Two sets of three. The **company** set speaks as Depictio, about what the release
+means for someone deciding whether to run it. The **personal** set is Thomas's
+voice, in the build-in-public register the launch-kit arc uses.
+
+All six lead on the same four things, in different orders and proportions:
+
+1. **Stability** — the data model, the API and the viewer stopped moving.
+2. **Production** — meant to be deployed and left running, not demoed.
+3. **Performance and scalability** — real pipeline volumes, and it scales out.
+4. **Breadth** — a lot is built in already, not a roadmap.
+
+Common notes:
+
+- The company page already announced 1.0 about a month ago, so none of these says
+  "1.0 is here" again. They announce **what 1.0 actually means**, via the write-up.
+- Emphasis follows the launch-kit rule: emoji anchors, `→`, short lines, and
+  unicode bold on **at most the hook line**. Never in hashtags or load-bearing text.
+- Attach the filtering screencast (vimeo 1213942946) as native video, and put the
+  article link in the first pinned comment. A body link suppresses reach. Where a
+  variant has `{BLOG_URL}` inline, that is the version to use if you would rather
+  not use a comment.
+- Tag EMBL and SciLifeLab. Only tag GHGA / MGnify / ISCIII if you are comfortable
+  naming them publicly; the article says "as far as I'm aware".
+- Pick ONE from each set. Do not post two variants from the same set.
 
 ---
 
-𝗡𝗲𝘄 𝗮𝗿𝘁𝗶𝗰𝗹𝗲: 𝘄𝗵𝗮𝘁 𝘄𝗲𝗻𝘁 𝗶𝗻𝘁𝗼 𝗗𝗲𝗽𝗶𝗰𝘁𝗶𝗼 𝟭.𝟬 ⚡
+## Company set
 
-A dashboard over 12 million rows, three linked collections, on a laptop with one API worker. Change a filter and every component catches up in under two seconds.
+### C1 — What "1.0" actually means (default)
 
-We have written up how, in full, with the benchmark methodology and the numbers that did not flatter us:
+Answers the only question a prospective operator has: is this safe to build on?
+Leads with stability, because that is what a major version is a promise about.
 
-📖 {BLOG_URL}
+---
 
-Three things from it:
+𝗪𝗵𝗮𝘁 𝗮 𝟭.𝟬 𝗮𝗰𝘁𝘂𝗮𝗹𝗹𝘆 𝗽𝗿𝗼𝗺𝗶𝘀𝗲𝘀
 
-→ 𝗜𝘁 𝗯𝗮𝗿𝗲𝗹𝘆 𝗺𝗮𝘁𝘁𝗲𝗿𝘀 𝘄𝗵𝗲𝗿𝗲 𝗮 𝗳𝗶𝗹𝘁𝗲𝗿 𝘀𝘁𝗮𝗿𝘁𝘀. Filtering the 12M-row feature matrix costs about the same as filtering the 500-row sample sheet, because both resolve to a few hundred sample IDs in 25 ms before any data is touched.
+A dashboard is not something you build and admire. You set it up once, and come
+back to it months later with new samples, often after the person who built it has
+moved on.
 
-→ 𝗕𝗼𝘅 𝗽𝗹𝗼𝘁𝘀, 𝗵𝗶𝘀𝘁𝗼𝗴𝗿𝗮𝗺𝘀 𝗮𝗻𝗱 𝗯𝗮𝗿 𝗰𝗵𝗮𝗿𝘁𝘀 𝗺𝗮𝘁𝗲𝗿𝗶𝗮𝗹𝗶𝘀𝗲 𝘇𝗲𝗿𝗼 𝗿𝗼𝘄𝘀. They are computed as aggregations directly over the stored files: exact, not sampled. Largest data frame held in memory across the whole run: 1.6 MB.
+That only works if the thing underneath holds still. So that is what 1.0 is:
 
-→ 𝗧𝗵𝗲 𝗳𝗿𝗼𝗻𝘁 𝗲𝗻𝗱 𝗶𝘀 𝗻𝗼𝘄 𝗥𝗲𝗮𝗰𝘁 𝗮𝗻𝗱 𝗧𝘆𝗽𝗲𝗦𝗰𝗿𝗶𝗽𝘁, and the old Dash codebase is gone. One FastAPI backend instead of two servers, and full control of the render path, which is what made the performance work possible at all.
+✅ The data model, the API and the viewer are stable. Projects you ingest today
+keep working. Dashboards you build today keep opening. Code you write against the
+API does not need rewriting at the next release.
 
-Those timings are a floor, not a ceiling: one worker, dev mode, auto-reloader attached. A real deployment runs several workers on server hardware.
+✅ Built to be deployed and left alone. The API runs several workers behind a
+replica, heavy jobs (ingestion, clustering, rendering) go to a separate Celery
+pool so they never block the interface, and the viewer and API scale out to more
+replicas under load. On Kubernetes, MongoDB can run as a three-node replica set.
 
-What none of it changes is the point of the tool. Link your data collections once, then filter from anywhere: a dropdown in the side panel, a lasso around points on a scatter plot, rows in a table, a region on a map. Every other component follows.
+✅ Fast at real pipeline volumes. Twelve million rows across three linked
+collections, on a laptop with a single API worker: first component on screen in
+133 to 270 ms, and a filter fully caught up in 1.7 s at four components, 2.0 s at
+eight, 4.1 s at sixteen. Those are floor numbers, from one worker in dev mode.
 
-MIT-licensed and self-hosted. In production at EMBL, and free for life-science researchers at Swedish universities through SciLifeLab Serve.
+✅ Already broad. Eighteen advanced visualisation types, MultiQC rendered inline
+rather than linked, images, GeoJSON maps, phylogenetic trees, and dashboards that
+carry an ingestion report and a health banner so a bad scan is visible instead of
+silent.
 
-📖 Read it → {BLOG_URL}
-🚀 Live demo → https://demo.depictio.embl.org/dashboards
-⭐ GitHub → https://github.com/depictio/depictio
+Still self-hosted, still MIT-licensed. Your data stays on your infrastructure,
+there is no vendor account and no per-seat bill.
+
+We wrote the whole thing up, including the benchmark numbers that did not flatter
+us. Link in the comments.
 
 #bioinformatics #opensource #nfcore #datavisualization #computationalbiology
 
 ---
 
-## 2. LinkedIn, Thomas's personal profile
+### C2 — The gap between a tool people try and a tool people keep
 
-First person, reflective, shorter. Personal posts do better when they admit
-something, so this leads with the flaw rather than the fix. It says plainly that
-there is an article and what is in it, rather than trailing a bare URL at the
-end: a link with no description reads like an afterthought and gets treated as
-one.
+Leads on performance and scalability, framed as the reason adoption sticks.
+Best paired with the filtering screencast.
 
 ---
 
-A year ago I put Depictio online and called it a prototype, which was generous. It worked, people built real dashboards with it, and it fell over on anything past a few tens of thousands of rows.
+𝗧𝗵𝗲 𝗱𝗶𝗳𝗳𝗲𝗿𝗲𝗻𝗰𝗲 𝗯𝗲𝘁𝘄𝗲𝗲𝗻 𝗮 𝘁𝗼𝗼𝗹 𝗽𝗲𝗼𝗽𝗹𝗲 𝘁𝗿𝘆 𝗮𝗻𝗱 𝗮 𝘁𝗼𝗼𝗹 𝗽𝗲𝗼𝗽𝗹𝗲 𝗸𝗲𝗲𝗽
 
-I have just published the write-up of what went into fixing that. It is the long version, with the benchmark method and the results that did not flatter us, because a benchmark you only publish when it looks good is marketing.
+Usually it is not features. It is whether the thing is still pleasant on your
+actual data, not the demo file.
 
-📖 The full article is here → {BLOG_URL}
+So here is Depictio 1.0 on twelve million rows, across three linked collections,
+running on a laptop with a single API worker in dev mode:
 
-The number I am most pleased with: a dashboard over 12 million rows, three linked collections, running on my laptop with a single API worker in dev mode. Change a filter and the whole thing catches up in under two seconds. Not one chart. All of them, across all three collections.
+→ First component on screen in 133 to 270 ms, whether the dashboard holds 4
+components or 30.
+→ Change a filter and the dashboard starts responding in 100 to 200 ms, and is
+fully caught up in 1.7 s at four components, 2.0 s at eight and 4.1 s at sixteen,
+with all three collections re-filtered.
+→ Box plots, histograms and bar charts materialise zero rows. They are computed
+as aggregations directly over the stored files, so they are exact rather than
+sampled. Largest data frame held in memory across the whole run: 1.6 MB.
 
-The part I did not expect going in: it barely matters where the filter starts. Filtering the 12-million-row feature matrix costs about the same as filtering the 500-row sample sheet, because both resolve down to a few hundred sample IDs in 25 milliseconds before any actual data gets touched. Getting the linking right turned out to matter more than any single optimisation.
+Floor numbers, not ceiling ones: one worker, dev mode, auto-reloader attached. A
+real deployment runs several workers on server hardware, and the services scale
+independently, so heavy ingestion or clustering never blocks the interface.
 
-I also rewrote the entire front end in React and deleted the Dash codebase. Same interface, one server instead of two, and finally full control over how things render, which is what made the rest possible.
+The other half of 1.0 is that it stopped moving. The data model, the API and the
+viewer are stable: what you ingest and build today still works at the next
+release. That is the part that makes a dashboard worth setting up at all.
 
-The article covers all of it, plus where Depictio runs today and what I am building next. It is MIT-licensed and self-hosted: in production at EMBL, and any life-science researcher at a Swedish university can spin up an instance for free on SciLifeLab Serve.
+Self-hosted, MIT-licensed, in production at EMBL and available free to
+life-science researchers at Swedish universities through SciLifeLab Serve.
 
-If you only read one section, read the performance one → {BLOG_URL}
+Full write-up, with the methodology: link in the comments.
+
+#bioinformatics #opensource #performance #datavisualization #computationalbiology
 
 ---
 
-## 3. X / Twitter
+### C3 — How much is already in the box
+
+Leads on breadth, for the reader who assumes a 1.0 is thin. Ends on stability so
+it does not read as a feature dump.
+
+---
+
+𝗔 𝟭.𝟬 𝘁𝗵𝗮𝘁 𝗶𝘀 𝗻𝗼𝘁 𝘁𝗵𝗶𝗻
+
+"1.0" often means the minimum that could be called finished. This one is the
+opposite: the point of the release is that the foundation stopped moving, and a
+lot is already built on it.
+
+What is in the box today:
+
+🌋 Eighteen advanced visualisation types aimed at omics work — volcano plots,
+clustered heatmaps, embeddings (PCA, UMAP, t-SNE, PCoA), Manhattan plots,
+oncoplots, taxonomy bars. Each arrives with its own controls: movable thresholds
+on a volcano, clustering method on a heatmap, layout on a tree.
+
+🔗 Everything filters everything. Declare how your collections relate, then filter
+from anywhere: a dropdown, a lasso on a scatter plot, rows in a table, a region on
+a map. Nothing is merged on disk, so a sample sheet can filter a MultiQC report,
+not just another table.
+
+📦 Every data type in its own format. MultiQC read as MultiQC and rendered inline,
+images from object storage, GeoJSON for maps, Newick and Nexus straight to the
+phylogeny renderer, and tabular data normalised to Delta for speed.
+
+🚀 Deployable for real. Docker or Kubernetes, independently scaling API and worker
+pools, permission-based auth, and an ingestion report plus health banner on each
+dashboard so a failed scan is visible rather than silent.
+
+And underneath all of it: a stable data model, API and viewer. Projects you ingest
+today keep working, and code you write against the API does not need rewriting
+next release.
+
+Self-hosted and MIT-licensed, the way it started.
+
+The full write-up is in the comments. What would you want to point it at first? 👇
+
+#bioinformatics #opensource #nfcore #datavisualization #singlecell
+
+---
+
+## Personal set
+
+### P1 — I was wrong about which part was hard (default)
+
+Build-in-public register, admits something, lands on the same four themes.
+
+---
+
+I have been building Depictio for about three years, and I was wrong about which
+part was hard.
+
+I assumed it was the charts. Volcano plots, clustered heatmaps, phylogenetic
+trees, coverage tracks: draw enough of those well and you have a product. So I
+built those first, and a year ago I put it online and called it a prototype, which
+was generous. It worked, people built real dashboards with it, and it fell over on
+anything past a few tens of thousands of rows.
+
+The hard part was never the charts. It was the links, and then it was holding
+still.
+
+The links, because "when you narrow this, what else has to narrow" is the whole
+tool, and working that out without reading a twelve-million-row table is what
+decides whether the dashboard is pleasant. A filter on twelve million rows across
+three linked collections is now fully caught up in about two seconds, on my
+laptop, with one API worker.
+
+Holding still, because a dashboard is something you set up once and come back to
+months later, often after the person who built it has left. So 1.0 mostly means
+the data model, the API and the viewer stopped moving, and the services split up
+so it can actually be deployed and left running.
+
+I wrote all of it up, including the benchmark numbers that did not flatter us,
+because a benchmark you only publish when it looks good is marketing.
+
+It is MIT-licensed and self-hosted. It runs in production at EMBL, and any
+life-science researcher at a Swedish university can spin up an instance for free
+on SciLifeLab Serve.
+
+{BLOG_URL}
+
+---
+
+### P2 — The unglamorous release
+
+For the audience that appreciates restraint. The hook is that this release is
+deliberately boring, which makes the stability point land.
+
+---
+
+The most useful release I have shipped is also the least exciting to announce.
+
+Depictio 1.0 has almost no new features in it. What it has is a promise: the data
+model, the API and the viewer stopped moving. Projects you ingest today keep
+working. Dashboards you build today keep opening. Code you write against the API
+does not need rewriting at the next release.
+
+That sounds like nothing until you remember what a dashboard actually is. You set
+one up once, and come back months later with new samples, often after whoever
+built it has moved on. That only works if the ground underneath is still there,
+and until now it was not.
+
+The rest of the year went into the two things that stop a tool being a demo:
+
+Making it fast on real data. Twelve million rows across three linked collections,
+a filter fully caught up in about two seconds, on a laptop with a single API
+worker. Some plots materialise zero rows at all, computed straight over the stored
+files.
+
+Making it deployable. Independently scaling API and worker pools, so heavy
+ingestion and clustering never block the interface, plus an ingestion report and
+health banner so a bad scan is visible instead of silent.
+
+There is plenty already built on top: eighteen advanced visualisation types,
+MultiQC inline, maps, trees, images. But the release itself is the foundation, and
+I am oddly proud of how boring it is.
+
+Write-up, with the numbers that did not flatter us: {BLOG_URL}
+
+---
+
+### P3 — Where it runs now
+
+Personal and slightly reflective, leading with adoption as the evidence that the
+production claims are real. Shortest of the three.
+
+---
+
+Three years in, the thing I did not expect to care most about is where Depictio
+runs when I am not the one running it.
+
+At EMBL, where it started, it serves dashboards for groups across the institute.
+And through SciLifeLab Serve, any life-science researcher at a Swedish university
+can spin up their own instance for free, with no infrastructure and no sysadmin.
+That is the deployment story I care about most, because it takes "self-hosted" and
+removes the part where you have to host it yourself. As far as I am aware it is
+also being trialled at GHGA, at MGnify, and at ISCIII.
+
+None of that was possible while it was still a prototype, which is really what
+1.0 is about. Three things had to become true:
+
+It had to hold still. The data model, the API and the viewer are stable now, so a
+dashboard you set up today still opens next year.
+
+It had to survive real data. Twelve million rows across three linked collections,
+filters caught up in about two seconds, on a laptop with one API worker.
+
+It had to be deployable by someone who is not me. Independently scaling API and
+worker pools, Docker or Kubernetes, and health reporting when ingestion goes
+wrong.
+
+Still MIT-licensed, still self-hosted, still no vendor account.
+
+I wrote up the whole year, benchmark methodology included: {BLOG_URL}
+
+---
+
+## X / Twitter
 
 ### Option A, single post (fits the 280-char limit)
 
