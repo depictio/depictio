@@ -102,16 +102,18 @@ def app(user: User) -> FastAPI:
 @pytest.fixture
 def client(app: FastAPI):
     # Both modules hold their own `settings` reference, and the CSP is built in
-    # embed.py — patching only the routes module silently leaves the real
-    # (empty) allowlist in play for frame-ancestors.
+    # embed.py while the CORS grant is decided in export/cors.py — patching only
+    # the routes module silently leaves the real (empty) allowlists in play.
     with (
         patch(f"{_ROUTES}.settings") as route_settings,
         patch("depictio.api.v1.services.export.embed.settings") as embed_settings,
+        patch("depictio.api.v1.services.export.cors.settings") as cors_settings,
     ):
         route_settings.fastapi.embed_enabled = True
         route_settings.fastapi.embed_allowed_origins = ["https://lab.example.org"]
         embed_settings.fastapi.embed_allowed_origins = ["https://lab.example.org"]
         embed_settings.fastapi.embed_csp_unsafe_inline = False
+        cors_settings.fastapi.embed_allowed_origins = ["https://lab.example.org"]
         yield TestClient(app)
 
 
@@ -472,12 +474,14 @@ class TestSecurityHeaderExemption:
         with (
             patch(f"{_ROUTES}.settings") as route_settings,
             patch("depictio.api.v1.services.export.embed.settings") as embed_settings,
+            patch("depictio.api.v1.services.export.cors.settings") as cors_settings,
             patch("depictio.api.v1.services.export.embed.EMBED_TEMPLATE_PATH", bundle),
         ):
             route_settings.fastapi.embed_enabled = True
             route_settings.fastapi.embed_allowed_origins = ["https://lab.example.org"]
             embed_settings.fastapi.embed_allowed_origins = ["https://lab.example.org"]
             embed_settings.fastapi.embed_csp_unsafe_inline = False
+            cors_settings.fastapi.embed_allowed_origins = ["https://lab.example.org"]
             yield TestClient(app)
 
     def test_html_embed_escapes_the_baseline_headers(self, secured_client, mongo):
