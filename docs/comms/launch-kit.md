@@ -71,9 +71,10 @@ truncates after ~2 lines.
 > **The 1.0 write-up is a separate, later beat.** Post 1 below is the *release*
 > announcement, already posted from the company page. The long-form article that
 > followed it ("Depictio 1.0: from prototype to production") has its own copy in
-> `docs/blog/depictio-1-0-social.md`: three company variants and three personal
-> ones, all pointing at the published article. That file is gitignored on purpose
-> (it is rewritten per attempt), so look for it on disk rather than in history.
+> `docs/blog/depictio-1-0-social.md`: one post for the company page and one for
+> the personal profile, both pointing at the published article. That file is
+> gitignored on purpose (it is rewritten per attempt), so look for it on disk
+> rather than in history.
 > Do not re-announce 1.0 from this section; the arc below assumes the release is
 > still news.
 
