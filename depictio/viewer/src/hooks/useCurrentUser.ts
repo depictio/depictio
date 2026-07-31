@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 
+import { authFetch } from 'depictio-react-core';
+
 /**
  * Calls /depictio/api/v1/auth/me/optional to identify the current user.
  * Anonymous-tolerant: returns null on missing/invalid token (HTTP 200 with
@@ -52,22 +54,6 @@ export interface UseCurrentUserResult {
   loading: boolean;
 }
 
-function authHeaders(): Record<string, string> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  try {
-    const stored = localStorage.getItem('local-store');
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      if (parsed?.access_token) {
-        headers.Authorization = `Bearer ${parsed.access_token}`;
-      }
-    }
-  } catch {
-    // ignore malformed localStorage
-  }
-  return headers;
-}
-
 export function useCurrentUser(): UseCurrentUserResult {
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [authMode, setAuthMode] = useState<AuthMode>('standard');
@@ -84,7 +70,7 @@ export function useCurrentUser(): UseCurrentUserResult {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(ME_URL, { headers: authHeaders() });
+        const res = await authFetch(ME_URL);
         if (!res.ok) {
           if (!cancelled) {
             setUser(null);

@@ -23,6 +23,8 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 
+import { ensureFreshAccessToken } from './api';
+
 export type RealtimeStatus = 'connecting' | 'connected' | 'disconnected';
 
 export type RealtimeMode = 'manual' | 'auto';
@@ -112,16 +114,11 @@ function buildWebSocketUrl(token: string | null, dashboardId: string): string {
   return `${proto}//${hostname}${portSuffix}/depictio/api/v1/events/ws?${params.toString()}`;
 }
 
-function readToken(): string | null {
-  try {
-    const raw = localStorage.getItem('local-store');
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    return typeof parsed?.access_token === 'string' ? parsed.access_token : null;
-  } catch {
-    return null;
-  }
-}
+// A WebSocket carries its credential in the URL, so these two connect paths
+// cannot ride `authFetch`. They resolve the token through
+// `ensureFreshAccessToken` instead, which matters most here: a dashboard left
+// open past the access token's 1 h life reconnects on its own, and would
+// otherwise reconnect with a token the backend has already stopped accepting.
 
 /** Subscribe to dashboard-scoped backend events. The hook owns one WebSocket
  *  for the current dashboard, reconnects with capped exponential backoff,
@@ -158,9 +155,11 @@ export function useDataCollectionUpdates(
 
     let disposed = false;
 
-    const connect = () => {
+    const connect = async () => {
       if (disposed) return;
-      const token = readToken();
+      const token = await ensureFreshAccessToken();
+      // Re-check: the effect can be torn down while the refresh is in flight.
+      if (disposed) return;
       const url = buildWebSocketUrl(token, dashboardId);
       setStatus('connecting');
 
@@ -308,9 +307,11 @@ export function useMonitoringEvents(
 
     let disposed = false;
 
-    const connect = () => {
+    const connect = async () => {
       if (disposed) return;
-      const token = readToken();
+      const token = await ensureFreshAccessToken();
+      // Re-check: the effect can be torn down while the refresh is in flight.
+      if (disposed) return;
       const url = buildWebSocketUrl(token, ADMIN_MONITORING_CHANNEL);
       setStatus('connecting');
 

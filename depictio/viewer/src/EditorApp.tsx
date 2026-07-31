@@ -64,6 +64,7 @@ import {
   RealtimeIndicator,
   useRealtimeJournal,
   batchIdsFromPayload,
+  authFetch,
 } from 'depictio-react-core';
 import type {
   DashboardData,
@@ -107,25 +108,6 @@ function dashOrigin(): string {
   return '';
 }
 
-/** Local helper — uses the same auth pattern as `depictio-react-core/api.ts`. */
-function authHeaders(): Record<string, string> {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
-  try {
-    const stored = localStorage.getItem('local-store');
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      if (parsed?.access_token) {
-        headers.Authorization = `Bearer ${parsed.access_token}`;
-      }
-    }
-  } catch {
-    // ignore
-  }
-  return headers;
-}
-
 /** Local POST wrapper for layout/component persistence. Surfaces the response
  *  body on failure so callers can debug 422 validation errors at the console.
  *  Pass `forceScreenshot=true` for an explicit Save click — the backend bypasses
@@ -139,9 +121,8 @@ async function saveDashboard(
   const url = opts.forceScreenshot
     ? `${API_BASE}/dashboards/save/${dashboardId}?force_screenshot=true`
     : `${API_BASE}/dashboards/save/${dashboardId}`;
-  const res = await fetch(url, {
+  const res = await authFetch(url, {
     method: 'POST',
-    headers: authHeaders(),
     body: JSON.stringify(dashboardData),
   });
   if (!res.ok) {
