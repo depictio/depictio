@@ -970,7 +970,17 @@ export default App;
 function extractDashboardId(): string | null {
   const path = window.location.pathname;
   const match = path.match(/\/dashboard\/([^/?#]+)/);
-  return match?.[1] || null;
+  if (match?.[1]) return match[1];
+  // Serverless static bundles have no /dashboard/<id> route (they load from
+  // file:// or an arbitrary static host); their entry sets this global from
+  // the bundle manifest before mounting. Undefined in the server build.
+  return window.__DEPICTIO_STATIC_DASHBOARD_ID__ ?? null;
+}
+
+declare global {
+  interface Window {
+    __DEPICTIO_STATIC_DASHBOARD_ID__?: string;
+  }
 }
 
 function stableFilterKey(filters: InteractiveFilter[]): string {

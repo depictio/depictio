@@ -65,6 +65,9 @@ importers:
       depictio-react-core:
         specifier: file:../../packages/depictio-react-core
         version: link:../../packages/depictio-react-core
+      depictio-static-core:
+        specifier: file:../../packages/depictio-static-core
+        version: link:../../packages/depictio-static-core
       embla-carousel:
         specifier: ^8.0.0
         version: 8.6.0
