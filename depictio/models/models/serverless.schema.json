@@ -1,0 +1,532 @@
+{
+  "$defs": {
+    "BindingTable": {
+      "additionalProperties": false,
+      "description": "Everything the runtime needs to refill a ui-mode figure (RFC \u00a74).",
+      "properties": {
+        "group_cols": {
+          "description": "px grouping columns in order [color, symbol, line_dash, line_group, pattern_shape, facet_row, facet_col]",
+          "items": {
+            "type": "string"
+          },
+          "title": "Group Cols",
+          "type": "array"
+        },
+        "sampled": {
+          "default": false,
+          "description": "True when the build sampled before filtering (FIGURE_MAX_POINTS) -> partial tier",
+          "title": "Sampled",
+          "type": "boolean"
+        },
+        "scaffold": {
+          "additionalProperties": true,
+          "description": "Full figure JSON from the real create_figure_from_data, data arrays stripped",
+          "title": "Scaffold",
+          "type": "object"
+        },
+        "traces": {
+          "items": {
+            "$ref": "#/$defs/TraceBinding"
+          },
+          "title": "Traces",
+          "type": "array"
+        },
+        "trendlines": {
+          "items": {
+            "$ref": "#/$defs/TrendlineBinding"
+          },
+          "title": "Trendlines",
+          "type": "array"
+        }
+      },
+      "required": [
+        "scaffold",
+        "traces"
+      ],
+      "title": "BindingTable",
+      "type": "object"
+    },
+    "BundleMode": {
+      "description": "Delivery mode \u2014 only ``data_refs[].uri`` semantics change between them.",
+      "enum": [
+        "single-file",
+        "static-dir",
+        "remote"
+      ],
+      "title": "BundleMode",
+      "type": "string"
+    },
+    "ColumnSpec": {
+      "additionalProperties": false,
+      "description": "One physical column of a bundled Parquet file.",
+      "properties": {
+        "dtype": {
+          "description": "Polars dtype string at export time (e.g. 'Int64', 'Utf8')",
+          "title": "Dtype",
+          "type": "string"
+        },
+        "name": {
+          "description": "Column name as stored in the Parquet file",
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "dtype"
+      ],
+      "title": "ColumnSpec",
+      "type": "object"
+    },
+    "ComponentTier": {
+      "description": "Per-component liveness in the static runtime (RFC \u00a73.2).",
+      "enum": [
+        "live",
+        "partial",
+        "frozen",
+        "omitted"
+      ],
+      "title": "ComponentTier",
+      "type": "string"
+    },
+    "DashboardSection": {
+      "additionalProperties": false,
+      "description": "The dashboard document the runtime mounts.",
+      "properties": {
+        "doc": {
+          "additionalProperties": true,
+          "description": "DashboardDataLite-shaped document: layout + stored_metadata components",
+          "title": "Doc",
+          "type": "object"
+        },
+        "id": {
+          "description": "Dashboard id the runtime passes to App \u2014 real Mongo id (producer A/C) or synthetic sha1(workflow_tag + ':' + dc_tag)[:24]-style id (producer B). Must be non-empty: ComponentRenderer silently no-ops several component types without a dashboardId.",
+          "title": "Id",
+          "type": "string"
+        },
+        "title": {
+          "default": "",
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "doc"
+      ],
+      "title": "DashboardSection",
+      "type": "object"
+    },
+    "DataRef": {
+      "additionalProperties": false,
+      "description": "One data collection's bundled table.\n\nMirrors the shape of ``load_deltatable_lite``'s ``init_data`` entries\n(``deltatables_utils.py:1393``) \u2014 the proven \"resolve a DC without an API\nround-trip\" contract \u2014 extended with serverless-only fields.",
+      "properties": {
+        "aggregation_hash": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Staleness token: server-side _get_aggregation_hash for producer A, hash of the input Parquet bytes for producer B",
+          "title": "Aggregation Hash"
+        },
+        "codebooks": {
+          "additionalProperties": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object"
+          },
+          "description": "Per categorical non-String column: JSON-serialized option value -> integer code stored in the '__code__<col>' companion. Keys are serialized with the same _json_safe path that produces MultiSelect options, so option values and codebook keys are byte-identical. A selected value absent from the codebook matches nothing (same as a failed cast server-side).",
+          "title": "Codebooks",
+          "type": "object"
+        },
+        "columns": {
+          "description": "Physical schema after pruning + companions",
+          "items": {
+            "$ref": "#/$defs/ColumnSpec"
+          },
+          "title": "Columns",
+          "type": "array"
+        },
+        "companions": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Companion column name -> source. '__ts__<col>': epoch-microsecond datetime companion for <col>; '__fe__<sha8>': boolean column for the component-static filter_expr whose source text is the value; '__code__<col>': Int32 codebook codes for categorical column <col>.",
+          "title": "Companions",
+          "type": "object"
+        },
+        "row_group_bytes": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Target row-group size used at export (tuned for Range requests in remote mode)",
+          "title": "Row Group Bytes"
+        },
+        "rows": {
+          "description": "Row count at export time",
+          "minimum": 0,
+          "title": "Rows",
+          "type": "integer"
+        },
+        "size_bytes": {
+          "description": "Parquet file size in bytes",
+          "minimum": 0,
+          "title": "Size Bytes",
+          "type": "integer"
+        },
+        "uri": {
+          "description": "Where the Parquet bytes live. 'inline:dc_<id>' (single-file, resolved against inline_blobs), a bundle-relative path like 'data/<id>.parquet' (static-dir), or an absolute URL (remote). All resolution goes through the runtime's single resolveUri() helper.",
+          "title": "Uri",
+          "type": "string"
+        }
+      },
+      "required": [
+        "uri",
+        "rows",
+        "size_bytes",
+        "columns"
+      ],
+      "title": "DataRef",
+      "type": "object"
+    },
+    "FrozenPayload": {
+      "additionalProperties": false,
+      "description": "A precomputed component payload, rendered when the component is frozen.",
+      "properties": {
+        "filter_state": {
+          "description": "Filter state the payload was computed at (default state = [])",
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Filter State",
+          "type": "array"
+        },
+        "kind": {
+          "description": "Component type the payload feeds (figure|table|card|multiqc|advanced_viz|map|image)",
+          "title": "Kind",
+          "type": "string"
+        },
+        "payload": {
+          "additionalProperties": true,
+          "description": "Exactly what the corresponding api.ts function would have returned",
+          "title": "Payload",
+          "type": "object"
+        }
+      },
+      "required": [
+        "kind",
+        "payload"
+      ],
+      "title": "FrozenPayload",
+      "type": "object"
+    },
+    "LinkTable": {
+      "additionalProperties": false,
+      "description": "Precomputed value-mapping for a DC link whose source DC is not bundled (tier B).",
+      "properties": {
+        "values": {
+          "additionalProperties": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "description": "Source value -> translated target values",
+          "title": "Values",
+          "type": "object"
+        }
+      },
+      "title": "LinkTable",
+      "type": "object"
+    },
+    "LinksSection": {
+      "additionalProperties": false,
+      "description": "DC link configs plus precomputed translation tables (RFC \u00a78).",
+      "properties": {
+        "configs": {
+          "description": "Link configs as stored in Mongo, verbatim",
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Configs",
+          "type": "array"
+        },
+        "tables": {
+          "additionalProperties": {
+            "$ref": "#/$defs/LinkTable"
+          },
+          "description": "link_id -> precomputed translation table",
+          "title": "Tables",
+          "type": "object"
+        }
+      },
+      "title": "LinksSection",
+      "type": "object"
+    },
+    "Producer": {
+      "description": "Which producer built the bundle (RFC \u00a73.3).",
+      "enum": [
+        "A",
+        "B",
+        "C"
+      ],
+      "title": "Producer",
+      "type": "string"
+    },
+    "PrologueOp": {
+      "additionalProperties": false,
+      "description": "One op of a code-mode figure's data prologue IR (RFC \u00a77).\n\n``op`` is a closed allowlist: filter | unpivot | pivot | group_by | sort |\nrename. Arguments are op-specific; predicates are compiled server-side to\nJSON nodes so the runtime never parses Python.",
+      "properties": {
+        "args": {
+          "additionalProperties": true,
+          "description": "Op-specific arguments",
+          "title": "Args",
+          "type": "object"
+        },
+        "op": {
+          "description": "filter | unpivot | pivot | group_by | sort | rename",
+          "title": "Op",
+          "type": "string"
+        }
+      },
+      "required": [
+        "op"
+      ],
+      "title": "PrologueOp",
+      "type": "object"
+    },
+    "TierEntry": {
+      "additionalProperties": false,
+      "description": "Per-component liveness verdict, shown by ``--check`` and the runtime badge.",
+      "properties": {
+        "detail": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Human string for the --check table and badge tooltip",
+          "title": "Detail"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TierReason"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Machine-readable cause when tier != live"
+        },
+        "tier": {
+          "$ref": "#/$defs/ComponentTier"
+        }
+      },
+      "required": [
+        "tier"
+      ],
+      "title": "TierEntry",
+      "type": "object"
+    },
+    "TierReason": {
+      "description": "Why a component is not fully live. ``detail`` carries the human string.",
+      "enum": [
+        "multiqc",
+        "celery_compute",
+        "code_mode",
+        "binding_miss",
+        "max_points",
+        "link_table_too_big",
+        "map_tiles",
+        "jbrowse",
+        "image",
+        "whole_frame_viz",
+        "filter_expr_window",
+        "unsupported"
+      ],
+      "title": "TierReason",
+      "type": "string"
+    },
+    "TraceBinding": {
+      "additionalProperties": false,
+      "description": "One trace's binding in the bind-and-refill scheme (RFC \u00a74).",
+      "properties": {
+        "axes": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Facet-cell disambiguation: 'xaxis'/'yaxis' -> plotly axis id",
+          "title": "Axes",
+          "type": "object"
+        },
+        "fields": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Trace field path (e.g. 'x', 'y', 'marker.size') -> source column",
+          "title": "Fields",
+          "type": "object"
+        },
+        "group": {
+          "additionalProperties": true,
+          "description": "Equality predicates (grouping column -> value) selecting this trace's rows",
+          "title": "Group",
+          "type": "object"
+        },
+        "i": {
+          "description": "Trace index in the scaffold figure",
+          "minimum": 0,
+          "title": "I",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "i",
+        "fields"
+      ],
+      "title": "TraceBinding",
+      "type": "object"
+    },
+    "TrendlineBinding": {
+      "additionalProperties": false,
+      "description": "A trendline trace refit client-side via closed-form 1-predictor OLS.",
+      "properties": {
+        "i": {
+          "description": "Trendline trace index in the scaffold",
+          "minimum": 0,
+          "title": "I",
+          "type": "integer"
+        },
+        "on": {
+          "description": "Index of the raw-data trace it is fit against",
+          "minimum": 0,
+          "title": "On",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "i",
+        "on"
+      ],
+      "title": "TrendlineBinding",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "The serverless bundle contract (RFC \u00a73.1). manifest_version 1.",
+  "properties": {
+    "allow_network_tiles": {
+      "default": false,
+      "description": "Permit MapLibre tile fetches (static-dir/remote); single-file freezes maps unless style is white-bg",
+      "title": "Allow Network Tiles",
+      "type": "boolean"
+    },
+    "bindings": {
+      "additionalProperties": {
+        "$ref": "#/$defs/BindingTable"
+      },
+      "description": "component_id -> bind-and-refill table (phase 5)",
+      "title": "Bindings",
+      "type": "object"
+    },
+    "built_at": {
+      "description": "ISO 8601 build timestamp",
+      "title": "Built At",
+      "type": "string"
+    },
+    "dashboard": {
+      "$ref": "#/$defs/DashboardSection"
+    },
+    "data_refs": {
+      "additionalProperties": {
+        "$ref": "#/$defs/DataRef"
+      },
+      "description": "dc_id -> bundled table",
+      "title": "Data Refs",
+      "type": "object"
+    },
+    "depictio_version": {
+      "description": "Depictio version that built the bundle",
+      "title": "Depictio Version",
+      "type": "string"
+    },
+    "frozen": {
+      "additionalProperties": {
+        "$ref": "#/$defs/FrozenPayload"
+      },
+      "description": "component_id -> precomputed payload",
+      "title": "Frozen",
+      "type": "object"
+    },
+    "inline_blobs": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "single-file only: 'dc_<id>' -> base64 Parquet bytes referenced by inline: URIs",
+      "title": "Inline Blobs",
+      "type": "object"
+    },
+    "links": {
+      "$ref": "#/$defs/LinksSection"
+    },
+    "manifest_version": {
+      "default": 1,
+      "title": "Manifest Version",
+      "type": "integer"
+    },
+    "mode": {
+      "$ref": "#/$defs/BundleMode"
+    },
+    "producer": {
+      "$ref": "#/$defs/Producer"
+    },
+    "prologues": {
+      "additionalProperties": {
+        "items": {
+          "$ref": "#/$defs/PrologueOp"
+        },
+        "type": "array"
+      },
+      "description": "component_id -> code-mode prologue IR (phase 6)",
+      "title": "Prologues",
+      "type": "object"
+    },
+    "tiers": {
+      "additionalProperties": {
+        "$ref": "#/$defs/TierEntry"
+      },
+      "description": "component_id -> liveness verdict",
+      "title": "Tiers",
+      "type": "object"
+    }
+  },
+  "required": [
+    "mode",
+    "producer",
+    "built_at",
+    "depictio_version",
+    "dashboard"
+  ],
+  "title": "BundleManifest",
+  "type": "object"
+}
