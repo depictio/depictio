@@ -5,6 +5,7 @@ import { Icon } from '@iconify/react';
 import { StoredMetadata } from '../../api';
 import CatalogButton from './CatalogButton';
 import { useEscapeClear } from './escapeClear';
+import { StaticTierBadge } from './StaticBadgeContext';
 import MetadataPopover from './MetadataPopover';
 import FullscreenButton from './FullscreenButton';
 import InspectButton from './InspectButton';
@@ -426,6 +427,9 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
           : undefined
       }
     >
+      {/* Static-bundle liveness badge — renders nothing outside the static
+        * runtime (no StaticBadgeProvider mounted) or for live components. */}
+      <StaticTierBadge componentIndex={metadata?.index} />
       <Group
         gap={compact ? 2 : 4}
         className={

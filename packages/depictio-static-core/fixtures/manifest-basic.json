@@ -37,7 +37,9 @@
         {
           "index": "comp-text-1",
           "component_type": "text",
-          "content": "A hand-written fixture manifest. Everything frozen."
+          "title": "Fixture note",
+          "order": 3,
+          "body": "A hand-written fixture manifest. Everything frozen."
         }
       ],
       "stored_layout_data": []

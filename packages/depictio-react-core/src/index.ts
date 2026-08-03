@@ -431,6 +431,8 @@ export {
   FULLSCREEN_EXIT_ICON,
   LOAD_ALL_ACTIVE_ICON,
   TILE_ACTION_STYLE,
+  StaticBadgeProvider,
+  StaticTierBadge,
 } from './components/chrome';
 export type {
   ComponentChromeProps,
@@ -445,6 +447,8 @@ export type {
   TileActionStyle,
   TileActionStyleKey,
   WrapWithChromeOpts,
+  StaticTierEntry,
+  StaticTierMap,
 } from './components/chrome';
 
 // Component comments & annotation threads (/comments API).

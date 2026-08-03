@@ -6,6 +6,8 @@ import type { StoredMetadata } from '../../api';
 export { default as ComponentChrome, actionsFor } from './ComponentChrome';
 export { canDuplicate } from './chromeActions';
 export type { ComponentChromeProps, ChromeAction } from './ComponentChrome';
+export { StaticBadgeProvider, StaticTierBadge } from './StaticBadgeContext';
+export type { StaticTierEntry, StaticTierMap } from './StaticBadgeContext';
 export { default as MetadataPopover } from './MetadataPopover';
 export { default as MetadataBody } from './MetadataBody';
 export { default as ComponentInfo, TileSubtitle, TileTitleRow } from './ComponentInfo';
