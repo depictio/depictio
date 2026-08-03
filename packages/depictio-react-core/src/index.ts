@@ -74,11 +74,15 @@ export {
   ResetButton,
   actionsFor,
   wrapWithChrome,
+  StaticBadgeProvider,
+  StaticTierBadge,
 } from './components/chrome';
 export type {
   ComponentChromeProps,
   ChromeAction,
   WrapWithChromeOpts,
+  StaticTierEntry,
+  StaticTierMap,
 } from './components/chrome';
 
 // API surface — fetchers, payload types, filter types

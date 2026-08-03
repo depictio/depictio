@@ -9,6 +9,7 @@
     "dev": "pnpm run icons && vite",
     "build": "pnpm run icons && tsc && vite build",
     "build:catalog-preview": "pnpm run icons && vite build --config vite.catalog-preview.config.ts",
+    "build:static": "pnpm run icons && vite build --config vite.static.config.ts",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -31,6 +32,7 @@
     "dayjs": "^1.11.10",
     "depictio-components": "file:../../packages/depictio-components",
     "depictio-react-core": "file:../../packages/depictio-react-core",
+    "depictio-static-core": "file:../../packages/depictio-static-core",
     "embla-carousel": "^8.0.0",
     "embla-carousel-react": "^8.0.0",
     "js-yaml": "^4.1.0",

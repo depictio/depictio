@@ -9,6 +9,9 @@ const IS_CI = !!process.env.CI;
 // Slow down every browser operation by N ms so headed runs are watchable:
 //   PLAYWRIGHT_SLOWMO=500 npx playwright test --headed --workers=1
 const SLOW_MO = Number(process.env.PLAYWRIGHT_SLOWMO ?? 0);
+// Escape hatch for environments with a pre-provisioned Chromium at a fixed
+// path (no `playwright install`): point this at the binary to use it.
+const CHROMIUM_EXECUTABLE = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE;
 
 export default defineConfig({
   testDir: "./tests",
@@ -30,7 +33,7 @@ export default defineConfig({
     actionTimeout: 10_000,
     navigationTimeout: 30_000,
     viewport: { width: 1920, height: 1080 },
-    launchOptions: { slowMo: SLOW_MO },
+    launchOptions: { slowMo: SLOW_MO, executablePath: CHROMIUM_EXECUTABLE },
     // Always record traces locally so every run is inspectable in the trace
     // viewer / UI mode timeline (CI keeps the cheaper retain-on-failure).
     trace: IS_CI ? "retain-on-failure" : "on",
@@ -44,6 +47,17 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
+      use: { ...devices["Desktop Chrome"] },
+      // Backend-less specs run in their own project below.
+      testIgnore: /static-runtime/,
+    },
+    {
+      // Serverless static-bundle runtime: renders the built single-file bundle
+      // from file:// with all network blocked. Needs `pnpm run build:static`
+      // in depictio/viewer first (specs skip with a message otherwise) — no
+      // docker-compose stack, no dev server.
+      name: "static-runtime",
+      testMatch: /static-runtime\/.*\.spec\.ts/,
       use: { ...devices["Desktop Chrome"] },
     },
     // Uncomment to add cross-browser coverage:
