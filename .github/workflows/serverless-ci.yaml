@@ -1,0 +1,122 @@
+name: serverless-ci
+
+# Dedicated CI for the serverless static-bundle stack (RFC:
+# docs/design/rfc-serverless-deployment.md). Runs when the contract, the
+# runtime, the shims, or their tests change — fast, focused signal.
+on:
+  pull_request:
+    paths:
+      - "packages/depictio-static-core/**"
+      - "packages/depictio-react-core/**"
+      - "depictio/viewer/**"
+      - "depictio/models/models/serverless.py"
+      - "depictio/models/models/serverless.schema.json"
+      - "depictio/serverless/**"
+      - "depictio/tests/unit/serverless/**"
+      - "depictio/tests/e2e-playwright/tests/static-runtime/**"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/serverless-ci.yaml"
+  push:
+    branches: [main]
+    paths:
+      - "packages/depictio-static-core/**"
+      - "depictio/viewer/**"
+      - "depictio/models/models/serverless.py"
+      - "depictio/serverless/**"
+      - ".github/workflows/serverless-ci.yaml"
+
+jobs:
+  static-core:
+    name: depictio-static-core (vitest + tsc)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter depictio-static-core typecheck
+      - run: pnpm --filter depictio-static-core test
+
+  manifest-contract:
+    name: manifest contract (pytest + ty)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version-file: "pyproject.toml"
+      - name: Install dependencies
+        run: |
+          uv venv --python 3.12.9 venv
+          source venv/bin/activate
+          uv pip install -e ".[dev]"
+      - name: Serverless unit tests (schema snapshot + fixture pinning)
+        run: |
+          source venv/bin/activate
+          python -m pytest depictio/tests/unit/serverless -q
+      - name: ty gate (models — includes serverless.py)
+        run: |
+          source venv/bin/activate
+          ty check depictio/models/
+
+  bundles:
+    name: bundles (build + byte budget + offline e2e)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build static-runtime bundle
+        working-directory: depictio/viewer
+        run: pnpm run build:static
+
+      - name: Build catalog-preview bundle
+        working-directory: depictio/viewer
+        run: pnpm run build:catalog-preview
+
+      # Budgets (gzip bytes). static runtime: 3.2 MB — the catalog-preview
+      # floor (2.20 MB) + ~1 MB headroom for runtime code, excluding data.
+      # catalog-preview: 2.6 MB — first-ever guard; measured 2.21 MB today.
+      # A bump is a reviewable diff on these two lines.
+      - name: Byte budget — static runtime
+        working-directory: depictio/viewer
+        run: node scripts/check-bundle-budget.mjs dist-static/static.html 3355443 static-runtime
+
+      - name: Byte budget — catalog preview
+        working-directory: depictio/viewer
+        run: node scripts/check-bundle-budget.mjs dist-catalog-preview/catalog-preview.html 2726297 catalog-preview
+
+      - name: Install Playwright
+        working-directory: depictio/tests/e2e-playwright
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Offline static-runtime specs (no backend, no network)
+        working-directory: depictio/tests/e2e-playwright
+        run: npx playwright test --project=static-runtime
+
+      - name: Upload static bundle artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: static-bundle
+          path: depictio/viewer/dist-static/static.html
+          retention-days: 7
