@@ -432,3 +432,69 @@ failure mode that silently ruins `single-file`.
   the transpiler shrinks to a migration aid, **and producer B gains reshaping without needing
   Python** — which would materially widen what a backend-less build can express. Worth sequencing
   deliberately.
+
+## 12. Errata vs. main@4ee7924 (v1.3.1)
+
+This RFC was written against v1.2.1. Main has since had major perf refactors to the exact files it
+cites. Verified corrections — implementation must encode these, not the original text:
+
+1. **§5 categorical predicates changed direction (critical).** `add_filter` is now at
+   `deltatables_utils.py:225` and gained a `dtype` parameter. Categorical filtering is no longer
+   `pl.col(c).cast(pl.Utf8).is_in(...)` — it is `_categorical_predicate` (`:138`), which casts the
+   **values** to the column dtype (String → bare `is_in`; numeric/Date → `cast`; Datetime →
+   `str.to_datetime` then cast; Time → `str.to_time`; else the old Utf8 fallback), so parquet
+   row-group statistics and dictionary pushdown survive. Its docstring notes the old column-cast
+   form *never matched temporal values* — copying §5 as written would reintroduce a fixed bug.
+   Resolution: replace the `__u8__` companion columns with **codebooks** — at build time, map each
+   categorical-filtered non-String column's unique values to dense integer codes (companion Int32
+   `__code__<col>` + a `{json_serialized_value: code}` codebook serialized through the same
+   `_json_safe` path that produces MultiSelect options, so option values and codebook keys are
+   byte-identical by construction); at runtime, filtering is integer set membership — no casting
+   semantics in JS at all. Extract `_categorical_predicate` + the datetime normalisation into
+   `depictio/models/components/predicates.py` so build and server share one expression.
+2. **New predicate branch:** `add_filter` gained a `LINK_NO_MATCH` sentinel
+   (`"__link_no_match__"`, const `:135`) → `pl.lit(False)`. A browser port missing this branch
+   renders **all** rows where the server renders none. The §5 predicate count is 6 branches / 9
+   component-type strings, not 7 predicates.
+3. **Line/size drift:** `App.tsx` 799 LOC (was 736); `useDataCollectionUpdates` at
+   `realtime.ts:129` (`:169` is the `new WebSocket` inside it); `routes.py` 5528 LOC
+   (`_build_filter_metadata` `:1606`, `bulk_compute_cards` `:1636`, `render_table_endpoint`
+   `:2430`); `deltatables_utils.py` 2194 LOC (`load_deltatable_lite` `:1393`, joined-id
+   `NotImplementedError` guards `:1442-1448` **and a second one in `count_deltatable_lite`
+   `:1767`**, `apply_runtime_filters` `:1963`, `_filter_columns` `:834`, datetime branch
+   `:274-356`, `join_deltatables_dev` `:2122` — still dead); `referenced_columns`
+   `figure_builder.py:76`; `_get_aggregation_version` `:580`.
+4. **`build_figure_preview` is a Celery task, not a route** (`celery_tasks.py:95`), called
+   in-process by `render_figure_endpoint` (`routes.py:2288` → `:2410`). Preview and render share
+   one worker code path — a single golden-fixture entry point.
+5. **`fetchComponentData` (`api.ts:402`) is dead** — no callers; exclude it from the shim
+   surface. The realtime shim is optional-for-correctness: `useDataCollectionUpdates` is inert
+   when the dashboard document omits `project_realtime.enabled` (early return, no socket). Keep
+   the shim for tree-shaking only.
+6. **Badge placement (§8) revised:** `wrapWithChrome` has 9 call sites in `ComponentRenderer.tsx`
+   plus a 10th in `advanced_viz/AdvancedVizDispatch.tsx:104`, which lives in a separately
+   lazy-loaded chunk — an `opts`-threaded prop would miss it. Instead, read a
+   `StaticBadgeContext` **inside `ComponentChrome`** (a real component, so it can `useContext`)
+   with the provider above the `LazyMount`/`Suspense` boundary: zero call-site changes, no public
+   signature change (`wrapWithChrome` is re-exported at `index.ts:76`).
+7. **`load_deltatable_lite` gained `select_columns` and `init_data`**
+   (`{dc_id: {delta_location, size_bytes}}`). The manifest's `data_refs` should mirror
+   `init_data`'s shape — it is the already-proven "resolve a DC without an API round-trip"
+   contract.
+8. **Staleness token:** prefer `_get_aggregation_hash` (`deltatables_utils.py:607`, documented as
+   the preferred cache-key salt) over `_get_aggregation_version`.
+9. **`AdvancedVizLiteComponent` does not exist** in `depictio/models/components/lite.py`, yet
+   advanced_viz is 54 of the 251 seed components — they pass the `LiteComponent | dict` union as
+   raw dicts, unvalidated. Adding it is a prerequisite for producer B reusing
+   `DashboardDataLite` as its spec.
+10. **Amendment to §3.3:** producer B **may freeze ui-mode figures** by calling
+    `create_figure_from_data` locally — `figure_builder.py` is Dash- and FastAPI-free, and
+    `create_figure_from_data` (`:241`) consumes Polars natively and installs the mantine
+    templates itself. Producer B's *omitted* set therefore narrows to: MultiQC, the 6 Celery
+    computes, code-mode figures (RestrictedPython execution is a producer-A policy decision), and
+    JBrowse. Also note `create_figure_from_data`'s newer `max_points` / `render_stats` out-params:
+    frozen/binding builds must pin them (sampling ⇒ `partial` tier).
+11. **§7 caveat:** `analyze_constrained_code` (`code_mode.py:18`) is a line/paren-counting
+    splitter that returns raw Python source — reuse it for *classification*, but the prologue
+    transpiler needs its own `ast`-based parser to emit a browser-executable IR; it cannot get
+    referenced columns or ops from the existing analyzer.
