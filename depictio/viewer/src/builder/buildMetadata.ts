@@ -295,6 +295,7 @@ function buildText(
     title?: string;
     order?: number | string;
     alignment?: string;
+    vertical_alignment?: string;
     body?: string;
   }>(state.config);
   return {
@@ -310,6 +311,10 @@ function buildText(
     order: clampOrder(c.order ?? 1),
     alignment:
       c.alignment === 'center' || c.alignment === 'right' ? c.alignment : 'left',
+    vertical_alignment:
+      c.vertical_alignment === 'center' || c.vertical_alignment === 'bottom'
+        ? c.vertical_alignment
+        : 'top',
     body: c.body ?? '',
   };
 }

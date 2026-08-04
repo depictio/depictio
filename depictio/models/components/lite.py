@@ -543,6 +543,7 @@ class TextLiteComponent(BaseLiteComponent):
           title: Within-Sample Diversity
           order: 2
           alignment: left
+          vertical_alignment: top
           body: |
             Shannon, observed features, and Faith's PD measure
             within-sample richness and evenness.
@@ -552,7 +553,11 @@ class TextLiteComponent(BaseLiteComponent):
 
     order: int = Field(default=1, ge=1, le=6, description="Heading level (H1–H6; clamped 1..6)")
     alignment: Literal["left", "center", "right"] = Field(
-        default="left", description="Text alignment for the title and body"
+        default="left", description="Horizontal alignment of the title and body"
+    )
+    vertical_alignment: Literal["top", "center", "bottom"] = Field(
+        default="top",
+        description="Vertical placement of the text block within its tile",
     )
     body: str = Field(default="", description="Optional paragraph below the heading")
 

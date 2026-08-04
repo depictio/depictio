@@ -19,6 +19,7 @@ from depictio.models.components.lite import (
     InteractiveLiteComponent,
     MultiQCLiteComponent,
     TableLiteComponent,
+    TextLiteComponent,
 )
 from depictio.models.models.dashboards import DashboardDataLite
 
@@ -435,6 +436,67 @@ class TestTableLiteComponent:
         )
         assert comp.sortable is False
         assert comp.filterable is False
+
+
+# ============================================================================
+# TestTextLiteComponent
+# ============================================================================
+
+
+class TestTextLiteComponent:
+    """Tests for TextLiteComponent."""
+
+    def test_create_minimal(self):
+        """Create with defaults."""
+        comp = TextLiteComponent(tag="section-1")
+        assert comp.component_type == "text"
+        assert comp.order == 1
+        assert comp.alignment == "left"
+        assert comp.vertical_alignment == "top"
+        assert comp.body == ""
+
+    def test_custom_alignments(self):
+        """Horizontal and vertical alignment are independent."""
+        comp = TextLiteComponent(
+            tag="section-1",
+            alignment="center",
+            vertical_alignment="bottom",
+        )
+        assert comp.alignment == "center"
+        assert comp.vertical_alignment == "bottom"
+
+    def test_invalid_vertical_alignment_rejected(self):
+        """Only top / center / bottom are accepted."""
+        with pytest.raises(ValidationError):
+            TextLiteComponent(tag="section-1", vertical_alignment="middle")
+
+    def test_to_full_carries_vertical_alignment(self):
+        """to_full() forwards vertical_alignment to stored_metadata."""
+        dash = DashboardDataLite(
+            title="Text Test",
+            components=[
+                {
+                    "tag": "section-1",
+                    "component_type": "text",
+                    "title": "Overview",
+                    "order": 2,
+                    "alignment": "center",
+                    "vertical_alignment": "center",
+                }
+            ],
+        )
+        comp = dash.to_full()["stored_metadata"][0]
+        assert comp["order"] == 2
+        assert comp["alignment"] == "center"
+        assert comp["vertical_alignment"] == "center"
+
+    def test_to_full_defaults_vertical_alignment_to_top(self):
+        """Dashboards saved before the field existed keep their top-aligned look."""
+        dash = DashboardDataLite(
+            title="Text Test",
+            components=[{"tag": "section-1", "component_type": "text", "title": "Overview"}],
+        )
+        assert dash.to_full()["stored_metadata"][0]["vertical_alignment"] == "top"
 
 
 # ============================================================================

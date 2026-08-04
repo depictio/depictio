@@ -1184,7 +1184,8 @@ class DashboardDataLite(BaseModel):
 
             elif comp_type == "text":
                 # Section-header text tile: TextRenderer.tsx reads `order` (H1-H6),
-                # `alignment`, `body`, and inherits `title` from the base.
+                # `alignment`, `vertical_alignment`, `body`, and inherits `title`
+                # from the base.
                 order = comp_dict.get("order", 1)
                 try:
                     order_int = max(1, min(6, int(order)))
@@ -1192,6 +1193,7 @@ class DashboardDataLite(BaseModel):
                     order_int = 1
                 full_comp["order"] = order_int
                 full_comp["alignment"] = comp_dict.get("alignment", "left")
+                full_comp["vertical_alignment"] = comp_dict.get("vertical_alignment", "top")
                 full_comp["body"] = comp_dict.get("body", "")
 
             full_components.append(full_comp)

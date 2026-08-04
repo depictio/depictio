@@ -63,6 +63,7 @@ const renderInlineMarkdown = (input: string): React.ReactNode[] => {
  *   - title (string)
  *   - order (1-6 → H1..H6; clamped)
  *   - alignment ('left' | 'center' | 'right'; default 'left')
+ *   - vertical_alignment ('top' | 'center' | 'bottom'; default 'top')
  *   - body (optional paragraph)
  *
  * No data fetching, no editing UI. Same shape in viewer and editor — the
@@ -78,6 +79,12 @@ const TextRenderer: React.FC<TextRendererProps> = ({ metadata, placeholder = fal
     typeof metadata.alignment === 'string' ? metadata.alignment : 'left';
   const alignment: 'left' | 'center' | 'right' =
     alignmentRaw === 'center' || alignmentRaw === 'right' ? alignmentRaw : 'left';
+  const vAlignRaw =
+    typeof metadata.vertical_alignment === 'string' ? metadata.vertical_alignment : 'top';
+  // Flex `justify` on the column Stack — visible only where the tile is taller
+  // than the text it holds.
+  const justify =
+    vAlignRaw === 'center' ? 'center' : vAlignRaw === 'bottom' ? 'flex-end' : 'flex-start';
   const body = typeof metadata.body === 'string' ? metadata.body : '';
 
   const hasTitle = rawTitle.trim().length > 0;
@@ -86,8 +93,12 @@ const TextRenderer: React.FC<TextRendererProps> = ({ metadata, placeholder = fal
     <Stack
       gap={4}
       h="100%"
-      justify="flex-start"
-      style={{ textAlign: alignment, width: '100%', padding: 0 }}
+      justify={justify}
+      // `flex` alongside `h="100%"`: the chrome wrapper and the builder's
+      // preview Card are both column flex containers whose height can be
+      // indefinite, where a percentage height alone collapses to the content
+      // and vertical alignment would have no room to act.
+      style={{ flex: '1 1 auto', textAlign: alignment, width: '100%', padding: 0 }}
     >
       {hasTitle ? (
         <Title
