@@ -29,13 +29,26 @@ export const WORKFLOW_ICON_MAP: Record<string, string> = {
   iwc: '/assets/images/workflows/iwc.png',
 };
 
-/** Mantine brand color per workflow system (Dash's "purple" → `grape`). */
+/** Mantine colour per workflow system, matched to the system's own logo so a
+ *  badge's colour and its icon read as one thing.
+ *
+ *  Chosen by sampling each shipped logo's dominant non-grey pixel and taking
+ *  the nearest Mantine shade-6 entry in CIELab:
+ *    nextflow  #00c090 → teal    snakemake #009060 → teal
+ *    nf-core   #18a860 → green   galaxy    #c0a800 → yellow
+ *    iwc       #c0a818 → yellow
+ *  (nf-core's apple and Galaxy/IWC's gold were previously blue/grape, which
+ *  clashed with the logo sitting right next to them.)
+ *
+ *  `python` has no logo asset, so it is keyed off its official brand blue
+ *  (#3776AB) — the badge then carries the identity the icon can't. */
 export const WORKFLOW_COLOR_MAP: Record<string, string> = {
   nextflow: 'teal',
-  snakemake: 'green',
-  'nf-core': 'blue',
-  galaxy: 'blue',
-  iwc: 'grape',
+  snakemake: 'teal',
+  'nf-core': 'green',
+  galaxy: 'yellow',
+  iwc: 'yellow',
+  python: 'blue',
 };
 
 /** True when a workflow system is selected and has a logo (i.e. it overrides
