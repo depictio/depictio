@@ -8,7 +8,25 @@ export type SecondaryLayout =
   | 'top_n'
   | 'coverage'
   | 'concentration'
-  | 'composition';
+  | 'composition'
+  | 'donut';
+
+/** Layouts that draw the server-computed ``__breakdown__`` payload, i.e. the
+ *  ones whose config requires a ``breakdown_col``.
+ *
+ *  Mirrors ``BREAKDOWN_LAYOUTS`` in ``depictio/api/v1/services/card_breakdown.py``.
+ *  The builder gates its required-field UI and its preview fetch on this, so a
+ *  layout added to the union but forgotten here silently renders no strip —
+ *  which is precisely how ``composition`` nearly shipped broken. */
+export const BREAKDOWN_LAYOUTS = [
+  'top_n',
+  'concentration',
+  'composition',
+  'donut',
+] as const satisfies readonly SecondaryLayout[];
+
+export const isBreakdownLayout = (layout: SecondaryLayout | undefined | null): boolean =>
+  !!layout && (BREAKDOWN_LAYOUTS as readonly string[]).includes(layout);
 
 /** Server-computed payload for the breakdown layouts (``top_n`` /
  *  ``concentration`` / ``composition``). Lives in ``rows`` under the synthetic
@@ -83,6 +101,14 @@ const SecondaryMetrics: React.FC<SecondaryMetricsProps> = ({
     return (
       <CompositionMetric payload={breakdownRow.value as BreakdownPayload} color={color} />
     );
+  }
+
+  if (layout === 'donut') {
+    const breakdownRow = rows.find(
+      (r) => r.name === '__breakdown__' && isBreakdownPayload(r.value),
+    );
+    if (!breakdownRow) return null;
+    return <DonutMetric payload={breakdownRow.value as BreakdownPayload} color={color} />;
   }
 
   if (layout === 'coverage') {
@@ -992,6 +1018,283 @@ const CompositionMetric: React.FC<{
           </Text>
         ) : null}
       </Stack>
+    </Tooltip>
+  );
+};
+
+/** Polar coordinate → SVG point on a circle of radius ``r`` centred at ``cx,cy``.
+ *  Angles run clockwise from 12 o'clock, which is where a reader expects a ring
+ *  to start. */
+function polar(cx: number, cy: number, r: number, fraction: number): [number, number] {
+  const angle = fraction * 2 * Math.PI - Math.PI / 2;
+  return [cx + r * Math.cos(angle), cy + r * Math.sin(angle)];
+}
+
+/** SVG path for one ring segment (an annular sector) between two fractions. */
+function ringSegment(
+  cx: number,
+  cy: number,
+  rOuter: number,
+  rInner: number,
+  from: number,
+  to: number,
+): string {
+  // A full ring cannot be drawn as a single arc — start and end points would
+  // coincide and the path collapses to nothing. Split it in two half arcs.
+  if (to - from >= 1) {
+    const half = ringSegment(cx, cy, rOuter, rInner, 0, 0.5);
+    return `${half} ${ringSegment(cx, cy, rOuter, rInner, 0.5, 1)}`;
+  }
+  const [x0, y0] = polar(cx, cy, rOuter, from);
+  const [x1, y1] = polar(cx, cy, rOuter, to);
+  const [x2, y2] = polar(cx, cy, rInner, to);
+  const [x3, y3] = polar(cx, cy, rInner, from);
+  const largeArc = to - from > 0.5 ? 1 : 0;
+  return [
+    `M ${x0} ${y0}`,
+    `A ${rOuter} ${rOuter} 0 ${largeArc} 1 ${x1} ${y1}`,
+    `L ${x2} ${y2}`,
+    `A ${rInner} ${rInner} 0 ${largeArc} 0 ${x3} ${y3}`,
+    'Z',
+  ].join(' ');
+}
+
+/**
+ * ``donut`` layout — the top-N shares drawn as a ring, with the number of
+ * distinct values in the hole.
+ *
+ * Reads the same ``__breakdown__`` payload as ``top_n`` / ``composition``.
+ * Where ``composition`` shows proportion on a linear bar, the ring makes
+ * *part-of-a-whole* immediate: a single dominant category is a visibly
+ * three-quarter-full circle, which no horizontal strip conveys as fast. The
+ * legend sits beside the ring so the card stays readable at 2x2.
+ *
+ * Segment tints step down in opacity by rank, and the remainder is drawn in the
+ * same muted track ``composition`` uses — the card's accent colour stays the
+ * only hue, per the no-hardcoded-palette rule.
+ */
+const DonutMetric: React.FC<{
+  payload: BreakdownPayload;
+  color?: string | null;
+}> = ({ payload, color }) => {
+  if (!payload.top.length) return null;
+
+  const SIZE = 54;
+  const R_OUTER = 25;
+  const R_INNER = 16;
+  const cx = SIZE / 2;
+  const cy = SIZE / 2;
+
+  const segments = payload.top.map((row, idx) => ({
+    ...row,
+    fill: hexWithAlpha(color, Math.max(0.3, 0.85 - idx * 0.16)),
+  }));
+  // Derived from top_share, which the server computed over the whole
+  // distribution — summing the rounded segment percents would not close.
+  const otherShare = Math.max(0, 1 - payload.top_share);
+  const otherPct = Math.round(otherShare * 100);
+  const tailRows = Math.max(0, payload.unique_values - payload.top.length);
+  const evennessValue = typeof payload.evenness === 'number' ? payload.evenness : null;
+
+  let cursor = 0;
+  const arcs = segments.map((row) => {
+    const from = cursor;
+    cursor += row.percent;
+    return { ...row, from, to: Math.min(1, cursor) };
+  });
+
+  const tooltipBody = (
+    <Stack gap={2} miw={240}>
+      <Group gap={4} wrap="nowrap" justify="space-between">
+        <Text size="xs" c="dimmed" lh={1.2}>column</Text>
+        <Text size="xs" fw={500} lh={1.2}>{payload.column}</Text>
+      </Group>
+      <Group gap={4} wrap="nowrap" justify="space-between">
+        <Text size="xs" c="dimmed" lh={1.2}>total</Text>
+        <Text size="xs" fw={500} lh={1.2} style={{ fontVariantNumeric: 'tabular-nums' }}>
+          {payload.total.toLocaleString()}
+        </Text>
+      </Group>
+      <Group gap={4} wrap="nowrap" justify="space-between">
+        <Text size="xs" c="dimmed" lh={1.2}>unique values</Text>
+        <Text size="xs" fw={500} lh={1.2} style={{ fontVariantNumeric: 'tabular-nums' }}>
+          {payload.unique_values.toLocaleString()}
+        </Text>
+      </Group>
+      <Box style={{ height: 1, background: 'rgba(255,255,255,0.18)', margin: '4px 0' }} />
+      {segments.map((row) => (
+        <Group key={row.name} gap={4} wrap="nowrap" justify="space-between">
+          <Group gap={5} wrap="nowrap" style={{ flex: 1, minWidth: 0 }}>
+            <Box
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: 2,
+                background: row.fill,
+                flexShrink: 0,
+              }}
+            />
+            <Text
+              size="xs"
+              lh={1.2}
+              style={{
+                flex: 1,
+                minWidth: 0,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {row.name}
+            </Text>
+          </Group>
+          <Text size="xs" fw={500} lh={1.2} style={{ fontVariantNumeric: 'tabular-nums' }}>
+            {row.count.toLocaleString()} ({Math.round(row.percent * 100)}%)
+          </Text>
+        </Group>
+      ))}
+      {tailRows > 0 ? (
+        <Group gap={4} wrap="nowrap" justify="space-between">
+          <Text size="xs" c="dimmed" lh={1.2}>
+            other ({tailRows.toLocaleString()} more)
+          </Text>
+          <Text size="xs" lh={1.2} style={{ fontVariantNumeric: 'tabular-nums' }}>
+            {otherPct}%
+          </Text>
+        </Group>
+      ) : null}
+      {evennessValue !== null ? (
+        <>
+          <Box style={{ height: 1, background: 'rgba(255,255,255,0.18)', margin: '4px 0' }} />
+          <Group gap={4} wrap="nowrap" justify="space-between">
+            <Text size="xs" c="dimmed" lh={1.2}>evenness</Text>
+            <Text size="xs" fw={700} lh={1.2} style={{ fontVariantNumeric: 'tabular-nums' }}>
+              {evennessValue.toFixed(2)} — {evennessLabel(evennessValue)}
+            </Text>
+          </Group>
+        </>
+      ) : null}
+    </Stack>
+  );
+
+  return (
+    <Tooltip
+      label={tooltipBody}
+      multiline
+      w={280}
+      withArrow
+      position="bottom"
+      openDelay={150}
+      styles={{ tooltip: { padding: '8px 10px' } }}
+    >
+      <Group
+        gap="xs"
+        mt={4}
+        px="xs"
+        pb="xs"
+        wrap="nowrap"
+        align="center"
+        style={{ overflow: 'hidden', minWidth: 0, position: 'relative', zIndex: 2, cursor: 'help' }}
+      >
+        <svg
+          width={SIZE}
+          height={SIZE}
+          viewBox={`0 0 ${SIZE} ${SIZE}`}
+          style={{ flexShrink: 0, display: 'block' }}
+          role="img"
+          aria-label={`Composition of ${payload.column}`}
+        >
+          {/* Full track first: the remainder shows through wherever the
+              top-N arcs don't cover, so "Other" needs no arc of its own. */}
+          <circle
+            cx={cx}
+            cy={cy}
+            r={(R_OUTER + R_INNER) / 2}
+            fill="none"
+            stroke="rgba(160,160,160,0.18)"
+            strokeWidth={R_OUTER - R_INNER}
+          />
+          {arcs.map((arc) =>
+            arc.to > arc.from ? (
+              <path
+                key={arc.name}
+                d={ringSegment(cx, cy, R_OUTER, R_INNER, arc.from, arc.to)}
+                fill={arc.fill}
+              />
+            ) : null,
+          )}
+          <text
+            x={cx}
+            y={cy}
+            textAnchor="middle"
+            dominantBaseline="central"
+            style={{ fontSize: 13, fontWeight: 700, fill: 'currentColor' }}
+          >
+            {payload.unique_values.toLocaleString()}
+          </text>
+        </svg>
+        <Stack gap={1} style={{ flex: 1, minWidth: 0 }}>
+          {segments.map((row) => (
+            <Group key={row.name} gap={4} wrap="nowrap" style={{ minWidth: 0 }}>
+              <Box
+                style={{
+                  width: 7,
+                  height: 7,
+                  borderRadius: 2,
+                  background: row.fill,
+                  flexShrink: 0,
+                }}
+              />
+              <Text
+                size="10"
+                lh={1.25}
+                style={{
+                  fontSize: 10,
+                  flex: 1,
+                  minWidth: 0,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {row.name}
+              </Text>
+              <Text
+                size="10"
+                c="dimmed"
+                lh={1.25}
+                style={{ fontSize: 10, fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}
+              >
+                {Math.round(row.percent * 100)}%
+              </Text>
+            </Group>
+          ))}
+          {otherPct > 0 ? (
+            <Group gap={4} wrap="nowrap" style={{ minWidth: 0 }}>
+              <Box
+                style={{
+                  width: 7,
+                  height: 7,
+                  borderRadius: 2,
+                  background: 'rgba(160,160,160,0.35)',
+                  flexShrink: 0,
+                }}
+              />
+              <Text size="10" c="dimmed" lh={1.25} style={{ fontSize: 10, flex: 1, minWidth: 0 }}>
+                other
+              </Text>
+              <Text
+                size="10"
+                c="dimmed"
+                lh={1.25}
+                style={{ fontSize: 10, fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}
+              >
+                {otherPct}%
+              </Text>
+            </Group>
+          ) : null}
+        </Stack>
+      </Group>
     </Tooltip>
   );
 };

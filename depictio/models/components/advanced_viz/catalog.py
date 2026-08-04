@@ -32,6 +32,7 @@ from typing import Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
 
+from depictio.models.components.lite import CardLiteComponent
 from depictio.models.components.types import (
     AdvancedVizKind,
     AggregationFunction,
@@ -53,10 +54,15 @@ _FIGURE_COLUMN_KWARGS: frozenset[str] = frozenset(
 # catalog entry can only target a component that exists.
 ComponentKind = ComponentType | Literal["multiqc"]
 
-# How a multi-metric card renders its secondary strip (mirrors CardLiteComponent).
-CardLayout = Literal[
-    "vertical", "compact", "box_plot", "top_n", "coverage", "concentration", "composition"
-]
+# How a multi-metric card renders its secondary strip. Derived from
+# ``CardLiteComponent`` rather than re-spelled, so a layout added there can't be
+# rejected here — the two had already drifted once.
+CardLayout = CardLiteComponent.model_fields["secondary_layout"].annotation
+
+# Layouts that require a ``breakdown_col``. Single source of truth in
+# ``card_breakdown``; imported lazily below to keep the models package free of
+# an API-layer import at module scope.
+_BREAKDOWN_CARD_LAYOUTS = ("top_n", "concentration", "composition", "donut")
 
 
 def _check_identity_urls(
@@ -209,10 +215,7 @@ class Render(BaseModel):
         if c == "card":
             if not (self.column and self.aggregation):
                 raise ValueError("renders_as card requires 'column' and 'aggregation'")
-            if (
-                self.secondary_layout in ("top_n", "concentration", "composition")
-                and not self.breakdown_col
-            ):
+            if self.secondary_layout in _BREAKDOWN_CARD_LAYOUTS and not self.breakdown_col:
                 raise ValueError(
                     f"secondary_layout={self.secondary_layout!r} requires 'breakdown_col'"
                 )

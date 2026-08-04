@@ -23,6 +23,7 @@ from depictio.api.v1.db import deltatables_collection, projects_collection, user
 from depictio.api.v1.endpoints.deltatables_endpoints.utils import precompute_columns_specs
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user, get_user_or_anonymous
 from depictio.api.v1.s3 import polars_s3_config
+from depictio.api.v1.services.card_breakdown import compute_breakdown
 from depictio.api.v1.utils import agg_functions
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 from depictio.models.models.deltatables import (
@@ -699,6 +700,112 @@ async def get_unique_values(
     except Exception as e:
         logger.error(f"Error fetching unique values for column {column}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to read unique values: {e}")
+
+
+@deltatables_endpoint_router.get("/breakdown/{data_collection_id}")
+async def get_breakdown(
+    data_collection_id: PyObjectId,
+    column: str,
+    breakdown_col: str,
+    aggregation: str = "count",
+    top_n_count: int = 3,
+    current_user: User = Depends(get_user_or_anonymous),
+):
+    """Top-N breakdown of ``breakdown_col``, for the card builder's live preview.
+
+    Returns the same ``__breakdown__`` payload ``bulk_compute_cards`` attaches to
+    a saved card — same helper, same per-group aggregation, same evenness — so
+    the preview shows the card's real categories and real distribution instead
+    of guessing. The preview used to synthesise ``Bucket 1/2/3`` split evenly at
+    33/33/34; the names and the shape were both invented, which made a correct
+    builder look broken.
+
+    Computed against the *unfiltered* table: the builder has no interactive
+    filter state, and the saved card recomputes under whatever filters the
+    dashboard carries.
+
+    Args:
+        data_collection_id: Target data collection.
+        column: The card's hero column (decides the per-group reduction).
+        breakdown_col: Categorical column to group by.
+        aggregation: The card's hero aggregation (``count`` / ``nunique`` / ``sum``).
+        top_n_count: How many groups to surface, clamped to 1..5 by the helper.
+        current_user: Authenticated or anonymous user (permission-checked).
+
+    Returns:
+        ``{"column", "total", "top": [{name, count, percent}], "top_share",
+        "unique_values", "breakdown_kind", "evenness"}``.
+
+    Raises:
+        HTTPException: 404 if the DC / delta table / column is missing, 403 if
+        the user may not read it, 500 on a read error.
+    """
+    pipeline = _build_permission_pipeline(data_collection_id, current_user)
+    if not list(projects_collection.aggregate(pipeline)):
+        raise HTTPException(status_code=404, detail="Data collection not found or access denied.")
+
+    deltatables_list = list(deltatables_collection.find({"data_collection_id": data_collection_id}))
+    if not deltatables_list:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No DeltaTable found for Data Collection ID {data_collection_id}.",
+        )
+    delta_table_location = deltatables_list[-1].get("delta_table_location")
+    if not delta_table_location:
+        raise HTTPException(
+            status_code=404, detail="Delta table location not found in deltatable document."
+        )
+
+    # The builder re-requests this on every keystroke-ish config change (layout
+    # switch, breakdown column, top-N). Salting on the aggregation version means
+    # an ingest invalidates it for free, same contract as ``unique_values``.
+    from depictio.api.v1.deltatables_utils import _get_aggregation_version
+
+    dc_id_str = str(data_collection_id)
+    cache_key = (
+        f"breakdown_{dc_id_str}_{column}_{breakdown_col}_{aggregation}_{top_n_count}_"
+        f"{_get_aggregation_version(dc_id_str)}"
+    )
+    try:
+        from depictio.api.cache import get_cache
+
+        cached = get_cache().get(cache_key)
+        if cached is not None:
+            return cached
+    except Exception as exc:  # the cache is an optimisation, never a dependency
+        logger.debug(f"breakdown: cache read failed for {cache_key}: {exc}")
+
+    try:
+        lazy = pl.scan_delta(delta_table_location, storage_options=polars_s3_config)
+        # Project before grouping: a breakdown reads two columns, and on a wide
+        # collection loading the rest is the whole cost of the request.
+        wanted = list(dict.fromkeys([c for c in (breakdown_col, column) if c]))
+        available = set(lazy.collect_schema().names())
+        missing = [c for c in wanted if c not in available]
+        if missing:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Column(s) {missing} not found in data collection {dc_id_str}.",
+            )
+        payload = compute_breakdown(
+            lazy.select(wanted),
+            column=column,
+            breakdown_col=breakdown_col,
+            aggregation=aggregation,
+            top_n_count=top_n_count,
+        )
+        try:
+            from depictio.api.cache import get_cache
+
+            get_cache().set(cache_key, payload)
+        except Exception as exc:
+            logger.debug(f"breakdown: cache write failed for {cache_key}: {exc}")
+        return payload
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error computing breakdown on {breakdown_col!r} for {dc_id_str}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to compute breakdown: {e}")
 
 
 @deltatables_endpoint_router.get("/shape/{data_collection_id}")

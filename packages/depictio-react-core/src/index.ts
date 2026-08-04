@@ -42,6 +42,10 @@ export { default as MultiQCRenderer } from './components/MultiQCRenderer';
 // Card helpers — exposed so the builder preview in `depictio/viewer` can
 // render the same SecondaryMetrics strip the dashboard grid renders.
 export { default as SecondaryMetrics } from './components/card/SecondaryMetrics';
+export {
+  BREAKDOWN_LAYOUTS,
+  isBreakdownLayout,
+} from './components/card/SecondaryMetrics';
 export type { SecondaryLayout } from './components/card/SecondaryMetrics';
 
 // Interactive renderers
@@ -87,6 +91,7 @@ export {
   fetchAllDashboards,
   fetchSpecs,
   fetchUniqueValues,
+  fetchBreakdown,
   fetchColumnRange,
   fetchComponentData,
   bulkComputeCards,
@@ -232,6 +237,7 @@ export type {
   CatalogComposeResponse,
   CatalogPreviewRender,
   CatalogPreviewPayload,
+  BreakdownPayloadDTO,
 } from './api';
 // Selection-as-filter helpers (Plotly/AG Grid → InteractiveFilter)
 export {

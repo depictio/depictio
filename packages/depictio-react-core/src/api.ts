@@ -335,6 +335,45 @@ export async function fetchUniqueValues(
   return body.values || [];
 }
 
+/** The ``__breakdown__`` payload for a card's categorical strip, computed
+ *  server-side against the real data.
+ *
+ *  Same shape and same helper ``bulk_compute_cards`` uses for a saved card, so
+ *  the builder preview shows the card's actual categories and distribution.
+ *  The preview used to invent ``Bucket 1/2/3`` at a uniform 33/33/34 split.
+ */
+export interface BreakdownPayloadDTO {
+  column: string;
+  total: number;
+  top: { name: string; count: number; percent: number }[];
+  top_share: number;
+  unique_values: number;
+  breakdown_kind?: string;
+  evenness?: number | null;
+}
+
+export async function fetchBreakdown(
+  dcId: string,
+  column: string,
+  breakdownCol: string,
+  aggregation = 'count',
+  topNCount = 3,
+  signal?: AbortSignal,
+): Promise<BreakdownPayloadDTO> {
+  const params = new URLSearchParams({
+    column,
+    breakdown_col: breakdownCol,
+    aggregation,
+    top_n_count: String(topNCount),
+  });
+  const res = await authFetch(
+    `${API_BASE}/deltatables/breakdown/${dcId}?${params.toString()}`,
+    { signal },
+  );
+  if (!res.ok) throw new Error(`Failed to fetch breakdown: ${res.status}`);
+  return res.json();
+}
+
 /** Numeric range bounds for a column — backs RangeSlider min/max.
  *  Reads precomputed min/max from /deltatables/specs/{dcId}.
  */

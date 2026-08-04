@@ -340,7 +340,8 @@
                 "top_n",
                 "coverage",
                 "concentration",
-                "composition"
+                "composition",
+                "donut"
               ],
               "type": "string"
             },

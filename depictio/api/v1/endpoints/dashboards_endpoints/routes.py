@@ -1,5 +1,4 @@
 import json
-import math
 import re
 import sys
 import threading
@@ -33,6 +32,11 @@ from depictio.api.v1.endpoints.user_endpoints.routes import (
     oauth2_scheme_optional,
 )
 from depictio.api.v1.filter_links import extend_filters_via_links
+from depictio.api.v1.services.card_breakdown import (
+    BREAKDOWN_LAYOUTS,
+    compute_breakdown,
+    evenness,
+)
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 from depictio.models.models.dashboards import DashboardData, DashboardDataLite
 from depictio.models.models.users import User
@@ -1218,12 +1222,13 @@ def bulk_get_component_data_endpoint(
 # React viewer: bulk card value computation with filters
 # ============================================================================
 
-# Secondary layouts that need a server-computed ``__breakdown__`` payload.
-# Three separate places gate on this set (the specs fast path, the pushdown
-# short-circuit and the breakdown block itself); keeping it in one constant is
-# what stops a new layout from rendering an empty strip because one gate was
-# missed.
-_BREAKDOWN_LAYOUTS = ("top_n", "concentration", "composition")
+# Secondary layouts that need a server-computed ``__breakdown__`` payload, and
+# the computation itself. Both live in ``card_breakdown`` because the builder
+# preview endpoint computes the identical payload — the module docstring
+# explains why sharing it is what keeps the preview honest. Re-exported here
+# under the old private names so existing call sites and tests keep working.
+_BREAKDOWN_LAYOUTS = BREAKDOWN_LAYOUTS
+_evenness = evenness
 
 # Card aggregations whose reduction is defined by the precompute table rather
 # than spelled out here. Mapping is card-method name -> the ``pandas`` method
@@ -1279,33 +1284,6 @@ def _spec_value(col_specs: dict, aggregation: str) -> Any:
         if value is not None:
             return value
     return None
-
-
-def _evenness(counts: list[int], total: int) -> float | None:
-    """Pielou's evenness of a category distribution, in ``[0, 1]``.
-
-    Shannon entropy over the *whole* distribution divided by ``log(k)``, its
-    maximum for ``k`` categories. ``1.0`` means every value occurs equally
-    often, values near ``0`` mean one category dominates — the question none of
-    the ranking-style layouts answer.
-
-    Computed from the counts the breakdown already grouped, so it costs no extra
-    scan. Returns ``None`` below two categories, where the measure is degenerate:
-    a single category would score ``0``, which the meter would render as
-    "dominated" when the honest answer is "not applicable".
-    """
-    # Only categories that actually occur count toward ``k``. An empty group can
-    # survive a filter, and letting it into the denominator would drag a
-    # perfectly balanced distribution below 1.0.
-    present = [c for c in counts if c > 0]
-    if total <= 0 or len(present) < 2:
-        return None
-    entropy = 0.0
-    for count in present:
-        p = count / total
-        entropy -= p * math.log(p)
-    # log(k) is only zero for k == 1, already excluded above.
-    return max(0.0, min(1.0, entropy / math.log(len(present))))
 
 
 def _filter_expr_columns(filter_expr: str | None) -> set[str]:
@@ -2185,74 +2163,23 @@ def bulk_compute_cards(
             for sa in secondary_aggs:
                 sec_results[sa] = _agg_value(df[column], sa)
 
-        # ``top_n`` / ``concentration`` secondary layouts: compute a top-N
-        # breakdown over ``breakdown_col`` (per-group aggregate that matches the
-        # hero metric — see below). The renderer reads this payload from
+        # Categorical secondary layouts: compute a top-N breakdown over
+        # ``breakdown_col``. The renderer reads this payload from
         # ``sec_results['__breakdown__']`` and chooses how to display it
-        # (mini-bars vs concentration-only line).
-        #
-        # The breakdown's per-group aggregation MUST match the hero ``aggregation``
-        # so the strip's "Top N cover X%" reads against the same denominator as
-        # the card's hero value. e.g. a ``nunique POS`` card grouped by ``GENE``
-        # should compute *distinct POS per gene*, not *row count per gene* —
-        # otherwise the strip's percentages don't add up to the hero metric.
+        # (mini-bars / concentration line / composition bar / donut).
+        # ``compute_breakdown`` is shared with the builder-preview endpoint, so
+        # a card's preview and its saved self show the same numbers.
         breakdown_col = card.get("breakdown_col")
         sec_layout = card.get("secondary_layout") or "vertical"
         if breakdown_col and sec_layout in _BREAKDOWN_LAYOUTS and breakdown_col in df.columns:
             try:
-                import polars as _pl
-
-                top_n_count = int(card.get("top_n_count") or 3)
-                top_n_count = max(1, min(top_n_count, 5))
-                hero_agg = (card.get("aggregation") or "count").lower()
-
-                # Pick the per-group aggregation expression mirroring the hero.
-                # Special case: when the breakdown column IS the hero column
-                # (e.g. ``Unique Lineages`` aggregates ``nunique lineage`` and
-                # breaks down by ``lineage``), ``n_unique(column) per group`` is
-                # trivially 1 — useless Pareto. Fall back to row count so the
-                # strip shows the prevalence of each value (`Alpha: 14 rows,
-                # Delta: 9 rows, …`), which is the natural reading.
-                if column == breakdown_col:
-                    agg_expr = _pl.len().alias("__count__")
-                elif hero_agg in ("nunique", "unique"):
-                    agg_expr = _pl.col(column).n_unique().alias("__count__")
-                elif hero_agg == "sum":
-                    agg_expr = _pl.col(column).sum().alias("__count__")
-                else:
-                    # ``count`` and anything else → number of rows per group.
-                    agg_expr = _pl.len().alias("__count__")
-
-                grouped = (
-                    df.lazy()
-                    .group_by(breakdown_col)
-                    .agg(agg_expr)
-                    .sort("__count__", descending=True)
-                    .collect()
+                sec_results["__breakdown__"] = compute_breakdown(
+                    df,
+                    column=column,
+                    breakdown_col=breakdown_col,
+                    aggregation=card.get("aggregation") or "count",
+                    top_n_count=int(card.get("top_n_count") or 3),
                 )
-                total_raw = grouped["__count__"].sum()
-                total = int(total_raw or 0) if total_raw is not None else 0
-                top_rows = grouped.head(top_n_count)
-                names = top_rows[breakdown_col].cast(_pl.Utf8).to_list()
-                counts = [int(c) for c in top_rows["__count__"].to_list()]
-                top_sum = sum(counts)
-                top_share = (top_sum / total) if total > 0 else 0.0
-                sec_results["__breakdown__"] = {
-                    "column": breakdown_col,
-                    "total": total,
-                    "top": [
-                        {
-                            "name": names[i] if i < len(names) else "(null)",
-                            "count": counts[i] if i < len(counts) else 0,
-                            "percent": (counts[i] / total) if total > 0 else 0.0,
-                        }
-                        for i in range(len(names))
-                    ],
-                    "top_share": top_share,
-                    "unique_values": int(grouped.height),
-                    "breakdown_kind": hero_agg,
-                    "evenness": _evenness([int(c) for c in grouped["__count__"].to_list()], total),
-                }
             except Exception as e:
                 logger.warning(
                     f"bulk_compute_cards: breakdown on {breakdown_col!r} failed for {idx}: {e}"
