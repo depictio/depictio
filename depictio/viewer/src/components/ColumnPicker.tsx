@@ -59,14 +59,20 @@ function ColumnPicker<K extends string>({
               onClick={() => onToggle(col.key)}
               disabled={col.alwaysVisible}
             >
+              {/* The Checkbox is presentational: the row's onClick owns the
+                  toggle. A click on the Mantine label is re-dispatched by the
+                  browser to the associated <input>, so a single user click
+                  reaches Menu.Item TWICE — with the Checkbox also handling
+                  onChange the two toggles cancelled out and the column never
+                  appeared. Swallowing the input's own click keeps it at one. */}
               <Checkbox
                 size="xs"
                 checked={isVisible(col.key)}
                 disabled={col.alwaysVisible}
-                onChange={() => onToggle(col.key)}
+                readOnly
                 onClick={(e) => e.stopPropagation()}
                 label={col.description ?? col.label}
-                styles={{ label: { cursor: 'pointer' } }}
+                styles={{ label: { cursor: 'pointer' }, input: { cursor: 'pointer' } }}
               />
             </Menu.Item>
           ))}
