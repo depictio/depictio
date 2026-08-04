@@ -16,6 +16,7 @@ import type { ProjectListEntry } from 'depictio-react-core';
 import ProjectActionsMenu from '../ProjectActionsMenu';
 import { parseTemplate, TemplateChip } from '../template';
 import { determineRole } from '../lib/projectRole';
+import type { Density } from '../hooks/useProjectViewPrefs';
 import { coerceString } from '../../dashboards/lib/format';
 import ColumnPicker from '../../components/ColumnPicker';
 import { type ColumnDef, useTableColumns } from '../../lib/useTableColumns';
@@ -32,6 +33,8 @@ export interface ProjectTableViewProps {
   isAdmin: boolean;
   pinnedIds: Set<string>;
   pinDisabled: boolean;
+  density: Density;
+  onSetDensity: (d: Density) => void;
   onView: (p: ProjectListEntry) => void;
   onEdit: (p: ProjectListEntry) => void;
   onDelete: (p: ProjectListEntry) => void;
@@ -289,6 +292,8 @@ const ProjectTableView: React.FC<ProjectTableViewProps> = ({
   isAdmin,
   pinnedIds,
   pinDisabled,
+  density,
+  onSetDensity,
   onView,
   onEdit,
   onDelete,
@@ -371,7 +376,15 @@ const ProjectTableView: React.FC<ProjectTableViewProps> = ({
         );
       case 'type':
         return (
-          <Badge color={r.isAdvanced ? 'orange' : 'cyan'} variant="light" size="sm">
+          <Badge
+            color={r.isAdvanced ? 'orange' : 'cyan'}
+            variant="light"
+            size="sm"
+            // Mantine clamps the INNER `.mantine-Badge-label` with
+            // overflow:hidden + text-overflow:ellipsis, so styling the root
+            // alone still renders "ADVAN…". These labels are short and fixed.
+            styles={{ root: { maxWidth: 'none' }, label: { overflow: 'visible' } }}
+          >
             {r.isAdvanced ? 'Advanced' : 'Basic'}
           </Badge>
         );
@@ -382,6 +395,7 @@ const ProjectTableView: React.FC<ProjectTableViewProps> = ({
             variant="light"
             size="sm"
             leftSection={<Icon icon={r.isPublic ? 'mdi:earth' : 'mdi:lock-outline'} width={11} />}
+            styles={{ root: { maxWidth: 'none' }, label: { overflow: 'visible' } }}
           >
             {r.isPublic ? 'Public' : 'Private'}
           </Badge>
@@ -443,7 +457,7 @@ const ProjectTableView: React.FC<ProjectTableViewProps> = ({
         borderRadius: 8,
       }}
     >
-      <Group justify="flex-end" px="sm" pt="xs">
+      <Group justify="flex-end" px="sm" pt="xs" gap="xs">
         <ColumnPicker
           columns={allColumns}
           isVisible={isVisible}
@@ -452,9 +466,33 @@ const ProjectTableView: React.FC<ProjectTableViewProps> = ({
           isCustomized={isCustomized}
           visibleCount={visibleColumns.length}
         />
+        <Tooltip label="Density" withinPortal>
+          <ActionIcon.Group>
+            <ActionIcon
+              variant={density === 'cozy' ? 'filled' : 'subtle'}
+              color={density === 'cozy' ? 'orange' : 'gray'}
+              onClick={() => onSetDensity('cozy')}
+              aria-label="Cozy density"
+            >
+              <Icon icon="mdi:format-line-spacing" width={16} />
+            </ActionIcon>
+            <ActionIcon
+              variant={density === 'compact' ? 'filled' : 'subtle'}
+              color={density === 'compact' ? 'orange' : 'gray'}
+              onClick={() => onSetDensity('compact')}
+              aria-label="Compact density"
+            >
+              <Icon icon="mdi:format-align-justify" width={16} />
+            </ActionIcon>
+          </ActionIcon.Group>
+        </Tooltip>
       </Group>
       <div style={{ overflowX: 'auto' }}>
-        <Table verticalSpacing="sm" highlightOnHover miw={Math.max(700, visibleColumns.length * 130)}>
+        <Table
+          verticalSpacing={density === 'compact' ? 4 : 'sm'}
+          highlightOnHover
+          miw={Math.max(700, visibleColumns.length * 145)}
+        >
           <Table.Thead>
             <Table.Tr>
               <Table.Th style={{ width: 36 }} aria-label="Pin" />

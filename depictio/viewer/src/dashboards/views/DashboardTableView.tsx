@@ -21,7 +21,8 @@ import type { CategoryInfo } from '../DashboardsList';
 import type { GroupedDashboards } from '../lib/splitDefaultSections';
 import { dashboardHref, dashboardLinkClickHandler } from '../lib/dashboardLinks';
 import { isOwnedByEmail } from '../lib/splitDefaultSections';
-import { coerceString, isImagePath } from '../lib/format';
+import { coerceString, isImagePath, resolveAssetUrl } from '../lib/format';
+import { WORKFLOW_COLOR_MAP, WORKFLOW_ICON_MAP } from '../lib/workflowIcons';
 import type { Density } from '../hooks/useDashboardViewPrefs';
 import ColumnPicker from '../../components/ColumnPicker';
 import { type ColumnDef, useTableColumns } from '../../lib/useTableColumns';
@@ -464,14 +465,32 @@ const DashboardTableView: React.FC<DashboardTableViewProps> = ({
         return <CountCell icon="mdi:tab" value={r.childCount + 1} />;
       case 'components':
         return <CountCell icon="mdi:shape-outline" value={r.componentCount} />;
-      case 'workflow':
-        return r.workflowSystem && r.workflowSystem !== 'none' ? (
-          <Badge color="indigo" variant="light" size="sm">
+      case 'workflow': {
+        if (!r.workflowSystem || r.workflowSystem === 'none') return <Dash />;
+        // Match the Project badge's shape (light variant, size sm) but use the
+        // workflow system's own brand colour and logo, so the cell reads the
+        // same way the create/edit modals present the system.
+        const logo = WORKFLOW_ICON_MAP[r.workflowSystem];
+        return (
+          <Badge
+            color={WORKFLOW_COLOR_MAP[r.workflowSystem] ?? 'indigo'}
+            variant="light"
+            size="sm"
+            leftSection={
+              logo ? (
+                <img
+                  src={resolveAssetUrl(logo)}
+                  alt=""
+                  style={{ width: 12, height: 12, objectFit: 'contain', display: 'block' }}
+                />
+              ) : undefined
+            }
+            style={{ maxWidth: '100%' }}
+          >
             {r.workflowSystem}
           </Badge>
-        ) : (
-          <Dash />
         );
+      }
       case 'version':
         return r.version ? <Text size="sm">{r.version}</Text> : <Dash />;
       case 'id':
