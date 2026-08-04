@@ -69,6 +69,34 @@ async function refreshAccessToken(refreshToken: string): Promise<{
  *  cache. Reset to null when the refresh resolves. */
 let pendingRefresh: Promise<string | null> | null = null;
 
+/** Incremented by ``clearSession``. A refresh started before a logout must not
+ *  write its result back afterwards.
+ *
+ *  Logout is client-side only: the refresh token stays valid server-side for 7
+ *  days, so a late write does not just restore stale bytes, it restores a
+ *  *working* session and the user is silently signed back in. The window is
+ *  real because every authenticated request now refreshes through here, and a
+ *  page like /profile has several in flight at the moment the button is
+ *  clicked. Writers capture the epoch before awaiting and drop their result if
+ *  it moved. */
+let sessionEpoch = 0;
+
+/** Persist a refreshed token, unless the session was cleared while we awaited.
+ *  Returns false when the write was dropped. */
+function persistRefreshedSession(
+  epoch: number,
+  base: Record<string, unknown> | null,
+  refreshed: { access_token: string; expire_datetime: string },
+): boolean {
+  if (epoch !== sessionEpoch) return false;
+  try {
+    localStorage.setItem(SESSION_KEY, JSON.stringify({ ...base, ...refreshed }));
+  } catch {
+    // ignore quota / private mode
+  }
+  return true;
+}
+
 /** Parse a timestamp the API produced, as UTC.
  *
  * The backend stamps expiries with a naive `datetime.now()` in a UTC container
@@ -101,23 +129,22 @@ async function ensureFreshAccessToken(): Promise<string | null> {
   }
 
   if (!pendingRefresh) {
+    const epoch = sessionEpoch;
     pendingRefresh = (async () => {
       try {
         const refreshed = await refreshAccessToken(refresh);
         if (!refreshed) return null;
-        const next = { ...session, ...refreshed };
-        try {
-          localStorage.setItem(SESSION_KEY, JSON.stringify(next));
-        } catch {
-          // ignore quota / private mode
-        }
+        if (!persistRefreshedSession(epoch, session, refreshed)) return null;
         return refreshed.access_token;
       } finally {
         pendingRefresh = null;
       }
     })();
   }
+  const epochBefore = sessionEpoch;
   const next = await pendingRefresh;
+  // Logged out mid-refresh: there is no current token to report.
+  if (epochBefore !== sessionEpoch) return null;
   return next ?? access;
 }
 
@@ -160,17 +187,16 @@ async function authFetch(url: string, init: RequestInit = {}): Promise<Response>
     redirectToAuth();
     return first;
   }
+  const epoch = sessionEpoch;
   const refreshed = await refreshAccessToken(refresh);
   if (!refreshed) {
     clearSession();
     redirectToAuth();
     return first;
   }
-  try {
-    localStorage.setItem(SESSION_KEY, JSON.stringify({ ...existing, ...refreshed }));
-  } catch {
-    // ignore
-  }
+  // Logged out while the retry was in flight — do not resurrect the session,
+  // and do not re-issue the request as the user who just signed out.
+  if (!persistRefreshedSession(epoch, existing, refreshed)) return first;
   const retryHeaders = new Headers(init.headers || {});
   retryHeaders.set('Authorization', `Bearer ${refreshed.access_token}`);
   if (!retryHeaders.has('Content-Type') && init.body && typeof init.body === 'string') {
@@ -1812,6 +1838,14 @@ export interface AuthStatusResponse {
    *  treat absent as `false`. */
   registration_disabled?: boolean;
   google_oauth_enabled: boolean;
+  /** Development mode (DEPICTIO_DEV_MODE). Suppresses the walkthrough. */
+  is_dev_mode?: boolean;
+  /** Explicit walkthrough kill switch (DEPICTIO_WALKTHROUGH_DISABLED). */
+  walkthrough_disabled?: boolean;
+  /** TTL of a temporary public-mode user. */
+  temporary_user_expiry_hours?: number;
+  /** Sub-hour component of the temporary-user TTL. */
+  temporary_user_expiry_minutes?: number;
 }
 
 /** Session payload persisted to localStorage['local-store'] on successful auth.
@@ -1835,9 +1869,31 @@ export interface SessionPayload {
   expiration_time?: string | null;
 }
 
-/** Fetch the auth state + mode flags. Drives which UI the /auth page renders. */
+/** Fetch the auth state + mode flags. Drives which UI the /auth page renders.
+ *
+ * Deliberately NOT routed through `authFetch`. This endpoint answers a
+ * question — "is the stored credential currently good?" — and `authFetch`
+ * would answer it by *making* it good: it refreshes a near-expiry or absent
+ * expiry token before sending, so the probe reports a healthy session it
+ * created itself.
+ *
+ * That is wrong everywhere, but it actively breaks logout. Signing out only
+ * clears the client's copy of the token; the refresh token stays valid
+ * server-side for 7 days. `/auth` then mounts, calls this to decide what to
+ * render, mints a fresh access token off that still-live refresh token, sees a
+ * logged-in user, and redirects straight back to `/dashboards`.
+ *
+ * Sending the stored bearer as-is gives the honest answer: the backend
+ * resolves the user when the token is genuinely live and returns
+ * `user: null` when it is not. Expiry recovery belongs to the requests that
+ * actually need a working credential, and they go through `authFetch`.
+ */
 export async function fetchAuthStatus(): Promise<AuthStatusResponse> {
-  const res = await authFetch(`${API_BASE}/auth/me/optional`);
+  const session = readStoredSession();
+  const token = typeof session?.access_token === 'string' ? session.access_token : null;
+  const res = await fetch(`${API_BASE}/auth/me/optional`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  });
   if (!res.ok) {
     return {
       auth_mode: 'standard',
@@ -2016,8 +2072,14 @@ export function persistSession(session: SessionPayload): void {
   }
 }
 
-/** Clear the persisted session — used for logout. */
+/** Clear the persisted session — used for logout.
+ *
+ *  Also invalidates any refresh already in flight. Logout only removes the
+ *  client's copy of the credential (there is no server-side revocation), so a
+ *  refresh that resolved after this point would write back a *working* session
+ *  and sign the user straight back in. */
 export function clearSession(): void {
+  sessionEpoch += 1;
   try {
     localStorage.removeItem(SESSION_KEY);
   } catch {
