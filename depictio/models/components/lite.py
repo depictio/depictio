@@ -231,6 +231,18 @@ class CardLiteComponent(BaseLiteComponent):
     #     count in the hole and a legend beside it. Part-of-a-whole reads faster
     #     on a ring than on a bar — one dominant category is a visibly
     #     three-quarter-full circle.
+    #   - ``histogram``: binned sparkline of the column. The one view ``box_plot``
+    #     structurally cannot give: a five-number summary is blind to modality,
+    #     so a bimodal column and a flat one draw the same box.
+    #   - ``threshold``: pass / warn / fail counts against ``threshold_value``.
+    #     The QC question every sequencing pipeline asks and no other layout
+    #     answers — a box-plot shows the spread but never says whether three
+    #     samples are unusable.
+    #   - ``completeness``: filled vs missing (null) values. A hero ``count``
+    #     already skips nulls, so a card can look complete while the column is
+    #     half empty.
+    #   - ``attrition``: retention across ``attrition_cols`` in pipeline order
+    #     (reads in → trimmed → mapped → deduplicated).
     secondary_layout: Literal[
         "vertical",
         "compact",
@@ -240,6 +252,10 @@ class CardLiteComponent(BaseLiteComponent):
         "concentration",
         "composition",
         "donut",
+        "histogram",
+        "threshold",
+        "completeness",
+        "attrition",
     ] = Field(
         default="vertical",
         description=(
@@ -277,6 +293,40 @@ class CardLiteComponent(BaseLiteComponent):
             "maximum the hero value can reach (e.g. 44 samples in the cohort, "
             "11 SARS-CoV-2 ORFs). When null the renderer falls back to plain "
             "vertical layout."
+        ),
+    )
+    threshold_value: float | None = Field(
+        default=None,
+        description=(
+            "QC cut-off for ``secondary_layout: threshold``. Rows are counted as "
+            "passing or failing against it; without a value the strip is not "
+            "rendered."
+        ),
+    )
+    threshold_direction: Literal["min", "max"] = Field(
+        default="min",
+        description=(
+            "Which side of ``threshold_value`` passes. ``min`` means at-least "
+            "(coverage, %Q30 — higher is better), ``max`` means at-most "
+            "(duplication, contamination — lower is better). Explicit because "
+            "inferring it would silently invert a QC verdict."
+        ),
+    )
+    threshold_warn: float | None = Field(
+        default=None,
+        description=(
+            "Optional softer cut-off between pass and fail. Ignored unless it "
+            "lies on the failing side of ``threshold_value``, where a warn band "
+            "is the only place it is meaningful."
+        ),
+    )
+    attrition_cols: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Ordered stage columns for ``secondary_layout: attrition``, after "
+            "the card's own column (which is the first stage). The order is the "
+            "pipeline's order and is the content of the chart — the stages are "
+            "never sorted by value."
         ),
     )
 

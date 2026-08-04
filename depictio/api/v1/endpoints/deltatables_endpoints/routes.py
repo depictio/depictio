@@ -24,6 +24,7 @@ from depictio.api.v1.endpoints.deltatables_endpoints.utils import precompute_col
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user, get_user_or_anonymous
 from depictio.api.v1.s3 import polars_s3_config
 from depictio.api.v1.services.card_breakdown import compute_breakdown
+from depictio.api.v1.services.card_metrics import NUMERIC_LAYOUTS, numeric_layout_payload
 from depictio.api.v1.utils import agg_functions
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 from depictio.models.models.deltatables import (
@@ -806,6 +807,72 @@ async def get_breakdown(
     except Exception as e:
         logger.error(f"Error computing breakdown on {breakdown_col!r} for {dc_id_str}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to compute breakdown: {e}")
+
+
+@deltatables_endpoint_router.post("/card_metric/{data_collection_id}")
+async def get_card_metric(
+    data_collection_id: PyObjectId,
+    request: dict,
+    current_user: User = Depends(get_user_or_anonymous),
+):
+    """Payload for a card's numeric / QC secondary layout, for the live preview.
+
+    Runs the same dispatcher ``bulk_compute_cards`` runs for a saved card, so
+    the builder shows the values the dashboard will show. POST rather than GET
+    because ``attrition`` carries an ordered column list, which does not belong
+    in a query string.
+
+    Body: ``{"layout": ..., "column": ..., ...card config fields...}`` — the
+    same field names the card metadata uses (``threshold_value``,
+    ``threshold_direction``, ``threshold_warn``, ``attrition_cols``,
+    ``aggregation``).
+
+    Returns the layout's payload, or ``null`` when the config is incomplete or
+    the data cannot support it (a constant column has no histogram). The
+    builder then renders no strip rather than a misleading one.
+    """
+    layout = str(request.get("layout") or "")
+    column = str(request.get("column") or "")
+    if layout not in NUMERIC_LAYOUTS or not column:
+        raise HTTPException(
+            status_code=400,
+            detail=f"layout must be one of {NUMERIC_LAYOUTS} and column is required.",
+        )
+
+    pipeline = _build_permission_pipeline(data_collection_id, current_user)
+    if not list(projects_collection.aggregate(pipeline)):
+        raise HTTPException(status_code=404, detail="Data collection not found or access denied.")
+
+    deltatables_list = list(deltatables_collection.find({"data_collection_id": data_collection_id}))
+    if not deltatables_list:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No DeltaTable found for Data Collection ID {data_collection_id}.",
+        )
+    delta_table_location = deltatables_list[-1].get("delta_table_location")
+    if not delta_table_location:
+        raise HTTPException(
+            status_code=404, detail="Delta table location not found in deltatable document."
+        )
+
+    try:
+        lazy = pl.scan_delta(delta_table_location, storage_options=polars_s3_config)
+        # Project to the columns this layout reads. ``attrition`` is the only
+        # multi-column one; the rest read the hero column alone.
+        wanted = [column, *[str(c) for c in (request.get("attrition_cols") or []) if c]]
+        available = set(lazy.collect_schema().names())
+        wanted = list(dict.fromkeys([c for c in wanted if c in available]))
+        if not wanted:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Column {column!r} not found in data collection {data_collection_id}.",
+            )
+        return numeric_layout_payload(lazy.select(wanted), request, column, layout)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error computing {layout} on {column!r}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to compute {layout}: {e}")
 
 
 @deltatables_endpoint_router.get("/shape/{data_collection_id}")

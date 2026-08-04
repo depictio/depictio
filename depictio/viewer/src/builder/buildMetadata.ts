@@ -86,10 +86,19 @@ function buildCard(
       | 'top_n'
       | 'coverage'
       | 'concentration'
-      | 'composition';
+      | 'composition'
+      | 'donut'
+      | 'histogram'
+      | 'threshold'
+      | 'completeness'
+      | 'attrition';
     breakdown_col?: string | null;
     coverage_max?: number | null;
     top_n_count?: number;
+    threshold_value?: number | null;
+    threshold_direction?: string;
+    threshold_warn?: number | null;
+    attrition_cols?: string[] | null;
     background_color?: string;
     title_color?: string;
     icon_name?: string;
@@ -116,6 +125,12 @@ function buildCard(
     breakdown_col: (c.breakdown_col ?? null) as unknown as string | undefined,
     coverage_max: (c.coverage_max ?? null) as unknown as number | undefined,
     top_n_count: typeof c.top_n_count === 'number' ? c.top_n_count : 3,
+    // QC layouts. Same ``null``-not-``undefined`` rule as the block above: the
+    // server distinguishes "no threshold set" from "field absent".
+    threshold_value: (c.threshold_value ?? null) as unknown as number | undefined,
+    threshold_direction: (c.threshold_direction ?? 'min') as unknown as string | undefined,
+    threshold_warn: (c.threshold_warn ?? null) as unknown as number | undefined,
+    attrition_cols: (c.attrition_cols ?? []) as unknown as string[] | undefined,
     background_color: c.background_color || '',
     title_color: c.title_color || '',
     icon_name: c.icon_name || 'mdi:chart-line',

@@ -1044,6 +1044,10 @@ class DashboardDataLite(BaseModel):
                         "breakdown_col": comp_dict.get("breakdown_col"),
                         "top_n_count": comp_dict.get("top_n_count", 3),
                         "coverage_max": comp_dict.get("coverage_max"),
+                        "threshold_value": comp_dict.get("threshold_value"),
+                        "threshold_direction": comp_dict.get("threshold_direction", "min"),
+                        "threshold_warn": comp_dict.get("threshold_warn"),
+                        "attrition_cols": comp_dict.get("attrition_cols") or [],
                     }
                 )
                 for f in [

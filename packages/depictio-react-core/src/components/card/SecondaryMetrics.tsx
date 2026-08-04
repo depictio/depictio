@@ -9,7 +9,11 @@ export type SecondaryLayout =
   | 'coverage'
   | 'concentration'
   | 'composition'
-  | 'donut';
+  | 'donut'
+  | 'histogram'
+  | 'threshold'
+  | 'completeness'
+  | 'attrition';
 
 /** Layouts that draw the server-computed ``__breakdown__`` payload, i.e. the
  *  ones whose config requires a ``breakdown_col``.
@@ -27,6 +31,65 @@ export const BREAKDOWN_LAYOUTS = [
 
 export const isBreakdownLayout = (layout: SecondaryLayout | undefined | null): boolean =>
   !!layout && (BREAKDOWN_LAYOUTS as readonly string[]).includes(layout);
+
+/** Layouts backed by a server-computed *numeric* payload, keyed in ``rows`` as
+ *  ``__<layout>__``.
+ *
+ *  Mirrors ``NUMERIC_LAYOUTS`` in ``depictio/api/v1/services/card_metrics.py``;
+ *  a test asserts the two lists are equal. */
+export const NUMERIC_LAYOUTS = [
+  'histogram',
+  'threshold',
+  'completeness',
+  'attrition',
+] as const satisfies readonly SecondaryLayout[];
+
+export const isNumericLayout = (layout: SecondaryLayout | undefined | null): boolean =>
+  !!layout && (NUMERIC_LAYOUTS as readonly string[]).includes(layout);
+
+/** Payloads the numeric layouts read. Field-for-field mirrors of what
+ *  ``card_metrics.py`` returns. */
+export interface HistogramPayload {
+  bins: number[];
+  breakpoints: number[];
+  min: number;
+  max: number;
+  median: number | null;
+  total: number;
+  nulls: number;
+}
+
+export interface ThresholdPayload {
+  column: string;
+  threshold: number;
+  warn_threshold: number | null;
+  direction: 'min' | 'max';
+  total: number;
+  measured: number;
+  nulls: number;
+  passing: number;
+  warning: number;
+  failing: number;
+  pass_rate: number;
+  min: number | null;
+  max: number | null;
+  median: number | null;
+}
+
+export interface CompletenessPayload {
+  column: string;
+  total: number;
+  filled: number;
+  nulls: number;
+  fill_rate: number;
+}
+
+export interface AttritionPayload {
+  columns: string[];
+  aggregation: string;
+  stages: { name: string; value: number; share: number; step_share: number | null }[];
+  retained: number;
+}
 
 /** Server-computed payload for the breakdown layouts (``top_n`` /
  *  ``concentration`` / ``composition``). Lives in ``rows`` under the synthetic
@@ -109,6 +172,25 @@ const SecondaryMetrics: React.FC<SecondaryMetricsProps> = ({
     );
     if (!breakdownRow) return null;
     return <DonutMetric payload={breakdownRow.value as BreakdownPayload} color={color} />;
+  }
+
+  // Numeric layouts: each reads its own ``__<layout>__`` key. A missing payload
+  // means the server declined (incomplete config, or data that cannot support
+  // the layout — a constant column has no histogram), so render nothing rather
+  // than an empty chart that reads as "all zero".
+  if (isNumericLayout(layout)) {
+    const payload = rows.find((r) => r.name === `__${layout}__`)?.value;
+    if (!payload || typeof payload !== 'object') return null;
+    if (layout === 'histogram') {
+      return <HistogramMetric payload={payload as HistogramPayload} color={color} />;
+    }
+    if (layout === 'threshold') {
+      return <ThresholdMetric payload={payload as ThresholdPayload} color={color} />;
+    }
+    if (layout === 'completeness') {
+      return <CompletenessMetric payload={payload as CompletenessPayload} color={color} />;
+    }
+    return <AttritionMetric payload={payload as AttritionPayload} color={color} />;
   }
 
   if (layout === 'coverage') {
@@ -1413,6 +1495,504 @@ const ConcentrationMetric: React.FC<{
         {names}
       </Text>
     </Stack>
+    </Tooltip>
+  );
+};
+
+/** Compact number for the tight captions: 1.2M / 45.3k / 812. */
+function compactNumber(value: number): string {
+  if (!Number.isFinite(value)) return '—';
+  const abs = Math.abs(value);
+  if (abs >= 1e9) return `${(value / 1e9).toFixed(1)}B`;
+  if (abs >= 1e6) return `${(value / 1e6).toFixed(1)}M`;
+  if (abs >= 1e3) return `${(value / 1e3).toFixed(1)}k`;
+  if (Number.isInteger(value)) return String(value);
+  return value.toFixed(2);
+}
+
+/** Axis-friendly rendering of a bin edge — enough precision to distinguish
+ *  adjacent bins without spilling out of a 260px card. */
+function axisNumber(value: number): string {
+  if (!Number.isFinite(value)) return '—';
+  const abs = Math.abs(value);
+  if (abs >= 1e4 || (abs > 0 && abs < 0.01)) return value.toExponential(1);
+  return Number.isInteger(value) ? String(value) : value.toFixed(2);
+}
+
+/**
+ * ``histogram`` layout — the distribution's *shape* as a sparkline.
+ *
+ *   ▁▂▅█▇▄▂▁ ▁▂▄█▆▂
+ *   4.3 — 7.9 · median 5.8
+ *
+ * This is the one thing ``box_plot`` structurally cannot show. Five-number
+ * summaries are blind to modality: a bimodal column and a flat one can share
+ * min/Q1/median/Q3/max exactly, and the box-plot draws them identically. The
+ * bars make the second peak visible at a glance.
+ *
+ * Bar heights are scaled to the tallest bin, so the shape is preserved but the
+ * absolute counts are not readable — that is what the tooltip is for. Empty
+ * bins keep a hairline so a gap between two modes reads as "no data here"
+ * rather than as a rendering artefact.
+ */
+const HistogramMetric: React.FC<{
+  payload: HistogramPayload;
+  color?: string | null;
+}> = ({ payload, color }) => {
+  const bins = payload.bins || [];
+  if (!bins.length) return null;
+  const peak = Math.max(...bins);
+  if (peak <= 0) return null;
+
+  const fill = hexWithAlpha(color, 0.8);
+  const BAR_AREA = 26;
+
+  const tooltipBody = (
+    <Stack gap={2} miw={220}>
+      <Group gap={4} wrap="nowrap" justify="space-between">
+        <Text size="xs" c="dimmed" lh={1.2}>range</Text>
+        <Text size="xs" fw={500} lh={1.2} style={{ fontVariantNumeric: 'tabular-nums' }}>
+          {axisNumber(payload.min)} — {axisNumber(payload.max)}
+        </Text>
+      </Group>
+      {payload.median !== null ? (
+        <Group gap={4} wrap="nowrap" justify="space-between">
+          <Text size="xs" c="dimmed" lh={1.2}>median</Text>
+          <Text size="xs" fw={500} lh={1.2} style={{ fontVariantNumeric: 'tabular-nums' }}>
+            {axisNumber(payload.median)}
+          </Text>
+        </Group>
+      ) : null}
+      <Group gap={4} wrap="nowrap" justify="space-between">
+        <Text size="xs" c="dimmed" lh={1.2}>values</Text>
+        <Text size="xs" fw={500} lh={1.2} style={{ fontVariantNumeric: 'tabular-nums' }}>
+          {(payload.total - payload.nulls).toLocaleString()}
+        </Text>
+      </Group>
+      {payload.nulls > 0 ? (
+        <Group gap={4} wrap="nowrap" justify="space-between">
+          <Text size="xs" c="dimmed" lh={1.2}>missing</Text>
+          <Text size="xs" lh={1.2} style={{ fontVariantNumeric: 'tabular-nums' }}>
+            {payload.nulls.toLocaleString()}
+          </Text>
+        </Group>
+      ) : null}
+      <Group gap={4} wrap="nowrap" justify="space-between">
+        <Text size="xs" c="dimmed" lh={1.2}>tallest bin</Text>
+        <Text size="xs" lh={1.2} style={{ fontVariantNumeric: 'tabular-nums' }}>
+          {peak.toLocaleString()}
+        </Text>
+      </Group>
+    </Stack>
+  );
+
+  return (
+    <Tooltip
+      label={tooltipBody}
+      multiline
+      w={260}
+      withArrow
+      position="bottom"
+      openDelay={150}
+      styles={{ tooltip: { padding: '8px 10px' } }}
+    >
+      <Stack
+        gap={2}
+        mt={6}
+        px="xs"
+        pb="xs"
+        style={{ overflow: 'hidden', minWidth: 0, position: 'relative', zIndex: 2, cursor: 'help' }}
+      >
+        <Group gap={1} wrap="nowrap" align="flex-end" style={{ height: BAR_AREA }}>
+          {bins.map((count, idx) => (
+            <Box
+              key={idx}
+              style={{
+                flex: 1,
+                minWidth: 0,
+                // Hairline for empty bins: a genuine gap between two modes has
+                // to be distinguishable from a rendering glitch.
+                height: count > 0 ? `${Math.max(8, (count / peak) * 100)}%` : 1,
+                background: count > 0 ? fill : 'rgba(160,160,160,0.35)',
+                borderRadius: 1,
+              }}
+            />
+          ))}
+        </Group>
+        <Group gap={4} wrap="nowrap" justify="space-between">
+          <Text size="10" c="dimmed" lh={1.2} style={{ fontSize: 10 }}>
+            {axisNumber(payload.min)}
+          </Text>
+          {payload.median !== null ? (
+            <Text size="10" c="dimmed" lh={1.2} style={{ fontSize: 10 }}>
+              med {axisNumber(payload.median)}
+            </Text>
+          ) : null}
+          <Text size="10" c="dimmed" lh={1.2} style={{ fontSize: 10 }}>
+            {axisNumber(payload.max)}
+          </Text>
+        </Group>
+      </Stack>
+    </Tooltip>
+  );
+};
+
+// QC verdict colours. These are the one place a hard-coded hue is right: a
+// pass/fail judgement is not a brand accent, and tinting "fail" with the card's
+// colour would make a red-themed card look like everything failed.
+const QC_PASS = '#40c057';
+const QC_WARN = '#fab005';
+const QC_FAIL = '#fa5252';
+
+/**
+ * ``threshold`` layout — how many rows clear a QC cut-off.
+ *
+ *   ▰▰▰▰▰▰▰▰▰▰▰▰▰▰▱▱▓▓
+ *   37/40 pass ≥ 30  ·  2 warn · 1 fail
+ *
+ * The question every nf-core pipeline asks and no other layout answers. A
+ * ``box_plot`` of coverage shows the spread but never says whether three
+ * samples are unusable; this counts them against the cut-off the lab actually
+ * uses. ``direction`` decides which side passes, so it works for both
+ * "higher is better" (Q30, breadth) and "lower is better" (duplication,
+ * contamination).
+ */
+const ThresholdMetric: React.FC<{
+  payload: ThresholdPayload;
+  color?: string | null;
+}> = ({ payload }) => {
+  const measured = payload.measured || 0;
+  if (measured <= 0) return null;
+  const passPct = (payload.passing / measured) * 100;
+  const warnPct = (payload.warning / measured) * 100;
+  const failPct = Math.max(0, 100 - passPct - warnPct);
+  const comparator = payload.direction === 'max' ? '≤' : '≥';
+
+  const tooltipBody = (
+    <Stack gap={2} miw={240}>
+      <Group gap={4} wrap="nowrap" justify="space-between">
+        <Text size="xs" c="dimmed" lh={1.2}>criterion</Text>
+        <Text size="xs" fw={500} lh={1.2} style={{ fontVariantNumeric: 'tabular-nums' }}>
+          {payload.column} {comparator} {axisNumber(payload.threshold)}
+        </Text>
+      </Group>
+      <Box style={{ height: 1, background: 'rgba(255,255,255,0.18)', margin: '4px 0' }} />
+      {[
+        ['pass', payload.passing, QC_PASS],
+        ...(payload.warn_threshold !== null
+          ? [['warn', payload.warning, QC_WARN] as const]
+          : []),
+        ['fail', payload.failing, QC_FAIL],
+      ].map(([label, count, tint]) => (
+        <Group key={String(label)} gap={4} wrap="nowrap" justify="space-between">
+          <Group gap={5} wrap="nowrap">
+            <Box
+              style={{ width: 8, height: 8, borderRadius: 2, background: tint as string }}
+            />
+            <Text size="xs" lh={1.2}>{label}</Text>
+          </Group>
+          <Text size="xs" fw={500} lh={1.2} style={{ fontVariantNumeric: 'tabular-nums' }}>
+            {(count as number).toLocaleString()} (
+            {Math.round(((count as number) / measured) * 100)}%)
+          </Text>
+        </Group>
+      ))}
+      {payload.warn_threshold !== null ? (
+        <Text size="xs" c="dimmed" lh={1.2}>
+          warn band: {comparator} {axisNumber(payload.warn_threshold)} but not{' '}
+          {comparator} {axisNumber(payload.threshold)}
+        </Text>
+      ) : null}
+      {payload.nulls > 0 ? (
+        <>
+          <Box style={{ height: 1, background: 'rgba(255,255,255,0.18)', margin: '4px 0' }} />
+          <Group gap={4} wrap="nowrap" justify="space-between">
+            <Text size="xs" c="dimmed" lh={1.2}>not measured</Text>
+            <Text size="xs" lh={1.2} style={{ fontVariantNumeric: 'tabular-nums' }}>
+              {payload.nulls.toLocaleString()}
+            </Text>
+          </Group>
+          <Text size="xs" c="dimmed" lh={1.2}>
+            Missing values are neither passed nor failed.
+          </Text>
+        </>
+      ) : null}
+    </Stack>
+  );
+
+  return (
+    <Tooltip
+      label={tooltipBody}
+      multiline
+      w={280}
+      withArrow
+      position="bottom"
+      openDelay={150}
+      styles={{ tooltip: { padding: '8px 10px' } }}
+    >
+      <Stack
+        gap={3}
+        mt={6}
+        px="xs"
+        pb="xs"
+        style={{ overflow: 'hidden', minWidth: 0, position: 'relative', zIndex: 2, cursor: 'help' }}
+      >
+        <Group
+          gap={0}
+          wrap="nowrap"
+          style={{
+            height: 12,
+            borderRadius: 4,
+            overflow: 'hidden',
+            background: 'rgba(160,160,160,0.18)',
+          }}
+        >
+          {passPct > 0 ? (
+            <Box style={{ width: `${passPct}%`, height: '100%', background: QC_PASS }} />
+          ) : null}
+          {warnPct > 0 ? (
+            <Box style={{ width: `${warnPct}%`, height: '100%', background: QC_WARN }} />
+          ) : null}
+          {failPct > 0 ? (
+            <Box style={{ width: `${failPct}%`, height: '100%', background: QC_FAIL }} />
+          ) : null}
+        </Group>
+        <Text
+          size="10"
+          lh={1.2}
+          style={{
+            fontSize: 10,
+            fontVariantNumeric: 'tabular-nums',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          }}
+        >
+          <strong>
+            {payload.passing.toLocaleString()}/{measured.toLocaleString()}
+          </strong>{' '}
+          pass {comparator} {axisNumber(payload.threshold)}
+          {payload.failing > 0 ? ` · ${payload.failing.toLocaleString()} fail` : ''}
+          {payload.warning > 0 ? ` · ${payload.warning.toLocaleString()} warn` : ''}
+        </Text>
+      </Stack>
+    </Tooltip>
+  );
+};
+
+/**
+ * ``completeness`` layout — how much of the column is actually populated.
+ *
+ *   ▰▰▰▰▰▰▰▰▰▰▰▰▱▱▱▱
+ *   128/150 filled (85%) · 22 missing
+ *
+ * The first question asked of any clinical or sample metadata table, and one
+ * a hero ``count`` actively hides: ``count`` already skips nulls, so a card
+ * reading "128" looks complete until you know the table has 150 rows.
+ */
+const CompletenessMetric: React.FC<{
+  payload: CompletenessPayload;
+  color?: string | null;
+}> = ({ payload, color }) => {
+  if (!payload.total) return null;
+  const pct = Math.round(payload.fill_rate * 100);
+  const fill = hexWithAlpha(color, 0.85);
+
+  const tooltipBody = (
+    <Stack gap={2} miw={220}>
+      <Group gap={4} wrap="nowrap" justify="space-between">
+        <Text size="xs" c="dimmed" lh={1.2}>column</Text>
+        <Text size="xs" fw={500} lh={1.2}>{payload.column}</Text>
+      </Group>
+      <Group gap={4} wrap="nowrap" justify="space-between">
+        <Text size="xs" c="dimmed" lh={1.2}>filled</Text>
+        <Text size="xs" fw={500} lh={1.2} style={{ fontVariantNumeric: 'tabular-nums' }}>
+          {payload.filled.toLocaleString()} / {payload.total.toLocaleString()}
+        </Text>
+      </Group>
+      <Group gap={4} wrap="nowrap" justify="space-between">
+        <Text size="xs" c="dimmed" lh={1.2}>missing</Text>
+        <Text size="xs" fw={500} lh={1.2} style={{ fontVariantNumeric: 'tabular-nums' }}>
+          {payload.nulls.toLocaleString()}
+        </Text>
+      </Group>
+      <Text size="xs" c="dimmed" lh={1.2}>
+        Counts nulls only — empty strings and sentinels like "NA" are indistinguishable
+        from real values here.
+      </Text>
+    </Stack>
+  );
+
+  return (
+    <Tooltip
+      label={tooltipBody}
+      multiline
+      w={260}
+      withArrow
+      position="bottom"
+      openDelay={150}
+      styles={{ tooltip: { padding: '8px 10px' } }}
+    >
+      <Stack
+        gap={3}
+        mt={6}
+        px="xs"
+        pb="xs"
+        style={{ overflow: 'hidden', minWidth: 0, position: 'relative', zIndex: 2, cursor: 'help' }}
+      >
+        <Box
+          style={{
+            height: 12,
+            borderRadius: 4,
+            overflow: 'hidden',
+            background: 'rgba(160,160,160,0.18)',
+          }}
+        >
+          <Box style={{ width: `${pct}%`, height: '100%', background: fill }} />
+        </Box>
+        <Text
+          size="10"
+          c="dimmed"
+          lh={1.2}
+          style={{
+            fontSize: 10,
+            fontVariantNumeric: 'tabular-nums',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          }}
+        >
+          {payload.filled.toLocaleString()}/{payload.total.toLocaleString()} filled ({pct}%)
+          {payload.nulls > 0 ? ` · ${payload.nulls.toLocaleString()} missing` : ''}
+        </Text>
+      </Stack>
+    </Tooltip>
+  );
+};
+
+/**
+ * ``attrition`` layout — retention across an ordered sequence of stages.
+ *
+ *   ▰▰▰▰▰▰▰▰▰▰  raw       12.4M
+ *   ▰▰▰▰▰▰▰▰▱▱  trimmed   11.1M
+ *   ▰▰▰▰▱▱▱▱▱▱  mapped     5.6M
+ *   45% retained
+ *
+ * The most-read figure of any nf-core report. Bars are shares of the *first*
+ * stage, so the funnel shape is the cumulative survival; the tooltip adds the
+ * step-to-step drop, which is what identifies the single stage that did the
+ * damage — a 50% cumulative loss reads very differently when it happened in
+ * one step versus gradually.
+ *
+ * A stage larger than its predecessor is drawn as-is (clamped only for the bar
+ * width): it means the columns were listed in the wrong order, and hiding that
+ * would leave the user with a chart they cannot explain.
+ */
+const AttritionMetric: React.FC<{
+  payload: AttritionPayload;
+  color?: string | null;
+}> = ({ payload, color }) => {
+  const stages = payload.stages || [];
+  if (stages.length < 2) return null;
+
+  const tooltipBody = (
+    <Stack gap={2} miw={250}>
+      <Group gap={4} wrap="nowrap" justify="space-between">
+        <Text size="xs" c="dimmed" lh={1.2}>reduction</Text>
+        <Text size="xs" fw={500} lh={1.2}>{payload.aggregation}</Text>
+      </Group>
+      <Box style={{ height: 1, background: 'rgba(255,255,255,0.18)', margin: '4px 0' }} />
+      {stages.map((stage) => (
+        <Group key={stage.name} gap={4} wrap="nowrap" justify="space-between">
+          <Text
+            size="xs"
+            lh={1.2}
+            style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}
+          >
+            {stage.name}
+          </Text>
+          <Text size="xs" fw={500} lh={1.2} style={{ fontVariantNumeric: 'tabular-nums' }}>
+            {compactNumber(stage.value)} ({Math.round(stage.share * 100)}%)
+            {stage.step_share !== null && stage.step_share < 1
+              ? ` −${Math.round((1 - stage.step_share) * 100)}%`
+              : ''}
+          </Text>
+        </Group>
+      ))}
+      <Box style={{ height: 1, background: 'rgba(255,255,255,0.18)', margin: '4px 0' }} />
+      <Text size="xs" c="dimmed" lh={1.2}>
+        Percentages are shares of the first stage; −x% is the drop from the previous
+        stage.
+      </Text>
+    </Stack>
+  );
+
+  return (
+    <Tooltip
+      label={tooltipBody}
+      multiline
+      w={290}
+      withArrow
+      position="bottom"
+      openDelay={150}
+      styles={{ tooltip: { padding: '8px 10px' } }}
+    >
+      <Stack
+        gap={2}
+        mt={4}
+        px="xs"
+        pb="xs"
+        style={{ overflow: 'hidden', minWidth: 0, position: 'relative', zIndex: 2, cursor: 'help' }}
+      >
+        {stages.map((stage, idx) => (
+          <Group key={stage.name} gap={5} wrap="nowrap" style={{ minWidth: 0 }}>
+            <Box
+              style={{
+                flex: 1,
+                minWidth: 0,
+                height: 8,
+                borderRadius: 3,
+                overflow: 'hidden',
+                background: 'rgba(160,160,160,0.18)',
+              }}
+            >
+              <Box
+                style={{
+                  width: `${Math.max(0, Math.min(100, stage.share * 100))}%`,
+                  height: '100%',
+                  background: hexWithAlpha(color, Math.max(0.35, 0.85 - idx * 0.12)),
+                  transition: 'width 200ms ease-out',
+                }}
+              />
+            </Box>
+            <Text
+              size="10"
+              c="dimmed"
+              lh={1.2}
+              style={{
+                fontSize: 10,
+                width: 62,
+                flexShrink: 0,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {stage.name}
+            </Text>
+          </Group>
+        ))}
+        <Text
+          size="10"
+          c="dimmed"
+          lh={1.2}
+          style={{ fontSize: 10, fontVariantNumeric: 'tabular-nums' }}
+        >
+          {Math.round(payload.retained * 100)}% retained ·{' '}
+          {compactNumber(stages[stages.length - 1]?.value ?? 0)} of{' '}
+          {compactNumber(stages[0]?.value ?? 0)}
+        </Text>
+      </Stack>
     </Tooltip>
   );
 };

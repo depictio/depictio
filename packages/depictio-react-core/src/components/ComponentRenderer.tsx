@@ -13,7 +13,10 @@ import DatePickerRenderer from './interactive/DatePickerRenderer';
 import CheckboxSwitchRenderer from './interactive/CheckboxSwitchRenderer';
 import SegmentedControlRenderer from './interactive/SegmentedControlRenderer';
 import TimelineRenderer from './interactive/TimelineRenderer';
-import SecondaryMetrics, { type SecondaryLayout } from './card/SecondaryMetrics';
+import SecondaryMetrics, {
+  NUMERIC_LAYOUTS,
+  type SecondaryLayout,
+} from './card/SecondaryMetrics';
 import { wrapWithChrome } from './chrome';
 import LoadAllButton, { LoadAllState } from './chrome/LoadAllButton';
 import { ActiveHighlight } from '../highlight';
@@ -534,6 +537,16 @@ const CardRenderer: React.FC<{
     | undefined;
   if (breakdown !== undefined) {
     orderedSecondary.push({ name: '__breakdown__', value: breakdown });
+  }
+
+  // Numeric / QC layouts read their own ``__<layout>__`` key, populated by the
+  // same bulk-compute pass. Injected the same way, since the strip dispatches
+  // on the row name rather than on aggregation order.
+  for (const key of NUMERIC_LAYOUTS) {
+    const payload = secondaryValues?.[`__${key}__`];
+    if (payload !== undefined && payload !== null) {
+      orderedSecondary.push({ name: `__${key}__`, value: payload });
+    }
   }
 
   // Aggregation description line — sits in the existing card slot just below

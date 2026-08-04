@@ -374,6 +374,33 @@ export async function fetchBreakdown(
   return res.json();
 }
 
+/** Payload for a card's numeric / QC secondary layout (histogram, threshold,
+ *  completeness, attrition), computed server-side by the same dispatcher the
+ *  saved card uses.
+ *
+ *  ``config`` carries the card's own field names (``threshold_value``,
+ *  ``threshold_direction``, ``threshold_warn``, ``attrition_cols``,
+ *  ``aggregation``). Resolves to ``null`` when the config is incomplete or the
+ *  data cannot support the layout — a constant column has no histogram — and
+ *  the caller then renders no strip.
+ */
+export async function fetchCardMetric(
+  dcId: string,
+  layout: string,
+  column: string,
+  config: Record<string, unknown> = {},
+  signal?: AbortSignal,
+): Promise<Record<string, unknown> | null> {
+  const res = await authFetch(`${API_BASE}/deltatables/card_metric/${dcId}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...config, layout, column }),
+    signal,
+  });
+  if (!res.ok) throw new Error(`Failed to fetch card metric: ${res.status}`);
+  return res.json();
+}
+
 /** Numeric range bounds for a column — backs RangeSlider min/max.
  *  Reads precomputed min/max from /deltatables/specs/{dcId}.
  */
