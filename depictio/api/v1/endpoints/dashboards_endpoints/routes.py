@@ -37,6 +37,12 @@ from depictio.api.v1.services.card_breakdown import (
     compute_breakdown,
     evenness,
 )
+from depictio.api.v1.services.card_metrics import (
+    NUMERIC_LAYOUTS,
+)
+from depictio.api.v1.services.card_metrics import (
+    numeric_layout_payload as _numeric_layout_payload,
+)
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 from depictio.models.models.dashboards import DashboardData, DashboardDataLite
 from depictio.models.models.users import User
@@ -1230,6 +1236,22 @@ def bulk_get_component_data_endpoint(
 _BREAKDOWN_LAYOUTS = BREAKDOWN_LAYOUTS
 _evenness = evenness
 
+
+def _needs_server_payload(card: dict) -> bool:
+    """True when this card's layout needs a payload the precomputed specs can't
+    supply, so neither the specs fast path nor the pushdown may short-circuit.
+
+    Three separate gates ask this question (the specs fast path, the pushdown
+    short-circuit and the compute block). They used to spell the condition out
+    individually, which is how a newly added layout ends up rendering an empty
+    strip — the gate nobody remembered to update wins.
+    """
+    layout = card.get("secondary_layout") or "vertical"
+    if layout in _BREAKDOWN_LAYOUTS:
+        return bool(card.get("breakdown_col"))
+    return layout in NUMERIC_LAYOUTS
+
+
 # Card aggregations whose reduction is defined by the precompute table rather
 # than spelled out here. Mapping is card-method name -> the ``pandas`` method
 # name ``_POLARS_AGG_EXPRS`` is keyed by. Reusing those factories is what keeps
@@ -1933,6 +1955,11 @@ def bulk_compute_cards(
         breakdown_col = card.get("breakdown_col")
         if breakdown_col:
             key_cols.add(breakdown_col)
+        # ``attrition`` reads several columns beyond the card's own; they have
+        # to survive the projection or the strip silently loses its stages.
+        for stage in card.get("attrition_cols") or []:
+            if stage:
+                key_cols.add(str(stage))
         # The expression is applied to the projected frame, so its columns have
         # to survive the projection even when no card displays them.
         key_cols |= _filter_expr_columns(card_filter_expr)
@@ -2059,13 +2086,10 @@ def bulk_compute_cards(
                 # the slow Delta load only if:
                 #   (a) all requested ``secondary_aggs`` are present in the
                 #       precomputed column specs, AND
-                #   (b) no server-side breakdown is needed (the
-                #       ``_BREAKDOWN_LAYOUTS`` compute counts grouped by another
-                #       column, which the specs don't carry).
-                needs_breakdown = (
-                    card.get("breakdown_col")
-                    and (card.get("secondary_layout") or "vertical") in _BREAKDOWN_LAYOUTS
-                )
+                #   (b) the layout needs no server-computed payload (a grouped
+                #       breakdown, a histogram, threshold counts…, none of which
+                #       the per-column specs carry).
+                needs_breakdown = _needs_server_payload(card)
                 if secondary_aggs:
                     sec: dict[str, Any] = {}
                     all_specs_present = True
@@ -2100,10 +2124,7 @@ def bulk_compute_cards(
             pushdown_tried.add(cache_key)
             _try_pushdown(cache_key, wf_id, dc_id, card_filter_expr)
 
-        needs_breakdown_payload = (
-            bool(card.get("breakdown_col"))
-            and (card.get("secondary_layout") or "vertical") in _BREAKDOWN_LAYOUTS
-        )
+        needs_breakdown_payload = _needs_server_payload(card)
         wanted_aggs = [aggregation] + list(secondary_aggs)
         fully_pushed = not needs_breakdown_payload and all(
             (idx, a) in pushdown_values for a in wanted_aggs
@@ -2183,6 +2204,19 @@ def bulk_compute_cards(
             except Exception as e:
                 logger.warning(
                     f"bulk_compute_cards: breakdown on {breakdown_col!r} failed for {idx}: {e}"
+                )
+
+        # Numeric / QC secondary layouts. Same contract as the breakdown above:
+        # one synthetic key in ``sec_results`` the renderer reads, computed by
+        # the shared helper the preview endpoint also calls.
+        if sec_layout in NUMERIC_LAYOUTS:
+            try:
+                payload = _numeric_layout_payload(df, card, column, sec_layout)
+                if payload is not None:
+                    sec_results[f"__{sec_layout}__"] = payload
+            except Exception as e:
+                logger.warning(
+                    f"bulk_compute_cards: {sec_layout} on {column!r} failed for {idx}: {e}"
                 )
 
         if sec_results:

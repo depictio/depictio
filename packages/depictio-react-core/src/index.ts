@@ -45,8 +45,16 @@ export { default as SecondaryMetrics } from './components/card/SecondaryMetrics'
 export {
   BREAKDOWN_LAYOUTS,
   isBreakdownLayout,
+  NUMERIC_LAYOUTS,
+  isNumericLayout,
 } from './components/card/SecondaryMetrics';
 export type { SecondaryLayout } from './components/card/SecondaryMetrics';
+export type {
+  HistogramPayload,
+  ThresholdPayload,
+  CompletenessPayload,
+  AttritionPayload,
+} from './components/card/SecondaryMetrics';
 
 // Interactive renderers
 export { default as MultiSelectRenderer } from './components/interactive/MultiSelectRenderer';
@@ -92,6 +100,7 @@ export {
   fetchSpecs,
   fetchUniqueValues,
   fetchBreakdown,
+  fetchCardMetric,
   fetchColumnRange,
   fetchComponentData,
   bulkComputeCards,

@@ -167,6 +167,10 @@ class Render(BaseModel):
     breakdown_col: str | None = None  # group-by column for top_n / concentration / composition
     top_n_count: int | None = Field(default=None, ge=1, le=5)
     coverage_max: float | None = None  # denominator for secondary_layout=coverage
+    threshold_value: float | None = None  # QC cut-off for secondary_layout=threshold
+    threshold_direction: Literal["min", "max"] | None = None  # which side passes
+    threshold_warn: float | None = None  # optional warn band
+    attrition_cols: list[str] = Field(default_factory=list)  # stages for =attrition
     filter_expr: str | None = None  # optional polars pre-filter
     # multiqc
     section: str | None = None
@@ -181,6 +185,7 @@ class Render(BaseModel):
             cols.add(self.column)
         if self.breakdown_col:
             cols.add(self.breakdown_col)
+        cols |= {c for c in self.attrition_cols if c}
         return cols  # NB: `code`-mode figures are free-form → not grounded
 
     @model_validator(mode="after")
@@ -221,6 +226,13 @@ class Render(BaseModel):
                 )
             if self.secondary_layout == "coverage" and self.coverage_max is None:
                 raise ValueError("secondary_layout='coverage' requires 'coverage_max'")
+            if self.secondary_layout == "threshold" and self.threshold_value is None:
+                raise ValueError("secondary_layout='threshold' requires 'threshold_value'")
+            if self.secondary_layout == "attrition" and not self.attrition_cols:
+                raise ValueError(
+                    "secondary_layout='attrition' requires 'attrition_cols' "
+                    "(the stages after the card's own column)"
+                )
         elif any(
             (
                 self.column,
@@ -230,6 +242,10 @@ class Render(BaseModel):
                 self.breakdown_col,
                 self.top_n_count,
                 self.coverage_max,
+                self.threshold_value,
+                self.threshold_direction,
+                self.threshold_warn,
+                self.attrition_cols,
                 self.filter_expr,
             )
         ):

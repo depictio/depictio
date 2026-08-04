@@ -27,7 +27,9 @@ import { autoCardTitle } from './cardTitle';
 import {
   SecondaryMetrics,
   fetchBreakdown,
+  fetchCardMetric,
   isBreakdownLayout,
+  isNumericLayout,
   type BreakdownPayloadDTO,
   type SecondaryLayout,
 } from 'depictio-react-core';
@@ -144,6 +146,52 @@ function useBreakdownPreview(
   return { payload, loading, error };
 }
 
+/** Fetch the server-computed payload for a numeric / QC layout.
+ *
+ *  Same contract as the breakdown hook above: aborts in-flight requests on
+ *  dependency change, and resolves to ``null`` when the server declines
+ *  (incomplete config, or data that cannot support the layout). ``configKey``
+ *  is the serialised layout config, so editing a threshold refetches while an
+ *  unrelated styling change does not. */
+function useNumericPreview(
+  dcId: string | null,
+  column: string | undefined,
+  layout: SecondaryLayout,
+  layoutConfig: Record<string, unknown>,
+  enabled: boolean,
+): { payload: Record<string, unknown> | null; loading: boolean; error: string | null } {
+  const [payload, setPayload] = useState<Record<string, unknown> | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const configKey = JSON.stringify(layoutConfig);
+
+  useEffect(() => {
+    if (!enabled || !dcId || !column) {
+      setPayload(null);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+    const ctrl = new AbortController();
+    setLoading(true);
+    setError(null);
+    fetchCardMetric(dcId, layout, column, JSON.parse(configKey), ctrl.signal)
+      .then((res) => {
+        setPayload(res);
+        setLoading(false);
+      })
+      .catch((err: unknown) => {
+        if ((err as { name?: string })?.name === 'AbortError') return;
+        setPayload(null);
+        setError(err instanceof Error ? err.message : String(err));
+        setLoading(false);
+      });
+    return () => ctrl.abort();
+  }, [enabled, dcId, column, layout, configKey]);
+
+  return { payload, loading, error };
+}
+
 const CardPreview: React.FC = () => {
   const config = useBuilderStore((s) => s.config) as {
     title?: string;
@@ -155,6 +203,10 @@ const CardPreview: React.FC = () => {
     breakdown_col?: string | null;
     coverage_max?: number | null;
     top_n_count?: number;
+    threshold_value?: number | null;
+    threshold_direction?: 'min' | 'max';
+    threshold_warn?: number | null;
+    attrition_cols?: string[] | null;
     background_color?: string;
     title_color?: string;
     icon_name?: string;
@@ -177,6 +229,24 @@ const CardPreview: React.FC = () => {
     config.aggregation,
     config.top_n_count ?? 3,
     isBreakdownLayout(layout),
+  );
+
+  const {
+    payload: numericPayload,
+    loading: numericLoading,
+    error: numericError,
+  } = useNumericPreview(
+    dcId,
+    config.column_name,
+    layout,
+    {
+      aggregation: config.aggregation,
+      threshold_value: config.threshold_value ?? null,
+      threshold_direction: config.threshold_direction ?? 'min',
+      threshold_warn: config.threshold_warn ?? null,
+      attrition_cols: config.attrition_cols ?? [],
+    },
+    isNumericLayout(layout),
   );
 
   if (!config.column_name || !config.aggregation) {
@@ -217,6 +287,8 @@ const CardPreview: React.FC = () => {
     stripRows = breakdownPayload
       ? [{ name: '__breakdown__', value: breakdownPayload }]
       : [];
+  } else if (isNumericLayout(layout)) {
+    stripRows = numericPayload ? [{ name: `__${layout}__`, value: numericPayload }] : [];
   } else if (layout === 'coverage') {
     if (
       typeof config.coverage_max === 'number' &&
@@ -248,6 +320,25 @@ const CardPreview: React.FC = () => {
           ? 'Pick a breakdown column to see the distribution.'
           : null;
 
+  // Why a numeric layout is showing nothing. The server returns null for data
+  // that genuinely cannot support the layout, and saying so beats an empty
+  // panel the user reads as a bug.
+  const numericHint = !isNumericLayout(layout)
+    ? null
+    : numericError
+      ? `Preview unavailable: ${numericError}`
+      : numericLoading
+        ? 'Computing from the live data…'
+        : layout === 'threshold' && config.threshold_value == null
+          ? 'Set a threshold value to see the pass/fail split.'
+          : layout === 'attrition' && (config.attrition_cols?.length ?? 0) < 1
+            ? 'Add at least one further stage column to see the funnel.'
+            : !numericPayload
+              ? layout === 'histogram'
+                ? 'No histogram: this column has no spread (every value is identical).'
+                : 'No data available for this layout.'
+              : null;
+
   return (
     <PreviewPanel minHeight={200}>
       <Center style={{ width: '100%', padding: '0.5rem' }}>
@@ -277,9 +368,9 @@ const CardPreview: React.FC = () => {
               live data.
             </Text>
           ) : null}
-          {breakdownHint ? (
+          {breakdownHint || numericHint ? (
             <Text size="10" c="dimmed" ta="center" mt={2} style={{ fontSize: 10 }}>
-              {breakdownHint}
+              {breakdownHint || numericHint}
             </Text>
           ) : null}
         </div>
