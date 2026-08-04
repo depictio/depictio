@@ -23,6 +23,7 @@ The YAML serialization system (`depictio/models/yaml_serialization/`) is **depre
 ```python
 # ❌ OLD (YAML)
 from depictio.models.yaml_serialization import export_dashboard_to_yaml
+
 yaml_content = export_dashboard_to_yaml(dashboard, format="compact")
 
 # ✅ NEW (JSON)
@@ -41,6 +42,7 @@ with open("dashboard.json", "w") as f:
 ```python
 # ❌ OLD (YAML)
 from depictio.models.yaml_serialization import import_dashboard_from_file
+
 dashboard = import_dashboard_from_file("dashboard.yaml")
 
 # ✅ NEW (JSON)
