@@ -1299,6 +1299,14 @@ class DashboardData(MongoModel):
     permissions: Permission
     is_public: bool = False
     last_saved_ts: str = ""
+    # Creation timestamp, UTC, "%Y-%m-%d %H:%M:%S". Stamped once on insert and
+    # never overwritten by saves, so it stays distinct from `last_saved_ts`.
+    # Empty on legacy documents — the API backfills it from the ObjectId.
+    creation_time: str = ""
+    # Set by the screenshot worker when the thumbnail PNGs land on disk. Used
+    # purely as a cache-buster for the listing thumbnails; deliberately separate
+    # from `last_saved_ts` so a background screenshot never looks like an edit.
+    screenshot_ts: str = ""
     project_id: PyObjectId
 
     # Tab support (backward compatible)

@@ -8,11 +8,11 @@ Uses watchdog for cross-platform file system monitoring.
 import asyncio
 import threading
 import time
-from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
 
 from depictio.api.v1.configs.logging_init import logger
+from depictio.models.timestamps import preserved_creation_time, utc_now_str
 
 # Track watcher state
 _watcher_threads: dict[str, threading.Thread] = {}
@@ -300,7 +300,10 @@ def sync_yaml_to_mongodb(filepath: str, event_type: str) -> dict[str, Any]:
         dashboard_dict["permissions"] = existing.get("permissions", {})
         dashboard_dict["is_public"] = existing.get("is_public", False)
         dashboard_dict["version"] = existing.get("version", 0) + 1
-        dashboard_dict["last_saved_ts"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        dashboard_dict["last_saved_ts"] = utc_now_str()
+        dashboard_dict["creation_time"] = preserved_creation_time(
+            existing, dashboard_id, dashboard_dict["last_saved_ts"]
+        )
 
         dashboard = DashboardData.from_mongo(dashboard_dict)
         dashboards_collection.find_one_and_update(

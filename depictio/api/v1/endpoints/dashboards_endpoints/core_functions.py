@@ -4,6 +4,7 @@ from bson import ObjectId
 
 from depictio.api.v1.db import dashboards_collection, projects_collection
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
+from depictio.models.timestamps import objectid_creation_str
 
 
 def sync_tab_family_permissions(
@@ -148,6 +149,10 @@ def load_dashboards_from_db(owner, admin_mode=False, user=None, include_child_ta
         "icon_variant": 1,
         "permissions": 1,
         "last_saved_ts": 1,
+        "creation_time": 1,
+        "screenshot_ts": 1,
+        "workflow_system": 1,
+        "notes_content": 1,
         "project_id": 1,
         "is_public": 1,
         # Tab-specific fields (needed for sidebar tab navigation)
@@ -238,4 +243,14 @@ def load_dashboards_from_db(owner, admin_mode=False, user=None, include_child_ta
         dashboards = list(dashboards_collection.find(query, projection))
 
     dashboards = [convert_objectid_to_str(dashboard) for dashboard in dashboards]
+
+    # Backfill `creation_time` for documents written before it was stored:
+    # every ObjectId embeds its generation time, so the listing can always show
+    # a real creation date instead of falling back to the modification one.
+    for dashboard in dashboards:
+        if not dashboard.get("creation_time"):
+            dashboard["creation_time"] = objectid_creation_str(
+                dashboard.get("dashboard_id") or dashboard.get("_id")
+            )
+
     return {"dashboards": dashboards, "success": True}

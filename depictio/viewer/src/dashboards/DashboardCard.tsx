@@ -28,6 +28,7 @@ import {
   isImagePath,
   resolveAssetUrl,
   screenshotUrl,
+  screenshotVersion,
 } from './lib/format';
 import { dashboardHrefFor, dashboardLinkClickHandler } from './lib/dashboardLinks';
 import { parseTemplateOrigin, TemplateChip } from '../projects/template';
@@ -97,8 +98,8 @@ const SingleThumbnail: React.FC<{
   }
   return (
     <img
-      key={`${theme}-${dashboard.last_saved_ts ?? ''}-${fallback}`}
-      src={screenshotUrl(dashboard.dashboard_id, theme, dashboard.last_saved_ts)}
+      key={`${theme}-${screenshotVersion(dashboard) ?? ''}-${fallback}`}
+      src={screenshotUrl(dashboard.dashboard_id, theme, screenshotVersion(dashboard))}
       alt={dashboard.title || dashboard.dashboard_id}
       loading="lazy"
       decoding="async"
@@ -168,7 +169,7 @@ const DashboardCard: React.FC<DashboardCardProps> = ({
   const thumbnailSrc = screenshotUrl(
     dashboard.dashboard_id,
     theme,
-    dashboard.last_saved_ts,
+    screenshotVersion(dashboard),
   );
   // Hover-popover preview only makes sense with a real screenshot — when the
   // card itself is showing the icon fallback there's nothing to enlarge, so we

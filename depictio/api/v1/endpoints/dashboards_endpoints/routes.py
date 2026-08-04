@@ -34,6 +34,7 @@ from depictio.api.v1.filter_links import extend_filters_via_links
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 from depictio.models.models.dashboards import DashboardData, DashboardDataLite
 from depictio.models.models.users import User
+from depictio.models.timestamps import preserved_creation_time, utc_now_str
 
 dashboards_endpoint_router = APIRouter()
 
@@ -594,10 +595,17 @@ async def save_dashboard(
     # last loaded, which leaves the timestamp frozen between editor sessions —
     # browsers then keep showing the stale thumbnail PNG. (The Dash save path
     # bumps the same field; see dashboards_endpoints/routes.py:3705 etc.)
-    from datetime import datetime
-
     save_payload = data.mongo()
-    save_payload["last_saved_ts"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    save_payload["last_saved_ts"] = utc_now_str()
+
+    # `creation_time` is write-once: the client round-trips the whole dashboard
+    # document, so trusting its payload would let a save clobber (or invent) the
+    # creation date and make both columns show the same value — issue #932.
+    save_payload["creation_time"] = preserved_creation_time(
+        existing_dashboard,
+        (existing_dashboard or {}).get("dashboard_id") or dashboard_id,
+        save_payload["last_saved_ts"],
+    )
 
     if existing_dashboard:
         project_id = existing_dashboard.get("project_id")
@@ -4406,7 +4414,10 @@ def _import_multi_tab_dashboard(
         main_dashboard_id  # CRITICAL: Ensure _id = dashboard_id for MongoDB
     )
     main_dashboard_dict["project_id"] = ObjectId(project_id)
-    main_dashboard_dict["last_saved_ts"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    main_dashboard_dict["last_saved_ts"] = utc_now_str()
+    main_dashboard_dict["creation_time"] = preserved_creation_time(
+        existing_main, main_dashboard_id, main_dashboard_dict["last_saved_ts"]
+    )
 
     # Set version and permissions
     if existing_main:
@@ -4477,7 +4488,10 @@ def _import_multi_tab_dashboard(
         tab_dashboard_dict["dashboard_id"] = tab_dashboard_id
         tab_dashboard_dict["_id"] = tab_dashboard_id  # CRITICAL: Ensure _id = dashboard_id
         tab_dashboard_dict["project_id"] = ObjectId(project_id)
-        tab_dashboard_dict["last_saved_ts"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        tab_dashboard_dict["last_saved_ts"] = utc_now_str()
+        tab_dashboard_dict["creation_time"] = preserved_creation_time(
+            existing_tab, tab_dashboard_id, tab_dashboard_dict["last_saved_ts"]
+        )
 
         # Set version and permissions
         if existing_tab:
@@ -4715,7 +4729,10 @@ async def import_dashboard_from_yaml(
     new_dashboard_id = existing_dashboard["dashboard_id"] if existing_dashboard else ObjectId()
     dashboard_dict["dashboard_id"] = new_dashboard_id
     dashboard_dict["project_id"] = ObjectId(project_id)
-    dashboard_dict["last_saved_ts"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    dashboard_dict["last_saved_ts"] = utc_now_str()
+    dashboard_dict["creation_time"] = preserved_creation_time(
+        existing_dashboard, new_dashboard_id, dashboard_dict["last_saved_ts"]
+    )
 
     # Set version and permissions based on create vs update
     if existing_dashboard:
@@ -5401,7 +5418,8 @@ async def import_dashboard_from_json(
             "viewers": [],
         },
         "is_public": project_doc.get("is_public", False),
-        "last_saved_ts": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "last_saved_ts": utc_now_str(),
+        "creation_time": utc_now_str(),
     }
 
     # Insert dashboard

@@ -2156,7 +2156,10 @@ export interface ProjectListEntry {
   name: string;
   project_type?: 'basic' | 'advanced';
   is_public?: boolean;
+  /** Creation time, UTC "YYYY-MM-DD HH:MM:SS". */
   registration_time?: string;
+  /** Last modification time, UTC. Empty when never edited since creation. */
+  last_modified?: string;
   yaml_config_path?: string | null;
   data_management_platform_project_url?: string | null;
   permissions?: DashboardPermissions;
