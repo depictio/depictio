@@ -227,14 +227,25 @@ class CardLiteComponent(BaseLiteComponent):
     #     caption. Where ``top_n`` ranks and ``concentration`` quantifies
     #     dominance, this one shows what the column is *made of*, and whether it
     #     is balanced.
+    #   - ``donut``: same backend again, drawn as a ring with the distinct-value
+    #     count in the hole and a legend beside it. Part-of-a-whole reads faster
+    #     on a ring than on a bar — one dominant category is a visibly
+    #     three-quarter-full circle.
     secondary_layout: Literal[
-        "vertical", "compact", "box_plot", "top_n", "coverage", "concentration", "composition"
+        "vertical",
+        "compact",
+        "box_plot",
+        "top_n",
+        "coverage",
+        "concentration",
+        "composition",
+        "donut",
     ] = Field(
         default="vertical",
         description=(
             "Layout of the secondary strip. ``vertical`` / ``compact`` use the "
             "``aggregations`` list; ``box_plot`` uses ``box_plot_stats``; ``top_n``, "
-            "``concentration`` and ``composition`` use ``breakdown_col``; "
+            "``concentration``, ``composition`` and ``donut`` use ``breakdown_col``; "
             "``coverage`` uses ``coverage_max``."
         ),
     )
@@ -242,9 +253,9 @@ class CardLiteComponent(BaseLiteComponent):
         default=None,
         description=(
             "Column to group by when ``secondary_layout`` is ``top_n``, "
-            "``concentration`` or ``composition``. The renderer shows the top-N "
-            "most-frequent values of this column (and their share of the total). "
-            "Ignored otherwise."
+            "``concentration``, ``composition`` or ``donut``. The renderer shows "
+            "the top-N most-frequent values of this column (and their share of "
+            "the total). Ignored otherwise."
         ),
     )
     top_n_count: int = Field(
@@ -253,9 +264,10 @@ class CardLiteComponent(BaseLiteComponent):
         le=5,
         description=(
             "Number of values to surface in the secondary strip when "
-            "``secondary_layout`` is ``top_n``, ``concentration`` or "
-            "``composition``. Capped at 5 — past that the strip becomes illegibly "
-            "cramped at typical card sizes (w=2, h=2 ≈ 280×120 px)."
+            "``secondary_layout`` is ``top_n``, ``concentration``, "
+            "``composition`` or ``donut``. Capped at 5 — past that the strip "
+            "becomes illegibly cramped at typical card sizes "
+            "(w=2, h=2 ≈ 280×120 px)."
         ),
     )
     coverage_max: float | None = Field(

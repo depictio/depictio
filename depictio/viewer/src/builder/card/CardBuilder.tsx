@@ -13,6 +13,7 @@ import {
   Title,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
+import { isBreakdownLayout } from 'depictio-react-core';
 import { useBuilderStore } from '../store/useBuilderStore';
 import ColumnSelect from '../shared/ColumnSelect';
 import DesignShell from '../shared/DesignShell';
@@ -82,10 +83,11 @@ const ICON_OPTIONS: { value: string; label: string }[] = [
  *  to a ``(aggregations, secondary_layout, …)`` config bundle on save.
  *
  *  Distribution-style layouts (vertical / compact / box_plot) target numeric
- *  columns and surface scalar aggregations. The three cardinality-style
- *  layouts (top_n / coverage / concentration) target ``count`` / ``nunique``
- *  aggregations and need an extra config field — the builder exposes those
- *  fields conditionally below the Select. */
+ *  columns and surface scalar aggregations. The cardinality-style layouts
+ *  (top_n / composition / donut / coverage / concentration) target ``count`` /
+ *  ``nunique`` aggregations and need an extra config field — the builder
+ *  exposes those fields conditionally below the Select, and pre-fills them
+ *  with a sensible guess so switching layout shows a strip immediately. */
 type MultiMetricStyle =
   | 'single'
   | 'vertical'
@@ -94,7 +96,8 @@ type MultiMetricStyle =
   | 'top_n'
   | 'coverage'
   | 'concentration'
-  | 'composition';
+  | 'composition'
+  | 'donut';
 // Mantine 7 ``Select`` expects nested groups in the shape
 // ``{ group, items: [...] }`` — the flat ``{value, label, group}`` format we
 // inherited from Mantine 6 crashes the option normalizer with
@@ -119,6 +122,7 @@ const MULTI_METRIC_OPTIONS: Array<
     items: [
       { value: 'top_n', label: 'Top-N bars (most frequent values of a column)' },
       { value: 'composition', label: 'Composition bar (shares + "Other", with evenness)' },
+      { value: 'donut', label: 'Donut (ring of shares, hero value in the middle)' },
       { value: 'coverage', label: 'Coverage gauge (current / theoretical max)' },
       { value: 'concentration', label: 'Concentration (top-N share + names)' },
     ],
@@ -135,6 +139,7 @@ function inferMultiMetricStyle(
   if (layout === 'coverage') return 'coverage';
   if (layout === 'concentration') return 'concentration';
   if (layout === 'composition') return 'composition';
+  if (layout === 'donut') return 'donut';
   if (!aggs || aggs.length === 0) return 'single';
   if (layout === 'box_plot' || (aggs.length === 1 && aggs[0] === 'box_plot_stats')) {
     return 'box_plot';
@@ -156,7 +161,8 @@ function multiMetricStyleToConfig(style: MultiMetricStyle): {
     | 'top_n'
     | 'coverage'
     | 'concentration'
-    | 'composition';
+    | 'composition'
+    | 'donut';
   breakdown_col: string | null;
   coverage_max: number | null;
   top_n_count: number;
@@ -179,6 +185,8 @@ function multiMetricStyleToConfig(style: MultiMetricStyle): {
       return { ...base, aggregations: null, secondary_layout: 'concentration' };
     case 'composition':
       return { ...base, aggregations: null, secondary_layout: 'composition' };
+    case 'donut':
+      return { ...base, aggregations: null, secondary_layout: 'donut' };
     case 'single':
     default:
       return { ...base, aggregations: null, secondary_layout: 'vertical' };
@@ -199,7 +207,8 @@ const CardBuilder: React.FC = () => {
       | 'top_n'
       | 'coverage'
       | 'concentration'
-      | 'composition';
+      | 'composition'
+      | 'donut';
     breakdown_col?: string | null;
     coverage_max?: number | null;
     top_n_count?: number;
@@ -209,6 +218,7 @@ const CardBuilder: React.FC = () => {
     title_font_size?: string;
   };
   const patchConfig = useBuilderStore((s) => s.patchConfig);
+  const cols = useBuilderStore((s) => s.cols);
 
   // Apply sane defaults once after mount when creating fresh.
   useEffect(() => {
@@ -232,6 +242,70 @@ const CardBuilder: React.FC = () => {
     () => inferMultiMetricStyle(config.aggregations, config.secondary_layout),
     [config.aggregations, config.secondary_layout],
   );
+
+  /** Best guess at the column a breakdown should group by.
+   *
+   *  Preference order, and why: the card's own column when it is categorical
+   *  (a "count of variety" card broken down by variety is the reading the user
+   *  almost always means); otherwise the categorical column with the *fewest*
+   *  distinct values, because a strip of 3 species is legible where a strip of
+   *  10 000 sample IDs is noise. ``nunique`` comes from the precomputed specs,
+   *  so this costs nothing. */
+  const defaultBreakdownCol = useMemo(() => {
+    const categorical = cols.filter((c) =>
+      ['object', 'string', 'category', 'bool'].includes(c.type),
+    );
+    if (!categorical.length) return null;
+    if (categorical.some((c) => c.name === config.column_name)) {
+      return config.column_name ?? null;
+    }
+    const ranked = [...categorical].sort((a, b) => {
+      const an = typeof a.specs?.nunique === 'number' ? (a.specs.nunique as number) : Infinity;
+      const bn = typeof b.specs?.nunique === 'number' ? (b.specs.nunique as number) : Infinity;
+      // Single-valued columns carry no information; push them behind the rest
+      // rather than letting them win for having the lowest cardinality.
+      const aScore = an <= 1 ? Infinity : an;
+      const bScore = bn <= 1 ? Infinity : bn;
+      return aScore - bScore;
+    });
+    return ranked[0]?.name ?? null;
+  }, [cols, config.column_name]);
+
+  /** Default denominator for the coverage gauge: the card's own unfiltered
+   *  value. The gauge then reads "how much of the data survives the current
+   *  filters", which is both the common intent and immediately meaningful —
+   *  where a null max renders nothing at all and looks like a broken card. */
+  const defaultCoverageMax = useMemo(() => {
+    const raw = cols.find((c) => c.name === config.column_name)?.specs?.[
+      config.aggregation as string
+    ];
+    return typeof raw === 'number' && Number.isFinite(raw) && raw > 0
+      ? Math.ceil(raw)
+      : null;
+  }, [cols, config.column_name, config.aggregation]);
+
+  // Pre-fill the field the chosen layout requires. Without this, picking a
+  // cardinality layout showed an empty form and no preview strip, so the
+  // feature looked broken until the user guessed which field to fill. Only
+  // ever fills a *blank* field, so an explicit choice is never overwritten.
+  useEffect(() => {
+    if (isBreakdownLayout(config.secondary_layout)) {
+      if (!config.breakdown_col && defaultBreakdownCol) {
+        patchConfig({ breakdown_col: defaultBreakdownCol });
+      }
+    } else if (config.secondary_layout === 'coverage') {
+      if (config.coverage_max == null && defaultCoverageMax != null) {
+        patchConfig({ coverage_max: defaultCoverageMax });
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    config.secondary_layout,
+    config.breakdown_col,
+    config.coverage_max,
+    defaultBreakdownCol,
+    defaultCoverageMax,
+  ]);
 
   // Aggregation options follow the column's type, mirroring
   // depictio/api/v1/utils.py:agg_functions[type]['card_methods'].
@@ -295,7 +369,7 @@ const CardBuilder: React.FC = () => {
 
       <Select
         label="Multi-metric style"
-        description="Pick a secondary strip layout. Distribution group (vertical / compact / box-plot) targets numeric columns; cardinality group (top-N / composition / coverage / concentration) targets count / distinct-count cards."
+        description="Pick a secondary strip layout. Distribution group (vertical / compact / box-plot) targets numeric columns; cardinality group (top-N / composition / donut / coverage / concentration) targets count / distinct-count cards. The field each layout needs is pre-filled from your data."
         data={MULTI_METRIC_OPTIONS}
         value={multiMetricStyle}
         onChange={(val) => {
@@ -306,13 +380,12 @@ const CardBuilder: React.FC = () => {
         leftSection={<Icon icon="mdi:chart-box-outline" width={14} />}
       />
 
-      {/* Conditional fields for the cardinality-style layouts. ``top_n`` and
-          ``concentration`` need a categorical breakdown column + a row count;
-          ``coverage`` needs the theoretical max value (denominator). Hidden
-          when the user picks a distribution-style layout. */}
-      {(multiMetricStyle === 'top_n' ||
-        multiMetricStyle === 'concentration' ||
-        multiMetricStyle === 'composition') && (
+      {/* Conditional fields for the cardinality-style layouts. The breakdown
+          layouts need a categorical column + a row count; ``coverage`` needs
+          the theoretical max (denominator). Both are pre-filled above, so this
+          block shows a working configuration rather than empty required
+          fields. Hidden for the distribution-style layouts. */}
+      {isBreakdownLayout(config.secondary_layout) && (
         <>
           <ColumnSelect
             label="Breakdown column"
