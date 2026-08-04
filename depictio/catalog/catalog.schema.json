@@ -339,7 +339,8 @@
                 "box_plot",
                 "top_n",
                 "coverage",
-                "concentration"
+                "concentration",
+                "composition"
               ],
               "type": "string"
             },

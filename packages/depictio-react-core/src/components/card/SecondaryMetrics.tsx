@@ -7,17 +7,24 @@ export type SecondaryLayout =
   | 'box_plot'
   | 'top_n'
   | 'coverage'
-  | 'concentration';
+  | 'concentration'
+  | 'composition';
 
-/** Server-computed payload for ``top_n`` / ``concentration`` layouts. Lives in
- *  ``rows`` under the synthetic name ``__breakdown__`` — populated by the
- *  ``bulk_compute_cards`` endpoint when ``breakdown_col`` is bound. */
+/** Server-computed payload for the breakdown layouts (``top_n`` /
+ *  ``concentration`` / ``composition``). Lives in ``rows`` under the synthetic
+ *  name ``__breakdown__`` — populated by the ``bulk_compute_cards`` endpoint
+ *  when ``breakdown_col`` is bound. */
 interface BreakdownPayload {
   column: string;
   total: number;
   top: { name: string; count: number; percent: number }[];
   top_share: number;
   unique_values: number;
+  /** Hero aggregation the per-group counts mirror ('count' / 'nunique' / 'sum'). */
+  breakdown_kind?: string;
+  /** Pielou evenness of the whole distribution, 0–1. Null below two
+   *  categories, where the measure is degenerate rather than meaningful. */
+  evenness?: number | null;
 }
 
 const isBreakdownPayload = (v: unknown): v is BreakdownPayload => {
@@ -65,6 +72,16 @@ const SecondaryMetrics: React.FC<SecondaryMetricsProps> = ({
     if (!breakdownRow) return null;
     return (
       <ConcentrationMetric payload={breakdownRow.value as BreakdownPayload} color={color} />
+    );
+  }
+
+  if (layout === 'composition') {
+    const breakdownRow = rows.find(
+      (r) => r.name === '__breakdown__' && isBreakdownPayload(r.value),
+    );
+    if (!breakdownRow) return null;
+    return (
+      <CompositionMetric payload={breakdownRow.value as BreakdownPayload} color={color} />
     );
   }
 
@@ -773,6 +790,208 @@ const CoverageMetric: React.FC<{
         </Text>
       </Box>
     </Stack>
+    </Tooltip>
+  );
+};
+
+/** Evenness → plain-language reading. The thresholds mirror the wording
+ *  ``ConcentrationMetric`` uses for ``top_share`` so the two layouts describe
+ *  the same distribution in compatible terms. */
+function evennessLabel(evenness: number): string {
+  if (evenness >= 0.85) return 'balanced';
+  if (evenness >= 0.6) return 'fairly even';
+  if (evenness >= 0.3) return 'uneven';
+  return 'dominated';
+}
+
+/**
+ * ``composition`` layout — what the column is *made of*, plus whether it is
+ * balanced. Reads the same ``__breakdown__`` payload as ``top_n``.
+ *
+ *   ▰▰▰▰▰▰▰▰▰▰▱▱▱▱▱▱▱▱▱▱▒▒▒▒▒▒
+ *   Alpha 45% · Delta 25% · Other 30%
+ *   balanced (evenness 0.87) · 47 values
+ *
+ * Where ``top_n`` ranks and ``concentration`` quantifies dominance, this one
+ * shows proportion: a single 100%-wide bar split into the top-N segments plus a
+ * muted "Other" remainder, so the parts always sum to the whole. That makes it
+ * the one breakdown layout that stays readable in a 2×1 card, where ``top_n``'s
+ * stacked rows have no room.
+ *
+ * Segment tints step down in opacity by rank so adjacent slices stay
+ * distinguishable without introducing a second hue — the card's accent colour
+ * remains the only colour in play, per the no-hardcoded-palette rule.
+ */
+const CompositionMetric: React.FC<{
+  payload: BreakdownPayload;
+  color?: string | null;
+}> = ({ payload, color }) => {
+  if (!payload.top.length) return null;
+
+  const segments = payload.top.map((row, idx) => ({
+    ...row,
+    // Rank 0 is the most opaque; each subsequent slice steps down but never
+    // below 0.3, where it would be indistinguishable from the "Other" track.
+    fill: hexWithAlpha(color, Math.max(0.3, 0.85 - idx * 0.16)),
+  }));
+  // Derive the remainder from top_share rather than summing the segments: the
+  // server computed it over the full distribution, so it stays correct even
+  // when rounding the individual percents would not sum to 100.
+  const otherShare = Math.max(0, 1 - payload.top_share);
+  const otherPct = Math.round(otherShare * 100);
+  const tailRows = Math.max(0, payload.unique_values - payload.top.length);
+  const evenness = typeof payload.evenness === 'number' ? payload.evenness : null;
+
+  const tooltipBody = (
+    <Stack gap={2} miw={240}>
+      <Group gap={4} wrap="nowrap" justify="space-between">
+        <Text size="xs" c="dimmed" lh={1.2}>column</Text>
+        <Text size="xs" fw={500} lh={1.2}>{payload.column}</Text>
+      </Group>
+      <Group gap={4} wrap="nowrap" justify="space-between">
+        <Text size="xs" c="dimmed" lh={1.2}>total</Text>
+        <Text size="xs" fw={500} lh={1.2} style={{ fontVariantNumeric: 'tabular-nums' }}>
+          {payload.total.toLocaleString()}
+        </Text>
+      </Group>
+      <Group gap={4} wrap="nowrap" justify="space-between">
+        <Text size="xs" c="dimmed" lh={1.2}>unique values</Text>
+        <Text size="xs" fw={500} lh={1.2} style={{ fontVariantNumeric: 'tabular-nums' }}>
+          {payload.unique_values.toLocaleString()}
+        </Text>
+      </Group>
+      <Box style={{ height: 1, background: 'rgba(255,255,255,0.18)', margin: '4px 0' }} />
+      {segments.map((row) => (
+        <Group key={row.name} gap={4} wrap="nowrap" justify="space-between">
+          <Group gap={5} wrap="nowrap" style={{ flex: 1, minWidth: 0 }}>
+            <Box
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: 2,
+                background: row.fill,
+                flexShrink: 0,
+              }}
+            />
+            <Text
+              size="xs"
+              lh={1.2}
+              style={{
+                flex: 1,
+                minWidth: 0,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {row.name}
+            </Text>
+          </Group>
+          <Text size="xs" fw={500} lh={1.2} style={{ fontVariantNumeric: 'tabular-nums' }}>
+            {row.count.toLocaleString()} ({Math.round(row.percent * 100)}%)
+          </Text>
+        </Group>
+      ))}
+      {tailRows > 0 ? (
+        <Group gap={4} wrap="nowrap" justify="space-between">
+          <Text size="xs" c="dimmed" lh={1.2}>
+            other ({tailRows.toLocaleString()} more)
+          </Text>
+          <Text size="xs" lh={1.2} style={{ fontVariantNumeric: 'tabular-nums' }}>
+            {otherPct}%
+          </Text>
+        </Group>
+      ) : null}
+      {evenness !== null ? (
+        <>
+          <Box style={{ height: 1, background: 'rgba(255,255,255,0.18)', margin: '4px 0' }} />
+          <Group gap={4} wrap="nowrap" justify="space-between">
+            <Text size="xs" c="dimmed" lh={1.2}>evenness</Text>
+            <Text size="xs" fw={700} lh={1.2} style={{ fontVariantNumeric: 'tabular-nums' }}>
+              {evenness.toFixed(2)} — {evennessLabel(evenness)}
+            </Text>
+          </Group>
+          <Text size="xs" c="dimmed" lh={1.2}>
+            1.00 = every value equally frequent; 0 = one value dominates.
+          </Text>
+        </>
+      ) : null}
+    </Stack>
+  );
+
+  return (
+    <Tooltip
+      label={tooltipBody}
+      multiline
+      w={280}
+      withArrow
+      position="bottom"
+      openDelay={150}
+      styles={{ tooltip: { padding: '8px 10px' } }}
+    >
+      <Stack
+        gap={3}
+        mt={6}
+        px="xs"
+        pb="xs"
+        style={{
+          overflow: 'hidden',
+          minWidth: 0,
+          position: 'relative',
+          zIndex: 2,
+          cursor: 'help',
+        }}
+      >
+        <Group
+          gap={0}
+          wrap="nowrap"
+          style={{
+            height: 14,
+            borderRadius: 4,
+            overflow: 'hidden',
+            background: 'rgba(160,160,160,0.18)',
+          }}
+        >
+          {segments.map((row) => (
+            <Box
+              key={row.name}
+              style={{
+                width: `${row.percent * 100}%`,
+                height: '100%',
+                background: row.fill,
+                transition: 'width 200ms ease-out',
+              }}
+            />
+          ))}
+        </Group>
+        <Text
+          size="10"
+          c="dimmed"
+          lh={1.2}
+          style={{
+            fontSize: 10,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {segments
+            .map((row) => `${row.name} ${Math.round(row.percent * 100)}%`)
+            .join(' · ')}
+          {otherPct > 0 ? ` · other ${otherPct}%` : ''}
+        </Text>
+        {evenness !== null ? (
+          <Text
+            size="10"
+            c="dimmed"
+            lh={1.2}
+            style={{ fontSize: 10, fontVariantNumeric: 'tabular-nums' }}
+          >
+            {evennessLabel(evenness)} ({evenness.toFixed(2)}) ·{' '}
+            {payload.unique_values.toLocaleString()} values
+          </Text>
+        ) : null}
+      </Stack>
     </Tooltip>
   );
 };

@@ -1,4 +1,6 @@
 import json
+import math
+import re
 import sys
 import threading
 import time
@@ -1216,6 +1218,107 @@ def bulk_get_component_data_endpoint(
 # React viewer: bulk card value computation with filters
 # ============================================================================
 
+# Secondary layouts that need a server-computed ``__breakdown__`` payload.
+# Three separate places gate on this set (the specs fast path, the pushdown
+# short-circuit and the breakdown block itself); keeping it in one constant is
+# what stops a new layout from rendering an empty strip because one gate was
+# missed.
+_BREAKDOWN_LAYOUTS = ("top_n", "concentration", "composition")
+
+# Card aggregations whose reduction is defined by the precompute table rather
+# than spelled out here. Mapping is card-method name -> the ``pandas`` method
+# name ``_POLARS_AGG_EXPRS`` is keyed by. Reusing those factories is what keeps
+# a filtered card's value identical to the precomputed spec it replaces: the
+# bias-corrected skew/kurtosis estimators and the ``linear`` quantile
+# interpolation are parity fixes measured against pandas, and re-deriving them
+# here is exactly how the two paths would drift apart again.
+_PRECOMPUTE_PARITY_AGGS = {
+    "skewness": "skew",
+    "kurtosis": "kurt",
+    "percentile": "quantile",
+}
+
+# Aggregation names that address the same precomputed spec entry. Specs are
+# stored under the ``agg_functions`` card-method name (e.g. numeric columns
+# record ``unique``), while the models and the compute path below speak the
+# canonical name (``nunique``). Looking a card's aggregation up through this
+# map lets either spelling hit the stored value instead of silently missing
+# the fast path — and avoids renaming a key that every already-ingested
+# collection carries.
+_SPEC_ALIASES: dict[str, tuple[str, ...]] = {
+    "nunique": ("nunique", "unique"),
+    "unique": ("unique", "nunique"),
+    "average": ("average", "mean"),
+    "mean": ("mean", "average"),
+    "std_dev": ("std_dev", "std"),
+    "std": ("std", "std_dev"),
+    "variance": ("variance", "var"),
+    "var": ("var", "variance"),
+}
+
+
+def _precompute_parity_factory(aggregation: str) -> Any:
+    """Return the shared precompute expression factory for ``aggregation``.
+
+    ``None`` when the aggregation isn't one of the parity-defined ones, or when
+    the precompute table has no entry for it.
+    """
+    pandas_name = _PRECOMPUTE_PARITY_AGGS.get((aggregation or "").lower())
+    if pandas_name is None:
+        return None
+    from depictio.api.v1.endpoints.deltatables_endpoints.utils import _POLARS_AGG_EXPRS
+
+    entry = _POLARS_AGG_EXPRS.get(pandas_name)
+    return entry[1] if entry else None
+
+
+def _spec_value(col_specs: dict, aggregation: str) -> Any:
+    """Read ``aggregation`` out of a column's precomputed specs, alias-aware."""
+    for name in _SPEC_ALIASES.get((aggregation or "").lower(), (aggregation,)):
+        value = col_specs.get(name)
+        if value is not None:
+            return value
+    return None
+
+
+def _evenness(counts: list[int], total: int) -> float | None:
+    """Pielou's evenness of a category distribution, in ``[0, 1]``.
+
+    Shannon entropy over the *whole* distribution divided by ``log(k)``, its
+    maximum for ``k`` categories. ``1.0`` means every value occurs equally
+    often, values near ``0`` mean one category dominates — the question none of
+    the ranking-style layouts answer.
+
+    Computed from the counts the breakdown already grouped, so it costs no extra
+    scan. Returns ``None`` below two categories, where the measure is degenerate:
+    a single category would score ``0``, which the meter would render as
+    "dominated" when the honest answer is "not applicable".
+    """
+    # Only categories that actually occur count toward ``k``. An empty group can
+    # survive a filter, and letting it into the denominator would drag a
+    # perfectly balanced distribution below 1.0.
+    present = [c for c in counts if c > 0]
+    if total <= 0 or len(present) < 2:
+        return None
+    entropy = 0.0
+    for count in present:
+        p = count / total
+        entropy -= p * math.log(p)
+    # log(k) is only zero for k == 1, already excluded above.
+    return max(0.0, min(1.0, entropy / math.log(len(present))))
+
+
+def _filter_expr_columns(filter_expr: str | None) -> set[str]:
+    """Column names referenced by a card's ``filter_expr``.
+
+    The projected Delta load only carries the columns the cards ask for, so a
+    ``filter_expr`` over a column no card displays would otherwise be applied to
+    a frame that doesn't contain it.
+    """
+    if not filter_expr:
+        return set()
+    return set(re.findall(r"col\(\s*['\"]([^'\"]+)['\"]\s*\)", filter_expr))
+
 
 def _agg_expr(column: str, aggregation: str) -> Any:
     """Polars *expression* form of :func:`_agg_value`, or ``None`` if there isn't one.
@@ -1260,6 +1363,11 @@ def _agg_expr(column: str, aggregation: str) -> Any:
         return col.max() - col.min()
     if agg in ("q1", "q3"):
         return col.quantile(0.25 if agg == "q1" else 0.75, interpolation="linear")
+    # skewness / kurtosis / percentile come straight from the precompute table so
+    # a filtered card reduces exactly like the spec it stands in for.
+    factory = _precompute_parity_factory(agg)
+    if factory is not None:
+        return factory(col)
     # ``mode`` is deliberately absent even though an expression exists: Polars
     # doesn't guarantee an order among tied modes, so the two paths could pick
     # different winners. A card's value must not depend on whether a sibling
@@ -1331,6 +1439,17 @@ def _agg_value(col: Any, aggregation: str) -> Any:
         if agg in ("q1", "q3"):
             q = 0.25 if agg == "q1" else 0.75
             v = col.quantile(q, interpolation="linear")
+            return float(v) if v is not None else None
+        factory = _precompute_parity_factory(agg)
+        if factory is not None:
+            # Evaluate the shared expression against this Series rather than
+            # reimplementing it, so both card paths and the precomputed specs
+            # agree to the last decimal (bias correction, interpolation, and
+            # the small-sample guards that make skew/kurtosis return null).
+            import polars as _pl
+
+            frame = col.to_frame()
+            v = frame.select(factory(_pl.col(frame.columns[0]))).item()
             return float(v) if v is not None else None
         if agg == "box_plot_stats":
             # Compound Tukey box-and-whisker payload, computed in one scan.
@@ -1793,10 +1912,14 @@ def bulk_compute_cards(
         specs_cache[dc_id_str] = flat
         return flat
 
-    def _card_cache_key(wf_id: Any, dc_id: Any) -> tuple:
-        """``(wf_id, dc_id, filter signature)`` — the dedupe key for a card's
-        Delta load. Cards sharing it share one loaded frame (via ``df_cache``),
-        so a projected load must carry the union of their columns."""
+    def _card_cache_key(wf_id: Any, dc_id: Any, filter_expr: str | None = None) -> tuple:
+        """``(wf_id, dc_id, filter signature, filter_expr)`` — the dedupe key for a
+        card's Delta load. Cards sharing it share one loaded frame (via
+        ``df_cache``), so a projected load must carry the union of their columns.
+
+        ``filter_expr`` is part of the key because the cached frame is stored
+        *after* the expression has been applied: two cards on the same DC with
+        different expressions must not read each other's rows."""
         card_filters = _resolved_filters_for(str(dc_id))
         filter_sig = tuple(
             sorted(
@@ -1808,7 +1931,7 @@ def bulk_compute_cards(
                 for fm in card_filters
             )
         )
-        return (str(wf_id), str(dc_id), filter_sig)
+        return (str(wf_id), str(dc_id), filter_sig, filter_expr or "")
 
     # Column projection (#7) pre-pass: the slow Delta load is shared across
     # every card with the same (wf_id, dc_id, filter) signature, so the
@@ -1824,11 +1947,17 @@ def bulk_compute_cards(
         aggregation = card.get("aggregation")
         if not (wf_id and dc_id and column and aggregation):
             continue
-        key_cols = needed_cols_by_key.setdefault(_card_cache_key(wf_id, dc_id), set())
+        card_filter_expr = card.get("filter_expr")
+        key_cols = needed_cols_by_key.setdefault(
+            _card_cache_key(wf_id, dc_id, card_filter_expr), set()
+        )
         key_cols.add(column)
         breakdown_col = card.get("breakdown_col")
         if breakdown_col:
             key_cols.add(breakdown_col)
+        # The expression is applied to the projected frame, so its columns have
+        # to survive the projection even when no card displays them.
+        key_cols |= _filter_expr_columns(card_filter_expr)
 
     # Cards sharing a cache key share one Delta read; group them so the pushdown
     # below can answer all of their aggregations in a single query.
@@ -1836,13 +1965,17 @@ def bulk_compute_cards(
     for card in cards:
         if not (card.get("wf_id") and card.get("dc_id") and card.get("column_name")):
             continue
-        cards_by_key.setdefault(_card_cache_key(card["wf_id"], card["dc_id"]), []).append(card)
+        cards_by_key.setdefault(
+            _card_cache_key(card["wf_id"], card["dc_id"], card.get("filter_expr")), []
+        ).append(card)
 
     # ``(component_index, aggregation) -> value`` filled by the pushdown pass.
     pushdown_values: dict[tuple[str, str], Any] = {}
     pushdown_tried: set[tuple] = set()
 
-    def _try_pushdown(cache_key: tuple, wf_id: Any, dc_id: Any) -> None:
+    def _try_pushdown(
+        cache_key: tuple, wf_id: Any, dc_id: Any, filter_expr: str | None = None
+    ) -> None:
         """Answer every aggregation on ``cache_key``'s cards with one scan query.
 
         This is the path that used to force a full frame load: as soon as any
@@ -1889,6 +2022,12 @@ def bulk_compute_cards(
         if scan is None:
             return
         try:
+            # Every card on this key shares the same ``filter_expr`` (it is part
+            # of the key), so narrowing the scan once serves all of them.
+            if filter_expr:
+                from depictio.models.components.filter_expr import build_filter_expr
+
+                scan = scan.filter(build_filter_expr(filter_expr))
             row = scan.select(exprs).collect().row(0)
         except Exception as e:
             logger.warning(f"bulk_compute_cards: pushdown failed for {cache_key}: {e}")
@@ -1908,6 +2047,7 @@ def bulk_compute_cards(
         aggregation = card.get("aggregation")
         secondary_aggs_raw = card.get("aggregations") or []
         secondary_aggs = [a for a in secondary_aggs_raw if a and a != aggregation]
+        card_filter_expr = card.get("filter_expr")
         if secondary_aggs:
             aggregations_per_card[idx] = secondary_aggs
 
@@ -1923,10 +2063,13 @@ def bulk_compute_cards(
         # aggregation_columns_specs. Mirrors what the Dash callback does via
         # compute_value's `cols_json` short-circuit. Avoids touching raw Delta
         # data — necessary for DCs whose Delta file has corrupted columns.
-        if not has_filters:
+        # A card-level ``filter_expr`` narrows the rows before aggregating, so the
+        # precomputed specs — computed over the whole collection — are the wrong
+        # answer for it. Skip straight to a path that can apply the expression.
+        if not has_filters and not card_filter_expr:
             specs = _get_specs(str(dc_id))
             col_specs = specs.get(column) or {}
-            specs_value = col_specs.get(aggregation)
+            specs_value = _spec_value(col_specs, aggregation)
             if specs_value is not None:
                 values[idx] = (
                     float(specs_value) if isinstance(specs_value, (int, float)) else specs_value
@@ -1938,17 +2081,18 @@ def bulk_compute_cards(
                 # the slow Delta load only if:
                 #   (a) all requested ``secondary_aggs`` are present in the
                 #       precomputed column specs, AND
-                #   (b) no server-side breakdown is needed (``top_n`` /
-                #       ``concentration`` layouts compute counts grouped by
-                #       another column, which the specs don't carry).
-                needs_breakdown = card.get("breakdown_col") and (
-                    card.get("secondary_layout") or "vertical"
-                ) in ("top_n", "concentration")
+                #   (b) no server-side breakdown is needed (the
+                #       ``_BREAKDOWN_LAYOUTS`` compute counts grouped by another
+                #       column, which the specs don't carry).
+                needs_breakdown = (
+                    card.get("breakdown_col")
+                    and (card.get("secondary_layout") or "vertical") in _BREAKDOWN_LAYOUTS
+                )
                 if secondary_aggs:
                     sec: dict[str, Any] = {}
                     all_specs_present = True
                     for sa in secondary_aggs:
-                        sv = col_specs.get(sa)
+                        sv = _spec_value(col_specs, sa)
                         if sv is None:
                             all_specs_present = False
                             break
@@ -1968,7 +2112,7 @@ def bulk_compute_cards(
         # Cache key includes the filter signature so two cards on the same DC
         # with different (link-resolved) filter sets don't collide.
         card_filters = _resolved_filters_for(str(dc_id))
-        cache_key = _card_cache_key(wf_id, dc_id)
+        cache_key = _card_cache_key(wf_id, dc_id, card_filter_expr)
 
         # Try the scan-level pushdown once per cache key before considering a
         # load. It answers every expressible aggregation for all cards sharing
@@ -1976,11 +2120,12 @@ def bulk_compute_cards(
         # costs one column scan rather than one full-frame collect.
         if cache_key not in pushdown_tried:
             pushdown_tried.add(cache_key)
-            _try_pushdown(cache_key, wf_id, dc_id)
+            _try_pushdown(cache_key, wf_id, dc_id, card_filter_expr)
 
-        needs_breakdown_payload = bool(card.get("breakdown_col")) and (
-            card.get("secondary_layout") or "vertical"
-        ) in ("top_n", "concentration")
+        needs_breakdown_payload = (
+            bool(card.get("breakdown_col"))
+            and (card.get("secondary_layout") or "vertical") in _BREAKDOWN_LAYOUTS
+        )
         wanted_aggs = [aggregation] + list(secondary_aggs)
         fully_pushed = not needs_breakdown_payload and all(
             (idx, a) in pushdown_values for a in wanted_aggs
@@ -2005,6 +2150,14 @@ def bulk_compute_cards(
                     select_columns=project_cols,
                     init_data=init_data,
                 )
+                # The card's own conditional-aggregation expression narrows the
+                # rows before anything is reduced. Applied here rather than per
+                # card because ``cache_key`` carries the expression, so every
+                # card sharing this frame declared the same one.
+                if df is not None and card_filter_expr:
+                    from depictio.models.components.filter_expr import apply_filter_expr
+
+                    df = apply_filter_expr(df, card_filter_expr)
                 logger.debug(
                     f"bulk_compute_cards: loaded {cache_key}: shape={df.shape if df is not None else None}"
                 )
@@ -2045,11 +2198,7 @@ def bulk_compute_cards(
         # otherwise the strip's percentages don't add up to the hero metric.
         breakdown_col = card.get("breakdown_col")
         sec_layout = card.get("secondary_layout") or "vertical"
-        if (
-            breakdown_col
-            and sec_layout in ("top_n", "concentration")
-            and breakdown_col in df.columns
-        ):
+        if breakdown_col and sec_layout in _BREAKDOWN_LAYOUTS and breakdown_col in df.columns:
             try:
                 import polars as _pl
 
@@ -2102,6 +2251,7 @@ def bulk_compute_cards(
                     "top_share": top_share,
                     "unique_values": int(grouped.height),
                     "breakdown_kind": hero_agg,
+                    "evenness": _evenness([int(c) for c in grouped["__count__"].to_list()], total),
                 }
             except Exception as e:
                 logger.warning(

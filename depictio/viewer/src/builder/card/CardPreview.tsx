@@ -99,6 +99,7 @@ function buildBreakdownPreview(
   top: { name: string; count: number; percent: number }[];
   top_share: number;
   unique_values: number;
+  evenness: number | null;
 } | null {
   if (!breakdownSpecs) return null;
   const nunique = pickNum(breakdownSpecs, 'nunique');
@@ -130,6 +131,12 @@ function buildBreakdownPreview(
     top,
     top_share: topShare,
     unique_values: totalUnique,
+    // Deliberately null: evenness measures the *real* distribution, and these
+    // buckets are spread uniformly by construction — deriving it here would
+    // always read "balanced (1.00)" regardless of the data. The composition
+    // strip omits the caption rather than assert something untrue; the saved
+    // card computes it server-side from the live rows.
+    evenness: null,
   };
 }
 
@@ -188,7 +195,7 @@ const CardPreview: React.FC = () => {
   let stripRows: { name: string; value: unknown }[] = secondaryRows;
   let coverageValue: number | null = null;
   let coverageMax: number | null = null;
-  if (layout === 'top_n' || layout === 'concentration') {
+  if (layout === 'top_n' || layout === 'concentration' || layout === 'composition') {
     const breakdownCol =
       config.breakdown_col && cols.find((c) => c.name === config.breakdown_col);
     const payload = buildBreakdownPreview(
@@ -218,7 +225,8 @@ const CardPreview: React.FC = () => {
       typeof coverageValue === 'number');
   const showApproxHint =
     (layout === 'box_plot' && secondaryRows.length > 0) ||
-    ((layout === 'top_n' || layout === 'concentration') && stripRows.length > 0);
+    ((layout === 'top_n' || layout === 'concentration' || layout === 'composition') &&
+      stripRows.length > 0);
 
   return (
     <PreviewPanel minHeight={200}>

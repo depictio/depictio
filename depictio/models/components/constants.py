@@ -103,6 +103,10 @@ AGGREGATION_COMPATIBILITY: dict[str, list[str]] = {
         "std_dev",
         "skewness",
         "kurtosis",
+        # Quantiles are well defined on integers, the builder has always offered
+        # this option, and the precompute step already records it — the omission
+        # here was the outlier, and it rejected cards the UI could produce.
+        "percentile",
         "q1",
         "q3",
         "box_plot_stats",

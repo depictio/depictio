@@ -85,7 +85,8 @@ function buildCard(
       | 'box_plot'
       | 'top_n'
       | 'coverage'
-      | 'concentration';
+      | 'concentration'
+      | 'composition';
     breakdown_col?: string | null;
     coverage_max?: number | null;
     top_n_count?: number;
