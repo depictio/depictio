@@ -13,7 +13,7 @@ import DatePickerRenderer from './interactive/DatePickerRenderer';
 import CheckboxSwitchRenderer from './interactive/CheckboxSwitchRenderer';
 import SegmentedControlRenderer from './interactive/SegmentedControlRenderer';
 import TimelineRenderer from './interactive/TimelineRenderer';
-import SecondaryMetrics from './card/SecondaryMetrics';
+import SecondaryMetrics, { type SecondaryLayout } from './card/SecondaryMetrics';
 import { wrapWithChrome } from './chrome';
 import LoadAllButton, { LoadAllState } from './chrome/LoadAllButton';
 import { ActiveHighlight } from '../highlight';
@@ -604,14 +604,10 @@ const CardRenderer: React.FC<{
             <SecondaryMetrics
               rows={orderedSecondary}
               layout={
-                (metadata.secondary_layout as
-                  | 'vertical'
-                  | 'compact'
-                  | 'box_plot'
-                  | 'top_n'
-                  | 'coverage'
-                  | 'concentration'
-                  | undefined) || 'vertical'
+                // Cast through the renderer's own exported union rather than
+                // respelling it here — an inline copy silently drops any layout
+                // added later, which is how a new one renders as `vertical`.
+                (metadata.secondary_layout as SecondaryLayout | undefined) || 'vertical'
               }
               color={
                 (metadata.icon_color as string | undefined) ||

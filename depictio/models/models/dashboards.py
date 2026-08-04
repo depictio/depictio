@@ -1036,8 +1036,9 @@ class DashboardDataLite(BaseModel):
                         "aggregations": comp_dict.get("aggregations"),
                         "filter_expr": comp_dict.get("filter_expr"),
                         # Multi-metric layout style: vertical / compact /
-                        # box_plot / top_n / coverage / concentration. The
-                        # last three need extra config fields plumbed through:
+                        # box_plot / top_n / coverage / concentration /
+                        # composition. All but the first three need extra
+                        # config fields plumbed through:
                         "secondary_layout": comp_dict.get("secondary_layout", "vertical"),
                         "breakdown_col": comp_dict.get("breakdown_col"),
                         "top_n_count": comp_dict.get("top_n_count", 3),

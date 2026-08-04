@@ -93,7 +93,8 @@ type MultiMetricStyle =
   | 'box_plot'
   | 'top_n'
   | 'coverage'
-  | 'concentration';
+  | 'concentration'
+  | 'composition';
 // Mantine 7 ``Select`` expects nested groups in the shape
 // ``{ group, items: [...] }`` — the flat ``{value, label, group}`` format we
 // inherited from Mantine 6 crashes the option normalizer with
@@ -117,6 +118,7 @@ const MULTI_METRIC_OPTIONS: Array<
     group: 'Cardinality',
     items: [
       { value: 'top_n', label: 'Top-N bars (most frequent values of a column)' },
+      { value: 'composition', label: 'Composition bar (shares + "Other", with evenness)' },
       { value: 'coverage', label: 'Coverage gauge (current / theoretical max)' },
       { value: 'concentration', label: 'Concentration (top-N share + names)' },
     ],
@@ -132,6 +134,7 @@ function inferMultiMetricStyle(
   if (layout === 'top_n') return 'top_n';
   if (layout === 'coverage') return 'coverage';
   if (layout === 'concentration') return 'concentration';
+  if (layout === 'composition') return 'composition';
   if (!aggs || aggs.length === 0) return 'single';
   if (layout === 'box_plot' || (aggs.length === 1 && aggs[0] === 'box_plot_stats')) {
     return 'box_plot';
@@ -152,7 +155,8 @@ function multiMetricStyleToConfig(style: MultiMetricStyle): {
     | 'box_plot'
     | 'top_n'
     | 'coverage'
-    | 'concentration';
+    | 'concentration'
+    | 'composition';
   breakdown_col: string | null;
   coverage_max: number | null;
   top_n_count: number;
@@ -173,6 +177,8 @@ function multiMetricStyleToConfig(style: MultiMetricStyle): {
       return { ...base, aggregations: null, secondary_layout: 'coverage' };
     case 'concentration':
       return { ...base, aggregations: null, secondary_layout: 'concentration' };
+    case 'composition':
+      return { ...base, aggregations: null, secondary_layout: 'composition' };
     case 'single':
     default:
       return { ...base, aggregations: null, secondary_layout: 'vertical' };
@@ -192,7 +198,8 @@ const CardBuilder: React.FC = () => {
       | 'box_plot'
       | 'top_n'
       | 'coverage'
-      | 'concentration';
+      | 'concentration'
+      | 'composition';
     breakdown_col?: string | null;
     coverage_max?: number | null;
     top_n_count?: number;
@@ -288,7 +295,7 @@ const CardBuilder: React.FC = () => {
 
       <Select
         label="Multi-metric style"
-        description="Pick a secondary strip layout. Distribution group (vertical / compact / box-plot) targets numeric columns; cardinality group (top-N / coverage / concentration) targets count / nunique cards."
+        description="Pick a secondary strip layout. Distribution group (vertical / compact / box-plot) targets numeric columns; cardinality group (top-N / composition / coverage / concentration) targets count / distinct-count cards."
         data={MULTI_METRIC_OPTIONS}
         value={multiMetricStyle}
         onChange={(val) => {
@@ -303,7 +310,9 @@ const CardBuilder: React.FC = () => {
           ``concentration`` need a categorical breakdown column + a row count;
           ``coverage`` needs the theoretical max value (denominator). Hidden
           when the user picks a distribution-style layout. */}
-      {(multiMetricStyle === 'top_n' || multiMetricStyle === 'concentration') && (
+      {(multiMetricStyle === 'top_n' ||
+        multiMetricStyle === 'concentration' ||
+        multiMetricStyle === 'composition') && (
         <>
           <ColumnSelect
             label="Breakdown column"

@@ -54,7 +54,9 @@ _FIGURE_COLUMN_KWARGS: frozenset[str] = frozenset(
 ComponentKind = ComponentType | Literal["multiqc"]
 
 # How a multi-metric card renders its secondary strip (mirrors CardLiteComponent).
-CardLayout = Literal["vertical", "compact", "box_plot", "top_n", "coverage", "concentration"]
+CardLayout = Literal[
+    "vertical", "compact", "box_plot", "top_n", "coverage", "concentration", "composition"
+]
 
 
 def _check_identity_urls(
@@ -156,7 +158,7 @@ class Render(BaseModel):
         default_factory=list
     )  # secondary (multi-metric)
     secondary_layout: CardLayout | None = None  # vertical/compact/box_plot(Tukey)/top_n/coverage/…
-    breakdown_col: str | None = None  # group-by column for top_n / concentration
+    breakdown_col: str | None = None  # group-by column for top_n / concentration / composition
     top_n_count: int | None = Field(default=None, ge=1, le=5)
     coverage_max: float | None = None  # denominator for secondary_layout=coverage
     filter_expr: str | None = None  # optional polars pre-filter
@@ -207,7 +209,10 @@ class Render(BaseModel):
         if c == "card":
             if not (self.column and self.aggregation):
                 raise ValueError("renders_as card requires 'column' and 'aggregation'")
-            if self.secondary_layout in ("top_n", "concentration") and not self.breakdown_col:
+            if (
+                self.secondary_layout in ("top_n", "concentration", "composition")
+                and not self.breakdown_col
+            ):
                 raise ValueError(
                     f"secondary_layout={self.secondary_layout!r} requires 'breakdown_col'"
                 )
