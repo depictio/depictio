@@ -71,7 +71,7 @@ dependencies = [
   # evidence that redis 8 is safe — verifying it needs the e2e/docker jobs.
   "redis==5.2.1",
   "tomli==2.4.1",
-  "types-requests==2.33.0.20260518",
+  "types-requests==2.33.0.20260712",
   "umap-learn==0.5.12",
   # Storage
   "s3fs==2026.4.0",
@@ -94,9 +94,9 @@ classifiers = [
 [project.optional-dependencies]
 dev = [
   "bandit==1.9.4",
-  "ruff==0.15.20",
-  "ty==0.0.56",
-  "pre-commit==4.6.0",
+  "ruff==0.16.1",
+  "ty==0.0.65",
+  "pre-commit==4.6.1",
   "pytest==9.1.1",
   "pytest-asyncio==1.4.0",
   "pytest-cov==7.1.0",
@@ -104,9 +104,9 @@ dev = [
   "mongomock==4.3.0",
   "mongomock-motor==0.0.36",
   "bump2version==1.0.1",
-  "testcontainers[minio]==4.14.2",
-  "types-bleach==6.4.0.20260607",
-  "types-boto3==1.43.40",
+  "testcontainers[minio]==4.15.0",
+  "types-bleach==6.4.0.20260728",
+  "types-boto3==1.43.62",
 ]
 
 
