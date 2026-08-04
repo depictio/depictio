@@ -245,12 +245,15 @@ def load_dashboards_from_db(owner, admin_mode=False, user=None, include_child_ta
     dashboards = [convert_objectid_to_str(dashboard) for dashboard in dashboards]
 
     # Backfill `creation_time` for documents written before it was stored:
-    # every ObjectId embeds its generation time, so the listing can always show
-    # a real creation date instead of falling back to the modification one.
+    # every ObjectId embeds its generation time, so the listing can show a real
+    # creation date instead of an empty cell. Seed data uses hand-written ids
+    # whose prefix decodes to a future date — `objectid_creation_str` rejects
+    # those, and we fall back to the save time so the column never shows a
+    # creation date that is somehow *after* the modification date.
     for dashboard in dashboards:
         if not dashboard.get("creation_time"):
             dashboard["creation_time"] = objectid_creation_str(
                 dashboard.get("dashboard_id") or dashboard.get("_id")
-            )
+            ) or dashboard.get("last_saved_ts", "")
 
     return {"dashboards": dashboards, "success": True}
