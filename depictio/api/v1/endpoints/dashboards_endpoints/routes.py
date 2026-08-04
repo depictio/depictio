@@ -598,6 +598,15 @@ async def save_dashboard(
     save_payload = data.mongo()
     save_payload["last_saved_ts"] = utc_now_str()
 
+    # `_id` is immutable in MongoDB, and `MongoModel.ensure_id` mints a fresh
+    # one whenever the payload omits it (the React `createDashboard` shape
+    # does). `$set`-ting that regenerated value makes the update fail outright
+    # with "the (immutable) field '_id' was found to have been altered", so it
+    # must never appear in an update to an existing document. On insert we pin
+    # it to `dashboard_id`, matching the `_id == dashboard_id` invariant the
+    # import paths call out as CRITICAL (see the YAML/JSON import routes).
+    save_payload.pop("_id", None)
+
     # `creation_time` is write-once: the client round-trips the whole dashboard
     # document, so trusting its payload would let a save clobber (or invent) the
     # creation date and make both columns show the same value — issue #932.
@@ -606,6 +615,13 @@ async def save_dashboard(
         (existing_dashboard or {}).get("dashboard_id") or dashboard_id,
         save_payload["last_saved_ts"],
     )
+
+    # `screenshot_ts` is owned by the screenshot worker, but the client
+    # round-trips the whole document and the model defaults the field to "".
+    # Without this the save would blank the thumbnail cache-buster, so the
+    # listing would re-cache stale PNG bytes under an unversioned URL.
+    if existing_dashboard and not save_payload.get("screenshot_ts"):
+        save_payload.pop("screenshot_ts", None)
 
     if existing_dashboard:
         project_id = existing_dashboard.get("project_id")
@@ -627,7 +643,11 @@ async def save_dashboard(
     else:
         result = dashboards_collection.find_one_and_update(
             {"dashboard_id": dashboard_id},
-            {"$set": save_payload},
+            # `$setOnInsert` applies only when this upsert actually inserts, so
+            # the new document keeps the `_id == dashboard_id` invariant while
+            # a concurrent save that finds an existing doc still never touches
+            # the immutable field.
+            {"$set": save_payload, "$setOnInsert": {"_id": dashboard_id}},
             upsert=True,
             return_document=True,
         )
