@@ -3142,6 +3142,12 @@ export interface MonitoringHealth {
   live_updates: boolean;
 }
 
+/** Monitoring calls go through ``authFetch`` (not the bare ``authHeaders()``
+ *  used by most endpoints) because the admin "Log & Task" tab is the one
+ *  surface that polls unattended for hours. ``authHeaders()`` reads whatever
+ *  access token happens to be in localStorage with no expiry check, so once it
+ *  lapses every poll 401s with FastAPI's "Invalid token" and nothing ever
+ *  triggers a refresh. ``authFetch`` refreshes near-expiry and retries once. */
 function monitoringQuery(params: Record<string, string | number | undefined>): string {
   const qs = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
@@ -3165,14 +3171,14 @@ export async function fetchMonitoringTasks(opts: {
     limit: opts.limit,
     skip: opts.skip,
   });
-  const res = await fetch(`${API_BASE}/monitoring/tasks${qs}`, { headers: authHeaders() });
+  const res = await authFetch(`${API_BASE}/monitoring/tasks${qs}`);
   if (!res.ok) await throwHttpDetailError(res, 'Failed to load tasks');
   const data = await res.json();
   return Array.isArray(data?.tasks) ? (data.tasks as MonitoringTaskEvent[]) : [];
 }
 
 export async function fetchMonitoringTask(taskId: string): Promise<MonitoringTaskEvent> {
-  const res = await fetch(`${API_BASE}/monitoring/tasks/${taskId}`, { headers: authHeaders() });
+  const res = await authFetch(`${API_BASE}/monitoring/tasks/${taskId}`);
   if (!res.ok) await throwHttpDetailError(res, 'Failed to load task');
   return (await res.json()) as MonitoringTaskEvent;
 }
@@ -3191,14 +3197,14 @@ export async function fetchIngestionRuns(opts: {
     limit: opts.limit,
     skip: opts.skip,
   });
-  const res = await fetch(`${API_BASE}/monitoring/ingestion${qs}`, { headers: authHeaders() });
+  const res = await authFetch(`${API_BASE}/monitoring/ingestion${qs}`);
   if (!res.ok) await throwHttpDetailError(res, 'Failed to load ingestion runs');
   const data = await res.json();
   return Array.isArray(data?.runs) ? (data.runs as MonitoringIngestionRun[]) : [];
 }
 
 export async function fetchIngestionRun(runId: string): Promise<MonitoringIngestionRun> {
-  const res = await fetch(`${API_BASE}/monitoring/ingestion/${runId}`, { headers: authHeaders() });
+  const res = await authFetch(`${API_BASE}/monitoring/ingestion/${runId}`);
   if (!res.ok) await throwHttpDetailError(res, 'Failed to load ingestion run');
   return (await res.json()) as MonitoringIngestionRun;
 }
@@ -3209,21 +3215,21 @@ export async function fetchAppLogs(opts: {
   limit?: number;
 } = {}): Promise<MonitoringAppLog[]> {
   const qs = monitoringQuery({ level: opts.level, source: opts.source, limit: opts.limit });
-  const res = await fetch(`${API_BASE}/monitoring/logs${qs}`, { headers: authHeaders() });
+  const res = await authFetch(`${API_BASE}/monitoring/logs${qs}`);
   if (!res.ok) await throwHttpDetailError(res, 'Failed to load logs');
   const data = await res.json();
   return Array.isArray(data?.logs) ? (data.logs as MonitoringAppLog[]) : [];
 }
 
 export async function fetchMonitoringHealth(): Promise<MonitoringHealth> {
-  const res = await fetch(`${API_BASE}/monitoring/health`, { headers: authHeaders() });
+  const res = await authFetch(`${API_BASE}/monitoring/health`);
   if (!res.ok) await throwHttpDetailError(res, 'Failed to load monitoring health');
   return (await res.json()) as MonitoringHealth;
 }
 
 /** Read the current app-log capture floor (admin-only). */
 export async function fetchLogCaptureLevel(): Promise<string> {
-  const res = await fetch(`${API_BASE}/monitoring/logs/level`, { headers: authHeaders() });
+  const res = await authFetch(`${API_BASE}/monitoring/logs/level`);
   if (!res.ok) await throwHttpDetailError(res, 'Failed to load log level');
   const data = await res.json();
   return typeof data?.level === 'string' ? data.level : 'WARNING';
@@ -3232,9 +3238,9 @@ export async function fetchLogCaptureLevel(): Promise<string> {
 /** Set the runtime app-log capture floor (admin-only). Applies live in the API
  *  process and is broadcast best-effort to Celery workers. */
 export async function setLogCaptureLevel(level: string): Promise<string> {
-  const res = await fetch(`${API_BASE}/monitoring/logs/level`, {
+  const res = await authFetch(`${API_BASE}/monitoring/logs/level`, {
     method: 'POST',
-    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ level }),
   });
   if (!res.ok) await throwHttpDetailError(res, 'Failed to set log level');
