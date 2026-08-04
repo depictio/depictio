@@ -67,6 +67,7 @@ spec:
     metadata:
       name: wipe-data
     spec:
+      enableServiceLinks: {{ .Values.enableServiceLinks | default false }}
       restartPolicy: Never
       serviceAccountName: {{ .Release.Name }}-wipe-sa
       securityContext:
