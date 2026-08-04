@@ -15,12 +15,11 @@ import { Icon } from '@iconify/react';
 import { listAllDashboards } from 'depictio-react-core';
 import type { AdminDashboard } from 'depictio-react-core';
 
+import { formatDateTime } from '../lib/datetime';
+
 function formatLastSaved(raw: unknown): string {
   if (!raw || typeof raw !== 'string') return 'Never';
-  const d = new Date(raw.replace('Z', '+00:00'));
-  if (Number.isNaN(d.getTime())) return raw;
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return formatDateTime(raw, raw);
 }
 
 const AdminDashboardsPanel: React.FC = () => {
