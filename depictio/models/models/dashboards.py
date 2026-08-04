@@ -109,6 +109,36 @@ def _parse_component_lines(raw_msg: str) -> list[dict[str, Any]]:
 # ============================================================================
 
 
+class FilterSectionSpec(BaseModel):
+    """Presentation of one left-panel filter section.
+
+    Only needed to override a section's defaults. A section named by a
+    component's ``section`` field but absent from ``filter_sections`` still
+    renders — expanded, no icon — and sorts after the declared ones.
+
+    Example YAML:
+        filter_sections:
+          - name: Sample
+            icon: mdi:test-tube
+          - name: Quality
+            icon: mdi:check-decagram
+            collapsed: true
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(..., description="Section name, matched against a component's `section`")
+    icon: str | None = Field(default=None, description="Iconify id shown in the section header")
+    description: str | None = Field(
+        default=None, description="Short hint rendered under the section header"
+    )
+    collapsed: bool = Field(
+        default=False,
+        description="Start the section collapsed. Defaults to expanded so no filter is "
+        "hidden on first visit.",
+    )
+
+
 class DashboardDataLite(BaseModel):
     """Minimal dashboard format for YAML import/export.
 
@@ -189,6 +219,14 @@ class DashboardDataLite(BaseModel):
         default=None, description="Workflow system (e.g., 'nf-core', 'snakemake')"
     )
 
+    # Left filter panel presentation (ordering + icons for named sections)
+    filter_sections: list[FilterSectionSpec] = Field(
+        default_factory=list,
+        description="Optional presentation for the left panel's filter sections. "
+        "Declaring a section here fixes its position and lets it carry an icon, a "
+        "description and a default collapse state.",
+    )
+
     # Components using Lite models
     components: list[LiteComponent | dict[str, Any]] = Field(
         default_factory=list, description="List of dashboard components"
@@ -238,21 +276,29 @@ class DashboardDataLite(BaseModel):
 
     @model_validator(mode="after")
     def validate_interactive_groups(self) -> "DashboardDataLite":
-        """Enforce that no `group` exceeds MAX_INTERACTIVE_GROUP_SIZE members."""
+        """Enforce group size and one-section-per-group.
+
+        A group split across two sections has no single place to render, so the
+        panel would have to silently pick one and drop the other members.
+        """
         from depictio.models.components.constants import MAX_INTERACTIVE_GROUP_SIZE
 
         counts: dict[str, int] = {}
+        sections_per_group: dict[str, set[str | None]] = {}
         for comp in self.components:
             if isinstance(comp, dict):
                 if comp.get("component_type") != "interactive":
                     continue
                 group = comp.get("group")
+                section = comp.get("section")
             else:
                 if getattr(comp, "component_type", None) != "interactive":
                     continue
                 group = getattr(comp, "group", None)
+                section = getattr(comp, "section", None)
             if group:
                 counts[group] = counts.get(group, 0) + 1
+                sections_per_group.setdefault(group, set()).add(section or None)
 
         oversized = {g: n for g, n in counts.items() if n > MAX_INTERACTIVE_GROUP_SIZE}
         if oversized:
@@ -260,6 +306,15 @@ class DashboardDataLite(BaseModel):
             raise ValueError(
                 f"Interactive component groups exceed the maximum size of "
                 f"{MAX_INTERACTIVE_GROUP_SIZE}: {details}"
+            )
+
+        split = {g: s for g, s in sections_per_group.items() if len(s) > 1}
+        if split:
+            details = ", ".join(
+                f"'{g}' spans sections {sorted(str(x) for x in s)}" for g, s in split.items()
+            )
+            raise ValueError(
+                f"Interactive component groups must sit in a single section: {details}"
             )
         return self
 
@@ -282,6 +337,7 @@ class DashboardDataLite(BaseModel):
         "icon_color",
         "icon_variant",
         "workflow_system",
+        "filter_sections",
     ]
 
     @staticmethod
@@ -774,6 +830,15 @@ class DashboardDataLite(BaseModel):
             comp_layout = layout_lookup.get(comp_index_str, {"x": 0, "y": 0, "w": 6, "h": 4})
             lite_comp["layout"] = comp_layout
 
+            # Placement & grouping — the mirror of what `to_full` writes, so an
+            # export round-trips the left panel's structure instead of flattening
+            # every control back into one ungrouped list. Emitted from the shared
+            # prologue rather than the interactive branch: a component type that
+            # never carries these keys simply contributes nothing.
+            for field in ("placement", "group", "section", "timescale", "show_marks"):
+                if comp.get(field) is not None:
+                    lite_comp[field] = comp[field]
+
             if comp.get("title"):
                 lite_comp["title"] = comp["title"]
 
@@ -921,6 +986,10 @@ class DashboardDataLite(BaseModel):
             title=dashboard_data.get("title", "Untitled Dashboard"),
             subtitle=dashboard_data.get("subtitle", ""),
             components=lite_components,
+            # Section presentation, so an exported dashboard keeps its accordion
+            # order, icons and default collapse rather than falling back to
+            # "declared nowhere, sorted by first appearance".
+            filter_sections=dashboard_data.get("filter_sections") or [],
             # Tab fields
             is_main_tab=dashboard_data.get("is_main_tab", True),
             tab_order=dashboard_data.get("tab_order", 0),
@@ -985,6 +1054,9 @@ class DashboardDataLite(BaseModel):
             "main_tab_name": self.main_tab_name,
             "tab_icon": self.tab_icon,
             "tab_icon_color": self.tab_icon_color,
+            # Left-panel section presentation, carried through so the viewer can
+            # order sections and render their icons.
+            "filter_sections": [s.model_dump() for s in self.filter_sections],
             # parent_dashboard_tag is resolved to parent_dashboard_id during import
         }
 
@@ -1079,6 +1151,7 @@ class DashboardDataLite(BaseModel):
                         # or grouped Paper. Default placement is 'left'.
                         "placement": comp_dict.get("placement", "left"),
                         "group": comp_dict.get("group"),
+                        "section": comp_dict.get("section"),
                         "timescale": comp_dict.get("timescale"),
                         "show_marks": comp_dict.get("show_marks"),
                     }
@@ -1301,6 +1374,9 @@ class DashboardData(MongoModel):
     # Dual-panel layout storage (for left/right grid layouts)
     left_panel_layout_data: list = []
     right_panel_layout_data: list = []
+    # Left-panel filter section presentation. Empty for dashboards saved before
+    # sections existed, which renders exactly as it did then.
+    filter_sections: list[FilterSectionSpec] = []
     buttons_data: dict = {
         "unified_edit_mode": True,  # Default edit mode ON for dashboard owners
         "add_components_button": {"count": 0},

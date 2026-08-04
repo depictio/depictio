@@ -31,6 +31,7 @@ import {
   AppShell,
   Button,
   Center,
+  Drawer,
   Group,
   Text,
   Loader,
@@ -39,12 +40,15 @@ import {
   Stack,
   Title,
 } from '@mantine/core';
-import { useDisclosure } from '@mantine/hooks';
+import { useDisclosure, useMediaQuery } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { Icon } from '@iconify/react';
 import { useSidebarOpen } from './hooks/useSidebarOpen';
+import { useFilterPanelOpen } from './hooks/useFilterPanelOpen';
+import { useFilterPanelWidth } from './hooks/useFilterPanelWidth';
 import { useCurrentUser } from './hooks/useCurrentUser';
 import { isDashboardOwner } from './lib/dashboardOwnership';
+import FilterPanelResizer, { FILTER_PANEL_RESIZER_WIDTH } from './components/FilterPanelResizer';
 import type { Layout } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
@@ -58,6 +62,9 @@ import {
   reorderTabs,
   updateTab,
   DashboardGrid,
+  FilterPanel,
+  TopPanel,
+  stripBoxPrefix,
   mergeFiltersBySource,
   enrichFilterWithDcId,
   useDataCollectionUpdates,
@@ -69,6 +76,8 @@ import {
   MapPanelControl,
   MapPanelDock,
   MapPanelSurface,
+  FILTER_PANEL_RAIL_WIDTH,
+  countActiveFilters,
 } from 'depictio-react-core';
 import type {
   DashboardData,
@@ -81,7 +90,6 @@ import type {
   RealtimeJournalEntry,
 } from 'depictio-react-core';
 
-import LeftFilterPanel from './components/LeftFilterPanel';
 import GridItemEditOverlay from './components/GridItemEditOverlay';
 import { Header, Sidebar, SettingsDrawer, TabModal } from './chrome';
 import type { TabModalSubmitPayload } from './chrome';
@@ -171,6 +179,30 @@ const EditorApp: React.FC = () => {
   }>({ open: false, mode: 'create', target: null, submitting: false });
 
   const dashboardId = extractDashboardId();
+
+  // Left filter panel chrome — same hooks and same storage keys as the viewer,
+  // so collapsing or resizing in one mode carries over to the other.
+  const {
+    width: filterPanelWidth,
+    beginResize: beginFilterPanelResize,
+    nudge: nudgeFilterPanelWidth,
+  } = useFilterPanelWidth(dashboardId);
+  // The swing spans both variable tracks: collapsing takes the panel down to
+  // the rail *and* the drag handle down to nothing. The grid gaps don't move,
+  // so they cancel out.
+  const [filterPanelOpened, toggleFilterPanel] = useFilterPanelOpen(
+    dashboardId,
+    filterPanelWidth + FILTER_PANEL_RESIZER_WIDTH - FILTER_PANEL_RAIL_WIDTH,
+  );
+  const isNarrow = useMediaQuery('(max-width: 48em)', false, { getInitialValueInEffect: false });
+  const [filterDrawerOpened, { open: openFilterDrawer, close: closeFilterDrawer }] =
+    useDisclosure(false);
+  // Widening past the breakpoint unmounts the drawer without closing it, which
+  // would leave it primed to reappear the next time the window narrows.
+  useEffect(() => {
+    if (!isNarrow) closeFilterDrawer();
+  }, [isNarrow, closeFilterDrawer]);
+
   const bulkCtrl = useRef<AbortController | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Latest dashboard ref so the debounced save uses fresh state. We update
@@ -536,6 +568,33 @@ const EditorApp: React.FC = () => {
       ),
     [dashboard],
   );
+  // Same placement split as the viewer (App.tsx). Without it, `placement: 'top'`
+  // controls render in the left filter column while editing and jump to the
+  // bottom strip on save, so the editor never shows the real layout.
+  const topComponents = useMemo(
+    () => interactiveComponents.filter((m) => m.placement === 'top'),
+    [interactiveComponents],
+  );
+  const leftComponents = useMemo(
+    () => interactiveComponents.filter((m) => m.placement !== 'top'),
+    [interactiveComponents],
+  );
+  // Per-filter edit / duplicate / delete menu. FilterPanel injects it into
+  // each control's chrome, including controls nested inside a group card.
+  const renderFilterItemOverlay = useCallback(
+    (component: StoredMetadata) => (
+      <GridItemEditOverlay
+        dashboardId={dashboardId!}
+        componentId={component.index}
+        editMode
+        onDelete={handleDeleteComponent}
+        onDuplicate={handleDuplicateComponent}
+        componentType={component.component_type}
+      />
+    ),
+    [dashboardId, handleDeleteComponent, handleDuplicateComponent],
+  );
+
   const cardComponents = useMemo(
     () =>
       (dashboard?.stored_metadata || []).filter(
@@ -966,6 +1025,8 @@ const EditorApp: React.FC = () => {
           onToggleMobile={toggleMobile}
           onToggleDesktop={toggleDesktop}
           onOpenSettings={openSettings}
+          onOpenFilters={isNarrow && leftComponents.length > 0 ? openFilterDrawer : undefined}
+          filterCount={countActiveFilters(filters)}
           cardsLoading={cardsLoading}
           mode="edit"
           onAddComponent={handleAddComponent}
@@ -1027,52 +1088,80 @@ const EditorApp: React.FC = () => {
         {dashboard && !loading && !error && (
           <div
             style={{
-              display: 'grid',
-              // 20vw / remainder. Using viewport units (vs. % of main) so the
-              // left panel keeps a fixed visual width regardless of any chrome
-              // that might shrink "main". User asked for ~1/5 left, 4/5 right.
-              // Floored, because at 1280px a bare 20vw leaves the docked map
-              // barely 200px wide.
-              gridTemplateColumns: 'minmax(260px, 20vw) 1fr',
+              display: 'flex',
+              flexDirection: 'column',
               height: '100%',
+              width: '100%',
+              overflow: 'hidden',
+            }}
+          >
+          <div
+            style={{
+              display: 'grid',
+              // Panel | drag handle | content, the same three tracks the viewer
+              // uses. The track count stays at three whatever the panel's
+              // state, because `grid-template-columns` only animates between
+              // templates with matching track counts.
+              gridTemplateColumns: isNarrow
+                ? '1fr'
+                : `${filterPanelOpened ? filterPanelWidth : FILTER_PANEL_RAIL_WIDTH}px ` +
+                  `${filterPanelOpened ? FILTER_PANEL_RESIZER_WIDTH : 0}px 1fr`,
+              transition: 'grid-template-columns 300ms ease',
+              flex: 1,
+              minHeight: 0,
               width: '100%',
               gap: 4,
               overflow: 'hidden',
             }}
           >
-            {/* The panel scrolls its own filter list (see LeftFilterPanel), so
-                this wrapper must not scroll too — otherwise the docked map
-                would scroll away with the filters instead of staying pinned. */}
-            <Box
-              px={4}
-              py={4}
-              style={{
-                height: '100%',
-                minWidth: 0,
-                overflow: 'hidden',
-              }}
-            >
-              <LeftFilterPanel
-                dashboardId={dashboardId!}
-                interactiveComponents={interactiveComponents}
-                layoutData={dashboard.left_panel_layout_data}
-                filters={filters}
-                onFilterChange={handleFilterChange}
-                onResetAllFilters={handleResetAllFilters}
-                onLeftLayoutChange={handleLeftLayoutChange}
-                editMode={true}
-                onDeleteComponent={handleDeleteComponent}
-                onDuplicateComponent={handleDuplicateComponent}
-                footer={
-                  <MapPanelDock
-                    panel={mapPanel}
-                    filters={filters}
-                    onFilterChange={handleFilterChange}
-                    renderEditActions={renderMapPanelEditActions}
-                  />
-                }
+            {!isNarrow && (
+              <Box
+                px={4}
+                py={4}
+                style={{
+                  // The panel scrolls its own filter list, so this wrapper must
+                  // not scroll too — otherwise the docked map would scroll away
+                  // with the filters instead of staying pinned.
+                  height: '100%',
+                  minWidth: 0,
+                  overflow: 'hidden',
+                }}
+              >
+                <FilterPanel
+                  components={leftComponents}
+                  allMetadata={dashboard.stored_metadata}
+                  filters={filters}
+                  onFilterChange={handleFilterChange}
+                  onResetAllFilters={handleResetAllFilters}
+                  layoutData={dashboard.left_panel_layout_data}
+                  filterSections={dashboard.filter_sections}
+                  dashboardId={dashboardId}
+                  // No refreshTick: the editor threads no realtime refresh
+                  // counter into any of its grids, so the left panel matches
+                  // RightComponentGrid rather than inventing state here.
+                  editMode
+                  renderItemOverlay={renderFilterItemOverlay}
+                  onLayoutChange={handleLeftLayoutChange}
+                  collapsed={!filterPanelOpened}
+                  onToggleCollapsed={toggleFilterPanel}
+                  footer={
+                    <MapPanelDock
+                      panel={mapPanel}
+                      filters={filters}
+                      onFilterChange={handleFilterChange}
+                      renderEditActions={renderMapPanelEditActions}
+                    />
+                  }
+                />
+              </Box>
+            )}
+            {!isNarrow && (
+              <FilterPanelResizer
+                onPointerDown={beginFilterPanelResize}
+                onNudge={nudgeFilterPanelWidth}
+                collapsed={!filterPanelOpened}
               />
-            </Box>
+            )}
             <Box
               px={4}
               py={4}
@@ -1102,6 +1191,52 @@ const EditorApp: React.FC = () => {
               />
             </Box>
           </div>
+          {/* Mirrors the viewer's footer strip so `placement: 'top'` controls
+              sit where they will actually render, instead of appearing in the
+              left column only while editing. */}
+          {topComponents.length > 0 && (
+            <Box
+              px="md"
+              py={6}
+              style={{
+                flexShrink: 0,
+                width: '100%',
+                borderTop: '1px solid var(--mantine-color-default-border)',
+                background: 'var(--mantine-color-body)',
+              }}
+            >
+              <TopPanel
+                components={topComponents}
+                filters={filters}
+                onFilterChange={handleFilterChange}
+              />
+            </Box>
+          )}
+          </div>
+        )}
+        {/* Narrow screens: the panel the grid no longer has room for. Not in
+            `editMode` — drag-reordering needs a stable panel width to lay its
+            grid out against, and a transient drawer on a phone is neither the
+            place nor the input device for authoring. */}
+        {dashboard && isNarrow && (
+          <Drawer
+            opened={filterDrawerOpened}
+            onClose={closeFilterDrawer}
+            position="left"
+            size="min(320px, 85vw)"
+            title="Filters"
+          >
+            <FilterPanel
+              components={leftComponents}
+              allMetadata={dashboard.stored_metadata}
+              filters={filters}
+              onFilterChange={handleFilterChange}
+              onResetAllFilters={handleResetAllFilters}
+              layoutData={dashboard.left_panel_layout_data}
+              filterSections={dashboard.filter_sections}
+              dashboardId={dashboardId}
+            />
+          </Drawer>
         )}
         {dashboard && dashboardId && (
           <NotesFooter
@@ -1276,10 +1411,6 @@ function stableFilterKey(filters: InteractiveFilter[]): string {
     return (a.source ?? '').localeCompare(b.source ?? '');
   });
   return JSON.stringify(sorted.map((f) => [f.index, f.source ?? null, f.value]));
-}
-
-function stripBoxPrefix(id: string): string {
-  return id.startsWith('box-') ? id.slice(4) : id;
 }
 
 /** Strip a single component id from a layout array (or breakpoint dict). */

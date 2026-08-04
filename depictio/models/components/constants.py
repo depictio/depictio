@@ -66,7 +66,10 @@ TOP_PANEL_INTERACTIVE_TYPES: tuple[str, ...] = ("Timeline",)
 TIMELINE_TIMESCALES: tuple[str, ...] = ("year", "month", "day", "hour", "minute")
 
 # Maximum number of interactive components that may share the same `group`.
-MAX_INTERACTIVE_GROUP_SIZE: int = 3
+# The cap guards against a group card so tall it defeats the point of grouping.
+# It was 3 when a group was an always-expanded stack; groups are collapsible and
+# render their members compact now, so a taller card stays usable.
+MAX_INTERACTIVE_GROUP_SIZE: int = 6
 
 # ---------------------------------------------------------------------------
 # Valid map types and styles

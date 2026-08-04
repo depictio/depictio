@@ -78,10 +78,22 @@ export {
 } from './components/interactive/frame';
 
 // Layout helpers (filter sidebar grouping + top panel)
+export { default as FilterPanel } from './components/interactive/FilterPanel';
+export { FILTER_PANEL_RAIL_WIDTH } from './components/interactive/FilterPanel';
+export type { FilterPanelProps } from './components/interactive/FilterPanel';
 export { default as InteractiveGroupCard } from './components/InteractiveGroupCard';
 export { default as TopPanel } from './components/TopPanel';
 export { groupInteractiveComponents } from './utils/groupInteractive';
 export type { InteractiveGroup } from './utils/groupInteractive';
+export { extractLayoutItems, stripBoxPrefix } from './utils/leftPanelLayout';
+export { countActiveFilters } from './activeFilters';
+export {
+  PANEL_TOGGLE_EVENTS,
+  SIDEBAR_TOGGLE_EVENT,
+  FILTER_PANEL_TOGGLE_EVENT,
+  dispatchPanelToggle,
+} from './utils/panelToggle';
+export type { PanelToggleDetail } from './utils/panelToggle';
 export { readMultiqcSelection } from './utils/multiqcSelection';
 export type { MultiqcSelection } from './utils/multiqcSelection';
 

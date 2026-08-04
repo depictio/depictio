@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { SIDEBAR_TOGGLE_EVENT, dispatchPanelToggle } from 'depictio-react-core';
 
 /**
  * Persistent desktop-sidebar state, kept in sync with the Dash app's
@@ -48,6 +49,13 @@ function writeCollapsed(collapsed: boolean): void {
 export function useSidebarOpen(defaultCollapsed = true): [boolean, () => void] {
   const [opened, setOpened] = useState<boolean>(() => !readCollapsed(defaultCollapsed));
   const flagTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The next state is derived here rather than inside a `setOpened` updater:
+  // StrictMode double-invokes updaters in dev, which would dispatch the toggle
+  // event twice. `DashboardGrid` reads the second one as a genuine re-toggle
+  // and applies the width delta twice, mis-sizing every figure for the length
+  // of the transition (it self-corrects on the post-transition re-measure,
+  // which is why this went unnoticed).
+  const openedRef = useRef(opened);
 
   const toggle = useCallback(() => {
     // Mark `<body>` so width-aware grids can swap their item transition
@@ -59,29 +67,23 @@ export function useSidebarOpen(defaultCollapsed = true): [boolean, () => void] {
       flagTimerRef.current = null;
     }, TRANSITION_MS + 20); // 300ms + 20ms slack so the final frame settles
 
-    setOpened((prev) => {
-      const next = !prev;
-      writeCollapsed(!next);
-      // Tell the dashboard grid the predicted final container delta so it
-      // can `setContainerWidth` to the destination value once at the start
-      // of the transition. RGL then computes new item transforms once,
-      // CSS animates them smoothly over 300ms in lockstep with the parent.
-      // This avoids the ResizeObserver→setState→render race which was
-      // producing 20–30Hz "stair-step" item updates against the parent's
-      // 60Hz compositor-driven width animation.
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(
-          new CustomEvent('depictio:sidebar-toggle', {
-            detail: {
-              willBeOpen: next,
-              navbarWidthPx: NAVBAR_WIDTH_PX,
-              durationMs: TRANSITION_MS,
-            },
-          }),
-        );
-      }
-      return next;
+    const next = !openedRef.current;
+    openedRef.current = next;
+    writeCollapsed(!next);
+    // Tell the dashboard grid the predicted final container delta so it
+    // can `setContainerWidth` to the destination value once at the start
+    // of the transition. RGL then computes new item transforms once,
+    // CSS animates them smoothly over 300ms in lockstep with the parent.
+    // This avoids the ResizeObserver→setState→render race which was
+    // producing 20–30Hz "stair-step" item updates against the parent's
+    // 60Hz compositor-driven width animation.
+    // The navbar collapses to nothing, so its full width is also its swing.
+    dispatchPanelToggle(SIDEBAR_TOGGLE_EVENT, {
+      willBeOpen: next,
+      swingPx: NAVBAR_WIDTH_PX,
+      durationMs: TRANSITION_MS,
     });
+    setOpened(next);
   }, []);
 
   useEffect(

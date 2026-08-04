@@ -30,6 +30,7 @@ from depictio.models.components.constants import (
     MAP_PLACEMENTS,
     MAP_STYLES,
     MAP_TYPES,
+    MAX_INTERACTIVE_GROUP_SIZE,
     TIMELINE_TIMESCALES,
     TOP_PANEL_INTERACTIVE_TYPES,
     VISU_TYPES,
@@ -465,7 +466,16 @@ class InteractiveLiteComponent(BaseLiteComponent):
     group: str | None = Field(
         default=None,
         description="Optional group identifier. Interactive components sharing the same "
-        "group are rendered together inside one card. Up to 3 components per group.",
+        "group are rendered together inside one collapsible card. Up to "
+        f"{MAX_INTERACTIVE_GROUP_SIZE} components per group.",
+    )
+    section: str | None = Field(
+        default=None,
+        description="Optional section name — the outer level of the left filter panel. "
+        "Each section renders as a collapsible accordion item holding its groups and "
+        "ungrouped components. Components with no section render above the first "
+        "section. Declare a section's icon and default collapse state via the "
+        "dashboard-level `filter_sections` list.",
     )
 
     # Timeline-specific

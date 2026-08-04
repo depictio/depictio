@@ -4,6 +4,7 @@ import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
 import { StoredMetadata, InteractiveFilter } from '../api';
 import { ActiveHighlight } from '../highlight';
+import { PANEL_TOGGLE_EVENTS, PanelToggleDetail } from '../utils/panelToggle';
 import ComponentRenderer from './ComponentRenderer';
 
 interface DashboardGridProps {
@@ -103,7 +104,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
     return () => ro.disconnect();
   }, []);
 
-  // When the sidebar toggles, jump `containerWidth` to its predicted final
+  // When a chrome panel toggles, jump `containerWidth` to its predicted final
   // value in one shot. RGL re-renders item transforms once with that final
   // value, and the existing CSS transition (bumped to 300ms during the
   // sidebar slide via `body.sidebar-transitioning`) animates each item from
@@ -112,10 +113,14 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | null = null;
     let rafId: number | null = null;
-    const onSidebarToggle = (event: Event) => {
-      const detail = (event as CustomEvent).detail as
-        | { willBeOpen: boolean; navbarWidthPx: number; durationMs: number }
-        | undefined;
+    // Shared across toggles rather than captured per invocation: with several
+    // panels able to animate (sidebar, filter panel), a second toggle landing
+    // mid-transition has to extend the running pump. A per-invocation deadline
+    // would be invisible to the loop already in flight, which then expires on
+    // the first toggle's schedule and leaves the second one un-pumped.
+    let transitionEndAt = 0;
+    const onPanelToggle = (event: Event) => {
+      const detail = (event as CustomEvent).detail as PanelToggleDetail | undefined;
       if (!detail) return;
       // Use the locked width if a previous toggle is still in flight (rapid
       // re-toggle); otherwise read the live DOM width before applying delta.
@@ -124,25 +129,25 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
           ? lockedWidthRef.current
           : wrapperRef.current?.getBoundingClientRect().width ?? 0;
       if (baseWidth <= 0) return;
-      const delta = detail.willBeOpen ? -detail.navbarWidthPx : detail.navbarWidthPx;
+      const delta = detail.willBeOpen ? -detail.swingPx : detail.swingPx;
       const final = Math.max(100, Math.floor(baseWidth + delta));
       lockedWidthRef.current = final;
       setContainerWidth(final);
 
       // Plotly's `useResizeHandler` and AG Grid both listen to the WINDOW
-      // resize event, not the per-cell ResizeObserver. As the navbar slides,
+      // resize event, not the per-cell ResizeObserver. As the panel slides,
       // each grid item's CSS transition smoothly grows/shrinks its outer
       // div, but Plotly's <canvas>/<svg> stays pinned at its pre-toggle
       // pixel size — producing the clipped / stretched look the user sees.
       // Dispatch synthetic window resize events on each animation frame for
       // the transition's duration so Plotly + AG Grid re-flow in lockstep.
       // Both internally throttle, so 60Hz dispatch is cheap.
-      const transitionEnd = performance.now() + detail.durationMs + 50;
+      transitionEndAt = Math.max(transitionEndAt, performance.now() + detail.durationMs + 50);
       const tickResize = () => {
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new Event('resize'));
         }
-        if (performance.now() < transitionEnd) {
+        if (performance.now() < transitionEndAt) {
           rafId = requestAnimationFrame(tickResize);
         } else {
           rafId = null;
@@ -166,9 +171,13 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
         }
       }, detail.durationMs + 50);
     };
-    window.addEventListener('depictio:sidebar-toggle', onSidebarToggle as EventListener);
+    for (const name of PANEL_TOGGLE_EVENTS) {
+      window.addEventListener(name, onPanelToggle as EventListener);
+    }
     return () => {
-      window.removeEventListener('depictio:sidebar-toggle', onSidebarToggle as EventListener);
+      for (const name of PANEL_TOGGLE_EVENTS) {
+        window.removeEventListener(name, onPanelToggle as EventListener);
+      }
       if (timer) clearTimeout(timer);
       if (rafId != null) cancelAnimationFrame(rafId);
     };

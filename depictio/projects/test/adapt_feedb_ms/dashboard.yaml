@@ -10,6 +10,18 @@ main_tab_name: "Dashboard"
 tab_icon: "mdi:view-dashboard"
 tab_icon_color: "dark"
 
+# Left-panel sections — the collapsible outer level, above `group`. Optional:
+# a section named by a component but omitted here still renders, expanded and
+# without an icon. Declaring it fixes its position in the panel and lets it
+# carry an icon, a hint and a default collapse state.
+filter_sections:
+  - name: "Sample"
+    icon: "mdi:bacteria"
+    description: "Which cells to look at"
+  - name: "Morphology"
+    icon: "mdi:shape-outline"
+    collapsed: true
+
 components:
   # ── Narrative intro (grid, right column, full width) ─────────────────────
   - tag: dashboard-intro
@@ -57,6 +69,7 @@ components:
     column_name: classifications_taxa
     column_type: object
     filter_expr: "col('features_area') > 100"
+    section: "Sample"
     title: "Taxa Class (large cells only)"
     icon_name: mdi:bacteria
     layout:
@@ -65,11 +78,12 @@ components:
       w: 1
       h: 3
 
-  # ── Combined "Shape filters" group ───────────────────────────────────────
-  # Three interactive components sharing the same `group` are rendered
-  # together inside one Mantine Paper — visual grouping only, each control
-  # still emits its own filter and they AND together via the existing
-  # filter pipeline (max 3 components per group is enforced server-side).
+  # ── Combined "Shape filters" group, inside the "Morphology" section ──────
+  # Interactive components sharing the same `group` render together inside one
+  # collapsible card — visual grouping only, each control still emits its own
+  # filter and they AND together via the existing filter pipeline. Group size
+  # is capped server-side (MAX_INTERACTIVE_GROUP_SIZE), and every member of a
+  # group must sit in the same `section`.
 
   - tag: area-range-filter
     component_type: interactive
@@ -79,6 +93,7 @@ components:
     column_name: features_area
     column_type: float64
     group: "Shape filters"
+    section: "Morphology"
     title: "Cell Area"
     icon_name: mdi:vector-square
     layout:
@@ -95,6 +110,7 @@ components:
     column_name: features_eccentricity
     column_type: float64
     group: "Shape filters"
+    section: "Morphology"
     title: "Eccentricity"
     icon_name: mdi:shape-outline
     layout:
@@ -111,6 +127,7 @@ components:
     column_name: features_solidity
     column_type: float64
     group: "Shape filters"
+    section: "Morphology"
     title: "Solidity"
     icon_name: mdi:diamond-stone
     layout:

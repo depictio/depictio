@@ -270,8 +270,13 @@ export interface StoredMetadata {
   interactive_component_type?: string;
   default_state?: { default_value?: unknown; default_range?: unknown; options?: unknown[] };
   /** Visual grouping — interactive components sharing the same `group` are
-   *  rendered together inside one Mantine Paper. Up to 3 per group. */
+   *  rendered together inside one collapsible Mantine Paper. See
+   *  MAX_INTERACTIVE_GROUP_SIZE in depictio/models/components/constants.py. */
   group?: string;
+  /** Outer level of the filter panel: components sharing a `section` render
+   *  inside one accordion item. Presentation comes from
+   *  `DashboardData.filter_sections`. */
+  section?: string;
   /** Layout placement. The allowed values depend on the component type:
    *  interactive components use 'left' (default — Filters sidebar) or 'top'
    *  (top panel above the grid, currently 'Timeline' only); maps use 'grid'
@@ -301,6 +306,15 @@ export interface StoredMetadata {
   [key: string]: unknown;
 }
 
+/** Presentation of one left-panel filter section. Mirrors FilterSectionSpec in
+ *  depictio/models/models/dashboards.py. */
+export interface FilterSectionSpec {
+  name: string;
+  icon?: string | null;
+  description?: string | null;
+  collapsed?: boolean;
+}
+
 export interface DashboardData {
   _id?: string;
   dashboard_id?: string;
@@ -310,6 +324,8 @@ export interface DashboardData {
   stored_layout_data?: unknown;
   left_panel_layout_data?: unknown;
   right_panel_layout_data?: unknown;
+  /** Ordering + icons for the left panel's filter sections. */
+  filter_sections?: FilterSectionSpec[];
   /** Project-level realtime config — only when ``enabled === true`` should
    *  the viewer mount the WebSocket subscription / live-updates indicator. */
   project_realtime?: { enabled: boolean; debounce_ms: number };

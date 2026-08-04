@@ -191,6 +191,10 @@ function buildInteractive(
     title?: string;
     color?: string;
     icon_name?: string;
+    section?: string;
+    group?: string;
+    placement?: string;
+    show_marks?: boolean;
   }>(state.config);
   // Mirror Dash design_interactive: the form surfaces only the basics, no
   // default value/range, marks, or scale. Those are derived at render time.
@@ -201,6 +205,12 @@ function buildInteractive(
   const title =
     (c.title && c.title.trim()) ||
     defaultInteractiveTitle(c.interactive_component_type, c.column_name);
+  // `placement: 'top'` is allow-listed to Timeline in the Pydantic model
+  // (validate_placement in depictio/models/components/lite.py). Clamp here so
+  // switching an existing top-placed Timeline to another variant can't save a
+  // component the backend will then reject.
+  const placement =
+    c.placement === 'top' && c.interactive_component_type === 'Timeline' ? 'top' : 'left';
   return {
     ...existing,
     ...base,
@@ -210,6 +220,12 @@ function buildInteractive(
     title,
     color: c.color ?? '',
     icon_name: c.icon_name ?? 'bx:slider-alt',
+    // Empty string from a cleared Autocomplete means "no section/group", which
+    // must persist as undefined so the panel treats it as unsectioned.
+    section: c.section?.trim() || undefined,
+    group: c.group?.trim() || undefined,
+    placement,
+    show_marks: c.show_marks,
   };
 }
 
