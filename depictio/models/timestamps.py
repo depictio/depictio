@@ -31,13 +31,21 @@ def objectid_creation_str(oid) -> str:
 
     Used as a fallback for documents created before ``creation_time`` was
     stored explicitly: every ObjectId embeds its generation time.
+
+    Returns ``""`` when the embedded time is in the future, which means the id
+    was hand-written rather than generated (Depictio's seed data uses literal
+    ids like ``746b0f3c...``, whose 4-byte prefix decodes to 2031). Callers
+    then fall back rather than showing a nonsensical creation date.
     """
     try:
         from bson import ObjectId
 
         if not isinstance(oid, ObjectId):
             oid = ObjectId(str(oid))
-        return oid.generation_time.astimezone(timezone.utc).strftime(TIMESTAMP_FORMAT)
+        generated = oid.generation_time.astimezone(timezone.utc)
+        if generated > utc_now():
+            return ""
+        return generated.strftime(TIMESTAMP_FORMAT)
     except Exception:
         return ""
 

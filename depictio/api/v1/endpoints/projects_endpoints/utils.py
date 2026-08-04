@@ -33,7 +33,9 @@ def _async_get_all_projects(current_user: User, projects_collection) -> list[Pro
         # show a real creation date (issue #932).
         for project in projects:
             if not project.get("registration_time"):
-                project["registration_time"] = objectid_creation_str(project.get("_id"))
+                project["registration_time"] = objectid_creation_str(
+                    project.get("_id")
+                ) or project.get("last_modified", "")
         projects = [ProjectResponse.from_mongo(project) for project in projects]
         return projects
     else:

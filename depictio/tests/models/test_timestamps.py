@@ -118,3 +118,31 @@ class TestPreservedCreationTime:
             stored["creation_time"] = preserved_creation_time(stored, ObjectId(), modified)
             assert stored["creation_time"] == created
             assert stored["creation_time"] != modified
+
+
+class TestHandWrittenObjectIds:
+    """Seed data uses literal ids whose 4-byte prefix is not a real timestamp.
+
+    ``746b0f3c...`` decodes to 2031, so a naive backfill showed dashboards as
+    "created" years in the future — and *after* their own modification date.
+    """
+
+    def test_future_dated_objectid_is_rejected(self):
+        # The literal id used by Depictio's viralrecon seed dashboard.
+        assert objectid_creation_str(ObjectId("746b0f3c1e4a2d7f8e5b9ca2")) == ""
+
+    def test_past_dated_seed_objectid_is_still_accepted(self):
+        # ...while the 6-prefixed seed ids decode to a plausible 2023 date.
+        assert objectid_creation_str(ObjectId("646b0f3c1e4a2d7f8e5b8ca2")) == "2023-05-22 06:44:12"
+
+    def test_a_freshly_minted_objectid_is_accepted(self):
+        """Guard the boundary: 'now' must not be rejected as 'the future'."""
+        assert objectid_creation_str(ObjectId()) != ""
+
+    def test_preserved_creation_time_falls_back_when_objectid_is_bogus(self):
+        from depictio.models.timestamps import preserved_creation_time
+
+        assert (
+            preserved_creation_time({}, ObjectId("746b0f3c1e4a2d7f8e5b9ca2"), "2026-08-04 09:00:00")
+            == "2026-08-04 09:00:00"
+        )

@@ -75,3 +75,28 @@ class TestListingCreationTime:
         _insert(collections, creation_time="", oid_moment=moment)
         result = core_functions.load_dashboards_from_db(owner=None, admin_mode=True)
         assert result["dashboards"][0]["creation_time"] == "2023-06-15 08:00:00"
+
+
+class TestSeedDataObjectIds:
+    """Seed dashboards use hand-written ids whose prefix decodes to 2031."""
+
+    def test_future_dated_objectid_falls_back_to_the_save_time(self, collections):
+        """Never show a creation date that is after the modification date."""
+        oid = ObjectId("746b0f3c1e4a2d7f8e5b9ca2")  # decodes to 2031
+        collections["dashboards"].insert_one(
+            {
+                "_id": oid,
+                "dashboard_id": oid,
+                "title": "nf-core/viralrecon",
+                "last_saved_ts": "2026-08-04 09:00:00",
+                "project_id": ObjectId(),
+                "is_main_tab": True,
+                "permissions": {"owners": [], "viewers": []},
+            }
+        )
+        entry = core_functions.load_dashboards_from_db(owner=None, admin_mode=True)["dashboards"][0]
+
+        assert entry["creation_time"] == "2026-08-04 09:00:00"
+        assert entry["creation_time"] <= entry["last_saved_ts"], (
+            "creation must never be later than modification"
+        )
