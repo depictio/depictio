@@ -64,6 +64,7 @@ import {
   RealtimeIndicator,
   useRealtimeJournal,
   batchIdsFromPayload,
+  authFetch,
 } from 'depictio-react-core';
 import type {
   DashboardData,
@@ -107,30 +108,17 @@ function dashOrigin(): string {
   return '';
 }
 
-/** Local helper — uses the same auth pattern as `depictio-react-core/api.ts`. */
-function authHeaders(): Record<string, string> {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
-  try {
-    const stored = localStorage.getItem('local-store');
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      if (parsed?.access_token) {
-        headers.Authorization = `Bearer ${parsed.access_token}`;
-      }
-    }
-  } catch {
-    // ignore
-  }
-  return headers;
-}
-
 /** Local POST wrapper for layout/component persistence. Surfaces the response
  *  body on failure so callers can debug 422 validation errors at the console.
  *  Pass `forceScreenshot=true` for an explicit Save click — the backend bypasses
  *  its 1h auto-save debounce and re-queues a fresh thumbnail. Auto-saves should
- *  omit it so drag/resize/rename bursts don't overwhelm the celery worker. */
+ *  omit it so drag/resize/rename bursts don't overwhelm the celery worker.
+ *
+ *  Goes through ``authFetch`` rather than a hand-rolled Authorization header:
+ *  an editor session routinely outlives the 1h access token, and a bare header
+ *  read from localStorage would make every autosave 401 ("Invalid token") with
+ *  nothing to refresh it — silently dropping the user's work. ``authFetch``
+ *  refreshes near expiry and retries once on a 401. */
 async function saveDashboard(
   dashboardId: string,
   dashboardData: DashboardData,
@@ -139,9 +127,9 @@ async function saveDashboard(
   const url = opts.forceScreenshot
     ? `${API_BASE}/dashboards/save/${dashboardId}?force_screenshot=true`
     : `${API_BASE}/dashboards/save/${dashboardId}`;
-  const res = await fetch(url, {
+  const res = await authFetch(url, {
     method: 'POST',
-    headers: authHeaders(),
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(dashboardData),
   });
   if (!res.ok) {
