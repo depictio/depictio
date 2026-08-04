@@ -2151,6 +2151,70 @@ export async function validateSession(): Promise<boolean> {
   return readStoredSession()?.access_token != null;
 }
 
+/** How often the keep-alive re-checks the stored token. Must be comfortably
+ *  shorter than the access-token lifetime (1 h as minted by `/auth/refresh`)
+ *  so a token never lapses between ticks. */
+const KEEPALIVE_INTERVAL_MS = 5 * 60_000;
+
+let keepAliveTimer: ReturnType<typeof setInterval> | null = null;
+
+/**
+ * Keep the stored access token continuously fresh for the life of the page.
+ *
+ * Most helpers here build their headers with the synchronous `authHeaders()`,
+ * which reads `localStorage` as-is and cannot await a refresh. That is fine for
+ * load-once screens, but any long-lived page (a dashboard sitting open while a
+ * user tweaks filters, the admin monitoring tab) eventually outlives the 1 h
+ * access token and then fails every subsequent call with the backend's
+ * "Invalid token" 401 — with nothing to trigger a refresh, since the SPA only
+ * refreshed at boot.
+ *
+ * Rather than convert ~90 call sites to async, this ticks in the background and
+ * refreshes via the same `ensureFreshAccessToken` path, so whatever
+ * `authHeaders()` reads next is still valid. `authFetch` remains the stronger
+ * guarantee (it also retries a 401), so prefer it for new code and for any
+ * request whose failure would lose user data.
+ *
+ * Idempotent: repeat calls reuse the existing timer. Also refreshes on tab
+ * refocus, since timers are throttled (or frozen) in background tabs.
+ */
+export function startSessionKeepAlive(): () => void {
+  if (typeof window === 'undefined') return () => {};
+  if (keepAliveTimer !== null) return stopSessionKeepAlive;
+
+  const tick = () => {
+    // No session yet (or signed out) — nothing to keep alive.
+    if (!readStoredSession()?.refresh_token) return;
+    void ensureFreshAccessToken().catch(() => {
+      /* offline / transient: the next tick retries */
+    });
+  };
+
+  keepAliveTimer = setInterval(tick, KEEPALIVE_INTERVAL_MS);
+
+  // A backgrounded tab has its timers throttled, so it can return to the
+  // foreground with an already-stale token. Top up as soon as it's visible.
+  document.addEventListener('visibilitychange', onVisible);
+  return stopSessionKeepAlive;
+}
+
+function onVisible(): void {
+  if (document.visibilityState === 'visible') {
+    if (!readStoredSession()?.refresh_token) return;
+    void ensureFreshAccessToken().catch(() => {});
+  }
+}
+
+export function stopSessionKeepAlive(): void {
+  if (keepAliveTimer !== null) {
+    clearInterval(keepAliveTimer);
+    keepAliveTimer = null;
+  }
+  if (typeof document !== 'undefined') {
+    document.removeEventListener('visibilitychange', onVisible);
+  }
+}
+
 export { authFetch, refreshAccessToken };
 
 // ---- Dashboard management (list / create / edit / delete / import / export)

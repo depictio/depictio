@@ -52,6 +52,7 @@ import {
   fetchAuthStatus,
   getAnonymousSession,
   persistSession,
+  startSessionKeepAlive,
   validateSession,
 } from 'depictio-react-core';
 import BootSplash from './components/BootSplash';
@@ -240,6 +241,10 @@ if (isBareRoot) {
   window.location.replace('/dashboards');
 } else {
   bootstrapSession().finally(() => {
+    // Keep the access token fresh for the whole page session. Without this a
+    // long-open view (dashboard filters, admin monitoring) outlives the 1h
+    // token and every subsequent request 401s with "Invalid token".
+    startSessionKeepAlive();
     ReactDOM.createRoot(document.getElementById('root')!).render(
       <React.StrictMode>
         <MantineProvider theme={depictioTheme} defaultColorScheme={readInitialColorScheme()}>

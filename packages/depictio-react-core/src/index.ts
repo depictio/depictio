@@ -145,6 +145,8 @@ export {
   validateSession,
   authFetch,
   refreshAccessToken,
+  startSessionKeepAlive,
+  stopSessionKeepAlive,
   // Dashboard management
   listDashboards,
   listProjects,
