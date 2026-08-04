@@ -78,7 +78,7 @@ async function refreshAccessToken(refreshToken: string): Promise<{
  *  cache. Reset to null when the refresh resolves. */
 let pendingRefresh: Promise<string | null> | null = null;
 
-async function ensureFreshAccessToken(): Promise<string | null> {
+async function ensureFreshAccessToken(windowMs = REFRESH_WINDOW_MS): Promise<string | null> {
   const session = readStoredSession();
   const access = typeof session?.access_token === 'string' ? session.access_token : null;
   const refresh = typeof session?.refresh_token === 'string' ? session.refresh_token : null;
@@ -87,7 +87,7 @@ async function ensureFreshAccessToken(): Promise<string | null> {
   if (!access || !refresh) return access;
 
   const expireMs = expireIso ? Date.parse(expireIso) : NaN;
-  if (Number.isFinite(expireMs) && expireMs - Date.now() > REFRESH_WINDOW_MS) {
+  if (Number.isFinite(expireMs) && expireMs - Date.now() > windowMs) {
     return access;
   }
 
@@ -2156,6 +2156,13 @@ export async function validateSession(): Promise<boolean> {
  *  so a token never lapses between ticks. */
 const KEEPALIVE_INTERVAL_MS = 5 * 60_000;
 
+/** Window the keep-alive refreshes within. It must exceed the tick interval,
+ *  otherwise a tick can land just outside the window, decline to refresh, and
+ *  let the token expire before the next tick fires — leaving a multi-minute
+ *  hole of exactly the "Invalid token" failures this is meant to prevent. The
+ *  margin absorbs timer jitter and throttling in background tabs. */
+const KEEPALIVE_REFRESH_WINDOW_MS = KEEPALIVE_INTERVAL_MS * 2;
+
 let keepAliveTimer: ReturnType<typeof setInterval> | null = null;
 
 /**
@@ -2185,7 +2192,7 @@ export function startSessionKeepAlive(): () => void {
   const tick = () => {
     // No session yet (or signed out) — nothing to keep alive.
     if (!readStoredSession()?.refresh_token) return;
-    void ensureFreshAccessToken().catch(() => {
+    void ensureFreshAccessToken(KEEPALIVE_REFRESH_WINDOW_MS).catch(() => {
       /* offline / transient: the next tick retries */
     });
   };
@@ -2201,7 +2208,7 @@ export function startSessionKeepAlive(): () => void {
 function onVisible(): void {
   if (document.visibilityState === 'visible') {
     if (!readStoredSession()?.refresh_token) return;
-    void ensureFreshAccessToken().catch(() => {});
+    void ensureFreshAccessToken(KEEPALIVE_REFRESH_WINDOW_MS).catch(() => {});
   }
 }
 
