@@ -133,7 +133,6 @@ async function saveDashboard(
     : `${API_BASE}/dashboards/save/${dashboardId}`;
   const res = await authFetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(dashboardData),
   });
   if (!res.ok) {

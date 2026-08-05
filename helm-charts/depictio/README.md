@@ -34,6 +34,7 @@ helm uninstall depictio
 |-----------|-------------|---------|
 | `nameOverride` | String to partially override the chart name | `""` |
 | `fullnameOverride` | String to fully override the chart name | `""` |
+| `enableServiceLinks` | Inject the legacy Docker-link service environment variables into every pod. Keep `false`: on clusters with many Services the injected block overflows the process argument limit and the viewer's nginx entrypoint crashloops with `envsubst: Argument list too long` | `false` |
 
 ### Namespace parameters
 

@@ -24,6 +24,7 @@ spec:
         project: {{ .Values.project.slug }}
         type: app
     spec:
+      enableServiceLinks: {{ .Values.enableServiceLinks | default false }}
       {{- if gt (.Values.mongo.replicas | default 1 | int) 1 }}
       affinity:
         podAntiAffinity:
@@ -133,6 +134,7 @@ spec:
         project: {{ .Values.project.slug }}
         type: app
     spec:
+      enableServiceLinks: {{ .Values.enableServiceLinks | default false }}
       containers:
         - name: redis
           image: "{{ .Values.redis.image.repository }}:{{ .Values.redis.image.tag }}"
@@ -205,6 +207,7 @@ spec:
         project: {{ .Values.project.slug }}
         type: app
     spec:
+      enableServiceLinks: {{ .Values.enableServiceLinks | default false }}
       containers:
         - name: minio
           image: "{{ .Values.minio.image.repository }}:{{ .Values.minio.image.tag }}"
@@ -268,6 +271,7 @@ spec:
         checksum/config: {{ include (print $.Template.BasePath "/configmaps.yaml") . | sha256sum }}
         checksum/secrets: {{ include (print $.Template.BasePath "/secrets.yaml") . | sha256sum }}
     spec:
+      enableServiceLinks: {{ .Values.enableServiceLinks | default false }}
       {{- if gt (.Values.backend.replicas | int) 1 }}
       affinity:
         podAntiAffinity:
@@ -571,6 +575,7 @@ spec:
         project: {{ .Values.project.slug }}
         type: app
     spec:
+      enableServiceLinks: {{ .Values.enableServiceLinks | default false }}
       {{- if gt (.Values.viewer.replicas | int) 1 }}
       affinity:
         podAntiAffinity:
@@ -666,6 +671,7 @@ spec:
         checksum/config: {{ include (print $.Template.BasePath "/configmaps.yaml") . | sha256sum }}
         checksum/secrets: {{ include (print $.Template.BasePath "/secrets.yaml") . | sha256sum }}
     spec:
+      enableServiceLinks: {{ .Values.enableServiceLinks | default false }}
       securityContext:
         {{- toYaml .Values.celery.podSecurityContext | nindent 8 }}
       initContainers:
