@@ -16,11 +16,14 @@ import {
   HyparquetEngine,
   refillFigure,
   resolveUri,
+  runPrologue,
   sortSlice,
   type AggFn,
   type BindingTable,
   type BoundFilter,
+  type ColumnTable,
   type DataRef,
+  type PrologueOp,
   type QueryEngine,
   type SortSpec,
   type TableHandle,
@@ -280,6 +283,95 @@ export async function renderFigureLive(
     mask,
   });
   return { ...result, filterApplied: bound.length > 0 };
+}
+
+/** Live path for a code-mode figure with a transpiled prologue (phase 6):
+ *  mask the BASE table with the current filters exactly like the ui-mode
+ *  figure path, replay the prologue IR over the mask-selected base rows to
+ *  rebuild the code's derived frame, then refill the binding's scaffold from
+ *  that frame. `mask: null` on the refill is deliberate — the mask was
+ *  already applied while materializing the base rows, so refill operates on
+ *  the reshaped frame unchanged. Any throw (missing column, malformed op,
+ *  unbound scaffold trace) is structural degradation — the api shim catches
+ *  it, same as the ui-mode path. */
+export async function renderPrologueFigureLive(
+  binding: BindingTable,
+  ops: PrologueOp[],
+  dcId: string,
+  filters: InteractiveFilter[],
+): Promise<{
+  figure: { data: unknown[]; layout: Record<string, unknown> };
+  displayed: number;
+  total: number;
+  filterApplied: boolean;
+}> {
+  const { ref, handle } = await tableFor(dcId);
+  const bound = toBoundFilters(filters);
+  const mask = bound.length ? (await engine.mask(handle, bound)).mask : null;
+
+  // Base frame = the DataRef's schema minus build-time companions
+  // (companion-map keys plus `__code__*`/`__ts__*`/`__fe__*` — the same
+  // exclusion rule as renderTableLive): the prologue re-derives the code's
+  // DataFrame from the user-visible columns, which the producer bundles
+  // keep-all for prologue figures.
+  const companions = new Set(Object.keys(ref.companions ?? {}));
+  const baseNames = (ref.columns ?? [])
+    .map((c) => c.name)
+    .filter(
+      (n) =>
+        !companions.has(n) &&
+        !n.startsWith('__code__') &&
+        !n.startsWith('__ts__') &&
+        !n.startsWith('__fe__'),
+    );
+  const cols = await engine.columns(handle, baseNames);
+
+  // Materialize the mask-selected base rows into a plain ColumnTable.
+  const sel: number[] = [];
+  for (let i = 0; i < ref.rows; i++) {
+    if (mask === null || mask[i] === 1) sel.push(i);
+  }
+  const columns: Record<string, unknown[]> = {};
+  for (const name of baseNames) {
+    const src = cols[name];
+    const out: unknown[] = new Array(sel.length);
+    for (let k = 0; k < sel.length; k++) {
+      const v = src[sel[k]];
+      out[k] = v === undefined ? null : v;
+    }
+    columns[name] = out;
+  }
+  const base: ColumnTable = { columns, length: sel.length };
+
+  const derived = runPrologue(ops, base);
+
+  const result = await refillFigure({
+    binding,
+    // The mask is already baked into `derived`; the binding's fields/group
+    // reference DERIVED column names, served straight from the frame.
+    mask: null,
+    columns: async (names) => {
+      const out: Record<string, ArrayLike<unknown>> = {};
+      for (const name of names) {
+        const values = derived.columns[name];
+        if (values === undefined) {
+          throw new Error(`prologue figure: derived frame has no column "${name}"`);
+        }
+        out[name] = values;
+      }
+      return out;
+    },
+  });
+
+  // Metadata counts DERIVED rows (post-reshape) — that is what the figure
+  // actually plots: `total` is the derived frame's height, `displayed` the
+  // points refill wrote across raw traces.
+  return {
+    figure: result.figure,
+    displayed: result.displayed,
+    total: derived.length,
+    filterApplied: bound.length > 0,
+  };
 }
 
 /** Numeric Polars dtypes → AG Grid's numericColumn, matching the dtype set
