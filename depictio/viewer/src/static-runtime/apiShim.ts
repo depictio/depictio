@@ -19,6 +19,8 @@
 export * from '../../../../packages/depictio-react-core/src/api';
 
 import type {
+  AdvancedVizDataRequest,
+  AdvancedVizDataResponse,
   DashboardData,
   DashboardSummary,
   FigureResponse,
@@ -30,18 +32,61 @@ import {
   columnRangeLive,
   computeCardsLive,
   dataRefFor,
+  fetchAdvancedVizDataLive,
   renderFigureLive,
   renderPrologueFigureLive,
   renderTableLive,
   specsLive,
   uniqueValuesLive,
+  userColumns,
 } from './liveData';
 import { themedFrozenFigure } from './mantinePlotlyTemplate';
 
 // ---- dashboard shell -------------------------------------------------------
 
+/** Stand-in workflow id for spec-authored bundles (producer B writes
+ *  `wf_id: None` on every component — there is no Mongo workflow behind a YAML
+ *  spec). Every advanced_viz renderer gates its data fetch on a truthy
+ *  `metadata.wf_id` and otherwise renders "missing data binding", and the id
+ *  itself is inert offline: the shim's `fetchAdvancedVizData` keys on `dcId`
+ *  alone. Filling it here — the one place the runtime hands the document to
+ *  the real App — keeps the fix out of the renderers and out of the manifest
+ *  contract. */
+const BUNDLE_WF_ID = 'static-bundle';
+
+/** Cached so the document keeps one identity across App's re-fetches. */
+let dashboardDoc: DashboardData | null = null;
+
+interface DocComponent {
+  component_type?: string;
+  dc_id?: string | null;
+  wf_id?: string | null;
+}
+
+/** True for an advanced_viz component that would render live but is missing
+ *  the workflow id its renderer insists on. */
+function needsWorkflowId(m: DocComponent): boolean {
+  return (
+    m.component_type === 'advanced_viz' &&
+    !m.wf_id &&
+    Boolean(m.dc_id) &&
+    Boolean(dataRefFor(String(m.dc_id)))
+  );
+}
+
 export async function fetchDashboard(_dashboardId: string): Promise<DashboardData> {
-  return bundle().dashboard.doc as unknown as DashboardData;
+  if (dashboardDoc) return dashboardDoc;
+  const doc = bundle().dashboard.doc as { stored_metadata?: DocComponent[] };
+  const meta = doc.stored_metadata;
+  dashboardDoc = (
+    Array.isArray(meta) && meta.some(needsWorkflowId)
+      ? {
+          ...doc,
+          stored_metadata: meta.map((m) => (needsWorkflowId(m) ? { ...m, wf_id: BUNDLE_WF_ID } : m)),
+        }
+      : doc
+  ) as unknown as DashboardData;
+  return dashboardDoc;
 }
 
 export async function fetchAllDashboards(): Promise<DashboardSummary[]> {
@@ -313,8 +358,45 @@ function advancedVizIndexFor(dcId: string): string {
   return meta.index;
 }
 
-export async function fetchAdvancedVizData(req: { dcId: string }) {
-  return frozenPayload(advancedVizIndexFor(req.dcId), 'advanced-viz-data') as never;
+export async function fetchAdvancedVizData(
+  req: AdvancedVizDataRequest,
+  _signal?: AbortSignal,
+): Promise<AdvancedVizDataResponse> {
+  // Live path (phase 4): a data-path advanced_viz kind whose DC ships in the
+  // bundle recomputes `/advanced_viz/data` offline — mask, project, reduce by
+  // the kind's sampling policy — so intra-viz controls and the global filters
+  // both move real data instead of a snapshot. Routing is by DATA_REF
+  // presence, matching the producers' own live gate: they bundle the DC (and
+  // emit no frozen payload) exactly for these components. Everything else —
+  // phylogenetic, whose source is a tree rather than a frame, and every
+  // pre-phase-4 bundle — keeps the frozen payload.
+  if (dataRefFor(req.dcId)) {
+    // Deliberately NOT wrapped in a try/catch: a live component has no frozen
+    // payload to fall back to, so swallowing the error would only turn a
+    // readable message into an empty chart. Every advanced_viz renderer has
+    // its own error state and shows what the throw said.
+    //
+    // `signal` is ignored: the work is local and synchronous once the table is
+    // open, so there is no in-flight request to abort — the renderers' own
+    // `cancelled` flags already discard a superseded result.
+    return fetchAdvancedVizDataLive(req);
+  }
+  return frozenPayload<AdvancedVizDataResponse>(
+    advancedVizIndexFor(req.dcId),
+    'advanced-viz-data',
+  );
+}
+
+/** The DC's polars schema, straight off the DataRef the producer wrote —
+ *  dtype strings pass through unchanged (they were serialised from the same
+ *  `pl.DataFrame.schema` this endpoint reads server-side), companions
+ *  excluded. Renderers treat this as best-effort decoration (annotation
+ *  pickers, hover extras) and catch failures, but a bundled DC can answer it
+ *  exactly, and the real implementation would network-fail offline. */
+export async function fetchPolarsSchema(dcId: string): Promise<Record<string, string>> {
+  const ref = dataRefFor(dcId);
+  if (!ref) throw new Error(`static bundle: no data_ref for dc "${dcId}"`);
+  return Object.fromEntries(userColumns(ref).map((c) => [c.name, c.dtype]));
 }
 
 export async function fetchPhylogenyNewick(dcId: string): Promise<string> {
