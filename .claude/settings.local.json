@@ -58,7 +58,12 @@
       "Bash(gh run list:*)",
       "Bash(/Users/tweber/Gits/workspaces/depictio-workspace/depictio/depictio-venv-dash-v3/bin/python -m ruff:*)",
       "Bash(/Users/tweber/Gits/workspaces/depictio-workspace/depictio/depictio-venv-dash-v3/bin/python -m pre_commit run:*)",
-      "Bash(/Users/tweber/Gits/workspaces/depictio-workspace/depictio/depictio-venv-dash-v3/bin/python:*)"
+      "Bash(/Users/tweber/Gits/workspaces/depictio-workspace/depictio/depictio-venv-dash-v3/bin/python:*)",
+      "Bash(rtk read *)",
+      "Bash(rtk ls *)",
+      "Bash(rtk grep *)",
+      "Bash(rtk proxy *)",
+      "Bash(python3 -)"
     ],
     "deny": []
   }
