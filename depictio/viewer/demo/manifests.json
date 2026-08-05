@@ -4,5 +4,11 @@
     "title": "Phase 0 — static runtime, everything frozen",
     "manifest": "../../packages/depictio-static-core/fixtures/manifest-basic.json",
     "description": "The real viewer mounted offline from a hand-written manifest: card, Plotly figure, MultiSelect and text component, all served from frozen payloads with tier badges. No backend, no network."
+  },
+  {
+    "id": "phase-1",
+    "title": "Phase 1 — penguins with LIVE cards and filters",
+    "manifest": "demo/manifests/penguins.json",
+    "description": "Built by producer B from a spec + local Parquet (depictio dashboard build-static). Cards, MultiSelect filters and text are live: change the species or year selection and the card values recompute offline through the in-browser hyparquet engine. The scatter figure stays frozen until phase 5 (bind-and-refill). Regenerate with depictio/serverless/examples/generate_demo_manifest.py."
   }
 ]

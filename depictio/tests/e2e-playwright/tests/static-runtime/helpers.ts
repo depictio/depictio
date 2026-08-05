@@ -20,6 +20,10 @@ export const FIXTURE_MANIFEST = join(
   REPO_ROOT,
   "packages/depictio-static-core/fixtures/manifest-basic.json",
 );
+export const PENGUINS_MANIFEST = join(
+  REPO_ROOT,
+  "depictio/viewer/demo/manifests/penguins.json",
+);
 
 export function skipUnlessBundleBuilt(): void {
   test.skip(
@@ -28,10 +32,10 @@ export function skipUnlessBundleBuilt(): void {
   );
 }
 
-/** Inject the fixture manifest into the built bundle; returns a file:// URL. */
-export function injectedBundleUrl(): string {
+/** Inject a manifest into the built bundle; returns a file:// URL. */
+export function injectedBundleUrl(manifestPath: string = FIXTURE_MANIFEST): string {
   const template = readFileSync(BUNDLE_TEMPLATE, "utf-8");
-  const manifest = JSON.parse(readFileSync(FIXTURE_MANIFEST, "utf-8"));
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf-8"));
   // Same convention as depictio/catalog/payload.py::_inject. replaceAll +
   // a function replacement: a plain string replacement would interpret `$`
   // sequences in the JSON, and Python's .replace (which producers use)

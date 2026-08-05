@@ -1,0 +1,456 @@
+{
+ "allow_network_tiles": false,
+ "bindings": {},
+ "built_at": "2026-08-05T12:56:12.069272+00:00",
+ "dashboard": {
+  "doc": {
+   "left_panel_layout_data": [
+    {
+     "h": 3,
+     "i": "box-filter-species",
+     "static": false,
+     "w": 1,
+     "x": 0,
+     "y": 0
+    },
+    {
+     "h": 3,
+     "i": "box-filter-year",
+     "static": false,
+     "w": 1,
+     "x": 0,
+     "y": 3
+    }
+   ],
+   "right_panel_layout_data": [
+    {
+     "h": 1,
+     "i": "box-text-intro",
+     "resizeHandles": [
+      "se",
+      "s",
+      "e",
+      "sw",
+      "w"
+     ],
+     "static": false,
+     "w": 8,
+     "x": 0,
+     "y": 0
+    },
+    {
+     "h": 2,
+     "i": "box-card-body-mass",
+     "static": true,
+     "w": 4,
+     "x": 0,
+     "y": 1
+    },
+    {
+     "h": 2,
+     "i": "box-card-species-count",
+     "static": true,
+     "w": 4,
+     "x": 4,
+     "y": 1
+    },
+    {
+     "h": 5,
+     "i": "box-scatter-mass-flipper",
+     "resizeHandles": [
+      "se",
+      "s",
+      "e",
+      "sw",
+      "w"
+     ],
+     "static": false,
+     "w": 8,
+     "x": 0,
+     "y": 3
+    }
+   ],
+   "stored_layout_data": [],
+   "stored_metadata": [
+    {
+     "alignment": "left",
+     "body": "Morphology of *Adelie*, *Chinstrap* and *Gentoo* penguins, built with no backend.",
+     "component_type": "text",
+     "data_collection_tag": "",
+     "dc_id": null,
+     "description": "",
+     "index": "text-intro",
+     "order": 2,
+     "title": "Palmer Penguins \u2014 Static Bundle",
+     "title_align": "left",
+     "title_size": "sm",
+     "wf_id": null,
+     "workflow_tag": ""
+    },
+    {
+     "aggregation": "average",
+     "column_name": "body_mass_g",
+     "column_type": "float64",
+     "component_type": "card",
+     "data_collection_tag": "joined_penguins_complete",
+     "dc_id": "e26f036c4d124f11b2f23fd8",
+     "description": "",
+     "index": "card-body-mass",
+     "secondary_layout": "vertical",
+     "title": "Mean Body Mass (g)",
+     "title_align": "left",
+     "title_size": "sm",
+     "top_n_count": 3,
+     "wf_id": null,
+     "workflow_tag": "penguin_species_analysis"
+    },
+    {
+     "aggregation": "nunique",
+     "column_name": "species",
+     "column_type": "object",
+     "component_type": "card",
+     "data_collection_tag": "joined_penguins_complete",
+     "dc_id": "e26f036c4d124f11b2f23fd8",
+     "description": "",
+     "index": "card-species-count",
+     "secondary_layout": "vertical",
+     "title": "Species",
+     "title_align": "left",
+     "title_size": "sm",
+     "top_n_count": 3,
+     "wf_id": null,
+     "workflow_tag": "penguin_species_analysis"
+    },
+    {
+     "column_name": "species",
+     "column_type": "object",
+     "component_type": "interactive",
+     "data_collection_tag": "joined_penguins_complete",
+     "dc_id": "e26f036c4d124f11b2f23fd8",
+     "description": "",
+     "index": "filter-species",
+     "interactive_component_type": "MultiSelect",
+     "placement": "left",
+     "title": "Species",
+     "title_align": "left",
+     "wf_id": null,
+     "workflow_tag": "penguin_species_analysis"
+    },
+    {
+     "column_name": "year",
+     "column_type": "object",
+     "component_type": "interactive",
+     "data_collection_tag": "joined_penguins_complete",
+     "dc_id": "e26f036c4d124f11b2f23fd8",
+     "description": "",
+     "index": "filter-year",
+     "interactive_component_type": "MultiSelect",
+     "placement": "left",
+     "title": "Year",
+     "title_align": "left",
+     "wf_id": null,
+     "workflow_tag": "penguin_species_analysis"
+    },
+    {
+     "component_type": "figure",
+     "data_collection_tag": "joined_penguins_complete",
+     "dc_id": "e26f036c4d124f11b2f23fd8",
+     "description": "",
+     "dict_kwargs": {
+      "color": "species",
+      "x": "flipper_length_mm",
+      "y": "body_mass_g"
+     },
+     "index": "scatter-mass-flipper",
+     "mode": "ui",
+     "selection_enabled": false,
+     "title": "Body Mass vs Flipper Length",
+     "title_align": "left",
+     "title_size": "sm",
+     "visu_type": "scatter",
+     "wf_id": null,
+     "workflow_tag": "penguin_species_analysis"
+    }
+   ],
+   "subtitle": "Producer B worked example (Palmer Penguins)",
+   "title": "Penguins \u2014 static bundle example"
+  },
+  "id": "d20dd5d02fd72ec8e71e5d65",
+  "title": "Penguins \u2014 static bundle example"
+ },
+ "data_refs": {
+  "e26f036c4d124f11b2f23fd8": {
+   "aggregation_hash": "0c8cf3758705899ee21283c6c8510e396b4f81a6ef30be6b477beeeeec5cf4a6",
+   "codebooks": {
+    "year": {
+     "2007": 0,
+     "2008": 1,
+     "2009": 2
+    }
+   },
+   "columns": [
+    {
+     "dtype": "Int64",
+     "name": "year"
+    },
+    {
+     "dtype": "String",
+     "name": "species"
+    },
+    {
+     "dtype": "Float64",
+     "name": "flipper_length_mm"
+    },
+    {
+     "dtype": "Float64",
+     "name": "body_mass_g"
+    },
+    {
+     "dtype": "Int32",
+     "name": "__code__year"
+    }
+   ],
+   "companions": {
+    "__code__year": "year"
+   },
+   "row_group_bytes": null,
+   "rows": 342,
+   "size_bytes": 3615,
+   "uri": "inline:dc_e26f036c4d124f11b2f23fd8"
+  }
+ },
+ "depictio_version": "1.3.1",
+ "frozen": {
+  "scatter-mass-flipper": {
+   "filter_state": [],
+   "kind": "figure",
+   "payload": {
+    "figure": {
+     "data": [
+      {
+       "hovertemplate": "species=Adelie<br>flipper_length_mm=%{x}<br>body_mass_g=%{y}<extra></extra>",
+       "legendgroup": "Adelie",
+       "marker": {
+        "color": "#228be6",
+        "symbol": "circle"
+       },
+       "mode": "markers",
+       "name": "Adelie",
+       "showlegend": true,
+       "type": "scattergl",
+       "x": {
+        "bdata": "AAAAAACgZkAAAAAAAEBnQAAAAAAAYGhAAAAAAAAgaEAAAAAAAMBnQAAAAAAAoGZAAAAAAABgaEAAAAAAACBoQAAAAAAAwGdAAAAAAABAZ0AAAAAAAIBmQAAAAAAAwGZAAAAAAADgZ0AAAAAAAMBoQAAAAAAAIGdAAAAAAABgaEAAAAAAAKBoQAAAAAAAAGdAAAAAAABAaEAAAAAAAMBlQAAAAAAAgGZAAAAAAACgZ0AAAAAAACBnQAAAAAAAgGZAAAAAAABgZ0AAAAAAAOBmQAAAAAAAYGdAAAAAAACAZUAAAAAAAIBmQAAAAAAAQGZAAAAAAABAZkAAAAAAAIBnQAAAAAAAAGdAAAAAAABgaEAAAAAAAIBoQAAAAAAAwGdAAAAAAACAZkAAAAAAAKBmQAAAAAAAAGdAAAAAAADAZkAAAAAAAGBoQAAAAAAAQGdAAAAAAACAaEAAAAAAACBnQAAAAAAAwGdAAAAAAADAZkAAAAAAAGBmQAAAAAAAwGdAAAAAAADgZ0AAAAAAAEBnQAAAAAAAgGdAAAAAAADAZ0AAAAAAAABpQAAAAAAAYGdAAAAAAADgZ0AAAAAAAEBnQAAAAAAAIGhAAAAAAACgZkAAAAAAAEBoQAAAAAAAIGdAAAAAAABgaEAAAAAAACBnQAAAAAAAAGhAAAAAAAAAZ0AAAAAAAABoQAAAAAAAYGhAAAAAAACAZ0AAAAAAAMBnQAAAAAAAwGhAAAAAAADAZ0AAAAAAAMBnQAAAAAAAgGhAAAAAAACgaEAAAAAAAMBnQAAAAAAAYGhAAAAAAADgZ0AAAAAAAABnQAAAAAAAYGdAAAAAAABgaEAAAAAAAKBnQAAAAAAAgGhAAAAAAABgZ0AAAAAAACBoQAAAAAAA4GdAAAAAAABAaEAAAAAAAMBnQAAAAAAAoGdAAAAAAACgZ0AAAAAAAMBnQAAAAAAAQGlAAAAAAACgaUAAAAAAACBnQAAAAAAAQGdAAAAAAABgZ0AAAAAAAABqQAAAAAAAwGdAAAAAAACAaEAAAAAAAEBmQAAAAAAAAGhAAAAAAAAAaEAAAAAAAGBpQAAAAAAA4GZAAAAAAADAZ0AAAAAAACBoQAAAAAAAAGdAAAAAAADgaEAAAAAAAMBnQAAAAAAAoGZAAAAAAACgaEAAAAAAAMBoQAAAAAAA4GdAAAAAAAAgaEAAAAAAAKBoQAAAAAAA4GdAAAAAAACAaEAAAAAAAIBnQAAAAAAA4GhAAAAAAACgZ0AAAAAAAKBnQAAAAAAAYGdAAAAAAADAaEAAAAAAAABmQAAAAAAAQGlAAAAAAABAZ0AAAAAAAOBoQAAAAAAA4GdAAAAAAABgaEAAAAAAAOBnQAAAAAAAQGpAAAAAAADAZ0AAAAAAAKBoQAAAAAAAIGhAAAAAAADgaEAAAAAAAGBnQAAAAAAAwGdAAAAAAADgZ0AAAAAAAABpQAAAAAAAIGdAAAAAAAAgaEAAAAAAACBoQAAAAAAAYGdAAAAAAACAZ0AAAAAAAMBnQAAAAAAAAGhAAAAAAAAgZ0AAAAAAAMBnQAAAAAAAAGdAAAAAAABgaEAAAAAAACBoQAAAAAAAYGdAAAAAAAAgaUA=",
+        "dtype": "f8"
+       },
+       "xaxis": "x",
+       "y": {
+        "bdata": "AAAAAABMrUAAAAAAALCtQAAAAAAAZKlAAAAAAAD0qkAAAAAAAISsQAAAAAAAUqxAAAAAAABDskAAAAAAACarQAAAAAAAmrBAAAAAAADIqUAAAAAAAOisQAAAAAAAAKlAAAAAAACwrUAAAAAAADCxQAAAAAAA6KxAAAAAAAD0qkAAAAAAAJSxQAAAAAAA+qlAAAAAAABosEAAAAAAAJCqQAAAAAAAIKxAAAAAAACwrUAAAAAAANyuQAAAAAAAsK1AAAAAAACwrUAAAAAAALyrQAAAAAAAAKlAAAAAAACcqEAAAAAAANyuQAAAAAAAZKlAAAAAAAB4rkAAAAAAAMipQAAAAAAAeK5AAAAAAAD6qUAAAAAAADawQAAAAAAA3K5AAAAAAAC8q0AAAAAAAMipQAAAAAAAKrJAAAAAAACcqEAAAAAAAHiuQAAAAAAAOKhAAAAAAAAwsUAAAAAAAHCnQAAAAAAA+LFAAAAAAADCqkAAAAAAAD6nQAAAAAAA9KpAAAAAAAA2sEAAAAAAAFirQAAAAAAAzLBAAAAAAAD0qkAAAAAAAKSvQAAAAAAAqKZAAAAAAADorEAAAAAAALyrQAAAAAAAsK1AAAAAAABEpkAAAAAAAEytQAAAAAAAnKhAAAAAAAAwsUAAAAAAACCsQAAAAAAApK9AAAAAAABEpkAAAAAAANyuQAAAAAAALKpAAAAAAAAEsEAAAAAAANSnQAAAAAAAYrFAAAAAAAAgrEAAAAAAAHiuQAAAAAAAvKtAAAAAAAA2sEAAAAAAAOisQAAAAAAAmrBAAAAAAADorEAAAAAAAHiuQAAAAAAAvKtAAAAAAABAr0AAAAAAAACpQAAAAAAAXLJAAAAAAACwrUAAAAAAAGiwQAAAAAAALKpAAAAAAAC8q0AAAAAAALCtQAAAAAAAWKtAAAAAAADcrkAAAAAAACCsQAAAAAAAvKtAAAAAAADMsEAAAAAAAJCqQAAAAAAAYrFAAAAAAADIqUAAAAAAAMywQAAAAAAA6KxAAAAAAAD+sEAAAAAAAKimQAAAAAAABLBAAAAAAAAarUAAAAAAAHWyQAAAAAAABqhAAAAAAACasEAAAAAAANqmQAAAAAAAvKtAAAAAAABMrUAAAAAAAHiuQAAAAAAAzqhAAAAAAACnskAAAAAAAOKtQAAAAAAA+LFAAAAAAAAAqUAAAAAAALOwQAAAAAAAeK5AAAAAAADWr0AAAAAAAKimQAAAAAAAfq1AAAAAAAAsqkAAAAAAAPqpQAAAAAAAnKhAAAAAAABYq0AAAAAAAPSqQAAAAAAARq5AAAAAAADUp0AAAAAAAECvQAAAAAAAlqlAAAAAAADMsEAAAAAAANSnQAAAAAAAQK9AAAAAAAD6qUAAAAAAAFirQAAAAAAAWKtAAAAAAAB7sUAAAAAAAMKqQAAAAAAAeK5AAAAAAADOqEAAAAAAAA6vQAAAAAAAkKpAAAAAAACasEAAAAAAAJCqQAAAAAAAJqtAAAAAAADUp0AAAAAAABqtQAAAAAAAcKdAAAAAAACErEAAAAAAAJqwQAAAAAAAJqtAAAAAAAD0qkAAAAAAAEytQAAAAAAA6KxAAAAAAABAr0A=",
+        "dtype": "f8"
+       },
+       "yaxis": "y"
+      },
+      {
+       "hovertemplate": "species=Chinstrap<br>flipper_length_mm=%{x}<br>body_mass_g=%{y}<extra></extra>",
+       "legendgroup": "Chinstrap",
+       "marker": {
+        "color": "#fa5252",
+        "symbol": "circle"
+       },
+       "mode": "markers",
+       "name": "Chinstrap",
+       "showlegend": true,
+       "type": "scattergl",
+       "x": {
+        "bdata": "AAAAAAAAaEAAAAAAAIBoQAAAAAAAIGhAAAAAAACAZ0AAAAAAAKBoQAAAAAAAwGhAAAAAAABAZkAAAAAAAKBoQAAAAAAAYGhAAAAAAADAaEAAAAAAACBoQAAAAAAAQGhAAAAAAAAgZ0AAAAAAACBpQAAAAAAAwGdAAAAAAAAgaUAAAAAAAKBoQAAAAAAAoGZAAAAAAADAZ0AAAAAAAGBoQAAAAAAAoGZAAAAAAADgZ0AAAAAAAGBnQAAAAAAAIGhAAAAAAABgaEAAAAAAAKBoQAAAAAAAAGlAAAAAAAAAaUAAAAAAAOBnQAAAAAAAoGlAAAAAAABgZ0AAAAAAACBpQAAAAAAAYGdAAAAAAABgaUAAAAAAAGBoQAAAAAAA4GhAAAAAAABgaEAAAAAAAEBqQAAAAAAAAGhAAAAAAACgaUAAAAAAAEBqQAAAAAAAYGdAAAAAAACAaEAAAAAAAIBoQAAAAAAAgGhAAAAAAAAgaUAAAAAAAMBnQAAAAAAAgGpAAAAAAABgZ0AAAAAAAMBoQAAAAAAA4GhAAAAAAAAgaUAAAAAAACBoQAAAAAAAYGlAAAAAAABgZ0AAAAAAAKBoQAAAAAAA4GdAAAAAAABgaUAAAAAAAEBpQAAAAAAAQGhAAAAAAADAaUAAAAAAAKBnQAAAAAAAYGhAAAAAAADgaUAAAAAAAEBpQAAAAAAAIGhAAAAAAABAakAAAAAAAMBoQA==",
+        "dtype": "f8"
+       },
+       "xaxis": "x",
+       "y": {
+        "bdata": "AAAAAABYq0AAAAAAAHiuQAAAAAAAhKxAAAAAAACKq0AAAAAAABqtQAAAAAAA3K5AAAAAAABkqUAAAAAAAEytQAAAAAAANrBAAAAAAADorEAAAAAAALCtQAAAAAAAfq1AAAAAAADorEAAAAAAAKSvQAAAAAAA7qtAAAAAAACkr0AAAAAAAMipQAAAAAAA6KxAAAAAAAD0qkAAAAAAADCxQAAAAAAAIKxAAAAAAACQqkAAAAAAAKimQAAAAAAAsK1AAAAAAADIqUAAAAAAADawQAAAAAAAkKpAAAAAAACwrUAAAAAAAOisQAAAAAAAxrFAAAAAAAAAqUAAAAAAAMywQAAAAAAALKpAAAAAAAAEsEAAAAAAACCsQAAAAAAAeK5AAAAAAAAUrkAAAAAAAMCyQAAAAAAAGKVAAAAAAACUsUAAAAAAANyuQAAAAAAAhKxAAAAAAAC8q0AAAAAAAFirQAAAAAAAtqxAAAAAAABisUAAAAAAAJCqQAAAAAAAzLBAAAAAAABkqUAAAAAAALasQAAAAAAA+qlAAAAAAADcrkAAAAAAACCsQAAAAAAApK9AAAAAAAAsqkAAAAAAAPSqQAAAAAAAZKlAAAAAAACkr0AAAAAAALCtQAAAAAAAiqtAAAAAAADcrkAAAAAAAISsQAAAAAAAhKxAAAAAAABAr0AAAAAAAJCqQAAAAAAAfq1AAAAAAAAEsEAAAAAAAH6tQA==",
+        "dtype": "f8"
+       },
+       "yaxis": "y"
+      },
+      {
+       "hovertemplate": "species=Gentoo<br>flipper_length_mm=%{x}<br>body_mass_g=%{y}<extra></extra>",
+       "legendgroup": "Gentoo",
+       "marker": {
+        "color": "#40c057",
+        "symbol": "circle"
+       },
+       "mode": "markers",
+       "name": "Gentoo",
+       "showlegend": true,
+       "type": "scattergl",
+       "x": {
+        "bdata": "AAAAAABgakAAAAAAAMBsQAAAAAAAQGpAAAAAAABAa0AAAAAAAOBqQAAAAAAAQGpAAAAAAABgakAAAAAAAGBrQAAAAAAAIGpAAAAAAADgakAAAAAAAMBqQAAAAAAAAGtAAAAAAADAakAAAAAAAKBqQAAAAAAAQGpAAAAAAAAga0AAAAAAAEBqQAAAAAAAoGtAAAAAAAAgakAAAAAAAMBrQAAAAAAAQGtAAAAAAADgakAAAAAAAKBqQAAAAAAA4GpAAAAAAADgakAAAAAAAOBqQAAAAAAAAGtAAAAAAADgakAAAAAAAEBqQAAAAAAAgGtAAAAAAADAa0AAAAAAACBqQAAAAAAA4GlAAAAAAADAbEAAAAAAAIBrQAAAAAAAgGtAAAAAAACgakAAAAAAAGBrQAAAAAAAAGpAAAAAAAAAakAAAAAAAABqQAAAAAAAIGxAAAAAAABAakAAAAAAAABrQAAAAAAAwGtAAAAAAAAga0AAAAAAAEBqQAAAAAAAIGxAAAAAAACgakAAAAAAAOBqQAAAAAAAQGpAAAAAAACAa0AAAAAAAEBqQAAAAAAAIGxAAAAAAAAga0AAAAAAAIBrQAAAAAAAAGpAAAAAAACAa0AAAAAAAABqQAAAAAAAAGxAAAAAAAAAakAAAAAAAKBrQAAAAAAAwGpAAAAAAADgbEAAAAAAAGBrQAAAAAAAwGxAAAAAAADAakAAAAAAAKBsQAAAAAAAgGtAAAAAAADga0AAAAAAAABrQAAAAAAAoGtAAAAAAACga0AAAAAAACBrQAAAAAAAAGtAAAAAAADAbEAAAAAAACBqQAAAAAAAgGtAAAAAAADgakAAAAAAAOBrQAAAAAAAgGpAAAAAAACga0AAAAAAAIBqQAAAAAAAAGxAAAAAAACAakAAAAAAAIBsQAAAAAAAQGtAAAAAAABAa0AAAAAAAIBqQAAAAAAAwGxAAAAAAABAa0AAAAAAAIBsQAAAAAAAgGpAAAAAAAAAbEAAAAAAAMBqQAAAAAAAQGxAAAAAAAAAa0AAAAAAAMBrQAAAAAAAYGlAAAAAAAAgbEAAAAAAAGBrQAAAAAAAgGxAAAAAAADgakAAAAAAAIBsQAAAAAAAAGtAAAAAAADgakAAAAAAAEBqQAAAAAAAYGtAAAAAAAAAakAAAAAAACBqQAAAAAAAAGtAAAAAAACgbEAAAAAAAKBqQAAAAAAAwGxAAAAAAAAga0AAAAAAAMBsQAAAAAAAIGtAAAAAAADAa0AAAAAAAMBqQAAAAAAA4GpAAAAAAADAa0AAAAAAAIBqQAAAAAAAoGpA",
+        "dtype": "f8"
+       },
+       "xaxis": "x",
+       "y": {
+        "bdata": "AAAAAACUsUAAAAAAAES2QAAAAAAAYrFAAAAAAABEtkAAAAAAABi1QAAAAAAAxrFAAAAAAADAskAAAAAAAFC0QAAAAAAAMLFAAAAAAAAetEAAAAAAACqyQAAAAAAArrVAAAAAAAAqskAAAAAAANq2QAAAAAAAaLBAAAAAAADatkAAAAAAADawQAAAAAAAnLhAAAAAAADAskAAAAAAAOa0QAAAAAAARLZAAAAAAACIs0AAAAAAADCxQAAAAAAAurNAAAAAAACIs0AAAAAAAOyzQAAAAAAABLBAAAAAAAAStkAAAAAAAPixQAAAAAAArrVAAAAAAACCtEAAAAAAAFyyQAAAAAAAurNAAAAAAACit0AAAAAAAB60QAAAAAAAGLVAAAAAAABWs0AAAAAAAIK0QAAAAAAA/rBAAAAAAADmtEAAAAAAANyuQAAAAAAARLZAAAAAAADMsEAAAAAAAI6yQAAAAAAArrVAAAAAAAAks0AAAAAAAGiwQAAAAAAAGLVAAAAAAADss0AAAAAAALS0QAAAAAAA8rJAAAAAAAC0tEAAAAAAADCxQAAAAAAAiLNAAAAAAAAks0AAAAAAALqzQAAAAAAAzLBAAAAAAACIs0AAAAAAAGKxQAAAAAAArrVAAAAAAABosEAAAAAAALS0QAAAAAAAMLFAAAAAAAAStkAAAAAAAFyyQAAAAAAARLZAAAAAAAAqskAAAAAAAKi2QAAAAAAAXLJAAAAAAACutUAAAAAAAI6yQAAAAAAAiLNAAAAAAADss0AAAAAAAFC0QAAAAAAAXLJAAAAAAACotkAAAAAAAPixQAAAAAAAcLdAAAAAAACOskAAAAAAAD63QAAAAAAAEbJAAAAAAABKtUAAAAAAAHWyQAAAAAAA5rRAAAAAAACOskAAAAAAAOC1QAAAAAAA+LFAAAAAAAC0tEAAAAAAAAuzQAAAAAAArrVAAAAAAABWs0AAAAAAABi1QAAAAAAAjrJAAAAAAAAStkAAAAAAAPKyQAAAAAAAULRAAAAAAAA9s0AAAAAAAAuzQAAAAAAAEbJAAAAAAACCtEAAAAAAAPKyQAAAAAAA4LVAAAAAAABvs0AAAAAAAHy1QAAAAAAAdbJAAAAAAAB8tUAAAAAAAFyyQAAAAAAAfLVAAAAAAADfsUAAAAAAAHy1QAAAAAAAiLNAAAAAAAA+t0AAAAAAACqyQAAAAAAAfLVAAAAAAAAXsUAAAAAAANq2QAAAAAAAC7NAAAAAAABwt0AAAAAAAD2zQAAAAAAA8rJAAAAAAAB2tkAAAAAAAFC0QAAAAAAAGLVA",
+        "dtype": "f8"
+       },
+       "yaxis": "y"
+      }
+     ],
+     "layout": {
+      "legend": {
+       "title": {
+        "text": "species"
+       },
+       "tracegroupgap": 0
+      },
+      "margin": {
+       "b": 40,
+       "l": 50,
+       "r": 20,
+       "t": 40
+      },
+      "paper_bgcolor": "rgba(0,0,0,0)",
+      "plot_bgcolor": "rgba(0,0,0,0)",
+      "template": {
+       "layout": {
+        "colorscale": {
+         "sequential": [
+          [
+           0.0,
+           "#1864ab"
+          ],
+          [
+           0.14285714285714285,
+           "#7065b9"
+          ],
+          [
+           0.2857142857142857,
+           "#af61b7"
+          ],
+          [
+           0.42857142857142855,
+           "#e35ea5"
+          ],
+          [
+           0.5714285714285714,
+           "#ff6587"
+          ],
+          [
+           0.7142857142857143,
+           "#ff7c63"
+          ],
+          [
+           0.8571428571428571,
+           "#ff9e3d"
+          ],
+          [
+           1.0,
+           "#fcc419"
+          ]
+         ]
+        },
+        "colorway": [
+         "#228be6",
+         "#fa5252",
+         "#40c057",
+         "#7950f2",
+         "#fd7e14",
+         "#15aabf",
+         "#e64980",
+         "#fab005"
+        ],
+        "font": {
+         "family": "-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\""
+        },
+        "geo": {
+         "bgcolor": "#ffffff"
+        },
+        "paper_bgcolor": "#ffffff",
+        "plot_bgcolor": "#ffffff",
+        "xaxis": {
+         "gridcolor": "#dee2e6",
+         "gridwidth": 0.5,
+         "zerolinecolor": "#dee2e6"
+        },
+        "yaxis": {
+         "gridcolor": "#dee2e6",
+         "gridwidth": 0.5,
+         "zerolinecolor": "#dee2e6"
+        }
+       }
+      },
+      "uirevision": "persistent",
+      "xaxis": {
+       "anchor": "y",
+       "domain": [
+        0.0,
+        1.0
+       ],
+       "title": {
+        "text": "flipper_length_mm"
+       }
+      },
+      "yaxis": {
+       "anchor": "x",
+       "domain": [
+        0.0,
+        1.0
+       ],
+       "title": {
+        "text": "body_mass_g"
+       }
+      }
+     }
+    },
+    "metadata": {
+     "displayed_data_count": 342,
+     "filter_applied": false,
+     "total_data_count": 342,
+     "visu_type": "scatter",
+     "was_sampled": false
+    }
+   }
+  }
+ },
+ "inline_blobs": {
+  "dc_e26f036c4d124f11b2f23fd8": "UEFSMRUEFTAVMEwVBhUAAAAYCNcHAAUBPNgHAAAAAAAA2QcAAAAAAAAVABU0FTgsFawFFRAVBhUGHDYAKAjZBwAAAAAAABgI1wcAAAAAAAAAAAAaZAMAAACsBQECYgBkAWgCNAAkATACRABcAVYCFQQZNQAGEBkYBHllYXIVAhasBRbSARbWASZSJggcNgAoCNkHAAAAAAAAGAjXBwAAAAAAAAAAFQQVQhVGTBUGFQAAACGABgAAAEFkZWxpZQkAAABDaGluc3RyYXAGAAAAR2VudG9vFQAVIhUmLBWsBRUQFQYVBhw2ACgGR2VudG9vGAZBZGVsaWUAAAARQAMAAACsBQECrgIAiAEB9gECFQwZNQAGEBkYB3NwZWNpZXMVAhasBRbKARbSASaqAybKAhw2ACgGR2VudG9vGAZBZGVsaWUAABUAFe4qFc4MLBWsBRUAFQYVBhw2ACgIAAAAAADgbEAYCAAAAAAAgGVAAAAAtxUcAwAAAKwFAQABAQigZkABBwgAQGcJCARgaAkIACANCADADRgRKF4gABFAAIANUADADQgA4A1AAMANUAAgDRARSACgDRgAAA0YAEANEATAZQmIEVAAoA0gEUARGABgDRgA4A1wERAAgDpAAABADSARCACADTgReBGQAIARgA0gEWgxABEwEeARODUADUARqBFIFTANiBEYMSAVQA14ESAEAGkpCBHYPjAAMagRoDFAEYARoBEQAAANoBHIERARKD6AADG4EZARCBHoMcARGBFIEagRaBHAESAx0BFIESAR0BFAEdARYBE4EQgRGABALSgAoA0IEfAxWBFgBABqKVAROBGAURgxEBEIAGANUFFgETgRqBHgAOAtWBEgMZA1IA0gEdgRQBEgERgRkDGIEVgR8BEIEdARWAAATVgxCBH4EUARYDGAERAAQDoQARGQEaARQBVwTaARQFGgMXAROBEIETgR0BFAMWAROBUYDWARqD5IAAAgLZARQDEwESgRaBHIMSAx4BEYEWARIBFAUXARmBFwEaAREBFIMegRIBFYERgxKDEIEWgVKE0YMUgRCBE4UdAVQC0AERBRoBFQNbANWDHgMTARUBEYEUgxSD4IABFwEeAAgE0wETgxQBF4ETAV6DqwABHwEeARIFW4DbgAwA04VfANGADgDRgRMBFoEdARkABgDagEwGxp8BEgBEBrCRAA4A0gERgRMABgDSAAIA0gESgAwA0QAAANIBEQAKANGBFIACANIBEQAKANEBFQAMANED6IABFIEXA+CAAReBEYEWAAgA1QEVgRaDEoMQARKBEIEXAR8LEYPggAACA6QAERiBVwDYARkBEwEWBesAA+MAARSBGgEYg+EAAAAA2QESAxYDGQAOANIBHYMQARIACgDSARWADgDcAR2BFQEQgRmBEgEVAxaBVITQgRUACADRARSBEQEcAREACADZBREBEIESARcBUYDTAAgA1gEVAR4ABADSAVsA3gcWgxoDEgEVARwBEQEUARGDGwETgxgDEIETAxYFEAEcAxSEIQAA2gEcARcBEYKIBqQAAAAAAAoGpAFQoZJQAGGRgRZmxpcHBlcl9sZW5ndGhfbW0VAhasBRbGKxamDSaKBTw2ACgIAAAAAADgbEAYCAAAAAAAgGVAAAAVABXuKhWcDiwVrAUVABUGFQYcNgAoCAAAAAAAnLhAGAgAAAAAABilQAAAALcVHAMAAACsBQEAAQEITK1AAQcEALANCARkqQkQBPSqCQgEhKwJCABSDQgEQ7IJEAQmqwkIBJqwCQgAyA04AOgNKAAADRARWAQwsQkoESARYACUDRgA+g0wAGgNUACQDYAAIA1QEUgE3K4JSBEQEQgAvA2QEXgEnKgJKBEwEdgAeA1AEbAREBGAADYNgBE4EVgRMAAqLQARYBFAADgNcBHoBHCnCYAA+A3gAMIN0AA+DRgxABFwAFgNwADMDYARIASkrwlIBKimCQgxQBGYMQAARA0gMdARoBGQMUgRUBEwEegALA2gAAQNgADUDagAYg3AEUAR8BGAEcARmFEQERA+MAAAQA3QMagAXC1QEchRABGQEWgRIDEoEbgRmBEoMUBRQBHAMcARIBGgAP4N8DFgMQAAGm0QAHUNoAAGLeAR4ADaLXAReDF4EfAAzg0wAKcNQADiDVBREDEAALMNgBE4ANYtIBGQAH4NODEQUagx4DEQUTAARk3gMcAxcACWbWAxAD4gABFYEVARCAB7TQBRwBGoEeAADg2wMXAxIBEQkSgRcDFYcSCRYBE4ETAR0DFYMbAR0BGgEZARSACKbUgRaFEokQARUD64AlFgMXARcHEwAO4NWBEQUVARKBGwPnADMQgx0BFoEUARiBEoESARWADGLYBRMDHAURBRsHEIMRAAFE0IAMBNgAQYpYlAsXAxGDE4UcgxWAC2rXhxQBGgEYAxUBEoUUARWBGQMTARsDEoEUARIBH4McARSBGgEQhRABGQMbAxCBEQEegERLYJ+BHIERAEGLUJGDFgMSgEULQJGDHIAB4NELH4AK4NOBEQANoNYJG4ERAx2AScuAlQEWAA5g1QEYgEiLMJIBFwALoNEBEYAOwNEBHgABINcJFIEZAAgg1YsVARSASitwlgEcgR+ABWDVgROLEIEaAxgBGoMfgAjk1QEXgAJA1IMQARYBG4ALQNmADyDTgREBHwEegRSBG4EXARIDHAEXgRcD5QADEgMQgRwDGwAKgtQBEgEVAR2BFwEcBREBEwEUAxgABwLWARQAA+DRAAEQ3wAEpNMNFIMWARMADgDSARUBHQAAstWBGgMbAxYBFAEfAxYBGwAD0NQBFIEZAx8BEwEYAAbw0wAHwNkBGwERAxABEQAN+NmBEQMTgxADFwESAAFw0wcSARmDFAEbARmAB2LagoULRAAAAAAAAYtUAVChklAAYZGAtib2R5X21hc3NfZxUCFqwFFsYrFvQOJrITPDYAKAgAAAAAAJy4QBgIAAAAAAAYpUAAABUEFRgVHEwVBhUAAAAMLAAAAAABAAAAAgAAABUAFTQVOCwVrAUVEBUGFQYcNgAoBAIAAAAYBAAAAAAAAAAaZAMAAACsBQECYgBkAWgCNAAkATACRABcAVYCFQIZNQAGEBkYDF9fY29kZV9feWVhchUCFqwFFqoBFrIBJtIjJpwjHDYAKAQCAAAAGAQAAAAAAAAZEQIZGAjXBwAAAAAAABkYCNkHAAAAAAAAFQAZFgAAGRECGRgGQWRlbGllGRgGR2VudG9vFQAZFgAAGRECGRgIAAAAAACAZUAZGAgAAAAAAOBsQBUAGRYAABkRAhkYCAAAAAAAGKVAGRgIAAAAAACcuEAVABkWAAAZEQIZGAQAAAAAGRgEAgAAABUAGRYAABkcFlIVjAEWAAAAGRwWqgMVchYAAAAZHBaKBRWmDRYAAAAZHBayExX0DhYAAAAZHBbSIxV8FgAAABUCGWxIBHJvb3QVCgAVBCUCGAR5ZWFyABUMJQIYB3NwZWNpZXMlAEwcAAAAFQolAhgRZmxpcHBlcl9sZW5ndGhfbW0AFQolAhgLYm9keV9tYXNzX2cAFQIlAhgMX19jb2RlX195ZWFyABasBRkcGVwmqAIcFQQZNQAGEBkYBHllYXIVAhasBRbSARbWASZSJggcNgAoCNkHAAAAAAAAGAjXBwAAAAAAAAAAFtwnFRYWviUVPgAm/AQcFQwZNQAGEBkYB3NwZWNpZXMVAhasBRbKARbSASaqAybKAhw2ACgGR2VudG9vGAZBZGVsaWUAABbyJxUWFvwlFTYAJrASHBUKGSUABhkYEWZsaXBwZXJfbGVuZ3RoX21tFQIWrAUWxisWpg0migU8NgAoCAAAAAAA4GxAGAgAAAAAAIBlQAAAFogoFRgWsiYVPgAmpiIcFQoZJQAGGRgLYm9keV9tYXNzX2cVAhasBRbGKxb0DiayEzw2ACgIAAAAAACcuEAYCAAAAAAAGKVAAAAWoCgVGBbwJhU+ACaEJRwVAhk1AAYQGRgMX19jb2RlX195ZWFyFQIWrAUWqgEWsgEm0iMmnCMcNgAoBAIAAAAYBAAAAAAAABa4KBUWFq4nFS4AFtJbFqwFJggW9CAUAAAZHBgMQVJST1c6c2NoZW1hGNgDLy8vLy8xa0JBQUFFQUFBQTh2Ly8veFFBQUFBRUFBRUFBQUFLQUFzQUNBQUtBQVFBK1AvLy93d0FBQUFJQUFnQUFBQUVBQVVBQUFEa0FBQUF0QUFBQUhRQUFBQkFBQUFBQkFBQUFCei8vLzhnQUFBQUVBQUFBQWdBQUFBQkFnQUFBQUFBQUJULy8vOGdBQUFBQVFBQUFBd0FBQUJmWDJOdlpHVmZYM2xsWVhJQUFBQUFWUC8vL3h3QUFBQVFBQUFBQ0FBQUFBRURBQUFBQUFBQXl2Ly8vd0lBQUFBTEFBQUFZbTlrZVY5dFlYTnpYMmNBaFAvLy95QUFBQUFRQUFBQUNBQUFBQUVEQUFBQUFBQUErdi8vL3dJQUJnQUdBQVFBRVFBQUFHWnNhWEJ3WlhKZmJHVnVaM1JvWDIxdEFBQUF3UC8vL3h3QUFBQVFBQUFBQ0FBQUFBRVVBQUFBQUFBQS9QLy8vd1FBQkFBSEFBQUFjM0JsWTJsbGN3RHMvLy8vT0FBQUFDQUFBQUFZQUFBQUFRSUFBQkFBRWdBRUFCQUFFUUFJQUFBQURBQUFBQUFBOVAvLy8wQUFBQUFCQUFBQUNBQUpBQVFBQ0FBRUFBQUFlV1ZoY2dBPQAYBlBvbGFycxlcHAAAHAAAHAAAHAAAHAAAAPADAABQQVIx"
+ },
+ "links": {
+  "configs": [],
+  "tables": {}
+ },
+ "manifest_version": 1,
+ "mode": "single-file",
+ "producer": "B",
+ "prologues": {},
+ "tiers": {
+  "card-body-mass": {
+   "detail": null,
+   "reason": null,
+   "tier": "live"
+  },
+  "card-species-count": {
+   "detail": null,
+   "reason": null,
+   "tier": "live"
+  },
+  "filter-species": {
+   "detail": null,
+   "reason": null,
+   "tier": "live"
+  },
+  "filter-year": {
+   "detail": null,
+   "reason": null,
+   "tier": "live"
+  },
+  "scatter-mass-flipper": {
+   "detail": "ui-mode bind-and-refill lands in phase 5; frozen at the default filter state",
+   "reason": "binding_miss",
+   "tier": "frozen"
+  },
+  "text-intro": {
+   "detail": null,
+   "reason": null,
+   "tier": "live"
+  }
+ }
+}
