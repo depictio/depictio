@@ -759,8 +759,8 @@ def client_aggregate_data(
         #    ``table_manage`` write) get join-config clustering only. A project
         #    can therefore hold both clustered and unclustered tables.
         #  - the sort is not in-place, so it adds a frame copy to the peak of
-        #    the collect-then-write path — the same path HANDOFF_ingest_memory.md
-        #    describes as the memory ceiling. The streaming path skips it.
+        #    the collect-then-write path, which is what sets the memory ceiling
+        #    for that path. The streaming path skips it.
         sort_cols = clustering_columns(
             data_collection_config,
             aggregated_df.columns,
