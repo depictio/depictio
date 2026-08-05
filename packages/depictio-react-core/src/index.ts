@@ -275,6 +275,34 @@ export { useDataCollectionUpdates, useMonitoringEvents, ADMIN_MONITORING_CHANNEL
 export type {
   RealtimeStatus,
   RealtimeMode,
+// Map panel: a map lifted out of the grid, available from every tab as a
+// floating card or as a dock under the filter panel. Mount both shells — each
+// renders nothing unless the panel is in its mode.
+// Consumers that draw their own Plotly map (the builder / project previews)
+// need this too — plotly leaves every map's basemap credit expanded on first
+// paint. See the helper's own docstring.
+export { collapseMapAttribution } from './components/map/collapseMapAttribution';
+export { default as MapPanelControl } from './components/mapPanel/MapPanelControl';
+export type { MapPanelControlProps } from './components/mapPanel/MapPanelControl';
+export { default as MapPanelSurface } from './components/mapPanel/MapPanelSurface';
+export type { MapPanelSurfaceProps } from './components/mapPanel/MapPanelSurface';
+export { default as MapPanelDock } from './components/mapPanel/MapPanelDock';
+export type { MapPanelDockProps } from './components/mapPanel/MapPanelDock';
+export { useMapPanel } from './components/mapPanel/useMapPanel';
+export type { MapPanel, UseMapPanelOptions } from './components/mapPanel/useMapPanel';
+export type {
+  MapPanelMode,
+  MapPanelCardSize,
+  MapPanelState,
+} from './components/mapPanel/useMapPanelState';
+export {
+  readFloatingFilters,
+  writeFloatingFilters,
+  clearFloatingFilters,
+  persistableFloatingFilters,
+} from './floatingFilters';
+export type { FloatingFilterPayload } from './floatingFilters';
+
   RealtimeEvent,
   MonitoringLiveEvent,
 } from './realtime';

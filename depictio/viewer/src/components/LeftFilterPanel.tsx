@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import GridLayout, { Layout } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
-import { Paper, Title, Stack, Text, Group, Button } from '@mantine/core';
+import { Box, Paper, Title, Stack, Text, Group, Button } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import { ComponentRenderer } from 'depictio-react-core';
@@ -36,6 +36,10 @@ interface LeftFilterPanelProps {
   onDuplicateComponent?: (componentId: string) => void;
   /** Width to render the grid at — typically the panel's measured width. */
   width?: number;
+  /** Pinned below the filter list, outside the scroll area. Deliberately an
+   *  opaque node: the editor puts the docked map panel here, and this
+   *  component has no business knowing that. */
+  footer?: React.ReactNode;
 }
 
 // Compact filter rows: rowHeight=40, h=2 → 80 px per filter. Tighter than
@@ -124,6 +128,7 @@ const LeftFilterPanel: React.FC<LeftFilterPanelProps> = ({
     const ro = new ResizeObserver((entries) => {
       const next = entries[0]?.contentRect.width;
       if (next && next > 0) setMeasuredWidth(Math.floor(next));
+  footer,
     });
     ro.observe(wrapperRef.current);
     return () => ro.disconnect();
@@ -134,10 +139,21 @@ const LeftFilterPanel: React.FC<LeftFilterPanelProps> = ({
       p="md"
       withBorder
       radius="md"
-      style={{ height: '100%', overflow: 'hidden' }}
+      style={{
+        height: '100%',
+        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
       data-tour-id="filter-panel"
     >
-      <Group justify="space-between" align="center" mb="sm" wrap="nowrap">
+      <Group
+        justify="space-between"
+        align="center"
+        mb="sm"
+        wrap="nowrap"
+        style={{ flexShrink: 0 }}
+      >
         <Title order={5}>Filters</Title>
         {onResetAllFilters && (
           <Button
@@ -147,6 +163,9 @@ const LeftFilterPanel: React.FC<LeftFilterPanelProps> = ({
             size="xs"
             onClick={onResetAllFilters}
             disabled={filters.length === 0}
+    // Flex column, and the scroll boundary sits on the filter list inside it
+    // rather than on the caller's wrapper — that is what lets `footer` stay
+    // pinned to the bottom while a long filter list scrolls past it.
           >
             Reset all
           </Button>
@@ -173,6 +192,19 @@ const LeftFilterPanel: React.FC<LeftFilterPanelProps> = ({
         >
         <GridLayout
           className="layout left-filter-grid"
+      <Box
+        style={{
+          flex: 1,
+          minHeight: 0,
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          // Reserve the scrollbar's width. Without it, the scrollbar
+          // appearing changes the content width, which feeds the
+          // ResizeObserver below → grid reflow → height change → scrollbar
+          // toggles again.
+          scrollbarGutter: 'stable',
+        }}
+      >
           layout={layout}
           cols={1}
           rowHeight={ROW_HEIGHT}
@@ -219,3 +251,5 @@ const LeftFilterPanel: React.FC<LeftFilterPanelProps> = ({
 };
 
 export default LeftFilterPanel;
+      </Box>
+      {footer}

@@ -36,6 +36,18 @@ const MAP_STYLES = [
   { value: 'carto-darkmatter', label: 'Carto Dark' },
 ];
 
+const PLACEMENTS = [
+  { value: 'grid', label: 'In grid' },
+  { value: 'floating', label: 'Floating panel' },
+];
+
+const FLOATING_INITIAL_STATES = [
+  { value: 'compact', label: 'Compact card' },
+  { value: 'expanded', label: 'Expanded card' },
+  { value: 'docked', label: 'Docked in the filter panel' },
+  { value: 'hidden', label: 'Hidden' },
+];
+
 const OPACITY_MARKS = [
   { value: 0.2, label: '0.2' },
   { value: 0.5, label: '0.5' },
@@ -56,6 +68,8 @@ const MapBuilder: React.FC = () => {
     opacity?: number;
     selection_enabled?: boolean;
     selection_column?: string;
+    placement?: string;
+    floating_initial_state?: string;
   };
   const patchConfig = useBuilderStore((s) => s.patchConfig);
   const cols = useBuilderStore((s) => s.cols);
@@ -102,6 +116,7 @@ const MapBuilder: React.FC = () => {
   const mapStyle = config.map_style ?? 'carto-positron';
   const opacity = typeof config.opacity === 'number' ? config.opacity : 0.8;
   const selectionEnabled = !!config.selection_enabled;
+  const placement = config.placement ?? 'grid';
 
   const allColumnOptions = cols.map((c) => ({
     value: c.name,
@@ -200,6 +215,39 @@ const MapBuilder: React.FC = () => {
           onChange={(val) => patchConfig({ opacity: val })}
           marks={OPACITY_MARKS}
         />
+      </Stack>
+
+      <Stack gap={4}>
+        <Text size="sm" fw={500}>
+          Display
+        </Text>
+        <SegmentedControl
+          data={PLACEMENTS}
+          value={placement}
+          onChange={(val) => patchConfig({ placement: val })}
+          fullWidth
+        />
+        {placement === 'floating' ? (
+          <>
+            <Text size="xs" c="dimmed">
+              The map leaves the grid and becomes a panel reachable from every
+              tab of this dashboard, through the map button in the header.
+              Viewers can float it, dock it in the filter panel or hide it.
+            </Text>
+            <Select
+              label="Initial state"
+              description="What viewers see on their first visit. Their own choice is remembered afterwards."
+              data={FLOATING_INITIAL_STATES}
+              value={config.floating_initial_state ?? 'compact'}
+              onChange={(val) => val && patchConfig({ floating_initial_state: val })}
+              allowDeselect={false}
+            />
+          </>
+        ) : (
+          <Text size="xs" c="dimmed">
+            The map is a normal dashboard tile on this tab.
+          </Text>
+        )}
       </Stack>
 
       <Accordion variant="separated" radius="md" multiple>

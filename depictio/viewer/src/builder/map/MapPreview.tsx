@@ -10,7 +10,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Stack, Text } from '@mantine/core';
 import Plot from 'react-plotly.js';
-import { fetchDataCollectionPreview } from 'depictio-react-core';
+import { collapseMapAttribution, fetchDataCollectionPreview } from 'depictio-react-core';
 import type { PreviewResult } from 'depictio-react-core';
 import { useBuilderStore } from '../store/useBuilderStore';
 import PreviewPanel from '../shared/PreviewPanel';
@@ -167,6 +167,8 @@ const MapPreview: React.FC = () => {
           config={{ displaylogo: false, responsive: true }}
           useResizeHandler
           style={{ width: '100%', height: 320 }}
+          onInitialized={(_f, gd) => collapseMapAttribution(gd)}
+          onUpdate={(_f, gd) => collapseMapAttribution(gd)}
         />
       )}
     </PreviewPanel>

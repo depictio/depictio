@@ -65,6 +65,10 @@ import {
   useRealtimeJournal,
   batchIdsFromPayload,
   authFetch,
+  useMapPanel,
+  MapPanelControl,
+  MapPanelDock,
+  MapPanelSurface,
 } from 'depictio-react-core';
 import type {
   DashboardData,
@@ -259,6 +263,15 @@ const EditorApp: React.FC = () => {
     },
     [dashboard],
   );
+
+  // Authors see the panel as viewers will. Cross-tab filter persistence is
+  // deliberately viewer-only: an editing session's filter state is scratch, and
+  // carrying it between tabs would be surprising here.
+  const mapPanel = useMapPanel({
+    dashboardId: dashboardId ?? '',
+    filters,
+    onFilterChange: handleFilterChange,
+  });
 
   /** Debounced save: schedule a POST 500ms after the last layout mutation. */
   const scheduleSave = useCallback(
@@ -506,7 +519,10 @@ const EditorApp: React.FC = () => {
     () =>
       (dashboard?.stored_metadata || []).filter(
         (m) =>
-          m.component_type !== 'card' && m.component_type !== 'interactive',
+          m.component_type !== 'card' &&
+          m.component_type !== 'interactive' &&
+          // Floating maps live in FloatingPanelHost, not the grid (see App.tsx).
+          !(m.component_type === 'map' && m.placement === 'floating'),
       ),
     [dashboard],
   );
@@ -929,6 +945,7 @@ const EditorApp: React.FC = () => {
           isOwner={isOwner}
           rightExtras={
             <>
+              <MapPanelControl panel={mapPanel} />
               {realtimeEnabled && (
                 <span data-tour-id="realtime-indicator" style={{ display: 'inline-flex' }}>
                   <RealtimeIndicator
@@ -986,21 +1003,25 @@ const EditorApp: React.FC = () => {
               // 20vw / remainder. Using viewport units (vs. % of main) so the
               // left panel keeps a fixed visual width regardless of any chrome
               // that might shrink "main". User asked for ~1/5 left, 4/5 right.
-              gridTemplateColumns: '20vw 1fr',
+              // Floored, because at 1280px a bare 20vw leaves the docked map
+              // barely 200px wide.
+              gridTemplateColumns: 'minmax(260px, 20vw) 1fr',
               height: '100%',
               width: '100%',
               gap: 4,
               overflow: 'hidden',
             }}
           >
+            {/* The panel scrolls its own filter list (see LeftFilterPanel), so
+                this wrapper must not scroll too — otherwise the docked map
+                would scroll away with the filters instead of staying pinned. */}
             <Box
               px={4}
               py={4}
               style={{
                 height: '100%',
                 minWidth: 0,
-                overflowY: 'auto',
-                overflowX: 'hidden',
+                overflow: 'hidden',
               }}
             >
               <LeftFilterPanel
@@ -1014,6 +1035,13 @@ const EditorApp: React.FC = () => {
                 editMode={true}
                 onDeleteComponent={handleDeleteComponent}
                 onDuplicateComponent={handleDuplicateComponent}
+                footer={
+                  <MapPanelDock
+                    panel={mapPanel}
+                    filters={filters}
+                    onFilterChange={handleFilterChange}
+                  />
+                }
               />
             </Box>
             <Box
@@ -1051,6 +1079,13 @@ const EditorApp: React.FC = () => {
             dashboardId={dashboardId}
             initialContent={(dashboard.notes_content as string) ?? ''}
             permissions={dashboard.permissions as DashboardPermissions | undefined}
+          />
+        )}
+        {dashboard && dashboardId && (
+          <MapPanelSurface
+            panel={mapPanel}
+            filters={filters}
+            onFilterChange={handleFilterChange}
           />
         )}
       </AppShell.Main>

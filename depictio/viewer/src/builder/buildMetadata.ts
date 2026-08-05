@@ -361,6 +361,8 @@ function buildMap(
     selection_enabled?: boolean;
     selection_column?: string;
     title?: string;
+    placement?: StoredMetadata['placement'];
+    floating_initial_state?: StoredMetadata['floating_initial_state'];
   }>(state.config);
   return {
     ...existing,
@@ -376,5 +378,9 @@ function buildMap(
     selection_enabled: Boolean(c.selection_enabled),
     selection_column: c.selection_column,
     title: c.title ?? '',
+    // 'floating' lifts the map out of the grid into the dashboard-wide panel.
+    // Written unconditionally so switching back to 'grid' actually clears it.
+    placement: c.placement ?? 'grid',
+    floating_initial_state: c.floating_initial_state ?? 'compact',
   };
 }
