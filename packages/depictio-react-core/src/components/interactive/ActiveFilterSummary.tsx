@@ -19,6 +19,27 @@ import {
 } from '../../activeFilters';
 import { INTERACTIVE_FRAME, interactiveAccent, interactiveIcon } from './frame';
 
+/**
+ * Icon for a selection row, by the component the selection was made on.
+ *
+ * A selection used to be drawn with one generic marquee glyph whatever it came
+ * from, which named the gesture rather than the thing — a lasso over a map
+ * looked exactly like a row picked out of a table. These are the icons each
+ * component type already wears elsewhere (the map panel's control, the
+ * builder's component list), so a row and its source are recognisably the same
+ * thing. Every id here appears as a literal in viewer source, which is what
+ * gets it into the bundled icon subset — see `generate-icon-subset.mjs`.
+ */
+const SELECTION_ICONS: Record<string, string> = {
+  map: 'mdi:map-marker-multiple',
+  table: 'mdi:table',
+  figure: 'mdi:chart-scatter-plot',
+  advanced_viz: 'mdi:chart-line',
+};
+
+/** Fallback for a selection whose source component can't be resolved. */
+const SELECTION_ICON_FALLBACK = 'mdi:selection-drag';
+
 interface ActiveFilterSummaryProps {
   filters: InteractiveFilter[];
   /** Full stored_metadata — chart/table selections resolve their label from
@@ -93,11 +114,13 @@ const ActiveFilterSummary: React.FC<ActiveFilterSummaryProps> = ({
             // Same icon and same accent as the control this row stands for, so
             // a row and its filter are recognisably one thing — `interactiveIcon`
             // and `interactiveAccent` are the accessors the control itself reads.
-            // A selection keeps its own icon: it has no control in the panel to
-            // match, and where it came from is the useful thing to show. It
-            // still takes its source component's accent.
+            // A selection has no control in the panel to match, so it takes the
+            // icon of the component it was made on: where it came from is the
+            // useful thing to show, and it is what tells you which map or table
+            // to go back to in order to change it. It still takes that
+            // component's accent.
             const icon = fromSelection
-              ? 'mdi:selection-drag'
+              ? (meta && SELECTION_ICONS[meta.component_type || '']) || SELECTION_ICON_FALLBACK
               : meta
                 ? interactiveIcon(meta)
                 : 'mdi:filter-variant';
