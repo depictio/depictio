@@ -73,6 +73,16 @@ class LayoutItem(BaseModel):
 
 _VALUE_ERROR_PREFIX = re.compile(r"^Value error,\s*")
 
+# `placement` means something different per component type and so defaults
+# differently: an interactive control lives in the left filter panel, a map is a
+# normal grid tile. Kept in step with the `placement` fields on
+# `InteractiveLiteComponent` / `MapLiteComponent`. Types absent here carry no
+# placement at all, so nothing is ever skipped for them.
+_DEFAULT_PLACEMENT: dict[str, str] = {
+    "interactive": "left",
+    "map": "grid",
+}
+
 
 def _strip_value_error_prefix(msg: str) -> str:
     """Remove Pydantic v2's 'Value error, ' prefix from a message."""
@@ -851,9 +861,19 @@ class DashboardDataLite(BaseModel):
             # every control back into one ungrouped list. Emitted from the shared
             # prologue rather than the interactive branch: a component type that
             # never carries these keys simply contributes nothing.
+            #
+            # `placement` is skipped at its per-type default so the export stays
+            # the minimal diff from the model — writing `placement: grid` on every
+            # map is noise, and the map branch below would then have no way to
+            # take it back out.
+            default_placement = _DEFAULT_PLACEMENT.get(comp_type)
             for field in ("placement", "group", "section", "timescale", "show_marks"):
-                if comp.get(field) is not None:
-                    lite_comp[field] = comp[field]
+                val = comp.get(field)
+                if val is None:
+                    continue
+                if field == "placement" and val == default_placement:
+                    continue
+                lite_comp[field] = val
 
             if comp.get("title"):
                 lite_comp["title"] = comp["title"]
