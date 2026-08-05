@@ -158,7 +158,7 @@ BENCH_CELERY_CPUS=4 BENCH_CELERY_WORKERS=4 \
 BENCH_MONGO_CPUS=2 \
 docker compose -p ${COMPOSE_PROJECT_NAME} --env-file .env.instance \
   -f docker-compose.dev.yaml -f docker-compose.override.yaml \
-  -f docker-compose.bench.yaml --profile dev up -d
+  -f docker-compose/docker-compose.bench.yaml --profile dev up -d
 
 python -m benchmark.cli run --cli-config ~/.depictio/CLI.yaml \
   --server-mode celery_on --profile-label mbp-m1max-4cpu \
