@@ -11,6 +11,8 @@
  *   - first/last: positional, nulls INCLUDED (first([None,1]) is None)
  *   - sum: 0 for an empty/all-null NUMERIC selection; null on non-numeric
  *   - mode: null is a candidate value; the server str()'s a None winner
+ *   - box_plot_stats: the one COMPOUND member — resolves to a BoxPlotStats
+ *     object rather than a scalar (see boxPlotStats below)
  *
  * `numericColumn` is the caller's dtype knowledge: the engine derives it from
  * DataRef dtypes (NUMERIC_DTYPE), the prologue infers it from decoded values.
@@ -76,14 +78,12 @@ export function aggregateValues(
     }
     case 'median': {
       // Polars default: linear interpolation between the two middle values on
-      // even counts (verified: median([1,2,3,10]) == 2.5).
+      // even counts (verified: median([1,2,3,10]) == 2.5) — i.e. exactly
+      // quantile(0.5, interpolation="linear").
       const nums = collectNumbers(values, mask);
       if (nums.length === 0) return null;
       nums.sort((a, b) => a - b);
-      const pos = (nums.length - 1) / 2;
-      const lo = Math.floor(pos);
-      const frac = pos - lo;
-      return frac === 0 ? nums[lo] : nums[lo] + frac * (nums[lo + 1] - nums[lo]);
+      return quantileLinear(nums, 0.5);
     }
     case 'min':
     case 'max': {
@@ -190,7 +190,101 @@ export function aggregateValues(
           ? Number(result)
           : stringifyValue(result);
     }
+    case 'box_plot_stats':
+      return boxPlotStats(values, mask);
   }
+}
+
+/** The compound `box_plot_stats` payload — field-for-field the dict the server
+ *  builds (routes.py:1508), which is what `BoxPlot.tsx` type-guards on. */
+export interface BoxPlotStats {
+  min: number;
+  max: number;
+  q1: number;
+  q3: number;
+  median: number;
+  mean: number;
+  lower_whisker: number;
+  upper_whisker: number;
+  outliers: number[];
+  outlier_count: number;
+}
+
+/** Cap on the returned outlier list, mirroring the server's `head(100)`: past
+ *  that the dots overlap into a solid bar at card scale, and `outlier_count`
+ *  carries the real total. */
+const MAX_OUTLIERS = 100;
+
+/**
+ * Tukey box-and-whisker payload — port of the server's `box_plot_stats` branch
+ * of `_agg_value` (dashboards routes.py:1508). Pinned behaviours, each mirrored
+ * from a specific line there:
+ *   - selection = `col.cast(Float64, strict=False).drop_nulls()`; no numeric
+ *     values (all-null, or a non-numeric column) → null, NOT a zeroed payload
+ *   - q1/q3/median: `quantile(interpolation="linear")`, so median is the same
+ *     reduction as the `median` agg above
+ *   - mean: plain arithmetic mean over that same selection (the payload
+ *     carries no std/var — the card draws a box, not an error bar)
+ *   - whiskers: the most extreme datum still inside the 1.5×IQR fence, with a
+ *     min/max fallback when the fence admits nothing. IQR=0 does NOT by itself
+ *     trigger the fallback — a constant column puts both fences on q1=q3, and
+ *     every value compares equal, so the whiskers land on the constant
+ *   - outliers keep ORIGINAL ROW ORDER, not sorted order: the server filters
+ *     the unsorted `numeric` series and takes `head(100)` off that
+ */
+function boxPlotStats(values: ColumnValues, mask: Bitmask | null): BoxPlotStats | null {
+  const nums = collectNumbers(values, mask);
+  if (nums.length === 0) return null;
+  const sorted = [...nums].sort((a, b) => a - b);
+  const q1 = quantileLinear(sorted, 0.25);
+  const q3 = quantileLinear(sorted, 0.75);
+  const iqr = q3 - q1;
+  const fenceLo = q1 - 1.5 * iqr;
+  const fenceHi = q3 + 1.5 * iqr;
+
+  let lowerWhisker: number | null = null;
+  let upperWhisker: number | null = null;
+  const outliers: number[] = [];
+  let outlierCount = 0;
+  for (const v of nums) {
+    if (v < fenceLo || v > fenceHi) {
+      outlierCount++;
+      if (outliers.length < MAX_OUTLIERS) outliers.push(v);
+    } else {
+      if (lowerWhisker === null || v < lowerWhisker) lowerWhisker = v;
+      if (upperWhisker === null || v > upperWhisker) upperWhisker = v;
+    }
+  }
+
+  let sum = 0;
+  for (const v of nums) sum += v;
+  const min = sorted[0];
+  const max = sorted[sorted.length - 1];
+  return {
+    min,
+    max,
+    q1,
+    q3,
+    median: quantileLinear(sorted, 0.5),
+    mean: sum / nums.length,
+    lower_whisker: lowerWhisker ?? min,
+    upper_whisker: upperWhisker ?? max,
+    outliers,
+    outlier_count: outlierCount,
+  };
+}
+
+/**
+ * Polars `quantile(q, interpolation="linear")` over an ASCENDING-sorted array:
+ * position `q*(n-1)`, linearly interpolated between its neighbours (the numpy
+ * convention — verified on Polars 1.42.1: quantile([1,2,3,10], 0.25) == 1.75,
+ * 0.75 == 4.75). Callers must sort first; `sorted` must be non-empty.
+ */
+function quantileLinear(sorted: number[], q: number): number {
+  const pos = (sorted.length - 1) * q;
+  const lo = Math.floor(pos);
+  const frac = pos - lo;
+  return frac === 0 ? sorted[lo] : sorted[lo] + frac * (sorted[lo + 1] - sorted[lo]);
 }
 
 function forEachMasked(

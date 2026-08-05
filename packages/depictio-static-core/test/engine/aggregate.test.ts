@@ -6,6 +6,7 @@
 
 import { describe, expect, it } from 'vitest';
 
+import { aggregateValues, type BoxPlotStats } from '../../src/engine/aggregate';
 import type { AggFn } from '../../src/engine/QueryEngine';
 import { expectClose, expected, openFixture } from './helpers';
 
@@ -186,5 +187,199 @@ describe('aggregate: empty mask (server empty-selection returns)', () => {
     ]);
     expect(std).toBeNull();
     expect(variance).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// box_plot_stats — the one COMPOUND aggregation
+// ---------------------------------------------------------------------------
+
+/** Every expectation below is the literal dict `_agg_value(pl.Series(...),
+ *  "box_plot_stats")` returned on the repo's Polars pin (1.42.1), captured by
+ *  feeding these exact inputs to the server function. */
+function box(values: unknown[]): BoxPlotStats | null {
+  return aggregateValues(values, null, 'box_plot_stats', true) as BoxPlotStats | null;
+}
+
+function expectStats(actual: BoxPlotStats | null, exp: BoxPlotStats): void {
+  expect(actual).not.toBeNull();
+  const a = actual as BoxPlotStats;
+  for (const k of [
+    'min',
+    'max',
+    'q1',
+    'q3',
+    'median',
+    'mean',
+    'lower_whisker',
+    'upper_whisker',
+  ] as const) {
+    try {
+      expectClose(a[k], exp[k]);
+    } catch (e) {
+      throw new Error(`${k}: ${(e as Error).message}`);
+    }
+  }
+  expect(a.outlier_count, 'outlier_count').toBe(exp.outlier_count);
+  expect(a.outliers.length, 'outliers.length').toBe(exp.outliers.length);
+  exp.outliers.forEach((v, i) => expectClose(a.outliers[i], v));
+}
+
+describe('aggregate: box_plot_stats vs the server dict', () => {
+  it('normal spread — Tukey fence pushes the far value out to an outlier', () => {
+    // Deliberately UNSORTED so the outlier list order is meaningful.
+    expectStats(box([7, 2, 100, 4, 5, 1, 9, 3, 8, 6]), {
+      min: 1.0,
+      max: 100.0,
+      q1: 3.25,
+      q3: 7.75,
+      median: 5.5,
+      mean: 14.5,
+      // Whiskers stop at the most extreme datum still inside the fence, NOT at
+      // the fence itself (which is q3 + 1.5*4.5 = 14.5 here).
+      lower_whisker: 1.0,
+      upper_whisker: 9.0,
+      outliers: [100.0],
+      outlier_count: 1,
+    });
+  });
+
+  it('IQR=0 on a constant column — fences collapse onto q1=q3, no outliers', () => {
+    expectStats(box([5, 5, 5, 5]), {
+      min: 5.0,
+      max: 5.0,
+      q1: 5.0,
+      q3: 5.0,
+      median: 5.0,
+      mean: 5.0,
+      // Not the min/max FALLBACK: every value compares equal to both fences,
+      // so `within` is non-empty and the whiskers land on the constant.
+      lower_whisker: 5.0,
+      upper_whisker: 5.0,
+      outliers: [],
+      outlier_count: 0,
+    });
+  });
+
+  it('IQR=0 with spread — a zero-width fence makes every off-constant value an outlier, in ROW order', () => {
+    expectStats(box([5, 100, 5, 5, 5, -40]), {
+      min: -40.0,
+      max: 100.0,
+      q1: 5.0,
+      q3: 5.0,
+      median: 5.0,
+      mean: 13.333333333333334,
+      lower_whisker: 5.0,
+      upper_whisker: 5.0,
+      // 100 before -40: the server filters the UNSORTED series, so the dot
+      // list is in row order, not ascending order.
+      outliers: [100.0, -40.0],
+      outlier_count: 2,
+    });
+  });
+
+  it('all-null column is null, not a zeroed payload', () => {
+    expect(box([null, null, null])).toBeNull();
+    // Same for a column with no numeric values at all.
+    expect(box(['a', 'b'])).toBeNull();
+  });
+
+  it('single row — every marker collapses onto the one value', () => {
+    expectStats(box([42]), {
+      min: 42.0,
+      max: 42.0,
+      q1: 42.0,
+      q3: 42.0,
+      median: 42.0,
+      mean: 42.0,
+      lower_whisker: 42.0,
+      upper_whisker: 42.0,
+      outliers: [],
+      outlier_count: 0,
+    });
+  });
+
+  it('median is linear-interpolated on an EVEN count and exact on an ODD one', () => {
+    // Even: q*(n-1) = 1.5 -> 2 + 0.5*(3-2) = 2.5, not the 2 or 3 a
+    // nearest-rank quantile would give.
+    const even = box([1, 2, 3, 10]) as BoxPlotStats;
+    expect(even.median).toBeCloseTo(2.5, 12);
+    expect(even.q1).toBeCloseTo(1.75, 12);
+    expect(even.q3).toBeCloseTo(4.75, 12);
+    const odd = box([1, 2, 3]) as BoxPlotStats;
+    expect(odd.median).toBe(2);
+    expect(odd.q1).toBeCloseTo(1.5, 12);
+    expect(odd.q3).toBeCloseTo(2.5, 12);
+    // The scalar `median` agg must agree with the compound payload's field —
+    // both are quantile(0.5, linear).
+    expect(aggregateValues([1, 2, 3, 10], null, 'median', true)).toBe(even.median);
+  });
+
+  it('nulls are dropped before the reduction, like the server cast+drop_nulls', () => {
+    expectStats(box([3, null, 1, null, 2, 50]), {
+      min: 1.0,
+      max: 50.0,
+      q1: 1.75,
+      q3: 14.75,
+      median: 2.5,
+      mean: 14.0,
+      lower_whisker: 1.0,
+      upper_whisker: 3.0,
+      outliers: [50.0],
+      outlier_count: 1,
+    });
+  });
+
+  it('matches Polars through the real Parquet path (fixture value_f64, 126 nulls)', async () => {
+    const { engine, handle } = await openFixture();
+    const [stats] = await engine.aggregate(handle, null, [
+      { col: 'value_f64', fn: 'box_plot_stats' },
+    ]);
+    expectStats(stats as BoxPlotStats, {
+      min: -6.583291,
+      max: 6.793622,
+      q1: -1.36753925,
+      q3: 1.34355925,
+      median: 0.033745,
+      mean: 0.01019037993596586,
+      lower_whisker: -5.374904,
+      upper_whisker: 5.3731,
+      outliers: [
+        6.026977, -5.584713, -6.583291, -6.342375, -6.151694, 6.793622, 6.508922, 5.764453,
+        -5.675585,
+      ],
+      outlier_count: 9,
+    });
+  });
+
+  it('reduces the masked subset, not the whole column', async () => {
+    const { engine, handle, mask } = await maskInStr();
+    const [full] = await engine.aggregate(handle, null, [
+      { col: 'value_f64', fn: 'box_plot_stats' },
+    ]);
+    const [masked] = await engine.aggregate(handle, mask, [
+      { col: 'value_f64', fn: 'box_plot_stats' },
+    ]);
+    const f = full as BoxPlotStats;
+    const m = masked as BoxPlotStats;
+    expect(m.outlier_count).toBeLessThan(f.outlier_count);
+    // The masked median must be the masked `median` agg — one kernel, and the
+    // card's primary value and its box plot must never disagree.
+    const [medianAgg] = await engine.aggregate(handle, mask, [{ col: 'value_f64', fn: 'median' }]);
+    expect(m.median).toBe(medianAgg);
+  });
+
+  it('caps the outlier list at 100 while outlier_count stays exact', () => {
+    // 150 far-out values against a core large enough to keep BOTH quartiles
+    // inside it (q3 sits at 0.75*(n-1), so the tail must stay under a quarter
+    // of the rows or it drags the fence out past itself).
+    const core = Array.from({ length: 2000 }, (_, i) => (i % 5) - 2);
+    const far = Array.from({ length: 150 }, (_, i) => 1000 + i);
+    const s = box([...core, ...far]) as BoxPlotStats;
+    expect(s.outlier_count).toBe(150);
+    expect(s.outliers.length).toBe(100);
+    // head(100) of the row-ordered outliers, so the first one wins.
+    expect(s.outliers[0]).toBe(1000);
+    expect(s.outliers[99]).toBe(1099);
   });
 });
