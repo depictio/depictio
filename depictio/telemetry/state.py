@@ -40,17 +40,21 @@ STATE_FILENAME: Final[str] = "telemetry.json"
 #: Key under which the anonymous ID is stored.
 _ID_KEY: Final[str] = "anonymous_id"
 
+#: Key recording that the first-run telemetry notice has been displayed.
+#:
+#: Deliberately separate from the ID. Keying the notice off "the ID did not exist
+#: until now" looks equivalent and is not: a first invocation from a script or a
+#: cron job creates the ID while showing nothing, and every later interactive run
+#: then thinks the user has already been told. The disclosure would be skipped for
+#: exactly the users whose first contact with the CLI was automated.
+_NOTICE_KEY: Final[str] = "notice_shown"
+
 
 class AnonymousId(NamedTuple):
     """An anonymous CLI ID plus whether it survived to disk."""
 
     value: str
     ephemeral: bool
-    #: True only on the run that minted this ID. The signal a first-run notice
-    #: needs, and the reason the caller does not have to keep its own marker file:
-    #: the ID file already *is* the record of having run before. Defaulted so that
-    #: existing two-field construction stays valid.
-    created: bool = False
 
 
 def state_dir() -> Path:
@@ -77,40 +81,49 @@ def state_path() -> Path:
     return state_dir() / STATE_FILENAME
 
 
-def _read_id(path: Path) -> str | None:
-    """Read the stored ID, or ``None`` if absent, unreadable or malformed."""
+def _read_state(path: Path) -> dict:
+    """Parse the state file, or ``{}`` if absent, unreadable or malformed."""
     try:
         raw = path.read_text(encoding="utf-8")
     except OSError:
-        return None
+        return {}
 
     try:
         parsed = json.loads(raw)
     except (json.JSONDecodeError, ValueError):
         logger.debug("Telemetry state file %s is not valid JSON; regenerating", path)
-        return None
+        return {}
 
-    if not isinstance(parsed, dict):
-        return None
+    return parsed if isinstance(parsed, dict) else {}
 
-    stored = parsed.get(_ID_KEY)
+
+def _read_id(path: Path) -> str | None:
+    """Read the stored ID, or ``None`` if absent, unreadable or malformed."""
+    stored = _read_state(path).get(_ID_KEY)
     if isinstance(stored, str) and stored:
         return stored
     return None
 
 
-def _write_id(path: Path, value: str) -> bool:
-    """Persist the ID atomically. Returns False on any filesystem failure.
+def _write_state(path: Path, updates: dict) -> bool:
+    """Merge ``updates`` into the state file atomically. False on any IO failure.
+
+    Read-modify-write, so writing one key cannot drop another: the ID and the
+    notice flag are set at different moments by different code paths. Two CLIs
+    racing can still lose one update, the worst outcome being a notice shown
+    twice, which is why nothing here takes a lock.
 
     The temporary file is created in the destination directory so that
     :func:`os.replace` stays within one filesystem, where it is atomic.
     """
     try:
         path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        state = _read_state(path)
+        state.update(updates)
         fd, tmp_name = tempfile.mkstemp(dir=str(path.parent), prefix=".telemetry-", suffix=".tmp")
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as handle:
-                json.dump({_ID_KEY: value}, handle)
+                json.dump(state, handle)
             os.replace(tmp_name, path)
         except OSError:
             # Leave no debris behind if the move failed.
@@ -125,17 +138,32 @@ def _write_id(path: Path, value: str) -> bool:
     return True
 
 
+def first_run_notice_shown() -> bool:
+    """Whether the CLI has already disclosed telemetry to this user.
+
+    True on any failure to find out. A notice repeated because the flag could not
+    be read is worse than one missed: users mute what repeats.
+    """
+    try:
+        return _read_state(state_path()).get(_NOTICE_KEY) is True
+    except (OSError, RuntimeError):
+        return True
+
+
+def mark_first_run_notice_shown() -> None:
+    """Record that the notice has been displayed. Never raises."""
+    try:
+        _write_state(state_path(), {_NOTICE_KEY: True})
+    except (OSError, RuntimeError) as exc:
+        logger.debug("Could not record the telemetry notice as shown: %s", exc)
+
+
 def get_or_create_anonymous_id() -> AnonymousId:
     """Return this machine's anonymous CLI ID, creating and storing it if needed.
 
     Never raises. When the ID cannot be persisted the returned tuple is flagged
     ``ephemeral`` so the caller can report that, and the collector can discount
     those events instead of treating each one as a fresh installation.
-
-    ``created`` marks the run that minted the ID, which is what a first-run notice
-    keys off. An ephemeral ID counts as created every time, deliberately: a machine
-    that cannot persist the file has never been told about telemetry by a previous
-    run either.
     """
     value = uuid.uuid4().hex
     try:
@@ -145,12 +173,12 @@ def get_or_create_anonymous_id() -> AnonymousId:
         # resolved at all — no $HOME and no passwd entry, which happens in
         # scratch containers.
         logger.debug("Could not resolve telemetry state location: %s", exc)
-        return AnonymousId(value, ephemeral=True, created=True)
+        return AnonymousId(value, ephemeral=True)
 
     existing = _read_id(path)
     if existing is not None:
         return AnonymousId(existing, ephemeral=False)
 
-    if _write_id(path, value):
-        return AnonymousId(value, ephemeral=False, created=True)
-    return AnonymousId(value, ephemeral=True, created=True)
+    if _write_state(path, {_ID_KEY: value}):
+        return AnonymousId(value, ephemeral=False)
+    return AnonymousId(value, ephemeral=True)

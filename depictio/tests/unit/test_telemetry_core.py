@@ -22,7 +22,13 @@ from depictio.telemetry.env import (
 from depictio.telemetry.gates import SuppressionReason, do_not_track, telemetry_allowed
 from depictio.telemetry.k8s_resources import parse_cpu_millicores, parse_memory_mib
 from depictio.telemetry.posthog import build_body, render_for_debug
-from depictio.telemetry.state import STATE_DIR_ENV, get_or_create_anonymous_id, state_dir
+from depictio.telemetry.state import (
+    STATE_DIR_ENV,
+    first_run_notice_shown,
+    get_or_create_anonymous_id,
+    mark_first_run_notice_shown,
+    state_dir,
+)
 
 
 class TestBuckets:
@@ -253,7 +259,7 @@ class TestState:
         every invocation as a fresh installation.
         """
         monkeypatch.setenv(STATE_DIR_ENV, str(tmp_path / "nested"))
-        with patch("depictio.telemetry.state._write_id", return_value=False):
+        with patch("depictio.telemetry.state._write_state", return_value=False):
             result = get_or_create_anonymous_id()
         assert result.value
         assert result.ephemeral is True
@@ -272,24 +278,35 @@ class TestState:
         if os.name == "posix":
             assert (target.stat().st_mode & 0o077) == 0
 
-    def test_created_is_true_only_on_the_run_that_mints_the_id(self, tmp_path, monkeypatch):
-        """What the CLI's first-run notice keys off.
+    def test_the_notice_flag_survives_writing_the_id(self, tmp_path, monkeypatch):
+        """Both live in one file, written at different moments by different paths.
 
-        The ID file doubles as the record of having run before, so this flag is the
-        whole mechanism: if it stayed true, every invocation would re-print an
-        opt-out notice, and users mute what repeats.
+        A whole-file write of either key would drop the other: the ID would erase a
+        notice already shown, or the notice would erase the ID and every later run
+        would look like a fresh installation.
         """
         monkeypatch.setenv(STATE_DIR_ENV, str(tmp_path))
-        assert get_or_create_anonymous_id().created is True
-        assert get_or_create_anonymous_id().created is False
+        mark_first_run_notice_shown()
+        anon = get_or_create_anonymous_id()
 
-    def test_an_ephemeral_id_counts_as_created(self, tmp_path, monkeypatch):
-        """Nothing persisted means no previous run ever disclosed anything."""
-        monkeypatch.setenv(STATE_DIR_ENV, str(tmp_path / "nested"))
-        with patch("depictio.telemetry.state._write_id", return_value=False):
-            result = get_or_create_anonymous_id()
-        assert result.ephemeral is True
-        assert result.created is True
+        assert first_run_notice_shown() is True
+        assert get_or_create_anonymous_id().value == anon.value
+
+    def test_the_notice_flag_is_not_set_by_creating_the_id(self, tmp_path, monkeypatch):
+        """The disclosure is owed to whoever has not seen it, not to the machine.
+
+        A first invocation from a script mints the ID while showing nothing, and
+        the user must still be told the first time they run the CLI themselves.
+        """
+        monkeypatch.setenv(STATE_DIR_ENV, str(tmp_path))
+        get_or_create_anonymous_id()
+        assert first_run_notice_shown() is False
+
+    def test_an_unreadable_state_dir_claims_the_notice_was_shown(self, tmp_path, monkeypatch):
+        """Failing towards silence: a notice repeated every run gets muted."""
+        monkeypatch.setenv(STATE_DIR_ENV, str(tmp_path))
+        with patch("depictio.telemetry.state._read_state", side_effect=OSError("nope")):
+            assert first_run_notice_shown() is True
 
 
 class TestPostHogBody:

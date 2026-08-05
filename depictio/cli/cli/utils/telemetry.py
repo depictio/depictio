@@ -20,6 +20,7 @@ CLI versions are in use.
 """
 
 import os
+import sys
 import time
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _pkg_version
@@ -35,7 +36,11 @@ from depictio.telemetry.constants import (
 from depictio.telemetry.env import detect_ci, detect_deployment_kind, platform_info
 from depictio.telemetry.gates import telemetry_allowed
 from depictio.telemetry.schema import EVENT_CLI_COMMAND, CliCommandProperties
-from depictio.telemetry.state import get_or_create_anonymous_id
+from depictio.telemetry.state import (
+    first_run_notice_shown,
+    get_or_create_anonymous_id,
+    mark_first_run_notice_shown,
+)
 
 #: Opt-out, matching the server's variable name.
 ENABLED_ENV: Final[str] = "DEPICTIO_TELEMETRY_ENABLED"
@@ -127,9 +132,9 @@ def suppression_reason() -> str | None:
     return None
 
 
-#: Shown once, on the run that creates the anonymous ID. Kept to four lines: an
-#: opt-out notice that scrolls a user's real output off the screen gets muted
-#: rather than read.
+#: Shown once, on the run that creates the anonymous ID. Kept short: an opt-out
+#: notice that scrolls a user's real output off the screen gets muted rather than
+#: read.
 _FIRST_RUN_NOTICE: Final[str] = (
     "\nDepictio collects anonymous usage data (which command ran, whether it "
     "succeeded, OS and version).\n"
@@ -151,22 +156,20 @@ def maybe_print_first_run_notice() -> None:
     to stderr and gated on *stderr* being a terminal, so a piped command still
     tells the person at the keyboard while leaving stdout clean for whatever is
     reading it. Never raises — a notice must not be able to break a command.
+
+    The "shown" flag is only written once the notice actually reaches a terminal.
+    A first invocation from a script or a cron job therefore leaves it unset, and
+    the user still gets told the first time they run the CLI themselves.
     """
     try:
         if suppression_reason() is not None:
             return
 
-        import sys
-
-        if not sys.stderr.isatty():
+        if not sys.stderr.isatty() or first_run_notice_shown():
             return
 
-        # Creating the ID here rather than in the sender is the point: "the ID did
-        # not exist until this run" is exactly "the user has not been told yet",
-        # so no separate marker file has to be kept in sync. The call is
-        # idempotent, so the later send reuses what this wrote.
-        if get_or_create_anonymous_id().created:
-            print(_FIRST_RUN_NOTICE, file=sys.stderr)
+        print(_FIRST_RUN_NOTICE, file=sys.stderr)
+        mark_first_run_notice_shown()
     except Exception as exc:
         logger.debug(f"CLI telemetry notice failed: {exc}")
 

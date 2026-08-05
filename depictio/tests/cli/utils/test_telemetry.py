@@ -44,6 +44,21 @@ def allow_telemetry(monkeypatch):
         yield
 
 
+@pytest.fixture
+def notice(capsys, monkeypatch, tmp_path):
+    """Run the first-run notice against an empty state directory, return stderr."""
+    from depictio.cli.cli.utils import telemetry as cli_telemetry
+
+    monkeypatch.setenv("DEPICTIO_TELEMETRY_STATE_DIR", str(tmp_path))
+
+    def run(*, tty: bool = True) -> str:
+        with patch("sys.stderr.isatty", return_value=tty):
+            cli_telemetry.maybe_print_first_run_notice()
+        return capsys.readouterr().err
+
+    return run
+
+
 class TestResolveCommandPathHappyCases:
     @pytest.mark.parametrize(
         ("argv", "expected"),
@@ -231,48 +246,47 @@ class TestCliSuppression:
 class TestFirstRunNotice:
     """Telemetry on by default has to announce itself to the person it counts."""
 
-    @staticmethod
-    def _notice(*, tty: bool, capsys, monkeypatch, tmp_path) -> str:
-        from depictio.cli.cli.utils import telemetry as cli_telemetry
-
-        monkeypatch.setenv("DEPICTIO_TELEMETRY_STATE_DIR", str(tmp_path))
-        with patch("sys.stderr.isatty", return_value=tty):
-            cli_telemetry.maybe_print_first_run_notice()
-        return capsys.readouterr().err
-
-    def test_shown_once_on_the_run_that_creates_the_id(
-        self, capsys, monkeypatch, tmp_path, allow_telemetry
-    ):
-        first = self._notice(tty=True, capsys=capsys, monkeypatch=monkeypatch, tmp_path=tmp_path)
+    def test_shown_once_on_the_run_that_creates_the_id(self, notice, allow_telemetry):
+        first = notice()
         assert "DEPICTIO_TELEMETRY_ENABLED=false" in first
         assert "DO_NOT_TRACK=1" in first
 
-        second = self._notice(tty=True, capsys=capsys, monkeypatch=monkeypatch, tmp_path=tmp_path)
-        assert second == "", "an opt-out notice that repeats is one users learn to ignore"
+        assert notice() == "", "an opt-out notice that repeats is one users learn to ignore"
 
-    def test_silent_when_telemetry_is_suppressed(self, capsys, monkeypatch, tmp_path):
+    def test_silent_when_telemetry_is_suppressed(self, notice, monkeypatch):
         """Nothing is being collected, so there is nothing to disclose."""
         monkeypatch.setenv("DO_NOT_TRACK", "1")
-        assert (
-            self._notice(tty=True, capsys=capsys, monkeypatch=monkeypatch, tmp_path=tmp_path) == ""
-        )
+        assert notice() == ""
 
-    def test_silent_when_stderr_is_not_a_terminal(
-        self, capsys, monkeypatch, tmp_path, allow_telemetry
-    ):
+    def test_silent_when_stderr_is_not_a_terminal(self, notice, allow_telemetry):
         """Scripts, CI logs and redirected output stay clean."""
-        assert (
-            self._notice(tty=False, capsys=capsys, monkeypatch=monkeypatch, tmp_path=tmp_path) == ""
-        )
+        assert notice(tty=False) == ""
 
-    def test_never_raises(self, capsys, monkeypatch, tmp_path, allow_telemetry):
+    def test_a_non_interactive_first_run_does_not_consume_the_disclosure(
+        self, notice, allow_telemetry
+    ):
+        """The notice is owed to whoever has not seen it, not to the machine.
+
+        A first invocation from a wrapper script, a `docker exec` without `-t`, or
+        a cron job still mints the anonymous ID on its way out. Keying the notice
+        off ID creation would mean those users — the automated ones — are never
+        shown it on any later interactive run.
+        """
+        from depictio.telemetry.state import get_or_create_anonymous_id
+
+        assert notice(tty=False) == ""
+        get_or_create_anonymous_id()  # what the scripted run's send does anyway
+
+        assert "DO_NOT_TRACK=1" in notice()
+
+    def test_never_raises(self, notice, allow_telemetry):
         """A disclosure must not be able to break the command it precedes."""
         from depictio.cli.cli.utils import telemetry as cli_telemetry
 
         with patch.object(
             cli_telemetry, "get_or_create_anonymous_id", side_effect=RuntimeError("boom")
         ):
-            self._notice(tty=True, capsys=capsys, monkeypatch=monkeypatch, tmp_path=tmp_path)
+            notice()
 
 
 class TestCliVersion:
