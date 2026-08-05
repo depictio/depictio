@@ -60,6 +60,11 @@ jobs:
       DEPICTIO_MONGODB_SERVICE_NAME: localhost
       DEPICTIO_MONGODB_SERVICE_PORT: 27018
       DEPICTIO_MONGODB_DB_NAME: telemetry_ci
+      # Importing anything under `depictio.api.v1.telemetry` pulls in the whole
+      # `Settings` model, whose server-context validator refuses to build without
+      # this. Nothing in this job talks to MinIO; the value only has to clear the
+      # length and known-default checks in `settings_models.py`.
+      DEPICTIO_MINIO_ROOT_PASSWORD: telemetry-ci-not-a-real-secret
 
     steps:
       - uses: actions/checkout@v7
