@@ -17,6 +17,7 @@ import { Icon } from '@iconify/react';
 import type { DashboardData } from 'depictio-react-core';
 import { fetchProject } from 'depictio-react-core';
 import { parseTemplateOrigin, TemplateChip } from '../projects/template';
+import { formatDateTime } from '../lib/datetime';
 
 interface SettingsDrawerProps {
   opened: boolean;
@@ -24,12 +25,10 @@ interface SettingsDrawerProps {
   dashboard: DashboardData | null;
 }
 
-/** "yyyy-mm-dd HH:MM" — same format the dashboards list uses. */
+/** "yyyy-mm-dd HH:MM" in the viewer's local timezone — same format the
+ *  dashboards list uses. */
 function formatTimestamp(raw: string): string {
-  const d = new Date(raw.replace('Z', '+00:00'));
-  if (Number.isNaN(d.getTime())) return raw;
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return formatDateTime(raw, raw);
 }
 
 /** Pull the first owner's email from a permissions blob, regardless of

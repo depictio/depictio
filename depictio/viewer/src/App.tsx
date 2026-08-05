@@ -37,11 +37,20 @@ import {
   fetchIngestionHealth,
   bumpFetchGeneration,
   DashboardLoadingProvider,
+  useMapPanel,
+  MapPanelControl,
+  MapPanelDock,
+  MapPanelSurface,
+  readFloatingFilters,
+  writeFloatingFilters,
+  clearFloatingFilters,
+  persistableFloatingFilters,
 } from 'depictio-react-core';
 import type {
   DashboardData,
   DashboardPermissions,
   DashboardSummary,
+  FloatingComponent,
   InteractiveFilter,
   RealtimeMode,
   ActiveHighlight,
@@ -89,7 +98,28 @@ const App: React.FC = () => {
   const [allDashboards, setAllDashboards] = useState<DashboardSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState<InteractiveFilter[]>([]);
+  // Seed from the floating panel's persisted selection, synchronously. A
+  // selection made on the floating map is meant to survive a tab switch, and
+  // hydrating in an effect instead would let every grid tile fetch once
+  // unfiltered before the seed landed, then again straight after. The seed is
+  // validated against the real floating components once they resolve
+  // (`handleFloatingResolved`), which is what discards stale entries.
+  const [filters, setFilters] = useState<InteractiveFilter[]>(
+    () => readFloatingFilters()?.filters ?? [],
+  );
+  // Indices we hydrated from storage. Only these may be pruned as stale — a
+  // selection the viewer makes on a *grid* map during this page load must
+  // never be swept up by the validation pass.
+  //
+  // Lazily, because `useRef`'s argument is evaluated on EVERY render and React
+  // keeps only the first: an eager read would re-parse the stored payload — as
+  // large as the last lasso — on every keystroke in a filter.
+  const hydratedIndicesRef = useRef<Set<string> | null>(null);
+  if (hydratedIndicesRef.current === null) {
+    hydratedIndicesRef.current = new Set(filters.map((f) => f.index));
+  }
+  const [floatingIndices, setFloatingIndices] = useState<Set<string> | null>(null);
+  const [floatingFamilyId, setFloatingFamilyId] = useState<string | null>(null);
   // Data fetches follow a *settled* filter, not every intermediate value of one.
   // Interactive components keep reading `filters` directly so their own UI stays
   // instant; only the components that hit the API wait for the pause. Without
@@ -247,6 +277,58 @@ const App: React.FC = () => {
   );
 
   const handleResetAllFilters = useCallback(() => setFilters([]), []);
+
+  // ---- Floating panel: validate the hydrated cross-tab selection -----------
+  // Runs once the family's floating components are known. Anything we seeded
+  // from storage that does not correspond to a still-floating map on *this*
+  // dashboard family is dropped: the map may have been deleted, moved back
+  // into the grid, or the viewer may have navigated to a different dashboard
+  // entirely (one browser tab, one storage entry).
+  const handleFloatingResolved = useCallback(
+    (familyId: string | null, components: FloatingComponent[]) => {
+      const indices = new Set(components.map((c) => c.metadata.index));
+      setFloatingIndices(indices);
+      setFloatingFamilyId(familyId);
+
+      const stored = readFloatingFilters();
+      const familyChanged = stored != null && familyId != null && stored.parentDashboardId !== familyId;
+      const hydrated = hydratedIndicesRef.current ?? new Set<string>();
+      if (hydrated.size === 0) return;
+
+      setFilters((prev) =>
+        prev.filter((f) => {
+          if (!hydrated.has(f.index) || f.source !== 'map_selection') return true;
+          return !familyChanged && indices.has(f.index);
+        }),
+      );
+      hydratedIndicesRef.current = new Set();
+      if (familyChanged) clearFloatingFilters();
+    },
+    [],
+  );
+
+  // The dashboard-wide map panel: its own fetch of the tab family's floating
+  // maps, its own hidden/floating/docked state, shared by the header control
+  // and the panel itself.
+  const mapPanel = useMapPanel({
+    dashboardId: dashboardId ?? '',
+    // Instant filters, not the debounced copy: the badge and the selection
+    // summary should not lag behind the click that set them.
+    filters,
+    onFilterChange: handleFilterChange,
+    onComponentsResolved: handleFloatingResolved,
+  });
+
+  // Persist the floating subset on every filter change. Deriving it from
+  // `filters` rather than tracking writes separately is what makes "Reset all"
+  // and "Clear chart selections" clear the stored copy for free.
+  useEffect(() => {
+    if (!floatingFamilyId || !floatingIndices) return;
+    writeFloatingFilters(
+      floatingFamilyId,
+      persistableFloatingFilters(filters, floatingIndices),
+    );
+  }, [filters, floatingFamilyId, floatingIndices]);
 
   // ---- Realtime: WebSocket subscription + UI toggle -------------------------
   // Mode toggle persisted to localStorage so the user's choice survives
@@ -414,7 +496,13 @@ const App: React.FC = () => {
   const otherComponents = useMemo(
     () =>
       (dashboard?.stored_metadata || []).filter(
-        (m) => m.component_type !== 'card' && m.component_type !== 'interactive',
+        (m) =>
+          m.component_type !== 'card' &&
+          m.component_type !== 'interactive' &&
+          // Floating maps are rendered by FloatingPanelHost, not the grid.
+          // They also carry no layout entry (see dashboards.py), so leaving
+          // them here would make the grid auto-place them on top of a tile.
+          !(m.component_type === 'map' && m.placement === 'floating'),
       ),
     [dashboard],
   );
@@ -464,6 +552,7 @@ const App: React.FC = () => {
           }
           rightExtras={
             <>
+              <MapPanelControl panel={mapPanel} />
               {realtimeEnabled && (
                 <span data-tour-id="realtime-indicator" style={{ display: 'inline-flex' }}>
                   <RealtimeIndicator
@@ -584,7 +673,9 @@ const App: React.FC = () => {
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: '20vw 1fr',
+              // Floor the filter column: at 1280px, a bare 20vw leaves the
+              // docked map barely 200px wide.
+              gridTemplateColumns: 'minmax(260px, 20vw) 1fr',
               flex: 1,
               minHeight: 0,
               width: '100%',
@@ -598,18 +689,31 @@ const App: React.FC = () => {
               style={{
                 height: '100%',
                 minWidth: 0,
-                overflowY: 'auto',
-                overflowX: 'hidden',
+                overflow: 'hidden',
               }}
             >
+              {/* Flex column, and the scroll lives on the filter list inside it
+                  rather than out here — that is what keeps the docked map
+                  pinned to the bottom while a long filter list scrolls past. */}
               <Paper
                 p="md"
                 withBorder
                 radius="md"
-                style={{ height: '100%' }}
+                style={{
+                  height: '100%',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  overflow: 'hidden',
+                }}
                 data-tour-id="filter-panel"
               >
-                <Group justify="space-between" align="center" mb="sm" wrap="nowrap">
+                <Group
+                  justify="space-between"
+                  align="center"
+                  mb="sm"
+                  wrap="nowrap"
+                  style={{ flexShrink: 0 }}
+                >
                   <Title order={5}>Filters</Title>
                   <Button
                     leftSection={<Icon icon="bx:reset" width={12} />}
@@ -622,43 +726,61 @@ const App: React.FC = () => {
                     Reset all
                   </Button>
                 </Group>
-                <Stack gap="sm">
-                  {leftComponents.length === 0 && (
-                    <Text size="sm" c="dimmed">No interactive components.</Text>
-                  )}
-                  {leftGroups.map((g) =>
-                    g.groupName ? (
-                      <InteractiveGroupCard
-                        key={g.key}
-                        groupName={g.groupName}
-                        members={g.members}
-                        filters={filters}
-                        onFilterChange={handleFilterChange}
-                        refreshTick={refreshTick}
-                      />
-                    ) : (
-                      <ComponentRenderer
-                        key={g.key}
-                        metadata={g.members[0]}
-                        filters={filters}
-                        onFilterChange={handleFilterChange}
-                        refreshTick={refreshTick}
-                      />
-                    ),
-                  )}
-                  {hasSelectionFilters(filters) && (
-                    <Anchor
-                      component="button"
-                      onClick={() =>
-                        setFilters((prev) => prev.filter((f) => f.source === undefined))
-                      }
-                      size="xs"
-                      mt="xs"
-                    >
-                      Clear chart selections
-                    </Anchor>
-                  )}
-                </Stack>
+                <Box
+                  style={{
+                    flex: 1,
+                    minHeight: 0,
+                    overflowY: 'auto',
+                    overflowX: 'hidden',
+                    // Reserve the scrollbar's width so appearing/disappearing
+                    // doesn't re-measure the controls underneath.
+                    scrollbarGutter: 'stable',
+                  }}
+                >
+                  <Stack gap="sm">
+                    {leftComponents.length === 0 && (
+                      <Text size="sm" c="dimmed">No interactive components.</Text>
+                    )}
+                    {leftGroups.map((g) =>
+                      g.groupName ? (
+                        <InteractiveGroupCard
+                          key={g.key}
+                          groupName={g.groupName}
+                          members={g.members}
+                          filters={filters}
+                          onFilterChange={handleFilterChange}
+                          refreshTick={refreshTick}
+                        />
+                      ) : (
+                        <ComponentRenderer
+                          key={g.key}
+                          metadata={g.members[0]}
+                          filters={filters}
+                          onFilterChange={handleFilterChange}
+                          refreshTick={refreshTick}
+                        />
+                      ),
+                    )}
+                    {hasSelectionFilters(filters) && (
+                      <Anchor
+                        component="button"
+                        onClick={() =>
+                          setFilters((prev) => prev.filter((f) => f.source === undefined))
+                        }
+                        size="xs"
+                        mt="xs"
+                      >
+                        Clear chart selections
+                      </Anchor>
+                    )}
+                  </Stack>
+                </Box>
+                <MapPanelDock
+                  panel={mapPanel}
+                  filters={filters}
+                  onFilterChange={handleFilterChange}
+                  refreshTick={refreshTick}
+                />
               </Paper>
             </Box>
             <Box
@@ -762,6 +884,14 @@ const App: React.FC = () => {
             dashboardId={dashboardId}
             initialContent={(dashboard.notes_content as string) ?? ''}
             permissions={dashboard.permissions as DashboardPermissions | undefined}
+          />
+        )}
+        {dashboard && dashboardId && (
+          <MapPanelSurface
+            panel={mapPanel}
+            filters={filters}
+            onFilterChange={handleFilterChange}
+            refreshTick={refreshTick}
           />
         )}
       </AppShell.Main>

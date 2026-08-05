@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Paper, Stack, Text, Group, SegmentedControl } from '@mantine/core';
-import { Icon } from '@iconify/react';
+import { Text, SegmentedControl } from '@mantine/core';
 
 import { fetchUniqueValues, InteractiveFilter, StoredMetadata } from '../../api';
 import { useAvailableSet } from '../../availableValues';
 import ComponentSkeleton from '../ComponentSkeleton';
+import { INTERACTIVE_FRAME, InteractiveFrame, InteractiveTitle } from './frame';
 
 /**
  * SegmentedControl renderer for the React viewer.
@@ -37,7 +37,9 @@ const SegmentedControlRenderer: React.FC<{
   metadata: StoredMetadata;
   filters: InteractiveFilter[];
   onChange?: (filter: InteractiveFilter) => void;
-}> = ({ metadata, filters, onChange }) => {
+  /** Compact rendering — drops the frame, relies on the parent group's card. */
+  compact?: boolean;
+}> = ({ metadata, filters, onChange, compact }) => {
   const [options, setOptions] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -101,10 +103,6 @@ const SegmentedControlRenderer: React.FC<{
     }));
   }, [options, availableSet]);
 
-  const displayTitle =
-    metadata.title || (metadata.column_name ? `Filter on ${metadata.column_name}` : '');
-  const iconCol = metadata.icon_color || 'var(--mantine-color-blue-6)';
-
   const handleChange = useCallback(
     (next: string) => {
       // Emit null when the user re-clicks the active segment (toggle off).
@@ -121,41 +119,11 @@ const SegmentedControlRenderer: React.FC<{
     [onChange, metadata.index, metadata.column_name, metadata.filter_expr],
   );
 
-  const Header = displayTitle ? (
-    <Group gap="xs" align="center" wrap="nowrap">
-      {metadata.icon_name && (
-        <Icon
-          icon={metadata.icon_name}
-          width={18}
-          height={18}
-          style={{ color: iconCol, flexShrink: 0 }}
-        />
-      )}
-      <Text fw={600} size="sm">
-        {displayTitle}
-      </Text>
-    </Group>
-  ) : null;
-
   const Frame: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-    <Paper
-      p="md"
-      radius="md"
-      shadow="xs"
-      withBorder
-      className="dashboard-component-hover"
-      style={{
-        height: '100%',
-        display: 'flex',
-        flexDirection: 'column',
-        boxSizing: 'border-box',
-      }}
-    >
-      <Stack gap="xs" style={{ flex: 1 }}>
-        {Header}
-        {children}
-      </Stack>
-    </Paper>
+    <InteractiveFrame compact={compact}>
+      <InteractiveTitle metadata={metadata} compact={compact} />
+      {children}
+    </InteractiveFrame>
   );
 
   if (error) {
@@ -203,7 +171,33 @@ const SegmentedControlRenderer: React.FC<{
         value={selectedValue ?? data[0]?.value}
         onChange={handleChange}
         color={metadata.icon_color || undefined}
-        fullWidth
+        // One step below the panel's shared control size, deliberately. Every
+        // other control is a single input; a segmented control is N labels
+        // side by side, so at the same token it carries several times the ink
+        // and reads as a slab next to its neighbours.
+        size="xs"
+        styles={{
+          root: {
+            // Sized to its content and centred, rather than stretched across
+            // the panel. `1fr` tracks inside a `fit-content` grid all resolve
+            // to the widest label, so "male" and "female" get equal cells that
+            // fit "female" — which is what `fullWidth` cannot do, since that
+            // stretches to the container instead.
+            display: 'grid',
+            gridTemplateColumns: `repeat(${data.length}, 1fr)`,
+            width: 'fit-content',
+            maxWidth: '100%',
+            marginInline: 'auto',
+          },
+          // Long category names must cost width, not height: without this a
+          // four-option control wraps its labels and the row grows past the
+          // panel's fixed height.
+          label: {
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          },
+        }}
       />
     </Frame>
   );

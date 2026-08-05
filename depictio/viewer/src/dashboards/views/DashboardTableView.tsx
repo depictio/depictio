@@ -4,6 +4,7 @@ import {
   Badge,
   Button,
   Checkbox,
+  Code,
   Group,
   Paper,
   Table,
@@ -20,8 +21,17 @@ import type { CategoryInfo } from '../DashboardsList';
 import type { GroupedDashboards } from '../lib/splitDefaultSections';
 import { dashboardHref, dashboardLinkClickHandler } from '../lib/dashboardLinks';
 import { isOwnedByEmail } from '../lib/splitDefaultSections';
-import { coerceString, isImagePath } from '../lib/format';
+import { coerceString, isImagePath, resolveAssetUrl } from '../lib/format';
+import { WORKFLOW_COLOR_MAP, WORKFLOW_ICON_MAP } from '../lib/workflowIcons';
 import type { Density } from '../hooks/useDashboardViewPrefs';
+import ColumnPicker from '../../components/ColumnPicker';
+import { type ColumnDef, useTableColumns } from '../../lib/useTableColumns';
+import {
+  formatDateTime,
+  formatDateTimeVerbose,
+  formatRelative,
+  timestampSortKey,
+} from '../../lib/datetime';
 
 export interface DashboardTableViewProps {
   groups: GroupedDashboards[];
@@ -44,47 +54,102 @@ export interface DashboardTableViewProps {
   onBulkDelete: (ids: string[]) => void;
 }
 
-type SortKey =
+type ColumnKey =
   | 'title'
+  | 'subtitle'
   | 'category'
   | 'project'
   | 'owner'
+  | 'created'
   | 'modified'
   | 'visibility'
-  | 'tabs';
+  | 'tabs'
+  | 'components'
+  | 'workflow'
+  | 'version'
+  | 'id';
+
 type SortDir = 'asc' | 'desc';
+
+/** Column catalogue. Order here is the render order; `defaultVisible: false`
+ *  keeps the extra metadata columns opt-in so the default table stays readable. */
+const ALL_COLUMNS: ColumnDef<ColumnKey>[] = [
+  { key: 'title', label: 'Title', alwaysVisible: true },
+  { key: 'subtitle', label: 'Subtitle', defaultVisible: false },
+  { key: 'category', label: 'Category' },
+  { key: 'project', label: 'Project' },
+  { key: 'owner', label: 'Owner' },
+  { key: 'created', label: 'Created', description: 'Created (local time)' },
+  { key: 'modified', label: 'Modified', description: 'Last modified (local time)' },
+  { key: 'visibility', label: 'Visibility' },
+  { key: 'tabs', label: 'Tabs' },
+  { key: 'components', label: 'Components', defaultVisible: false },
+  { key: 'workflow', label: 'Workflow', description: 'Workflow system', defaultVisible: false },
+  { key: 'version', label: 'Version', defaultVisible: false },
+  { key: 'id', label: 'ID', description: 'Dashboard ID', defaultVisible: false },
+];
+
+const STORAGE_KEY = 'depictio.dashboards.tableColumns.v1';
 
 interface Row {
   id: string;
   dashboard: DashboardListEntry;
   childCount: number;
+  componentCount: number | null;
   isOwner: boolean;
   projectName: string;
   ownerEmail: string;
   isPublic: boolean;
   lastSavedTs: string;
+  createdTs: string;
   titleText: string;
+  subtitle: string;
+  workflowSystem: string;
+  version: string;
   categoryLabel: string;
   categoryColor: string;
 }
 
-function compareRows(a: Row, b: Row, key: SortKey, dir: SortDir): number {
+function compareNullable(a: number | null, b: number | null, dir: SortDir): number {
+  const mul = dir === 'asc' ? 1 : -1;
+  if (a === null && b === null) return 0;
+  if (a === null) return 1;
+  if (b === null) return -1;
+  return mul * (a - b);
+}
+
+function compareRows(a: Row, b: Row, key: ColumnKey, dir: SortDir): number {
   const mul = dir === 'asc' ? 1 : -1;
   switch (key) {
     case 'title':
       return mul * a.titleText.localeCompare(b.titleText);
+    case 'subtitle':
+      return mul * a.subtitle.localeCompare(b.subtitle);
     case 'category':
       return mul * a.categoryLabel.localeCompare(b.categoryLabel);
     case 'project':
       return mul * a.projectName.localeCompare(b.projectName);
     case 'owner':
       return mul * a.ownerEmail.localeCompare(b.ownerEmail);
+    // Timestamps are compared as epoch ms rather than lexically: the wire
+    // format is not always the same shape (naive vs ISO with offset), so
+    // string ordering would interleave the two.
+    case 'created':
+      return mul * (timestampSortKey(a.createdTs) - timestampSortKey(b.createdTs));
     case 'modified':
-      return mul * a.lastSavedTs.localeCompare(b.lastSavedTs);
+      return mul * (timestampSortKey(a.lastSavedTs) - timestampSortKey(b.lastSavedTs));
     case 'visibility':
       return mul * Number(b.isPublic) - mul * Number(a.isPublic);
     case 'tabs':
       return mul * (a.childCount - b.childCount);
+    case 'components':
+      return compareNullable(a.componentCount, b.componentCount, dir);
+    case 'workflow':
+      return mul * a.workflowSystem.localeCompare(b.workflowSystem);
+    case 'version':
+      return mul * a.version.localeCompare(b.version, undefined, { numeric: true });
+    case 'id':
+      return mul * a.id.localeCompare(b.id);
     default:
       return 0;
   }
@@ -92,33 +157,84 @@ function compareRows(a: Row, b: Row, key: SortKey, dir: SortDir): number {
 
 const SortHeader: React.FC<{
   label: string;
+  tooltip?: string;
   active: boolean;
   dir: SortDir;
   onClick: () => void;
-}> = ({ label, active, dir, onClick }) => (
-  <UnstyledButton
-    onClick={onClick}
-    style={{
-      display: 'inline-flex',
-      alignItems: 'center',
-      gap: 4,
-      fontWeight: 600,
-    }}
-    aria-label={`Sort by ${label}`}
-  >
-    {label}
-    <Icon
-      icon={
-        active
-          ? dir === 'asc'
-            ? 'mdi:chevron-up'
-            : 'mdi:chevron-down'
-          : 'mdi:unfold-more-horizontal'
-      }
-      width={14}
-      style={{ opacity: active ? 1 : 0.4 }}
-    />
-  </UnstyledButton>
+}> = ({ label, tooltip, active, dir, onClick }) => {
+  const button = (
+    <UnstyledButton
+      onClick={onClick}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 4,
+        fontWeight: 600,
+      }}
+      aria-label={`Sort by ${tooltip ?? label}`}
+    >
+      {label}
+      <Icon
+        icon={
+          active
+            ? dir === 'asc'
+              ? 'mdi:chevron-up'
+              : 'mdi:chevron-down'
+            : 'mdi:unfold-more-horizontal'
+        }
+        width={14}
+        style={{ opacity: active ? 1 : 0.4 }}
+      />
+    </UnstyledButton>
+  );
+  return tooltip ? (
+    <Tooltip label={tooltip} withinPortal>
+      {button}
+    </Tooltip>
+  ) : (
+    button
+  );
+};
+
+const Dash: React.FC = () => (
+  <Text size="xs" c="dimmed">
+    —
+  </Text>
+);
+
+/** Absolute local time in the cell, with a tooltip spelling out the timezone
+ *  and the original UTC value so a "why is this 2h off?" question answers
+ *  itself (issue #932). */
+const TimeCell: React.FC<{ raw: string; empty?: string }> = ({ raw, empty = 'Never' }) => {
+  if (!raw) {
+    return (
+      <Text size="xs" c="dimmed">
+        {empty}
+      </Text>
+    );
+  }
+  return (
+    <Tooltip label={`${formatDateTimeVerbose(raw)} · ${formatRelative(raw)}`} withinPortal>
+      <Text size="sm" style={{ whiteSpace: 'nowrap' }}>
+        {formatDateTime(raw)}
+      </Text>
+    </Tooltip>
+  );
+};
+
+const CountCell: React.FC<{ icon: string; value: number | null }> = ({ icon, value }) => (
+  <Group gap={4} wrap="nowrap" align="center">
+    <Icon icon={icon} width={12} color="var(--mantine-color-dimmed)" />
+    {value === null ? (
+      <Text size="sm" c="dimmed">
+        —
+      </Text>
+    ) : (
+      <Text size="sm" c={value > 0 ? undefined : 'dimmed'}>
+        {value}
+      </Text>
+    )}
+  </Group>
 );
 
 const DashboardTableView: React.FC<DashboardTableViewProps> = ({
@@ -139,18 +255,33 @@ const DashboardTableView: React.FC<DashboardTableViewProps> = ({
   onBulkExport,
   onBulkDelete,
 }) => {
-  const [sortKey, setSortKey] = useState<SortKey>('modified');
+  const [sortKey, setSortKey] = useState<ColumnKey>('modified');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  // The Category column only makes sense when the caller supplies the mapping;
+  // drop it from the picker entirely otherwise so users can't enable a column
+  // that would always render as "—".
+  const columnCatalogue = useMemo(
+    () => (categoryById ? ALL_COLUMNS : ALL_COLUMNS.filter((c) => c.key !== 'category')),
+    [categoryById],
+  );
+  const { visibleColumns, isVisible, allColumns, toggle, reset, isCustomized } =
+    useTableColumns<ColumnKey>(STORAGE_KEY, columnCatalogue);
 
   const rows = useMemo<Row[]>(() => {
     const list: Row[] = groups.map((g) => {
       const id = String(g.parent.dashboard_id);
       const cat = categoryById?.get(id);
+      const meta = g.parent.stored_metadata;
+      const versionRaw = g.parent.version;
       return {
         id,
         dashboard: g.parent,
         childCount: g.children.length,
+        // `stored_metadata` is only projected for admin listings; show "—"
+        // rather than a misleading 0 when the field isn't on the payload.
+        componentCount: Array.isArray(meta) ? meta.length : null,
         isOwner: isOwnedByEmail(g.parent, currentUserEmail),
         projectName: g.parent.project_id
           ? (projectNames.get(String(g.parent.project_id)) ?? '')
@@ -158,7 +289,14 @@ const DashboardTableView: React.FC<DashboardTableViewProps> = ({
         ownerEmail: g.parent.permissions?.owners?.[0]?.email ?? '',
         isPublic: Boolean(g.parent.is_public),
         lastSavedTs: coerceString(g.parent.last_saved_ts, ''),
+        createdTs: coerceString(g.parent.creation_time, ''),
         titleText: g.parent.title || g.parent.dashboard_id,
+        subtitle: coerceString(g.parent.subtitle, ''),
+        workflowSystem: coerceString(g.parent.workflow_system, ''),
+        version:
+          typeof versionRaw === 'number' || typeof versionRaw === 'string'
+            ? String(versionRaw)
+            : '',
         categoryLabel: cat?.label ?? '',
         categoryColor: cat?.color ?? 'var(--mantine-color-gray-6)',
       };
@@ -167,18 +305,14 @@ const DashboardTableView: React.FC<DashboardTableViewProps> = ({
     return list;
   }, [groups, projectNames, currentUserEmail, categoryById, sortKey, sortDir]);
 
-  const sortableColumns = useMemo<{ key: SortKey; label: string }[]>(
-    () => [
-      { key: 'title', label: 'Title' },
-      ...(categoryById ? ([{ key: 'category', label: 'Category' }] as const) : []),
-      { key: 'project', label: 'Project' },
-      { key: 'owner', label: 'Owner' },
-      { key: 'modified', label: 'Modified' },
-      { key: 'visibility', label: 'Visibility' },
-      { key: 'tabs', label: 'Tabs' },
-    ],
-    [categoryById],
-  );
+  // A hidden column must not keep driving the sort order, otherwise the table
+  // looks arbitrarily ordered with no visible sort indicator.
+  useEffect(() => {
+    if (!isVisible(sortKey)) {
+      setSortKey('title');
+      setSortDir('asc');
+    }
+  }, [isVisible, sortKey]);
 
   // Prune ids that no longer match a visible row (after a delete, a search,
   // a filter change, etc.) so the bulk-action bar's count and the
@@ -197,12 +331,13 @@ const DashboardTableView: React.FC<DashboardTableViewProps> = ({
     });
   }, [rows]);
 
-  const toggleSort = (key: SortKey) => {
+  const toggleSort = (key: ColumnKey) => {
     if (key === sortKey) {
       setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
     } else {
       setSortKey(key);
-      setSortDir(key === 'modified' ? 'desc' : 'asc');
+      // Time columns are far more useful newest-first.
+      setSortDir(key === 'modified' || key === 'created' ? 'desc' : 'asc');
     }
   };
 
@@ -232,6 +367,142 @@ const DashboardTableView: React.FC<DashboardTableViewProps> = ({
     selectedRows.length > 0 && selectedRows.every((r) => r.isOwner);
 
   const verticalSpacing = density === 'compact' ? 4 : 'sm';
+
+  const renderCell = (r: Row, key: ColumnKey): React.ReactNode => {
+    switch (key) {
+      case 'title': {
+        const icon = coerceString(r.dashboard.icon, 'mdi:view-dashboard');
+        const iconColor = coerceString(r.dashboard.icon_color, 'orange');
+        return (
+          <Group gap="xs" wrap="nowrap">
+            {isImagePath(icon) ? (
+              <img
+                src={icon}
+                alt=""
+                style={{
+                  width: 22,
+                  height: 22,
+                  objectFit: 'contain',
+                  borderRadius: 4,
+                  flexShrink: 0,
+                }}
+              />
+            ) : (
+              <ThemeIcon
+                color={iconColor}
+                radius="sm"
+                size={22}
+                variant="filled"
+                style={{ flexShrink: 0 }}
+              >
+                <Icon icon={icon} width={14} />
+              </ThemeIcon>
+            )}
+            <UnstyledButton
+              component="a"
+              href={dashboardHref(String(r.dashboard.dashboard_id))}
+              onClick={dashboardLinkClickHandler(() => onView(r.dashboard))}
+              style={{ textAlign: 'left', color: 'inherit' }}
+            >
+              <Text fw={500} size="sm">
+                {r.titleText}
+              </Text>
+            </UnstyledButton>
+          </Group>
+        );
+      }
+      case 'subtitle':
+        return r.subtitle ? (
+          <Text size="sm" lineClamp={1}>
+            {r.subtitle}
+          </Text>
+        ) : (
+          <Dash />
+        );
+      case 'category':
+        return r.categoryLabel ? (
+          <Badge
+            variant="dot"
+            size="sm"
+            color={r.categoryColor}
+            styles={{ root: { textTransform: 'none' } }}
+          >
+            {r.categoryLabel}
+          </Badge>
+        ) : (
+          <Dash />
+        );
+      case 'project': {
+        if (!r.projectName) return <Dash />;
+        const pid = (r.dashboard.project_id as string | undefined) || null;
+        return (
+          <Badge
+            color="teal"
+            variant="light"
+            size="sm"
+            component={pid ? 'a' : 'div'}
+            href={pid ? `/projects/${pid}` : undefined}
+            onClick={(e: React.MouseEvent) => e.stopPropagation()}
+            style={{ cursor: pid ? 'pointer' : undefined, maxWidth: '100%' }}
+          >
+            {r.projectName}
+          </Badge>
+        );
+      }
+      case 'owner':
+        return r.ownerEmail ? <Text size="sm">{r.ownerEmail}</Text> : <Dash />;
+      case 'created':
+        return <TimeCell raw={r.createdTs} empty="Unknown" />;
+      case 'modified':
+        return <TimeCell raw={r.lastSavedTs} />;
+      case 'visibility':
+        return (
+          <Badge color={r.isPublic ? 'green' : 'grape'} variant="light" size="sm">
+            {r.isPublic ? 'Public' : 'Private'}
+          </Badge>
+        );
+      case 'tabs':
+        return <CountCell icon="mdi:tab" value={r.childCount + 1} />;
+      case 'components':
+        return <CountCell icon="mdi:shape-outline" value={r.componentCount} />;
+      case 'workflow': {
+        if (!r.workflowSystem || r.workflowSystem === 'none') return <Dash />;
+        // Match the Project badge's shape (light variant, size sm) but use the
+        // workflow system's own brand colour and logo, so the cell reads the
+        // same way the create/edit modals present the system.
+        const logo = WORKFLOW_ICON_MAP[r.workflowSystem];
+        return (
+          <Badge
+            color={WORKFLOW_COLOR_MAP[r.workflowSystem] ?? 'indigo'}
+            variant="light"
+            size="sm"
+            leftSection={
+              logo ? (
+                <img
+                  src={resolveAssetUrl(logo)}
+                  alt=""
+                  style={{ width: 12, height: 12, objectFit: 'contain', display: 'block' }}
+                />
+              ) : undefined
+            }
+            style={{ maxWidth: '100%' }}
+          >
+            {r.workflowSystem}
+          </Badge>
+        );
+      }
+      case 'version':
+        return r.version ? <Text size="sm">{r.version}</Text> : <Dash />;
+      case 'id':
+        return (
+          <Tooltip label={r.id} withinPortal>
+            <Code style={{ fontSize: 11 }}>{r.id.slice(-8)}</Code>
+          </Tooltip>
+        );
+      default:
+        return null;
+    }
+  };
 
   return (
     <Paper withBorder radius="md" p={0}>
@@ -284,6 +555,14 @@ const DashboardTableView: React.FC<DashboardTableViewProps> = ({
       )}
 
       <Group justify="flex-end" px="sm" pt="xs" gap="xs">
+        <ColumnPicker
+          columns={allColumns}
+          isVisible={isVisible}
+          onToggle={toggle}
+          onReset={reset}
+          isCustomized={isCustomized}
+          visibleCount={visibleColumns.length}
+        />
         <Tooltip label="Density" withinPortal>
           <ActionIcon.Group>
             <ActionIcon
@@ -319,10 +598,11 @@ const DashboardTableView: React.FC<DashboardTableViewProps> = ({
                 />
               </Table.Th>
               <Table.Th style={{ width: 36 }} aria-label="Pin" />
-              {sortableColumns.map((col) => (
+              {visibleColumns.map((col) => (
                 <Table.Th key={col.key}>
                   <SortHeader
                     label={col.label}
+                    tooltip={col.description}
                     active={sortKey === col.key}
                     dir={sortDir}
                     onClick={() => toggleSort(col.key)}
@@ -334,9 +614,6 @@ const DashboardTableView: React.FC<DashboardTableViewProps> = ({
           </Table.Thead>
           <Table.Tbody>
             {rows.map((r) => {
-              const icon = coerceString(r.dashboard.icon, 'mdi:view-dashboard');
-              const iconColor = coerceString(r.dashboard.icon_color, 'orange');
-              const totalTabs = r.childCount + 1;
               const isPinned = pinnedIds.has(r.id);
               return (
                 <Table.Tr key={r.id}>
@@ -377,120 +654,9 @@ const DashboardTableView: React.FC<DashboardTableViewProps> = ({
                       </ActionIcon>
                     </Tooltip>
                   </Table.Td>
-                  <Table.Td>
-                    <Group gap="xs" wrap="nowrap">
-                      {isImagePath(icon) ? (
-                        <img
-                          src={icon}
-                          alt=""
-                          style={{
-                            width: 22,
-                            height: 22,
-                            objectFit: 'contain',
-                            borderRadius: 4,
-                            flexShrink: 0,
-                          }}
-                        />
-                      ) : (
-                        <ThemeIcon
-                          color={iconColor}
-                          radius="sm"
-                          size={22}
-                          variant="filled"
-                          style={{ flexShrink: 0 }}
-                        >
-                          <Icon icon={icon} width={14} />
-                        </ThemeIcon>
-                      )}
-                      <UnstyledButton
-                        component="a"
-                        href={dashboardHref(String(r.dashboard.dashboard_id))}
-                        onClick={dashboardLinkClickHandler(() => onView(r.dashboard))}
-                        style={{ textAlign: 'left', color: 'inherit' }}
-                      >
-                        <Text fw={500} size="sm">
-                          {r.titleText}
-                        </Text>
-                      </UnstyledButton>
-                    </Group>
-                  </Table.Td>
-                  {categoryById && (
-                    <Table.Td>
-                      {r.categoryLabel ? (
-                        <Badge
-                          variant="dot"
-                          size="sm"
-                          color={r.categoryColor}
-                          styles={{ root: { textTransform: 'none' } }}
-                        >
-                          {r.categoryLabel}
-                        </Badge>
-                      ) : (
-                        <Text size="xs" c="dimmed">
-                          —
-                        </Text>
-                      )}
-                    </Table.Td>
-                  )}
-                  <Table.Td>
-                    {r.projectName ? (
-                      (() => {
-                        const pid = (r.dashboard.project_id as string | undefined) || null;
-                        return (
-                          <Badge
-                            color="teal"
-                            variant="light"
-                            size="sm"
-                            component={pid ? 'a' : 'div'}
-                            href={pid ? `/projects/${pid}` : undefined}
-                            onClick={(e: React.MouseEvent) => e.stopPropagation()}
-                            style={{ cursor: pid ? 'pointer' : undefined, maxWidth: '100%' }}
-                          >
-                            {r.projectName}
-                          </Badge>
-                        );
-                      })()
-                    ) : (
-                      <Text size="xs" c="dimmed">
-                        —
-                      </Text>
-                    )}
-                  </Table.Td>
-                  <Table.Td>
-                    {r.ownerEmail ? (
-                      <Text size="sm">{r.ownerEmail}</Text>
-                    ) : (
-                      <Text size="xs" c="dimmed">
-                        —
-                      </Text>
-                    )}
-                  </Table.Td>
-                  <Table.Td>
-                    <Text size="sm">
-                      {r.lastSavedTs ? r.lastSavedTs.slice(0, 16).replace('T', ' ') : 'Never'}
-                    </Text>
-                  </Table.Td>
-                  <Table.Td>
-                    <Badge
-                      color={r.isPublic ? 'green' : 'grape'}
-                      variant="light"
-                      size="sm"
-                    >
-                      {r.isPublic ? 'Public' : 'Private'}
-                    </Badge>
-                  </Table.Td>
-                  <Table.Td>
-                    <Group gap={4} wrap="nowrap" align="center">
-                      <Icon
-                        icon="mdi:tab"
-                        width={12}
-                        color="var(--mantine-color-dimmed)"
-                      />
-                      <Text size="sm" c={r.childCount > 0 ? undefined : 'dimmed'}>
-                        {totalTabs}
-                      </Text>
-                    </Group>
-                  </Table.Td>
+                  {visibleColumns.map((col) => (
+                    <Table.Td key={col.key}>{renderCell(r, col.key)}</Table.Td>
+                  ))}
                   <Table.Td>
                     <DashboardActionsMenu
                       dashboard={r.dashboard}

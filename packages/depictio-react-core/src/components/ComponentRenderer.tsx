@@ -13,9 +13,14 @@ import DatePickerRenderer from './interactive/DatePickerRenderer';
 import CheckboxSwitchRenderer from './interactive/CheckboxSwitchRenderer';
 import SegmentedControlRenderer from './interactive/SegmentedControlRenderer';
 import TimelineRenderer from './interactive/TimelineRenderer';
-import SecondaryMetrics from './card/SecondaryMetrics';
+import SecondaryMetrics, {
+  NUMERIC_LAYOUTS,
+  type SecondaryLayout,
+} from './card/SecondaryMetrics';
 import { wrapWithChrome } from './chrome';
 import LoadAllButton, { LoadAllState } from './chrome/LoadAllButton';
+import MapDataButton from './map/MapDataButton';
+import { isMapSelectionEnabled } from '../selection';
 import { ActiveHighlight } from '../highlight';
 
 // Heavy renderers are lazy-loaded so plotly / ag-grid / jbrowse resolve into
@@ -103,7 +108,12 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
     let inner: React.ReactNode;
     if (subType === 'MultiSelect' || subType === 'Select') {
       inner = (
-        <MultiSelectRenderer metadata={metadata} filters={filters} onChange={onFilterChange} />
+        <MultiSelectRenderer
+          metadata={metadata}
+          filters={filters}
+          onChange={onFilterChange}
+          compact={compact}
+        />
       );
     } else if (subType === 'RangeSlider') {
       inner = (
@@ -125,11 +135,21 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
       );
     } else if (subType === 'DatePicker' || subType === 'DateRangePicker') {
       inner = (
-        <DatePickerRenderer metadata={metadata} filters={filters} onChange={onFilterChange} />
+        <DatePickerRenderer
+          metadata={metadata}
+          filters={filters}
+          onChange={onFilterChange}
+          compact={compact}
+        />
       );
     } else if (subType === 'Checkbox' || subType === 'Switch') {
       inner = (
-        <CheckboxSwitchRenderer metadata={metadata} filters={filters} onChange={onFilterChange} />
+        <CheckboxSwitchRenderer
+          metadata={metadata}
+          filters={filters}
+          onChange={onFilterChange}
+          compact={compact}
+        />
       );
     } else if (subType === 'SegmentedControl') {
       inner = (
@@ -137,6 +157,7 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
           metadata={metadata}
           filters={filters}
           onChange={onFilterChange}
+          compact={compact}
         />
       );
     } else if (subType === 'Timeline') {
@@ -223,11 +244,7 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
   }
 
   if (metadata.component_type === 'map' && dashboardId) {
-    const mapType = (metadata.map_type as string) || 'scatter_map';
-    const selectionEnabled =
-      Boolean(metadata.selection_enabled) &&
-      mapType !== 'choropleth_map' &&
-      !!onFilterChange;
+    const selectionEnabled = isMapSelectionEnabled(metadata, !!onFilterChange);
     const onResetSelection =
       selectionEnabled && onFilterChange
         ? () =>
@@ -238,6 +255,19 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
             })
         : undefined;
     const sourceFilterActive = isSourceFilterActive(filters, metadata.index, 'map_selection');
+    // Same "show underlying data" affordance advanced_viz has, riding the same
+    // `extraActions` slot — so `actionsFor('map')` needs no change.
+    const mapExtras = (
+      <>
+        {extraActions}
+        <MapDataButton
+          dashboardId={dashboardId}
+          metadata={metadata}
+          filters={filters}
+          onFilterChange={onFilterChange}
+        />
+      </>
+    );
     return wrapWithChrome(
       'map',
       metadata,
@@ -251,7 +281,12 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
           refreshTick={refreshTick}
         />
       </Suspense>,
-      { onResetFilter: onResetSelection, extraActions, showDragHandle, sourceFilterActive },
+      {
+        onResetFilter: onResetSelection,
+        extraActions: mapExtras,
+        showDragHandle,
+        sourceFilterActive,
+      },
     );
   }
 
@@ -536,6 +571,16 @@ const CardRenderer: React.FC<{
     orderedSecondary.push({ name: '__breakdown__', value: breakdown });
   }
 
+  // Numeric / QC layouts read their own ``__<layout>__`` key, populated by the
+  // same bulk-compute pass. Injected the same way, since the strip dispatches
+  // on the row name rather than on aggregation order.
+  for (const key of NUMERIC_LAYOUTS) {
+    const payload = secondaryValues?.[`__${key}__`];
+    if (payload !== undefined && payload !== null) {
+      orderedSecondary.push({ name: `__${key}__`, value: payload });
+    }
+  }
+
   // Aggregation description line — sits in the existing card slot just below
   // the hero value. We enrich it with breakdown info when available so the
   // "(Count)" line carries useful context (top-N share) without needing its
@@ -556,7 +601,7 @@ const CardRenderer: React.FC<{
       return `${base} · Top ${breakdown.top.length} = ${share}%`;
     }
     if (
-      layout === 'coverage' &&
+      (layout === 'coverage' || layout === 'gauge') &&
       typeof metadata.coverage_max === 'number' &&
       typeof value === 'number' &&
       metadata.coverage_max > 0
@@ -594,24 +639,21 @@ const CardRenderer: React.FC<{
         aggregation_description={aggDesc}
         filter_applied={filterApplied}
         secondaryStrip={
-          // ``coverage`` layout doesn't rely on the secondary aggregations
-          // array — it reads the card's hero ``value`` + the YAML-declared
+          // ``coverage`` and ``gauge`` don't rely on the secondary aggregations
+          // array — they read the card's hero ``value`` + the YAML-declared
           // ``coverage_max``. So even with empty ``orderedSecondary`` we
-          // still render the strip when the coverage inputs are present.
+          // still render the strip when those inputs are present.
           orderedSecondary.length > 0 ||
-          (metadata.secondary_layout === 'coverage' &&
+          ((metadata.secondary_layout === 'coverage' ||
+            metadata.secondary_layout === 'gauge') &&
             typeof metadata.coverage_max === 'number') ? (
             <SecondaryMetrics
               rows={orderedSecondary}
               layout={
-                (metadata.secondary_layout as
-                  | 'vertical'
-                  | 'compact'
-                  | 'box_plot'
-                  | 'top_n'
-                  | 'coverage'
-                  | 'concentration'
-                  | undefined) || 'vertical'
+                // Cast through the renderer's own exported union rather than
+                // respelling it here — an inline copy silently drops any layout
+                // added later, which is how a new one renders as `vertical`.
+                (metadata.secondary_layout as SecondaryLayout | undefined) || 'vertical'
               }
               color={
                 (metadata.icon_color as string | undefined) ||

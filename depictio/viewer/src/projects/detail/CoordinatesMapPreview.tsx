@@ -16,7 +16,7 @@ import {
   useMantineColorScheme,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
-import { fetchDataCollectionPreview } from 'depictio-react-core';
+import { collapseMapAttribution, fetchDataCollectionPreview } from 'depictio-react-core';
 import type { PreviewResult } from 'depictio-react-core';
 import Plot from 'react-plotly.js';
 
@@ -277,6 +277,8 @@ const CoordinatesMapPreview: React.FC<{ dc: DcLike }> = ({ dc }) => {
           config={{ displaylogo: false, responsive: true }}
           useResizeHandler
           style={{ width: '100%', height: '100%' }}
+          onInitialized={(_f, gd) => collapseMapAttribution(gd)}
+          onUpdate={(_f, gd) => collapseMapAttribution(gd)}
         />
       </div>
       {otherCols.length > 0 && (

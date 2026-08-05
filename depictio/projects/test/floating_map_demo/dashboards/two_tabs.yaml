@@ -1,0 +1,238 @@
+# Floating Map Demo — two tabs, one map
+# ============================================================================
+# The map is declared ONCE, on tab 1, with `placement: floating`. It therefore
+# leaves the grid entirely and renders in the floating panel, which is present
+# on BOTH tabs. What this dashboard is meant to demonstrate:
+#
+#   1. Tab 1 shows sites and habitats; the map floats above it, compactable
+#      to a small card or hidden down to a FAB.
+#   2. Lasso or click samples on the map -> tab 1's cards, figure and table
+#      filter to that selection.
+#   3. Switch to tab 2. The panel is still there, in the same state and
+#      position, with the selection still applied — and tab 2's taxonomy
+#      components are filtered through the sampling_sites -> taxonomy link.
+#
+# Without `placement: floating` the map would be a tile on tab 1 only, and
+# both the panel and the selection would vanish on the tab switch.
+# ============================================================================
+main_dashboard:
+  title: Floating Map Demo
+  subtitle: One map, every tab — floating panel placement
+  project_tag: Floating Map Demo
+  main_tab_name: Sites
+  tab_icon: mdi:map-marker-multiple
+  tab_icon_color: blue
+  icon: mdi:map-search-outline
+  icon_color: blue
+  dashboard_id: 661c3d4e5f6a7b8c9d0e1f10
+  components:
+
+  # ---- The floating map. No `layout` block: it claims no grid slot. --------
+  - component_type: map
+    workflow_tag: floating_map_demo_workflow
+    data_collection_tag: sampling_sites
+    tag: floating-sampling-map
+    index: floating-sampling-map
+    title: Sampling Sites
+    placement: floating
+    floating_initial_state: compact
+    lat_column: latitude
+    lon_column: longitude
+    color_column: habitat
+    hover_columns: [sample, habitat, city, sampling_date]
+    map_style: carto-positron
+    size_max: 25
+    default_center: {lat: 51.0, lon: 10.5}
+    default_zoom: 5
+    selection_enabled: true
+    selection_column: sample
+    dict_kwargs:
+      color_discrete_map:
+        Riverwater: "#377EB8"
+        Groundwater: "#4DAF4A"
+        Sediment: "#E41A1C"
+        Soil: "#FF7F00"
+
+  # ---- Left filter panel --------------------------------------------------
+  - component_type: interactive
+    workflow_tag: floating_map_demo_workflow
+    data_collection_tag: sampling_sites
+    interactive_component_type: MultiSelect
+    column_name: habitat
+    column_type: object
+    tag: habitat-filter
+    index: habitat-filter
+    title: Habitat
+    display:
+      title_size: md
+      icon_name: mdi:waves
+    layout: {x: 0, y: 0, w: 1, h: 3}
+
+  - component_type: interactive
+    workflow_tag: floating_map_demo_workflow
+    data_collection_tag: sampling_sites
+    interactive_component_type: MultiSelect
+    column_name: city
+    column_type: object
+    tag: city-filter
+    index: city-filter
+    title: City
+    display:
+      title_size: md
+      icon_name: mdi:city
+    layout: {x: 0, y: 3, w: 1, h: 3}
+
+  # ---- Grid ---------------------------------------------------------------
+  - component_type: card
+    workflow_tag: floating_map_demo_workflow
+    data_collection_tag: sampling_sites
+    aggregation: nunique
+    column_name: sample
+    column_type: object
+    tag: card-samples
+    index: card-samples
+    title: Samples
+    display:
+      icon_name: mdi:flask
+      icon_color: "#2196F3"
+      title_font_size: lg
+      value_font_size: xl
+    layout: {x: 0, y: 0, w: 2, h: 2}
+
+  - component_type: card
+    workflow_tag: floating_map_demo_workflow
+    data_collection_tag: sampling_sites
+    aggregation: nunique
+    column_name: habitat
+    column_type: object
+    tag: card-habitats
+    index: card-habitats
+    title: Habitats
+    display:
+      icon_name: mdi:forest
+      icon_color: "#4CAF50"
+      title_font_size: lg
+      value_font_size: xl
+    layout: {x: 2, y: 0, w: 2, h: 2}
+
+  - component_type: card
+    workflow_tag: floating_map_demo_workflow
+    data_collection_tag: sampling_sites
+    aggregation: nunique
+    column_name: city
+    column_type: object
+    tag: card-cities
+    index: card-cities
+    title: Cities
+    display:
+      icon_name: mdi:map-marker
+      icon_color: "#FF9800"
+      title_font_size: lg
+      value_font_size: xl
+    layout: {x: 4, y: 0, w: 2, h: 2}
+
+  - component_type: figure
+    workflow_tag: floating_map_demo_workflow
+    data_collection_tag: sampling_sites
+    visu_type: bar
+    mode: ui
+    tag: figure-habitat-counts
+    index: figure-habitat-counts
+    title: Samples by habitat
+    figure_params:
+      x: habitat
+      color: habitat
+      title: Samples by habitat
+    layout: {x: 0, y: 2, w: 8, h: 5}
+
+  - component_type: table
+    workflow_tag: floating_map_demo_workflow
+    data_collection_tag: sampling_sites
+    tag: table-sites
+    index: table-sites
+    title: Sampling sites
+    layout: {x: 0, y: 7, w: 8, h: 5}
+
+# ============================================================================
+# Tab 2. Declares NO map of its own — the floating panel carries tab 1's map
+# here, and its selection filters these components through the project link.
+# ============================================================================
+tabs:
+- title: Taxonomy
+  subtitle: Community composition of whatever the map has selected
+  tab_order: 1
+  tab_icon: mdi:chart-donut
+  tab_icon_color: grape
+  icon: mdi:map-search-outline
+  icon_color: blue
+  dashboard_id: 661c3d4e5f6a7b8c9d0e1f11
+  components:
+
+  - component_type: interactive
+    workflow_tag: floating_map_demo_workflow
+    data_collection_tag: taxonomy
+    interactive_component_type: MultiSelect
+    column_name: Phylum
+    column_type: object
+    tag: phylum-filter
+    index: phylum-filter
+    title: Phylum
+    display:
+      title_size: md
+      icon_name: mdi:bacteria
+    layout: {x: 0, y: 0, w: 1, h: 3}
+
+  - component_type: card
+    workflow_tag: floating_map_demo_workflow
+    data_collection_tag: taxonomy
+    aggregation: nunique
+    column_name: Phylum
+    column_type: object
+    tag: card-phyla
+    index: card-phyla
+    title: Phyla
+    display:
+      icon_name: mdi:bacteria
+      icon_color: "#9C27B0"
+      title_font_size: lg
+      value_font_size: xl
+    layout: {x: 0, y: 0, w: 2, h: 2}
+
+  - component_type: card
+    workflow_tag: floating_map_demo_workflow
+    data_collection_tag: taxonomy
+    aggregation: average
+    column_name: rel_abundance
+    column_type: float64
+    tag: card-mean-abundance
+    index: card-mean-abundance
+    title: Mean rel. abundance
+    display:
+      icon_name: mdi:percent
+      icon_color: "#00BCD4"
+      title_font_size: lg
+      value_font_size: xl
+    layout: {x: 2, y: 0, w: 2, h: 2}
+
+  - component_type: figure
+    workflow_tag: floating_map_demo_workflow
+    data_collection_tag: taxonomy
+    visu_type: bar
+    mode: ui
+    tag: figure-phylum-abundance
+    index: figure-phylum-abundance
+    title: Relative abundance by phylum
+    figure_params:
+      x: Phylum
+      y: rel_abundance
+      color: Phylum
+      title: Relative abundance by phylum
+    layout: {x: 0, y: 2, w: 8, h: 5}
+
+  - component_type: table
+    workflow_tag: floating_map_demo_workflow
+    data_collection_tag: taxonomy
+    tag: table-taxonomy
+    index: table-taxonomy
+    title: Taxonomy
+    layout: {x: 0, y: 7, w: 8, h: 5}

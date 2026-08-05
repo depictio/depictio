@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import GridLayout, { Layout } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
-import { Paper, Title, Stack, Text, Group, Button } from '@mantine/core';
+import { Box, Paper, Title, Stack, Text, Group, Button } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import { ComponentRenderer } from 'depictio-react-core';
@@ -36,35 +36,56 @@ interface LeftFilterPanelProps {
   onDuplicateComponent?: (componentId: string) => void;
   /** Width to render the grid at — typically the panel's measured width. */
   width?: number;
+  /** Pinned below the filter list, outside the scroll area. Deliberately an
+   *  opaque node: the editor puts the docked map panel here, and this
+   *  component has no business knowing that. */
+  footer?: React.ReactNode;
 }
 
-// Compact filter rows: rowHeight=40, h=2 → 80 px per filter. Tighter than
-// Dash's default 100 px so more filters fit without scrolling. All
-// interactive components — including DateRangePicker — share the same
-// height for visual uniformity in the panel.
+// Compact filter rows: rowHeight=40 + 8px margin, so h=2 is 88 px per filter.
+// Tighter than Dash's default 100 px so more filters fit without scrolling.
 const ROW_HEIGHT = 40;
 const DEFAULT_H = 2;
+
+/** Rows a control needs.
+ *
+ *  Heights are forced here rather than read from the saved layout (the panel is
+ *  not resizable), so this is the one place that decides how tall a filter is.
+ *  Two rows fit a title plus an input; a slider showing tick marks needs a
+ *  third, because its labels hang below the track and the grid item clips
+ *  anything past its own height — which is why sliders used to lose their
+ *  scale in the panel while the same control looked fine in the grid. */
+function rowsFor(component: StoredMetadata): number {
+  const type = component.interactive_component_type;
+  if (type !== 'Slider' && type !== 'RangeSlider') return DEFAULT_H;
+  return component.show_marks === false ? DEFAULT_H : DEFAULT_H + 1;
+}
 
 function normalizeLeftLayout(
   components: StoredMetadata[],
   layoutData: unknown,
 ): Layout[] {
   const items = extractLayoutItems(layoutData);
-  const indexSet = new Set(components.map((c) => c.index));
+  const byIndex = new Map(components.map((c) => [c.index, c]));
   const matched = items
-    .map((it) => ({ ...it, i: stripBoxPrefix(it.i), w: 1, h: DEFAULT_H }))
-    .filter((it) => indexSet.has(it.i));
+    .map((it) => ({ ...it, i: stripBoxPrefix(it.i) }))
+    .filter((it) => byIndex.has(it.i))
+    .map((it) => ({ ...it, w: 1, h: rowsFor(byIndex.get(it.i)!) }));
 
   const seen = new Set(matched.map((it) => it.i));
+  // Stack the unplaced ones below everything already positioned. `y` only has
+  // to order them — `compactType: 'vertical'` closes the gaps left by the
+  // varying heights above.
+  const usedRows = matched.reduce((sum, it) => sum + it.h, 0);
+  let cursor = usedRows;
   const fallback = components
     .filter((c) => !seen.has(c.index))
-    .map((c, idx) => ({
-      i: c.index,
-      x: 0,
-      y: (matched.length + idx) * DEFAULT_H,
-      w: 1,
-      h: DEFAULT_H,
-    }));
+    .map((c) => {
+      const h = rowsFor(c);
+      const item = { i: c.index, x: 0, y: cursor, w: 1, h };
+      cursor += h;
+      return item;
+    });
   return [...matched, ...fallback];
 }
 
@@ -107,6 +128,7 @@ const LeftFilterPanel: React.FC<LeftFilterPanelProps> = ({
   onDeleteComponent,
   onDuplicateComponent,
   width,
+  footer,
 }) => {
   const layout = useMemo(
     () => normalizeLeftLayout(interactiveComponents, layoutData),
@@ -130,20 +152,38 @@ const LeftFilterPanel: React.FC<LeftFilterPanelProps> = ({
   }, []);
 
   return (
+    // Flex column, and the scroll boundary sits on the filter list inside it
+    // rather than on the caller's wrapper — that is what lets `footer` stay
+    // pinned to the bottom while a long filter list scrolls past it.
     <Paper
       p="md"
       withBorder
       radius="md"
-      style={{ height: '100%', overflow: 'hidden' }}
+      style={{
+        height: '100%',
+        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
       data-tour-id="filter-panel"
     >
-      <Group justify="space-between" align="center" mb="sm" wrap="nowrap">
+      <Group
+        justify="space-between"
+        align="center"
+        mb="sm"
+        wrap="nowrap"
+        style={{ flexShrink: 0 }}
+      >
         <Title order={5}>Filters</Title>
         {onResetAllFilters && (
           <Button
             leftSection={<Icon icon="bx:reset" width={12} />}
             color="orange"
-            variant="filled"
+            // Filled only while there is something to reset, mirroring the
+            // per-component ResetButton in the chrome: a permanently filled
+            // orange button reads as an alert on a panel that is otherwise
+            // quiet, which is most of the time.
+            variant={filters.length > 0 ? 'filled' : 'light'}
             size="xs"
             onClick={onResetAllFilters}
             disabled={filters.length === 0}
@@ -152,6 +192,19 @@ const LeftFilterPanel: React.FC<LeftFilterPanelProps> = ({
           </Button>
         )}
       </Group>
+      <Box
+        style={{
+          flex: 1,
+          minHeight: 0,
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          // Reserve the scrollbar's width. Without it, the scrollbar
+          // appearing changes the content width, which feeds the
+          // ResizeObserver below → grid reflow → height change → scrollbar
+          // toggles again.
+          scrollbarGutter: 'stable',
+        }}
+      >
       {interactiveComponents.length === 0 ? (
         <Stack gap="sm">
           <Text size="sm" c="dimmed">
@@ -214,6 +267,8 @@ const LeftFilterPanel: React.FC<LeftFilterPanelProps> = ({
         </GridLayout>
         </div>
       )}
+      </Box>
+      {footer}
     </Paper>
   );
 };

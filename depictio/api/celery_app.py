@@ -178,28 +178,30 @@ def generate_dashboard_screenshot_dual(
 
         if result["status"] == "success":
             logger.info(f"✅ Screenshots generated for dashboard {dashboard_id}")
-            # Bump `last_saved_ts` once the PNGs are on disk so the React
-            # listing's `screenshotUrl(..., last_saved_ts)` cache-buster
+            # Bump `screenshot_ts` once the PNGs are on disk so the React
+            # listing's `screenshotUrl(..., screenshot_ts)` cache-buster
             # advances. Without this, a viewer that loaded the listing while
             # the Playwright job was still running has cached the OLD bytes
             # against the URL the save endpoint just minted — and would never
             # refetch until the next save bumped the timestamp again.
+            # NB: this deliberately does NOT touch `last_saved_ts` — that field
+            # is the user-visible "modified" time, and a background screenshot
+            # is not a user modification (issue #932).
             try:
-                from datetime import datetime
-
                 from depictio.api.v1.db import dashboards_collection
+                from depictio.models.timestamps import utc_now_str
 
                 dashboards_collection.update_one(
                     {"dashboard_id": dashboard_id},
                     {
                         "$set": {
-                            "last_saved_ts": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                            "screenshot_ts": utc_now_str(),
                         }
                     },
                 )
             except Exception as exc:  # noqa: BLE001 — non-fatal best-effort bump
                 logger.warning(
-                    "Could not bump last_saved_ts after screenshot for %s: %s",
+                    "Could not bump screenshot_ts after screenshot for %s: %s",
                     dashboard_id,
                     exc,
                 )

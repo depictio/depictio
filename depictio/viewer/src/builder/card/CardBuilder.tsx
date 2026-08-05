@@ -6,6 +6,7 @@
 import React, { useEffect, useMemo } from 'react';
 import {
   ColorInput,
+  MultiSelect,
   NumberInput,
   Select,
   Stack,
@@ -13,6 +14,7 @@ import {
   Title,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
+import { isBreakdownLayout } from 'depictio-react-core';
 import { useBuilderStore } from '../store/useBuilderStore';
 import ColumnSelect from '../shared/ColumnSelect';
 import DesignShell from '../shared/DesignShell';
@@ -82,18 +84,29 @@ const ICON_OPTIONS: { value: string; label: string }[] = [
  *  to a ``(aggregations, secondary_layout, …)`` config bundle on save.
  *
  *  Distribution-style layouts (vertical / compact / box_plot) target numeric
- *  columns and surface scalar aggregations. The three cardinality-style
- *  layouts (top_n / coverage / concentration) target ``count`` / ``nunique``
- *  aggregations and need an extra config field — the builder exposes those
- *  fields conditionally below the Select. */
+ *  columns and surface scalar aggregations. The cardinality-style layouts
+ *  (top_n / composition / donut / coverage / concentration) target ``count`` /
+ *  ``nunique`` aggregations and need an extra config field — the builder
+ *  exposes those fields conditionally below the Select, and pre-fills them
+ *  with a sensible guess so switching layout shows a strip immediately. */
 type MultiMetricStyle =
   | 'single'
   | 'vertical'
   | 'compact'
+  | 'grid'
   | 'box_plot'
   | 'top_n'
   | 'coverage'
-  | 'concentration';
+  | 'gauge'
+  | 'concentration'
+  | 'composition'
+  | 'donut'
+  | 'histogram'
+  | 'threshold'
+  | 'completeness'
+  | 'uniqueness'
+  | 'attrition'
+  | 'trend';
 // Mantine 7 ``Select`` expects nested groups in the shape
 // ``{ group, items: [...] }`` — the flat ``{value, label, group}`` format we
 // inherited from Mantine 6 crashes the option normalizer with
@@ -106,18 +119,46 @@ const MULTI_METRIC_OPTIONS: Array<
 > = [
   { value: 'single', label: 'Single metric (no extras)' },
   {
-    group: 'Distribution',
+    group: 'Stats list',
     items: [
       { value: 'vertical', label: 'Vertical list (median / min / max)' },
       { value: 'compact', label: 'Compact strip (median / min / max)' },
-      { value: 'box_plot', label: 'Box-plot (Tukey: IQR + whiskers + outliers)' },
+      { value: 'grid', label: 'Two-column grid (best for 4–6 aggregations)' },
     ],
+  },
+  {
+    group: 'Distribution',
+    items: [
+      { value: 'box_plot', label: 'Box-plot (Tukey: IQR + whiskers + outliers)' },
+      { value: 'histogram', label: 'Histogram sparkline (shows shape / modality)' },
+    ],
+  },
+  {
+    group: 'Quality control',
+    items: [
+      { value: 'threshold', label: 'Threshold (pass / warn / fail against a cut-off)' },
+      { value: 'completeness', label: 'Completeness (filled vs missing values)' },
+      { value: 'uniqueness', label: 'Uniqueness (distinct vs repeated values)' },
+      { value: 'attrition', label: 'Attrition funnel (retention across stages)' },
+    ],
+  },
+  {
+    group: 'Progress towards a maximum',
+    items: [
+      { value: 'coverage', label: 'Coverage bar (current / theoretical max)' },
+      { value: 'gauge', label: 'Gauge dial (current / theoretical max)' },
+    ],
+  },
+  {
+    group: 'Change over an axis',
+    items: [{ value: 'trend', label: 'Trend sparkline (metric bucketed along a column)' }],
   },
   {
     group: 'Cardinality',
     items: [
       { value: 'top_n', label: 'Top-N bars (most frequent values of a column)' },
-      { value: 'coverage', label: 'Coverage gauge (current / theoretical max)' },
+      { value: 'composition', label: 'Composition bar (shares + "Other", with evenness)' },
+      { value: 'donut', label: 'Donut (ring of shares, distinct count in the middle)' },
       { value: 'concentration', label: 'Concentration (top-N share + names)' },
     ],
   },
@@ -129,53 +170,72 @@ function inferMultiMetricStyle(
   aggs: string[] | null | undefined,
   layout: string | null | undefined,
 ): MultiMetricStyle {
-  if (layout === 'top_n') return 'top_n';
-  if (layout === 'coverage') return 'coverage';
-  if (layout === 'concentration') return 'concentration';
+  // Every layout that owns its own config bundle round-trips by name; only the
+  // three ``aggregations``-driven ones need the fallbacks below.
+  const selfDescribing: MultiMetricStyle[] = [
+    'top_n',
+    'coverage',
+    'gauge',
+    'concentration',
+    'composition',
+    'donut',
+    'histogram',
+    'threshold',
+    'completeness',
+    'uniqueness',
+    'attrition',
+    'trend',
+  ];
+  if (layout && selfDescribing.includes(layout as MultiMetricStyle)) {
+    return layout as MultiMetricStyle;
+  }
   if (!aggs || aggs.length === 0) return 'single';
   if (layout === 'box_plot' || (aggs.length === 1 && aggs[0] === 'box_plot_stats')) {
     return 'box_plot';
   }
   if (layout === 'compact') return 'compact';
+  if (layout === 'grid') return 'grid';
   return 'vertical';
 }
 
-/** Apply a Select token onto config: writes back the (aggregations,
- *  secondary_layout, breakdown_col, coverage_max, top_n_count) bundle the
- *  dashboard renderer + server reads. Switching between styles clears the
- *  irrelevant fields so stale values don't pollute the saved metadata. */
-function multiMetricStyleToConfig(style: MultiMetricStyle): {
-  aggregations: string[] | null;
-  secondary_layout:
-    | 'vertical'
-    | 'compact'
-    | 'box_plot'
-    | 'top_n'
-    | 'coverage'
-    | 'concentration';
-  breakdown_col: string | null;
-  coverage_max: number | null;
-  top_n_count: number;
-} {
-  const base = { breakdown_col: null, coverage_max: null, top_n_count: 3 } as const;
+/** Apply a Select token onto config: writes back the whole layout-config bundle
+ *  the dashboard renderer + server read.
+ *
+ *  Every layout-specific field is reset on every switch, so a stale threshold
+ *  from a previous choice can never end up on a saved composition card. Only
+ *  the distribution layouts populate ``aggregations``; the categorical and QC
+ *  ones are computed server-side from their own config instead. */
+function multiMetricStyleToConfig(style: MultiMetricStyle): Record<string, unknown> {
+  const base = {
+    aggregations: null as string[] | null,
+    breakdown_col: null,
+    coverage_max: null,
+    top_n_count: 3,
+    threshold_value: null,
+    threshold_direction: 'min',
+    threshold_warn: null,
+    attrition_cols: [] as string[],
+    trend_col: null,
+  };
+  const SCALAR_AGGS = ['median', 'min', 'max'];
+  // `grid` earns its keep from four upwards — offering it the same three as the
+  // other stat lists would leave half of it empty.
+  const GRID_AGGS = ['median', 'average', 'min', 'max'];
   switch (style) {
     case 'box_plot':
       return { ...base, aggregations: ['box_plot_stats'], secondary_layout: 'box_plot' };
     case 'compact':
-      return { ...base, aggregations: ['median', 'min', 'max'], secondary_layout: 'compact' };
+      return { ...base, aggregations: SCALAR_AGGS, secondary_layout: 'compact' };
     case 'vertical':
-      return { ...base, aggregations: ['median', 'min', 'max'], secondary_layout: 'vertical' };
-    case 'top_n':
-      // Cardinality strips don't use the ``aggregations`` array — the
-      // breakdown is computed server-side via ``breakdown_col`` instead.
-      return { ...base, aggregations: null, secondary_layout: 'top_n' };
-    case 'coverage':
-      return { ...base, aggregations: null, secondary_layout: 'coverage' };
-    case 'concentration':
-      return { ...base, aggregations: null, secondary_layout: 'concentration' };
+      return { ...base, aggregations: SCALAR_AGGS, secondary_layout: 'vertical' };
+    case 'grid':
+      return { ...base, aggregations: GRID_AGGS, secondary_layout: 'grid' };
     case 'single':
+      return { ...base, secondary_layout: 'vertical' };
     default:
-      return { ...base, aggregations: null, secondary_layout: 'vertical' };
+      // Every other layout round-trips by name and carries its own config
+      // field, pre-filled by the effect below.
+      return { ...base, secondary_layout: style };
   }
 }
 
@@ -186,22 +246,22 @@ const CardBuilder: React.FC = () => {
     column_type?: string;
     aggregation?: string;
     aggregations?: string[] | null;
-    secondary_layout?:
-      | 'vertical'
-      | 'compact'
-      | 'box_plot'
-      | 'top_n'
-      | 'coverage'
-      | 'concentration';
+    secondary_layout?: Exclude<MultiMetricStyle, 'single'>;
     breakdown_col?: string | null;
     coverage_max?: number | null;
     top_n_count?: number;
+    threshold_value?: number | null;
+    threshold_direction?: string;
+    threshold_warn?: number | null;
+    attrition_cols?: string[] | null;
+    trend_col?: string | null;
     background_color?: string;
     title_color?: string;
     icon_name?: string;
     title_font_size?: string;
   };
   const patchConfig = useBuilderStore((s) => s.patchConfig);
+  const cols = useBuilderStore((s) => s.cols);
 
   // Apply sane defaults once after mount when creating fresh.
   useEffect(() => {
@@ -225,6 +285,123 @@ const CardBuilder: React.FC = () => {
     () => inferMultiMetricStyle(config.aggregations, config.secondary_layout),
     [config.aggregations, config.secondary_layout],
   );
+
+  /** Best guess at the column a breakdown should group by.
+   *
+   *  Preference order, and why: the card's own column when it is categorical
+   *  (a "count of variety" card broken down by variety is the reading the user
+   *  almost always means); otherwise the categorical column with the *fewest*
+   *  distinct values, because a strip of 3 species is legible where a strip of
+   *  10 000 sample IDs is noise. ``nunique`` comes from the precomputed specs,
+   *  so this costs nothing. */
+  const defaultBreakdownCol = useMemo(() => {
+    const categorical = cols.filter((c) =>
+      ['object', 'string', 'category', 'bool'].includes(c.type),
+    );
+    if (!categorical.length) return null;
+    if (categorical.some((c) => c.name === config.column_name)) {
+      return config.column_name ?? null;
+    }
+    const ranked = [...categorical].sort((a, b) => {
+      const an = typeof a.specs?.nunique === 'number' ? (a.specs.nunique as number) : Infinity;
+      const bn = typeof b.specs?.nunique === 'number' ? (b.specs.nunique as number) : Infinity;
+      // Single-valued columns carry no information; push them behind the rest
+      // rather than letting them win for having the lowest cardinality.
+      const aScore = an <= 1 ? Infinity : an;
+      const bScore = bn <= 1 ? Infinity : bn;
+      return aScore - bScore;
+    });
+    return ranked[0]?.name ?? null;
+  }, [cols, config.column_name]);
+
+  /** Default denominator for the coverage gauge: the card's own unfiltered
+   *  value. The gauge then reads "how much of the data survives the current
+   *  filters", which is both the common intent and immediately meaningful —
+   *  where a null max renders nothing at all and looks like a broken card. */
+  const defaultCoverageMax = useMemo(() => {
+    const raw = cols.find((c) => c.name === config.column_name)?.specs?.[
+      config.aggregation as string
+    ];
+    return typeof raw === 'number' && Number.isFinite(raw) && raw > 0
+      ? Math.ceil(raw)
+      : null;
+  }, [cols, config.column_name, config.aggregation]);
+
+  /** Default QC cut-off: the column's median, from the precomputed specs.
+   *
+   *  Not a guess at the user's real threshold — that is lab policy this layer
+   *  cannot know — but a value guaranteed to be inside the data's range, so the
+   *  strip renders a meaningful split immediately and the user adjusts from
+   *  something rather than from a blank field. */
+  const defaultThreshold = useMemo(() => {
+    const specs = cols.find((c) => c.name === config.column_name)?.specs;
+    const median = specs?.median ?? specs?.average ?? specs?.mean;
+    return typeof median === 'number' && Number.isFinite(median) ? median : null;
+  }, [cols, config.column_name]);
+
+  /** Numeric columns available as later attrition stages. The card's own column
+   *  is the first stage and is excluded, so it cannot be listed twice. */
+  const numericColumnNames = useMemo(
+    () =>
+      cols
+        .filter(
+          (c) =>
+            ['int64', 'int32', 'float64', 'float32'].includes(c.type) &&
+            c.name !== config.column_name,
+        )
+        .map((c) => c.name),
+    [cols, config.column_name],
+  );
+
+  /** Columns a trend can be bucketed along: anything with a defined order.
+   *  Dates come first because that is what a trend usually means; integers
+   *  follow, for the run / batch / year indices pipelines produce. Floats are
+   *  excluded — a measurement is not an axis, and offering it produces a line
+   *  through noise. */
+  const trendAxisOptions = useMemo(() => {
+    const ordered = cols.filter(
+      (c) => ['datetime', 'date', 'int64', 'int32'].includes(c.type) && c.name !== config.column_name,
+    );
+    const rank = (t: string) => (t.startsWith('date') ? 0 : 1);
+    return [...ordered]
+      .sort((a, b) => rank(a.type) - rank(b.type))
+      .map((c) => ({ value: c.name, label: `${c.name} (${c.type})` }));
+  }, [cols, config.column_name]);
+
+  // Pre-fill the field the chosen layout requires. Without this, picking a
+  // cardinality layout showed an empty form and no preview strip, so the
+  // feature looked broken until the user guessed which field to fill. Only
+  // ever fills a *blank* field, so an explicit choice is never overwritten.
+  useEffect(() => {
+    if (isBreakdownLayout(config.secondary_layout)) {
+      if (!config.breakdown_col && defaultBreakdownCol) {
+        patchConfig({ breakdown_col: defaultBreakdownCol });
+      }
+    } else if (config.secondary_layout === 'coverage' || config.secondary_layout === 'gauge') {
+      if (config.coverage_max == null && defaultCoverageMax != null) {
+        patchConfig({ coverage_max: defaultCoverageMax });
+      }
+    } else if (config.secondary_layout === 'threshold') {
+      if (config.threshold_value == null && defaultThreshold != null) {
+        patchConfig({ threshold_value: defaultThreshold });
+      }
+    } else if (config.secondary_layout === 'trend') {
+      if (!config.trend_col && trendAxisOptions.length) {
+        patchConfig({ trend_col: trendAxisOptions[0].value });
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    config.secondary_layout,
+    config.breakdown_col,
+    config.coverage_max,
+    config.threshold_value,
+    config.trend_col,
+    defaultBreakdownCol,
+    defaultThreshold,
+    defaultCoverageMax,
+    trendAxisOptions,
+  ]);
 
   // Aggregation options follow the column's type, mirroring
   // depictio/api/v1/utils.py:agg_functions[type]['card_methods'].
@@ -288,7 +465,7 @@ const CardBuilder: React.FC = () => {
 
       <Select
         label="Multi-metric style"
-        description="Pick a secondary strip layout. Distribution group (vertical / compact / box-plot) targets numeric columns; cardinality group (top-N / coverage / concentration) targets count / nunique cards."
+        description="Pick a secondary strip layout. Stats lists and distributions target numeric columns, cardinality targets count / distinct-count cards, quality control answers “how many rows pass”, and trend answers “is this moving”. The field each layout needs is pre-filled from your data."
         data={MULTI_METRIC_OPTIONS}
         value={multiMetricStyle}
         onChange={(val) => {
@@ -299,11 +476,12 @@ const CardBuilder: React.FC = () => {
         leftSection={<Icon icon="mdi:chart-box-outline" width={14} />}
       />
 
-      {/* Conditional fields for the cardinality-style layouts. ``top_n`` and
-          ``concentration`` need a categorical breakdown column + a row count;
-          ``coverage`` needs the theoretical max value (denominator). Hidden
-          when the user picks a distribution-style layout. */}
-      {(multiMetricStyle === 'top_n' || multiMetricStyle === 'concentration') && (
+      {/* Conditional fields for the cardinality-style layouts. The breakdown
+          layouts need a categorical column + a row count; ``coverage`` needs
+          the theoretical max (denominator). Both are pre-filled above, so this
+          block shows a working configuration rather than empty required
+          fields. Hidden for the distribution-style layouts. */}
+      {isBreakdownLayout(config.secondary_layout) && (
         <>
           <ColumnSelect
             label="Breakdown column"
@@ -328,10 +506,10 @@ const CardBuilder: React.FC = () => {
           />
         </>
       )}
-      {multiMetricStyle === 'coverage' && (
+      {(multiMetricStyle === 'coverage' || multiMetricStyle === 'gauge') && (
         <NumberInput
-          label="Coverage max"
-          description="Theoretical maximum the hero value can reach (e.g. 44 samples / 11 ORFs / 99 amplicons). The strip renders ``value / max`` as a fill bar."
+          label="Maximum"
+          description="Theoretical maximum the hero value can reach (e.g. 44 samples / 11 ORFs / 99 amplicons). The strip renders “value / max” as a fill bar or a dial."
           value={config.coverage_max ?? undefined}
           onChange={(val) =>
             patchConfig({
@@ -342,6 +520,84 @@ const CardBuilder: React.FC = () => {
           step={1}
           leftSection={<Icon icon="mdi:gauge" width={14} />}
           required
+        />
+      )}
+
+      {multiMetricStyle === 'trend' && (
+        <Select
+          label="Trend axis"
+          description="Ordered column the sparkline is bucketed along — a date, or an index like run or year. The card's own column is what gets aggregated inside each bucket."
+          placeholder={
+            trendAxisOptions.length === 0
+              ? 'No date or integer column in this data collection'
+              : 'Pick an ordered column'
+          }
+          data={trendAxisOptions}
+          value={config.trend_col ?? null}
+          onChange={(val) => patchConfig({ trend_col: val })}
+          disabled={trendAxisOptions.length === 0}
+          allowDeselect={false}
+          searchable
+          leftSection={<Icon icon="mdi:chart-timeline-variant" width={14} />}
+          required
+        />
+      )}
+
+      {/* Quality-control layouts. ``threshold`` needs the cut-off (pre-filled
+          with the column's median so the strip renders something meaningful
+          immediately) and which side passes; ``attrition`` needs the ordered
+          stage columns. ``completeness`` needs no config at all. */}
+      {multiMetricStyle === 'threshold' && (
+        <>
+          <NumberInput
+            label="Threshold value"
+            description="QC cut-off the column is judged against. Pre-filled with the column's median — replace it with your actual criterion (e.g. 30 for ≥30× coverage, 80 for %Q30)."
+            value={config.threshold_value ?? undefined}
+            onChange={(val) =>
+              patchConfig({
+                threshold_value: val === '' || val === undefined ? null : Number(val),
+              })
+            }
+            step={1}
+            leftSection={<Icon icon="mdi:ruler" width={14} />}
+            required
+          />
+          <Select
+            label="Passing side"
+            description="Which side of the cut-off counts as a pass. Getting this backwards inverts the QC verdict, so it is explicit rather than guessed."
+            data={[
+              { value: 'min', label: 'At least (≥) — higher is better, e.g. coverage, %Q30' },
+              { value: 'max', label: 'At most (≤) — lower is better, e.g. duplication, error rate' },
+            ]}
+            value={config.threshold_direction ?? 'min'}
+            onChange={(val) => patchConfig({ threshold_direction: val || 'min' })}
+            allowDeselect={false}
+            leftSection={<Icon icon="mdi:compare-horizontal" width={14} />}
+          />
+          <NumberInput
+            label="Warning threshold (optional)"
+            description="Softer cut-off between pass and fail. Must sit on the failing side of the main threshold, otherwise it is ignored."
+            value={config.threshold_warn ?? undefined}
+            onChange={(val) =>
+              patchConfig({
+                threshold_warn: val === '' || val === undefined ? null : Number(val),
+              })
+            }
+            step={1}
+            leftSection={<Icon icon="mdi:alert-outline" width={14} />}
+          />
+        </>
+      )}
+      {multiMetricStyle === 'attrition' && (
+        <MultiSelect
+          label="Later stage columns"
+          description="Numeric columns for the stages after this card's own, in pipeline order (e.g. trimmed → mapped → deduplicated). Bars show each stage's share of the first."
+          data={numericColumnNames}
+          value={config.attrition_cols ?? []}
+          onChange={(vals) => patchConfig({ attrition_cols: vals })}
+          searchable
+          clearable
+          leftSection={<Icon icon="mdi:filter-variant" width={14} />}
         />
       )}
 

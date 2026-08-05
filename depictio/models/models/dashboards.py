@@ -859,6 +859,8 @@ class DashboardDataLite(BaseModel):
                     "opacity": 1.0,
                     "size_max": 15,
                     "featureidkey": "id",
+                    "placement": "grid",
+                    "floating_initial_state": "compact",
                 }
                 # Fields exported whenever truthy
                 _MAP_TRUTHY_FIELDS = [
@@ -1035,13 +1037,20 @@ class DashboardDataLite(BaseModel):
                         "value": None,
                         "aggregations": comp_dict.get("aggregations"),
                         "filter_expr": comp_dict.get("filter_expr"),
-                        # Multi-metric layout style: vertical / compact /
-                        # box_plot / top_n / coverage / concentration. The
-                        # last three need extra config fields plumbed through:
+                        # Multi-metric layout style — see
+                        # ``CardLiteComponent.secondary_layout`` for the full
+                        # list. Everything past the distribution layouts
+                        # (vertical / compact / box_plot) needs extra config
+                        # fields plumbed through:
                         "secondary_layout": comp_dict.get("secondary_layout", "vertical"),
                         "breakdown_col": comp_dict.get("breakdown_col"),
                         "top_n_count": comp_dict.get("top_n_count", 3),
                         "coverage_max": comp_dict.get("coverage_max"),
+                        "threshold_value": comp_dict.get("threshold_value"),
+                        "threshold_direction": comp_dict.get("threshold_direction", "min"),
+                        "threshold_warn": comp_dict.get("threshold_warn"),
+                        "attrition_cols": comp_dict.get("attrition_cols") or [],
+                        "trend_col": comp_dict.get("trend_col"),
                     }
                 )
                 for f in [
@@ -1144,6 +1153,8 @@ class DashboardDataLite(BaseModel):
                     "choropleth_aggregation": None,
                     "color_continuous_scale": None,
                     "range_color": None,
+                    "placement": "grid",
+                    "floating_initial_state": "compact",
                 }
                 for field, default in _MAP_FULL_DEFAULTS.items():
                     full_comp[field] = comp_dict.get(field, default)
@@ -1178,7 +1189,8 @@ class DashboardDataLite(BaseModel):
 
             elif comp_type == "text":
                 # Section-header text tile: TextRenderer.tsx reads `order` (H1-H6),
-                # `alignment`, `body`, and inherits `title` from the base.
+                # `alignment`, `vertical_alignment`, `body`, and inherits `title`
+                # from the base.
                 order = comp_dict.get("order", 1)
                 try:
                     order_int = max(1, min(6, int(order)))
@@ -1186,6 +1198,7 @@ class DashboardDataLite(BaseModel):
                     order_int = 1
                 full_comp["order"] = order_int
                 full_comp["alignment"] = comp_dict.get("alignment", "left")
+                full_comp["vertical_alignment"] = comp_dict.get("vertical_alignment", "top")
                 full_comp["body"] = comp_dict.get("body", "")
 
             full_components.append(full_comp)
@@ -1206,6 +1219,14 @@ class DashboardDataLite(BaseModel):
             comp_obj = self.components[idx]
             comp_dict = comp_obj if isinstance(comp_obj, dict) else comp_obj.model_dump()
             comp_type = comp.get("component_type", "figure")
+
+            # Components lifted out of the grid get no layout item at all: the
+            # React shell lays them out itself. 'top' is the Timeline in the
+            # TopPanel, 'floating' is a map in the floating panel. Skipping
+            # before the auto-layout below also keeps them from consuming a
+            # vertical slot the grid would then render as a gap.
+            if comp.get("placement") in ("top", "floating"):
+                continue
 
             # Extract x/y/w/h from nested layout (new format), flat fields (legacy), or auto-generate
             layout_nested = comp_dict.get("layout", {})
@@ -1243,10 +1264,6 @@ class DashboardDataLite(BaseModel):
                 layout_item["resizeHandles"] = ["se", "s", "e", "sw", "w"]
 
             if comp_type == "interactive":
-                # Top-placement components (e.g. Timeline) live in the React
-                # TopPanel, which lays them out inline — no grid entry needed.
-                if comp.get("placement") == "top":
-                    continue
                 left_panel_layout_data.append(layout_item)
             else:
                 right_panel_layout_data.append(layout_item)
@@ -1299,6 +1316,14 @@ class DashboardData(MongoModel):
     permissions: Permission
     is_public: bool = False
     last_saved_ts: str = ""
+    # Creation timestamp, UTC, "%Y-%m-%d %H:%M:%S". Stamped once on insert and
+    # never overwritten by saves, so it stays distinct from `last_saved_ts`.
+    # Empty on legacy documents — the API backfills it from the ObjectId.
+    creation_time: str = ""
+    # Set by the screenshot worker when the thumbnail PNGs land on disk. Used
+    # purely as a cache-buster for the listing thumbnails; deliberately separate
+    # from `last_saved_ts` so a background screenshot never looks like an edit.
+    screenshot_ts: str = ""
     project_id: PyObjectId
 
     # Tab support (backward compatible)

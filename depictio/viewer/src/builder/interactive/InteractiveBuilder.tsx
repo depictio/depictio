@@ -90,20 +90,11 @@ const ICON_OPTIONS: { value: string; label: string }[] = [
   { value: 'mdi:calendar-range', label: 'Calendar' },
 ];
 
-const TITLE_SIZES: { value: string; label: string }[] = [
-  { value: 'xs', label: 'Extra Small' },
-  { value: 'sm', label: 'Small' },
-  { value: 'md', label: 'Medium' },
-  { value: 'lg', label: 'Large' },
-  { value: 'xl', label: 'Extra Large' },
-];
-
 interface InteractiveConfig {
   interactive_component_type?: string;
   column_name?: string;
   column_type?: string;
   title?: string;
-  title_size?: string;
   color?: string;
   icon_name?: string;
 }
@@ -226,11 +217,12 @@ const InteractiveBuilder: React.FC = () => {
   }, [config.column_type, variants, config.interactive_component_type, patchConfig]);
 
   // Defaults applied once on first mount, mirroring Dash design_ui defaults
-  // (Icon='bx:slider-alt', Title Size='md').
+  // (Icon='bx:slider-alt'). No title size: interactive titles render at one
+  // fixed size so the Filters panel stays uniform — see
+  // `components/interactive/frame.tsx` in depictio-react-core.
   useEffect(() => {
     patchConfig({
       icon_name: config.icon_name ?? 'bx:slider-alt',
-      title_size: config.title_size ?? 'md',
       color: config.color ?? '',
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -318,14 +310,6 @@ const InteractiveBuilder: React.FC = () => {
           }
         />
 
-        <Select
-          label="Title Size"
-          description="Choose the size of the component title"
-          data={TITLE_SIZES}
-          value={config.title_size ?? 'md'}
-          onChange={(val) => patchConfig({ title_size: val ?? 'md' })}
-          allowDeselect={false}
-        />
       </Stack>
     </Card>
   );

@@ -10,14 +10,29 @@
  * are not precomputed (specs only carries min/max/median/mean) — we
  * synthesise rough Q1/Q3 + lower/upper whiskers so the user sees the
  * box-plot shape; the actual saved card recomputes from the live data.
+ *
+ * The categorical layouts (top_n / concentration / composition / donut) do
+ * *not* estimate: they fetch the real breakdown from
+ * `/deltatables/breakdown`, which runs the same helper `bulk_compute_cards`
+ * runs for the saved card. Previously this preview invented `Bucket 1/2/3`
+ * split evenly at 33/33/34, so a perfectly good card looked broken in the
+ * builder and then rendered completely different numbers once saved.
  */
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Center, Text } from '@mantine/core';
 import { DepictioCard } from 'depictio-components';
 import { useBuilderStore } from '../store/useBuilderStore';
 import PreviewPanel from '../shared/PreviewPanel';
 import { autoCardTitle } from './cardTitle';
-import { SecondaryMetrics, type SecondaryLayout } from 'depictio-react-core';
+import {
+  SecondaryMetrics,
+  fetchBreakdown,
+  fetchCardMetric,
+  isBreakdownLayout,
+  isNumericLayout,
+  type BreakdownPayloadDTO,
+  type SecondaryLayout,
+} from 'depictio-react-core';
 
 type Specs = Record<string, unknown> | undefined;
 
@@ -82,55 +97,99 @@ function buildPreviewRows(
     .filter((r) => r.value !== undefined);
 }
 
-/** Synthesise a ``__breakdown__`` payload (same shape the server emits via
- *  ``bulk_compute_cards``) from the breakdown column's precomputed specs so
- *  the top-N / concentration previews show a representative strip without
- *  needing a live data fetch. Categories: prefer ``unique_values`` (the
- *  precomputed sample list of distinct names) — fall back to ``placeholder
- *  bucket`` labels when only ``nunique`` is available. Counts are
- *  approximated by spreading the total uniformly across the top-N buckets;
- *  the saved card recomputes the real distribution from the live data. */
-function buildBreakdownPreview(
-  breakdownSpecs: Specs,
+/** Fetch the *real* ``__breakdown__`` payload for the categorical layouts.
+ *
+ *  The server runs the same helper ``bulk_compute_cards`` runs for the saved
+ *  card, so the preview and the dashboard agree by construction. Nothing is
+ *  fetched until the user has actually picked a breakdown column, so an
+ *  incomplete form shows no strip rather than a fake one.
+ *
+ *  In-flight requests are aborted on dependency change: flipping through
+ *  layouts and columns fires one request per change, and a slow earlier
+ *  response must not overwrite a newer one. */
+function useBreakdownPreview(
+  dcId: string | null,
+  column: string | undefined,
+  breakdownCol: string | null | undefined,
+  aggregation: string | undefined,
   topNCount: number,
-): {
-  column: string;
-  total: number;
-  top: { name: string; count: number; percent: number }[];
-  top_share: number;
-  unique_values: number;
-} | null {
-  if (!breakdownSpecs) return null;
-  const nunique = pickNum(breakdownSpecs, 'nunique');
-  const uniqueValuesRaw = breakdownSpecs['unique_values'];
-  const uniqueList: string[] = Array.isArray(uniqueValuesRaw)
-    ? (uniqueValuesRaw as unknown[]).map((v) => String(v))
-    : [];
-  if (nunique === undefined && uniqueList.length === 0) return null;
-  const totalUnique = nunique ?? uniqueList.length;
-  const n = Math.max(1, Math.min(topNCount, totalUnique));
-  // Use real names when available, otherwise synthesise placeholder buckets.
-  const names: string[] = uniqueList.length
-    ? uniqueList.slice(0, n)
-    : Array.from({ length: n }, (_, i) => `Bucket ${i + 1}`);
-  // Spread a notional "100 rows" uniformly across the top-N so percents
-  // render to something legible (e.g. 33% / 33% / 34% for n=3). Real data
-  // gets surfaced when the card is saved + bulk-computed.
-  const totalRows = 100;
-  const perBucket = Math.floor(totalRows / n);
-  const remainder = totalRows - perBucket * n;
-  const top = names.map((name, i) => {
-    const count = perBucket + (i < remainder ? 1 : 0);
-    return { name, count, percent: count / totalRows };
-  });
-  const topShare = top.reduce((acc, r) => acc + r.percent, 0);
-  return {
-    column: '__preview__',
-    total: totalRows,
-    top,
-    top_share: topShare,
-    unique_values: totalUnique,
-  };
+  enabled: boolean,
+): { payload: BreakdownPayloadDTO | null; loading: boolean; error: string | null } {
+  const [payload, setPayload] = useState<BreakdownPayloadDTO | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!enabled || !dcId || !column || !breakdownCol) {
+      setPayload(null);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+    const ctrl = new AbortController();
+    setLoading(true);
+    setError(null);
+    fetchBreakdown(dcId, column, breakdownCol, aggregation || 'count', topNCount, ctrl.signal)
+      .then((res) => {
+        setPayload(res);
+        setLoading(false);
+      })
+      .catch((err: unknown) => {
+        if ((err as { name?: string })?.name === 'AbortError') return;
+        setPayload(null);
+        setError(err instanceof Error ? err.message : String(err));
+        setLoading(false);
+      });
+    return () => ctrl.abort();
+  }, [enabled, dcId, column, breakdownCol, aggregation, topNCount]);
+
+  return { payload, loading, error };
+}
+
+/** Fetch the server-computed payload for a numeric / QC layout.
+ *
+ *  Same contract as the breakdown hook above: aborts in-flight requests on
+ *  dependency change, and resolves to ``null`` when the server declines
+ *  (incomplete config, or data that cannot support the layout). ``configKey``
+ *  is the serialised layout config, so editing a threshold refetches while an
+ *  unrelated styling change does not. */
+function useNumericPreview(
+  dcId: string | null,
+  column: string | undefined,
+  layout: SecondaryLayout,
+  layoutConfig: Record<string, unknown>,
+  enabled: boolean,
+): { payload: Record<string, unknown> | null; loading: boolean; error: string | null } {
+  const [payload, setPayload] = useState<Record<string, unknown> | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const configKey = JSON.stringify(layoutConfig);
+
+  useEffect(() => {
+    if (!enabled || !dcId || !column) {
+      setPayload(null);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+    const ctrl = new AbortController();
+    setLoading(true);
+    setError(null);
+    fetchCardMetric(dcId, layout, column, JSON.parse(configKey), ctrl.signal)
+      .then((res) => {
+        setPayload(res);
+        setLoading(false);
+      })
+      .catch((err: unknown) => {
+        if ((err as { name?: string })?.name === 'AbortError') return;
+        setPayload(null);
+        setError(err instanceof Error ? err.message : String(err));
+        setLoading(false);
+      });
+    return () => ctrl.abort();
+  }, [enabled, dcId, column, layout, configKey]);
+
+  return { payload, loading, error };
 }
 
 const CardPreview: React.FC = () => {
@@ -144,12 +203,53 @@ const CardPreview: React.FC = () => {
     breakdown_col?: string | null;
     coverage_max?: number | null;
     top_n_count?: number;
+    threshold_value?: number | null;
+    threshold_direction?: 'min' | 'max';
+    threshold_warn?: number | null;
+    attrition_cols?: string[] | null;
+    trend_col?: string | null;
     background_color?: string;
     title_color?: string;
     icon_name?: string;
     title_font_size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
   };
   const cols = useBuilderStore((s) => s.cols);
+  const dcId = useBuilderStore((s) => s.dcId);
+
+  const layout: SecondaryLayout = config.secondary_layout ?? 'vertical';
+  // Hooks must run unconditionally, so this sits above the early return for an
+  // incomplete form. ``enabled`` carries the gating instead.
+  const {
+    payload: breakdownPayload,
+    loading: breakdownLoading,
+    error: breakdownError,
+  } = useBreakdownPreview(
+    dcId,
+    config.column_name,
+    config.breakdown_col,
+    config.aggregation,
+    config.top_n_count ?? 3,
+    isBreakdownLayout(layout),
+  );
+
+  const {
+    payload: numericPayload,
+    loading: numericLoading,
+    error: numericError,
+  } = useNumericPreview(
+    dcId,
+    config.column_name,
+    layout,
+    {
+      aggregation: config.aggregation,
+      threshold_value: config.threshold_value ?? null,
+      threshold_direction: config.threshold_direction ?? 'min',
+      threshold_warn: config.threshold_warn ?? null,
+      attrition_cols: config.attrition_cols ?? [],
+      trend_col: config.trend_col ?? null,
+    },
+    isNumericLayout(layout),
+  );
 
   if (!config.column_name || !config.aggregation) {
     return (
@@ -173,33 +273,25 @@ const CardPreview: React.FC = () => {
       config.column_type,
     );
 
-  const layout: SecondaryLayout = config.secondary_layout ?? 'vertical';
   const secondaryRows = buildPreviewRows(
     col?.specs as Specs,
     config.aggregations,
     layout,
   );
 
-  // top_n / concentration: synthesise a __breakdown__ row from the breakdown
-  // column's precomputed unique_values so the strip renders without a live
-  // data fetch. coverage: pass the hero value + coverage_max directly to the
-  // strip. Both fall back to "no strip" when the user hasn't filled in the
-  // required config (breakdown_col / coverage_max).
+  // Categorical layouts read the server-computed payload; coverage passes the
+  // hero value + coverage_max straight to the strip. Both render no strip at
+  // all until the required config (breakdown_col / coverage_max) is filled in.
   let stripRows: { name: string; value: unknown }[] = secondaryRows;
   let coverageValue: number | null = null;
   let coverageMax: number | null = null;
-  if (layout === 'top_n' || layout === 'concentration') {
-    const breakdownCol =
-      config.breakdown_col && cols.find((c) => c.name === config.breakdown_col);
-    const payload = buildBreakdownPreview(
-      breakdownCol ? (breakdownCol.specs as Specs) : undefined,
-      config.top_n_count ?? 3,
-    );
-    if (payload) {
-      payload.column = config.breakdown_col ?? '__preview__';
-      stripRows = [{ name: '__breakdown__', value: payload }];
-    }
-  } else if (layout === 'coverage') {
+  if (isBreakdownLayout(layout)) {
+    stripRows = breakdownPayload
+      ? [{ name: '__breakdown__', value: breakdownPayload }]
+      : [];
+  } else if (isNumericLayout(layout)) {
+    stripRows = numericPayload ? [{ name: `__${layout}__`, value: numericPayload }] : [];
+  } else if (layout === 'coverage' || layout === 'gauge') {
     if (
       typeof config.coverage_max === 'number' &&
       config.coverage_max > 0 &&
@@ -213,12 +305,48 @@ const CardPreview: React.FC = () => {
 
   const showStrip =
     stripRows.length > 0 ||
-    (layout === 'coverage' &&
-      typeof coverageMax === 'number' &&
-      typeof coverageValue === 'number');
-  const showApproxHint =
-    (layout === 'box_plot' && secondaryRows.length > 0) ||
-    ((layout === 'top_n' || layout === 'concentration') && stripRows.length > 0);
+    typeof coverageMax === 'number';
+  // Only box_plot still estimates (quartiles aren't precomputed). The
+  // categorical strips now show server-computed numbers, so claiming they are
+  // estimates would be the inaccurate statement.
+  const showApproxHint = layout === 'box_plot' && secondaryRows.length > 0;
+  const breakdownHint = !isBreakdownLayout(layout)
+    ? null
+    : breakdownError
+      ? `Breakdown unavailable: ${breakdownError}`
+      : breakdownLoading
+        ? 'Computing breakdown from the live data…'
+        : !config.breakdown_col
+          ? 'Pick a breakdown column to see the distribution.'
+          : null;
+
+  // Why a numeric layout is showing nothing. The server returns null for data
+  // that genuinely cannot support the layout, and saying so beats an empty
+  // panel the user reads as a bug.
+  const numericHint = ((): string | null => {
+    if (!isNumericLayout(layout)) return null;
+    if (numericError) return `Preview unavailable: ${numericError}`;
+    if (numericLoading) return 'Computing from the live data…';
+    // Config the layout cannot run without.
+    if (layout === 'threshold' && config.threshold_value == null) {
+      return 'Set a threshold value to see the pass/fail split.';
+    }
+    if (layout === 'attrition' && (config.attrition_cols?.length ?? 0) < 1) {
+      return 'Add at least one further stage column to see the funnel.';
+    }
+    if (layout === 'trend' && !config.trend_col) {
+      return 'Pick an ordered column to bucket the trend along.';
+    }
+    if (numericPayload) return null;
+    // Config is complete, so the data is what cannot support the layout.
+    if (layout === 'histogram') {
+      return 'No histogram: this column has no spread (every value is identical).';
+    }
+    if (layout === 'trend') {
+      return 'No trend: the chosen axis has fewer than two distinct values.';
+    }
+    return 'No data available for this layout.';
+  })();
 
   return (
     <PreviewPanel minHeight={200}>
@@ -247,6 +375,11 @@ const CardPreview: React.FC = () => {
             <Text size="10" c="dimmed" ta="center" mt={2} style={{ fontSize: 10 }}>
               Preview values are estimated; the saved card recomputes from the
               live data.
+            </Text>
+          ) : null}
+          {breakdownHint || numericHint ? (
+            <Text size="10" c="dimmed" ta="center" mt={2} style={{ fontSize: 10 }}>
+              {breakdownHint || numericHint}
             </Text>
           ) : null}
         </div>

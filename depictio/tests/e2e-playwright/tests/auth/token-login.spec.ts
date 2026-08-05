@@ -8,7 +8,7 @@
  * the React viewer (`local-store`), and protected-page access.
  */
 
-import { test, expect, apiLogin, getAuthMode, seedTokenInStorage, API_URL, API_PREFIX } from "@fixtures/auth";
+import { test, expect, apiLogin, getAuthMode, loginStatus, seedTokenInStorage } from "@fixtures/auth";
 import { credentials } from "@fixtures/credentials";
 
 test.describe("Token-Based Login", () => {
@@ -50,6 +50,15 @@ test.describe("Token-Based Login", () => {
     page,
     request,
   }) => {
+    // Single-user mode's /auth/login ignores the submitted credentials and
+    // always issues the admin token, so the per-user email assertion below
+    // cannot hold. Same guard the other credential-sensitive tests here use.
+    const { is_single_user_mode } = await getAuthMode();
+    test.skip(
+      is_single_user_mode,
+      "Single-user mode always logs in as admin, not the requested user.",
+    );
+
     const tokens = await apiLogin(
       request,
       credentials.testUser.email,
@@ -74,10 +83,12 @@ test.describe("Token-Based Login", () => {
     const { is_single_user_mode } = await getAuthMode();
     test.skip(is_single_user_mode, "Single-user mode accepts any credentials.");
 
-    const res = await request.post(`${API_URL}${API_PREFIX}/auth/login`, {
-      form: { username: "wrong@email.com", password: "wrongpassword" },
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    });
-    expect(res.status()).toBe(401);
+    // Via `loginStatus` rather than a bare POST: this asserts an *outcome* of
+    // the submitted credentials, and a 429 from the per-minute login limiter
+    // says nothing about them. Earlier specs in the file log in repeatedly, so
+    // the window is often already part-spent by the time this runs.
+    expect(
+      await loginStatus(request, "wrong@email.com", "wrongpassword"),
+    ).toBe(401);
   });
 });

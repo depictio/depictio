@@ -42,7 +42,22 @@ export { default as MultiQCRenderer } from './components/MultiQCRenderer';
 // Card helpers — exposed so the builder preview in `depictio/viewer` can
 // render the same SecondaryMetrics strip the dashboard grid renders.
 export { default as SecondaryMetrics } from './components/card/SecondaryMetrics';
+export {
+  BREAKDOWN_LAYOUTS,
+  isBreakdownLayout,
+  NUMERIC_LAYOUTS,
+  isNumericLayout,
+  STAT_LIST_LAYOUTS,
+} from './components/card/SecondaryMetrics';
 export type { SecondaryLayout } from './components/card/SecondaryMetrics';
+export type {
+  HistogramPayload,
+  ThresholdPayload,
+  CompletenessPayload,
+  AttritionPayload,
+  TrendPayload,
+  UniquenessPayload,
+} from './components/card/SecondaryMetrics';
 
 // Interactive renderers
 export { default as MultiSelectRenderer } from './components/interactive/MultiSelectRenderer';
@@ -52,6 +67,15 @@ export { default as DatePickerRenderer } from './components/interactive/DatePick
 export { default as CheckboxSwitchRenderer } from './components/interactive/CheckboxSwitchRenderer';
 export { default as SegmentedControlRenderer } from './components/interactive/SegmentedControlRenderer';
 export { default as TimelineRenderer } from './components/interactive/TimelineRenderer';
+// The one frame every interactive control renders inside — exported so the
+// builder can label a component the way the viewer would.
+export {
+  INTERACTIVE_FRAME,
+  InteractiveFrame,
+  InteractiveTitle,
+  defaultInteractiveTitle,
+  interactiveTitle,
+} from './components/interactive/frame';
 
 // Layout helpers (filter sidebar grouping + top panel)
 export { default as InteractiveGroupCard } from './components/InteractiveGroupCard';
@@ -85,8 +109,11 @@ export type {
 export {
   fetchDashboard,
   fetchAllDashboards,
+  fetchFloatingComponents,
   fetchSpecs,
   fetchUniqueValues,
+  fetchBreakdown,
+  fetchCardMetric,
   fetchColumnRange,
   fetchComponentData,
   bulkComputeCards,
@@ -131,6 +158,8 @@ export {
   validateSession,
   authFetch,
   refreshAccessToken,
+  startSessionKeepAlive,
+  stopSessionKeepAlive,
   // Dashboard management
   listDashboards,
   listProjects,
@@ -217,6 +246,8 @@ export {
   fetchCatalogPreviewPayload,
 } from './api';
 export type {
+  FloatingComponent,
+  FloatingComponentsResponse,
   TableMutationResult,
   RoleDtypeSpec,
   IngestionReport,
@@ -232,6 +263,7 @@ export type {
   CatalogComposeResponse,
   CatalogPreviewRender,
   CatalogPreviewPayload,
+  BreakdownPayloadDTO,
 } from './api';
 // Selection-as-filter helpers (Plotly/AG Grid → InteractiveFilter)
 export {
@@ -242,6 +274,34 @@ export {
   hasSelectionFilters,
   enrichFilterWithDcId,
 } from './selection';
+
+// Map panel: a map lifted out of the grid, available from every tab as a
+// floating card or as a dock under the filter panel. Mount both shells — each
+// renders nothing unless the panel is in its mode.
+// Consumers that draw their own Plotly map (the builder / project previews)
+// need this too — plotly leaves every map's basemap credit expanded on first
+// paint. See the helper's own docstring.
+export { collapseMapAttribution } from './components/map/collapseMapAttribution';
+export { default as MapPanelControl } from './components/mapPanel/MapPanelControl';
+export type { MapPanelControlProps } from './components/mapPanel/MapPanelControl';
+export { default as MapPanelSurface } from './components/mapPanel/MapPanelSurface';
+export type { MapPanelSurfaceProps } from './components/mapPanel/MapPanelSurface';
+export { default as MapPanelDock } from './components/mapPanel/MapPanelDock';
+export type { MapPanelDockProps } from './components/mapPanel/MapPanelDock';
+export { useMapPanel } from './components/mapPanel/useMapPanel';
+export type { MapPanel, UseMapPanelOptions } from './components/mapPanel/useMapPanel';
+export type {
+  MapPanelMode,
+  MapPanelCardSize,
+  MapPanelState,
+} from './components/mapPanel/useMapPanelState';
+export {
+  readFloatingFilters,
+  writeFloatingFilters,
+  clearFloatingFilters,
+  persistableFloatingFilters,
+} from './floatingFilters';
+export type { FloatingFilterPayload } from './floatingFilters';
 
 // Cross-DC available-values intersection (powers greying-out unavailable
 // options in interactive filter dropdowns).

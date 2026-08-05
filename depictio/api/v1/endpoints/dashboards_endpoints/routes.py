@@ -1,8 +1,10 @@
 import json
+import re
 import sys
 import threading
 import time
 import uuid
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Annotated, Any
 from uuid import UUID
@@ -31,9 +33,21 @@ from depictio.api.v1.endpoints.user_endpoints.routes import (
     oauth2_scheme_optional,
 )
 from depictio.api.v1.filter_links import extend_filters_via_links
+from depictio.api.v1.services.card_breakdown import (
+    BREAKDOWN_LAYOUTS,
+    compute_breakdown,
+    evenness,
+)
+from depictio.api.v1.services.card_metrics import (
+    NUMERIC_LAYOUTS,
+)
+from depictio.api.v1.services.card_metrics import (
+    numeric_layout_payload as _numeric_layout_payload,
+)
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 from depictio.models.models.dashboards import DashboardData, DashboardDataLite
 from depictio.models.models.users import User
+from depictio.models.timestamps import preserved_creation_time, utc_now_str
 
 dashboards_endpoint_router = APIRouter()
 
@@ -594,10 +608,33 @@ async def save_dashboard(
     # last loaded, which leaves the timestamp frozen between editor sessions —
     # browsers then keep showing the stale thumbnail PNG. (The Dash save path
     # bumps the same field; see dashboards_endpoints/routes.py:3705 etc.)
-    from datetime import datetime
-
     save_payload = data.mongo()
-    save_payload["last_saved_ts"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    save_payload["last_saved_ts"] = utc_now_str()
+
+    # `_id` is immutable in MongoDB, and `MongoModel.ensure_id` mints a fresh
+    # one whenever the payload omits it (the React `createDashboard` shape
+    # does). `$set`-ting that regenerated value makes the update fail outright
+    # with "the (immutable) field '_id' was found to have been altered", so it
+    # must never appear in an update to an existing document. On insert we pin
+    # it to `dashboard_id`, matching the `_id == dashboard_id` invariant the
+    # import paths call out as CRITICAL (see the YAML/JSON import routes).
+    save_payload.pop("_id", None)
+
+    # `creation_time` is write-once: the client round-trips the whole dashboard
+    # document, so trusting its payload would let a save clobber (or invent) the
+    # creation date and make both columns show the same value — issue #932.
+    save_payload["creation_time"] = preserved_creation_time(
+        existing_dashboard,
+        (existing_dashboard or {}).get("dashboard_id") or dashboard_id,
+        save_payload["last_saved_ts"],
+    )
+
+    # `screenshot_ts` is owned by the screenshot worker, but the client
+    # round-trips the whole document and the model defaults the field to "".
+    # Without this the save would blank the thumbnail cache-buster, so the
+    # listing would re-cache stale PNG bytes under an unversioned URL.
+    if existing_dashboard and not save_payload.get("screenshot_ts"):
+        save_payload.pop("screenshot_ts", None)
 
     if existing_dashboard:
         project_id = existing_dashboard.get("project_id")
@@ -619,7 +656,11 @@ async def save_dashboard(
     else:
         result = dashboards_collection.find_one_and_update(
             {"dashboard_id": dashboard_id},
-            {"$set": save_payload},
+            # `$setOnInsert` applies only when this upsert actually inserts, so
+            # the new document keeps the `_id == dashboard_id` invariant while
+            # a concurrent save that finds an existing doc still never touches
+            # the immutable field.
+            {"$set": save_payload, "$setOnInsert": {"_id": dashboard_id}},
             upsert=True,
             return_document=True,
         )
@@ -1216,6 +1257,122 @@ def bulk_get_component_data_endpoint(
 # React viewer: bulk card value computation with filters
 # ============================================================================
 
+# Secondary layouts that need a server-computed ``__breakdown__`` payload, and
+# the computation itself. Both live in ``card_breakdown`` because the builder
+# preview endpoint computes the identical payload — the module docstring
+# explains why sharing it is what keeps the preview honest. Re-exported here
+# under the old private names so existing call sites and tests keep working.
+_BREAKDOWN_LAYOUTS = BREAKDOWN_LAYOUTS
+_evenness = evenness
+
+
+def _card_payload_columns(card: dict) -> set[str]:
+    """Columns a card's secondary layout reads *besides* its own ``column_name``.
+
+    The projected Delta load has to carry all of them: a layout whose extra
+    column is missing computes to ``None``, and the card then renders its hero
+    value with no strip under it — a silent loss, since nothing in the response
+    says a column was dropped.
+
+    One accessor rather than a run of ``if``s at the call site, because that run
+    is exactly how ``trend`` shipped without its axis: each new layout that
+    reaches past its own column has to be added here, and this is the only place
+    to add it.
+    """
+    cols: set[str] = set()
+    for key in ("breakdown_col", "trend_col"):
+        value = card.get(key)
+        if value:
+            cols.add(str(value))
+    # ``attrition`` walks an ordered list of stage columns.
+    for stage in card.get("attrition_cols") or []:
+        if stage:
+            cols.add(str(stage))
+    return cols
+
+
+def _needs_server_payload(card: dict) -> bool:
+    """True when this card's layout needs a payload the precomputed specs can't
+    supply, so neither the specs fast path nor the pushdown may short-circuit.
+
+    Three separate gates ask this question (the specs fast path, the pushdown
+    short-circuit and the compute block). They used to spell the condition out
+    individually, which is how a newly added layout ends up rendering an empty
+    strip — the gate nobody remembered to update wins.
+    """
+    layout = card.get("secondary_layout") or "vertical"
+    if layout in _BREAKDOWN_LAYOUTS:
+        return bool(card.get("breakdown_col"))
+    return layout in NUMERIC_LAYOUTS
+
+
+# Card aggregations whose reduction is defined by the precompute table rather
+# than spelled out here. Mapping is card-method name -> the ``pandas`` method
+# name ``_POLARS_AGG_EXPRS`` is keyed by. Reusing those factories is what keeps
+# a filtered card's value identical to the precomputed spec it replaces: the
+# bias-corrected skew/kurtosis estimators and the ``linear`` quantile
+# interpolation are parity fixes measured against pandas, and re-deriving them
+# here is exactly how the two paths would drift apart again.
+_PRECOMPUTE_PARITY_AGGS = {
+    "skewness": "skew",
+    "kurtosis": "kurt",
+    "percentile": "quantile",
+}
+
+# Aggregation names that address the same precomputed spec entry. Specs are
+# stored under the ``agg_functions`` card-method name (e.g. numeric columns
+# record ``unique``), while the models and the compute path below speak the
+# canonical name (``nunique``). Looking a card's aggregation up through this
+# map lets either spelling hit the stored value instead of silently missing
+# the fast path — and avoids renaming a key that every already-ingested
+# collection carries.
+_SPEC_ALIASES: dict[str, tuple[str, ...]] = {
+    "nunique": ("nunique", "unique"),
+    "unique": ("unique", "nunique"),
+    "average": ("average", "mean"),
+    "mean": ("mean", "average"),
+    "std_dev": ("std_dev", "std"),
+    "std": ("std", "std_dev"),
+    "variance": ("variance", "var"),
+    "var": ("var", "variance"),
+}
+
+
+def _precompute_parity_factory(aggregation: str) -> Any:
+    """Return the shared precompute expression factory for ``aggregation``.
+
+    ``None`` when the aggregation isn't one of the parity-defined ones, or when
+    the precompute table has no entry for it.
+    """
+    pandas_name = _PRECOMPUTE_PARITY_AGGS.get((aggregation or "").lower())
+    if pandas_name is None:
+        return None
+    from depictio.api.v1.endpoints.deltatables_endpoints.utils import _POLARS_AGG_EXPRS
+
+    entry = _POLARS_AGG_EXPRS.get(pandas_name)
+    return entry[1] if entry else None
+
+
+def _spec_value(col_specs: dict, aggregation: str) -> Any:
+    """Read ``aggregation`` out of a column's precomputed specs, alias-aware."""
+    for name in _SPEC_ALIASES.get((aggregation or "").lower(), (aggregation,)):
+        value = col_specs.get(name)
+        if value is not None:
+            return value
+    return None
+
+
+def _filter_expr_columns(filter_expr: str | None) -> set[str]:
+    """Column names referenced by a card's ``filter_expr``.
+
+    The projected Delta load only carries the columns the cards ask for, so a
+    ``filter_expr`` over a column no card displays would otherwise be applied to
+    a frame that doesn't contain it.
+    """
+    if not filter_expr:
+        return set()
+    return set(re.findall(r"col\(\s*['\"]([^'\"]+)['\"]\s*\)", filter_expr))
+
 
 def _agg_expr(column: str, aggregation: str) -> Any:
     """Polars *expression* form of :func:`_agg_value`, or ``None`` if there isn't one.
@@ -1260,6 +1417,11 @@ def _agg_expr(column: str, aggregation: str) -> Any:
         return col.max() - col.min()
     if agg in ("q1", "q3"):
         return col.quantile(0.25 if agg == "q1" else 0.75, interpolation="linear")
+    # skewness / kurtosis / percentile come straight from the precompute table so
+    # a filtered card reduces exactly like the spec it stands in for.
+    factory = _precompute_parity_factory(agg)
+    if factory is not None:
+        return factory(col)
     # ``mode`` is deliberately absent even though an expression exists: Polars
     # doesn't guarantee an order among tied modes, so the two paths could pick
     # different winners. A card's value must not depend on whether a sibling
@@ -1331,6 +1493,17 @@ def _agg_value(col: Any, aggregation: str) -> Any:
         if agg in ("q1", "q3"):
             q = 0.25 if agg == "q1" else 0.75
             v = col.quantile(q, interpolation="linear")
+            return float(v) if v is not None else None
+        factory = _precompute_parity_factory(agg)
+        if factory is not None:
+            # Evaluate the shared expression against this Series rather than
+            # reimplementing it, so both card paths and the precomputed specs
+            # agree to the last decimal (bias correction, interpolation, and
+            # the small-sample guards that make skew/kurtosis return null).
+            import polars as _pl
+
+            frame = col.to_frame()
+            v = frame.select(factory(_pl.col(frame.columns[0]))).item()
             return float(v) if v is not None else None
         if agg == "box_plot_stats":
             # Compound Tukey box-and-whisker payload, computed in one scan.
@@ -1581,28 +1754,6 @@ def _resolve_link_filters_cached(
     return list(resolved)
 
 
-def _own_selection_values(filters: list[dict], component: dict, source: str) -> list | None:
-    """Pluck the values for this component's own active selection, if any.
-
-    The React viewer stores selection emits as filters with
-    ``source="scatter_selection"|"table_selection"|"map_selection"`` and
-    ``index`` set to the emitting component's index. When we re-render that
-    component, we pass the matching values back as ``active_selection_values``
-    so the figure/map re-highlights the user's selection.
-    """
-    target_idx = str(component.get("index"))
-    for f in filters:
-        if str(f.get("index")) != target_idx:
-            continue
-        if (f.get("source") or (f.get("metadata") or {}).get("source")) != source:
-            continue
-        value = f.get("value")
-        if not value:
-            return None
-        return value if isinstance(value, list) else [value]
-    return None
-
-
 def _build_filter_metadata(filters: list[dict]) -> list[dict]:
     """Convert React filter payloads into the shape ``load_deltatable_lite`` expects.
 
@@ -1630,6 +1781,101 @@ def _build_filter_metadata(filters: list[dict]) -> list[dict]:
             entry["filter_expr"] = filter_expr
         out.append(entry)
     return out
+
+
+@dataclass(frozen=True)
+class _ComponentContext:
+    """A resolved, authorised component plus what the Delta loader needs for it."""
+
+    component: dict
+    wf_oid: ObjectId
+    dc_id: str
+    init_data: dict[str, dict]
+    filter_metadata: list[dict]
+    # Link-resolved filters, for callers that echo them back via
+    # ``_emit_link_headers``.
+    merged_filters: list[dict]
+
+
+def _component_context(
+    dashboard_id: PyObjectId,
+    component_id: str,
+    *,
+    component_type: str,
+    filters: list[dict],
+    current_user: User,
+    access_token: str | None,
+) -> _ComponentContext:
+    """Resolve and authorise a stored component, and prepare its data-load inputs.
+
+    Every per-component render endpoint opens the same way: find the dashboard,
+    check the project permission, find the component by (index, type), resolve
+    cross-DC link filters against its DC, and work out where that DC's Delta
+    table lives. Raises the same 404 / 403 / 400 those endpoints raised inline.
+
+    Deliberately stops *before* loading the frame: callers disagree about how
+    (``load_deltatable_lite`` vs the sorted/schema variants the table endpoint
+    needs), so each does its own load with its own error message.
+    """
+    dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
+    if not dashboard_data:
+        raise HTTPException(status_code=404, detail=f"Dashboard '{dashboard_id}' not found.")
+
+    project_id = dashboard_data.get("project_id")
+    if not project_id or not check_project_permission(project_id, current_user, "viewer"):
+        raise HTTPException(status_code=403, detail="Permission denied.")
+
+    component = next(
+        (
+            m
+            for m in (dashboard_data.get("stored_metadata") or [])
+            if str(m.get("index")) == component_id and m.get("component_type") == component_type
+        ),
+        None,
+    )
+    if component is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"{component_type.capitalize()} component '{component_id}' not found.",
+        )
+
+    wf_id = component.get("wf_id")
+    dc_id = component.get("dc_id")
+    if not wf_id or not dc_id:
+        raise HTTPException(status_code=400, detail="Component missing wf_id/dc_id.")
+
+    merged_filters = _resolve_link_filters_cached(
+        filters=filters,
+        target_dc_id=str(dc_id),
+        project_id=project_id,
+        access_token=access_token,
+        component_type=component_type,
+    )
+
+    dc_config = component.get("dc_config") or {}
+    init_data: dict[str, dict] = {}
+    delta_loc = dc_config.get("delta_location")
+    if not delta_loc:
+        from depictio.api.v1.db import deltatables_collection
+
+        dt = deltatables_collection.find_one({"data_collection_id": ObjectId(str(dc_id))})
+        if dt:
+            delta_loc = dt.get("delta_table_location")
+    if delta_loc:
+        init_data[str(dc_id)] = {
+            "delta_location": delta_loc,
+            "dc_type": dc_config.get("type") or "table",
+            "size_bytes": dc_config.get("size_bytes", 0),
+        }
+
+    return _ComponentContext(
+        component=component,
+        wf_oid=wf_id if isinstance(wf_id, ObjectId) else ObjectId(str(wf_id)),
+        dc_id=str(dc_id),
+        init_data=init_data,
+        filter_metadata=_build_filter_metadata(merged_filters),
+        merged_filters=merged_filters,
+    )
 
 
 @dashboards_endpoint_router.post("/bulk_compute_cards/{dashboard_id}")
@@ -1793,10 +2039,14 @@ def bulk_compute_cards(
         specs_cache[dc_id_str] = flat
         return flat
 
-    def _card_cache_key(wf_id: Any, dc_id: Any) -> tuple:
-        """``(wf_id, dc_id, filter signature)`` — the dedupe key for a card's
-        Delta load. Cards sharing it share one loaded frame (via ``df_cache``),
-        so a projected load must carry the union of their columns."""
+    def _card_cache_key(wf_id: Any, dc_id: Any, filter_expr: str | None = None) -> tuple:
+        """``(wf_id, dc_id, filter signature, filter_expr)`` — the dedupe key for a
+        card's Delta load. Cards sharing it share one loaded frame (via
+        ``df_cache``), so a projected load must carry the union of their columns.
+
+        ``filter_expr`` is part of the key because the cached frame is stored
+        *after* the expression has been applied: two cards on the same DC with
+        different expressions must not read each other's rows."""
         card_filters = _resolved_filters_for(str(dc_id))
         filter_sig = tuple(
             sorted(
@@ -1808,7 +2058,7 @@ def bulk_compute_cards(
                 for fm in card_filters
             )
         )
-        return (str(wf_id), str(dc_id), filter_sig)
+        return (str(wf_id), str(dc_id), filter_sig, filter_expr or "")
 
     # Column projection (#7) pre-pass: the slow Delta load is shared across
     # every card with the same (wf_id, dc_id, filter) signature, so the
@@ -1824,11 +2074,15 @@ def bulk_compute_cards(
         aggregation = card.get("aggregation")
         if not (wf_id and dc_id and column and aggregation):
             continue
-        key_cols = needed_cols_by_key.setdefault(_card_cache_key(wf_id, dc_id), set())
+        card_filter_expr = card.get("filter_expr")
+        key_cols = needed_cols_by_key.setdefault(
+            _card_cache_key(wf_id, dc_id, card_filter_expr), set()
+        )
         key_cols.add(column)
-        breakdown_col = card.get("breakdown_col")
-        if breakdown_col:
-            key_cols.add(breakdown_col)
+        key_cols |= _card_payload_columns(card)
+        # The expression is applied to the projected frame, so its columns have
+        # to survive the projection even when no card displays them.
+        key_cols |= _filter_expr_columns(card_filter_expr)
 
     # Cards sharing a cache key share one Delta read; group them so the pushdown
     # below can answer all of their aggregations in a single query.
@@ -1836,13 +2090,17 @@ def bulk_compute_cards(
     for card in cards:
         if not (card.get("wf_id") and card.get("dc_id") and card.get("column_name")):
             continue
-        cards_by_key.setdefault(_card_cache_key(card["wf_id"], card["dc_id"]), []).append(card)
+        cards_by_key.setdefault(
+            _card_cache_key(card["wf_id"], card["dc_id"], card.get("filter_expr")), []
+        ).append(card)
 
     # ``(component_index, aggregation) -> value`` filled by the pushdown pass.
     pushdown_values: dict[tuple[str, str], Any] = {}
     pushdown_tried: set[tuple] = set()
 
-    def _try_pushdown(cache_key: tuple, wf_id: Any, dc_id: Any) -> None:
+    def _try_pushdown(
+        cache_key: tuple, wf_id: Any, dc_id: Any, filter_expr: str | None = None
+    ) -> None:
         """Answer every aggregation on ``cache_key``'s cards with one scan query.
 
         This is the path that used to force a full frame load: as soon as any
@@ -1889,6 +2147,12 @@ def bulk_compute_cards(
         if scan is None:
             return
         try:
+            # Every card on this key shares the same ``filter_expr`` (it is part
+            # of the key), so narrowing the scan once serves all of them.
+            if filter_expr:
+                from depictio.models.components.filter_expr import build_filter_expr
+
+                scan = scan.filter(build_filter_expr(filter_expr))
             row = scan.select(exprs).collect().row(0)
         except Exception as e:
             logger.warning(f"bulk_compute_cards: pushdown failed for {cache_key}: {e}")
@@ -1908,6 +2172,7 @@ def bulk_compute_cards(
         aggregation = card.get("aggregation")
         secondary_aggs_raw = card.get("aggregations") or []
         secondary_aggs = [a for a in secondary_aggs_raw if a and a != aggregation]
+        card_filter_expr = card.get("filter_expr")
         if secondary_aggs:
             aggregations_per_card[idx] = secondary_aggs
 
@@ -1923,10 +2188,13 @@ def bulk_compute_cards(
         # aggregation_columns_specs. Mirrors what the Dash callback does via
         # compute_value's `cols_json` short-circuit. Avoids touching raw Delta
         # data — necessary for DCs whose Delta file has corrupted columns.
-        if not has_filters:
+        # A card-level ``filter_expr`` narrows the rows before aggregating, so the
+        # precomputed specs — computed over the whole collection — are the wrong
+        # answer for it. Skip straight to a path that can apply the expression.
+        if not has_filters and not card_filter_expr:
             specs = _get_specs(str(dc_id))
             col_specs = specs.get(column) or {}
-            specs_value = col_specs.get(aggregation)
+            specs_value = _spec_value(col_specs, aggregation)
             if specs_value is not None:
                 values[idx] = (
                     float(specs_value) if isinstance(specs_value, (int, float)) else specs_value
@@ -1938,17 +2206,15 @@ def bulk_compute_cards(
                 # the slow Delta load only if:
                 #   (a) all requested ``secondary_aggs`` are present in the
                 #       precomputed column specs, AND
-                #   (b) no server-side breakdown is needed (``top_n`` /
-                #       ``concentration`` layouts compute counts grouped by
-                #       another column, which the specs don't carry).
-                needs_breakdown = card.get("breakdown_col") and (
-                    card.get("secondary_layout") or "vertical"
-                ) in ("top_n", "concentration")
+                #   (b) the layout needs no server-computed payload (a grouped
+                #       breakdown, a histogram, threshold counts…, none of which
+                #       the per-column specs carry).
+                needs_breakdown = _needs_server_payload(card)
                 if secondary_aggs:
                     sec: dict[str, Any] = {}
                     all_specs_present = True
                     for sa in secondary_aggs:
-                        sv = col_specs.get(sa)
+                        sv = _spec_value(col_specs, sa)
                         if sv is None:
                             all_specs_present = False
                             break
@@ -1968,7 +2234,7 @@ def bulk_compute_cards(
         # Cache key includes the filter signature so two cards on the same DC
         # with different (link-resolved) filter sets don't collide.
         card_filters = _resolved_filters_for(str(dc_id))
-        cache_key = _card_cache_key(wf_id, dc_id)
+        cache_key = _card_cache_key(wf_id, dc_id, card_filter_expr)
 
         # Try the scan-level pushdown once per cache key before considering a
         # load. It answers every expressible aggregation for all cards sharing
@@ -1976,11 +2242,9 @@ def bulk_compute_cards(
         # costs one column scan rather than one full-frame collect.
         if cache_key not in pushdown_tried:
             pushdown_tried.add(cache_key)
-            _try_pushdown(cache_key, wf_id, dc_id)
+            _try_pushdown(cache_key, wf_id, dc_id, card_filter_expr)
 
-        needs_breakdown_payload = bool(card.get("breakdown_col")) and (
-            card.get("secondary_layout") or "vertical"
-        ) in ("top_n", "concentration")
+        needs_breakdown_payload = _needs_server_payload(card)
         wanted_aggs = [aggregation] + list(secondary_aggs)
         fully_pushed = not needs_breakdown_payload and all(
             (idx, a) in pushdown_values for a in wanted_aggs
@@ -2005,6 +2269,14 @@ def bulk_compute_cards(
                     select_columns=project_cols,
                     init_data=init_data,
                 )
+                # The card's own conditional-aggregation expression narrows the
+                # rows before anything is reduced. Applied here rather than per
+                # card because ``cache_key`` carries the expression, so every
+                # card sharing this frame declared the same one.
+                if df is not None and card_filter_expr:
+                    from depictio.models.components.filter_expr import apply_filter_expr
+
+                    df = apply_filter_expr(df, card_filter_expr)
                 logger.debug(
                     f"bulk_compute_cards: loaded {cache_key}: shape={df.shape if df is not None else None}"
                 )
@@ -2032,80 +2304,39 @@ def bulk_compute_cards(
             for sa in secondary_aggs:
                 sec_results[sa] = _agg_value(df[column], sa)
 
-        # ``top_n`` / ``concentration`` secondary layouts: compute a top-N
-        # breakdown over ``breakdown_col`` (per-group aggregate that matches the
-        # hero metric — see below). The renderer reads this payload from
+        # Categorical secondary layouts: compute a top-N breakdown over
+        # ``breakdown_col``. The renderer reads this payload from
         # ``sec_results['__breakdown__']`` and chooses how to display it
-        # (mini-bars vs concentration-only line).
-        #
-        # The breakdown's per-group aggregation MUST match the hero ``aggregation``
-        # so the strip's "Top N cover X%" reads against the same denominator as
-        # the card's hero value. e.g. a ``nunique POS`` card grouped by ``GENE``
-        # should compute *distinct POS per gene*, not *row count per gene* —
-        # otherwise the strip's percentages don't add up to the hero metric.
+        # (mini-bars / concentration line / composition bar / donut).
+        # ``compute_breakdown`` is shared with the builder-preview endpoint, so
+        # a card's preview and its saved self show the same numbers.
         breakdown_col = card.get("breakdown_col")
         sec_layout = card.get("secondary_layout") or "vertical"
-        if (
-            breakdown_col
-            and sec_layout in ("top_n", "concentration")
-            and breakdown_col in df.columns
-        ):
+        if breakdown_col and sec_layout in _BREAKDOWN_LAYOUTS and breakdown_col in df.columns:
             try:
-                import polars as _pl
-
-                top_n_count = int(card.get("top_n_count") or 3)
-                top_n_count = max(1, min(top_n_count, 5))
-                hero_agg = (card.get("aggregation") or "count").lower()
-
-                # Pick the per-group aggregation expression mirroring the hero.
-                # Special case: when the breakdown column IS the hero column
-                # (e.g. ``Unique Lineages`` aggregates ``nunique lineage`` and
-                # breaks down by ``lineage``), ``n_unique(column) per group`` is
-                # trivially 1 — useless Pareto. Fall back to row count so the
-                # strip shows the prevalence of each value (`Alpha: 14 rows,
-                # Delta: 9 rows, …`), which is the natural reading.
-                if column == breakdown_col:
-                    agg_expr = _pl.len().alias("__count__")
-                elif hero_agg in ("nunique", "unique"):
-                    agg_expr = _pl.col(column).n_unique().alias("__count__")
-                elif hero_agg == "sum":
-                    agg_expr = _pl.col(column).sum().alias("__count__")
-                else:
-                    # ``count`` and anything else → number of rows per group.
-                    agg_expr = _pl.len().alias("__count__")
-
-                grouped = (
-                    df.lazy()
-                    .group_by(breakdown_col)
-                    .agg(agg_expr)
-                    .sort("__count__", descending=True)
-                    .collect()
+                sec_results["__breakdown__"] = compute_breakdown(
+                    df,
+                    column=column,
+                    breakdown_col=breakdown_col,
+                    aggregation=card.get("aggregation") or "count",
+                    top_n_count=int(card.get("top_n_count") or 3),
                 )
-                total_raw = grouped["__count__"].sum()
-                total = int(total_raw or 0) if total_raw is not None else 0
-                top_rows = grouped.head(top_n_count)
-                names = top_rows[breakdown_col].cast(_pl.Utf8).to_list()
-                counts = [int(c) for c in top_rows["__count__"].to_list()]
-                top_sum = sum(counts)
-                top_share = (top_sum / total) if total > 0 else 0.0
-                sec_results["__breakdown__"] = {
-                    "column": breakdown_col,
-                    "total": total,
-                    "top": [
-                        {
-                            "name": names[i] if i < len(names) else "(null)",
-                            "count": counts[i] if i < len(counts) else 0,
-                            "percent": (counts[i] / total) if total > 0 else 0.0,
-                        }
-                        for i in range(len(names))
-                    ],
-                    "top_share": top_share,
-                    "unique_values": int(grouped.height),
-                    "breakdown_kind": hero_agg,
-                }
             except Exception as e:
                 logger.warning(
                     f"bulk_compute_cards: breakdown on {breakdown_col!r} failed for {idx}: {e}"
+                )
+
+        # Numeric / QC secondary layouts. Same contract as the breakdown above:
+        # one synthetic key in ``sec_results`` the renderer reads, computed by
+        # the shared helper the preview endpoint also calls.
+        if sec_layout in NUMERIC_LAYOUTS:
+            try:
+                payload = _numeric_layout_payload(df, card, column, sec_layout)
+                if payload is not None:
+                    sec_results[f"__{sec_layout}__"] = payload
+            except Exception as e:
+                logger.warning(
+                    f"bulk_compute_cards: {sec_layout} on {column!r} failed for {idx}: {e}"
                 )
 
         if sec_results:
@@ -2898,67 +3129,27 @@ def render_map_endpoint(
     from depictio.api.v1.deltatables_utils import load_deltatable_lite
     from depictio.api.v1.services.map.render import render_map
 
-    filters = request.get("filters") or []
     theme = request.get("theme") or "light"
 
-    dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
-    if not dashboard_data:
-        raise HTTPException(status_code=404, detail=f"Dashboard '{dashboard_id}' not found.")
-
-    project_id = dashboard_data.get("project_id")
-    if not project_id or not check_project_permission(project_id, current_user, "viewer"):
-        raise HTTPException(status_code=403, detail="Permission denied.")
-
-    component = next(
-        (
-            m
-            for m in (dashboard_data.get("stored_metadata") or [])
-            if str(m.get("index")) == component_id and m.get("component_type") == "map"
-        ),
-        None,
-    )
-    if component is None:
-        raise HTTPException(status_code=404, detail=f"Map component '{component_id}' not found.")
-
-    wf_id = component.get("wf_id")
-    dc_id = component.get("dc_id")
-    if not wf_id or not dc_id:
-        raise HTTPException(status_code=400, detail="Component missing wf_id/dc_id.")
-
-    merged_filters = _resolve_link_filters_cached(
-        filters=filters,
-        target_dc_id=str(dc_id),
-        project_id=project_id,
-        access_token=access_token,
+    ctx = _component_context(
+        dashboard_id,
+        component_id,
         component_type="map",
+        filters=request.get("filters") or [],
+        current_user=current_user,
+        access_token=access_token,
     )
-    filter_metadata = _build_filter_metadata(merged_filters)
-
-    dc_config = component.get("dc_config") or {}
-    init_data: dict[str, dict] = {}
-    delta_loc = dc_config.get("delta_location")
-    if not delta_loc:
-        from depictio.api.v1.db import deltatables_collection
-
-        dt = deltatables_collection.find_one({"data_collection_id": ObjectId(str(dc_id))})
-        if dt:
-            delta_loc = dt.get("delta_table_location")
-    if delta_loc:
-        init_data[str(dc_id)] = {
-            "delta_location": delta_loc,
-            "dc_type": dc_config.get("type") or "table",
-            "size_bytes": dc_config.get("size_bytes", 0),
-        }
+    component = ctx.component
 
     try:
         df = load_deltatable_lite(
-            workflow_id=ObjectId(str(wf_id)) if not isinstance(wf_id, ObjectId) else wf_id,
-            data_collection_id=str(dc_id),
-            metadata=filter_metadata or None,
-            init_data=init_data,
+            workflow_id=ctx.wf_oid,
+            data_collection_id=ctx.dc_id,
+            metadata=ctx.filter_metadata or None,
+            init_data=ctx.init_data,
         )
     except Exception as e:
-        logger.error(f"render_map: DC load failed for {dc_id}: {e}", exc_info=True)
+        logger.error(f"render_map: DC load failed for {ctx.dc_id}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to load data: {e}")
 
     import plotly.io as pio
@@ -2968,15 +3159,12 @@ def render_map_endpoint(
 
         ensure_mantine_templates()
 
-    selection_values = _own_selection_values(filters, component, source="map_selection")
-
     try:
         fig, data_info = render_map(
             df=df,
             trigger_data=component,
             theme=theme,
             existing_metadata=None,
-            active_selection_values=selection_values,
             access_token=access_token,
         )
 
@@ -2994,7 +3182,7 @@ def render_map_endpoint(
             "figure": fig_dict,
             "metadata": {
                 "map_type": component.get("map_type", "scatter_map"),
-                "filter_applied": bool(filter_metadata),
+                "filter_applied": bool(ctx.filter_metadata),
                 "displayed_count": data_info.get("displayed_count"),
                 "total_count": data_info.get("total_count"),
             },
@@ -3004,6 +3192,221 @@ def render_map_endpoint(
     except Exception as e:
         logger.error(f"render_map: build failed for {component_id}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Map render failed: {e}")
+
+
+# A peek at what is on the map, not a browsing surface — that is what a table
+# component is for. Every column of the DC × 10k rows is already a several-MB
+# response.
+MAP_DATA_MAX_ROWS = 10_000
+
+
+def _map_column_order(component: dict, columns: list[str]) -> list[str]:
+    """Reorder ``columns`` so the ones the map is actually about come first.
+
+    Pure ordering — nothing is dropped. Opening the table on ``lat``/``lon``/the
+    hover fields beats opening it on whatever the DC happens to store first.
+    """
+    preferred: list[str] = []
+    for key in (
+        "selection_column",
+        "lat_column",
+        "lon_column",
+        "locations_column",
+        "color_column",
+        "size_column",
+        "z_column",
+        "text_column",
+    ):
+        value = component.get(key)
+        if isinstance(value, str) and value:
+            preferred.append(value)
+    hover = component.get("hover_columns")
+    if isinstance(hover, list):
+        preferred.extend(c for c in hover if isinstance(c, str))
+
+    available = set(columns)
+    lead = [c for c in dict.fromkeys(preferred) if c in available]
+    leading = set(lead)
+    return lead + [c for c in columns if c not in leading]
+
+
+def _stringify_non_scalar_columns(df):
+    """Render columns JSON can't carry as text, leaving true scalars alone.
+
+    Numbers and booleans stay native — the grid's numeric filters need them —
+    but everything else (dates, categoricals, durations, lists, structs) goes
+    over the wire as text. ``cast(String)`` covers most of it and is by far the
+    cheapest path; Polars refuses it outright for List, Array and Duration, so
+    those fall back to per-element ``str()``. Neither branch may raise: one
+    exotic column must not cost the user the whole table.
+    """
+    import polars as pl
+
+    exprs = []
+    for name, dtype in df.schema.items():
+        if dtype.is_numeric() or dtype in (pl.Boolean, pl.String):
+            continue
+        try:
+            df.head(1).select(pl.col(name).cast(pl.String))
+            exprs.append(pl.col(name).cast(pl.String))
+        except Exception:
+            exprs.append(pl.col(name).map_elements(_scalar_str, return_dtype=pl.String))
+    return df.with_columns(exprs) if exprs else df
+
+
+def _scalar_str(value: Any) -> str | None:
+    """One cell as text, for the dtypes Polars will not cast.
+
+    A List or Array cell arrives as a ``pl.Series``, and ``str()`` on one of
+    those is its multi-line debug repr (shape header, dtype, one line per
+    element) — which is what the grid would then show in the cell. Its
+    ``to_list()`` is the readable form.
+    """
+    if value is None:
+        return None
+    to_list = getattr(value, "to_list", None)
+    return str(to_list()) if callable(to_list) else str(value)
+
+
+@dashboards_endpoint_router.post("/map_data/{dashboard_id}/{component_id}")
+def map_data_endpoint(
+    dashboard_id: PyObjectId,
+    component_id: str,
+    request: dict,
+    current_user: User = Depends(get_user_or_anonymous),
+    access_token: Annotated[str | None, Depends(oauth2_scheme_optional)] = None,
+):
+    """Return the rows behind a map component, for the viewer's "show data" table.
+
+    Nothing is rendered here, hence the name: this is the map's equivalent of
+    ``POST /advanced_viz/data``, and it deliberately answers in the same
+    column-oriented shape so the viewer can reuse that popover's grid verbatim.
+
+    Every column of the data collection is returned, reordered so the map's own
+    columns lead (see ``_map_column_order``). Callers are expected to send the
+    dashboard's filters *minus* the map's own ``map_selection``, so the table
+    matches the points currently drawn rather than only the lassoed ones.
+
+    Response:
+        {
+          "columns": [str],           # ordering, map columns first
+          "rows": {col: [values]},    # column-oriented
+          "row_count": int,           # rows actually returned
+          "total_rows": int,          # rows matching the filters, before the cap
+          "truncated": bool,          # row_count < total_rows because of the cap
+          "filter_applied": bool,
+        }
+    """
+    from depictio.api.v1.deltatables_utils import count_deltatable_lite, load_deltatable_lite
+
+    ctx = _component_context(
+        dashboard_id,
+        component_id,
+        component_type="map",
+        filters=request.get("filters") or [],
+        current_user=current_user,
+        access_token=access_token,
+    )
+
+    try:
+        df = load_deltatable_lite(
+            workflow_id=ctx.wf_oid,
+            data_collection_id=ctx.dc_id,
+            metadata=ctx.filter_metadata or None,
+            # +1 so a frame that exactly fills the cap is still recognisable as
+            # truncated rather than silently reported as complete.
+            limit_rows=MAP_DATA_MAX_ROWS + 1,
+            init_data=ctx.init_data,
+        )
+
+        truncated = df.height > MAP_DATA_MAX_ROWS
+        if truncated:
+            df = df.head(MAP_DATA_MAX_ROWS)
+            # `count_deltatable_lite` answers 0 rather than raising when the
+            # pushdown fails, and "first 10,000 of 0" is a worse answer than
+            # "first 10,000 of 10,000".
+            total_rows = max(
+                _cached_row_count(
+                    ctx.wf_oid,
+                    ctx.dc_id,
+                    ctx.filter_metadata,
+                    ctx.init_data,
+                    count_deltatable_lite,
+                ),
+                df.height,
+            )
+        else:
+            total_rows = int(df.height)
+
+        df = _stringify_non_scalar_columns(df)
+    except Exception as e:
+        # A data problem is not a server fault — the popover can say what broke.
+        logger.warning(f"map_data: could not build rows for {ctx.dc_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=422, detail=f"Could not read this data collection: {e}")
+
+    columns = _map_column_order(ctx.component, list(df.columns))
+    return {
+        "columns": columns,
+        "rows": {c: df.get_column(c).to_list() for c in columns},
+        "row_count": int(df.height),
+        "total_rows": total_rows,
+        "truncated": truncated,
+        "filter_applied": bool(ctx.filter_metadata),
+    }
+
+
+@dashboards_endpoint_router.get("/floating_components/{dashboard_id}")
+def get_floating_components(
+    dashboard_id: PyObjectId,
+    current_user: User = Depends(get_user_or_anonymous),
+):
+    """Return the floating components of a dashboard's whole tab family.
+
+    A floating map is authored on one tab but rendered on every tab, so the
+    viewer needs the components of its *siblings*, not just its own. The
+    `/dashboards/list` projection deliberately omits `stored_metadata` for
+    non-admins, hence this narrow endpoint: one request per page load,
+    returning only the components that actually float.
+
+    Each entry carries its owning `dashboard_id`, which the viewer passes
+    straight to `render_map` — that endpoint takes the dashboard id as a path
+    parameter and gates on the same project-level permission, so rendering tab
+    A's map while viewing tab B needs no special casing.
+    """
+    dashboard_data = dashboards_collection.find_one(
+        {"dashboard_id": dashboard_id},
+        {"project_id": 1, "parent_dashboard_id": 1},
+    )
+    if not dashboard_data:
+        raise HTTPException(status_code=404, detail=f"Dashboard '{dashboard_id}' not found.")
+
+    project_id = dashboard_data.get("project_id")
+    if not project_id or not check_project_permission(project_id, current_user, "viewer"):
+        raise HTTPException(status_code=403, detail="Permission denied.")
+
+    # The family is the parent plus all its children; a main tab is its own parent.
+    parent_id = dashboard_data.get("parent_dashboard_id") or dashboard_id
+    family = dashboards_collection.find(
+        {"$or": [{"dashboard_id": parent_id}, {"parent_dashboard_id": parent_id}]},
+        {"dashboard_id": 1, "title": 1, "tab_order": 1, "stored_metadata": 1},
+    )
+
+    components: list[dict[str, Any]] = []
+    for tab in sorted(family, key=lambda t: (t.get("tab_order") is None, t.get("tab_order") or 0)):
+        for meta in tab.get("stored_metadata") or []:
+            if meta.get("component_type") == "map" and meta.get("placement") == "floating":
+                components.append(
+                    {
+                        "dashboard_id": str(tab.get("dashboard_id")),
+                        "tab_title": tab.get("title"),
+                        "metadata": convert_objectid_to_str(meta),
+                    }
+                )
+
+    # The viewer keys its per-dashboard panel state (and its cross-tab filter
+    # persistence) on the family id, so hand it back rather than making the
+    # client re-derive it from the dashboard list.
+    return {"parent_dashboard_id": str(parent_id), "components": components}
 
 
 # ============================================================================
@@ -4406,7 +4809,10 @@ def _import_multi_tab_dashboard(
         main_dashboard_id  # CRITICAL: Ensure _id = dashboard_id for MongoDB
     )
     main_dashboard_dict["project_id"] = ObjectId(project_id)
-    main_dashboard_dict["last_saved_ts"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    main_dashboard_dict["last_saved_ts"] = utc_now_str()
+    main_dashboard_dict["creation_time"] = preserved_creation_time(
+        existing_main, main_dashboard_id, main_dashboard_dict["last_saved_ts"]
+    )
 
     # Set version and permissions
     if existing_main:
@@ -4477,7 +4883,10 @@ def _import_multi_tab_dashboard(
         tab_dashboard_dict["dashboard_id"] = tab_dashboard_id
         tab_dashboard_dict["_id"] = tab_dashboard_id  # CRITICAL: Ensure _id = dashboard_id
         tab_dashboard_dict["project_id"] = ObjectId(project_id)
-        tab_dashboard_dict["last_saved_ts"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        tab_dashboard_dict["last_saved_ts"] = utc_now_str()
+        tab_dashboard_dict["creation_time"] = preserved_creation_time(
+            existing_tab, tab_dashboard_id, tab_dashboard_dict["last_saved_ts"]
+        )
 
         # Set version and permissions
         if existing_tab:
@@ -4715,7 +5124,10 @@ async def import_dashboard_from_yaml(
     new_dashboard_id = existing_dashboard["dashboard_id"] if existing_dashboard else ObjectId()
     dashboard_dict["dashboard_id"] = new_dashboard_id
     dashboard_dict["project_id"] = ObjectId(project_id)
-    dashboard_dict["last_saved_ts"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    dashboard_dict["last_saved_ts"] = utc_now_str()
+    dashboard_dict["creation_time"] = preserved_creation_time(
+        existing_dashboard, new_dashboard_id, dashboard_dict["last_saved_ts"]
+    )
 
     # Set version and permissions based on create vs update
     if existing_dashboard:
@@ -5401,7 +5813,8 @@ async def import_dashboard_from_json(
             "viewers": [],
         },
         "is_public": project_doc.get("is_public", False),
-        "last_saved_ts": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "last_saved_ts": utc_now_str(),
+        "creation_time": utc_now_str(),
     }
 
     # Insert dashboard

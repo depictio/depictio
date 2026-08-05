@@ -16,7 +16,9 @@ from depictio.api.v1.endpoints.dashboards_endpoints.routes import (
     _agg_expr,
     _agg_value,
     _coerce_agg_result,
+    _filter_expr_columns,
 )
+from depictio.models.components.filter_expr import apply_filter_expr, build_filter_expr
 
 # Every aggregation name the card component offers that has an expression form.
 PUSHDOWN_AGGS = [
@@ -36,6 +38,13 @@ PUSHDOWN_AGGS = [
     "range",
     "q1",
     "q3",
+    # Answered by the shared precompute expressions. Before these had an
+    # expression form a card showed a number while unfiltered (served from the
+    # precomputed specs) and blanked to "—" the moment a filter forced it onto
+    # one of the two paths below.
+    "skewness",
+    "kurtosis",
+    "percentile",
 ]
 
 
@@ -127,3 +136,54 @@ def test_empty_frame_agrees_between_paths(agg):
     """
     empty = pl.DataFrame({"v": []}, schema={"v": pl.Float64})
     assert _pushdown(empty, "v", agg) == _agg_value(empty["v"], agg)
+
+
+class TestCardFilterExpr:
+    """A card's own ``filter_expr`` narrows the rows before anything is reduced.
+
+    ``bulk_compute_cards`` used to ignore the field entirely, so a card declaring
+    a conditional aggregation in YAML rendered the *unfiltered* number — silently
+    wrong rather than visibly broken. The endpoint now narrows the lazy scan
+    (pushdown path) or the collected frame (fallback path); these pin the two
+    together and check the value actually moves.
+    """
+
+    EXPR = "col('v') >= 10"
+
+    @pytest.mark.parametrize("agg", PUSHDOWN_AGGS)
+    def test_both_paths_agree_under_a_filter_expr(self, frame, agg):
+        # Pushdown path: narrow the lazy frame, same as _try_pushdown does.
+        lazy = frame.lazy().filter(build_filter_expr(self.EXPR))
+        pushed = _coerce_agg_result(
+            lazy.select(_agg_expr("v", agg).alias("x")).collect().row(0)[0], agg
+        )
+        # Fallback path: narrow the materialised frame, same as the load branch.
+        loaded = _agg_value(apply_filter_expr(frame, self.EXPR)["v"], agg)
+        if isinstance(loaded, float):
+            assert pushed == pytest.approx(loaded)
+        else:
+            assert pushed == loaded
+
+    def test_the_filter_actually_changes_the_answer(self, frame):
+        """Guard against a filter that silently matches everything."""
+        filtered = apply_filter_expr(frame, self.EXPR)
+        assert 0 < filtered.height < frame.height
+        assert _agg_value(filtered["v"], "count") < _agg_value(frame["v"], "count")
+
+    def test_expression_columns_are_discovered_for_projection(self):
+        """The projected load must carry columns only the expression mentions."""
+        assert _filter_expr_columns("col('v') >= 10") == {"v"}
+        assert _filter_expr_columns("(col('a') >= 5) & (col('b') == 'x')") == {"a", "b"}
+        assert _filter_expr_columns('col("quoted") > 1') == {"quoted"}
+        assert _filter_expr_columns(None) == set()
+        assert _filter_expr_columns("") == set()
+
+    def test_a_filter_matching_nothing_still_agrees(self, frame):
+        """An over-narrow expression must blank both paths the same way."""
+        expr = "col('v') > 1000000"
+        lazy = frame.lazy().filter(build_filter_expr(expr))
+        pushed = _coerce_agg_result(
+            lazy.select(_agg_expr("v", "average").alias("x")).collect().row(0)[0], "average"
+        )
+        loaded = _agg_value(apply_filter_expr(frame, expr)["v"], "average")
+        assert pushed == loaded is None

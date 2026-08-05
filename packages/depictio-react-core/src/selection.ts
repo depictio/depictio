@@ -12,6 +12,89 @@
 import type { InteractiveFilter, InteractiveFilterSource, StoredMetadata } from './api';
 
 /**
+ * Values a given map currently has selected, read back out of the filter list.
+ *
+ * A map's own selection is stripped before it fetches (it must keep showing
+ * every point), so the filter list is the only record of what is selected. The
+ * map re-derives it from here to repaint the highlight — which matters most
+ * after a tab switch, where the map remounts from scratch while the selection
+ * it made is still filtering the rest of the dashboard.
+ */
+export function mapSelectionValues(
+  filters: InteractiveFilter[],
+  componentIndex: string,
+): string[] {
+  for (const f of filters) {
+    if (f.index !== componentIndex || f.source !== 'map_selection') continue;
+    if (Array.isArray(f.value)) return f.value.map((v) => String(v));
+  }
+  return [];
+}
+
+/**
+ * The filter entry a map emits for a set of selected values.
+ *
+ * Shared so that every way of selecting on a map — lassoing points, clicking
+ * one, ticking rows in its underlying-data table — produces the *same* entry.
+ * They are all one selection: they land on the same `(index, 'map_selection')`
+ * key, so whichever was used last replaces the others, and the map's highlight
+ * reads back out of it. Passing `[]` clears.
+ */
+export function mapSelectionFilter(
+  metadata: StoredMetadata,
+  values: string[],
+): InteractiveFilter {
+  const selectionColumn =
+    typeof metadata.selection_column === 'string'
+      ? (metadata.selection_column as string)
+      : undefined;
+  return {
+    index: metadata.index,
+    value: values,
+    source: 'map_selection',
+    column_name: selectionColumn,
+    interactive_component_type: 'MultiSelect',
+    metadata: {
+      dc_id: metadata.dc_id,
+      column_name: selectionColumn,
+      interactive_component_type: 'MultiSelect',
+      selection_column: selectionColumn,
+    },
+  };
+}
+
+/**
+ * Whether a map should emit selections at all.
+ *
+ * Choropleth is excluded because its shapes are non-point geometries that
+ * Plotly's selection events don't cover. `hasHandler` folds in the caller's own
+ * "is anyone listening" check, so read-only hosts light up no lasso affordance.
+ */
+export function isMapSelectionEnabled(metadata: StoredMetadata, hasHandler: boolean): boolean {
+  return (
+    Boolean(metadata.selection_enabled) &&
+    (metadata.map_type as string) !== 'choropleth_map' &&
+    hasHandler
+  );
+}
+
+/**
+ * The filter list a selection-source component should render against: every
+ * dashboard filter *except* the one it emitted itself.
+ *
+ * A component that filtered on its own selection would only ever draw the rows
+ * it already picked, so the selection could never be widened again. It keeps
+ * every row and dims the excluded ones instead.
+ */
+export function filtersExcludingOwn(
+  filters: InteractiveFilter[],
+  componentIndex: string,
+  source: InteractiveFilterSource,
+): InteractiveFilter[] {
+  return filters.filter((f) => !(f.index === componentIndex && f.source === source));
+}
+
+/**
  * Pick selection values from a Plotly ``selectedData`` / ``clickData`` event.
  * Mirrors ``extract_scatter_selection_values`` in
  * ``depictio/dash/modules/figure_component/callbacks/selection.py``.

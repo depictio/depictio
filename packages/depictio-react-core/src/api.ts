@@ -114,8 +114,12 @@ function parseBackendTimestamp(iso: string): number {
 /** Current access token, refreshed first if it is at or near expiry.
  *
  * Exported for the callers that cannot go through `authFetch`: a WebSocket
- * carries its credential in the URL, so it has to resolve the token itself. */
-async function ensureFreshAccessToken(): Promise<string | null> {
+ * carries its credential in the URL, so it has to resolve the token itself.
+ *
+ * `windowMs` widens "near expiry" for the keep-alive, which polls on its own
+ * interval and has to refresh anything that would lapse before its next tick —
+ * see `KEEPALIVE_REFRESH_WINDOW_MS`. Per-request callers want the default. */
+async function ensureFreshAccessToken(windowMs = REFRESH_WINDOW_MS): Promise<string | null> {
   const session = readStoredSession();
   const access = typeof session?.access_token === 'string' ? session.access_token : null;
   const refresh = typeof session?.refresh_token === 'string' ? session.refresh_token : null;
@@ -124,7 +128,7 @@ async function ensureFreshAccessToken(): Promise<string | null> {
   if (!access || !refresh) return access;
 
   const expireMs = expireIso ? parseBackendTimestamp(expireIso) : NaN;
-  if (Number.isFinite(expireMs) && expireMs - Date.now() > REFRESH_WINDOW_MS) {
+  if (Number.isFinite(expireMs) && expireMs - Date.now() > windowMs) {
     return access;
   }
 
@@ -268,9 +272,17 @@ export interface StoredMetadata {
   /** Visual grouping — interactive components sharing the same `group` are
    *  rendered together inside one Mantine Paper. Up to 3 per group. */
   group?: string;
-  /** Layout placement: 'left' (default — Filters sidebar) or 'top' (top panel
-   *  above the dashboard grid). Currently only 'Timeline' may use 'top'. */
-  placement?: 'left' | 'top';
+  /** Layout placement. The allowed values depend on the component type:
+   *  interactive components use 'left' (default — Filters sidebar) or 'top'
+   *  (top panel above the grid, currently 'Timeline' only); maps use 'grid'
+   *  (default — a normal tile) or 'floating' (the floating panel, reachable
+   *  from every tab). Anything lifted out of the grid gets no layout entry. */
+  placement?: 'left' | 'top' | 'grid' | 'floating';
+  /** How the panel presents itself on a viewer's first visit — a card in one of
+   *  its two sizes, docked below the filter panel, or hidden behind the header
+   *  control. Their own saved preference wins thereafter. Maps with
+   *  `placement: 'floating'` only. */
+  floating_initial_state?: 'compact' | 'expanded' | 'docked' | 'hidden';
   /** Default timescale for the Timeline interactive component. */
   timescale?: 'year' | 'month' | 'day' | 'hour' | 'minute';
   /** When set, controls tick-mark visibility on Slider / RangeSlider / Timeline.
@@ -313,6 +325,55 @@ export async function fetchDashboard(dashboardId: string): Promise<DashboardData
   const res = await authFetch(`${API_BASE}/dashboards/get/${dashboardId}`);
   if (!res.ok) throw new Error(`Failed to fetch dashboard: ${res.status}`);
   return res.json();
+}
+
+/** A component lifted out of the grid into the floating panel, paired with the
+ *  tab that owns it. `dashboard_id` is the *owning* tab, which is what the
+ *  renderer must fetch against — it is not necessarily the tab being viewed. */
+export interface FloatingComponent {
+  dashboard_id: string;
+  tab_title?: string;
+  metadata: StoredMetadata;
+}
+
+export interface FloatingComponentsResponse {
+  /** Id of the tab family (the main tab). Panel state and cross-tab filter
+   *  persistence are keyed on this, not on the tab currently being viewed. */
+  parent_dashboard_id: string | null;
+  components: FloatingComponent[];
+}
+
+/**
+ * Fetch the floating components of the whole tab family (parent + siblings).
+ * `/dashboards/list` omits `stored_metadata` for non-admins, so a child tab
+ * cannot otherwise see a map authored on one of its siblings.
+ *
+ * Resolves to an empty result rather than throwing: a missing floating panel
+ * must never take the dashboard down with it.
+ */
+export async function fetchFloatingComponents(
+  dashboardId: string,
+): Promise<FloatingComponentsResponse> {
+  const empty: FloatingComponentsResponse = { parent_dashboard_id: null, components: [] };
+  try {
+    const res = await authFetch(
+      `${API_BASE}/dashboards/floating_components/${dashboardId}`,
+    );
+    if (!res.ok) return empty;
+    const data = await res.json();
+    if (!Array.isArray(data?.components)) return empty;
+    return {
+      parent_dashboard_id: data.parent_dashboard_id ?? null,
+      components: data.components,
+    };
+  } catch (err) {
+    // Network failure or malformed body. Resolving empty rather than rejecting
+    // matters beyond the panel itself: the caller uses this result to validate
+    // filters hydrated from storage, and a rejection would leave a stale
+    // cross-tab selection applied with nothing left to prune it.
+    console.warn('[api] fetchFloatingComponents failed:', err);
+    return empty;
+  }
 }
 
 /**
@@ -372,13 +433,92 @@ export async function fetchUniqueValues(
   return body.values || [];
 }
 
+/** The ``__breakdown__`` payload for a card's categorical strip, computed
+ *  server-side against the real data.
+ *
+ *  Same shape and same helper ``bulk_compute_cards`` uses for a saved card, so
+ *  the builder preview shows the card's actual categories and distribution.
+ *  The preview used to invent ``Bucket 1/2/3`` at a uniform 33/33/34 split.
+ */
+export interface BreakdownPayloadDTO {
+  column: string;
+  total: number;
+  top: { name: string; count: number; percent: number }[];
+  top_share: number;
+  unique_values: number;
+  breakdown_kind?: string;
+  evenness?: number | null;
+}
+
+export async function fetchBreakdown(
+  dcId: string,
+  column: string,
+  breakdownCol: string,
+  aggregation = 'count',
+  topNCount = 3,
+  signal?: AbortSignal,
+): Promise<BreakdownPayloadDTO> {
+  const params = new URLSearchParams({
+    column,
+    breakdown_col: breakdownCol,
+    aggregation,
+    top_n_count: String(topNCount),
+  });
+  const res = await authFetch(
+    `${API_BASE}/deltatables/breakdown/${dcId}?${params.toString()}`,
+    { signal },
+  );
+  if (!res.ok) throw new Error(`Failed to fetch breakdown: ${res.status}`);
+  return res.json();
+}
+
+/** Payload for a card's numeric / QC secondary layout (histogram, threshold,
+ *  completeness, attrition), computed server-side by the same dispatcher the
+ *  saved card uses.
+ *
+ *  ``config`` carries the card's own field names (``threshold_value``,
+ *  ``threshold_direction``, ``threshold_warn``, ``attrition_cols``,
+ *  ``aggregation``). Resolves to ``null`` when the config is incomplete or the
+ *  data cannot support the layout — a constant column has no histogram — and
+ *  the caller then renders no strip.
+ */
+export async function fetchCardMetric(
+  dcId: string,
+  layout: string,
+  column: string,
+  config: Record<string, unknown> = {},
+  signal?: AbortSignal,
+): Promise<Record<string, unknown> | null> {
+  const res = await authFetch(`${API_BASE}/deltatables/card_metric/${dcId}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...config, layout, column }),
+    signal,
+  });
+  if (!res.ok) throw new Error(`Failed to fetch card metric: ${res.status}`);
+  return res.json();
+}
+
+/** What a numeric slider needs to know about its column: the bounds, plus the
+ *  granularity the bounds are drawn from. `dtype` and `unique` are what tell a
+ *  three-year survey column apart from a continuous measurement, so the slider
+ *  can stop on 2008 instead of on 2007.34 — see `buildNumericScale`. */
+export interface ColumnRange {
+  min: number | null;
+  max: number | null;
+  /** Polars dtype as recorded in the DC specs ("int64", "float64", …). */
+  dtype?: string | null;
+  /** Distinct value count from the DC specs. */
+  unique?: number | null;
+}
+
 /** Numeric range bounds for a column — backs RangeSlider min/max.
  *  Reads precomputed min/max from /deltatables/specs/{dcId}.
  */
 export async function fetchColumnRange(
   dcId: string,
   columnName: string,
-): Promise<{ min: number | null; max: number | null }> {
+): Promise<ColumnRange> {
   const specs = await fetchSpecs(dcId);
   if (Array.isArray(specs)) {
     // List shape: [{name, type, specs}]
@@ -389,6 +529,8 @@ export async function fetchColumnRange(
     return {
       min: typeof s.min === 'number' ? s.min : null,
       max: typeof s.max === 'number' ? s.max : null,
+      dtype: typeof entry?.type === 'string' ? (entry.type as string) : null,
+      unique: typeof s.unique === 'number' ? s.unique : null,
     };
   }
   // Dict shape (legacy)
@@ -397,6 +539,8 @@ export async function fetchColumnRange(
   return {
     min: typeof s.min === 'number' ? s.min : null,
     max: typeof s.max === 'number' ? s.max : null,
+    dtype: typeof s.type === 'string' ? (s.type as string) : null,
+    unique: typeof s.unique === 'number' ? s.unique : null,
   };
 }
 
@@ -1099,6 +1243,39 @@ export async function renderMap(
   );
   if (!res.ok) throw new Error(`Failed to render map: ${res.status}`);
   return res.json();
+}
+
+/** Rows behind a map component, for the viewer's "show data" table. Every
+ *  column of the data collection, in `{col: values}` form — deliberately the
+ *  same shape `fetchAdvancedVizData` returns, so both feed the same grid. */
+export interface MapDataResponse {
+  columns: string[];
+  rows: Record<string, unknown[]>;
+  row_count: number;
+  total_rows: number;
+  truncated: boolean;
+  filter_applied: boolean;
+}
+
+export async function fetchMapData(
+  dashboardId: string,
+  componentId: string,
+  filters: InteractiveFilter[],
+  signal?: AbortSignal,
+): Promise<MapDataResponse> {
+  // Not queued through `enqueueFetch`, unlike `fetchAdvancedVizData` above:
+  // this fires when the user opens the popover, and making it wait behind a
+  // dashboard's mount-time request burst would read as a broken button.
+  const res = await authFetch(
+    `${API_BASE}/dashboards/map_data/${dashboardId}/${componentId}`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ filters }),
+      signal,
+    },
+  );
+  if (!res.ok) throw new Error(`Failed to fetch map data: ${res.status}`);
+  return (await res.json()) as MapDataResponse;
 }
 
 /** JBrowse 2 iframe session payload. The standalone JBrowse server runs at
@@ -2099,6 +2276,72 @@ export async function validateSession(): Promise<boolean> {
   return readStoredSession()?.access_token != null;
 }
 
+/** How often the keep-alive re-checks the stored token. Must be comfortably
+ *  shorter than the access-token lifetime (1 h as minted by `/auth/refresh`)
+ *  so a token never lapses between ticks. */
+const KEEPALIVE_INTERVAL_MS = 5 * 60_000;
+
+/** Window the keep-alive refreshes within. It must exceed the tick interval,
+ *  otherwise a tick can land just outside the window, decline to refresh, and
+ *  let the token expire before the next tick fires — leaving a multi-minute
+ *  hole of exactly the "Invalid token" failures this is meant to prevent. The
+ *  margin absorbs timer jitter and throttling in background tabs. */
+const KEEPALIVE_REFRESH_WINDOW_MS = KEEPALIVE_INTERVAL_MS * 2;
+
+let keepAliveTimer: ReturnType<typeof setInterval> | null = null;
+
+/**
+ * Keep the stored access token continuously fresh for the life of the page.
+ *
+ * `authFetch` already refreshes near expiry, so a page that keeps making
+ * requests looks after itself. This is for the gaps: a token that lapses while
+ * a dashboard sits idle, and the credentials that never pass through a fetch
+ * at all — a realtime WebSocket carries its token in the URL and can only read
+ * whatever is in storage at the moment it connects or reconnects.
+ *
+ * Ticking on a timer also means the first click after an idle hour does not
+ * pay for a refresh round-trip before it does anything.
+ *
+ * Idempotent: repeat calls reuse the existing timer. Also refreshes on tab
+ * refocus, since timers are throttled (or frozen) in background tabs.
+ */
+export function startSessionKeepAlive(): () => void {
+  if (typeof window === 'undefined') return () => {};
+  if (keepAliveTimer !== null) return stopSessionKeepAlive;
+
+  const tick = () => {
+    // No session yet (or signed out) — nothing to keep alive.
+    if (!readStoredSession()?.refresh_token) return;
+    void ensureFreshAccessToken(KEEPALIVE_REFRESH_WINDOW_MS).catch(() => {
+      /* offline / transient: the next tick retries */
+    });
+  };
+
+  keepAliveTimer = setInterval(tick, KEEPALIVE_INTERVAL_MS);
+
+  // A backgrounded tab has its timers throttled, so it can return to the
+  // foreground with an already-stale token. Top up as soon as it's visible.
+  document.addEventListener('visibilitychange', onVisible);
+  return stopSessionKeepAlive;
+}
+
+function onVisible(): void {
+  if (document.visibilityState === 'visible') {
+    if (!readStoredSession()?.refresh_token) return;
+    void ensureFreshAccessToken(KEEPALIVE_REFRESH_WINDOW_MS).catch(() => {});
+  }
+}
+
+export function stopSessionKeepAlive(): void {
+  if (keepAliveTimer !== null) {
+    clearInterval(keepAliveTimer);
+    keepAliveTimer = null;
+  }
+  if (typeof document !== 'undefined') {
+    document.removeEventListener('visibilitychange', onVisible);
+  }
+}
+
 export { authFetch, ensureFreshAccessToken, refreshAccessToken };
 
 // ---- Dashboard management (list / create / edit / delete / import / export)
@@ -2156,7 +2399,10 @@ export interface ProjectListEntry {
   name: string;
   project_type?: 'basic' | 'advanced';
   is_public?: boolean;
+  /** Creation time, UTC "YYYY-MM-DD HH:MM:SS". */
   registration_time?: string;
+  /** Last modification time, UTC. Empty when never edited since creation. */
+  last_modified?: string;
   yaml_config_path?: string | null;
   data_management_platform_project_url?: string | null;
   permissions?: DashboardPermissions;
@@ -3042,6 +3288,11 @@ export interface MonitoringHealth {
   live_updates: boolean;
 }
 
+/** Monitoring calls go through ``authFetch``, as every endpoint here now does.
+ *  The admin "Log & Task" tab is the surface that made it necessary: it polls
+ *  unattended for hours, so an access token attached without an expiry check
+ *  lapses mid-session and every poll then 401s with FastAPI's "Invalid token",
+ *  with nothing to trigger a refresh. */
 function monitoringQuery(params: Record<string, string | number | undefined>): string {
   const qs = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {

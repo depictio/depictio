@@ -65,6 +65,10 @@ import {
   useRealtimeJournal,
   batchIdsFromPayload,
   authFetch,
+  useMapPanel,
+  MapPanelControl,
+  MapPanelDock,
+  MapPanelSurface,
 } from 'depictio-react-core';
 import type {
   DashboardData,
@@ -112,7 +116,13 @@ function dashOrigin(): string {
  *  body on failure so callers can debug 422 validation errors at the console.
  *  Pass `forceScreenshot=true` for an explicit Save click — the backend bypasses
  *  its 1h auto-save debounce and re-queues a fresh thumbnail. Auto-saves should
- *  omit it so drag/resize/rename bursts don't overwhelm the celery worker. */
+ *  omit it so drag/resize/rename bursts don't overwhelm the celery worker.
+ *
+ *  Goes through ``authFetch`` rather than a hand-rolled Authorization header:
+ *  an editor session routinely outlives the 1h access token, and a bare header
+ *  read from localStorage would make every autosave 401 ("Invalid token") with
+ *  nothing to refresh it — silently dropping the user's work. ``authFetch``
+ *  refreshes near expiry and retries once on a 401. */
 async function saveDashboard(
   dashboardId: string,
   dashboardData: DashboardData,
@@ -252,6 +262,15 @@ const EditorApp: React.FC = () => {
     },
     [dashboard],
   );
+
+  // Authors see the panel as viewers will. Cross-tab filter persistence is
+  // deliberately viewer-only: an editing session's filter state is scratch, and
+  // carrying it between tabs would be surprising here.
+  const mapPanel = useMapPanel({
+    dashboardId: dashboardId ?? '',
+    filters,
+    onFilterChange: handleFilterChange,
+  });
 
   /** Debounced save: schedule a POST 500ms after the last layout mutation. */
   const scheduleSave = useCallback(
@@ -481,6 +500,35 @@ const EditorApp: React.FC = () => {
     [dashboardId, applyDashboard],
   );
 
+  /**
+   * The same Edit / Delete menu a grid tile carries, for the map in the panel.
+   *
+   * A map with `placement: floating` claims no grid cell, so it never gets a
+   * `renderItemOverlay` — without this there is no way to edit or delete one
+   * again short of hand-typing its component id into the edit URL.
+   *
+   * Only for maps this tab owns. `handleDeleteComponent` strips the component
+   * from *this* dashboard's `stored_metadata`, so on a map authored on a
+   * sibling tab it would save a document unchanged and look like the delete
+   * silently failed. Those are editable from the tab that owns them, which is
+   * the tab the panel's own tab strip names.
+   */
+  const renderMapPanelEditActions = useCallback(
+    (componentId: string, ownerDashboardId: string) => {
+      if (!dashboardId || ownerDashboardId !== dashboardId) return null;
+      return (
+        <GridItemEditOverlay
+          dashboardId={ownerDashboardId}
+          componentId={componentId}
+          editMode
+          onDelete={handleDeleteComponent}
+          componentType="map"
+        />
+      );
+    },
+    [dashboardId, handleDeleteComponent],
+  );
+
   const interactiveComponents = useMemo(
     () =>
       (dashboard?.stored_metadata || []).filter(
@@ -499,7 +547,10 @@ const EditorApp: React.FC = () => {
     () =>
       (dashboard?.stored_metadata || []).filter(
         (m) =>
-          m.component_type !== 'card' && m.component_type !== 'interactive',
+          m.component_type !== 'card' &&
+          m.component_type !== 'interactive' &&
+          // Floating maps live in FloatingPanelHost, not the grid (see App.tsx).
+          !(m.component_type === 'map' && m.placement === 'floating'),
       ),
     [dashboard],
   );
@@ -922,6 +973,7 @@ const EditorApp: React.FC = () => {
           isOwner={isOwner}
           rightExtras={
             <>
+              <MapPanelControl panel={mapPanel} />
               {realtimeEnabled && (
                 <span data-tour-id="realtime-indicator" style={{ display: 'inline-flex' }}>
                   <RealtimeIndicator
@@ -979,21 +1031,25 @@ const EditorApp: React.FC = () => {
               // 20vw / remainder. Using viewport units (vs. % of main) so the
               // left panel keeps a fixed visual width regardless of any chrome
               // that might shrink "main". User asked for ~1/5 left, 4/5 right.
-              gridTemplateColumns: '20vw 1fr',
+              // Floored, because at 1280px a bare 20vw leaves the docked map
+              // barely 200px wide.
+              gridTemplateColumns: 'minmax(260px, 20vw) 1fr',
               height: '100%',
               width: '100%',
               gap: 4,
               overflow: 'hidden',
             }}
           >
+            {/* The panel scrolls its own filter list (see LeftFilterPanel), so
+                this wrapper must not scroll too — otherwise the docked map
+                would scroll away with the filters instead of staying pinned. */}
             <Box
               px={4}
               py={4}
               style={{
                 height: '100%',
                 minWidth: 0,
-                overflowY: 'auto',
-                overflowX: 'hidden',
+                overflow: 'hidden',
               }}
             >
               <LeftFilterPanel
@@ -1007,6 +1063,14 @@ const EditorApp: React.FC = () => {
                 editMode={true}
                 onDeleteComponent={handleDeleteComponent}
                 onDuplicateComponent={handleDuplicateComponent}
+                footer={
+                  <MapPanelDock
+                    panel={mapPanel}
+                    filters={filters}
+                    onFilterChange={handleFilterChange}
+                    renderEditActions={renderMapPanelEditActions}
+                  />
+                }
               />
             </Box>
             <Box
@@ -1044,6 +1108,14 @@ const EditorApp: React.FC = () => {
             dashboardId={dashboardId}
             initialContent={(dashboard.notes_content as string) ?? ''}
             permissions={dashboard.permissions as DashboardPermissions | undefined}
+          />
+        )}
+        {dashboard && dashboardId && (
+          <MapPanelSurface
+            panel={mapPanel}
+            filters={filters}
+            onFilterChange={handleFilterChange}
+            renderEditActions={renderMapPanelEditActions}
           />
         )}
       </AppShell.Main>
