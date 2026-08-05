@@ -152,6 +152,10 @@ def offline_export(monkeypatch: pytest.MonkeyPatch) -> BundleManifest:
 
     monkeypatch.setattr(db_mod, "dashboards_collection", _FakeCollection([_dashboard_doc()]))
     monkeypatch.setattr(db_mod, "deltatables_collection", _FakeCollection([]))
+    # Phase 7 reads the project for its cross-DC links; this one declares none.
+    monkeypatch.setattr(
+        db_mod, "projects_collection", _FakeCollection([{"_id": PROJECT_OID, "links": []}])
+    )
 
     monkeypatch.setattr(
         dtu_mod,
@@ -345,6 +349,9 @@ def test_no_data_bundled_when_no_code_figure_binds(monkeypatch: pytest.MonkeyPat
     doc["stored_metadata"] = [_code_component("fig-miss", MISS_CODE)]
     monkeypatch.setattr(db_mod, "dashboards_collection", _FakeCollection([doc]))
     monkeypatch.setattr(db_mod, "deltatables_collection", _FakeCollection([]))
+    monkeypatch.setattr(
+        db_mod, "projects_collection", _FakeCollection([{"_id": PROJECT_OID, "links": []}])
+    )
     monkeypatch.setattr(
         dtu_mod,
         "schema_deltatable_lite",

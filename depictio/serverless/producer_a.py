@@ -58,7 +58,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import io
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -76,16 +76,25 @@ from depictio.models.models.serverless import (
     DashboardSection,
     DataRef,
     FrozenPayload,
+    LinksSection,
+    LinkTable,
     Producer,
     PrologueOp,
     TierEntry,
     TierReason,
 )
 from depictio.serverless.binding import build_binding
-from depictio.serverless.preflight import TierRow
+from depictio.serverless.preflight import (
+    LINK_TIER_A,
+    LINK_TIER_B,
+    LINK_TIER_INERT,
+    LinkRow,
+    TierRow,
+)
 from depictio.serverless.producer_b import (
     PARQUET_COMPRESSION,
     PARQUET_ROW_GROUP_SIZE,
+    SAMPLE_MAPPING_NO_INLINE_NOTE,
     _companion_targets,
     _depictio_version,
     _runtime_limits,
@@ -100,6 +109,7 @@ from depictio.serverless.pruning import (
     advanced_viz_kind,
     advanced_viz_roles,
     component_columns,
+    link_target_column,
     serves_advanced_viz_live,
 )
 
@@ -774,9 +784,14 @@ def _freeze_map(comp: dict[str, Any], user: ExportUser) -> dict[str, Any]:
 
 def _bundle_data_refs(
     stored_metadata: list[dict[str, Any]],
+    links: list[dict[str, Any]] | None = None,
 ) -> tuple[dict[str, DataRef], dict[str, str], dict[str, str], dict[str, pl.DataFrame]]:
     """Bundle every DC a live component, a ui-mode figure or a live
     advanced_viz consumes (:func:`_ships_data`).
+
+    ``links`` are the emitted cross-DC link configs; their join columns are
+    folded into the per-DC keep sets (:func:`link_join_column_sets`) so a
+    bundled link always finds the column it resolves against.
 
     Returns ``(data_refs, inline_blobs, failures, pruned_frames)``.
     ``failures`` maps ``dc_id`` → error string for DCs that could not be loaded
@@ -788,6 +803,7 @@ def _bundle_data_refs(
     dtu = _dtu()
     column_sets = live_column_sets(stored_metadata)
     filter_cols = interactive_filter_columns(stored_metadata)
+    join_cols = link_join_column_sets(links or [])
     interactive_comps = [c for c in stored_metadata if c.get("component_type") == "interactive"]
     live_comps_by_dc: dict[str, list[dict[str, Any]]] = {}
     for comp in stored_metadata:
@@ -821,8 +837,11 @@ def _bundle_data_refs(
                 select: list[str] | None = None
             else:
                 # Fold every interactive filter column that exists in this DC's
-                # schema (cross-DC name binding — RFC §5) before intersecting.
-                wanted = cols | filter_cols
+                # schema (cross-DC name binding — RFC §5) and every cross-DC
+                # link join column (RFC §8) before intersecting — the schema
+                # intersection below is the guard that keeps a column absent
+                # from this DC out of ``select`` (mirroring ``_project_scan``).
+                wanted = cols | filter_cols | join_cols.get(dc_id, set())
                 select = [c for c in available if c in wanted]
             df = dtu.load_deltatable_lite(
                 workflow_id=ObjectId(str(wf_id)),
@@ -895,6 +914,314 @@ def _base_frame(
 
 
 # ---------------------------------------------------------------------------
+# Cross-DC links (RFC §8, phase 7)
+# ---------------------------------------------------------------------------
+
+# Ceiling on a precomputed translation table, counted in (source value, target
+# value) PAIRS — the thing that actually lands in the manifest JSON. A link
+# whose join column is near-unique on a large source DC would otherwise inline
+# millions of strings into a single-file bundle and dwarf the data it is meant
+# to filter.
+#
+# Over the cap the table is simply left out. That is deliberate and safe: with
+# no table the hop has no way to translate, the runtime's walk reports an
+# unusable chain, and the filter does not propagate — precisely what happens
+# against a server whose link resolution 404s (``filter_links.py:273``, and
+# ``_walk_link_path``'s ``(None, [])`` outcome). Fewer filters applied, never
+# wrong rows. The ``--check`` output says so out loud.
+LINK_TABLE_MAX_PAIRS = 50_000
+
+
+def _fetch_project(project_id: Any) -> dict[str, Any] | None:
+    """The dashboard's project document — where ``links`` live (projects.py:33).
+
+    Best-effort: a bundle whose project cannot be read still builds, it just
+    carries no links (and the check output shows none).
+    """
+    if not project_id:
+        return None
+    try:
+        return _db().projects_collection.find_one({"_id": ObjectId(str(project_id))})
+    except Exception:
+        return None
+
+
+def project_links(project_doc: dict[str, Any] | None) -> list[dict[str, Any]]:
+    """The project's ``links`` list, as stored (list of ``DCLink`` dicts)."""
+    links = (project_doc or {}).get("links") or []
+    return [link for link in links if isinstance(link, dict)]
+
+
+def workflow_ids_by_dc(project_doc: dict[str, Any] | None) -> dict[str, str]:
+    """``dc_id -> workflow_id`` over the project's workflows.
+
+    ``load_deltatable_lite`` wants a workflow id even when ``init_data`` spares
+    it every lookup (it salts the cache key), and a link's source DC need not be
+    read by any component — so its workflow cannot be taken from a component.
+    """
+    out: dict[str, str] = {}
+    for workflow in (project_doc or {}).get("workflows") or []:
+        if not isinstance(workflow, dict):
+            continue
+        wf_id = workflow.get("_id") or workflow.get("id")
+        if not wf_id:
+            continue
+        for dc in workflow.get("data_collections") or []:
+            if not isinstance(dc, dict):
+                continue
+            dc_id = dc.get("_id") or dc.get("id")
+            if dc_id:
+                out[str(dc_id)] = str(wf_id)
+    for dc in (project_doc or {}).get("data_collections") or []:
+        if isinstance(dc, dict) and (dc.get("_id") or dc.get("id")):
+            out.setdefault(str(dc.get("_id") or dc.get("id")), "")
+    return out
+
+
+def dashboard_dc_ids(stored_metadata: list[dict[str, Any]]) -> set[str]:
+    """Every data collection any component of this dashboard reads."""
+    return {str(comp["dc_id"]) for comp in stored_metadata if comp.get("dc_id")}
+
+
+def _link_config_json(link: dict[str, Any]) -> dict[str, Any]:
+    """One Mongo link document, JSON-ready and verbatim otherwise.
+
+    ObjectIds are stringified (``id``/``_id`` and both endpoint ids) because the
+    browser core compares them as strings, and Mongo's ``_id`` spelling is
+    normalised to ``id`` — the same rename ``DCLink.convert_id_field`` does.
+    Nothing else is touched: the runtime reads these dicts with ``.get(...)``,
+    exactly like the server code they mirror, so an unknown field is harmless
+    and a dropped one is not.
+    """
+    config = convert_objectid_to_str(dict(link))
+    if "_id" in config:
+        config["id"] = config.pop("_id")
+    for key in ("id", "source_dc_id", "target_dc_id"):
+        if config.get(key) is not None:
+            config[key] = str(config[key])
+    return config
+
+
+def emit_link_configs(links: list[dict[str, Any]], dc_ids: set[str]) -> list[dict[str, Any]]:
+    """The subset of a project's links worth shipping with this dashboard.
+
+    Keep-rule: **the link's TARGET DC is one this dashboard's components read.**
+    A link that cannot land a filter on anything rendered here is dead weight in
+    the bundle. The source side is deliberately NOT required to be a dashboard
+    DC: it may be an intermediate hop of a chain (A → B → C with no component on
+    B), or an unbundled DC whose translation is precomputed into a tier-B table.
+    The runtime's breadth-first walk ignores whatever it cannot use anyway, so
+    the rule errs toward keeping — an over-kept link costs a few hundred bytes,
+    a dropped one silently kills a cross-DC filter.
+
+    Disabled links are kept too (``enabled: false`` is skipped by the walk
+    itself, and keeping them makes the bundle a faithful copy of the project).
+    """
+    return [
+        _link_config_json(link) for link in links if str(link.get("target_dc_id") or "") in dc_ids
+    ]
+
+
+def link_join_column_sets(links: list[dict[str, Any]]) -> dict[str, set[str]]:
+    """``dc_id -> join columns`` pinned by a set of emitted links.
+
+    ``source_column`` on the source DC, ``target_field or source_column`` on the
+    target (the server's ``_link_target_column`` precedence). Folding these into
+    the bundled column sets is what keeps a cross-DC filter working offline —
+    the join column is typically not one any component plots. Mirrors the
+    server's ``_effective_projection`` fold; columns absent from a DC's real
+    schema are dropped by the caller's schema intersection, never selected.
+    """
+    out: dict[str, set[str]] = {}
+    for link in links:
+        source_id = str(link.get("source_dc_id") or "")
+        target_id = str(link.get("target_dc_id") or "")
+        source_column = link.get("source_column")
+        target_column = link_target_column(link)
+        if source_id and source_column:
+            out.setdefault(source_id, set()).add(str(source_column))
+        if target_id and target_column:
+            out.setdefault(target_id, set()).add(str(target_column))
+    return out
+
+
+def _link_source_column_values(dc_id: str, wf_id: str, column: str) -> list[Any] | None:
+    """Distinct values of a link's join column on an UNBUNDLED source DC.
+
+    ``None`` when the Delta table cannot be located or the column is not in its
+    schema — either way there is nothing to precompute and the caller leaves the
+    link without a table.
+    """
+    try:
+        dt = _db().deltatables_collection.find_one({"data_collection_id": ObjectId(str(dc_id))})
+    except Exception:
+        dt = None
+    delta_location = (dt or {}).get("delta_table_location")
+    if not delta_location:
+        return None
+    try:
+        df = _dtu().load_deltatable_lite(
+            workflow_id=ObjectId(str(wf_id)) if wf_id else ObjectId(),
+            data_collection_id=str(dc_id),
+            metadata=None,
+            select_columns=[column],
+            init_data={
+                str(dc_id): {
+                    "delta_location": delta_location,
+                    "dc_type": "table",
+                    "size_bytes": 0,
+                }
+            },
+        )
+    except Exception:
+        return None
+    if column not in df.columns:
+        return None
+    return [v for v in df[column].unique().to_list() if v is not None]
+
+
+def build_link_table(
+    link: dict[str, Any], source_values: list[Any]
+) -> tuple[LinkTable | None, int]:
+    """Precompute one link's source value → target values mapping (tier B).
+
+    The resolver is the REAL server one (``links_endpoints.resolvers``), called
+    per source value exactly the way ``resolve_link`` calls it — including
+    ``target_known_values=None``, which is what makes ``regex``/``wildcard``
+    behave as pass-throughs server-side. Anything else would make the bundle
+    disagree with the instance it was cut from.
+
+    Returns ``(table, pair_count)``; ``(None, pairs)`` when the table would
+    exceed :data:`LINK_TABLE_MAX_PAIRS` pairs, or when the resolver/config
+    cannot be built at all.
+    """
+    from depictio.api.v1.endpoints.links_endpoints.resolvers import get_resolver
+    from depictio.models.models.links import LinkConfig
+
+    try:
+        link_config = LinkConfig.model_validate(link.get("link_config") or {})
+        resolver = get_resolver(link_config.resolver)
+    except Exception:
+        return None, 0
+
+    values: dict[str, list[str]] = {}
+    pairs = 0
+    for value in source_values:
+        key = str(value)
+        if key in values:
+            continue
+        resolved, _unmapped = resolver.resolve(
+            source_values=[value],
+            link_config=link_config,
+            target_known_values=None,  # what routes.py:743 passes
+        )
+        values[key] = list(resolved)
+        pairs += len(resolved)
+        if pairs > LINK_TABLE_MAX_PAIRS:
+            return None, pairs
+    return LinkTable(values=values), pairs
+
+
+def build_links_section(
+    links: list[dict[str, Any]],
+    dc_ids: set[str],
+    bundled_dc_ids: set[str],
+    wf_by_dc: dict[str, str] | None = None,
+    precompute: bool = True,
+) -> tuple[LinksSection, list[LinkRow]]:
+    """``manifest.links`` plus the rows the ``--check`` links summary prints.
+
+    Tier per emitted link:
+
+    * **tier A** — the source DC is bundled. The browser reruns the server's own
+      translation query against the bundled Parquet and applies the resolver; no
+      table is needed, and every filter state stays exact.
+    * **tier B** — the source DC is NOT bundled, so its whole join-column →
+      resolved-values mapping is precomputed here (:func:`build_link_table`).
+    * **inert** — tier B was impossible: the source Delta table is unreadable
+      from the producer, or the table would blow :data:`LINK_TABLE_MAX_PAIRS`.
+      The link ships (the config is still true) but resolves to nothing in the
+      bundle, which the runtime reports as an unusable chain — the filter does
+      not propagate rather than propagating wrongly.
+
+    ``precompute=False`` is the ``--check`` path: tiers are predicted from
+    bundling alone and no Delta table is read.
+    """
+    configs = emit_link_configs(links, dc_ids)
+    tables: dict[str, LinkTable] = {}
+    rows: list[LinkRow] = []
+    wf_by_dc = wf_by_dc or {}
+
+    for config in configs:
+        link_id = str(config.get("id") or "")
+        source_id = str(config.get("source_dc_id") or "")
+        target_id = str(config.get("target_dc_id") or "")
+        link_config = config.get("link_config") or {}
+        resolver = str(link_config.get("resolver") or "direct")
+        enabled = bool(config.get("enabled", True))
+        note = None
+        if resolver == "sample_mapping" and not link_config.get("mappings"):
+            note = SAMPLE_MAPPING_NO_INLINE_NOTE
+
+        row = LinkRow(
+            link_id=link_id or "?",
+            source=source_id[:8] or "?",
+            target=target_id[:8] or "?",
+            resolver=resolver,
+            tier=LINK_TIER_A,
+            enabled=enabled,
+            note=note,
+        )
+        rows.append(row)
+
+        if source_id in bundled_dc_ids:
+            continue  # tier A — nothing to precompute
+
+        row.tier = LINK_TIER_B
+        if not enabled:
+            # A disabled link never resolves, so its table would be dead
+            # weight — the config alone documents the project's intent.
+            row.tier = LINK_TIER_INERT
+            row.note = _join_notes(note, "disabled; no table precomputed")
+            continue
+        if not precompute:
+            continue
+        column = str(config.get("source_column") or "")
+        source_values = (
+            _link_source_column_values(source_id, wf_by_dc.get(source_id, ""), column)
+            if column
+            else None
+        )
+        if source_values is None:
+            row.tier = LINK_TIER_INERT
+            row.note = _join_notes(
+                note,
+                f"source data collection {source_id[:8]} is neither bundled nor readable "
+                f"(column {column!r}); link inert in bundle",
+            )
+            continue
+        table, pairs = build_link_table(config, source_values)
+        if table is None:
+            row.tier = LINK_TIER_INERT
+            row.note = _join_notes(
+                note,
+                f"translation table too big (>{LINK_TABLE_MAX_PAIRS} pairs); link inert in bundle",
+            )
+            continue
+        tables[link_id] = table
+        row.entries = len(table.values)
+        row.note = _join_notes(note, f"{pairs} pair(s) precomputed")
+
+    return LinksSection(configs=configs, tables=tables), rows
+
+
+def _join_notes(*notes: str | None) -> str | None:
+    """Join the non-empty notes of one link row into a single sentence."""
+    parts = [n for n in notes if n]
+    return "; ".join(parts) if parts else None
+
+
+# ---------------------------------------------------------------------------
 # Export
 # ---------------------------------------------------------------------------
 
@@ -908,6 +1235,7 @@ class ExportResult:
 
     manifest: BundleManifest | None
     tier_rows: list[TierRow]
+    link_rows: list[LinkRow] = field(default_factory=list)
 
 
 def _fetch_dashboard(dashboard_id: str) -> dict[str, Any]:
@@ -940,9 +1268,18 @@ def export_manifest(dashboard_id: str, user: ExportUser) -> ExportResult:
     tier_by_id = {row.component_id: row for row in tier_rows}
     dashboard_oid = ObjectId(str(dashboard_data["dashboard_id"]))
 
+    # Cross-DC links (RFC §8): read from the PROJECT, filtered to the ones that
+    # can land a filter on this dashboard, and folded into the column sets
+    # before anything is bundled — a join column pruned away is a dead filter.
+    project_doc = _fetch_project(dashboard_data.get("project_id"))
+    dc_ids = dashboard_dc_ids(stored_metadata)
+    emitted_links = emit_link_configs(project_links(project_doc), dc_ids)
+
     # Live tier: bundle the DCs cards/interactive (and ui-mode figures, and the
     # live advanced_viz kinds) read.
-    data_refs, inline_blobs, dc_failures, pruned_frames = _bundle_data_refs(stored_metadata)
+    data_refs, inline_blobs, dc_failures, pruned_frames = _bundle_data_refs(
+        stored_metadata, emitted_links
+    )
     for comp in stored_metadata:
         # Components with no data of their own (frozen figures & co.) survive a
         # failed DC — their payload is self-contained. The ones the runtime
@@ -1118,6 +1455,15 @@ def export_manifest(dashboard_id: str, user: ExportUser) -> ExportResult:
         del data_refs[dc_id]
         inline_blobs.pop(f"dc_{dc_id}", None)
 
+    # Links last: a link's tier depends on whether its SOURCE DC survived the
+    # drop above, so this cannot run before the final data_refs are known.
+    links_section, link_rows = build_links_section(
+        project_links(project_doc),
+        dc_ids,
+        set(data_refs),
+        workflow_ids_by_dc(project_doc),
+    )
+
     manifest = BundleManifest(
         mode=BundleMode.SINGLE_FILE,
         producer=Producer.EXPORT_FROM_INSTANCE,
@@ -1136,10 +1482,11 @@ def export_manifest(dashboard_id: str, user: ExportUser) -> ExportResult:
         frozen=frozen,
         bindings=bindings,
         prologues=prologues,
+        links=links_section,
         limits=_runtime_limits(),
         inline_blobs=inline_blobs,
     )
-    return ExportResult(manifest=manifest, tier_rows=tier_rows)
+    return ExportResult(manifest=manifest, tier_rows=tier_rows, link_rows=link_rows)
 
 
 def export_static(
@@ -1170,10 +1517,18 @@ def export_static(
     if check:
         dashboard_data = _fetch_dashboard(dashboard_id)
         _check_permission(dashboard_data, export_user, "viewer")
-        return ExportResult(
-            manifest=None,
-            tier_rows=classify_stored_metadata(dashboard_data.get("stored_metadata") or []),
+        stored_metadata = dashboard_data.get("stored_metadata") or []
+        tier_rows = classify_stored_metadata(stored_metadata)
+        # Predicted link tiers: a source DC that a data-shipping component reads
+        # will be bundled (tier A), anything else needs a precomputed table
+        # (tier B). No Delta table is read — preflight stays data-free.
+        _, link_rows = build_links_section(
+            project_links(_fetch_project(dashboard_data.get("project_id"))),
+            dashboard_dc_ids(stored_metadata),
+            {str(c["dc_id"]) for c in stored_metadata if c.get("dc_id") and _ships_data(c)},
+            precompute=False,
         )
+        return ExportResult(manifest=None, tier_rows=tier_rows, link_rows=link_rows)
 
     if out_path is None:
         raise ProducerAError("out_path is required unless check=True")

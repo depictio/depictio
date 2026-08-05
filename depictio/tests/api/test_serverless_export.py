@@ -452,6 +452,12 @@ def offline_export(monkeypatch: pytest.MonkeyPatch) -> BundleManifest:
 
     monkeypatch.setattr(db_mod, "dashboards_collection", _FakeCollection([_dashboard_doc()]))
     monkeypatch.setattr(db_mod, "deltatables_collection", _FakeCollection([]))
+    # Phase 7 reads the dashboard's project for its cross-DC ``links`` — this
+    # one declares none, so ``manifest.links`` stays empty. (Links themselves
+    # are covered in tests/unit/serverless/test_links_producers.py.)
+    monkeypatch.setattr(
+        db_mod, "projects_collection", _FakeCollection([{"_id": PROJECT_OID, "links": []}])
+    )
 
     frames = {str(DC_OID): _frame(), str(DC2_OID): _frame_2(), str(AV_DC_OID): _frame_av()}
     locations = {
@@ -747,7 +753,11 @@ def test_export_static_check_classifies_without_building(monkeypatch: pytest.Mon
     from depictio.api.v1 import db as db_mod
 
     monkeypatch.setattr(db_mod, "dashboards_collection", _FakeCollection([_dashboard_doc()]))
-    # --check needs only viewer; an admin passes without touching projects.
+    # --check needs only viewer; an admin passes the permission gate without
+    # touching projects, but the links preflight still reads the project doc.
+    monkeypatch.setattr(
+        db_mod, "projects_collection", _FakeCollection([{"_id": PROJECT_OID, "links": []}])
+    )
     result = export_static(
         str(DASHBOARD_OID), check=True, user=ExportUser(id=ObjectId(), is_admin=True)
     )
