@@ -41,6 +41,7 @@ import base64
 import hashlib
 import io
 import json
+import os
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -88,7 +89,22 @@ from depictio.serverless.pruning import (
 
 # Prebuilt single-file static-runtime bundle (`cd depictio/viewer && pnpm run build:static`).
 TEMPLATE_PATH = Path(__file__).resolve().parent.parent / "viewer" / "dist-static" / "static.html"
+TEMPLATE_PATH_ENV = "DEPICTIO_SERVERLESS_TEMPLATE_PATH"
 BUNDLE_TOKEN = "__BUNDLE_MANIFEST__"
+
+
+def _template_path() -> Path:
+    """Where the static-runtime template lives for this process.
+
+    Defaults to the in-tree build output, which official images do not carry
+    (`dist-static/` is gitignored and needs a Node build). Containers without a
+    Node toolchain mount the template elsewhere and point
+    ``DEPICTIO_SERVERLESS_TEMPLATE_PATH`` at it. Resolved per call, not at
+    import time, so the env var can be set after the module loads.
+    """
+    override = os.environ.get(TEMPLATE_PATH_ENV)
+    return Path(override) if override else TEMPLATE_PATH
+
 
 # Engine-spike builder rule (docs/design/serverless-engine-spike.md §4): the
 # runtime's bare hyparquet path decodes snappy; 250k-row groups match the
@@ -783,12 +799,14 @@ def render_bundle_html(manifest: BundleManifest) -> str:
     """Inject a manifest into the prebuilt static-runtime template."""
     from depictio.serverless.inject import inject
 
-    if not TEMPLATE_PATH.exists():
+    template = _template_path()
+    if not template.exists():
         raise ProducerBError(
-            f"static-runtime bundle not built: {TEMPLATE_PATH} is missing — run "
-            f"`cd depictio/viewer && pnpm run build:static`"
+            f"static-runtime bundle not built: {template} is missing — run "
+            f"`cd depictio/viewer && pnpm run build:static`, or point "
+            f"{TEMPLATE_PATH_ENV} at a prebuilt static.html"
         )
-    return inject(TEMPLATE_PATH.read_text(), BUNDLE_TOKEN, manifest.model_dump(mode="json"))
+    return inject(template.read_text(), BUNDLE_TOKEN, manifest.model_dump(mode="json"))
 
 
 def build_static(

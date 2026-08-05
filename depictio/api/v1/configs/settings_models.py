@@ -194,6 +194,7 @@ class MongoDBConfig(ServiceConfig):
         # stored there would be regenerated on every dev wipe and inflate the
         # project's installation count.
         telemetry_collection: str = Field(default="telemetry")
+        static_exports_collection: str = Field(default="static_exports")
         test_collection: str = Field(default="test")
 
     collections: Collections = Field(default_factory=Collections)

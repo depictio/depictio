@@ -1725,6 +1725,70 @@ def compute_sankey(payload: dict) -> dict:
     }
 
 
+@celery_app.task(
+    name="depictio.serverless.export_static",
+    soft_time_limit=600,
+    time_limit=900,
+)
+def export_static_bundle(payload: dict) -> dict:
+    """Build a dashboard's static HTML bundle and park it in S3.
+
+    Producer A writes to a filesystem path, so the bundle is rendered into a
+    temp dir and uploaded from there — the worker keeps nothing on disk.
+
+    ProducerAError / ProducerBError are deliberately NOT caught: Celery marks the
+    task failed and the poll endpoint surfaces the message. That is the path a
+    deployment without the prebuilt static-runtime template takes (see
+    ``DEPICTIO_SERVERLESS_TEMPLATE_PATH``).
+
+    Args:
+        payload: ``{"job_id", "dashboard_id", "user": {"id", "email", "is_admin",
+            "is_anonymous"}}`` — JSON-serializable throughout.
+
+    Returns:
+        ``{"s3_key", "bucket", "size_bytes", "built_at"}``.
+    """
+    import tempfile
+    from datetime import datetime, timezone
+    from pathlib import Path
+
+    # Deferred: producer A pulls in polars / the endpoint bodies, and importing
+    # it lazily keeps the module-attribute monkeypatch seam that tests use.
+    from depictio.api.v1.s3 import s3_client
+    from depictio.serverless import producer_a
+
+    dashboard_id = str(payload["dashboard_id"])
+    export_user = producer_a.ExportUser(**payload["user"])
+    built_at = datetime.now(timezone.utc)
+    key = f"serverless-exports/{dashboard_id}/{built_at.strftime('%Y%m%dT%H%M%SZ')}.html"
+
+    started = time.monotonic()
+    with tempfile.TemporaryDirectory() as tmpdir:
+        out = Path(tmpdir) / "bundle.html"
+        producer_a.export_static(dashboard_id, out_path=out, user=export_user)
+        html_bytes = out.read_bytes()
+
+    s3_client.put_object(
+        Bucket=settings.minio.bucket,
+        Key=key,
+        Body=html_bytes,
+        ContentType="text/html; charset=utf-8",
+    )
+    logger.info(
+        "static export built: dashboard=%s key=%s bytes=%d (%.1fs)",
+        dashboard_id,
+        key,
+        len(html_bytes),
+        time.monotonic() - started,
+    )
+    return {
+        "s3_key": key,
+        "bucket": settings.minio.bucket,
+        "size_bytes": len(html_bytes),
+        "built_at": built_at.isoformat(),
+    }
+
+
 __all__: list[str] = [
     "build_figure_preview",
     "analyze_figure_code",
@@ -1735,4 +1799,5 @@ __all__: list[str] = [
     "compute_upset",
     "compute_coverage_track",
     "compute_sankey",
+    "export_static_bundle",
 ]
