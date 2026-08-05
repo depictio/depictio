@@ -8,6 +8,13 @@ silently breaking it, so uncertainty always widens to a full keep.
 
 Data collections are keyed by ``"{workflow_tag}:{dc_tag}"`` (see
 :func:`dc_key`), the same string producer B hashes into synthetic dc_ids.
+
+Since phase 7 the pruning also has to survive **cross-DC links** (RFC §8): a
+link translates a filter through a *join column* that no component necessarily
+plots, so both endpoints of every emitted link must keep theirs or the bundled
+filter would silently no-op. This mirrors the server's ``_effective_projection``
+fold, pinned by ``TestCrossDcLinkProjection``
+(``depictio/tests/api/v1/test_column_projection.py``).
 """
 
 from __future__ import annotations
@@ -154,13 +161,105 @@ def component_columns(comp: dict[str, Any]) -> set[str] | None:
     return set()
 
 
-def compute_column_sets(spec: DashboardDataLite) -> dict[str, set[str] | None]:
+# ---------------------------------------------------------------------------
+# Cross-DC links (RFC §8): join columns must survive pruning
+# ---------------------------------------------------------------------------
+
+
+def spec_links(spec: DashboardDataLite) -> list[dict[str, Any]]:
+    """The optional top-level ``links:`` block of a build-from-spec YAML.
+
+    ``DashboardDataLite`` is ``extra="allow"``, so a spec that declares
+    project-shaped links (``source_dc_tag`` / ``target_dc_tag`` + ``source_column``
+    + ``link_config`` + ``enabled``) simply carries them as an extra attribute.
+    Anything that is not a list of dicts is ignored rather than fatal — a
+    malformed block must not sink a build whose components are all fine.
+    """
+    raw = getattr(spec, "links", None)
+    if not isinstance(raw, list):
+        return []
+    return [link for link in raw if isinstance(link, dict)]
+
+
+def link_target_column(link: dict[str, Any]) -> str | None:
+    """The column a link's resolved values name on the TARGET DC.
+
+    Mirror of the server's ``_link_target_column`` (``api/v1/filter_links.py:57``)
+    minus its first (resolver-supplied) branch, which only exists at resolution
+    time: ``link_config.target_field`` first, then the link's own
+    ``source_column`` — for a direct table→table link the join column has the
+    same name on both sides.
+    """
+    link_config = link.get("link_config") or {}
+    return link_config.get("target_field") or link.get("source_column") or None
+
+
+def dc_keys_by_tag(spec: DashboardDataLite) -> dict[str, list[str]]:
+    """``dc_tag -> [dc_key, ...]`` for every DC the spec's components reference.
+
+    A spec's link block names data collections by *tag* alone (that is the
+    project-YAML convention), while pruning keys DCs by ``workflow_tag:dc_tag``.
+    The same tag under two workflows is legal, so the map keeps every match and
+    callers fold into all of them — a spare kept column is harmless, a missing
+    join column is a silently dead filter.
+    """
+    by_tag: dict[str, list[str]] = {}
+    for raw in spec.components:
+        comp = component_as_dict(raw)
+        wf_tag = comp.get("workflow_tag") or ""
+        dc_tag = comp.get("data_collection_tag") or ""
+        if not wf_tag or not dc_tag:
+            continue
+        key = dc_key(wf_tag, dc_tag)
+        keys = by_tag.setdefault(dc_tag, [])
+        if key not in keys:
+            keys.append(key)
+    return by_tag
+
+
+def link_join_columns(
+    spec: DashboardDataLite, links: list[dict[str, Any]] | None = None
+) -> dict[str, set[str]]:
+    """``dc_key -> join columns`` contributed by the spec's cross-DC links.
+
+    Each link pins ``source_column`` on its source DC and
+    :func:`link_target_column` on its target DC. Disabled links count too: they
+    ship in the manifest (the runtime skips them), and a link re-enabled in a
+    rebuilt bundle should not need a different column set. Links whose tags do
+    not resolve to a spec DC contribute nothing — producer B reports them
+    separately.
+    """
+    by_tag = dc_keys_by_tag(spec)
+    out: dict[str, set[str]] = {}
+    for link in spec_links(spec) if links is None else links:
+        for tag_field, column in (
+            ("source_dc_tag", link.get("source_column")),
+            ("target_dc_tag", link_target_column(link)),
+        ):
+            tag = link.get(tag_field)
+            if not tag or not column:
+                continue
+            for key in by_tag.get(str(tag), []):
+                out.setdefault(key, set()).add(str(column))
+    return out
+
+
+def compute_column_sets(
+    spec: DashboardDataLite, links: list[dict[str, Any]] | None = None
+) -> dict[str, set[str] | None]:
     """Per-DC column sets for the whole spec.
 
     Returns ``{dc_key: set_of_columns | None}`` where ``None`` means keep every
     column. Only DCs referenced by at least one data-reading component appear.
-    DC-link columns are out of scope for producer B phase 1 — the Lite spec
-    carries no link configs (they are project-level documents).
+
+    Cross-DC link join columns (:func:`link_join_columns`) are folded in on top
+    — a link's join column is typically NOT one a component plots, and dropping
+    it would leave the bundled link resolving against a column that is not
+    there. Only DCs that already have an entry are widened: a link endpoint no
+    component reads is not a reason to bundle a whole extra data collection.
+    Columns absent from the DC's real schema are dropped later, by
+    :func:`intersect_with_schema`'s caller (schema-guard, like the server's
+    ``_project_scan``).
     """
     sets: dict[str, set[str] | None] = {}
     for raw in spec.components:
@@ -185,6 +284,10 @@ def compute_column_sets(spec: DashboardDataLite) -> dict[str, set[str] | None]:
         else:
             existing = sets.get(key) or set()
             sets[key] = existing | cols
+
+    for key, join_cols in link_join_columns(spec, links).items():
+        if key in sets and sets[key] is not None:
+            sets[key] = (sets[key] or set()) | join_cols
     return sets
 
 

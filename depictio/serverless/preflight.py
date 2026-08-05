@@ -42,6 +42,43 @@ class TierRow:
     detail: str | None = None
 
 
+# Link tiers, in the vocabulary the check output prints. They describe HOW a
+# cross-DC link resolves inside the bundle, not how "live" a component is —
+# hence a separate row type from :class:`TierRow`.
+LINK_TIER_A = "tier A"
+LINK_TIER_B = "tier B"
+LINK_TIER_INERT = "inert"
+
+
+@dataclass
+class LinkRow:
+    """One row of the ``--check`` links summary (RFC §8, phase 7).
+
+    A bundled cross-DC link resolves one of two ways, and which one it got is
+    exactly what an author needs to see before shipping:
+
+    * **tier A** — the link's SOURCE data collection is bundled, so the browser
+      runs the server's own translation step (``SELECT DISTINCT link_col WHERE
+      filter_col IN (values)``) against the bundled Parquet and then applies the
+      resolver. Nothing is precomputed; every filter state is exact.
+    * **tier B** — the source DC is not bundled, so the producer precomputed the
+      whole source-value → target-value mapping into ``manifest.links.tables``.
+    * **inert** — neither is possible (no table, e.g. because it would have been
+      too large). The runtime's walk finds no usable chain and the filter simply
+      does not propagate, exactly as it would against a server whose link
+      resolution 404s: fewer filters, never wrong rows.
+    """
+
+    link_id: str
+    source: str
+    target: str
+    resolver: str
+    tier: str
+    enabled: bool = True
+    entries: int | None = None
+    note: str | None = None
+
+
 def classify_component(comp: dict[str, Any]) -> tuple[ComponentTier, TierReason | None, str | None]:
     """Planned (data-free) tier verdict for one component."""
     ctype = comp.get("component_type") or ""
@@ -214,3 +251,44 @@ def print_tier_table(rows: list[TierRow], console: Any) -> None:
         counts[row.tier] = counts.get(row.tier, 0) + 1
     summary = ", ".join(f"{counts[t]} {t.value}" for t in ComponentTier if t in counts)
     console.print(f"  {len(rows)} component(s): {summary}")
+
+
+def print_links_summary(rows: list[LinkRow], console: Any) -> None:
+    """Pretty-print the cross-DC links summary (CLI ``--check`` and builds).
+
+    A no-op when the bundle carries no links, so the overwhelmingly common
+    single-DC dashboard's output is unchanged.
+    """
+    if not rows:
+        return
+
+    from rich.table import Table
+
+    styles = {LINK_TIER_A: "green", LINK_TIER_B: "cyan", LINK_TIER_INERT: "red"}
+    table = Table(title="Static-bundle preflight — cross-DC links")
+    table.add_column("Link", style="cyan")
+    table.add_column("Source → target", overflow="fold")
+    table.add_column("Resolver", style="magenta")
+    table.add_column("Tier")
+    table.add_column("Note", style="dim", overflow="fold")
+    for row in rows:
+        note = row.note or "-"
+        if row.entries is not None:
+            note = f"{row.entries} entries" if note == "-" else f"{row.entries} entries; {note}"
+        table.add_row(
+            row.link_id[:12],
+            f"{row.source} → {row.target}" + ("" if row.enabled else "  (disabled)"),
+            row.resolver,
+            f"[{styles.get(row.tier, 'yellow')}]{row.tier}[/{styles.get(row.tier, 'yellow')}]",
+            note,
+        )
+    console.print(table)
+
+    counts: dict[str, int] = {}
+    for row in rows:
+        counts[row.tier] = counts.get(row.tier, 0) + 1
+    summary = ", ".join(f"{n} {tier}" for tier, n in counts.items())
+    console.print(f"  {len(rows)} link(s): {summary}")
+    for row in rows:
+        if row.note:
+            console.print(f"  [yellow]NOTE[/yellow] {row.source} → {row.target}: {row.note}")

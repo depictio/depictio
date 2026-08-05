@@ -766,9 +766,10 @@ def build_static(
         depictio dashboard build-static --spec dashboard.yaml --data ./parquet/ --check
     """
     from depictio.models.models.serverless import BundleMode
-    from depictio.serverless.preflight import classify_spec, print_tier_table
+    from depictio.serverless.preflight import classify_spec, print_links_summary, print_tier_table
     from depictio.serverless.producer_b import (
         ProducerBError,
+        build_link_configs,
         build_manifest,
         load_spec,
         render_bundle_html,
@@ -790,6 +791,7 @@ def build_static(
 
     if check:
         print_tier_table(classify_spec(lite), console)
+        print_links_summary(build_link_configs(lite)[1], console)
         console.print("[dim]Preflight only (--check): nothing written.[/dim]")
         raise typer.Exit(0)
 
@@ -801,6 +803,7 @@ def build_static(
         raise typer.Exit(1)
 
     print_tier_table(result.tier_rows, console)
+    print_links_summary(result.link_rows, console)
 
     manifest = result.manifest
     for dc_id, ref in manifest.data_refs.items():
@@ -880,7 +883,7 @@ def export_static_cmd(
     # Importing producer A pulls in the API's Mongo/S3 modules; DEPICTIO_CONTEXT
     # is already "CLI" (set by the depictio entrypoint), which skips the
     # server-only Settings secret validation.
-    from depictio.serverless.preflight import print_tier_table
+    from depictio.serverless.preflight import print_links_summary, print_tier_table
     from depictio.serverless.producer_a import ProducerAError, export_static
     from depictio.serverless.producer_b import ProducerBError
 
@@ -904,6 +907,7 @@ def export_static_cmd(
         raise typer.Exit(1)
 
     print_tier_table(result.tier_rows, console)
+    print_links_summary(result.link_rows, console)
 
     if check:
         console.print("[dim]Preflight only (--check): nothing written.[/dim]")

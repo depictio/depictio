@@ -41,7 +41,7 @@ import base64
 import hashlib
 import io
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -59,6 +59,7 @@ from depictio.models.models.serverless import (
     DashboardSection,
     DataRef,
     FrozenPayload,
+    LinksSection,
     Producer,
     PrologueOp,
     RuntimeLimits,
@@ -67,7 +68,13 @@ from depictio.models.models.serverless import (
 )
 from depictio.serverless.binding import build_binding
 from depictio.serverless.companions import build_companions
-from depictio.serverless.preflight import TierRow, classify_spec
+from depictio.serverless.preflight import (
+    LINK_TIER_A,
+    LINK_TIER_INERT,
+    LinkRow,
+    TierRow,
+    classify_spec,
+)
 from depictio.serverless.prologue import transpile_with_reason
 from depictio.serverless.prologue_exec import execute_ops, terminal_px_call
 from depictio.serverless.pruning import (
@@ -75,6 +82,8 @@ from depictio.serverless.pruning import (
     compute_column_sets,
     dc_key,
     intersect_with_schema,
+    link_join_columns,
+    spec_links,
 )
 
 # Prebuilt single-file static-runtime bundle (`cd depictio/viewer && pnpm run build:static`).
@@ -229,6 +238,139 @@ def build_dashboard_doc(spec: DashboardDataLite) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# Cross-DC links (RFC §8, phase 7)
+# ---------------------------------------------------------------------------
+
+# Emitted when a MultiQC sample_mapping link declares no inline ``mappings``.
+# Server-side that is the signal to auto-fetch them from the MultiQC report
+# (``links_endpoints/routes.py:718``); producer B has no report to read, and
+# the resolver's documented behaviour for an empty mapping table is
+# pass-through-with-unmapped (``resolvers.py:181``) — so the link stays honest
+# but expands nothing.
+SAMPLE_MAPPING_NO_INLINE_NOTE = (
+    "sample_mapping without inline 'mappings': the server auto-fetches them from "
+    "the MultiQC report, which the producer cannot replicate — the bundled "
+    "resolver passes values through unexpanded"
+)
+
+
+def synthetic_link_id(source_tag: str, source_column: str, target_tag: str) -> str:
+    """Stable synthetic link id for a spec link (no Mongo behind producer B).
+
+    Hashed from the link's natural triple (source DC tag, join column, target
+    DC tag), so the same spec always yields the same id — which is what lets
+    ``manifest.links.tables`` key on it and a rebuilt bundle stay comparable.
+    """
+    natural = f"link:{source_tag}:{source_column}->{target_tag}"
+    return hashlib.sha1(natural.encode()).hexdigest()[:24]
+
+
+def _dc_ids_by_tag(spec: DashboardDataLite) -> dict[str, list[str]]:
+    """``dc_tag -> [synthetic dc_id, ...]`` over the spec's components.
+
+    A spec's link block names DCs by tag alone (the project-YAML convention);
+    the manifest — and the browser core, which resolves link paths by dc *id* —
+    needs ids. The same tag under two workflows is legal, so every match is
+    kept and the link is emitted once per resolved pair.
+    """
+    by_tag: dict[str, list[str]] = {}
+    for raw in spec.components:
+        comp = component_as_dict(raw)
+        wf_tag = comp.get("workflow_tag") or ""
+        dc_tag = comp.get("data_collection_tag") or ""
+        if not wf_tag or not dc_tag:
+            continue
+        dc_id = synthetic_dc_id(wf_tag, dc_tag)
+        ids = by_tag.setdefault(dc_tag, [])
+        if dc_id not in ids:
+            ids.append(dc_id)
+    return by_tag
+
+
+def build_link_configs(spec: DashboardDataLite) -> tuple[list[dict[str, Any]], list[LinkRow]]:
+    """``(manifest.links.configs, check rows)`` for a spec's ``links:`` block.
+
+    Tags are resolved to the same synthetic dc_ids the data refs are keyed by;
+    a link naming a tag no component references is dropped (there is no DC in
+    the bundle for it to reach) and reported as an inert row. Disabled links
+    ARE emitted — the runtime's graph walk skips them itself, and keeping them
+    makes the bundle a faithful copy of the spec.
+
+    Every source DC of an emitted link is a component DC, hence bundled, hence
+    tier A: the browser runs the source-DC translation query against the
+    bundled Parquet exactly like the server would. Producer B therefore needs
+    no precomputed tables at all — that is producer A's tier-B problem.
+    """
+    by_tag = _dc_ids_by_tag(spec)
+    configs: list[dict[str, Any]] = []
+    rows: list[LinkRow] = []
+
+    for link in spec_links(spec):
+        source_tag = str(link.get("source_dc_tag") or "")
+        target_tag = str(link.get("target_dc_tag") or "")
+        source_column = str(link.get("source_column") or "")
+        link_config = dict(link.get("link_config") or {})
+        resolver = str(link_config.get("resolver") or "direct")
+        link_id = synthetic_link_id(source_tag, source_column, target_tag)
+        enabled = bool(link.get("enabled", True))
+
+        source_ids = by_tag.get(source_tag, [])
+        target_ids = by_tag.get(target_tag, [])
+        if not source_column or not source_ids or not target_ids:
+            missing = [
+                label
+                for label, ok in (
+                    (f"source_dc_tag '{source_tag}'", bool(source_ids)),
+                    (f"target_dc_tag '{target_tag}'", bool(target_ids)),
+                    ("source_column", bool(source_column)),
+                )
+                if not ok
+            ]
+            rows.append(
+                LinkRow(
+                    link_id=link_id,
+                    source=source_tag or "?",
+                    target=target_tag or "?",
+                    resolver=resolver,
+                    tier=LINK_TIER_INERT,
+                    enabled=enabled,
+                    note=f"unresolvable in this spec ({', '.join(missing)}); link dropped",
+                )
+            )
+            continue
+
+        note = None
+        if resolver == "sample_mapping" and not link_config.get("mappings"):
+            note = SAMPLE_MAPPING_NO_INLINE_NOTE
+
+        for source_id in source_ids:
+            for target_id in target_ids:
+                config = {k: v for k, v in link.items() if k != "id"}
+                config["id"] = link_id
+                config["source_dc_id"] = source_id
+                config["target_dc_id"] = target_id
+                config["source_column"] = source_column
+                config["target_type"] = link.get("target_type") or "table"
+                config["link_config"] = dict(link_config)
+                config["enabled"] = enabled
+                configs.append(config)
+
+        rows.append(
+            LinkRow(
+                link_id=link_id,
+                source=source_tag,
+                target=target_tag,
+                resolver=resolver,
+                tier=LINK_TIER_A,
+                enabled=enabled,
+                note=note,
+            )
+        )
+
+    return configs, rows
+
+
+# ---------------------------------------------------------------------------
 # Frozen payloads
 # ---------------------------------------------------------------------------
 
@@ -322,6 +464,7 @@ class BuildResult:
 
     manifest: BundleManifest
     tier_rows: list[TierRow]
+    link_rows: list[LinkRow] = field(default_factory=list)
 
 
 def _companion_targets(
@@ -402,6 +545,11 @@ def build_manifest(
     for i, comp in enumerate(components):
         comp.setdefault("tag", comp.get("index") or f"component-{i}")
 
+    # Cross-DC links (RFC §8): resolved to synthetic dc_ids, and their join
+    # columns folded into both endpoints' column sets by ``compute_column_sets``.
+    link_configs, link_rows = build_link_configs(spec)
+    join_columns = link_join_columns(spec)
+
     # DCs needed = referenced by at least one component that ships data.
     column_sets = compute_column_sets(spec)
     needed: dict[str, tuple[str, str]] = {}
@@ -434,6 +582,11 @@ def build_manifest(
         df = pl.read_parquet(parquet_path)
 
         kept, missing = intersect_with_schema(column_sets.get(key), df.columns)
+        # A link's join column absent from this DC's real schema is dropped, not
+        # fatal — the same schema-guard the server applies in ``_project_scan``
+        # (test_column_projection.py::TestCrossDcLinkProjection). Only columns a
+        # *component* asked for are a hard error.
+        missing -= join_columns.get(key, set())
         if missing:
             raise ProducerBError(
                 f"data collection '{dc_tag}' ({parquet_path.name}) is missing column(s) "
@@ -593,10 +746,23 @@ def build_manifest(
         frozen=frozen,
         bindings=bindings,
         prologues=prologues,
+        # No tables: every emitted link's source DC is a component DC, hence
+        # bundled, hence resolvable in the browser (tier A).
+        links=LinksSection(configs=link_configs),
         limits=_runtime_limits(),
         inline_blobs=inline_blobs,
     )
-    return BuildResult(manifest=manifest, tier_rows=tier_rows)
+    # A link whose source DC did not end up bundled (its only components were
+    # omitted) has no data to translate through and no precomputed table — the
+    # runtime's walk finds no usable chain and the filter does not propagate.
+    for row in link_rows:
+        if row.tier != LINK_TIER_A:
+            continue
+        sources = {c["source_dc_id"] for c in link_configs if c["id"] == row.link_id}
+        if not sources & set(data_refs):
+            row.tier = LINK_TIER_INERT
+            row.note = "source data collection not bundled; link inert in this bundle"
+    return BuildResult(manifest=manifest, tier_rows=tier_rows, link_rows=link_rows)
 
 
 def render_bundle_html(manifest: BundleManifest) -> str:
