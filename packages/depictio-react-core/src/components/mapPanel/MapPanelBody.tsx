@@ -50,6 +50,19 @@ export interface MapPanelBodyProps {
   /** Drag handle props from `useDraggable`, for the floating shell's header. */
   dragHandleProps?: DragHandleProps;
   dragging?: boolean;
+  /**
+   * Editor chrome for the map currently on screen — omit outside the editor.
+   *
+   * A render prop rather than a node, because only the panel knows which of a
+   * family's maps is showing, and only the host knows what editing one means:
+   * this package has no business knowing the editor's routes or its save path.
+   * Same shape as `DashboardGrid`'s `renderItemOverlay`, which is where a
+   * grid-placed component gets the identical menu.
+   *
+   * `ownerDashboardId` is the tab the map was authored on, which is not always
+   * the tab being edited — a floating map is shown from all of them.
+   */
+  renderEditActions?: (componentId: string, ownerDashboardId: string) => React.ReactNode;
 }
 
 /**
@@ -70,6 +83,7 @@ const MapPanelBody: React.FC<MapPanelBodyProps> = ({
   variant,
   dragHandleProps,
   dragging = false,
+  renderEditActions,
 }) => {
   const {
     components,
@@ -159,6 +173,12 @@ const MapPanelBody: React.FC<MapPanelBodyProps> = ({
           </Group>
         )}
         <Group gap={4} wrap="nowrap" data-no-drag>
+          {/* First, and set apart from the rest: everything after it changes how
+              the panel is presented to *you*, while this edits or deletes the
+              component itself. Lifting a map into the panel takes it out of the
+              grid, and the grid overlay is otherwise the only way to reach
+              those actions. */}
+          {!collapsed && renderEditActions?.(active.metadata.index, active.dashboard_id)}
           {/* Folded down, the row keeps only what still acts on something: the
               map's own controls would be operating on a map nobody can see. */}
           {!collapsed && (

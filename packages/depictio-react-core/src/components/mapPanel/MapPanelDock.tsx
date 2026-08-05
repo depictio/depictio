@@ -20,6 +20,8 @@ export interface MapPanelDockProps {
   filters: InteractiveFilter[];
   onFilterChange?: (filter: InteractiveFilter) => void;
   refreshTick?: number;
+  /** Editor chrome for the map on screen — see `MapPanelBodyProps`. */
+  renderEditActions?: (componentId: string, ownerDashboardId: string) => React.ReactNode;
 }
 
 /**
@@ -38,6 +40,7 @@ const MapPanelDock: React.FC<MapPanelDockProps> = ({
   filters,
   onFilterChange,
   refreshTick,
+  renderEditActions,
 }) => {
   const { nodeRef, liveHeight, resizing, handleProps } = useDockResize(panel.setDockHeight);
 
@@ -113,6 +116,7 @@ const MapPanelDock: React.FC<MapPanelDockProps> = ({
         onFilterChange={onFilterChange}
         refreshTick={refreshTick}
         variant="docked"
+        renderEditActions={renderEditActions}
       />
     </Box>
   );

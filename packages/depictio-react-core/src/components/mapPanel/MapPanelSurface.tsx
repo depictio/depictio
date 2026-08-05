@@ -43,6 +43,8 @@ export interface MapPanelSurfaceProps {
   filters: InteractiveFilter[];
   onFilterChange?: (filter: InteractiveFilter) => void;
   refreshTick?: number;
+  /** Editor chrome for the map on screen — see `MapPanelBodyProps`. */
+  renderEditActions?: (componentId: string, ownerDashboardId: string) => React.ReactNode;
 }
 
 /**
@@ -58,6 +60,7 @@ const MapPanelSurface: React.FC<MapPanelSurfaceProps> = ({
   filters,
   onFilterChange,
   refreshTick,
+  renderEditActions,
 }) => {
   const { components, state, setPosition } = panel;
   const { nodeRef, livePosition, dragging, handleProps } = useDraggable((pos: Position) =>
@@ -116,6 +119,7 @@ const MapPanelSurface: React.FC<MapPanelSurfaceProps> = ({
         variant="floating"
         dragHandleProps={handleProps}
         dragging={dragging}
+        renderEditActions={renderEditActions}
       />
     </Paper>
   );

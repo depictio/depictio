@@ -501,6 +501,35 @@ const EditorApp: React.FC = () => {
     [dashboardId, applyDashboard],
   );
 
+  /**
+   * The same Edit / Delete menu a grid tile carries, for the map in the panel.
+   *
+   * A map with `placement: floating` claims no grid cell, so it never gets a
+   * `renderItemOverlay` — without this there is no way to edit or delete one
+   * again short of hand-typing its component id into the edit URL.
+   *
+   * Only for maps this tab owns. `handleDeleteComponent` strips the component
+   * from *this* dashboard's `stored_metadata`, so on a map authored on a
+   * sibling tab it would save a document unchanged and look like the delete
+   * silently failed. Those are editable from the tab that owns them, which is
+   * the tab the panel's own tab strip names.
+   */
+  const renderMapPanelEditActions = useCallback(
+    (componentId: string, ownerDashboardId: string) => {
+      if (!dashboardId || ownerDashboardId !== dashboardId) return null;
+      return (
+        <GridItemEditOverlay
+          dashboardId={ownerDashboardId}
+          componentId={componentId}
+          editMode
+          onDelete={handleDeleteComponent}
+          componentType="map"
+        />
+      );
+    },
+    [dashboardId, handleDeleteComponent],
+  );
+
   const interactiveComponents = useMemo(
     () =>
       (dashboard?.stored_metadata || []).filter(
@@ -1040,6 +1069,7 @@ const EditorApp: React.FC = () => {
                     panel={mapPanel}
                     filters={filters}
                     onFilterChange={handleFilterChange}
+                    renderEditActions={renderMapPanelEditActions}
                   />
                 }
               />
@@ -1086,6 +1116,7 @@ const EditorApp: React.FC = () => {
             panel={mapPanel}
             filters={filters}
             onFilterChange={handleFilterChange}
+            renderEditActions={renderMapPanelEditActions}
           />
         )}
       </AppShell.Main>
