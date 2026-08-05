@@ -278,6 +278,16 @@ def build_aggregated_figure(
         margin={"l": 50, "r": 20, "t": 40, "b": 40},
         uirevision="persistent",
     )
+    # The margins above are a floor, not a ceiling. Fixed, they clip whatever
+    # doesn't fit: a bar chart over long category names ("Candidatus_Sacchari-
+    # bacteria") rotates its ticks, needs far more than 40px below the plot, and
+    # rendered with its labels cut off mid-glyph and the axis title written over
+    # them. `automargin` lets each axis grow the margin to fit its own ticks and
+    # title, so the tight default still applies to the figures that fit it.
+    # Applied here and in `figure_builder`, which pins the same margins for the
+    # px path. No-op on figures without cartesian axes (the map family).
+    fig.update_xaxes(automargin=True)
+    fig.update_yaxes(automargin=True)
     if render_stats is not None:
         render_stats["aggregated"] = True
     return fig
