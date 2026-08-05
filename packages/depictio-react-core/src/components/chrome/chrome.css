@@ -72,7 +72,10 @@
 }
 /* The reset icon stays visible without hover when its component is the
  * source of the dashboard's active filter — gives users a persistent
- * affordance to clear the filter from where it originated. */
+ * affordance to clear the filter from where it originated. Which components
+ * get it is decided in ComponentChrome (`persistentReset`); interactive
+ * controls are excluded, because this row floats and their frame has nothing
+ * under the top-right corner to spare. */
 .depictio-component-actions > .depictio-active-reset {
   opacity: 1;
   pointer-events: auto;

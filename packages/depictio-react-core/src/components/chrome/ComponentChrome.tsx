@@ -43,7 +43,9 @@ export interface ComponentChromeProps {
    *  (e.g. a scatter selection, a table row selection, a map polygon). The
    *  reset action icon stays in its original position in the chrome row but
    *  switches to a filled-orange style; otherwise it renders disabled in the
-   *  light variant. The action-icon order is preserved either way. */
+   *  light variant. The action-icon order is preserved either way. Whether it
+   *  also stays visible without hover is a further question — see
+   *  `persistentReset` below. */
   sourceFilterActive?: boolean;
 }
 
@@ -136,6 +138,27 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
   if (inspector) actions.push('inspect');
   actions.push(...actionsFor(componentType));
 
+  /**
+   * Whether the reset icon stays on screen without hover.
+   *
+   * The action row floats over the component, so a persistent icon costs
+   * whatever is under the top-right corner. A figure, table or map has plot
+   * area to spare there, and it needs the icon: a scatter selection or a
+   * highlighted row is easy to miss, and nothing else on screen says the
+   * component is filtering the dashboard.
+   *
+   * An interactive control has neither. Its frame is a title line and the
+   * control itself with nothing in reserve, so the icon lands on the slider
+   * track or the select's chevron — and it is the one component type whose
+   * active filter is already legible, because the value is displayed in the
+   * control. The panel's summary list, the group headers and "Reset all" all
+   * carry a persistent clear for it too. So here the icon reverts to
+   * hover-only, like every other action; it still turns filled-orange when
+   * revealed, so the state it signalled is not lost.
+   */
+  const persistentReset =
+    sourceFilterActive && Boolean(onResetFilter) && componentType !== 'interactive';
+
   const renderAction = (action: ChromeAction) => {
     switch (action) {
       case 'inspect':
@@ -189,7 +212,7 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
         className={
           'depictio-component-actions' +
           (orientationFor(componentType) === 'vertical' ? ' depictio-actions-vertical' : '') +
-          (sourceFilterActive && onResetFilter ? ' has-active-reset' : '')
+          (persistentReset ? ' has-active-reset' : '')
         }
         wrap="nowrap"
       >
@@ -225,7 +248,7 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
           // Load-All toggle) looks detached / misaligned from the rest.
           const node = renderAction(a);
           if (!node) return null;
-          const isActiveReset = a === 'reset' && sourceFilterActive && Boolean(onResetFilter);
+          const isActiveReset = a === 'reset' && persistentReset;
           return (
             <span
               key={a}
