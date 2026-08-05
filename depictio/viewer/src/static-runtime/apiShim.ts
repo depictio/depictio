@@ -26,6 +26,13 @@ import type {
 } from '../../../../packages/depictio-react-core/src/api';
 
 import { bundle, frozenPayload, interactiveIndexFor } from './bundle';
+import {
+  columnRangeLive,
+  computeCardsLive,
+  dataRefFor,
+  specsLive,
+  uniqueValuesLive,
+} from './liveData';
 import { themedFrozenFigure } from './mantinePlotlyTemplate';
 
 // ---- dashboard shell -------------------------------------------------------
@@ -112,11 +119,22 @@ export async function renderMultiQCGeneralStats(_dashboardId: string, componentI
 
 export async function bulkComputeCards(
   _dashboardId: string,
-  _filters: InteractiveFilter[],
+  filters: InteractiveFilter[],
   componentIds?: string[],
 ) {
-  // Merge every frozen card payload; each carries the bulk-response shape for
-  // its own component id(s).
+  // Live-tier cards (phase 1: bundles with data_refs) compute through the
+  // query engine with the current filter state; frozen card payloads (phase-0
+  // bundles, or frozen-tier cards in mixed bundles) merge in unchanged.
+  const live = await computeCardsLive(filters, componentIds).catch((e) => {
+    console.error('static bundle: live card computation failed', e);
+    return {
+      values: {} as Record<string, unknown>,
+      secondary_values: {} as Record<string, Record<string, unknown>>,
+      aggregations: {} as Record<string, string[]>,
+      filter_applied: false,
+      filter_count: 0,
+    };
+  });
   const values: Record<string, unknown> = {};
   const secondary_values: Record<string, Record<string, unknown>> = {};
   const aggregations: Record<string, string[]> = {};
@@ -136,7 +154,17 @@ export async function bulkComputeCards(
       if (!componentIds.includes(key)) delete values[key];
     }
   }
-  return { values, secondary_values, aggregations, filter_applied: false, filter_count: 0 };
+  // Live results win over any frozen snapshot of the same component.
+  Object.assign(values, live.values);
+  Object.assign(secondary_values, live.secondary_values);
+  Object.assign(aggregations, live.aggregations);
+  return {
+    values,
+    secondary_values,
+    aggregations,
+    filter_applied: live.filter_applied,
+    filter_count: live.filter_count,
+  };
 }
 
 // ---- interactive (requests carry dc_id + column, not a component id) -------
@@ -158,14 +186,17 @@ function interactiveFrozen(dcId: string, columnName?: string, kind = 'interactiv
 }
 
 export async function fetchUniqueValues(dcId: string, columnName: string): Promise<string[]> {
+  if (dataRefFor(dcId)) return uniqueValuesLive(dcId, columnName);
   return interactiveFrozen(dcId, columnName, 'unique-values').unique ?? [];
 }
 
 export async function fetchColumnRange(dcId: string, columnName: string) {
+  if (dataRefFor(dcId)) return columnRangeLive(dcId, columnName);
   return interactiveFrozen(dcId, columnName, 'column-range').range ?? { min: null, max: null };
 }
 
 export async function fetchSpecs(dcId: string): Promise<Record<string, unknown>> {
+  if (dataRefFor(dcId)) return specsLive(dcId);
   return interactiveFrozen(dcId, undefined, 'specs').specs ?? {};
 }
 
