@@ -12,6 +12,7 @@ import {
   Switch,
   Text,
   Textarea,
+  Tooltip,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
@@ -20,6 +21,7 @@ import {
   BrandThemePreview,
   isEmptyBrandTheme,
   useBrandScopeAttributes,
+  useIsStaticBundle,
   useResolvedBrandTheme,
   Z_LAYERS,
   type BrandTheme,
@@ -642,6 +644,52 @@ const FeedbackBlock: React.FC<{ href: string; label: string }> = ({ href, label 
 );
 
 // ---------------------------------------------------------------------------
+// Export static
+// ---------------------------------------------------------------------------
+
+/** Shown both as the disabled button's tooltip and, when the gate is closed,
+ *  as the always-visible caption underneath it — a tooltip on a disabled
+ *  Mantine button never fires, and the whole point of disabling (rather than
+ *  hiding) is that the reason stays discoverable. */
+const OWNER_GATE_HINT =
+  'You can only export dashboards you own. Duplicate this one to get your own copy.';
+
+/**
+ * The owner-gated "Export static" action: a rare, owner-only action that does
+ * not warrant permanent header real estate. The click hands off to
+ * `ExportStaticModal` (opened by the viewer), which runs the preflight.
+ */
+const ExportStaticBlock: React.FC<{
+  dashboardId?: string | null;
+  isOwner: boolean;
+  onExportStatic: () => void;
+}> = ({ dashboardId, isOwner, onExportStatic }) => (
+  <Stack gap="xs" data-testid="export-static-section">
+    {/* The button sizes to its label; only the caption spans the section, so
+        it stays readable instead of wrapping at button width. */}
+    <Group>
+      <Tooltip label={OWNER_GATE_HINT} disabled={isOwner} withArrow>
+        <Button
+          leftSection={<Icon icon="mdi:export-variant" width={16} />}
+          variant="light"
+          size="sm"
+          onClick={onExportStatic}
+          disabled={!dashboardId || !isOwner}
+          data-testid="export-static-btn"
+        >
+          Export static
+        </Button>
+      </Tooltip>
+    </Group>
+    <Text size="xs" c="dimmed">
+      {isOwner
+        ? 'Builds a single self-contained HTML file of this dashboard that opens without a server.'
+        : OWNER_GATE_HINT}
+    </Text>
+  </Stack>
+);
+
+// ---------------------------------------------------------------------------
 // Sections
 // ---------------------------------------------------------------------------
 
@@ -656,6 +704,7 @@ type SectionKey =
   | 'branding'
   | 'history'
   | 'data-version'
+  | 'export'
   | 'feedback';
 /** A settings section, for opening the settings on it (`initialSection`). */
 export type SettingsSectionKey = SectionKey;
@@ -830,6 +879,17 @@ interface SettingsDrawerProps {
   filters?: FilterSettings;
   /** The section to open on, instead of the one last visited. */
   initialSection?: SettingsSectionKey;
+  /** Needed by the Export static action; omit it (with `onExportStatic`) on
+   *  surfaces that have no export affordance, e.g. the editor. */
+  dashboardId?: string | null;
+  /** Viewer only: opens the owner-gated "Export static" modal. When omitted
+   *  the Export section is not rendered at all — that is how the editor keeps
+   *  the export out. Also suppressed inside static bundles, which have no
+   *  backend to build from. */
+  onExportStatic?: () => void;
+  /** False renders the export action disabled (never hidden) with the
+   *  owner-gate explanation. Defaults to `true`. */
+  isOwner?: boolean;
 }
 
 /** What the "Your filters" section needs from the viewer. */
@@ -888,7 +948,14 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
   dataVersionPanel,
   filters,
   initialSection,
+  dashboardId,
+  onExportStatic,
+  isOwner = true,
 }) => {
+  // Static bundles are offline snapshots: there is no API to preflight or build
+  // against, so the export is absent rather than disabled. Inert (false) in
+  // server builds.
+  const isStaticBundle = useIsStaticBundle();
   const surface: Surface =
     onChangeBrandTheme ||
     onToggleFunnelFiltering ||
@@ -1022,6 +1089,22 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
       title: 'Data version',
       subtitle: 'Draw this dashboard from earlier data, for you only, until you reload',
       body: dataVersionPanel,
+    });
+  }
+  if (onExportStatic && !isStaticBundle) {
+    sections.push({
+      key: 'export',
+      icon: 'mdi:export-variant',
+      title: 'Export static',
+      navLabel: 'Export',
+      subtitle: 'The whole dashboard as one HTML file that opens without Depictio',
+      body: (
+        <ExportStaticBlock
+          dashboardId={dashboardId}
+          isOwner={isOwner}
+          onExportStatic={onExportStatic}
+        />
+      ),
     });
   }
   if (feedback) {

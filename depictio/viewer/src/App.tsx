@@ -176,6 +176,7 @@ import { LandingHint, useLandingHint } from './landing';
 import { DashboardSpotlight } from './spotlight';
 import { useLayoutOverride } from './layoutOverride';
 import type { SettingsSectionKey } from './chrome/SettingsDrawer';
+import ExportStaticModal from './chrome/ExportStaticModal';
 import VersionPreviewBanner from './versions/VersionPreviewBanner';
 import { dashboardHref } from './dashboards/lib/dashboardLinks';
 
@@ -292,6 +293,8 @@ const App: React.FC = () => {
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure(false);
   const [settingsOpened, { open: openSettings, close: closeSettings }] = useDisclosure(false);
   const [searchOpened, { open: openSearch, close: closeSearch }] = useDisclosure(false);
+  const [exportStaticOpened, { open: openExportStatic, close: closeExportStatic }] =
+    useDisclosure(false);
   // The section the settings open on when something asks for one (the Guide's
   // "Open Your view"); unset, they open on the one last visited.
   const [settingsSection, setSettingsSection] = useState<SettingsSectionKey | undefined>();
@@ -2171,6 +2174,15 @@ const App: React.FC = () => {
         onClose={closeSettings}
         dashboard={dashboard}
         initialSection={settingsSection}
+        dashboardId={dashboardId}
+        // Hand off rather than stack: a Modal opened over a still-open
+        // settings modal leaves two Mantine focus traps and two overlays
+        // fighting each other.
+        onExportStatic={() => {
+          closeSettings();
+          openExportStatic();
+        }}
+        isOwner={isOwner}
         filters={
           remembering
             ? {
@@ -2181,6 +2193,12 @@ const App: React.FC = () => {
               }
             : undefined
         }
+      />
+      <ExportStaticModal
+        opened={exportStaticOpened}
+        onClose={closeExportStatic}
+        dashboardId={dashboardId}
+        dashboardTitle={dashboard?.title ?? null}
       />
       {/* Opens on a dashboard's `params:` links. */}
       <RunParametersHost dashboard={dashboard} />
