@@ -55,7 +55,11 @@ export type AggFn =
   | 'var'
   | 'mode'
   | 'first'
-  | 'last';
+  | 'last'
+  /** Compound Tukey box-and-whisker payload, not a scalar: resolves to a
+   *  `BoxPlotStats` object (or null on an empty selection). The card renderer
+   *  reads all nine fields; see aggregateValues. */
+  | 'box_plot_stats';
 
 export interface AggSpec {
   col: string;

@@ -279,8 +279,10 @@ export async function resolveLinkFilters(
 }
 
 /** Server aggregation-name aliases (`_agg_expr`, dashboards routes.py:1242)
- *  → engine AggFn. Returns undefined for aggregations the phase-1 engine
- *  doesn't cover (box_plot_stats, q1/q3); `range` is derived from minMax. */
+ *  → engine AggFn. Returns undefined for aggregations the engine doesn't cover
+ *  (q1/q3); `range` is derived from minMax. `box_plot_stats` maps straight
+ *  through — the kernel resolves it to the same compound object the server
+ *  returns, which the card's BoxPlot renderer type-guards on. */
 function toAggFn(aggregation: string): AggFn | 'range' | undefined {
   const agg = (aggregation || '').toLowerCase();
   const direct: Record<string, AggFn> = {
@@ -300,6 +302,7 @@ function toAggFn(aggregation: string): AggFn | 'range' | undefined {
     mode: 'mode',
     first: 'first',
     last: 'last',
+    box_plot_stats: 'box_plot_stats',
   };
   if (agg in direct) return direct[agg];
   if (agg === 'range') return 'range';
