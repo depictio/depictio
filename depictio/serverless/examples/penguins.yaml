@@ -1,0 +1,91 @@
+# Worked producer-B example — Palmer Penguins (minimal).
+#
+# A trimmed-down cousin of depictio/projects/init/penguins/dashboards/
+# species_analysis.yaml, kept small on purpose: 2 cards, 1 ui-mode figure,
+# 2 interactive filters, 1 text header.
+#
+# Expected data-dir layout (producer-B convention
+# `{data_dir}/{workflow_tag}/{data_collection_tag}.parquet`):
+#
+#   <data_dir>/penguin_species_analysis/joined_penguins_complete.parquet
+#
+# The Parquet is the join of the repo's penguins CSVs
+# (depictio/projects/init/penguins/data/run_*/{demographic_data,physical_features}.csv,
+# joined on `individual_id`) — see the build helper in
+# depictio/tests/unit/serverless/test_producer_b.py, which converts those CSVs
+# into a temp data dir before building this spec. Columns:
+#   individual_id (str), island (str), sex (str), year (int), species (str),
+#   bill_length_mm / bill_depth_mm / flipper_length_mm / body_mass_g (float)
+#
+# Build:
+#   depictio dashboard build-static \
+#     --spec depictio/serverless/examples/penguins.yaml \
+#     --data <data_dir> --out penguins-static.html
+#   (add --check to preview the per-component tier table without building)
+
+title: "Penguins — static bundle example"
+subtitle: "Producer B worked example (Palmer Penguins)"
+
+components:
+  - tag: text-intro
+    component_type: text
+    title: "Palmer Penguins — Static Bundle"
+    order: 2
+    alignment: left
+    body: "Morphology of *Adelie*, *Chinstrap* and *Gentoo* penguins, built with no backend."
+    layout: {x: 0, y: 0, w: 8, h: 1}
+
+  - tag: card-body-mass
+    component_type: card
+    workflow_tag: penguin_species_analysis
+    data_collection_tag: joined_penguins_complete
+    aggregation: average
+    column_name: body_mass_g
+    column_type: float64
+    title: "Mean Body Mass (g)"
+    layout: {x: 0, y: 1, w: 4, h: 2}
+
+  - tag: card-species-count
+    component_type: card
+    workflow_tag: penguin_species_analysis
+    data_collection_tag: joined_penguins_complete
+    aggregation: nunique
+    column_name: species
+    column_type: object
+    title: "Species"
+    layout: {x: 4, y: 1, w: 4, h: 2}
+
+  - tag: filter-species
+    component_type: interactive
+    workflow_tag: penguin_species_analysis
+    data_collection_tag: joined_penguins_complete
+    interactive_component_type: MultiSelect
+    column_name: species
+    column_type: object
+    title: "Species"
+    layout: {x: 0, y: 0, w: 1, h: 3}
+
+  # `year` is Int64 in the Parquet: a categorical filter on a non-String
+  # column, so the build materialises a `__code__year` companion + codebook
+  # (RFC §5 / errata #1).
+  - tag: filter-year
+    component_type: interactive
+    workflow_tag: penguin_species_analysis
+    data_collection_tag: joined_penguins_complete
+    interactive_component_type: MultiSelect
+    column_name: year
+    column_type: object
+    title: "Year"
+    layout: {x: 0, y: 3, w: 1, h: 3}
+
+  - tag: scatter-mass-flipper
+    component_type: figure
+    workflow_tag: penguin_species_analysis
+    data_collection_tag: joined_penguins_complete
+    visu_type: scatter
+    title: "Body Mass vs Flipper Length"
+    dict_kwargs:
+      x: flipper_length_mm
+      y: body_mass_g
+      color: species
+    layout: {x: 0, y: 3, w: 8, h: 5}

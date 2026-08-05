@@ -1,0 +1,404 @@
+"""End-to-end tests for serverless producer B (build-from-spec).
+
+Builds the worked example spec (``depictio/serverless/examples/penguins.yaml``)
+against a temp data dir derived from the repo's penguins CSVs, and asserts the
+manifest contract: stable synthetic dc_ids, complete data_refs (columns /
+dtypes / companions / codebooks / hash), exact pruning, frozen figure payloads,
+the tier table, and that the inline blob round-trips to a polars-readable
+snappy Parquet. Manifest assembly is tested without the HTML template; the
+injection assertions are skipped when ``dist-static/static.html`` is absent
+(CI may not have built the viewer).
+"""
+
+from __future__ import annotations
+
+import base64
+import hashlib
+import io
+import json
+from pathlib import Path
+
+import polars as pl
+import pytest
+
+from depictio.models.models.serverless import (
+    BundleManifest,
+    BundleMode,
+    ComponentTier,
+    Producer,
+    TierReason,
+)
+from depictio.serverless.preflight import classify_spec
+from depictio.serverless.producer_b import (
+    TEMPLATE_PATH,
+    BuildResult,
+    ProducerBError,
+    build_manifest,
+    build_static,
+    load_spec,
+    render_bundle_html,
+    resolve_parquet_path,
+    synthetic_dc_id,
+)
+
+REPO_ROOT = Path(__file__).resolve().parents[4]
+EXAMPLE_SPEC = REPO_ROOT / "depictio" / "serverless" / "examples" / "penguins.yaml"
+PENGUINS_DATA = REPO_ROOT / "depictio" / "projects" / "init" / "penguins" / "data"
+
+WF_TAG = "penguin_species_analysis"
+DC_TAG = "joined_penguins_complete"
+
+
+def _penguins_frame() -> pl.DataFrame:
+    """Join the repo's penguins CSV runs into the flat example table."""
+    runs = sorted(p for p in PENGUINS_DATA.iterdir() if p.is_dir())
+    parts = []
+    for run in runs:
+        demo = pl.read_csv(run / "demographic_data.csv")
+        phys = pl.read_csv(run / "physical_features.csv")
+        parts.append(demo.join(phys, on="individual_id", how="inner"))
+    return pl.concat(parts)
+
+
+@pytest.fixture(scope="module")
+def data_dir(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    root = tmp_path_factory.mktemp("penguins-data")
+    dc_dir = root / WF_TAG
+    dc_dir.mkdir(parents=True)
+    _penguins_frame().write_parquet(dc_dir / f"{DC_TAG}.parquet")
+    return root
+
+
+@pytest.fixture(scope="module")
+def result(data_dir: Path) -> BuildResult:
+    return build_manifest(load_spec(EXAMPLE_SPEC), data_dir)
+
+
+@pytest.fixture(scope="module")
+def manifest(result: BuildResult) -> BundleManifest:
+    return result.manifest
+
+
+# ---------------------------------------------------------------------------
+# Manifest assembly
+# ---------------------------------------------------------------------------
+
+
+def test_manifest_validates_and_roundtrips(manifest: BundleManifest) -> None:
+    assert manifest.producer is Producer.BUILD_FROM_SPEC
+    assert manifest.mode is BundleMode.SINGLE_FILE
+    assert manifest.dashboard.id  # runtime no-ops several component types without one
+    assert manifest.dashboard.title == "Penguins — static bundle example"
+    # JSON-safety guard: NaN/Inf tokens would blank the embedded blob.
+    text = json.dumps(manifest.model_dump(mode="json"))
+    assert "NaN" not in text and "Infinity" not in text
+    assert BundleManifest.model_validate(json.loads(text))
+
+
+def test_dc_ids_are_stable(data_dir: Path, manifest: BundleManifest) -> None:
+    expected = hashlib.sha1(f"{WF_TAG}:{DC_TAG}".encode()).hexdigest()[:24]
+    assert synthetic_dc_id(WF_TAG, DC_TAG) == expected
+    assert set(manifest.data_refs) == {expected}
+    # A rebuild produces the same ids and the same blob bytes.
+    again = build_manifest(load_spec(EXAMPLE_SPEC), data_dir).manifest
+    assert set(again.data_refs) == {expected}
+    assert again.inline_blobs == manifest.inline_blobs
+    # Component dc_ids in the mounted doc point at the same synthetic id.
+    for comp in manifest.dashboard.doc["stored_metadata"]:
+        if comp.get("data_collection_tag") == DC_TAG:
+            assert comp["dc_id"] == expected
+
+
+def test_data_ref_is_complete(manifest: BundleManifest) -> None:
+    ref = next(iter(manifest.data_refs.values()))
+    assert ref.uri == f"inline:dc_{synthetic_dc_id(WF_TAG, DC_TAG)}"
+    assert ref.rows == 342  # inner join of the repo CSVs (2 rows lack physical features)
+    assert ref.size_bytes > 0
+    names = [c.name for c in ref.columns]
+    dtypes = {c.name: c.dtype for c in ref.columns}
+    assert dtypes["body_mass_g"] == "Float64"
+    assert dtypes["species"] == "String"
+    assert dtypes["year"] == "Int64"
+    # `year` is a non-String MultiSelect column → codebook + Int32 companion.
+    assert ref.companions == {"__code__year": "year"}
+    assert "__code__year" in names
+    assert dtypes["__code__year"] == "Int32"
+    assert ref.codebooks == {"year": {"2007": 0, "2008": 1, "2009": 2}}
+    # `species` is a String MultiSelect column → direct membership, no codebook.
+    assert "species" not in ref.codebooks
+    assert ref.aggregation_hash is not None and len(ref.aggregation_hash) == 64
+
+
+def test_pruning_kept_exactly_the_referenced_columns(manifest: BundleManifest) -> None:
+    ref = next(iter(manifest.data_refs.values()))
+    physical = {c.name for c in ref.columns if not c.name.startswith("__")}
+    # union of: figure (x/y/color), cards (body_mass_g, species), filters (species, year)
+    assert physical == {"flipper_length_mm", "body_mass_g", "species", "year"}
+
+
+def test_inline_blob_roundtrips_to_snappy_parquet(manifest: BundleManifest) -> None:
+    ref = next(iter(manifest.data_refs.values()))
+    blob_key = ref.uri.removeprefix("inline:")
+    assert blob_key in manifest.inline_blobs
+    raw = base64.b64decode(manifest.inline_blobs[blob_key])
+    assert len(raw) == ref.size_bytes
+    assert hashlib.sha256(raw).hexdigest() == ref.aggregation_hash
+    df = pl.read_parquet(io.BytesIO(raw))
+    assert df.height == ref.rows
+    assert [(c.name, c.dtype) for c in ref.columns] == [
+        (name, str(dtype)) for name, dtype in df.schema.items()
+    ]
+    # snappy re-export (engine-spike builder rule): bare hyparquet can decode it.
+    import pyarrow.parquet as pq
+
+    meta = pq.ParquetFile(io.BytesIO(raw)).metadata
+    assert meta.row_group(0).column(0).compression.lower() == "snappy"
+
+
+def test_tier_table(manifest: BundleManifest) -> None:
+    tiers = {cid: e.tier for cid, e in manifest.tiers.items()}
+    assert tiers == {
+        "text-intro": ComponentTier.LIVE,
+        "card-body-mass": ComponentTier.LIVE,
+        "card-species-count": ComponentTier.LIVE,
+        "filter-species": ComponentTier.LIVE,
+        "filter-year": ComponentTier.LIVE,
+        "scatter-mass-flipper": ComponentTier.FROZEN,
+    }
+    figure_entry = manifest.tiers["scatter-mass-flipper"]
+    assert figure_entry.reason is TierReason.BINDING_MISS
+    assert figure_entry.detail and "phase 5" in figure_entry.detail
+
+
+def _trace_points(trace: dict) -> int:
+    """Point count of one trace's x array — plotly ≥6 serialises numeric arrays
+    as base64 typed arrays ({'dtype', 'bdata'}), older versions as lists."""
+    x = trace["x"]
+    if isinstance(x, dict) and "bdata" in x:
+        import numpy as np
+
+        return len(base64.b64decode(x["bdata"])) // np.dtype(x["dtype"]).itemsize
+    return len(x)
+
+
+def test_frozen_figure_payload(manifest: BundleManifest) -> None:
+    assert set(manifest.frozen) == {"scatter-mass-flipper"}
+    frozen = manifest.frozen["scatter-mass-flipper"]
+    assert frozen.kind == "figure"
+    assert frozen.filter_state == []  # default filter state
+    fig = frozen.payload["figure"]
+    assert len(fig["data"]) == 3  # one trace per species
+    assert sum(_trace_points(t) for t in fig["data"]) == 342
+    meta = frozen.payload["metadata"]
+    assert meta["filter_applied"] is False
+    assert meta["was_sampled"] is False
+    assert meta["total_data_count"] == 342
+
+
+def test_preflight_matches_build_tiers(manifest: BundleManifest) -> None:
+    # No data-dependent downgrades in the example: preflight == final tiers.
+    rows = classify_spec(load_spec(EXAMPLE_SPEC))
+    assert {r.component_id: r.tier for r in rows} == {
+        cid: e.tier for cid, e in manifest.tiers.items()
+    }
+
+
+# ---------------------------------------------------------------------------
+# Data-dependent behaviours (synthetic mini-specs)
+# ---------------------------------------------------------------------------
+
+
+def _mini_spec(components: list[dict]) -> dict:
+    return {"title": "mini", "components": components}
+
+
+def test_datetime_companion_and_table_freeze(tmp_path: Path) -> None:
+    from datetime import date
+
+    from depictio.models.models.dashboards import DashboardDataLite
+
+    (tmp_path / "wf").mkdir()
+    pl.DataFrame(
+        {
+            "sample": ["a", "b", "c"],
+            "captured": [date(2024, 1, 1), date(2024, 6, 1), date(2025, 1, 1)],
+            "value": [1.0, 2.0, float("nan")],
+        }
+    ).write_parquet(tmp_path / "wf" / "dc.parquet")
+
+    spec = DashboardDataLite.model_validate(
+        _mini_spec(
+            [
+                {
+                    "tag": "filter-date",
+                    "component_type": "interactive",
+                    "workflow_tag": "wf",
+                    "data_collection_tag": "dc",
+                    "interactive_component_type": "DateRangePicker",
+                    "column_name": "captured",
+                    "column_type": "datetime",
+                },
+                {
+                    "tag": "table-1",
+                    "component_type": "table",
+                    "workflow_tag": "wf",
+                    "data_collection_tag": "dc",
+                },
+            ]
+        )
+    )
+    manifest = build_manifest(spec, tmp_path).manifest
+
+    ref = next(iter(manifest.data_refs.values()))
+    assert ref.companions == {"__ts__captured": "captured"}
+    dtypes = {c.name: c.dtype for c in ref.columns}
+    assert dtypes["__ts__captured"] == "Int64"
+    # Table ⇒ keep-all pruning + a frozen payload (live tables land in phase 3).
+    assert set(dtypes) == {"sample", "captured", "value", "__ts__captured"}
+    assert manifest.tiers["table-1"].tier is ComponentTier.FROZEN
+    table = manifest.frozen["table-1"]
+    assert table.kind == "table"
+    assert table.payload["total"] == 3
+    assert {c["field"] for c in table.payload["columns"]} >= {"sample", "captured", "value"}
+    # NaN must have been scrubbed by the json-safe path when serialized.
+    assert "NaN" not in json.dumps(manifest.model_dump(mode="json"))
+
+
+def test_code_mode_figure_freezes_or_omits(tmp_path: Path) -> None:
+    from depictio.models.models.dashboards import DashboardDataLite
+
+    (tmp_path / "wf").mkdir()
+    pl.DataFrame({"x": [1.0, 2.0, 3.0], "y": [2.0, 4.0, 6.0]}).write_parquet(
+        tmp_path / "wf" / "dc.parquet"
+    )
+
+    def spec_with_code(code: str) -> DashboardDataLite:
+        return DashboardDataLite.model_validate(
+            _mini_spec(
+                [
+                    {
+                        "tag": "fig-code",
+                        "component_type": "figure",
+                        "workflow_tag": "wf",
+                        "data_collection_tag": "dc",
+                        "visu_type": "scatter",
+                        "mode": "code",
+                        "code_content": code,
+                    }
+                ]
+            )
+        )
+
+    ok = build_manifest(
+        spec_with_code("fig = px.scatter(df.to_pandas(), x='x', y='y')"), tmp_path
+    ).manifest
+    entry = ok.tiers["fig-code"]
+    assert entry.tier is ComponentTier.FROZEN
+    assert entry.reason is TierReason.CODE_MODE
+    assert ok.frozen["fig-code"].kind == "figure"
+    # Code mode ⇒ never projected: the whole schema ships.
+    ref = next(iter(ok.data_refs.values()))
+    assert {c.name for c in ref.columns} == {"x", "y"}
+
+    bad = build_manifest(spec_with_code("fig = undefined_name"), tmp_path).manifest
+    entry = bad.tiers["fig-code"]
+    assert entry.tier is ComponentTier.OMITTED
+    assert entry.reason is TierReason.CODE_MODE
+    assert "fig-code" not in bad.frozen
+
+
+def test_omitted_types_get_accurate_reasons() -> None:
+    from depictio.models.models.dashboards import DashboardDataLite
+
+    spec = DashboardDataLite.model_validate(
+        _mini_spec(
+            [
+                {
+                    "tag": "mqc",
+                    "component_type": "multiqc",
+                    "workflow_tag": "wf",
+                    "data_collection_tag": "dc",
+                    "selected_module": "fastqc",
+                    "selected_plot": "x",
+                },
+                {
+                    "tag": "img",
+                    "component_type": "image",
+                    "workflow_tag": "wf",
+                    "data_collection_tag": "dc",
+                    "image_column": "path",
+                },
+            ]
+        )
+    )
+    rows = {r.component_id: r for r in classify_spec(spec)}
+    assert rows["mqc"].tier is ComponentTier.OMITTED
+    assert rows["mqc"].reason is TierReason.MULTIQC
+    assert rows["img"].tier is ComponentTier.OMITTED
+    assert rows["img"].reason is TierReason.IMAGE
+
+
+def test_missing_parquet_raises_with_expected_path(tmp_path: Path) -> None:
+    spec = load_spec(EXAMPLE_SPEC)
+    with pytest.raises(ProducerBError, match=f"{WF_TAG}/{DC_TAG}.parquet"):
+        build_manifest(spec, tmp_path)
+
+
+def test_missing_referenced_column_raises(tmp_path: Path) -> None:
+    from depictio.models.models.dashboards import DashboardDataLite
+
+    (tmp_path / "wf").mkdir()
+    pl.DataFrame({"x": [1.0]}).write_parquet(tmp_path / "wf" / "dc.parquet")
+    spec = DashboardDataLite.model_validate(
+        _mini_spec(
+            [
+                {
+                    "tag": "card-1",
+                    "component_type": "card",
+                    "workflow_tag": "wf",
+                    "data_collection_tag": "dc",
+                    "aggregation": "average",
+                    "column_name": "missing_col",
+                    "column_type": "float64",
+                }
+            ]
+        )
+    )
+    with pytest.raises(ProducerBError, match="missing_col"):
+        build_manifest(spec, tmp_path)
+
+
+def test_data_yaml_map_overrides_layout(tmp_path: Path) -> None:
+    elsewhere = tmp_path / "elsewhere.parquet"
+    pl.DataFrame({"a": [1]}).write_parquet(elsewhere)
+    (tmp_path / "data.yaml").write_text(f"'{WF_TAG}:{DC_TAG}': {elsewhere}\n")
+    assert resolve_parquet_path(tmp_path, WF_TAG, DC_TAG) == elsewhere
+
+
+# ---------------------------------------------------------------------------
+# Injection (skipped when the viewer bundle is not built, e.g. bare CI)
+# ---------------------------------------------------------------------------
+
+
+def test_render_bundle_html_injects_manifest(manifest: BundleManifest) -> None:
+    if not TEMPLATE_PATH.exists():
+        pytest.skip("dist-static/static.html not built (run `pnpm run build:static`)")
+    html = render_bundle_html(manifest)
+    assert "__BUNDLE_MANIFEST__" not in html
+    assert '"producer": "B"' in html or '"producer":"B"' in html
+
+
+def test_build_static_end_to_end(data_dir: Path, tmp_path: Path) -> None:
+    if not TEMPLATE_PATH.exists():
+        pytest.skip("dist-static/static.html not built (run `pnpm run build:static`)")
+    out = tmp_path / "nested" / "bundle.html"
+    result = build_static(EXAMPLE_SPEC, data_dir, out)
+    assert out.exists()
+    html = out.read_text()
+    assert "__BUNDLE_MANIFEST__" not in html
+    # The embedded manifest survives extraction and validates.
+    start = html.index('<script id="bundle-manifest" type="application/json">')
+    start = html.index(">", start) + 1
+    end = html.index("</script>", start)
+    embedded = BundleManifest.model_validate_json(html[start:end].replace("<\\/", "</"))
+    assert embedded.dashboard.id == result.manifest.dashboard.id
