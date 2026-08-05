@@ -979,6 +979,146 @@ def scan_url_for_data_collection(
     return {"result": "success"}
 
 
+def fetch_manifest(manifest_url: str, field_map: dict | None = None):
+    """Load and parse a Data Manifest from a local path or an http(s) URL.
+
+    Format is decided by extension (.json vs anything else = CSV), falling
+    back to content sniffing. s3:// manifests are not supported yet (phase 2
+    covers file paths and https; the RFC tracks s3 manifests).
+    """
+    from depictio.models.models.manifest import DataManifest, is_remote_url
+
+    if is_remote_url(manifest_url):
+        if manifest_url.startswith("s3://"):
+            raise ValueError(
+                "s3:// manifest locations are not supported yet — "
+                "serve the manifest over https or use a local path."
+            )
+        import httpx
+
+        with httpx.Client(timeout=30.0, follow_redirects=True) as client:
+            response = client.get(manifest_url)
+            response.raise_for_status()
+            text = response.text
+    else:
+        if not os.path.exists(manifest_url):
+            raise ValueError(f"Manifest '{manifest_url}' does not exist.")
+        with open(manifest_url) as fh:
+            text = fh.read()
+
+    stripped = text.lstrip()
+    looks_json = manifest_url.endswith(".json") or stripped.startswith(("{", "["))
+    if looks_json:
+        return DataManifest.from_json(text, source=manifest_url, field_map=field_map)
+    return DataManifest.from_csv(text, source=manifest_url, field_map=field_map)
+
+
+def scan_manifest_for_data_collection(
+    workflow: Workflow,
+    data_collection: "DataCollection",
+    CLI_config: CLIConfig,
+    permissions: Permission,
+    update_files: bool,
+) -> dict:
+    """Register the manifest entries matching this DC's manifest_type.
+
+    One File per manifest row: file_location = the entry URL, run_tag = the
+    entry's run (or "remote"), manifest_id = the entry's canonical ID — read
+    back as the `depictio_manifest_id` column at aggregation time.
+    """
+    import hashlib
+    import time
+
+    scan_params = data_collection.config.scan.scan_parameters  # type: ignore[union-attr]
+    field_map = {
+        "id": scan_params.id_field,  # type: ignore[union-attr]
+        "type": scan_params.type_field,  # type: ignore[union-attr]
+        "url": scan_params.url_field,  # type: ignore[union-attr]
+    }
+    if scan_params.run_field:  # type: ignore[union-attr]
+        field_map["run"] = scan_params.run_field  # type: ignore[union-attr]
+    manifest = fetch_manifest(scan_params.manifest_url, field_map=field_map)  # type: ignore[union-attr]
+
+    entries = manifest.entries_for_type(scan_params.manifest_type)  # type: ignore[union-attr]
+    if not entries:
+        return {
+            "result": "error",
+            "message": (
+                f"Manifest has no entries of type '{scan_params.manifest_type}' "  # type: ignore[union-attr]
+                f"(available: {sorted(manifest.types())})"
+            ),
+        }
+
+    # Existing-file lookup + stale cleanup: any registered location no longer
+    # present in the manifest for this type is dropped.
+    manifest_urls = {entry.url for entry in entries}
+    response = api_get_files_by_dc_id(dc_id=str(data_collection.id), CLI_config=CLI_config)
+    existing_files: dict[str, dict] = {}
+    if response.status_code == 200:
+        for existing_file in response.json() or []:
+            location = existing_file["file_location"]
+            if location not in manifest_urls:
+                stale_id = existing_file.get("_id") or existing_file.get("id")
+                if stale_id:
+                    logger.info(f"Removing stale file {location} (absent from manifest)")
+                    api_delete_file(str(stale_id), CLI_config)
+            else:
+                existing_files[location] = existing_file
+
+    now_iso = format_timestamp(time.time())
+    workflow_config_id = (
+        PyObjectId(workflow.config.id) if workflow.config and workflow.config.id else PyObjectId()
+    )
+    workflow_run = WorkflowRun(
+        workflow_id=PyObjectId(workflow.id),
+        run_tag=f"{data_collection.data_collection_tag}-manifest-scan",
+        files_id=[],
+        workflow_config_id=workflow_config_id,
+        run_location=scan_params.manifest_url,  # type: ignore[union-attr]
+        creation_time=now_iso,
+        last_modification_time=now_iso,
+        run_hash="",
+        permissions=permissions,
+    )
+
+    to_add: list[File] = []
+    to_update: list[File] = []
+    skipped = 0
+    for entry in entries:
+        file_hash = hashlib.sha256(f"{entry.url}|{entry.id}".encode()).hexdigest()
+        existing = existing_files.get(entry.url)
+        if existing and existing.get("file_hash") == file_hash and not update_files:
+            skipped += 1
+            continue
+        file_instance = File(
+            id=PyObjectId(existing["_id"]) if existing else PyObjectId(),
+            filename=os.path.basename(entry.url.split("?", 1)[0]) or "remote-file",
+            file_location=entry.url,
+            creation_time=now_iso,
+            modification_time=now_iso,
+            file_hash=file_hash,
+            filesize=-1,
+            data_collection_id=data_collection.id,
+            run_id=workflow_run.id,
+            run_tag=entry.run or "remote",
+            permissions=permissions,
+            manifest_id=entry.id,
+        )
+        (to_update if existing else to_add).append(file_instance)
+
+    if to_add:
+        api_create_files(files=to_add, CLI_config=CLI_config, update=False)
+    if to_update:
+        api_create_files(files=to_update, CLI_config=CLI_config, update=True)
+
+    rich_print_checked_statement(
+        f"Manifest scan for {data_collection.data_collection_tag}: "
+        f"{len(to_add)} added, {len(to_update)} updated, {skipped} unchanged",
+        "info",
+    )
+    return {"result": "success", "added": len(to_add), "updated": len(to_update)}
+
+
 def scan_files_for_data_collection(
     workflow: Workflow,
     data_collection_id: str,
@@ -1013,10 +1153,11 @@ def scan_files_for_data_collection(
         rich_print_checked_statement(error_msg, "error")
         raise ValueError(error_msg)
 
-    # Only handle single-file and url modes here
+    # Only handle single-file, url and manifest modes here
     if not data_collection.config.scan or data_collection.config.scan.mode.lower() not in (
         "single",
         "url",
+        "manifest",
     ):
         raise ValueError(
             "This function only handles single file mode. Use scan_files_for_workflow for aggregate mode."
@@ -1024,6 +1165,15 @@ def scan_files_for_data_collection(
 
     if data_collection.config.scan.mode.lower() == "url":
         return scan_url_for_data_collection(
+            workflow=workflow,
+            data_collection=data_collection,
+            CLI_config=CLI_config,
+            permissions=permissions,
+            update_files=update_files,
+        )
+
+    if data_collection.config.scan.mode.lower() == "manifest":
+        return scan_manifest_for_data_collection(
             workflow=workflow,
             data_collection=data_collection,
             CLI_config=CLI_config,

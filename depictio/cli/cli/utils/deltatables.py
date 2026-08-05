@@ -294,6 +294,10 @@ def read_single_file_lazy(
         # Optionally, add a column from file_info if available (e.g., run_id)
         if hasattr(file_info, "run_id"):
             lf = lf.with_columns(pl.lit(str(file_info.run_tag)).alias("depictio_run_id"))
+        # Manifest-built DCs carry the canonical entry ID as a column — the
+        # zero-config cross-DC join key (LinkConfig `direct` resolver).
+        if getattr(file_info, "manifest_id", None):
+            lf = lf.with_columns(pl.lit(str(file_info.manifest_id)).alias("depictio_manifest_id"))
         return lf
 
     except Exception as e:

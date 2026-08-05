@@ -28,6 +28,10 @@ class File(MongoModel):
     file_hash: str
     filesize: int
     permissions: Permission
+    # Canonical entity/sample ID from a Data Manifest entry (scan mode
+    # "manifest"). Injected as the `depictio_manifest_id` column at read time
+    # so manifest-built DCs share a zero-config cross-DC join key.
+    manifest_id: str | None = None
 
     # id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
     # id: Optional[PyObjectId] = None
