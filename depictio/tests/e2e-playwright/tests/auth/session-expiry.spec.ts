@@ -24,6 +24,7 @@ import {
   test,
   expect,
   apiLogin,
+  getAuthMode,
   seedTokenInStorage,
   API_URL,
   API_PREFIX,
@@ -37,6 +38,25 @@ const DEAD_TOKEN =
   "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9." +
   "eyJzdWIiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAiLCJleHAiOjF9." +
   "ZGVhZGJlZWY";
+
+/**
+ * The `/monitoring/*` surface is refused outright in public/demo deployments —
+ * `_require_admin` (monitoring_endpoints/routes.py) answers 404 there, on the
+ * grounds that there is no meaningful per-user admin to gate on. The two tests
+ * that drive it therefore have nothing to assert in that mode. Single-user is a
+ * trusted personal admin instance and keeps the surface even when public mode is
+ * also set, so the condition mirrors the gate's own exactly.
+ *
+ * The dead-token test below is deliberately *not* skipped: `get_current_user`
+ * rejects before the route body runs, so its 401 holds in every mode.
+ */
+async function skipWhereMonitoringIsRefused() {
+  const mode = await getAuthMode();
+  test.skip(
+    (mode.is_public_mode || mode.is_demo_mode) && !mode.is_single_user_mode,
+    "Monitoring is not available in public/demo mode.",
+  );
+}
 
 test.describe("Session expiry / token refresh", () => {
   test("strict endpoints reject a dead token with 'Invalid token'", async ({
@@ -52,6 +72,8 @@ test.describe("Session expiry / token refresh", () => {
   });
 
   test("a refresh token recovers a dead session", async ({ request }) => {
+    await skipWhereMonitoringIsRefused();
+
     const tokens = await apiLogin(
       request,
       credentials.adminUser.email,
@@ -79,6 +101,8 @@ test.describe("Session expiry / token refresh", () => {
     page,
     request,
   }) => {
+    await skipWhereMonitoringIsRefused();
+
     const tokens = await apiLogin(
       request,
       credentials.adminUser.email,
