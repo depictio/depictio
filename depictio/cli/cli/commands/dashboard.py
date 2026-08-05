@@ -692,6 +692,16 @@ def export_static_cmd(
             help="Preflight only: print the per-component live/frozen/omitted table, write nothing",
         ),
     ] = False,
+    single_tab: Annotated[
+        bool,
+        typer.Option(
+            "--single-tab",
+            help=(
+                "Export only this tab. Default: the whole tab family it belongs to, "
+                "entered on this tab."
+            ),
+        ),
+    ] = False,
     open_browser: Annotated[
         bool, typer.Option("--open", help="Open the built bundle in a browser tab")
     ] = False,
@@ -720,9 +730,14 @@ def export_static_cmd(
     their data; everything else is frozen at the default filter state or
     omitted with a reason — use --check to see the tier table first.
 
+    The bundle carries the dashboard's whole TAB FAMILY (one copy of each data
+    collection, however many tabs read it), entered on the tab you named. Pass
+    --single-tab for just that tab.
+
     Example:
         depictio dashboard export-static 6824cb3b89d2b72169309737 --check
         depictio dashboard export-static 6824cb3b89d2b72169309737 --out bundle.html
+        depictio dashboard export-static 6824cb3b89d2b72169309737 --single-tab
     """
     from depictio.models.models.serverless import BundleMode
 
@@ -746,6 +761,7 @@ def export_static_cmd(
             mode=bundle_mode,
             check=check,
             user=user_email,
+            single_tab=single_tab,
         )
     except (ProducerAError, ProducerBError) as e:
         console.print(f"[red]Error: {e}[/red]")
@@ -758,7 +774,9 @@ def export_static_cmd(
         )
         raise typer.Exit(1)
 
-    print_tier_table(result.tier_rows, console)
+    # A family export gets the per-tab breakdown; a single-tab one keeps the
+    # flat table it always had.
+    print_tier_table(result.tier_rows, console, tabs=result.tabs if len(result.tabs) > 1 else None)
     print_links_summary(result.link_rows, console)
 
     if check:

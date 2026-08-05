@@ -2,10 +2,12 @@
 
 Four thin endpoints around ``depictio.serverless.producer_a.export_static``:
 
-* ``GET  /export-static/{dashboard_id}/preflight`` — the ``--check`` tier table
-  (viewer permission, reads no data, writes nothing).
+* ``GET  /export-static/{dashboard_id}/preflight`` — the ``--check`` tier table,
+  per component and per tab of the dashboard's family (viewer permission, reads
+  no data, writes nothing).
 * ``POST /export-static/{dashboard_id}`` — owner-gated; enqueues the build as a
-  Celery task and returns a ``job_id``.
+  Celery task and returns a ``job_id``. The bundle carries the whole tab family,
+  entered on the requested tab.
 * ``GET  /export-static/status/{job_id}`` — poll; settles pending jobs against
   their Celery result.
 * ``GET  /export-static/download/{job_id}`` — proxies the finished bundle out of
@@ -38,6 +40,7 @@ from depictio.api.v1.db import dashboards_collection, static_exports_collection
 from depictio.api.v1.endpoints.dashboards_endpoints.routes import check_project_permission
 from depictio.api.v1.endpoints.user_endpoints.routes import get_user_or_anonymous
 from depictio.api.v1.s3 import s3_client
+from depictio.serverless.preflight import rows_for_tab, tier_counts
 from depictio.serverless.producer_a import ProducerAError, export_static
 
 serverless_endpoint_router = APIRouter()
@@ -208,7 +211,11 @@ async def preflight_export_static(
     dashboard_id: str,
     current_user=Depends(get_user_or_anonymous),
 ) -> dict[str, Any]:
-    """Per-component (and per-link) tier table for a would-be static export.
+    """Per-component (and per-tab, per-link) tier table for a would-be static export.
+
+    Covers the whole tab family the dashboard belongs to, because that is what a
+    bundle carries: every tier row names its ``tab_id`` and ``tabs`` repeats the
+    per-tab counts. The top-level ``counts`` stay family-wide.
 
     Needs *viewer* on the dashboard's project; reads no Delta data and writes
     nothing. ``export_static`` is synchronous and hits Mongo, so it runs in a
@@ -236,8 +243,24 @@ async def preflight_export_static(
                 "tier": tier,
                 "reason": _enum_value(row.reason),
                 "detail": row.detail,
+                "tab_id": row.tab_id,
             }
         )
+
+    tabs = [
+        {
+            "id": tab.id,
+            "title": tab.title,
+            "tab_order": tab.tab_order,
+            "is_main_tab": tab.is_main_tab,
+            "counts": {
+                key: value
+                for key, value in tier_counts(rows_for_tab(result.tier_rows, tab.id)).items()
+                if key in _TIER_COUNT_KEYS
+            },
+        }
+        for tab in result.tabs
+    ]
 
     links = [
         {
@@ -253,7 +276,13 @@ async def preflight_export_static(
         for row in result.link_rows
     ]
 
-    return {"dashboard_id": dashboard_id, "tiers": tiers, "links": links, "counts": counts}
+    return {
+        "dashboard_id": dashboard_id,
+        "tiers": tiers,
+        "tabs": tabs,
+        "links": links,
+        "counts": counts,
+    }
 
 
 @serverless_endpoint_router.post("/export-static/{dashboard_id}")

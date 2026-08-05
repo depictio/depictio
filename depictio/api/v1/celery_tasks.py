@@ -1736,6 +1736,12 @@ def export_static_bundle(payload: dict) -> dict:
     Producer A writes to a filesystem path, so the bundle is rendered into a
     temp dir and uploaded from there — the worker keeps nothing on disk.
 
+    One bundle carries the dashboard's whole tab family, and the Celery-computed
+    advanced_viz kinds are computed in-process while it builds. Both are bounded
+    by producer A's own compute budget (DEPICTIO_SERVERLESS_COMPUTE_BUDGET_S /
+    _TOTAL_BUDGET_S, defaulting to 120 s per component and 300 s overall) so a
+    large family cannot run this task into its 900 s hard limit.
+
     ProducerAError / ProducerBError are deliberately NOT caught: Celery marks the
     task failed and the poll endpoint surfaces the message. That is the path a
     deployment without the prebuilt static-runtime template takes (see
@@ -1743,10 +1749,10 @@ def export_static_bundle(payload: dict) -> dict:
 
     Args:
         payload: ``{"job_id", "dashboard_id", "user": {"id", "email", "is_admin",
-            "is_anonymous"}}`` — JSON-serializable throughout.
+            "is_anonymous"}, "single_tab"?}`` — JSON-serializable throughout.
 
     Returns:
-        ``{"s3_key", "bucket", "size_bytes", "built_at"}``.
+        ``{"s3_key", "bucket", "size_bytes", "built_at", "tab_count"}``.
     """
     import tempfile
     from datetime import datetime, timezone
@@ -1765,7 +1771,12 @@ def export_static_bundle(payload: dict) -> dict:
     started = time.monotonic()
     with tempfile.TemporaryDirectory() as tmpdir:
         out = Path(tmpdir) / "bundle.html"
-        producer_a.export_static(dashboard_id, out_path=out, user=export_user)
+        result = producer_a.export_static(
+            dashboard_id,
+            out_path=out,
+            user=export_user,
+            single_tab=bool(payload.get("single_tab", False)),
+        )
         html_bytes = out.read_bytes()
 
     s3_client.put_object(
@@ -1775,8 +1786,10 @@ def export_static_bundle(payload: dict) -> dict:
         ContentType="text/html; charset=utf-8",
     )
     logger.info(
-        "static export built: dashboard=%s key=%s bytes=%d (%.1fs)",
+        "static export built: dashboard=%s tabs=%d components=%d key=%s bytes=%d (%.1fs)",
         dashboard_id,
+        len(result.tabs),
+        len(result.tier_rows),
         key,
         len(html_bytes),
         time.monotonic() - started,
@@ -1786,6 +1799,7 @@ def export_static_bundle(payload: dict) -> dict:
         "bucket": settings.minio.bucket,
         "size_bytes": len(html_bytes),
         "built_at": built_at.isoformat(),
+        "tab_count": len(result.tabs),
     }
 
 

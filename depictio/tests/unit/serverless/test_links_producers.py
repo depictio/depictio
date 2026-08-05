@@ -360,6 +360,22 @@ class _FakeCollection:
         return None
 
 
+class _NoChildTabs:
+    """``core_functions.get_child_tabs``'s view of a childless instance.
+
+    Every export resolves the dashboard's tab family, and ``get_child_tabs``
+    binds ``dashboards_collection`` on its own module at import time — without
+    this stub the lookup would reach for a real MongoDB.
+    """
+
+    def find(self, query: dict[str, Any], projection: Any = None):
+        class _Cursor:
+            def sort(self, field: str, direction: int = 1) -> list[dict[str, Any]]:
+                return []
+
+        return _Cursor()
+
+
 def _dc_config(location: str) -> dict[str, Any]:
     return {"type": "table", "delta_location": location, "size_bytes": 1}
 
@@ -501,9 +517,11 @@ def producer_a_env(monkeypatch: pytest.MonkeyPatch):
     from depictio.api.v1 import celery_tasks as celery_mod
     from depictio.api.v1 import db as db_mod
     from depictio.api.v1 import deltatables_utils as dtu_mod
+    from depictio.api.v1.endpoints.dashboards_endpoints import core_functions as core_mod
     from depictio.api.v1.endpoints.dashboards_endpoints import routes as routes_mod
 
     monkeypatch.setattr(db_mod, "dashboards_collection", _FakeCollection([_dashboard_doc()]))
+    monkeypatch.setattr(core_mod, "dashboards_collection", _NoChildTabs())
     monkeypatch.setattr(
         db_mod,
         "deltatables_collection",
@@ -722,9 +740,11 @@ def test_producer_a_check_predicts_tiers_without_reading_any_delta(
 ):
     from depictio.api.v1 import db as db_mod
     from depictio.api.v1 import deltatables_utils as dtu_mod
+    from depictio.api.v1.endpoints.dashboards_endpoints import core_functions as core_mod
     from depictio.serverless.producer_a import ExportUser, export_static
 
     monkeypatch.setattr(db_mod, "dashboards_collection", _FakeCollection([_dashboard_doc()]))
+    monkeypatch.setattr(core_mod, "dashboards_collection", _NoChildTabs())
     monkeypatch.setattr(db_mod, "projects_collection", _FakeCollection([_project_doc(_links())]))
 
     def boom(*a, **kw):  # preflight must stay data-free
