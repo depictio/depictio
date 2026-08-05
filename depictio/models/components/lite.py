@@ -24,8 +24,10 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from depictio.models.components.constants import (
     AGGREGATION_COMPATIBILITY,
     COLUMN_TYPES,
+    FLOATING_PANEL_STATES,
     INTERACTIVE_COMPATIBILITY,
     INTERACTIVE_PLACEMENTS,
+    MAP_PLACEMENTS,
     MAP_STYLES,
     MAP_TYPES,
     TIMELINE_TIMESCALES,
@@ -778,6 +780,21 @@ class MapLiteComponent(BaseLiteComponent):
                 )
             if not self.lon_column:
                 raise ValueError(
+    # Layout placement
+    placement: str = Field(
+        default="grid",
+        description="Where to render this map: 'grid' (default — a normal dashboard "
+        "tile) or 'floating' (a collapsible panel reachable from every tab of the "
+        "dashboard).",
+    )
+    floating_initial_state: str = Field(
+        default="compact",
+        description="How that panel presents itself on a viewer's first visit: "
+        "'compact' or 'expanded' (a draggable card), 'docked' (pinned below the "
+        "filter panel) or 'hidden' (reachable from the header). Their own saved "
+        "preference takes over from then on. Ignored when placement='grid'.",
+    )
+
                     "lon_column is required when map_type is scatter_map or density_map"
                 )
 
@@ -795,6 +812,17 @@ class MapLiteComponent(BaseLiteComponent):
                 )
             if not self.color_column:
                 raise ValueError("color_column is required when map_type='choropleth_map'")
+        if self.placement not in MAP_PLACEMENTS:
+            valid = ", ".join(MAP_PLACEMENTS)
+            raise ValueError(f"Invalid placement '{self.placement}'. Valid values: {valid}")
+
+        if self.floating_initial_state not in FLOATING_PANEL_STATES:
+            valid = ", ".join(FLOATING_PANEL_STATES)
+            raise ValueError(
+                f"Invalid floating_initial_state '{self.floating_initial_state}'. "
+                f"Valid values: {valid}"
+            )
+
             if self.selection_enabled:
                 raise ValueError(
                     "selection_enabled is not supported for choropleth_map "

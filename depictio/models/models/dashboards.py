@@ -859,6 +859,8 @@ class DashboardDataLite(BaseModel):
                     "opacity": 1.0,
                     "size_max": 15,
                     "featureidkey": "id",
+                    "placement": "grid",
+                    "floating_initial_state": "compact",
                 }
                 # Fields exported whenever truthy
                 _MAP_TRUTHY_FIELDS = [
@@ -1151,6 +1153,8 @@ class DashboardDataLite(BaseModel):
                     "color_continuous_scale": None,
                     "range_color": None,
                 }
+                    "placement": "grid",
+                    "floating_initial_state": "compact",
                 for field, default in _MAP_FULL_DEFAULTS.items():
                     full_comp[field] = comp_dict.get(field, default)
                 full_comp.update(
@@ -1216,6 +1220,14 @@ class DashboardDataLite(BaseModel):
             comp_type = comp.get("component_type", "figure")
 
             # Extract x/y/w/h from nested layout (new format), flat fields (legacy), or auto-generate
+            # Components lifted out of the grid get no layout item at all: the
+            # React shell lays them out itself. 'top' is the Timeline in the
+            # TopPanel, 'floating' is a map in the floating panel. Skipping
+            # before the auto-layout below also keeps them from consuming a
+            # vertical slot the grid would then render as a gap.
+            if comp.get("placement") in ("top", "floating"):
+                continue
+
             layout_nested = comp_dict.get("layout", {})
             if layout_nested and isinstance(layout_nested, dict):
                 x = layout_nested.get("x", 0)
@@ -1251,10 +1263,6 @@ class DashboardDataLite(BaseModel):
                 layout_item["resizeHandles"] = ["se", "s", "e", "sw", "w"]
 
             if comp_type == "interactive":
-                # Top-placement components (e.g. Timeline) live in the React
-                # TopPanel, which lays them out inline — no grid entry needed.
-                if comp.get("placement") == "top":
-                    continue
                 left_panel_layout_data.append(layout_item)
             else:
                 right_panel_layout_data.append(layout_item)

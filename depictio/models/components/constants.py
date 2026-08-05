@@ -84,6 +84,16 @@ MAP_STYLES: tuple[str, ...] = (
     "carto-darkmatter",
 )
 
+# Where a map renders: as a normal dashboard tile, or lifted out of the grid
+# into the panel that is available from every tab of the dashboard family.
+MAP_PLACEMENTS: tuple[str, ...] = ("grid", "floating")
+
+# How that panel presents itself on a viewer's first visit. 'compact' and
+# 'expanded' are the two sizes; as a draggable card they are its footprint, and
+# 'docked' pins it below the dashboard's filter panel where they are its height.
+# The viewer's own saved preference takes over from then on.
+FLOATING_PANEL_STATES: tuple[str, ...] = ("compact", "expanded", "docked", "hidden")
+
 # ---------------------------------------------------------------------------
 # Card aggregation × column_type compatibility
 # column_type → list of valid aggregation names
