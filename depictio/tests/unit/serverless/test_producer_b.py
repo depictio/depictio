@@ -218,6 +218,35 @@ def test_bound_figure_ships_no_frozen_payload(manifest: BundleManifest) -> None:
     assert {"flipper_length_mm", "body_mass_g", "species"} <= {c.name for c in ref.columns}
 
 
+def test_text_labelled_figure_binds_and_keeps_its_label_column(data_dir: Path) -> None:
+    """A ``text=`` figure stays LIVE end-to-end: pruning keeps the label column
+    in the bundled parquet, so the binder can build against it.
+
+    Regression — ``referenced_columns`` omitted ``text``, so the column was
+    pruned out and the figure froze with ``binding_miss``.
+    """
+    import yaml
+
+    from depictio.models.models.dashboards import DashboardDataLite
+
+    spec_dict = yaml.safe_load(EXAMPLE_SPEC.read_text())
+    for comp in spec_dict["components"]:
+        if comp["tag"] == "scatter-mass-flipper":
+            comp["dict_kwargs"]["text"] = "island"
+    manifest = build_manifest(DashboardDataLite.model_validate(spec_dict), data_dir).manifest
+
+    entry = manifest.tiers["scatter-mass-flipper"]
+    assert entry.tier is ComponentTier.LIVE
+    assert entry.reason is None
+    binding = manifest.bindings["scatter-mass-flipper"]
+    for trace in binding.traces:
+        assert trace.fields["text"] == "island"
+    # Pruning kept the label column, and the scaffold ships no text array.
+    ref = next(iter(manifest.data_refs.values()))
+    assert "island" in {c.name for c in ref.columns}
+    assert all("text" not in t for t in binding.scaffold["data"])
+
+
 def test_unbindable_figure_falls_back_to_frozen(data_dir: Path) -> None:
     """A figure the matcher refuses keeps the frozen path + binding_miss."""
     import yaml
