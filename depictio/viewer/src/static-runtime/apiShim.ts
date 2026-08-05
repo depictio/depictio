@@ -13,6 +13,34 @@
  * carry a dc_id, resolved to a component index via the dashboard document.
  * `fetchComponentData` is intentionally NOT shimmed — it has no callers
  * (RFC errata #5).
+ *
+ * SHIM SURFACE. The rule is: every api.ts export that touches the network AND
+ * sits in the static entry's module graph must be overridden here. That graph
+ * was walked from `static-runtime/main.tsx` (which mounts App directly — no
+ * router, so builder/, dashboards/, projects/, admin/, profile/, cli-agents/
+ * and auth/ are absent from the bundle entirely, and their api calls are
+ * unreachable by construction, not by luck). Two traps that walk found:
+ *   - reachability is not "fires on page load". `fetchMapData` and
+ *     `fetchProject` are one user click deep (a map's data popover; the
+ *     header's Settings gear, which unlike Edit/Export carries no
+ *     `isStaticBundle` guard) — a clean load trace proves nothing about them.
+ *   - a shimmed function does not make its module safe: `availableValues`
+ *     dispatches to `fetchUniqueValues` (shimmed) OR
+ *     `fetchMultiQCSampleMappings` (was not).
+ * Still unshimmed and deliberately so: `preflightStaticExport` /
+ * `dispatchStaticExport` / `pollStaticExport` / `downloadStaticExport`.
+ * `ExportStaticModal` IS in the graph (App renders it unconditionally) and
+ * only the `!isStaticBundle` guard on its opener keeps it shut, so any future
+ * second opener turns those four into live calls.
+ *
+ * NOT an api.ts concern, but the last thing standing between a bundle and a
+ * zero-network load: Iconify. `../icons` registers only the source-SCANNED
+ * icon subset, so an icon named solely in dashboard YAML/Mongo (mdi:penguin,
+ * mdi:island, …) misses and @iconify/react falls back to its three public API
+ * hosts — measured as 6 aborted requests on the penguins bundle, present both
+ * before and after this file's overrides. STILL OPEN; the fix belongs at the
+ * static entry beside `import '../icons'`, not here
+ * (`addAPIProvider('', { resources: [] })` refuses the fallback outright).
  */
 
 // Real api (importer === this file, so the shim plugin lets it through).
@@ -24,10 +52,12 @@ import type {
   DashboardData,
   DashboardSummary,
   FigureResponse,
+  FloatingComponentsResponse,
   InteractiveFilter,
+  StoredMetadata,
 } from '../../../../packages/depictio-react-core/src/api';
 
-import { bundle, frozenPayload, interactiveIndexFor } from './bundle';
+import { bundle, bundledTabs, frozenPayload, interactiveIndexFor, rawBundle } from './bundle';
 import {
   columnRangeLive,
   computeCardsLive,
@@ -94,8 +124,78 @@ export async function fetchAllDashboards(): Promise<DashboardSummary[]> {
   return [];
 }
 
+/** Floating-map panel surface (`useMapPanel`), one request per page load.
+ *
+ *  Mirrors `/dashboards/floating_components/{id}`, including the part that
+ *  makes the endpoint exist at all: it walks the whole TAB FAMILY, because a
+ *  floating map is authored on one tab and rendered on every one. So this
+ *  reads `bundledTabs()` — NOT `bundle().dashboard.doc`, which is only the tab
+ *  on screen and would drop a map authored on a sibling. A single-tab bundle
+ *  has no `tabs` array and is its own family.
+ *
+ *  Worth shimming even though the real function already resolves empty on a
+ *  network failure instead of throwing: unshimmed it still ATTEMPTED the
+ *  fetch, and a bundle's contract is zero requests, not zero fatal ones.
+ *
+ *  Component ids are uuids and the frozen section spans the family, so a
+ *  sibling tab's map resolves its payload through `renderMap` unchanged —
+ *  and producer A freezes every `map` component regardless of placement, so
+ *  the payload is there. Never throws: the caller uses this result to prune
+ *  filters hydrated from storage, and a rejection would leave a stale
+ *  cross-tab selection applied with nothing left to prune it. */
+export async function fetchFloatingComponents(
+  dashboardId: string,
+): Promise<FloatingComponentsResponse> {
+  const raw = rawBundle();
+  const tabs = bundledTabs();
+  const family = tabs.length
+    ? tabs.map((t) => ({ id: t.id, title: t.title, doc: t.doc }))
+    : [{ id: raw.dashboard.id || dashboardId, title: raw.dashboard.title, doc: raw.dashboard.doc }];
+
+  const components = [];
+  for (const tab of family) {
+    const meta =
+      (tab.doc as { stored_metadata?: (DocComponent & { placement?: string })[] })
+        .stored_metadata ?? [];
+    for (const m of meta) {
+      if (m.component_type === 'map' && m.placement === 'floating') {
+        // `dashboard_id` is the OWNING tab, which is what MapRenderer fetches
+        // against — not necessarily the tab being viewed.
+        components.push({
+          dashboard_id: tab.id,
+          tab_title: tab.title,
+          metadata: m as unknown as StoredMetadata,
+        });
+      }
+    }
+  }
+
+  // Endpoint: `parent_dashboard_id or dashboard_id` — a main tab is its own
+  // parent. The viewer keys panel state and cross-tab filter persistence on
+  // this, so it must be the family id, not a placeholder. `bundledTabs()`
+  // already sorts the main tab first.
+  const entryDoc = raw.dashboard.doc as { parent_dashboard_id?: string | null };
+  const parentId = tabs.length
+    ? (tabs.find((t) => t.is_main_tab)?.id ?? tabs[0].id)
+    : String(entryDoc.parent_dashboard_id || raw.dashboard.id || dashboardId);
+  return { parent_dashboard_id: parentId, components };
+}
+
 export async function fetchProjectFromDashboard(_dashboardId: string) {
   // App's ingestion-banner effect is best-effort and swallows failures.
+  throw new Error('static bundle: no project backend');
+}
+
+/** Reached one click deep: the header's Settings gear is NOT `isStaticBundle`-
+ *  gated (unlike Edit and Export beside it), and `DashboardInfoBody` enriches
+ *  `doc.project_id` — which producer A keeps — into a project name. Rejecting
+ *  matches the sibling `fetchProjectFromDashboard` above, and that effect
+ *  already catches and falls back to "no name"; the drawer's other fields all
+ *  come from the bundled document and still render. */
+export async function fetchProject(
+  _projectId: string,
+  _options: { skipEnrichment?: boolean } = {},
+) {
   throw new Error('static bundle: no project backend');
 }
 
@@ -188,6 +288,24 @@ export async function renderFigure(
 
 export async function renderMap(_dashboardId: string, componentId: string) {
   return frozenPayload(componentId, 'map') as never;
+}
+
+/** The "show data" popover behind every map (`MapDataButton`, rendered by both
+ *  ComponentRenderer and the floating panel). Fires on user click, so it never
+ *  showed up in a page-load network trace — but it is a live POST all the same.
+ *
+ *  Rejects rather than serving an approximation: a map is a FROZEN-tier
+ *  component, so its DC is only in the bundle when some *other* live component
+ *  happens to share it, and the endpoint's own column order + truncation rules
+ *  are not reproduced here. `MapDataButton` catches and renders `err.message`
+ *  inside the popover, so this text is what the user reads. */
+export async function fetchMapData(
+  _dashboardId: string,
+  _componentId: string,
+  _filters: InteractiveFilter[],
+  _signal?: AbortSignal,
+) {
+  throw new Error('static bundle: the map data table is not exported');
 }
 
 /** dc_id of a table component, from the dashboard document. */
@@ -341,6 +459,20 @@ export async function fetchColumnRange(dcId: string, columnName: string) {
 export async function fetchSpecs(dcId: string): Promise<Record<string, unknown>> {
   if (dataRefFor(dcId)) return specsLive(dcId);
   return interactiveFrozen(dcId, undefined, 'specs').specs ?? {};
+}
+
+/** `availableValues`' multiqc branch — the asymmetric sibling of
+ *  `fetchUniqueValues` above. Same provider, same effect, but a multiqc DC
+ *  exposes its sample list only through this per-project endpoint, and the
+ *  bundle carries no sample-mapping table. Fires when a bundle pairs a multiqc
+ *  DC with an interactive filter over a sample-like column; `availableValues`
+ *  runs both branches under `Promise.allSettled` and drops the rejection, so
+ *  the filter falls back to the values it can resolve. */
+export async function fetchMultiQCSampleMappings(
+  _projectId: string,
+  _dcId: string,
+): Promise<Record<string, string[]>> {
+  throw new Error('static bundle: multiqc sample mappings are not exported');
 }
 
 // ---- advanced viz (requests carry dc_id) -----------------------------------

@@ -14,9 +14,19 @@
  */
 import type { Plugin } from 'vite';
 
-/** map: resolved absolute path of the real module -> absolute path of its shim. */
-export function moduleShim(name: string, map: Record<string, string>): Plugin {
-  const shims = new Set(Object.values(map));
+/**
+ * @param map resolved absolute path of the real module -> absolute path of its shim.
+ * @param extraShims further modules to treat as shims, i.e. whose own imports
+ *   resolve to the real thing. Needed when shims are CHAINED (A -> B -> real):
+ *   only B appears in `map`'s values, so without this A's import of the real
+ *   module would be redirected back into the chain.
+ */
+export function moduleShim(
+  name: string,
+  map: Record<string, string>,
+  extraShims: string[] = [],
+): Plugin {
+  const shims = new Set([...Object.values(map), ...extraShims]);
   return {
     name,
     enforce: 'pre',

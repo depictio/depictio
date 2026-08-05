@@ -20,6 +20,7 @@ import ThemeToggle from './ThemeToggle';
 import ServerStatusBadge from './ServerStatusBadge';
 import ProfileBadge from './ProfileBadge';
 import AuthModeBadge from './AuthModeBadge';
+import StaticProvenance from './StaticProvenance';
 import { dashboardHref } from '../dashboards/lib/dashboardLinks';
 import './chrome.css';
 
@@ -386,6 +387,10 @@ const Sidebar: React.FC<SidebarProps> = ({
             <ProfileBadge />
           </>
         )}
+        {/* Static bundles only — who exported this file, from where, and with
+            which depictio. Renders null (and imports nothing extra) in the
+            server build. */}
+        <StaticProvenance />
       </Stack>
     </Stack>
   );

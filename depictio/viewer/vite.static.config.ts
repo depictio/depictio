@@ -5,7 +5,8 @@
  * viewer App from an embedded bundle manifest — no API, fully offline. Three
  * modules are swapped by the module-shim plugin (RFC errata #5/#6):
  *
- *   - depictio-react-core api.ts        -> src/static-runtime/apiShim.ts
+ *   - depictio-react-core api.ts        -> src/static-runtime/tabApiShim.ts
+ *                                          -> src/static-runtime/apiShim.ts
  *   - viewer hooks/useCurrentUser.ts    -> src/static-runtime/useCurrentUserShim.ts
  *   - depictio-react-core realtime.ts   -> src/static-runtime/realtimeShim.ts
  *   - viewer hooks/useServerStatus.ts   -> src/static-runtime/serverStatusShim.ts
@@ -27,20 +28,28 @@ export default defineConfig({
   base: './',
   plugins: [
     react(),
-    moduleShim('static-runtime-shim', {
-      [path.join(CORE_SRC, 'api.ts')]: path.join(RUNTIME, 'apiShim.ts'),
-      [path.join(CORE_SRC, 'realtime.ts')]: path.join(RUNTIME, 'realtimeShim.ts'),
-      [path.resolve(__dirname, 'src/hooks/useCurrentUser.ts')]: path.join(
-        RUNTIME,
-        'useCurrentUserShim.ts',
-      ),
-      // 4th raw-fetch module, missed by the RFC's shim census: polls
-      // /utils/status every 30s from the sidebar badge.
-      [path.resolve(__dirname, 'src/hooks/useServerStatus.ts')]: path.join(
-        RUNTIME,
-        'serverStatusShim.ts',
-      ),
-    }),
+    moduleShim(
+      'static-runtime-shim',
+      {
+        // Chained: tabApiShim (tab family) -> apiShim (offline data path) ->
+        // the real api.ts.
+        [path.join(CORE_SRC, 'api.ts')]: path.join(RUNTIME, 'tabApiShim.ts'),
+        [path.join(CORE_SRC, 'realtime.ts')]: path.join(RUNTIME, 'realtimeShim.ts'),
+        [path.resolve(__dirname, 'src/hooks/useCurrentUser.ts')]: path.join(
+          RUNTIME,
+          'useCurrentUserShim.ts',
+        ),
+        // 4th raw-fetch module, missed by the RFC's shim census: polls
+        // /utils/status every 30s from the sidebar badge.
+        [path.resolve(__dirname, 'src/hooks/useServerStatus.ts')]: path.join(
+          RUNTIME,
+          'serverStatusShim.ts',
+        ),
+      },
+      // Middle link of the api chain: apiShim's own `export * from api.ts`
+      // must reach the real module, not bounce back through tabApiShim.
+      [path.join(RUNTIME, 'apiShim.ts')],
+    ),
     viteSingleFile(),
   ],
   build: {
@@ -55,6 +64,20 @@ export default defineConfig({
   },
   resolve: {
     alias: [
+      // Iconify's default entry keeps an API loader: an icon name that is not
+      // in the source-scanned subset is fetched from api.iconify.design (with
+      // api.simplesvg.com / api.unisvg.com as fallbacks). Dashboard documents
+      // carry AUTHORED icon names, so a bundle can always contain ids the
+      // scanner never saw — and it would then phone home, which is the one
+      // thing a bundle must never do. The `/offline` entry is the same
+      // component with the API code removed: unknown ids render blank instead.
+      //
+      // That is the accepted trade-off, and it is not new: a served deployment
+      // ships `connect-src 'self'`, so those lookups are blocked there too and
+      // the same ids render blank (see scripts/generate-icon-subset.mjs). The
+      // fix for a missing icon is to add it to the scanned subset, in both
+      // cases. Exact-match regex so `@iconify/react/offline` is left alone.
+      { find: /^@iconify\/react$/, replacement: '@iconify/react/offline' },
       {
         find: 'depictio-components',
         replacement: path.resolve(__dirname, '../../packages/depictio-components/src/lib'),
