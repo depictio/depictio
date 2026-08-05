@@ -368,6 +368,13 @@ importers:
         version: 2.1.9(@types/node@25.6.0)(jsdom@25.0.1)(terser@5.46.2)
 
   packages/depictio-static-core:
+    dependencies:
+      hyparquet:
+        specifier: ^1.27.1
+        version: 1.31.0
+      hyparquet-compressors:
+        specifier: ^1.1.1
+        version: 1.1.3
     devDependencies:
       typescript:
         specifier: ^5.3.0
@@ -3608,6 +3615,9 @@ packages:
   function-bind@1.1.2:
     resolution: {integrity: sha512-7XHNxH7qX9xG5mIwxkhumTox/MIRNcOgDrxWsMt2pAr23WHp6MrRlN7FBSFpCpr+oVO0F744iUgR82nJMfG2SA==}
 
+  fzstd@0.1.1:
+    resolution: {integrity: sha512-dkuVSOKKwh3eas5VkJy1AW1vFpet8TA/fGmVA5krThl8YcOVE/8ZIoEA1+U1vEn5ckxxhLirSdY837azmbaNHA==}
+
   g2p_mapper@2.2.1:
     resolution: {integrity: sha512-D/XBsX1YeCY1j2gZK/UbUHYhXi7Eohc32kMrQ8MLtttrCv05DRrzeyOZU6siGW9X6lsJ+IXnK2nfGap2SKtN2Q==}
 
@@ -3788,8 +3798,14 @@ packages:
     resolution: {integrity: sha512-vK9P5/iUfdl95AI+JVyUuIcVtd4ofvtrOr3HNtM2yxC9bnMbEdp3x01OhQNnjb8IJYi38VlTE3mBXwcfvywuSw==}
     engines: {node: '>= 14'}
 
+  hyparquet-compressors@1.1.3:
+    resolution: {integrity: sha512-QqObpH8Vu1NKF5qzv7yWwgVso8sQE6irx0L5+WZ5QQ+xXnCQE5/X9K8hzYD6Z4wVjTmsMnZUO1vbutXLhU9AFQ==}
+
   hyparquet@1.31.0:
     resolution: {integrity: sha512-jd1eIm+dPFuJAHzgWWW+GXkTYoGXwTJpGreoQA4SYnsMBPO3cAhf+N1bt1+1kUseo5/81g5RBKjT+MZtif2C7Q==}
+
+  hysnappy@1.1.1:
+    resolution: {integrity: sha512-/V9XcN2NtRyWjR4LYMfvnvasVVF8jbT/ej0eofBQjZel91E3D813FQ3mQC6gDSMMTCq/FJh28XHeyqr3I/oBRw==}
 
   iconv-lite@0.4.24:
     resolution: {integrity: sha512-v3MXnZAcvnywkTUEZomIActle7RXXeedOR31wwl7VlyoXO4Qi9arvSenNQWne1TcRwhCL1HwLI21bEqdpj8/rA==}
@@ -9499,6 +9515,8 @@ snapshots:
 
   function-bind@1.1.2: {}
 
+  fzstd@0.1.1: {}
+
   g2p_mapper@2.2.1: {}
 
   generic-filehandle2@2.4.0: {}
@@ -9732,7 +9750,14 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  hyparquet-compressors@1.1.3:
+    dependencies:
+      fzstd: 0.1.1
+      hysnappy: 1.1.1
+
   hyparquet@1.31.0: {}
+
+  hysnappy@1.1.1: {}
 
   iconv-lite@0.4.24:
     dependencies:
