@@ -19,6 +19,8 @@ import SecondaryMetrics, {
 } from './card/SecondaryMetrics';
 import { wrapWithChrome } from './chrome';
 import LoadAllButton, { LoadAllState } from './chrome/LoadAllButton';
+import MapDataButton from './map/MapDataButton';
+import { isMapSelectionEnabled } from '../selection';
 import { ActiveHighlight } from '../highlight';
 
 // Heavy renderers are lazy-loaded so plotly / ag-grid / jbrowse resolve into
@@ -226,11 +228,7 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
   }
 
   if (metadata.component_type === 'map' && dashboardId) {
-    const mapType = (metadata.map_type as string) || 'scatter_map';
-    const selectionEnabled =
-      Boolean(metadata.selection_enabled) &&
-      mapType !== 'choropleth_map' &&
-      !!onFilterChange;
+    const selectionEnabled = isMapSelectionEnabled(metadata, !!onFilterChange);
     const onResetSelection =
       selectionEnabled && onFilterChange
         ? () =>
@@ -254,9 +252,27 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
           refreshTick={refreshTick}
         />
       </Suspense>,
-      { onResetFilter: onResetSelection, extraActions, showDragHandle, sourceFilterActive },
+      {
+        onResetFilter: onResetSelection,
+        extraActions: mapExtras,
+        showDragHandle,
+        sourceFilterActive,
+      },
     );
   }
+    // Same "show underlying data" affordance advanced_viz has, riding the same
+    // `extraActions` slot — so `actionsFor('map')` needs no change.
+    const mapExtras = (
+      <>
+        {extraActions}
+        <MapDataButton
+          dashboardId={dashboardId}
+          metadata={metadata}
+          filters={filters}
+          onFilterChange={onFilterChange}
+        />
+      </>
+    );
 
   if (metadata.component_type === 'jbrowse' && dashboardId) {
     // JBrowse fetches its session on mount and pulls a heavy chunk, so gate the
