@@ -1,9 +1,11 @@
 """Bind-and-refill BUILD side (RFC §4, phase 5a).
 
-Turns a ui-mode figure component into a :class:`BindingTable` — the thing the
-runtime (``packages/depictio-static-core/src/refill.ts``) needs to re-render the
-*same* figure under any filter mask, without porting one line of
-plotly-express to TypeScript.
+Turns a figure component into a :class:`BindingTable` — the thing the runtime
+(``packages/depictio-static-core/src/refill.ts``) needs to re-render the *same*
+figure under any filter mask, without porting one line of plotly-express to
+TypeScript. ui-mode figures are built here from their kwargs; code-mode figures
+(RFC §7, phase 6) hand in the figure their own Python produced plus the frame
+its transpiled prologue derived (``fig=`` / ``df``), and bind the same way.
 
 The invariant this exploits: **filtering only removes rows**, so the trace set
 built on unfiltered data is a superset of any filtered view. We therefore build
@@ -78,6 +80,8 @@ runtime.
 
 from __future__ import annotations
 
+import base64
+import binascii
 import math
 from datetime import date, datetime, time
 from typing import Any
@@ -157,11 +161,44 @@ def _norm(value: Any) -> Any:
     return value
 
 
+def _typed_array(value: Any) -> list[Any] | None:
+    """Decode Plotly's base64 typed-array wire form, ``{'dtype', 'bdata'}``.
+
+    Plotly ≥6 serialises numeric arrays that way and does **not** decode them on
+    the way back in (``go.Figure(fig_json)`` / ``plotly.io.from_json`` leave the
+    dict in place — plotly.js decodes it in the browser). A figure the producer
+    rebuilt from JSON — every code-mode figure, which comes back from the server
+    pipeline as JSON — therefore holds these dicts where a live figure holds
+    numpy arrays, and without this the binder would see "an array-ish attribute
+    it cannot flatten" and refuse every one of them.
+
+    ``None`` for anything that is not a plain 1-D buffer (an ``nd`` ``shape``
+    included: a 2-D array is not column-bound).
+    """
+    if not isinstance(value, dict) or "bdata" not in value or "dtype" not in value:
+        return None
+    shape = value.get("shape")
+    if shape not in (None, "") and len(str(shape).split(",")) > 1:
+        return None
+    import numpy as np
+
+    try:
+        # Plotly writes little-endian buffers regardless of host order.
+        dtype = np.dtype(str(value["dtype"])).newbyteorder("<")
+        buffer = base64.b64decode(value["bdata"])
+        decoded = np.frombuffer(buffer, dtype=dtype)
+    except (TypeError, ValueError, binascii.Error):
+        return None
+    return [_norm(item) for item in decoded.tolist()]
+
+
 def _as_list(value: Any) -> list[Any] | None:
     """A Plotly trace attribute as a flat list of normalised scalars, or
     ``None`` when it is not a 1-D array (scalars, 2-D customdata, lists of
     sub-objects such as ``dimensions``)."""
-    if value is None or isinstance(value, (str, bytes, dict)):
+    if isinstance(value, dict):
+        return _typed_array(value)
+    if value is None or isinstance(value, (str, bytes)):
         return None
     if hasattr(value, "tolist"):
         value = value.tolist()
@@ -306,12 +343,24 @@ def _combinations(
 # ---------------------------------------------------------------------------
 
 
-def build_binding(component_meta: dict[str, Any], df: pl.DataFrame) -> BindingTable | None:
-    """Binding table for one ui-mode figure component, or ``None``.
+def build_binding(
+    component_meta: dict[str, Any], df: pl.DataFrame, fig: Any = None
+) -> BindingTable | None:
+    """Binding table for one figure component, or ``None``.
 
     ``None`` means "not bindable with certainty" — the caller must freeze the
     component with ``binding_miss``. See the module docstring for the exhaustive
     list of bail-outs.
+
+    ``fig`` is an already-built ``plotly.graph_objects.Figure`` to use as the
+    authoritative scaffold instead of calling ``create_figure_from_data``. That
+    is the code-mode path (RFC §7, phase 6): the user's Python already ran —
+    under RestrictedPython for producer A, a trusted local exec for producer B —
+    and ``df`` is the *derived* frame its prologue produced, so re-deriving the
+    figure here would both duplicate the work and lose everything the code did
+    after the ``px`` call. Sampling is skipped with it: no service downsampled
+    the code's own figure, so there is nothing to rebuild uncapped and
+    ``sampled`` stays False.
     """
     from depictio.api.v1.services.figure.figure_builder import (
         _WHOLE_FRAME_VISU,
@@ -342,21 +391,24 @@ def build_binding(component_meta: dict[str, Any], df: pl.DataFrame) -> BindingTa
     if combos is None:
         return None
 
-    # Authoritative figure: the real service, unfiltered frame (errata #10).
-    stats: dict[str, Any] = {}
-    fig = create_figure_from_data(
-        df,
-        visu_type,
-        dict_kwargs,
-        theme="light",
-        max_points=component_meta.get("max_points"),
-        render_stats=stats,
-    )
-    sampled = bool(stats.get("sampled", False))
-    if sampled:
-        # Rebuild uncapped: the runtime refills from the full column, so the
-        # scaffold's trace set must cover every group of the full frame.
-        fig = create_figure_from_data(df, visu_type, dict_kwargs, theme="light", max_points=-1)
+    # Authoritative figure: the caller's prebuilt one (code mode), else the real
+    # service on the unfiltered frame (errata #10).
+    sampled = False
+    if fig is None:
+        stats: dict[str, Any] = {}
+        fig = create_figure_from_data(
+            df,
+            visu_type,
+            dict_kwargs,
+            theme="light",
+            max_points=component_meta.get("max_points"),
+            render_stats=stats,
+        )
+        sampled = bool(stats.get("sampled", False))
+        if sampled:
+            # Rebuild uncapped: the runtime refills from the full column, so the
+            # scaffold's trace set must cover every group of the full frame.
+            fig = create_figure_from_data(df, visu_type, dict_kwargs, theme="light", max_points=-1)
 
     scaffold = fig.to_plotly_json()
     traces_json: list[dict[str, Any]] = list(scaffold.get("data") or [])

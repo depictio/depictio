@@ -3,9 +3,11 @@
 Classifies every component of a ``DashboardDataLite`` spec into its expected
 liveness tier *without* reading any data or writing any output — this is what
 makes the feature usable: authors see up front why a component will degrade
-(RFC §3.3). The build itself refines two verdicts that need data: a code-mode
-figure whose trusted local execution fails drops to ``omitted``, and a ui-mode
-figure that had to be sampled (``FIGURE_MAX_POINTS``) drops to ``partial``.
+(RFC §3.3). The build itself refines the verdicts that need data: a figure the
+bind-and-refill builder accepts (ui-mode kwargs, or a code-mode figure whose
+prologue transpiled) is upgraded to ``live``, a code-mode figure whose trusted
+local execution fails drops to ``omitted``, and a ui-mode figure that had to be
+sampled (``FIGURE_MAX_POINTS``) drops to ``partial``.
 """
 
 from __future__ import annotations
@@ -15,6 +17,7 @@ from typing import Any
 
 from depictio.models.models.dashboards import DashboardDataLite
 from depictio.models.models.serverless import ComponentTier, TierReason
+from depictio.serverless.prologue import transpile_with_reason
 from depictio.serverless.pruning import component_as_dict
 
 # advanced_viz kinds whose payload is computed by a Celery dispatch server-side
@@ -62,11 +65,24 @@ def classify_component(comp: dict[str, Any]) -> tuple[ComponentTier, TierReason 
 
     if ctype == "figure":
         if comp.get("mode", "ui") == "code":
+            # Data-free verdict, but the transpiler IS data-free: it reads the
+            # code, so preflight can already tell a replayable prologue from one
+            # that will freeze. The build refines the first case to live once
+            # the binding matches (and omits either if the code fails to run).
+            ops, refusal = transpile_with_reason(comp.get("code_content") or "")
+            if ops is None:
+                return (
+                    ComponentTier.FROZEN,
+                    TierReason.CODE_MODE,
+                    f"code-mode figure not transpilable: {refusal}; executed locally "
+                    "(trusted) and frozen at the default filter state — omitted if "
+                    "execution fails",
+                )
             return (
                 ComponentTier.FROZEN,
-                TierReason.CODE_MODE,
-                "code-mode transpiler lands in phase 6; executed locally (trusted) "
-                "and frozen at the default filter state — omitted if execution fails",
+                TierReason.BINDING_MISS,
+                "transpilable prologue; offered to bind-and-refill, upgraded to "
+                "live when the binding matches",
             )
         return (
             ComponentTier.FROZEN,

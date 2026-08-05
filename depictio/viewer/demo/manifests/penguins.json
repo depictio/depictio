@@ -1,6 +1,143 @@
 {
  "allow_network_tiles": false,
  "bindings": {
+  "figure-codemode": {
+   "group_cols": [],
+   "sampled": false,
+   "scaffold": {
+    "data": [
+     {
+      "hovertemplate": "species=%{x}<br>mean_mass=%{y}<extra></extra>",
+      "legendgroup": "",
+      "marker": {
+       "color": "#636efa",
+       "pattern": {
+        "shape": ""
+       }
+      },
+      "name": "",
+      "orientation": "v",
+      "showlegend": false,
+      "textposition": "auto",
+      "type": "bar",
+      "xaxis": "x",
+      "yaxis": "y"
+     }
+    ],
+    "layout": {
+     "barmode": "relative",
+     "legend": {
+      "tracegroupgap": 0
+     },
+     "margin": {
+      "t": 60
+     },
+     "template": {
+      "layout": {
+       "colorscale": {
+        "sequential": [
+         [
+          0.0,
+          "#1864ab"
+         ],
+         [
+          0.14285714285714285,
+          "#7065b9"
+         ],
+         [
+          0.2857142857142857,
+          "#af61b7"
+         ],
+         [
+          0.42857142857142855,
+          "#e35ea5"
+         ],
+         [
+          0.5714285714285714,
+          "#ff6587"
+         ],
+         [
+          0.7142857142857143,
+          "#ff7c63"
+         ],
+         [
+          0.8571428571428571,
+          "#ff9e3d"
+         ],
+         [
+          1.0,
+          "#fcc419"
+         ]
+        ]
+       },
+       "colorway": [
+        "#228be6",
+        "#fa5252",
+        "#40c057",
+        "#7950f2",
+        "#fd7e14",
+        "#15aabf",
+        "#e64980",
+        "#fab005"
+       ],
+       "font": {
+        "family": "-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\""
+       },
+       "geo": {
+        "bgcolor": "#ffffff"
+       },
+       "paper_bgcolor": "#ffffff",
+       "plot_bgcolor": "#ffffff",
+       "xaxis": {
+        "gridcolor": "#dee2e6",
+        "gridwidth": 0.5,
+        "zerolinecolor": "#dee2e6"
+       },
+       "yaxis": {
+        "gridcolor": "#dee2e6",
+        "gridwidth": 0.5,
+        "zerolinecolor": "#dee2e6"
+       }
+      }
+     },
+     "xaxis": {
+      "anchor": "y",
+      "domain": [
+       0.0,
+       1.0
+      ],
+      "title": {
+       "text": "species"
+      }
+     },
+     "yaxis": {
+      "anchor": "x",
+      "domain": [
+       0.0,
+       1.0
+      ],
+      "title": {
+       "text": "mean_mass"
+      }
+     }
+    }
+   },
+   "traces": [
+    {
+     "axes": {
+      "xaxis": "x",
+      "yaxis": "y"
+     },
+     "fields": {
+      "x": "species",
+      "y": "mean_mass"
+     },
+     "group": {},
+     "i": 0
+    }
+   ],
+   "trendlines": []
+  },
   "scatter-mass-flipper": {
    "group_cols": [
     "species"
@@ -204,7 +341,7 @@
    "trendlines": []
   }
  },
- "built_at": "2026-08-05T16:01:16.581536+00:00",
+ "built_at": "2026-08-05T17:00:10.165426+00:00",
  "dashboard": {
   "doc": {
    "left_panel_layout_data": [
@@ -286,6 +423,21 @@
      "w": 8,
      "x": 0,
      "y": 8
+    },
+    {
+     "h": 4,
+     "i": "box-figure-codemode",
+     "resizeHandles": [
+      "se",
+      "s",
+      "e",
+      "sw",
+      "w"
+     ],
+     "static": false,
+     "w": 6,
+     "x": 0,
+     "y": 13
     }
    ],
    "stored_layout_data": [],
@@ -405,6 +557,23 @@
      "title_size": "sm",
      "wf_id": null,
      "workflow_tag": "penguin_species_analysis"
+    },
+    {
+     "code_content": "import polars as pl\nimport plotly.express as px\n\ndf2 = df.group_by(\"species\").agg(pl.col(\"body_mass_g\").mean().alias(\"mean_mass\"))\ndf2 = df2.sort(\"mean_mass\", descending=True)\nfig = px.bar(df2, x=\"species\", y=\"mean_mass\")\n",
+     "component_type": "figure",
+     "data_collection_tag": "joined_penguins_complete",
+     "dc_id": "e26f036c4d124f11b2f23fd8",
+     "description": "",
+     "dict_kwargs": {},
+     "index": "figure-codemode",
+     "mode": "code",
+     "selection_enabled": false,
+     "title": "Mean body mass by species (code)",
+     "title_align": "left",
+     "title_size": "sm",
+     "visu_type": "scatter",
+     "wf_id": null,
+     "workflow_tag": "penguin_species_analysis"
     }
    ],
    "subtitle": "Producer B worked example (Palmer Penguins)",
@@ -486,7 +655,32 @@
  "manifest_version": 1,
  "mode": "single-file",
  "producer": "B",
- "prologues": {},
+ "prologues": {
+  "figure-codemode": [
+   {
+    "agg": [
+     {
+      "alias": "mean_mass",
+      "col": "body_mass_g",
+      "fn": "mean"
+     }
+    ],
+    "by": [
+     "species"
+    ],
+    "op": "group_by"
+   },
+   {
+    "by": [
+     "mean_mass"
+    ],
+    "desc": [
+     true
+    ],
+    "op": "sort"
+   }
+  ]
+ },
  "tiers": {
   "card-body-mass": {
    "detail": null,
@@ -494,6 +688,11 @@
    "tier": "live"
   },
   "card-species-count": {
+   "detail": null,
+   "reason": null,
+   "tier": "live"
+  },
+  "figure-codemode": {
    "detail": null,
    "reason": null,
    "tier": "live"

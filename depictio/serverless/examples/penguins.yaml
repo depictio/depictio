@@ -2,7 +2,7 @@
 #
 # A trimmed-down cousin of depictio/projects/init/penguins/dashboards/
 # species_analysis.yaml, kept small on purpose: 2 cards, 1 ui-mode figure,
-# 1 table, 2 interactive filters, 1 text header.
+# 1 code-mode figure, 1 table, 2 interactive filters, 1 text header.
 #
 # Expected data-dir layout (producer-B convention
 # `{data_dir}/{workflow_tag}/{data_collection_tag}.parquet`):
@@ -99,3 +99,22 @@ components:
     data_collection_tag: joined_penguins_complete
     title: "Raw Measurements"
     layout: {x: 0, y: 8, w: 8, h: 5}
+
+  # Code-mode figure, LIVE since phase 6 (RFC §7). The build transpiles the
+  # data prologue (group_by + sort) to the JSON IR, runs the code once to get
+  # the real figure as a scaffold, and binds the two — so the browser replays
+  # the reshape on the filtered rows instead of showing a frozen snapshot.
+  - tag: figure-codemode
+    component_type: figure
+    workflow_tag: penguin_species_analysis
+    data_collection_tag: joined_penguins_complete
+    mode: code
+    title: "Mean body mass by species (code)"
+    code_content: |
+      import polars as pl
+      import plotly.express as px
+
+      df2 = df.group_by("species").agg(pl.col("body_mass_g").mean().alias("mean_mass"))
+      df2 = df2.sort("mean_mass", descending=True)
+      fig = px.bar(df2, x="species", y="mean_mass")
+    layout: {x: 0, y: 13, w: 6, h: 4}

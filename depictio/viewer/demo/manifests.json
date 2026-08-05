@@ -7,8 +7,8 @@
   },
   {
     "id": "phase-1",
-    "title": "Phases 1+3+5 — penguins fully LIVE (cards, filters, figure, table)",
+    "title": "Phases 1+3+5+6 — penguins fully LIVE (cards, filters, figures, table)",
     "manifest": "demo/manifests/penguins.json",
-    "description": "Built by producer B from a spec + local Parquet (depictio dashboard build-static). Everything is live: change the species or year selection and the cards recompute, the scatter re-renders (bind-and-refill) AND the live table re-filters — plus header-click sorting and pagination, all computed offline through the in-browser hyparquet engine with server-exact Polars sort semantics. Regenerate with depictio/serverless/examples/generate_demo_manifest.py."
+    "description": "Built by producer B from a spec + local Parquet (depictio dashboard build-static). All 8 components are live, none frozen: change the species or year selection and the cards recompute, the scatter re-renders (bind-and-refill), the live table re-filters — and the CODE-MODE bar chart re-derives itself, replaying its Python prologue (group_by + sort, transpiled to a JSON IR) over the filtered rows before refilling. Header-click sorting and pagination included, all computed offline through the in-browser hyparquet engine with server-exact Polars semantics. Regenerate with depictio/serverless/examples/generate_demo_manifest.py."
   }
 ]
