@@ -106,11 +106,58 @@ export interface BindingTable {
   sampled: boolean;
 }
 
-export interface PrologueOp {
-  /** filter | unpivot | pivot | group_by | sort | rename (closed allowlist). */
-  op: string;
-  args: Record<string, unknown>;
+/** JSON scalar allowed in predicate comparisons / is_in lists. */
+export type PrologueScalar = string | number | boolean | null;
+
+export type CmpOp = '<' | '<=' | '>' | '>=' | '==' | '!=';
+
+/**
+ * Predicate tree for the `filter` prologue op. Evaluation is polars-faithful
+ * three-valued logic: a comparison involving null is null, and/or/not are
+ * Kleene, and a row passes only when the tree is strictly true.
+ */
+export type Pred =
+  | { and: Pred[] }
+  | { or: Pred[] }
+  | { not: Pred }
+  | { cmp: { col: string; op: CmpOp; value: PrologueScalar } }
+  | { is_null: { col: string } }
+  | { is_not_null: { col: string } }
+  | { is_in: { col: string; values: PrologueScalar[] } };
+
+/** Closed group_by aggregation allowlist (the agg kernel's AggFn minus mode). */
+export type PrologueAggFn =
+  | 'sum'
+  | 'mean'
+  | 'median'
+  | 'min'
+  | 'max'
+  | 'count'
+  | 'nunique'
+  | 'std'
+  | 'var'
+  | 'first'
+  | 'last';
+
+export interface PrologueAgg {
+  col: string;
+  fn: PrologueAggFn;
+  alias: string;
 }
+
+/**
+ * One step of a component's data prologue — the closed JSON IR the Python
+ * transpiler emits and `runPrologue` (../prologue.ts) executes in the browser
+ * with pinned Polars semantics. Shapes are the phase-6 contract, byte-for-byte
+ * shared with the Python side; the polars-generated differential fixture is
+ * the arbiter.
+ */
+export type PrologueOp =
+  | { op: 'filter'; pred: Pred }
+  | { op: 'unpivot'; on: string[]; index: string[]; variable: string; value: string }
+  | { op: 'group_by'; by: string[]; agg: PrologueAgg[] }
+  | { op: 'sort'; by: string[]; desc: boolean[] }
+  | { op: 'rename'; map: Record<string, string> };
 
 export interface LinkTable {
   /** Source value -> translated target values. */
