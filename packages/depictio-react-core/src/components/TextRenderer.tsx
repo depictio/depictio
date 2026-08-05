@@ -63,7 +63,7 @@ const renderInlineMarkdown = (input: string): React.ReactNode[] => {
  *   - title (string)
  *   - order (1-6 → H1..H6; clamped)
  *   - alignment ('left' | 'center' | 'right'; default 'left')
- *   - vertical_alignment ('top' | 'center' | 'bottom'; default 'top')
+ *   - vertical_alignment ('top' | 'center' | 'bottom'; default 'center')
  *   - body (optional paragraph)
  *
  * No data fetching, no editing UI. Same shape in viewer and editor — the
@@ -80,7 +80,7 @@ const TextRenderer: React.FC<TextRendererProps> = ({ metadata, placeholder = fal
   const alignment: 'left' | 'center' | 'right' =
     alignmentRaw === 'center' || alignmentRaw === 'right' ? alignmentRaw : 'left';
   const vAlignRaw =
-    typeof metadata.vertical_alignment === 'string' ? metadata.vertical_alignment : 'top';
+    typeof metadata.vertical_alignment === 'string' ? metadata.vertical_alignment : 'center';
   // Flex `justify` on the column Stack — visible only where the tile is taller
   // than the text it holds.
   const justify =

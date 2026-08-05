@@ -81,7 +81,7 @@
   ],
   "stored_metadata": [
     {
-      "index": "1bde9035-eab7-4390-a51e-5ad2aee03cc6",
+      "index": "36b79a3f-7141-4b65-8860-c55f6c1da7f0",
       "component_type": "text",
       "title": "Palmer Penguins \u2014 Species & Island Morphology",
       "workflow_tag": "",
@@ -93,18 +93,18 @@
       "dc_config": {},
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-08-05T14:47:30.005183",
+      "last_updated": "2026-08-05T17:12:07.300263",
       "title_size": "sm",
       "title_align": "left",
       "section": null,
       "order": 2,
       "alignment": "left",
-      "vertical_alignment": "top",
+      "vertical_alignment": "center",
       "body": "Joined physical measurements + demographics for *Adelie*, *Chinstrap*, *Gentoo* across Biscoe, Dream, Torgersen. Each section leads with its numbers, then its figures.",
       "wf_tag": "python/penguin_species_analysis"
     },
     {
-      "index": "a932bd24-9f54-407b-9e53-84d88238e2fb",
+      "index": "6c1ea4b4-0063-409a-910f-11e762701503",
       "component_type": "card",
       "title": "Individuals",
       "workflow_tag": "penguin_species_analysis",
@@ -127,7 +127,7 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-08-05T14:47:30.005203",
+      "last_updated": "2026-08-05T17:12:07.300289",
       "title_size": "sm",
       "title_align": "left",
       "section": "Cohort",
@@ -154,7 +154,7 @@
       "wf_tag": "python/penguin_species_analysis"
     },
     {
-      "index": "67397473-3d1f-4551-ac7f-6f2334a89bbb",
+      "index": "9af37234-e4e6-4b5c-9931-9608b2d4772c",
       "component_type": "card",
       "title": "Species mix",
       "workflow_tag": "penguin_species_analysis",
@@ -177,7 +177,7 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-08-05T14:47:30.005210",
+      "last_updated": "2026-08-05T17:12:07.300299",
       "title_size": "sm",
       "title_align": "left",
       "section": "Cohort",
@@ -204,7 +204,7 @@
       "wf_tag": "python/penguin_species_analysis"
     },
     {
-      "index": "6d4b132a-5d1f-4b91-8bc8-62bab0cb226a",
+      "index": "07496500-ebb5-4512-bee7-9fd12a7d74d9",
       "component_type": "card",
       "title": "Island balance",
       "workflow_tag": "penguin_species_analysis",
@@ -227,7 +227,7 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-08-05T14:47:30.005216",
+      "last_updated": "2026-08-05T17:12:07.300307",
       "title_size": "sm",
       "title_align": "left",
       "section": "Cohort",
@@ -254,7 +254,7 @@
       "wf_tag": "python/penguin_species_analysis"
     },
     {
-      "index": "8cbc412c-29c8-4459-a1ca-ff66a17d2bf5",
+      "index": "44d328bc-5570-4240-98c1-9c69e4cd8799",
       "component_type": "card",
       "title": "Sex recorded",
       "workflow_tag": "penguin_species_analysis",
@@ -277,7 +277,7 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-08-05T14:47:30.005221",
+      "last_updated": "2026-08-05T17:12:07.300314",
       "title_size": "sm",
       "title_align": "left",
       "section": "Cohort",
@@ -304,7 +304,7 @@
       "wf_tag": "python/penguin_species_analysis"
     },
     {
-      "index": "3a017776-fe26-4b80-a2b2-78dec9709f58",
+      "index": "2454e3aa-df88-4734-80e1-03ecd1a4462e",
       "component_type": "card",
       "title": "Body Mass (g)",
       "workflow_tag": "penguin_species_analysis",
@@ -327,7 +327,7 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-08-05T14:47:30.005227",
+      "last_updated": "2026-08-05T17:12:07.300327",
       "title_size": "sm",
       "title_align": "left",
       "section": "Morphometrics",
@@ -356,7 +356,7 @@
       "wf_tag": "python/penguin_species_analysis"
     },
     {
-      "index": "fb5127b4-d24d-4a19-8c22-06f231217ebe",
+      "index": "4f8ca611-e273-415a-82f1-df75c5d8824b",
       "component_type": "card",
       "title": "Flipper Length (mm)",
       "workflow_tag": "penguin_species_analysis",
@@ -379,7 +379,7 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-08-05T14:47:30.005232",
+      "last_updated": "2026-08-05T17:12:07.300334",
       "title_size": "sm",
       "title_align": "left",
       "section": "Morphometrics",
@@ -406,7 +406,7 @@
       "wf_tag": "python/penguin_species_analysis"
     },
     {
-      "index": "4d644a41-67a3-4f0b-88d0-2d4e6a9ddd5a",
+      "index": "edf8971e-6584-4899-bd19-9a37f69b5ad3",
       "component_type": "card",
       "title": "Mass by season",
       "workflow_tag": "penguin_species_analysis",
@@ -429,7 +429,7 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-08-05T14:47:30.005238",
+      "last_updated": "2026-08-05T17:12:07.300340",
       "title_size": "sm",
       "title_align": "left",
       "section": "Morphometrics",
@@ -456,7 +456,7 @@
       "wf_tag": "python/penguin_species_analysis"
     },
     {
-      "index": "92315be6-ce40-46c9-b72b-0ff0b992b6e1",
+      "index": "ce3d3843-f801-4b80-aef5-c8d9137b68e8",
       "component_type": "card",
       "title": "Bills > 50 mm",
       "workflow_tag": "penguin_species_analysis",
@@ -479,7 +479,7 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-08-05T14:47:30.005243",
+      "last_updated": "2026-08-05T17:12:07.300346",
       "title_size": "sm",
       "title_align": "left",
       "section": "Morphometrics",
@@ -506,7 +506,7 @@
       "wf_tag": "python/penguin_species_analysis"
     },
     {
-      "index": "ca49cf79-edc1-4812-8e2e-456b6791a077",
+      "index": "20285ba4-15a6-4293-a2e8-296656625841",
       "component_type": "interactive",
       "title": "Species",
       "workflow_tag": "penguin_species_analysis",
@@ -529,7 +529,7 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-08-05T14:47:30.005258",
+      "last_updated": "2026-08-05T17:12:07.300353",
       "title_align": "left",
       "section": "Cohort",
       "interactive_component_type": "MultiSelect",
@@ -547,7 +547,7 @@
       "wf_tag": "python/penguin_species_analysis"
     },
     {
-      "index": "5fe115e4-91e0-4c98-931e-7d43a5124798",
+      "index": "a96eeeae-68f4-48e2-b57c-9d4400bbb8ee",
       "component_type": "interactive",
       "title": "Island",
       "workflow_tag": "penguin_species_analysis",
@@ -570,7 +570,7 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-08-05T14:47:30.005263",
+      "last_updated": "2026-08-05T17:12:07.300359",
       "title_align": "left",
       "section": "Cohort",
       "interactive_component_type": "MultiSelect",
@@ -588,7 +588,7 @@
       "wf_tag": "python/penguin_species_analysis"
     },
     {
-      "index": "919ee964-95e9-4f8a-802f-902576eeb89a",
+      "index": "f100e08d-f713-4f1a-be84-9bc9a1dc55b5",
       "component_type": "interactive",
       "title": "Sex",
       "workflow_tag": "penguin_species_analysis",
@@ -611,7 +611,7 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-08-05T14:47:30.005267",
+      "last_updated": "2026-08-05T17:12:07.300364",
       "title_align": "left",
       "section": "Cohort",
       "interactive_component_type": "MultiSelect",
@@ -629,7 +629,7 @@
       "wf_tag": "python/penguin_species_analysis"
     },
     {
-      "index": "61da0dd5-3fdf-4748-bf98-66e629101ee4",
+      "index": "9ab19402-3f06-4290-b29f-531d2cca516d",
       "component_type": "interactive",
       "title": "Sampling season",
       "workflow_tag": "penguin_species_analysis",
@@ -652,7 +652,7 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-08-05T14:47:30.005272",
+      "last_updated": "2026-08-05T17:12:07.300369",
       "title_align": "left",
       "section": "Cohort",
       "interactive_component_type": "RangeSlider",
@@ -670,7 +670,7 @@
       "wf_tag": "python/penguin_species_analysis"
     },
     {
-      "index": "d4efb733-cf91-4ec8-9a50-0cda28c88f1a",
+      "index": "0f7450ce-3e31-4c6d-88cf-a1e15abb5367",
       "component_type": "interactive",
       "title": "Body mass (g)",
       "workflow_tag": "penguin_species_analysis",
@@ -693,7 +693,7 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-08-05T14:47:30.005276",
+      "last_updated": "2026-08-05T17:12:07.300374",
       "title_align": "left",
       "section": "Measurements",
       "interactive_component_type": "RangeSlider",
@@ -711,7 +711,7 @@
       "wf_tag": "python/penguin_species_analysis"
     },
     {
-      "index": "90e0802d-3627-42b7-b2a7-8c19b4a84203",
+      "index": "5a24ebff-7b1a-4474-9d71-841fc56fe0bf",
       "component_type": "interactive",
       "title": "Bill length (mm)",
       "workflow_tag": "penguin_species_analysis",
@@ -734,7 +734,7 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-08-05T14:47:30.005280",
+      "last_updated": "2026-08-05T17:12:07.300379",
       "title_align": "left",
       "section": "Measurements",
       "interactive_component_type": "RangeSlider",
@@ -752,7 +752,7 @@
       "wf_tag": "python/penguin_species_analysis"
     },
     {
-      "index": "7b2e4e79-fb9b-418d-bb7f-c26a0354d65f",
+      "index": "4cee6a4e-453d-41aa-bafe-56e098cbb9cf",
       "component_type": "interactive",
       "title": "Bill depth (mm)",
       "workflow_tag": "penguin_species_analysis",
@@ -775,7 +775,7 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-08-05T14:47:30.005284",
+      "last_updated": "2026-08-05T17:12:07.300383",
       "title_align": "left",
       "section": "Measurements",
       "interactive_component_type": "RangeSlider",
@@ -793,7 +793,7 @@
       "wf_tag": "python/penguin_species_analysis"
     },
     {
-      "index": "e6a34615-2ffb-4236-a542-5522c682fa12",
+      "index": "a119768f-de7c-43b9-a583-6f5215b61d0a",
       "component_type": "interactive",
       "title": "Flipper length (mm)",
       "workflow_tag": "penguin_species_analysis",
@@ -816,7 +816,7 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-08-05T14:47:30.005288",
+      "last_updated": "2026-08-05T17:12:07.300388",
       "title_align": "left",
       "section": "Measurements",
       "interactive_component_type": "RangeSlider",
@@ -834,7 +834,7 @@
       "wf_tag": "python/penguin_species_analysis"
     },
     {
-      "index": "3eeabddc-87be-4b6b-a25a-6a11b7014d99",
+      "index": "71bc3bb0-3b97-4d2c-b992-3ad4e169d629",
       "component_type": "interactive",
       "title": "Species (bill > 50 mm)",
       "workflow_tag": "penguin_species_analysis",
@@ -857,7 +857,7 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-08-05T14:47:30.005292",
+      "last_updated": "2026-08-05T17:12:07.300392",
       "title_align": "left",
       "section": "Scoped views",
       "interactive_component_type": "MultiSelect",
@@ -875,7 +875,7 @@
       "wf_tag": "python/penguin_species_analysis"
     },
     {
-      "index": "daa7ab64-eb9b-43ca-be38-97560aa470d1",
+      "index": "32182322-3571-4679-bda4-1f05d1fe75d1",
       "component_type": "figure",
       "title": "Body Mass vs Flipper Length",
       "workflow_tag": "penguin_species_analysis",
@@ -898,7 +898,7 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-08-05T14:47:30.005302",
+      "last_updated": "2026-08-05T17:12:07.300401",
       "description": "Colour = species, symbol = island, size = bill length. Marginal box/violin show per-axis spread; the lowess trend is the allometric relationship the species share.",
       "title_size": "h3",
       "title_align": "left",
@@ -929,7 +929,7 @@
       "wf_tag": "python/penguin_species_analysis"
     },
     {
-      "index": "f7ce833e-0146-4744-8f47-27cba9209643",
+      "index": "750f28fb-8fd6-4fb8-882e-474800961b97",
       "component_type": "figure",
       "title": "Bill Shape \u2014 Length vs Depth",
       "workflow_tag": "penguin_species_analysis",
@@ -952,7 +952,7 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-08-05T14:47:30.005307",
+      "last_updated": "2026-08-05T17:12:07.300407",
       "description": "Bivariate bill morphology. Chinstrap = long & deep; Gentoo = long & shallow; Adelie = short & deep.",
       "title_size": "h3",
       "title_align": "left",
@@ -978,7 +978,7 @@
       "wf_tag": "python/penguin_species_analysis"
     },
     {
-      "index": "393a4cf9-d996-4e3f-8bd4-b59d876c088e",
+      "index": "8a397eab-4989-461c-bd9c-cccc3484a3ad",
       "component_type": "figure",
       "title": "Bill Length by Species and Sex",
       "workflow_tag": "penguin_species_analysis",
@@ -1001,7 +1001,7 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-08-05T14:47:30.005311",
+      "last_updated": "2026-08-05T17:12:07.300412",
       "description": "Grouped box + all points. Sexual dimorphism is most visible in Gentoo.",
       "title_size": "h3",
       "title_align": "left",
@@ -1029,7 +1029,7 @@
       "wf_tag": "python/penguin_species_analysis"
     },
     {
-      "index": "b09212f3-f779-4842-90de-95d716be9dda",
+      "index": "c5d384d5-fcdf-4366-b1de-7f4c4d4e5d34",
       "component_type": "figure",
       "title": "Body Mass Distribution by Species",
       "workflow_tag": "penguin_species_analysis",
@@ -1052,7 +1052,7 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-08-05T14:47:30.005315",
+      "last_updated": "2026-08-05T17:12:07.300416",
       "description": "Box + every observation as a tick. Reads against the Body Mass card above: the card's single box is this one with the species collapsed together.",
       "title_size": "h3",
       "title_align": "left",
@@ -1078,7 +1078,7 @@
       "wf_tag": "python/penguin_species_analysis"
     },
     {
-      "index": "548d3e42-9a0c-44ef-ad7a-4cbf183d262b",
+      "index": "adff43e5-ffaf-4892-8b8d-2fb4a6b22e73",
       "component_type": "figure",
       "title": "Bill Depth Distribution by Species",
       "workflow_tag": "penguin_species_analysis",
@@ -1101,7 +1101,7 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-08-05T14:47:30.005319",
+      "last_updated": "2026-08-05T17:12:07.300421",
       "description": "Overlay histogram with rug; Chinstrap and Adelie overlap heavily on bill depth, which is why bill depth alone cannot separate them.",
       "title_size": "h3",
       "title_align": "left",
@@ -1129,7 +1129,7 @@
       "wf_tag": "python/penguin_species_analysis"
     },
     {
-      "index": "d04d062e-72ab-430e-b282-4e8db983d32e",
+      "index": "25562e8e-6735-4a63-88b2-9b7138c2dae1",
       "component_type": "figure",
       "title": "Island \u00d7 Species Distribution",
       "workflow_tag": "penguin_species_analysis",
@@ -1152,7 +1152,7 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-08-05T14:47:30.005323",
+      "last_updated": "2026-08-05T17:12:07.300425",
       "description": "Hierarchical breakdown of the cohort. Inner ring = island, outer ring = species \u2014 only Biscoe and Dream hold more than one species.",
       "title_size": "h3",
       "title_align": "left",
@@ -1171,7 +1171,7 @@
       "wf_tag": "python/penguin_species_analysis"
     },
     {
-      "index": "ac435ed3-7369-46a8-9cf6-9fddab8aaa2c",
+      "index": "2161fe5e-778e-44e1-bab9-59389366d3ab",
       "component_type": "figure",
       "title": "Body Mass by Season and Species",
       "workflow_tag": "penguin_species_analysis",
@@ -1194,7 +1194,7 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-08-05T14:47:30.005327",
+      "last_updated": "2026-08-05T17:12:07.300430",
       "description": "What the Mass by season card cannot say on its own: each species is flat across 2007\u20132009, so the cohort-wide drift is a sampling-mix effect, not birds getting heavier.",
       "title_size": "h3",
       "title_align": "left",
@@ -1221,7 +1221,7 @@
       "wf_tag": "python/penguin_species_analysis"
     },
     {
-      "index": "474f8bb9-7ce2-4aaf-84be-ec6964a6ebc3",
+      "index": "49b6f00c-0901-451c-bf6b-0a4199a66a3d",
       "component_type": "table",
       "title": "Palmer Penguins Data",
       "workflow_tag": "penguin_species_analysis",
@@ -1244,7 +1244,7 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-08-05T14:47:30.005332",
+      "last_updated": "2026-08-05T17:12:07.300437",
       "description": "Joined physical-features + demographics view used by every tile above.",
       "title_size": "h3",
       "title_align": "left",
@@ -1262,7 +1262,7 @@
   "stored_layout_data": [],
   "left_panel_layout_data": [
     {
-      "i": "box-ca49cf79-edc1-4812-8e2e-456b6791a077",
+      "i": "box-20285ba4-15a6-4293-a2e8-296656625841",
       "x": 0,
       "y": 0,
       "w": 1,
@@ -1270,7 +1270,7 @@
       "static": false
     },
     {
-      "i": "box-5fe115e4-91e0-4c98-931e-7d43a5124798",
+      "i": "box-a96eeeae-68f4-48e2-b57c-9d4400bbb8ee",
       "x": 0,
       "y": 3,
       "w": 1,
@@ -1278,7 +1278,7 @@
       "static": false
     },
     {
-      "i": "box-919ee964-95e9-4f8a-802f-902576eeb89a",
+      "i": "box-f100e08d-f713-4f1a-be84-9bc9a1dc55b5",
       "x": 0,
       "y": 6,
       "w": 1,
@@ -1286,7 +1286,7 @@
       "static": false
     },
     {
-      "i": "box-61da0dd5-3fdf-4748-bf98-66e629101ee4",
+      "i": "box-9ab19402-3f06-4290-b29f-531d2cca516d",
       "x": 0,
       "y": 9,
       "w": 1,
@@ -1294,7 +1294,7 @@
       "static": false
     },
     {
-      "i": "box-d4efb733-cf91-4ec8-9a50-0cda28c88f1a",
+      "i": "box-0f7450ce-3e31-4c6d-88cf-a1e15abb5367",
       "x": 0,
       "y": 12,
       "w": 1,
@@ -1302,7 +1302,7 @@
       "static": false
     },
     {
-      "i": "box-90e0802d-3627-42b7-b2a7-8c19b4a84203",
+      "i": "box-5a24ebff-7b1a-4474-9d71-841fc56fe0bf",
       "x": 0,
       "y": 15,
       "w": 1,
@@ -1310,7 +1310,7 @@
       "static": false
     },
     {
-      "i": "box-7b2e4e79-fb9b-418d-bb7f-c26a0354d65f",
+      "i": "box-4cee6a4e-453d-41aa-bafe-56e098cbb9cf",
       "x": 0,
       "y": 18,
       "w": 1,
@@ -1318,7 +1318,7 @@
       "static": false
     },
     {
-      "i": "box-e6a34615-2ffb-4236-a542-5522c682fa12",
+      "i": "box-a119768f-de7c-43b9-a583-6f5215b61d0a",
       "x": 0,
       "y": 21,
       "w": 1,
@@ -1326,7 +1326,7 @@
       "static": false
     },
     {
-      "i": "box-3eeabddc-87be-4b6b-a25a-6a11b7014d99",
+      "i": "box-71bc3bb0-3b97-4d2c-b992-3ad4e169d629",
       "x": 0,
       "y": 24,
       "w": 1,
@@ -1336,7 +1336,7 @@
   ],
   "right_panel_layout_data": [
     {
-      "i": "box-1bde9035-eab7-4390-a51e-5ad2aee03cc6",
+      "i": "box-36b79a3f-7141-4b65-8860-c55f6c1da7f0",
       "x": 0,
       "y": 0,
       "w": 8,
@@ -1351,7 +1351,7 @@
       ]
     },
     {
-      "i": "box-a932bd24-9f54-407b-9e53-84d88238e2fb",
+      "i": "box-6c1ea4b4-0063-409a-910f-11e762701503",
       "x": 0,
       "y": 1,
       "w": 2,
@@ -1359,7 +1359,7 @@
       "static": true
     },
     {
-      "i": "box-67397473-3d1f-4551-ac7f-6f2334a89bbb",
+      "i": "box-9af37234-e4e6-4b5c-9931-9608b2d4772c",
       "x": 2,
       "y": 1,
       "w": 2,
@@ -1367,7 +1367,7 @@
       "static": true
     },
     {
-      "i": "box-6d4b132a-5d1f-4b91-8bc8-62bab0cb226a",
+      "i": "box-07496500-ebb5-4512-bee7-9fd12a7d74d9",
       "x": 4,
       "y": 1,
       "w": 2,
@@ -1375,7 +1375,7 @@
       "static": true
     },
     {
-      "i": "box-8cbc412c-29c8-4459-a1ca-ff66a17d2bf5",
+      "i": "box-44d328bc-5570-4240-98c1-9c69e4cd8799",
       "x": 6,
       "y": 1,
       "w": 2,
@@ -1383,7 +1383,7 @@
       "static": true
     },
     {
-      "i": "box-3a017776-fe26-4b80-a2b2-78dec9709f58",
+      "i": "box-2454e3aa-df88-4734-80e1-03ecd1a4462e",
       "x": 0,
       "y": 3,
       "w": 2,
@@ -1391,7 +1391,7 @@
       "static": true
     },
     {
-      "i": "box-fb5127b4-d24d-4a19-8c22-06f231217ebe",
+      "i": "box-4f8ca611-e273-415a-82f1-df75c5d8824b",
       "x": 2,
       "y": 3,
       "w": 2,
@@ -1399,7 +1399,7 @@
       "static": true
     },
     {
-      "i": "box-4d644a41-67a3-4f0b-88d0-2d4e6a9ddd5a",
+      "i": "box-edf8971e-6584-4899-bd19-9a37f69b5ad3",
       "x": 4,
       "y": 3,
       "w": 2,
@@ -1407,7 +1407,7 @@
       "static": true
     },
     {
-      "i": "box-92315be6-ce40-46c9-b72b-0ff0b992b6e1",
+      "i": "box-ce3d3843-f801-4b80-aef5-c8d9137b68e8",
       "x": 6,
       "y": 3,
       "w": 2,
@@ -1415,7 +1415,7 @@
       "static": true
     },
     {
-      "i": "box-daa7ab64-eb9b-43ca-be38-97560aa470d1",
+      "i": "box-32182322-3571-4679-bda4-1f05d1fe75d1",
       "x": 0,
       "y": 5,
       "w": 8,
@@ -1430,7 +1430,7 @@
       ]
     },
     {
-      "i": "box-f7ce833e-0146-4744-8f47-27cba9209643",
+      "i": "box-750f28fb-8fd6-4fb8-882e-474800961b97",
       "x": 0,
       "y": 10,
       "w": 4,
@@ -1445,7 +1445,7 @@
       ]
     },
     {
-      "i": "box-393a4cf9-d996-4e3f-8bd4-b59d876c088e",
+      "i": "box-8a397eab-4989-461c-bd9c-cccc3484a3ad",
       "x": 4,
       "y": 10,
       "w": 4,
@@ -1460,7 +1460,7 @@
       ]
     },
     {
-      "i": "box-b09212f3-f779-4842-90de-95d716be9dda",
+      "i": "box-c5d384d5-fcdf-4366-b1de-7f4c4d4e5d34",
       "x": 0,
       "y": 15,
       "w": 4,
@@ -1475,7 +1475,7 @@
       ]
     },
     {
-      "i": "box-548d3e42-9a0c-44ef-ad7a-4cbf183d262b",
+      "i": "box-adff43e5-ffaf-4892-8b8d-2fb4a6b22e73",
       "x": 4,
       "y": 15,
       "w": 4,
@@ -1490,7 +1490,7 @@
       ]
     },
     {
-      "i": "box-d04d062e-72ab-430e-b282-4e8db983d32e",
+      "i": "box-25562e8e-6735-4a63-88b2-9b7138c2dae1",
       "x": 0,
       "y": 20,
       "w": 4,
@@ -1505,7 +1505,7 @@
       ]
     },
     {
-      "i": "box-ac435ed3-7369-46a8-9cf6-9fddab8aaa2c",
+      "i": "box-2161fe5e-778e-44e1-bab9-59389366d3ab",
       "x": 4,
       "y": 20,
       "w": 4,
@@ -1520,7 +1520,7 @@
       ]
     },
     {
-      "i": "box-474f8bb9-7ce2-4aaf-84be-ec6964a6ebc3",
+      "i": "box-49b6f00c-0901-451c-bf6b-0a4199a66a3d",
       "x": 0,
       "y": 25,
       "w": 8,

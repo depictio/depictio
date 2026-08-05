@@ -1314,7 +1314,7 @@ class DashboardDataLite(BaseModel):
                     order_int = 1
                 full_comp["order"] = order_int
                 full_comp["alignment"] = comp_dict.get("alignment", "left")
-                full_comp["vertical_alignment"] = comp_dict.get("vertical_alignment", "top")
+                full_comp["vertical_alignment"] = comp_dict.get("vertical_alignment", "center")
                 full_comp["body"] = comp_dict.get("body", "")
 
             full_components.append(full_comp)

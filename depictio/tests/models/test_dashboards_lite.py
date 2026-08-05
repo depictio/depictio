@@ -452,7 +452,7 @@ class TestTextLiteComponent:
         assert comp.component_type == "text"
         assert comp.order == 1
         assert comp.alignment == "left"
-        assert comp.vertical_alignment == "top"
+        assert comp.vertical_alignment == "center"
         assert comp.body == ""
 
     def test_custom_alignments(self):
@@ -490,11 +490,32 @@ class TestTextLiteComponent:
         assert comp["alignment"] == "center"
         assert comp["vertical_alignment"] == "center"
 
-    def test_to_full_defaults_vertical_alignment_to_top(self):
-        """Dashboards saved before the field existed keep their top-aligned look."""
+    def test_to_full_defaults_vertical_alignment_to_centre(self):
+        """A text tile that doesn't say where its text sits gets it centred.
+
+        The grid sizes a tile in whole row units, so it is almost never the
+        height of its own text; top alignment left the remainder as dead space
+        below and read as a rendering slip. `to_full` has to agree with the
+        field default, since the seeds are generated through it.
+        """
         dash = DashboardDataLite(
             title="Text Test",
             components=[{"tag": "section-1", "component_type": "text", "title": "Overview"}],
+        )
+        assert dash.to_full()["stored_metadata"][0]["vertical_alignment"] == "center"
+
+    def test_to_full_keeps_an_explicit_top(self):
+        """Top alignment is still reachable — it is a choice, not the fallback."""
+        dash = DashboardDataLite(
+            title="Text Test",
+            components=[
+                {
+                    "tag": "section-1",
+                    "component_type": "text",
+                    "title": "Overview",
+                    "vertical_alignment": "top",
+                }
+            ],
         )
         assert dash.to_full()["stored_metadata"][0]["vertical_alignment"] == "top"
 

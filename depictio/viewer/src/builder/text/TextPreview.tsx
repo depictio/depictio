@@ -32,7 +32,7 @@ const TextPreview: React.FC = () => {
           ? Number(config.order)
           : 1,
     alignment: config.alignment ?? 'left',
-    vertical_alignment: config.vertical_alignment ?? 'top',
+    vertical_alignment: config.vertical_alignment ?? 'center',
     body: config.body ?? '',
   };
 

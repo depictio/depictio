@@ -598,8 +598,13 @@ class TextLiteComponent(BaseLiteComponent):
     alignment: Literal["left", "center", "right"] = Field(
         default="left", description="Horizontal alignment of the title and body"
     )
+    # Centred rather than top-aligned, because a text tile is almost never the
+    # height of its own text: the grid sizes it in whole row units, so a
+    # one-line heading in an `h: 2` tile spends the remainder as dead space
+    # under the text and reads as a rendering slip rather than a choice. Top
+    # alignment is still one word away for anyone who wants it.
     vertical_alignment: Literal["top", "center", "bottom"] = Field(
-        default="top",
+        default="center",
         description="Vertical placement of the text block within its tile",
     )
     body: str = Field(default="", description="Optional paragraph below the heading")

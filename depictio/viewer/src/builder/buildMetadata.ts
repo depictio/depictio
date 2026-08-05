@@ -334,9 +334,9 @@ function buildText(
     alignment:
       c.alignment === 'center' || c.alignment === 'right' ? c.alignment : 'left',
     vertical_alignment:
-      c.vertical_alignment === 'center' || c.vertical_alignment === 'bottom'
+      c.vertical_alignment === 'top' || c.vertical_alignment === 'bottom'
         ? c.vertical_alignment
-        : 'top',
+        : 'center',
     body: c.body ?? '',
   };
 }

@@ -50,7 +50,7 @@ const TextBuilder: React.FC = () => {
 
   const orderStr = String(config.order ?? 1);
   const alignment = config.alignment ?? 'left';
-  const verticalAlignment = config.vertical_alignment ?? 'top';
+  const verticalAlignment = config.vertical_alignment ?? 'center';
 
   const form = (
     <Stack gap="md">
