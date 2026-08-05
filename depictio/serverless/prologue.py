@@ -33,12 +33,24 @@ Deliberately rejected even though they *look* mappable:
     ``.to_pandas()`` / ``.to_dicts()`` themselves are pure format conversions
     and are treated as identity.
 
-bare ``pl.count()`` / ``pl.len()`` / ``pl.col(c).len()``
-    These are *group size*; the IR's ``count`` is the NON-NULL count of a named
-    column (pinned repo-wide by ``_agg_value``). The two differ exactly when the
-    counted column has nulls, and group size has no column to attach to, so the
-    IR cannot express it. ``pl.col(c).count()`` **is** the non-null count and is
-    accepted.
+Group size vs. non-null count
+-----------------------------
+The IR's ``count`` is the NON-NULL count of a named column (pinned repo-wide by
+``_agg_value``); *group size* is a separate fn, ``len``, added in the phase-6
+contract precisely so the three Polars spellings below stop freezing. All three
+count every row of the group, nulls included; they differ only in the output
+name Polars gives them when no ``.alias()`` follows, and the IR reproduces that
+name exactly (measured on the repo's Polars 1.42.1):
+
+    ``pl.len()``          -> ``{"col": null, "fn": "len", "alias": "len"}``
+    ``pl.count()``        -> ``{"col": null, "fn": "len", "alias": "count"}``
+                             (deprecated since 0.20.5, still functional)
+    ``pl.col(c).len()``   -> ``{"col": c,    "fn": "len", "alias": c}``
+
+``col`` is carried by the third spelling only: Polars still ignores the column's
+values, but it names the output after it and raises when it is missing, so the
+runtime keeps the reference. ``pl.col(c).count()`` / ``pl.count(c)`` remain the
+non-null count of ``c``.
 
 Splitting
 ---------
@@ -94,8 +106,8 @@ _ROOT = "df"
 #: Format conversions that change no rows and no column names — dropped.
 _IDENTITY_METHODS = frozenset({"to_pandas", "to_dicts", "lazy", "collect"})
 
-#: ``pl.col("x").<name>()`` reducers -> IR ``fn``. ``len`` is *not* here: see the
-#: module docstring (group size != non-null count).
+#: ``pl.col("x").<name>()`` reducers -> IR ``fn``. ``len`` is here as the group
+#: size (it ignores the column's values); see the module docstring.
 _AGG_METHODS: dict[str, AggFn] = {
     "sum": AggFn.SUM,
     "mean": AggFn.MEAN,
@@ -103,6 +115,7 @@ _AGG_METHODS: dict[str, AggFn] = {
     "min": AggFn.MIN,
     "max": AggFn.MAX,
     "count": AggFn.COUNT,
+    "len": AggFn.LEN,
     "n_unique": AggFn.NUNIQUE,
     "std": AggFn.STD,
     "var": AggFn.VAR,
@@ -110,8 +123,14 @@ _AGG_METHODS: dict[str, AggFn] = {
     "last": AggFn.LAST,
 }
 
-#: ``pl.<name>("x")`` shorthands for the same reducers.
-_AGG_SHORTHANDS = dict(_AGG_METHODS)
+#: ``pl.<name>("x")`` shorthands for the same reducers. ``pl.len`` is excluded:
+#: it takes no column argument (bare ``pl.len()`` is handled separately, and
+#: ``pl.len("x")`` is not a Polars API at all).
+_AGG_SHORTHANDS = {name: fn for name, fn in _AGG_METHODS.items() if name != "len"}
+
+#: Bare ``pl.<name>()`` group-size spellings -> the output column name Polars
+#: gives them without an ``.alias()`` (measured on Polars 1.42.1).
+_BARE_LEN_ALIASES = {"len": "len", "count": "count"}
 
 _CMP_OPS: dict[type[ast.cmpop], CmpOperator] = {
     ast.Lt: CmpOperator.LT,
@@ -319,16 +338,12 @@ def _agg_spec(node: ast.expr) -> AggSpec:
 
     # ``pl.mean("x")`` shorthand.
     if _is_pl(node.func.value):
-        if name in ("len",) or (name == "count" and not node.args):
-            # ``pl.count()`` / ``pl.len()`` are the GROUP SIZE. The IR's `count`
-            # is the non-null count of a named column, which differs on every
-            # group whose column has nulls, and there is no column to name here.
-            # Expressing this needs a new `fn` in the pinned allowlist.
-            raise _reject(
-                node,
-                f"pl.{name}() is the group size, not a column's non-null count — "
-                "not expressible in the IR",
-            )
+        # ``pl.len()`` / the deprecated ``pl.count()`` are the GROUP SIZE: no
+        # source column, and Polars names the output after the function itself.
+        if name in _BARE_LEN_ALIASES and not node.args:
+            if node.keywords:
+                raise _reject(node, f"pl.{name}() must take no arguments")
+            return AggSpec(col=None, fn=AggFn.LEN, alias=alias or _BARE_LEN_ALIASES[name])
         fn = _AGG_SHORTHANDS.get(name)
         if fn is None:
             raise _reject(node, f"unsupported aggregation 'pl.{name}()'")
@@ -337,14 +352,10 @@ def _agg_spec(node: ast.expr) -> AggSpec:
         col = _string(node.args[0])
         return AggSpec(col=col, fn=fn, alias=alias or col)
 
-    # ``pl.col("x").mean()``.
+    # ``pl.col("x").mean()`` — including ``.len()``, which is the group size but
+    # still names its output (and validates) against the column.
     fn = _AGG_METHODS.get(name)
     if fn is None:
-        if name == "len":
-            raise _reject(
-                node,
-                "len() is the group size, not a non-null count — not expressible in the IR",
-            )
         raise _reject(node, f"unsupported aggregation '.{name}()'")
     if node.args or node.keywords:
         raise _reject(node, f".{name}() must take no arguments")

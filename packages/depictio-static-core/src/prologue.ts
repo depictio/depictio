@@ -27,6 +27,12 @@
  *     the engine's aggregate() uses (engine/aggregate.ts) — identical traps
  *     (std/var ddof=1 & n<2 → null, count=non-null, nunique counts null,
  *     median interpolates, first/last positional, all-null numeric sum → 0).
+ *     `len` is the one fn the kernel does not own: it is the GROUP SIZE (row
+ *     count, nulls included, mask-independent), so it is counted here directly.
+ *     Its `col` is null for the bare spellings (`pl.len()` / `pl.count()`) and
+ *     set for `pl.col(c).len()`, where polars still ignores c's values but
+ *     names the output after it and raises when it is missing — so a present
+ *     `col` is still required to exist.
  *
  *   unpivot — one block per `on` column in `on` order; original row order
  *     within a block; `index` columns repeated per block; output column order
@@ -64,6 +70,7 @@ const AGG_FNS: ReadonlySet<string> = new Set<PrologueAggFn>([
   'min',
   'max',
   'count',
+  'len',
   'nunique',
   'std',
   'var',
@@ -386,11 +393,11 @@ function opGroupBy(
   if (!Array.isArray(agg)) {
     throw new Error(`prologue: ${where} "agg" must be an array of {col, fn, alias}`);
   }
-  for (const spec of agg) {
+  for (const entry of agg) {
+    const spec = entry as { col?: unknown; fn?: unknown; alias?: unknown } | null;
     if (
       typeof spec !== 'object' ||
       spec === null ||
-      typeof spec.col !== 'string' ||
       typeof spec.fn !== 'string' ||
       typeof spec.alias !== 'string' ||
       spec.alias.length === 0
@@ -400,6 +407,18 @@ function opGroupBy(
     if (!AGG_FNS.has(spec.fn)) {
       throw new Error(`prologue: ${where} has unknown agg fn "${spec.fn}"`);
     }
+    // `col` is optional ONLY for the bare `len` spellings (group size).
+    if (spec.col === null || spec.col === undefined) {
+      if (spec.fn !== 'len') {
+        throw new Error(`prologue: ${where} agg fn "${spec.fn}" needs a source column`);
+      }
+      continue;
+    }
+    if (typeof spec.col !== 'string') {
+      throw new Error(`prologue: ${where} agg entries must be {col, fn, alias}`);
+    }
+    // Present even for `pl.col(c).len()`: polars ignores c's values but still
+    // raises ColumnNotFoundError when c is missing.
     requireColumn(t, spec.col, where);
   }
   const byCols = by.map((c) => requireColumn(t, c, where));
@@ -427,6 +446,12 @@ function opGroupBy(
     columns[by[b]] = groupRows.map((rows) => byCols[b][rows[0]] ?? null);
   }
   for (const spec of agg) {
+    if (spec.fn === 'len') {
+      // GROUP SIZE — mask-independent, nulls included; `col` (when present) is
+      // only a naming/existence anchor, never read.
+      columns[spec.alias] = groupRows.map((rows) => rows.length);
+      continue;
+    }
     const src = t.columns[spec.col];
     const numeric = inferNumericColumn(src);
     columns[spec.alias] = groupRows.map((rows) => {

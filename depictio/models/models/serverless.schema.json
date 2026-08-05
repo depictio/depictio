@@ -9,6 +9,7 @@
         "min",
         "max",
         "count",
+        "len",
         "nunique",
         "std",
         "var",
@@ -20,24 +21,31 @@
     },
     "AggSpec": {
       "additionalProperties": false,
-      "description": "One reducer of a ``group_by().agg()``.",
+      "description": "One reducer of a ``group_by().agg()``.\n\n``col`` is null only for ``fn == \"len\"`` spelled bare (``pl.len()`` /\nthe deprecated ``pl.count()``): the group size reads no column. The\ncolumn-attached spelling ``pl.col(c).len()`` keeps ``col = c`` \u2014 Polars\nstill returns the group size there, but names the output after ``c``, and\na missing ``c`` still raises.",
       "properties": {
         "alias": {
-          "description": "Output column name (Polars defaults it to ``col``)",
+          "description": "Output column name. Polars defaults it to ``col``, except for a bare ``pl.len()`` -> 'len' and a bare ``pl.count()`` -> 'count'",
           "title": "Alias",
           "type": "string"
         },
         "col": {
-          "description": "Source column reduced",
-          "title": "Col",
-          "type": "string"
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Source column reduced; null only for a bare ``len`` (group size)",
+          "title": "Col"
         },
         "fn": {
           "$ref": "#/$defs/AggFn"
         }
       },
       "required": [
-        "col",
         "fn",
         "alias"
       ],
