@@ -16,11 +16,13 @@ import {
   HyparquetEngine,
   refillFigure,
   resolveUri,
+  sortSlice,
   type AggFn,
   type BindingTable,
   type BoundFilter,
   type DataRef,
   type QueryEngine,
+  type SortSpec,
   type TableHandle,
 } from 'depictio-static-core';
 import type { InteractiveFilter } from '../../../../packages/depictio-react-core/src/api';
@@ -278,6 +280,108 @@ export async function renderFigureLive(
     mask,
   });
   return { ...result, filterApplied: bound.length > 0 };
+}
+
+/** Numeric Polars dtypes → AG Grid's numericColumn, matching the dtype set
+ *  Polars' `DataType.is_numeric()` covers (ints, uints, floats, decimals). */
+const NUMERIC_DTYPE_RE = /^(u?int|float|decimal)/i;
+
+/** `name.replace("_", " ").title()` — the header naming the frozen table
+ *  payloads used, kept byte-identical so live and frozen tables agree. */
+function titleCaseHeader(name: string): string {
+  return name
+    .replace(/_/g, ' ')
+    .replace(/[A-Za-z]+/g, (w) => w[0].toUpperCase() + w.slice(1).toLowerCase());
+}
+
+/** Live equivalent of the server's `render_table_endpoint` body
+ *  (dashboards routes.py:2429): filter → sort → slice over the bundled
+ *  Parquet, in the exact TableResponse shape the real `renderTable` returns.
+ *  Sorting itself is the shared `sortSlice` kernel (depictio-static-core),
+ *  which pins the Polars semantics (single sort key, nulls last both
+ *  directions, stable, NaN above +inf, code-point string compare). */
+export async function renderTableLive(
+  dcId: string,
+  filters: InteractiveFilter[],
+  start: number,
+  limit: number,
+  sortBy?: string | null,
+  sortDir: 'asc' | 'desc' = 'desc',
+): Promise<{
+  columns: { field: string; headerName: string; type: string }[];
+  rows: Record<string, unknown>[];
+  total: number;
+  sort_by: string | null;
+  sort_dir: 'asc' | 'desc';
+  sort_disabled: boolean;
+  data_version: string | null;
+}> {
+  const { ref, handle } = await tableFor(dcId);
+
+  // Display columns = the DataRef's schema minus build-time companions
+  // (`__code__*` codebook codes, `__ts__*` epoch-µs — companions.py): those
+  // exist only for the filter kernels and the live server never serves them.
+  const companions = new Set(Object.keys(ref.companions ?? {}));
+  const display = (ref.columns ?? []).filter(
+    (c) =>
+      !companions.has(c.name) &&
+      !c.name.startsWith('__code__') &&
+      !c.name.startsWith('__ts__'),
+  );
+
+  // Endpoint request validation (routes.py:2467-2473): limit clamped 1..500,
+  // sort_dir anything but "asc" collapses to the default "desc".
+  const s = Math.max(0, Math.floor(start) || 0);
+  const l = Math.max(1, Math.min(Math.floor(limit) || 100, 500));
+  const dir: 'asc' | 'desc' = sortDir === 'asc' ? 'asc' : 'desc';
+
+  // Default sort pick + unknown-column drop (routes.py:2544-2555): no client
+  // sort → first acquisition-timestamp-looking column (realtime "newest
+  // first"); a sort key absent from the schema is silently dropped, never an
+  // error (stale client caches must not 500).
+  let chosen = sortBy ?? null;
+  if (!chosen) {
+    chosen =
+      display.find((c) => {
+        const n = c.name.toLowerCase();
+        return (
+          n.includes('acquisition') &&
+          (n.includes('time') || n.includes('date') || n.includes('stamp'))
+        );
+      })?.name ?? null;
+  }
+  if (chosen && !display.some((c) => c.name === chosen)) chosen = null;
+
+  // Filters apply BEFORE sorting, exactly like the server threads
+  // filter_metadata into the load (routes.py:2612-2621); `total` is the
+  // filtered count, independent of the page window (routes.py:2577-2579).
+  const bound = toBoundFilters(filters);
+  const mask = bound.length ? (await engine.mask(handle, bound)).mask : null;
+  const cols = await engine.columns(
+    handle,
+    display.map((c) => c.name),
+  );
+  const sort: SortSpec[] = chosen ? [{ column: chosen, desc: dir === 'desc' }] : [];
+  const { rows, total } = sortSlice(cols, mask, sort, s, l);
+
+  return {
+    columns: display.map((c) => ({
+      field: c.name,
+      headerName: titleCaseHeader(c.name),
+      type: NUMERIC_DTYPE_RE.test(c.dtype) ? 'numericColumn' : 'text',
+    })),
+    rows,
+    total,
+    sort_by: chosen,
+    sort_dir: dir,
+    // A bundled table is always small enough to sort in the browser — the
+    // server's table_sort_max_rows guard protects multi-million-row Delta
+    // scans, not an inlined Parquet.
+    sort_disabled: false,
+    // The bundle's data never changes under the grid; a stable version means
+    // the infinite row model never purges its block cache mid-scroll.
+    data_version: ref.aggregation_hash ?? null,
+  };
 }
 
 /** MultiSelect options: codebook keys are the server's exact option strings

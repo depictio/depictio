@@ -69,10 +69,6 @@ BUNDLE_TOKEN = "__BUNDLE_MANIFEST__"
 PARQUET_COMPRESSION = "snappy"
 PARQUET_ROW_GROUP_SIZE = 250_000
 
-# Frozen tables inline their rows into the manifest — cap them like the catalog
-# preview does so a large DC cannot blow the single-file byte budget.
-TABLE_FROZEN_MAX_ROWS = 1_000
-
 # Interactive component types whose filtered column is categorical (codebook
 # companions) vs date-typed (__ts__ companions). RFC §5 / errata #1.
 CATEGORICAL_INTERACTIVE_TYPES = frozenset({"Select", "MultiSelect", "SegmentedControl"})
@@ -217,25 +213,6 @@ def build_dashboard_doc(spec: DashboardDataLite) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 # Frozen payloads
 # ---------------------------------------------------------------------------
-
-
-def _table_frozen_payload(df: pl.DataFrame) -> dict[str, Any]:
-    """The renderTable response shape the static runtime's api shim serves."""
-    columns = []
-    for name in df.columns:
-        numeric = df.schema[name].is_numeric()
-        columns.append(
-            {
-                "field": name,
-                "headerName": name.replace("_", " ").title(),
-                "type": "numericColumn" if numeric else "text",
-            }
-        )
-    return {
-        "columns": columns,
-        "rows": df.head(TABLE_FROZEN_MAX_ROWS).to_dicts(),
-        "total": df.height,
-    }
 
 
 def _freeze_ui_figure(comp: dict[str, Any], df: pl.DataFrame) -> tuple[dict[str, Any], bool]:
@@ -447,12 +424,13 @@ def build_manifest(
             row.reason = TierReason.UNSUPPORTED
             row.detail = "component references no resolvable data collection"
             continue
+        # Tables never reach this loop: preflight classifies them LIVE (phase
+        # 3) whenever their data collection resolves. Like a bound figure, a
+        # live table ships NO frozen payload — the runtime recomputes every
+        # page (filter → sort → slice) from the bundled Parquet, so a frozen
+        # snapshot would only be a second copy of data the bundle already has.
         ctype = comp.get("component_type")
-        if ctype == "table":
-            frozen[row.component_id] = FrozenPayload(
-                kind="table", payload=_table_frozen_payload(df)
-            )
-        elif ctype == "figure" and comp.get("mode", "ui") == "code":
+        if ctype == "figure" and comp.get("mode", "ui") == "code":
             try:
                 payload = _freeze_code_figure(comp, df)
             except ProducerBError as exc:

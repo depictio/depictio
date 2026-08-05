@@ -49,7 +49,7 @@ def test_check_prints_tier_table_and_writes_nothing(data_dir: Path, tmp_path: Pa
     # Tier table + summary (rich may wrap long cells, so assert on short tokens)
     assert "frozen" in result.output
     assert "live" in result.output
-    assert "6 component(s)" in result.output
+    assert "7 component(s)" in result.output
     assert "nothing written" in result.output.lower()
 
 

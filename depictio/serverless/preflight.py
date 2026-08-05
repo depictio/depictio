@@ -48,10 +48,16 @@ def classify_component(comp: dict[str, Any]) -> tuple[ComponentTier, TierReason 
         return ComponentTier.LIVE, None, None
 
     if ctype == "table":
+        # Live tables (phase 3): the runtime recomputes every page — filter,
+        # sort, slice — from the bundled Parquet (sortSlice mirrors the
+        # server's render_table_endpoint), so a table whose data can ship
+        # needs no frozen payload at all.
+        if comp.get("workflow_tag") and comp.get("data_collection_tag"):
+            return ComponentTier.LIVE, None, None
         return (
-            ComponentTier.FROZEN,
+            ComponentTier.OMITTED,
             TierReason.UNSUPPORTED,
-            "live tables land in phase 3; frozen at the default filter state",
+            "table references no resolvable data collection",
         )
 
     if ctype == "figure":
