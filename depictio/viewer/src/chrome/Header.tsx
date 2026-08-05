@@ -3,6 +3,7 @@ import { ActionIcon, Badge, Box, Button, Group, Loader, Title, Tooltip, useManti
 import { Icon } from '@iconify/react';
 
 import type { DashboardData, DashboardSummary } from 'depictio-react-core';
+import { useIsStaticBundle } from 'depictio-react-core';
 import PoweredBy from './PoweredBy';
 
 /** True for path-like icon values (PNG/SVG file URLs) — these came from the
@@ -108,6 +109,10 @@ const Header: React.FC<HeaderProps> = ({
 }) => {
   const { colorScheme } = useMantineColorScheme();
   const theme: 'light' | 'dark' = colorScheme === 'dark' ? 'dark' : 'light';
+  // Static bundles are read-only snapshots with no backend: the editor route
+  // does not exist there, so the Edit / Exit-Edit affordance is hidden
+  // entirely instead of rendered disabled. Inert in server builds (false).
+  const isStaticBundle = useIsStaticBundle();
 
   const tabIconRaw = resolveTabIcon(activeTab);
   const tabIconIsImage = isImagePath(tabIconRaw);
@@ -304,7 +309,7 @@ const Header: React.FC<HeaderProps> = ({
             </Button>
           </Tooltip>
         )}
-        {mode === 'view' ? (
+        {isStaticBundle ? null : mode === 'view' ? (
           <Tooltip
             label="You can only edit dashboards you own. Duplicate this one to get your own copy."
             disabled={isOwner}

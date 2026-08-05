@@ -133,6 +133,7 @@ export {
   wrapWithChrome,
   StaticBadgeProvider,
   StaticTierBadge,
+  useIsStaticBundle,
 } from './components/chrome';
 export type {
   ComponentChromeProps,

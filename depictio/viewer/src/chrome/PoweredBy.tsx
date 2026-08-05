@@ -1,7 +1,14 @@
 import React from 'react';
 import { Anchor, Group, Text } from '@mantine/core';
+import { useIsStaticBundle } from 'depictio-react-core';
 
 import { useColorScheme } from '../hooks/useColorScheme';
+// Bundled copy of public/logos/logo_black.svg. Static bundles open from
+// file:// where the server-served `/dashboard/logos/...` path can't resolve;
+// importing the asset lets Vite inline it (vite.static.config.ts sets
+// `assetsInlineLimit` high enough that the single-file build embeds it as a
+// data: URI). Server builds keep the original absolute path below.
+import inlineLogo from '../assets/depictio_logo.svg';
 
 /**
  * "Powered by Depictio" badge — themed Depictio logo + label, linking to docs.
@@ -15,6 +22,7 @@ interface PoweredByProps {
 
 const PoweredBy: React.FC<PoweredByProps> = ({ withRightBorder = false }) => {
   const { colorScheme } = useColorScheme();
+  const isStaticBundle = useIsStaticBundle();
 
   // Both `logo_black.svg` and `logo_white.svg` are byte-identical (a base64-
   // embedded PNG inside an SVG wrapper), so swapping `src` does nothing.
@@ -41,7 +49,7 @@ const PoweredBy: React.FC<PoweredByProps> = ({ withRightBorder = false }) => {
           Powered by
         </Text>
         <img
-          src="/dashboard/logos/logo_black.svg"
+          src={isStaticBundle ? inlineLogo : '/dashboard/logos/logo_black.svg'}
           alt="Depictio"
           style={{
             height: 20,

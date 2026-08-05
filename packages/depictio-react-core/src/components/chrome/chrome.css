@@ -70,6 +70,14 @@
   opacity: 1;
   pointer-events: auto;
 }
+/* Static-bundle tier badge ("Frozen"/"Partial"/"Omitted") — always visible,
+ * never hover-gated (RFC §3.2: degraded fidelity cannot be missed). It sits
+ * as the first flex cell of the action row, so the hover-revealed icons lay
+ * out after it rather than over it. */
+.depictio-component-actions > .depictio-static-tier-badge {
+  opacity: 1;
+  pointer-events: auto;
+}
 /* The reset icon stays visible without hover when its component is the
  * source of the dashboard's active filter — gives users a persistent
  * affordance to clear the filter from where it originated. Which components

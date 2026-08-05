@@ -15,6 +15,7 @@ import {
 import { Icon } from '@iconify/react';
 
 import type { DashboardSummary } from 'depictio-react-core';
+import { useIsStaticBundle } from 'depictio-react-core';
 import ThemeToggle from './ThemeToggle';
 import ServerStatusBadge from './ServerStatusBadge';
 import ProfileBadge from './ProfileBadge';
@@ -143,6 +144,10 @@ const Sidebar: React.FC<SidebarProps> = ({
   const { colorScheme } = useMantineColorScheme();
   const theme: 'light' | 'dark' = colorScheme === 'dark' ? 'dark' : 'light';
   const isEdit = mode === 'edit';
+  // Static bundles have no backend and no other routes: hide navigation to
+  // the management page and the server/profile chrome (the theme toggle stays
+  // — it's fully client-side). Inert in server builds (always false there).
+  const isStaticBundle = useIsStaticBundle();
 
   // Lift the per-tab menu open-state up here so only ONE "..." menu can be
   // open at a time. Each child Menu was previously self-contained, so opening
@@ -180,21 +185,24 @@ const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <Stack gap="sm" h="100%" justify="space-between">
-      {/* Top region — centered, grey back link to match Dash sidebar */}
-      <Stack gap="sm" align="stretch">
-        <Anchor
-          href="/dashboards"
-          size="sm"
-          fw={500}
-          underline="hover"
-          ta="center"
-          c="dimmed"
-          className="depictio-chrome-link"
-        >
-          ← Back to Dashboards
-        </Anchor>
-        <Divider />
-      </Stack>
+      {/* Top region — centered, grey back link to match Dash sidebar.
+          Hidden in static bundles: there is no /dashboards route to go to. */}
+      {!isStaticBundle && (
+        <Stack gap="sm" align="stretch">
+          <Anchor
+            href="/dashboards"
+            size="sm"
+            fw={500}
+            underline="hover"
+            ta="center"
+            c="dimmed"
+            className="depictio-chrome-link"
+          >
+            ← Back to Dashboards
+          </Anchor>
+          <Divider />
+        </Stack>
+      )}
 
       {/* Middle region — scrollable tab list */}
       <ScrollArea style={{ flex: 1 }} type="auto">
@@ -369,9 +377,15 @@ const Sidebar: React.FC<SidebarProps> = ({
       <Stack gap="xs" align="center">
         <Divider w="100%" />
         <ThemeToggle />
-        <ServerStatusBadge />
-        <AuthModeBadge />
-        <ProfileBadge />
+        {/* Server/auth/profile chrome is meaningless without a backend — a
+            bundle has no server to report on and no account to manage. */}
+        {!isStaticBundle && (
+          <>
+            <ServerStatusBadge />
+            <AuthModeBadge />
+            <ProfileBadge />
+          </>
+        )}
       </Stack>
     </Stack>
   );
