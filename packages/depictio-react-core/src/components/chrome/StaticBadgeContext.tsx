@@ -50,13 +50,18 @@ export function useIsStaticBundle(): boolean {
   return useContext(StaticBadgeContext) !== null;
 }
 
-const BADGE_LABEL: Record<string, string> = {
+/** Shared tier badge label/color maps. Exported (as STATIC_TIER_BADGE_* from
+ *  the package barrel) so the viewer's Export-static preflight modal renders
+ *  the same vocabulary as the in-bundle badges. 'live' is deliberately absent
+ *  — the in-bundle badge only renders non-live tiers; callers that need to
+ *  show live rows supply their own 'Live'/'green' entry. */
+export const BADGE_LABEL: Record<string, string> = {
   partial: 'Partial',
   frozen: 'Frozen',
   omitted: 'Omitted',
 };
 
-const BADGE_COLOR: Record<string, string> = {
+export const BADGE_COLOR: Record<string, string> = {
   partial: 'yellow',
   frozen: 'blue',
   omitted: 'gray',

@@ -70,6 +70,7 @@ const ingestionBannerKey = (projectId: string) =>
 const FILTER_DEBOUNCE_MS = 250;
 import { notifications } from '@mantine/notifications';
 import { Header, Sidebar, SettingsDrawer } from './chrome';
+import ExportStaticModal from './chrome/ExportStaticModal';
 import { useSidebarOpen } from './hooks/useSidebarOpen';
 import { useFilterPanelOpen } from './hooks/useFilterPanelOpen';
 import { FILTER_PANEL_WIDTH_VAR, useFilterPanelWidth } from './hooks/useFilterPanelWidth';
@@ -155,6 +156,8 @@ const App: React.FC = () => {
   // `sidebar-collapsed` localStorage key the Dash app writes.
   const [desktopOpened, toggleDesktop] = useSidebarOpen();
   const [settingsOpened, { open: openSettings, close: closeSettings }] = useDisclosure(false);
+  const [exportStaticOpened, { open: openExportStatic, close: closeExportStatic }] =
+    useDisclosure(false);
   const { user: currentUser, inspectorEnabled } = useCurrentUser();
   const isOwner = isDashboardOwner(dashboard, currentUser?.email ?? null);
   // `control` is null while the flag is off, so no provider value reaches the
@@ -602,6 +605,7 @@ const App: React.FC = () => {
           onOpenSettings={openSettings}
           onOpenFilters={isNarrow && leftComponents.length > 0 ? openFilterDrawer : undefined}
           filterCount={activeFilterCount}
+          onExportStatic={openExportStatic}
           cardsLoading={cardsLoading}
           isOwner={isOwner}
           titleExtras={
@@ -955,6 +959,12 @@ const App: React.FC = () => {
         opened={settingsOpened}
         onClose={closeSettings}
         dashboard={dashboard}
+      />
+      <ExportStaticModal
+        opened={exportStaticOpened}
+        onClose={closeExportStatic}
+        dashboardId={dashboardId}
+        dashboardTitle={dashboard?.title ?? null}
       />
     </AppShell>
       </InspectorProviders>

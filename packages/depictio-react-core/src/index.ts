@@ -143,6 +143,13 @@ export type {
   StaticTierEntry,
   StaticTierMap,
 } from './components/chrome';
+// Tier badge vocabulary — shared between the in-bundle StaticTierBadge and the
+// viewer's Export-static preflight modal. Aliased to avoid generic names in
+// the package namespace. Note 'live' is absent (see StaticBadgeContext).
+export {
+  BADGE_LABEL as STATIC_TIER_BADGE_LABEL,
+  BADGE_COLOR as STATIC_TIER_BADGE_COLOR,
+} from './components/chrome/StaticBadgeContext';
 
 // API surface — fetchers, payload types, filter types
 export {
@@ -211,6 +218,11 @@ export {
   importDashboardYaml,
   validateDashboardJson,
   exportDashboardJson,
+  // Serverless static export
+  preflightStaticExport,
+  dispatchStaticExport,
+  pollStaticExport,
+  downloadStaticExport,
   // Project management
   fetchProject,
   fetchIngestionReport,
@@ -421,6 +433,12 @@ export type {
   EditDashboardInput,
   ImportDashboardOptions,
   ImportDashboardResult,
+  // Serverless static export types
+  StaticExportTierRow,
+  StaticExportLinkRow,
+  StaticExportPreflight,
+  StaticExportResult,
+  StaticExportJob,
   // Project management types
   CreateProjectInput,
   CreateProjectResult,

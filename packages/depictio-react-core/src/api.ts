@@ -3135,6 +3135,117 @@ export async function exportDashboardJson(
   return res.json();
 }
 
+// ---- Serverless static export --------------------------------------------
+//
+// Owner-gated "Export static" flow: preflight tells the user which components
+// stay live / degrade / drop before they commit; dispatch + poll mirror the
+// advanced-viz Celery job contract; download streams the built single-file
+// HTML artifact. Endpoints live under `/serverless/export-static`.
+
+/** One row of the preflight per-component liveness verdict. `tier` mirrors
+ *  `StaticTierEntry` in StaticBadgeContext (the badge the bundle itself
+ *  renders); `reason`/`detail` explain non-live verdicts. */
+export interface StaticExportTierRow {
+  component_id: string;
+  title?: string | null;
+  component_type?: string | null;
+  tier: 'live' | 'partial' | 'frozen' | 'omitted';
+  reason?: string | null;
+  detail?: string | null;
+}
+
+/** Cross-DC link resolution plan for the bundle. */
+export interface StaticExportLinkRow {
+  link_id: string;
+  source: string;
+  target: string;
+  resolver: string;
+  tier: 'A' | 'B' | 'inert';
+  enabled: boolean;
+  entries: number;
+  note?: string | null;
+}
+
+export interface StaticExportPreflight {
+  dashboard_id: string;
+  tiers: StaticExportTierRow[];
+  links: StaticExportLinkRow[];
+  counts: { live: number; partial: number; frozen: number; omitted: number };
+}
+
+export interface StaticExportResult {
+  s3_key: string;
+  bucket: string;
+  size_bytes: number;
+  built_at: string;
+  /** Pre-signed URL when the deployment can mint one; null otherwise —
+   *  callers should prefer the authenticated download endpoint anyway. */
+  download_url: string | null;
+}
+
+export interface StaticExportJob {
+  job_id: string;
+  status: 'pending' | 'done' | 'failed';
+  result?: StaticExportResult | null;
+  error?: string | null;
+}
+
+/** Preflight a static export: per-component tier verdicts + link plan.
+ *  404 (`detail`) when the dashboard is unknown or not viewable. */
+export async function preflightStaticExport(
+  dashboardId: string,
+): Promise<StaticExportPreflight> {
+  const res = await fetch(
+    `${API_BASE}/serverless/export-static/${dashboardId}/preflight`,
+    { headers: authHeaders() },
+  );
+  if (!res.ok) await throwHttpDetailError(res, 'Static export preflight failed');
+  return res.json();
+}
+
+/** Dispatch the static-export Celery build. Owner-only (404 otherwise).
+ *  Returns a job the caller polls via pollStaticExport(). */
+export async function dispatchStaticExport(
+  dashboardId: string,
+): Promise<StaticExportJob> {
+  const res = await fetch(`${API_BASE}/serverless/export-static/${dashboardId}`, {
+    method: 'POST',
+    headers: authHeaders(),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to dispatch static export');
+  return res.json();
+}
+
+/** Poll a previously-dispatched static export build. */
+export async function pollStaticExport(jobId: string): Promise<StaticExportJob> {
+  const res = await fetch(`${API_BASE}/serverless/export-static/status/${jobId}`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to poll static export');
+  return res.json();
+}
+
+/** Download the built HTML artifact (409 while not ready) and save it via the
+ *  blob → anchor-click flow, same as exportProjectZip(). */
+export async function downloadStaticExport(
+  jobId: string,
+  filename: string,
+): Promise<void> {
+  const res = await fetch(`${API_BASE}/serverless/export-static/download/${jobId}`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to download static export');
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 // ---- Admin (system-wide) helpers ----------------------------------------
 //
 // These back the React /admin page. Backend already enforces `is_admin`

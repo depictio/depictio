@@ -65,6 +65,9 @@ interface HeaderProps {
    *  default is `true` so callers that haven't been migrated keep working,
    *  matching prior behavior. */
   isOwner?: boolean;
+  /** View-mode only: opens the owner-gated "Export static" modal. Hidden in
+   *  static bundles (there is no backend to build from) and when omitted. */
+  onExportStatic?: () => void;
   /** Optional element rendered next to the action group (e.g. RealtimeIndicator). */
   rightExtras?: React.ReactNode;
   /** Optional element rendered right after the title (e.g. the dashboard load
@@ -82,7 +85,7 @@ interface HeaderProps {
 /**
  * Replaces the contents of `<AppShell.Header>`. Three regions:
  *   Left:  Burgers + active-tab icon + dashboard title (with parent breadcrumb)
- *   Right: PoweredBy | Edit | Settings (Reset lives in the Filters panel now).
+ *   Right: PoweredBy | Edit | Export static | Settings (Reset lives in the Filters panel now).
  *
  * Visual parity with `depictio/dash/layouts/header.py:design_header`.
  */
@@ -101,6 +104,7 @@ const Header: React.FC<HeaderProps> = ({
   onAddComponent,
   onOpenSections,
   onSave,
+  onExportStatic,
   isOwner = true,
   rightExtras,
   titleExtras,
@@ -338,6 +342,25 @@ const Header: React.FC<HeaderProps> = ({
           >
             Exit Edit
           </Button>
+        )}
+        {!isStaticBundle && mode === 'view' && onExportStatic && (
+          <Tooltip
+            label="You can only export dashboards you own. Duplicate this one to get your own copy."
+            disabled={isOwner}
+            withArrow
+          >
+            <Button
+              leftSection={<Icon icon="mdi:export-variant" width={14} />}
+              color="violet"
+              variant="filled"
+              size="xs"
+              onClick={onExportStatic}
+              disabled={!dashboardId || !isOwner}
+              data-testid="export-static-btn"
+            >
+              Export static
+            </Button>
+          </Tooltip>
         )}
         <Button
           leftSection={<Icon icon="ic:baseline-settings" width={14} />}
