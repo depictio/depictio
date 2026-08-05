@@ -31,6 +31,7 @@ import {
   computeCardsLive,
   dataRefFor,
   renderFigureLive,
+  renderPrologueFigureLive,
   renderTableLive,
   specsLive,
   uniqueValuesLive,
@@ -80,17 +81,31 @@ export async function renderFigure(
   filters: InteractiveFilter[] = [],
   theme: 'light' | 'dark' = 'light',
 ): Promise<FigureResponse> {
-  // Live path (phase 5b): a ui-mode figure with a binding table refills from
-  // the bundled Parquet under the current filter state — the RFC §4
-  // bind-and-refill runtime. The theme template swap is shared with the
-  // frozen path (themedFrozenFigure only replaces layout.template, exactly
-  // like the live server re-templating on a color-scheme flip).
+  // Live path (phase 5b): a figure with a binding table refills from the
+  // bundled Parquet under the current filter state — the RFC §4
+  // bind-and-refill runtime. Gating is by BINDING PRESENCE, never by the
+  // component's mode field: the producer only emits bindings[cid] for
+  // figures it could bind (ui-mode, or — phase 6 — code-mode with a
+  // transpiled prologue), so a code-mode figure with both bindings[cid] and
+  // a non-empty prologues[cid] takes the live path below, while a figure
+  // with a prologue but NO binding falls through to frozen and never
+  // renders live. Figures without a prologue keep the ui-mode refill
+  // unchanged. The theme template swap is shared with the frozen path
+  // (themedFrozenFigure only replaces layout.template, exactly like the
+  // live server re-templating on a color-scheme flip).
   const binding = bundle().bindings?.[componentId];
   if (binding) {
     const dcId = figureDcIdFor(componentId);
     if (dcId && dataRefFor(dcId)) {
+      const prologue = bundle().prologues?.[componentId];
       try {
-        const live = await renderFigureLive(binding, dcId, filters);
+        const live =
+          prologue && prologue.length > 0
+            ? // Phase 6: replay the transpiled prologue over the mask-selected
+              // base rows, then refill from the derived frame. displayed/total
+              // count DERIVED rows (post-reshape) — what the figure plots.
+              await renderPrologueFigureLive(binding, prologue, dcId, filters)
+            : await renderFigureLive(binding, dcId, filters);
         return themedFrozenFigure(
           {
             figure: live.figure,
@@ -105,8 +120,13 @@ export async function renderFigure(
           theme,
         );
       } catch (e) {
-        // Structural degradation (RFC §4): a refill that cannot complete
-        // falls back to the frozen snapshot rather than rendering wrong data.
+        // Structural degradation (RFC §4): a refill (or prologue replay)
+        // that cannot complete falls back to the frozen snapshot rather than
+        // rendering wrong data. Prologue figures ship WITHOUT a frozen
+        // payload — for those, frozenPayload() below throws its readable
+        // "no frozen figure payload" error, which the FigureRenderer
+        // surfaces as the component's error state (same behavior as any
+        // frozen-payload miss today).
         console.error(
           `static bundle: live figure refill failed for "${componentId}" — serving frozen payload`,
           e,
