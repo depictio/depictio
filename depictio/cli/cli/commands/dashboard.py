@@ -673,6 +673,110 @@ def build_static(
     )
 
 
+@app.command("export-static")
+def export_static_cmd(
+    dashboard_id: Annotated[str, typer.Argument(help="Dashboard ID (Mongo ObjectId) to export")],
+    out: Annotated[
+        Path, typer.Option("--out", "-o", help="Output HTML path (single-file bundle)")
+    ] = Path("dashboard-static.html"),
+    mode: Annotated[
+        str, typer.Option("--mode", help="Bundle delivery mode (phase 2: single-file only)")
+    ] = "single-file",
+    check: Annotated[
+        bool,
+        typer.Option(
+            "--check",
+            help="Preflight only: print the per-component live/frozen/omitted table, write nothing",
+        ),
+    ] = False,
+    open_browser: Annotated[
+        bool, typer.Option("--open", help="Open the built bundle in a browser tab")
+    ] = False,
+    user_email: Annotated[
+        str | None,
+        typer.Option(
+            "--user",
+            help=(
+                "Email of the acting user (permission checks: viewer for --check, "
+                "owner for the build). Defaults to the instance's admin account."
+            ),
+        ),
+    ] = None,
+) -> None:
+    """Export a static bundle from a RUNNING instance (serverless producer A).
+
+    Runs fully local against the instance's backing services — MongoDB and
+    S3/MinIO must be reachable from this process (configure via the standard
+    DEPICTIO_MONGODB_* / DEPICTIO_MINIO_* environment variables, exactly as the
+    API reads them). There is intentionally no HTTP path: the export calls the
+    server render pipeline in-process (the API-endpoint flavour is producer C,
+    RFC §3.3). Run it on the instance host, inside the backend container, or
+    anywhere with port-forwards to Mongo + S3.
+
+    Components the static runtime can serve live (cards, filters, text) ship
+    their data; everything else is frozen at the default filter state or
+    omitted with a reason — use --check to see the tier table first.
+
+    Example:
+        depictio dashboard export-static 6824cb3b89d2b72169309737 --check
+        depictio dashboard export-static 6824cb3b89d2b72169309737 --out bundle.html
+    """
+    from depictio.models.models.serverless import BundleMode
+
+    try:
+        bundle_mode = BundleMode(mode)
+    except ValueError:
+        console.print(f"[red]Error: unknown mode {mode!r} (phase 2 supports 'single-file')[/red]")
+        raise typer.Exit(1)
+
+    # Importing producer A pulls in the API's Mongo/S3 modules; DEPICTIO_CONTEXT
+    # is already "CLI" (set by the depictio entrypoint), which skips the
+    # server-only Settings secret validation.
+    from depictio.serverless.preflight import print_tier_table
+    from depictio.serverless.producer_a import ProducerAError, export_static
+    from depictio.serverless.producer_b import ProducerBError
+
+    try:
+        result = export_static(
+            dashboard_id,
+            out_path=None if check else out,
+            mode=bundle_mode,
+            check=check,
+            user=user_email,
+        )
+    except (ProducerAError, ProducerBError) as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(1)
+    except Exception as e:  # Mongo/S3 unreachable, auth, ...
+        console.print(f"[red]Error: {e}[/red]")
+        console.print(
+            "[yellow]Hint: export-static needs the instance's MongoDB and S3 reachable "
+            "from this process (DEPICTIO_MONGODB_* / DEPICTIO_MINIO_* env vars).[/yellow]"
+        )
+        raise typer.Exit(1)
+
+    print_tier_table(result.tier_rows, console)
+
+    if check:
+        console.print("[dim]Preflight only (--check): nothing written.[/dim]")
+        raise typer.Exit(0)
+
+    manifest = result.manifest
+    assert manifest is not None
+    for dc_id, ref in manifest.data_refs.items():
+        console.print(
+            f"  [dim]dc {dc_id}[/dim]: {ref.rows} rows × {len(ref.columns)} cols, "
+            f"{ref.size_bytes / 1024:.1f} KiB parquet"
+        )
+
+    size_mb = out.stat().st_size / 1_048_576
+    console.print(f"[green]✓ Static bundle written: {out} ({size_mb:.2f} MB)[/green]")
+    if open_browser:
+        import webbrowser
+
+        webbrowser.open(out.resolve().as_uri())
+
+
 @app.command()
 def export(
     dashboard_id: Annotated[str, typer.Argument(help="Dashboard ID to export")],
