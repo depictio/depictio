@@ -25,8 +25,13 @@ Everything runs **in-process** — no HTTP round-trips to the API:
   its DC (RFC errata #8), so a rebuilt bundle can be compared against the
   instance state it was cut from.
 
-Figures are frozen in producer A (both ui and code mode) until the phase-5
-binding module lands — see the TODO hook in :func:`_freeze_figure`.
+ui-mode figures are first offered to the bind-and-refill builder
+(``binding.py``, RFC §4), exactly like producer B: a component that binds ships
+a *binding table* built from the same pruned frame whose Parquet lands in the
+bundle and goes ``live`` (no frozen payload — the runtime refills from the
+bundled data). A component that cannot be bound with certainty falls back to
+the frozen path with reason ``binding_miss``. Code-mode figures stay frozen
+until the phase-6 transpiler.
 
 Permissions (RFC §8): ``--check`` needs *viewer* on the dashboard's project;
 the build itself needs *owner* — a bundle is bulk data exfiltration.
@@ -42,10 +47,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+import polars as pl
 from bson import ObjectId
 
 from depictio.models.models.base import convert_objectid_to_str
 from depictio.models.models.serverless import (
+    BindingTable,
     BundleManifest,
     BundleMode,
     ColumnSpec,
@@ -57,11 +64,11 @@ from depictio.models.models.serverless import (
     TierEntry,
     TierReason,
 )
+from depictio.serverless.binding import build_binding
 from depictio.serverless.preflight import _CELERY_VIZ_KINDS, TierRow
 from depictio.serverless.producer_b import (
     PARQUET_COMPRESSION,
     PARQUET_ROW_GROUP_SIZE,
-    TABLE_FROZEN_MAX_ROWS,
     _companion_targets,
     _depictio_version,
     render_bundle_html,
@@ -69,11 +76,25 @@ from depictio.serverless.producer_b import (
 from depictio.serverless.pruning import component_columns
 
 # Component types whose data ships in the bundle (live in the static runtime).
-# Figures are NOT here: producer A freezes them until bindings exist (phase 5).
+# ui-mode figures are handled via :func:`_refillable_figure`: their DC is
+# bundled too, so the bind-and-refill runtime can refill bound traces from it.
 LIVE_DATA_TYPES = frozenset({"card", "interactive"})
 
+
+def _refillable_figure(comp: dict[str, Any]) -> bool:
+    """ui-mode figures are offered to the bind-and-refill builder (RFC §4), so
+    their DC's pruned frame must be loaded (and, if the figure binds, bundled).
+    Code-mode figures never bind — the phase-6 transpiler is their path."""
+    return comp.get("component_type") == "figure" and comp.get("mode", "ui") != "code"
+
+
+# Frozen tables inline their rows into the manifest — cap them like the catalog
+# preview does so a large DC cannot blow the single-file byte budget. (Producer
+# B's tables are live now; producer A's go live in a later phase.)
+TABLE_FROZEN_MAX_ROWS = 1_000
+
 # render_table_endpoint clamps ``limit`` to 500 per request; page up to the
-# shared producer cap (``TABLE_FROZEN_MAX_ROWS``).
+# producer cap (``TABLE_FROZEN_MAX_ROWS``).
 _TABLE_PAGE_LIMIT = 500
 
 # Dashboard-document keys stripped before embedding: Mongo internals, the
@@ -218,8 +239,8 @@ def classify_stored_component(
         return (
             ComponentTier.FROZEN,
             TierReason.BINDING_MISS,
-            "no binding table yet (phase 5 bind-and-refill); frozen via the "
-            "server figure pipeline at the default filter state",
+            "planned frozen fallback; the build offers ui-mode figures to the "
+            "bind-and-refill builder (RFC §4) first and upgrades bound ones to live",
         )
 
     if ctype == "multiqc":
@@ -334,13 +355,17 @@ def _dc_init_entry(comp: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def live_column_sets(stored_metadata: list[dict[str, Any]]) -> dict[str, set[str] | None]:
-    """Per-DC column sets for the *live* components (cards + interactive).
+    """Per-DC column sets for the components whose data ships in the bundle
+    (cards + interactive, plus ui-mode figures for bind-and-refill).
 
     Thin translation of ``pruning.compute_column_sets`` onto stored_metadata:
     the components ARE dicts of the shape ``component_columns`` reads
     (``column_name`` / ``breakdown_col`` / ``filter_expr`` / ``dict_kwargs``),
     but producer A keys DCs by their real Mongo ``dc_id`` and only bundles DCs
-    that a live component consumes (frozen payloads carry their own data).
+    that a bundled-data component consumes (frozen payloads carry their own
+    data). ui-mode figures contribute ``referenced_columns`` via
+    ``component_columns`` — so every column a binding could reference survives
+    pruning (``None`` for whole-frame visus widens to a full keep).
 
     Every interactive filter column that exists in a DC's schema is folded in
     later (see :func:`_bundle_data_refs`) to mirror the server's
@@ -348,7 +373,7 @@ def live_column_sets(stored_metadata: list[dict[str, Any]]) -> dict[str, set[str
     """
     sets: dict[str, set[str] | None] = {}
     for comp in stored_metadata:
-        if comp.get("component_type") not in LIVE_DATA_TYPES:
+        if comp.get("component_type") not in LIVE_DATA_TYPES and not _refillable_figure(comp):
             continue
         dc_id = comp.get("dc_id")
         if not dc_id:
@@ -463,9 +488,9 @@ def _freeze_figure(comp: dict[str, Any]) -> tuple[dict[str, Any], bool]:
     in-process. The payload mirrors ``render_figure_endpoint``'s task payload
     with the default (empty) filter state.
 
-    TODO(phase 5): when ``depictio.serverless.binding.build_binding`` lands,
-    ui-mode figures whose traces all match a binding become live — this
-    function then only serves as the scaffold builder / fallback freeze.
+    ui-mode figures reach this only when ``build_binding`` refused them
+    (bind-and-refill, RFC §4) — a bound figure ships a binding table and no
+    frozen payload. Code-mode figures always freeze here (phase 6).
 
     Returns ``(payload, was_sampled)``.
     """
@@ -634,12 +659,15 @@ def _freeze_map(comp: dict[str, Any], user: ExportUser) -> dict[str, Any]:
 
 def _bundle_data_refs(
     stored_metadata: list[dict[str, Any]],
-) -> tuple[dict[str, DataRef], dict[str, str], dict[str, str]]:
-    """Bundle every DC a live component consumes.
+) -> tuple[dict[str, DataRef], dict[str, str], dict[str, str], dict[str, pl.DataFrame]]:
+    """Bundle every DC a live component or a ui-mode figure consumes.
 
-    Returns ``(data_refs, inline_blobs, failures)`` where ``failures`` maps
-    ``dc_id`` → error string for DCs that could not be loaded (their live
-    components are downgraded by the caller).
+    Returns ``(data_refs, inline_blobs, failures, pruned_frames)``.
+    ``failures`` maps ``dc_id`` → error string for DCs that could not be loaded
+    (their live components are downgraded by the caller). ``pruned_frames``
+    maps ``dc_id`` → the exact companion-bearing frame whose Parquet was
+    inlined — the frame the bind-and-refill builder must be handed, so a
+    binding's column references always exist in the bundled data.
     """
     dtu = _dtu()
     column_sets = live_column_sets(stored_metadata)
@@ -647,12 +675,15 @@ def _bundle_data_refs(
     interactive_comps = [c for c in stored_metadata if c.get("component_type") == "interactive"]
     live_comps_by_dc: dict[str, list[dict[str, Any]]] = {}
     for comp in stored_metadata:
-        if comp.get("component_type") in LIVE_DATA_TYPES and comp.get("dc_id"):
+        if not comp.get("dc_id"):
+            continue
+        if comp.get("component_type") in LIVE_DATA_TYPES or _refillable_figure(comp):
             live_comps_by_dc.setdefault(str(comp["dc_id"]), []).append(comp)
 
     data_refs: dict[str, DataRef] = {}
     inline_blobs: dict[str, str] = {}
     failures: dict[str, str] = {}
+    pruned_frames: dict[str, pl.DataFrame] = {}
 
     for dc_id, comps in live_comps_by_dc.items():
         rep = comps[0]
@@ -698,6 +729,7 @@ def _bundle_data_refs(
         from depictio.serverless.companions import build_companions
 
         result = build_companions(df, categorical_cols, datetime_cols)
+        pruned_frames[dc_id] = result.df
 
         buf = io.BytesIO()
         result.df.write_parquet(
@@ -720,7 +752,7 @@ def _bundle_data_refs(
             or hashlib.sha256(parquet_bytes).hexdigest(),
         )
 
-    return data_refs, inline_blobs, failures
+    return data_refs, inline_blobs, failures, pruned_frames
 
 
 # ---------------------------------------------------------------------------
@@ -769,8 +801,8 @@ def export_manifest(dashboard_id: str, user: ExportUser) -> ExportResult:
     tier_by_id = {row.component_id: row for row in tier_rows}
     dashboard_oid = ObjectId(str(dashboard_data["dashboard_id"]))
 
-    # Live tier: bundle the DCs cards/interactive read.
-    data_refs, inline_blobs, dc_failures = _bundle_data_refs(stored_metadata)
+    # Live tier: bundle the DCs cards/interactive (and ui-mode figures) read.
+    data_refs, inline_blobs, dc_failures, pruned_frames = _bundle_data_refs(stored_metadata)
     for comp in stored_metadata:
         if comp.get("component_type") not in LIVE_DATA_TYPES:
             continue
@@ -782,7 +814,9 @@ def export_manifest(dashboard_id: str, user: ExportUser) -> ExportResult:
             row.detail = f"data collection {dc_id} not bundled: {dc_failures[dc_id]}"
 
     # Frozen tier: real endpoint bodies, default (empty) filter state.
+    # Bindings (bind-and-refill, RFC §4) are filled per ui-mode figure below.
     frozen: dict[str, FrozenPayload] = {}
+    bindings: dict[str, BindingTable] = {}
 
     cards = [
         c
@@ -813,7 +847,42 @@ def export_manifest(dashboard_id: str, user: ExportUser) -> ExportResult:
                     payload=_freeze_table(dashboard_oid, component_id, user),
                 )
             elif ctype == "figure":
+                # Bind-and-refill first (RFC §4): a bound figure re-renders live
+                # in the browser at every filter state — including the default,
+                # empty one — so it ships NO frozen payload. The scaffold
+                # already carries the authentic layout, and the runtime refills
+                # the arrays from the bundled Parquet, so a frozen snapshot
+                # would only be a second copy of data the bundle already has.
+                binding = None
+                if _refillable_figure(comp):
+                    df = pruned_frames.get(str(comp.get("dc_id") or ""))
+                    if df is not None:
+                        try:
+                            binding = build_binding(comp, df)
+                        except Exception:
+                            binding = None  # any builder crash freezes below
+                if binding is not None:
+                    bindings[component_id] = binding
+                    if binding.sampled:
+                        row.tier = ComponentTier.PARTIAL
+                        row.reason = TierReason.MAX_POINTS
+                        row.detail = (
+                            "the server samples above FIGURE_MAX_POINTS after filtering; "
+                            "the bound figure refills every selected row instead — exact, "
+                            "but heavier than the server's default view"
+                        )
+                    else:
+                        row.tier = ComponentTier.LIVE
+                        row.reason = None
+                        row.detail = None
+                    continue
                 payload, sampled = _freeze_figure(comp)
+                if _refillable_figure(comp):
+                    row.reason = TierReason.BINDING_MISS
+                    row.detail = (
+                        "no unambiguous trace↔group binding (RFC §4); "
+                        "frozen at the default filter state"
+                    )
                 if sampled:
                     row.tier = ComponentTier.PARTIAL
                     row.reason = TierReason.MAX_POINTS
@@ -837,6 +906,19 @@ def export_manifest(dashboard_id: str, user: ExportUser) -> ExportResult:
             row.reason = row.reason or TierReason.UNSUPPORTED
             row.detail = f"frozen payload could not be computed: {exc}"
 
+    # A DC bundled only for figures that failed to bind carries data the
+    # runtime never reads (their frozen payloads are self-contained) — drop the
+    # blob so an unbindable figure does not double the bundle's bytes.
+    used_dcs = {
+        str(c["dc_id"])
+        for c in stored_metadata
+        if c.get("dc_id")
+        and (c.get("component_type") in LIVE_DATA_TYPES or str(c.get("index")) in bindings)
+    }
+    for dc_id in [d for d in data_refs if d not in used_dcs]:
+        del data_refs[dc_id]
+        inline_blobs.pop(f"dc_{dc_id}", None)
+
     manifest = BundleManifest(
         mode=BundleMode.SINGLE_FILE,
         producer=Producer.EXPORT_FROM_INSTANCE,
@@ -853,6 +935,7 @@ def export_manifest(dashboard_id: str, user: ExportUser) -> ExportResult:
             for row in tier_rows
         },
         frozen=frozen,
+        bindings=bindings,
         inline_blobs=inline_blobs,
     )
     return ExportResult(manifest=manifest, tier_rows=tier_rows)
