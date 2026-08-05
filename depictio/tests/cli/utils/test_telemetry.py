@@ -28,6 +28,22 @@ def root_command():
     return depictiocli
 
 
+@pytest.fixture
+def allow_telemetry(monkeypatch):
+    """Lift the gates that make telemetry a no-op inside a test run.
+
+    Running under pytest is itself a hard suppression, so anything exercising
+    behaviour that only happens while telemetry is *on* has to say so explicitly.
+    """
+    monkeypatch.delenv("DO_NOT_TRACK", raising=False)
+    monkeypatch.delenv("DEPICTIO_TELEMETRY_ENABLED", raising=False)
+    with (
+        patch("depictio.telemetry.gates.detect_pytest", return_value=False),
+        patch("depictio.telemetry.gates.detect_ci", return_value=False),
+    ):
+        yield
+
+
 class TestResolveCommandPathHappyCases:
     @pytest.mark.parametrize(
         ("argv", "expected"),
@@ -210,6 +226,53 @@ class TestCliSuppression:
 
         with patch.object(cli_telemetry, "suppression_reason", side_effect=RuntimeError("boom")):
             cli_telemetry.send_command_event("data scan", succeeded=True, duration_seconds=1.0)
+
+
+class TestFirstRunNotice:
+    """Telemetry on by default has to announce itself to the person it counts."""
+
+    @staticmethod
+    def _notice(*, tty: bool, capsys, monkeypatch, tmp_path) -> str:
+        from depictio.cli.cli.utils import telemetry as cli_telemetry
+
+        monkeypatch.setenv("DEPICTIO_TELEMETRY_STATE_DIR", str(tmp_path))
+        with patch("sys.stderr.isatty", return_value=tty):
+            cli_telemetry.maybe_print_first_run_notice()
+        return capsys.readouterr().err
+
+    def test_shown_once_on_the_run_that_creates_the_id(
+        self, capsys, monkeypatch, tmp_path, allow_telemetry
+    ):
+        first = self._notice(tty=True, capsys=capsys, monkeypatch=monkeypatch, tmp_path=tmp_path)
+        assert "DEPICTIO_TELEMETRY_ENABLED=false" in first
+        assert "DO_NOT_TRACK=1" in first
+
+        second = self._notice(tty=True, capsys=capsys, monkeypatch=monkeypatch, tmp_path=tmp_path)
+        assert second == "", "an opt-out notice that repeats is one users learn to ignore"
+
+    def test_silent_when_telemetry_is_suppressed(self, capsys, monkeypatch, tmp_path):
+        """Nothing is being collected, so there is nothing to disclose."""
+        monkeypatch.setenv("DO_NOT_TRACK", "1")
+        assert (
+            self._notice(tty=True, capsys=capsys, monkeypatch=monkeypatch, tmp_path=tmp_path) == ""
+        )
+
+    def test_silent_when_stderr_is_not_a_terminal(
+        self, capsys, monkeypatch, tmp_path, allow_telemetry
+    ):
+        """Scripts, CI logs and redirected output stay clean."""
+        assert (
+            self._notice(tty=False, capsys=capsys, monkeypatch=monkeypatch, tmp_path=tmp_path) == ""
+        )
+
+    def test_never_raises(self, capsys, monkeypatch, tmp_path, allow_telemetry):
+        """A disclosure must not be able to break the command it precedes."""
+        from depictio.cli.cli.utils import telemetry as cli_telemetry
+
+        with patch.object(
+            cli_telemetry, "get_or_create_anonymous_id", side_effect=RuntimeError("boom")
+        ):
+            self._notice(tty=True, capsys=capsys, monkeypatch=monkeypatch, tmp_path=tmp_path)
 
 
 class TestCliVersion:

@@ -272,6 +272,25 @@ class TestState:
         if os.name == "posix":
             assert (target.stat().st_mode & 0o077) == 0
 
+    def test_created_is_true_only_on_the_run_that_mints_the_id(self, tmp_path, monkeypatch):
+        """What the CLI's first-run notice keys off.
+
+        The ID file doubles as the record of having run before, so this flag is the
+        whole mechanism: if it stayed true, every invocation would re-print an
+        opt-out notice, and users mute what repeats.
+        """
+        monkeypatch.setenv(STATE_DIR_ENV, str(tmp_path))
+        assert get_or_create_anonymous_id().created is True
+        assert get_or_create_anonymous_id().created is False
+
+    def test_an_ephemeral_id_counts_as_created(self, tmp_path, monkeypatch):
+        """Nothing persisted means no previous run ever disclosed anything."""
+        monkeypatch.setenv(STATE_DIR_ENV, str(tmp_path / "nested"))
+        with patch("depictio.telemetry.state._write_id", return_value=False):
+            result = get_or_create_anonymous_id()
+        assert result.ephemeral is True
+        assert result.created is True
+
 
 class TestPostHogBody:
     def test_body_shape_matches_the_capture_api(self):

@@ -197,9 +197,14 @@ def main():
 
     from depictio.cli.cli.utils.telemetry import (
         CommandTimer,
+        maybe_print_first_run_notice,
         resolve_command_path,
         send_command_event,
     )
+
+    # Before the command runs, not after: an opt-out notice printed underneath a
+    # command's output is one the user has already been counted by.
+    maybe_print_first_run_notice()
 
     timer = CommandTimer()
     # Resolved from argv up front: Typer/Click raise SystemExit for --help and for

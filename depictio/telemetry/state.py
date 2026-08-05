@@ -46,6 +46,11 @@ class AnonymousId(NamedTuple):
 
     value: str
     ephemeral: bool
+    #: True only on the run that minted this ID. The signal a first-run notice
+    #: needs, and the reason the caller does not have to keep its own marker file:
+    #: the ID file already *is* the record of having run before. Defaulted so that
+    #: existing two-field construction stays valid.
+    created: bool = False
 
 
 def state_dir() -> Path:
@@ -126,6 +131,11 @@ def get_or_create_anonymous_id() -> AnonymousId:
     Never raises. When the ID cannot be persisted the returned tuple is flagged
     ``ephemeral`` so the caller can report that, and the collector can discount
     those events instead of treating each one as a fresh installation.
+
+    ``created`` marks the run that minted the ID, which is what a first-run notice
+    keys off. An ephemeral ID counts as created every time, deliberately: a machine
+    that cannot persist the file has never been told about telemetry by a previous
+    run either.
     """
     value = uuid.uuid4().hex
     try:
@@ -135,12 +145,12 @@ def get_or_create_anonymous_id() -> AnonymousId:
         # resolved at all — no $HOME and no passwd entry, which happens in
         # scratch containers.
         logger.debug("Could not resolve telemetry state location: %s", exc)
-        return AnonymousId(value, ephemeral=True)
+        return AnonymousId(value, ephemeral=True, created=True)
 
     existing = _read_id(path)
     if existing is not None:
         return AnonymousId(existing, ephemeral=False)
 
     if _write_id(path, value):
-        return AnonymousId(value, ephemeral=False)
-    return AnonymousId(value, ephemeral=True)
+        return AnonymousId(value, ephemeral=False, created=True)
+    return AnonymousId(value, ephemeral=True, created=True)
