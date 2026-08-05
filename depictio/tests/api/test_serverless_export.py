@@ -206,7 +206,7 @@ def test_split_bulk_cards():
     assert out["b"] == {"values": {"b": None}, "filter_applied": False, "filter_count": 0}
 
 
-def test_live_column_sets_covers_only_live_data_components():
+def test_live_column_sets_covers_bundled_data_components():
     dc_a, dc_b = ObjectId(), ObjectId()
     stored = [
         {"component_type": "card", "dc_id": dc_a, "column_name": "bill", "breakdown_col": "isl"},
@@ -218,13 +218,16 @@ def test_live_column_sets_covers_only_live_data_components():
         },
         {"component_type": "interactive", "dc_id": dc_a, "column_name": "year"},
         {"component_type": "interactive", "dc_id": dc_b, "column_name": "species"},
-        # frozen/omitted types contribute no live columns
+        # ui-mode figures contribute their referenced columns (bind-and-refill
+        # needs them in the bundled Parquet)…
         {"component_type": "figure", "dc_id": dc_a, "dict_kwargs": {"x": "flipper"}},
+        # …but code-mode figures, tables and text contribute nothing.
+        {"component_type": "figure", "mode": "code", "dc_id": dc_a, "code_content": "fig = 1"},
         {"component_type": "table", "dc_id": dc_a},
         {"component_type": "text", "dc_id": dc_a},
     ]
     sets = live_column_sets(stored)
-    assert sets[str(dc_a)] == {"bill", "isl", "mass", "q", "year"}
+    assert sets[str(dc_a)] == {"bill", "isl", "mass", "q", "year", "flipper"}
     assert sets[str(dc_b)] == {"species"}
     assert interactive_filter_columns(stored) == {"year", "species"}
 
@@ -249,6 +252,7 @@ DASHBOARD_OID = ObjectId("6824cb3b89d2b72169309737")
 PROJECT_OID = ObjectId("646b0f3c1e4a2d7f8e5b8c9d")
 WF_OID = ObjectId("646b0f3c1e4a2d7f8e5b8c01")
 DC_OID = ObjectId("646b0f3c1e4a2d7f8e5b8ca1")
+DC2_OID = ObjectId("646b0f3c1e4a2d7f8e5b8ca3")  # consumed only by an unbindable figure
 AV_DC_OID = ObjectId("646b0f3c1e4a2d7f8e5b8ca2")
 
 TABLE_TOTAL = 700  # > one 500-row endpoint page, < the 1000-row producer cap
@@ -265,8 +269,13 @@ def _frame() -> pl.DataFrame:
     )
 
 
+def _frame_2() -> pl.DataFrame:
+    return pl.DataFrame({"a": [1.0, 2.0], "b": [3.0, 4.0]})
+
+
 def _dashboard_doc() -> dict[str, Any]:
     dc_config = {"type": "table", "delta_location": "memory://dcA", "size_bytes": 123}
+    dc2_config = {"type": "table", "delta_location": "memory://dcB", "size_bytes": 45}
     return {
         "_id": ObjectId(),
         "dashboard_id": DASHBOARD_OID,
@@ -295,6 +304,7 @@ def _dashboard_doc() -> dict[str, Any]:
             },
             {"index": "text-1", "component_type": "text"},
             {
+                # Binds (bind-and-refill): plain scatter, no ambiguity -> LIVE.
                 "index": "fig-1",
                 "component_type": "figure",
                 "mode": "ui",
@@ -303,6 +313,41 @@ def _dashboard_doc() -> dict[str, Any]:
                 "wf_id": WF_OID,
                 "dc_id": DC_OID,
                 "dc_config": dc_config,
+            },
+            {
+                # Refused: hover_data makes 2-D customdata, which the static
+                # runtime cannot refill -> frozen with binding_miss.
+                "index": "fig-2",
+                "component_type": "figure",
+                "mode": "ui",
+                "visu_type": "scatter",
+                "dict_kwargs": {"x": "bill", "y": "flipper", "hover_data": ["species"]},
+                "wf_id": WF_OID,
+                "dc_id": DC_OID,
+                "dc_config": dc_config,
+            },
+            {
+                # Code mode never binds; the (fake) preview samples -> partial.
+                "index": "fig-3",
+                "component_type": "figure",
+                "mode": "code",
+                "visu_type": "scatter",
+                "code_content": "fig = px.scatter(df, x='bill', y='flipper')",
+                "wf_id": WF_OID,
+                "dc_id": DC_OID,
+                "dc_config": dc_config,
+            },
+            {
+                # Whole-frame visu on its own DC: binding refused, and the DC's
+                # blob (bundled speculatively for the figure) must be dropped.
+                "index": "fig-4",
+                "component_type": "figure",
+                "mode": "ui",
+                "visu_type": "heatmap",
+                "dict_kwargs": {"x": "a", "y": "b"},
+                "wf_id": WF_OID,
+                "dc_id": DC2_OID,
+                "dc_config": dc2_config,
             },
             {
                 "index": "tbl-1",
@@ -343,15 +388,17 @@ def offline_export(monkeypatch: pytest.MonkeyPatch) -> BundleManifest:
     monkeypatch.setattr(db_mod, "dashboards_collection", _FakeCollection([_dashboard_doc()]))
     monkeypatch.setattr(db_mod, "deltatables_collection", _FakeCollection([]))
 
-    frame = _frame()
+    frames = {str(DC_OID): _frame(), str(DC2_OID): _frame_2()}
+    locations = {str(DC_OID): "memory://dcA", str(DC2_OID): "memory://dcB"}
 
     def fake_schema(workflow_id, data_collection_id, init_data):
-        assert str(data_collection_id) == str(DC_OID)
-        assert init_data[str(DC_OID)]["delta_location"] == "memory://dcA"
-        return dict(frame.schema)
+        dc = str(data_collection_id)
+        assert init_data[dc]["delta_location"] == locations[dc]
+        return dict(frames[dc].schema)
 
     def fake_load(workflow_id, data_collection_id, metadata=None, select_columns=None, **kw):
         assert metadata is None  # bundling loads the unfiltered frame
+        frame = frames[str(data_collection_id)]
         return frame.select(select_columns) if select_columns else frame
 
     monkeypatch.setattr(dtu_mod, "schema_deltatable_lite", fake_schema)
@@ -386,13 +433,20 @@ def offline_export(monkeypatch: pytest.MonkeyPatch) -> BundleManifest:
             "sort_dir": "desc",
         }
 
+    preview_calls: list[str] = []
+
     def fake_figure_preview(payload):
         assert payload["filter_metadata"] == []
-        assert payload["metadata"]["dc_id"] == str(DC_OID)
-        assert payload["metadata"]["visu_type"] == "scatter"
+        meta = payload["metadata"]
+        preview_calls.append(f"{meta['visu_type']}:{meta['mode']}")
         return {
             "figure": {"data": [], "layout": {}},
-            "metadata": {"visu_type": "scatter", "filter_applied": False, "was_sampled": True},
+            "metadata": {
+                "visu_type": meta["visu_type"],
+                "filter_applied": False,
+                # Only the code-mode figure exercises the sampled->partial path.
+                "was_sampled": meta["mode"] == "code",
+            },
         }
 
     def fake_av_data(response, payload, current_user, access_token):
@@ -419,6 +473,9 @@ def offline_export(monkeypatch: pytest.MonkeyPatch) -> BundleManifest:
     assert result.manifest is not None
     # The table freeze paged through the 500-row endpoint clamp.
     assert table_calls == [(0, 500), (500, 500)]
+    # Only the unbindable figures fell back to the frozen figure pipeline —
+    # the bound fig-1 never touched it (it ships a binding table instead).
+    assert preview_calls == ["scatter:ui", "scatter:code", "heatmap:ui"]
     return result.manifest
 
 
@@ -439,9 +496,17 @@ def test_offline_export_tiers(offline_export: BundleManifest):
     assert tiers["card-1"].tier is ComponentTier.LIVE
     assert tiers["filter-1"].tier is ComponentTier.LIVE
     assert tiers["text-1"].tier is ComponentTier.LIVE
-    # Sampled frozen figure was refined to partial (FIGURE_MAX_POINTS).
-    assert tiers["fig-1"].tier is ComponentTier.PARTIAL
-    assert tiers["fig-1"].reason is TierReason.MAX_POINTS
+    # The bound figure was upgraded to LIVE (bind-and-refill, RFC §4).
+    assert tiers["fig-1"].tier is ComponentTier.LIVE
+    assert tiers["fig-1"].reason is None and tiers["fig-1"].detail is None
+    # The refused figures froze with binding_miss (same wording as producer B).
+    for refused in ("fig-2", "fig-4"):
+        assert tiers[refused].tier is ComponentTier.FROZEN
+        assert tiers[refused].reason is TierReason.BINDING_MISS
+        assert tiers[refused].detail and "binding" in tiers[refused].detail
+    # Sampled frozen code figure was refined to partial (FIGURE_MAX_POINTS).
+    assert tiers["fig-3"].tier is ComponentTier.PARTIAL
+    assert tiers["fig-3"].reason is TierReason.MAX_POINTS
     assert tiers["tbl-1"].tier is ComponentTier.FROZEN
     assert tiers["av-1"].tier is ComponentTier.FROZEN
     assert tiers["emb-1"].tier is ComponentTier.OMITTED
@@ -452,14 +517,19 @@ def test_offline_export_tiers(offline_export: BundleManifest):
 
 def test_offline_export_data_ref_and_blob(offline_export: BundleManifest):
     manifest = offline_export
-    assert set(manifest.data_refs) == {str(DC_OID)}  # only the live components' DC
+    # Only the DC live components / the bound figure read: DC2 was bundled
+    # speculatively for fig-4, whose binding was refused, so its blob is
+    # dropped again (the frozen payload is self-contained).
+    assert set(manifest.data_refs) == {str(DC_OID)}
+    assert f"dc_{DC2_OID}" not in manifest.inline_blobs
     ref = manifest.data_refs[str(DC_OID)]
     assert ref.aggregation_hash == "agghash-1"  # the server-side staleness token
     assert ref.uri == f"inline:dc_{DC_OID}"
-    # Pruned to live columns (card 'bill' + interactive 'year'), figure/table
-    # columns excluded, plus the Int64 filter column's codebook companion.
+    # Pruned to the bundled components' columns: card 'bill', interactive
+    # 'year' (+ its codebook companion), the ui figures' 'flipper'/'species';
+    # table columns still excluded.
     names = {c.name for c in ref.columns}
-    assert names == {"bill", "year", "__code__year"}
+    assert names == {"bill", "flipper", "species", "year", "__code__year"}
     assert ref.companions == {"__code__year": "year"}
     assert ref.codebooks == {"year": {"2021": 0, "2022": 1, "2023": 2}}
 
@@ -480,15 +550,45 @@ def test_offline_export_frozen_payloads(offline_export: BundleManifest):
     assert tbl["total"] == TABLE_TOTAL
     assert len(tbl["rows"]) == TABLE_TOTAL
     assert tbl["rows"][0] == {"i": 0} and tbl["rows"][-1] == {"i": TABLE_TOTAL - 1}
-    # Figure payload came straight from build_figure_preview.
-    assert frozen["fig-1"].kind == "figure"
-    assert frozen["fig-1"].payload["metadata"]["was_sampled"] is True
+    # Refused/code figures came straight from build_figure_preview; the bound
+    # fig-1 ships NO frozen payload (the runtime refills from the Parquet).
+    assert "fig-1" not in frozen
+    assert frozen["fig-2"].kind == "figure"
+    assert frozen["fig-2"].payload["metadata"]["was_sampled"] is False
+    assert frozen["fig-3"].kind == "figure"
+    assert frozen["fig-3"].payload["metadata"]["was_sampled"] is True
+    assert frozen["fig-4"].kind == "figure"
     # advanced_viz keeps the /advanced_viz/data sampling block verbatim.
     av = frozen["av-1"].payload
     assert av["sampling"] == {"policy": "tail_preserving", "exact": False, "degraded": False}
     assert av["total_rows"] == 17_000_000
     # Omitted components ship no payload.
     assert "emb-1" not in frozen and "img-1" not in frozen
+
+
+def test_offline_export_bindings(offline_export: BundleManifest):
+    """The bound ui figure ships a binding table built from the SAME pruned
+    frame whose Parquet is in the bundle — live badge, no frozen copy."""
+    manifest = offline_export
+    assert set(manifest.bindings) == {"fig-1"}
+    binding = manifest.bindings["fig-1"]
+    assert binding.sampled is False
+    assert binding.group_cols == []  # plain scatter: one ungrouped trace
+    assert [t.i for t in binding.traces] == [0]
+    assert binding.traces[0].group == {}
+    assert binding.traces[0].fields == {"x": "bill", "y": "flipper"}
+    # Stripping convention: bound arrays are ABSENT from the scaffold (the
+    # runtime writes them back); layout is the real figure service's.
+    trace = binding.scaffold["data"][0]
+    assert "x" not in trace and "y" not in trace
+    assert binding.scaffold["layout"]["xaxis"]["title"]["text"] == "bill"
+    # Every bound column exists in the bundled DataRef (pruning kept them).
+    ref = manifest.data_refs[str(DC_OID)]
+    bundled = {c.name for c in ref.columns}
+    for t in binding.traces:
+        assert set(t.fields.values()) <= bundled
+    # The manifest round-trips with the binding in place.
+    BundleManifest.model_validate(manifest.model_dump(mode="json"))
 
 
 def test_export_requires_owner(monkeypatch: pytest.MonkeyPatch):
@@ -534,6 +634,9 @@ def test_export_static_check_classifies_without_building(monkeypatch: pytest.Mon
         "filter-1",
         "text-1",
         "fig-1",
+        "fig-2",
+        "fig-3",
+        "fig-4",
         "tbl-1",
         "av-1",
         "emb-1",
