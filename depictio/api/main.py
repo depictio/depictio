@@ -143,13 +143,27 @@ _SECURITY_HEADERS: dict[str, str] = {
     # Manhattan, DotPlot, QQ, Lollipop and Embedding render nothing. The Vite
     # dev server only appears to work because it sends no CSP at all.
     # 'wasm-unsafe-eval' covers the Pyodide runtime behind figure Code Mode.
+    #
+    # connect-src also has to name the basemap CDNs, because maplibre fetches a
+    # map's style, glyphs, sprite and vector tiles with fetch/XHR rather than as
+    # images — `img-src https:` does not cover them. Without these a map
+    # component renders its legend over blank white and logs "Style is not done
+    # loading". The three styles Depictio offers (see MAP_STYLES in
+    # depictio/models/components/constants.py) resolve to:
+    #   carto-positron / carto-darkmatter → basemaps.cartocdn.com (style.json),
+    #     which in turn points at tiles.basemaps.cartocdn.com (glyphs, sprite,
+    #     TileJSON) and tiles-{a,b,c,d}.basemaps.cartocdn.com (the .mvt tiles)
+    #   open-street-map → tile.openstreetmap.org
+    # The bare apex is listed separately: a `*.` wildcard does not match it.
     "Content-Security-Policy": (
         "default-src 'self'; "
         "script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval'; "
         "style-src 'self' 'unsafe-inline'; "
         "img-src 'self' data: blob: https:; "
         "font-src 'self' data:; "
-        "connect-src 'self' ws: wss:; "
+        "connect-src 'self' ws: wss: "
+        "https://basemaps.cartocdn.com https://*.basemaps.cartocdn.com "
+        "https://tile.openstreetmap.org; "
         "frame-ancestors 'self'; "
         "object-src 'none'; "
         "base-uri 'self'; "
