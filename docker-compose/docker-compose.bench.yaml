@@ -1,6 +1,7 @@
 # Benchmark overlay — makes local perf numbers comparable to the EMBL cluster.
 #
-#   docker compose -f docker-compose.dev.yaml -f docker-compose.bench.yaml \
+#   docker compose -f docker-compose.dev.yaml \
+#     -f docker-compose/docker-compose.bench.yaml \
 #     --env-file docker-compose/.env up -d
 #
 # Two independent changes, both needed for a run whose numbers mean something:
