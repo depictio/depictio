@@ -222,9 +222,17 @@ export interface StoredMetadata {
   /** Visual grouping — interactive components sharing the same `group` are
    *  rendered together inside one Mantine Paper. Up to 3 per group. */
   group?: string;
-  /** Layout placement: 'left' (default — Filters sidebar) or 'top' (top panel
-   *  above the dashboard grid). Currently only 'Timeline' may use 'top'. */
-  placement?: 'left' | 'top';
+  /** Layout placement. The allowed values depend on the component type:
+   *  interactive components use 'left' (default — Filters sidebar) or 'top'
+   *  (top panel above the grid, currently 'Timeline' only); maps use 'grid'
+   *  (default — a normal tile) or 'floating' (the floating panel, reachable
+   *  from every tab). Anything lifted out of the grid gets no layout entry. */
+  placement?: 'left' | 'top' | 'grid' | 'floating';
+  /** How the panel presents itself on a viewer's first visit — a card in one of
+   *  its two sizes, docked below the filter panel, or hidden behind the header
+   *  control. Their own saved preference wins thereafter. Maps with
+   *  `placement: 'floating'` only. */
+  floating_initial_state?: 'compact' | 'expanded' | 'docked' | 'hidden';
   /** Default timescale for the Timeline interactive component. */
   timescale?: 'year' | 'month' | 'day' | 'hour' | 'minute';
   /** When set, controls tick-mark visibility on Slider / RangeSlider / Timeline.
@@ -269,6 +277,55 @@ export async function fetchDashboard(dashboardId: string): Promise<DashboardData
   });
   if (!res.ok) throw new Error(`Failed to fetch dashboard: ${res.status}`);
   return res.json();
+}
+
+/** A component lifted out of the grid into the floating panel, paired with the
+ *  tab that owns it. `dashboard_id` is the *owning* tab, which is what the
+ *  renderer must fetch against — it is not necessarily the tab being viewed. */
+export interface FloatingComponent {
+  dashboard_id: string;
+  tab_title?: string;
+  metadata: StoredMetadata;
+}
+
+export interface FloatingComponentsResponse {
+  /** Id of the tab family (the main tab). Panel state and cross-tab filter
+   *  persistence are keyed on this, not on the tab currently being viewed. */
+  parent_dashboard_id: string | null;
+  components: FloatingComponent[];
+}
+
+/**
+ * Fetch the floating components of the whole tab family (parent + siblings).
+ * `/dashboards/list` omits `stored_metadata` for non-admins, so a child tab
+ * cannot otherwise see a map authored on one of its siblings.
+ *
+ * Resolves to an empty result rather than throwing: a missing floating panel
+ * must never take the dashboard down with it.
+ */
+export async function fetchFloatingComponents(
+  dashboardId: string,
+): Promise<FloatingComponentsResponse> {
+  const empty: FloatingComponentsResponse = { parent_dashboard_id: null, components: [] };
+  try {
+    const res = await fetch(`${API_BASE}/dashboards/floating_components/${dashboardId}`, {
+      headers: authHeaders(),
+    });
+    if (!res.ok) return empty;
+    const data = await res.json();
+    if (!Array.isArray(data?.components)) return empty;
+    return {
+      parent_dashboard_id: data.parent_dashboard_id ?? null,
+      components: data.components,
+    };
+  } catch (err) {
+    // Network failure or malformed body. Resolving empty rather than rejecting
+    // matters beyond the panel itself: the caller uses this result to validate
+    // filters hydrated from storage, and a rejection would leave a stale
+    // cross-tab selection applied with nothing left to prune it.
+    console.warn('[api] fetchFloatingComponents failed:', err);
+    return empty;
+  }
 }
 
 /**
@@ -1176,6 +1233,37 @@ export async function fetchJBrowseSession(
   dashboardId: string,
   componentId: string,
   filters: InteractiveFilter[],
+/** Rows behind a map component, for the viewer's "show data" table. Every
+ *  column of the data collection, in `{col: values}` form — deliberately the
+ *  same shape `fetchAdvancedVizData` returns, so both feed the same grid. */
+export interface MapDataResponse {
+  columns: string[];
+  rows: Record<string, unknown[]>;
+  row_count: number;
+  total_rows: number;
+  truncated: boolean;
+  filter_applied: boolean;
+}
+
+export async function fetchMapData(
+  dashboardId: string,
+  componentId: string,
+  filters: InteractiveFilter[],
+  signal?: AbortSignal,
+): Promise<MapDataResponse> {
+  // Not queued through `enqueueFetch`, unlike `fetchAdvancedVizData` above:
+  // this fires when the user opens the popover, and making it wait behind a
+  // dashboard's mount-time request burst would read as a broken button.
+  const res = await fetch(`${API_BASE}/dashboards/map_data/${dashboardId}/${componentId}`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ filters }),
+    signal,
+  });
+  if (!res.ok) throw new Error(`Failed to fetch map data: ${res.status}`);
+  return (await res.json()) as MapDataResponse;
+}
+
   theme: 'light' | 'dark' = 'light',
 ): Promise<JBrowseSessionResponse> {
   const res = await fetch(
