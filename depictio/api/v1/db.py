@@ -83,6 +83,7 @@ migration_requests_collection = db[settings.mongodb.collections.migration_reques
 migration_targets_collection = db[settings.mongodb.collections.migration_targets_collection]
 migration_pushes_collection = db[settings.mongodb.collections.migration_pushes_collection]
 migration_invites_collection = db[settings.mongodb.collections.migration_invites_collection]
+static_exports_collection = db[settings.mongodb.collections.static_exports_collection]
 test_collection = db[settings.mongodb.collections.test_collection]
 
 

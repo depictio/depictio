@@ -359,6 +359,7 @@ class MongoDBConfig(ServiceConfig):
         # Target side: invite codes an admin issued so a source can push without
         # a pre-shared pairing key. Only the sha256 of each code is stored.
         migration_invites_collection: str = Field(default="migration_invites")
+        static_exports_collection: str = Field(default="static_exports")
         test_collection: str = Field(default="test")
 
     collections: Collections = Field(default_factory=Collections)
