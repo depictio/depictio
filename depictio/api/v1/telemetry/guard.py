@@ -33,9 +33,6 @@ from depictio.api.v1.configs.logging_init import logger
 
 #: How long *daily* guard documents are kept. Only needs to outlive one send
 #: interval; a week leaves plenty of slack for a clock skew or a long outage.
-#:
-#: It deliberately does not apply to the undated install guard, which has to
-#: outlive the installation itself. See :func:`claim_send`.
 GUARD_TTL_SECONDS: Final[int] = 7 * 24 * 3600
 
 _TTL_INDEX_NAME: Final[str] = "telemetry_guard_ttl"
@@ -85,20 +82,26 @@ def _guard_id(event: str, *, daily: bool) -> str:
     return f"send:{event}:{today}"
 
 
-def claim_send(event: str, *, daily: bool = True) -> bool:
+def claim_send(event: str, *, daily: bool = True) -> str | None:
     """Try to claim the right to send ``event``.
 
     Returns:
-        True if this process should send. False if another process already has
-        (or if MongoDB is unreachable — declining to send is the safe failure, as
-        a missed heartbeat costs one data point whereas a duplicate corrupts the
-        installation count).
+        The guard ID claimed, for :func:`release_send` to give back if the send
+        fails. ``None`` if another process already holds it, or if MongoDB is
+        unreachable — declining to send is the safe failure, as a missed heartbeat
+        costs one data point whereas a duplicate corrupts the installation count.
+
+        The ID is returned rather than recomputed later because a daily ID embeds
+        today's date: a send that starts at 23:59 and fails at 00:00 would
+        otherwise release *tomorrow's* guard, freeing a day that has already been
+        reported.
     """
     from depictio.api.v1.db import telemetry_collection
 
     now = datetime.now(timezone.utc)
+    guard_id = _guard_id(event, daily=daily)
     document: dict[str, Any] = {
-        "_id": _guard_id(event, daily=daily),
+        "_id": guard_id,
         "sent_at": now,
     }
 
@@ -113,24 +116,23 @@ def claim_send(event: str, *, daily: bool = True) -> bool:
         # Its presence is also what marks a document as a disposable guard rather
         # than a durable one, which carries no such field.
         document["guard_expires_at"] = now + timedelta(seconds=GUARD_TTL_SECONDS)
-    # An undated guard gets no expiry at all. It is claimed once and has to hold
-    # for the lifetime of the installation: the heartbeat loop retries the install
-    # event on every iteration, so a guard that expires means `server_install`
-    # simply fires again on the next pass, once per TTL period, forever.
 
     try:
         telemetry_collection.insert_one(document)
-        return True
+        return guard_id
     except DuplicateKeyError:
         logger.debug("Telemetry: %r already sent for this period, skipping", event)
-        return False
+        return None
     except Exception as exc:
         logger.debug("Telemetry: could not claim send for %r: %s", event, exc)
-        return False
+        return None
 
 
-def release_send(event: str, *, daily: bool = True) -> None:
+def release_send(guard_id: str) -> None:
     """Give back a claim whose send did not go through. Never raises.
+
+    Takes the ID :func:`claim_send` returned, never a recomputed one: see the note
+    there about a send that straddles UTC midnight.
 
     A claim is taken *before* the network call, so that concurrent workers settle
     the "who sends" question without waiting on a collector. The cost is that a
@@ -143,11 +145,11 @@ def release_send(event: str, *, daily: bool = True) -> None:
     from depictio.api.v1.db import telemetry_collection
 
     try:
-        telemetry_collection.delete_one({"_id": _guard_id(event, daily=daily)})
+        telemetry_collection.delete_one({"_id": guard_id})
     except Exception as exc:
         # Nothing to do about it: the send already failed, and the next period's
         # guard is a different key anyway.
-        logger.debug("Telemetry: could not release the claim for %r: %s", event, exc)
+        logger.debug("Telemetry: could not release the claim %r: %s", guard_id, exc)
 
 
 def has_sent(event: str, *, daily: bool = True) -> bool:

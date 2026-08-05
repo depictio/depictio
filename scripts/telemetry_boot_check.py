@@ -98,7 +98,7 @@ def main() -> int:
         claims = [claim_send(EVENT_HEARTBEAT, daily=True) for _ in range(4)]
         failures += not check(
             "4 simulated workers yield exactly 1 claim",
-            claims.count(True) == 1,
+            sum(claim is not None for claim in claims) == 1,
             f"claims={claims}",
         )
 

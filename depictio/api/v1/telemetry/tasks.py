@@ -61,18 +61,32 @@ def log_telemetry_status() -> None:
 
 
 async def _send(event: str, *, daily: bool) -> None:
-    """Claim, build and send one event. Never raises."""
-    if not claim_send(event, daily=daily):
-        return
+    """Claim, build and send one event. Never raises.
 
+    The payload is built *before* the guard is claimed. That costs every worker a
+    handful of count queries a day rather than only the one that wins, which is
+    nothing, and it buys the guarantee that a claim is only ever taken when there
+    is something to send it with: nothing between the claim and the network call
+    can throw, so no failure path can spend a guard that never expires.
+    """
     instance_id, properties = build_heartbeat_properties()
     props = properties.model_dump(mode="json", exclude_none=True)
 
     if settings.telemetry.debug:
+        # No claim taken on this path. Debug mode is the documented way to audit
+        # the payload before deciding whether to leave telemetry on, and the
+        # install guard never expires — claiming here would mean an operator who
+        # inspects their payload has silently ensured their installation can never
+        # be counted.
+        #
         # Rendered through the same builder the real send uses, so what an operator
         # audits here is byte-for-byte what would have gone out.
         body = build_body(event, instance_id, props, api_key=settings.telemetry.api_key)
         logger.info("Telemetry (debug mode, not sent) %s:\n%s", event, render_for_debug(body))
+        return
+
+    guard_id = claim_send(event, daily=daily)
+    if guard_id is None:
         return
 
     sent = await acapture(
@@ -86,7 +100,7 @@ async def _send(event: str, *, daily: bool) -> None:
     if not sent:
         # The claim was taken before the send, so hand it back rather than let a
         # collector outage cost this installation the event permanently.
-        release_send(event, daily=daily)
+        release_send(guard_id)
 
 
 async def periodic_telemetry_heartbeat() -> None:

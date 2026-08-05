@@ -113,23 +113,25 @@ class TestSendGuard:
     def test_only_one_of_many_workers_may_send(self, telemetry_db):
         """The whole point: 12 processes, one heartbeat."""
         granted = [claim_send("server_heartbeat", daily=True) for _ in range(12)]
-        assert sum(granted) == 1
-        assert granted[0] is True
+        assert sum(g is not None for g in granted) == 1
+        assert granted[0] == "send:server_heartbeat:" + datetime.now(timezone.utc).strftime(
+            "%Y-%m-%d"
+        )
 
     def test_install_guard_is_once_per_installation_ever(self, telemetry_db):
         granted = [claim_send("server_install", daily=False) for _ in range(5)]
-        assert sum(granted) == 1
+        assert sum(g is not None for g in granted) == 1
 
     def test_has_sent_does_not_consume_the_guard(self, telemetry_db):
         """The admin preview reads this; it must not suppress the real send."""
         assert has_sent("server_heartbeat", daily=True) is False
         assert has_sent("server_heartbeat", daily=True) is False
-        assert claim_send("server_heartbeat", daily=True) is True
+        assert claim_send("server_heartbeat", daily=True) is not None
         assert has_sent("server_heartbeat", daily=True) is True
 
     def test_a_new_day_gets_a_fresh_guard(self, telemetry_db):
-        assert claim_send("server_heartbeat", daily=True) is True
-        assert claim_send("server_heartbeat", daily=True) is False
+        assert claim_send("server_heartbeat", daily=True) is not None
+        assert claim_send("server_heartbeat", daily=True) is None
 
         # Guard IDs are date-stamped, so tomorrow's ID is simply a different key.
         tomorrow = (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%d")
@@ -137,7 +139,7 @@ class TestSendGuard:
             "depictio.api.v1.telemetry.guard._guard_id",
             return_value=f"send:server_heartbeat:{tomorrow}",
         ):
-            assert claim_send("server_heartbeat", daily=True) is True
+            assert claim_send("server_heartbeat", daily=True) is not None
 
     def test_guard_declines_when_mongodb_is_unreachable(self, telemetry_db):
         """Failing closed is right: a missed heartbeat loses one point, a duplicate
@@ -145,7 +147,7 @@ class TestSendGuard:
         with patch.object(
             telemetry_db.telemetry, "insert_one", side_effect=RuntimeError("no mongo")
         ):
-            assert claim_send("server_heartbeat", daily=True) is False
+            assert claim_send("server_heartbeat", daily=True) is None
 
     def test_guard_documents_carry_an_expiry_field(self, telemetry_db):
         """The TTL index keys off this field; the identity document must lack it."""
@@ -194,9 +196,9 @@ class TestSendGuard:
         deployment. The installation count would then grow on its own, without a
         single new installation.
 
-        Checking that the *daily* guard still carries the field matters just as
-        much: both documents live in the same collection, and this field is the
-        only thing that tells the TTL monitor them apart.
+        Both documents live in the same collection and this field is the only
+        thing that tells the TTL monitor them apart, so read this alongside
+        ``test_guard_documents_carry_an_expiry_field``, which pins the daily half.
         """
         claim_send("server_install", daily=False)
         install_guard = telemetry_db.telemetry.find_one(
@@ -204,13 +206,6 @@ class TestSendGuard:
         )
         assert install_guard is not None
         assert "guard_expires_at" not in install_guard
-
-        claim_send("server_heartbeat", daily=True)
-        heartbeat_guard = telemetry_db.telemetry.find_one(
-            {"_id": _guard_id("server_heartbeat", daily=True)}
-        )
-        assert heartbeat_guard is not None
-        assert "guard_expires_at" in heartbeat_guard
 
     def test_a_released_claim_can_be_taken_again(self, telemetry_db):
         """What a failed send has to leave behind.
@@ -221,25 +216,50 @@ class TestSendGuard:
         that means an installation that is never counted at all. Which is exactly
         the deployment whose first send hits a firewall.
         """
-        assert claim_send("server_install", daily=False) is True
-        assert claim_send("server_install", daily=False) is False
+        guard_id = claim_send("server_install", daily=False)
+        assert guard_id is not None
+        assert claim_send("server_install", daily=False) is None
 
-        release_send("server_install", daily=False)
+        release_send(guard_id)
 
-        assert claim_send("server_install", daily=False) is True
+        assert claim_send("server_install", daily=False) is not None
+
+    def test_release_frees_the_day_it_claimed_not_the_current_one(self, telemetry_db):
+        """A send that starts at 23:59 and fails at 00:00 must not free the new day.
+
+        Guard IDs embed the UTC date, so releasing by a *recomputed* ID would delete
+        the guard the next day's worker had already claimed and sent against. The
+        fix for double-counting would then be a source of it.
+        """
+        claimed = claim_send("server_heartbeat", daily=True)
+        assert claimed is not None
+
+        next_day = "send:server_heartbeat:2999-01-01"
+        with patch("depictio.api.v1.telemetry.guard._guard_id", return_value=next_day):
+            # Midnight passes; another worker claims the new day and its send lands.
+            assert claim_send("server_heartbeat", daily=True) == next_day
+
+            # Only now does the first worker's send fail and give its claim back.
+            release_send(claimed)
+
+            assert claim_send("server_heartbeat", daily=True) is None, (
+                "released a day that had already been reported"
+            )
+
+        assert claim_send("server_heartbeat", daily=True) is not None
 
     def test_releasing_never_raises_when_mongodb_is_unreachable(self, telemetry_db):
         with patch.object(
             telemetry_db.telemetry, "delete_one", side_effect=RuntimeError("no mongo")
         ):
-            release_send("server_heartbeat", daily=True)
+            release_send(_guard_id("server_heartbeat", daily=True))
 
 
 class TestSendReleasesTheClaimOnFailure:
     """The guard is only spent when the collector actually took the event."""
 
     @staticmethod
-    def _send_once(*, accepted: bool) -> None:
+    def _send_once(*, accepted: bool, debug: bool = False) -> None:
         """Run ``_send`` end to end with the network and the config stubbed out."""
         from depictio.api.v1.telemetry.tasks import _send
 
@@ -247,8 +267,7 @@ class TestSendReleasesTheClaimOnFailure:
         properties.model_dump.return_value = {}
 
         stub_settings = MagicMock()
-        # Debug mode returns before the send and must not be what this exercises.
-        stub_settings.telemetry.debug = False
+        stub_settings.telemetry.debug = debug
 
         with (
             patch("depictio.api.v1.telemetry.tasks.settings", stub_settings),
@@ -265,13 +284,24 @@ class TestSendReleasesTheClaimOnFailure:
 
     def test_a_refused_send_leaves_the_claim_available(self, telemetry_db):
         self._send_once(accepted=False)
-        assert claim_send("server_install", daily=False) is True, (
+        assert claim_send("server_install", daily=False) is not None, (
             "a collector outage cost this installation its install event permanently"
         )
 
     def test_an_accepted_send_spends_the_claim(self, telemetry_db):
         self._send_once(accepted=True)
-        assert claim_send("server_install", daily=False) is False
+        assert claim_send("server_install", daily=False) is None
+
+    def test_debug_mode_spends_nothing(self, telemetry_db):
+        """Auditing the payload must not cost the installation its install event.
+
+        ``DEPICTIO_TELEMETRY_DEBUG=true`` is the documented way to see what would
+        be sent before deciding whether to leave telemetry on. The install guard
+        never expires, so a claim taken on a path that sends nothing would mean an
+        operator who inspects their payload is silently never counted again.
+        """
+        self._send_once(accepted=False, debug=True)
+        assert claim_send("server_install", daily=False) is not None
 
 
 class TestCliVersionRecording:
