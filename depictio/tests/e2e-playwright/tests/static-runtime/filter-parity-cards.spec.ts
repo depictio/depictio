@@ -57,7 +57,7 @@ test.describe("static bundle — live card parity (penguins)", () => {
     expect(attempts).toEqual([]);
   });
 
-  test("options come from the codebook and the frozen figure stays badged", async ({
+  test("options come from the codebook and nothing is frozen anymore", async ({
     page,
   }) => {
     const attempts = await blockNetwork(page);
@@ -71,10 +71,8 @@ test.describe("static bundle — live card parity (penguins)", () => {
     }
     await page.keyboard.press("Escape");
 
-    // The scatter is frozen (phase 5) and badged as such.
-    await expect(
-      page.locator('[data-static-tier="frozen"]').first(),
-    ).toBeVisible();
+    // Since phase 5 the scatter is bound (live) — no frozen badge anywhere.
+    await expect(page.locator('[data-static-tier="frozen"]')).toHaveCount(0);
 
     expect(attempts).toEqual([]);
   });

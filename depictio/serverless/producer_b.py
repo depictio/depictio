@@ -8,10 +8,17 @@ self-contained HTML file (phase 1: ``single-file`` mode only).
 
 Pipeline per data collection: read Parquet → prune columns (RFC §6) →
 materialise companion columns (RFC §5 / errata #1) → re-export snappy Parquet
-with 250k row groups (engine-spike builder rule) → inline as base64. Figures
-are frozen by calling the *real* ``create_figure_from_data`` locally on the
-unfiltered pruned frame (errata #10); everything the producer cannot compute is
-*omitted* with a reason, surfaced by ``--check`` (see ``preflight.py``).
+with 250k row groups (engine-spike builder rule) → inline as base64.
+
+ui-mode figures are first offered to the bind-and-refill builder
+(``binding.py``, RFC §4): a component that binds ships a *binding table* — the
+real ``create_figure_from_data`` figure with its data arrays stripped, plus
+per-trace group predicates and field→column bindings — and goes ``live``, with
+the runtime re-projecting the arrays at every filter state. A component that
+cannot be bound with certainty falls back to a *frozen* payload from the same
+real figure service (errata #10) with reason ``binding_miss``. Everything the
+producer cannot compute at all is *omitted* with a reason, surfaced by
+``--check`` (see ``preflight.py``).
 """
 
 from __future__ import annotations
@@ -30,6 +37,7 @@ import yaml
 
 from depictio.models.models.dashboards import DashboardDataLite
 from depictio.models.models.serverless import (
+    BindingTable,
     BundleManifest,
     BundleMode,
     ColumnSpec,
@@ -41,6 +49,7 @@ from depictio.models.models.serverless import (
     TierEntry,
     TierReason,
 )
+from depictio.serverless.binding import build_binding
 from depictio.serverless.companions import build_companions
 from depictio.serverless.preflight import TierRow, classify_spec
 from depictio.serverless.pruning import (
@@ -424,8 +433,9 @@ def build_manifest(
             aggregation_hash=hashlib.sha256(parquet_bytes).hexdigest(),
         )
 
-    # Frozen payloads (+ data-dependent tier refinements).
+    # Bindings and frozen payloads (+ data-dependent tier refinements).
     frozen: dict[str, FrozenPayload] = {}
+    bindings: dict[str, BindingTable] = {}
     for comp in components:
         row = tier_by_id[comp["tag"]]
         if row.tier is not ComponentTier.FROZEN:
@@ -452,7 +462,33 @@ def build_manifest(
                 continue
             frozen[row.component_id] = FrozenPayload(kind="figure", payload=payload)
         elif ctype == "figure":
+            # Bind-and-refill first (RFC §4): a bound figure re-renders live in
+            # the browser at every filter state — including the default, empty
+            # one — so it ships NO frozen payload. The scaffold already carries
+            # the authentic layout, and the runtime refills the arrays from the
+            # bundled Parquet, so a frozen snapshot would only be a second copy
+            # of data the bundle already has.
+            binding = build_binding(comp, df)
+            if binding is not None:
+                bindings[row.component_id] = binding
+                if binding.sampled:
+                    row.tier = ComponentTier.PARTIAL
+                    row.reason = TierReason.MAX_POINTS
+                    row.detail = (
+                        "the server samples above FIGURE_MAX_POINTS after filtering; "
+                        "the bound figure refills every selected row instead — exact, "
+                        "but heavier than the server's default view"
+                    )
+                else:
+                    row.tier = ComponentTier.LIVE
+                    row.reason = None
+                    row.detail = None
+                continue
             payload, sampled = _freeze_ui_figure(comp, df)
+            row.reason = TierReason.BINDING_MISS
+            row.detail = (
+                "no unambiguous trace↔group binding (RFC §4); frozen at the default filter state"
+            )
             if sampled:
                 row.tier = ComponentTier.PARTIAL
                 row.reason = TierReason.MAX_POINTS
@@ -477,6 +513,7 @@ def build_manifest(
             for row in tier_rows
         },
         frozen=frozen,
+        bindings=bindings,
         inline_blobs=inline_blobs,
     )
     return BuildResult(manifest=manifest, tier_rows=tier_rows)
