@@ -31,6 +31,7 @@ import {
   AppShell,
   Button,
   Center,
+  Drawer,
   Group,
   Text,
   Loader,
@@ -39,12 +40,18 @@ import {
   Stack,
   Title,
 } from '@mantine/core';
-import { useDisclosure } from '@mantine/hooks';
+import { useDisclosure, useMediaQuery } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { Icon } from '@iconify/react';
 import { useSidebarOpen } from './hooks/useSidebarOpen';
+import { useFilterPanelOpen } from './hooks/useFilterPanelOpen';
+import { FILTER_PANEL_WIDTH_VAR, useFilterPanelWidth } from './hooks/useFilterPanelWidth';
 import { useCurrentUser } from './hooks/useCurrentUser';
 import { isDashboardOwner } from './lib/dashboardOwnership';
+import FilterPanelResizer, { FILTER_PANEL_RESIZER_WIDTH } from './components/FilterPanelResizer';
+import Inspector from './chrome/inspector/Inspector';
+import { useInspectorChrome } from './chrome/inspector/useInspectorChrome';
+import InspectorProviders from './chrome/inspector/InspectorProviders';
 import type { Layout } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
@@ -58,6 +65,9 @@ import {
   reorderTabs,
   updateTab,
   DashboardGrid,
+  FilterPanel,
+  TopPanel,
+  stripBoxPrefix,
   mergeFiltersBySource,
   enrichFilterWithDcId,
   useDataCollectionUpdates,
@@ -69,11 +79,14 @@ import {
   MapPanelControl,
   MapPanelDock,
   MapPanelSurface,
+  FILTER_PANEL_RAIL_WIDTH,
+  countActiveFilters,
 } from 'depictio-react-core';
 import type {
   DashboardData,
   DashboardPermissions,
   DashboardSummary,
+  FilterSectionSpec,
   InteractiveFilter,
   StoredMetadata,
   RealtimeMode,
@@ -81,8 +94,10 @@ import type {
   RealtimeJournalEntry,
 } from 'depictio-react-core';
 
-import LeftFilterPanel from './components/LeftFilterPanel';
 import GridItemEditOverlay from './components/GridItemEditOverlay';
+import SectionsModal from './components/sections/SectionsModal';
+import { applySectionOp, groupWith, sectionsFor } from './components/sections/sectionMutations';
+import type { SectionOp } from './components/sections/sectionMutations';
 import { Header, Sidebar, SettingsDrawer, TabModal } from './chrome';
 import type { TabModalSubmitPayload } from './chrome';
 import NotesFooter from './components/NotesFooter';
@@ -159,7 +174,12 @@ const EditorApp: React.FC = () => {
   // Persist across tab/page navigations (matches App.tsx + Dash app).
   const [desktopOpened, toggleDesktop] = useSidebarOpen();
   const [settingsOpened, { open: openSettings, close: closeSettings }] = useDisclosure(false);
-  const { user: currentUser, loading: userLoading } = useCurrentUser();
+  const [sectionsOpened, { open: openSections, close: closeSections }] = useDisclosure(false);
+  const { user: currentUser, loading: userLoading, inspectorEnabled } = useCurrentUser();
+  // `control` is null while the flag is off, so no provider value reaches the
+  // component chrome and no inspect action is rendered anywhere.
+  const { control: inspectorControl, aside: inspectorAside } =
+    useInspectorChrome(inspectorEnabled);
   // Tab modal state — `mode` decides between create vs edit. `target` is the
   // tab being edited (or null for create). `submitting` blocks Save while a
   // request is in flight.
@@ -171,6 +191,32 @@ const EditorApp: React.FC = () => {
   }>({ open: false, mode: 'create', target: null, submitting: false });
 
   const dashboardId = extractDashboardId();
+
+  // Left filter panel chrome — same hooks and same storage keys as the viewer,
+  // so collapsing or resizing in one mode carries over to the other.
+  const {
+    width: filterPanelWidth,
+    resizing: filterPanelResizing,
+    layoutRef: filterPanelLayoutRef,
+    beginResize: beginFilterPanelResize,
+    nudge: nudgeFilterPanelWidth,
+  } = useFilterPanelWidth(dashboardId);
+  // The swing spans both variable tracks: collapsing takes the panel down to
+  // the rail *and* the drag handle down to nothing. The grid gaps don't move,
+  // so they cancel out.
+  const [filterPanelOpened, toggleFilterPanel] = useFilterPanelOpen(
+    dashboardId,
+    filterPanelWidth + FILTER_PANEL_RESIZER_WIDTH - FILTER_PANEL_RAIL_WIDTH,
+  );
+  const isNarrow = useMediaQuery('(max-width: 48em)', false, { getInitialValueInEffect: false });
+  const [filterDrawerOpened, { open: openFilterDrawer, close: closeFilterDrawer }] =
+    useDisclosure(false);
+  // Widening past the breakpoint unmounts the drawer without closing it, which
+  // would leave it primed to reappear the next time the window narrows.
+  useEffect(() => {
+    if (!isNarrow) closeFilterDrawer();
+  }, [isNarrow, closeFilterDrawer]);
+
   const bulkCtrl = useRef<AbortController | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Latest dashboard ref so the debounced save uses fresh state. We update
@@ -291,6 +337,32 @@ const EditorApp: React.FC = () => {
       }, SAVE_DEBOUNCE_MS);
     },
     [dashboardId, applyDashboard],
+  );
+
+  /** The single write path for every section change.
+   *
+   *  Reduces against `dashboardRef.current` rather than the `dashboard` state
+   *  variable so the manager — which may be a render behind — can't clobber a
+   *  concurrent layout drag, and vice versa. `scheduleSave` writes the ref
+   *  synchronously, so a burst of ops (a rename followed by an update, from one
+   *  Save click) composes correctly. */
+  const handleSectionOp = useCallback(
+    (op: SectionOp) => {
+      const cur = dashboardRef.current;
+      if (!cur) return;
+      const next = applySectionOp(cur, op);
+      // Reference equality is the reducer's "rejected" signal (duplicate name,
+      // move past an end). Saving anyway would burn a request per no-op.
+      if (next === cur) return;
+      scheduleSave(next);
+    },
+    [scheduleSave],
+  );
+
+  const handleMoveToSection = useCallback(
+    (componentId: string, section: string | null) =>
+      handleSectionOp({ op: 'assign', componentId, section }),
+    [handleSectionOp],
   );
 
   const handleLeftLayoutChange = useCallback(
@@ -536,6 +608,63 @@ const EditorApp: React.FC = () => {
       ),
     [dashboard],
   );
+  // Same placement split as the viewer (App.tsx). Without it, `placement: 'top'`
+  // controls render in the left filter column while editing and jump to the
+  // bottom strip on save, so the editor never shows the real layout.
+  const topComponents = useMemo(
+    () => interactiveComponents.filter((m) => m.placement === 'top'),
+    [interactiveComponents],
+  );
+  const leftComponents = useMemo(
+    () => interactiveComponents.filter((m) => m.placement !== 'top'),
+    [interactiveComponents],
+  );
+  // Sections offered by the filter controls' ⋮ menus. Keyed on the spec list
+  // rather than the whole dashboard so a card value or layout nudge doesn't
+  // re-render every overlay.
+  const filterSections = useMemo(
+    () => dashboard?.filter_sections ?? [],
+    [dashboard?.filter_sections],
+  );
+  // How many controls move together, per component. Precomputed once instead of
+  // per overlay so the callback below can depend on this rather than on the
+  // whole `dashboard`.
+  const filterGroupSizes = useMemo(() => {
+    const sizes = new Map<string, number>();
+    const metadata = dashboard?.stored_metadata ?? [];
+    for (const m of metadata) {
+      if (m.group) sizes.set(m.index, groupWith(metadata, m.index).size);
+    }
+    return sizes;
+  }, [dashboard?.stored_metadata]);
+
+  // Per-filter edit / duplicate / delete menu. FilterPanel injects it into
+  // each control's chrome, including controls nested inside a group card.
+  const renderFilterItemOverlay = useCallback(
+    (component: StoredMetadata) => (
+      <GridItemEditOverlay
+        dashboardId={dashboardId!}
+        componentId={component.index}
+        editMode
+        onDelete={handleDeleteComponent}
+        onDuplicate={handleDuplicateComponent}
+        componentType={component.component_type}
+        sections={filterSections}
+        currentSection={component.section ?? null}
+        onMoveToSection={handleMoveToSection}
+        groupSize={filterGroupSizes.get(component.index) ?? 1}
+      />
+    ),
+    [
+      dashboardId,
+      handleDeleteComponent,
+      handleDuplicateComponent,
+      filterSections,
+      handleMoveToSection,
+      filterGroupSizes,
+    ],
+  );
+
   const cardComponents = useMemo(
     () =>
       (dashboard?.stored_metadata || []).filter(
@@ -893,6 +1022,28 @@ const EditorApp: React.FC = () => {
     [tabSiblings, allDashboards, refreshTabList],
   );
 
+  /** Closing the manager flushes the debounce: the next thing a user does after
+   *  reorganising sections is often "Edit" or "Add component", both of which
+   *  navigate away with `window.location.assign` and would drop a pending
+   *  save. */
+  const handleCloseSections = useCallback(() => {
+    closeSections();
+    if (!dashboardId) return;
+    const cur = dashboardRef.current;
+    if (!cur) return;
+    if (saveTimer.current) {
+      clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+    }
+    setSaveStatus('saving');
+    saveDashboard(dashboardId, cur)
+      .then(() => setSaveStatus('saved'))
+      .catch((err) => {
+        console.error('[EditorApp] section save failed:', err);
+        setSaveStatus('error');
+      });
+  }, [closeSections, dashboardId]);
+
   /** Force-save: cancel any pending debounce and POST current state now.
    *  Mirrors depictio/dash/layouts/save.py:save_dashboard_minimal — uses
    *  Mantine notifications for success/failure feedback (no persistent header
@@ -944,6 +1095,7 @@ const EditorApp: React.FC = () => {
 
   return (
     <>
+    <InspectorProviders control={inspectorControl}>
     <AppShell
       header={{ height: 50 }}
       navbar={{
@@ -953,6 +1105,7 @@ const EditorApp: React.FC = () => {
       }}
       padding={0}
       transitionDuration={300}
+      aside={inspectorAside}
       transitionTimingFunction="ease"
     >
       <AppShell.Header data-tour-id="header-title">
@@ -966,9 +1119,12 @@ const EditorApp: React.FC = () => {
           onToggleMobile={toggleMobile}
           onToggleDesktop={toggleDesktop}
           onOpenSettings={openSettings}
+          onOpenFilters={isNarrow && leftComponents.length > 0 ? openFilterDrawer : undefined}
+          filterCount={countActiveFilters(filters)}
           cardsLoading={cardsLoading}
           mode="edit"
           onAddComponent={handleAddComponent}
+          onOpenSections={openSections}
           onSave={handleForceSave}
           isOwner={isOwner}
           rightExtras={
@@ -1027,52 +1183,90 @@ const EditorApp: React.FC = () => {
         {dashboard && !loading && !error && (
           <div
             style={{
-              display: 'grid',
-              // 20vw / remainder. Using viewport units (vs. % of main) so the
-              // left panel keeps a fixed visual width regardless of any chrome
-              // that might shrink "main". User asked for ~1/5 left, 4/5 right.
-              // Floored, because at 1280px a bare 20vw leaves the docked map
-              // barely 200px wide.
-              gridTemplateColumns: 'minmax(260px, 20vw) 1fr',
+              display: 'flex',
+              flexDirection: 'column',
               height: '100%',
               width: '100%',
-              gap: 4,
               overflow: 'hidden',
             }}
           >
-            {/* The panel scrolls its own filter list (see LeftFilterPanel), so
-                this wrapper must not scroll too — otherwise the docked map
-                would scroll away with the filters instead of staying pinned. */}
-            <Box
-              px={4}
-              py={4}
-              style={{
-                height: '100%',
-                minWidth: 0,
-                overflow: 'hidden',
-              }}
-            >
-              <LeftFilterPanel
-                dashboardId={dashboardId!}
-                interactiveComponents={interactiveComponents}
-                layoutData={dashboard.left_panel_layout_data}
-                filters={filters}
-                onFilterChange={handleFilterChange}
-                onResetAllFilters={handleResetAllFilters}
-                onLeftLayoutChange={handleLeftLayoutChange}
-                editMode={true}
-                onDeleteComponent={handleDeleteComponent}
-                onDuplicateComponent={handleDuplicateComponent}
-                footer={
-                  <MapPanelDock
-                    panel={mapPanel}
-                    filters={filters}
-                    onFilterChange={handleFilterChange}
-                    renderEditActions={renderMapPanelEditActions}
-                  />
-                }
+          <div
+            ref={filterPanelLayoutRef}
+            // Cast for the custom property — see the same note in App.tsx.
+            style={{
+              // Written directly by a drag, so the panel edge doesn't wait on a
+              // render — see the same note in App.tsx.
+              [FILTER_PANEL_WIDTH_VAR]: `${
+                filterPanelOpened ? filterPanelWidth : FILTER_PANEL_RAIL_WIDTH
+              }px`,
+              display: 'grid',
+              // Panel | drag handle | content, the same three tracks the viewer
+              // uses. The track count stays at three whatever the panel's
+              // state, because `grid-template-columns` only animates between
+              // templates with matching track counts.
+              gridTemplateColumns: isNarrow
+                ? '1fr'
+                : `var(${FILTER_PANEL_WIDTH_VAR}) ` +
+                  `${filterPanelOpened ? FILTER_PANEL_RESIZER_WIDTH : 0}px 1fr`,
+              // Off while dragging — see the same note in App.tsx.
+              transition: filterPanelResizing
+                ? 'none'
+                : 'grid-template-columns 300ms ease',
+              flex: 1,
+              minHeight: 0,
+              width: '100%',
+              gap: 4,
+              overflow: 'hidden',
+            } as React.CSSProperties}
+          >
+            {!isNarrow && (
+              <Box
+                px={4}
+                py={4}
+                style={{
+                  // The panel scrolls its own filter list, so this wrapper must
+                  // not scroll too — otherwise the docked map would scroll away
+                  // with the filters instead of staying pinned.
+                  height: '100%',
+                  minWidth: 0,
+                  overflow: 'hidden',
+                }}
+              >
+                <FilterPanel
+                  components={leftComponents}
+                  allMetadata={dashboard.stored_metadata}
+                  filters={filters}
+                  onFilterChange={handleFilterChange}
+                  onResetAllFilters={handleResetAllFilters}
+                  layoutData={dashboard.left_panel_layout_data}
+                  filterSections={dashboard.filter_sections}
+                  dashboardId={dashboardId}
+                  // No refreshTick: the editor threads no realtime refresh
+                  // counter into any of its grids, so the left panel matches
+                  // RightComponentGrid rather than inventing state here.
+                  editMode
+                  renderItemOverlay={renderFilterItemOverlay}
+                  onLayoutChange={handleLeftLayoutChange}
+                  collapsed={!filterPanelOpened}
+                  onToggleCollapsed={toggleFilterPanel}
+                  footer={
+                    <MapPanelDock
+                      panel={mapPanel}
+                      filters={filters}
+                      onFilterChange={handleFilterChange}
+                      renderEditActions={renderMapPanelEditActions}
+                    />
+                  }
+                />
+              </Box>
+            )}
+            {!isNarrow && (
+              <FilterPanelResizer
+                onPointerDown={beginFilterPanelResize}
+                onNudge={nudgeFilterPanelWidth}
+                collapsed={!filterPanelOpened}
               />
-            </Box>
+            )}
             <Box
               px={4}
               py={4}
@@ -1089,6 +1283,7 @@ const EditorApp: React.FC = () => {
                 cardComponents={cardComponents}
                 otherComponents={otherComponents}
                 layoutData={dashboard.right_panel_layout_data}
+                gridSections={dashboard.grid_sections}
                 filters={filters}
                 onFilterChange={handleFilterChange}
                 cardValues={cardValues}
@@ -1099,11 +1294,58 @@ const EditorApp: React.FC = () => {
                 onDuplicateComponent={handleDuplicateComponent}
                 onAddComponent={handleAddComponent}
                 activeHighlight={activeHighlight}
+                onMoveToSection={handleMoveToSection}
               />
             </Box>
           </div>
+          {/* Mirrors the viewer's footer strip so `placement: 'top'` controls
+              sit where they will actually render, instead of appearing in the
+              left column only while editing. */}
+          {topComponents.length > 0 && (
+            <Box
+              px="md"
+              py={6}
+              style={{
+                flexShrink: 0,
+                width: '100%',
+                borderTop: '1px solid var(--mantine-color-default-border)',
+                background: 'var(--mantine-color-body)',
+              }}
+            >
+              <TopPanel
+                components={topComponents}
+                filters={filters}
+                onFilterChange={handleFilterChange}
+              />
+            </Box>
+          )}
+          </div>
         )}
-        {dashboard && dashboardId && (
+        {/* Narrow screens: the panel the grid no longer has room for. Not in
+            `editMode` — drag-reordering needs a stable panel width to lay its
+            grid out against, and a transient drawer on a phone is neither the
+            place nor the input device for authoring. */}
+        {dashboard && isNarrow && (
+          <Drawer
+            opened={filterDrawerOpened}
+            onClose={closeFilterDrawer}
+            position="left"
+            size="min(320px, 85vw)"
+            title="Filters"
+          >
+            <FilterPanel
+              components={leftComponents}
+              allMetadata={dashboard.stored_metadata}
+              filters={filters}
+              onFilterChange={handleFilterChange}
+              onResetAllFilters={handleResetAllFilters}
+              layoutData={dashboard.left_panel_layout_data}
+              filterSections={dashboard.filter_sections}
+              dashboardId={dashboardId}
+            />
+          </Drawer>
+        )}
+        {dashboard && dashboardId && !inspectorEnabled && (
           <NotesFooter
             dashboardId={dashboardId}
             initialContent={(dashboard.notes_content as string) ?? ''}
@@ -1120,6 +1362,12 @@ const EditorApp: React.FC = () => {
         )}
       </AppShell.Main>
 
+      {inspectorEnabled && (
+        <AppShell.Aside p={0}>
+          <Inspector dashboard={dashboard} dashboardId={dashboardId} />
+        </AppShell.Aside>
+      )}
+
       <SettingsDrawer
         opened={settingsOpened}
         onClose={closeSettings}
@@ -1134,7 +1382,15 @@ const EditorApp: React.FC = () => {
         onSubmit={handleTabModalSubmit}
         submitting={tabModalState.submitting}
       />
+
+      <SectionsModal
+        opened={sectionsOpened}
+        onClose={handleCloseSections}
+        dashboard={dashboard}
+        onOp={handleSectionOp}
+      />
     </AppShell>
+    </InspectorProviders>
     </>
   );
 };
@@ -1150,6 +1406,7 @@ interface RightComponentGridProps {
   cardComponents: StoredMetadata[];
   otherComponents: StoredMetadata[];
   layoutData: unknown;
+  gridSections?: FilterSectionSpec[];
   filters: InteractiveFilter[];
   onFilterChange: (filter: InteractiveFilter) => void;
   cardValues: Record<string, unknown>;
@@ -1160,6 +1417,9 @@ interface RightComponentGridProps {
   onDuplicateComponent: (componentId: string) => void;
   onAddComponent: () => void;
   activeHighlight?: ActiveHighlight | null;
+  /** Fired by each cell's "Move to section" action. The names on offer are
+   *  derived from `gridSections`, which this component already receives. */
+  onMoveToSection: (componentId: string, section: string | null) => void;
 }
 
 /**
@@ -1175,6 +1435,7 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
   cardComponents,
   otherComponents,
   layoutData,
+  gridSections,
   filters,
   onFilterChange,
   cardValues,
@@ -1185,6 +1446,7 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
   onDuplicateComponent,
   onAddComponent,
   activeHighlight,
+  onMoveToSection,
 }) => {
   const allComponents = useMemo(
     () => [...cardComponents, ...otherComponents],
@@ -1233,6 +1495,7 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
       dashboardId={dashboardId}
       metadataList={allComponents}
       layoutData={layoutData}
+      gridSections={gridSections}
       filters={filters}
       onFilterChange={onFilterChange}
       cardValues={cardValues}
@@ -1251,6 +1514,9 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
           onDelete={onDeleteComponent}
           onDuplicate={onDuplicateComponent}
           componentType={metadata.component_type}
+          sections={gridSections}
+          currentSection={metadata.section ?? null}
+          onMoveToSection={onMoveToSection}
         />
       )}
     />
@@ -1276,10 +1542,6 @@ function stableFilterKey(filters: InteractiveFilter[]): string {
     return (a.source ?? '').localeCompare(b.source ?? '');
   });
   return JSON.stringify(sorted.map((f) => [f.index, f.source ?? null, f.value]));
-}
-
-function stripBoxPrefix(id: string): string {
-  return id.startsWith('box-') ? id.slice(4) : id;
 }
 
 /** Strip a single component id from a layout array (or breakpoint dict). */

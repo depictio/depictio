@@ -3,6 +3,10 @@ import { Group, Paper, Stack, Text } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import type { StoredMetadata } from '../../api';
+// Loaded here rather than beside either slider: `DepictioRangeSlider` lives in
+// another package and cannot import from this one, and both sliders need the
+// same rule. This module is what every interactive renderer already imports.
+import './sliderMarks.css';
 
 /**
  * The one frame every interactive control renders inside.
@@ -155,6 +159,11 @@ export const SLIDER_MARK_LABEL_STYLE = {
   fontSize: 'var(--mantine-font-size-xs)',
   lineHeight: 1.2,
 } as const;
+
+/** Class that keeps a slider's first and last mark labels inside the track —
+ *  see sliderMarks.css. `DepictioRangeSlider` sets the same literal for the
+ *  same reason it carries its own copy of the style above. */
+export const SLIDER_MARKS_CLASS = 'depictio-slider-marks';
 
 export interface InteractiveTitleProps {
   metadata: StoredMetadata;

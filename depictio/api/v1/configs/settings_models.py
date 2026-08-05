@@ -133,6 +133,13 @@ class ViewerConfig(ServiceConfig):
     auto_generate_figures: bool = Field(
         default=False, description="Enable automatic figure generation in UI mode"
     )
+    inspector_enabled: bool = Field(
+        default=False,
+        description="Show the dashboard inspector: a docked right-hand panel carrying "
+        "the selected component's info and notes. Off by default while it is validated "
+        "against the reference dashboards; with it off those surfaces stay in the "
+        "popovers and drawers they live in today.",
+    )
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_VIEWER_")
 

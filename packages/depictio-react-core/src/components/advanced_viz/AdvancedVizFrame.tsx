@@ -3,12 +3,10 @@ import { Alert, Badge, Group, Paper, Stack, Text, Tooltip } from '@mantine/core'
 
 import ErrorBoundary from '../ErrorBoundary';
 import ComponentSkeleton from '../ComponentSkeleton';
-import LoadAllButton from '../chrome/LoadAllButton';
 import { ComponentIndexContext, useReportLoadStatus } from '../DashboardLoadingProvider';
 import {
-  AdvancedVizDataPopover,
   AdvancedVizExtrasContext,
-  AdvancedVizSettingsPopover,
+  type AdvancedVizExtrasPayload,
   type TierAnnotation,
 } from './AdvancedVizExtras';
 
@@ -168,42 +166,26 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
   onToggleRef.current = reduction?.onToggle;
   const stableToggle = useCallback(() => onToggleRef.current?.(), []);
 
-  // Render the popovers as a single React node and publish it. ComponentRenderer
-  // reads it via useState and threads it through wrapWithChrome's extraActions
-  // slot. The popovers themselves portal their dropdown content so even if the
-  // chrome row fades out on mouseleave, an OPEN popover stays visible.
-  const extras = useMemo(() => {
-    const nodes: React.ReactNode[] = [];
-    if (controls) {
-      nodes.push(<AdvancedVizSettingsPopover key="settings" controls={controls} />);
-    }
+  // Publish what this renderer has, not how to draw it. AdvancedVizDispatch
+  // turns the payload back into the popovers; the inspector turns the same
+  // fields into docked tabs. Publishing finished popovers, as this once did,
+  // left the inspector with nothing it could re-present.
+  const extras = useMemo<AdvancedVizExtrasPayload | null>(() => {
+    const payload: AdvancedVizExtrasPayload = {};
+    if (controls) payload.controls = controls;
     if (dataRows) {
-      nodes.push(
-        <AdvancedVizDataPopover
-          key="data"
-          dataRows={dataRows}
-          dataColumns={dataColumns}
-          tierAnnotation={tierAnnotation}
-        />,
-      );
+      payload.data = { rows: dataRows, columns: dataColumns, tierAnnotation };
     }
-    // Reuse the exact figure/table Load-All ActionIcon so the toggle looks and
-    // sits identically across component types.
     if (redPresent && showReduction) {
-      nodes.push(
-        <LoadAllButton
-          key="load-all"
-          state={{
-            reduced: !redFull,
-            full: redFull,
-            loading: redLoading,
-            toggle: stableToggle,
-            noun: 'points',
-          }}
-        />,
-      );
+      payload.reduction = {
+        reduced: !redFull,
+        full: redFull,
+        loading: redLoading,
+        toggle: stableToggle,
+        noun: 'points',
+      };
     }
-    return nodes.length ? <>{nodes}</> : null;
+    return Object.keys(payload).length ? payload : null;
   }, [
     controls,
     dataRows,

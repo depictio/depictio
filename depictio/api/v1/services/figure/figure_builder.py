@@ -514,6 +514,11 @@ def create_figure_from_data(
             layout_updates["dragmode"] = "lasso"
 
         fig.update_layout(**layout_updates)
+        # A floor, not a ceiling — see the same pair in `aggregate.py`. Without
+        # this a fixed 40px bottom margin clips rotated category labels
+        # mid-glyph and lets the axis title overwrite them.
+        fig.update_xaxes(automargin=True)
+        fig.update_yaxes(automargin=True)
 
         return fig
 

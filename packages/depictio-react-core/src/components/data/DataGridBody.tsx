@@ -53,6 +53,9 @@ export interface DataGridBodyProps {
   extraBadge?: React.ReactNode;
   /** Omit for a read-only peek at the data. */
   selection?: DataGridSelection;
+  /** AG Grid needs a definite height. Popovers keep the fixed pixel default;
+   *  the inspector's Data tab passes '100%' to fill its docked panel. */
+  height?: number | string;
   /** Puts a close button at the end of the header row. Both callers hold their
    *  popover open through outside clicks (AG Grid portals its column menus to
    *  the body, and the outside-click detector reads those as outside), which
@@ -77,6 +80,7 @@ const DataGridBody: React.FC<DataGridBodyProps> = ({
   tierAnnotation,
   extraBadge,
   selection,
+  height = 420,
   onClose,
 }) => {
   const { colorScheme } = useMantineColorScheme();
@@ -295,7 +299,7 @@ const DataGridBody: React.FC<DataGridBodyProps> = ({
       </Group>
       {/* AG Grid needs a definite height to render rows — `flex: 1`
           inside a content-sized popover collapses to 0 and the grid
-          vanishes. Keep an explicit pixel height; the grid handles its
+          vanishes. Keep an explicit height; the grid handles its
           own scrolling internally.
           The Alpine CSS-variable overrides shrink rows + font so the
           popover shows ~2× more rows in the same space — the default
@@ -305,7 +309,9 @@ const DataGridBody: React.FC<DataGridBodyProps> = ({
         style={
           {
             width: '100%',
-            height: 420,
+            height,
+            flex: height === '100%' ? 1 : undefined,
+            minHeight: 0,
             '--ag-font-size': '11px',
             '--ag-row-height': '24px',
             '--ag-header-height': '28px',

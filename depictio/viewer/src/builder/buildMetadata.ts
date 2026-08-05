@@ -24,6 +24,12 @@ export function buildMetadata(state: BuilderState): StoredMetadata {
     wf_id: state.wfId || undefined,
     dc_id: state.dcId || undefined,
     project_id: state.projectId || undefined,
+    // Set here rather than in each per-type branch: `section` lives on the base
+    // component model, `SectionSelect` is mounted once for every builder, and
+    // `base` is spread after `existing` everywhere — so the picker's choice
+    // always wins, including clearing it back to unsectioned. Empty string from
+    // a cleared Select means "no section", which must persist as undefined.
+    section: as<{ section?: string }>(state.config).section?.trim() || undefined,
     last_updated: new Date().toISOString(),
     // Persist catalog origin so the dashboard can show a "from catalog" badge.
     // Preserved through edits via the ...existing spread in per-type builders.
@@ -191,6 +197,10 @@ function buildInteractive(
     title?: string;
     color?: string;
     icon_name?: string;
+    section?: string;
+    group?: string;
+    placement?: string;
+    show_marks?: boolean;
   }>(state.config);
   // Mirror Dash design_interactive: the form surfaces only the basics, no
   // default value/range, marks, or scale. Those are derived at render time.
@@ -201,6 +211,12 @@ function buildInteractive(
   const title =
     (c.title && c.title.trim()) ||
     defaultInteractiveTitle(c.interactive_component_type, c.column_name);
+  // `placement: 'top'` is allow-listed to Timeline in the Pydantic model
+  // (validate_placement in depictio/models/components/lite.py). Clamp here so
+  // switching an existing top-placed Timeline to another variant can't save a
+  // component the backend will then reject.
+  const placement =
+    c.placement === 'top' && c.interactive_component_type === 'Timeline' ? 'top' : 'left';
   return {
     ...existing,
     ...base,
@@ -210,6 +226,12 @@ function buildInteractive(
     title,
     color: c.color ?? '',
     icon_name: c.icon_name ?? 'bx:slider-alt',
+    // Empty string from a cleared Autocomplete means "no group", which must
+    // persist as undefined so the panel treats it as ungrouped. (`section` is
+    // set once on `base`.)
+    group: c.group?.trim() || undefined,
+    placement,
+    show_marks: c.show_marks,
   };
 }
 
@@ -312,9 +334,9 @@ function buildText(
     alignment:
       c.alignment === 'center' || c.alignment === 'right' ? c.alignment : 'left',
     vertical_alignment:
-      c.vertical_alignment === 'center' || c.vertical_alignment === 'bottom'
+      c.vertical_alignment === 'top' || c.vertical_alignment === 'bottom'
         ? c.vertical_alignment
-        : 'top',
+        : 'center',
     body: c.body ?? '',
   };
 }

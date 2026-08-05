@@ -11,6 +11,13 @@
 export { default as DepictioCard } from './components/DepictioCard';
 export { default as DepictioMultiSelect } from './components/DepictioMultiSelect';
 export { default as DepictioRangeSlider } from './components/DepictioRangeSlider';
+// The density contract the two widgets above share with the renderers in
+// depictio-react-core: every compact filter control gets the same slot, so a
+// select and a slider cost the same vertical space.
+export {
+  default as CompactControlSlot,
+  COMPACT_CONTROL_HEIGHT,
+} from './components/CompactControlSlot';
 
 export type {
   DepictioCardProps,

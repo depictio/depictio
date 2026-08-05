@@ -1,5 +1,5 @@
 import React from 'react';
-import { ActionIcon, Box, Button, Group, Loader, Title, Tooltip, useMantineColorScheme } from '@mantine/core';
+import { ActionIcon, Badge, Box, Button, Group, Loader, Title, Tooltip, useMantineColorScheme } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import type { DashboardData, DashboardSummary } from 'depictio-react-core';
@@ -54,6 +54,8 @@ interface HeaderProps {
   mode?: 'view' | 'edit';
   /** Edit-mode only: invoked when the user clicks "Add component". */
   onAddComponent?: () => void;
+  /** Edit-mode only: opens the Sections manager. */
+  onOpenSections?: () => void;
   /** Edit-mode only: invoked when the user clicks "Save". Should force-flush any pending debounced save. */
   onSave?: () => void;
   /** True when the current user owns this dashboard. When false, the
@@ -68,6 +70,12 @@ interface HeaderProps {
    *  indicator). Replaces the bare `cardsLoading` spinner when provided, since
    *  an indicator of its own already accounts for the card group. */
   titleExtras?: React.ReactNode;
+  /** Below `sm` the filter panel moves into a drawer; this opens it. Omitted
+   *  (with the button hidden) when there are no filters to show. */
+  onOpenFilters?: () => void;
+  /** Active filter count, badged on the filters button so a filtered dashboard
+   *  never looks unfiltered on a phone. */
+  filterCount?: number;
 }
 
 /**
@@ -90,10 +98,13 @@ const Header: React.FC<HeaderProps> = ({
   cardsLoading = false,
   mode = 'view',
   onAddComponent,
+  onOpenSections,
   onSave,
   isOwner = true,
   rightExtras,
   titleExtras,
+  onOpenFilters,
+  filterCount = 0,
 }) => {
   const { colorScheme } = useMantineColorScheme();
   const theme: 'light' | 'dark' = colorScheme === 'dark' ? 'dark' : 'light';
@@ -174,6 +185,27 @@ const Header: React.FC<HeaderProps> = ({
         >
           <Icon icon="mdi:menu" width={22} />
         </ActionIcon>
+        {/* Only below `sm`, where the filter panel has moved into a drawer.
+            Above it the panel is on screen and this would be a second way to
+            do the same thing. */}
+        {onOpenFilters && (
+          <Button
+            variant="light"
+            size="compact-sm"
+            hiddenFrom="sm"
+            onClick={onOpenFilters}
+            leftSection={<Icon icon="mdi:filter-variant" width={14} />}
+            rightSection={
+              filterCount > 0 ? (
+                <Badge size="xs" variant="filled" circle>
+                  {filterCount}
+                </Badge>
+              ) : undefined
+            }
+          >
+            Filters
+          </Button>
+        )}
         {tabIconImageSrc ? (
           <img
             src={tabIconImageSrc}
@@ -231,6 +263,25 @@ const Header: React.FC<HeaderProps> = ({
               data-tour-id="editor-add-component"
             >
               Add component
+            </Button>
+          </Tooltip>
+        )}
+        {mode === 'edit' && onOpenSections && (
+          <Tooltip
+            label="You can only edit dashboards you own. Duplicate this one to get your own copy."
+            disabled={isOwner}
+            withArrow
+          >
+            <Button
+              leftSection={<Icon icon="mdi:format-list-group" width={14} />}
+              color="grape"
+              variant="filled"
+              size="xs"
+              onClick={onOpenSections}
+              disabled={!dashboardId || !isOwner}
+              data-tour-id="editor-sections"
+            >
+              Sections
             </Button>
           </Tooltip>
         )}

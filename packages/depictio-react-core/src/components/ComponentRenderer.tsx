@@ -182,7 +182,11 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
     // with no `source` discriminator (only chart/table selections use one),
     // so the active check matches on `index` + empty-value semantics.
     const sourceFilterActive = isSourceFilterActive(filters, metadata.index, undefined);
-    return wrapWithChrome('interactive', metadata, undefined, inner, { onResetFilter, extraActions, showDragHandle, sourceFilterActive });
+    // Always the compact chrome, not just at compact density: an interactive
+    // control is a title line and its input at every density and in every
+    // placement, so there is never a corner for a tile-sized icon to sit in.
+    // See `compact` in ComponentChrome.
+    return wrapWithChrome('interactive', metadata, undefined, inner, { onResetFilter, extraActions, showDragHandle, sourceFilterActive, compact: true });
   }
 
   if (metadata.component_type === 'figure' && dashboardId) {
@@ -674,7 +678,9 @@ const CardRenderer: React.FC<{
   );
 };
 
-function inferCardTitle(m: StoredMetadata): string {
+/** Exported so the dashboard grid can label a collapsed section's summary
+ *  chips exactly the way the cards themselves are labelled. */
+export function inferCardTitle(m: StoredMetadata): string {
   if (m.aggregation && m.column_name) {
     return `${capitalize(String(m.aggregation))} of ${m.column_name}`;
   }
@@ -685,7 +691,8 @@ function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-function formatValue(v: unknown): string | number {
+/** Exported alongside `inferCardTitle`, and for the same reason. */
+export function formatValue(v: unknown): string | number {
   if (typeof v === 'number') {
     if (!Number.isInteger(v)) return v.toFixed(4).replace(/\.?0+$/, '');
     return v;

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Text, SegmentedControl } from '@mantine/core';
+import { CompactControlSlot } from 'depictio-components';
 
 import { fetchUniqueValues, InteractiveFilter, StoredMetadata } from '../../api';
 import { useAvailableSet } from '../../availableValues';
@@ -119,53 +120,47 @@ const SegmentedControlRenderer: React.FC<{
     [onChange, metadata.index, metadata.column_name, metadata.filter_expr],
   );
 
-  const Frame: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  // Plain function rather than an inline component: declaring a component
+  // inside the render body gives it a new identity every render, so React
+  // unmounts and remounts the whole subtree on each state change.
+  const frame = (children: React.ReactNode) => (
     <InteractiveFrame compact={compact}>
       <InteractiveTitle metadata={metadata} compact={compact} />
-      {children}
+      <CompactControlSlot compact={compact}>{children}</CompactControlSlot>
     </InteractiveFrame>
   );
 
   if (error) {
-    return (
-      <Frame>
+    return frame(
         <Text size="xs" c="red">
           Failed to load options: {error}
         </Text>
-      </Frame>
-    );
+      );
   }
 
   if (loading) {
-    return (
-      <Frame>
+    return frame(
         <ComponentSkeleton variant="control" withTitle={false} />
-      </Frame>
-    );
+      );
   }
 
   if (data.length === 0) {
-    return (
-      <Frame>
+    return frame(
         <Text size="xs" c="dimmed">
           No values available for column "{metadata.column_name}".
         </Text>
-      </Frame>
-    );
+      );
   }
 
   if (data.length > MAX_SEGMENTS) {
-    return (
-      <Frame>
+    return frame(
         <Text size="xs" c="dimmed">
           Too many options for SegmentedControl, use Select instead
         </Text>
-      </Frame>
-    );
+      );
   }
 
-  return (
-    <Frame>
+  return frame(
       <SegmentedControl
         data={data}
         value={selectedValue ?? data[0]?.value}
@@ -199,8 +194,7 @@ const SegmentedControlRenderer: React.FC<{
           },
         }}
       />
-    </Frame>
-  );
+    );
 };
 
 export default SegmentedControlRenderer;

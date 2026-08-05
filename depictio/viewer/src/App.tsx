@@ -4,16 +4,16 @@ import {
   AppShell,
   Button,
   Center,
+  Drawer,
   Group,
   Text,
   Loader,
-  Anchor,
   Stack,
   Title,
   Paper,
   Box,
 } from '@mantine/core';
-import { useDebouncedValue, useDisclosure } from '@mantine/hooks';
+import { useDebouncedValue, useDisclosure, useMediaQuery } from '@mantine/hooks';
 import { Icon } from '@iconify/react';
 
 import {
@@ -21,14 +21,11 @@ import {
   fetchAllDashboards,
   bulkComputeCards,
   AvailableFilterValuesProvider,
-  ComponentRenderer,
   DashboardGrid,
-  InteractiveGroupCard,
+  FilterPanel,
   TopPanel,
-  groupInteractiveComponents,
   mergeFiltersBySource,
   enrichFilterWithDcId,
-  hasSelectionFilters,
   useDataCollectionUpdates,
   RealtimeIndicator,
   useRealtimeJournal,
@@ -45,6 +42,8 @@ import {
   writeFloatingFilters,
   clearFloatingFilters,
   persistableFloatingFilters,
+  FILTER_PANEL_RAIL_WIDTH,
+  countActiveFilters,
 } from 'depictio-react-core';
 import type {
   DashboardData,
@@ -72,8 +71,14 @@ const FILTER_DEBOUNCE_MS = 250;
 import { notifications } from '@mantine/notifications';
 import { Header, Sidebar, SettingsDrawer } from './chrome';
 import { useSidebarOpen } from './hooks/useSidebarOpen';
+import { useFilterPanelOpen } from './hooks/useFilterPanelOpen';
+import { FILTER_PANEL_WIDTH_VAR, useFilterPanelWidth } from './hooks/useFilterPanelWidth';
 import { useCurrentUser } from './hooks/useCurrentUser';
 import { isDashboardOwner } from './lib/dashboardOwnership';
+import FilterPanelResizer, { FILTER_PANEL_RESIZER_WIDTH } from './components/FilterPanelResizer';
+import Inspector from './chrome/inspector/Inspector';
+import { useInspectorChrome } from './chrome/inspector/useInspectorChrome';
+import InspectorProviders from './chrome/inspector/InspectorProviders';
 import NotesFooter from './components/NotesFooter';
 import DashboardLoadIndicator from './components/DashboardLoadIndicator';
 import BootSplash from './components/BootSplash';
@@ -150,10 +155,43 @@ const App: React.FC = () => {
   // `sidebar-collapsed` localStorage key the Dash app writes.
   const [desktopOpened, toggleDesktop] = useSidebarOpen();
   const [settingsOpened, { open: openSettings, close: closeSettings }] = useDisclosure(false);
-  const { user: currentUser } = useCurrentUser();
+  const { user: currentUser, inspectorEnabled } = useCurrentUser();
   const isOwner = isDashboardOwner(dashboard, currentUser?.email ?? null);
+  // `control` is null while the flag is off, so no provider value reaches the
+  // component chrome and no inspect action is rendered anywhere.
+  const { control: inspectorControl, aside: inspectorAside } =
+    useInspectorChrome(inspectorEnabled);
 
   const dashboardId = extractDashboardId();
+
+  // Left filter panel chrome. Width first: the collapse swing is the width the
+  // content column reclaims, which is everything but the icon rail.
+  const {
+    width: filterPanelWidth,
+    resizing: filterPanelResizing,
+    layoutRef: filterPanelLayoutRef,
+    beginResize: beginFilterPanelResize,
+    nudge: nudgeFilterPanelWidth,
+  } = useFilterPanelWidth(dashboardId);
+  // The swing spans both variable tracks: collapsing takes the panel down to
+  // the rail *and* the drag handle down to nothing. The grid gaps don't move,
+  // so they cancel out.
+  const [filterPanelOpened, toggleFilterPanel] = useFilterPanelOpen(
+    dashboardId,
+    filterPanelWidth + FILTER_PANEL_RESIZER_WIDTH - FILTER_PANEL_RAIL_WIDTH,
+  );
+  // Below `sm` the panel would leave the content column unusable, so it moves
+  // into a drawer opened from the header. `getInitialValueInEffect: false`
+  // avoids a first frame of desktop layout on a phone.
+  const isNarrow = useMediaQuery('(max-width: 48em)', false, { getInitialValueInEffect: false });
+  const [filterDrawerOpened, { open: openFilterDrawer, close: closeFilterDrawer }] =
+    useDisclosure(false);
+  // Widening past the breakpoint unmounts the drawer without closing it, which
+  // would leave it primed to reappear the next time the window narrows.
+  useEffect(() => {
+    if (!isNarrow) closeFilterDrawer();
+  }, [isNarrow, closeFilterDrawer]);
+
   const bulkCtrl = useRef<AbortController | null>(null);
 
   // Ingestion-health banner: for template-derived dashboards, surface a
@@ -485,10 +523,23 @@ const App: React.FC = () => {
     () => interactiveComponents.filter((m) => m.placement !== 'top'),
     [interactiveComponents],
   );
-  const leftGroups = useMemo(
-    () => groupInteractiveComponents(leftComponents),
-    [leftComponents],
-  );
+  /**
+   * What the filter panel resolves a filter's *name* against.
+   *
+   * The tab's own `stored_metadata` is not enough. A floating map is declared on
+   * one tab and filters every tab, so on any other tab its selection has no
+   * component to look up — and the active-filter summary fell back to the raw
+   * join column, listing a map selection as "sample". Unioning in the family's
+   * floating components gives that row the map's actual title on every tab.
+   *
+   * `leftComponents` deliberately does not get them: they are not panel controls
+   * and must not be rendered as filter rows.
+   */
+  const summaryMetadata = useMemo(() => {
+    const own = dashboard?.stored_metadata || [];
+    const seen = new Set(own.map((m) => m.index));
+    return [...own, ...mapPanel.components.map((c) => c.metadata).filter((m) => !seen.has(m.index))];
+  }, [dashboard, mapPanel.components]);
   const cardComponents = useMemo(
     () => (dashboard?.stored_metadata || []).filter((m) => m.component_type === 'card'),
     [dashboard],
@@ -515,12 +566,17 @@ const App: React.FC = () => {
     [cardComponents, otherComponents],
   );
 
+  // Same count the panel badges, hoisted so the narrow-screen header button can
+  // show it while the panel itself is off screen.
+  const activeFilterCount = countActiveFilters(filters);
+
   return (
     <AvailableFilterValuesProvider
       dashboardMetadata={dashboard?.stored_metadata}
       projectId={dashboard?.project_id}
     >
       <DashboardLoadingProvider>
+      <InspectorProviders control={inspectorControl}>
       <AppShell
       header={{ height: 50 }}
       navbar={{
@@ -528,6 +584,7 @@ const App: React.FC = () => {
         breakpoint: 'sm',
         collapsed: { mobile: !mobileOpened, desktop: !desktopOpened },
       }}
+      aside={inspectorAside}
       padding={0}
       transitionDuration={300}
       transitionTimingFunction="ease"
@@ -543,6 +600,8 @@ const App: React.FC = () => {
           onToggleMobile={toggleMobile}
           onToggleDesktop={toggleDesktop}
           onOpenSettings={openSettings}
+          onOpenFilters={isNarrow && leftComponents.length > 0 ? openFilterDrawer : undefined}
+          filterCount={activeFilterCount}
           cardsLoading={cardsLoading}
           isOwner={isOwner}
           titleExtras={
@@ -671,118 +730,84 @@ const App: React.FC = () => {
             }}
           >
           <div
+            ref={filterPanelLayoutRef}
+            // Cast because `CSSProperties` has no index signature for custom
+            // properties, and the name is a constant rather than a literal.
             style={{
+              // The panel track comes from a variable so a drag can move it
+              // without a React render — see `useFilterPanelWidth`. React owns
+              // the value everywhere else, including here on every commit.
+              [FILTER_PANEL_WIDTH_VAR]: `${
+                filterPanelOpened ? filterPanelWidth : FILTER_PANEL_RAIL_WIDTH
+              }px`,
               display: 'grid',
-              // Floor the filter column: at 1280px, a bare 20vw leaves the
-              // docked map barely 200px wide.
-              gridTemplateColumns: 'minmax(260px, 20vw) 1fr',
+              // Panel | drag handle | content. The handle gets a real column
+              // rather than floating over the panel edge, so it can't overlap
+              // the controls underneath. The track count stays at three
+              // whatever the panel's state, because `grid-template-columns`
+              // only animates between templates with matching track counts.
+              gridTemplateColumns: isNarrow
+                ? '1fr'
+                : `var(${FILTER_PANEL_WIDTH_VAR}) ` +
+                  `${filterPanelOpened ? FILTER_PANEL_RESIZER_WIDTH : 0}px 1fr`,
+              // Matches the panel's own toggle duration so the grid items,
+              // which animate on `body.panel-transitioning`, stay in lockstep.
+              // Dropped while dragging: the transition is for the collapse
+              // toggle, and easing every pointermove over 300ms is what makes
+              // the handle feel like it's being towed rather than moved.
+              transition: filterPanelResizing
+                ? 'none'
+                : 'grid-template-columns 300ms ease',
               flex: 1,
               minHeight: 0,
               width: '100%',
               gap: 4,
               overflow: 'hidden',
-            }}
+            } as React.CSSProperties}
           >
-            <Box
-              px={4}
-              py={4}
-              style={{
-                height: '100%',
-                minWidth: 0,
-                overflow: 'hidden',
-              }}
-            >
-              {/* Flex column, and the scroll lives on the filter list inside it
-                  rather than out here — that is what keeps the docked map
-                  pinned to the bottom while a long filter list scrolls past. */}
-              <Paper
-                p="md"
-                withBorder
-                radius="md"
+            {!isNarrow && (
+              <Box
+                px={4}
+                py={4}
                 style={{
+                  // The panel scrolls its own filter list, so this wrapper must
+                  // not scroll too — that is what keeps the docked map pinned
+                  // to the bottom while a long list scrolls past it.
                   height: '100%',
-                  display: 'flex',
-                  flexDirection: 'column',
+                  minWidth: 0,
                   overflow: 'hidden',
                 }}
-                data-tour-id="filter-panel"
               >
-                <Group
-                  justify="space-between"
-                  align="center"
-                  mb="sm"
-                  wrap="nowrap"
-                  style={{ flexShrink: 0 }}
-                >
-                  <Title order={5}>Filters</Title>
-                  <Button
-                    leftSection={<Icon icon="bx:reset" width={12} />}
-                    color="orange"
-                    variant="filled"
-                    size="xs"
-                    onClick={handleResetAllFilters}
-                    disabled={filters.length === 0}
-                  >
-                    Reset all
-                  </Button>
-                </Group>
-                <Box
-                  style={{
-                    flex: 1,
-                    minHeight: 0,
-                    overflowY: 'auto',
-                    overflowX: 'hidden',
-                    // Reserve the scrollbar's width so appearing/disappearing
-                    // doesn't re-measure the controls underneath.
-                    scrollbarGutter: 'stable',
-                  }}
-                >
-                  <Stack gap="sm">
-                    {leftComponents.length === 0 && (
-                      <Text size="sm" c="dimmed">No interactive components.</Text>
-                    )}
-                    {leftGroups.map((g) =>
-                      g.groupName ? (
-                        <InteractiveGroupCard
-                          key={g.key}
-                          groupName={g.groupName}
-                          members={g.members}
-                          filters={filters}
-                          onFilterChange={handleFilterChange}
-                          refreshTick={refreshTick}
-                        />
-                      ) : (
-                        <ComponentRenderer
-                          key={g.key}
-                          metadata={g.members[0]}
-                          filters={filters}
-                          onFilterChange={handleFilterChange}
-                          refreshTick={refreshTick}
-                        />
-                      ),
-                    )}
-                    {hasSelectionFilters(filters) && (
-                      <Anchor
-                        component="button"
-                        onClick={() =>
-                          setFilters((prev) => prev.filter((f) => f.source === undefined))
-                        }
-                        size="xs"
-                        mt="xs"
-                      >
-                        Clear chart selections
-                      </Anchor>
-                    )}
-                  </Stack>
-                </Box>
-                <MapPanelDock
-                  panel={mapPanel}
+                <FilterPanel
+                  components={leftComponents}
+                  allMetadata={summaryMetadata}
                   filters={filters}
                   onFilterChange={handleFilterChange}
+                  onResetAllFilters={handleResetAllFilters}
+                  layoutData={dashboard.left_panel_layout_data}
+                  filterSections={dashboard.filter_sections}
+                  dashboardId={dashboardId}
                   refreshTick={refreshTick}
+                  collapsed={!filterPanelOpened}
+                  onToggleCollapsed={toggleFilterPanel}
+                  footer={
+                    <MapPanelDock
+                      panel={mapPanel}
+                      filters={filters}
+                      onFilterChange={handleFilterChange}
+                      refreshTick={refreshTick}
+                    />
+                  }
                 />
-              </Paper>
-            </Box>
+              </Box>
+            )}
+            {!isNarrow && (
+              <FilterPanelResizer
+                onPointerDown={beginFilterPanelResize}
+                onNudge={nudgeFilterPanelWidth}
+                collapsed={!filterPanelOpened}
+              />
+            )}
             <Box
               px={4}
               py={4}
@@ -839,6 +864,7 @@ const App: React.FC = () => {
                     dashboardId={dashboardId!}
                     metadataList={rightComponents}
                     layoutData={dashboard.right_panel_layout_data}
+                    gridSections={dashboard.grid_sections}
                     filters={deferredFilters}
                     onFilterChange={handleFilterChange}
                     cardValues={cardValues}
@@ -879,7 +905,30 @@ const App: React.FC = () => {
           )}
           </div>
         )}
-        {dashboard && dashboardId && (
+        {/* Narrow screens: the panel the grid no longer has room for. No
+            collapse control inside — the drawer's own close is the way out. */}
+        {dashboard && isNarrow && (
+          <Drawer
+            opened={filterDrawerOpened}
+            onClose={closeFilterDrawer}
+            position="left"
+            size="min(320px, 85vw)"
+            title="Filters"
+          >
+            <FilterPanel
+              components={leftComponents}
+              allMetadata={summaryMetadata}
+              filters={filters}
+              onFilterChange={handleFilterChange}
+              onResetAllFilters={handleResetAllFilters}
+              layoutData={dashboard.left_panel_layout_data}
+              filterSections={dashboard.filter_sections}
+              dashboardId={dashboardId}
+              refreshTick={refreshTick}
+            />
+          </Drawer>
+        )}
+        {dashboard && dashboardId && !inspectorEnabled && (
           <NotesFooter
             dashboardId={dashboardId}
             initialContent={(dashboard.notes_content as string) ?? ''}
@@ -896,12 +945,19 @@ const App: React.FC = () => {
         )}
       </AppShell.Main>
 
+      {inspectorEnabled && (
+        <AppShell.Aside p={0}>
+          <Inspector dashboard={dashboard} dashboardId={dashboardId} />
+        </AppShell.Aside>
+      )}
+
       <SettingsDrawer
         opened={settingsOpened}
         onClose={closeSettings}
         dashboard={dashboard}
       />
     </AppShell>
+      </InspectorProviders>
       </DashboardLoadingProvider>
     </AvailableFilterValuesProvider>
   );

@@ -20,7 +20,14 @@ import SunburstRenderer from './SunburstRenderer';
 import OncoplotRenderer from './OncoplotRenderer';
 import CoverageTrackRenderer from './CoverageTrackRenderer';
 import SankeyRenderer from './SankeyRenderer';
-import { AdvancedVizExtrasProvider } from './AdvancedVizExtras';
+import {
+  AdvancedVizDataPopover,
+  AdvancedVizExtrasProvider,
+  AdvancedVizSettingsPopover,
+} from './AdvancedVizExtras';
+import type { AdvancedVizExtrasPayload } from './AdvancedVizExtras';
+import { useAdvancedVizInspector } from './AdvancedVizInspectorBridge';
+import LoadAllButton from '../chrome/LoadAllButton';
 import { ComponentIndexContext } from '../DashboardLoadingProvider';
 
 interface AdvancedVizDispatchProps {
@@ -69,11 +76,16 @@ const RENDERERS: Record<string, React.ComponentType<any>> = {
  * from ComponentRenderer as a single async chunk. A dashboard with no
  * advanced_viz component never loads any of it.
  *
- * Holds a useState for the Settings + Show-data popovers the framed renderer
- * publishes via AdvancedVizExtrasContext. The published JSX is appended to
- * the standard chrome icons (metadata + fullscreen + reset) via the
- * `extraActions` slot so all the action icons land in the same hover-revealed
- * row with matching Mantine styling.
+ * Holds the payload the framed renderer publishes via
+ * AdvancedVizExtrasContext, and turns it into the Settings + Show-data
+ * popovers. Those are appended to the standard chrome icons (metadata +
+ * fullscreen + reset) via the `extraActions` slot so all the action icons land
+ * in the same hover-revealed row with matching Mantine styling.
+ *
+ * The same payload is forwarded to the app's inspector when one is mounted, so
+ * the docked panel can present the identical controls and data. Both surfaces
+ * read one payload — the popovers keep working unchanged with the inspector
+ * off, which is what makes the feature safe to ship behind a flag.
  */
 const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
   metadata,
@@ -82,7 +94,40 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
   extraActions,
   showDragHandle,
 }) => {
-  const [publishedExtras, setPublishedExtras] = React.useState<React.ReactNode>(null);
+  const [published, setPublished] = React.useState<AdvancedVizExtrasPayload | null>(null);
+
+  // Forward to the inspector, when the app mounted one. Keyed by component so
+  // the panel can show whichever component is selected.
+  const publishToInspector = useAdvancedVizInspector();
+  React.useEffect(() => {
+    if (!publishToInspector) return;
+    publishToInspector(metadata.index, published);
+    return () => publishToInspector(metadata.index, null);
+  }, [publishToInspector, metadata.index, published]);
+
+  // Rebuild the popovers from the payload — byte-for-byte what the frame used
+  // to publish ready-made.
+  const popovers = React.useMemo<React.ReactNode>(() => {
+    if (!published) return null;
+    const nodes: React.ReactNode[] = [];
+    if (published.controls) {
+      nodes.push(<AdvancedVizSettingsPopover key="settings" controls={published.controls} />);
+    }
+    if (published.data) {
+      nodes.push(
+        <AdvancedVizDataPopover
+          key="data"
+          dataRows={published.data.rows}
+          dataColumns={published.data.columns}
+          tierAnnotation={published.data.tierAnnotation}
+        />,
+      );
+    }
+    if (published.reduction) {
+      nodes.push(<LoadAllButton key="load-all" state={published.reduction} />);
+    }
+    return nodes.length ? <>{nodes}</> : null;
+  }, [published]);
 
   const vizKind = (metadata.viz_kind as string) || '';
   const Renderer = RENDERERS[vizKind];
@@ -94,9 +139,9 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
     </div>
   );
 
-  const combinedExtras = publishedExtras || extraActions ? (
+  const combinedExtras = popovers || extraActions ? (
     <>
-      {publishedExtras}
+      {popovers}
       {extraActions}
     </>
   ) : undefined;
@@ -105,7 +150,7 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
     'advanced_viz',
     metadata,
     undefined,
-    <AdvancedVizExtrasProvider onChange={setPublishedExtras}>
+    <AdvancedVizExtrasProvider onChange={setPublished}>
       <ComponentIndexContext.Provider value={metadata.index}>
         {inner}
       </ComponentIndexContext.Provider>

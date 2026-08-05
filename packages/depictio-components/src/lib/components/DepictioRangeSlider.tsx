@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Paper, Stack, Text, Group, RangeSlider } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
+import CompactControlSlot from './CompactControlSlot';
+
 /**
  * RangeSlider interactive filter — selects a numeric [min, max] range.
  * Mirrors what `_build_select_component` produces for
@@ -149,6 +151,11 @@ const DepictioRangeSlider: React.FC<DepictioRangeSliderProps> = ({
   const sliderMb = compact ? (show_marks ? 'sm' : 0) : 'xs';
   const slider = (
     <RangeSlider
+      // Pulls the first and last mark labels inside the track. The rule lives in
+      // depictio-react-core's `sliderMarks.css`, which this package cannot
+      // import — same split as `markLabel` below, and the two have to stay in
+      // step because the Filters panel stacks both sliders.
+      className="depictio-slider-marks"
       min={safeMin}
       max={safeMax}
       step={step ?? (safeMax - safeMin) / 100}
@@ -204,7 +211,7 @@ const DepictioRangeSlider: React.FC<DepictioRangeSliderProps> = ({
           </Text>
         </Group>
       )}
-      {slider}
+      <CompactControlSlot compact={compact}>{slider}</CompactControlSlot>
     </Stack>
   );
 

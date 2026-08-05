@@ -31,10 +31,24 @@
   position: absolute;
   top: 10px;
   right: 10px;
-  opacity: 0.3;
+  /* Hidden at rest, revealed on the card the pointer is over. At 0.3 and
+     always on, the mark competed with the content it sits behind: on cards
+     carrying a secondary strip it landed on top of the bars and their labels.
+     Note this is a decoration and only a decoration — the card's title says
+     what the metric is, so nothing is lost where hover doesn't exist (touch,
+     and the Playwright screenshots behind the dashboard gallery). */
+  opacity: 0;
   pointer-events: none;
   z-index: 1;
-  transition: top 120ms ease-out, right 120ms ease-out, transform 120ms ease-out;
+  transition:
+    opacity 140ms ease-out,
+    top 120ms ease-out,
+    right 120ms ease-out,
+    transform 120ms ease-out;
+}
+
+.depictio-card:hover .depictio-card-icon {
+  opacity: 0.3;
 }
 
 .depictio-card-icon svg {
@@ -46,7 +60,11 @@
 /* When the card itself is wide (≈ ``w >= 4`` in the 8-col grid), centre the
    icon vertically on the right side and scale it up so it visually anchors
    the empty right half of the card. Keeps opacity low so it reads as a
-   watermark, not a competing focus point with the value text. */
+   watermark, not a competing focus point with the value text.
+
+   Narrow cards keep the top-right anchor, which is also where the hover chrome
+   (drag / info / fullscreen / ⋮) appears — the two now reveal together, so the
+   icon stays behind them at 0.3 rather than in front of anything. */
 @container depictio-card (min-width: 400px) {
   .depictio-card-icon {
     top: 50%;

@@ -246,6 +246,11 @@ depictio/api/static/screenshots/**
 # 646b0f3c1e4a2d7f8e5b8..., viralrecon 746b0f3c1e4a2d7f8e5b9...); runtime
 # dashboards get random ObjectIds and stay ignored.
 !depictio/api/static/screenshots/?46b0f3c1e4a2d7f8e5b*.png
+# Iris Petal Analysis (6a720e8b59acf2d013e48100) — a static-ID init dashboard
+# like iris and penguins, but not yet created by db_init, so this thumbnail is
+# ahead of the seeding it belongs to.
+!depictio/api/static/screenshots/6a720e8b59acf2d013e48100_light.png
+!depictio/api/static/screenshots/6a720e8b59acf2d013e48100_dark.png
 
 # Ensure parent directories are also un-ignored
 !depictio/

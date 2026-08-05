@@ -270,8 +270,13 @@ export interface StoredMetadata {
   interactive_component_type?: string;
   default_state?: { default_value?: unknown; default_range?: unknown; options?: unknown[] };
   /** Visual grouping — interactive components sharing the same `group` are
-   *  rendered together inside one Mantine Paper. Up to 3 per group. */
+   *  rendered together inside one collapsible Mantine Paper. See
+   *  MAX_INTERACTIVE_GROUP_SIZE in depictio/models/components/constants.py. */
   group?: string;
+  /** Outer level of the filter panel: components sharing a `section` render
+   *  inside one accordion item. Presentation comes from
+   *  `DashboardData.filter_sections`. */
+  section?: string;
   /** Layout placement. The allowed values depend on the component type:
    *  interactive components use 'left' (default — Filters sidebar) or 'top'
    *  (top panel above the grid, currently 'Timeline' only); maps use 'grid'
@@ -301,6 +306,18 @@ export interface StoredMetadata {
   [key: string]: unknown;
 }
 
+/** Presentation of one left-panel filter section. Mirrors FilterSectionSpec in
+ *  depictio/models/models/dashboards.py. */
+export interface FilterSectionSpec {
+  name: string;
+  icon?: string | null;
+  /** Mantine palette name. Unset renders neutral; an unrecognised name falls
+   *  back to the theme default rather than throwing. */
+  color?: string | null;
+  description?: string | null;
+  collapsed?: boolean;
+}
+
 export interface DashboardData {
   _id?: string;
   dashboard_id?: string;
@@ -310,6 +327,9 @@ export interface DashboardData {
   stored_layout_data?: unknown;
   left_panel_layout_data?: unknown;
   right_panel_layout_data?: unknown;
+  /** Ordering + icons for the left panel's filter sections. */
+  filter_sections?: FilterSectionSpec[];
+  grid_sections?: FilterSectionSpec[];
   /** Project-level realtime config — only when ``enabled === true`` should
    *  the viewer mount the WebSocket subscription / live-updates indicator. */
   project_realtime?: { enabled: boolean; debounce_ms: number };
@@ -2023,6 +2043,9 @@ export interface AuthStatusResponse {
   temporary_user_expiry_hours?: number;
   /** Sub-hour component of the temporary-user TTL. */
   temporary_user_expiry_minutes?: number;
+  /** Component inspector feature flag. Older backends omit this — treat absent
+   *  as `false`, which keeps the inspect action off everywhere. */
+  inspector_enabled?: boolean;
 }
 
 /** Session payload persisted to localStorage['local-store'] on successful auth.

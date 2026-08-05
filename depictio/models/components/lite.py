@@ -30,6 +30,7 @@ from depictio.models.components.constants import (
     MAP_PLACEMENTS,
     MAP_STYLES,
     MAP_TYPES,
+    MAX_INTERACTIVE_GROUP_SIZE,
     TIMELINE_TIMESCALES,
     TOP_PANEL_INTERACTIVE_TYPES,
     VISU_TYPES,
@@ -67,6 +68,17 @@ class BaseLiteComponent(BaseModel):
     title_align: str = Field(
         default="left",
         description="Title alignment: 'left' (default), 'center', or 'right'",
+    )
+
+    # Layout
+    section: str | None = Field(
+        default=None,
+        description="Optional section name. Components sharing a section render "
+        "together under one collapsible accordion header — in the left filter panel "
+        "for interactive components, in the main grid for every other type. "
+        "Components with no section render above the first section. Declare a "
+        "section's icon and default collapse state via the dashboard-level "
+        "`filter_sections` (left panel) or `grid_sections` (main grid) list.",
     )
 
     # Data source references (human-readable tags)
@@ -465,7 +477,8 @@ class InteractiveLiteComponent(BaseLiteComponent):
     group: str | None = Field(
         default=None,
         description="Optional group identifier. Interactive components sharing the same "
-        "group are rendered together inside one card. Up to 3 components per group.",
+        "group are rendered together inside one collapsible card. Up to "
+        f"{MAX_INTERACTIVE_GROUP_SIZE} components per group.",
     )
 
     # Timeline-specific
@@ -585,8 +598,13 @@ class TextLiteComponent(BaseLiteComponent):
     alignment: Literal["left", "center", "right"] = Field(
         default="left", description="Horizontal alignment of the title and body"
     )
+    # Centred rather than top-aligned, because a text tile is almost never the
+    # height of its own text: the grid sizes it in whole row units, so a
+    # one-line heading in an `h: 2` tile spends the remainder as dead space
+    # under the text and reads as a rendering slip rather than a choice. Top
+    # alignment is still one word away for anyone who wants it.
     vertical_alignment: Literal["top", "center", "bottom"] = Field(
-        default="top",
+        default="center",
         description="Vertical placement of the text block within its tile",
     )
     body: str = Field(default="", description="Optional paragraph below the heading")

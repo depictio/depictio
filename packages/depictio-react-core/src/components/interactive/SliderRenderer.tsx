@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Text, Slider } from '@mantine/core';
+import { CompactControlSlot } from 'depictio-components';
 
 import { ColumnRange, fetchColumnRange, InteractiveFilter, StoredMetadata } from '../../api';
 import ComponentSkeleton from '../ComponentSkeleton';
@@ -7,6 +8,7 @@ import {
   InteractiveFrame,
   InteractiveTitle,
   SLIDER_MARK_LABEL_STYLE,
+  SLIDER_MARKS_CLASS,
   interactiveAccent,
 } from './frame';
 import { buildNumericScale, formatSliderValue } from './numericScale';
@@ -187,31 +189,34 @@ const SliderRenderer: React.FC<{
           </Text>
         }
       />
-      <Slider
-        min={bounds.min}
-        max={bounds.max}
-        step={scale.step}
-        restrictToMarks={scale.discrete}
-        value={value}
-        onChangeEnd={handleChange}
-        marks={marks}
-        size={compact ? 'sm' : 'md'}
-        thumbSize={compact ? 12 : undefined}
-        color={accent && !rawAccent ? accent : undefined}
-        styles={{
-          markLabel: SLIDER_MARK_LABEL_STYLE,
-          ...(accent && rawAccent
-            ? {
-                bar: { backgroundColor: accent },
-                thumb: { borderColor: accent, backgroundColor: accent },
-              }
-            : {}),
-        }}
-        label={readout}
-        // Mark labels hang below the track, so they need the room a compact
-        // slider otherwise gives away.
-        mb={compact ? (marksVisible ? 'sm' : 0) : 'xs'}
-      />
+      <CompactControlSlot compact={compact}>
+        <Slider
+          className={SLIDER_MARKS_CLASS}
+          min={bounds.min}
+          max={bounds.max}
+          step={scale.step}
+          restrictToMarks={scale.discrete}
+          value={value}
+          onChangeEnd={handleChange}
+          marks={marks}
+          size={compact ? 'sm' : 'md'}
+          thumbSize={compact ? 12 : undefined}
+          color={accent && !rawAccent ? accent : undefined}
+          styles={{
+            markLabel: SLIDER_MARK_LABEL_STYLE,
+            ...(accent && rawAccent
+              ? {
+                  bar: { backgroundColor: accent },
+                  thumb: { borderColor: accent, backgroundColor: accent },
+                }
+              : {}),
+          }}
+          label={readout}
+          // Mark labels hang below the track, so they need the room a compact
+          // slider otherwise gives away.
+          mb={compact ? (marksVisible ? 'sm' : 0) : 'xs'}
+        />
+      </CompactControlSlot>
     </InteractiveFrame>
   );
 };
