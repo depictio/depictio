@@ -74,6 +74,18 @@ export function tableFor(dcId: string): Promise<{ ref: DataRef; handle: TableHan
   return entry;
 }
 
+/** JSON-serialisable form of one engine cell.
+ *
+ *  hyparquet decodes Int64/UInt64 as BigInt, which no renderer expects: the
+ *  server ships plain JSON numbers, and arithmetic on a BigInt throws
+ *  ("Cannot convert a BigInt value to a number") — one such throw in a
+ *  renderer's useMemo unmounts the whole app, not just its tile. Widening to
+ *  Number matches the wire format; values beyond 2^53 lose precision exactly
+ *  as they would in the server's own JSON. */
+function jsonNumber(value: unknown): unknown {
+  return typeof value === 'bigint' ? Number(value) : value;
+}
+
 /** Parse the ISO-ish strings the date pickers emit into epoch-microseconds,
  *  as WALL-CLOCK time — the server parses them into naive datetimes
  *  (add_filter:290-306) and the `__ts__` companions epoch wall-clock too, so
@@ -384,7 +396,7 @@ export async function computeCardsLive(
       return min === null || max === null ? null : max - min;
     }
     const [value] = await engine.aggregate(handle, mask, [{ col: column, fn }]);
-    return value;
+    return jsonNumber(value);
   };
 
   await Promise.all(
@@ -714,7 +726,7 @@ export async function fetchAdvancedVizDataLive(
     const values = rows[name] ?? [];
     payload[name] = FLOAT_DTYPE_RE.test(schema.get(name) ?? '')
       ? values.map(roundSigFigs)
-      : values;
+      : values.map(jsonNumber);
   }
 
   return {
@@ -821,7 +833,11 @@ export async function renderTableLive(
       headerName: titleCaseHeader(c.name),
       type: NUMERIC_DTYPE_RE.test(c.dtype) ? 'numericColumn' : 'text',
     })),
-    rows,
+    rows: rows.map((row) => {
+      const out: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(row)) out[key] = jsonNumber(value);
+      return out;
+    }),
     total,
     sort_by: chosen,
     sort_dir: dir,
@@ -854,7 +870,7 @@ export async function columnRangeLive(
 ): Promise<{ min: number | null; max: number | null }> {
   const { handle } = await tableFor(dcId);
   const [min, max] = await engine.minMax(handle, null, columnName);
-  return { min, max };
+  return { min: jsonNumber(min) as number | null, max: jsonNumber(max) as number | null };
 }
 
 /** Specs in the list shape fetchColumnRange's real implementation expects —
@@ -866,7 +882,7 @@ export async function specsLive(dcId: string): Promise<Record<string, unknown>> 
   const entries = await Promise.all(
     (ref.columns ?? []).map(async (c) => {
       const [min, max] = await engine.minMax(handle, null, c.name);
-      return { name: c.name, type: c.dtype, specs: { min, max } };
+      return { name: c.name, type: c.dtype, specs: { min: jsonNumber(min), max: jsonNumber(max) } };
     }),
   );
   return entries as unknown as Record<string, unknown>;
