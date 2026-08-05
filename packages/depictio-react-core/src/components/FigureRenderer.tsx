@@ -15,6 +15,7 @@ import Plot from 'react-plotly.js';
 import Plotly from 'plotly.js';
 
 import { renderFigure, InteractiveFilter, StoredMetadata, FigureResponse } from '../api';
+import type { GroupRenderState } from '../selectionGroups';
 import { enqueueFetch, isStaleFetch } from '../fetchQueue';
 import { extractScatterSelection } from '../selection';
 import { useInView } from '../hooks/useInView';
@@ -43,6 +44,9 @@ interface FigureRendererProps {
   /** Reports the sample/full state so the chrome can render a "load all points"
    *  action icon. ``null`` when the figure isn't downsampled. */
   onLoadAllState?: (state: LoadAllState | null) => void;
+  /** Selection groups to color the figure by. Folded into the render request;
+   *  the server annotates rows and colors traces by group membership. */
+  groupRender?: GroupRenderState;
 }
 
 /**
@@ -65,6 +69,7 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
   refreshTick,
   activeHighlight,
   onLoadAllState,
+  groupRender,
 }) => {
   const [figure, setFigure] = useState<{ data?: unknown[]; layout?: Record<string, unknown> } | null>(null);
   const [renderMeta, setRenderMeta] = useState<FigureResponse['metadata'] | null>(null);
@@ -136,6 +141,9 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
           theme,
           fullLoad,
           ctrl.signal,
+          groupRender
+            ? { groups: groupRender.groups, colorByGroup: groupRender.colorByGroup }
+            : undefined,
         ),
       metadata.layout?.y ?? 0,
     )
@@ -163,7 +171,7 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
       ctrl.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dashboardId, metadata.index, JSON.stringify(filtersForFetch), theme, inView, refreshTick, fullLoad]);
+  }, [dashboardId, metadata.index, JSON.stringify(filtersForFetch), theme, inView, refreshTick, fullLoad, JSON.stringify(groupRender ?? null)]);
 
   // First-paint loader vs refetch overlay: only show the big "Rendering…"
   // block until we have something to show; subsequent fetches keep the
@@ -434,6 +442,17 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
     return null;
   }, [renderMeta, fullLoad]);
 
+  // "Grouped" tag: the server confirmed it colored this figure by the user's
+  // selection groups (it may decline, e.g. when the group column isn't in this
+  // figure's data collection). Explicit because group coloring temporarily
+  // overrides the figure's own `color` mapping.
+  const groupedBadge =
+    renderMeta?.group_colored ? (
+      <Badge variant="light" color="blue" size="xs" radius="sm">
+        grouped
+      </Badge>
+    ) : null;
+
   // Publish the sample/full state so the chrome can render the "load all points"
   // action icon in the same cluster as reset / fullscreen. Bidirectional: the
   // toggle flips back to the sampled view once fully loaded.
@@ -468,7 +487,7 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
         flexDirection: 'column',
       }}
     >
-      {(metadata.title || reductionBadge) && (
+      {(metadata.title || reductionBadge || groupedBadge) && (
         <Group gap="xs" mb="xs" wrap="nowrap">
           {metadata.title && (
             <Text fw={600} size="sm">
@@ -476,6 +495,7 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
             </Text>
           )}
           {reductionBadge}
+          {groupedBadge}
         </Group>
       )}
       {showInitialLoader && <ComponentSkeleton variant="block" />}

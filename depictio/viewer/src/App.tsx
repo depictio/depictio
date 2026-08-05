@@ -47,6 +47,8 @@ import {
   persistableCrossTabFilters,
   FILTER_PANEL_RAIL_WIDTH,
   countActiveFilters,
+  useSelectionGroups,
+  SelectionGroupsPanel,
 } from 'depictio-react-core';
 import type {
   DashboardData,
@@ -128,12 +130,23 @@ const App: React.FC = () => {
   if (hydratedIndicesRef.current === null) {
     hydratedIndicesRef.current = new Set(filters.map((f) => f.index));
   }
+  // Saved selection groups ("select & compare"): annotation state kept apart
+  // from `filters` — the user's filter list stays theirs, and the active
+  // groups are only *composed in* at the fetch boundary below. That keeps
+  // group entries out of mergeFiltersBySource / the clear-chip path, where a
+  // derived filter could not be cleared meaningfully.
+  const groupsApi = useSelectionGroups(extractDashboardId() ?? undefined);
+  const combinedFilters = useMemo(
+    () =>
+      groupsApi.groupFilters.length > 0 ? [...filters, ...groupsApi.groupFilters] : filters,
+    [filters, groupsApi.groupFilters],
+  );
   // Data fetches follow a *settled* filter, not every intermediate value of one.
   // Interactive components keep reading `filters` directly so their own UI stays
   // instant; only the components that hit the API wait for the pause. Without
   // this, picking three values in a MultiSelect fires three full rounds of
   // renders and the first two are obsolete before they land.
-  const [deferredFilters] = useDebouncedValue(filters, FILTER_DEBOUNCE_MS);
+  const [deferredFilters] = useDebouncedValue(combinedFilters, FILTER_DEBOUNCE_MS);
 
   // Funnel filtering (issue #939). The dashboard's `funnel_filtering` field is
   // the author's default; the panel button flips it for this page view only
@@ -652,6 +665,22 @@ const App: React.FC = () => {
       .filter((s) => !names.has(s.name));
     return foreign.length ? [...own, ...foreign] : own;
   }, [dashboard, foreignFilterSections]);
+  // One node, mounted in whichever FilterPanel is on screen (desktop panel or
+  // narrow drawer — never both at once).
+  const groupsSection = (
+    <SelectionGroupsPanel
+      filters={filters}
+      components={summaryMetadata}
+      groups={groupsApi.groups}
+      colorByGroup={groupsApi.colorByGroup}
+      onCreateGroup={groupsApi.createGroupFromFilter}
+      onClearSelection={handleFilterChange}
+      onRenameGroup={groupsApi.renameGroup}
+      onDeleteGroup={groupsApi.deleteGroup}
+      onToggleGroupFilter={groupsApi.toggleGroupFilter}
+      onColorByGroupChange={groupsApi.setColorByGroup}
+    />
+  );
   const cardComponents = useMemo(
     () => (dashboard?.stored_metadata || []).filter((m) => m.component_type === 'card'),
     [dashboard],
@@ -912,6 +941,7 @@ const App: React.FC = () => {
                     onToggle: () => setFunnelEnabled((v) => !v),
                     onOpenView: () => setFunnelViewOpen(true),
                   }}
+                  groupsSection={groupsSection}
                   footer={
                     <MapPanelDock
                       panel={mapPanel}
@@ -1014,6 +1044,11 @@ const App: React.FC = () => {
                     cardValuesLoading={cardsLoading}
                     refreshTick={refreshTick}
                     activeHighlight={activeHighlight}
+                    groupRender={
+                      groupsApi.colorByGroup && groupsApi.renderGroups.length > 0
+                        ? { groups: groupsApi.renderGroups, colorByGroup: true }
+                        : undefined
+                    }
                     isDraggable={false}
                     isResizable={false}
                     editMode={false}
@@ -1082,6 +1117,7 @@ const App: React.FC = () => {
                 onToggle: () => setFunnelEnabled((v) => !v),
                 onOpenView: () => setFunnelViewOpen(true),
               }}
+              groupsSection={groupsSection}
             />
           </Drawer>
         )}

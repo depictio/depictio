@@ -2518,17 +2518,26 @@ async def render_figure_endpoint(
     code path on the worker.
 
     Request body:
-        {"filters": [...], "theme": "light" | "dark", "full_load": bool}
+        {"filters": [...], "theme": "light" | "dark", "full_load": bool,
+         "groups": [{name, column_name, values, color}], "color_by_group": bool}
 
     ``full_load`` (default False) bypasses the point-plot row cap so the client
     can explicitly render every point on demand (slow on large datasets).
 
+    ``groups`` + ``color_by_group`` (optional) ask for the figure to be colored
+    by the caller's selection groups (issue #89); sanitized here at the trust
+    boundary, applied in ``build_figure_preview``.
+
     Response:
         {"figure": <plotly fig dict>, "metadata": {visu_type, ...}}
     """
+    from depictio.api.v1.services.figure.groups import sanitize_group_defs
+
     filters = request.get("filters") or []
     theme = request.get("theme") or "light"
     full_load = bool(request.get("full_load", False))
+    group_defs = sanitize_group_defs(request.get("groups"))
+    color_by_group = bool(request.get("color_by_group", False)) and bool(group_defs)
 
     dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
     if not dashboard_data:
@@ -2610,6 +2619,9 @@ async def render_figure_endpoint(
         "theme": theme,
         "full_load": full_load,
     }
+    if color_by_group:
+        payload["groups"] = group_defs
+        payload["color_by_group"] = True
     import time as _time
 
     _t0 = _time.perf_counter()

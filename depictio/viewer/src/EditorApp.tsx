@@ -87,6 +87,8 @@ import {
   countActiveFilters,
   readEditorFilters,
   writeEditorFilters,
+  useSelectionGroups,
+  SelectionGroupsPanel,
 } from 'depictio-react-core';
 import type {
   DashboardData,
@@ -99,6 +101,7 @@ import type {
   RealtimeMode,
   ActiveHighlight,
   RealtimeJournalEntry,
+  GroupRenderDef,
 } from 'depictio-react-core';
 
 import GridItemEditOverlay from './components/GridItemEditOverlay';
@@ -246,6 +249,16 @@ const EditorApp: React.FC = () => {
 
   const dashboardId = extractDashboardId();
 
+  // Saved selection groups — same hook and same storage key as the viewer, so
+  // groups made in one mode are visible in the other. Groups stay out of the
+  // `filters` state and are composed in only where data is fetched.
+  const groupsApi = useSelectionGroups(dashboardId ?? undefined);
+  const combinedFilters = useMemo(
+    () =>
+      groupsApi.groupFilters.length > 0 ? [...filters, ...groupsApi.groupFilters] : filters,
+    [filters, groupsApi.groupFilters],
+  );
+
   // Left filter panel chrome — same hooks and same storage keys as the viewer,
   // so collapsing or resizing in one mode carries over to the other.
   const {
@@ -349,7 +362,7 @@ const EditorApp: React.FC = () => {
       // snapping to ``…``. See App.tsx for the matching change.
       if (bulkCtrl.current) bulkCtrl.current.abort();
       bulkCtrl.current = new AbortController();
-      bulkComputeCards(dashboardId, filters, cardIds)
+      bulkComputeCards(dashboardId, combinedFilters, cardIds)
         .then((res) => {
           setCardValues(res.values);
           setCardSecondaryValues(res.secondary_values || {});
@@ -362,7 +375,7 @@ const EditorApp: React.FC = () => {
         .finally(() => setCardsLoading(false));
     }, 250);
     return () => clearTimeout(timer);
-  }, [dashboard, dashboardId, stableFilterKey(filters)]);
+  }, [dashboard, dashboardId, stableFilterKey(combinedFilters)]);
 
   // Mirror the live filters into the per-tab store so they survive the
   // builder's full-page round-trip (see editorFilters.ts). Writing on every
@@ -944,6 +957,22 @@ const EditorApp: React.FC = () => {
   );
 
   const handleResetAllFilters = useCallback(() => setFilters([]), []);
+
+  // One node, mounted in whichever FilterPanel is on screen (mirrors App.tsx).
+  const groupsSection = (
+    <SelectionGroupsPanel
+      filters={filters}
+      components={dashboard?.stored_metadata ?? []}
+      groups={groupsApi.groups}
+      colorByGroup={groupsApi.colorByGroup}
+      onCreateGroup={groupsApi.createGroupFromFilter}
+      onClearSelection={handleFilterChange}
+      onRenameGroup={groupsApi.renameGroup}
+      onDeleteGroup={groupsApi.deleteGroup}
+      onToggleGroupFilter={groupsApi.toggleGroupFilter}
+      onColorByGroupChange={groupsApi.setColorByGroup}
+    />
+  );
 
   // ---- Realtime: WebSocket subscription mirrors App.tsx ---------------------
   const [realtimeMode, setRealtimeMode] = useState<RealtimeMode>(() => {
@@ -1557,6 +1586,7 @@ const EditorApp: React.FC = () => {
                   onLayoutChange={handleLeftLayoutChange}
                   collapsed={!filterPanelOpened}
                   onToggleCollapsed={toggleFilterPanel}
+                  groupsSection={groupsSection}
                   footer={
                     <MapPanelDock
                       panel={mapPanel}
@@ -1605,7 +1635,12 @@ const EditorApp: React.FC = () => {
                 otherComponents={otherComponents}
                 layoutData={dashboard.right_panel_layout_data}
                 gridSections={dashboard.grid_sections}
-                filters={filters}
+                filters={combinedFilters}
+                groupRender={
+                  groupsApi.colorByGroup && groupsApi.renderGroups.length > 0
+                    ? { groups: groupsApi.renderGroups, colorByGroup: true }
+                    : undefined
+                }
                 onFilterChange={handleFilterChange}
                 cardValues={cardValues}
                 cardSecondaryValues={cardSecondaryValues}
@@ -1674,6 +1709,7 @@ const EditorApp: React.FC = () => {
               layoutData={dashboard.left_panel_layout_data}
               filterSections={panelFilterSections}
               dashboardId={dashboardId}
+              groupsSection={groupsSection}
             />
           </Drawer>
         )}
@@ -1762,6 +1798,7 @@ interface RightComponentGridProps {
   onDuplicateComponent: (componentId: string) => void;
   onAddComponent: () => void;
   activeHighlight?: ActiveHighlight | null;
+  groupRender?: { groups: GroupRenderDef[]; colorByGroup: boolean };
   /** Fired by each cell's "Move to section" action. The names on offer are
    *  derived from `gridSections`, which this component already receives. */
   onMoveToSection: (componentId: string, section: string | null) => void;
@@ -1793,6 +1830,7 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
   onDuplicateComponent,
   onAddComponent,
   activeHighlight,
+  groupRender,
   onMoveToSection,
   renderSectionActions,
 }) => {
@@ -1850,6 +1888,7 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
       cardSecondaryValues={cardSecondaryValues}
       cardValuesLoading={cardsLoading}
       activeHighlight={activeHighlight}
+      groupRender={groupRender}
       isDraggable={true}
       isResizable={true}
       editMode={true}

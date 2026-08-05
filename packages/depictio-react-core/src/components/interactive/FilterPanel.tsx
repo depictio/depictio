@@ -144,6 +144,10 @@ export interface FilterPanelProps {
     onToggle: () => void;
     onOpenView: () => void;
   };
+  /** Rendered between the header and the active-filter summary. Opaque for the
+   *  same reason as `footer`: the apps put the selection-groups panel here, and
+   *  its state (groups are not filters) is theirs to own. */
+  groupsSection?: React.ReactNode;
 }
 
 function readDensity(): FilterPanelDensity {
@@ -173,6 +177,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
   onToggleCollapsed,
   footer,
   funnel,
+  groupsSection,
 }) => {
   const [density, setDensity] = useState<FilterPanelDensity>(readDensity);
   const [search, setSearch] = useState('');
@@ -851,6 +856,8 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
           )}
         </Group>
       </Group>
+
+      {groupsSection}
 
       <ActiveFilterSummary
         filters={filters}
