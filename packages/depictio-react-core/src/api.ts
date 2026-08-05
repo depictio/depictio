@@ -8442,10 +8442,7 @@ export interface StaticExportJob {
 export async function preflightStaticExport(
   dashboardId: string,
 ): Promise<StaticExportPreflight> {
-  const res = await fetch(
-    `${API_BASE}/serverless/export-static/${dashboardId}/preflight`,
-    { headers: authHeaders() },
-  );
+  const res = await authFetch(`${API_BASE}/serverless/export-static/${dashboardId}/preflight`);
   if (!res.ok) await throwHttpDetailError(res, 'Static export preflight failed');
   return res.json();
 }
@@ -8455,9 +8452,8 @@ export async function preflightStaticExport(
 export async function dispatchStaticExport(
   dashboardId: string,
 ): Promise<StaticExportJob> {
-  const res = await fetch(`${API_BASE}/serverless/export-static/${dashboardId}`, {
+  const res = await authFetch(`${API_BASE}/serverless/export-static/${dashboardId}`, {
     method: 'POST',
-    headers: authHeaders(),
   });
   if (!res.ok) await throwHttpDetailError(res, 'Failed to dispatch static export');
   return res.json();
@@ -8465,9 +8461,7 @@ export async function dispatchStaticExport(
 
 /** Poll a previously-dispatched static export build. */
 export async function pollStaticExport(jobId: string): Promise<StaticExportJob> {
-  const res = await fetch(`${API_BASE}/serverless/export-static/status/${jobId}`, {
-    headers: authHeaders(),
-  });
+  const res = await authFetch(`${API_BASE}/serverless/export-static/status/${jobId}`);
   if (!res.ok) await throwHttpDetailError(res, 'Failed to poll static export');
   return res.json();
 }
@@ -8478,9 +8472,7 @@ export async function downloadStaticExport(
   jobId: string,
   filename: string,
 ): Promise<void> {
-  const res = await fetch(`${API_BASE}/serverless/export-static/download/${jobId}`, {
-    headers: authHeaders(),
-  });
+  const res = await authFetch(`${API_BASE}/serverless/export-static/download/${jobId}`);
   if (!res.ok) await throwHttpDetailError(res, 'Failed to download static export');
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);
