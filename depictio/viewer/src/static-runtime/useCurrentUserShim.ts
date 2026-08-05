@@ -25,6 +25,9 @@ const STATIC_RESULT: UseCurrentUserResult = {
   // bundle has no temp users, but keep the documented fallback shape.
   temporaryUserExpiryHours: 24,
   temporaryUserExpiryMinutes: 0,
+  // The inspector reads live component metadata from the server; a bundle has
+  // none, so the info and notes surfaces stay in their popover/drawer form.
+  inspectorEnabled: false,
   loading: false,
 };
 
