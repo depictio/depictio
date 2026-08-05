@@ -510,6 +510,11 @@ def build_multiqc_preview(payload: dict) -> dict:
 
         if not s3_locations:
             raise ValueError("No s3_locations resolved for general_stats preview.")
+        # The violin figure is built with `template="mantine_light"`
+        # (services/multiqc/general_stats_payload.py). Those templates are
+        # registered per-process, so without this the worker raises "Invalid
+        # value of type 'builtins.str' ... for the 'template' property".
+        _ensure_mantine_templates()
         parquet_path = _get_local_path_for_s3(s3_locations[0])
         gs_payload = build_general_stats_payload(parquet_path=parquet_path, show_hidden=True)
         violin = gs_payload.get("modes", {}).get("mean", {}).get("violin_figure") or {

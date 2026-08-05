@@ -348,6 +348,8 @@ def _ingest(
         capture_output=True,
         text=True,
         cwd=_REPO_ROOT,
+        # Opt into the per-phase marker lines `_aggregate_markers` parses.
+        env={**os.environ, "DEPICTIO_INGEST_TIMINGS": "1"},
     )
     return (time.perf_counter() - t0) * 1000.0, proc.stdout or ""
 
@@ -1337,7 +1339,10 @@ def _ingest_error_row(cell: Cell, server_mode: str, error: str) -> dict:
 def _run_cli_capture(args: list[str], cwd: str | Path | None = None) -> tuple[int, str, str, float]:
     """Run a depictio CLI subprocess, returning (rc, stdout, stderr, wall_ms)."""
     t0 = time.perf_counter()
-    proc = subprocess.run(args, capture_output=True, text=True, cwd=cwd)
+    # Per-phase markers are opt-in on the CLI side so ordinary runs stay quiet;
+    # `_aggregate_markers` below needs them, so turn them on for this subprocess.
+    env = {**os.environ, "DEPICTIO_INGEST_TIMINGS": "1"}
+    proc = subprocess.run(args, capture_output=True, text=True, cwd=cwd, env=env)
     wall_ms = (time.perf_counter() - t0) * 1000.0
     return proc.returncode, proc.stdout, proc.stderr, wall_ms
 
