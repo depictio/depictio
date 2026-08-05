@@ -21,10 +21,12 @@ export * from '../../../../packages/depictio-react-core/src/api';
 import type {
   DashboardData,
   DashboardSummary,
+  FigureResponse,
   InteractiveFilter,
 } from '../../../../packages/depictio-react-core/src/api';
 
 import { bundle, frozenPayload, interactiveIndexFor } from './bundle';
+import { themedFrozenFigure } from './mantinePlotlyTemplate';
 
 // ---- dashboard shell -------------------------------------------------------
 
@@ -52,8 +54,17 @@ export async function saveDashboardNotes(_dashboardId: string, _notes: unknown) 
 
 // ---- frozen render-path lookups (keyed by component index) -----------------
 
-export async function renderFigure(_dashboardId: string, componentId: string) {
-  return frozenPayload(componentId, 'figure') as never;
+export async function renderFigure(
+  _dashboardId: string,
+  componentId: string,
+  _filters: InteractiveFilter[] = [],
+  theme: 'light' | 'dark' = 'light',
+): Promise<FigureResponse> {
+  // FigureRenderer re-requests on every color-scheme flip (the live path
+  // sends `theme` to the server, which re-templates the figure). Offline
+  // equivalent: swap the frozen figure's layout.template with the matching
+  // client-side mantine template so frozen figures follow the theme too.
+  return themedFrozenFigure(frozenPayload<FigureResponse>(componentId, 'figure'), theme);
 }
 
 export async function renderMap(_dashboardId: string, componentId: string) {

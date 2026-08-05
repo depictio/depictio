@@ -2,11 +2,18 @@
  * Liveness badges for the serverless static runtime (RFC §3.2 / errata #6).
  *
  * The static runtime wraps the app in `StaticBadgeProvider` with the bundle
- * manifest's per-component tier map; `ComponentChrome` reads the context and
- * pins a badge top-left on every non-live component — always visible, never
- * hover-gated, so degraded fidelity cannot be missed. The normal server build
- * mounts no provider, the context stays `null`, and nothing renders — zero
- * cost and zero visual change outside static bundles.
+ * manifest's per-component tier map; `ComponentChrome` renders the badge as
+ * the first (always-visible) cell of its top-right action row on every
+ * non-live component — never hover-gated, so degraded fidelity cannot be
+ * missed, and never overlapping the component's own title/content (the action
+ * row is a flex row/column, so the hover-revealed icons lay out AFTER the
+ * badge instead of on top of it). The normal server build mounts no provider,
+ * the context stays `null`, and nothing renders — zero cost and zero visual
+ * change outside static bundles.
+ *
+ * The provider doubles as the "running inside a static bundle" signal:
+ * `useIsStaticBundle()` lets chrome components hide affordances that cannot
+ * work without a backend (edit buttons, management links, auth badges).
  *
  * A context (read inside `ComponentChrome`, a real component) rather than a
  * `wrapWithChrome` opt: one of the ten chrome call sites lives in the
@@ -35,6 +42,14 @@ export const StaticBadgeProvider: React.FC<{
   <StaticBadgeContext.Provider value={tiers}>{children}</StaticBadgeContext.Provider>
 );
 
+/** True when a `StaticBadgeProvider` is mounted above the caller — i.e. the
+ *  app is running inside a serverless static bundle. Server builds mount no
+ *  provider, so this is a zero-cost `false` there. Used to hide affordances
+ *  that need a backend (edit / management navigation, auth chrome). */
+export function useIsStaticBundle(): boolean {
+  return useContext(StaticBadgeContext) !== null;
+}
+
 const BADGE_LABEL: Record<string, string> = {
   partial: 'Partial',
   frozen: 'Frozen',
@@ -47,7 +62,13 @@ const BADGE_COLOR: Record<string, string> = {
   omitted: 'gray',
 };
 
-/** Rendered by ComponentChrome; null outside a static bundle or for live tiers. */
+/**
+ * Rendered by ComponentChrome as the first cell of its action row; null
+ * outside a static bundle or for live tiers. The `depictio-static-tier-badge`
+ * wrapper class exempts it from the row's hover-only opacity rule (see
+ * chrome.css) so the badge stays visible without hover while the action icons
+ * next to it keep their hover-reveal behavior.
+ */
 export const StaticTierBadge: React.FC<{ componentIndex: string | undefined }> = ({
   componentIndex,
 }) => {
@@ -60,25 +81,36 @@ export const StaticTierBadge: React.FC<{ componentIndex: string | undefined }> =
       size="xs"
       variant="light"
       color={BADGE_COLOR[entry.tier] ?? 'gray'}
-      style={{
-        position: 'absolute',
-        top: 4,
-        left: 4,
-        zIndex: 5,
-        pointerEvents: 'auto',
-        textTransform: 'none',
-      }}
+      style={{ textTransform: 'none', flexShrink: 0 }}
       data-static-tier={entry.tier}
     >
       {BADGE_LABEL[entry.tier] ?? entry.tier}
     </Badge>
   );
   const tooltip = entry.detail ?? entry.reason;
-  return tooltip ? (
-    <Tooltip label={tooltip} withArrow position="bottom-start">
-      {badge}
-    </Tooltip>
-  ) : (
-    badge
+  return (
+    <span
+      className="depictio-static-tier-badge"
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        // Hoverable (for the detail tooltip) even when the positioning
+        // wrapper in ComponentChrome is pointer-events: none.
+        pointerEvents: 'auto',
+        // Opaque page-colored backdrop under the translucent light-variant
+        // badge: on narrow components renderer content can run close to the
+        // corner, and without this the two layers blend into each other.
+        background: 'var(--mantine-color-body)',
+        borderRadius: 'var(--mantine-radius-xl)',
+      }}
+    >
+      {tooltip ? (
+        <Tooltip label={tooltip} withArrow position="bottom-start">
+          {badge}
+        </Tooltip>
+      ) : (
+        badge
+      )}
+    </span>
   );
 };

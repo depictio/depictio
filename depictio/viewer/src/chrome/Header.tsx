@@ -10,7 +10,7 @@ import {
 import { Icon } from '@iconify/react';
 
 import type { BrandTheme, DashboardData, DashboardSummary } from 'depictio-react-core';
-import { paletteVar } from 'depictio-react-core';
+import { paletteVar, useIsStaticBundle } from 'depictio-react-core';
 import PoweredBy from './PoweredBy';
 import { PublishedLockBadge } from '../projects/detail/PublishedLockBadge';
 import { useFeedbackLink } from '../feedback';
@@ -181,6 +181,10 @@ export function useHeaderModel({
 }: HeaderProps): HeaderModel {
   const { colorScheme } = useMantineColorScheme();
   const theme: 'light' | 'dark' = colorScheme === 'dark' ? 'dark' : 'light';
+  // Static bundles are read-only snapshots with no backend: the editor route
+  // does not exist there, so the Edit / Exit-Edit affordance is hidden
+  // entirely instead of rendered disabled. Inert in server builds (false).
+  const isStaticBundle = useIsStaticBundle();
 
   const tabIconRaw = resolveTabIcon(activeTab);
   const tabIconIsImage = isImagePath(tabIconRaw);
@@ -337,7 +341,7 @@ export function useHeaderModel({
   }
   // Comments, Analysis, live updates: ways of *reading* the dashboard.
   if (extraActions) actions.push(...extraActions);
-  actions.push(
+  if (!isStaticBundle) actions.push(
     mode === 'view'
       ? {
           id: 'edit',

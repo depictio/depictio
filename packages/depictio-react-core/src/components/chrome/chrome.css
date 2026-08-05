@@ -110,6 +110,14 @@
   opacity: 1;
   pointer-events: auto;
 }
+/* Static-bundle tier badge ("Frozen"/"Partial"/"Omitted") — always visible,
+ * never hover-gated (RFC §3.2: degraded fidelity cannot be missed). It sits
+ * as the first flex cell of the action row, so the hover-revealed icons lay
+ * out after it rather than over it. */
+.depictio-component-actions > .depictio-static-tier-badge {
+  opacity: 1;
+  pointer-events: auto;
+}
 /* The clear-selection slot of a tile that is the source of an active
  * selection (see `showClear` in ComponentChrome). Like the analysis marker it
  * escapes the hover-only default, so at rest it is the one visible icon of the

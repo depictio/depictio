@@ -1,6 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react';
 
+import { useIsStaticBundle } from 'depictio-react-core';
+
 import DepictioRose from '../components/rose/DepictioRose';
+// Bundled copy of public/logos/logo_black.svg. Static bundles open from
+// file:// where the server-served `/dashboard/logos/...` path can't resolve;
+// importing the asset lets Vite inline it (vite.static.config.ts sets
+// `assetsInlineLimit` high enough that the single-file build embeds it as a
+// data: URI). Server builds keep the absolute path so the SVG stays
+// separately cacheable.
+import inlineWordmark from '../assets/depictio_logo.svg';
 
 const WORDMARK_SRC = '/dashboard/logos/logo_black.svg';
 
@@ -78,6 +87,7 @@ const DepictioWordmark: React.FC<DepictioWordmarkProps> = ({
   testId,
   live,
 }) => {
+  const isStaticBundle = useIsStaticBundle();
   const imgRef = useRef<HTMLImageElement>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [overlay, setOverlay] = useState<Overlay | null>(null);
@@ -129,7 +139,7 @@ const DepictioWordmark: React.FC<DepictioWordmarkProps> = ({
     >
       <img
         ref={imgRef}
-        src={WORDMARK_SRC}
+        src={isStaticBundle ? inlineWordmark : WORDMARK_SRC}
         alt={alt}
         data-testid={testId}
         style={{

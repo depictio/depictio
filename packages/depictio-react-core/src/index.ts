@@ -433,6 +433,7 @@ export {
   TILE_ACTION_STYLE,
   StaticBadgeProvider,
   StaticTierBadge,
+  useIsStaticBundle,
 } from './components/chrome';
 export type {
   ComponentChromeProps,

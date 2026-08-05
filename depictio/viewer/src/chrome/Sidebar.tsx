@@ -30,6 +30,7 @@ import {
 import type { BrandTheme, DashboardSummary } from 'depictio-react-core';
 import { paletteVar } from 'depictio-react-core';
 import BrandLogo from './BrandLogo';
+import { useIsStaticBundle } from 'depictio-react-core';
 import ThemeToggle from './ThemeToggle';
 import { useScrollOverflow } from './useScrollOverflow';
 import ServerStatusBadge from './ServerStatusBadge';
@@ -345,6 +346,10 @@ const Sidebar: React.FC<SidebarProps> = ({
   const brand = useBranding();
   const isEdit = mode === 'edit';
   const chromeStyle = useChromeStyle();
+  // Static bundles have no backend and no other routes: hide navigation to
+  // the management page and the server/profile chrome (the theme toggle stays
+  // — it's fully client-side). Inert in server builds (always false there).
+  const isStaticBundle = useIsStaticBundle();
 
   // Lift the per-tab menu open-state up here so only ONE "..." menu can be
   // open at a time. Each child Menu was previously self-contained, so opening
@@ -556,7 +561,9 @@ const Sidebar: React.FC<SidebarProps> = ({
       justify="space-between"
       className="dc-sidebar-inner"
     >
-      {/* Top region — centered, grey back link to match Dash sidebar */}
+      {/* Top region — centered, grey back link to match Dash sidebar.
+          Hidden in static bundles: there is no /dashboards route to go to. */}
+      {!isStaticBundle && (
       <Stack gap="sm" align="stretch">
         <Anchor
           href="/dashboards"
@@ -573,6 +580,7 @@ const Sidebar: React.FC<SidebarProps> = ({
         </Anchor>
         <Divider />
       </Stack>
+      )}
 
       {/* Middle region — scrollable tab list */}
       {/* `hover` rather than `auto`: a permanently drawn scrollbar down the
@@ -824,15 +832,21 @@ const Sidebar: React.FC<SidebarProps> = ({
         <div className="dc-sidebar-footer-item dc-sidebar-theme">
           <ThemeToggle />
         </div>
-        <div className="dc-sidebar-footer-item dc-sidebar-status">
-          <ServerStatusBadge />
-        </div>
-        <div className="dc-sidebar-footer-item dc-sidebar-auth">
-          <AuthModeBadge />
-        </div>
-        <div className="dc-sidebar-footer-item dc-sidebar-profile">
-          <ProfileBadge />
-        </div>
+        {/* Server/auth/profile chrome is meaningless without a backend — a
+            bundle has no server to report on and no account to manage. */}
+        {!isStaticBundle && (
+          <>
+            <div className="dc-sidebar-footer-item dc-sidebar-status">
+              <ServerStatusBadge />
+            </div>
+            <div className="dc-sidebar-footer-item dc-sidebar-auth">
+              <AuthModeBadge />
+            </div>
+            <div className="dc-sidebar-footer-item dc-sidebar-profile">
+              <ProfileBadge />
+            </div>
+          </>
+        )}
       </Stack>
     </Stack>
   );
