@@ -21,6 +21,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { BindingTable, BundleManifest } from '../src/manifest';
 import { refillFigure, type RefillInput } from '../src/refill';
+import { runPrologue } from '../src/prologue';
 import { HyparquetEngine } from '../src/engine/hyparquet/index';
 
 // ---------------------------------------------------------------------------
@@ -267,24 +268,37 @@ function loadPenguins(): BundleManifest | null {
 
 const penguins = loadPenguins();
 const penguinsBindings = Object.entries(penguins?.bindings ?? {});
+// Prologue figures (phase 6) bind DERIVED columns — they refill through
+// runPrologue, exercised by the dedicated test below, not straight from the
+// base table.
+const baseBindings = penguinsBindings.filter(
+  ([cid]) => !(penguins?.prologues?.[cid]?.length ?? 0),
+);
+const prologueBindings = penguinsBindings.filter(
+  ([cid]) => (penguins?.prologues?.[cid]?.length ?? 0) > 0,
+);
 
-describe.runIf(penguinsBindings.length > 0)('refillFigure — penguins demo manifest', () => {
+async function openDc(manifest: BundleManifest, componentId: string) {
+  const meta = (
+    manifest.dashboard.doc as {
+      stored_metadata?: { index?: string; dc_id?: string | null }[];
+    }
+  ).stored_metadata?.find((c) => c.index === componentId);
+  const dcId = String(meta?.dc_id ?? '');
+  const ref = manifest.data_refs[dcId];
+  const blobKey = ref.uri.slice('inline:'.length);
+  const bytes = new Uint8Array(Buffer.from(manifest.inline_blobs[blobKey], 'base64'));
+  const engine = new HyparquetEngine();
+  const handle = await engine.open(ref, bytes);
+  return { ref, engine, handle };
+}
+
+describe.runIf(baseBindings.length > 0)('refillFigure — penguins demo manifest', () => {
   it('refills the species scatter from the inline Parquet blob', async () => {
     const manifest = penguins!;
-    const [componentId, binding] = penguinsBindings[0];
-    const meta = (
-      manifest.dashboard.doc as {
-        stored_metadata?: { index?: string; dc_id?: string | null }[];
-      }
-    ).stored_metadata?.find((c) => c.index === componentId);
-    const dcId = String(meta?.dc_id ?? '');
-    const ref = manifest.data_refs[dcId];
+    const [componentId, binding] = baseBindings[0];
+    const { ref, engine, handle } = await openDc(manifest, componentId);
     expect(ref).toBeDefined();
-
-    const blobKey = ref.uri.slice('inline:'.length);
-    const bytes = new Uint8Array(Buffer.from(manifest.inline_blobs[blobKey], 'base64'));
-    const engine = new HyparquetEngine();
-    const handle = await engine.open(ref, bytes);
 
     const { figure, displayed, total } = await refillFigure({
       binding,
@@ -307,3 +321,50 @@ describe.runIf(penguinsBindings.length > 0)('refillFigure — penguins demo mani
     expect(total).toBe(342);
   });
 });
+
+describe.runIf(prologueBindings.length > 0)(
+  'refillFigure — penguins code-mode prologue (phase 6)',
+  () => {
+    it('runs the IR on the base table and refills the derived frame', async () => {
+      const manifest = penguins!;
+      const [componentId, binding] = prologueBindings[0];
+      const ops = manifest.prologues[componentId];
+      const { ref, engine, handle } = await openDc(manifest, componentId);
+
+      // Base frame = physical columns minus companions, same rule as the
+      // static runtime's renderPrologueFigureLive.
+      const companionNames = new Set(Object.keys(ref.companions ?? {}));
+      const baseNames = ref.columns
+        .map((c) => c.name)
+        .filter((n) => !companionNames.has(n) && !/^__(code|ts|fe)__/.test(n));
+      const batch = await engine.columns(handle, baseNames);
+      const columns: Record<string, unknown[]> = {};
+      for (const name of baseNames) columns[name] = Array.from(batch[name]);
+      const derived = runPrologue(ops, { columns, length: ref.rows });
+
+      const { figure, total } = await refillFigure({
+        binding,
+        columns: async (names) => {
+          const out: Record<string, unknown[]> = {};
+          for (const name of names) {
+            const col = derived.columns[name];
+            if (!col) throw new Error(`derived frame lacks column "${name}"`);
+            out[name] = col;
+          }
+          return out;
+        },
+        mask: null,
+      });
+
+      // group_by species -> mean body_mass_g, sorted desc: the Polars
+      // reference values pinned by the e2e spec.
+      expect(total).toBe(3);
+      const trace = figure.data[0] as Trace;
+      expect(trace.x).toEqual(['Gentoo', 'Chinstrap', 'Adelie']);
+      const y = trace.y as number[];
+      expect(y[0]).toBeCloseTo(5076.016260162602, 9);
+      expect(y[1]).toBeCloseTo(3733.0882352941176, 9);
+      expect(y[2]).toBeCloseTo(3700.662251655629, 9);
+    });
+  },
+);
