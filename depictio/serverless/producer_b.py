@@ -16,9 +16,16 @@ real ``create_figure_from_data`` figure with its data arrays stripped, plus
 per-trace group predicates and field→column bindings — and goes ``live``, with
 the runtime re-projecting the arrays at every filter state. A component that
 cannot be bound with certainty falls back to a *frozen* payload from the same
-real figure service (errata #10) with reason ``binding_miss``. Everything the
-producer cannot compute at all is *omitted* with a reason, surfaced by
-``--check`` (see ``preflight.py``).
+real figure service (errata #10) with reason ``binding_miss``.
+
+code-mode figures take the same road since phase 6 (RFC §7): their data
+prologue is compiled to the JSON IR (``prologue.py``), replayed here with
+Polars (``prologue_exec.py``) to rebuild the frame the code handed to
+plotly-express, and the figure the code itself produced becomes the scaffold —
+so a transpilable, bindable code figure ships ``prologues[cid]`` +
+``bindings[cid]`` and goes ``live`` too. Code the transpiler refuses stays
+frozen with reason ``code_mode``. Everything the producer cannot compute at all
+is *omitted* with a reason, surfaced by ``--check`` (see ``preflight.py``).
 """
 
 from __future__ import annotations
@@ -46,12 +53,15 @@ from depictio.models.models.serverless import (
     DataRef,
     FrozenPayload,
     Producer,
+    PrologueOp,
     TierEntry,
     TierReason,
 )
 from depictio.serverless.binding import build_binding
 from depictio.serverless.companions import build_companions
 from depictio.serverless.preflight import TierRow, classify_spec
+from depictio.serverless.prologue import transpile_with_reason
+from depictio.serverless.prologue_exec import execute_ops, terminal_px_call
 from depictio.serverless.pruning import (
     component_as_dict,
     compute_column_sets,
@@ -244,13 +254,17 @@ def _freeze_ui_figure(comp: dict[str, Any], df: pl.DataFrame) -> tuple[dict[str,
     return payload, bool(stats.get("sampled", False))
 
 
-def _freeze_code_figure(comp: dict[str, Any], df: pl.DataFrame) -> dict[str, Any]:
-    """Freeze a code-mode figure via a trusted local exec.
+def _run_code_figure(comp: dict[str, Any], df: pl.DataFrame) -> Any:
+    """Run a code-mode figure's Python and return the Plotly ``fig`` OBJECT.
 
     Producer B runs on the spec author's own machine against their own code, so
     a plain ``exec`` is the policy here (RestrictedPython sandboxing is producer
     A's concern). Raises ``ProducerBError`` when the code does not yield a
     Plotly ``fig`` — the caller downgrades the component to ``omitted``.
+
+    The object (not its JSON) is what the caller needs: a transpilable figure
+    hands it to the binding builder as the authoritative scaffold, and freezing
+    is then just ``_code_figure_payload`` on the same object.
     """
     import numpy as np
     import pandas as pd
@@ -273,10 +287,20 @@ def _freeze_code_figure(comp: dict[str, Any], df: pl.DataFrame) -> dict[str, Any
 
         ensure_mantine_templates()
         fig.update_layout(template="mantine_light")
+    return fig
+
+
+def _code_figure_payload(fig: Any) -> dict[str, Any]:
+    """The frozen payload shape for a code-mode figure."""
     return {
         "figure": fig.to_plotly_json(),
         "metadata": {"visu_type": "code", "filter_applied": False},
     }
+
+
+def _freeze_code_figure(comp: dict[str, Any], df: pl.DataFrame) -> dict[str, Any]:
+    """Run a code-mode figure and freeze it at the default filter state."""
+    return _code_figure_payload(_run_code_figure(comp, df))
 
 
 # ---------------------------------------------------------------------------
@@ -413,6 +437,7 @@ def build_manifest(
     # Bindings and frozen payloads (+ data-dependent tier refinements).
     frozen: dict[str, FrozenPayload] = {}
     bindings: dict[str, BindingTable] = {}
+    prologues: dict[str, list[PrologueOp]] = {}
     for comp in components:
         row = tier_by_id[comp["tag"]]
         if row.tier is not ComponentTier.FROZEN:
@@ -431,14 +456,57 @@ def build_manifest(
         # snapshot would only be a second copy of data the bundle already has.
         ctype = comp.get("component_type")
         if ctype == "figure" and comp.get("mode", "ui") == "code":
+            # Code mode (RFC §7, phase 6). The author's Python always runs — it
+            # is both the frozen fallback and, for a transpilable figure, the
+            # authoritative scaffold. Then: compile the data prologue to IR,
+            # read the terminal `px` call for the binder's kwargs, replay the IR
+            # to rebuild the derived frame, and bind against it. A figure that
+            # binds ships IR + binding and NO frozen payload — the runtime
+            # re-derives it at every filter state from the bundled base table.
+            code = comp.get("code_content") or ""
+            ops, refusal = transpile_with_reason(code)
+            call = terminal_px_call(code) if ops is not None else None
+            if ops is not None and call is None:
+                refusal = "figure call not analyzable"
             try:
-                payload = _freeze_code_figure(comp, df)
+                fig = _run_code_figure(comp, df)
             except ProducerBError as exc:
                 row.tier = ComponentTier.OMITTED
                 row.reason = TierReason.CODE_MODE
                 row.detail = f"code-mode figure not locally computable: {exc}"
                 continue
-            frozen[row.component_id] = FrozenPayload(kind="figure", payload=payload)
+            binding = None
+            if call is not None:
+                assert ops is not None
+                try:
+                    derived = execute_ops(ops, df)
+                    binding = build_binding(
+                        {"visu_type": call[0], "dict_kwargs": call[1]}, derived, fig=fig
+                    )
+                except Exception:
+                    binding = None  # any executor/builder failure freezes below
+            if binding is not None:
+                bindings[row.component_id] = binding
+                if ops:
+                    # A code that needs no reshape binds to the base table, and
+                    # the contract omits empty op lists from the manifest.
+                    prologues[row.component_id] = ops
+                row.tier = ComponentTier.LIVE
+                row.reason = None
+                row.detail = None
+                continue
+            if call is None:
+                row.reason = TierReason.CODE_MODE
+                row.detail = f"code-mode figure not transpilable: {refusal}"
+            else:
+                row.reason = TierReason.BINDING_MISS
+                row.detail = (
+                    "prologue transpiled, but no unambiguous trace↔group binding "
+                    "(RFC §4); frozen at the default filter state"
+                )
+            frozen[row.component_id] = FrozenPayload(
+                kind="figure", payload=_code_figure_payload(fig)
+            )
         elif ctype == "figure":
             # Bind-and-refill first (RFC §4): a bound figure re-renders live in
             # the browser at every filter state — including the default, empty
@@ -492,6 +560,7 @@ def build_manifest(
         },
         frozen=frozen,
         bindings=bindings,
+        prologues=prologues,
         inline_blobs=inline_blobs,
     )
     return BuildResult(manifest=manifest, tier_rows=tier_rows)

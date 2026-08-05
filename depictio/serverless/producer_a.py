@@ -25,13 +25,20 @@ Everything runs **in-process** — no HTTP round-trips to the API:
   its DC (RFC errata #8), so a rebuilt bundle can be compared against the
   instance state it was cut from.
 
-ui-mode figures are first offered to the bind-and-refill builder
-(``binding.py``, RFC §4), exactly like producer B: a component that binds ships
-a *binding table* built from the same pruned frame whose Parquet lands in the
-bundle and goes ``live`` (no frozen payload — the runtime refills from the
-bundled data). A component that cannot be bound with certainty falls back to
-the frozen path with reason ``binding_miss``. Code-mode figures stay frozen
-until the phase-6 transpiler.
+Figures are first offered to the bind-and-refill builder (``binding.py``, RFC
+§4), exactly like producer B: a component that binds ships a *binding table*
+built from the same pruned frame whose Parquet lands in the bundle and goes
+``live`` (no frozen payload — the runtime refills from the bundled data). A
+component that cannot be bound with certainty falls back to the frozen path
+with reason ``binding_miss``.
+
+Code-mode figures join them since phase 6 (RFC §7): their data prologue is
+compiled to the JSON IR (``prologue.py``), the figure is built by the *server*
+pipeline (``build_figure_preview`` — RestrictedPython, never a local exec), the
+IR is replayed here with Polars (``prologue_exec.py``) to rebuild the frame the
+code handed to plotly-express, and the binder matches the two. A bound one
+ships ``prologues[cid]`` + ``bindings[cid]`` with its DC bundled keep-all; code
+the transpiler refuses stays frozen with reason ``code_mode``.
 
 Permissions (RFC §8): ``--check`` needs *viewer* on the dashboard's project;
 the build itself needs *owner* — a bundle is bulk data exfiltration.
@@ -61,6 +68,7 @@ from depictio.models.models.serverless import (
     DataRef,
     FrozenPayload,
     Producer,
+    PrologueOp,
     TierEntry,
     TierReason,
 )
@@ -73,19 +81,52 @@ from depictio.serverless.producer_b import (
     _depictio_version,
     render_bundle_html,
 )
+from depictio.serverless.prologue import transpile_with_reason
+from depictio.serverless.prologue_exec import execute_ops, terminal_px_call
 from depictio.serverless.pruning import component_columns
 
 # Component types whose data ships in the bundle (live in the static runtime).
-# ui-mode figures are handled via :func:`_refillable_figure`: their DC is
-# bundled too, so the bind-and-refill runtime can refill bound traces from it.
+# Figures are handled via :func:`_refillable_figure`: their DC is bundled too,
+# so the bind-and-refill runtime can refill bound traces from it.
 LIVE_DATA_TYPES = frozenset({"card", "interactive"})
 
 
+def _code_figure_plan(
+    comp: dict[str, Any],
+) -> tuple[list[PrologueOp] | None, tuple[str, dict[str, Any]] | None, str | None]:
+    """``(prologue ops, terminal px call, refusal)`` for a code-mode figure.
+
+    Both halves must succeed for the figure to be bindable: the ops let the
+    runtime re-derive the code's frame, and the ``px`` call names the columns
+    the binder forms its hypothesis from. Either refusal returns
+    ``(None, None, reason)`` and the figure freezes with ``code_mode``.
+    """
+    code = comp.get("code_content") or ""
+    ops, refusal = transpile_with_reason(code)
+    if ops is None:
+        return None, None, refusal
+    call = terminal_px_call(code)
+    if call is None:
+        return None, None, "figure call not analyzable"
+    return ops, call, None
+
+
 def _refillable_figure(comp: dict[str, Any]) -> bool:
-    """ui-mode figures are offered to the bind-and-refill builder (RFC §4), so
-    their DC's pruned frame must be loaded (and, if the figure binds, bundled).
-    Code-mode figures never bind — the phase-6 transpiler is their path."""
-    return comp.get("component_type") == "figure" and comp.get("mode", "ui") != "code"
+    """True when a figure is offered to the bind-and-refill builder (RFC §4),
+    so its DC's frame must be loaded (and, if the figure binds, bundled).
+
+    ui-mode figures always are. A code-mode figure is too when its data
+    prologue transpiles and its ``px`` call is readable (RFC §7, phase 6) — its
+    DC then ships **keep-all** (``pruning.component_columns`` never projects
+    code mode: arbitrary code reads anything, and the runtime re-derives the
+    frame from the bundled base columns). Code the transpiler refuses keeps the
+    old road: frozen payload, no data bundled for it.
+    """
+    if comp.get("component_type") != "figure":
+        return False
+    if comp.get("mode", "ui") != "code":
+        return True
+    return _code_figure_plan(comp)[1] is not None
 
 
 # Frozen tables inline their rows into the manifest — cap them like the catalog
@@ -230,11 +271,22 @@ def classify_stored_component(
 
     if ctype == "figure":
         if comp.get("mode", "ui") == "code":
+            # The transpiler is data-free, so the planned verdict can already
+            # tell a replayable prologue (offered to bind-and-refill, RFC §7)
+            # from code that will freeze via the server figure pipeline.
+            _, call, refusal = _code_figure_plan(comp)
+            if call is None:
+                return (
+                    ComponentTier.FROZEN,
+                    TierReason.CODE_MODE,
+                    f"code-mode figure not transpilable: {refusal}; frozen via the "
+                    "server figure pipeline (RestrictedPython) at the default filter state",
+                )
             return (
                 ComponentTier.FROZEN,
-                TierReason.CODE_MODE,
-                "code-mode transpiler lands in phase 6; frozen via the server "
-                "figure pipeline (RestrictedPython) at the default filter state",
+                TierReason.BINDING_MISS,
+                "transpilable prologue; offered to bind-and-refill, upgraded to "
+                "live when the binding matches",
             )
         return (
             ComponentTier.FROZEN,
@@ -356,7 +408,7 @@ def _dc_init_entry(comp: dict[str, Any]) -> dict[str, Any] | None:
 
 def live_column_sets(stored_metadata: list[dict[str, Any]]) -> dict[str, set[str] | None]:
     """Per-DC column sets for the components whose data ships in the bundle
-    (cards + interactive, plus ui-mode figures for bind-and-refill).
+    (cards + interactive, plus the figures offered to bind-and-refill).
 
     Thin translation of ``pruning.compute_column_sets`` onto stored_metadata:
     the components ARE dicts of the shape ``component_columns`` reads
@@ -365,7 +417,9 @@ def live_column_sets(stored_metadata: list[dict[str, Any]]) -> dict[str, set[str
     that a bundled-data component consumes (frozen payloads carry their own
     data). ui-mode figures contribute ``referenced_columns`` via
     ``component_columns`` — so every column a binding could reference survives
-    pruning (``None`` for whole-frame visus widens to a full keep).
+    pruning (``None`` for whole-frame visus widens to a full keep); a
+    transpilable code-mode figure contributes ``None`` too, since its code may
+    read any column and the runtime re-derives the frame from all of them.
 
     Every interactive filter column that exists in a DC's schema is folded in
     later (see :func:`_bundle_data_refs`) to mirror the server's
@@ -480,8 +534,8 @@ def _freeze_table(
     return {"columns": columns, "rows": rows[:max_rows], "total": total}
 
 
-def _freeze_figure(comp: dict[str, Any]) -> tuple[dict[str, Any], bool]:
-    """Freeze a figure by calling the Celery task *function* directly.
+def _freeze_figure(comp: dict[str, Any], full_load: bool = False) -> tuple[dict[str, Any], bool]:
+    """Build a figure by calling the Celery task *function* directly.
 
     ``build_figure_preview`` is the single worker code path preview and render
     share (RFC errata #4); calling the function (not ``.delay()``) runs it
@@ -490,7 +544,16 @@ def _freeze_figure(comp: dict[str, Any]) -> tuple[dict[str, Any], bool]:
 
     ui-mode figures reach this only when ``build_binding`` refused them
     (bind-and-refill, RFC §4) — a bound figure ships a binding table and no
-    frozen payload. Code-mode figures always freeze here (phase 6).
+    frozen payload. Code-mode figures always come through here, because this is
+    also the only sanctioned way to *run* their Python (RestrictedPython, in the
+    same sandbox the server uses): the resulting figure is either the frozen
+    payload or the binding's scaffold.
+
+    ``full_load=True`` disables the code-mode row cap
+    (``_load_uniform_sample``): a figure that is about to be bound must be built
+    from the *whole* frame, since the runtime refills it from the whole bundled
+    table. Sampling there would produce a scaffold whose traces no filtered view
+    can reproduce.
 
     Returns ``(payload, was_sampled)``.
     """
@@ -509,7 +572,7 @@ def _freeze_figure(comp: dict[str, Any]) -> tuple[dict[str, Any], bool]:
         },
         "filter_metadata": [],
         "theme": "light",
-        "full_load": False,
+        "full_load": full_load,
     }
     result = _celery().build_figure_preview(payload)
     meta = result.get("metadata") or {}
@@ -755,6 +818,29 @@ def _bundle_data_refs(
     return data_refs, inline_blobs, failures, pruned_frames
 
 
+def _base_frame(
+    dc_id: str, data_refs: dict[str, DataRef], pruned_frames: dict[str, pl.DataFrame]
+) -> pl.DataFrame | None:
+    """The bundled frame WITHOUT its build-time companion columns.
+
+    This is the frame a code-mode prologue is replayed on, and it must be the
+    same one the runtime rebuilds (``liveData.renderPrologueFigureLive``): the
+    DataRef's columns minus the companion map's keys and the reserved
+    ``__code__`` / ``__ts__`` / ``__fe__`` prefixes. The user's Python saw the
+    Delta frame, which never carries them, so leaving them in could change an
+    ``unpivot`` or collide with an alias.
+    """
+    df = pruned_frames.get(dc_id)
+    if df is None:
+        return None
+    ref = data_refs.get(dc_id)
+    companions = set(ref.companions) if ref is not None else set()
+    drop = [
+        c for c in df.columns if c in companions or c.startswith(("__code__", "__ts__", "__fe__"))
+    ]
+    return df.drop(drop) if drop else df
+
+
 # ---------------------------------------------------------------------------
 # Export
 # ---------------------------------------------------------------------------
@@ -814,9 +900,12 @@ def export_manifest(dashboard_id: str, user: ExportUser) -> ExportResult:
             row.detail = f"data collection {dc_id} not bundled: {dc_failures[dc_id]}"
 
     # Frozen tier: real endpoint bodies, default (empty) filter state.
-    # Bindings (bind-and-refill, RFC §4) are filled per ui-mode figure below.
+    # Bindings (bind-and-refill, RFC §4) — and, for code-mode figures, the
+    # prologue IR the runtime replays first (RFC §7) — are filled per figure
+    # below.
     frozen: dict[str, FrozenPayload] = {}
     bindings: dict[str, BindingTable] = {}
+    prologues: dict[str, list[PrologueOp]] = {}
 
     cards = [
         c
@@ -854,7 +943,34 @@ def export_manifest(dashboard_id: str, user: ExportUser) -> ExportResult:
                 # the arrays from the bundled Parquet, so a frozen snapshot
                 # would only be a second copy of data the bundle already has.
                 binding = None
-                if _refillable_figure(comp):
+                ops: list[PrologueOp] | None = None
+                payload: dict[str, Any] | None = None
+                sampled = False
+                code_mode = comp.get("mode", "ui") == "code"
+                refusal: str | None = None
+                if code_mode:
+                    # Phase 6 (RFC §7). The figure itself must come from the
+                    # server pipeline — that is where the user's Python runs
+                    # under RestrictedPython; producer A never execs it here.
+                    # Its ops are then replayed on the bundled base frame to
+                    # rebuild the frame the code handed to plotly-express, and
+                    # the binder matches the real figure against it.
+                    ops, call, refusal = _code_figure_plan(comp)
+                    payload, sampled = _freeze_figure(comp, full_load=call is not None)
+                    if call is not None and ops is not None:
+                        df = _base_frame(str(comp.get("dc_id") or ""), data_refs, pruned_frames)
+                        if df is not None:
+                            try:
+                                import plotly.graph_objects as go
+
+                                binding = build_binding(
+                                    {"visu_type": call[0], "dict_kwargs": call[1]},
+                                    execute_ops(ops, df),
+                                    fig=go.Figure(payload["figure"]),
+                                )
+                            except Exception:
+                                binding = None  # any replay/builder crash freezes
+                elif _refillable_figure(comp):
                     df = pruned_frames.get(str(comp.get("dc_id") or ""))
                     if df is not None:
                         try:
@@ -863,6 +979,11 @@ def export_manifest(dashboard_id: str, user: ExportUser) -> ExportResult:
                             binding = None  # any builder crash freezes below
                 if binding is not None:
                     bindings[component_id] = binding
+                    if ops:
+                        # An empty op list means the code needed no reshape: it
+                        # binds to the base table, and the contract omits empty
+                        # lists from ``manifest.prologues``.
+                        prologues[component_id] = ops
                     if binding.sampled:
                         row.tier = ComponentTier.PARTIAL
                         row.reason = TierReason.MAX_POINTS
@@ -876,8 +997,18 @@ def export_manifest(dashboard_id: str, user: ExportUser) -> ExportResult:
                         row.reason = None
                         row.detail = None
                     continue
-                payload, sampled = _freeze_figure(comp)
-                if _refillable_figure(comp):
+                if payload is None:
+                    payload, sampled = _freeze_figure(comp)
+                if code_mode and refusal is not None:
+                    row.reason = TierReason.CODE_MODE
+                    row.detail = f"code-mode figure not transpilable: {refusal}"
+                elif code_mode:
+                    row.reason = TierReason.BINDING_MISS
+                    row.detail = (
+                        "code analyzed, but no unambiguous trace↔group binding "
+                        "(RFC §4); frozen at the default filter state"
+                    )
+                elif _refillable_figure(comp):
                     row.reason = TierReason.BINDING_MISS
                     row.detail = (
                         "no unambiguous trace↔group binding (RFC §4); "
@@ -908,7 +1039,9 @@ def export_manifest(dashboard_id: str, user: ExportUser) -> ExportResult:
 
     # A DC bundled only for figures that failed to bind carries data the
     # runtime never reads (their frozen payloads are self-contained) — drop the
-    # blob so an unbindable figure does not double the bundle's bytes.
+    # blob so an unbindable figure does not double the bundle's bytes. Code-mode
+    # figures ride the same rule: a transpilable one had its DC bundled
+    # speculatively (keep-all), and only a *bound* one keeps it.
     used_dcs = {
         str(c["dc_id"])
         for c in stored_metadata
@@ -936,6 +1069,7 @@ def export_manifest(dashboard_id: str, user: ExportUser) -> ExportResult:
         },
         frozen=frozen,
         bindings=bindings,
+        prologues=prologues,
         inline_blobs=inline_blobs,
     )
     return ExportResult(manifest=manifest, tier_rows=tier_rows)

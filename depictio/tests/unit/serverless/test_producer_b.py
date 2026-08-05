@@ -178,10 +178,14 @@ def test_tier_table(manifest: BundleManifest) -> None:
         "scatter-mass-flipper": ComponentTier.LIVE,
         # Tables are live since phase 3 — sortSlice recomputes pages offline.
         "table-penguins": ComponentTier.LIVE,
+        # The code-mode bar chart transpiles and binds (RFC §7, phase 6), so
+        # the browser replays its prologue at every filter state.
+        "figure-codemode": ComponentTier.LIVE,
     }
-    figure_entry = manifest.tiers["scatter-mass-flipper"]
-    assert figure_entry.reason is None
-    assert figure_entry.detail is None
+    for cid in ("scatter-mass-flipper", "figure-codemode"):
+        figure_entry = manifest.tiers[cid]
+        assert figure_entry.reason is None
+        assert figure_entry.detail is None
     table_entry = manifest.tiers["table-penguins"]
     assert table_entry.reason is None
     assert table_entry.detail is None
@@ -216,6 +220,30 @@ def test_bound_figure_ships_no_frozen_payload(manifest: BundleManifest) -> None:
     # The bound columns are in the bundle (pruning keeps every referenced one).
     ref = next(iter(manifest.data_refs.values()))
     assert {"flipper_length_mm", "body_mass_g", "species"} <= {c.name for c in ref.columns}
+
+
+def test_example_code_mode_figure_is_live_with_its_prologue(manifest: BundleManifest) -> None:
+    """The demo's code-mode bar chart (the one the phase-6 Playwright spec
+    drives): IR + binding, no frozen payload, bound to DERIVED columns."""
+    assert manifest.tiers["figure-codemode"].tier is ComponentTier.LIVE
+    assert "figure-codemode" not in manifest.frozen
+    assert [op.model_dump(mode="json") for op in manifest.prologues["figure-codemode"]] == [
+        {
+            "op": "group_by",
+            "by": ["species"],
+            "agg": [{"col": "body_mass_g", "fn": "mean", "alias": "mean_mass"}],
+        },
+        {"op": "sort", "by": ["mean_mass"], "desc": [True]},
+    ]
+    binding = manifest.bindings["figure-codemode"]
+    assert binding.group_cols == []
+    assert [t.fields for t in binding.traces] == [{"x": "species", "y": "mean_mass"}]
+    assert binding.scaffold["data"][0]["type"] == "bar"
+    assert all("x" not in t and "y" not in t for t in binding.scaffold["data"])
+    # `mean_mass` exists only after the prologue runs; `species`/`body_mass_g`
+    # — the columns it reads — are in the bundle.
+    ref = next(iter(manifest.data_refs.values()))
+    assert {"species", "body_mass_g"} <= {c.name for c in ref.columns}
 
 
 def test_text_labelled_figure_binds_and_keeps_its_label_column(data_dir: Path) -> None:
@@ -261,7 +289,7 @@ def test_unbindable_figure_falls_back_to_frozen(data_dir: Path) -> None:
             comp["dict_kwargs"]["color"] = "sex"
     manifest = build_manifest(DashboardDataLite.model_validate(spec_dict), data_dir).manifest
 
-    assert manifest.bindings == {}
+    assert "scatter-mass-flipper" not in manifest.bindings
     entry = manifest.tiers["scatter-mass-flipper"]
     assert entry.tier is ComponentTier.FROZEN
     assert entry.reason is TierReason.BINDING_MISS
@@ -281,13 +309,19 @@ def test_unbindable_figure_falls_back_to_frozen(data_dir: Path) -> None:
 
 def test_preflight_refines_the_figure_verdict(manifest: BundleManifest) -> None:
     # Preflight is data-free, so it can only promise the frozen fallback; the
-    # build refines it once the matcher has seen the frame.
-    rows = {r.component_id: r.tier for r in classify_spec(load_spec(EXAMPLE_SPEC))}
+    # build refines it once the matcher has seen the frame. That holds for both
+    # figures: the code-mode one's prologue transpiles without data too, but
+    # whether it BINDS is only knowable against the frame.
+    refined = {"scatter-mass-flipper", "figure-codemode"}
+    rows = {r.component_id: r for r in classify_spec(load_spec(EXAMPLE_SPEC))}
     final = {cid: e.tier for cid, e in manifest.tiers.items()}
-    assert rows["scatter-mass-flipper"] is ComponentTier.FROZEN
-    assert final["scatter-mass-flipper"] is ComponentTier.LIVE
-    assert {k: v for k, v in rows.items() if k != "scatter-mass-flipper"} == {
-        k: v for k, v in final.items() if k != "scatter-mass-flipper"
+    for cid in refined:
+        assert rows[cid].tier is ComponentTier.FROZEN
+        assert rows[cid].reason is TierReason.BINDING_MISS
+        assert final[cid] is ComponentTier.LIVE
+    assert rows["figure-codemode"].detail and "transpilable" in rows["figure-codemode"].detail
+    assert {k: v.tier for k, v in rows.items() if k not in refined} == {
+        k: v for k, v in final.items() if k not in refined
     }
 
 
@@ -368,47 +402,138 @@ def test_table_without_dc_is_omitted() -> None:
     assert rows["table-nodc"].reason is TierReason.UNSUPPORTED
 
 
-def test_code_mode_figure_freezes_or_omits(tmp_path: Path) -> None:
+@pytest.fixture
+def code_data_dir(tmp_path: Path) -> Path:
+    """A tiny two-group frame for the code-mode cases (distinct group means, so
+    the derived frame has a total order and nothing hinges on tie-breaking)."""
+    (tmp_path / "wf").mkdir()
+    pl.DataFrame(
+        {
+            "g": ["a", "b", "a", "c"],
+            "x": [1.0, 5.0, 3.0, 9.0],
+            "y": [2.0, 4.0, 6.0, 14.0],
+        }
+    ).write_parquet(tmp_path / "wf" / "dc.parquet")
+    return tmp_path
+
+
+def _code_spec(code: str):
     from depictio.models.models.dashboards import DashboardDataLite
 
-    (tmp_path / "wf").mkdir()
-    pl.DataFrame({"x": [1.0, 2.0, 3.0], "y": [2.0, 4.0, 6.0]}).write_parquet(
-        tmp_path / "wf" / "dc.parquet"
+    return DashboardDataLite.model_validate(
+        _mini_spec(
+            [
+                {
+                    "tag": "fig-code",
+                    "component_type": "figure",
+                    "workflow_tag": "wf",
+                    "data_collection_tag": "dc",
+                    "visu_type": "scatter",
+                    "mode": "code",
+                    "code_content": code,
+                }
+            ]
+        )
     )
 
-    def spec_with_code(code: str) -> DashboardDataLite:
-        return DashboardDataLite.model_validate(
-            _mini_spec(
-                [
-                    {
-                        "tag": "fig-code",
-                        "component_type": "figure",
-                        "workflow_tag": "wf",
-                        "data_collection_tag": "dc",
-                        "visu_type": "scatter",
-                        "mode": "code",
-                        "code_content": code,
-                    }
-                ]
-            )
-        )
 
-    ok = build_manifest(
-        spec_with_code("fig = px.scatter(df.to_pandas(), x='x', y='y')"), tmp_path
+PROLOGUE_CODE = (
+    "import polars as pl\n"
+    "import plotly.express as px\n"
+    "\n"
+    "df2 = df.group_by('g').agg(pl.col('x').mean().alias('mean_x'))\n"
+    "df2 = df2.sort('mean_x', descending=True)\n"
+    "fig = px.bar(df2, x='g', y='mean_x')\n"
+)
+
+
+def test_code_mode_figure_with_a_prologue_goes_live(code_data_dir: Path) -> None:
+    """Phase 6 (RFC §7): transpilable code ships IR + binding and NO frozen
+    payload — the runtime re-derives the frame at every filter state."""
+    manifest = build_manifest(_code_spec(PROLOGUE_CODE), code_data_dir).manifest
+
+    entry = manifest.tiers["fig-code"]
+    assert entry.tier is ComponentTier.LIVE
+    assert entry.reason is None and entry.detail is None
+    assert manifest.frozen == {}
+
+    ops = [op.model_dump(mode="json") for op in manifest.prologues["fig-code"]]
+    assert ops == [
+        {
+            "op": "group_by",
+            "by": ["g"],
+            "agg": [{"col": "x", "fn": "mean", "alias": "mean_x"}],
+        },
+        {"op": "sort", "by": ["mean_x"], "desc": [True]},
+    ]
+
+    # The binding references DERIVED column names (the group_by's output), not
+    # the base frame's — the runtime refills from the reshaped table.
+    binding = manifest.bindings["fig-code"]
+    assert binding.sampled is False
+    assert binding.group_cols == []
+    assert [t.fields for t in binding.traces] == [{"x": "g", "y": "mean_x"}]
+    assert all("x" not in t and "y" not in t for t in binding.scaffold["data"])
+
+    # Code mode ⇒ never projected: the whole schema ships, because the runtime
+    # re-runs the reshape over the base columns.
+    ref = next(iter(manifest.data_refs.values()))
+    assert {c.name for c in ref.columns} == {"g", "x", "y"}
+
+    # And the manifest still round-trips with IR + binding in it.
+    assert BundleManifest.model_validate(json.loads(json.dumps(manifest.model_dump(mode="json"))))
+
+
+def test_free_code_mode_figure_binds_on_the_base_frame(code_data_dir: Path) -> None:
+    """Code that reshapes nothing binds straight to the base table — and the
+    contract omits its empty op list from ``prologues``."""
+    manifest = build_manifest(
+        _code_spec("fig = px.scatter(df.to_pandas(), x='x', y='y')"), code_data_dir
     ).manifest
-    entry = ok.tiers["fig-code"]
+
+    assert manifest.tiers["fig-code"].tier is ComponentTier.LIVE
+    assert manifest.frozen == {}
+    assert manifest.prologues == {}  # empty op lists are never shipped
+    assert [t.fields for t in manifest.bindings["fig-code"].traces] == [{"x": "x", "y": "y"}]
+
+
+def test_untranspilable_code_mode_figure_stays_frozen(code_data_dir: Path) -> None:
+    """A computed column is outside the IR grammar: freeze with ``code_mode``
+    and the transpiler's own refusal reason."""
+    code = (
+        "df2 = df.with_columns((pl.col('x') * 2).alias('x2'))\nfig = px.scatter(df2, x='x', y='x2')"
+    )
+    manifest = build_manifest(_code_spec(code), code_data_dir).manifest
+
+    entry = manifest.tiers["fig-code"]
     assert entry.tier is ComponentTier.FROZEN
     assert entry.reason is TierReason.CODE_MODE
-    assert ok.frozen["fig-code"].kind == "figure"
-    # Code mode ⇒ never projected: the whole schema ships.
-    ref = next(iter(ok.data_refs.values()))
-    assert {c.name for c in ref.columns} == {"x", "y"}
+    assert entry.detail and "with_columns" in entry.detail
+    assert manifest.frozen["fig-code"].kind == "figure"
+    assert manifest.frozen["fig-code"].filter_state == []
+    assert "fig-code" not in manifest.bindings and "fig-code" not in manifest.prologues
 
-    bad = build_manifest(spec_with_code("fig = undefined_name"), tmp_path).manifest
-    entry = bad.tiers["fig-code"]
+
+def test_code_mode_figure_whose_px_call_is_opaque_stays_frozen(code_data_dir: Path) -> None:
+    """The prologue transpiles, but a ``px`` kwarg is not a literal — the binder
+    would have to guess its column hypothesis, so freeze instead."""
+    code = "df2 = df.sort('x')\nfig = px.scatter(df2, x='x', y='y', title=str(len(df2)))"
+    manifest = build_manifest(_code_spec(code), code_data_dir).manifest
+
+    entry = manifest.tiers["fig-code"]
+    assert entry.tier is ComponentTier.FROZEN
+    assert entry.reason is TierReason.CODE_MODE
+    assert entry.detail and "not analyzable" in entry.detail
+    assert "fig-code" in manifest.frozen
+    assert "fig-code" not in manifest.bindings and "fig-code" not in manifest.prologues
+
+
+def test_code_mode_figure_omitted_when_execution_fails(code_data_dir: Path) -> None:
+    manifest = build_manifest(_code_spec("fig = undefined_name"), code_data_dir).manifest
+    entry = manifest.tiers["fig-code"]
     assert entry.tier is ComponentTier.OMITTED
     assert entry.reason is TierReason.CODE_MODE
-    assert "fig-code" not in bad.frozen
+    assert "fig-code" not in manifest.frozen
 
 
 def test_omitted_types_get_accurate_reasons() -> None:
