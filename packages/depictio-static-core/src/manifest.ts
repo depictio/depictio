@@ -211,6 +211,31 @@ export interface DashboardSection {
   doc: Record<string, unknown>;
 }
 
+/**
+ * One tab of a bundled tab family. Server-side a family is a main tab plus
+ * children carrying parent_dashboard_id, and the viewer's left rail switches
+ * between them by navigating to /dashboard/<id>. A bundle has no routing, so it
+ * carries every tab's document and switches in place.
+ */
+export interface TabEntry {
+  id: string;
+  title: string;
+  tab_order: number;
+  is_main_tab: boolean;
+  icon?: string | null;
+  icon_color?: string | null;
+  doc: Record<string, unknown>;
+}
+
+/** Who built the bundle, from where, and against which data. */
+export interface ExportProvenance {
+  exported_by?: string | null;
+  exported_at?: string | null;
+  source?: string | null;
+  project_name?: string | null;
+  dashboard_url?: string | null;
+}
+
 export interface BundleManifest {
   manifest_version: number;
   mode: BundleMode;
@@ -218,6 +243,15 @@ export interface BundleManifest {
   built_at: string;
   depictio_version: string;
   dashboard: DashboardSection;
+  /**
+   * Every tab of the family, main tab first, each with its own document. Empty
+   * for a single-tab bundle, where `dashboard` is the whole story; when
+   * populated it includes the entry tab, so `dashboard.doc` duplicates one
+   * entry. Component-keyed sections span the whole family — component ids are
+   * uuids, so they never collide across tabs.
+   */
+  tabs: TabEntry[];
+  provenance: ExportProvenance;
   data_refs: Record<string, DataRef>;
   tiers: Record<string, TierEntry>;
   frozen: Record<string, FrozenPayload>;

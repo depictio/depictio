@@ -23,6 +23,11 @@
       "additionalProperties": false,
       "description": "One reducer of a ``group_by().agg()``.\n\n``col`` is null only for ``fn == \"len\"`` spelled bare (``pl.len()`` /\nthe deprecated ``pl.count()``): the group size reads no column. The\ncolumn-attached spelling ``pl.col(c).len()`` keeps ``col = c`` \u2014 Polars\nstill returns the group size there, but names the output after ``c``, and\na missing ``c`` still raises.",
       "properties": {
+        "alias": {
+          "description": "Output column name. Polars defaults it to ``col``, except for a bare ``pl.len()`` -> 'len' and a bare ``pl.count()`` -> 'count'",
+          "title": "Alias",
+          "type": "string"
+        },
         "col": {
           "anyOf": [
             {
@@ -38,11 +43,6 @@
         },
         "fn": {
           "$ref": "#/$defs/AggFn"
-        },
-        "alias": {
-          "description": "Output column name. Polars defaults it to ``col``, except for a bare ``pl.len()`` -> 'len' and a bare ``pl.count()`` -> 'count'",
-          "title": "Alias",
-          "type": "string"
         }
       },
       "required": [
@@ -97,12 +97,6 @@
       "additionalProperties": false,
       "description": "Everything the runtime needs to refill a ui-mode figure (RFC \u00a74).",
       "properties": {
-        "scaffold": {
-          "additionalProperties": true,
-          "description": "Full figure JSON from the real create_figure_from_data, data arrays stripped",
-          "title": "Scaffold",
-          "type": "object"
-        },
         "group_cols": {
           "description": "px grouping columns in order [color, symbol, line_dash, line_group, pattern_shape, facet_row, facet_col]",
           "items": {
@@ -110,6 +104,18 @@
           },
           "title": "Group Cols",
           "type": "array"
+        },
+        "sampled": {
+          "default": false,
+          "description": "True when the build sampled before filtering (FIGURE_MAX_POINTS) -> partial tier",
+          "title": "Sampled",
+          "type": "boolean"
+        },
+        "scaffold": {
+          "additionalProperties": true,
+          "description": "Full figure JSON from the real create_figure_from_data, data arrays stripped",
+          "title": "Scaffold",
+          "type": "object"
         },
         "traces": {
           "items": {
@@ -124,12 +130,6 @@
           },
           "title": "Trendlines",
           "type": "array"
-        },
-        "sampled": {
-          "default": false,
-          "description": "True when the build sampled before filtering (FIGURE_MAX_POINTS) -> partial tier",
-          "title": "Sampled",
-          "type": "boolean"
         }
       },
       "required": [
@@ -234,14 +234,14 @@
       "additionalProperties": false,
       "description": "One physical column of a bundled Parquet file.",
       "properties": {
-        "name": {
-          "description": "Column name as stored in the Parquet file",
-          "title": "Name",
-          "type": "string"
-        },
         "dtype": {
           "description": "Polars dtype string at export time (e.g. 'Int64', 'Utf8')",
           "title": "Dtype",
+          "type": "string"
+        },
+        "name": {
+          "description": "Column name as stored in the Parquet file",
+          "title": "Name",
           "type": "string"
         }
       },
@@ -267,6 +267,12 @@
       "additionalProperties": false,
       "description": "The dashboard document the runtime mounts.",
       "properties": {
+        "doc": {
+          "additionalProperties": true,
+          "description": "DashboardDataLite-shaped document: layout + stored_metadata components",
+          "title": "Doc",
+          "type": "object"
+        },
         "id": {
           "description": "Dashboard id the runtime passes to App \u2014 real Mongo id (producer A/C) or synthetic sha1(workflow_tag + ':' + dc_tag)[:24]-style id (producer B). Must be non-empty: ComponentRenderer silently no-ops several component types without a dashboardId.",
           "title": "Id",
@@ -276,12 +282,6 @@
           "default": "",
           "title": "Title",
           "type": "string"
-        },
-        "doc": {
-          "additionalProperties": true,
-          "description": "DashboardDataLite-shaped document: layout + stored_metadata components",
-          "title": "Doc",
-          "type": "object"
         }
       },
       "required": [
@@ -295,35 +295,29 @@
       "additionalProperties": false,
       "description": "One data collection's bundled table.\n\nMirrors the shape of ``load_deltatable_lite``'s ``init_data`` entries\n(``deltatables_utils.py:1393``) \u2014 the proven \"resolve a DC without an API\nround-trip\" contract \u2014 extended with serverless-only fields.",
       "properties": {
-        "uri": {
-          "description": "Where the Parquet bytes live. 'inline:dc_<id>' (single-file, resolved against inline_blobs), a bundle-relative path like 'data/<id>.parquet' (static-dir), or an absolute URL (remote). All resolution goes through the runtime's single resolveUri() helper.",
-          "title": "Uri",
-          "type": "string"
-        },
-        "rows": {
-          "description": "Row count at export time",
-          "minimum": 0,
-          "title": "Rows",
-          "type": "integer"
-        },
-        "size_bytes": {
-          "description": "Parquet file size in bytes",
-          "minimum": 0,
-          "title": "Size Bytes",
-          "type": "integer"
-        },
-        "row_group_bytes": {
+        "aggregation_hash": {
           "anyOf": [
             {
-              "type": "integer"
+              "type": "string"
             },
             {
               "type": "null"
             }
           ],
           "default": null,
-          "description": "Target row-group size used at export (tuned for Range requests in remote mode)",
-          "title": "Row Group Bytes"
+          "description": "Staleness token: server-side _get_aggregation_hash for producer A, hash of the input Parquet bytes for producer B",
+          "title": "Aggregation Hash"
+        },
+        "codebooks": {
+          "additionalProperties": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object"
+          },
+          "description": "Per categorical non-String column: JSON-serialized option value -> integer code stored in the '__code__<col>' companion. Keys are serialized with the same _json_safe path that produces MultiSelect options, so option values and codebook keys are byte-identical. A selected value absent from the codebook matches nothing (same as a failed cast server-side).",
+          "title": "Codebooks",
+          "type": "object"
         },
         "columns": {
           "description": "Physical schema after pruning + companions",
@@ -341,29 +335,35 @@
           "title": "Companions",
           "type": "object"
         },
-        "codebooks": {
-          "additionalProperties": {
-            "additionalProperties": {
-              "type": "integer"
-            },
-            "type": "object"
-          },
-          "description": "Per categorical non-String column: JSON-serialized option value -> integer code stored in the '__code__<col>' companion. Keys are serialized with the same _json_safe path that produces MultiSelect options, so option values and codebook keys are byte-identical. A selected value absent from the codebook matches nothing (same as a failed cast server-side).",
-          "title": "Codebooks",
-          "type": "object"
-        },
-        "aggregation_hash": {
+        "row_group_bytes": {
           "anyOf": [
             {
-              "type": "string"
+              "type": "integer"
             },
             {
               "type": "null"
             }
           ],
           "default": null,
-          "description": "Staleness token: server-side _get_aggregation_hash for producer A, hash of the input Parquet bytes for producer B",
-          "title": "Aggregation Hash"
+          "description": "Target row-group size used at export (tuned for Range requests in remote mode)",
+          "title": "Row Group Bytes"
+        },
+        "rows": {
+          "description": "Row count at export time",
+          "minimum": 0,
+          "title": "Rows",
+          "type": "integer"
+        },
+        "size_bytes": {
+          "description": "Parquet file size in bytes",
+          "minimum": 0,
+          "title": "Size Bytes",
+          "type": "integer"
+        },
+        "uri": {
+          "description": "Where the Parquet bytes live. 'inline:dc_<id>' (single-file, resolved against inline_blobs), a bundle-relative path like 'data/<id>.parquet' (static-dir), or an absolute URL (remote). All resolution goes through the runtime's single resolveUri() helper.",
+          "title": "Uri",
+          "type": "string"
         }
       },
       "required": [
@@ -373,6 +373,78 @@
         "columns"
       ],
       "title": "DataRef",
+      "type": "object"
+    },
+    "ExportProvenance": {
+      "additionalProperties": false,
+      "description": "Who built the bundle, from where, and against which data.\n\nSurfaced in the bundle's left rail: a bundle outlives the instance it came\nfrom, so a reader needs to know whose export it is and how old.",
+      "properties": {
+        "dashboard_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Absolute URL of the live dashboard, when the builder knows it",
+          "title": "Dashboard Url"
+        },
+        "exported_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "ISO 8601; mirrors built_at, kept here for display",
+          "title": "Exported At"
+        },
+        "exported_by": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Email of the exporting user",
+          "title": "Exported By"
+        },
+        "project_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Name"
+        },
+        "source": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Instance the export ran against (host or deployment name)",
+          "title": "Source"
+        }
+      },
+      "title": "ExportProvenance",
       "type": "object"
     },
     "FilterOp": {
@@ -422,6 +494,15 @@
       "additionalProperties": false,
       "description": "A precomputed component payload, rendered when the component is frozen.",
       "properties": {
+        "filter_state": {
+          "description": "Filter state the payload was computed at (default state = [])",
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Filter State",
+          "type": "array"
+        },
         "kind": {
           "description": "Component type the payload feeds (figure|table|card|multiqc|advanced_viz|map|image)",
           "title": "Kind",
@@ -432,15 +513,6 @@
           "description": "Exactly what the corresponding api.ts function would have returned",
           "title": "Payload",
           "type": "object"
-        },
-        "filter_state": {
-          "description": "Filter state the payload was computed at (default state = [])",
-          "items": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "title": "Filter State",
-          "type": "array"
         }
       },
       "required": [
@@ -454,11 +526,12 @@
       "additionalProperties": false,
       "description": "``df.group_by(by, maintain_order=True).agg(...)`` \u2014 first-appearance group order.",
       "properties": {
-        "op": {
-          "const": "group_by",
-          "default": "group_by",
-          "title": "Op",
-          "type": "string"
+        "agg": {
+          "items": {
+            "$ref": "#/$defs/AggSpec"
+          },
+          "title": "Agg",
+          "type": "array"
         },
         "by": {
           "description": "Grouping key columns; a null key forms its own group",
@@ -468,12 +541,11 @@
           "title": "By",
           "type": "array"
         },
-        "agg": {
-          "items": {
-            "$ref": "#/$defs/AggSpec"
-          },
-          "title": "Agg",
-          "type": "array"
+        "op": {
+          "const": "group_by",
+          "default": "group_by",
+          "title": "Op",
+          "type": "string"
         }
       },
       "required": [
@@ -699,12 +771,6 @@
       "additionalProperties": false,
       "description": "``df.rename({\"old\": \"new\"})``.",
       "properties": {
-        "op": {
-          "const": "rename",
-          "default": "rename",
-          "title": "Op",
-          "type": "string"
-        },
         "map": {
           "additionalProperties": {
             "type": "string"
@@ -712,6 +778,12 @@
           "description": "Old column name -> new column name",
           "title": "Map",
           "type": "object"
+        },
+        "op": {
+          "const": "rename",
+          "default": "rename",
+          "title": "Op",
+          "type": "string"
         }
       },
       "required": [
@@ -724,17 +796,17 @@
       "additionalProperties": false,
       "description": "Sampling ceilings the runtime enforces, pinned from the building instance.\n\nMirrors ``PerformanceConfig`` (settings_models.py): the advanced_viz data\npath reduces the filtered frame to ``figure_max_points`` rows under the\nkind's policy, and flags aggregating kinds as degraded past\n``advanced_viz_no_sample_max_rows``. Defaults match the server defaults so\nmanifests built before this field existed keep the same behaviour.",
       "properties": {
-        "figure_max_points": {
-          "default": 10000,
-          "description": "Scan-level reduction cap (rows) for sampled render paths",
-          "title": "Figure Max Points",
-          "type": "integer"
-        },
         "advanced_viz_no_sample_max_rows": {
           "default": 2000000,
           "description": "Ceiling past which 'none'-policy kinds are sampled anyway (degraded); 0 disables",
           "title": "Advanced Viz No Sample Max Rows",
           "type": "integer"
+        },
+        "advanced_viz_tail_effect_threshold": {
+          "default": 1.0,
+          "description": "Fallback tail threshold for signed effect columns",
+          "title": "Advanced Viz Tail Effect Threshold",
+          "type": "number"
         },
         "advanced_viz_tail_p_threshold": {
           "default": 0.05,
@@ -742,11 +814,11 @@
           "title": "Advanced Viz Tail P Threshold",
           "type": "number"
         },
-        "advanced_viz_tail_effect_threshold": {
-          "default": 1.0,
-          "description": "Fallback tail threshold for signed effect columns",
-          "title": "Advanced Viz Tail Effect Threshold",
-          "type": "number"
+        "figure_max_points": {
+          "default": 10000,
+          "description": "Scan-level reduction cap (rows) for sampled render paths",
+          "title": "Figure Max Points",
+          "type": "integer"
         }
       },
       "title": "RuntimeLimits",
@@ -756,12 +828,6 @@
       "additionalProperties": false,
       "description": "``df.sort(by, descending=desc)`` with Polars' default null placement.",
       "properties": {
-        "op": {
-          "const": "sort",
-          "default": "sort",
-          "title": "Op",
-          "type": "string"
-        },
         "by": {
           "items": {
             "type": "string"
@@ -776,6 +842,12 @@
           },
           "title": "Desc",
           "type": "array"
+        },
+        "op": {
+          "const": "sort",
+          "default": "sort",
+          "title": "Op",
+          "type": "string"
         }
       },
       "required": [
@@ -785,12 +857,85 @@
       "title": "SortOp",
       "type": "object"
     },
+    "TabEntry": {
+      "additionalProperties": false,
+      "description": "One tab of a bundled tab family.\n\nServer-side a family is a main tab (``is_main_tab``) plus children carrying\n``parent_dashboard_id``; the viewer's left rail switches between them by\nnavigating to /dashboard/<id>. A bundle has no routing, so it carries every\ntab's document and switches in place.",
+      "properties": {
+        "doc": {
+          "additionalProperties": true,
+          "description": "That tab's DashboardDataLite-shaped document",
+          "title": "Doc",
+          "type": "object"
+        },
+        "icon": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Iconify id shown on the tab pill",
+          "title": "Icon"
+        },
+        "icon_color": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Icon Color"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "is_main_tab": {
+          "default": false,
+          "title": "Is Main Tab",
+          "type": "boolean"
+        },
+        "tab_order": {
+          "default": 0,
+          "description": "0 for the main tab, then child order",
+          "title": "Tab Order",
+          "type": "integer"
+        },
+        "title": {
+          "default": "",
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "doc"
+      ],
+      "title": "TabEntry",
+      "type": "object"
+    },
     "TierEntry": {
       "additionalProperties": false,
       "description": "Per-component liveness verdict, shown by ``--check`` and the runtime badge.",
       "properties": {
-        "tier": {
-          "$ref": "#/$defs/ComponentTier"
+        "detail": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Human string for the --check table and badge tooltip",
+          "title": "Detail"
         },
         "reason": {
           "anyOf": [
@@ -804,18 +949,8 @@
           "default": null,
           "description": "Machine-readable cause when tier != live"
         },
-        "detail": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Human string for the --check table and badge tooltip",
-          "title": "Detail"
+        "tier": {
+          "$ref": "#/$defs/ComponentTier"
         }
       },
       "required": [
@@ -847,16 +982,12 @@
       "additionalProperties": false,
       "description": "One trace's binding in the bind-and-refill scheme (RFC \u00a74).",
       "properties": {
-        "i": {
-          "description": "Trace index in the scaffold figure",
-          "minimum": 0,
-          "title": "I",
-          "type": "integer"
-        },
-        "group": {
-          "additionalProperties": true,
-          "description": "Equality predicates (grouping column -> value) selecting this trace's rows",
-          "title": "Group",
+        "axes": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Facet-cell disambiguation: 'xaxis'/'yaxis' -> plotly axis id",
+          "title": "Axes",
           "type": "object"
         },
         "fields": {
@@ -867,13 +998,17 @@
           "title": "Fields",
           "type": "object"
         },
-        "axes": {
-          "additionalProperties": {
-            "type": "string"
-          },
-          "description": "Facet-cell disambiguation: 'xaxis'/'yaxis' -> plotly axis id",
-          "title": "Axes",
+        "group": {
+          "additionalProperties": true,
+          "description": "Equality predicates (grouping column -> value) selecting this trace's rows",
+          "title": "Group",
           "type": "object"
+        },
+        "i": {
+          "description": "Trace index in the scaffold figure",
+          "minimum": 0,
+          "title": "I",
+          "type": "integer"
         }
       },
       "required": [
@@ -911,11 +1046,13 @@
       "additionalProperties": false,
       "description": "``df.unpivot(on=, index=, variable_name=, value_name=)`` (a.k.a. legacy ``melt``).",
       "properties": {
-        "op": {
-          "const": "unpivot",
-          "default": "unpivot",
-          "title": "Op",
-          "type": "string"
+        "index": {
+          "description": "Columns carried through unchanged",
+          "items": {
+            "type": "string"
+          },
+          "title": "Index",
+          "type": "array"
         },
         "on": {
           "description": "Columns melted into (variable, value) pairs, in block order",
@@ -925,24 +1062,22 @@
           "title": "On",
           "type": "array"
         },
-        "index": {
-          "description": "Columns carried through unchanged",
-          "items": {
-            "type": "string"
-          },
-          "title": "Index",
-          "type": "array"
-        },
-        "variable": {
-          "default": "variable",
-          "description": "Name of the emitted variable column",
-          "title": "Variable",
+        "op": {
+          "const": "unpivot",
+          "default": "unpivot",
+          "title": "Op",
           "type": "string"
         },
         "value": {
           "default": "value",
           "description": "Name of the emitted value column",
           "title": "Value",
+          "type": "string"
+        },
+        "variable": {
+          "default": "variable",
+          "description": "Name of the emitted variable column",
+          "title": "Variable",
           "type": "string"
         }
       },
@@ -956,25 +1091,23 @@
   "additionalProperties": false,
   "description": "The serverless bundle contract (RFC \u00a73.1). manifest_version 1.",
   "properties": {
-    "manifest_version": {
-      "default": 1,
-      "title": "Manifest Version",
-      "type": "integer"
+    "allow_network_tiles": {
+      "default": false,
+      "description": "Permit MapLibre tile fetches (static-dir/remote); single-file freezes maps unless style is white-bg",
+      "title": "Allow Network Tiles",
+      "type": "boolean"
     },
-    "mode": {
-      "$ref": "#/$defs/BundleMode"
-    },
-    "producer": {
-      "$ref": "#/$defs/Producer"
+    "bindings": {
+      "additionalProperties": {
+        "$ref": "#/$defs/BindingTable"
+      },
+      "description": "component_id -> bind-and-refill table (phase 5)",
+      "title": "Bindings",
+      "type": "object"
     },
     "built_at": {
       "description": "ISO 8601 build timestamp",
       "title": "Built At",
-      "type": "string"
-    },
-    "depictio_version": {
-      "description": "Depictio version that built the bundle",
-      "title": "Depictio Version",
       "type": "string"
     },
     "dashboard": {
@@ -988,13 +1121,10 @@
       "title": "Data Refs",
       "type": "object"
     },
-    "tiers": {
-      "additionalProperties": {
-        "$ref": "#/$defs/TierEntry"
-      },
-      "description": "component_id -> liveness verdict",
-      "title": "Tiers",
-      "type": "object"
+    "depictio_version": {
+      "description": "Depictio version that built the bundle",
+      "title": "Depictio Version",
+      "type": "string"
     },
     "frozen": {
       "additionalProperties": {
@@ -1004,13 +1134,31 @@
       "title": "Frozen",
       "type": "object"
     },
-    "bindings": {
+    "inline_blobs": {
       "additionalProperties": {
-        "$ref": "#/$defs/BindingTable"
+        "type": "string"
       },
-      "description": "component_id -> bind-and-refill table (phase 5)",
-      "title": "Bindings",
+      "description": "single-file only: 'dc_<id>' -> base64 Parquet bytes referenced by inline: URIs",
+      "title": "Inline Blobs",
       "type": "object"
+    },
+    "limits": {
+      "$ref": "#/$defs/RuntimeLimits",
+      "description": "Sampling ceilings pinned from the building instance's PerformanceConfig"
+    },
+    "links": {
+      "$ref": "#/$defs/LinksSection"
+    },
+    "manifest_version": {
+      "default": 1,
+      "title": "Manifest Version",
+      "type": "integer"
+    },
+    "mode": {
+      "$ref": "#/$defs/BundleMode"
+    },
+    "producer": {
+      "$ref": "#/$defs/Producer"
     },
     "prologues": {
       "additionalProperties": {
@@ -1049,25 +1197,23 @@
       "title": "Prologues",
       "type": "object"
     },
-    "links": {
-      "$ref": "#/$defs/LinksSection"
+    "provenance": {
+      "$ref": "#/$defs/ExportProvenance"
     },
-    "limits": {
-      "$ref": "#/$defs/RuntimeLimits",
-      "description": "Sampling ceilings pinned from the building instance's PerformanceConfig"
-    },
-    "allow_network_tiles": {
-      "default": false,
-      "description": "Permit MapLibre tile fetches (static-dir/remote); single-file freezes maps unless style is white-bg",
-      "title": "Allow Network Tiles",
-      "type": "boolean"
-    },
-    "inline_blobs": {
-      "additionalProperties": {
-        "type": "string"
+    "tabs": {
+      "description": "Every tab of the bundled family, main tab first, each with its own document. Empty for a single-tab bundle, where `dashboard` is the whole story; when populated it includes the entry tab too, so `dashboard.doc` duplicates one entry. Component-keyed sections (tiers, frozen, bindings, prologues) span the whole family \u2014 component ids are uuids, so they never collide across tabs",
+      "items": {
+        "$ref": "#/$defs/TabEntry"
       },
-      "description": "single-file only: 'dc_<id>' -> base64 Parquet bytes referenced by inline: URIs",
-      "title": "Inline Blobs",
+      "title": "Tabs",
+      "type": "array"
+    },
+    "tiers": {
+      "additionalProperties": {
+        "$ref": "#/$defs/TierEntry"
+      },
+      "description": "component_id -> liveness verdict",
+      "title": "Tiers",
       "type": "object"
     }
   },

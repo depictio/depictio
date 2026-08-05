@@ -533,6 +533,48 @@ class DashboardSection(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class TabEntry(BaseModel):
+    """One tab of a bundled tab family.
+
+    Server-side a family is a main tab (``is_main_tab``) plus children carrying
+    ``parent_dashboard_id``; the viewer's left rail switches between them by
+    navigating to /dashboard/<id>. A bundle has no routing, so it carries every
+    tab's document and switches in place.
+    """
+
+    id: str
+    title: str = Field(default="")
+    tab_order: int = Field(default=0, description="0 for the main tab, then child order")
+    is_main_tab: bool = Field(default=False)
+    icon: str | None = Field(default=None, description="Iconify id shown on the tab pill")
+    icon_color: str | None = Field(default=None)
+    doc: dict[str, Any] = Field(description="That tab's DashboardDataLite-shaped document")
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class ExportProvenance(BaseModel):
+    """Who built the bundle, from where, and against which data.
+
+    Surfaced in the bundle's left rail: a bundle outlives the instance it came
+    from, so a reader needs to know whose export it is and how old.
+    """
+
+    exported_by: str | None = Field(default=None, description="Email of the exporting user")
+    exported_at: str | None = Field(
+        default=None, description="ISO 8601; mirrors built_at, kept here for display"
+    )
+    source: str | None = Field(
+        default=None, description="Instance the export ran against (host or deployment name)"
+    )
+    project_name: str | None = Field(default=None)
+    dashboard_url: str | None = Field(
+        default=None, description="Absolute URL of the live dashboard, when the builder knows it"
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class BundleManifest(BaseModel):
     """The serverless bundle contract (RFC §3.1). manifest_version 1."""
 
@@ -543,6 +585,18 @@ class BundleManifest(BaseModel):
     depictio_version: str = Field(description="Depictio version that built the bundle")
 
     dashboard: DashboardSection
+    tabs: list[TabEntry] = Field(
+        default_factory=list,
+        description=(
+            "Every tab of the bundled family, main tab first, each with its own "
+            "document. Empty for a single-tab bundle, where `dashboard` is the "
+            "whole story; when populated it includes the entry tab too, so "
+            "`dashboard.doc` duplicates one entry. Component-keyed sections "
+            "(tiers, frozen, bindings, prologues) span the whole family — "
+            "component ids are uuids, so they never collide across tabs"
+        ),
+    )
+    provenance: ExportProvenance = Field(default_factory=ExportProvenance)
     data_refs: dict[str, DataRef] = Field(
         default_factory=dict, description="dc_id -> bundled table"
     )
