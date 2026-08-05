@@ -130,6 +130,19 @@ def synthetic_dc_id(workflow_tag: str, dc_tag: str) -> str:
     return hashlib.sha1(f"{workflow_tag}:{dc_tag}".encode()).hexdigest()[:24]
 
 
+def synthetic_wf_id(workflow_tag: str) -> str:
+    """Stable synthetic wf_id for a workflow tag (no Mongo behind producer B).
+
+    Same 24-hex shape as :func:`synthetic_dc_id`, hashed from the workflow tag
+    alone so every component of one workflow carries the same id. It exists
+    because the renderers read it: every advanced_viz renderer gates its data
+    fetch on a truthy ``metadata.wf_id`` and otherwise draws "missing data
+    binding". The value is inert offline — the runtime keys its bundled tables
+    on ``dc_id`` — but it has to be *there*, and it has to be the workflow's.
+    """
+    return hashlib.sha1(f"workflow:{workflow_tag}".encode()).hexdigest()[:24]
+
+
 def _load_data_map(data_dir: Path) -> dict[str, str]:
     """Optional ``data.yaml`` in the data dir: ``"{wf_tag}:{dc_tag}"`` (or bare
     ``dc_tag``) → Parquet path, relative to the data dir or absolute."""
@@ -164,10 +177,11 @@ def resolve_parquet_path(data_dir: Path, workflow_tag: str, dc_tag: str) -> Path
 
 def _component_meta(comp: dict[str, Any], index: str, dc_id: str | None) -> dict[str, Any]:
     """One ``stored_metadata`` entry: the spec component + runtime identifiers."""
+    wf_tag = comp.get("workflow_tag") or ""
     meta = {k: v for k, v in comp.items() if k not in ("layout", "tag")}
     meta["index"] = index
     meta["component_type"] = comp.get("component_type", "figure")
-    meta["wf_id"] = None
+    meta["wf_id"] = synthetic_wf_id(wf_tag) if wf_tag else None
     meta["dc_id"] = dc_id
     if meta["component_type"] == "figure":
         meta["dict_kwargs"] = comp.get("figure_params") or comp.get("dict_kwargs") or {}

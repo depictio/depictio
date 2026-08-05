@@ -8,27 +8,37 @@
  * (depictio/api/v1/deltatables_utils.py:225) would, and computes card values /
  * unique options / column ranges offline.
  *
+ * Every render path starts by resolving cross-DC links for ITS target data
+ * collection ({@link resolveLinkFilters}, RFC §8) — a filter set is only
+ * complete relative to the collection it is about to mask.
+ *
  * Manifests without `data_refs` (the phase-0 fixture) take none of these
  * paths — the apiShim falls back to frozen payloads, so old bundles keep
  * rendering.
  */
 import {
   HyparquetEngine,
+  applyResolver,
+  extendFiltersViaLinks,
   limitsOf,
+  needsTranslation,
   reduceFrame,
   refillFigure,
   resolveUri,
   roundSigFigs,
   runPrologue,
   sortSlice,
+  translateViaTable,
   type AdvancedVizTailSpec,
   type AggFn,
   type BindingTable,
   type BoundFilter,
   type ColumnTable,
+  type DCLinkLike,
   type DataRef,
   type PrologueOp,
   type QueryEngine,
+  type ResolveHop,
   type SortSpec,
   type TableHandle,
 } from 'depictio-static-core';
@@ -137,6 +147,137 @@ export function toBoundFilters(filters: InteractiveFilter[]): BoundFilter[] {
   return out;
 }
 
+// ---------------------------------------------------------------------------
+// cross-DC links (RFC §8, phase 7)
+// ---------------------------------------------------------------------------
+
+/** Polars dtype strings the server treats as date-typed in a link translation
+ *  (`schema[filter_column] in [pl.Date, pl.Datetime]`, links routes.py:225):
+ *  'Date' and 'Datetime(time_unit=…, time_zone=…)'. */
+const DATE_DTYPE_RE = /^date/i;
+
+/**
+ * The BoundFilter one hop's translation query runs on the SOURCE table —
+ * mirror of the predicate `_translate_filter_values` builds
+ * (links routes.py:222–241) before its `SELECT DISTINCT link_col`:
+ *
+ *   - a 2-element value list on a Date/Datetime column is a BETWEEN, both
+ *     bounds inclusive (the server's DateRangePicker special case, parsing the
+ *     bounds with '%Y-%m-%d'); `parseWallClockMicros` reads the same strings
+ *     into the epoch-µs space the `__ts__` companion lives in.
+ *   - everything else is `is_in`.
+ *
+ * Returns null when the engine would have nothing to read: a `ts_range` needs
+ * the `__ts__` companion, and without it the mask kernel's per-filter skip
+ * would silently drop the predicate and translate the WHOLE column — an
+ * over-match that would widen the filter instead of narrowing it. An unusable
+ * hop is the honest answer (the caller returns null → the chain is dropped).
+ */
+function translationFilter(
+  ref: DataRef,
+  column: string,
+  dtype: string,
+  values: unknown[],
+): BoundFilter | null {
+  if (values.length === 2 && DATE_DTYPE_RE.test(dtype)) {
+    const min = parseWallClockMicros(values[0]);
+    const max = parseWallClockMicros(values[1]);
+    if (min !== undefined && max !== undefined) {
+      const hasCompanion = (ref.columns ?? []).some((c) => c.name === `__ts__${column}`);
+      return hasCompanion ? { kind: 'ts_range', column, min, max } : null;
+    }
+  }
+  return { kind: 'in', column, values };
+}
+
+/**
+ * One link hop, resolved offline — the runtime half of depictio-static-core's
+ * {@link ResolveHop} contract (the data-touching step the pure graph walk
+ * delegates).
+ *
+ * Tier A — the hop's SOURCE data collection ships in the bundle: run the
+ * server's own translation query against the bundled Parquet
+ * (`SELECT DISTINCT source_column WHERE filter_col …`, links routes.py:243–256)
+ * when the filter column differs from the join column, then apply the pure
+ * resolver. A filter or join column absent from the source schema returns null
+ * — the server answers those with a 400 (routes.py:196–207), and a null here
+ * is the walk's "unusable hop", which claims nothing rather than filtering
+ * wrongly.
+ *
+ * Tier B — the source DC is NOT bundled (producer A, when the source is a
+ * link-only collection): the precomputed `manifest.links.tables[link_id]` IS
+ * the full answer of that query, but only for the join column it was keyed on
+ * — a hop that would need a different column's translation has no table to
+ * read and is unusable. The precomputed values already went through the real
+ * server resolver at build time, so `applyResolver` must NOT run again.
+ */
+const resolveHop: ResolveHop = async (link, column, values) => {
+  const sourceDcId = String(link.source_dc_id ?? '');
+  const linkColumn = String(link.source_column ?? '');
+  if (!sourceDcId || !linkColumn) return null;
+
+  const ref = dataRefFor(sourceDcId);
+  if (!ref) {
+    const table = bundle().links?.tables?.[String(link.id ?? '')];
+    if (!table || needsTranslation(column, link)) return null;
+    return { resolved_values: translateViaTable(table, values) };
+  }
+
+  // The source DC's schema as the SERVER sees it: build-time companions are
+  // physical columns of the bundled Parquet but never part of a link's
+  // contract (the engine reaches them itself, through `column`).
+  const schema = new Map(userColumns(ref).map((c) => [c.name, c.dtype]));
+  if (!schema.has(column) || !schema.has(linkColumn)) return null;
+
+  let translated: unknown[] = values;
+  if (needsTranslation(column, link)) {
+    const filter = translationFilter(ref, column, schema.get(column) ?? '', values);
+    if (!filter) return null;
+    const { handle } = await tableFor(sourceDcId);
+    const { mask } = await engine.mask(handle, [filter]);
+    translated = await engine.unique(handle, mask, linkColumn);
+  }
+  return { resolved_values: applyResolver(link.link_config, translated).resolved };
+};
+
+/**
+ * Extend a render's filter list with the cross-DC filters the project's links
+ * imply for ONE target data collection — the offline equivalent of
+ * `_filters_with_links` (dashboards routes.py:1390–1466) wrapping
+ * `extend_filters_via_links`.
+ *
+ * Grouping is strictly by `metadata.dc_id`, like the server: a filter without
+ * one (a selection the SPA could not attribute) is left out of the walk
+ * entirely — it already binds to every DC by column name, and feeding it in
+ * would invent an origin it does not have. The synthetic filters come back in
+ * the flattened shape the viewer's `InteractiveFilter` uses (top-level
+ * column_name/interactive_component_type plus metadata), and are APPENDED —
+ * for this target DC only, which is why every live path resolves its own.
+ *
+ * Fast path: a bundle with no links (every pre-phase-7 bundle, and every
+ * single-DC one) returns the caller's array untouched, so linkless renders pay
+ * nothing.
+ */
+export async function resolveLinkFilters(
+  targetDcId: string,
+  filters: InteractiveFilter[],
+): Promise<InteractiveFilter[]> {
+  const configs = (bundle().links?.configs ?? []) as DCLinkLike[];
+  if (configs.length === 0 || !targetDcId) return filters;
+
+  const filtersByDc: Record<string, InteractiveFilter[]> = {};
+  for (const f of filters ?? []) {
+    const dcId = String(f.metadata?.dc_id ?? '');
+    if (!dcId) continue;
+    (filtersByDc[dcId] ??= []).push(f);
+  }
+  if (Object.keys(filtersByDc).length === 0) return filters;
+
+  const synthetic = await extendFiltersViaLinks(targetDcId, filtersByDc, configs, resolveHop);
+  if (synthetic.length === 0) return filters;
+  return [...filters, ...(synthetic as unknown as InteractiveFilter[])];
+}
+
 /** Server aggregation-name aliases (`_agg_expr`, dashboards routes.py:1242)
  *  → engine AggFn. Returns undefined for aggregations the phase-1 engine
  *  doesn't cover (box_plot_stats, q1/q3); `range` is derived from minMax. */
@@ -201,14 +342,26 @@ export async function computeCardsLive(
   const secondary_values: Record<string, Record<string, unknown>> = {};
   const aggregations: Record<string, string[]> = {};
 
-  // One mask per dc (filters are global; per-filter column skip is the
-  // engine's job, matching apply_runtime_filters).
+  // One bound filter set per dc: the user's filters are global (per-filter
+  // column skip is the engine's job, matching apply_runtime_filters), but the
+  // link-resolved synthetics are per TARGET dc, so each dc resolves its own.
+  const boundCache = new Map<string, Promise<BoundFilter[]>>();
+  const boundFor = (dcId: string) => {
+    let b = boundCache.get(dcId);
+    if (!b) {
+      b = resolveLinkFilters(dcId, filters).then(toBoundFilters);
+      boundCache.set(dcId, b);
+    }
+    return b;
+  };
+
+  // One mask per dc, over that dc's own bound filters.
   const maskCache = new Map<string, Promise<Uint8Array>>();
   const maskFor = (dcId: string) => {
     let m = maskCache.get(dcId);
     if (!m) {
-      m = tableFor(dcId).then(({ handle }) =>
-        engine.mask(handle, bound).then((r) => r.mask),
+      m = Promise.all([tableFor(dcId), boundFor(dcId)]).then(([{ handle }, dcBound]) =>
+        engine.mask(handle, dcBound).then((r) => r.mask),
       );
       maskCache.set(dcId, m);
     }
@@ -217,7 +370,7 @@ export async function computeCardsLive(
 
   const aggOne = async (dcId: string, column: string, aggregation: string) => {
     const { handle } = await tableFor(dcId);
-    const mask = bound.length ? await maskFor(dcId) : null;
+    const mask = (await boundFor(dcId)).length ? await maskFor(dcId) : null;
     const fn = toAggFn(aggregation);
     if (fn === undefined) {
       console.warn(`static bundle: aggregation "${aggregation}" not supported offline`);
@@ -254,6 +407,10 @@ export async function computeCardsLive(
     }),
   );
 
+  // Reported from the USER's filters, not any dc's link-extended set: the
+  // server's own count is of the filter entries the client sent
+  // (`bulk_compute_cards`), and a synthetic link filter is not a filter the
+  // user set — counting it would make the badge disagree per card.
   return {
     values,
     secondary_values,
@@ -279,7 +436,7 @@ export async function renderFigureLive(
   filterApplied: boolean;
 }> {
   const { handle } = await tableFor(dcId);
-  const bound = toBoundFilters(filters);
+  const bound = toBoundFilters(await resolveLinkFilters(dcId, filters));
   const mask = bound.length ? (await engine.mask(handle, bound)).mask : null;
   const result = await refillFigure({
     binding,
@@ -310,7 +467,7 @@ export async function renderPrologueFigureLive(
   filterApplied: boolean;
 }> {
   const { ref, handle } = await tableFor(dcId);
-  const bound = toBoundFilters(filters);
+  const bound = toBoundFilters(await resolveLinkFilters(dcId, filters));
   const mask = bound.length ? (await engine.mask(handle, bound)).mask : null;
 
   // Base frame = the DataRef's schema minus build-time companions
@@ -458,12 +615,16 @@ export async function fetchAdvancedVizDataLive(
   if (!ref) throw new Error(`static bundle: no data_ref for dc "${req.dcId}"`);
   const { handle } = await tableFor(req.dcId);
 
+  // Cross-DC links first: the server resolves them before it projects, and the
+  // synthetic filters are part of both steps below.
+  const filters = await resolveLinkFilters(req.dcId, req.filters ?? []);
+
   // Projection: requested columns first, then any column a filter names —
   // deduped first-occurrence, then intersected with the DC's actual schema
   // (the server's `available_cols` guard, which exists because link-resolved
   // filters can name columns this DC doesn't have).
   const schema = new Map(userColumns(ref).map((c) => [c.name, c.dtype]));
-  const filterCols = (req.filters ?? [])
+  const filterCols = filters
     .map((f) => f.column_name ?? f.metadata?.column_name)
     .filter((c): c is string => Boolean(c));
   const projection = [...new Set([...req.columns, ...filterCols])].filter((c) => schema.has(c));
@@ -471,7 +632,7 @@ export async function fetchAdvancedVizDataLive(
   // Mask exactly like every other live path (no filters → null mask = all
   // rows), then materialise the projection over the surviving rows: the
   // reduction kernels take plain arrays, not a scan.
-  const bound = toBoundFilters(req.filters ?? []);
+  const bound = toBoundFilters(filters);
   const mask = bound.length ? (await engine.mask(handle, bound)).mask : null;
   const cols = await engine.columns(handle, projection);
   const sel: number[] = [];
@@ -642,7 +803,7 @@ export async function renderTableLive(
   // Filters apply BEFORE sorting, exactly like the server threads
   // filter_metadata into the load (routes.py:2612-2621); `total` is the
   // filtered count, independent of the page window (routes.py:2577-2579).
-  const bound = toBoundFilters(filters);
+  const bound = toBoundFilters(await resolveLinkFilters(dcId, filters));
   const mask = bound.length ? (await engine.mask(handle, bound)).mask : null;
   const cols = await engine.columns(
     handle,

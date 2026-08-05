@@ -39,14 +39,21 @@ from depictio.serverless.producer_b import (
     render_bundle_html,
     resolve_parquet_path,
     synthetic_dc_id,
+    synthetic_wf_id,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 EXAMPLE_SPEC = REPO_ROOT / "depictio" / "serverless" / "examples" / "penguins.yaml"
+ISLAND_REGIONS_CSV = (
+    REPO_ROOT / "depictio" / "serverless" / "examples" / "data" / "island_regions.csv"
+)
 PENGUINS_DATA = REPO_ROOT / "depictio" / "projects" / "init" / "penguins" / "data"
 
 WF_TAG = "penguin_species_analysis"
 DC_TAG = "joined_penguins_complete"
+# The example's second data collection: the island -> region lookup the
+# cross-DC link resolves through (RFC §8, phase 7).
+LINKED_DC_TAG = "island_regions"
 
 
 def _penguins_frame() -> pl.DataFrame:
@@ -66,7 +73,13 @@ def data_dir(tmp_path_factory: pytest.TempPathFactory) -> Path:
     dc_dir = root / WF_TAG
     dc_dir.mkdir(parents=True)
     _penguins_frame().write_parquet(dc_dir / f"{DC_TAG}.parquet")
+    pl.read_csv(ISLAND_REGIONS_CSV).write_parquet(dc_dir / f"{LINKED_DC_TAG}.parquet")
     return root
+
+
+def _penguins_ref(manifest: BundleManifest):
+    """The measurements DataRef (the example bundles two data collections)."""
+    return manifest.data_refs[synthetic_dc_id(WF_TAG, DC_TAG)]
 
 
 @pytest.fixture(scope="module")
@@ -97,11 +110,12 @@ def test_manifest_validates_and_roundtrips(manifest: BundleManifest) -> None:
 
 def test_dc_ids_are_stable(data_dir: Path, manifest: BundleManifest) -> None:
     expected = hashlib.sha1(f"{WF_TAG}:{DC_TAG}".encode()).hexdigest()[:24]
+    linked = synthetic_dc_id(WF_TAG, LINKED_DC_TAG)
     assert synthetic_dc_id(WF_TAG, DC_TAG) == expected
-    assert set(manifest.data_refs) == {expected}
+    assert set(manifest.data_refs) == {expected, linked}
     # A rebuild produces the same ids and the same blob bytes.
     again = build_manifest(load_spec(EXAMPLE_SPEC), data_dir).manifest
-    assert set(again.data_refs) == {expected}
+    assert set(again.data_refs) == {expected, linked}
     assert again.inline_blobs == manifest.inline_blobs
     # Component dc_ids in the mounted doc point at the same synthetic id.
     for comp in manifest.dashboard.doc["stored_metadata"]:
@@ -109,8 +123,30 @@ def test_dc_ids_are_stable(data_dir: Path, manifest: BundleManifest) -> None:
             assert comp["dc_id"] == expected
 
 
+def test_components_carry_their_workflows_synthetic_id(manifest: BundleManifest) -> None:
+    """Every component with a workflow tag names that workflow.
+
+    Not decoration: each advanced_viz renderer gates its data fetch on a truthy
+    ``metadata.wf_id`` and otherwise draws "missing data binding" — a
+    ``wf_id: None`` document used to need a runtime workaround in the api shim.
+    The id is derived from the workflow TAG, so both data collections of this
+    one-workflow example share it, and the text component (no tags at all)
+    still has none.
+    """
+    wf_id = synthetic_wf_id(WF_TAG)
+    assert len(wf_id) == 24
+    int(wf_id, 16)  # raises if not hex
+    by_index = {c["index"]: c for c in manifest.dashboard.doc["stored_metadata"]}
+    for comp in by_index.values():
+        assert comp["wf_id"] == (wf_id if comp.get("workflow_tag") else None)
+    # One workflow, two data collections, one workflow id.
+    assert by_index["table-penguins"]["dc_id"] != by_index["table-island-regions"]["dc_id"]
+    assert by_index["table-penguins"]["wf_id"] == by_index["table-island-regions"]["wf_id"]
+    assert by_index["text-intro"]["wf_id"] is None
+
+
 def test_data_ref_is_complete(manifest: BundleManifest) -> None:
-    ref = next(iter(manifest.data_refs.values()))
+    ref = _penguins_ref(manifest)
     assert ref.uri == f"inline:dc_{synthetic_dc_id(WF_TAG, DC_TAG)}"
     assert ref.rows == 342  # inner join of the repo CSVs (2 rows lack physical features)
     assert ref.size_bytes > 0
@@ -132,7 +168,7 @@ def test_data_ref_is_complete(manifest: BundleManifest) -> None:
 def test_pruning_kept_every_column_for_the_table(manifest: BundleManifest) -> None:
     # The live table widens pruning to keep-all (RFC §6: sorting/filtering may
     # touch any column), so the whole joined frame ships.
-    ref = next(iter(manifest.data_refs.values()))
+    ref = _penguins_ref(manifest)
     physical = {c.name for c in ref.columns if not c.name.startswith("__")}
     assert physical == {
         "individual_id",
@@ -148,7 +184,7 @@ def test_pruning_kept_every_column_for_the_table(manifest: BundleManifest) -> No
 
 
 def test_inline_blob_roundtrips_to_snappy_parquet(manifest: BundleManifest) -> None:
-    ref = next(iter(manifest.data_refs.values()))
+    ref = _penguins_ref(manifest)
     blob_key = ref.uri.removeprefix("inline:")
     assert blob_key in manifest.inline_blobs
     raw = base64.b64decode(manifest.inline_blobs[blob_key])
@@ -185,6 +221,10 @@ def test_tier_table(manifest: BundleManifest) -> None:
         # engine recomputes /advanced_viz/data from the bundled Parquet.
         "sunburst-mass": ComponentTier.LIVE,
         "dotplot-mass": ComponentTier.LIVE,
+        # The linked lookup collection (RFC §8, phase 7): its filter drives the
+        # cross-DC link, its table shows the rows the translation reads.
+        "filter-region": ComponentTier.LIVE,
+        "table-island-regions": ComponentTier.LIVE,
     }
     for cid in ("sunburst-mass", "dotplot-mass"):
         av_entry = manifest.tiers[cid]
@@ -226,7 +266,7 @@ def test_bound_figure_ships_no_frozen_payload(manifest: BundleManifest) -> None:
     assert all("x" not in t and "y" not in t for t in binding.scaffold["data"])
     assert binding.scaffold["layout"]["legend"]["title"]["text"] == "species"
     # The bound columns are in the bundle (pruning keeps every referenced one).
-    ref = next(iter(manifest.data_refs.values()))
+    ref = _penguins_ref(manifest)
     assert {"flipper_length_mm", "body_mass_g", "species"} <= {c.name for c in ref.columns}
 
 
@@ -250,7 +290,7 @@ def test_example_code_mode_figure_is_live_with_its_prologue(manifest: BundleMani
     assert all("x" not in t and "y" not in t for t in binding.scaffold["data"])
     # `mean_mass` exists only after the prologue runs; `species`/`body_mass_g`
     # — the columns it reads — are in the bundle.
-    ref = next(iter(manifest.data_refs.values()))
+    ref = _penguins_ref(manifest)
     assert {"species", "body_mass_g"} <= {c.name for c in ref.columns}
 
 
@@ -278,7 +318,7 @@ def test_text_labelled_figure_binds_and_keeps_its_label_column(data_dir: Path) -
     for trace in binding.traces:
         assert trace.fields["text"] == "island"
     # Pruning kept the label column, and the scaffold ships no text array.
-    ref = next(iter(manifest.data_refs.values()))
+    ref = _penguins_ref(manifest)
     assert "island" in {c.name for c in ref.columns}
     assert all("text" not in t for t in binding.scaffold["data"])
 
