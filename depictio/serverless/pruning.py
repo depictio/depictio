@@ -74,21 +74,42 @@ def advanced_viz_kind(comp: dict[str, Any]) -> str:
     return comp.get("viz_kind") or (comp.get("config") or {}).get("viz_kind") or ""
 
 
+# Config-key suffixes that name data-collection columns. Scalars carry one
+# column (``metric_col``, complex_heatmap's ``index_column``); the plural
+# suffixes carry a list of them (``rank_cols``, ``value_columns``,
+# rarefaction's ``metric_options`` — the metrics its tab strip switches
+# between, each one a column of the frame).
+_COLUMN_SCALAR_SUFFIXES = ("_col", "_column")
+_COLUMN_LIST_SUFFIXES = ("_cols", "_columns", "_options")
+
+
 def advanced_viz_columns(comp: dict[str, Any]) -> list[str]:
     """Columns an advanced_viz component reads, in config order, deduplicated.
 
-    Derived from the persisted ``config`` blob — every ``<role>_col`` scalar
-    plus the hierarchical ``rank_cols`` list — which is the convention
-    ``buildAdvancedVizConfigBlob`` writes, the catalog preview reads, and the
-    ``/advanced_viz/data`` request carries. Non-column scalars (``top_n``,
-    ``compute_method``, …) are ignored: only keys ending in ``_col`` bind a
-    column.
+    Derived from the persisted ``config`` blob — the convention
+    ``buildAdvancedVizConfigBlob`` writes, the catalog preview reads and the
+    ``/advanced_viz/data`` request carries. A key names columns when it ends in
+    one of :data:`_COLUMN_SCALAR_SUFFIXES` (one column) or
+    :data:`_COLUMN_LIST_SUFFIXES` (a list of them). Everything else is a knob,
+    a palette or a value list (``top_n``, ``compute_method``,
+    ``chromosomes_filter``, …) and contributes nothing.
+
+    The rule deliberately **over**-collects: every consumer intersects the
+    result with the DC's real schema before using it — producer A's
+    ``select = [c for c in available if c in wanted]``, producer B's
+    :func:`intersect_with_schema`, and the ``/advanced_viz/data`` endpoint's own
+    ``projection = [c for c in projection if c in available_cols]`` — so a key
+    that turns out to name no column is dropped harmlessly. Missing one is not
+    harmless: the column never reaches the bundled Parquet and the renderer
+    quietly falls back to whatever it does have. That is how rarefaction's
+    metric tabs (``metric_options``) rendered the default metric for every tab
+    in a bundle while looking like they worked.
     """
     columns: list[str] = []
     for key, value in (comp.get("config") or {}).items():
-        if key == "rank_cols" and isinstance(value, list):
+        if key.endswith(_COLUMN_LIST_SUFFIXES) and isinstance(value, list):
             columns.extend(v for v in value if isinstance(v, str) and v)
-        elif key.endswith("_col") and isinstance(value, str) and value:
+        elif key.endswith(_COLUMN_SCALAR_SUFFIXES) and isinstance(value, str) and value:
             columns.append(value)
     return list(dict.fromkeys(columns))
 
@@ -96,8 +117,12 @@ def advanced_viz_columns(comp: dict[str, Any]) -> list[str]:
 def advanced_viz_roles(comp: dict[str, Any]) -> dict[str, str]:
     """``<role> -> column`` map for an advanced_viz component's ``*_col`` keys.
 
-    ``rank_cols`` carries no role (it is a hierarchy, not a single binding), so
-    it contributes to :func:`advanced_viz_columns` only.
+    Deliberately NARROWER than :func:`advanced_viz_columns`: a role is a single
+    binding the server looks up by name (``sampling.tail_role_for_kind`` asks
+    for e.g. the ``significance`` role), so the list-valued keys — ``rank_cols``
+    (a hierarchy), ``metric_options`` (a switchable set), ``value_columns`` (a
+    matrix) — have no role to carry, and widening the map with them would only
+    add entries no caller reads. They contribute columns and nothing else.
     """
     return {
         key[: -len("_col")]: value

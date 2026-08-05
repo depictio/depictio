@@ -22,7 +22,7 @@ from depictio.api.v1.endpoints.serverless_endpoints import routes as routes_mod
 from depictio.models.models.base import PyObjectId
 from depictio.models.models.serverless import ComponentTier, TierReason
 from depictio.models.models.users import User
-from depictio.serverless.preflight import LinkRow, TierRow
+from depictio.serverless.preflight import LinkRow, TabRow, TierRow
 from depictio.serverless.producer_a import ExportResult, ProducerAError
 
 DASHBOARD_OID = ObjectId("6824cb3b89d2b72169309737")
@@ -215,11 +215,17 @@ def _patch_project(monkeypatch: pytest.MonkeyPatch, owners: list[ObjectId]) -> N
 # ---------------------------------------------------------------------------
 
 
+MAIN_TAB_ID = str(DASHBOARD_OID)
+CHILD_TAB_ID = "6824cb3b89d2b72169309741"
+
+
 def _fake_export_result() -> ExportResult:
+    """A two-tab family: one live component on the main tab, one omitted
+    compute on the child — the shape the preflight endpoint reshapes."""
     return ExportResult(
         manifest=None,
         tier_rows=[
-            TierRow("c1", "Card", "card", ComponentTier.LIVE),
+            TierRow("c1", "Card", "card", ComponentTier.LIVE, tab_id=MAIN_TAB_ID),
             TierRow(
                 "c2",
                 "Heatmap",
@@ -227,10 +233,15 @@ def _fake_export_result() -> ExportResult:
                 ComponentTier.OMITTED,
                 TierReason.CELERY_COMPUTE,
                 "needs a Celery worker",
+                tab_id=CHILD_TAB_ID,
             ),
         ],
         link_rows=[
             LinkRow("l1", "dcA", "dcB", "exact", "tier B", True, 42, "precomputed"),
+        ],
+        tabs=[
+            TabRow(MAIN_TAB_ID, "Overview", 0, True),
+            TabRow(CHILD_TAB_ID, "Clusters", 2, False),
         ],
     )
 
@@ -260,6 +271,7 @@ def test_preflight_happy_path(client, owner, monkeypatch: pytest.MonkeyPatch):
                 "tier": "live",
                 "reason": None,
                 "detail": None,
+                "tab_id": MAIN_TAB_ID,
             },
             {
                 "component_id": "c2",
@@ -268,6 +280,23 @@ def test_preflight_happy_path(client, owner, monkeypatch: pytest.MonkeyPatch):
                 "tier": "omitted",
                 "reason": "celery_compute",
                 "detail": "needs a Celery worker",
+                "tab_id": CHILD_TAB_ID,
+            },
+        ],
+        "tabs": [
+            {
+                "id": MAIN_TAB_ID,
+                "title": "Overview",
+                "tab_order": 0,
+                "is_main_tab": True,
+                "counts": {"live": 1, "partial": 0, "frozen": 0, "omitted": 0},
+            },
+            {
+                "id": CHILD_TAB_ID,
+                "title": "Clusters",
+                "tab_order": 2,
+                "is_main_tab": False,
+                "counts": {"live": 0, "partial": 0, "frozen": 0, "omitted": 1},
             },
         ],
         "links": [
@@ -586,9 +615,12 @@ def test_export_task_uploads_bundle(monkeypatch: pytest.MonkeyPatch):
 
     captured: dict[str, Any] = {}
 
-    def fake_export_static(dashboard_id, out_path=None, mode=None, check=False, user=None):
-        captured.update(dashboard_id=dashboard_id, user=user)
+    def fake_export_static(
+        dashboard_id, out_path=None, mode=None, check=False, user=None, single_tab=False
+    ):
+        captured.update(dashboard_id=dashboard_id, user=user, single_tab=single_tab)
         Path(out_path).write_text("<html>hi</html>", encoding="utf-8")
+        return _fake_export_result()
 
     monkeypatch.setattr(producer_a_mod, "export_static", fake_export_static)
     fake_s3 = _FakeS3()
@@ -609,8 +641,10 @@ def test_export_task_uploads_bundle(monkeypatch: pytest.MonkeyPatch):
 
     assert captured["dashboard_id"] == str(DASHBOARD_OID)
     assert captured["user"].id == str(OWNER_OID)
+    assert captured["single_tab"] is False  # the family is the default
     assert result["bucket"] == settings.minio.bucket
     assert result["size_bytes"] == len("<html>hi</html>")
+    assert result["tab_count"] == 2
     assert result["s3_key"].startswith(f"serverless-exports/{DASHBOARD_OID}/")
     assert result["s3_key"].endswith(".html")
     datetime.fromisoformat(result["built_at"])

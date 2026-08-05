@@ -47,10 +47,24 @@ kinds go ``live`` (their DC is bundled, pruned to the columns their ``config``
 binds, and the in-browser engine recomputes ``/advanced_viz/data`` at every
 filter state — no frozen payload); ``phylogenetic`` stays frozen, because its
 Newick tree DC is a second, non-tabular source one bundled table cannot carry;
-the Celery-computed kinds stay omitted.
+and the five Celery-computed kinds (embedding, complex_heatmap, upset, sankey,
+coverage_track) are *pre-exported*: the producer calls their task functions
+in-process and ships the result as a frozen ``compute`` payload, which the
+runtime's dispatch/poll shim hands back as a finished job. They are badged as
+computed-at-export — no filter refreshes them — and degrade to ``omitted``
+(with the reason) when the compute fails or runs past its budget.
+
+One bundle carries a whole **tab family** (RFC §3.1 ``BundleManifest.tabs``):
+the requested dashboard is the entry tab, its main tab and siblings ride along,
+and every component-keyed section merges across them. Data collections are
+deduplicated by dc_id over the family, which is where the size goes: six tabs
+over the same two tables used to mean six bundles each re-inlining both.
+``manifest.provenance`` records who exported it, when, and from which instance.
 
 Permissions (RFC §8): ``--check`` needs *viewer* on the dashboard's project;
-the build itself needs *owner* — a bundle is bulk data exfiltration.
+the build itself needs *owner* — a bundle is bulk data exfiltration. Both are
+evaluated for EVERY tab of the family (they share a project in practice, so it
+is the same check repeated — but the bundle does not have to assume that).
 """
 
 from __future__ import annotations
@@ -58,6 +72,10 @@ from __future__ import annotations
 import base64
 import hashlib
 import io
+import logging
+import os
+import threading
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -75,11 +93,13 @@ from depictio.models.models.serverless import (
     ComponentTier,
     DashboardSection,
     DataRef,
+    ExportProvenance,
     FrozenPayload,
     LinksSection,
     LinkTable,
     Producer,
     PrologueOp,
+    TabEntry,
     TierEntry,
     TierReason,
 )
@@ -89,6 +109,7 @@ from depictio.serverless.preflight import (
     LINK_TIER_B,
     LINK_TIER_INERT,
     LinkRow,
+    TabRow,
     TierRow,
 )
 from depictio.serverless.producer_b import (
@@ -119,6 +140,8 @@ from depictio.serverless.pruning import (
 # components go through :func:`serves_advanced_viz_live` for the same reason —
 # their data-path kinds are recomputed in the browser since phase 4.
 LIVE_DATA_TYPES = frozenset({"card", "interactive"})
+
+logger = logging.getLogger(__name__)
 
 
 def _code_figure_plan(
@@ -225,6 +248,18 @@ def _routes():
     return routes
 
 
+def _dashboards_core():
+    """``dashboards_endpoints.core_functions`` — the tab-family helpers.
+
+    Note it binds ``dashboards_collection`` at import time (a ``from ... import``),
+    so tests that fake the collection must patch it on THIS module, not on
+    ``depictio.api.v1.db``.
+    """
+    from depictio.api.v1.endpoints.dashboards_endpoints import core_functions
+
+    return core_functions
+
+
 def _av_routes():
     from depictio.api.v1.endpoints.advanced_viz_endpoints import routes
 
@@ -287,6 +322,163 @@ def resolve_user(user: Any = None) -> ExportUser:
         is_admin=bool(doc.get("is_admin", False)),
         is_anonymous=bool(doc.get("is_anonymous", False)),
     )
+
+
+# ---------------------------------------------------------------------------
+# Tab family (RFC §3.1 ``BundleManifest.tabs``)
+#
+# Server-side a dashboard's tabs are SEPARATE documents: one main tab
+# (``is_main_tab``, its ``dashboard_id`` is the family id) plus children
+# carrying ``parent_dashboard_id`` + ``tab_order``, switched by routing to
+# /dashboard/<id>. A bundle has no routing and no server, so one bundle carries
+# the whole family: every tab's document, the component-keyed sections merged
+# across them (component ids are uuids), and — the actual size win — ONE copy
+# of each data collection however many tabs read it.
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class FamilyTab:
+    """One tab of the exported family: its full Mongo document plus its place."""
+
+    doc: dict[str, Any]
+    tab_order: int = 0
+    is_main_tab: bool = False
+
+    @property
+    def id(self) -> str:
+        return str(self.doc.get("dashboard_id") or "")
+
+    @property
+    def title(self) -> str:
+        return self.doc.get("title") or ""
+
+    @property
+    def components(self) -> list[dict[str, Any]]:
+        return self.doc.get("stored_metadata") or []
+
+    def tab_entry(self) -> TabEntry:
+        """The manifest entry for this tab (document sanitised like the entry tab).
+
+        Icons follow the tabs endpoint's inheritance: the tab's own
+        ``tab_icon``/``tab_icon_color`` when set, else the dashboard's.
+        """
+        return TabEntry(
+            id=self.id,
+            title=self.title,
+            tab_order=self.tab_order,
+            is_main_tab=self.is_main_tab,
+            icon=self.doc.get("tab_icon") or self.doc.get("icon"),
+            icon_color=self.doc.get("tab_icon_color") or self.doc.get("icon_color"),
+            doc=sanitize_dashboard_doc(self.doc),
+        )
+
+    def tab_row(self) -> TabRow:
+        """The ``--check`` / preflight-endpoint row for this tab."""
+        return TabRow(
+            id=self.id,
+            title=self.title,
+            tab_order=self.tab_order,
+            is_main_tab=self.is_main_tab,
+        )
+
+
+def family_from_doc(
+    entry_doc: dict[str, Any], single_tab: bool = False
+) -> tuple[list[FamilyTab], FamilyTab]:
+    """``(tabs, entry_tab)`` around an already-fetched dashboard document.
+
+    Takes the document rather than an id so callers run the permission gate on
+    the requested dashboard BEFORE the family is walked — a denied export must
+    not read other dashboards first.
+
+    The requested dashboard stays the ENTRY tab (``manifest.dashboard``) even
+    when it is a child, so exporting a child opens the bundle on that child.
+    Resolution walks UP first (``parent_dashboard_id``) and then collects the
+    family through :func:`core_functions.get_child_tabs` — the same helper the
+    ``GET /dashboards/tabs/{parent}`` endpoint uses — ordered main tab first,
+    then children by ``tab_order`` with the title breaking ties.
+
+    ``single_tab=True`` short-circuits to the requested document alone. A
+    dangling ``parent_dashboard_id`` degrades to the same single-tab export
+    rather than failing the build: half a family is still a usable bundle.
+    """
+    entry_tab = FamilyTab(
+        doc=entry_doc,
+        tab_order=int(entry_doc.get("tab_order") or 0),
+        is_main_tab=bool(entry_doc.get("is_main_tab", True)),
+    )
+    if single_tab:
+        return [entry_tab], entry_tab
+
+    entry_id = entry_tab.id
+    parent_id = str(entry_doc.get("parent_dashboard_id") or entry_id)
+    if parent_id == entry_id:
+        main_tab = entry_tab
+        main_tab.tab_order = 0
+        main_tab.is_main_tab = True
+    else:
+        try:
+            main_tab = FamilyTab(doc=_fetch_dashboard(parent_id), tab_order=0, is_main_tab=True)
+        except ProducerAError as exc:
+            logger.warning(
+                "producer A: dashboard %s points at a missing parent %s (%s) — "
+                "exporting it as a single-tab bundle",
+                entry_id,
+                parent_id,
+                exc,
+            )
+            return [entry_tab], entry_tab
+
+    try:
+        children = _dashboards_core().get_child_tabs(ObjectId(parent_id))
+    except Exception as exc:  # a family that cannot be listed is not a fatal export
+        logger.warning("producer A: could not list child tabs of %s: %s", parent_id, exc)
+        children = []
+
+    tabs = [main_tab]
+    for child in sorted(
+        children, key=lambda c: (int(c.get("tab_order") or 0), str(c.get("title") or ""))
+    ):
+        child_id = str(child.get("dashboard_id") or "")
+        if not child_id or child_id == main_tab.id:
+            continue
+        doc = entry_doc if child_id == entry_id else _fetch_dashboard(child_id)
+        tabs.append(
+            FamilyTab(
+                doc=doc,
+                tab_order=int(child.get("tab_order") or 0),
+                is_main_tab=False,
+            )
+        )
+
+    entry = next((tab for tab in tabs if tab.id == entry_id), entry_tab)
+    return tabs, entry
+
+
+def family_components(tabs: list[FamilyTab]) -> list[tuple[FamilyTab, dict[str, Any], str]]:
+    """``(tab, component, component_id)`` over the whole family, tab order first.
+
+    The manifest's component-keyed sections (``tiers``/``frozen``/``bindings``/
+    ``prologues``) are flat across the family, which is only sound because
+    component ids are uuids. Assert it rather than trust it: a collision would
+    silently make one tab's component render another tab's payload.
+    """
+    out: list[tuple[FamilyTab, dict[str, Any], str]] = []
+    seen: dict[str, str] = {}
+    for tab in tabs:
+        for i, comp in enumerate(tab.components):
+            raw = comp.get("index")
+            cid = str(raw) if raw else f"{tab.id}-component-{i}"
+            if raw and cid in seen:
+                raise ProducerAError(
+                    f"component id {cid!r} appears on two tabs of the family "
+                    f"({seen[cid]} and {tab.id}); component ids must be unique across "
+                    "a tab family for the bundle's component-keyed sections to merge"
+                )
+            seen[cid] = tab.id
+            out.append((tab, comp, cid))
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -370,15 +562,34 @@ def classify_stored_component(
     if ctype == "advanced_viz":
         kind = advanced_viz_kind(comp)
         if kind in CELERY_VIZ_KINDS:
-            # TODO(producer-A follow-up): freeze the Celery computes by calling
-            # their task functions (compute_embedding & co.) directly, the way
-            # figures call build_figure_preview — the static runtime already
-            # serves frozen 'compute' payloads through its finishedJob shim.
+            # The compute is run at export time by calling the task function
+            # directly (the way figures call build_figure_preview) and shipped
+            # as a frozen 'compute' payload, which the static runtime's
+            # finishedJob shim hands back as a finished poll result.
+            if celery_compute_request(comp) is not None:
+                return (
+                    ComponentTier.FROZEN,
+                    TierReason.CELERY_COMPUTE,
+                    CELERY_FROZEN_DETAIL.format(kind=kind),
+                )
+            if kind == "embedding" and advanced_viz_request(comp) is not None:
+                # An 'embedding' with no ``compute_method`` never dispatches:
+                # its renderer reads dim_*_col straight off the table
+                # (fetchAdvancedVizData), so the data path is what to freeze.
+                # The other four kinds always dispatch — a frozen /data payload
+                # would feed their popovers and leave the plot itself empty.
+                return (
+                    ComponentTier.FROZEN,
+                    TierReason.UNSUPPORTED,
+                    "advanced_viz 'embedding' has no compute_method: its renderer reads "
+                    "the coordinates from the table, frozen here at the default filter state",
+                )
             return (
                 ComponentTier.OMITTED,
                 TierReason.CELERY_COMPUTE,
-                f"advanced_viz '{kind}' is a server-side Celery compute; "
-                "freezing it is a producer-A follow-up",
+                f"advanced_viz '{kind}' is a server-side Celery compute and no request "
+                "can be derived from its config (missing workflow/data-collection id "
+                "or required column bindings)",
             )
         if kind in NON_TABULAR_VIZ_KINDS:
             return (
@@ -414,19 +625,28 @@ def classify_stored_component(
     )
 
 
-def classify_stored_metadata(stored_metadata: list[dict[str, Any]]) -> list[TierRow]:
-    """The planned tier table for a dashboard document, in component order."""
+def classify_stored_metadata(
+    stored_metadata: list[dict[str, Any]], tab_id: str | None = None
+) -> list[TierRow]:
+    """The planned tier table for a dashboard document, in component order.
+
+    ``tab_id`` stamps every row with the tab it came from (family exports) and
+    scopes the positional fallback id, so two tabs whose components lack an
+    ``index`` cannot collide.
+    """
     rows: list[TierRow] = []
     for i, comp in enumerate(stored_metadata):
         tier, reason, detail = classify_stored_component(comp)
+        fallback = f"{tab_id}-component-{i}" if tab_id else f"component-{i}"
         rows.append(
             TierRow(
-                component_id=str(comp.get("index") or f"component-{i}"),
+                component_id=str(comp.get("index") or fallback),
                 title=comp.get("title") or "",
                 component_type=comp.get("component_type") or "?",
                 tier=tier,
                 reason=reason,
                 detail=detail,
+                tab_id=tab_id,
             )
         )
     return rows
@@ -702,6 +922,282 @@ def _freeze_advanced_viz(comp: dict[str, Any], user: ExportUser) -> dict[str, An
         except Exception:
             pass  # best-effort — the tabular payload is still worth shipping
     return payload
+
+
+# ---------------------------------------------------------------------------
+# Celery-computed advanced_viz kinds — pre-exported at build time
+#
+# These five kinds have no in-browser equivalent: the server runs them as a
+# Celery task and the renderer dispatch/polls for the result. A bundle cannot
+# dispatch anything, so the producer runs the compute ITSELF at export time
+# (calling the task *function*, like ``build_figure_preview``) and ships the
+# result as a frozen payload. The runtime's ``finishedJob`` shim answers both
+# dispatch and poll with it, so the renderers are unchanged — which is why the
+# payload must be exactly ``{"result": <task return value>}``, the ``result``
+# field of the poll endpoint's ``{job_id, status: 'done', result}`` response.
+#
+# The view is the one a reader would have seen on first paint: every request is
+# built from the persisted ``config`` with the renderer's own control defaults,
+# at the default (empty) filter state. Filters cannot refresh it — the badge
+# says so.
+# ---------------------------------------------------------------------------
+
+CELERY_FROZEN_DETAIL = (
+    "advanced_viz '{kind}' is a server-side Celery compute: computed at export time — "
+    "filters do not refresh this view"
+)
+
+# Wall-clock guards. A family can carry a dozen of these and each one can be a
+# clustering over a wide matrix, while the export task itself
+# (``depictio.serverless.export_static``) is killed at 900 s (soft 600 s). The
+# defaults keep every compute bounded and the whole set well inside the soft
+# limit, leaving room for the data bundling and figure freezes around them.
+DEFAULT_COMPUTE_BUDGET_S = 120.0
+DEFAULT_COMPUTE_TOTAL_BUDGET_S = 300.0
+COMPUTE_BUDGET_ENV = "DEPICTIO_SERVERLESS_COMPUTE_BUDGET_S"
+COMPUTE_TOTAL_BUDGET_ENV = "DEPICTIO_SERVERLESS_COMPUTE_TOTAL_BUDGET_S"
+
+
+def _env_seconds(name: str, default: float) -> float:
+    """A positive float from the environment, or ``default`` (never fatal)."""
+    raw = os.getenv(name)
+    if not raw:
+        return default
+    try:
+        value = float(raw)
+    except ValueError:
+        logger.warning("producer A: ignoring non-numeric %s=%r", name, raw)
+        return default
+    return value if value > 0 else default
+
+
+@dataclass
+class ComputeBudget:
+    """Time the export may spend running Celery computes in-process."""
+
+    per_component: float = DEFAULT_COMPUTE_BUDGET_S
+    total: float = DEFAULT_COMPUTE_TOTAL_BUDGET_S
+    spent: float = 0.0
+
+    @classmethod
+    def from_env(cls) -> ComputeBudget:
+        return cls(
+            per_component=_env_seconds(COMPUTE_BUDGET_ENV, DEFAULT_COMPUTE_BUDGET_S),
+            total=_env_seconds(COMPUTE_TOTAL_BUDGET_ENV, DEFAULT_COMPUTE_TOTAL_BUDGET_S),
+        )
+
+    @property
+    def remaining(self) -> float:
+        return max(0.0, self.total - self.spent)
+
+    def slice(self) -> float:
+        """Seconds the next compute may take: its own cap, clipped to what is left."""
+        return min(self.per_component, self.remaining)
+
+    def charge(self, elapsed: float) -> None:
+        self.spent += max(0.0, elapsed)
+
+
+def _run_with_timeout(func: Any, payload: dict[str, Any], timeout: float) -> Any:
+    """Run ``func(payload)`` on a daemon thread, giving up after ``timeout``.
+
+    A Celery task function is a plain call with no cancellation point, and the
+    export runs inside a Celery worker whose own soft limit already owns
+    SIGALRM — so the only way to bound one compute without stealing that signal
+    is to wait on a thread and walk away. The abandoned thread finishes into the
+    void (daemon, so it never holds the process open); what matters is that the
+    export moves on and the component degrades to omitted.
+    """
+    box: dict[str, Any] = {}
+
+    def _run() -> None:
+        try:
+            box["value"] = func(payload)
+        except BaseException as exc:  # re-raised on the caller's thread
+            box["error"] = exc
+
+    thread = threading.Thread(target=_run, name="serverless-compute", daemon=True)
+    thread.start()
+    thread.join(timeout)
+    if thread.is_alive():
+        raise TimeoutError(f"compute exceeded its {timeout:.0f}s export budget")
+    if "error" in box:
+        raise box["error"]
+    return box.get("value")
+
+
+def celery_compute_request(comp: dict[str, Any]) -> tuple[str, dict[str, Any]] | None:
+    """``(task function name, payload)`` for a Celery-computed advanced_viz.
+
+    Mirrors the payload the component's renderer POSTs on first paint: the
+    persisted ``config`` with every interactive control at the default the
+    renderer seeds it with, and an empty ``filter_metadata``. ``None`` when the
+    component implies no compute at all — an ``embedding`` without
+    ``compute_method`` (its renderer reads coordinates from the table instead),
+    or a config missing what its task requires.
+    """
+    kind = advanced_viz_kind(comp)
+    if kind not in CELERY_VIZ_KINDS:
+        return None
+    wf_id, dc_id = comp.get("wf_id"), comp.get("dc_id")
+    if not wf_id or not dc_id:
+        return None
+    config = comp.get("config") or {}
+    base: dict[str, Any] = {"wf_id": str(wf_id), "dc_id": str(dc_id), "filter_metadata": []}
+
+    if kind == "embedding":
+        method = str(config.get("compute_method") or "").lower()
+        if method not in {"pca", "umap", "tsne", "pcoa"}:
+            return None  # table-driven embedding: no dispatch, no compute
+        params: dict[str, Any] = {"n_components": 2}  # renderer starts in 2D
+        if method == "umap":
+            params["n_neighbors"] = config.get("umap_n_neighbors", 15)
+            params["min_dist"] = config.get("umap_min_dist", 0.1)
+        elif method == "tsne":
+            params["perplexity"] = config.get("tsne_perplexity", 30)
+            params["n_iter"] = config.get("tsne_n_iter", 1000)
+        elif method == "pcoa":
+            params["distance"] = config.get("pcoa_distance") or "bray_curtis"
+        extra_cols = [c for c in (config.get("cluster_col"), config.get("color_col")) if c]
+        return "compute_embedding", {
+            **base,
+            "feature_id_col": config.get("sample_id_col") or "sample_id",
+            "method": method,
+            "params": params,
+            "extra_cols": list(dict.fromkeys(extra_cols)),
+        }
+
+    if kind == "complex_heatmap":
+        return "compute_complex_heatmap", {
+            **base,
+            "index_column": config.get("index_column") or "sample_id",
+            "value_columns": config.get("value_columns") or None,
+            "row_annotation_cols": list(config.get("row_annotation_cols") or []),
+            "col_annotations": config.get("col_annotations") or None,
+            "col_annotation_colors": config.get("col_annotation_colors") or None,
+            "cluster_rows": bool(config.get("cluster_rows", True)),
+            "cluster_cols": bool(config.get("cluster_cols", True)),
+            "cluster_method": config.get("cluster_method") or "ward",
+            "cluster_metric": config.get("cluster_metric") or "euclidean",
+            "normalize": config.get("normalize") or "none",
+            "colorscale": config.get("colorscale") or None,
+        }
+
+    if kind in ("upset", "upset_plot"):
+        min_size = config.get("min_size")
+        return "compute_upset", {
+            **base,
+            "set_columns": config.get("set_columns") or None,
+            "set_colors": config.get("set_colors") or None,
+            "annotation_cols": list(config.get("default_annotation_cols") or []) or None,
+            "sort_by": config.get("sort_by") or "cardinality",
+            "sort_order": config.get("sort_order") or "descending",
+            "min_size": 1 if min_size is None else int(min_size),
+            "max_degree": config.get("max_degree"),
+            "show_set_sizes": bool(config.get("show_set_sizes", True)),
+            "show_values": False,  # renderer's own default, never persisted
+            "color_intersections_by": config.get("color_intersections_by") or "none",
+        }
+
+    if kind == "coverage_track":
+        chromosome_col = config.get("chromosome_col")
+        position_col = config.get("position_col")
+        value_col = config.get("value_col")
+        if not (chromosome_col and position_col and value_col):
+            return None
+        smoothing = config.get("smoothing_window")
+        return "compute_coverage_track", {
+            **base,
+            "chromosome_col": chromosome_col,
+            "position_col": position_col,
+            "value_col": value_col,
+            "end_col": config.get("end_col") or None,
+            "sample_col": config.get("sample_col") or None,
+            "category_col": config.get("category_col") or None,
+            "chromosomes_filter": list(config.get("chromosomes_filter") or []) or None,
+            "samples_filter": list(config.get("samples_filter") or []) or None,
+            # The renderer seeds its slider at 5 when the config says nothing.
+            "smoothing_window": 5 if smoothing is None else int(smoothing),
+        }
+
+    if kind == "sankey":
+        available = config.get("available_step_cols") or []
+        step_cols = list(config.get("step_cols") or [])
+        all_steps = list(available) if len(available) >= 2 else step_cols
+        # The renderer's depth slider starts at the configured step count (or 3),
+        # clipped to the universe it can offer.
+        depth = max(2, min(len(all_steps), len(step_cols) or 3))
+        selected = all_steps[:depth]
+        if len(selected) < 2 or len(set(selected)) != len(selected):
+            return None  # compute_sankey rejects <2 or duplicate steps
+        return "compute_sankey", {
+            **base,
+            "step_cols": selected,
+            "value_col": config.get("value_col") or None,
+            "sort_mode": config.get("sort_mode") or "total_flow",
+            "min_link_value": float(config.get("min_link_value") or 0.0),
+            "step_filters": {},
+        }
+
+    return None
+
+
+def freeze_celery_compute(
+    comp: dict[str, Any], budget: ComputeBudget
+) -> tuple[dict[str, Any] | None, str]:
+    """Run one advanced_viz Celery compute in-process. ``(payload, detail)``.
+
+    ``payload`` is ``None`` when the component could not be computed — budget
+    exhausted, timed out, or the task raised — and ``detail`` then says why, so
+    the caller can degrade it to ``omitted`` instead of aborting the export. A
+    successful compute returns the frozen payload the runtime's shim serves.
+    """
+    kind = advanced_viz_kind(comp) or "?"
+    plan = celery_compute_request(comp)
+    if plan is None:
+        return None, f"advanced_viz '{kind}' compute request cannot be derived from its config"
+    task_name, request = plan
+
+    allowance = budget.slice()
+    if allowance <= 0:
+        detail = (
+            f"advanced_viz '{kind}' skipped: the export's total compute budget "
+            f"({budget.total:.0f}s) was already spent"
+        )
+        logger.warning("producer A: %s", detail)
+        return None, detail
+
+    func = getattr(_celery(), task_name, None)
+    if func is None:
+        return None, f"advanced_viz '{kind}' compute task {task_name!r} is unavailable"
+
+    started = time.monotonic()
+    try:
+        result = _run_with_timeout(func, request, allowance)
+    except TimeoutError as exc:
+        budget.charge(time.monotonic() - started)
+        detail = f"advanced_viz '{kind}' compute abandoned: {exc}"
+        logger.warning("producer A: %s", detail)
+        return None, detail
+    except Exception as exc:
+        budget.charge(time.monotonic() - started)
+        detail = f"advanced_viz '{kind}' compute failed: {exc}"
+        logger.warning("producer A: %s", detail)
+        return None, detail
+
+    elapsed = time.monotonic() - started
+    budget.charge(elapsed)
+    if not isinstance(result, dict):
+        return None, f"advanced_viz '{kind}' compute returned no payload"
+    logger.info(
+        "producer A: froze advanced_viz '%s' via %s in %.1fs (%.0fs of %.0fs budget left)",
+        kind,
+        task_name,
+        elapsed,
+        budget.remaining,
+        budget.total,
+    )
+    return {"result": result}, CELERY_FROZEN_DETAIL.format(kind=kind)
 
 
 def _freeze_multiqc(
@@ -1231,11 +1727,16 @@ class ExportResult:
     """A validated manifest plus the tier table that produced it.
 
     ``manifest`` is ``None`` for ``check=True`` (preflight writes nothing).
+    ``tabs`` always lists the resolved family — one entry for a single-tab
+    dashboard — while ``manifest.tabs`` stays empty in that case, per the
+    contract ("empty = single-tab bundle"). Every tier row carries the
+    ``tab_id`` it belongs to.
     """
 
     manifest: BundleManifest | None
     tier_rows: list[TierRow]
     link_rows: list[LinkRow] = field(default_factory=list)
+    tabs: list[TabRow] = field(default_factory=list)
 
 
 def _fetch_dashboard(dashboard_id: str) -> dict[str, Any]:
@@ -1258,29 +1759,100 @@ def _check_permission(dashboard_data: dict[str, Any], user: ExportUser, required
         )
 
 
-def export_manifest(dashboard_id: str, user: ExportUser) -> ExportResult:
-    """Assemble and validate the full ``BundleManifest`` for one dashboard."""
-    dashboard_data = _fetch_dashboard(dashboard_id)
-    _check_permission(dashboard_data, user, "owner")
+def _public_base_url() -> str | None:
+    """A browser-reachable base URL for this instance, or ``None``.
 
-    stored_metadata: list[dict[str, Any]] = dashboard_data.get("stored_metadata") or []
-    tier_rows = classify_stored_metadata(stored_metadata)
+    ``ServiceConfig.url`` resolves to the compose-internal hostname in server
+    context (``http://depictio-backend:8058``), which is worse than useless in a
+    bundle that outlives the network it was cut from — it *looks* like a link.
+    Only an explicitly declared ``public_url`` (viewer first, then the API,
+    which also serves the SPA) is trusted; anything else stays ``None``.
+    """
+    try:
+        from depictio.api.v1.configs.config import settings
+    except Exception:  # settings unavailable (bare CLI box) — no URL to claim
+        return None
+    for section in ("viewer", "fastapi"):
+        config = getattr(settings, section, None)
+        url = getattr(config, "public_url", None) if config is not None else None
+        if url:
+            return str(url).rstrip("/")
+    return None
+
+
+def build_provenance(
+    user: ExportUser,
+    built_at: str,
+    project_doc: dict[str, Any] | None,
+    entry_tab: FamilyTab,
+) -> ExportProvenance:
+    """Who exported the bundle, when, and from where (shown in the bundle's rail)."""
+    base = _public_base_url()
+    return ExportProvenance(
+        exported_by=user.email or None,
+        exported_at=built_at,
+        source=base,
+        project_name=(project_doc or {}).get("name") or None,
+        dashboard_url=f"{base}/dashboard/{entry_tab.id}" if base and entry_tab.id else None,
+    )
+
+
+def export_manifest(
+    dashboard_id: str,
+    user: ExportUser,
+    single_tab: bool = False,
+    budget: ComputeBudget | None = None,
+) -> ExportResult:
+    """Assemble and validate the full ``BundleManifest`` for a dashboard family.
+
+    ``dashboard_id`` may name any tab: it stays the bundle's entry tab, and the
+    rest of its family rides along (``single_tab=True`` opts out). Everything
+    component-keyed merges across the family; data collections are bundled ONCE
+    however many tabs read them, which is the whole point — six tabs over the
+    same two tables used to mean six bundles each re-inlining both.
+    """
+    # Owner gate on the REQUESTED dashboard first, before any other document is
+    # read: a denied export must not walk someone else's family. Then per tab —
+    # all tabs of a family share a project (the tab-creation route copies
+    # project_id from the parent, and sync_tab_family_permissions keeps the ACLs
+    # equal), so it is the same check repeated, but checking each tab's OWN
+    # project makes that an observation rather than an assumption.
+    entry_doc = _fetch_dashboard(dashboard_id)
+    _check_permission(entry_doc, user, "owner")
+    tabs, entry_tab = family_from_doc(entry_doc, single_tab=single_tab)
+    for tab in tabs:
+        _check_permission(tab.doc, user, "owner")
+    project_ids = {str(tab.doc.get("project_id") or "") for tab in tabs}
+    if len(project_ids) > 1:
+        logger.warning(
+            "producer A: tab family %s spans %d projects (%s) — every one was permission-checked",
+            entry_tab.id,
+            len(project_ids),
+            ", ".join(sorted(project_ids)),
+        )
+    budget = budget or ComputeBudget.from_env()
+
+    items = family_components(tabs)
+    tier_rows: list[TierRow] = []
+    for tab in tabs:
+        tier_rows.extend(classify_stored_metadata(tab.components, tab_id=tab.id))
     tier_by_id = {row.component_id: row for row in tier_rows}
-    dashboard_oid = ObjectId(str(dashboard_data["dashboard_id"]))
+    stored_metadata: list[dict[str, Any]] = [comp for _tab, comp, _cid in items]
 
     # Cross-DC links (RFC §8): read from the PROJECT, filtered to the ones that
     # can land a filter on this dashboard, and folded into the column sets
     # before anything is bundled — a join column pruned away is a dead filter.
-    project_doc = _fetch_project(dashboard_data.get("project_id"))
+    project_doc = _fetch_project(entry_tab.doc.get("project_id"))
     dc_ids = dashboard_dc_ids(stored_metadata)
     emitted_links = emit_link_configs(project_links(project_doc), dc_ids)
 
     # Live tier: bundle the DCs cards/interactive (and ui-mode figures, and the
-    # live advanced_viz kinds) read.
+    # live advanced_viz kinds) read — keyed by dc_id, so a DC read on three tabs
+    # is loaded, pruned and inlined exactly once.
     data_refs, inline_blobs, dc_failures, pruned_frames = _bundle_data_refs(
         stored_metadata, emitted_links
     )
-    for comp in stored_metadata:
+    for _tab, comp, component_id in items:
         # Components with no data of their own (frozen figures & co.) survive a
         # failed DC — their payload is self-contained. The ones the runtime
         # computes itself cannot.
@@ -1288,7 +1860,7 @@ def export_manifest(dashboard_id: str, user: ExportUser) -> ExportResult:
             continue
         dc_id = str(comp.get("dc_id") or "")
         if dc_id in dc_failures:
-            row = tier_by_id[str(comp.get("index"))]
+            row = tier_by_id[component_id]
             row.tier = ComponentTier.OMITTED
             row.reason = TierReason.UNSUPPORTED
             row.detail = f"data collection {dc_id} not bundled: {dc_failures[dc_id]}"
@@ -1300,28 +1872,33 @@ def export_manifest(dashboard_id: str, user: ExportUser) -> ExportResult:
     frozen: dict[str, FrozenPayload] = {}
     bindings: dict[str, BindingTable] = {}
     prologues: dict[str, list[PrologueOp]] = {}
+    computes_frozen = 0
+    computes_skipped = 0
 
-    cards = [
-        c
-        for c in stored_metadata
-        if c.get("component_type") == "card"
-        and tier_by_id[str(c.get("index"))].tier is ComponentTier.LIVE
-    ]
-    if cards:
+    # Cards freeze per tab: bulk_compute_cards resolves component ids against
+    # ONE dashboard document, so a family needs one call per tab.
+    for tab in tabs:
+        cards = [
+            comp
+            for t, comp, cid in items
+            if t is tab
+            and comp.get("component_type") == "card"
+            and tier_by_id[cid].tier is ComponentTier.LIVE
+        ]
+        if not cards:
+            continue
         try:
-            for idx, payload in _freeze_cards(dashboard_oid, cards, user).items():
+            for idx, payload in _freeze_cards(ObjectId(tab.id), cards, user).items():
                 frozen[idx] = FrozenPayload(kind="card", payload=payload)
         except Exception as exc:
             # Fallback payloads only — cards stay live off the bundled data.
-            import logging
+            logger.warning("producer A: frozen card fallback failed for tab %s: %s", tab.id, exc)
 
-            logging.getLogger(__name__).warning("producer A: frozen card fallback failed: %s", exc)
-
-    for comp in stored_metadata:
-        component_id = str(comp.get("index"))
+    for tab, comp, component_id in items:
         row = tier_by_id[component_id]
         if row.tier is not ComponentTier.FROZEN:
             continue
+        dashboard_oid = ObjectId(tab.id)
         ctype = comp.get("component_type")
         try:
             if ctype == "table":
@@ -1417,10 +1994,27 @@ def export_manifest(dashboard_id: str, user: ExportUser) -> ExportResult:
                     )
                 frozen[component_id] = FrozenPayload(kind="figure", payload=payload)
             elif ctype == "advanced_viz":
-                frozen[component_id] = FrozenPayload(
-                    kind="advanced-viz-data",
-                    payload=_freeze_advanced_viz(comp, user),
-                )
+                if celery_compute_request(comp) is not None:
+                    # Server-side Celery kind: run the compute here and ship the
+                    # result the poll endpoint would have returned. A failure
+                    # degrades this one component to omitted (with the error in
+                    # its detail) and never aborts the export.
+                    compute_payload, detail = freeze_celery_compute(comp, budget)
+                    row.reason = TierReason.CELERY_COMPUTE
+                    row.detail = detail
+                    if compute_payload is None:
+                        row.tier = ComponentTier.OMITTED
+                        computes_skipped += 1
+                    else:
+                        frozen[component_id] = FrozenPayload(
+                            kind="compute", payload=compute_payload
+                        )
+                        computes_frozen += 1
+                else:
+                    frozen[component_id] = FrozenPayload(
+                        kind="advanced-viz-data",
+                        payload=_freeze_advanced_viz(comp, user),
+                    )
             elif ctype == "multiqc":
                 kind, payload = _freeze_multiqc(dashboard_oid, comp, user)
                 frozen[component_id] = FrozenPayload(kind=kind, payload=payload)
@@ -1440,15 +2034,12 @@ def export_manifest(dashboard_id: str, user: ExportUser) -> ExportResult:
     # filter state — unless the build downgraded it (unloadable DC).
     used_dcs = {
         str(c["dc_id"])
-        for c in stored_metadata
+        for _tab, c, cid in items
         if c.get("dc_id")
         and (
             c.get("component_type") in LIVE_DATA_TYPES
-            or str(c.get("index")) in bindings
-            or (
-                serves_advanced_viz_live(c)
-                and tier_by_id[str(c.get("index"))].tier is ComponentTier.LIVE
-            )
+            or cid in bindings
+            or (serves_advanced_viz_live(c) and tier_by_id[cid].tier is ComponentTier.LIVE)
         )
     }
     for dc_id in [d for d in data_refs if d not in used_dcs]:
@@ -1464,16 +2055,21 @@ def export_manifest(dashboard_id: str, user: ExportUser) -> ExportResult:
         workflow_ids_by_dc(project_doc),
     )
 
+    built_at = datetime.now(timezone.utc).isoformat()
     manifest = BundleManifest(
         mode=BundleMode.SINGLE_FILE,
         producer=Producer.EXPORT_FROM_INSTANCE,
-        built_at=datetime.now(timezone.utc).isoformat(),
+        built_at=built_at,
         depictio_version=_depictio_version(),
         dashboard=DashboardSection(
-            id=str(dashboard_data["dashboard_id"]),
-            title=dashboard_data.get("title") or "",
-            doc=sanitize_dashboard_doc(dashboard_data),
+            id=entry_tab.id,
+            title=entry_tab.title,
+            doc=sanitize_dashboard_doc(entry_tab.doc),
         ),
+        # A one-tab family is a plain single-tab bundle: the contract says
+        # ``tabs`` is empty there and ``dashboard`` is the whole story.
+        tabs=[tab.tab_entry() for tab in tabs] if len(tabs) > 1 else [],
+        provenance=build_provenance(user, built_at, project_doc, entry_tab),
         data_refs=data_refs,
         tiers={
             row.component_id: TierEntry(tier=row.tier, reason=row.reason, detail=row.detail)
@@ -1486,7 +2082,24 @@ def export_manifest(dashboard_id: str, user: ExportUser) -> ExportResult:
         limits=_runtime_limits(),
         inline_blobs=inline_blobs,
     )
-    return ExportResult(manifest=manifest, tier_rows=tier_rows, link_rows=link_rows)
+    logger.info(
+        "producer A: exported %s (%d tab(s), %d component(s), %d data collection(s), "
+        "%d Celery compute(s) frozen, %d omitted, %.0fs of %.0fs compute budget spent)",
+        entry_tab.id,
+        len(tabs),
+        len(tier_rows),
+        len(data_refs),
+        computes_frozen,
+        computes_skipped,
+        budget.spent,
+        budget.total,
+    )
+    return ExportResult(
+        manifest=manifest,
+        tier_rows=tier_rows,
+        link_rows=link_rows,
+        tabs=[tab.tab_row() for tab in tabs],
+    )
 
 
 def export_static(
@@ -1495,11 +2108,13 @@ def export_static(
     mode: BundleMode | str = BundleMode.SINGLE_FILE,
     check: bool = False,
     user: Any = None,
+    single_tab: bool = False,
 ) -> ExportResult:
     """End-to-end: dashboard in Mongo → self-contained HTML at ``out_path``.
 
     Args:
-        dashboard_id: The dashboard's real Mongo ObjectId string.
+        dashboard_id: Any tab's real Mongo ObjectId string. Its whole tab
+            family is exported into one bundle, with this tab as the entry.
         out_path: Where to write the bundle (ignored with ``check=True``;
             required otherwise).
         mode: Bundle delivery mode — phase 2 supports ``single-file`` only.
@@ -1507,6 +2122,7 @@ def export_static(
         user: A User-like object, an email string, or ``None`` (falls back to
             the instance's admin account). Building needs *owner* on the
             dashboard's project; ``--check`` needs viewer.
+        single_tab: Export only the requested tab (no family).
     """
     bundle_mode = BundleMode(mode) if not isinstance(mode, BundleMode) else mode
     if bundle_mode is not BundleMode.SINGLE_FILE:
@@ -1515,25 +2131,35 @@ def export_static(
     export_user = resolve_user(user)
 
     if check:
-        dashboard_data = _fetch_dashboard(dashboard_id)
-        _check_permission(dashboard_data, export_user, "viewer")
-        stored_metadata = dashboard_data.get("stored_metadata") or []
-        tier_rows = classify_stored_metadata(stored_metadata)
+        entry_doc = _fetch_dashboard(dashboard_id)
+        _check_permission(entry_doc, export_user, "viewer")
+        tabs, entry_tab = family_from_doc(entry_doc, single_tab=single_tab)
+        for tab in tabs:
+            _check_permission(tab.doc, export_user, "viewer")
+        tier_rows: list[TierRow] = []
+        for tab in tabs:
+            tier_rows.extend(classify_stored_metadata(tab.components, tab_id=tab.id))
+        stored_metadata = [comp for tab in tabs for comp in tab.components]
         # Predicted link tiers: a source DC that a data-shipping component reads
         # will be bundled (tier A), anything else needs a precomputed table
         # (tier B). No Delta table is read — preflight stays data-free.
         _, link_rows = build_links_section(
-            project_links(_fetch_project(dashboard_data.get("project_id"))),
+            project_links(_fetch_project(entry_tab.doc.get("project_id"))),
             dashboard_dc_ids(stored_metadata),
             {str(c["dc_id"]) for c in stored_metadata if c.get("dc_id") and _ships_data(c)},
             precompute=False,
         )
-        return ExportResult(manifest=None, tier_rows=tier_rows, link_rows=link_rows)
+        return ExportResult(
+            manifest=None,
+            tier_rows=tier_rows,
+            link_rows=link_rows,
+            tabs=[tab.tab_row() for tab in tabs],
+        )
 
     if out_path is None:
         raise ProducerAError("out_path is required unless check=True")
 
-    result = export_manifest(dashboard_id, export_user)
+    result = export_manifest(dashboard_id, export_user, single_tab=single_tab)
     assert result.manifest is not None
     html = render_bundle_html(result.manifest)
     out = Path(out_path)

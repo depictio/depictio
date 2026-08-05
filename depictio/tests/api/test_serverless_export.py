@@ -34,14 +34,18 @@ from depictio.models.models.serverless import (
     Producer,
     TierReason,
 )
+from depictio.serverless import producer_a
 from depictio.serverless.producer_a import (
+    ComputeBudget,
     ExportUser,
+    FamilyTab,
     ProducerAError,
     advanced_viz_request,
     classify_stored_component,
     classify_stored_metadata,
     export_manifest,
     export_static,
+    family_components,
     interactive_filter_columns,
     live_column_sets,
     sanitize_dashboard_doc,
@@ -279,6 +283,29 @@ class _FakeCollection:
         return None
 
 
+class _FakeTabCollection:
+    """``dashboards_collection`` as ``core_functions.get_child_tabs`` uses it:
+    ``find(...).sort(field, direction)``.
+
+    Every export resolves a tab family, so this has to be patched onto
+    ``core_functions`` (which binds the collection at import time) even for a
+    single-tab dashboard — otherwise the child lookup would reach for a real
+    MongoDB.
+    """
+
+    def __init__(self, docs: list[dict[str, Any]]):
+        self.docs = docs
+
+    def find(self, query: dict[str, Any], projection: Any = None):
+        matched = [d for d in self.docs if all(d.get(k) == v for k, v in query.items())]
+
+        class _Cursor:
+            def sort(self, field: str, direction: int = 1):
+                return sorted(matched, key=lambda d: d.get(field) or 0, reverse=direction < 0)
+
+        return _Cursor()
+
+
 DASHBOARD_OID = ObjectId("6824cb3b89d2b72169309737")
 PROJECT_OID = ObjectId("646b0f3c1e4a2d7f8e5b8c9d")
 WF_OID = ObjectId("646b0f3c1e4a2d7f8e5b8c01")
@@ -448,9 +475,12 @@ def offline_export(monkeypatch: pytest.MonkeyPatch) -> BundleManifest:
     from depictio.api.v1 import db as db_mod
     from depictio.api.v1 import deltatables_utils as dtu_mod
     from depictio.api.v1.endpoints.advanced_viz_endpoints import routes as av_mod
+    from depictio.api.v1.endpoints.dashboards_endpoints import core_functions as core_mod
     from depictio.api.v1.endpoints.dashboards_endpoints import routes as routes_mod
 
     monkeypatch.setattr(db_mod, "dashboards_collection", _FakeCollection([_dashboard_doc()]))
+    # A lone dashboard is a one-tab family: the child lookup finds nothing.
+    monkeypatch.setattr(core_mod, "dashboards_collection", _FakeTabCollection([]))
     monkeypatch.setattr(db_mod, "deltatables_collection", _FakeCollection([]))
     # Phase 7 reads the dashboard's project for its cross-DC ``links`` — this
     # one declares none, so ``manifest.links`` stays empty. (Links themselves
@@ -751,8 +781,10 @@ def test_export_static_rejects_non_single_file():
 
 def test_export_static_check_classifies_without_building(monkeypatch: pytest.MonkeyPatch):
     from depictio.api.v1 import db as db_mod
+    from depictio.api.v1.endpoints.dashboards_endpoints import core_functions as core_mod
 
     monkeypatch.setattr(db_mod, "dashboards_collection", _FakeCollection([_dashboard_doc()]))
+    monkeypatch.setattr(core_mod, "dashboards_collection", _FakeTabCollection([]))
     # --check needs only viewer; an admin passes the permission gate without
     # touching projects, but the links preflight still reads the project doc.
     monkeypatch.setattr(
@@ -776,6 +808,331 @@ def test_export_static_check_classifies_without_building(monkeypatch: pytest.Mon
         "emb-1",
         "img-1",
     }
+
+
+# ---------------------------------------------------------------------------
+# Tab family: one bundle per family, data collections deduplicated
+# ---------------------------------------------------------------------------
+
+MAIN_TAB_OID = ObjectId("6824cb3b89d2b72169309750")
+CHILD_TAB_OID = ObjectId("6824cb3b89d2b72169309751")
+FAM_DC_OID = ObjectId("646b0f3c1e4a2d7f8e5b8cb1")
+
+
+def _fam_dc_config() -> dict[str, Any]:
+    return {"type": "table", "delta_location": "memory://famDC", "size_bytes": 11}
+
+
+def _fam_frame() -> pl.DataFrame:
+    return pl.DataFrame(
+        {"depth": [1, 2, 3], "shannon": [0.1, 0.2, 0.3], "habitat": ["a", "b", "a"]}
+    )
+
+
+def _main_tab_doc() -> dict[str, Any]:
+    return {
+        "_id": ObjectId(),
+        "dashboard_id": MAIN_TAB_OID,
+        "project_id": PROJECT_OID,
+        "title": "Overview",
+        "is_main_tab": True,
+        "icon": "mdi:view-dashboard",
+        "stored_metadata": [
+            {
+                "index": "card-main",
+                "component_type": "card",
+                "wf_id": WF_OID,
+                "dc_id": FAM_DC_OID,
+                "dc_config": _fam_dc_config(),
+                "column_name": "shannon",
+                "aggregation": "mean",
+            }
+        ],
+    }
+
+
+def _child_tab_doc(components: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    return {
+        "_id": ObjectId(),
+        "dashboard_id": CHILD_TAB_OID,
+        "parent_dashboard_id": MAIN_TAB_OID,
+        "project_id": PROJECT_OID,
+        "title": "Clusters",
+        "is_main_tab": False,
+        "tab_order": 2,
+        "tab_icon": "mdi:set-merge",
+        "tab_icon_color": "grape",
+        "stored_metadata": components
+        if components is not None
+        else [
+            {
+                # Same DC as the main tab's card: it must be bundled ONCE.
+                "index": "card-child",
+                "component_type": "card",
+                "wf_id": WF_OID,
+                "dc_id": FAM_DC_OID,
+                "dc_config": _fam_dc_config(),
+                "column_name": "depth",
+                "aggregation": "max",
+            },
+            {
+                "index": "upset-1",
+                "component_type": "advanced_viz",
+                "viz_kind": "upset_plot",
+                "wf_id": WF_OID,
+                "dc_id": FAM_DC_OID,
+                "dc_config": _fam_dc_config(),
+                "config": {"viz_kind": "upset_plot", "set_columns": ["a", "b"]},
+            },
+        ],
+    }
+
+
+UPSET_RESULT = {"figure": {"data": [], "layout": {}}, "row_count": 3, "compute_ms": 7}
+
+
+@pytest.fixture
+def family_stack(monkeypatch: pytest.MonkeyPatch):
+    """Fake instance holding a two-tab family; returns the recorded compute calls."""
+    from depictio.api.v1 import celery_tasks as celery_mod
+    from depictio.api.v1 import db as db_mod
+    from depictio.api.v1 import deltatables_utils as dtu_mod
+    from depictio.api.v1.endpoints.dashboards_endpoints import core_functions as core_mod
+    from depictio.api.v1.endpoints.dashboards_endpoints import routes as routes_mod
+
+    docs = [_main_tab_doc(), _child_tab_doc()]
+    monkeypatch.setattr(db_mod, "dashboards_collection", _FakeCollection(docs))
+    # get_child_tabs binds the collection at import time on its own module.
+    monkeypatch.setattr(core_mod, "dashboards_collection", _FakeTabCollection(docs))
+    monkeypatch.setattr(db_mod, "deltatables_collection", _FakeCollection([]))
+    monkeypatch.setattr(
+        db_mod,
+        "projects_collection",
+        _FakeCollection([{"_id": PROJECT_OID, "name": "Fake project", "links": []}]),
+    )
+
+    frame = _fam_frame()
+    monkeypatch.setattr(dtu_mod, "schema_deltatable_lite", lambda **kw: dict(frame.schema))
+    monkeypatch.setattr(
+        dtu_mod,
+        "load_deltatable_lite",
+        lambda workflow_id, data_collection_id, metadata=None, select_columns=None, **kw: (
+            frame.select(select_columns) if select_columns else frame
+        ),
+    )
+    monkeypatch.setattr(dtu_mod, "_get_aggregation_hash", lambda dc_id: "agghash-fam")
+    monkeypatch.setattr(
+        routes_mod,
+        "bulk_compute_cards",
+        lambda dashboard_id, request, current_user, access_token: {
+            "values": dict.fromkeys(request["component_ids"], 1.0),
+            "secondary_values": {},
+            "aggregations": {},
+            "filter_applied": False,
+            "filter_count": 0,
+        },
+    )
+
+    calls: list[dict[str, Any]] = []
+
+    def fake_upset(payload: dict[str, Any]) -> dict[str, Any]:
+        calls.append(payload)
+        return dict(UPSET_RESULT)
+
+    monkeypatch.setattr(celery_mod, "compute_upset", fake_upset)
+    return calls
+
+
+def _admin() -> ExportUser:
+    return ExportUser(id=ObjectId(), email="owner@example.com", is_admin=True)
+
+
+def test_family_resolves_from_a_child_id_with_that_child_as_entry(family_stack):
+    """Exporting a CHILD opens the bundle on that child and still carries the
+    whole family, main tab first."""
+    result = export_manifest(str(CHILD_TAB_OID), _admin())
+    manifest = result.manifest
+    assert manifest is not None
+
+    assert manifest.dashboard.id == str(CHILD_TAB_OID)  # entry stays the requested tab
+    assert manifest.dashboard.title == "Clusters"
+    assert [t.id for t in manifest.tabs] == [str(MAIN_TAB_OID), str(CHILD_TAB_OID)]
+    assert [t.is_main_tab for t in manifest.tabs] == [True, False]
+    assert [t.tab_order for t in manifest.tabs] == [0, 2]
+    # The entry tab is duplicated between `dashboard` and `tabs`, per contract.
+    assert manifest.tabs[1].doc == manifest.dashboard.doc
+    assert manifest.tabs[1].icon == "mdi:set-merge"
+    assert manifest.tabs[1].icon_color == "grape"
+    # Every tab's document rides along, permissions stripped like the entry's.
+    assert "permissions" not in manifest.tabs[0].doc
+    assert manifest.tabs[0].doc["stored_metadata"][0]["index"] == "card-main"
+
+    # Components merge across the family, each row naming its tab.
+    assert set(manifest.tiers) == {"card-main", "card-child", "upset-1"}
+    by_id = {row.component_id: row for row in result.tier_rows}
+    assert by_id["card-main"].tab_id == str(MAIN_TAB_OID)
+    assert by_id["card-child"].tab_id == str(CHILD_TAB_OID)
+    assert [tab.id for tab in result.tabs] == [str(MAIN_TAB_OID), str(CHILD_TAB_OID)]
+
+    BundleManifest.model_validate(manifest.model_dump(mode="json"))
+
+
+def test_family_bundles_a_shared_data_collection_once(family_stack):
+    """The size win: two tabs reading one DC inline one Parquet blob, not two."""
+    manifest = export_manifest(str(MAIN_TAB_OID), _admin()).manifest
+    assert manifest is not None
+    assert list(manifest.data_refs) == [str(FAM_DC_OID)]
+    assert list(manifest.inline_blobs) == [f"dc_{FAM_DC_OID}"]
+    # Pruned to the union of BOTH tabs' cards.
+    assert {c.name for c in manifest.data_refs[str(FAM_DC_OID)].columns} == {"shannon", "depth"}
+
+
+def test_single_tab_export_carries_only_the_requested_tab(family_stack):
+    manifest = export_manifest(str(MAIN_TAB_OID), _admin(), single_tab=True).manifest
+    assert manifest is not None
+    assert manifest.tabs == []  # empty == single-tab bundle, per the contract
+    assert set(manifest.tiers) == {"card-main"}
+
+
+def test_family_provenance_records_the_export(family_stack, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(producer_a, "_public_base_url", lambda: "https://demo.example.org")
+    manifest = export_manifest(str(CHILD_TAB_OID), _admin()).manifest
+    assert manifest is not None
+    prov = manifest.provenance
+    assert prov.exported_by == "owner@example.com"
+    assert prov.exported_at == manifest.built_at
+    assert prov.project_name == "Fake project"
+    assert prov.source == "https://demo.example.org"
+    assert prov.dashboard_url == f"https://demo.example.org/dashboard/{CHILD_TAB_OID}"
+
+
+def test_provenance_omits_an_internal_only_instance_url(family_stack, monkeypatch):
+    """No declared public_url ⇒ no URL at all: an internal compose hostname in a
+    shipped bundle looks like a working link and is not one."""
+    monkeypatch.setattr(producer_a, "_public_base_url", lambda: None)
+    manifest = export_manifest(str(MAIN_TAB_OID), _admin()).manifest
+    assert manifest is not None
+    assert manifest.provenance.source is None
+    assert manifest.provenance.dashboard_url is None
+
+
+def test_family_component_id_collision_fails_loudly():
+    """Component-keyed manifest sections merge flat across tabs, which only
+    works because ids are uuids. A collision must not be silent."""
+    tab_a = FamilyTab(doc=_main_tab_doc(), tab_order=0, is_main_tab=True)
+    clash = _child_tab_doc([{"index": "card-main", "component_type": "card"}])
+    tab_b = FamilyTab(doc=clash, tab_order=2, is_main_tab=False)
+    with pytest.raises(ProducerAError, match="appears on two tabs"):
+        family_components([tab_a, tab_b])
+
+
+def test_family_preflight_reports_every_tab(family_stack):
+    result = export_static(str(MAIN_TAB_OID), check=True, user=_admin())
+    assert result.manifest is None
+    assert [tab.title for tab in result.tabs] == ["Overview", "Clusters"]
+    assert {row.tab_id for row in result.tier_rows} == {str(MAIN_TAB_OID), str(CHILD_TAB_OID)}
+
+
+# ---------------------------------------------------------------------------
+# Celery-computed advanced_viz kinds: pre-exported into a frozen payload
+# ---------------------------------------------------------------------------
+
+
+def test_celery_compute_is_frozen_at_export_time(family_stack):
+    """The frozen payload is exactly what the poll endpoint returns to the
+    renderer — ``{"result": <task return value>}`` — so the runtime's
+    dispatch/poll shim needs no renderer change."""
+    manifest = export_manifest(str(MAIN_TAB_OID), _admin()).manifest
+    assert manifest is not None
+
+    frozen = manifest.frozen["upset-1"]
+    assert frozen.kind == "compute"
+    assert frozen.payload == {"result": UPSET_RESULT}
+
+    tier = manifest.tiers["upset-1"]
+    assert tier.tier is ComponentTier.FROZEN
+    assert tier.reason is TierReason.CELERY_COMPUTE
+    assert tier.detail and "computed at export time" in tier.detail
+
+    # Called with the renderer's first-paint payload at the default filter state.
+    assert len(family_stack) == 1
+    payload = family_stack[0]
+    assert payload["dc_id"] == str(FAM_DC_OID)
+    assert payload["set_columns"] == ["a", "b"]
+    assert payload["sort_by"] == "cardinality"
+    assert payload["filter_metadata"] == []
+
+
+def test_a_failing_celery_compute_degrades_to_omitted(
+    family_stack, monkeypatch: pytest.MonkeyPatch
+):
+    """A compute that raises must not sink the export — the component is
+    omitted with the error, everything else still ships."""
+    from depictio.api.v1 import celery_tasks as celery_mod
+
+    def boom(payload: dict[str, Any]) -> dict[str, Any]:
+        raise RuntimeError("plotly-upset exploded")
+
+    monkeypatch.setattr(celery_mod, "compute_upset", boom)
+    manifest = export_manifest(str(MAIN_TAB_OID), _admin()).manifest
+    assert manifest is not None
+
+    assert "upset-1" not in manifest.frozen
+    tier = manifest.tiers["upset-1"]
+    assert tier.tier is ComponentTier.OMITTED
+    assert tier.reason is TierReason.CELERY_COMPUTE
+    assert tier.detail and "plotly-upset exploded" in tier.detail
+    # The rest of the family is unaffected.
+    assert manifest.tiers["card-main"].tier is ComponentTier.LIVE
+    assert list(manifest.data_refs) == [str(FAM_DC_OID)]
+
+
+def test_an_exhausted_compute_budget_omits_without_computing(family_stack):
+    """Wall-clock guard: once the export's total budget is spent, the remaining
+    computes are skipped (and say so) rather than running the task past the
+    Celery job's own time limit."""
+    manifest = export_manifest(
+        str(MAIN_TAB_OID), _admin(), budget=ComputeBudget(per_component=30.0, total=0.0)
+    ).manifest
+    assert manifest is not None
+    assert family_stack == []  # the task function was never called
+    tier = manifest.tiers["upset-1"]
+    assert tier.tier is ComponentTier.OMITTED
+    assert tier.reason is TierReason.CELERY_COMPUTE
+    assert tier.detail and "budget" in tier.detail
+
+
+def test_a_compute_over_its_per_component_budget_is_abandoned(
+    family_stack, monkeypatch: pytest.MonkeyPatch
+):
+    import time as _time
+
+    from depictio.api.v1 import celery_tasks as celery_mod
+
+    monkeypatch.setattr(
+        celery_mod, "compute_upset", lambda payload: _time.sleep(5) or dict(UPSET_RESULT)
+    )
+    manifest = export_manifest(
+        str(MAIN_TAB_OID), _admin(), budget=ComputeBudget(per_component=0.2, total=10.0)
+    ).manifest
+    assert manifest is not None
+    assert "upset-1" not in manifest.frozen
+    assert manifest.tiers["upset-1"].tier is ComponentTier.OMITTED
+    assert manifest.tiers["upset-1"].detail and "budget" in manifest.tiers["upset-1"].detail
+
+
+def test_compute_budget_reads_the_environment(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("DEPICTIO_SERVERLESS_COMPUTE_BUDGET_S", "45")
+    monkeypatch.setenv("DEPICTIO_SERVERLESS_COMPUTE_TOTAL_BUDGET_S", "90")
+    budget = ComputeBudget.from_env()
+    assert (budget.per_component, budget.total) == (45.0, 90.0)
+    assert budget.slice() == 45.0
+    budget.charge(80.0)
+    assert budget.remaining == 10.0
+    assert budget.slice() == 10.0  # the per-component cap is clipped to what is left
+
+    monkeypatch.setenv("DEPICTIO_SERVERLESS_COMPUTE_BUDGET_S", "not-a-number")
+    assert ComputeBudget.from_env().per_component == 120.0  # falls back to the default
 
 
 # ---------------------------------------------------------------------------

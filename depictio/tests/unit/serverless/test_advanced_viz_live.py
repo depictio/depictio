@@ -5,7 +5,8 @@ Three things move together and are pinned here:
 1. **Classification** — the 18 advanced_viz kinds split three ways. The
    data-path kinds go live in both producers (the in-browser engine recomputes
    ``/advanced_viz/data`` from the bundled Parquet); the Celery-computed kinds
-   stay omitted (no in-browser equivalent of the compute); ``phylogenetic``
+   have no in-browser equivalent, so producer B omits them and producer A
+   pre-computes them at export time into a frozen payload; ``phylogenetic``
    also reads a non-tabular Newick DC, so producer A keeps freezing it and
    producer B — which has no frozen path — omits it.
 2. **Column derivation** — one implementation (``pruning.advanced_viz_columns``)
@@ -26,7 +27,11 @@ import pytest
 from depictio.models.models.dashboards import DashboardDataLite
 from depictio.models.models.serverless import ComponentTier, RuntimeLimits, TierReason
 from depictio.serverless.preflight import classify_component
-from depictio.serverless.producer_a import advanced_viz_request, classify_stored_component
+from depictio.serverless.producer_a import (
+    advanced_viz_request,
+    celery_compute_request,
+    classify_stored_component,
+)
 from depictio.serverless.producer_b import _runtime_limits, build_manifest
 from depictio.serverless.pruning import (
     CELERY_VIZ_KINDS,
@@ -119,17 +124,53 @@ def test_data_path_kinds_are_live_in_both_producers(kind: str):
 
 
 @pytest.mark.parametrize("kind", sorted(CELERY_VIZ_KINDS))
-def test_celery_kinds_stay_omitted_in_both_producers(kind: str):
-    """Unchanged by phase 4: there is no in-browser equivalent of the compute."""
+def test_celery_kinds_stay_omitted_in_producer_b(kind: str):
+    """Producer B builds from a spec with no instance behind it — there is
+    nothing to run the compute on, and no frozen path to fall back to."""
     b_tier, b_reason, b_detail = classify_component(_spec_comp(kind))
     assert (b_tier, b_reason) == (ComponentTier.OMITTED, TierReason.CELERY_COMPUTE)
     assert b_detail and "Celery" in b_detail
 
-    a_tier, a_reason, a_detail = classify_stored_component(_stored_comp(kind))
-    assert (a_tier, a_reason) == (ComponentTier.OMITTED, TierReason.CELERY_COMPUTE)
-    assert a_detail and "Celery" in a_detail
-
     assert serves_advanced_viz_live(_spec_comp(kind)) is False
+
+
+def test_producer_a_freezes_a_derivable_celery_compute():
+    """A config the task can be called with freezes with ``celery_compute``."""
+    comp = _stored_comp("complex_heatmap", index_column="sample_id", value_columns=["f0", "f1"])
+    tier, reason, detail = classify_stored_component(comp)
+    assert (tier, reason) == (ComponentTier.FROZEN, TierReason.CELERY_COMPUTE)
+    assert detail and "computed at export time" in detail
+
+    task, request = celery_compute_request(comp)
+    assert task == "compute_complex_heatmap"
+    assert request["index_column"] == "sample_id"
+    assert request["value_columns"] == ["f0", "f1"]
+    assert request["filter_metadata"] == []  # the default filter state
+
+
+def test_producer_a_freezes_a_table_driven_embedding_via_the_data_path():
+    """No ``compute_method`` ⇒ the renderer never dispatches: it reads
+    dim_*_col off the table, so that is the path producer A freezes."""
+    comp = _stored_comp("embedding", sample_id_col="sample_id", dim_1_col="d1", dim_2_col="d2")
+    assert celery_compute_request(comp) is None
+    tier, reason, detail = classify_stored_component(comp)
+    assert (tier, reason) == (ComponentTier.FROZEN, TierReason.UNSUPPORTED)
+    assert detail and "compute_method" in detail
+
+
+@pytest.mark.parametrize(
+    "kind,config",
+    [
+        ("sankey", {"x_col": "a"}),  # needs >= 2 step_cols
+        ("coverage_track", {"x_col": "a"}),  # needs chromosome/position/value
+    ],
+)
+def test_producer_a_omits_a_celery_kind_it_cannot_call(kind: str, config: dict):
+    comp = _stored_comp(kind, **config)
+    assert celery_compute_request(comp) is None
+    tier, reason, detail = classify_stored_component(comp)
+    assert (tier, reason) == (ComponentTier.OMITTED, TierReason.CELERY_COMPUTE)
+    assert detail and "no request can be derived" in detail
 
 
 def test_phylogenetic_is_frozen_by_a_and_omitted_by_b():
@@ -199,6 +240,63 @@ def test_columns_come_from_col_scalars_and_rank_cols_deduplicated():
     # rank_cols carries no role — it is a hierarchy, not a single binding.
     assert advanced_viz_roles(comp) == {"abundance": "rel_abundance", "sample_id": "Phylum"}
     assert advanced_viz_kind(comp) == "sunburst"
+
+
+def test_columns_include_the_switchable_metric_options_of_a_rarefaction():
+    """Regression: a rarefaction's metric tabs switch between COLUMNS, listed in
+    ``metric_options``. Dropping them left every tab rendering ``metric_col``
+    (``rows[activeMetric] || rows[config.metric_col]``) — a wrong-but-plausible
+    plot, which is exactly what the tiering exists to prevent."""
+    comp = {
+        "component_type": "advanced_viz",
+        "config": {
+            "viz_kind": "rarefaction",
+            "sample_id_col": "sample_id",
+            "depth_col": "depth",
+            "metric_col": "shannon",
+            "iter_col": "iter",
+            "group_col": "group",
+            "metric_options": ["shannon", "observed_features", "faith_pd"],
+            "show_ci": True,
+        },
+    }
+    columns = advanced_viz_columns(comp)
+    assert set(columns) >= {"shannon", "observed_features", "faith_pd"}
+    assert columns == [
+        "sample_id",
+        "depth",
+        "shannon",
+        "iter",
+        "group",
+        "observed_features",
+        "faith_pd",
+    ]
+    # A switchable set carries no single binding, so it adds no role.
+    assert "metric_options" not in advanced_viz_roles(comp)
+    assert advanced_viz_roles(comp)["metric"] == "shannon"
+
+
+@pytest.mark.parametrize(
+    "config,expected",
+    [
+        # Every list-of-columns key of the config models, and the one scalar
+        # that names a column without the `_col` spelling.
+        ({"step_cols": ["a", "b"], "available_step_cols": ["a", "b", "c"]}, {"a", "b", "c"}),
+        ({"row_annotation_cols": ["k"], "value_columns": ["v1", "v2"]}, {"k", "v1", "v2"}),
+        (
+            {"set_columns": ["s1", "s2"], "default_annotation_cols": ["taxon"]},
+            {"s1", "s2", "taxon"},
+        ),
+        ({"color_by_columns": ["c1"], "extra_color_cols": ["c2"]}, {"c1", "c2"}),
+        ({"index_column": "Phylum"}, {"Phylum"}),
+        # …and the value lists that are NOT columns stay out.
+        ({"chromosomes_filter": ["chr1"], "samples_filter": ["S1"]}, set()),
+        ({"set_colors": {"Soil": "#fff"}, "top_n": 20, "sort_by": "abundance"}, set()),
+    ],
+)
+def test_column_keys_are_recognised_by_their_naming_family(config: dict, expected: set[str]):
+    comp = {"component_type": "advanced_viz", "config": {"viz_kind": "x", **config}}
+    assert set(advanced_viz_columns(comp)) == expected
 
 
 def test_kind_reads_the_top_level_field_before_the_config_blob():

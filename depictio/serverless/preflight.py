@@ -32,7 +32,14 @@ _LIVE_TYPES = frozenset({"card", "interactive", "text"})
 
 @dataclass
 class TierRow:
-    """One row of the preflight table (and one ``tiers`` manifest entry)."""
+    """One row of the preflight table (and one ``tiers`` manifest entry).
+
+    ``tab_id`` is the dashboard id of the tab the component lives on. Producer
+    A stamps it when it exports a whole tab family (the manifest's component
+    -keyed sections span the family, so a flat tier table would otherwise lose
+    track of which tab a component belongs to); it stays ``None`` for producer
+    B and for single-tab exports.
+    """
 
     component_id: str
     title: str
@@ -40,6 +47,35 @@ class TierRow:
     tier: ComponentTier
     reason: TierReason | None = None
     detail: str | None = None
+    tab_id: str | None = None
+
+
+@dataclass
+class TabRow:
+    """One tab of an exported tab family, as ``--check`` and the preflight
+    endpoint report it (RFC §3.1 ``BundleManifest.tabs``)."""
+
+    id: str
+    title: str
+    tab_order: int = 0
+    is_main_tab: bool = False
+
+
+def tier_counts(rows: list[TierRow]) -> dict[str, int]:
+    """``{tier value: count}`` over a tier table, every tier present (0 when unused).
+
+    Shared by the CLI summary and the preflight endpoint so both report the
+    same four keys in the same order whatever the dashboard contains.
+    """
+    counts = {tier.value: 0 for tier in ComponentTier}
+    for row in rows:
+        counts[row.tier.value] = counts.get(row.tier.value, 0) + 1
+    return counts
+
+
+def rows_for_tab(rows: list[TierRow], tab_id: str) -> list[TierRow]:
+    """The tier rows belonging to one tab of a family export."""
+    return [row for row in rows if row.tab_id == tab_id]
 
 
 # Link tiers, in the vocabulary the check output prints. They describe HOW a
@@ -218,8 +254,20 @@ def classify_spec(spec: DashboardDataLite) -> list[TierRow]:
     return rows
 
 
-def print_tier_table(rows: list[TierRow], console: Any) -> None:
-    """Pretty-print the tier table on a rich console (CLI ``--check``)."""
+def _tier_summary(rows: list[TierRow]) -> str:
+    """``"3 live, 1 frozen"`` — the non-zero tiers of a row set, in tier order."""
+    counts = tier_counts(rows)
+    return ", ".join(f"{counts[t.value]} {t.value}" for t in ComponentTier if counts[t.value])
+
+
+def print_tier_table(rows: list[TierRow], console: Any, tabs: list[TabRow] | None = None) -> None:
+    """Pretty-print the tier table on a rich console (CLI ``--check``).
+
+    ``tabs`` (a family export) adds a Tab column and a per-tab summary under
+    the table — with one bundle carrying every tab of a family, "which tab is
+    that omitted component on?" is the first question the flat table cannot
+    answer.
+    """
     from rich.table import Table
 
     styles = {
@@ -228,29 +276,38 @@ def print_tier_table(rows: list[TierRow], console: Any) -> None:
         ComponentTier.FROZEN: "cyan",
         ComponentTier.OMITTED: "red",
     }
+    tab_titles = {tab.id: (tab.title or tab.id[:8]) for tab in tabs or []}
     table = Table(title="Static-bundle preflight — per-component tiers")
     table.add_column("Component", style="cyan")
+    if tab_titles:
+        table.add_column("Tab", style="blue", overflow="fold")
     table.add_column("Title")
     table.add_column("Type", style="magenta")
     table.add_column("Tier")
     table.add_column("Reason", style="dim")
     table.add_column("Detail", overflow="fold")
     for row in rows:
-        table.add_row(
-            row.component_id,
+        cells = [row.component_id]
+        if tab_titles:
+            cells.append(tab_titles.get(row.tab_id or "", "-"))
+        cells += [
             row.title or "-",
             row.component_type,
             f"[{styles[row.tier]}]{row.tier.value}[/{styles[row.tier]}]",
             row.reason.value if row.reason else "-",
             row.detail or "-",
-        )
+        ]
+        table.add_row(*cells)
     console.print(table)
 
-    counts: dict[ComponentTier, int] = {}
-    for row in rows:
-        counts[row.tier] = counts.get(row.tier, 0) + 1
-    summary = ", ".join(f"{counts[t]} {t.value}" for t in ComponentTier if t in counts)
-    console.print(f"  {len(rows)} component(s): {summary}")
+    console.print(f"  {len(rows)} component(s): {_tier_summary(rows)}")
+    for tab in tabs or []:
+        tab_rows = rows_for_tab(rows, tab.id)
+        marker = " [dim](main)[/dim]" if tab.is_main_tab else ""
+        console.print(
+            f"    tab {tab.tab_order} {tab.title or tab.id}{marker}: "
+            f"{len(tab_rows)} component(s)" + (f" — {_tier_summary(tab_rows)}" if tab_rows else "")
+        )
 
 
 def print_links_summary(rows: list[LinkRow], console: Any) -> None:
