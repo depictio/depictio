@@ -43,8 +43,10 @@ returns ``None``. A frozen figure is correct; a mis-bound one is wrong, so
   figures freeze);
 * a whole-frame visualisation (heatmap, scatter_matrix, parallel_*, imshow,
   scatter_geo, choropleth — ``_WHOLE_FRAME_VISU``);
-* a null in any grouping column (a null never matches a predicate at runtime);
+* every grouping value null, so px would plot nothing at all;
 * a non-OLS ``trendline`` (the runtime only refits closed-form 1-predictor OLS).
+
+A *single* null grouping value is not one of them — see :func:`_combinations`.
 
 Stripping convention (what ``refill.ts`` expects)
 -------------------------------------------------
@@ -318,9 +320,25 @@ def _group_columns(dict_kwargs: dict[str, Any], df: pl.DataFrame) -> list[str]:
 
 def _combinations(
     df: pl.DataFrame, group_cols: list[str]
-) -> list[tuple[dict[str, Any], list[int]]] | None:
+) -> list[tuple[dict[str, Any], list[int]]]:
     """Group value combinations present in the frame, with their row indexes.
-    ``None`` when a grouping value is null (never matchable at runtime)."""
+
+    A combination holding a null is **omitted**, so the rows under it bind to no
+    trace. That is not a dropped row: px omits them from the figure too — it
+    groups with ``drop_null_keys=True`` (``plotly/express/_core.py``), so the
+    server's own render never plots a null-keyed group — and ``refill.ts``
+    applies the same rule from the other side ("a null cell never matches any
+    group", mirroring the mask kernel). Server and runtime therefore already
+    agree on those rows; the builder just has to stop treating the disagreement
+    it feared as certain.
+
+    Omitting rather than refusing keeps the matcher self-checking. If some px
+    version *did* emit a trace for a null-keyed group (polars NaN, say, which is
+    not a null to ``drop_null_keys`` but normalises to one here), that trace
+    reproduces no remaining combination, matches nothing, and the caller freezes
+    — the same safe outcome as before, reached by evidence instead of by
+    assumption.
+    """
     if not group_cols:
         return [({}, list(range(df.height)))]
     grouped = (
@@ -333,7 +351,7 @@ def _combinations(
     for row in grouped.iter_rows(named=True):
         values = {col: _norm(row[col]) for col in group_cols}
         if any(v is None for v in values.values()):
-            return None
+            continue
         out.append((values, [int(i) for i in row[_ROW_INDEX]]))
     return out
 
@@ -388,8 +406,8 @@ def build_binding(
 
     group_cols = _group_columns(dict_kwargs, df)
     combos = _combinations(df, group_cols)
-    if combos is None:
-        return None
+    if not combos:
+        return None  # every grouping value is null: px plots nothing to bind
 
     # Authoritative figure: the caller's prebuilt one (code mode), else the real
     # service on the unfiltered frame (errata #10).

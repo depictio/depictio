@@ -158,10 +158,31 @@ def cases(df: pl.DataFrame) -> list[tuple[str, dict[str, Any], pl.DataFrame, boo
             False,
         ),
         (
+            # px drops null-keyed groups and the runtime never matches a null to
+            # a group, so the two agree without the combination being bound.
             "null in grouping column (sex)",
             figure("scatter", x="flipper_length_mm", y="body_mass_g", color="sex"),
             df,
-            False,
+            True,
+        ),
+        (
+            "null group + symbol + ols trendline",
+            figure(
+                "scatter",
+                x="bill_length_mm",
+                y="bill_depth_mm",
+                color="species",
+                symbol="sex",
+                trendline="ols",
+            ),
+            df,
+            True,
+        ),
+        (
+            "box with points (null group)",
+            figure("box", x="species", y="bill_length_mm", color="sex", points="all"),
+            df,
+            True,
         ),
         (
             "hover_data (2-D customdata)",
