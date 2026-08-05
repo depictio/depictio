@@ -272,9 +272,14 @@ column-validation helper.
 
 Single-URL ingestion keeps the synchronous `asyncio.to_thread` pattern (parity
 with upload, and the sync-httpx deadlock note there still applies). Manifest
-ingestion (N files across N DCs) fans out through the existing Celery
-infrastructure with per-DC progress, surfaced via the ingestion-report
-machinery that `TemplateOrigin.expected_data_collections` already provides.
+ingestion (N files across N DCs) is implemented as a sequential per-DC loop in
+the same threaded pattern — `POST /projects/ingest_manifest` returns a per-DC
+`ManifestIngestReport`, with each failed DC's scan config reverted so a failed
+run never leaves a manifest config with no data behind it. The report shape is
+already per-DC, so switching the loop body to Celery fan-out (per-DC progress,
+long-manifest scalability) is an internal phase-4 change, surfaced via the
+ingestion-report machinery that `TemplateOrigin.expected_data_collections`
+already provides.
 
 ### 5.2 Trap №1 — SSRF
 
@@ -383,9 +388,9 @@ Each phase independently shippable.
 |---|---|---|
 | **0** | This RFC + `DataManifest` schema frozen against hand-written CSV/JSON fixtures (parser + model tests only) | `docs/design/rfc-remote-data-manifests.md`; `depictio/models/models/manifest.py` (new) |
 | **1 — minimal slice** | Table DC from a single `https://`/`s3://` parquet/csv URL, server-side: `ScanURL`, SSRF gateway, `_create_dc_from_url` + `POST /datacollections/create_from_url`, `File` relaxations, url branch in scan/aggregate | `models/models/data_collections.py`; `models/models/files.py`; `api/v1/remote_fetch.py` (new); `datacollections_endpoints/{utils,routes}.py`; `cli/utils/{scan,deltatables}.py` |
-| **2** | `ScanManifest` + manifest ingestion into an existing project: type→tag mapping, `depictio_manifest_id` injection, Celery fan-out, ingestion report | same model files; `cli/utils/deltatables.py`; `projects_endpoints/`; `celery_endpoints/` |
+| **2** | `ScanManifest` + manifest ingestion into an existing project: type→tag mapping, `depictio_manifest_id` injection, `POST /projects/ingest_manifest` + per-DC report (sequential; Celery fan-out moved to phase 4) | same model files; `cli/utils/deltatables.py`; `projects_endpoints/manifest_ingest.py` (new) |
 | **3** | Manifest-driven templates end-to-end: `resolve_template` data-root-optional refactor, shared dashboard-import function, `POST /projects/from_manifest`, CLI `--manifest`, reference template + E2E test | `cli/utils/templates.py`; `models/models/templates.py`; `projects_endpoints/routes.py`; `cli/commands/run.py`; `depictio/projects/generic/manifest-tables/` (new) |
-| **4** | Hardening & access: per-project storage config (issue 383), manifest re-ingest/refresh, builder UI (paste a URL / a manifest) | `ProjectStorageConfig` (new); `projects_endpoints`; viewer/builder |
+| **4** | Hardening & access: per-project storage config (issue 383), manifest re-ingest/refresh, Celery fan-out for long manifests, builder UI (paste a URL / a manifest) | `ProjectStorageConfig` (new); `projects_endpoints`; `celery_endpoints/`; viewer/builder |
 | **5** | Catalog auto-compose fallback (manifest → catalog match → auto-layout, no template) | `models/components/advanced_viz/catalog.py`; `catalog_endpoints`; layout packer |
 | **6** | Serverless remote bundles from the same manifest (resolves the serverless RFC's producer-B question) | branch: `depictio/serverless/producer_b.py`; `packages/depictio-static-core` |
 
