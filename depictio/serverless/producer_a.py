@@ -7,8 +7,9 @@ emission machinery with producer B (``producer_b.py``).
 
 Everything runs **in-process** — no HTTP round-trips to the API:
 
-- Live tiers (cards / interactive / text) bundle their data collections the
-  same way producer B does: ``load_deltatable_lite(..., init_data=...)`` →
+- Live tiers (cards / interactive / text, and since phase 4 the advanced_viz
+  data-path kinds) bundle their data collections the same way producer B does:
+  ``load_deltatable_lite(..., init_data=...)`` →
   prune to the union of consuming components' columns (plus every interactive
   filter column that exists in the schema, mirroring the server's
   ``_effective_projection`` fold) → companion columns / codebooks → re-export
@@ -18,9 +19,10 @@ Everything runs **in-process** — no HTTP round-trips to the API:
   filter state: ``bulk_compute_cards`` (fallback card payloads),
   ``render_table_endpoint`` (paged to the producer-B row cap),
   ``build_figure_preview`` (the Celery task *function*, called directly — the
-  same code path preview and render share), ``fetch_advanced_viz_data`` (its
-  ``sampling`` block is kept verbatim), ``render_multiqc*``, and the map
-  service with the basemap forced to ``white-bg`` (zero-network single-file).
+  same code path preview and render share), ``fetch_advanced_viz_data`` (the
+  phylogenetic kind only — its ``sampling`` block is kept verbatim),
+  ``render_multiqc*``, and the map service with the basemap forced to
+  ``white-bg`` (zero-network single-file).
 - Staleness: each DataRef records the server's ``_get_aggregation_hash`` for
   its DC (RFC errata #8), so a rebuilt bundle can be compared against the
   instance state it was cut from.
@@ -39,6 +41,13 @@ IR is replayed here with Polars (``prologue_exec.py``) to rebuild the frame the
 code handed to plotly-express, and the binder matches the two. A bound one
 ships ``prologues[cid]`` + ``bindings[cid]`` with its DC bundled keep-all; code
 the transpiler refuses stays frozen with reason ``code_mode``.
+
+advanced_viz components split three ways since phase 4: the tabular data-path
+kinds go ``live`` (their DC is bundled, pruned to the columns their ``config``
+binds, and the in-browser engine recomputes ``/advanced_viz/data`` at every
+filter state — no frozen payload); ``phylogenetic`` stays frozen, because its
+Newick tree DC is a second, non-tabular source one bundled table cannot carry;
+the Celery-computed kinds stay omitted.
 
 Permissions (RFC §8): ``--check`` needs *viewer* on the dashboard's project;
 the build itself needs *owner* — a bundle is bulk data exfiltration.
@@ -73,21 +82,32 @@ from depictio.models.models.serverless import (
     TierReason,
 )
 from depictio.serverless.binding import build_binding
-from depictio.serverless.preflight import _CELERY_VIZ_KINDS, TierRow
+from depictio.serverless.preflight import TierRow
 from depictio.serverless.producer_b import (
     PARQUET_COMPRESSION,
     PARQUET_ROW_GROUP_SIZE,
     _companion_targets,
     _depictio_version,
+    _runtime_limits,
     render_bundle_html,
 )
 from depictio.serverless.prologue import transpile_with_reason
 from depictio.serverless.prologue_exec import execute_ops, terminal_px_call
-from depictio.serverless.pruning import component_columns
+from depictio.serverless.pruning import (
+    CELERY_VIZ_KINDS,
+    NON_TABULAR_VIZ_KINDS,
+    advanced_viz_columns,
+    advanced_viz_kind,
+    advanced_viz_roles,
+    component_columns,
+    serves_advanced_viz_live,
+)
 
 # Component types whose data ships in the bundle (live in the static runtime).
 # Figures are handled via :func:`_refillable_figure`: their DC is bundled too,
-# so the bind-and-refill runtime can refill bound traces from it.
+# so the bind-and-refill runtime can refill bound traces from it. advanced_viz
+# components go through :func:`serves_advanced_viz_live` for the same reason —
+# their data-path kinds are recomputed in the browser since phase 4.
 LIVE_DATA_TYPES = frozenset({"card", "interactive"})
 
 
@@ -127,6 +147,22 @@ def _refillable_figure(comp: dict[str, Any]) -> bool:
     if comp.get("mode", "ui") != "code":
         return True
     return _code_figure_plan(comp)[1] is not None
+
+
+def _ships_data(comp: dict[str, Any]) -> bool:
+    """True when a component's DC must be bundled for it to work offline.
+
+    The union of the three data paths the static runtime computes itself:
+    cards/interactive (re-queried in the browser), the figures offered to
+    bind-and-refill, and the advanced_viz kinds the in-browser engine serves
+    (phase 4). Everything else is either frozen (payload self-contained) or
+    omitted.
+    """
+    return (
+        comp.get("component_type") in LIVE_DATA_TYPES
+        or _refillable_figure(comp)
+        or serves_advanced_viz_live(comp)
+    )
 
 
 # Frozen tables inline their rows into the manifest — cap them like the catalog
@@ -322,8 +358,8 @@ def classify_stored_component(
             "JBrowse sessions need a genome-data backend",
         )
     if ctype == "advanced_viz":
-        kind = comp.get("viz_kind") or (comp.get("config") or {}).get("viz_kind") or ""
-        if kind in _CELERY_VIZ_KINDS:
+        kind = advanced_viz_kind(comp)
+        if kind in CELERY_VIZ_KINDS:
             # TODO(producer-A follow-up): freeze the Celery computes by calling
             # their task functions (compute_embedding & co.) directly, the way
             # figures call build_figure_preview — the static runtime already
@@ -334,11 +370,31 @@ def classify_stored_component(
                 f"advanced_viz '{kind}' is a server-side Celery compute; "
                 "freezing it is a producer-A follow-up",
             )
+        if kind in NON_TABULAR_VIZ_KINDS:
+            return (
+                ComponentTier.FROZEN,
+                TierReason.UNSUPPORTED,
+                f"advanced_viz '{kind}' also reads a non-tabular tree data collection "
+                "(Newick), which one bundled table cannot carry — it stays frozen at "
+                "the default filter state (tree merged in) while the other data-path "
+                "kinds went live in phase 4",
+            )
+        if not serves_advanced_viz_live(comp) or advanced_viz_request(comp) is None:
+            return (
+                ComponentTier.OMITTED,
+                TierReason.UNSUPPORTED,
+                f"advanced_viz '{kind or '?'}' has no derivable request: its config "
+                "binds no column, or the component carries no workflow/data-collection id",
+            )
+        # Live since phase 4: the in-browser advanced_viz engine recomputes the
+        # /advanced_viz/data payload — projection, tail-preserving sampling, the
+        # kind's own reduction — from the bundled Parquet at every filter state,
+        # so the component ships NO frozen payload (same rule as a bound figure).
         return (
-            ComponentTier.FROZEN,
-            TierReason.UNSUPPORTED,
-            f"advanced_viz '{kind or '?'}' data-path kinds go live in phase 4; "
-            "frozen /advanced_viz/data response at the default filter state",
+            ComponentTier.LIVE,
+            None,
+            f"advanced_viz '{kind}' data path served by the in-browser engine "
+            "from the bundled Parquet",
         )
 
     return (
@@ -408,7 +464,8 @@ def _dc_init_entry(comp: dict[str, Any]) -> dict[str, Any] | None:
 
 def live_column_sets(stored_metadata: list[dict[str, Any]]) -> dict[str, set[str] | None]:
     """Per-DC column sets for the components whose data ships in the bundle
-    (cards + interactive, plus the figures offered to bind-and-refill).
+    (cards + interactive, the figures offered to bind-and-refill, and the
+    live advanced_viz kinds).
 
     Thin translation of ``pruning.compute_column_sets`` onto stored_metadata:
     the components ARE dicts of the shape ``component_columns`` reads
@@ -420,6 +477,9 @@ def live_column_sets(stored_metadata: list[dict[str, Any]]) -> dict[str, set[str
     pruning (``None`` for whole-frame visus widens to a full keep); a
     transpilable code-mode figure contributes ``None`` too, since its code may
     read any column and the runtime re-derives the frame from all of them.
+    A live advanced_viz contributes the columns its config binds (the same
+    ``pruning.advanced_viz_columns`` the request derivation uses), so the
+    in-browser engine finds every projected column in the bundled Parquet.
 
     Every interactive filter column that exists in a DC's schema is folded in
     later (see :func:`_bundle_data_refs`) to mirror the server's
@@ -427,7 +487,7 @@ def live_column_sets(stored_metadata: list[dict[str, Any]]) -> dict[str, set[str
     """
     sets: dict[str, set[str] | None] = {}
     for comp in stored_metadata:
-        if comp.get("component_type") not in LIVE_DATA_TYPES and not _refillable_figure(comp):
+        if not _ships_data(comp):
             continue
         dc_id = comp.get("dc_id")
         if not dc_id:
@@ -587,21 +647,13 @@ def advanced_viz_request(comp: dict[str, Any]) -> dict[str, Any] | None:
     Columns and roles are derived from the component's persisted ``config``
     blob (``<role>_col`` scalars plus sunburst's ``rank_cols`` list) — the
     same convention ``buildAdvancedVizConfigBlob`` writes and the catalog
-    preview reads. Returns ``None`` when no columns can be derived.
+    preview reads. The derivation itself lives in ``pruning`` so producer B's
+    column pruning bundles exactly the columns this request would ask for.
+    Returns ``None`` when no columns can be derived.
     """
     if not comp.get("wf_id") or not comp.get("dc_id"):
         return None
-    config = comp.get("config") or {}
-    kind = comp.get("viz_kind") or config.get("viz_kind") or ""
-    columns: list[str] = []
-    roles: dict[str, str] = {}
-    for key, value in config.items():
-        if key == "rank_cols" and isinstance(value, list):
-            columns.extend(v for v in value if isinstance(v, str))
-        elif key.endswith("_col") and isinstance(value, str) and value:
-            roles[key[: -len("_col")]] = value
-            columns.append(value)
-    columns = list(dict.fromkeys(columns))
+    columns = advanced_viz_columns(comp)
     if not columns:
         return None
     return {
@@ -609,8 +661,8 @@ def advanced_viz_request(comp: dict[str, Any]) -> dict[str, Any] | None:
         "dc_id": str(comp["dc_id"]),
         "columns": columns,
         "filter_metadata": [],
-        "viz_kind": kind or None,
-        "roles": roles,
+        "viz_kind": advanced_viz_kind(comp) or None,
+        "roles": advanced_viz_roles(comp),
     }
 
 
@@ -723,7 +775,8 @@ def _freeze_map(comp: dict[str, Any], user: ExportUser) -> dict[str, Any]:
 def _bundle_data_refs(
     stored_metadata: list[dict[str, Any]],
 ) -> tuple[dict[str, DataRef], dict[str, str], dict[str, str], dict[str, pl.DataFrame]]:
-    """Bundle every DC a live component or a ui-mode figure consumes.
+    """Bundle every DC a live component, a ui-mode figure or a live
+    advanced_viz consumes (:func:`_ships_data`).
 
     Returns ``(data_refs, inline_blobs, failures, pruned_frames)``.
     ``failures`` maps ``dc_id`` → error string for DCs that could not be loaded
@@ -740,7 +793,7 @@ def _bundle_data_refs(
     for comp in stored_metadata:
         if not comp.get("dc_id"):
             continue
-        if comp.get("component_type") in LIVE_DATA_TYPES or _refillable_figure(comp):
+        if _ships_data(comp):
             live_comps_by_dc.setdefault(str(comp["dc_id"]), []).append(comp)
 
     data_refs: dict[str, DataRef] = {}
@@ -887,10 +940,14 @@ def export_manifest(dashboard_id: str, user: ExportUser) -> ExportResult:
     tier_by_id = {row.component_id: row for row in tier_rows}
     dashboard_oid = ObjectId(str(dashboard_data["dashboard_id"]))
 
-    # Live tier: bundle the DCs cards/interactive (and ui-mode figures) read.
+    # Live tier: bundle the DCs cards/interactive (and ui-mode figures, and the
+    # live advanced_viz kinds) read.
     data_refs, inline_blobs, dc_failures, pruned_frames = _bundle_data_refs(stored_metadata)
     for comp in stored_metadata:
-        if comp.get("component_type") not in LIVE_DATA_TYPES:
+        # Components with no data of their own (frozen figures & co.) survive a
+        # failed DC — their payload is self-contained. The ones the runtime
+        # computes itself cannot.
+        if comp.get("component_type") not in LIVE_DATA_TYPES and not serves_advanced_viz_live(comp):
             continue
         dc_id = str(comp.get("dc_id") or "")
         if dc_id in dc_failures:
@@ -1041,12 +1098,21 @@ def export_manifest(dashboard_id: str, user: ExportUser) -> ExportResult:
     # runtime never reads (their frozen payloads are self-contained) — drop the
     # blob so an unbindable figure does not double the bundle's bytes. Code-mode
     # figures ride the same rule: a transpilable one had its DC bundled
-    # speculatively (keep-all), and only a *bound* one keeps it.
+    # speculatively (keep-all), and only a *bound* one keeps it. A live
+    # advanced_viz keeps its DC — the in-browser engine reads it at every
+    # filter state — unless the build downgraded it (unloadable DC).
     used_dcs = {
         str(c["dc_id"])
         for c in stored_metadata
         if c.get("dc_id")
-        and (c.get("component_type") in LIVE_DATA_TYPES or str(c.get("index")) in bindings)
+        and (
+            c.get("component_type") in LIVE_DATA_TYPES
+            or str(c.get("index")) in bindings
+            or (
+                serves_advanced_viz_live(c)
+                and tier_by_id[str(c.get("index"))].tier is ComponentTier.LIVE
+            )
+        )
     }
     for dc_id in [d for d in data_refs if d not in used_dcs]:
         del data_refs[dc_id]
@@ -1070,6 +1136,7 @@ def export_manifest(dashboard_id: str, user: ExportUser) -> ExportResult:
         frozen=frozen,
         bindings=bindings,
         prologues=prologues,
+        limits=_runtime_limits(),
         inline_blobs=inline_blobs,
     )
     return ExportResult(manifest=manifest, tier_rows=tier_rows)

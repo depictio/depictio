@@ -26,6 +26,13 @@ so a transpilable, bindable code figure ships ``prologues[cid]`` +
 ``bindings[cid]`` and goes ``live`` too. Code the transpiler refuses stays
 frozen with reason ``code_mode``. Everything the producer cannot compute at all
 is *omitted* with a reason, surfaced by ``--check`` (see ``preflight.py``).
+
+advanced_viz components are live since phase 4 for the tabular data-path kinds:
+pruning keeps the columns their ``config`` binds, and the in-browser engine
+recomputes the ``/advanced_viz/data`` payload from the bundled Parquet at every
+filter state. The Celery-computed kinds and ``phylogenetic`` (whose Newick tree
+DC producer B cannot read) are omitted — producer B has no frozen path for
+either.
 """
 
 from __future__ import annotations
@@ -54,6 +61,7 @@ from depictio.models.models.serverless import (
     FrozenPayload,
     Producer,
     PrologueOp,
+    RuntimeLimits,
     TierEntry,
     TierReason,
 )
@@ -338,6 +346,30 @@ def _companion_targets(
     return categorical, datetime_cols
 
 
+def _runtime_limits() -> RuntimeLimits:
+    """The building instance's sampling ceilings, pinned into the manifest.
+
+    The static runtime has no settings of its own: the advanced_viz data path
+    it serves in the browser must reduce frames with the SAME ceilings the
+    server would have used, or a live component would disagree with the
+    instance it was cut from. Imported lazily (and defensively): the model's
+    defaults mirror ``PerformanceConfig``'s, so a build without loadable server
+    settings still pins the documented behaviour.
+    """
+    try:
+        from depictio.api.v1.configs.config import settings
+
+        perf = settings.performance
+        return RuntimeLimits(
+            figure_max_points=perf.figure_max_points,
+            advanced_viz_no_sample_max_rows=perf.advanced_viz_no_sample_max_rows,
+            advanced_viz_tail_p_threshold=perf.advanced_viz_tail_p_threshold,
+            advanced_viz_tail_effect_threshold=perf.advanced_viz_tail_effect_threshold,
+        )
+    except Exception:
+        return RuntimeLimits()
+
+
 def _depictio_version() -> str:
     try:
         from depictio.version import get_version
@@ -561,6 +593,7 @@ def build_manifest(
         frozen=frozen,
         bindings=bindings,
         prologues=prologues,
+        limits=_runtime_limits(),
         inline_blobs=inline_blobs,
     )
     return BuildResult(manifest=manifest, tier_rows=tier_rows)

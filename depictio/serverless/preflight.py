@@ -18,13 +18,12 @@ from typing import Any
 from depictio.models.models.dashboards import DashboardDataLite
 from depictio.models.models.serverless import ComponentTier, TierReason
 from depictio.serverless.prologue import transpile_with_reason
-from depictio.serverless.pruning import component_as_dict
-
-# advanced_viz kinds whose payload is computed by a Celery dispatch server-side
-# (mirrors ``_ADVANCED_VIZ_DISPATCH_KINDS`` in depictio/catalog/payload.py plus
-# the RFC §2.4 list).
-_CELERY_VIZ_KINDS = frozenset(
-    {"embedding", "complex_heatmap", "upset", "upset_plot", "sankey", "coverage_track"}
+from depictio.serverless.pruning import (
+    CELERY_VIZ_KINDS,
+    NON_TABULAR_VIZ_KINDS,
+    advanced_viz_columns,
+    advanced_viz_kind,
+    component_as_dict,
 )
 
 # Component types phase 1 serves live (filters re-query in the browser).
@@ -115,17 +114,45 @@ def classify_component(comp: dict[str, Any]) -> tuple[ComponentTier, TierReason 
             "JBrowse sessions need a genome-data backend",
         )
     if ctype == "advanced_viz":
-        kind = comp.get("viz_kind") or (comp.get("config") or {}).get("viz_kind") or ""
-        if kind in _CELERY_VIZ_KINDS:
+        kind = advanced_viz_kind(comp)
+        if kind in CELERY_VIZ_KINDS:
             return (
                 ComponentTier.OMITTED,
                 TierReason.CELERY_COMPUTE,
                 f"advanced_viz '{kind}' is a server-side Celery compute (producer A)",
             )
+        if kind in NON_TABULAR_VIZ_KINDS:
+            # The tree lives in a second, non-tabular data collection (Newick),
+            # which producer B has no way to read or bundle — and, unlike
+            # producer A, no frozen payload to fall back on.
+            return (
+                ComponentTier.OMITTED,
+                TierReason.UNSUPPORTED,
+                f"advanced_viz '{kind}' also reads a non-tabular tree data collection "
+                "(Newick); producer B bundles tabular Parquet only",
+            )
+        if not (comp.get("workflow_tag") and comp.get("data_collection_tag")):
+            return (
+                ComponentTier.OMITTED,
+                TierReason.UNSUPPORTED,
+                "advanced_viz references no resolvable data collection",
+            )
+        if not advanced_viz_columns(comp):
+            return (
+                ComponentTier.OMITTED,
+                TierReason.UNSUPPORTED,
+                f"advanced_viz '{kind or '?'}' config binds no column "
+                "(no '*_col' / 'rank_cols' entries); nothing to project",
+            )
+        # Live data-path kinds (phase 4): the in-browser advanced_viz engine
+        # recomputes the payload — projection, tail-preserving sampling, the
+        # kind's own reduction — from the bundled Parquet at every filter state,
+        # so no frozen payload is needed.
         return (
-            ComponentTier.OMITTED,
-            TierReason.UNSUPPORTED,
-            f"advanced_viz '{kind or '?'}' data-path kinds go live in phase 4",
+            ComponentTier.LIVE,
+            None,
+            f"advanced_viz '{kind}' data path served by the in-browser engine "
+            "from the bundled Parquet",
         )
 
     return (
