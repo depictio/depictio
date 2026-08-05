@@ -9,9 +9,12 @@ per-phase durations that are flushed as a single line
     DEPICTIO_INGEST_TIMINGS={"dc_tag": ..., "phase_ms": {...}, "peak_rss_mb": ...}
 
 on stdout, which ``benchmark/runner.py`` greps out of the captured subprocess
-output. It is entirely opt-in and zero-overhead when no timer is active: the
-:func:`timed` / :func:`record` helpers no-op unless a surrounding
-:func:`ingest_run` has installed a timer for the current context.
+output. Emission is opt-in: it happens only when ``DEPICTIO_INGEST_TIMINGS`` is
+set in the environment (the benchmark runner sets it), so an ordinary
+``depictio-cli run`` stays free of marker lines. Measurement itself is
+zero-overhead when no timer is active: the :func:`timed` / :func:`record`
+helpers no-op unless a surrounding :func:`ingest_run` has installed a timer for
+the current context.
 
 The active timer is held in a :class:`contextvars.ContextVar`, so it is correct
 for the current sequential ingestion and for future per-worker isolation as long
@@ -23,6 +26,7 @@ from __future__ import annotations
 
 import contextvars
 import json
+import os
 import platform
 import sys
 import time
@@ -32,6 +36,13 @@ from typing import Any
 from depictio.cli.cli_logging import logger
 
 _MARKER = "DEPICTIO_INGEST_TIMINGS="
+_ENV_FLAG = "DEPICTIO_INGEST_TIMINGS"
+
+
+def _emission_enabled() -> bool:
+    """Marker lines are for the benchmark harness, not for CLI users."""
+    return os.environ.get(_ENV_FLAG, "").strip().lower() not in ("", "0", "false", "no")
+
 
 _active: contextvars.ContextVar["IngestTimer | None"] = contextvars.ContextVar(
     "depictio_ingest_timer", default=None
@@ -98,11 +109,14 @@ def record(key: str, value: Any) -> None:
 
 
 @contextmanager
-def ingest_run(dc_tag: str, dc_type: str, *, emit: bool = True):
+def ingest_run(dc_tag: str, dc_type: str, *, emit: bool | None = None):
     """Install a timer for the current context; flush the marker line on exit.
 
     Nested calls are supported (the inner run swaps the active timer and restores
     the outer one on exit); each run emits its own marker line.
+
+    ``emit`` defaults to the ``DEPICTIO_INGEST_TIMINGS`` environment flag; pass it
+    explicitly to force emission on or off.
     """
     timer = IngestTimer(dc_tag, dc_type)
     token = _active.set(timer)
@@ -110,7 +124,7 @@ def ingest_run(dc_tag: str, dc_type: str, *, emit: bool = True):
         yield timer
     finally:
         _active.reset(token)
-        if emit:
+        if _emission_enabled() if emit is None else emit:
             try:
                 sys.stdout.write(_MARKER + json.dumps(timer.as_payload()) + "\n")
                 sys.stdout.flush()
