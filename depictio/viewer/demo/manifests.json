@@ -7,8 +7,8 @@
   },
   {
     "id": "phase-1",
-    "title": "Phase 1 — penguins with LIVE cards and filters",
+    "title": "Phases 1+5 — penguins fully LIVE (cards, filters, figure)",
     "manifest": "demo/manifests/penguins.json",
-    "description": "Built by producer B from a spec + local Parquet (depictio dashboard build-static). Cards, MultiSelect filters and text are live: change the species or year selection and the card values recompute offline through the in-browser hyparquet engine. The scatter figure stays frozen until phase 5 (bind-and-refill). Regenerate with depictio/serverless/examples/generate_demo_manifest.py."
+    "description": "Built by producer B from a spec + local Parquet (depictio dashboard build-static). Everything is live: change the species or year selection and the cards recompute AND the scatter re-renders offline — bind-and-refill through the in-browser hyparquet engine. Regenerate with depictio/serverless/examples/generate_demo_manifest.py."
   }
 ]

@@ -163,11 +163,12 @@ def test_tier_table(manifest: BundleManifest) -> None:
         "card-species-count": ComponentTier.LIVE,
         "filter-species": ComponentTier.LIVE,
         "filter-year": ComponentTier.LIVE,
-        "scatter-mass-flipper": ComponentTier.FROZEN,
+        # The scatter binds (RFC §4), so it refills live in the browser.
+        "scatter-mass-flipper": ComponentTier.LIVE,
     }
     figure_entry = manifest.tiers["scatter-mass-flipper"]
-    assert figure_entry.reason is TierReason.BINDING_MISS
-    assert figure_entry.detail and "phase 5" in figure_entry.detail
+    assert figure_entry.reason is None
+    assert figure_entry.detail is None
 
 
 def _trace_points(trace: dict) -> int:
@@ -181,25 +182,66 @@ def _trace_points(trace: dict) -> int:
     return len(x)
 
 
-def test_frozen_figure_payload(manifest: BundleManifest) -> None:
-    assert set(manifest.frozen) == {"scatter-mass-flipper"}
+def test_bound_figure_ships_no_frozen_payload(manifest: BundleManifest) -> None:
+    # A bound figure refills at EVERY filter state, including the default empty
+    # one, so a frozen snapshot would only duplicate data the bundle carries.
+    assert manifest.frozen == {}
+    binding = manifest.bindings["scatter-mass-flipper"]
+    assert binding.group_cols == ["species"]
+    assert [t.group["species"] for t in binding.traces] == ["Adelie", "Chinstrap", "Gentoo"]
+    for trace in binding.traces:
+        assert trace.fields == {"x": "flipper_length_mm", "y": "body_mass_g"}
+    assert binding.sampled is False
+    # Scaffold: layout intact, data arrays stripped (refill.ts writes them back).
+    assert len(binding.scaffold["data"]) == 3
+    assert all("x" not in t and "y" not in t for t in binding.scaffold["data"])
+    assert binding.scaffold["layout"]["legend"]["title"]["text"] == "species"
+    # The bound columns are in the bundle (pruning keeps every referenced one).
+    ref = next(iter(manifest.data_refs.values()))
+    assert {"flipper_length_mm", "body_mass_g", "species"} <= {c.name for c in ref.columns}
+
+
+def test_unbindable_figure_falls_back_to_frozen(data_dir: Path) -> None:
+    """A figure the matcher refuses keeps the frozen path + binding_miss."""
+    import yaml
+
+    from depictio.models.models.dashboards import DashboardDataLite
+
+    spec_dict = yaml.safe_load(EXAMPLE_SPEC.read_text())
+    for comp in spec_dict["components"]:
+        if comp["tag"] == "scatter-mass-flipper":
+            # `sex` has nulls: a null group value can never match a runtime
+            # predicate, so the matcher must refuse this figure.
+            comp["dict_kwargs"]["color"] = "sex"
+    manifest = build_manifest(DashboardDataLite.model_validate(spec_dict), data_dir).manifest
+
+    assert manifest.bindings == {}
+    entry = manifest.tiers["scatter-mass-flipper"]
+    assert entry.tier is ComponentTier.FROZEN
+    assert entry.reason is TierReason.BINDING_MISS
+    assert entry.detail and "binding" in entry.detail
     frozen = manifest.frozen["scatter-mass-flipper"]
     assert frozen.kind == "figure"
     assert frozen.filter_state == []  # default filter state
     fig = frozen.payload["figure"]
-    assert len(fig["data"]) == 3  # one trace per species
-    assert sum(_trace_points(t) for t in fig["data"]) == 342
+    # px drops the 9 null-`sex` rows entirely — exactly the silent row loss the
+    # matcher refuses to encode in a binding.
+    assert sum(_trace_points(t) for t in fig["data"]) == 333
     meta = frozen.payload["metadata"]
     assert meta["filter_applied"] is False
     assert meta["was_sampled"] is False
     assert meta["total_data_count"] == 342
 
 
-def test_preflight_matches_build_tiers(manifest: BundleManifest) -> None:
-    # No data-dependent downgrades in the example: preflight == final tiers.
-    rows = classify_spec(load_spec(EXAMPLE_SPEC))
-    assert {r.component_id: r.tier for r in rows} == {
-        cid: e.tier for cid, e in manifest.tiers.items()
+def test_preflight_refines_the_figure_verdict(manifest: BundleManifest) -> None:
+    # Preflight is data-free, so it can only promise the frozen fallback; the
+    # build refines it once the matcher has seen the frame.
+    rows = {r.component_id: r.tier for r in classify_spec(load_spec(EXAMPLE_SPEC))}
+    final = {cid: e.tier for cid, e in manifest.tiers.items()}
+    assert rows["scatter-mass-flipper"] is ComponentTier.FROZEN
+    assert final["scatter-mass-flipper"] is ComponentTier.LIVE
+    assert {k: v for k, v in rows.items() if k != "scatter-mass-flipper"} == {
+        k: v for k, v in final.items() if k != "scatter-mass-flipper"
     }
 
 
