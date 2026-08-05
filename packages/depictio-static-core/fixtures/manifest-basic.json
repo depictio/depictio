@@ -45,6 +45,14 @@
       "stored_layout_data": []
     }
   },
+  "tabs": [],
+  "provenance": {
+    "exported_by": null,
+    "exported_at": null,
+    "source": null,
+    "project_name": null,
+    "dashboard_url": null
+  },
   "data_refs": {
     "dc00000000000000000000a1": {
       "uri": "inline:dc_dc00000000000000000000a1",
