@@ -16,6 +16,7 @@ from depictio.models.models.data_collections_types.table import DCTableConfig
 from depictio.models.models.data_collections_types.table_coordinates import (
     DCTableCoordinatesConfig,
 )
+from depictio.models.models.manifest import validate_remote_url_syntax
 from depictio.models.models.transforms import TransformConfig
 
 
@@ -111,13 +112,29 @@ class ScanSingle(BaseModel):
         return v
 
 
+class ScanURL(BaseModel):
+    """Remote single-file acquisition: the DC's data lives at an absolute
+    s3:// or https:// URL instead of a scanned local path. Validation is
+    syntactic only — reachability/SSRF checks happen at the API fetch gateway.
+    """
+
+    url: str
+
+    class Config:
+        extra = "forbid"
+
+    @field_validator("url")
+    def validate_url(cls, v):
+        return validate_remote_url_syntax(v)
+
+
 class Scan(BaseModel):
     mode: str
-    scan_parameters: ScanRecursive | ScanSingle
+    scan_parameters: ScanRecursive | ScanSingle | ScanURL
 
     @field_validator("mode")
     def validate_mode(cls, v):
-        allowed_values = ["recursive", "single"]
+        allowed_values = ["recursive", "single", "url"]
         if v.lower() not in allowed_values:
             raise ValueError(f"mode must be one of {allowed_values}")
         return v
@@ -139,6 +156,14 @@ class Scan(BaseModel):
                 if isinstance(scan_parameters, dict) and "filename" in scan_parameters:
                     try:
                         values["scan_parameters"] = ScanSingle(**scan_parameters)  # type: ignore[missing-argument]
+                    except Exception:
+                        # Keep original if conversion fails
+                        pass
+        elif type_value == "url":
+            if not isinstance(scan_parameters, ScanURL):
+                if isinstance(scan_parameters, dict) and "url" in scan_parameters:
+                    try:
+                        values["scan_parameters"] = ScanURL(**scan_parameters)  # type: ignore[missing-argument]
                     except Exception:
                         # Keep original if conversion fails
                         pass
