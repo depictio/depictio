@@ -14,7 +14,7 @@ from typing import Final
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
-from depictio.api.v1.telemetry.guard import claim_send, ensure_guard_index
+from depictio.api.v1.telemetry.guard import claim_send, ensure_guard_index, release_send
 from depictio.api.v1.telemetry.payload import build_heartbeat_properties
 from depictio.telemetry.gates import telemetry_allowed
 from depictio.telemetry.posthog import acapture, build_body, render_for_debug
@@ -75,13 +75,18 @@ async def _send(event: str, *, daily: bool) -> None:
         logger.info("Telemetry (debug mode, not sent) %s:\n%s", event, render_for_debug(body))
         return
 
-    await acapture(
+    sent = await acapture(
         event,
         instance_id,
         props,
         api_key=settings.telemetry.api_key,
         endpoint=settings.telemetry.endpoint,
     )
+
+    if not sent:
+        # The claim was taken before the send, so hand it back rather than let a
+        # collector outage cost this installation the event permanently.
+        release_send(event, daily=daily)
 
 
 async def periodic_telemetry_heartbeat() -> None:
@@ -101,7 +106,8 @@ async def periodic_telemetry_heartbeat() -> None:
     while True:
         try:
             if suppression_reason() is None:
-                # Undated guard: fires exactly once per installation, ever.
+                # Undated guard, and one that never expires: fires exactly once
+                # per installation, ever.
                 await _send(EVENT_INSTALL, daily=False)
                 await _send(EVENT_HEARTBEAT, daily=True)
         except Exception as exc:

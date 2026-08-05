@@ -9,9 +9,10 @@ Two things here are load-bearing and should be treated as release blockers:
   rather than once per gunicorn worker per Kubernetes replica.
 """
 
+import asyncio
 import json
 from datetime import datetime, timedelta, timezone
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from mongomock import MongoClient
@@ -21,7 +22,7 @@ from depictio.api.v1.telemetry.cli_versions import (
     read_cli_versions,
     record_cli_version,
 )
-from depictio.api.v1.telemetry.guard import claim_send, has_sent
+from depictio.api.v1.telemetry.guard import _guard_id, claim_send, has_sent, release_send
 from depictio.api.v1.telemetry.identity import IDENTITY_DOC_ID, install_age_days
 from depictio.telemetry.buckets import LABELS
 
@@ -182,6 +183,95 @@ class TestSendGuard:
         # Must also outlive a daily send interval, or a restart late in the day
         # could re-send after the guard had already been collected.
         assert expires_at - before >= timedelta(days=1)
+
+    def test_the_install_guard_carries_no_expiry_at_all(self, telemetry_db):
+        """The one guard that must survive the TTL sweep outright.
+
+        ``guard_expires_at`` is what the TTL index keys off, so writing it on the
+        undated install guard hands that document to the TTL monitor. A week later
+        it is gone, the heartbeat loop re-claims it on its next pass, and
+        ``server_install`` fires again — once per TTL period, for the life of the
+        deployment. The installation count would then grow on its own, without a
+        single new installation.
+
+        Checking that the *daily* guard still carries the field matters just as
+        much: both documents live in the same collection, and this field is the
+        only thing that tells the TTL monitor them apart.
+        """
+        claim_send("server_install", daily=False)
+        install_guard = telemetry_db.telemetry.find_one(
+            {"_id": _guard_id("server_install", daily=False)}
+        )
+        assert install_guard is not None
+        assert "guard_expires_at" not in install_guard
+
+        claim_send("server_heartbeat", daily=True)
+        heartbeat_guard = telemetry_db.telemetry.find_one(
+            {"_id": _guard_id("server_heartbeat", daily=True)}
+        )
+        assert heartbeat_guard is not None
+        assert "guard_expires_at" in heartbeat_guard
+
+    def test_a_released_claim_can_be_taken_again(self, telemetry_db):
+        """What a failed send has to leave behind.
+
+        The claim is taken *before* the network call, so concurrent workers settle
+        who sends without waiting on a collector. The cost is that a failed send
+        would burn it — and for the install event, whose guard no longer expires,
+        that means an installation that is never counted at all. Which is exactly
+        the deployment whose first send hits a firewall.
+        """
+        assert claim_send("server_install", daily=False) is True
+        assert claim_send("server_install", daily=False) is False
+
+        release_send("server_install", daily=False)
+
+        assert claim_send("server_install", daily=False) is True
+
+    def test_releasing_never_raises_when_mongodb_is_unreachable(self, telemetry_db):
+        with patch.object(
+            telemetry_db.telemetry, "delete_one", side_effect=RuntimeError("no mongo")
+        ):
+            release_send("server_heartbeat", daily=True)
+
+
+class TestSendReleasesTheClaimOnFailure:
+    """The guard is only spent when the collector actually took the event."""
+
+    @staticmethod
+    def _send_once(*, accepted: bool) -> None:
+        """Run ``_send`` end to end with the network and the config stubbed out."""
+        from depictio.api.v1.telemetry.tasks import _send
+
+        properties = MagicMock()
+        properties.model_dump.return_value = {}
+
+        stub_settings = MagicMock()
+        # Debug mode returns before the send and must not be what this exercises.
+        stub_settings.telemetry.debug = False
+
+        with (
+            patch("depictio.api.v1.telemetry.tasks.settings", stub_settings),
+            patch(
+                "depictio.api.v1.telemetry.tasks.build_heartbeat_properties",
+                return_value=("anonymous-id", properties),
+            ),
+            patch(
+                "depictio.api.v1.telemetry.tasks.acapture",
+                new=AsyncMock(return_value=accepted),
+            ),
+        ):
+            asyncio.run(_send("server_install", daily=False))
+
+    def test_a_refused_send_leaves_the_claim_available(self, telemetry_db):
+        self._send_once(accepted=False)
+        assert claim_send("server_install", daily=False) is True, (
+            "a collector outage cost this installation its install event permanently"
+        )
+
+    def test_an_accepted_send_spends_the_claim(self, telemetry_db):
+        self._send_once(accepted=True)
+        assert claim_send("server_install", daily=False) is False
 
 
 class TestCliVersionRecording:
