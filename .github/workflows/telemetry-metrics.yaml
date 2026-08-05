@@ -8,6 +8,11 @@
 # demand: GitHub retains only the last 14 days of clone and view counts, so
 # unsampled history is lost permanently. Everything else here is cumulative and
 # could be fetched at any time.
+#
+# Traffic needs a `TRAFFIC_READ_TOKEN` repository secret (a PAT with repo scope);
+# the default GITHUB_TOKEN cannot be granted the access those endpoints require.
+# Until that secret exists, the clone and view counts are the one thing here that
+# is genuinely not being collected.
 name: Telemetry metrics snapshot
 
 on:
@@ -17,6 +22,7 @@ on:
 
 permissions:
   contents: read
+  issues: read # the Tools Studio count goes through the issue search API
 
 jobs:
   snapshot:
@@ -28,6 +34,12 @@ jobs:
     # redirect the snapshot elsewhere.
     env:
       POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY || 'phc_Auxev6EYhAUhApdp9QXRfGUWFhti3mgVjyowXjpmcgQw' }}
+      # The traffic API needs push access to the repository, which no `permissions:`
+      # key can grant the default GITHUB_TOKEN — `administration` is not among them.
+      # So traffic is collected only when a PAT is configured, and the step is
+      # skipped rather than failed when it is not. Without this the workflow would
+      # go red every Monday over an access level it cannot obtain.
+      TRAFFIC_TOKEN: ${{ secrets.TRAFFIC_READ_TOKEN }}
     steps:
       - uses: actions/checkout@v7
 
@@ -51,31 +63,32 @@ jobs:
           for pkg in depictio-cli depictio; do
             url="https://pypistats.org/api/packages/${pkg}/recent"
             if body=$(curl -sSf --max-time 30 --retry 3 --retry-delay 5 --retry-all-errors "$url"); then
-              downloads=$(echo "$body" | python -c 'import json,sys; print(json.load(sys.stdin)["data"]["last_month"])')
+              downloads=$(jq -r '.data.last_month' <<<"$body")
               echo "${pkg}: ${downloads} downloads last month"
               echo "${pkg}=${downloads}" >> "$GITHUB_OUTPUT"
             else
               echo "::error::Could not fetch PyPI stats for ${pkg}"
+              # $RUNNER_TEMP, not a job-level env var: the `runner` context is
+              # not available where job env is evaluated, so hoisting this path
+              # would silently resolve it to /collection-errors.txt.
               echo "pypi/${pkg}" >> "$RUNNER_TEMP/collection-errors.txt"
             fi
           done
 
       - name: Collect repository traffic
         id: traffic
+        # Skipped, visibly, when no PAT is configured. See TRAFFIC_TOKEN above.
+        if: env.TRAFFIC_TOKEN != ''
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.TRAFFIC_READ_TOKEN }}
         run: |
           set -euo pipefail
-          # The traffic endpoints require push access to the repository. Whether
-          # the default GITHUB_TOKEN qualifies can only be settled by a real run;
-          # if these 403, add a PAT with repo scope as a secret and use it here.
           for endpoint in clones views; do
             if body=$(curl -sSf --max-time 30 --retry 3 --retry-delay 5 --retry-all-errors \
                 -H "Authorization: Bearer ${GH_TOKEN}" \
                 -H "Accept: application/vnd.github+json" \
                 "https://api.github.com/repos/${GITHUB_REPOSITORY}/traffic/${endpoint}"); then
-              total=$(echo "$body" | python -c 'import json,sys; print(json.load(sys.stdin)["count"])')
-              uniques=$(echo "$body" | python -c 'import json,sys; print(json.load(sys.stdin)["uniques"])')
+              read -r total uniques < <(jq -r '"\(.count) \(.uniques)"' <<<"$body")
               echo "${endpoint}: ${total} (${uniques} unique)"
               echo "${endpoint}=${total}" >> "$GITHUB_OUTPUT"
               echo "${endpoint}_uniques=${uniques}" >> "$GITHUB_OUTPUT"
@@ -100,7 +113,7 @@ jobs:
               -H "Accept: application/vnd.github+json" \
               --get --data-urlencode "q=${query}" \
               "https://api.github.com/search/issues"); then
-            total=$(echo "$body" | python -c 'import json,sys; print(json.load(sys.stdin)["total_count"])')
+            total=$(jq -r '.total_count' <<<"$body")
             echo "tools-studio PRs: ${total}"
             echo "pull_requests=${total}" >> "$GITHUB_OUTPUT"
           else
@@ -109,7 +122,10 @@ jobs:
           fi
 
       - name: Forward to the telemetry collector
-        if: env.POSTHOG_API_KEY != ''
+        # always(): a collector step that exits non-zero must not also cost the
+        # metrics that did collect. Whatever was gathered still gets sent, and the
+        # last step is what turns the run red.
+        if: always() && env.POSTHOG_API_KEY != ''
         env:
           PYPI_DEPICTIO_CLI: ${{ steps.pypi.outputs.depictio-cli }}
           PYPI_DEPICTIO: ${{ steps.pypi.outputs.depictio }}
@@ -135,7 +151,10 @@ jobs:
           def metric(name):
               """Collected value as an int, or None when that collector failed."""
               raw = os.environ.get(name, "").strip()
-              return int(raw) if raw else None
+              # `jq -r` prints the literal "null" for a missing field, which would
+              # otherwise reach int() and take down the whole forward, losing the
+              # metrics that were fine.
+              return int(raw) if raw and raw != "null" else None
 
           errors = pathlib.Path(os.environ["RUNNER_TEMP"]) / "collection-errors.txt"
           uncollected = errors.read_text().split() if errors.exists() else []
