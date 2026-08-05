@@ -54,6 +54,12 @@ interface TableRendererProps {
 
 const MAX_BLOCKS_IN_CACHE = 10;
 const DEFAULT_PAGE_SIZE = 100;
+/** Pages the full set must span before the chrome offers "load all rows".
+ *  Tied to the author's own page size rather than an absolute row count: a
+ *  dashboard that deliberately shows 15 rows at a time has said the table is a
+ *  peek at the data, so it reaches "clicking through this is tedious" far
+ *  sooner than one paging at 100. */
+const LOAD_ALL_MIN_PAGES = 5;
 // Server clamps a single render_table request to 500 rows; "Show all" pages
 // through in chunks of this size up to the client-side safety ceiling below.
 const SERVER_MAX_LIMIT = 500;
@@ -618,12 +624,21 @@ const TableRenderer: React.FC<TableRendererProps> = ({
   // The table is "reduced" whenever the full set spans more than one page.
   const hasReduction = ready && (total > pageSize || showAll);
 
+  // ...but spanning a second page is not on its own a reason to offer "load
+  // all". The figure only offers it when the server actually sampled the data
+  // (`renderMeta.was_sampled`), i.e. when something was genuinely withheld; the
+  // table's equivalent is paging deep enough that clicking through is the worse
+  // way to read it. Without this, all but the smallest table carried the icon
+  // and its "may be slow on large datasets" tooltip — on a few hundred rows
+  // that is noise attached to a warning that isn't true.
+  const offerLoadAll = ready && (total > pageSize * LOAD_ALL_MIN_PAGES || showAll);
+
   // Publish the paginated/full state to the chrome so it can render the same
   // "load all" action icon the figure uses (consistent affordance + placement).
   useEffect(() => {
     if (!onLoadAllState) return;
     onLoadAllState(
-      hasReduction
+      offerLoadAll
         ? {
             reduced: !showAll,
             full: showAll,
@@ -635,7 +650,7 @@ const TableRenderer: React.FC<TableRendererProps> = ({
     );
     // exitShowAll/loadAllRows are stable enough across the tracked deps.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [onLoadAllState, hasReduction, showAll, allLoading]);
+  }, [onLoadAllState, offerLoadAll, showAll, allLoading]);
 
   // Informational row-count indicator — same styling/placement as the figure's
   // point indicator. The load-all toggle lives in the chrome (above).

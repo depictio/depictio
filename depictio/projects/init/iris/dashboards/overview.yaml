@@ -278,5 +278,5 @@ components:
     description: "Complete iris flower measurements across the three varieties."
     title_size: h3
     title_align: left
-    page_size: 15
+    page_size: 100
     layout: {x: 0, y: 22, w: 8, h: 5}

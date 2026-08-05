@@ -362,5 +362,5 @@ components:
     description: "Joined physical-features + demographics view used by every tile above."
     title_size: h3
     title_align: left
-    page_size: 15
+    page_size: 100
     layout: {x: 0, y: 27, w: 8, h: 5}
