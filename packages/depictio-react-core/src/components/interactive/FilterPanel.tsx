@@ -41,7 +41,7 @@ import {
 } from '../../utils/leftPanelLayout';
 import ComponentRenderer from '../ComponentRenderer';
 import InteractiveGroupCard from '../InteractiveGroupCard';
-import FilterChips from './FilterChips';
+import ActiveFilterSummary from './ActiveFilterSummary';
 
 /**
  * The dashboard's left filter panel, shared by the viewer and the editor.
@@ -71,6 +71,13 @@ const ROW_HEIGHT = 40;
 const DENSITY_STORAGE_KEY = 'filter-panel-density';
 // Below this many controls the search box costs more room than it saves.
 const SEARCH_THRESHOLD = 8;
+
+/**
+ * Collapse key for the active-filter summary, which folds through the same
+ * persisted state as the sections and groups around it. Prefixed so it can't
+ * collide with a `section:` / `group:` key or with a component index.
+ */
+const SUMMARY_KEY = 'summary:active-filters';
 
 /**
  * Width of the collapsed panel. Unlike the tab sidebar, the filter panel never
@@ -446,14 +453,19 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
   const framedBody = (
     <div
       ref={wrapperRef}
-      // Edit mode only: these are the marker classes DashboardGrid sets on its
-      // own root, and app.css keys the visible per-cell border off them. The
-      // viewer deliberately stays unclassed — `.depictio-dashboard-grid:not(
-      // .depictio-edit-mode)` strips Paper borders, and the filter column has
-      // always shown its borders in view mode. The ref feeds the ResizeObserver
-      // that sizes the per-section grids; it only exists on this expanded
-      // branch, which is why that effect is keyed on `collapsed`.
-      className={editMode ? 'depictio-dashboard-grid depictio-edit-mode' : undefined}
+      // The marker classes DashboardGrid sets on its own root, carrying the
+      // same meaning here: app.css paints a per-cell border under
+      // `.depictio-edit-mode` and strips every Paper border without it. Both
+      // modes are classed so the panel matches the grid — a filter placed at
+      // the top of the dashboard already renders frameless in view mode, and
+      // the same control in the panel should not draw a box around itself just
+      // because of where it sits. Edit mode keeps its borders: there the boxes
+      // are the drag targets. The ref feeds the ResizeObserver that sizes the
+      // per-section grids; it only exists on this expanded branch, which is why
+      // that effect is keyed on `collapsed`.
+      className={
+        editMode ? 'depictio-dashboard-grid depictio-edit-mode' : 'depictio-dashboard-grid'
+      }
       style={{ width: '100%', overflowX: 'hidden' }}
     >
       {body}
@@ -621,10 +633,12 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
         </Group>
       </Group>
 
-      <FilterChips
+      <ActiveFilterSummary
         filters={filters}
         components={allMetadata ?? components}
         onClear={onFilterChange}
+        open={collapse.isOpen(SUMMARY_KEY)}
+        onToggle={() => collapse.toggle(SUMMARY_KEY)}
       />
 
       {components.length > SEARCH_THRESHOLD && (
