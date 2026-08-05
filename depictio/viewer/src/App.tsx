@@ -523,6 +523,23 @@ const App: React.FC = () => {
     () => interactiveComponents.filter((m) => m.placement !== 'top'),
     [interactiveComponents],
   );
+  /**
+   * What the filter panel resolves a filter's *name* against.
+   *
+   * The tab's own `stored_metadata` is not enough. A floating map is declared on
+   * one tab and filters every tab, so on any other tab its selection has no
+   * component to look up — and the active-filter summary fell back to the raw
+   * join column, listing a map selection as "sample". Unioning in the family's
+   * floating components gives that row the map's actual title on every tab.
+   *
+   * `leftComponents` deliberately does not get them: they are not panel controls
+   * and must not be rendered as filter rows.
+   */
+  const summaryMetadata = useMemo(() => {
+    const own = dashboard?.stored_metadata || [];
+    const seen = new Set(own.map((m) => m.index));
+    return [...own, ...mapPanel.components.map((c) => c.metadata).filter((m) => !seen.has(m.index))];
+  }, [dashboard, mapPanel.components]);
   const cardComponents = useMemo(
     () => (dashboard?.stored_metadata || []).filter((m) => m.component_type === 'card'),
     [dashboard],
@@ -763,7 +780,7 @@ const App: React.FC = () => {
               >
                 <FilterPanel
                   components={leftComponents}
-                  allMetadata={dashboard.stored_metadata}
+                  allMetadata={summaryMetadata}
                   filters={filters}
                   onFilterChange={handleFilterChange}
                   onResetAllFilters={handleResetAllFilters}
@@ -900,7 +917,7 @@ const App: React.FC = () => {
           >
             <FilterPanel
               components={leftComponents}
-              allMetadata={dashboard.stored_metadata}
+              allMetadata={summaryMetadata}
               filters={filters}
               onFilterChange={handleFilterChange}
               onResetAllFilters={handleResetAllFilters}
