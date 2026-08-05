@@ -1,3 +1,5 @@
+import asyncio
+
 import boto3
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -21,6 +23,11 @@ from depictio.api.v1.endpoints.projects_endpoints.ingestion_report import (
     IngestionReport,
     IngestionSummary,
     build_ingestion_report,
+)
+from depictio.api.v1.endpoints.projects_endpoints.manifest_ingest import (
+    IngestManifestRequest,
+    ManifestIngestReport,
+    _ingest_manifest_into_project,
 )
 from depictio.api.v1.endpoints.projects_endpoints.utils import (
     _async_get_all_projects,
@@ -250,6 +257,40 @@ async def get_ingestion_health(project_id: PyObjectId, current_user=Depends(get_
         raise HTTPException(status_code=401, detail="User not found.")
     project = _async_get_project_from_id(project_id, current_user, projects_collection)
     return build_ingestion_report(project).summary
+
+
+@projects_endpoint_router.post("/ingest_manifest", response_model=ManifestIngestReport)
+async def ingest_manifest(
+    payload: IngestManifestRequest,
+    current_user=Depends(get_user_or_anonymous),
+):
+    """Ingest a remote Data Manifest into an existing project.
+
+    Maps the manifest's ``type`` values onto the project's data-collection
+    tags, switches each matched DC to ``scan.mode: manifest``, then runs
+    scan + process in-process (same pipeline as ``/create_from_upload``).
+    ``dry_run=true`` returns the type→tag mapping plan without touching the
+    project. The manifest URL goes through the SSRF gateway before any fetch.
+    """
+    if not current_user:
+        raise HTTPException(status_code=401, detail="User not found.")
+    if not payload.dry_run:
+        from depictio.api.v1.endpoints.datacollections_endpoints.utils import (
+            _ensure_user_cli_token,
+        )
+
+        await _ensure_user_cli_token(current_user)
+    return await asyncio.to_thread(
+        _ingest_manifest_into_project,
+        project_id=payload.project_id,
+        manifest_url=payload.manifest_url,
+        current_user=current_user,
+        id_field=payload.id_field,
+        url_field=payload.url_field,
+        type_field=payload.type_field,
+        run_field=payload.run_field,
+        dry_run=payload.dry_run,
+    )
 
 
 @projects_endpoint_router.post("/create")
