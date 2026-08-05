@@ -1,5 +1,90 @@
 {
   "$defs": {
+    "AggFn": {
+      "description": "Closed allowlist of ``group_by().agg()`` reducers.",
+      "enum": [
+        "sum",
+        "mean",
+        "median",
+        "min",
+        "max",
+        "count",
+        "nunique",
+        "std",
+        "var",
+        "first",
+        "last"
+      ],
+      "title": "AggFn",
+      "type": "string"
+    },
+    "AggSpec": {
+      "additionalProperties": false,
+      "description": "One reducer of a ``group_by().agg()``.",
+      "properties": {
+        "alias": {
+          "description": "Output column name (Polars defaults it to ``col``)",
+          "title": "Alias",
+          "type": "string"
+        },
+        "col": {
+          "description": "Source column reduced",
+          "title": "Col",
+          "type": "string"
+        },
+        "fn": {
+          "$ref": "#/$defs/AggFn"
+        }
+      },
+      "required": [
+        "col",
+        "fn",
+        "alias"
+      ],
+      "title": "AggSpec",
+      "type": "object"
+    },
+    "AndPred": {
+      "additionalProperties": false,
+      "description": "``{\"and\": [<Pred>, ...]}`` \u2014 the field is aliased because ``and`` is a keyword.",
+      "properties": {
+        "and": {
+          "description": "Conjuncts, evaluated left to right",
+          "items": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/CmpPred"
+              },
+              {
+                "$ref": "#/$defs/IsNullPred"
+              },
+              {
+                "$ref": "#/$defs/IsNotNullPred"
+              },
+              {
+                "$ref": "#/$defs/IsInPred"
+              },
+              {
+                "$ref": "#/$defs/AndPred"
+              },
+              {
+                "$ref": "#/$defs/OrPred"
+              },
+              {
+                "$ref": "#/$defs/NotPred"
+              }
+            ]
+          },
+          "title": "And",
+          "type": "array"
+        }
+      },
+      "required": [
+        "and"
+      ],
+      "title": "AndPred",
+      "type": "object"
+    },
     "BindingTable": {
       "additionalProperties": false,
       "description": "Everything the runtime needs to refill a ui-mode figure (RFC \u00a74).",
@@ -55,6 +140,87 @@
       ],
       "title": "BundleMode",
       "type": "string"
+    },
+    "CmpArgs": {
+      "additionalProperties": false,
+      "description": "Argument of ``cmp``: column, operator, literal.",
+      "properties": {
+        "col": {
+          "title": "Col",
+          "type": "string"
+        },
+        "op": {
+          "$ref": "#/$defs/CmpOperator"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "description": "JSON scalar compared against the column (never null \u2014 use is_null)",
+          "title": "Value"
+        }
+      },
+      "required": [
+        "col",
+        "op",
+        "value"
+      ],
+      "title": "CmpArgs",
+      "type": "object"
+    },
+    "CmpOperator": {
+      "description": "Comparison operators expressible in a prologue predicate.",
+      "enum": [
+        "<",
+        "<=",
+        ">",
+        ">=",
+        "==",
+        "!="
+      ],
+      "title": "CmpOperator",
+      "type": "string"
+    },
+    "CmpPred": {
+      "additionalProperties": false,
+      "description": "``{\"cmp\": {\"col\": \"q_val\", \"op\": \"<\", \"value\": 0.05}}``",
+      "properties": {
+        "cmp": {
+          "$ref": "#/$defs/CmpArgs"
+        }
+      },
+      "required": [
+        "cmp"
+      ],
+      "title": "CmpPred",
+      "type": "object"
+    },
+    "ColRef": {
+      "additionalProperties": false,
+      "description": "Argument of the unary null predicates: ``{\"col\": \"x\"}``.",
+      "properties": {
+        "col": {
+          "description": "Column the predicate tests",
+          "title": "Col",
+          "type": "string"
+        }
+      },
+      "required": [
+        "col"
+      ],
+      "title": "ColRef",
+      "type": "object"
     },
     "ColumnSpec": {
       "additionalProperties": false,
@@ -201,6 +367,49 @@
       "title": "DataRef",
       "type": "object"
     },
+    "FilterOp": {
+      "additionalProperties": false,
+      "description": "``df.filter(<pred>)`` \u2014 row selection. Nulls never match.",
+      "properties": {
+        "op": {
+          "const": "filter",
+          "default": "filter",
+          "title": "Op",
+          "type": "string"
+        },
+        "pred": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CmpPred"
+            },
+            {
+              "$ref": "#/$defs/IsNullPred"
+            },
+            {
+              "$ref": "#/$defs/IsNotNullPred"
+            },
+            {
+              "$ref": "#/$defs/IsInPred"
+            },
+            {
+              "$ref": "#/$defs/AndPred"
+            },
+            {
+              "$ref": "#/$defs/OrPred"
+            },
+            {
+              "$ref": "#/$defs/NotPred"
+            }
+          ],
+          "title": "Pred"
+        }
+      },
+      "required": [
+        "pred"
+      ],
+      "title": "FilterOp",
+      "type": "object"
+    },
     "FrozenPayload": {
       "additionalProperties": false,
       "description": "A precomputed component payload, rendered when the component is frozen.",
@@ -231,6 +440,118 @@
         "payload"
       ],
       "title": "FrozenPayload",
+      "type": "object"
+    },
+    "GroupByOp": {
+      "additionalProperties": false,
+      "description": "``df.group_by(by, maintain_order=True).agg(...)`` \u2014 first-appearance group order.",
+      "properties": {
+        "agg": {
+          "items": {
+            "$ref": "#/$defs/AggSpec"
+          },
+          "title": "Agg",
+          "type": "array"
+        },
+        "by": {
+          "description": "Grouping key columns; a null key forms its own group",
+          "items": {
+            "type": "string"
+          },
+          "title": "By",
+          "type": "array"
+        },
+        "op": {
+          "const": "group_by",
+          "default": "group_by",
+          "title": "Op",
+          "type": "string"
+        }
+      },
+      "required": [
+        "by",
+        "agg"
+      ],
+      "title": "GroupByOp",
+      "type": "object"
+    },
+    "IsInArgs": {
+      "additionalProperties": false,
+      "description": "Argument of ``is_in``: column plus the literal membership set.",
+      "properties": {
+        "col": {
+          "title": "Col",
+          "type": "string"
+        },
+        "values": {
+          "description": "Literal scalars the column must be one of",
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              }
+            ]
+          },
+          "title": "Values",
+          "type": "array"
+        }
+      },
+      "required": [
+        "col",
+        "values"
+      ],
+      "title": "IsInArgs",
+      "type": "object"
+    },
+    "IsInPred": {
+      "additionalProperties": false,
+      "description": "``{\"is_in\": {\"col\": \"x\", \"values\": [...]}}``",
+      "properties": {
+        "is_in": {
+          "$ref": "#/$defs/IsInArgs"
+        }
+      },
+      "required": [
+        "is_in"
+      ],
+      "title": "IsInPred",
+      "type": "object"
+    },
+    "IsNotNullPred": {
+      "additionalProperties": false,
+      "description": "``{\"is_not_null\": {\"col\": \"x\"}}``",
+      "properties": {
+        "is_not_null": {
+          "$ref": "#/$defs/ColRef"
+        }
+      },
+      "required": [
+        "is_not_null"
+      ],
+      "title": "IsNotNullPred",
+      "type": "object"
+    },
+    "IsNullPred": {
+      "additionalProperties": false,
+      "description": "``{\"is_null\": {\"col\": \"x\"}}``",
+      "properties": {
+        "is_null": {
+          "$ref": "#/$defs/ColRef"
+        }
+      },
+      "required": [
+        "is_null"
+      ],
+      "title": "IsNullPred",
       "type": "object"
     },
     "LinkTable": {
@@ -277,6 +598,85 @@
       "title": "LinksSection",
       "type": "object"
     },
+    "NotPred": {
+      "additionalProperties": false,
+      "description": "``{\"not\": <Pred>}``",
+      "properties": {
+        "not": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CmpPred"
+            },
+            {
+              "$ref": "#/$defs/IsNullPred"
+            },
+            {
+              "$ref": "#/$defs/IsNotNullPred"
+            },
+            {
+              "$ref": "#/$defs/IsInPred"
+            },
+            {
+              "$ref": "#/$defs/AndPred"
+            },
+            {
+              "$ref": "#/$defs/OrPred"
+            },
+            {
+              "$ref": "#/$defs/NotPred"
+            }
+          ],
+          "description": "Negated sub-predicate",
+          "title": "Not"
+        }
+      },
+      "required": [
+        "not"
+      ],
+      "title": "NotPred",
+      "type": "object"
+    },
+    "OrPred": {
+      "additionalProperties": false,
+      "description": "``{\"or\": [<Pred>, ...]}``",
+      "properties": {
+        "or": {
+          "description": "Disjuncts, evaluated left to right",
+          "items": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/CmpPred"
+              },
+              {
+                "$ref": "#/$defs/IsNullPred"
+              },
+              {
+                "$ref": "#/$defs/IsNotNullPred"
+              },
+              {
+                "$ref": "#/$defs/IsInPred"
+              },
+              {
+                "$ref": "#/$defs/AndPred"
+              },
+              {
+                "$ref": "#/$defs/OrPred"
+              },
+              {
+                "$ref": "#/$defs/NotPred"
+              }
+            ]
+          },
+          "title": "Or",
+          "type": "array"
+        }
+      },
+      "required": [
+        "or"
+      ],
+      "title": "OrPred",
+      "type": "object"
+    },
     "Producer": {
       "description": "Which producer built the bundle (RFC \u00a73.3).",
       "enum": [
@@ -287,26 +687,62 @@
       "title": "Producer",
       "type": "string"
     },
-    "PrologueOp": {
+    "RenameOp": {
       "additionalProperties": false,
-      "description": "One op of a code-mode figure's data prologue IR (RFC \u00a77).\n\n``op`` is a closed allowlist: filter | unpivot | pivot | group_by | sort |\nrename. Arguments are op-specific; predicates are compiled server-side to\nJSON nodes so the runtime never parses Python.",
+      "description": "``df.rename({\"old\": \"new\"})``.",
       "properties": {
-        "args": {
-          "additionalProperties": true,
-          "description": "Op-specific arguments",
-          "title": "Args",
+        "map": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Old column name -> new column name",
+          "title": "Map",
           "type": "object"
         },
         "op": {
-          "description": "filter | unpivot | pivot | group_by | sort | rename",
+          "const": "rename",
+          "default": "rename",
           "title": "Op",
           "type": "string"
         }
       },
       "required": [
-        "op"
+        "map"
       ],
-      "title": "PrologueOp",
+      "title": "RenameOp",
+      "type": "object"
+    },
+    "SortOp": {
+      "additionalProperties": false,
+      "description": "``df.sort(by, descending=desc)`` with Polars' default null placement.",
+      "properties": {
+        "by": {
+          "items": {
+            "type": "string"
+          },
+          "title": "By",
+          "type": "array"
+        },
+        "desc": {
+          "description": "Per-key direction; same length as ``by``",
+          "items": {
+            "type": "boolean"
+          },
+          "title": "Desc",
+          "type": "array"
+        },
+        "op": {
+          "const": "sort",
+          "default": "sort",
+          "title": "Op",
+          "type": "string"
+        }
+      },
+      "required": [
+        "by",
+        "desc"
+      ],
+      "title": "SortOp",
       "type": "object"
     },
     "TierEntry": {
@@ -430,6 +866,51 @@
       ],
       "title": "TrendlineBinding",
       "type": "object"
+    },
+    "UnpivotOp": {
+      "additionalProperties": false,
+      "description": "``df.unpivot(on=, index=, variable_name=, value_name=)`` (a.k.a. legacy ``melt``).",
+      "properties": {
+        "index": {
+          "description": "Columns carried through unchanged",
+          "items": {
+            "type": "string"
+          },
+          "title": "Index",
+          "type": "array"
+        },
+        "on": {
+          "description": "Columns melted into (variable, value) pairs, in block order",
+          "items": {
+            "type": "string"
+          },
+          "title": "On",
+          "type": "array"
+        },
+        "op": {
+          "const": "unpivot",
+          "default": "unpivot",
+          "title": "Op",
+          "type": "string"
+        },
+        "value": {
+          "default": "value",
+          "description": "Name of the emitted value column",
+          "title": "Value",
+          "type": "string"
+        },
+        "variable": {
+          "default": "variable",
+          "description": "Name of the emitted variable column",
+          "title": "Variable",
+          "type": "string"
+        }
+      },
+      "required": [
+        "on"
+      ],
+      "title": "UnpivotOp",
+      "type": "object"
     }
   },
   "additionalProperties": false,
@@ -503,11 +984,37 @@
     "prologues": {
       "additionalProperties": {
         "items": {
-          "$ref": "#/$defs/PrologueOp"
+          "discriminator": {
+            "mapping": {
+              "filter": "#/$defs/FilterOp",
+              "group_by": "#/$defs/GroupByOp",
+              "rename": "#/$defs/RenameOp",
+              "sort": "#/$defs/SortOp",
+              "unpivot": "#/$defs/UnpivotOp"
+            },
+            "propertyName": "op"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/FilterOp"
+            },
+            {
+              "$ref": "#/$defs/UnpivotOp"
+            },
+            {
+              "$ref": "#/$defs/GroupByOp"
+            },
+            {
+              "$ref": "#/$defs/SortOp"
+            },
+            {
+              "$ref": "#/$defs/RenameOp"
+            }
+          ]
         },
         "type": "array"
       },
-      "description": "component_id -> code-mode prologue IR (phase 6)",
+      "description": "component_id -> code-mode prologue IR (phase 6): the ops the runtime replays on the filtered frame before bind-and-refill. Absent for components whose code needs no reshape (they bind to the base table)",
       "title": "Prologues",
       "type": "object"
     },
