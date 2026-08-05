@@ -6,3 +6,5 @@ export { HyparquetEngine } from './engine/hyparquet/index';
 export * from './engine/sortSlice';
 export * from './refill';
 export * from './prologue';
+export * from './advancedViz';
+export * from './links';
