@@ -4,6 +4,7 @@ import sys
 import threading
 import time
 import uuid
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Annotated, Any
 from uuid import UUID
@@ -1728,28 +1729,6 @@ def _resolve_link_filters_cached(
     return list(resolved)
 
 
-def _own_selection_values(filters: list[dict], component: dict, source: str) -> list | None:
-    """Pluck the values for this component's own active selection, if any.
-
-    The React viewer stores selection emits as filters with
-    ``source="scatter_selection"|"table_selection"|"map_selection"`` and
-    ``index`` set to the emitting component's index. When we re-render that
-    component, we pass the matching values back as ``active_selection_values``
-    so the figure/map re-highlights the user's selection.
-    """
-    target_idx = str(component.get("index"))
-    for f in filters:
-        if str(f.get("index")) != target_idx:
-            continue
-        if (f.get("source") or (f.get("metadata") or {}).get("source")) != source:
-            continue
-        value = f.get("value")
-        if not value:
-            return None
-        return value if isinstance(value, list) else [value]
-    return None
-
-
 def _build_filter_metadata(filters: list[dict]) -> list[dict]:
     """Convert React filter payloads into the shape ``load_deltatable_lite`` expects.
 
@@ -1804,6 +1783,101 @@ def bulk_compute_cards(
 
     Response:
         {
+@dataclass(frozen=True)
+class _ComponentContext:
+    """A resolved, authorised component plus what the Delta loader needs for it."""
+
+    component: dict
+    wf_oid: ObjectId
+    dc_id: str
+    init_data: dict[str, dict]
+    filter_metadata: list[dict]
+    # Link-resolved filters, for callers that echo them back via
+    # ``_emit_link_headers``.
+    merged_filters: list[dict]
+
+
+def _component_context(
+    dashboard_id: PyObjectId,
+    component_id: str,
+    *,
+    component_type: str,
+    filters: list[dict],
+    current_user: User,
+    access_token: str | None,
+) -> _ComponentContext:
+    """Resolve and authorise a stored component, and prepare its data-load inputs.
+
+    Every per-component render endpoint opens the same way: find the dashboard,
+    check the project permission, find the component by (index, type), resolve
+    cross-DC link filters against its DC, and work out where that DC's Delta
+    table lives. Raises the same 404 / 403 / 400 those endpoints raised inline.
+
+    Deliberately stops *before* loading the frame: callers disagree about how
+    (``load_deltatable_lite`` vs the sorted/schema variants the table endpoint
+    needs), so each does its own load with its own error message.
+    """
+    dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
+    if not dashboard_data:
+        raise HTTPException(status_code=404, detail=f"Dashboard '{dashboard_id}' not found.")
+
+    project_id = dashboard_data.get("project_id")
+    if not project_id or not check_project_permission(project_id, current_user, "viewer"):
+        raise HTTPException(status_code=403, detail="Permission denied.")
+
+    component = next(
+        (
+            m
+            for m in (dashboard_data.get("stored_metadata") or [])
+            if str(m.get("index")) == component_id and m.get("component_type") == component_type
+        ),
+        None,
+    )
+    if component is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"{component_type.capitalize()} component '{component_id}' not found.",
+        )
+
+    wf_id = component.get("wf_id")
+    dc_id = component.get("dc_id")
+    if not wf_id or not dc_id:
+        raise HTTPException(status_code=400, detail="Component missing wf_id/dc_id.")
+
+    merged_filters = _resolve_link_filters_cached(
+        filters=filters,
+        target_dc_id=str(dc_id),
+        project_id=project_id,
+        access_token=access_token,
+        component_type=component_type,
+    )
+
+    dc_config = component.get("dc_config") or {}
+    init_data: dict[str, dict] = {}
+    delta_loc = dc_config.get("delta_location")
+    if not delta_loc:
+        from depictio.api.v1.db import deltatables_collection
+
+        dt = deltatables_collection.find_one({"data_collection_id": ObjectId(str(dc_id))})
+        if dt:
+            delta_loc = dt.get("delta_table_location")
+    if delta_loc:
+        init_data[str(dc_id)] = {
+            "delta_location": delta_loc,
+            "dc_type": dc_config.get("type") or "table",
+            "size_bytes": dc_config.get("size_bytes", 0),
+        }
+
+    return _ComponentContext(
+        component=component,
+        wf_oid=wf_id if isinstance(wf_id, ObjectId) else ObjectId(str(wf_id)),
+        dc_id=str(dc_id),
+        init_data=init_data,
+        filter_metadata=_build_filter_metadata(merged_filters),
+        merged_filters=merged_filters,
+    )
+
+
             "values": {"<component_index>": <scalar or null>, ...},
             "secondary_values": {
                 "<component_index>": {"<aggregation>": <scalar or null>, ...},
@@ -3037,67 +3111,27 @@ def render_map_endpoint(
     from depictio.api.v1.deltatables_utils import load_deltatable_lite
     from depictio.api.v1.services.map.render import render_map
 
-    filters = request.get("filters") or []
     theme = request.get("theme") or "light"
 
-    dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
-    if not dashboard_data:
-        raise HTTPException(status_code=404, detail=f"Dashboard '{dashboard_id}' not found.")
-
-    project_id = dashboard_data.get("project_id")
-    if not project_id or not check_project_permission(project_id, current_user, "viewer"):
-        raise HTTPException(status_code=403, detail="Permission denied.")
-
-    component = next(
-        (
-            m
-            for m in (dashboard_data.get("stored_metadata") or [])
-            if str(m.get("index")) == component_id and m.get("component_type") == "map"
-        ),
-        None,
-    )
-    if component is None:
-        raise HTTPException(status_code=404, detail=f"Map component '{component_id}' not found.")
-
-    wf_id = component.get("wf_id")
-    dc_id = component.get("dc_id")
-    if not wf_id or not dc_id:
-        raise HTTPException(status_code=400, detail="Component missing wf_id/dc_id.")
-
-    merged_filters = _resolve_link_filters_cached(
-        filters=filters,
-        target_dc_id=str(dc_id),
-        project_id=project_id,
-        access_token=access_token,
+    ctx = _component_context(
+        dashboard_id,
+        component_id,
         component_type="map",
     )
-    filter_metadata = _build_filter_metadata(merged_filters)
-
-    dc_config = component.get("dc_config") or {}
-    init_data: dict[str, dict] = {}
-    delta_loc = dc_config.get("delta_location")
-    if not delta_loc:
-        from depictio.api.v1.db import deltatables_collection
-
-        dt = deltatables_collection.find_one({"data_collection_id": ObjectId(str(dc_id))})
-        if dt:
-            delta_loc = dt.get("delta_table_location")
-    if delta_loc:
-        init_data[str(dc_id)] = {
-            "delta_location": delta_loc,
-            "dc_type": dc_config.get("type") or "table",
-            "size_bytes": dc_config.get("size_bytes", 0),
-        }
+    component = ctx.component
+        filters=request.get("filters") or [],
+        current_user=current_user,
+        access_token=access_token,
 
     try:
         df = load_deltatable_lite(
-            workflow_id=ObjectId(str(wf_id)) if not isinstance(wf_id, ObjectId) else wf_id,
-            data_collection_id=str(dc_id),
-            metadata=filter_metadata or None,
-            init_data=init_data,
+            workflow_id=ctx.wf_oid,
+            data_collection_id=ctx.dc_id,
+            metadata=ctx.filter_metadata or None,
+            init_data=ctx.init_data,
         )
     except Exception as e:
-        logger.error(f"render_map: DC load failed for {dc_id}: {e}", exc_info=True)
+        logger.error(f"render_map: DC load failed for {ctx.dc_id}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to load data: {e}")
 
     import plotly.io as pio
@@ -3107,15 +3141,12 @@ def render_map_endpoint(
 
         ensure_mantine_templates()
 
-    selection_values = _own_selection_values(filters, component, source="map_selection")
-
     try:
         fig, data_info = render_map(
             df=df,
             trigger_data=component,
             theme=theme,
             existing_metadata=None,
-            active_selection_values=selection_values,
             access_token=access_token,
         )
 
@@ -3133,7 +3164,7 @@ def render_map_endpoint(
             "figure": fig_dict,
             "metadata": {
                 "map_type": component.get("map_type", "scatter_map"),
-                "filter_applied": bool(filter_metadata),
+                "filter_applied": bool(ctx.filter_metadata),
                 "displayed_count": data_info.get("displayed_count"),
                 "total_count": data_info.get("total_count"),
             },
@@ -3163,6 +3194,221 @@ async def render_jbrowse_endpoint(
     server at ``localhost:9010/sessions/...``; if either is unreachable,
     returns 503 (no silent fallback).
     """
+# A peek at what is on the map, not a browsing surface — that is what a table
+# component is for. Every column of the DC × 10k rows is already a several-MB
+# response.
+MAP_DATA_MAX_ROWS = 10_000
+
+
+def _map_column_order(component: dict, columns: list[str]) -> list[str]:
+    """Reorder ``columns`` so the ones the map is actually about come first.
+
+    Pure ordering — nothing is dropped. Opening the table on ``lat``/``lon``/the
+    hover fields beats opening it on whatever the DC happens to store first.
+    """
+    preferred: list[str] = []
+    for key in (
+        "selection_column",
+        "lat_column",
+        "lon_column",
+        "locations_column",
+        "color_column",
+        "size_column",
+        "z_column",
+        "text_column",
+    ):
+        value = component.get(key)
+        if isinstance(value, str) and value:
+            preferred.append(value)
+    hover = component.get("hover_columns")
+    if isinstance(hover, list):
+        preferred.extend(c for c in hover if isinstance(c, str))
+
+    available = set(columns)
+    lead = [c for c in dict.fromkeys(preferred) if c in available]
+    leading = set(lead)
+    return lead + [c for c in columns if c not in leading]
+
+
+def _stringify_non_scalar_columns(df):
+    """Render columns JSON can't carry as text, leaving true scalars alone.
+
+    Numbers and booleans stay native — the grid's numeric filters need them —
+    but everything else (dates, categoricals, durations, lists, structs) goes
+    over the wire as text. ``cast(String)`` covers most of it and is by far the
+    cheapest path; Polars refuses it outright for List, Array and Duration, so
+    those fall back to per-element ``str()``. Neither branch may raise: one
+    exotic column must not cost the user the whole table.
+    """
+    import polars as pl
+
+    exprs = []
+    for name, dtype in df.schema.items():
+        if dtype.is_numeric() or dtype in (pl.Boolean, pl.String):
+            continue
+        try:
+            df.head(1).select(pl.col(name).cast(pl.String))
+            exprs.append(pl.col(name).cast(pl.String))
+        except Exception:
+            exprs.append(pl.col(name).map_elements(_scalar_str, return_dtype=pl.String))
+    return df.with_columns(exprs) if exprs else df
+
+
+def _scalar_str(value: Any) -> str | None:
+    """One cell as text, for the dtypes Polars will not cast.
+
+    A List or Array cell arrives as a ``pl.Series``, and ``str()`` on one of
+    those is its multi-line debug repr (shape header, dtype, one line per
+    element) — which is what the grid would then show in the cell. Its
+    ``to_list()`` is the readable form.
+    """
+    if value is None:
+        return None
+    to_list = getattr(value, "to_list", None)
+    return str(to_list()) if callable(to_list) else str(value)
+
+
+@dashboards_endpoint_router.post("/map_data/{dashboard_id}/{component_id}")
+def map_data_endpoint(
+    dashboard_id: PyObjectId,
+    component_id: str,
+    request: dict,
+    current_user: User = Depends(get_user_or_anonymous),
+    access_token: Annotated[str | None, Depends(oauth2_scheme_optional)] = None,
+):
+    """Return the rows behind a map component, for the viewer's "show data" table.
+
+    Nothing is rendered here, hence the name: this is the map's equivalent of
+    ``POST /advanced_viz/data``, and it deliberately answers in the same
+    column-oriented shape so the viewer can reuse that popover's grid verbatim.
+
+    Every column of the data collection is returned, reordered so the map's own
+    columns lead (see ``_map_column_order``). Callers are expected to send the
+    dashboard's filters *minus* the map's own ``map_selection``, so the table
+    matches the points currently drawn rather than only the lassoed ones.
+
+    Response:
+        {
+          "columns": [str],           # ordering, map columns first
+          "rows": {col: [values]},    # column-oriented
+          "row_count": int,           # rows actually returned
+          "total_rows": int,          # rows matching the filters, before the cap
+          "truncated": bool,          # row_count < total_rows because of the cap
+          "filter_applied": bool,
+        }
+    """
+    from depictio.api.v1.deltatables_utils import count_deltatable_lite, load_deltatable_lite
+
+    ctx = _component_context(
+        dashboard_id,
+        component_id,
+        component_type="map",
+        filters=request.get("filters") or [],
+        current_user=current_user,
+        access_token=access_token,
+    )
+
+    try:
+        df = load_deltatable_lite(
+            workflow_id=ctx.wf_oid,
+            data_collection_id=ctx.dc_id,
+            metadata=ctx.filter_metadata or None,
+            # +1 so a frame that exactly fills the cap is still recognisable as
+            # truncated rather than silently reported as complete.
+            limit_rows=MAP_DATA_MAX_ROWS + 1,
+            init_data=ctx.init_data,
+        )
+
+        truncated = df.height > MAP_DATA_MAX_ROWS
+        if truncated:
+            df = df.head(MAP_DATA_MAX_ROWS)
+            # `count_deltatable_lite` answers 0 rather than raising when the
+            # pushdown fails, and "first 10,000 of 0" is a worse answer than
+            # "first 10,000 of 10,000".
+            total_rows = max(
+                _cached_row_count(
+                    ctx.wf_oid,
+                    ctx.dc_id,
+                    ctx.filter_metadata,
+                    ctx.init_data,
+                    count_deltatable_lite,
+                ),
+                df.height,
+            )
+        else:
+            total_rows = int(df.height)
+
+        df = _stringify_non_scalar_columns(df)
+    except Exception as e:
+        # A data problem is not a server fault — the popover can say what broke.
+        logger.warning(f"map_data: could not build rows for {ctx.dc_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=422, detail=f"Could not read this data collection: {e}")
+
+    columns = _map_column_order(ctx.component, list(df.columns))
+    return {
+        "columns": columns,
+        "rows": {c: df.get_column(c).to_list() for c in columns},
+        "row_count": int(df.height),
+        "total_rows": total_rows,
+        "truncated": truncated,
+        "filter_applied": bool(ctx.filter_metadata),
+    }
+
+
+@dashboards_endpoint_router.get("/floating_components/{dashboard_id}")
+def get_floating_components(
+    dashboard_id: PyObjectId,
+    current_user: User = Depends(get_user_or_anonymous),
+):
+    """Return the floating components of a dashboard's whole tab family.
+
+    A floating map is authored on one tab but rendered on every tab, so the
+    viewer needs the components of its *siblings*, not just its own. The
+    `/dashboards/list` projection deliberately omits `stored_metadata` for
+    non-admins, hence this narrow endpoint: one request per page load,
+    returning only the components that actually float.
+
+    Each entry carries its owning `dashboard_id`, which the viewer passes
+    straight to `render_map` — that endpoint takes the dashboard id as a path
+    parameter and gates on the same project-level permission, so rendering tab
+    A's map while viewing tab B needs no special casing.
+    """
+    dashboard_data = dashboards_collection.find_one(
+        {"dashboard_id": dashboard_id},
+        {"project_id": 1, "parent_dashboard_id": 1},
+    )
+    if not dashboard_data:
+        raise HTTPException(status_code=404, detail=f"Dashboard '{dashboard_id}' not found.")
+
+    project_id = dashboard_data.get("project_id")
+    if not project_id or not check_project_permission(project_id, current_user, "viewer"):
+        raise HTTPException(status_code=403, detail="Permission denied.")
+
+    # The family is the parent plus all its children; a main tab is its own parent.
+    parent_id = dashboard_data.get("parent_dashboard_id") or dashboard_id
+    family = dashboards_collection.find(
+        {"$or": [{"dashboard_id": parent_id}, {"parent_dashboard_id": parent_id}]},
+        {"dashboard_id": 1, "title": 1, "tab_order": 1, "stored_metadata": 1},
+    )
+
+    components: list[dict[str, Any]] = []
+    for tab in sorted(family, key=lambda t: (t.get("tab_order") is None, t.get("tab_order") or 0)):
+        for meta in tab.get("stored_metadata") or []:
+            if meta.get("component_type") == "map" and meta.get("placement") == "floating":
+                components.append(
+                    {
+                        "dashboard_id": str(tab.get("dashboard_id")),
+                        "tab_title": tab.get("title"),
+                        "metadata": convert_objectid_to_str(meta),
+                    }
+                )
+
+    # The viewer keys its per-dashboard panel state (and its cross-tab filter
+    # persistence) on the family id, so hand it back rather than making the
+    # client re-derive it from the dashboard list.
+    return {"parent_dashboard_id": str(parent_id), "components": components}
+
+
     import httpx
 
     from depictio.api.v1.configs.config import API_BASE_URL
