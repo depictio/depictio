@@ -332,9 +332,11 @@ def test_unbindable_figure_falls_back_to_frozen(data_dir: Path) -> None:
     spec_dict = yaml.safe_load(EXAMPLE_SPEC.read_text())
     for comp in spec_dict["components"]:
         if comp["tag"] == "scatter-mass-flipper":
-            # `sex` has nulls: a null group value can never match a runtime
-            # predicate, so the matcher must refuse this figure.
-            comp["dict_kwargs"]["color"] = "sex"
+            # `hover_data` gives every point an (n, k) customdata array. The
+            # runtime writes 1-D arrays only, so a bound figure would refill the
+            # points and leave their hover text describing other rows — the
+            # matcher refuses rather than ship that.
+            comp["dict_kwargs"]["hover_data"] = ["island"]
     manifest = build_manifest(DashboardDataLite.model_validate(spec_dict), data_dir).manifest
 
     assert "scatter-mass-flipper" not in manifest.bindings
@@ -346,9 +348,7 @@ def test_unbindable_figure_falls_back_to_frozen(data_dir: Path) -> None:
     assert frozen.kind == "figure"
     assert frozen.filter_state == []  # default filter state
     fig = frozen.payload["figure"]
-    # px drops the 9 null-`sex` rows entirely — exactly the silent row loss the
-    # matcher refuses to encode in a binding.
-    assert sum(_trace_points(t) for t in fig["data"]) == 333
+    assert sum(_trace_points(t) for t in fig["data"]) == 342
     meta = frozen.payload["metadata"]
     assert meta["filter_applied"] is False
     assert meta["was_sampled"] is False
