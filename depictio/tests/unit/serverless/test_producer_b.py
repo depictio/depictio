@@ -129,11 +129,22 @@ def test_data_ref_is_complete(manifest: BundleManifest) -> None:
     assert ref.aggregation_hash is not None and len(ref.aggregation_hash) == 64
 
 
-def test_pruning_kept_exactly_the_referenced_columns(manifest: BundleManifest) -> None:
+def test_pruning_kept_every_column_for_the_table(manifest: BundleManifest) -> None:
+    # The live table widens pruning to keep-all (RFC §6: sorting/filtering may
+    # touch any column), so the whole joined frame ships.
     ref = next(iter(manifest.data_refs.values()))
     physical = {c.name for c in ref.columns if not c.name.startswith("__")}
-    # union of: figure (x/y/color), cards (body_mass_g, species), filters (species, year)
-    assert physical == {"flipper_length_mm", "body_mass_g", "species", "year"}
+    assert physical == {
+        "individual_id",
+        "island",
+        "sex",
+        "year",
+        "species",
+        "bill_length_mm",
+        "bill_depth_mm",
+        "flipper_length_mm",
+        "body_mass_g",
+    }
 
 
 def test_inline_blob_roundtrips_to_snappy_parquet(manifest: BundleManifest) -> None:
@@ -165,10 +176,15 @@ def test_tier_table(manifest: BundleManifest) -> None:
         "filter-year": ComponentTier.LIVE,
         # The scatter binds (RFC §4), so it refills live in the browser.
         "scatter-mass-flipper": ComponentTier.LIVE,
+        # Tables are live since phase 3 — sortSlice recomputes pages offline.
+        "table-penguins": ComponentTier.LIVE,
     }
     figure_entry = manifest.tiers["scatter-mass-flipper"]
     assert figure_entry.reason is None
     assert figure_entry.detail is None
+    table_entry = manifest.tiers["table-penguins"]
+    assert table_entry.reason is None
+    assert table_entry.detail is None
 
 
 def _trace_points(trace: dict) -> int:
@@ -185,6 +201,7 @@ def _trace_points(trace: dict) -> int:
 def test_bound_figure_ships_no_frozen_payload(manifest: BundleManifest) -> None:
     # A bound figure refills at EVERY filter state, including the default empty
     # one, so a frozen snapshot would only duplicate data the bundle carries.
+    # Same for the live table — the whole example ships zero frozen payloads.
     assert manifest.frozen == {}
     binding = manifest.bindings["scatter-mass-flipper"]
     assert binding.group_cols == ["species"]
@@ -254,7 +271,7 @@ def _mini_spec(components: list[dict]) -> dict:
     return {"title": "mini", "components": components}
 
 
-def test_datetime_companion_and_table_freeze(tmp_path: Path) -> None:
+def test_datetime_companion_and_live_table(tmp_path: Path) -> None:
     from datetime import date
 
     from depictio.models.models.dashboards import DashboardDataLite
@@ -295,15 +312,31 @@ def test_datetime_companion_and_table_freeze(tmp_path: Path) -> None:
     assert ref.companions == {"__ts__captured": "captured"}
     dtypes = {c.name: c.dtype for c in ref.columns}
     assert dtypes["__ts__captured"] == "Int64"
-    # Table ⇒ keep-all pruning + a frozen payload (live tables land in phase 3).
+    # Table ⇒ keep-all pruning; the whole frame (+ companions) ships as data.
     assert set(dtypes) == {"sample", "captured", "value", "__ts__captured"}
-    assert manifest.tiers["table-1"].tier is ComponentTier.FROZEN
-    table = manifest.frozen["table-1"]
-    assert table.kind == "table"
-    assert table.payload["total"] == 3
-    assert {c["field"] for c in table.payload["columns"]} >= {"sample", "captured", "value"}
-    # NaN must have been scrubbed by the json-safe path when serialized.
+    # Live table (phase 3): no frozen payload — the runtime sorts/paginates/
+    # filters the bundled Parquet itself. This spec has no figure, so the
+    # manifest is bindings-free: live tables don't ride on the binding path.
+    assert manifest.tiers["table-1"].tier is ComponentTier.LIVE
+    assert manifest.tiers["table-1"].reason is None
+    assert manifest.tiers["table-1"].detail is None
+    assert "table-1" not in manifest.frozen
+    assert manifest.frozen == {}
+    assert manifest.bindings == {}
+    # NaN in the data must not leak into the serialized manifest (the rows now
+    # live only in the Parquet blob, which is base64 — but keep the guard).
     assert "NaN" not in json.dumps(manifest.model_dump(mode="json"))
+
+
+def test_table_without_dc_is_omitted() -> None:
+    from depictio.models.models.dashboards import DashboardDataLite
+
+    spec = DashboardDataLite.model_validate(
+        _mini_spec([{"tag": "table-nodc", "component_type": "table"}])
+    )
+    rows = {r.component_id: r for r in classify_spec(spec)}
+    assert rows["table-nodc"].tier is ComponentTier.OMITTED
+    assert rows["table-nodc"].reason is TierReason.UNSUPPORTED
 
 
 def test_code_mode_figure_freezes_or_omits(tmp_path: Path) -> None:

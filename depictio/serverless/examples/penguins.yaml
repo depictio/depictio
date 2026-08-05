@@ -2,7 +2,7 @@
 #
 # A trimmed-down cousin of depictio/projects/init/penguins/dashboards/
 # species_analysis.yaml, kept small on purpose: 2 cards, 1 ui-mode figure,
-# 2 interactive filters, 1 text header.
+# 1 table, 2 interactive filters, 1 text header.
 #
 # Expected data-dir layout (producer-B convention
 # `{data_dir}/{workflow_tag}/{data_collection_tag}.parquet`):
@@ -89,3 +89,13 @@ components:
       y: body_mass_g
       color: species
     layout: {x: 0, y: 3, w: 8, h: 5}
+
+  # Live table (phase 3): sorted/paginated/filtered entirely in the browser
+  # from the bundled Parquet — no frozen payload. Tables are keep-all pruning
+  # (RFC §6), so this ships every column of the joined frame.
+  - tag: table-penguins
+    component_type: table
+    workflow_tag: penguin_species_analysis
+    data_collection_tag: joined_penguins_complete
+    title: "Raw Measurements"
+    layout: {x: 0, y: 8, w: 8, h: 5}

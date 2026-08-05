@@ -31,6 +31,7 @@ import {
   computeCardsLive,
   dataRefFor,
   renderFigureLive,
+  renderTableLive,
   specsLive,
   uniqueValuesLive,
 } from './liveData';
@@ -124,13 +125,44 @@ export async function renderMap(_dashboardId: string, componentId: string) {
   return frozenPayload(componentId, 'map') as never;
 }
 
+/** dc_id of a table component, from the dashboard document. */
+function tableDcIdFor(componentId: string): string {
+  const doc = bundle().dashboard.doc as {
+    stored_metadata?: { index?: string; component_type?: string; dc_id?: string | null }[];
+  };
+  const meta = (doc.stored_metadata ?? []).find(
+    (c) => c.component_type === 'table' && String(c.index ?? '') === componentId,
+  );
+  return String(meta?.dc_id ?? '');
+}
+
 export async function renderTable(
   _dashboardId: string,
   componentId: string,
-  _filters: InteractiveFilter[],
+  filters: InteractiveFilter[] = [],
   start = 0,
   limit = 100,
+  sortBy?: string | null,
+  sortDir: 'asc' | 'desc' = 'desc',
 ) {
+  // Live path (phase 3): a table whose data collection ships in the bundle
+  // recomputes every page offline — filter, then sort, then slice — through
+  // the shared sortSlice kernel, mirroring the server's
+  // render_table_endpoint contract exactly (single sort key, sort_dir
+  // default desc, limit clamped 1..500, total = filtered count).
+  const dcId = tableDcIdFor(componentId);
+  if (dcId && dataRefFor(dcId)) {
+    try {
+      return await renderTableLive(dcId, filters, start, limit, sortBy, sortDir);
+    } catch (e) {
+      // Structural degradation (RFC §4): a live page that cannot be computed
+      // falls back to the frozen snapshot rather than rendering wrong data.
+      console.error(
+        `static bundle: live table failed for "${componentId}" — serving frozen payload`,
+        e,
+      );
+    }
+  }
   const t = frozenPayload<{
     columns: { field: string; headerName: string; type: string }[];
     rows: Record<string, unknown>[];
