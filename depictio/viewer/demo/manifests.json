@@ -1,0 +1,8 @@
+[
+  {
+    "id": "phase-0",
+    "title": "Phase 0 — static runtime, everything frozen",
+    "manifest": "../../packages/depictio-static-core/fixtures/manifest-basic.json",
+    "description": "The real viewer mounted offline from a hand-written manifest: card, Plotly figure, MultiSelect and text component, all served from frozen payloads with tier badges. No backend, no network."
+  }
+]
