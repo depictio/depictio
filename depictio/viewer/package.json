@@ -10,6 +10,7 @@
     "build": "pnpm run icons && tsc && vite build",
     "build:catalog-preview": "pnpm run icons && vite build --config vite.catalog-preview.config.ts",
     "build:static": "pnpm run icons && vite build --config vite.static.config.ts",
+    "demo:static": "pnpm run build:static && node scripts/build-demo.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

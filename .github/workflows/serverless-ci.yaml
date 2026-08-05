@@ -83,9 +83,9 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
 
-      - name: Build static-runtime bundle
+      - name: Build static-runtime bundle + demo site
         working-directory: depictio/viewer
-        run: pnpm run build:static
+        run: pnpm run demo:static
 
       - name: Build catalog-preview bundle
         working-directory: depictio/viewer
@@ -113,10 +113,15 @@ jobs:
         working-directory: depictio/tests/e2e-playwright
         run: npx playwright test --project=static-runtime
 
-      - name: Upload static bundle artifact
+      # The demo site is directly openable (manifests already injected) —
+      # download, unzip, double-click index.html. static.html stays the raw
+      # token template the producers consume.
+      - name: Upload demo site artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: static-bundle
-          path: depictio/viewer/dist-static/static.html
+          name: serverless-demos
+          path: |
+            depictio/viewer/dist-static/site/
+            depictio/viewer/dist-static/static.html
           retention-days: 7
