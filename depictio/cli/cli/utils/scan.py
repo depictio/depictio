@@ -849,6 +849,136 @@ def scan_files_for_workflow(
     return {"result": "success", "runs_scanned": len(all_workflow_runs)}
 
 
+def _probe_url_metadata(url: str) -> dict:
+    """Best-effort HEAD for size/etag on an https URL; s3 URLs return unknowns.
+
+    No SSRF concern at this layer: in server context the URL was validated by
+    the API fetch gateway (depictio.api.v1.remote_fetch) before reaching the
+    ingestion pipeline; in CLI context the URL is the user's own input on the
+    user's own machine.
+    """
+    from urllib.parse import urlparse
+
+    if urlparse(url).scheme == "s3":
+        return {"size": -1, "etag": ""}
+    try:
+        import httpx
+
+        with httpx.Client(timeout=10.0, follow_redirects=True) as client:
+            response = client.head(url)
+            size_header = response.headers.get("content-length")
+            size = int(size_header) if size_header and size_header.isdigit() else -1
+            return {"size": size if size > 0 else -1, "etag": response.headers.get("etag", "")}
+    except Exception as e:
+        logger.warning(f"Could not probe remote URL {url}: {e}")
+        return {"size": -1, "etag": ""}
+
+
+def scan_url_for_data_collection(
+    workflow: Workflow,
+    data_collection: "DataCollection",
+    CLI_config: CLIConfig,
+    permissions: Permission,
+    update_files: bool,
+) -> dict:
+    """Register a remote URL (scan mode "url") as a File record.
+
+    The remote counterpart of the single-file scan: no filesystem walk — one
+    synthesized File whose file_location is the URL. Timestamps are the
+    registration time; file_hash is sha256(url + etag), an identity hash (not
+    content integrity — documented in the RFC).
+    """
+    import hashlib
+    import time
+    from urllib.parse import urlparse
+
+    scan_params = data_collection.config.scan.scan_parameters  # type: ignore[union-attr]
+    url = scan_params.url  # type: ignore[union-attr]
+
+    # Existing-file lookup + stale cleanup (same semantics as single mode:
+    # a DC repointed at a different URL drops the old record).
+    response = api_get_files_by_dc_id(dc_id=str(data_collection.id), CLI_config=CLI_config)
+    existing_files: dict[str, dict] = {}
+    if response.status_code == 200:
+        for existing_file in response.json() or []:
+            location = existing_file["file_location"]
+            if location != url:
+                stale_id = existing_file.get("_id") or existing_file.get("id")
+                if stale_id:
+                    logger.info(f"Removing stale file {location} (expected {url})")
+                    api_delete_file(str(stale_id), CLI_config)
+            else:
+                existing_files[location] = existing_file
+    else:
+        logger.warning(
+            f"Failed to retrieve existing files for data collection {data_collection.id}."
+        )
+
+    metadata = _probe_url_metadata(url)
+    now_iso = format_timestamp(time.time())
+    file_hash = hashlib.sha256(f"{url}|{metadata['etag']}".encode()).hexdigest()
+
+    url_basename = os.path.basename(urlparse(url).path)
+    filename = url_basename or "remote-file"
+
+    file_id = None
+    scan_result = None
+    if url in existing_files:
+        file_id = existing_files[url]["_id"]
+        if existing_files[url].get("file_hash") == file_hash and not update_files:
+            scan_result = {"result": "failure", "reason": "skipped"}
+        else:
+            scan_result = {"result": "success", "reason": "updated"}
+    if scan_result is None:
+        scan_result = {"result": "success", "reason": "added"}
+
+    workflow_config_id = (
+        PyObjectId(workflow.config.id) if workflow.config and workflow.config.id else PyObjectId()
+    )
+    workflow_run = WorkflowRun(
+        workflow_id=PyObjectId(workflow.id),
+        run_tag=f"{data_collection.data_collection_tag}-url-scan",
+        files_id=[],
+        workflow_config_id=workflow_config_id,
+        run_location=url,
+        creation_time=now_iso,
+        last_modification_time=now_iso,
+        run_hash="",
+        permissions=permissions,
+    )
+
+    file_instance = File(
+        id=PyObjectId(file_id) if file_id else PyObjectId(),
+        filename=filename,
+        file_location=url,
+        creation_time=now_iso,
+        modification_time=now_iso,
+        file_hash=file_hash,
+        filesize=metadata["size"],
+        data_collection_id=data_collection.id,
+        run_id=workflow_run.id,
+        run_tag=workflow_run.run_tag,
+        permissions=permissions,
+    )
+
+    if scan_result["result"] == "success":
+        api_create_files(
+            files=[file_instance],
+            CLI_config=CLI_config,
+            update=scan_result["reason"] == "updated",
+        )
+        registered = 1
+    else:
+        registered = 0
+
+    rich_print_checked_statement(
+        f"Registered {registered} remote URL for data collection "
+        f"{data_collection.data_collection_tag}",
+        "info",
+    )
+    return {"result": "success"}
+
+
 def scan_files_for_data_collection(
     workflow: Workflow,
     data_collection_id: str,
@@ -883,10 +1013,22 @@ def scan_files_for_data_collection(
         rich_print_checked_statement(error_msg, "error")
         raise ValueError(error_msg)
 
-    # Only handle single file mode here
-    if not data_collection.config.scan or data_collection.config.scan.mode.lower() != "single":
+    # Only handle single-file and url modes here
+    if not data_collection.config.scan or data_collection.config.scan.mode.lower() not in (
+        "single",
+        "url",
+    ):
         raise ValueError(
             "This function only handles single file mode. Use scan_files_for_workflow for aggregate mode."
+        )
+
+    if data_collection.config.scan.mode.lower() == "url":
+        return scan_url_for_data_collection(
+            workflow=workflow,
+            data_collection=data_collection,
+            CLI_config=CLI_config,
+            permissions=permissions,
+            update_files=update_files,
         )
 
     # Check for the file's existence in the DB
