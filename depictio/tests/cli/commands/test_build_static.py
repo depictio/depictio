@@ -49,7 +49,10 @@ def test_check_prints_tier_table_and_writes_nothing(data_dir: Path, tmp_path: Pa
     # Tier table + summary (rich may wrap long cells, so assert on short tokens)
     assert "frozen" in result.output
     assert "live" in result.output
-    assert "8 component(s)" in result.output
+    # 10 components: 8 planned live (incl. the 2 advanced_viz data-path kinds,
+    # live since phase 4) + the 2 figures preflight can only promise frozen.
+    assert "10 component(s)" in result.output
+    assert "8 live, 2 frozen" in result.output
     assert "nothing written" in result.output.lower()
 
 

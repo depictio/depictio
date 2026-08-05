@@ -78,9 +78,40 @@ from depictio.serverless.producer_a import (
             ComponentTier.OMITTED,
             TierReason.CELERY_COMPUTE,
         ),
+        # Data-path kinds are live since phase 4 — the in-browser engine
+        # recomputes /advanced_viz/data from the bundled Parquet.
+        (
+            {
+                "component_type": "advanced_viz",
+                "viz_kind": "volcano",
+                "wf_id": "6" * 24,
+                "dc_id": "7" * 24,
+                "config": {"viz_kind": "volcano", "x_col": "lfc", "y_col": "q_val"},
+            },
+            ComponentTier.LIVE,
+            None,
+        ),
+        # …except phylogenetic, whose Newick tree DC no single bundled table
+        # can carry: it keeps the frozen /advanced_viz/data payload.
+        (
+            {
+                "component_type": "advanced_viz",
+                "viz_kind": "phylogenetic",
+                "wf_id": "6" * 24,
+                "dc_id": "7" * 24,
+                "config": {
+                    "viz_kind": "phylogenetic",
+                    "leaf_col": "tip",
+                    "tree_dc_id": "8" * 24,
+                },
+            },
+            ComponentTier.FROZEN,
+            TierReason.UNSUPPORTED,
+        ),
+        # A config that binds no column has no request to serve or freeze.
         (
             {"component_type": "advanced_viz", "viz_kind": "volcano"},
-            ComponentTier.FROZEN,
+            ComponentTier.OMITTED,
             TierReason.UNSUPPORTED,
         ),
         ({"component_type": "wat"}, ComponentTier.OMITTED, TierReason.UNSUPPORTED),
@@ -253,7 +284,8 @@ PROJECT_OID = ObjectId("646b0f3c1e4a2d7f8e5b8c9d")
 WF_OID = ObjectId("646b0f3c1e4a2d7f8e5b8c01")
 DC_OID = ObjectId("646b0f3c1e4a2d7f8e5b8ca1")
 DC2_OID = ObjectId("646b0f3c1e4a2d7f8e5b8ca3")  # consumed only by an unbindable figure
-AV_DC_OID = ObjectId("646b0f3c1e4a2d7f8e5b8ca2")
+AV_DC_OID = ObjectId("646b0f3c1e4a2d7f8e5b8ca2")  # the advanced_viz components' DC
+TREE_DC_OID = ObjectId("646b0f3c1e4a2d7f8e5b8ca4")  # phylogenetic's Newick source
 
 TABLE_TOTAL = 700  # > one 500-row endpoint page, < the 1000-row producer cap
 
@@ -273,9 +305,22 @@ def _frame_2() -> pl.DataFrame:
     return pl.DataFrame({"a": [1.0, 2.0], "b": [3.0, 4.0]})
 
 
+def _frame_av() -> pl.DataFrame:
+    """The advanced_viz DC: `tip` is read by the FROZEN phylogenetic component
+    only, so pruning must leave it out of the bundle."""
+    return pl.DataFrame(
+        {
+            "lfc": [1.0, -2.0, 0.5],
+            "q_val": [0.01, 0.2, 0.7],
+            "tip": ["t1", "t2", "t3"],
+        }
+    )
+
+
 def _dashboard_doc() -> dict[str, Any]:
     dc_config = {"type": "table", "delta_location": "memory://dcA", "size_bytes": 123}
     dc2_config = {"type": "table", "delta_location": "memory://dcB", "size_bytes": 45}
+    av_config = {"type": "table", "delta_location": "memory://dcAV", "size_bytes": 67}
     return {
         "_id": ObjectId(),
         "dashboard_id": DASHBOARD_OID,
@@ -357,12 +402,31 @@ def _dashboard_doc() -> dict[str, Any]:
                 "dc_config": dc_config,
             },
             {
+                # Data-path kind: LIVE since phase 4 — its DC is bundled,
+                # pruned to the columns its config binds, and it ships no
+                # frozen payload.
                 "index": "av-1",
                 "component_type": "advanced_viz",
                 "viz_kind": "volcano",
                 "wf_id": WF_OID,
                 "dc_id": AV_DC_OID,
+                "dc_config": av_config,
                 "config": {"viz_kind": "volcano", "x_col": "lfc", "y_col": "q_val"},
+            },
+            {
+                # Phylogenetic reads a second, non-tabular source (the Newick
+                # tree DC) -> still frozen, tree merged into the payload.
+                "index": "phy-1",
+                "component_type": "advanced_viz",
+                "viz_kind": "phylogenetic",
+                "wf_id": WF_OID,
+                "dc_id": AV_DC_OID,
+                "dc_config": av_config,
+                "config": {
+                    "viz_kind": "phylogenetic",
+                    "leaf_col": "tip",
+                    "tree_dc_id": str(TREE_DC_OID),
+                },
             },
             {
                 "index": "emb-1",
@@ -370,6 +434,7 @@ def _dashboard_doc() -> dict[str, Any]:
                 "viz_kind": "embedding",
                 "wf_id": WF_OID,
                 "dc_id": AV_DC_OID,
+                "dc_config": av_config,
                 "config": {"viz_kind": "embedding"},
             },
             {"index": "img-1", "component_type": "image"},
@@ -388,8 +453,12 @@ def offline_export(monkeypatch: pytest.MonkeyPatch) -> BundleManifest:
     monkeypatch.setattr(db_mod, "dashboards_collection", _FakeCollection([_dashboard_doc()]))
     monkeypatch.setattr(db_mod, "deltatables_collection", _FakeCollection([]))
 
-    frames = {str(DC_OID): _frame(), str(DC2_OID): _frame_2()}
-    locations = {str(DC_OID): "memory://dcA", str(DC2_OID): "memory://dcB"}
+    frames = {str(DC_OID): _frame(), str(DC2_OID): _frame_2(), str(AV_DC_OID): _frame_av()}
+    locations = {
+        str(DC_OID): "memory://dcA",
+        str(DC2_OID): "memory://dcB",
+        str(AV_DC_OID): "memory://dcAV",
+    }
 
     def fake_schema(workflow_id, data_collection_id, init_data):
         dc = str(data_collection_id)
@@ -449,14 +518,19 @@ def offline_export(monkeypatch: pytest.MonkeyPatch) -> BundleManifest:
             },
         }
 
+    av_calls: list[str] = []
+
     def fake_av_data(response, payload, current_user, access_token):
-        assert payload["viz_kind"] == "volcano"
-        assert payload["columns"] == ["lfc", "q_val"]
-        assert payload["roles"] == {"x": "lfc", "y": "q_val"}
+        # Only the FROZEN advanced_viz still calls the endpoint body: the
+        # live data-path kinds are recomputed in the browser.
+        av_calls.append(payload["viz_kind"])
+        assert payload["viz_kind"] == "phylogenetic"
+        assert payload["columns"] == ["tip"]
+        assert payload["roles"] == {"leaf": "tip"}
         assert payload["filter_metadata"] == []
         return {
-            "columns": ["lfc", "q_val"],
-            "rows": {"lfc": [1.0], "q_val": [0.01]},
+            "columns": ["tip"],
+            "rows": {"tip": ["t1"]},
             "row_count": 1,
             "total_rows": 17_000_000,
             "sampled": True,
@@ -464,13 +538,19 @@ def offline_export(monkeypatch: pytest.MonkeyPatch) -> BundleManifest:
             "filter_applied": False,
         }
 
+    def fake_newick(data_collection_id, current_user):
+        assert str(data_collection_id) == str(TREE_DC_OID)
+        return "(t1:0.1,t2:0.2,t3:0.3);"
+
     monkeypatch.setattr(routes_mod, "bulk_compute_cards", fake_bulk_cards)
     monkeypatch.setattr(routes_mod, "render_table_endpoint", fake_render_table)
     monkeypatch.setattr(celery_mod, "build_figure_preview", fake_figure_preview)
     monkeypatch.setattr(av_mod, "fetch_advanced_viz_data", fake_av_data)
+    monkeypatch.setattr(av_mod, "get_phylogeny_newick", fake_newick)
 
     result = export_manifest(str(DASHBOARD_OID), ExportUser(id=ObjectId(), is_admin=True))
     assert result.manifest is not None
+    assert av_calls == ["phylogenetic"]
     # The table freeze paged through the 500-row endpoint clamp.
     assert table_calls == [(0, 500), (500, 500)]
     # Only the unbindable figures fell back to the frozen figure pipeline —
@@ -490,6 +570,19 @@ def test_offline_export_manifest_contract(offline_export: BundleManifest):
     assert "permissions" not in doc and "project_realtime" not in doc and "_id" not in doc
     assert doc["stored_metadata"][0]["dc_id"] == str(DC_OID)
 
+    # The bundle pins the exporting instance's sampling ceilings — the browser
+    # engine has no settings of its own to fall back on.
+    from depictio.api.v1.configs.config import settings
+
+    perf = settings.performance
+    assert manifest.limits.figure_max_points == perf.figure_max_points
+    assert manifest.limits.advanced_viz_no_sample_max_rows == perf.advanced_viz_no_sample_max_rows
+    assert manifest.limits.advanced_viz_tail_p_threshold == perf.advanced_viz_tail_p_threshold
+    assert (
+        manifest.limits.advanced_viz_tail_effect_threshold
+        == perf.advanced_viz_tail_effect_threshold
+    )
+
 
 def test_offline_export_tiers(offline_export: BundleManifest):
     tiers = {k: v for k, v in offline_export.tiers.items()}
@@ -508,7 +601,14 @@ def test_offline_export_tiers(offline_export: BundleManifest):
     assert tiers["fig-3"].tier is ComponentTier.PARTIAL
     assert tiers["fig-3"].reason is TierReason.MAX_POINTS
     assert tiers["tbl-1"].tier is ComponentTier.FROZEN
-    assert tiers["av-1"].tier is ComponentTier.FROZEN
+    # advanced_viz data-path kinds go live (phase 4); phylogenetic stays frozen
+    # because its Newick tree DC is a second, non-tabular source.
+    assert tiers["av-1"].tier is ComponentTier.LIVE
+    assert tiers["av-1"].reason is None
+    assert tiers["av-1"].detail and "in-browser engine" in tiers["av-1"].detail
+    assert tiers["phy-1"].tier is ComponentTier.FROZEN
+    assert tiers["phy-1"].reason is TierReason.UNSUPPORTED
+    assert tiers["phy-1"].detail and "Newick" in tiers["phy-1"].detail
     assert tiers["emb-1"].tier is ComponentTier.OMITTED
     assert tiers["emb-1"].reason is TierReason.CELERY_COMPUTE
     assert tiers["img-1"].tier is ComponentTier.OMITTED
@@ -517,10 +617,10 @@ def test_offline_export_tiers(offline_export: BundleManifest):
 
 def test_offline_export_data_ref_and_blob(offline_export: BundleManifest):
     manifest = offline_export
-    # Only the DC live components / the bound figure read: DC2 was bundled
-    # speculatively for fig-4, whose binding was refused, so its blob is
-    # dropped again (the frozen payload is self-contained).
-    assert set(manifest.data_refs) == {str(DC_OID)}
+    # The DCs live components / the bound figure / the live advanced_viz read:
+    # DC2 was bundled speculatively for fig-4, whose binding was refused, so its
+    # blob is dropped again (the frozen payload is self-contained).
+    assert set(manifest.data_refs) == {str(DC_OID), str(AV_DC_OID)}
     assert f"dc_{DC2_OID}" not in manifest.inline_blobs
     ref = manifest.data_refs[str(DC_OID)]
     assert ref.aggregation_hash == "agghash-1"  # the server-side staleness token
@@ -538,6 +638,19 @@ def test_offline_export_data_ref_and_blob(offline_export: BundleManifest):
     df = pl.read_parquet(io.BytesIO(blob))
     assert df.height == ref.rows == 4
     assert df["__code__year"].to_list() == [0, 0, 1, 2]
+
+
+def test_offline_export_bundles_the_live_advanced_viz_columns(offline_export: BundleManifest):
+    """A live advanced_viz gets its DC bundled, pruned to the columns its
+    config binds — the same derivation ``advanced_viz_request`` sends."""
+    manifest = offline_export
+    ref = manifest.data_refs[str(AV_DC_OID)]
+    # 'tip' is read only by the FROZEN phylogenetic component, whose payload is
+    # self-contained, so pruning leaves it out.
+    assert {c.name for c in ref.columns} == {"lfc", "q_val"}
+    assert ref.uri == f"inline:dc_{AV_DC_OID}"
+    df = pl.read_parquet(io.BytesIO(base64.b64decode(manifest.inline_blobs[f"dc_{AV_DC_OID}"])))
+    assert df.height == ref.rows == 3
 
 
 def test_offline_export_frozen_payloads(offline_export: BundleManifest):
@@ -558,10 +671,20 @@ def test_offline_export_frozen_payloads(offline_export: BundleManifest):
     assert frozen["fig-3"].kind == "figure"
     assert frozen["fig-3"].payload["metadata"]["was_sampled"] is True
     assert frozen["fig-4"].kind == "figure"
-    # advanced_viz keeps the /advanced_viz/data sampling block verbatim.
-    av = frozen["av-1"].payload
-    assert av["sampling"] == {"policy": "tail_preserving", "exact": False, "degraded": False}
-    assert av["total_rows"] == 17_000_000
+    # The frozen advanced_viz (phylogenetic) keeps the /advanced_viz/data
+    # sampling block verbatim — it is what the renderer's badge reads — and
+    # carries the merged Newick tree its renderer also needs.
+    phy = frozen["phy-1"]
+    assert phy.kind == "advanced-viz-data"
+    assert phy.payload["sampling"] == {
+        "policy": "tail_preserving",
+        "exact": False,
+        "degraded": False,
+    }
+    assert phy.payload["total_rows"] == 17_000_000
+    assert phy.payload["newick"] == "(t1:0.1,t2:0.2,t3:0.3);"
+    # The live advanced_viz ships NO frozen payload (the runtime recomputes it).
+    assert "av-1" not in frozen
     # Omitted components ship no payload.
     assert "emb-1" not in frozen and "img-1" not in frozen
 
@@ -639,6 +762,7 @@ def test_export_static_check_classifies_without_building(monkeypatch: pytest.Mon
         "fig-4",
         "tbl-1",
         "av-1",
+        "phy-1",
         "emb-1",
         "img-1",
     }

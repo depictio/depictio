@@ -181,7 +181,15 @@ def test_tier_table(manifest: BundleManifest) -> None:
         # The code-mode bar chart transpiles and binds (RFC §7, phase 6), so
         # the browser replays its prologue at every filter state.
         "figure-codemode": ComponentTier.LIVE,
+        # advanced_viz data-path kinds are live since phase 4 — the in-browser
+        # engine recomputes /advanced_viz/data from the bundled Parquet.
+        "sunburst-mass": ComponentTier.LIVE,
+        "dotplot-mass": ComponentTier.LIVE,
     }
+    for cid in ("sunburst-mass", "dotplot-mass"):
+        av_entry = manifest.tiers[cid]
+        assert av_entry.reason is None
+        assert av_entry.detail and "in-browser engine" in av_entry.detail
     for cid in ("scatter-mass-flipper", "figure-codemode"):
         figure_entry = manifest.tiers[cid]
         assert figure_entry.reason is None

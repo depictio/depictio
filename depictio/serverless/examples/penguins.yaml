@@ -2,7 +2,8 @@
 #
 # A trimmed-down cousin of depictio/projects/init/penguins/dashboards/
 # species_analysis.yaml, kept small on purpose: 2 cards, 1 ui-mode figure,
-# 1 code-mode figure, 1 table, 2 interactive filters, 1 text header.
+# 1 code-mode figure, 1 table, 2 interactive filters, 1 text header and
+# 2 advanced_viz components (data-path kinds, live since phase 4).
 #
 # Expected data-dir layout (producer-B convention
 # `{data_dir}/{workflow_tag}/{data_collection_tag}.parquet`):
@@ -118,3 +119,35 @@ components:
       df2 = df2.sort("mean_mass", descending=True)
       fig = px.bar(df2, x="species", y="mean_mass")
     layout: {x: 0, y: 13, w: 6, h: 4}
+
+  # advanced_viz data-path kinds, LIVE since phase 4: the in-browser engine
+  # recomputes the /advanced_viz/data payload (projection → sampling policy →
+  # the kind's own reduction) from the bundled Parquet at every filter state,
+  # so neither ships a frozen payload. Pruning bundles exactly the columns the
+  # `config` binds — the `*_col` scalars plus `rank_cols` — which here are a
+  # subset of what the live table already keeps.
+  - tag: sunburst-mass
+    component_type: advanced_viz
+    workflow_tag: penguin_species_analysis
+    data_collection_tag: joined_penguins_complete
+    viz_kind: sunburst
+    title: "Body mass by species and island (sunburst)"
+    config:
+      viz_kind: sunburst
+      rank_cols: [species, island]
+      abundance_col: body_mass_g
+    layout: {x: 0, y: 17, w: 4, h: 5}
+
+  - tag: dotplot-mass
+    component_type: advanced_viz
+    workflow_tag: penguin_species_analysis
+    data_collection_tag: joined_penguins_complete
+    viz_kind: dot_plot
+    title: "Mean body mass dot plot"
+    config:
+      viz_kind: dot_plot
+      cluster_col: species
+      gene_col: island
+      mean_expression_col: body_mass_g
+      frac_expressing_col: bill_length_mm
+    layout: {x: 4, y: 17, w: 4, h: 5}
