@@ -30,6 +30,7 @@ import {
   columnRangeLive,
   computeCardsLive,
   dataRefFor,
+  renderFigureLive,
   specsLive,
   uniqueValuesLive,
 } from './liveData';
@@ -61,12 +62,57 @@ export async function saveDashboardNotes(_dashboardId: string, _notes: unknown) 
 
 // ---- frozen render-path lookups (keyed by component index) -----------------
 
+/** dc_id of a figure component, from the dashboard document. */
+function figureDcIdFor(componentId: string): string {
+  const doc = bundle().dashboard.doc as {
+    stored_metadata?: { index?: string; component_type?: string; dc_id?: string | null }[];
+  };
+  const meta = (doc.stored_metadata ?? []).find(
+    (c) => c.component_type === 'figure' && String(c.index ?? '') === componentId,
+  );
+  return String(meta?.dc_id ?? '');
+}
+
 export async function renderFigure(
   _dashboardId: string,
   componentId: string,
-  _filters: InteractiveFilter[] = [],
+  filters: InteractiveFilter[] = [],
   theme: 'light' | 'dark' = 'light',
 ): Promise<FigureResponse> {
+  // Live path (phase 5b): a ui-mode figure with a binding table refills from
+  // the bundled Parquet under the current filter state — the RFC §4
+  // bind-and-refill runtime. The theme template swap is shared with the
+  // frozen path (themedFrozenFigure only replaces layout.template, exactly
+  // like the live server re-templating on a color-scheme flip).
+  const binding = bundle().bindings?.[componentId];
+  if (binding) {
+    const dcId = figureDcIdFor(componentId);
+    if (dcId && dataRefFor(dcId)) {
+      try {
+        const live = await renderFigureLive(binding, dcId, filters);
+        return themedFrozenFigure(
+          {
+            figure: live.figure,
+            metadata: {
+              filter_applied: live.filterApplied,
+              was_sampled: binding.sampled,
+              displayed_data_count: live.displayed,
+              total_data_count: live.total,
+              full_data_loaded: !binding.sampled,
+            },
+          },
+          theme,
+        );
+      } catch (e) {
+        // Structural degradation (RFC §4): a refill that cannot complete
+        // falls back to the frozen snapshot rather than rendering wrong data.
+        console.error(
+          `static bundle: live figure refill failed for "${componentId}" — serving frozen payload`,
+          e,
+        );
+      }
+    }
+  }
   // FigureRenderer re-requests on every color-scheme flip (the live path
   // sends `theme` to the server, which re-templates the figure). Offline
   // equivalent: swap the frozen figure's layout.template with the matching

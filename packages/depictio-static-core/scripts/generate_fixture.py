@@ -305,6 +305,79 @@ def main() -> None:
         "empty": [None, None],
     }
 
+    # ---- sortSlice (phase 3) ----------------------------------------------
+    # Ground truth for the TS sortSlice kernel, computed with the server's
+    # EXACT sort call: render_table_endpoint's sorted branch delegates to
+    # load_sorted_deltatable_lite (dashboards routes.py:2606-2621), which runs
+    #     df.sort(sort_by, descending=..., nulls_last=True, maintain_order=True)
+    # (deltatables_utils.py:1591-1592; identical arguments on the lazy page
+    # path at 1568-1577; nulls_last=True is the function default at :1468 and
+    # the endpoint never overrides it) and pages via .slice(start, limit)
+    # (deltatables_utils.py:1522-1523). Filters apply BEFORE the sort
+    # (metadata=filter_metadata, routes.py:2612-2621); total is the filtered
+    # count (routes.py:2577-2579). The multi-key case uses the list form the
+    # server itself uses at routes.py:2838-2847 (per-key descending,
+    # nulls_last=True), plus maintain_order=True to pin stability.
+    def sort_slice_case(
+        sort_cols,
+        descending,
+        start: int,
+        limit: int,
+        filter_expr=None,
+        value_col: str | None = None,
+    ) -> dict:
+        frame = df.filter(filter_expr) if filter_expr is not None else df
+        if sort_cols:
+            frame_sorted = frame.sort(
+                sort_cols, descending=descending, nulls_last=True, maintain_order=True
+            )
+        else:
+            frame_sorted = frame  # natural order branch (routes.py:2622-2633)
+        page = frame_sorted.slice(start, limit)
+        out: dict = {
+            "total": frame.height,
+            # idx_i32 is unique + null-free, so this list pins the full row order.
+            "idx": page["idx_i32"].to_list(),
+        }
+        if value_col is not None:
+            out["values"] = [
+                (float(v) if isinstance(v, float) else v) for v in page[value_col].to_list()
+            ]
+        return out
+
+    tail = N - 10  # last page: where nulls_last placement becomes visible
+    sort_slice = {
+        "f64_asc_head": sort_slice_case(["value_f64"], [False], 0, 10, value_col="value_f64"),
+        "f64_asc_tail": sort_slice_case(["value_f64"], [False], tail, 10, value_col="value_f64"),
+        "f64_desc_head": sort_slice_case(["value_f64"], [True], 0, 10, value_col="value_f64"),
+        "f64_desc_tail": sort_slice_case(["value_f64"], [True], tail, 10, value_col="value_f64"),
+        "i64_asc_head": sort_slice_case(["value_i64"], [False], 0, 10, value_col="value_i64"),
+        "i64_desc_head": sort_slice_case(["value_i64"], [True], 0, 10, value_col="value_i64"),
+        "str_asc_head": sort_slice_case(["category_str"], [False], 0, 10, value_col="category_str"),
+        "str_asc_tail": sort_slice_case(
+            ["category_str"], [False], tail, 10, value_col="category_str"
+        ),
+        "str_desc_head": sort_slice_case(
+            ["category_str"], [True], 0, 10, value_col="category_str"
+        ),
+        "bool_asc_head": sort_slice_case(["flag_bool"], [False], 0, 10, value_col="flag_bool"),
+        "date_asc_head": sort_slice_case(["event_date"], [False], 0, 10),
+        "date_desc_head": sort_slice_case(["event_date"], [True], 0, 10),
+        # Heavy ties on `batch` — maintain_order=True must keep input order
+        # within each tie, so idx is the stability oracle.
+        "batch_asc_stability": sort_slice_case(["batch"], [False], 0, 25),
+        # Multi-key: per-key direction, ties on key 1 broken by key 2.
+        "multi_str_asc_f64_desc": sort_slice_case(
+            ["category_str", "value_f64"], [False, True], 0, 15
+        ),
+        # Filter-then-sort: mask narrows first, total is the filtered count.
+        "masked_in_str_i64_asc": sort_slice_case(
+            ["value_i64"], [False], 0, 10, filter_expr=in_str_expr, value_col="value_i64"
+        ),
+        # Natural order under a mask: plain slice of the filtered frame.
+        "masked_in_str_natural": sort_slice_case([], [], 5, 10, filter_expr=in_str_expr),
+    }
+
     expected = {
         "rows": N,
         "row_group_size": ROW_GROUP_SIZE,
@@ -316,6 +389,7 @@ def main() -> None:
         "aggregates": aggregates,
         "unique": unique,
         "minmax": minmax_block,
+        "sort_slice": sort_slice,
         "polars_version": pl.__version__,
     }
 
