@@ -181,6 +181,25 @@ export interface LinksSection {
   tables: Record<string, LinkTable>;
 }
 
+/**
+ * Sampling ceilings the runtime enforces, pinned from the building instance's
+ * PerformanceConfig. Defaults match the server defaults, so manifests built
+ * before this field existed behave identically.
+ */
+export interface RuntimeLimits {
+  figure_max_points: number;
+  advanced_viz_no_sample_max_rows: number;
+  advanced_viz_tail_p_threshold: number;
+  advanced_viz_tail_effect_threshold: number;
+}
+
+export const DEFAULT_LIMITS: RuntimeLimits = {
+  figure_max_points: 10_000,
+  advanced_viz_no_sample_max_rows: 2_000_000,
+  advanced_viz_tail_p_threshold: 0.05,
+  advanced_viz_tail_effect_threshold: 1.0,
+};
+
 export interface DashboardSection {
   /**
    * Dashboard id passed to App. Must be non-empty: ComponentRenderer silently
@@ -205,9 +224,16 @@ export interface BundleManifest {
   bindings: Record<string, BindingTable>;
   prologues: Record<string, PrologueOp[]>;
   links: LinksSection;
+  /** Absent in pre-phase-4 manifests — read via `limitsOf()` for defaults. */
+  limits?: RuntimeLimits;
   allow_network_tiles: boolean;
   /** single-file only: 'dc_<id>' -> base64 Parquet bytes. */
   inline_blobs: Record<string, string>;
+}
+
+/** The manifest's sampling ceilings, with server defaults for older bundles. */
+export function limitsOf(m: BundleManifest): RuntimeLimits {
+  return { ...DEFAULT_LIMITS, ...(m.limits ?? {}) };
 }
 
 /** Runtime parse with the checks the runtime actually depends on. */

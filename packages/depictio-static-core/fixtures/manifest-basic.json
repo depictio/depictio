@@ -52,8 +52,14 @@
       "size_bytes": 128,
       "row_group_bytes": null,
       "columns": [
-        { "name": "species", "dtype": "Utf8" },
-        { "name": "bill_length_mm", "dtype": "Float64" }
+        {
+          "name": "species",
+          "dtype": "Utf8"
+        },
+        {
+          "name": "bill_length_mm",
+          "dtype": "Float64"
+        }
       ],
       "companions": {},
       "codebooks": {},
@@ -61,18 +67,40 @@
     }
   },
   "tiers": {
-    "comp-card-1": { "tier": "frozen", "reason": "unsupported", "detail": "phase 0: all tiers frozen" },
-    "comp-figure-1": { "tier": "frozen", "reason": "unsupported", "detail": "phase 0: all tiers frozen" },
-    "comp-interactive-1": { "tier": "frozen", "reason": "unsupported", "detail": "phase 0: all tiers frozen" },
-    "comp-text-1": { "tier": "live", "reason": null, "detail": null }
+    "comp-card-1": {
+      "tier": "frozen",
+      "reason": "unsupported",
+      "detail": "phase 0: all tiers frozen"
+    },
+    "comp-figure-1": {
+      "tier": "frozen",
+      "reason": "unsupported",
+      "detail": "phase 0: all tiers frozen"
+    },
+    "comp-interactive-1": {
+      "tier": "frozen",
+      "reason": "unsupported",
+      "detail": "phase 0: all tiers frozen"
+    },
+    "comp-text-1": {
+      "tier": "live",
+      "reason": null,
+      "detail": null
+    }
   },
   "frozen": {
     "comp-card-1": {
       "kind": "card",
       "payload": {
-        "values": { "comp-card-1": 43.92 },
+        "values": {
+          "comp-card-1": 43.92
+        },
         "secondary_values": {},
-        "aggregations": { "comp-card-1": ["average"] },
+        "aggregations": {
+          "comp-card-1": [
+            "average"
+          ]
+        },
         "filter_applied": false,
         "filter_count": 0
       },
@@ -83,23 +111,58 @@
       "payload": {
         "figure": {
           "data": [
-            { "type": "scatter", "mode": "markers", "x": [39.1, 39.5, 40.3], "y": [18.7, 17.4, 18.0] }
+            {
+              "type": "scatter",
+              "mode": "markers",
+              "x": [
+                39.1,
+                39.5,
+                40.3
+              ],
+              "y": [
+                18.7,
+                17.4,
+                18.0
+              ]
+            }
           ],
-          "layout": { "title": { "text": "Fixture scatter" } }
+          "layout": {
+            "title": {
+              "text": "Fixture scatter"
+            }
+          }
         },
-        "metadata": { "visu_type": "scatter", "filter_applied": false }
+        "metadata": {
+          "visu_type": "scatter",
+          "filter_applied": false
+        }
       },
       "filter_state": []
     },
     "comp-interactive-1": {
       "kind": "interactive",
-      "payload": { "unique": ["Adelie", "Chinstrap", "Gentoo"] },
+      "payload": {
+        "unique": [
+          "Adelie",
+          "Chinstrap",
+          "Gentoo"
+        ]
+      },
       "filter_state": []
     }
   },
   "bindings": {},
   "prologues": {},
-  "links": { "configs": [], "tables": {} },
+  "links": {
+    "configs": [],
+    "tables": {}
+  },
+  "limits": {
+    "figure_max_points": 10000,
+    "advanced_viz_no_sample_max_rows": 2000000,
+    "advanced_viz_tail_p_threshold": 0.05,
+    "advanced_viz_tail_effect_threshold": 1.0
+  },
   "allow_network_tiles": false,
   "inline_blobs": {
     "dc_dc00000000000000000000a1": ""
