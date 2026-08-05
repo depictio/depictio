@@ -171,6 +171,10 @@ dump.rdb
 !depictio/projects/nf-core/viralrecon/3.0.0/*.tsv
 # Allow advanced_viz_showcase synthetic fixtures
 !depictio/projects/init/advanced_viz_showcase/data/*.tsv
+# Allow the serverless worked example's linked lookup table (4 rows; the
+# penguins side is derived from the committed run_*/ CSVs, this one has no
+# other source)
+!depictio/serverless/examples/data/*.csv
 # Allow catalog fixtures (small samples co-located in each module folder)
 !depictio/catalog/**/*.tsv
 !depictio/catalog/**/*.csv

@@ -17,6 +17,7 @@ pinned by ``depictio/tests/api/v1/test_column_projection.py::TestCrossDcLinkProj
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import polars as pl
@@ -254,6 +255,80 @@ def test_build_schema_guards_a_join_column_absent_from_the_target(data_dir):
     assert "not_a_column" not in measure_cols
     assert "depth" in measure_cols
     assert len(manifest.links.configs) == 1
+
+
+# ---------------------------------------------------------------------------
+# Producer B — the worked example (the demo the browser specs drive)
+# ---------------------------------------------------------------------------
+
+
+EXAMPLE_SPEC = (
+    Path(__file__).resolve().parents[4] / "depictio" / "serverless" / "examples" / "penguins.yaml"
+)
+EXAMPLE_ISLAND_REGIONS_CSV = EXAMPLE_SPEC.parent / "data" / "island_regions.csv"
+EXAMPLE_WF = "penguin_species_analysis"
+EXAMPLE_MEASUREMENTS = "joined_penguins_complete"
+EXAMPLE_LOOKUP = "island_regions"
+
+
+@pytest.fixture
+def example_data_dir(tmp_path):
+    """The worked example's documented data layout, both collections."""
+    from depictio.serverless.examples.generate_demo_manifest import penguins_frame
+
+    dc_dir = tmp_path / EXAMPLE_WF
+    dc_dir.mkdir(parents=True)
+    penguins_frame().write_parquet(dc_dir / f"{EXAMPLE_MEASUREMENTS}.parquet")
+    pl.read_csv(EXAMPLE_ISLAND_REGIONS_CSV).write_parquet(dc_dir / f"{EXAMPLE_LOOKUP}.parquet")
+    return tmp_path
+
+
+def test_worked_example_ships_one_tier_a_link_between_its_two_collections(example_data_dir):
+    """The demo bundle the static-runtime Playwright specs drive.
+
+    Both endpoints are component DCs, so the browser runs the translation query
+    itself (tier A, no precomputed table), and the join column — `island`, the
+    same name on both sides for this direct link — has to survive pruning on
+    BOTH frames or the resolved values would land on a column that is not there.
+    """
+    from depictio.serverless.producer_b import load_spec
+
+    result = build_manifest(load_spec(EXAMPLE_SPEC), example_data_dir)
+    manifest = result.manifest
+
+    assert len(manifest.links.configs) == 1
+    config = manifest.links.configs[0]
+    assert config["source_dc_id"] == synthetic_dc_id(EXAMPLE_WF, EXAMPLE_LOOKUP)
+    assert config["target_dc_id"] == synthetic_dc_id(EXAMPLE_WF, EXAMPLE_MEASUREMENTS)
+    assert config["source_column"] == "island"
+    assert config["link_config"] == {"resolver": "direct"}
+    assert config["enabled"] is True
+    # Tier A: every hop resolves against a bundled Parquet, so no table.
+    assert manifest.links.tables == {}
+    assert [r.tier for r in result.link_rows] == [LINK_TIER_A]
+
+    lookup = manifest.data_refs[config["source_dc_id"]]
+    measurements = manifest.data_refs[config["target_dc_id"]]
+    assert {c.name for c in lookup.columns} == {"island", "region"}
+    assert lookup.rows == 4
+    assert "island" in {c.name for c in measurements.columns}
+
+    # The lookup's fourth island is deliberately absent from the measurements:
+    # the demo's zero-state (a link that resolves to a real value matching no
+    # target row) depends on it.
+    import base64
+    import io
+
+    lookup_df = pl.read_parquet(
+        io.BytesIO(base64.b64decode(manifest.inline_blobs[lookup.uri.removeprefix("inline:")]))
+    )
+    measurements_df = pl.read_parquet(
+        io.BytesIO(
+            base64.b64decode(manifest.inline_blobs[measurements.uri.removeprefix("inline:")])
+        )
+    )
+    unmatched = set(lookup_df["island"]) - set(measurements_df["island"])
+    assert unmatched == {"Alpha"}
 
 
 # ---------------------------------------------------------------------------

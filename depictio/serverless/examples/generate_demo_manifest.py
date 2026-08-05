@@ -25,12 +25,15 @@ from depictio.serverless.inject import json_safe
 from depictio.serverless.producer_b import build_manifest, load_spec
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-SPEC = REPO_ROOT / "depictio" / "serverless" / "examples" / "penguins.yaml"
+EXAMPLES = REPO_ROOT / "depictio" / "serverless" / "examples"
+SPEC = EXAMPLES / "penguins.yaml"
+ISLAND_REGIONS_CSV = EXAMPLES / "data" / "island_regions.csv"
 PENGUINS_DATA = REPO_ROOT / "depictio" / "projects" / "init" / "penguins" / "data"
 OUT = REPO_ROOT / "depictio" / "viewer" / "demo" / "manifests" / "penguins.json"
 
 WF_TAG = "penguin_species_analysis"
 DC_TAG = "joined_penguins_complete"
+LINKED_DC_TAG = "island_regions"
 
 
 def penguins_frame() -> pl.DataFrame:
@@ -45,11 +48,17 @@ def penguins_frame() -> pl.DataFrame:
     return pl.concat(parts)
 
 
+def island_regions_frame() -> pl.DataFrame:
+    """The linked lookup DC: island → region, straight from the example CSV."""
+    return pl.read_csv(ISLAND_REGIONS_CSV)
+
+
 def main() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         dc_dir = Path(tmp) / WF_TAG
         dc_dir.mkdir(parents=True)
         penguins_frame().write_parquet(dc_dir / f"{DC_TAG}.parquet")
+        island_regions_frame().write_parquet(dc_dir / f"{LINKED_DC_TAG}.parquet")
         result = build_manifest(load_spec(SPEC), Path(tmp))
     manifest = json_safe(result.manifest.model_dump(mode="json"))
     OUT.parent.mkdir(parents=True, exist_ok=True)

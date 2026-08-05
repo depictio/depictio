@@ -44,14 +44,14 @@ import { themedFrozenFigure } from './mantinePlotlyTemplate';
 
 // ---- dashboard shell -------------------------------------------------------
 
-/** Stand-in workflow id for spec-authored bundles (producer B writes
- *  `wf_id: None` on every component — there is no Mongo workflow behind a YAML
- *  spec). Every advanced_viz renderer gates its data fetch on a truthy
- *  `metadata.wf_id` and otherwise renders "missing data binding", and the id
- *  itself is inert offline: the shim's `fetchAdvancedVizData` keys on `dcId`
- *  alone. Filling it here — the one place the runtime hands the document to
- *  the real App — keeps the fix out of the renderers and out of the manifest
- *  contract. */
+/** Stand-in workflow id for a bundle whose document has none. Every
+ *  advanced_viz renderer gates its data fetch on a truthy `metadata.wf_id` and
+ *  otherwise renders "missing data binding"; the id itself is inert offline
+ *  (the shim's `fetchAdvancedVizData` keys on `dcId` alone).
+ *
+ *  Both producers now write a real workflow id — producer A the Mongo one,
+ *  producer B its synthetic `synthetic_wf_id(workflow_tag)` — so this fill
+ *  only ever fires for bundles built before that, which must keep rendering. */
 const BUNDLE_WF_ID = 'static-bundle';
 
 /** Cached so the document keeps one identity across App's re-fetches. */

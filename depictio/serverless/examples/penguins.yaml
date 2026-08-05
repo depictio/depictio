@@ -2,21 +2,29 @@
 #
 # A trimmed-down cousin of depictio/projects/init/penguins/dashboards/
 # species_analysis.yaml, kept small on purpose: 2 cards, 1 ui-mode figure,
-# 1 code-mode figure, 1 table, 2 interactive filters, 1 text header and
-# 2 advanced_viz components (data-path kinds, live since phase 4).
+# 1 code-mode figure, 2 tables, 3 interactive filters, 1 text header and
+# 2 advanced_viz components (data-path kinds, live since phase 4) — across
+# TWO data collections joined by a cross-DC link (RFC §8, live since phase 7).
 #
 # Expected data-dir layout (producer-B convention
 # `{data_dir}/{workflow_tag}/{data_collection_tag}.parquet`):
 #
 #   <data_dir>/penguin_species_analysis/joined_penguins_complete.parquet
+#   <data_dir>/penguin_species_analysis/island_regions.parquet
 #
-# The Parquet is the join of the repo's penguins CSVs
+# The first Parquet is the join of the repo's penguins CSVs
 # (depictio/projects/init/penguins/data/run_*/{demographic_data,physical_features}.csv,
 # joined on `individual_id`) — see the build helper in
 # depictio/tests/unit/serverless/test_producer_b.py, which converts those CSVs
 # into a temp data dir before building this spec. Columns:
 #   individual_id (str), island (str), sex (str), year (int), species (str),
 #   bill_length_mm / bill_depth_mm / flipper_length_mm / body_mass_g (float)
+#
+# The second is the 4-row lookup table in `data/island_regions.csv` (island →
+# region). Its fourth island, "Alpha"/"Uncharted", exists in NO penguin row on
+# purpose: selecting that region translates to an island the penguins DC has
+# none of, which is the demo's visible zero-state for a link that resolves to
+# real values matching nothing downstream.
 #
 # Build:
 #   depictio dashboard build-static \
@@ -26,6 +34,22 @@
 
 title: "Penguins — static bundle example"
 subtitle: "Producer B worked example (Palmer Penguins)"
+
+# Cross-DC links (RFC §8). One direct link: the island_regions lookup table
+# joins the penguins measurements on `island`. Selecting a region on the
+# island_regions DC therefore filters EVERY penguins component — the browser
+# translates region → island against the bundled lookup table (the source DC
+# ships in the bundle, so the hop is tier A), then applies the resolved island
+# values to the penguins table. `direct` + no `target_field`: the join column
+# is named `island` on both sides.
+links:
+  - source_dc_tag: island_regions
+    source_column: island
+    target_dc_tag: joined_penguins_complete
+    target_type: table
+    link_config:
+      resolver: direct
+    enabled: true
 
 components:
   - tag: text-intro
@@ -151,3 +175,30 @@ components:
       mean_expression_col: body_mass_g
       frac_expressing_col: bill_length_mm
     layout: {x: 4, y: 17, w: 4, h: 5}
+
+  # --- second data collection: the island → region lookup, linked above -----
+  # The link DRIVER. A selection here has no column in the penguins frame
+  # (`region` exists only on this DC), so it reaches the penguins components
+  # solely through the link: the runtime resolves region → island on THIS
+  # table, then filters the penguins one by the islands it got back.
+  - tag: filter-region
+    component_type: interactive
+    workflow_tag: penguin_species_analysis
+    data_collection_tag: island_regions
+    interactive_component_type: MultiSelect
+    column_name: region
+    column_type: object
+    title: "Region (linked)"
+    layout: {x: 0, y: 6, w: 1, h: 3}
+
+  # The lookup table itself, so the linked DC is visible rather than implied.
+  # Live like every table: it re-filters on its own columns (region), and is
+  # untouched by penguins-side filters — no link points back this way.
+  - tag: table-island-regions
+    component_type: table
+    workflow_tag: penguin_species_analysis
+    data_collection_tag: island_regions
+    title: "Island Regions"
+    # Full width on its own row below the advanced_viz pair: the view grid is
+    # 8 columns and widens any item left alone on a row anyway.
+    layout: {x: 0, y: 22, w: 8, h: 4}
