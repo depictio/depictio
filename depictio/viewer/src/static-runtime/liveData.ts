@@ -14,8 +14,10 @@
  */
 import {
   HyparquetEngine,
+  refillFigure,
   resolveUri,
   type AggFn,
+  type BindingTable,
   type BoundFilter,
   type DataRef,
   type QueryEngine,
@@ -250,6 +252,32 @@ export async function computeCardsLive(
     filter_applied: bound.length > 0,
     filter_count: bound.length,
   };
+}
+
+/** Live equivalent of the server's render_figure body for a bound ui-mode
+ *  figure (RFC §4 bind-and-refill): mask the dc's table with the current
+ *  filters (no filters → null mask = all rows), then refill the binding's
+ *  scaffold from the projected columns. Theme templating stays in the api
+ *  shim — this helper is theme-agnostic, like the engine. */
+export async function renderFigureLive(
+  binding: BindingTable,
+  dcId: string,
+  filters: InteractiveFilter[],
+): Promise<{
+  figure: { data: unknown[]; layout: Record<string, unknown> };
+  displayed: number;
+  total: number;
+  filterApplied: boolean;
+}> {
+  const { handle } = await tableFor(dcId);
+  const bound = toBoundFilters(filters);
+  const mask = bound.length ? (await engine.mask(handle, bound)).mask : null;
+  const result = await refillFigure({
+    binding,
+    columns: (names) => engine.columns(handle, names),
+    mask,
+  });
+  return { ...result, filterApplied: bound.length > 0 };
 }
 
 /** MultiSelect options: codebook keys are the server's exact option strings
