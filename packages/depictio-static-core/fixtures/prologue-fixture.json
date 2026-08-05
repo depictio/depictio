@@ -991,6 +991,100 @@
       ]
     },
     {
+      "name": "group_by_len_vs_count_nulls",
+      "ops": [
+        {
+          "op": "group_by",
+          "by": [
+            "habitat"
+          ],
+          "agg": [
+            {
+              "col": null,
+              "fn": "len",
+              "alias": "n_rows"
+            },
+            {
+              "col": "value",
+              "fn": "count",
+              "alias": "n_value"
+            },
+            {
+              "col": "n_reads",
+              "fn": "count",
+              "alias": "n_reads"
+            },
+            {
+              "col": "value",
+              "fn": "len",
+              "alias": "len_value"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "group_by_len_default_aliases",
+      "ops": [
+        {
+          "op": "group_by",
+          "by": [
+            "batch"
+          ],
+          "agg": [
+            {
+              "col": null,
+              "fn": "len",
+              "alias": "len"
+            },
+            {
+              "col": null,
+              "fn": "len",
+              "alias": "count"
+            },
+            {
+              "col": "value",
+              "fn": "len",
+              "alias": "value"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "group_by_len_after_filter",
+      "ops": [
+        {
+          "op": "filter",
+          "pred": {
+            "cmp": {
+              "col": "q_val",
+              "op": "<",
+              "value": 0.05
+            }
+          }
+        },
+        {
+          "op": "group_by",
+          "by": [
+            "habitat"
+          ],
+          "agg": [
+            {
+              "col": null,
+              "fn": "len",
+              "alias": "n_rows"
+            },
+            {
+              "col": "value",
+              "fn": "count",
+              "alias": "n_value"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "name": "sort_label_asc",
       "ops": [
         {
@@ -1161,6 +1255,35 @@
             "habitat"
           ],
           "desc": [
+            false
+          ]
+        }
+      ]
+    },
+    {
+      "name": "chain_group_len_sort_desc",
+      "ops": [
+        {
+          "op": "group_by",
+          "by": [
+            "habitat"
+          ],
+          "agg": [
+            {
+              "col": null,
+              "fn": "len",
+              "alias": "count"
+            }
+          ]
+        },
+        {
+          "op": "sort",
+          "by": [
+            "count",
+            "habitat"
+          ],
+          "desc": [
+            true,
             false
           ]
         }

@@ -25,7 +25,8 @@ Pinned semantics exercised by the cases below
 * ``filter``   — a null never matches a comparison (Polars default).
 * ``group_by`` — ``maintain_order=True`` (first-appearance group order); a null
   key forms its own group; ``std``/``var`` are ddof=1 so a single-row group
-  aggregates to null; ``count`` is the non-null count; ``nunique`` COUNTS null;
+  aggregates to null; ``count`` is the non-null count of ``col`` while ``len``
+  is the GROUP SIZE (nulls included, no column read); ``nunique`` COUNTS null;
   ``median`` interpolates linearly; ``first``/``last`` are positional.
 * ``unpivot``  — one block per ``on`` column in ``on`` order, original row order
   inside each block.
@@ -177,6 +178,7 @@ def build_input() -> pl.DataFrame:
 
 _AGG_EXPR = {
     "sum": lambda e: e.sum(),
+    "len": lambda e: e.len(),  # GROUP SIZE (nulls included) — see agg_expr()
     "mean": lambda e: e.mean(),
     "median": lambda e: e.median(),
     "min": lambda e: e.min(),
@@ -230,6 +232,21 @@ def pred_expr(node: dict[str, Any]) -> pl.Expr:
     raise ValueError(f"unknown predicate node {sorted(node)}")
 
 
+def agg_expr(spec: dict[str, Any]) -> pl.Expr:
+    """One ``AggSpec`` JSON node -> the aliased Polars expression it stands for.
+
+    ``len`` is the group size and is the only fn whose ``col`` may be null: the
+    bare Polars spellings (``pl.len()`` / the deprecated ``pl.count()``) read no
+    column at all, while ``pl.col(c).len()`` returns the same group size but
+    keeps ``c`` (polars names the output after it and still raises when it is
+    missing). Every other fn requires ``col``.
+    """
+    col = spec.get("col")
+    if spec["fn"] == "len" and col is None:
+        return pl.len().alias(spec["alias"])
+    return _AGG_EXPR[spec["fn"]](pl.col(col)).alias(spec["alias"])
+
+
 def apply_ops(df: pl.DataFrame, ops: list[dict[str, Any]]) -> pl.DataFrame:
     """Execute a prologue IR program. This function *is* the contract."""
     for op in ops:
@@ -246,10 +263,7 @@ def apply_ops(df: pl.DataFrame, ops: list[dict[str, Any]]) -> pl.DataFrame:
             )
         elif kind == "group_by":
             df = df.group_by(op["by"], maintain_order=True).agg(
-                [
-                    _AGG_EXPR[spec["fn"]](pl.col(spec["col"])).alias(spec["alias"])
-                    for spec in op["agg"]
-                ]
+                [agg_expr(spec) for spec in op["agg"]]
             )
         elif kind == "sort":
             df = df.sort(op["by"], descending=op["desc"])
@@ -414,6 +428,55 @@ def cases() -> list[tuple[str, list[Any]]]:
                 )
             ],
         ),
+        # -- group_by: len (group size) vs count (non-null) ------------------
+        (
+            # The contrast that motivates a separate `len` fn: `value` has
+            # scattered nulls and one all-null group (Void), so group size and
+            # non-null count disagree on most groups. `habitat` also carries a
+            # null key group, which `len` must count like any other.
+            "group_by_len_vs_count_nulls",
+            [
+                GroupByOp(
+                    by=["habitat"],
+                    agg=[
+                        AggSpec(col=None, fn=AggFn.LEN, alias="n_rows"),
+                        AggSpec(col="value", fn=AggFn.COUNT, alias="n_value"),
+                        AggSpec(col="n_reads", fn=AggFn.COUNT, alias="n_reads"),
+                        AggSpec(col="value", fn=AggFn.LEN, alias="len_value"),
+                    ],
+                )
+            ],
+        ),
+        (
+            # Default (alias-free) output names, pinned per spelling on Polars
+            # 1.42.1: bare `pl.len()` -> "len", bare `pl.count()` -> "count",
+            # `pl.col("value").len()` -> "value". `batch` has a null key group.
+            "group_by_len_default_aliases",
+            [
+                GroupByOp(
+                    by=["batch"],
+                    agg=[
+                        AggSpec(col=None, fn=AggFn.LEN, alias="len"),
+                        AggSpec(col=None, fn=AggFn.LEN, alias="count"),
+                        AggSpec(col="value", fn=AggFn.LEN, alias="value"),
+                    ],
+                )
+            ],
+        ),
+        (
+            # len after a filter counts the SURVIVING rows only.
+            "group_by_len_after_filter",
+            [
+                FilterOp(pred=CmpPred(cmp=CmpArgs(col="q_val", op=CmpOperator.LT, value=0.05))),
+                GroupByOp(
+                    by=["habitat"],
+                    agg=[
+                        AggSpec(col=None, fn=AggFn.LEN, alias="n_rows"),
+                        AggSpec(col="value", fn=AggFn.COUNT, alias="n_value"),
+                    ],
+                ),
+            ],
+        ),
         # -- sort -----------------------------------------------------------
         (
             # Tie-free key (`label` is unique) so the ordering is total.
@@ -473,6 +536,20 @@ def cases() -> list[tuple[str, list[Any]]]:
                 ),
                 RenameOp(map={"value": "mean_value"}),
                 SortOp(by=["habitat"], desc=[False]),
+            ],
+        ),
+        (
+            # The shape four viralrecon seed figures use verbatim:
+            # `group_by(k).agg(pl.count().alias('count')).sort('count', desc)`.
+            # `habitat` is appended to the sort key because group sizes tie
+            # (Marsh and Void are both 2) and Polars' sort is not stable.
+            "chain_group_len_sort_desc",
+            [
+                GroupByOp(
+                    by=["habitat"],
+                    agg=[AggSpec(col=None, fn=AggFn.LEN, alias="count")],
+                ),
+                SortOp(by=["count", "habitat"], desc=[True, False]),
             ],
         ),
         (

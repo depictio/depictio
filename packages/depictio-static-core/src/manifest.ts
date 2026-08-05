@@ -125,7 +125,11 @@ export type Pred =
   | { is_not_null: { col: string } }
   | { is_in: { col: string; values: PrologueScalar[] } };
 
-/** Closed group_by aggregation allowlist (the agg kernel's AggFn minus mode). */
+/**
+ * Closed group_by aggregation allowlist (the agg kernel's AggFn minus mode,
+ * plus `len`). `count` is the NON-NULL count of `col`; `len` is the GROUP SIZE
+ * — every row of the group, nulls included, independent of any column.
+ */
 export type PrologueAggFn =
   | 'sum'
   | 'mean'
@@ -133,17 +137,25 @@ export type PrologueAggFn =
   | 'min'
   | 'max'
   | 'count'
+  | 'len'
   | 'nunique'
   | 'std'
   | 'var'
   | 'first'
   | 'last';
 
-export interface PrologueAgg {
-  col: string;
-  fn: PrologueAggFn;
-  alias: string;
-}
+/**
+ * One reducer of a `group_by`. `col` is null/absent only for a bare `len`
+ * (polars `pl.len()` / `pl.count()`, which read no column); the column-attached
+ * `pl.col(c).len()` keeps `col: c` — the value is still the group size, but
+ * polars names the output after `c` and raises when `c` is missing, so the
+ * interpreter validates it. `alias` is always the output column name the
+ * transpiler already resolved (polars' no-alias default: `col`, except bare
+ * `pl.len()` -> 'len' and bare `pl.count()` -> 'count').
+ */
+export type PrologueAgg =
+  | { col: string; fn: Exclude<PrologueAggFn, 'len'>; alias: string }
+  | { col?: string | null; fn: 'len'; alias: string };
 
 /**
  * One step of a component's data prologue — the closed JSON IR the Python

@@ -315,6 +315,71 @@ describe('group_by', () => {
     expect(out.columns['median']).toEqual([null, 1, 3]); // (2+4)/2 linear interpolation
   });
 
+  it('len is the GROUP SIZE (nulls included) while count is the non-null count', () => {
+    // Verified on polars 1.42.1: group_by(k).agg(pl.len(), pl.col('v').count(),
+    // pl.col('v').len()) over this frame → len [2,2,1], count [1,0,1], len(v)
+    // [2,2,1]; the null key forms its own group and is counted like any other.
+    const t = table({ k: ['a', 'a', null, null, 'b'], v: [1, null, null, null, 5] });
+    const out = run(
+      [
+        {
+          op: 'group_by',
+          by: ['k'],
+          agg: [
+            { fn: 'len', alias: 'n_rows' }, // bare pl.len() — no source column
+            { col: null, fn: 'len', alias: 'n_rows_explicit_null' }, // pl.count()
+            { col: 'v', fn: 'len', alias: 'n_rows_via_col' }, // pl.col('v').len()
+            { col: 'v', fn: 'count', alias: 'n_v' },
+            { col: 'v', fn: 'nunique', alias: 'u_v' },
+          ],
+        },
+      ],
+      t,
+    );
+    expect(out.columns['k']).toEqual(['a', null, 'b']);
+    expect(out.columns['n_rows']).toEqual([2, 2, 1]);
+    expect(out.columns['n_rows_explicit_null']).toEqual([2, 2, 1]);
+    expect(out.columns['n_rows_via_col']).toEqual([2, 2, 1]);
+    expect(out.columns['n_v']).toEqual([1, 0, 1]); // non-null count differs
+    expect(out.columns['u_v']).toEqual([2, 1, 1]); // nunique counts null
+  });
+
+  it('len counts only the rows that survived an earlier filter', () => {
+    const t = table({ k: ['a', 'a', 'a', 'b'], v: [1, 5, null, 9] });
+    const out = run(
+      [
+        { op: 'filter', pred: { cmp: { col: 'v', op: '>', value: 2 } } },
+        { op: 'group_by', by: ['k'], agg: [{ fn: 'len', alias: 'n' }] },
+      ],
+      t,
+    );
+    expect(out.columns['k']).toEqual(['a', 'b']);
+    expect(out.columns['n']).toEqual([1, 1]);
+  });
+
+  it('len still validates a present col (polars raises on a missing column)', () => {
+    const t = table({ k: ['a'], v: [1] });
+    expect(() =>
+      run([{ op: 'group_by', by: ['k'], agg: [{ col: 'nope', fn: 'len', alias: 'n' }] }], t),
+    ).toThrow(/missing column "nope"/);
+  });
+
+  it('every fn other than len requires a source column', () => {
+    const t = table({ k: ['a'], v: [1] });
+    expect(() =>
+      run(
+        [
+          {
+            op: 'group_by',
+            by: ['k'],
+            agg: [{ fn: 'sum', alias: 'n' } as unknown as { col: string; fn: 'sum'; alias: string }],
+          },
+        ],
+        t,
+      ),
+    ).toThrow(/agg fn "sum" needs a source column/);
+  });
+
   it('std of a single-value group is null (ddof=1)', () => {
     const t = table({ k: ['a'], v: [5] });
     const out = run(

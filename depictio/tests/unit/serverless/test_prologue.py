@@ -202,6 +202,57 @@ def _last_target(prep: str) -> str:
                 }
             ],
         ),
+        # -- group_by: len (group size) -------------------------------------
+        (
+            # Bare `pl.len()`: no source column, Polars names it "len".
+            "df_modified = df.group_by('g').agg(pl.len())",
+            [
+                {
+                    "op": "group_by",
+                    "by": ["g"],
+                    "agg": [{"col": None, "fn": "len", "alias": "len"}],
+                }
+            ],
+        ),
+        (
+            # Bare `pl.count()`: same group size, but Polars names it "count"
+            # (deprecated since 0.20.5, still functional on the repo's 1.42.1).
+            "df_modified = df.group_by('g').agg(pl.count())",
+            [
+                {
+                    "op": "group_by",
+                    "by": ["g"],
+                    "agg": [{"col": None, "fn": "len", "alias": "count"}],
+                }
+            ],
+        ),
+        (
+            # `pl.col(c).len()` is STILL the group size, but keeps `c` — Polars
+            # names the output after it and raises when it is missing.
+            "df_modified = df.group_by('g').agg(pl.col('x').len())",
+            [
+                {
+                    "op": "group_by",
+                    "by": ["g"],
+                    "agg": [{"col": "x", "fn": "len", "alias": "x"}],
+                }
+            ],
+        ),
+        (
+            # The seed shape: aliased group size next to a real non-null count.
+            "df_modified = df.group_by('lineage').agg(pl.count().alias('count'),"
+            " pl.col('x').count().alias('n_x'))",
+            [
+                {
+                    "op": "group_by",
+                    "by": ["lineage"],
+                    "agg": [
+                        {"col": None, "fn": "len", "alias": "count"},
+                        {"col": "x", "fn": "count", "alias": "n_x"},
+                    ],
+                }
+            ],
+        ),
         (
             # pl.<fn>("col") shorthand.
             "df_modified = df.group_by(by=['a', 'b']).agg(pl.mean('z'), pl.std('z').alias('sd'))",
@@ -350,10 +401,10 @@ def test_no_prep_is_an_empty_program():
         "df_modified = df.join(other, on='id')",
         "df_modified = df.group_by('g').head(3)",
         "df_modified = df.unique(subset=['a'])",
-        # group size is not a non-null count
-        "df_modified = df.group_by('lineage').agg(pl.count().alias('count'))",
-        "df_modified = df.group_by('lineage').agg(pl.len().alias('count'))",
-        "df_modified = df.group_by('lineage').agg(pl.col('x').len())",
+        # `pl.len` takes no column argument — `pl.len('x')` is not a Polars API
+        # (unlike `pl.count('x')`, which IS the non-null count of 'x').
+        "df_modified = df.group_by('lineage').agg(pl.len('x'))",
+        "df_modified = df.group_by('lineage').agg(pl.len(pl.col('x')))",
         # unknown / unsupported kwargs
         "df_modified = df.sort('a', nulls_last=True)",
         "df_modified = df.sort('a', reverse=True)",
@@ -454,7 +505,9 @@ def test_seed_corpus_classification_is_stable():
         classify(component.get("code_content") or "") for _, component in code_mode_figures()
     )
     assert sum(counts.values()) == 18
-    assert counts == {"free": 4, "prologue": 7, "frozen": 7}
+    # `len` (group size) landed in the phase-6 IR: the four viralrecon
+    # `pl.count().alias('count')` figures moved frozen -> prologue.
+    assert counts == {"free": 4, "prologue": 11, "frozen": 3}
 
 
 # ---------------------------------------------------------------------------
@@ -518,6 +571,27 @@ CASE_CODE: dict[str, str] = {
         "pl.col('event_time').max().alias('last_seen'),"
         "pl.col('flag').count().alias('flag_count'),"
         "pl.col('flag').n_unique().alias('flag_nunique'))"
+    ),
+    "group_by_len_vs_count_nulls": (
+        "df_modified = df.group_by('habitat', maintain_order=True).agg("
+        "pl.len().alias('n_rows'),"
+        "pl.col('value').count().alias('n_value'),"
+        "pl.col('n_reads').count().alias('n_reads'),"
+        "pl.col('value').len().alias('len_value'))"
+    ),
+    "group_by_len_default_aliases": (
+        "df_modified = df.group_by('batch', maintain_order=True).agg("
+        "pl.len(), pl.count(), pl.col('value').len())"
+    ),
+    "group_by_len_after_filter": (
+        "df_modified = (df.filter(pl.col('q_val') < 0.05)"
+        ".group_by('habitat', maintain_order=True)"
+        ".agg(pl.len().alias('n_rows'), pl.col('value').count().alias('n_value')))"
+    ),
+    "chain_group_len_sort_desc": (
+        "df_modified = (df.group_by('habitat', maintain_order=True)"
+        ".agg(pl.count().alias('count'))"
+        ".sort(['count', 'habitat'], descending=[True, False]))"
     ),
     "sort_label_asc": "df_modified = df.sort('label')",
     "sort_value_nulls_then_id": "df_modified = df.sort(['value', 'sample_id'])",

@@ -3949,6 +3949,128 @@
       }
     },
     {
+      "name": "group_by_len_vs_count_nulls",
+      "output": {
+        "columns": {
+          "habitat": [
+            "Riverwater",
+            "Groundwater",
+            "Sediment",
+            "Soil",
+            null,
+            "Bog",
+            "Marsh",
+            "Void"
+          ],
+          "n_rows": [
+            11,
+            11,
+            10,
+            10,
+            3,
+            1,
+            2,
+            2
+          ],
+          "n_value": [
+            9,
+            10,
+            9,
+            9,
+            3,
+            1,
+            2,
+            0
+          ],
+          "n_reads": [
+            10,
+            10,
+            9,
+            9,
+            3,
+            1,
+            2,
+            1
+          ],
+          "len_value": [
+            11,
+            11,
+            10,
+            10,
+            3,
+            1,
+            2,
+            2
+          ]
+        },
+        "length": 8
+      }
+    },
+    {
+      "name": "group_by_len_default_aliases",
+      "output": {
+        "columns": {
+          "batch": [
+            1,
+            2,
+            3,
+            null
+          ],
+          "len": [
+            17,
+            17,
+            15,
+            1
+          ],
+          "count": [
+            17,
+            17,
+            15,
+            1
+          ],
+          "value": [
+            17,
+            17,
+            15,
+            1
+          ]
+        },
+        "length": 4
+      }
+    },
+    {
+      "name": "group_by_len_after_filter",
+      "output": {
+        "columns": {
+          "habitat": [
+            "Riverwater",
+            "Groundwater",
+            "Sediment",
+            "Soil",
+            null,
+            "Void"
+          ],
+          "n_rows": [
+            7,
+            4,
+            7,
+            3,
+            3,
+            2
+          ],
+          "n_value": [
+            7,
+            3,
+            7,
+            2,
+            3,
+            0
+          ]
+        },
+        "length": 6
+      }
+    },
+    {
       "name": "sort_label_asc",
       "output": {
         "columns": {
@@ -7863,6 +7985,34 @@
             2.3055555555555554,
             1.4166666666666667,
             null
+          ]
+        },
+        "length": 8
+      }
+    },
+    {
+      "name": "chain_group_len_sort_desc",
+      "output": {
+        "columns": {
+          "habitat": [
+            "Groundwater",
+            "Riverwater",
+            "Sediment",
+            "Soil",
+            null,
+            "Marsh",
+            "Void",
+            "Bog"
+          ],
+          "count": [
+            11,
+            11,
+            10,
+            10,
+            3,
+            2,
+            2,
+            1
           ]
         },
         "length": 8

@@ -17,7 +17,7 @@ Both sides are pinned by the committed JSON-schema snapshot
 from enum import Enum
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 MANIFEST_VERSION = 1
 
@@ -226,6 +226,9 @@ class BindingTable(BaseModel):
 #   {"op": "filter",   "pred": <Pred>}
 #   {"op": "unpivot",  "on": [...], "index": [...], "variable": "...", "value": "..."}
 #   {"op": "group_by", "by": [...], "agg": [{"col": ..., "fn": ..., "alias": ...}]}
+#                      ``col`` is null exactly for ``fn: "len"`` written bare
+#                      (``pl.len()`` / ``pl.count()``), which needs no source
+#                      column; every other fn carries one.
 #   {"op": "sort",     "by": [...], "desc": [true, ...]}
 #   {"op": "rename",   "map": {"old": "new"}}
 #
@@ -238,8 +241,10 @@ class BindingTable(BaseModel):
 #   * sort      — ``DataFrame.sort(by, descending=desc)`` with Polars defaults,
 #                 including its null placement.
 #   * agg traps — std/var use ddof=1 (a single value aggregates to null),
-#                 ``count`` is the NON-NULL count, ``nunique`` COUNTS null,
-#                 ``median`` interpolates linearly, first/last are positional.
+#                 ``count`` is the NON-NULL count of ``col`` while ``len`` is the
+#                 GROUP SIZE (mask-independent, nulls included), ``nunique``
+#                 COUNTS null, ``median`` interpolates linearly, first/last are
+#                 positional.
 # --------------------------------------------------------------------------
 
 PredScalar = str | bool | int | float
@@ -265,7 +270,8 @@ class AggFn(str, Enum):
     MEDIAN = "median"
     MIN = "min"
     MAX = "max"
-    COUNT = "count"  # non-null count
+    COUNT = "count"  # non-null count of ``col``
+    LEN = "len"  # group size: every row, nulls included; ``col`` is not read
     NUNIQUE = "nunique"  # counts null as a distinct value
     STD = "std"  # ddof=1 -> null for a single-row group
     VAR = "var"  # ddof=1 -> null for a single-row group
@@ -392,13 +398,34 @@ class UnpivotOp(BaseModel):
 
 
 class AggSpec(BaseModel):
-    """One reducer of a ``group_by().agg()``."""
+    """One reducer of a ``group_by().agg()``.
 
-    col: str = Field(description="Source column reduced")
+    ``col`` is null only for ``fn == "len"`` spelled bare (``pl.len()`` /
+    the deprecated ``pl.count()``): the group size reads no column. The
+    column-attached spelling ``pl.col(c).len()`` keeps ``col = c`` — Polars
+    still returns the group size there, but names the output after ``c``, and
+    a missing ``c`` still raises.
+    """
+
+    col: str | None = Field(
+        default=None,
+        description="Source column reduced; null only for a bare ``len`` (group size)",
+    )
     fn: AggFn
-    alias: str = Field(description="Output column name (Polars defaults it to ``col``)")
+    alias: str = Field(
+        description=(
+            "Output column name. Polars defaults it to ``col``, except for a bare "
+            "``pl.len()`` -> 'len' and a bare ``pl.count()`` -> 'count'"
+        )
+    )
 
     model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def _col_required_unless_len(self) -> "AggSpec":
+        if self.col is None and self.fn is not AggFn.LEN:
+            raise ValueError(f"agg fn '{self.fn.value}' needs a source column")
+        return self
 
 
 class GroupByOp(BaseModel):
