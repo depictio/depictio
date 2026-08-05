@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Text } from '@mantine/core';
 import { DatePickerInput } from '@mantine/dates';
+import { CompactControlSlot } from 'depictio-components';
 import ComponentSkeleton from '../ComponentSkeleton';
 
 import {
@@ -196,6 +197,7 @@ const DatePickerRenderer: React.FC<{
   return (
     <InteractiveFrame compact={compact}>
       <InteractiveTitle metadata={metadata} compact={compact} />
+      <CompactControlSlot compact={compact}>
       <DatePickerInput
         type="range"
         value={value}
@@ -203,7 +205,7 @@ const DatePickerRenderer: React.FC<{
         maxDate={bounds.max ?? undefined}
         clearable={false}
         w="100%"
-        size={INTERACTIVE_FRAME.controlSize}
+        size={compact ? 'xs' : INTERACTIVE_FRAME.controlSize}
         allowSingleDateInRange
         onChange={(next: [Date | null, Date | null] | null) => {
           const [a, b] = (next ?? [null, null]) as [Date | null, Date | null];
@@ -237,6 +239,7 @@ const DatePickerRenderer: React.FC<{
           input: metadata.icon_color ? { borderColor: metadata.icon_color } : undefined,
         }}
       />
+      </CompactControlSlot>
     </InteractiveFrame>
   );
 };

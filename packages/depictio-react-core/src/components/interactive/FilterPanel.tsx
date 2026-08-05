@@ -20,12 +20,20 @@ import { Icon } from '@iconify/react';
 
 import type { FilterSectionSpec, InteractiveFilter, StoredMetadata } from '../../api';
 import { countActiveFilters } from '../../activeFilters';
+import { PANEL_RESIZE_END_EVENT, isPanelResizing } from '../../utils/panelToggle';
 import { useCollapseState } from '../../hooks/useCollapseState';
 import type { InteractiveSection } from '../../utils/groupInteractive';
 import {
+  collapsedSectionKeys,
   matchesFilterSearch,
   sectionInteractiveComponents,
 } from '../../utils/groupInteractive';
+import {
+  applyAccordionValue,
+  SectionAccordion,
+  SectionAccordionItem,
+  SectionHeader,
+} from '../SectionAccordion';
 import {
   gridLayoutToMemberLayout,
   groupsToGridLayout,
@@ -134,11 +142,17 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
   const [search, setSearch] = useState('');
 
   const collapsedByDefault = useMemo(
-    () => (filterSections ?? []).filter((s) => s.collapsed).map((s) => `section:${s.name}`),
+    () => collapsedSectionKeys(filterSections),
     [filterSections],
   );
+  // `filter-panel-sections-collapsed:`, NOT `filter-panel-collapsed:` — the
+  // latter is `useFilterPanelOpen`'s key for the whole-panel boolean, and both
+  // hooks are mounted together on every dashboard. Sharing the key would have
+  // each one silently overwrite the other's payload (`boolean` vs `string[]`),
+  // so the losing side falls back to its default on the next load. Matches the
+  // `grid-section-collapsed:` naming used by DashboardGrid.
   const collapse = useCollapseState(
-    `filter-panel-collapsed:${dashboardId ?? 'unknown'}`,
+    `filter-panel-sections-collapsed:${dashboardId ?? 'unknown'}`,
     collapsedByDefault,
   );
 
@@ -149,15 +163,36 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
 
   const sections = useMemo(
     () =>
-      sectionInteractiveComponents(visibleComponents, filterSections).map((s) => ({
+      // `includeEmpty` only in edit mode, and only while nothing is being
+      // searched for: a section created from the Sections manager has no members
+      // yet, but a search that matches none of a section's filters should still
+      // hide it rather than leave a row of empty headers behind.
+      sectionInteractiveComponents(
+        visibleComponents,
+        filterSections,
+        editMode && !search.trim(),
+      ).map((s) => ({
         ...s,
         groups: orderGroupsByLayout(s.groups, layoutData),
       })),
-    [visibleComponents, filterSections, layoutData],
+    [visibleComponents, filterSections, layoutData, editMode, search],
   );
 
   const activeCount = countActiveFilters(filters);
   const compactMembers = density === 'compact';
+
+  // Everything the panel can fold: its named sections and its group cards. The
+  // grid's equivalent control only has sections to worry about; here a
+  // dashboard may well group its filters without sectioning them, and a
+  // "collapse all" that left those groups open would be a lie.
+  const collapsibleKeys = useMemo(() => {
+    const keys = sections.filter((s) => s.sectionName).map((s) => s.key);
+    for (const s of sections) {
+      for (const g of s.groups) if (g.groupName) keys.push(g.key);
+    }
+    return keys;
+  }, [sections]);
+  const anyOpen = collapsibleKeys.some((key) => collapse.isOpen(key));
 
   // A search narrows `groups` to the matches, so the grid only knows about
   // those rows. Persisting that layout would drop every filtered-out
@@ -181,15 +216,52 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
   // when the panel is narrower than the window-derived estimate.
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const [measuredWidth, setMeasuredWidth] = useState(280);
+  // Room the section box leaves inside itself, measured the same way and for the
+  // same reason as `DashboardGrid`'s: a grid handed the full panel width would
+  // run past the box and get clipped.
+  const [sectionInset, setSectionInset] = useState(0);
+  const measureRef = useRef<() => void>(() => {});
   useEffect(() => {
     if (!wrapperRef.current || typeof ResizeObserver === 'undefined') return;
-    const ro = new ResizeObserver((entries) => {
-      const next = entries[0]?.contentRect.width;
-      if (next && next > 0) setMeasuredWidth(Math.floor(next));
+    const measure = () => {
+      const wrapper = wrapperRef.current;
+      if (!wrapper) return;
+      const next = wrapper.getBoundingClientRect().width;
+      if (!next || next <= 0) return;
+      setMeasuredWidth(Math.floor(next));
+      const probe = wrapper.querySelector('[data-section-grid]');
+      if (probe) {
+        setSectionInset(Math.max(0, Math.round(next - probe.getBoundingClientRect().width)));
+      }
+    };
+    measureRef.current = measure;
+    const ro = new ResizeObserver(() => {
+      // Held still while the panel's own edge is being dragged, then measured
+      // once on release — the same freeze `DashboardGrid` applies, and for the
+      // same reason: this width changes on every pointermove of that drag.
+      if (isPanelResizing()) return;
+      measure();
     });
     ro.observe(wrapperRef.current);
-    return () => ro.disconnect();
-  }, []);
+    window.addEventListener(PANEL_RESIZE_END_EVENT, measure);
+    measure();
+    return () => {
+      ro.disconnect();
+      window.removeEventListener(PANEL_RESIZE_END_EVENT, measure);
+    };
+    // Keyed on `collapsed` because `wrapperRef` only has a node while the panel
+    // is expanded — the collapsed branch returns the icon rail before
+    // `framedBody` renders. A panel that mounts collapsed (the persisted state
+    // from a previous visit) would otherwise never install the observer, and
+    // `measuredWidth` would stay pinned at its seed for the rest of the session.
+  }, [collapsed]);
+
+  // The inset probe is a section, so it can only be measured once one has
+  // rendered — and again whenever the set of them changes, which a search can do
+  // without the panel itself resizing.
+  useEffect(() => {
+    measureRef.current();
+  }, [sections]);
 
   const renderGroup = (group: InteractiveSection['groups'][number]) => {
     if (group.groupName) {
@@ -263,7 +335,9 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
         layout={groupsToGridLayout(section.groups, isCollapsed)}
         cols={1}
         rowHeight={ROW_HEIGHT}
-        width={measuredWidth}
+        // Inside a section box the grid gets the room the box leaves; the
+        // unsectioned bucket has no box and spans the panel.
+        width={section.sectionName ? Math.max(80, measuredWidth - sectionInset) : measuredWidth}
         margin={[8, 8]}
         containerPadding={[0, 0]}
         isDraggable={dragEnabled}
@@ -294,19 +368,17 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
     const members = section.groups.flatMap((g) => g.members);
     const count = countActiveFilters(filters, members);
     return (
-      <Group gap={6} wrap="nowrap" style={{ minWidth: 0 }}>
-        {section.spec?.icon && (
-          <Icon icon={section.spec.icon} width={15} height={15} style={{ flexShrink: 0 }} />
-        )}
-        <Text size="sm" fw={600} truncate>
-          {section.sectionName}
-        </Text>
-        {count > 0 && (
-          <Badge size="xs" variant="light" circle>
-            {count}
-          </Badge>
-        )}
-      </Group>
+      <SectionHeader
+        spec={section.spec}
+        name={section.sectionName}
+        badge={
+          count > 0 ? (
+            <Badge size="sm" variant="light" circle color={section.spec?.color || undefined}>
+              {count}
+            </Badge>
+          ) : undefined
+        }
+      />
     );
   };
 
@@ -333,36 +405,39 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
       <Stack gap="sm">
         {unsectioned && renderSectionBody(unsectioned)}
         {named.length > 0 && (
-          <Accordion
-            multiple
-            variant="separated"
-            radius="md"
-            chevronPosition="left"
+          <SectionAccordion
+            compact
             value={named.filter((s) => collapse.isOpen(s.key)).map((s) => s.key)}
-            onChange={(open) => {
-              // Mantine hands back the full open set; translate it into the
-              // per-key toggles the persisted collapse state is built from.
-              const openSet = new Set(open);
-              for (const s of named) {
-                if (openSet.has(s.key) !== collapse.isOpen(s.key)) collapse.toggle(s.key);
-              }
-            }}
-            styles={{ content: { padding: 'var(--mantine-spacing-xs)' } }}
+            onChange={(open) =>
+              applyAccordionValue(
+                open,
+                named.map((s) => s.key),
+                collapse,
+              )
+            }
           >
             {named.map((s) => (
-              <Accordion.Item key={s.key} value={s.key}>
+              // No `color`: the panel's rails stay neutral so they don't pair
+              // up with the grid's. See `SectionAccordionItem`.
+              <SectionAccordionItem key={s.key} value={s.key}>
                 <Accordion.Control>{renderSectionHeader(s)}</Accordion.Control>
                 <Accordion.Panel>
-                  {s.spec?.description && (
-                    <Text size="xs" c="dimmed" mb="xs">
-                      {s.spec.description}
-                    </Text>
-                  )}
-                  {renderSectionBody(s)}
+                  {/* Plain wrapper so the width available inside the section box
+                      can be read off the DOM — see `sectionInset`. */}
+                  <div data-section-grid>
+                    {s.groups.length === 0 ? (
+                      // Only reachable in edit mode (`includeEmpty`).
+                      <Text size="xs" c="dimmed" ta="center" py="xs">
+                        No filters yet — pick this section when creating one.
+                      </Text>
+                    ) : (
+                      renderSectionBody(s)
+                    )}
+                  </div>
                 </Accordion.Panel>
-              </Accordion.Item>
+              </SectionAccordionItem>
             ))}
-          </Accordion>
+          </SectionAccordion>
         )}
       </Stack>
     );
@@ -375,8 +450,9 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
       // own root, and app.css keys the visible per-cell border off them. The
       // viewer deliberately stays unclassed — `.depictio-dashboard-grid:not(
       // .depictio-edit-mode)` strips Paper borders, and the filter column has
-      // always shown its borders in view mode. The ref is unconditional: it
-      // feeds the ResizeObserver that sizes the per-section grids.
+      // always shown its borders in view mode. The ref feeds the ResizeObserver
+      // that sizes the per-section grids; it only exists on this expanded
+      // branch, which is why that effect is keyed on `collapsed`.
       className={editMode ? 'depictio-dashboard-grid depictio-edit-mode' : undefined}
       style={{ width: '100%', overflowX: 'hidden' }}
     >
@@ -427,6 +503,29 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
             {activeCount}
           </Badge>
         )}
+        {/* Rotated so a 44px rail still says what it is. `vertical-rl` plus a
+            180° turn reads bottom-to-top, the usual direction for a label on a
+            left-hand edge. `aria-hidden` because the ActionIcon above already
+            carries the accessible name — this is the same control, spelled out
+            for sighted users, so exposing it twice would just add noise. */}
+        <Text
+          size="xs"
+          fw={600}
+          c="dimmed"
+          aria-hidden
+          onClick={onToggleCollapsed}
+          style={{
+            writingMode: 'vertical-rl',
+            transform: 'rotate(180deg)',
+            letterSpacing: '0.08em',
+            textTransform: 'uppercase',
+            userSelect: 'none',
+            cursor: onToggleCollapsed ? 'pointer' : undefined,
+            whiteSpace: 'nowrap',
+          }}
+        >
+          Filters
+        </Text>
       </Paper>
     );
   }
@@ -463,6 +562,27 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
           )}
         </Group>
         <Group gap={4} wrap="nowrap">
+          {collapsibleKeys.length > 0 && (
+            <Tooltip
+              label={anyOpen ? 'Collapse all' : 'Expand all'}
+              withArrow
+              openDelay={400}
+            >
+              <ActionIcon
+                variant="subtle"
+                color="gray"
+                size="sm"
+                aria-label={anyOpen ? 'Collapse all' : 'Expand all'}
+                onClick={() => collapse.setAll(collapsibleKeys, anyOpen)}
+              >
+                <Icon
+                  icon={anyOpen ? 'mdi:unfold-less-horizontal' : 'mdi:unfold-more-horizontal'}
+                  width={16}
+                  height={16}
+                />
+              </ActionIcon>
+            </Tooltip>
+          )}
           <Tooltip
             label={density === 'compact' ? 'Comfortable density' : 'Compact density'}
             withArrow

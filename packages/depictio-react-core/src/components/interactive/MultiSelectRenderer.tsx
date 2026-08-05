@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
-import { DepictioMultiSelect } from 'depictio-components';
+import { CompactControlSlot, DepictioMultiSelect } from 'depictio-components';
 import ComponentSkeleton from '../ComponentSkeleton';
 
 import {
@@ -96,23 +96,25 @@ const MultiSelectRenderer: React.FC<{
   return (
     <InteractiveFrame compact={compact}>
       <InteractiveTitle metadata={metadata} compact={compact} />
-      <DepictioMultiSelect
-        bare
-        size={INTERACTIVE_FRAME.controlSize}
-        column_name={metadata.column_name}
-        options={optionItems}
-        value={selected}
-        placeholder={`Select ${metadata.column_name || 'values'}…`}
-        onChange={(next) =>
-          onChange?.({
-            index: metadata.index,
-            value: next,
-            column_name: metadata.column_name,
-            interactive_component_type: metadata.interactive_component_type,
-            filter_expr: metadata.filter_expr,
-          })
-        }
-      />
+      <CompactControlSlot compact={compact}>
+        <DepictioMultiSelect
+          bare
+          size={compact ? 'xs' : INTERACTIVE_FRAME.controlSize}
+          column_name={metadata.column_name}
+          options={optionItems}
+          value={selected}
+          placeholder={`Select ${metadata.column_name || 'values'}…`}
+          onChange={(next) =>
+            onChange?.({
+              index: metadata.index,
+              value: next,
+              column_name: metadata.column_name,
+              interactive_component_type: metadata.interactive_component_type,
+              filter_expr: metadata.filter_expr,
+            })
+          }
+        />
+      </CompactControlSlot>
     </InteractiveFrame>
   );
 };

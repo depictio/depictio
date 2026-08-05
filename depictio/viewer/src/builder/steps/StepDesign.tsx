@@ -3,13 +3,14 @@
  * Used by both CreateComponentPage (final step) and EditComponentPage (only step).
  */
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Button, Center, Stack, Text, Title } from '@mantine/core';
+import { Alert, Button, Center, Paper, Stack, Text, Title } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import { notifications } from '@mantine/notifications';
 import { fetchSpecs, upsertComponent } from 'depictio-react-core';
 import { useBuilderStore } from '../store/useBuilderStore';
 import type { ColumnSpec } from '../store/useBuilderStore';
 import ComponentBuilder from '../ComponentBuilder';
+import SectionSelect from '../shared/SectionSelect';
 import { buildMetadata } from '../buildMetadata';
 import { getComponentTypeMeta } from '../componentTypes';
 
@@ -110,6 +111,13 @@ const StepDesign: React.FC = () => {
       </Stack>
 
       <ComponentBuilder />
+
+      {/* Placement, not appearance — so it sits outside the per-type builder,
+          which keeps it identical for every component type instead of nine
+          near-copies. */}
+      <Paper withBorder radius="md" p="md">
+        <SectionSelect />
+      </Paper>
 
       {state.saveError && (
         <Alert color="red" title="Save error">

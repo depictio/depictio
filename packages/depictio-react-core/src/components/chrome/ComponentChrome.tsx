@@ -5,11 +5,19 @@ import { Icon } from '@iconify/react';
 import { StoredMetadata } from '../../api';
 import MetadataPopover from './MetadataPopover';
 import FullscreenButton from './FullscreenButton';
+import InspectButton from './InspectButton';
+import { useInspectorControl } from './InspectorContext';
 import DownloadButton from './DownloadButton';
 import ResetButton from './ResetButton';
 import './chrome.css';
 
-export type ChromeAction = 'metadata' | 'fullscreen' | 'download' | 'reset' | 'drag';
+export type ChromeAction =
+  | 'inspect'
+  | 'metadata'
+  | 'fullscreen'
+  | 'download'
+  | 'reset'
+  | 'drag';
 
 export interface ComponentChromeProps {
   metadata: StoredMetadata;
@@ -119,10 +127,27 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
     return () => document.removeEventListener('fullscreenchange', onChange);
   }, [fullscreenRef]);
 
-  const actions = actionsFor(componentType);
+  // Prepended rather than folded into `actionsFor`, which stays a pure function
+  // of the component type: whether this action exists is a property of the app
+  // (is the inspector enabled?), not of the component. A null control — the
+  // default when no provider is mounted — leaves the chrome exactly as it was.
+  const inspector = useInspectorControl();
+  const actions: ChromeAction[] = [];
+  if (inspector) actions.push('inspect');
+  actions.push(...actionsFor(componentType));
 
   const renderAction = (action: ChromeAction) => {
     switch (action) {
+      case 'inspect':
+        if (!inspector) return null;
+        return (
+          <InspectButton
+            key="inspect"
+            componentId={metadata.index}
+            active={inspector.selectedId === metadata.index}
+            onInspect={inspector.select}
+          />
+        );
       case 'metadata':
         return <MetadataPopover key="metadata" metadata={metadata} />;
       case 'fullscreen':

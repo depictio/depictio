@@ -92,7 +92,8 @@
       "title_color": "#9C27B0",
       "title_font_size": "xl",
       "value_font_size": "xl",
-      "wf_tag": "python/iris_workflow"
+      "wf_tag": "python/iris_workflow",
+      "section": "Summary"
     },
     {
       "index": "47ecd813-7836-43c8-a4b7-831c7b8854e4",
@@ -138,7 +139,8 @@
       "title_color": "#43A047",
       "title_font_size": "xl",
       "value_font_size": "xl",
-      "wf_tag": "python/iris_workflow"
+      "wf_tag": "python/iris_workflow",
+      "section": "Summary"
     },
     {
       "index": "467edb63-4194-40e0-9444-c97650cf9729",
@@ -182,7 +184,8 @@
       "title_color": "#2196F3",
       "title_font_size": "xl",
       "value_font_size": "xl",
-      "wf_tag": "python/iris_workflow"
+      "wf_tag": "python/iris_workflow",
+      "section": "Summary"
     },
     {
       "index": "03fc4e24-63f0-45d1-83e8-93ed489687b6",
@@ -226,7 +229,8 @@
       "title_color": "#4CAF50",
       "title_font_size": "xl",
       "value_font_size": "xl",
-      "wf_tag": "python/iris_workflow"
+      "wf_tag": "python/iris_workflow",
+      "section": "Summary"
     },
     {
       "index": "db71b378-a4d1-4cff-bb5c-1cb8bc833558",
@@ -270,7 +274,8 @@
       "title_color": "#607D8B",
       "title_font_size": "lg",
       "value_font_size": "xl",
-      "wf_tag": "python/iris_workflow"
+      "wf_tag": "python/iris_workflow",
+      "section": "Summary"
     },
     {
       "index": "f06591ae-a95f-4ec2-8d18-1ff7537ff712",
@@ -470,7 +475,8 @@
       "filter_applied": false,
       "selection_enabled": false,
       "selection_column": null,
-      "wf_tag": "python/iris_workflow"
+      "wf_tag": "python/iris_workflow",
+      "section": "Distributions"
     },
     {
       "index": "a630775f-0f9c-4ac9-9ce6-b5da5988d90a",
@@ -517,7 +523,8 @@
       "filter_applied": false,
       "selection_enabled": false,
       "selection_column": null,
-      "wf_tag": "python/iris_workflow"
+      "wf_tag": "python/iris_workflow",
+      "section": "Distributions"
     },
     {
       "index": "5feb1689-2e93-4f20-8327-1367462a4610",
@@ -564,7 +571,8 @@
       "filter_applied": false,
       "selection_enabled": false,
       "selection_column": null,
-      "wf_tag": "python/iris_workflow"
+      "wf_tag": "python/iris_workflow",
+      "section": "Distributions"
     },
     {
       "index": "e0033582-c466-4806-ab68-a30a05c4ba37",
@@ -615,7 +623,8 @@
       "filter_applied": false,
       "selection_enabled": false,
       "selection_column": null,
-      "wf_tag": "python/iris_workflow"
+      "wf_tag": "python/iris_workflow",
+      "section": "Distributions"
     },
     {
       "index": "b5d9db1a-ae46-4baa-8e86-68f4cbca7403",
@@ -651,7 +660,8 @@
       "filterable": true,
       "row_selection_enabled": false,
       "row_selection_column": null,
-      "wf_tag": "python/iris_workflow"
+      "wf_tag": "python/iris_workflow",
+      "section": "Raw Data"
     }
   ],
   "stored_layout_data": [],
@@ -838,5 +848,28 @@
   "project_id": {
     "$oid": "646b0f3c1e4a2d7f8e5b8c9a"
   },
-  "last_saved_ts": "2026-05-20 00:00:00"
+  "last_saved_ts": "2026-05-20 00:00:00",
+  "grid_sections": [
+    {
+      "name": "Summary",
+      "icon": "mdi:counter",
+      "color": "teal",
+      "description": "Cohort-level measurements, kept on screen when folded",
+      "collapsed": false
+    },
+    {
+      "name": "Distributions",
+      "icon": "mdi:chart-bell-curve",
+      "color": "violet",
+      "description": "How each measurement spreads across varieties",
+      "collapsed": false
+    },
+    {
+      "name": "Raw Data",
+      "icon": "mdi:table",
+      "color": "gray",
+      "description": "Per-flower records behind every figure above",
+      "collapsed": true
+    }
+  ]
 }

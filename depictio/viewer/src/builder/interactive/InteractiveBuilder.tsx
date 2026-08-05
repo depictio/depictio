@@ -210,8 +210,9 @@ const InteractiveBuilder: React.FC = () => {
   const componentId = useBuilderStore((s) => s.componentId);
 
   // The dashboard's other interactive components, used only to suggest the
-  // section and group names already in use. Both fields stay free text, so a
-  // failed fetch degrades to "no suggestions" rather than blocking authoring.
+  // group names already in use. Group stays free text, so a failed fetch
+  // degrades to "no suggestions" rather than blocking authoring. (Section is
+  // picked from the dashboard's declared list by `SectionSelect` instead.)
   const [siblings, setSiblings] = useState<StoredMetadata[]>([]);
   useEffect(() => {
     if (!dashboardId) return;
@@ -234,16 +235,6 @@ const InteractiveBuilder: React.FC = () => {
       cancelled = true;
     };
   }, [dashboardId, componentId]);
-
-  const sectionOptions = useMemo(
-    () =>
-      [
-        ...new Set(
-          siblings.map((m) => m.section).filter((s): s is string => Boolean(s)),
-        ),
-      ].sort(),
-    [siblings],
-  );
 
   // Groups are scoped to the chosen section: a group may not span two sections
   // (validate_interactive_groups in depictio/models/models/dashboards.py), so
@@ -391,21 +382,10 @@ const InteractiveBuilder: React.FC = () => {
         <Fieldset legend="Panel placement" variant="filled" radius="md">
           <Stack gap="sm">
             <Text size="xs" c="dimmed">
-              Sections are the filter panel&apos;s collapsible outer level; groups stack
-              a few related controls inside one compact card. Leave both empty to
-              render this control on its own.
+              Groups stack a few related controls inside one compact card, within
+              whichever section this control belongs to. Leave it empty to render
+              the control on its own.
             </Text>
-
-            <Autocomplete
-              label="Section"
-              description="Existing sections are suggested — type a new name to create one"
-              placeholder="No section"
-              data={sectionOptions}
-              value={config.section ?? ''}
-              onChange={(val) => patchConfig({ section: val })}
-              leftSection={<Icon icon="mdi:format-list-group" width={14} />}
-              clearable
-            />
 
             <Autocomplete
               label="Group"

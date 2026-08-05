@@ -4623,7 +4623,9 @@ def _component_has_data(component: dict, dc_meta: dict[str, dict]) -> bool:
     )
 
 
-def _recompact_main_grid(items: list[dict]) -> list[dict]:
+def _recompact_main_grid(
+    items: list[dict], sections_by_box: dict[str, str | None] | None = None
+) -> list[dict]:
     """Re-pack main-grid layout items after components were dropped.
 
     Dropping a component leaves a hole in the grid: react-grid-layout's vertical
@@ -4640,9 +4642,32 @@ def _recompact_main_grid(items: list[dict]) -> list[dict]:
 
     Only ``x``/``y``/``w``/``h`` are rewritten; every other key (``i``,
     ``static``, ``resizeHandles``, …) is preserved.
+
+    ``sections_by_box`` maps ``box-<index>`` to the component's ``section``. When
+    given, each section is packed on its own and the results are stacked in the
+    order the sections first appear — the grid draws one sub-grid per section, so
+    packing across a boundary would slide a component under the wrong header.
+    Omitting it packs everything as one grid, which is what a dashboard with no
+    sections gets.
     """
     if not items:
         return items
+
+    if sections_by_box:
+        buckets: dict[str | None, list[dict]] = {}
+        for item in sorted(items, key=lambda it: (it.get("y", 0), it.get("x", 0))):
+            buckets.setdefault(sections_by_box.get(item.get("i", "")), []).append(item)
+        out: list[dict] = []
+        y_offset = 0
+        for bucket in buckets.values():
+            packed = _recompact_main_grid(bucket)
+            bottom = 0
+            for item in packed:
+                out.append({**item, "y": item["y"] + y_offset})
+                bottom = max(bottom, item["y"] + item["h"])
+            y_offset += bottom
+        return out
+
     ordered = sorted(items, key=lambda it: (it.get("y", 0), it.get("x", 0)))
     rows: list[list[dict]] = []
     current: list[dict] = []
@@ -4714,10 +4739,13 @@ def _filter_unresolved_components(
             ]
     # Re-flow the main grid only (the left rail is a vertical filter stack and the
     # legacy unified `stored_layout_data` mixes filters with content, so neither is
-    # safe to horizontally re-pack).
+    # safe to horizontally re-pack). Section by section: the grid renders one
+    # sub-grid per section, so packing across a section boundary would move a
+    # component under a header it doesn't belong to.
     if dashboard_dict.get("right_panel_layout_data"):
+        sections_by_box = {f"box-{c.get('index')}": c.get("section") or None for c in kept}
         dashboard_dict["right_panel_layout_data"] = _recompact_main_grid(
-            dashboard_dict["right_panel_layout_data"]
+            dashboard_dict["right_panel_layout_data"], sections_by_box
         )
 
 

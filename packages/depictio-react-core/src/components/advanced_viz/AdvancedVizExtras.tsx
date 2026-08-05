@@ -3,6 +3,7 @@ import { ActionIcon, Group, Popover, Stack, Text } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import DataGridBody, { type TierAnnotation } from '../data/DataGridBody';
+import type { LoadAllState } from '../chrome/LoadAllButton';
 
 /**
  * Bridges the per-renderer Settings + Show-data popovers into ComponentChrome's
@@ -11,11 +12,13 @@ import DataGridBody, { type TierAnnotation } from '../data/DataGridBody';
  * (variant=light, size=sm), instead of floating in the panel header.
  *
  * Wiring:
- *  - ComponentRenderer's advanced_viz dispatch holds the React node state and
- *    renders an <AdvancedVizExtrasProvider> around the renderer.
- *  - AdvancedVizFrame, when given controls / dataRows, builds the two
- *    Popovers and calls `publish(jsx)`. ComponentRenderer threads the
- *    published JSX into `extraActions` so chrome renders them.
+ *  - AdvancedVizDispatch holds the published payload and renders an
+ *    <AdvancedVizExtrasProvider> around the renderer.
+ *  - AdvancedVizFrame, when given controls / dataRows, calls
+ *    `publish(payload)` — the raw fields, not finished JSX, so the inspector
+ *    can present the same content docked.
+ *  - AdvancedVizDispatch builds the two Popovers from that payload and passes
+ *    them to chrome's `extraActions` slot.
  *
  * The popovers themselves use Mantine's Floating-UI-backed Popover which
  * portals the dropdown to document.body — so even when the chrome action
@@ -23,14 +26,36 @@ import DataGridBody, { type TierAnnotation } from '../data/DataGridBody';
  * dropdown stays visible. Closing requires a click outside (closeOnClickOutside).
  */
 
-type Publisher = (jsx: React.ReactNode) => void;
+/**
+ * What a framed renderer publishes about itself.
+ *
+ * Structured rather than pre-wrapped JSX: the dispatch builds the popovers out
+ * of it, and the inspector builds docked tabs out of the same fields. Publishing
+ * finished popovers, as this did originally, left the inspector nothing it could
+ * re-present.
+ */
+export interface AdvancedVizExtrasPayload {
+  /** Tier-2 settings JSX, rendered bare in a tab or inside the settings popover. */
+  controls?: React.ReactNode;
+  data?: {
+    rows: Record<string, unknown[]>;
+    columns?: string[];
+    tierAnnotation?: TierAnnotation;
+  };
+  /** Reduced-sampling state, when the renderer can expand to the full view.
+   *  Shaped as `LoadAllState` so the dispatch can hand it straight to
+   *  `LoadAllButton`. */
+  reduction?: LoadAllState;
+}
+
+type Publisher = (payload: AdvancedVizExtrasPayload | null) => void;
 
 export const AdvancedVizExtrasContext = createContext<Publisher | null>(null);
 
 interface ProviderProps {
   children: React.ReactNode;
-  /** Receives the latest JSX the framed renderer wants to publish. */
-  onChange: (jsx: React.ReactNode) => void;
+  /** Receives the latest payload the framed renderer wants to publish. */
+  onChange: Publisher;
 }
 
 export const AdvancedVizExtrasProvider: React.FC<ProviderProps> = ({ children, onChange }) => (
@@ -115,13 +140,26 @@ interface DataPopoverProps {
   tierAnnotation?: TierAnnotation;
 }
 
-// closeOnClickOutside disabled for the same reason as the Settings popover:
-// AG Grid's column menu + filter operator dropdown ("contains", "equals",
-// ...) is rendered in its own portal at document.body level. When users
-// clicked those, the popover's outside-click detector saw them as outside
-// and closed the table - the dropdown flashed for ~100ms before everything
-// disappeared, and sorting / filtering became impossible. Dismiss via the
-// close button in the table's header, the icon (toggle), or Escape.
+/** The columns actually rendered, in order. Shared so the popover can decide
+ *  whether to render an icon at all without duplicating the fallback rule. */
+function resolveDataColumns(
+  dataRows: Record<string, unknown[]>,
+  dataColumns?: string[],
+): string[] {
+  return (dataColumns?.filter((c) => c in dataRows) ?? Object.keys(dataRows)) as string[];
+}
+
+/**
+ * Popover wrapper around `DataGridBody` — the fallback surface whenever the
+ * inspector is disabled, which docks the same grid in a tab instead.
+ *
+ * closeOnClickOutside is disabled because AG Grid's column menu and filter
+ * operator dropdown ("contains", "equals", …) render in their own portal at
+ * document.body level. When users clicked those, the outside-click detector saw
+ * them as outside and closed the table: the dropdown flashed for ~100ms before
+ * everything disappeared, and sorting / filtering became impossible. Dismiss via
+ * the close button in the table's header, the icon (toggle), or Escape.
+ */
 export const AdvancedVizDataPopover: React.FC<DataPopoverProps> = ({
   dataRows,
   dataColumns,
@@ -134,8 +172,7 @@ export const AdvancedVizDataPopover: React.FC<DataPopoverProps> = ({
   // Hide the icon outright when there is nothing behind it. Unlike the map's
   // popover, whose data only arrives once opened, this one is handed its rows
   // up front - so an icon with no rows behind it is just a dead affordance.
-  const cols = dataColumns?.filter((c) => c in dataRows) ?? Object.keys(dataRows);
-  if (cols.length === 0) return null;
+  if (resolveDataColumns(dataRows, dataColumns).length === 0) return null;
 
   return (
     <Popover

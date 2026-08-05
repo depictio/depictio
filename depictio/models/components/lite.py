@@ -70,6 +70,17 @@ class BaseLiteComponent(BaseModel):
         description="Title alignment: 'left' (default), 'center', or 'right'",
     )
 
+    # Layout
+    section: str | None = Field(
+        default=None,
+        description="Optional section name. Components sharing a section render "
+        "together under one collapsible accordion header — in the left filter panel "
+        "for interactive components, in the main grid for every other type. "
+        "Components with no section render above the first section. Declare a "
+        "section's icon and default collapse state via the dashboard-level "
+        "`filter_sections` (left panel) or `grid_sections` (main grid) list.",
+    )
+
     # Data source references (human-readable tags)
     workflow_tag: str = Field(default="", description="Workflow tag (e.g., 'python/iris_workflow')")
     data_collection_tag: str = Field(
@@ -468,14 +479,6 @@ class InteractiveLiteComponent(BaseLiteComponent):
         description="Optional group identifier. Interactive components sharing the same "
         "group are rendered together inside one collapsible card. Up to "
         f"{MAX_INTERACTIVE_GROUP_SIZE} components per group.",
-    )
-    section: str | None = Field(
-        default=None,
-        description="Optional section name — the outer level of the left filter panel. "
-        "Each section renders as a collapsible accordion item holding its groups and "
-        "ungrouped components. Components with no section render above the first "
-        "section. Declare a section's icon and default collapse state via the "
-        "dashboard-level `filter_sections` list.",
     )
 
     # Timeline-specific

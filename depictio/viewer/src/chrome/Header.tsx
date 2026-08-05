@@ -54,6 +54,8 @@ interface HeaderProps {
   mode?: 'view' | 'edit';
   /** Edit-mode only: invoked when the user clicks "Add component". */
   onAddComponent?: () => void;
+  /** Edit-mode only: opens the Sections manager. */
+  onOpenSections?: () => void;
   /** Edit-mode only: invoked when the user clicks "Save". Should force-flush any pending debounced save. */
   onSave?: () => void;
   /** True when the current user owns this dashboard. When false, the
@@ -96,6 +98,7 @@ const Header: React.FC<HeaderProps> = ({
   cardsLoading = false,
   mode = 'view',
   onAddComponent,
+  onOpenSections,
   onSave,
   isOwner = true,
   rightExtras,
@@ -260,6 +263,25 @@ const Header: React.FC<HeaderProps> = ({
               data-tour-id="editor-add-component"
             >
               Add component
+            </Button>
+          </Tooltip>
+        )}
+        {mode === 'edit' && onOpenSections && (
+          <Tooltip
+            label="You can only edit dashboards you own. Duplicate this one to get your own copy."
+            disabled={isOwner}
+            withArrow
+          >
+            <Button
+              leftSection={<Icon icon="mdi:format-list-group" width={14} />}
+              color="grape"
+              variant="filled"
+              size="xs"
+              onClick={onOpenSections}
+              disabled={!dashboardId || !isOwner}
+              data-tour-id="editor-sections"
+            >
+              Sections
             </Button>
           </Tooltip>
         )}

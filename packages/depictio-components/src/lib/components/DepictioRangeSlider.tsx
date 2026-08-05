@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Paper, Stack, Text, Group, RangeSlider } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
+import CompactControlSlot from './CompactControlSlot';
+
 /**
  * RangeSlider interactive filter — selects a numeric [min, max] range.
  * Mirrors what `_build_select_component` produces for
@@ -204,7 +206,7 @@ const DepictioRangeSlider: React.FC<DepictioRangeSliderProps> = ({
           </Text>
         </Group>
       )}
-      {slider}
+      <CompactControlSlot compact={compact}>{slider}</CompactControlSlot>
     </Stack>
   );
 

@@ -88,7 +88,15 @@
   background: var(--mantine-color-body);
   padding: 1rem;
 }
-.depictio-component-chrome.fullscreen-active > * {
+/* Only the wrapped renderer fills the fullscreen viewport. The action row is
+ * the chrome's other direct child and is absolutely positioned, so it must be
+ * excluded: at `height: 100%` a horizontal row (Mantine Group centres on the
+ * cross axis) drops its icons to the vertical middle of the screen, and the
+ * hover pill — `::before { inset: 0 }` inside the row's z-index 1100 stacking
+ * context — inflates into a full-height opaque panel painted over the content.
+ * Vertical rows escape both effects because their cross axis is horizontal,
+ * which is why this only ever showed up on the table/AG Grid chrome. */
+.depictio-component-chrome.fullscreen-active > *:not(.depictio-component-actions) {
   height: 100%;
 }
 

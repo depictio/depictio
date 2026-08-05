@@ -92,7 +92,8 @@
       "title_color": "#F68B33",
       "title_font_size": "xl",
       "value_font_size": "xl",
-      "wf_tag": "python/penguin_species_analysis"
+      "wf_tag": "python/penguin_species_analysis",
+      "section": "Summary"
     },
     {
       "index": "20959316-cef3-43dc-8e00-f88c81e942c3",
@@ -138,7 +139,8 @@
       "title_color": "#26A69A",
       "title_font_size": "xl",
       "value_font_size": "xl",
-      "wf_tag": "python/penguin_species_analysis"
+      "wf_tag": "python/penguin_species_analysis",
+      "section": "Summary"
     },
     {
       "index": "d27bccae-8d6e-4111-b5ce-79bddba4e1b4",
@@ -182,7 +184,8 @@
       "title_color": "#8BC34A",
       "title_font_size": "xl",
       "value_font_size": "xl",
-      "wf_tag": "python/penguin_species_analysis"
+      "wf_tag": "python/penguin_species_analysis",
+      "section": "Summary"
     },
     {
       "index": "5e58a9ae-a1c5-49fd-83d7-5eba6a095dd4",
@@ -226,7 +229,8 @@
       "title_color": "#7E57C2",
       "title_font_size": "xl",
       "value_font_size": "xl",
-      "wf_tag": "python/penguin_species_analysis"
+      "wf_tag": "python/penguin_species_analysis",
+      "section": "Summary"
     },
     {
       "index": "84f6276c-a990-4b33-82cb-ff235558b089",
@@ -270,7 +274,8 @@
       "title_color": "#5C6BC0",
       "title_font_size": "xl",
       "value_font_size": "xl",
-      "wf_tag": "python/penguin_species_analysis"
+      "wf_tag": "python/penguin_species_analysis",
+      "section": "Summary"
     },
     {
       "index": "dfcb7773-97e4-4b04-a7d4-ec91af2c8189",
@@ -314,7 +319,8 @@
       "title_color": "#E91E63",
       "title_font_size": "lg",
       "value_font_size": "xl",
-      "wf_tag": "python/penguin_species_analysis"
+      "wf_tag": "python/penguin_species_analysis",
+      "section": "Summary"
     },
     {
       "index": "15cdfe3d-9073-4a47-8324-378d3bb9c8ba",
@@ -646,7 +652,8 @@
       "filter_applied": false,
       "selection_enabled": false,
       "selection_column": null,
-      "wf_tag": "python/penguin_species_analysis"
+      "wf_tag": "python/penguin_species_analysis",
+      "section": "Morphometrics"
     },
     {
       "index": "72381c5a-3218-481c-a5f8-ae6705f0a7f0",
@@ -693,7 +700,8 @@
       "filter_applied": false,
       "selection_enabled": false,
       "selection_column": null,
-      "wf_tag": "python/penguin_species_analysis"
+      "wf_tag": "python/penguin_species_analysis",
+      "section": "Morphometrics"
     },
     {
       "index": "4069cb03-9301-4476-9600-24c1529e4606",
@@ -742,7 +750,8 @@
       "filter_applied": false,
       "selection_enabled": false,
       "selection_column": null,
-      "wf_tag": "python/penguin_species_analysis"
+      "wf_tag": "python/penguin_species_analysis",
+      "section": "Morphometrics"
     },
     {
       "index": "b8030888-6848-44a6-b506-88277ac4f7ec",
@@ -789,7 +798,8 @@
       "filter_applied": false,
       "selection_enabled": false,
       "selection_column": null,
-      "wf_tag": "python/penguin_species_analysis"
+      "wf_tag": "python/penguin_species_analysis",
+      "section": "Morphometrics"
     },
     {
       "index": "ccf43bda-92e6-457c-a5e2-38a001d0c4b0",
@@ -838,7 +848,8 @@
       "filter_applied": false,
       "selection_enabled": false,
       "selection_column": null,
-      "wf_tag": "python/penguin_species_analysis"
+      "wf_tag": "python/penguin_species_analysis",
+      "section": "Morphometrics"
     },
     {
       "index": "6c8fd60d-5839-4664-b3e4-f5c9503b91e6",
@@ -878,7 +889,8 @@
       "filter_applied": false,
       "selection_enabled": false,
       "selection_column": null,
-      "wf_tag": "python/penguin_species_analysis"
+      "wf_tag": "python/penguin_species_analysis",
+      "section": "Composition"
     },
     {
       "index": "475ff4cc-55cd-492a-bdce-b0584c662197",
@@ -914,7 +926,8 @@
       "filterable": true,
       "row_selection_enabled": false,
       "row_selection_column": null,
-      "wf_tag": "python/penguin_species_analysis"
+      "wf_tag": "python/penguin_species_analysis",
+      "section": "Raw Data"
     }
   ],
   "stored_layout_data": [],
@@ -1163,5 +1176,35 @@
   "project_id": {
     "$oid": "646b0f3c1e4a2d7f8e5b8c9d"
   },
-  "last_saved_ts": "2026-05-20 00:00:00"
+  "last_saved_ts": "2026-05-20 00:00:00",
+  "grid_sections": [
+    {
+      "name": "Summary",
+      "icon": "mdi:counter",
+      "color": "teal",
+      "description": "Cohort-level measurements, kept on screen when folded",
+      "collapsed": false
+    },
+    {
+      "name": "Morphometrics",
+      "icon": "mdi:ruler",
+      "color": "indigo",
+      "description": "Body mass, flipper and bill dimensions by species",
+      "collapsed": false
+    },
+    {
+      "name": "Composition",
+      "icon": "mdi:chart-donut",
+      "color": "orange",
+      "description": "How species are distributed across the islands",
+      "collapsed": false
+    },
+    {
+      "name": "Raw Data",
+      "icon": "mdi:table",
+      "color": "gray",
+      "description": "Per-individual records behind every figure above",
+      "collapsed": true
+    }
+  ]
 }

@@ -1,0 +1,106 @@
+/*
+ * Section chrome shared by the dashboard grid and the left filter panel.
+ *
+ * The two surfaces are drawn differently on purpose, because the same treatment
+ * does not work at both widths:
+ *
+ * - The grid boxes each section. Across a full dashboard's width a hairline rail
+ *   on the far left has nothing to group the rest of the row against, so the box
+ *   is what says where a section starts and stops — the same shape folded or
+ *   open, rather than a boundary that depends on how much room the content takes.
+ * - The panel keeps a rail and an indent. A box a few hundred pixels wide spends
+ *   its border and padding on the filters it is meant to organise, and at that
+ *   width the rail is close enough to the content to group it.
+ *
+ * The accent's colour is set by the caller. Only the grid passes the section's
+ * own colour; the filter panel leaves it neutral on purpose — two coloured edges
+ * at the same heights on either side of the screen read as one paired set, and
+ * the two lists of sections are unrelated.
+ */
+
+.depictio-section-item {
+  --section-accent: var(--mantine-color-default-border);
+  /* Mantine's `default` variant rules off the bottom of each item, which reads
+     as a separator *after* the section rather than as part of it. */
+  border-bottom: none;
+}
+
+/* Padding belongs to the content, NOT to the panel: the panel is the element
+   Mantine collapses to `height: 0`, and padding on it survives that collapse,
+   so a folded section would reserve blank space it never fills. */
+
+/* ---------------------------------------------------------------- dashboard */
+
+.depictio-section-accordion:not(.is-compact) .depictio-section-item {
+  border: 1px solid var(--mantine-color-default-border);
+  border-inline-start: 3px solid var(--section-accent);
+  border-radius: var(--mantine-radius-md);
+  background: var(--mantine-color-body);
+}
+
+.depictio-section-accordion:not(.is-compact) .depictio-section-item + .depictio-section-item {
+  margin-top: var(--mantine-spacing-sm);
+}
+
+.depictio-section-accordion:not(.is-compact) .depictio-section-control {
+  padding-inline: var(--mantine-spacing-md);
+  /* Folded, a section is a row in a list and wants to be scannable; open, it is
+     a heading and wants air between itself and the content it introduces. The
+     type is the same either way — only the room around it changes. */
+  padding-block: var(--mantine-spacing-xs);
+  /* Keeps the header's hover fill inside the box's rounded corners without
+     `overflow: hidden` on the item, which would clip the grid's edge resize
+     handles in edit mode. Minus the border so the curves are concentric. */
+  border-radius: calc(var(--mantine-radius-md) - 1px);
+}
+
+.depictio-section-accordion:not(.is-compact) .depictio-section-item[data-active] .depictio-section-control {
+  padding-block: var(--mantine-spacing-sm);
+  /* Open, the header sits above content and wants a line under it. Folded there
+     is nothing below to separate it from. */
+  border-bottom: 1px solid var(--mantine-color-default-border);
+  border-end-start-radius: 0;
+  border-end-end-radius: 0;
+}
+
+.depictio-section-accordion:not(.is-compact) .depictio-section-content {
+  padding: var(--mantine-spacing-md);
+}
+
+/* ------------------------------------------------------------- filter panel */
+
+.depictio-section-accordion.is-compact .depictio-section-item {
+  border-inline-start: 2px solid var(--section-accent);
+  /* Deliberately tighter than a spacing token: the panel is a narrow column and
+     every pixel here is one the filters don't get. Enough to hold the rail off
+     the content, no more. */
+  padding-inline-start: 6px;
+}
+
+/* Mantine hangs a `spacing-lg` inline-start margin off a left-positioned
+   chevron, which on top of the rail and its padding started a panel section
+   some 34px in while an unsectioned filter starts at the column's edge. The
+   chevron keeps its gap to the title, but not the one before itself. */
+.depictio-section-accordion.is-compact .mantine-Accordion-chevron {
+  margin-inline-start: 0;
+  margin-inline-end: var(--mantine-spacing-xs);
+}
+
+.depictio-section-accordion.is-compact .depictio-section-item + .depictio-section-item {
+  margin-top: var(--mantine-spacing-sm);
+}
+
+.depictio-section-accordion.is-compact .depictio-section-control {
+  /* Flush against the rail — the indent is the item's, so the header and the
+     content start on the same line. */
+  padding-inline: 0;
+  padding-block: 4px;
+}
+
+.depictio-section-accordion.is-compact .depictio-section-item[data-active] .depictio-section-control {
+  padding-block: var(--mantine-spacing-xs);
+}
+
+.depictio-section-accordion.is-compact .depictio-section-content {
+  padding: 0 0 var(--mantine-spacing-xs) 0;
+}

@@ -674,7 +674,9 @@ const CardRenderer: React.FC<{
   );
 };
 
-function inferCardTitle(m: StoredMetadata): string {
+/** Exported so the dashboard grid can label a collapsed section's summary
+ *  chips exactly the way the cards themselves are labelled. */
+export function inferCardTitle(m: StoredMetadata): string {
   if (m.aggregation && m.column_name) {
     return `${capitalize(String(m.aggregation))} of ${m.column_name}`;
   }
@@ -685,7 +687,8 @@ function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-function formatValue(v: unknown): string | number {
+/** Exported alongside `inferCardTitle`, and for the same reason. */
+export function formatValue(v: unknown): string | number {
   if (typeof v === 'number') {
     if (!Number.isInteger(v)) return v.toFixed(4).replace(/\.?0+$/, '');
     return v;

@@ -13,13 +13,20 @@ tab_icon_color: "dark"
 # Left-panel sections — the collapsible outer level, above `group`. Optional:
 # a section named by a component but omitted here still renders, expanded and
 # without an icon. Declaring it fixes its position in the panel and lets it
-# carry an icon, a hint and a default collapse state.
+# carry an icon, a colour, a hint and a default collapse state.
+#
+# Icons must come from the curated list the editor's Sections manager offers
+# (depictio/viewer/src/components/sections/sectionIcons.ts): the viewer bundles
+# only the Iconify ids written as literals in its own source, so an id from
+# anywhere else renders blank in a built app.
 filter_sections:
   - name: "Sample"
-    icon: "mdi:bacteria"
+    icon: "mdi:bacteria-outline"
+    color: "teal"
     description: "Which cells to look at"
   - name: "Morphology"
     icon: "mdi:shape-outline"
+    color: "violet"
     collapsed: true
 
 components:

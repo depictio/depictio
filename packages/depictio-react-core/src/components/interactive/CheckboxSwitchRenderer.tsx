@@ -1,5 +1,6 @@
 import React from 'react';
 import { Checkbox, Switch } from '@mantine/core';
+import { CompactControlSlot } from 'depictio-components';
 
 import { InteractiveFilter, StoredMetadata } from '../../api';
 import { INTERACTIVE_FRAME, InteractiveFrame, InteractiveTitle } from './frame';
@@ -60,23 +61,25 @@ const CheckboxSwitchRenderer: React.FC<CheckboxSwitchRendererProps> = ({
   return (
     <InteractiveFrame compact={compact}>
       <InteractiveTitle metadata={metadata} compact={compact} />
-      {subType === 'Checkbox' ? (
-        <Checkbox
-          checked={checked}
-          onChange={(event) => emit(event.currentTarget.checked)}
-          color={metadata.icon_color || undefined}
-          size={INTERACTIVE_FRAME.controlSize}
-          label={metadata.column_name || undefined}
-        />
-      ) : (
-        <Switch
-          checked={checked}
-          onChange={(event) => emit(event.currentTarget.checked)}
-          color={metadata.icon_color || undefined}
-          size={INTERACTIVE_FRAME.controlSize}
-          label={metadata.column_name || undefined}
-        />
-      )}
+      <CompactControlSlot compact={compact}>
+        {subType === 'Checkbox' ? (
+          <Checkbox
+            checked={checked}
+            onChange={(event) => emit(event.currentTarget.checked)}
+            color={metadata.icon_color || undefined}
+            size={compact ? 'xs' : INTERACTIVE_FRAME.controlSize}
+            label={metadata.column_name || undefined}
+          />
+        ) : (
+          <Switch
+            checked={checked}
+            onChange={(event) => emit(event.currentTarget.checked)}
+            color={metadata.icon_color || undefined}
+            size={compact ? 'xs' : INTERACTIVE_FRAME.controlSize}
+            label={metadata.column_name || undefined}
+          />
+        )}
+      </CompactControlSlot>
     </InteractiveFrame>
   );
 };

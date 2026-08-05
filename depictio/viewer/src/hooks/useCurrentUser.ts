@@ -55,6 +55,10 @@ export interface UseCurrentUserResult {
   temporaryUserExpiryHours: number;
   /** Sub-hour TTL component for temporary public-mode users. */
   temporaryUserExpiryMinutes: number;
+  /** True when the server enables the docked inspector panel
+   *  (`DEPICTIO_VIEWER_INSPECTOR_ENABLED=true`). While false, the component
+   *  info and notes surfaces stay in their existing popover and drawer. */
+  inspectorEnabled: boolean;
   loading: boolean;
 }
 
@@ -68,6 +72,7 @@ export function useCurrentUser(): UseCurrentUserResult {
   const [isSingleUserMode, setIsSingleUserMode] = useState<boolean>(false);
   const [temporaryUserExpiryHours, setTemporaryUserExpiryHours] = useState<number>(24);
   const [temporaryUserExpiryMinutes, setTemporaryUserExpiryMinutes] = useState<number>(0);
+  const [inspectorEnabled, setInspectorEnabled] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
@@ -82,6 +87,7 @@ export function useCurrentUser(): UseCurrentUserResult {
         setIsDevMode(Boolean(data.is_dev_mode));
         setWalkthroughDisabled(Boolean(data.walkthrough_disabled));
         setIsSingleUserMode(Boolean(data.is_single_user_mode));
+        setInspectorEnabled(Boolean(data.inspector_enabled));
         if (typeof data.temporary_user_expiry_hours === 'number') {
           setTemporaryUserExpiryHours(data.temporary_user_expiry_hours);
         }
@@ -111,6 +117,7 @@ export function useCurrentUser(): UseCurrentUserResult {
     isSingleUserMode,
     temporaryUserExpiryHours,
     temporaryUserExpiryMinutes,
+    inspectorEnabled,
     loading,
   };
 }

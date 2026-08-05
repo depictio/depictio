@@ -122,6 +122,13 @@ class TestFilterSections:
         spec = FilterSectionSpec(name="Quality")
         assert spec.collapsed is False
         assert spec.icon is None
+        assert spec.color is None
+
+    def test_spec_accepts_an_unvalidated_palette_name(self):
+        """Colour is a Mantine palette name the frontend Select constrains. The
+        model stays permissive so a hand-written YAML never fails on it."""
+        assert FilterSectionSpec(name="Quality", color="teal").color == "teal"
+        assert FilterSectionSpec(name="Quality", color="not-a-palette").color == "not-a-palette"
 
     def test_spec_rejects_unknown_keys(self):
         """extra='forbid' turns a typo into an import error, not a silent no-op."""
@@ -162,13 +169,14 @@ class TestToFullPassthrough:
     def test_filter_sections_reach_the_full_dashboard(self):
         dash = _dashboard(
             [_interactive("a", section="Quality")],
-            filter_sections=[{"name": "Quality", "icon": "mdi:check-decagram"}],
+            filter_sections=[{"name": "Quality", "icon": "mdi:check-decagram", "color": "teal"}],
         )
         full = dash.to_full()
         assert full["filter_sections"] == [
             {
                 "name": "Quality",
                 "icon": "mdi:check-decagram",
+                "color": "teal",
                 "description": None,
                 "collapsed": False,
             }
@@ -221,12 +229,20 @@ class TestFromFullRoundTrip:
     def test_filter_sections_survive_a_round_trip(self):
         dash = _dashboard(
             [_interactive("a", section="Quality")],
-            filter_sections=[{"name": "Quality", "icon": "mdi:check-decagram", "collapsed": True}],
+            filter_sections=[
+                {
+                    "name": "Quality",
+                    "icon": "mdi:check-decagram",
+                    "color": "teal",
+                    "collapsed": True,
+                }
+            ],
         )
         back = DashboardDataLite.from_full(dash.to_full())
         assert len(back.filter_sections) == 1
         assert back.filter_sections[0].name == "Quality"
         assert back.filter_sections[0].icon == "mdi:check-decagram"
+        assert back.filter_sections[0].color == "teal"
         assert back.filter_sections[0].collapsed is True
 
     def test_exported_yaml_carries_the_panel_structure(self):
@@ -234,11 +250,12 @@ class TestFromFullRoundTrip:
         users actually get rather than only the intermediate model."""
         dash = _dashboard(
             [_interactive("a", section="Quality", group="Depth")],
-            filter_sections=[{"name": "Quality", "icon": "mdi:check-decagram"}],
+            filter_sections=[{"name": "Quality", "icon": "mdi:check-decagram", "color": "teal"}],
         )
         yaml_text = DashboardDataLite.from_full(dash.to_full()).to_yaml()
         assert "filter_sections:" in yaml_text
         assert "name: Quality" in yaml_text
+        assert "color: teal" in yaml_text
         assert "section: Quality" in yaml_text
         assert "group: Depth" in yaml_text
 
@@ -248,3 +265,71 @@ class TestFromFullRoundTrip:
         assert back.filter_sections == []
         assert back.components[0].section is None  # type: ignore[union-attr]
         assert back.components[0].group is None  # type: ignore[union-attr]
+
+
+# ---------------------------------------------------------------------------
+# `section` on every component type — the main grid groups by it too
+# ---------------------------------------------------------------------------
+
+
+def _figure(tag: str, **kwargs) -> dict:
+    return {
+        "tag": tag,
+        "component_type": "figure",
+        "visu_type": "scatter",
+        "figure_params": {"x": "sepal.length", "y": "sepal.width"},
+        **kwargs,
+    }
+
+
+class TestSectionOnEveryType:
+    """`section` lives on `BaseLiteComponent`: the left panel groups its
+    interactive controls by it, the main grid groups everything else."""
+
+    def test_figure_accepts_a_section(self):
+        dash = _dashboard([_figure("f", section="Quality")])
+        assert dash.to_full()["stored_metadata"][0]["section"] == "Quality"
+
+    def test_section_survives_a_round_trip_on_a_figure(self):
+        dash = _dashboard([_figure("f", section="Quality")])
+        comp = DashboardDataLite.from_full(dash.to_full()).components[0]
+        assert comp.section == "Quality"  # type: ignore[union-attr]
+
+    def test_group_stays_interactive_only(self):
+        """A figure's `group` is not validated against the group-size cap — only
+        interactive components share a card."""
+        comps = [_figure(f"f{i}", group="Anything") for i in range(MAX_INTERACTIVE_GROUP_SIZE + 3)]
+        assert len(_dashboard(comps).components) == MAX_INTERACTIVE_GROUP_SIZE + 3
+
+    def test_every_type_defaults_to_no_section(self):
+        full = _dashboard([_figure("f"), _interactive("a")]).to_full()
+        assert [c["section"] for c in full["stored_metadata"]] == [None, None]
+
+
+class TestGridSections:
+    def test_defaults_to_empty(self):
+        assert _dashboard([_figure("f")]).grid_sections == []
+
+    def test_kept_separate_from_filter_sections(self):
+        """Same model, distinct lists: a section named "QC" in the filter panel
+        and one in the grid are two different placements."""
+        dash = _dashboard(
+            [_figure("f", section="QC"), _interactive("a", section="QC")],
+            filter_sections=[{"name": "QC", "icon": "mdi:filter", "color": "indigo"}],
+            grid_sections=[{"name": "QC", "icon": "mdi:chart-box", "color": "orange"}],
+        )
+        full = dash.to_full()
+        assert full["filter_sections"][0]["icon"] == "mdi:filter"
+        assert full["filter_sections"][0]["color"] == "indigo"
+        assert full["grid_sections"][0]["icon"] == "mdi:chart-box"
+        assert full["grid_sections"][0]["color"] == "orange"
+
+    def test_survives_a_round_trip(self):
+        dash = _dashboard(
+            [_figure("f", section="QC")],
+            grid_sections=[{"name": "QC", "collapsed": True}],
+        )
+        back = DashboardDataLite.from_full(dash.to_full())
+        assert len(back.grid_sections) == 1
+        assert back.grid_sections[0].name == "QC"
+        assert back.grid_sections[0].collapsed is True

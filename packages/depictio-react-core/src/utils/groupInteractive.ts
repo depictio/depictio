@@ -60,10 +60,42 @@ export interface InteractiveSection {
   groups: InteractiveGroup[];
 }
 
-export function sectionInteractiveComponents(
+/** A section bucket before any type-specific sub-grouping is applied. */
+export interface ComponentSection {
+  /** Stable key — `section:<name>`, or `''` for the unsectioned bucket. */
+  key: string;
+  /** `undefined` for the unsectioned bucket. */
+  sectionName?: string;
+  spec?: FilterSectionSpec;
+  members: StoredMetadata[];
+}
+
+/**
+ * Bucket any components by `section`, independent of component type. Used by
+ * the filter panel for its interactive controls and by the dashboard grid for
+ * everything else — the field means the same thing in both places, so the
+ * bucketing does too.
+ *
+ * @param includeEmpty - keep declared sections that no component joined. Off by
+ *   default so a published dashboard never shows an empty band; the editor turns
+ *   it on, because otherwise creating a section looks like it did nothing until
+ *   something is moved into it.
+ */
+/** Collapse-state key for a named section. The one place the prefix is spelled,
+ *  so the sections the panels render and the keys they persist can't drift. */
+export const sectionKey = (name: string): string => `section:${name}`;
+
+/** Keys for the sections a dashboard author marked `collapsed` — the seed both
+ *  panels hand to `useCollapseState`. */
+export function collapsedSectionKeys(specs: FilterSectionSpec[] = []): string[] {
+  return specs.filter((s) => s.collapsed).map((s) => sectionKey(s.name));
+}
+
+export function sectionComponents(
   components: StoredMetadata[],
   specs: FilterSectionSpec[] = [],
-): InteractiveSection[] {
+  includeEmpty = false,
+): ComponentSection[] {
   const specByName = new Map(specs.map((s) => [s.name, s]));
 
   // Declared sections come first, in declaration order, even when a component
@@ -85,23 +117,34 @@ export function sectionInteractiveComponents(
     bucketed.get(name)!.push(m);
   }
 
-  const out: InteractiveSection[] = [];
+  const out: ComponentSection[] = [];
   if (unsectioned.length > 0) {
-    out.push({ key: '', groups: groupInteractiveComponents(unsectioned) });
+    out.push({ key: '', members: unsectioned });
   }
   for (const name of order) {
-    const members = bucketed.get(name);
-    // A section declared in filter_sections but with no component is skipped
-    // rather than rendered as an empty accordion item.
-    if (!members || members.length === 0) continue;
+    const members = bucketed.get(name) ?? [];
+    if (members.length === 0 && !includeEmpty) continue;
     out.push({
-      key: `section:${name}`,
+      key: sectionKey(name),
       sectionName: name,
       spec: specByName.get(name),
-      groups: groupInteractiveComponents(members),
+      members,
     });
   }
   return out;
+}
+
+export function sectionInteractiveComponents(
+  components: StoredMetadata[],
+  specs: FilterSectionSpec[] = [],
+  includeEmpty = false,
+): InteractiveSection[] {
+  return sectionComponents(components, specs, includeEmpty).map((s) => ({
+    key: s.key,
+    sectionName: s.sectionName,
+    spec: s.spec,
+    groups: groupInteractiveComponents(s.members),
+  }));
 }
 
 /** Components that survive the filter panel's search box. */

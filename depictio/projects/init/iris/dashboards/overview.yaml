@@ -6,6 +6,27 @@ title: "Iris Dataset Analysis"
 subtitle: "Overview of sepal/petal measurements across the three Iris varieties"
 project_tag: "Iris Dataset Project Data Analysis"
 
+# Main-grid sections — the right panel's collapsible outer level. Same shape as
+# `filter_sections`, applied to the grid instead of the filter rail. Components
+# join one by setting `section:`; anything that sets none (the intro text here)
+# renders above the accordion, ungrouped, exactly as before sections existed.
+# A folded section keeps its cards' values visible in its header, so folding
+# simplifies the dashboard without hiding its numbers.
+grid_sections:
+  - name: "Summary"
+    icon: "mdi:counter"
+    color: "teal"
+    description: "Cohort-level measurements, kept on screen when folded"
+  - name: "Distributions"
+    icon: "mdi:chart-bell-curve"
+    color: "violet"
+    description: "How each measurement spreads across varieties"
+  - name: "Raw Data"
+    icon: "mdi:table"
+    color: "gray"
+    description: "Per-flower records behind every figure above"
+    collapsed: true
+
 components:
   # ── Narrative intro ────────────────────────────────────────────────
   - tag: text-overview-intro
@@ -19,6 +40,7 @@ components:
   # ── Multi-metric summary cards ─────────────────────────────────────
   - tag: sepal-length-summary
     component_type: card
+    section: "Summary"
     workflow_tag: python/iris_workflow
     data_collection_tag: iris_table
     aggregation: median
@@ -36,6 +58,7 @@ components:
 
   - tag: petal-length-summary
     component_type: card
+    section: "Summary"
     workflow_tag: python/iris_workflow
     data_collection_tag: iris_table
     aggregation: median
@@ -53,6 +76,7 @@ components:
 
   - tag: variety-breakdown
     component_type: card
+    section: "Summary"
     workflow_tag: python/iris_workflow
     data_collection_tag: iris_table
     aggregation: nunique
@@ -71,6 +95,7 @@ components:
 
   - tag: sample-coverage
     component_type: card
+    section: "Summary"
     workflow_tag: python/iris_workflow
     data_collection_tag: iris_table
     aggregation: count
@@ -88,6 +113,7 @@ components:
 
   - tag: large-sepal-count
     component_type: card
+    section: "Summary"
     workflow_tag: python/iris_workflow
     data_collection_tag: iris_table
     aggregation: count
@@ -160,6 +186,7 @@ components:
   # supported by the lite YAML schema.
   - tag: iris-scatter-matrix
     component_type: figure
+    section: "Distributions"
     workflow_tag: python/iris_workflow
     data_collection_tag: iris_table
     visu_type: scatter
@@ -182,6 +209,7 @@ components:
 
   - tag: sepal-histogram
     component_type: figure
+    section: "Distributions"
     workflow_tag: python/iris_workflow
     data_collection_tag: iris_table
     visu_type: histogram
@@ -199,6 +227,7 @@ components:
 
   - tag: petal-box
     component_type: figure
+    section: "Distributions"
     workflow_tag: python/iris_workflow
     data_collection_tag: iris_table
     visu_type: box
@@ -219,6 +248,7 @@ components:
   # columns + the variety category into a single tile.
   - tag: sepal-petal-bivariate
     component_type: figure
+    section: "Distributions"
     workflow_tag: python/iris_workflow
     data_collection_tag: iris_table
     visu_type: scatter
@@ -241,6 +271,7 @@ components:
   # ── Data table ─────────────────────────────────────────────────────
   - tag: data-table
     component_type: table
+    section: "Raw Data"
     workflow_tag: python/iris_workflow
     data_collection_tag: iris_table
     title: "Iris Dataset"

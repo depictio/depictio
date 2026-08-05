@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 /**
  * Persistent open/closed state for a set of collapsible regions.
@@ -11,6 +11,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 export interface CollapseState {
   isOpen: (key: string) => boolean;
   toggle: (key: string) => void;
+  /** Collapse or expand a whole set in one write and one re-render — what the
+   *  grid's "collapse all sections" control needs. */
+  setAll: (keys: string[], collapsed: boolean) => void;
 }
 
 function readCollapsed(storageKey: string): string[] | null {
@@ -51,27 +54,60 @@ export function useCollapseState(
     () => new Set(readCollapsed(storageKey) ?? initiallyCollapsed),
   );
 
+  // Mirrors `collapsed` so the mutators can derive the next set without running
+  // inside a state updater. Updaters are re-invoked under StrictMode, and
+  // writing to localStorage from one makes them impure.
+  const collapsedRef = useRef(collapsed);
+
   // Switching dashboards swaps the storage key under a mounted panel.
   const keyRef = useRef(storageKey);
+
+  const commit = useCallback((next: Set<string>) => {
+    collapsedRef.current = next;
+    writeCollapsed(keyRef.current, next);
+    setCollapsed(next);
+  }, []);
+
   useEffect(() => {
     if (keyRef.current === storageKey) return;
     keyRef.current = storageKey;
-    setCollapsed(new Set(readCollapsed(storageKey) ?? seedRef.current));
+    const next = new Set(readCollapsed(storageKey) ?? seedRef.current);
+    collapsedRef.current = next;
+    setCollapsed(next);
   }, [storageKey]);
 
-  const toggle = useCallback((key: string) => {
-    setCollapsed((prev) => {
-      const next = new Set(prev);
+  const toggle = useCallback(
+    (key: string) => {
+      const next = new Set(collapsedRef.current);
       if (next.has(key)) next.delete(key);
       else next.add(key);
-      writeCollapsed(keyRef.current, next);
-      return next;
-    });
-  }, []);
+      commit(next);
+    },
+    [commit],
+  );
+
+  const setAll = useCallback(
+    (keys: string[], collapsedNext: boolean) => {
+      const next = new Set(collapsedRef.current);
+      for (const key of keys) {
+        if (collapsedNext) next.add(key);
+        else next.delete(key);
+      }
+      // A single call only ever adds or only ever removes, so an unchanged size
+      // means an unchanged set. Bailing keeps "collapse all" from pushing a
+      // fresh Set through the context — and re-rendering every chrome — when
+      // everything it names is already in the requested state.
+      if (next.size === collapsedRef.current.size) return;
+      commit(next);
+    },
+    [commit],
+  );
 
   const isOpen = useCallback((key: string) => !collapsed.has(key), [collapsed]);
 
-  return { isOpen, toggle };
+  // Memoised so callers can put the whole state object in a dependency array
+  // without re-running on every render of their parent.
+  return useMemo(() => ({ isOpen, toggle, setAll }), [isOpen, toggle, setAll]);
 }
 
 export default useCollapseState;

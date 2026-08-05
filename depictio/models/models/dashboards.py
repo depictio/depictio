@@ -120,6 +120,7 @@ class FilterSectionSpec(BaseModel):
         filter_sections:
           - name: Sample
             icon: mdi:test-tube
+            color: teal
           - name: Quality
             icon: mdi:check-decagram
             collapsed: true
@@ -129,6 +130,12 @@ class FilterSectionSpec(BaseModel):
 
     name: str = Field(..., description="Section name, matched against a component's `section`")
     icon: str | None = Field(default=None, description="Iconify id shown in the section header")
+    color: str | None = Field(
+        default=None,
+        description="Mantine palette name (e.g. 'teal') tinting the section's icon and badge. "
+        "Left unset the header renders neutral. Not validated against the palette: an "
+        "unknown name falls back to the theme default rather than failing the import.",
+    )
     description: str | None = Field(
         default=None, description="Short hint rendered under the section header"
     )
@@ -225,6 +232,14 @@ class DashboardDataLite(BaseModel):
         description="Optional presentation for the left panel's filter sections. "
         "Declaring a section here fixes its position and lets it carry an icon, a "
         "description and a default collapse state.",
+    )
+    # Main grid presentation. A separate list from `filter_sections` on purpose:
+    # a section named "QC" in the filter panel and one in the grid are two
+    # different placements that happen to share a name.
+    grid_sections: list[FilterSectionSpec] = Field(
+        default_factory=list,
+        description="Optional presentation for the main grid's sections. Same shape "
+        "as `filter_sections`, applied to non-interactive components.",
     )
 
     # Components using Lite models
@@ -338,6 +353,7 @@ class DashboardDataLite(BaseModel):
         "icon_variant",
         "workflow_system",
         "filter_sections",
+        "grid_sections",
     ]
 
     @staticmethod
@@ -990,6 +1006,7 @@ class DashboardDataLite(BaseModel):
             # order, icons and default collapse rather than falling back to
             # "declared nowhere, sorted by first appearance".
             filter_sections=dashboard_data.get("filter_sections") or [],
+            grid_sections=dashboard_data.get("grid_sections") or [],
             # Tab fields
             is_main_tab=dashboard_data.get("is_main_tab", True),
             tab_order=dashboard_data.get("tab_order", 0),
@@ -1057,6 +1074,7 @@ class DashboardDataLite(BaseModel):
             # Left-panel section presentation, carried through so the viewer can
             # order sections and render their icons.
             "filter_sections": [s.model_dump() for s in self.filter_sections],
+            "grid_sections": [s.model_dump() for s in self.grid_sections],
             # parent_dashboard_tag is resolved to parent_dashboard_id during import
         }
 
@@ -1079,6 +1097,12 @@ class DashboardDataLite(BaseModel):
 
             full_comp = build_base_component(comp_dict)
             comp_type = comp_dict.get("component_type", "figure")
+
+            # `section` applies to every component type — the left panel groups
+            # its interactive controls by it, the main grid groups everything
+            # else. Written here rather than per-branch so a new component type
+            # can't silently lose it.
+            full_comp["section"] = comp_dict.get("section")
 
             if comp_type == "figure":
                 # Support figure_params (new YAML key) and dict_kwargs (legacy/internal)
@@ -1151,7 +1175,6 @@ class DashboardDataLite(BaseModel):
                         # or grouped Paper. Default placement is 'left'.
                         "placement": comp_dict.get("placement", "left"),
                         "group": comp_dict.get("group"),
-                        "section": comp_dict.get("section"),
                         "timescale": comp_dict.get("timescale"),
                         "show_marks": comp_dict.get("show_marks"),
                     }
@@ -1377,6 +1400,7 @@ class DashboardData(MongoModel):
     # Left-panel filter section presentation. Empty for dashboards saved before
     # sections existed, which renders exactly as it did then.
     filter_sections: list[FilterSectionSpec] = []
+    grid_sections: list[FilterSectionSpec] = []
     buttons_data: dict = {
         "unified_edit_mode": True,  # Default edit mode ON for dashboard owners
         "add_components_button": {"count": 0},

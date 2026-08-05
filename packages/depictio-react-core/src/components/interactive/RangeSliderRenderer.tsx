@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { DepictioRangeSlider } from 'depictio-components';
+import { CompactControlSlot, DepictioRangeSlider } from 'depictio-components';
 import ComponentSkeleton from '../ComponentSkeleton';
 
 import {
@@ -88,6 +88,7 @@ const RangeSliderRenderer: React.FC<{
   return (
     <InteractiveFrame compact={compact}>
       <InteractiveTitle metadata={metadata} compact={compact} />
+      <CompactControlSlot compact={compact}>
       <DepictioRangeSlider
         bare
         min={bounds.min}
@@ -117,6 +118,7 @@ const RangeSliderRenderer: React.FC<{
           })
         }
       />
+      </CompactControlSlot>
     </InteractiveFrame>
   );
 };

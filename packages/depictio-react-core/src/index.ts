@@ -82,6 +82,10 @@ export { default as FilterPanel } from './components/interactive/FilterPanel';
 export { FILTER_PANEL_RAIL_WIDTH } from './components/interactive/FilterPanel';
 export type { FilterPanelProps } from './components/interactive/FilterPanel';
 export { default as InteractiveGroupCard } from './components/InteractiveGroupCard';
+// One swatch for every place a section is drawn — the two panel headers and the
+// viewer's authoring UI — so a section named "QC" never looks different
+// depending on where you meet it.
+export { default as SectionIcon, sectionColorVar } from './components/SectionIcon';
 export { default as TopPanel } from './components/TopPanel';
 export { groupInteractiveComponents } from './utils/groupInteractive';
 export type { InteractiveGroup } from './utils/groupInteractive';
@@ -91,9 +95,23 @@ export {
   PANEL_TOGGLE_EVENTS,
   SIDEBAR_TOGGLE_EVENT,
   FILTER_PANEL_TOGGLE_EVENT,
+  INSPECTOR_TOGGLE_EVENT,
   dispatchPanelToggle,
+  PANEL_RESIZE_END_EVENT,
+  beginPanelResize,
+  endPanelResize,
+  isPanelResizing,
 } from './utils/panelToggle';
 export type { PanelToggleDetail } from './utils/panelToggle';
+// Advanced-viz ↔ inspector bridge. Deliberately a separate module from the
+// renderers so importing it doesn't pull in the plotly-heavy lazy chunk.
+export { AdvancedVizInspectorProvider } from './components/advanced_viz/AdvancedVizInspectorBridge';
+export type { AdvancedVizInspectorPublisher } from './components/advanced_viz/AdvancedVizInspectorBridge';
+export type { AdvancedVizExtrasPayload } from './components/advanced_viz/AdvancedVizExtras';
+// The shared show-data grid, so the inspector can dock the same table the
+// renderers' popovers show.
+export { default as DataGridBody } from './components/data/DataGridBody';
+export type { TierAnnotation } from './components/data/DataGridBody';
 export { readMultiqcSelection } from './utils/multiqcSelection';
 export type { MultiqcSelection } from './utils/multiqcSelection';
 
@@ -105,15 +123,19 @@ export { default as MultiQCGeneralStats } from './components/multiqc/MultiQCGene
 export {
   ComponentChrome,
   MetadataPopover,
+  MetadataBody,
   FullscreenButton,
   DownloadButton,
   ResetButton,
+  InspectorProvider,
+  useInspectorControl,
   actionsFor,
   wrapWithChrome,
 } from './components/chrome';
 export type {
   ComponentChromeProps,
   ChromeAction,
+  InspectorControl,
   WrapWithChromeOpts,
 } from './components/chrome';
 
@@ -351,6 +373,7 @@ export {
 export type {
   StoredMetadata,
   DashboardData,
+  FilterSectionSpec,
   DashboardSummary,
   InteractiveFilter,
   InteractiveFilterSource,

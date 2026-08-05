@@ -72,10 +72,13 @@ import { notifications } from '@mantine/notifications';
 import { Header, Sidebar, SettingsDrawer } from './chrome';
 import { useSidebarOpen } from './hooks/useSidebarOpen';
 import { useFilterPanelOpen } from './hooks/useFilterPanelOpen';
-import { useFilterPanelWidth } from './hooks/useFilterPanelWidth';
+import { FILTER_PANEL_WIDTH_VAR, useFilterPanelWidth } from './hooks/useFilterPanelWidth';
 import { useCurrentUser } from './hooks/useCurrentUser';
 import { isDashboardOwner } from './lib/dashboardOwnership';
 import FilterPanelResizer, { FILTER_PANEL_RESIZER_WIDTH } from './components/FilterPanelResizer';
+import Inspector from './chrome/inspector/Inspector';
+import { useInspectorChrome } from './chrome/inspector/useInspectorChrome';
+import InspectorProviders from './chrome/inspector/InspectorProviders';
 import NotesFooter from './components/NotesFooter';
 import DashboardLoadIndicator from './components/DashboardLoadIndicator';
 import BootSplash from './components/BootSplash';
@@ -152,8 +155,12 @@ const App: React.FC = () => {
   // `sidebar-collapsed` localStorage key the Dash app writes.
   const [desktopOpened, toggleDesktop] = useSidebarOpen();
   const [settingsOpened, { open: openSettings, close: closeSettings }] = useDisclosure(false);
-  const { user: currentUser } = useCurrentUser();
+  const { user: currentUser, inspectorEnabled } = useCurrentUser();
   const isOwner = isDashboardOwner(dashboard, currentUser?.email ?? null);
+  // `control` is null while the flag is off, so no provider value reaches the
+  // component chrome and no inspect action is rendered anywhere.
+  const { control: inspectorControl, aside: inspectorAside } =
+    useInspectorChrome(inspectorEnabled);
 
   const dashboardId = extractDashboardId();
 
@@ -161,6 +168,8 @@ const App: React.FC = () => {
   // content column reclaims, which is everything but the icon rail.
   const {
     width: filterPanelWidth,
+    resizing: filterPanelResizing,
+    layoutRef: filterPanelLayoutRef,
     beginResize: beginFilterPanelResize,
     nudge: nudgeFilterPanelWidth,
   } = useFilterPanelWidth(dashboardId);
@@ -550,6 +559,7 @@ const App: React.FC = () => {
       projectId={dashboard?.project_id}
     >
       <DashboardLoadingProvider>
+      <InspectorProviders control={inspectorControl}>
       <AppShell
       header={{ height: 50 }}
       navbar={{
@@ -557,6 +567,7 @@ const App: React.FC = () => {
         breakpoint: 'sm',
         collapsed: { mobile: !mobileOpened, desktop: !desktopOpened },
       }}
+      aside={inspectorAside}
       padding={0}
       transitionDuration={300}
       transitionTimingFunction="ease"
@@ -702,7 +713,16 @@ const App: React.FC = () => {
             }}
           >
           <div
+            ref={filterPanelLayoutRef}
+            // Cast because `CSSProperties` has no index signature for custom
+            // properties, and the name is a constant rather than a literal.
             style={{
+              // The panel track comes from a variable so a drag can move it
+              // without a React render — see `useFilterPanelWidth`. React owns
+              // the value everywhere else, including here on every commit.
+              [FILTER_PANEL_WIDTH_VAR]: `${
+                filterPanelOpened ? filterPanelWidth : FILTER_PANEL_RAIL_WIDTH
+              }px`,
               display: 'grid',
               // Panel | drag handle | content. The handle gets a real column
               // rather than floating over the panel edge, so it can't overlap
@@ -711,17 +731,22 @@ const App: React.FC = () => {
               // only animates between templates with matching track counts.
               gridTemplateColumns: isNarrow
                 ? '1fr'
-                : `${filterPanelOpened ? filterPanelWidth : FILTER_PANEL_RAIL_WIDTH}px ` +
+                : `var(${FILTER_PANEL_WIDTH_VAR}) ` +
                   `${filterPanelOpened ? FILTER_PANEL_RESIZER_WIDTH : 0}px 1fr`,
               // Matches the panel's own toggle duration so the grid items,
               // which animate on `body.panel-transitioning`, stay in lockstep.
-              transition: 'grid-template-columns 300ms ease',
+              // Dropped while dragging: the transition is for the collapse
+              // toggle, and easing every pointermove over 300ms is what makes
+              // the handle feel like it's being towed rather than moved.
+              transition: filterPanelResizing
+                ? 'none'
+                : 'grid-template-columns 300ms ease',
               flex: 1,
               minHeight: 0,
               width: '100%',
               gap: 4,
               overflow: 'hidden',
-            }}
+            } as React.CSSProperties}
           >
             {!isNarrow && (
               <Box
@@ -822,6 +847,7 @@ const App: React.FC = () => {
                     dashboardId={dashboardId!}
                     metadataList={rightComponents}
                     layoutData={dashboard.right_panel_layout_data}
+                    gridSections={dashboard.grid_sections}
                     filters={deferredFilters}
                     onFilterChange={handleFilterChange}
                     cardValues={cardValues}
@@ -885,7 +911,7 @@ const App: React.FC = () => {
             />
           </Drawer>
         )}
-        {dashboard && dashboardId && (
+        {dashboard && dashboardId && !inspectorEnabled && (
           <NotesFooter
             dashboardId={dashboardId}
             initialContent={(dashboard.notes_content as string) ?? ''}
@@ -902,12 +928,19 @@ const App: React.FC = () => {
         )}
       </AppShell.Main>
 
+      {inspectorEnabled && (
+        <AppShell.Aside p={0}>
+          <Inspector dashboard={dashboard} dashboardId={dashboardId} />
+        </AppShell.Aside>
+      )}
+
       <SettingsDrawer
         opened={settingsOpened}
         onClose={closeSettings}
         dashboard={dashboard}
       />
     </AppShell>
+      </InspectorProviders>
       </DashboardLoadingProvider>
     </AvailableFilterValuesProvider>
   );

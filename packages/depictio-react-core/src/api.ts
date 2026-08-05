@@ -311,6 +311,9 @@ export interface StoredMetadata {
 export interface FilterSectionSpec {
   name: string;
   icon?: string | null;
+  /** Mantine palette name. Unset renders neutral; an unrecognised name falls
+   *  back to the theme default rather than throwing. */
+  color?: string | null;
   description?: string | null;
   collapsed?: boolean;
 }
@@ -326,6 +329,7 @@ export interface DashboardData {
   right_panel_layout_data?: unknown;
   /** Ordering + icons for the left panel's filter sections. */
   filter_sections?: FilterSectionSpec[];
+  grid_sections?: FilterSectionSpec[];
   /** Project-level realtime config — only when ``enabled === true`` should
    *  the viewer mount the WebSocket subscription / live-updates indicator. */
   project_realtime?: { enabled: boolean; debounce_ms: number };
@@ -2039,6 +2043,9 @@ export interface AuthStatusResponse {
   temporary_user_expiry_hours?: number;
   /** Sub-hour component of the temporary-user TTL. */
   temporary_user_expiry_minutes?: number;
+  /** Component inspector feature flag. Older backends omit this — treat absent
+   *  as `false`, which keeps the inspect action off everywhere. */
+  inspector_enabled?: boolean;
 }
 
 /** Session payload persisted to localStorage['local-store'] on successful auth.

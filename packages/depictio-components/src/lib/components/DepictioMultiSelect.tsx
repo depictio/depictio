@@ -2,6 +2,7 @@ import React, { useCallback } from 'react';
 import { Paper, Stack, Text, Group, MultiSelect } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
+
 /**
  * MultiSelect interactive filter component. Mirrors the DMC-based render in
  * `depictio/dash/modules/interactive_component/utils.py:_build_select_component`

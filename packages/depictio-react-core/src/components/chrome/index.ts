@@ -6,7 +6,11 @@ import type { StoredMetadata } from '../../api';
 export { default as ComponentChrome, actionsFor } from './ComponentChrome';
 export type { ComponentChromeProps, ChromeAction } from './ComponentChrome';
 export { default as MetadataPopover } from './MetadataPopover';
+export { default as MetadataBody } from './MetadataBody';
 export { default as FullscreenButton } from './FullscreenButton';
+export { default as InspectButton } from './InspectButton';
+export { InspectorProvider, useInspectorControl } from './InspectorContext';
+export type { InspectorControl } from './InspectorContext';
 export { default as DownloadButton } from './DownloadButton';
 export { default as ResetButton } from './ResetButton';
 

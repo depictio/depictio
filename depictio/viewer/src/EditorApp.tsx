@@ -45,10 +45,13 @@ import { notifications } from '@mantine/notifications';
 import { Icon } from '@iconify/react';
 import { useSidebarOpen } from './hooks/useSidebarOpen';
 import { useFilterPanelOpen } from './hooks/useFilterPanelOpen';
-import { useFilterPanelWidth } from './hooks/useFilterPanelWidth';
+import { FILTER_PANEL_WIDTH_VAR, useFilterPanelWidth } from './hooks/useFilterPanelWidth';
 import { useCurrentUser } from './hooks/useCurrentUser';
 import { isDashboardOwner } from './lib/dashboardOwnership';
 import FilterPanelResizer, { FILTER_PANEL_RESIZER_WIDTH } from './components/FilterPanelResizer';
+import Inspector from './chrome/inspector/Inspector';
+import { useInspectorChrome } from './chrome/inspector/useInspectorChrome';
+import InspectorProviders from './chrome/inspector/InspectorProviders';
 import type { Layout } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
@@ -83,6 +86,7 @@ import type {
   DashboardData,
   DashboardPermissions,
   DashboardSummary,
+  FilterSectionSpec,
   InteractiveFilter,
   StoredMetadata,
   RealtimeMode,
@@ -91,6 +95,9 @@ import type {
 } from 'depictio-react-core';
 
 import GridItemEditOverlay from './components/GridItemEditOverlay';
+import SectionsModal from './components/sections/SectionsModal';
+import { applySectionOp, groupWith, sectionsFor } from './components/sections/sectionMutations';
+import type { SectionOp } from './components/sections/sectionMutations';
 import { Header, Sidebar, SettingsDrawer, TabModal } from './chrome';
 import type { TabModalSubmitPayload } from './chrome';
 import NotesFooter from './components/NotesFooter';
@@ -167,7 +174,12 @@ const EditorApp: React.FC = () => {
   // Persist across tab/page navigations (matches App.tsx + Dash app).
   const [desktopOpened, toggleDesktop] = useSidebarOpen();
   const [settingsOpened, { open: openSettings, close: closeSettings }] = useDisclosure(false);
-  const { user: currentUser, loading: userLoading } = useCurrentUser();
+  const [sectionsOpened, { open: openSections, close: closeSections }] = useDisclosure(false);
+  const { user: currentUser, loading: userLoading, inspectorEnabled } = useCurrentUser();
+  // `control` is null while the flag is off, so no provider value reaches the
+  // component chrome and no inspect action is rendered anywhere.
+  const { control: inspectorControl, aside: inspectorAside } =
+    useInspectorChrome(inspectorEnabled);
   // Tab modal state — `mode` decides between create vs edit. `target` is the
   // tab being edited (or null for create). `submitting` blocks Save while a
   // request is in flight.
@@ -184,6 +196,8 @@ const EditorApp: React.FC = () => {
   // so collapsing or resizing in one mode carries over to the other.
   const {
     width: filterPanelWidth,
+    resizing: filterPanelResizing,
+    layoutRef: filterPanelLayoutRef,
     beginResize: beginFilterPanelResize,
     nudge: nudgeFilterPanelWidth,
   } = useFilterPanelWidth(dashboardId);
@@ -323,6 +337,32 @@ const EditorApp: React.FC = () => {
       }, SAVE_DEBOUNCE_MS);
     },
     [dashboardId, applyDashboard],
+  );
+
+  /** The single write path for every section change.
+   *
+   *  Reduces against `dashboardRef.current` rather than the `dashboard` state
+   *  variable so the manager — which may be a render behind — can't clobber a
+   *  concurrent layout drag, and vice versa. `scheduleSave` writes the ref
+   *  synchronously, so a burst of ops (a rename followed by an update, from one
+   *  Save click) composes correctly. */
+  const handleSectionOp = useCallback(
+    (op: SectionOp) => {
+      const cur = dashboardRef.current;
+      if (!cur) return;
+      const next = applySectionOp(cur, op);
+      // Reference equality is the reducer's "rejected" signal (duplicate name,
+      // move past an end). Saving anyway would burn a request per no-op.
+      if (next === cur) return;
+      scheduleSave(next);
+    },
+    [scheduleSave],
+  );
+
+  const handleMoveToSection = useCallback(
+    (componentId: string, section: string | null) =>
+      handleSectionOp({ op: 'assign', componentId, section }),
+    [handleSectionOp],
   );
 
   const handleLeftLayoutChange = useCallback(
@@ -579,6 +619,25 @@ const EditorApp: React.FC = () => {
     () => interactiveComponents.filter((m) => m.placement !== 'top'),
     [interactiveComponents],
   );
+  // Sections offered by the filter controls' ⋮ menus. Keyed on the spec list
+  // rather than the whole dashboard so a card value or layout nudge doesn't
+  // re-render every overlay.
+  const filterSections = useMemo(
+    () => dashboard?.filter_sections ?? [],
+    [dashboard?.filter_sections],
+  );
+  // How many controls move together, per component. Precomputed once instead of
+  // per overlay so the callback below can depend on this rather than on the
+  // whole `dashboard`.
+  const filterGroupSizes = useMemo(() => {
+    const sizes = new Map<string, number>();
+    const metadata = dashboard?.stored_metadata ?? [];
+    for (const m of metadata) {
+      if (m.group) sizes.set(m.index, groupWith(metadata, m.index).size);
+    }
+    return sizes;
+  }, [dashboard?.stored_metadata]);
+
   // Per-filter edit / duplicate / delete menu. FilterPanel injects it into
   // each control's chrome, including controls nested inside a group card.
   const renderFilterItemOverlay = useCallback(
@@ -590,9 +649,20 @@ const EditorApp: React.FC = () => {
         onDelete={handleDeleteComponent}
         onDuplicate={handleDuplicateComponent}
         componentType={component.component_type}
+        sections={filterSections}
+        currentSection={component.section ?? null}
+        onMoveToSection={handleMoveToSection}
+        groupSize={filterGroupSizes.get(component.index) ?? 1}
       />
     ),
-    [dashboardId, handleDeleteComponent, handleDuplicateComponent],
+    [
+      dashboardId,
+      handleDeleteComponent,
+      handleDuplicateComponent,
+      filterSections,
+      handleMoveToSection,
+      filterGroupSizes,
+    ],
   );
 
   const cardComponents = useMemo(
@@ -952,6 +1022,28 @@ const EditorApp: React.FC = () => {
     [tabSiblings, allDashboards, refreshTabList],
   );
 
+  /** Closing the manager flushes the debounce: the next thing a user does after
+   *  reorganising sections is often "Edit" or "Add component", both of which
+   *  navigate away with `window.location.assign` and would drop a pending
+   *  save. */
+  const handleCloseSections = useCallback(() => {
+    closeSections();
+    if (!dashboardId) return;
+    const cur = dashboardRef.current;
+    if (!cur) return;
+    if (saveTimer.current) {
+      clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+    }
+    setSaveStatus('saving');
+    saveDashboard(dashboardId, cur)
+      .then(() => setSaveStatus('saved'))
+      .catch((err) => {
+        console.error('[EditorApp] section save failed:', err);
+        setSaveStatus('error');
+      });
+  }, [closeSections, dashboardId]);
+
   /** Force-save: cancel any pending debounce and POST current state now.
    *  Mirrors depictio/dash/layouts/save.py:save_dashboard_minimal — uses
    *  Mantine notifications for success/failure feedback (no persistent header
@@ -1003,6 +1095,7 @@ const EditorApp: React.FC = () => {
 
   return (
     <>
+    <InspectorProviders control={inspectorControl}>
     <AppShell
       header={{ height: 50 }}
       navbar={{
@@ -1012,6 +1105,7 @@ const EditorApp: React.FC = () => {
       }}
       padding={0}
       transitionDuration={300}
+      aside={inspectorAside}
       transitionTimingFunction="ease"
     >
       <AppShell.Header data-tour-id="header-title">
@@ -1030,6 +1124,7 @@ const EditorApp: React.FC = () => {
           cardsLoading={cardsLoading}
           mode="edit"
           onAddComponent={handleAddComponent}
+          onOpenSections={openSections}
           onSave={handleForceSave}
           isOwner={isOwner}
           rightExtras={
@@ -1096,7 +1191,14 @@ const EditorApp: React.FC = () => {
             }}
           >
           <div
+            ref={filterPanelLayoutRef}
+            // Cast for the custom property — see the same note in App.tsx.
             style={{
+              // Written directly by a drag, so the panel edge doesn't wait on a
+              // render — see the same note in App.tsx.
+              [FILTER_PANEL_WIDTH_VAR]: `${
+                filterPanelOpened ? filterPanelWidth : FILTER_PANEL_RAIL_WIDTH
+              }px`,
               display: 'grid',
               // Panel | drag handle | content, the same three tracks the viewer
               // uses. The track count stays at three whatever the panel's
@@ -1104,15 +1206,18 @@ const EditorApp: React.FC = () => {
               // templates with matching track counts.
               gridTemplateColumns: isNarrow
                 ? '1fr'
-                : `${filterPanelOpened ? filterPanelWidth : FILTER_PANEL_RAIL_WIDTH}px ` +
+                : `var(${FILTER_PANEL_WIDTH_VAR}) ` +
                   `${filterPanelOpened ? FILTER_PANEL_RESIZER_WIDTH : 0}px 1fr`,
-              transition: 'grid-template-columns 300ms ease',
+              // Off while dragging — see the same note in App.tsx.
+              transition: filterPanelResizing
+                ? 'none'
+                : 'grid-template-columns 300ms ease',
               flex: 1,
               minHeight: 0,
               width: '100%',
               gap: 4,
               overflow: 'hidden',
-            }}
+            } as React.CSSProperties}
           >
             {!isNarrow && (
               <Box
@@ -1178,6 +1283,7 @@ const EditorApp: React.FC = () => {
                 cardComponents={cardComponents}
                 otherComponents={otherComponents}
                 layoutData={dashboard.right_panel_layout_data}
+                gridSections={dashboard.grid_sections}
                 filters={filters}
                 onFilterChange={handleFilterChange}
                 cardValues={cardValues}
@@ -1188,6 +1294,7 @@ const EditorApp: React.FC = () => {
                 onDuplicateComponent={handleDuplicateComponent}
                 onAddComponent={handleAddComponent}
                 activeHighlight={activeHighlight}
+                onMoveToSection={handleMoveToSection}
               />
             </Box>
           </div>
@@ -1238,7 +1345,7 @@ const EditorApp: React.FC = () => {
             />
           </Drawer>
         )}
-        {dashboard && dashboardId && (
+        {dashboard && dashboardId && !inspectorEnabled && (
           <NotesFooter
             dashboardId={dashboardId}
             initialContent={(dashboard.notes_content as string) ?? ''}
@@ -1255,6 +1362,12 @@ const EditorApp: React.FC = () => {
         )}
       </AppShell.Main>
 
+      {inspectorEnabled && (
+        <AppShell.Aside p={0}>
+          <Inspector dashboard={dashboard} dashboardId={dashboardId} />
+        </AppShell.Aside>
+      )}
+
       <SettingsDrawer
         opened={settingsOpened}
         onClose={closeSettings}
@@ -1269,7 +1382,15 @@ const EditorApp: React.FC = () => {
         onSubmit={handleTabModalSubmit}
         submitting={tabModalState.submitting}
       />
+
+      <SectionsModal
+        opened={sectionsOpened}
+        onClose={handleCloseSections}
+        dashboard={dashboard}
+        onOp={handleSectionOp}
+      />
     </AppShell>
+    </InspectorProviders>
     </>
   );
 };
@@ -1285,6 +1406,7 @@ interface RightComponentGridProps {
   cardComponents: StoredMetadata[];
   otherComponents: StoredMetadata[];
   layoutData: unknown;
+  gridSections?: FilterSectionSpec[];
   filters: InteractiveFilter[];
   onFilterChange: (filter: InteractiveFilter) => void;
   cardValues: Record<string, unknown>;
@@ -1295,6 +1417,9 @@ interface RightComponentGridProps {
   onDuplicateComponent: (componentId: string) => void;
   onAddComponent: () => void;
   activeHighlight?: ActiveHighlight | null;
+  /** Fired by each cell's "Move to section" action. The names on offer are
+   *  derived from `gridSections`, which this component already receives. */
+  onMoveToSection: (componentId: string, section: string | null) => void;
 }
 
 /**
@@ -1310,6 +1435,7 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
   cardComponents,
   otherComponents,
   layoutData,
+  gridSections,
   filters,
   onFilterChange,
   cardValues,
@@ -1320,6 +1446,7 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
   onDuplicateComponent,
   onAddComponent,
   activeHighlight,
+  onMoveToSection,
 }) => {
   const allComponents = useMemo(
     () => [...cardComponents, ...otherComponents],
@@ -1368,6 +1495,7 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
       dashboardId={dashboardId}
       metadataList={allComponents}
       layoutData={layoutData}
+      gridSections={gridSections}
       filters={filters}
       onFilterChange={onFilterChange}
       cardValues={cardValues}
@@ -1386,6 +1514,9 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
           onDelete={onDeleteComponent}
           onDuplicate={onDuplicateComponent}
           componentType={metadata.component_type}
+          sections={gridSections}
+          currentSection={metadata.section ?? null}
+          onMoveToSection={onMoveToSection}
         />
       )}
     />

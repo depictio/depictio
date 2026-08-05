@@ -24,6 +24,12 @@ export function buildMetadata(state: BuilderState): StoredMetadata {
     wf_id: state.wfId || undefined,
     dc_id: state.dcId || undefined,
     project_id: state.projectId || undefined,
+    // Set here rather than in each per-type branch: `section` lives on the base
+    // component model, `SectionSelect` is mounted once for every builder, and
+    // `base` is spread after `existing` everywhere — so the picker's choice
+    // always wins, including clearing it back to unsectioned. Empty string from
+    // a cleared Select means "no section", which must persist as undefined.
+    section: as<{ section?: string }>(state.config).section?.trim() || undefined,
     last_updated: new Date().toISOString(),
     // Persist catalog origin so the dashboard can show a "from catalog" badge.
     // Preserved through edits via the ...existing spread in per-type builders.
@@ -220,9 +226,9 @@ function buildInteractive(
     title,
     color: c.color ?? '',
     icon_name: c.icon_name ?? 'bx:slider-alt',
-    // Empty string from a cleared Autocomplete means "no section/group", which
-    // must persist as undefined so the panel treats it as unsectioned.
-    section: c.section?.trim() || undefined,
+    // Empty string from a cleared Autocomplete means "no group", which must
+    // persist as undefined so the panel treats it as ungrouped. (`section` is
+    // set once on `base`.)
     group: c.group?.trim() || undefined,
     placement,
     show_marks: c.show_marks,
