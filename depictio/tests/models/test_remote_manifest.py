@@ -326,3 +326,93 @@ class TestFileRemoteLocation:
         remote_file_data["filesize"] = -2
         with pytest.raises(ValidationError, match="File size cannot be negative"):
             File(**remote_file_data)  # type: ignore[missing-argument]
+
+
+class TestScanManifest:
+    """Scan mode "manifest" (phase 2): ScanManifest params + dispatch."""
+
+    def test_valid_manifest_scan(self):
+        from depictio.models.models.data_collections import Scan, ScanManifest
+
+        scan = Scan(
+            mode="manifest",
+            scan_parameters={
+                "manifest_url": "https://example.org/manifest.csv",
+                "manifest_type": "counts",
+            },
+        )
+        assert isinstance(scan.scan_parameters, ScanManifest)
+        assert scan.scan_parameters.manifest_type == "counts"
+        assert scan.scan_parameters.id_field == "id"
+
+    def test_local_path_manifest_url_accepted(self):
+        from depictio.models.models.data_collections import ScanManifest
+
+        params = ScanManifest(manifest_url="/data/manifest.csv", manifest_type="counts")
+        assert params.manifest_url == "/data/manifest.csv"
+
+    def test_bad_scheme_manifest_url_rejected(self):
+        from depictio.models.models.data_collections import ScanManifest
+
+        with pytest.raises(ValidationError):
+            ScanManifest(manifest_url="ftp://example.org/m.csv", manifest_type="counts")
+
+    def test_empty_manifest_type_rejected(self):
+        from depictio.models.models.data_collections import ScanManifest
+
+        with pytest.raises(ValidationError):
+            ScanManifest(manifest_url="/data/m.csv", manifest_type="  ")
+
+    def test_field_overrides(self):
+        from depictio.models.models.data_collections import ScanManifest
+
+        params = ScanManifest(
+            manifest_url="/data/m.csv",
+            manifest_type="counts",
+            id_field="sample",
+            url_field="path",
+            run_field=None,
+        )
+        assert params.id_field == "sample"
+        assert params.run_field is None
+
+
+class TestFieldMapParsing:
+    """field_map remaps non-canonical manifest columns onto the contract."""
+
+    def test_csv_field_map(self):
+        text = "sample,type,path\nS1,counts,https://x.org/a.parquet\n"
+        manifest = DataManifest.from_csv(text, field_map={"id": "sample", "url": "path"})
+        assert manifest.entries[0].id == "S1"
+        assert manifest.entries[0].url == "https://x.org/a.parquet"
+
+    def test_csv_field_map_missing_column_named_in_error(self):
+        text = "id,type,url\nS1,counts,https://x.org/a.parquet\n"
+        with pytest.raises(ValueError, match="sample"):
+            DataManifest.from_csv(text, field_map={"id": "sample"})
+
+    def test_json_field_map(self):
+        text = '[{"sample": "S1", "type": "counts", "path": "https://x.org/a.parquet"}]'
+        manifest = DataManifest.from_json(text, field_map={"id": "sample", "url": "path"})
+        assert manifest.entries[0].id == "S1"
+
+    def test_unknown_canonical_key_rejected(self):
+        with pytest.raises(ValueError, match="Unknown manifest field"):
+            DataManifest.from_csv("id,type,url\n", field_map={"nope": "x"})
+
+
+class TestFileManifestId:
+    def test_manifest_id_defaults_to_none_and_round_trips(self):
+        owner = UserBase(id=PyObjectId(), email="owner@example.com", is_admin=False)
+        file_instance = File(
+            filename="a.parquet",
+            file_location="https://example.org/a.parquet",
+            creation_time="2026-01-01 00:00:00",
+            modification_time="2026-01-01 00:00:00",
+            data_collection_id=PyObjectId(),
+            file_hash="a" * 64,
+            filesize=-1,
+            permissions=Permission(owners=[owner]),
+            manifest_id="S1",
+        )
+        assert file_instance.manifest_id == "S1"

@@ -113,3 +113,163 @@ def test_s3_parquet_dispatches_lazily():
     # touching the network — collection would fail, construction must not.
     lf = _read_remote_file_lazy("s3://bucket/key.parquet", "parquet", {}, {})
     assert isinstance(lf, pl.LazyFrame)
+
+
+class TestManifestScan:
+    """Phase 2: manifest fetch + per-entry File registration + id injection."""
+
+    @pytest.fixture()
+    def manifest_file(self, tmp_path, http_fixture_server):
+        path = tmp_path / "manifest.csv"
+        path.write_text(
+            "id,type,url,run\n"
+            f"S1,counts,{http_fixture_server}/table.csv,run42\n"
+            f"S2,counts,{http_fixture_server}/table.tsv,run42\n"
+            f"S1,stats,{http_fixture_server}/table.csv,run42\n"
+        )
+        return str(path)
+
+    def test_fetch_manifest_local_csv(self, manifest_file):
+        from depictio.cli.cli.utils.scan import fetch_manifest
+
+        manifest = fetch_manifest(manifest_file)
+        assert manifest.types() == {"counts", "stats"}
+        assert len(manifest.entries_for_type("counts")) == 2
+
+    def test_fetch_manifest_over_http(self, tmp_path, http_fixture_server):
+        from depictio.cli.cli.utils.scan import fetch_manifest
+
+        (tmp_path / "manifest.json").write_text(
+            '[{"id": "S1", "type": "counts", "url": "https://x.org/a.parquet"}]'
+        )
+        manifest = fetch_manifest(f"{http_fixture_server}/manifest.json")
+        assert manifest.entries[0].id == "S1"
+
+    def test_fetch_manifest_s3_rejected(self):
+        from depictio.cli.cli.utils.scan import fetch_manifest
+
+        with pytest.raises(ValueError, match="s3://"):
+            fetch_manifest("s3://bucket/manifest.csv")
+
+    def test_scan_manifest_registers_files(self, manifest_file, monkeypatch):
+        from unittest.mock import MagicMock
+
+        from depictio.cli.cli.utils import scan as scan_mod
+        from depictio.models.models.data_collections import (
+            DataCollection,
+            DataCollectionConfig,
+            Scan,
+            ScanManifest,
+        )
+        from depictio.models.models.users import Permission, UserBase
+        from depictio.models.models.workflows import (
+            Workflow,
+            WorkflowConfig,
+            WorkflowDataLocation,
+            WorkflowEngine,
+        )
+
+        dc = DataCollection(
+            data_collection_tag="counts",
+            config=DataCollectionConfig(
+                type="table",
+                metatype="aggregate",
+                scan=Scan(
+                    mode="manifest",
+                    scan_parameters=ScanManifest(
+                        manifest_url=manifest_file, manifest_type="counts"
+                    ),
+                ),
+                dc_specific_properties={"format": "csv"},
+            ),
+        )
+        workflow = Workflow(
+            name="wf",
+            workflow_tag="wf",
+            engine=WorkflowEngine(name="python"),
+            config=WorkflowConfig(),
+            data_location=WorkflowDataLocation(structure="flat", locations=["/tmp"]),
+            data_collections=[dc],
+        )
+
+        no_files = MagicMock(status_code=200)
+        no_files.json.return_value = []
+        monkeypatch.setattr(scan_mod, "api_get_files_by_dc_id", lambda **_: no_files)
+        created = []
+        monkeypatch.setattr(
+            scan_mod,
+            "api_create_files",
+            lambda files, CLI_config, update: created.append((list(files), update)),
+        )
+
+        owner = UserBase(id=PyObjectId(), email="o@example.com", is_admin=False)
+        result = scan_mod.scan_manifest_for_data_collection(
+            workflow=workflow,
+            data_collection=dc,
+            CLI_config=MagicMock(),
+            permissions=Permission(owners=[owner]),
+            update_files=False,
+        )
+        assert result == {"result": "success", "added": 2, "updated": 0}
+        files, update_flag = created[0]
+        assert update_flag is False
+        assert {f.manifest_id for f in files} == {"S1", "S2"}
+        assert {f.run_tag for f in files} == {"run42"}
+        assert all(f.file_location.startswith("http://127.0.0.1") for f in files)
+
+    def test_manifest_type_absent_errors(self, manifest_file, monkeypatch):
+        from unittest.mock import MagicMock
+
+        from depictio.cli.cli.utils import scan as scan_mod
+        from depictio.models.models.data_collections import (
+            DataCollection,
+            DataCollectionConfig,
+            Scan,
+            ScanManifest,
+        )
+        from depictio.models.models.users import Permission, UserBase
+        from depictio.models.models.workflows import (
+            Workflow,
+            WorkflowConfig,
+            WorkflowDataLocation,
+            WorkflowEngine,
+        )
+
+        dc = DataCollection(
+            data_collection_tag="nope",
+            config=DataCollectionConfig(
+                type="table",
+                metatype="aggregate",
+                scan=Scan(
+                    mode="manifest",
+                    scan_parameters=ScanManifest(manifest_url=manifest_file, manifest_type="nope"),
+                ),
+                dc_specific_properties={"format": "csv"},
+            ),
+        )
+        workflow = Workflow(
+            name="wf",
+            workflow_tag="wf",
+            engine=WorkflowEngine(name="python"),
+            config=WorkflowConfig(),
+            data_location=WorkflowDataLocation(structure="flat", locations=["/tmp"]),
+            data_collections=[dc],
+        )
+        owner = UserBase(id=PyObjectId(), email="o@example.com", is_admin=False)
+        result = scan_mod.scan_manifest_for_data_collection(
+            workflow=workflow,
+            data_collection=dc,
+            CLI_config=MagicMock(),
+            permissions=Permission(owners=[owner]),
+            update_files=False,
+        )
+        assert result["result"] == "error"
+        assert "counts" in result["message"]  # available types listed
+
+
+def test_manifest_id_column_injected(http_fixture_server):
+    file_info = _make_remote_file(f"{http_fixture_server}/table.csv")
+    file_info.manifest_id = "S1"
+    df = read_single_file_lazy(file_info, "csv", {}).collect()
+    assert df["depictio_manifest_id"].to_list() == ["S1", "S1"]
+    assert set(df["depictio_run_id"].to_list()) == {"remote-run"}

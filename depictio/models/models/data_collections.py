@@ -128,13 +128,48 @@ class ScanURL(BaseModel):
         return validate_remote_url_syntax(v)
 
 
+class ScanManifest(BaseModel):
+    """Manifest-driven acquisition: this DC consumes every entry of the
+    manifest whose ``type`` equals ``manifest_type`` (= this DC's tag by
+    convention). ``manifest_url`` may be a remote URL or, in CLI context, a
+    local path. The ``*_field`` overrides remap non-canonical manifest
+    columns onto the contract's id/type/url/run fields.
+    """
+
+    manifest_url: str
+    manifest_type: str
+    id_field: str = "id"
+    url_field: str = "url"
+    type_field: str = "type"
+    run_field: str | None = "run"
+
+    class Config:
+        extra = "forbid"
+
+    @field_validator("manifest_url")
+    def validate_manifest_url(cls, v):
+        if not v:
+            raise ValueError("manifest_url cannot be empty")
+        # Local paths are legitimate in CLI context; remote URLs get the
+        # same syntactic screen as ScanURL. Reachability is checked at fetch.
+        if "://" in v:
+            return validate_remote_url_syntax(v)
+        return v
+
+    @field_validator("manifest_type")
+    def validate_manifest_type(cls, v):
+        if not v or not v.strip():
+            raise ValueError("manifest_type cannot be empty")
+        return v.strip()
+
+
 class Scan(BaseModel):
     mode: str
-    scan_parameters: ScanRecursive | ScanSingle | ScanURL
+    scan_parameters: ScanRecursive | ScanSingle | ScanURL | ScanManifest
 
     @field_validator("mode")
     def validate_mode(cls, v):
-        allowed_values = ["recursive", "single", "url"]
+        allowed_values = ["recursive", "single", "url", "manifest"]
         if v.lower() not in allowed_values:
             raise ValueError(f"mode must be one of {allowed_values}")
         return v
@@ -164,6 +199,14 @@ class Scan(BaseModel):
                 if isinstance(scan_parameters, dict) and "url" in scan_parameters:
                     try:
                         values["scan_parameters"] = ScanURL(**scan_parameters)  # type: ignore[missing-argument]
+                    except Exception:
+                        # Keep original if conversion fails
+                        pass
+        elif type_value == "manifest":
+            if not isinstance(scan_parameters, ScanManifest):
+                if isinstance(scan_parameters, dict) and "manifest_url" in scan_parameters:
+                    try:
+                        values["scan_parameters"] = ScanManifest(**scan_parameters)  # type: ignore[missing-argument]
                     except Exception:
                         # Keep original if conversion fails
                         pass
