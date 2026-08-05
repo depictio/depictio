@@ -487,6 +487,33 @@ class LinksSection(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class RuntimeLimits(BaseModel):
+    """Sampling ceilings the runtime enforces, pinned from the building instance.
+
+    Mirrors ``PerformanceConfig`` (settings_models.py): the advanced_viz data
+    path reduces the filtered frame to ``figure_max_points`` rows under the
+    kind's policy, and flags aggregating kinds as degraded past
+    ``advanced_viz_no_sample_max_rows``. Defaults match the server defaults so
+    manifests built before this field existed keep the same behaviour.
+    """
+
+    figure_max_points: int = Field(
+        default=10_000, description="Scan-level reduction cap (rows) for sampled render paths"
+    )
+    advanced_viz_no_sample_max_rows: int = Field(
+        default=2_000_000,
+        description="Ceiling past which 'none'-policy kinds are sampled anyway (degraded); 0 disables",
+    )
+    advanced_viz_tail_p_threshold: float = Field(
+        default=0.05, description="Fallback tail threshold for raw p-value columns"
+    )
+    advanced_viz_tail_effect_threshold: float = Field(
+        default=1.0, description="Fallback tail threshold for signed effect columns"
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class DashboardSection(BaseModel):
     """The dashboard document the runtime mounts."""
 
@@ -537,6 +564,10 @@ class BundleManifest(BaseModel):
         ),
     )
     links: LinksSection = Field(default_factory=LinksSection)
+    limits: RuntimeLimits = Field(
+        default_factory=RuntimeLimits,
+        description="Sampling ceilings pinned from the building instance's PerformanceConfig",
+    )
     allow_network_tiles: bool = Field(
         default=False,
         description="Permit MapLibre tile fetches (static-dir/remote); single-file freezes maps unless style is white-bg",
