@@ -857,9 +857,14 @@ async def get_card_metric(
 
     try:
         lazy = pl.scan_delta(delta_table_location, storage_options=polars_s3_config)
-        # Project to the columns this layout reads. ``attrition`` is the only
-        # multi-column one; the rest read the hero column alone.
-        wanted = [column, *[str(c) for c in (request.get("attrition_cols") or []) if c]]
+        # Project to the columns this layout reads. ``attrition`` walks a list
+        # of stage columns and ``trend`` needs its axis alongside the hero
+        # column; the rest read the hero column alone.
+        wanted = [
+            column,
+            *[str(c) for c in (request.get("attrition_cols") or []) if c],
+            *([str(request["trend_col"])] if request.get("trend_col") else []),
+        ]
         available = set(lazy.collect_schema().names())
         wanted = list(dict.fromkeys([c for c in wanted if c in available]))
         if not wanted:

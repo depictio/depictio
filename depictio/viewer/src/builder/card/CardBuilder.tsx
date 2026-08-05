@@ -93,16 +93,20 @@ type MultiMetricStyle =
   | 'single'
   | 'vertical'
   | 'compact'
+  | 'grid'
   | 'box_plot'
   | 'top_n'
   | 'coverage'
+  | 'gauge'
   | 'concentration'
   | 'composition'
   | 'donut'
   | 'histogram'
   | 'threshold'
   | 'completeness'
-  | 'attrition';
+  | 'uniqueness'
+  | 'attrition'
+  | 'trend';
 // Mantine 7 ``Select`` expects nested groups in the shape
 // ``{ group, items: [...] }`` — the flat ``{value, label, group}`` format we
 // inherited from Mantine 6 crashes the option normalizer with
@@ -115,10 +119,16 @@ const MULTI_METRIC_OPTIONS: Array<
 > = [
   { value: 'single', label: 'Single metric (no extras)' },
   {
-    group: 'Distribution',
+    group: 'Stats list',
     items: [
       { value: 'vertical', label: 'Vertical list (median / min / max)' },
       { value: 'compact', label: 'Compact strip (median / min / max)' },
+      { value: 'grid', label: 'Two-column grid (best for 4–6 aggregations)' },
+    ],
+  },
+  {
+    group: 'Distribution',
+    items: [
       { value: 'box_plot', label: 'Box-plot (Tukey: IQR + whiskers + outliers)' },
       { value: 'histogram', label: 'Histogram sparkline (shows shape / modality)' },
     ],
@@ -128,16 +138,27 @@ const MULTI_METRIC_OPTIONS: Array<
     items: [
       { value: 'threshold', label: 'Threshold (pass / warn / fail against a cut-off)' },
       { value: 'completeness', label: 'Completeness (filled vs missing values)' },
+      { value: 'uniqueness', label: 'Uniqueness (distinct vs repeated values)' },
       { value: 'attrition', label: 'Attrition funnel (retention across stages)' },
     ],
+  },
+  {
+    group: 'Progress towards a maximum',
+    items: [
+      { value: 'coverage', label: 'Coverage bar (current / theoretical max)' },
+      { value: 'gauge', label: 'Gauge dial (current / theoretical max)' },
+    ],
+  },
+  {
+    group: 'Change over an axis',
+    items: [{ value: 'trend', label: 'Trend sparkline (metric bucketed along a column)' }],
   },
   {
     group: 'Cardinality',
     items: [
       { value: 'top_n', label: 'Top-N bars (most frequent values of a column)' },
       { value: 'composition', label: 'Composition bar (shares + "Other", with evenness)' },
-      { value: 'donut', label: 'Donut (ring of shares, hero value in the middle)' },
-      { value: 'coverage', label: 'Coverage gauge (current / theoretical max)' },
+      { value: 'donut', label: 'Donut (ring of shares, distinct count in the middle)' },
       { value: 'concentration', label: 'Concentration (top-N share + names)' },
     ],
   },
@@ -154,13 +175,16 @@ function inferMultiMetricStyle(
   const selfDescribing: MultiMetricStyle[] = [
     'top_n',
     'coverage',
+    'gauge',
     'concentration',
     'composition',
     'donut',
     'histogram',
     'threshold',
     'completeness',
+    'uniqueness',
     'attrition',
+    'trend',
   ];
   if (layout && selfDescribing.includes(layout as MultiMetricStyle)) {
     return layout as MultiMetricStyle;
@@ -170,6 +194,7 @@ function inferMultiMetricStyle(
     return 'box_plot';
   }
   if (layout === 'compact') return 'compact';
+  if (layout === 'grid') return 'grid';
   return 'vertical';
 }
 
@@ -190,8 +215,12 @@ function multiMetricStyleToConfig(style: MultiMetricStyle): Record<string, unkno
     threshold_direction: 'min',
     threshold_warn: null,
     attrition_cols: [] as string[],
+    trend_col: null,
   };
   const SCALAR_AGGS = ['median', 'min', 'max'];
+  // `grid` earns its keep from four upwards — offering it the same three as the
+  // other stat lists would leave half of it empty.
+  const GRID_AGGS = ['median', 'average', 'min', 'max'];
   switch (style) {
     case 'box_plot':
       return { ...base, aggregations: ['box_plot_stats'], secondary_layout: 'box_plot' };
@@ -199,11 +228,13 @@ function multiMetricStyleToConfig(style: MultiMetricStyle): Record<string, unkno
       return { ...base, aggregations: SCALAR_AGGS, secondary_layout: 'compact' };
     case 'vertical':
       return { ...base, aggregations: SCALAR_AGGS, secondary_layout: 'vertical' };
+    case 'grid':
+      return { ...base, aggregations: GRID_AGGS, secondary_layout: 'grid' };
     case 'single':
       return { ...base, secondary_layout: 'vertical' };
     default:
-      // top_n / coverage / concentration / composition / donut / histogram /
-      // threshold / completeness / attrition all round-trip by name.
+      // Every other layout round-trips by name and carries its own config
+      // field, pre-filled by the effect below.
       return { ...base, secondary_layout: style };
   }
 }
@@ -215,19 +246,7 @@ const CardBuilder: React.FC = () => {
     column_type?: string;
     aggregation?: string;
     aggregations?: string[] | null;
-    secondary_layout?:
-      | 'vertical'
-      | 'compact'
-      | 'box_plot'
-      | 'top_n'
-      | 'coverage'
-      | 'concentration'
-      | 'composition'
-      | 'donut'
-      | 'histogram'
-      | 'threshold'
-      | 'completeness'
-      | 'attrition';
+    secondary_layout?: Exclude<MultiMetricStyle, 'single'>;
     breakdown_col?: string | null;
     coverage_max?: number | null;
     top_n_count?: number;
@@ -235,6 +254,7 @@ const CardBuilder: React.FC = () => {
     threshold_direction?: string;
     threshold_warn?: number | null;
     attrition_cols?: string[] | null;
+    trend_col?: string | null;
     background_color?: string;
     title_color?: string;
     icon_name?: string;
@@ -333,6 +353,21 @@ const CardBuilder: React.FC = () => {
     [cols, config.column_name],
   );
 
+  /** Columns a trend can be bucketed along: anything with a defined order.
+   *  Dates come first because that is what a trend usually means; integers
+   *  follow, for the run / batch / year indices pipelines produce. Floats are
+   *  excluded — a measurement is not an axis, and offering it produces a line
+   *  through noise. */
+  const trendAxisOptions = useMemo(() => {
+    const ordered = cols.filter(
+      (c) => ['datetime', 'date', 'int64', 'int32'].includes(c.type) && c.name !== config.column_name,
+    );
+    const rank = (t: string) => (t.startsWith('date') ? 0 : 1);
+    return [...ordered]
+      .sort((a, b) => rank(a.type) - rank(b.type))
+      .map((c) => ({ value: c.name, label: `${c.name} (${c.type})` }));
+  }, [cols, config.column_name]);
+
   // Pre-fill the field the chosen layout requires. Without this, picking a
   // cardinality layout showed an empty form and no preview strip, so the
   // feature looked broken until the user guessed which field to fill. Only
@@ -342,13 +377,17 @@ const CardBuilder: React.FC = () => {
       if (!config.breakdown_col && defaultBreakdownCol) {
         patchConfig({ breakdown_col: defaultBreakdownCol });
       }
-    } else if (config.secondary_layout === 'coverage') {
+    } else if (config.secondary_layout === 'coverage' || config.secondary_layout === 'gauge') {
       if (config.coverage_max == null && defaultCoverageMax != null) {
         patchConfig({ coverage_max: defaultCoverageMax });
       }
     } else if (config.secondary_layout === 'threshold') {
       if (config.threshold_value == null && defaultThreshold != null) {
         patchConfig({ threshold_value: defaultThreshold });
+      }
+    } else if (config.secondary_layout === 'trend') {
+      if (!config.trend_col && trendAxisOptions.length) {
+        patchConfig({ trend_col: trendAxisOptions[0].value });
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -357,9 +396,11 @@ const CardBuilder: React.FC = () => {
     config.breakdown_col,
     config.coverage_max,
     config.threshold_value,
+    config.trend_col,
     defaultBreakdownCol,
     defaultThreshold,
     defaultCoverageMax,
+    trendAxisOptions,
   ]);
 
   // Aggregation options follow the column's type, mirroring
@@ -424,7 +465,7 @@ const CardBuilder: React.FC = () => {
 
       <Select
         label="Multi-metric style"
-        description="Pick a secondary strip layout. Distribution targets numeric columns, cardinality targets count / distinct-count cards, quality control answers “how many rows pass”. The field each layout needs is pre-filled from your data."
+        description="Pick a secondary strip layout. Stats lists and distributions target numeric columns, cardinality targets count / distinct-count cards, quality control answers “how many rows pass”, and trend answers “is this moving”. The field each layout needs is pre-filled from your data."
         data={MULTI_METRIC_OPTIONS}
         value={multiMetricStyle}
         onChange={(val) => {
@@ -465,10 +506,10 @@ const CardBuilder: React.FC = () => {
           />
         </>
       )}
-      {multiMetricStyle === 'coverage' && (
+      {(multiMetricStyle === 'coverage' || multiMetricStyle === 'gauge') && (
         <NumberInput
-          label="Coverage max"
-          description="Theoretical maximum the hero value can reach (e.g. 44 samples / 11 ORFs / 99 amplicons). The strip renders ``value / max`` as a fill bar."
+          label="Maximum"
+          description="Theoretical maximum the hero value can reach (e.g. 44 samples / 11 ORFs / 99 amplicons). The strip renders “value / max” as a fill bar or a dial."
           value={config.coverage_max ?? undefined}
           onChange={(val) =>
             patchConfig({
@@ -478,6 +519,26 @@ const CardBuilder: React.FC = () => {
           min={1}
           step={1}
           leftSection={<Icon icon="mdi:gauge" width={14} />}
+          required
+        />
+      )}
+
+      {multiMetricStyle === 'trend' && (
+        <Select
+          label="Trend axis"
+          description="Ordered column the sparkline is bucketed along — a date, or an index like run or year. The card's own column is what gets aggregated inside each bucket."
+          placeholder={
+            trendAxisOptions.length === 0
+              ? 'No date or integer column in this data collection'
+              : 'Pick an ordered column'
+          }
+          data={trendAxisOptions}
+          value={config.trend_col ?? null}
+          onChange={(val) => patchConfig({ trend_col: val })}
+          disabled={trendAxisOptions.length === 0}
+          allowDeselect={false}
+          searchable
+          leftSection={<Icon icon="mdi:chart-timeline-variant" width={14} />}
           required
         />
       )}

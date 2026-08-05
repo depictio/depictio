@@ -108,7 +108,12 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
     let inner: React.ReactNode;
     if (subType === 'MultiSelect' || subType === 'Select') {
       inner = (
-        <MultiSelectRenderer metadata={metadata} filters={filters} onChange={onFilterChange} />
+        <MultiSelectRenderer
+          metadata={metadata}
+          filters={filters}
+          onChange={onFilterChange}
+          compact={compact}
+        />
       );
     } else if (subType === 'RangeSlider') {
       inner = (
@@ -130,11 +135,21 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
       );
     } else if (subType === 'DatePicker' || subType === 'DateRangePicker') {
       inner = (
-        <DatePickerRenderer metadata={metadata} filters={filters} onChange={onFilterChange} />
+        <DatePickerRenderer
+          metadata={metadata}
+          filters={filters}
+          onChange={onFilterChange}
+          compact={compact}
+        />
       );
     } else if (subType === 'Checkbox' || subType === 'Switch') {
       inner = (
-        <CheckboxSwitchRenderer metadata={metadata} filters={filters} onChange={onFilterChange} />
+        <CheckboxSwitchRenderer
+          metadata={metadata}
+          filters={filters}
+          onChange={onFilterChange}
+          compact={compact}
+        />
       );
     } else if (subType === 'SegmentedControl') {
       inner = (
@@ -142,6 +157,7 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
           metadata={metadata}
           filters={filters}
           onChange={onFilterChange}
+          compact={compact}
         />
       );
     } else if (subType === 'Timeline') {
@@ -239,6 +255,19 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
             })
         : undefined;
     const sourceFilterActive = isSourceFilterActive(filters, metadata.index, 'map_selection');
+    // Same "show underlying data" affordance advanced_viz has, riding the same
+    // `extraActions` slot — so `actionsFor('map')` needs no change.
+    const mapExtras = (
+      <>
+        {extraActions}
+        <MapDataButton
+          dashboardId={dashboardId}
+          metadata={metadata}
+          filters={filters}
+          onFilterChange={onFilterChange}
+        />
+      </>
+    );
     return wrapWithChrome(
       'map',
       metadata,
@@ -260,19 +289,6 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
       },
     );
   }
-    // Same "show underlying data" affordance advanced_viz has, riding the same
-    // `extraActions` slot — so `actionsFor('map')` needs no change.
-    const mapExtras = (
-      <>
-        {extraActions}
-        <MapDataButton
-          dashboardId={dashboardId}
-          metadata={metadata}
-          filters={filters}
-          onFilterChange={onFilterChange}
-        />
-      </>
-    );
 
   if (metadata.component_type === 'jbrowse' && dashboardId) {
     // JBrowse fetches its session on mount and pulls a heavy chunk, so gate the
@@ -585,7 +601,7 @@ const CardRenderer: React.FC<{
       return `${base} · Top ${breakdown.top.length} = ${share}%`;
     }
     if (
-      layout === 'coverage' &&
+      (layout === 'coverage' || layout === 'gauge') &&
       typeof metadata.coverage_max === 'number' &&
       typeof value === 'number' &&
       metadata.coverage_max > 0
@@ -623,12 +639,13 @@ const CardRenderer: React.FC<{
         aggregation_description={aggDesc}
         filter_applied={filterApplied}
         secondaryStrip={
-          // ``coverage`` layout doesn't rely on the secondary aggregations
-          // array — it reads the card's hero ``value`` + the YAML-declared
+          // ``coverage`` and ``gauge`` don't rely on the secondary aggregations
+          // array — they read the card's hero ``value`` + the YAML-declared
           // ``coverage_max``. So even with empty ``orderedSecondary`` we
-          // still render the strip when the coverage inputs are present.
+          // still render the strip when those inputs are present.
           orderedSecondary.length > 0 ||
-          (metadata.secondary_layout === 'coverage' &&
+          ((metadata.secondary_layout === 'coverage' ||
+            metadata.secondary_layout === 'gauge') &&
             typeof metadata.coverage_max === 'number') ? (
             <SecondaryMetrics
               rows={orderedSecondary}

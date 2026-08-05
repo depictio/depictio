@@ -196,7 +196,8 @@ class TestLayoutsStayInSync:
             / "src"
             / "components"
             / "card"
-            / "SecondaryMetrics.tsx"
+            / "metrics"
+            / "types.ts"
         )
         if not source.exists():  # packages/ is absent in some install layouts
             pytest.skip("frontend package not present in this checkout")

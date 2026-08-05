@@ -7,7 +7,7 @@
  * so no Pydantic validation regressions on POST /dashboards/save.
  */
 import type { StoredMetadata } from 'depictio-react-core';
-import { readMultiqcSelection } from 'depictio-react-core';
+import { defaultInteractiveTitle, readMultiqcSelection } from 'depictio-react-core';
 import type { BuilderState } from './store/useBuilderStore';
 import { autoCardTitle } from './card/cardTitle';
 import { buildAdvancedVizConfigBlob } from './advanced_viz/configBlob';
@@ -189,17 +189,18 @@ function buildInteractive(
     column_name?: string;
     column_type?: string;
     title?: string;
-    title_size?: string;
     color?: string;
     icon_name?: string;
   }>(state.config);
   // Mirror Dash design_interactive: the form surfaces only the basics, no
   // default value/range, marks, or scale. Those are derived at render time.
+  // The fallback title is the viewer's own default, so an author who leaves the
+  // field empty gets the same string the renderer would have shown.
+  // No `title_size`: interactive titles render at one fixed size so the Filters
+  // panel stays uniform (see `components/interactive/frame.tsx`).
   const title =
     (c.title && c.title.trim()) ||
-    (c.interactive_component_type && c.column_name
-      ? `${c.interactive_component_type} on ${c.column_name}`
-      : '');
+    defaultInteractiveTitle(c.interactive_component_type, c.column_name);
   return {
     ...existing,
     ...base,
@@ -207,7 +208,6 @@ function buildInteractive(
     column_name: c.column_name,
     column_type: c.column_type,
     title,
-    title_size: c.title_size ?? 'md',
     color: c.color ?? '',
     icon_name: c.icon_name ?? 'bx:slider-alt',
   };

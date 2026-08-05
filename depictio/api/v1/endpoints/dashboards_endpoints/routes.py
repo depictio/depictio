@@ -1266,6 +1266,31 @@ _BREAKDOWN_LAYOUTS = BREAKDOWN_LAYOUTS
 _evenness = evenness
 
 
+def _card_payload_columns(card: dict) -> set[str]:
+    """Columns a card's secondary layout reads *besides* its own ``column_name``.
+
+    The projected Delta load has to carry all of them: a layout whose extra
+    column is missing computes to ``None``, and the card then renders its hero
+    value with no strip under it — a silent loss, since nothing in the response
+    says a column was dropped.
+
+    One accessor rather than a run of ``if``s at the call site, because that run
+    is exactly how ``trend`` shipped without its axis: each new layout that
+    reaches past its own column has to be added here, and this is the only place
+    to add it.
+    """
+    cols: set[str] = set()
+    for key in ("breakdown_col", "trend_col"):
+        value = card.get(key)
+        if value:
+            cols.add(str(value))
+    # ``attrition`` walks an ordered list of stage columns.
+    for stage in card.get("attrition_cols") or []:
+        if stage:
+            cols.add(str(stage))
+    return cols
+
+
 def _needs_server_payload(card: dict) -> bool:
     """True when this card's layout needs a payload the precomputed specs can't
     supply, so neither the specs fast path nor the pushdown may short-circuit.
@@ -1758,31 +1783,6 @@ def _build_filter_metadata(filters: list[dict]) -> list[dict]:
     return out
 
 
-@dashboards_endpoint_router.post("/bulk_compute_cards/{dashboard_id}")
-def bulk_compute_cards(
-    dashboard_id: PyObjectId,
-    request: dict,
-    current_user: User = Depends(get_user_or_anonymous),
-    access_token: Annotated[str | None, Depends(oauth2_scheme_optional)] = None,
-):
-    """Compute card values with interactive filters applied.
-
-    Called by the React viewer whenever the filter state changes. Dedupes
-    Delta-table loads: multiple cards referencing the same (wf_id, dc_id, filter
-    fingerprint) share one load. Returns a map keyed by component index.
-
-    Request body:
-        {
-            "filters": [
-                {"index": "...", "value": ..., "column_name": "...",
-                 "interactive_component_type": "MultiSelect"},
-                ...
-            ],
-            "component_ids": ["...", ...]   # optional; defaults to all cards
-        }
-
-    Response:
-        {
 @dataclass(frozen=True)
 class _ComponentContext:
     """A resolved, authorised component plus what the Delta loader needs for it."""
@@ -1878,6 +1878,31 @@ def _component_context(
     )
 
 
+@dashboards_endpoint_router.post("/bulk_compute_cards/{dashboard_id}")
+def bulk_compute_cards(
+    dashboard_id: PyObjectId,
+    request: dict,
+    current_user: User = Depends(get_user_or_anonymous),
+    access_token: Annotated[str | None, Depends(oauth2_scheme_optional)] = None,
+):
+    """Compute card values with interactive filters applied.
+
+    Called by the React viewer whenever the filter state changes. Dedupes
+    Delta-table loads: multiple cards referencing the same (wf_id, dc_id, filter
+    fingerprint) share one load. Returns a map keyed by component index.
+
+    Request body:
+        {
+            "filters": [
+                {"index": "...", "value": ..., "column_name": "...",
+                 "interactive_component_type": "MultiSelect"},
+                ...
+            ],
+            "component_ids": ["...", ...]   # optional; defaults to all cards
+        }
+
+    Response:
+        {
             "values": {"<component_index>": <scalar or null>, ...},
             "secondary_values": {
                 "<component_index>": {"<aggregation>": <scalar or null>, ...},
@@ -2054,14 +2079,7 @@ def _component_context(
             _card_cache_key(wf_id, dc_id, card_filter_expr), set()
         )
         key_cols.add(column)
-        breakdown_col = card.get("breakdown_col")
-        if breakdown_col:
-            key_cols.add(breakdown_col)
-        # ``attrition`` reads several columns beyond the card's own; they have
-        # to survive the projection or the strip silently loses its stages.
-        for stage in card.get("attrition_cols") or []:
-            if stage:
-                key_cols.add(str(stage))
+        key_cols |= _card_payload_columns(card)
         # The expression is applied to the projected frame, so its columns have
         # to survive the projection even when no card displays them.
         key_cols |= _filter_expr_columns(card_filter_expr)
@@ -3117,11 +3135,11 @@ def render_map_endpoint(
         dashboard_id,
         component_id,
         component_type="map",
-    )
-    component = ctx.component
         filters=request.get("filters") or [],
         current_user=current_user,
         access_token=access_token,
+    )
+    component = ctx.component
 
     try:
         df = load_deltatable_lite(
@@ -3176,24 +3194,6 @@ def render_map_endpoint(
         raise HTTPException(status_code=500, detail=f"Map render failed: {e}")
 
 
-# ============================================================================
-# React viewer: JBrowse session URL
-# ============================================================================
-
-
-@dashboards_endpoint_router.post("/render_jbrowse/{dashboard_id}/{component_id}")
-async def render_jbrowse_endpoint(
-    dashboard_id: PyObjectId,
-    component_id: str,
-    request: dict,
-    current_user: User = Depends(get_user_or_anonymous),
-):
-    """Synthesise the JBrowse 2 iframe URL for the React viewer.
-
-    JBrowse 2 must be running at ``localhost:3000`` and its session config
-    server at ``localhost:9010/sessions/...``; if either is unreachable,
-    returns 503 (no silent fallback).
-    """
 # A peek at what is on the map, not a browsing surface — that is what a table
 # component is for. Every column of the DC × 10k rows is already a several-MB
 # response.
@@ -3409,6 +3409,24 @@ def get_floating_components(
     return {"parent_dashboard_id": str(parent_id), "components": components}
 
 
+# ============================================================================
+# React viewer: JBrowse session URL
+# ============================================================================
+
+
+@dashboards_endpoint_router.post("/render_jbrowse/{dashboard_id}/{component_id}")
+async def render_jbrowse_endpoint(
+    dashboard_id: PyObjectId,
+    component_id: str,
+    request: dict,
+    current_user: User = Depends(get_user_or_anonymous),
+):
+    """Synthesise the JBrowse 2 iframe URL for the React viewer.
+
+    JBrowse 2 must be running at ``localhost:3000`` and its session config
+    server at ``localhost:9010/sessions/...``; if either is unreachable,
+    returns 503 (no silent fallback).
+    """
     import httpx
 
     from depictio.api.v1.configs.config import API_BASE_URL

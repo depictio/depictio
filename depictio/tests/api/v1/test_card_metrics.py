@@ -1,4 +1,4 @@
-"""Numeric / QC card layouts: histogram, threshold, completeness, attrition.
+"""Numeric / QC card layouts.
 
 Each exists because an existing layout structurally *cannot* answer its
 question, and the tests below pin those specific properties rather than the
@@ -9,9 +9,15 @@ arithmetic in general:
   missing measurement as a failed one;
 * ``completeness`` must reveal what a hero ``count`` hides, since ``count``
   already skips nulls;
+* ``uniqueness`` must reveal duplication, which is invisible to every other
+  layout because nothing is absent;
 * ``attrition`` must preserve the pipeline's stage order, which is the entire
-  content of the chart.
+  content of the chart;
+* ``trend`` must preserve the axis's *scale* when it downsamples, or a long
+  quiet stretch and a short busy one end up the same width.
 """
+
+from datetime import date, timedelta
 
 import polars as pl
 import pytest
@@ -19,10 +25,13 @@ import pytest
 from depictio.api.v1.services.card_metrics import (
     HISTOGRAM_BINS,
     NUMERIC_LAYOUTS,
+    TREND_MAX_POINTS,
     compute_attrition,
     compute_completeness,
     compute_histogram,
     compute_threshold,
+    compute_trend,
+    compute_uniqueness,
     numeric_layout_payload,
 )
 from depictio.models.components.lite import CardLiteComponent
@@ -287,6 +296,104 @@ class TestDispatcher:
         )
 
 
+class TestUniqueness:
+    def test_counts_repeats_a_completeness_bar_cannot_see(self):
+        """The layout's reason to exist: nothing is missing here, so
+        ``completeness`` reports a perfect column while a third of it repeats."""
+        frame = pl.DataFrame({"sample": ["a", "b", "c", "a", "b", "f"]})
+        assert compute_completeness(frame, "sample")["fill_rate"] == 1.0
+        payload = compute_uniqueness(frame, "sample")
+        assert payload["measured"] == 6
+        assert payload["distinct"] == 4
+        assert payload["duplicated"] == 2
+
+    def test_a_key_column_reads_as_fully_unique(self):
+        payload = compute_uniqueness(pl.DataFrame({"id": ["a", "b", "c"]}), "id")
+        assert payload["unique_rate"] == 1.0
+        assert payload["duplicated"] == 0
+        # No repeat to name — the strip says "unique key" rather than inventing one.
+        assert payload["top_repeat"] is None
+
+    def test_nulls_are_neither_distinct_nor_duplicated(self):
+        """Polars counts null as one of the distinct values. Left uncorrected, a
+        half-empty column would report one more distinct value than it has and
+        score above 100% unique."""
+        frame = pl.DataFrame({"v": ["a", "b", None, None]})
+        payload = compute_uniqueness(frame, "v")
+        assert payload["nulls"] == 2
+        assert payload["measured"] == 2
+        assert payload["distinct"] == 2
+        assert payload["unique_rate"] == 1.0
+
+    def test_names_the_worst_offender(self):
+        frame = pl.DataFrame({"v": ["x", "y", "y", "y", "z", "z"]})
+        assert compute_uniqueness(frame, "v")["top_repeat"] == {"name": "y", "count": 3}
+
+    def test_returns_none_when_every_value_is_missing(self):
+        frame = pl.DataFrame({"v": [None, None]}, schema={"v": pl.Utf8})
+        assert compute_uniqueness(frame, "v") is None
+
+
+class TestTrend:
+    def test_follows_axis_order_not_value_order(self):
+        """The chart's content is the order of the axis. Sorting by value would
+        turn any series into a monotonic ramp."""
+        frame = pl.DataFrame({"v": [5.0, 1.0, 9.0], "year": [2009, 2007, 2008]})
+        payload = compute_trend(frame, "v", "year", "sum")
+        assert [p["label"] for p in payload["points"]] == ["2007", "2008", "2009"]
+        assert [p["value"] for p in payload["points"]] == [1.0, 9.0, 5.0]
+        assert payload["first"] == 1.0
+        assert payload["last"] == 5.0
+
+    def test_change_is_relative_to_the_first_bucket(self):
+        frame = pl.DataFrame({"v": [10.0, 15.0], "t": [1, 2]})
+        assert compute_trend(frame, "v", "t", "sum")["change"] == pytest.approx(0.5)
+
+    def test_change_is_none_rather_than_infinite_on_a_zero_baseline(self):
+        frame = pl.DataFrame({"v": [0.0, 4.0], "t": [1, 2]})
+        assert compute_trend(frame, "v", "t", "sum")["change"] is None
+
+    def test_downsampling_bins_by_width_not_by_position(self):
+        """Two thirds of the rows sit in the first tenth of the range. Taking
+        every n-th distinct value would give that stretch two thirds of the
+        line's width; equal-width buckets keep it a tenth."""
+        dense = [date(2024, 1, 1) + timedelta(days=i) for i in range(60)]
+        sparse = [date(2024, 6, 1) + timedelta(days=i * 30) for i in range(30)]
+        frame = pl.DataFrame({"s": [str(i) for i in range(90)], "d": dense + sparse})
+        payload = compute_trend(frame, "s", "d", "count")
+        assert payload["axis_kind"] == "temporal"
+        assert len(payload["points"]) <= TREND_MAX_POINTS
+        # The dense stretch spans ~2 of the ~11 months covered, so it must not
+        # occupy more than a quarter of the buckets.
+        dense_buckets = [p for p in payload["points"] if p["label"] < "2024-03"]
+        assert len(dense_buckets) <= TREND_MAX_POINTS // 4
+
+    def test_labels_come_from_the_data_not_from_a_computed_edge(self):
+        frame = pl.DataFrame(
+            {
+                "s": [str(i) for i in range(60)],
+                "d": [date(2024, 1, 1) + timedelta(days=i) for i in range(60)],
+            }
+        )
+        payload = compute_trend(frame, "s", "d", "count")
+        assert payload["points"][0]["label"] == "2024-01-01"
+
+    def test_a_single_bucket_is_not_a_trend(self):
+        frame = pl.DataFrame({"v": [1.0, 2.0], "t": [1, 1]})
+        assert compute_trend(frame, "v", "t", "sum") is None
+
+    def test_missing_axis_values_are_dropped_not_bucketed(self):
+        frame = pl.DataFrame({"v": [1.0, 2.0, 3.0], "t": [1, 2, None]})
+        payload = compute_trend(frame, "v", "t", "sum")
+        assert [p["label"] for p in payload["points"]] == ["1", "2"]
+
+    def test_dispatch_needs_the_axis_column(self):
+        frame = pl.DataFrame({"v": [1.0, 2.0], "t": [1, 2]})
+        assert numeric_layout_payload(frame, {}, "v", "trend") is None
+        assert numeric_layout_payload(frame, {"trend_col": "absent"}, "v", "trend") is None
+        assert numeric_layout_payload(frame, {"trend_col": "t"}, "v", "trend") is not None
+
+
 class TestLayoutsStayInSync:
     def test_every_numeric_layout_is_a_valid_model_layout(self):
         from typing import get_args
@@ -303,8 +410,12 @@ class TestLayoutsStayInSync:
         }
         CardLiteComponent(**base, secondary_layout="histogram")
         CardLiteComponent(**base, secondary_layout="completeness")
+        CardLiteComponent(**base, secondary_layout="uniqueness")
         CardLiteComponent(**base, secondary_layout="threshold", threshold_value=30)
         CardLiteComponent(**base, secondary_layout="attrition", attrition_cols=["a", "b"])
+        CardLiteComponent(**base, secondary_layout="trend", trend_col="run_date")
+        CardLiteComponent(**base, secondary_layout="grid")
+        CardLiteComponent(**base, secondary_layout="gauge", coverage_max=44)
 
     def test_threshold_direction_rejects_a_typo(self):
         """A misspelled direction silently defaulting to ``min`` would invert a
@@ -333,7 +444,8 @@ class TestLayoutsStayInSync:
             / "src"
             / "components"
             / "card"
-            / "SecondaryMetrics.tsx"
+            / "metrics"
+            / "types.ts"
         )
         if not source.exists():
             pytest.skip("frontend package not present in this checkout")
@@ -342,3 +454,48 @@ class TestLayoutsStayInSync:
         names = set(re.findall(r"'([a-z_]+)'", block.group(1)))
         assert names, "parsed an empty layout list — the guard would pass vacuously"
         assert names == set(NUMERIC_LAYOUTS)
+
+
+class TestProjectedColumns:
+    """A layout that reaches past its own column needs that column projected out
+    of Delta. ``trend`` shipped without its axis in the projection set, so a
+    saved trend card computed to ``None`` and rendered a hero value with no
+    strip — while the builder preview, which projects correctly, showed the line.
+    """
+
+    def test_trend_axis_is_projected(self):
+        from depictio.api.v1.endpoints.dashboards_endpoints.routes import _card_payload_columns
+
+        card = {"column_name": "individual_id", "secondary_layout": "trend", "trend_col": "year"}
+        assert _card_payload_columns(card) == {"year"}
+
+    def test_breakdown_and_attrition_columns_are_projected(self):
+        from depictio.api.v1.endpoints.dashboards_endpoints.routes import _card_payload_columns
+
+        assert _card_payload_columns({"breakdown_col": "island"}) == {"island"}
+        assert _card_payload_columns({"attrition_cols": ["raw", "trimmed", ""]}) == {
+            "raw",
+            "trimmed",
+        }
+
+    def test_a_card_reading_only_its_own_column_asks_for_nothing_extra(self):
+        from depictio.api.v1.endpoints.dashboards_endpoints.routes import _card_payload_columns
+
+        assert _card_payload_columns({"column_name": "v", "secondary_layout": "histogram"}) == set()
+
+    def test_every_payload_field_of_the_model_is_collected(self):
+        """The guard that survives the next layout: any model field naming a
+        second column has to be read here, or its strip silently disappears."""
+        from depictio.api.v1.endpoints.dashboards_endpoints.routes import _card_payload_columns
+
+        column_fields = [
+            name
+            for name in CardLiteComponent.model_fields
+            if name.endswith("_col") or name.endswith("_cols")
+        ]
+        assert column_fields, "no column-naming fields found — did they get renamed?"
+        for name in column_fields:
+            card = {name: ["stage"] if name.endswith("_cols") else "stage"}
+            assert _card_payload_columns(card) == {"stage"}, (
+                f"{name} names a column the projection drops"
+            )

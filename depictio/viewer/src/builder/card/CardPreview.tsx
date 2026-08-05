@@ -207,6 +207,7 @@ const CardPreview: React.FC = () => {
     threshold_direction?: 'min' | 'max';
     threshold_warn?: number | null;
     attrition_cols?: string[] | null;
+    trend_col?: string | null;
     background_color?: string;
     title_color?: string;
     icon_name?: string;
@@ -245,6 +246,7 @@ const CardPreview: React.FC = () => {
       threshold_direction: config.threshold_direction ?? 'min',
       threshold_warn: config.threshold_warn ?? null,
       attrition_cols: config.attrition_cols ?? [],
+      trend_col: config.trend_col ?? null,
     },
     isNumericLayout(layout),
   );
@@ -289,7 +291,7 @@ const CardPreview: React.FC = () => {
       : [];
   } else if (isNumericLayout(layout)) {
     stripRows = numericPayload ? [{ name: `__${layout}__`, value: numericPayload }] : [];
-  } else if (layout === 'coverage') {
+  } else if (layout === 'coverage' || layout === 'gauge') {
     if (
       typeof config.coverage_max === 'number' &&
       config.coverage_max > 0 &&
@@ -303,9 +305,7 @@ const CardPreview: React.FC = () => {
 
   const showStrip =
     stripRows.length > 0 ||
-    (layout === 'coverage' &&
-      typeof coverageMax === 'number' &&
-      typeof coverageValue === 'number');
+    typeof coverageMax === 'number';
   // Only box_plot still estimates (quartiles aren't precomputed). The
   // categorical strips now show server-computed numbers, so claiming they are
   // estimates would be the inaccurate statement.
@@ -323,21 +323,30 @@ const CardPreview: React.FC = () => {
   // Why a numeric layout is showing nothing. The server returns null for data
   // that genuinely cannot support the layout, and saying so beats an empty
   // panel the user reads as a bug.
-  const numericHint = !isNumericLayout(layout)
-    ? null
-    : numericError
-      ? `Preview unavailable: ${numericError}`
-      : numericLoading
-        ? 'Computing from the live data…'
-        : layout === 'threshold' && config.threshold_value == null
-          ? 'Set a threshold value to see the pass/fail split.'
-          : layout === 'attrition' && (config.attrition_cols?.length ?? 0) < 1
-            ? 'Add at least one further stage column to see the funnel.'
-            : !numericPayload
-              ? layout === 'histogram'
-                ? 'No histogram: this column has no spread (every value is identical).'
-                : 'No data available for this layout.'
-              : null;
+  const numericHint = ((): string | null => {
+    if (!isNumericLayout(layout)) return null;
+    if (numericError) return `Preview unavailable: ${numericError}`;
+    if (numericLoading) return 'Computing from the live data…';
+    // Config the layout cannot run without.
+    if (layout === 'threshold' && config.threshold_value == null) {
+      return 'Set a threshold value to see the pass/fail split.';
+    }
+    if (layout === 'attrition' && (config.attrition_cols?.length ?? 0) < 1) {
+      return 'Add at least one further stage column to see the funnel.';
+    }
+    if (layout === 'trend' && !config.trend_col) {
+      return 'Pick an ordered column to bucket the trend along.';
+    }
+    if (numericPayload) return null;
+    // Config is complete, so the data is what cannot support the layout.
+    if (layout === 'histogram') {
+      return 'No histogram: this column has no spread (every value is identical).';
+    }
+    if (layout === 'trend') {
+      return 'No trend: the chosen axis has fewer than two distinct values.';
+    }
+    return 'No data available for this layout.';
+  })();
 
   return (
     <PreviewPanel minHeight={200}>

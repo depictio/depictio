@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Paper, Stack, Group, Text } from '@mantine/core';
+import { Text } from '@mantine/core';
 import { DatePickerInput } from '@mantine/dates';
-import { Icon } from '@iconify/react';
 import ComponentSkeleton from '../ComponentSkeleton';
 
 import {
@@ -9,6 +8,7 @@ import {
   InteractiveFilter,
   StoredMetadata,
 } from '../../api';
+import { INTERACTIVE_FRAME, InteractiveFrame, InteractiveTitle } from './frame';
 
 /**
  * DatePicker (range) interactive filter — selects a [start, end] date range.
@@ -87,7 +87,9 @@ const DatePickerRenderer: React.FC<{
   metadata: StoredMetadata;
   filters: InteractiveFilter[];
   onChange?: (filter: InteractiveFilter) => void;
-}> = ({ metadata, filters, onChange }) => {
+  /** Compact rendering — drops the frame, relies on the parent group's card. */
+  compact?: boolean;
+}> = ({ metadata, filters, onChange, compact }) => {
   const [bounds, setBounds] = useState<{ min: Date | null; max: Date | null } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -168,25 +170,21 @@ const DatePickerRenderer: React.FC<{
     }
   }, [filterEntry, selected, bounds]);
 
-  const displayTitle =
-    metadata.title ||
-    (metadata.column_name ? `Date range on ${metadata.column_name}` : '');
-  const titleSize =
-    ((metadata as Record<string, unknown>).title_size as
-      | 'xs' | 'sm' | 'md' | 'lg' | 'xl' | undefined) ||
-    metadata.title_font_size ||
-    'md';
-  const iconCol = metadata.icon_color || 'var(--mantine-color-blue-6)';
-
   if (loading) {
-    return <ComponentSkeleton variant="control" />;
+    return (
+      <InteractiveFrame compact={compact}>
+        <ComponentSkeleton variant="control" />
+      </InteractiveFrame>
+    );
   }
 
   if (error || !bounds) {
     return (
-      <div className="dashboard-error" style={{ fontSize: '0.75rem' }}>
-        {error || 'Date range unavailable'}
-      </div>
+      <InteractiveFrame compact={compact}>
+        <Text size="xs" c="red" className="dashboard-error">
+          {error || 'Date range unavailable'}
+        </Text>
+      </InteractiveFrame>
     );
   }
 
@@ -196,84 +194,50 @@ const DatePickerRenderer: React.FC<{
   const value: [Date | null, Date | null] = pickerValue;
 
   return (
-    <Paper
-      p="sm"
-      radius="md"
-      shadow="xs"
-      withBorder
-      className="dashboard-component-hover"
-      style={{
-        height: '100%',
-        boxSizing: 'border-box',
-        display: 'flex',
-        flexDirection: 'column',
-      }}
-    >
-      <Stack gap="xs" style={{ flex: 1, minHeight: 0 }}>
-        {displayTitle && (
-          <Group gap="xs" align="center" wrap="nowrap">
-            {metadata.icon_name && (
-              <Icon
-                icon={metadata.icon_name}
-                width={18}
-                height={18}
-                style={{ color: iconCol, flexShrink: 0 }}
-              />
-            )}
-            <Text fw={600} size={titleSize} lineClamp={1}>
-              {displayTitle}
-            </Text>
-          </Group>
-        )}
-        <DatePickerInput
-          type="range"
-          value={value}
-          minDate={bounds.min ?? undefined}
-          maxDate={bounds.max ?? undefined}
-          clearable={false}
-          w="100%"
-          // Match DMC's ``DatePickerInput type="range"`` defaults — same
-          // ``size="sm"`` the Dash builder uses (title_size="sm" maps
-          // straight through). No custom valueFormat: the default Mantine
-          // range string is what users see in the Dash viewer.
-          size="sm"
-          allowSingleDateInRange
-          onChange={(next: [Date | null, Date | null] | null) => {
-            const [a, b] = (next ?? [null, null]) as [Date | null, Date | null];
-            // Always reflect Mantine's intermediate value locally so the
-            // controlled picker actually advances through partial picks.
-            // Without this, the controlled `value` prop is constant and
-            // Mantine restarts on every click (the user can only ever pick
-            // a "start" date and never the "end").
-            setPickerValue([a, b]);
-            // Wait until both ends are picked before emitting upward.
-            if (!a || !b) return;
-            const isoA = toIsoDateString(a);
-            const isoB = toIsoDateString(b);
-            const isFull =
-              !!bounds.min &&
-              !!bounds.max &&
-              isoA === toIsoDateString(bounds.min) &&
-              isoB === toIsoDateString(bounds.max);
-            onChange?.({
-              index: metadata.index,
-              // Mirror the Dash "drop filter when equal to full bounds" pattern
-              // by emitting null in that case (filter inactive). Otherwise emit
-              // [iso, iso] strings to match the persisted Dash format.
-              value: isFull ? null : [isoA, isoB],
-              column_name: metadata.column_name,
-              interactive_component_type: 'DateRangePicker',
-              filter_expr: metadata.filter_expr,
-            });
-          }}
-          styles={{
-            input: metadata.icon_color
-              ? { borderColor: metadata.icon_color }
-              : undefined,
-          }}
-        />
-      </Stack>
-    </Paper>
+    <InteractiveFrame compact={compact}>
+      <InteractiveTitle metadata={metadata} compact={compact} />
+      <DatePickerInput
+        type="range"
+        value={value}
+        minDate={bounds.min ?? undefined}
+        maxDate={bounds.max ?? undefined}
+        clearable={false}
+        w="100%"
+        size={INTERACTIVE_FRAME.controlSize}
+        allowSingleDateInRange
+        onChange={(next: [Date | null, Date | null] | null) => {
+          const [a, b] = (next ?? [null, null]) as [Date | null, Date | null];
+          // Always reflect Mantine's intermediate value locally so the
+          // controlled picker actually advances through partial picks.
+          // Without this, the controlled `value` prop is constant and
+          // Mantine restarts on every click (the user can only ever pick
+          // a "start" date and never the "end").
+          setPickerValue([a, b]);
+          // Wait until both ends are picked before emitting upward.
+          if (!a || !b) return;
+          const isoA = toIsoDateString(a);
+          const isoB = toIsoDateString(b);
+          const isFull =
+            !!bounds.min &&
+            !!bounds.max &&
+            isoA === toIsoDateString(bounds.min) &&
+            isoB === toIsoDateString(bounds.max);
+          onChange?.({
+            index: metadata.index,
+            // Mirror the Dash "drop filter when equal to full bounds" pattern
+            // by emitting null in that case (filter inactive). Otherwise emit
+            // [iso, iso] strings to match the persisted Dash format.
+            value: isFull ? null : [isoA, isoB],
+            column_name: metadata.column_name,
+            interactive_component_type: 'DateRangePicker',
+            filter_expr: metadata.filter_expr,
+          });
+        }}
+        styles={{
+          input: metadata.icon_color ? { borderColor: metadata.icon_color } : undefined,
+        }}
+      />
+    </InteractiveFrame>
   );
 };
 

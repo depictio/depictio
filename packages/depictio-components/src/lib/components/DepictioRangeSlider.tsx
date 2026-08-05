@@ -21,12 +21,25 @@ export interface DepictioRangeSliderProps {
   step?: number;
   /** Marks count; default 5. */
   marks_number?: number;
+  /** Explicit marks, overriding the evenly spaced ones this component derives
+   *  from `marks_number`. Callers that know the column's granularity (the
+   *  viewer's `RangeSliderRenderer`, via `buildNumericScale`) pass the values
+   *  the column actually takes. */
+  marks?: { value: number; label?: React.ReactNode }[];
+  /** Snap both thumbs to `marks`. Only meaningful with explicit `marks`, and
+   *  only correct when those marks enumerate every value in range. */
+  restrict_to_marks?: boolean;
   /** When false, suppress tick marks for a denser look. Defaults to true. */
   show_marks?: boolean;
   /** Compact rendering: drop the outer Paper, tighten internal spacing, and
    *  shrink the title row. Used when this slider is embedded inside another
    *  Paper-bearing container (e.g. InteractiveGroupCard). */
   compact?: boolean;
+  /** Render the bare Mantine slider: no Paper, no title row. Used by the React
+   *  viewer, whose interactive renderers supply one shared frame for every
+   *  control type (see `components/interactive/frame.tsx` in
+   *  depictio-react-core) so the Filters panel stays visually uniform. */
+  bare?: boolean;
   /** Currently selected [low, high]. Defaults to [min, max]. */
   value?: [number, number] | null;
   color?: string;
@@ -47,8 +60,11 @@ const DepictioRangeSlider: React.FC<DepictioRangeSliderProps> = ({
   step,
   // Default = 2 marks (just min + max). Caller can override via metadata.
   marks_number = 2,
+  marks: explicitMarks,
+  restrict_to_marks = false,
   show_marks = true,
   compact = false,
+  bare = false,
   value,
   color,
   icon_name,
@@ -84,18 +100,26 @@ const DepictioRangeSlider: React.FC<DepictioRangeSliderProps> = ({
     [setProps, onChange, safeMin, safeMax],
   );
 
-  // Mark generation between [safeMin, safeMax] at marks_number positions.
-  // When show_marks is false the slider renders without any tick labels —
-  // used for compact group rendering where labels would compete for space.
+  // Marks come from the caller when it knows the column's granularity;
+  // otherwise they are evenly spaced between [safeMin, safeMax] at
+  // marks_number positions. When show_marks is false the slider renders without
+  // tick labels — used for compact group rendering where labels would compete
+  // for space — but a restricted slider keeps the marks themselves, since they
+  // are what its thumbs snap to.
   const marks = React.useMemo(() => {
-    if (!show_marks) return undefined;
+    if (!show_marks) {
+      return restrict_to_marks && explicitMarks
+        ? explicitMarks.map((m) => ({ value: m.value }))
+        : undefined;
+    }
+    if (explicitMarks) return explicitMarks;
     const n = Math.max(2, marks_number);
     const stepSize = (safeMax - safeMin) / (n - 1);
     return Array.from({ length: n }, (_, i) => {
       const v = safeMin + stepSize * i;
       return { value: v, label: formatMark(v) };
     });
-  }, [safeMin, safeMax, marks_number, show_marks]);
+  }, [safeMin, safeMax, marks_number, show_marks, explicitMarks, restrict_to_marks]);
 
   const displayTitle =
     title ||
@@ -120,7 +144,49 @@ const DepictioRangeSlider: React.FC<DepictioRangeSliderProps> = ({
   // tighter spacing) so a parent container's frame is the only visible one.
   const sliderTitleSize: 'xs' | 'sm' | 'md' | 'lg' | 'xl' = compact ? 'xs' : title_size;
   const stackGap = compact ? 2 : 6;
-  const sliderMb = compact ? 0 : 'xs';
+  // Mark labels hang below the track, so a compact slider showing them needs
+  // the room it otherwise gives away.
+  const sliderMb = compact ? (show_marks ? 'sm' : 0) : 'xs';
+  const slider = (
+    <RangeSlider
+      min={safeMin}
+      max={safeMax}
+      step={step ?? (safeMax - safeMin) / 100}
+      value={local}
+      onChange={handleChange}
+      onChangeEnd={handleChangeEnd}
+      marks={marks}
+      restrictToMarks={restrict_to_marks}
+      // On a restricted slider both thumbs may sit on the same mark — picking
+      // one year out of three is a legitimate selection, and a minimum range
+      // would forbid it.
+      minRange={restrict_to_marks ? 0 : (safeMax - safeMin) / 1000}
+      size={compact ? 'sm' : 'md'}
+      thumbSize={compact ? 12 : undefined}
+      mb={sliderMb}
+      // Apply the metadata color (track + thumb). Mantine accepts a token
+      // name ('blue') or `color.shade` ('blue.5'); a raw hex/rgb is set
+      // via the `styles` prop instead.
+      color={
+        color && !color.startsWith('#') && !color.startsWith('rgb') ? color : undefined
+      }
+      styles={{
+        // Tick labels are captions. Mantine sizes them at `sm` whatever the
+        // slider's own size, which matches the filter title beside them — see
+        // `SLIDER_MARK_LABEL_STYLE` in depictio-react-core, which this mirrors.
+        markLabel: { fontSize: 'var(--mantine-font-size-xs)', lineHeight: 1.2 },
+        ...(color && (color.startsWith('#') || color.startsWith('rgb'))
+          ? {
+              bar: { backgroundColor: color },
+              thumb: { borderColor: color, backgroundColor: color },
+            }
+          : {}),
+      }}
+    />
+  );
+
+  if (bare) return slider;
+
   const inner = (
     <Stack gap={stackGap}>
       {displayTitle && (
@@ -133,45 +199,12 @@ const DepictioRangeSlider: React.FC<DepictioRangeSliderProps> = ({
               style={{ color: iconCol, flexShrink: 0 }}
             />
           )}
-          <Text
-            fw={600}
-            size={sliderTitleSize}
-            style={{ color: titleCol }}
-            truncate
-          >
+          <Text fw={600} size={sliderTitleSize} style={{ color: titleCol }} truncate>
             {displayTitle}
           </Text>
         </Group>
       )}
-      <RangeSlider
-        min={safeMin}
-        max={safeMax}
-        step={step ?? (safeMax - safeMin) / 100}
-        value={local}
-        onChange={handleChange}
-        onChangeEnd={handleChangeEnd}
-        marks={marks}
-        minRange={(safeMax - safeMin) / 1000}
-        size={compact ? 'sm' : 'md'}
-        thumbSize={compact ? 12 : undefined}
-        mb={sliderMb}
-        // Apply the metadata color (track + thumb). Mantine accepts a token
-        // name ('blue') or `color.shade` ('blue.5'); a raw hex/rgb is set
-        // via the `styles` prop instead.
-        color={
-          color && !color.startsWith('#') && !color.startsWith('rgb')
-            ? color
-            : undefined
-        }
-        styles={
-          color && (color.startsWith('#') || color.startsWith('rgb'))
-            ? {
-                bar: { backgroundColor: color },
-                thumb: { borderColor: color, backgroundColor: color },
-              }
-            : undefined
-        }
-      />
+      {slider}
     </Stack>
   );
 

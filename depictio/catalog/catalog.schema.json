@@ -336,16 +336,20 @@
               "enum": [
                 "vertical",
                 "compact",
+                "grid",
                 "box_plot",
                 "top_n",
                 "coverage",
+                "gauge",
                 "concentration",
                 "composition",
                 "donut",
                 "histogram",
                 "threshold",
                 "completeness",
-                "attrition"
+                "uniqueness",
+                "attrition",
+                "trend"
               ],
               "type": "string"
             },
@@ -440,6 +444,18 @@
           },
           "title": "Attrition Cols",
           "type": "array"
+        },
+        "trend_col": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Trend Col"
         },
         "filter_expr": {
           "anyOf": [

@@ -214,6 +214,9 @@ class CardLiteComponent(BaseLiteComponent):
     # Multi-metric layout style.
     #   - ``vertical`` (default): stacked secondary aggregations under the hero
     #   - ``compact``: horizontal strip of secondary aggregations
+    #   - ``grid``: two columns of secondary aggregations. The readable option
+    #     between four and six, where ``compact`` squeezes each column below a
+    #     legible width and ``vertical`` grows taller than the card.
     #   - ``box_plot``: Tukey box-and-whisker from min/q1/median/q3/max
     #   - ``top_n``: mini horizontal bar chart of the top-N values of
     #     ``breakdown_col`` (cardinality view for ``count`` / ``nunique``
@@ -221,6 +224,9 @@ class CardLiteComponent(BaseLiteComponent):
     #   - ``coverage``: horizontal fill bar of ``value / coverage_max`` (e.g.
     #     "44 of 44 samples"). No extra server compute — the renderer reads
     #     the card's hero value as the numerator.
+    #   - ``gauge``: the same ``value / coverage_max``, drawn as a dial. Reads
+    #     faster when the number is a *level* rather than a quantity; same
+    #     relationship to ``coverage`` as ``donut`` has to ``composition``.
     #   - ``concentration``: same backend as ``top_n`` (groups by
     #     ``breakdown_col``) but the renderer surfaces only the top-N share
     #     (e.g. "Top 3 cover 18%").
@@ -243,28 +249,41 @@ class CardLiteComponent(BaseLiteComponent):
     #   - ``completeness``: filled vs missing (null) values. A hero ``count``
     #     already skips nulls, so a card can look complete while the column is
     #     half empty.
+    #   - ``uniqueness``: distinct vs repeated values. The other half of the
+    #     data-quality pair — ``completeness`` counts what is absent, this
+    #     counts what is duplicated, which nothing else surfaces because
+    #     nothing is missing.
     #   - ``attrition``: retention across ``attrition_cols`` in pipeline order
     #     (reads in → trimmed → mapped → deduplicated).
+    #   - ``trend``: the hero aggregation per bucket of ``trend_col``. Where
+    #     ``attrition`` walks a sequence of columns, this walks the values of
+    #     one — the only layout that answers "is this number moving".
     secondary_layout: Literal[
         "vertical",
         "compact",
+        "grid",
         "box_plot",
         "top_n",
         "coverage",
+        "gauge",
         "concentration",
         "composition",
         "donut",
         "histogram",
         "threshold",
         "completeness",
+        "uniqueness",
         "attrition",
+        "trend",
     ] = Field(
         default="vertical",
         description=(
-            "Layout of the secondary strip. ``vertical`` / ``compact`` use the "
-            "``aggregations`` list; ``box_plot`` uses ``box_plot_stats``; ``top_n``, "
+            "Layout of the secondary strip. ``vertical`` / ``compact`` / ``grid`` use "
+            "the ``aggregations`` list; ``box_plot`` uses ``box_plot_stats``; ``top_n``, "
             "``concentration``, ``composition`` and ``donut`` use ``breakdown_col``; "
-            "``coverage`` uses ``coverage_max``."
+            "``coverage`` and ``gauge`` use ``coverage_max``; ``trend`` uses "
+            "``trend_col``; ``histogram``, ``completeness`` and ``uniqueness`` need no "
+            "extra config."
         ),
     )
     breakdown_col: str | None = Field(
@@ -291,10 +310,19 @@ class CardLiteComponent(BaseLiteComponent):
     coverage_max: float | None = Field(
         default=None,
         description=(
-            "Denominator for ``secondary_layout: coverage`` — the theoretical "
-            "maximum the hero value can reach (e.g. 44 samples in the cohort, "
-            "11 SARS-CoV-2 ORFs). When null the renderer falls back to plain "
+            "Denominator for ``secondary_layout: coverage`` and ``gauge`` — the "
+            "theoretical maximum the hero value can reach (e.g. 44 samples in the "
+            "cohort, 11 SARS-CoV-2 ORFs). When null the renderer falls back to plain "
             "vertical layout."
+        ),
+    )
+    trend_col: str | None = Field(
+        default=None,
+        description=(
+            "Ordered column the ``secondary_layout: trend`` sparkline is bucketed "
+            "along — a date, a timestamp, or any sortable number (a run index, a "
+            "year). The card's own column is what gets aggregated inside each "
+            "bucket; without this the strip is not rendered."
         ),
     )
     threshold_value: float | None = Field(
@@ -752,6 +780,21 @@ class MapLiteComponent(BaseLiteComponent):
     # Display title
     title: str | None = Field(default=None, description="Title displayed above the map")
 
+    # Layout placement
+    placement: str = Field(
+        default="grid",
+        description="Where to render this map: 'grid' (default — a normal dashboard "
+        "tile) or 'floating' (a collapsible panel reachable from every tab of the "
+        "dashboard).",
+    )
+    floating_initial_state: str = Field(
+        default="compact",
+        description="How that panel presents itself on a viewer's first visit: "
+        "'compact' or 'expanded' (a draggable card), 'docked' (pinned below the "
+        "filter panel) or 'hidden' (reachable from the header). Their own saved "
+        "preference takes over from then on. Ignored when placement='grid'.",
+    )
+
     # Pass-through kwargs for extra Plotly Express parameters
     dict_kwargs: dict[str, Any] = Field(
         default_factory=dict,
@@ -769,6 +812,17 @@ class MapLiteComponent(BaseLiteComponent):
             valid = ", ".join(MAP_STYLES)
             raise ValueError(f"Invalid map_style '{self.map_style}'. Valid values: {valid}")
 
+        if self.placement not in MAP_PLACEMENTS:
+            valid = ", ".join(MAP_PLACEMENTS)
+            raise ValueError(f"Invalid placement '{self.placement}'. Valid values: {valid}")
+
+        if self.floating_initial_state not in FLOATING_PANEL_STATES:
+            valid = ", ".join(FLOATING_PANEL_STATES)
+            raise ValueError(
+                f"Invalid floating_initial_state '{self.floating_initial_state}'. "
+                f"Valid values: {valid}"
+            )
+
         if self.selection_enabled and not self.selection_column:
             raise ValueError("selection_column is required when selection_enabled=True")
 
@@ -780,21 +834,6 @@ class MapLiteComponent(BaseLiteComponent):
                 )
             if not self.lon_column:
                 raise ValueError(
-    # Layout placement
-    placement: str = Field(
-        default="grid",
-        description="Where to render this map: 'grid' (default — a normal dashboard "
-        "tile) or 'floating' (a collapsible panel reachable from every tab of the "
-        "dashboard).",
-    )
-    floating_initial_state: str = Field(
-        default="compact",
-        description="How that panel presents itself on a viewer's first visit: "
-        "'compact' or 'expanded' (a draggable card), 'docked' (pinned below the "
-        "filter panel) or 'hidden' (reachable from the header). Their own saved "
-        "preference takes over from then on. Ignored when placement='grid'.",
-    )
-
                     "lon_column is required when map_type is scatter_map or density_map"
                 )
 
@@ -812,17 +851,6 @@ class MapLiteComponent(BaseLiteComponent):
                 )
             if not self.color_column:
                 raise ValueError("color_column is required when map_type='choropleth_map'")
-        if self.placement not in MAP_PLACEMENTS:
-            valid = ", ".join(MAP_PLACEMENTS)
-            raise ValueError(f"Invalid placement '{self.placement}'. Valid values: {valid}")
-
-        if self.floating_initial_state not in FLOATING_PANEL_STATES:
-            valid = ", ".join(FLOATING_PANEL_STATES)
-            raise ValueError(
-                f"Invalid floating_initial_state '{self.floating_initial_state}'. "
-                f"Valid values: {valid}"
-            )
-
             if self.selection_enabled:
                 raise ValueError(
                     "selection_enabled is not supported for choropleth_map "

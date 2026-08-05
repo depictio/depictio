@@ -47,6 +47,7 @@ export {
   isBreakdownLayout,
   NUMERIC_LAYOUTS,
   isNumericLayout,
+  STAT_LIST_LAYOUTS,
 } from './components/card/SecondaryMetrics';
 export type { SecondaryLayout } from './components/card/SecondaryMetrics';
 export type {
@@ -54,6 +55,8 @@ export type {
   ThresholdPayload,
   CompletenessPayload,
   AttritionPayload,
+  TrendPayload,
+  UniquenessPayload,
 } from './components/card/SecondaryMetrics';
 
 // Interactive renderers
@@ -64,6 +67,15 @@ export { default as DatePickerRenderer } from './components/interactive/DatePick
 export { default as CheckboxSwitchRenderer } from './components/interactive/CheckboxSwitchRenderer';
 export { default as SegmentedControlRenderer } from './components/interactive/SegmentedControlRenderer';
 export { default as TimelineRenderer } from './components/interactive/TimelineRenderer';
+// The one frame every interactive control renders inside — exported so the
+// builder can label a component the way the viewer would.
+export {
+  INTERACTIVE_FRAME,
+  InteractiveFrame,
+  InteractiveTitle,
+  defaultInteractiveTitle,
+  interactiveTitle,
+} from './components/interactive/frame';
 
 // Layout helpers (filter sidebar grouping + top panel)
 export { default as InteractiveGroupCard } from './components/InteractiveGroupCard';
@@ -97,6 +109,7 @@ export type {
 export {
   fetchDashboard,
   fetchAllDashboards,
+  fetchFloatingComponents,
   fetchSpecs,
   fetchUniqueValues,
   fetchBreakdown,
@@ -109,7 +122,6 @@ export {
   fetchImagePaths,
   renderMap,
   fetchJBrowseSession,
-  fetchFloatingComponents,
   renderMultiQC,
   renderMultiQCGeneralStats,
   fetchServerStatus,
@@ -234,6 +246,8 @@ export {
   fetchCatalogPreviewPayload,
 } from './api';
 export type {
+  FloatingComponent,
+  FloatingComponentsResponse,
   TableMutationResult,
   RoleDtypeSpec,
   IngestionReport,
@@ -246,8 +260,6 @@ export type {
   CatalogRender,
   CatalogOutputMatch,
   CatalogModule,
-  FloatingComponent,
-  FloatingComponentsResponse,
   CatalogComposeResponse,
   CatalogPreviewRender,
   CatalogPreviewPayload,
@@ -263,18 +275,6 @@ export {
   enrichFilterWithDcId,
 } from './selection';
 
-// Cross-DC available-values intersection (powers greying-out unavailable
-// options in interactive filter dropdowns).
-export {
-  AvailableFilterValuesProvider,
-  useAvailableSet,
-} from './availableValues';
-
-// Real-time event subscription (WebSocket /events/ws)
-export { useDataCollectionUpdates, useMonitoringEvents, ADMIN_MONITORING_CHANNEL } from './realtime';
-export type {
-  RealtimeStatus,
-  RealtimeMode,
 // Map panel: a map lifted out of the grid, available from every tab as a
 // floating card or as a dock under the filter panel. Mount both shells — each
 // renders nothing unless the panel is in its mode.
@@ -303,6 +303,18 @@ export {
 } from './floatingFilters';
 export type { FloatingFilterPayload } from './floatingFilters';
 
+// Cross-DC available-values intersection (powers greying-out unavailable
+// options in interactive filter dropdowns).
+export {
+  AvailableFilterValuesProvider,
+  useAvailableSet,
+} from './availableValues';
+
+// Real-time event subscription (WebSocket /events/ws)
+export { useDataCollectionUpdates, useMonitoringEvents, ADMIN_MONITORING_CHANNEL } from './realtime';
+export type {
+  RealtimeStatus,
+  RealtimeMode,
   RealtimeEvent,
   MonitoringLiveEvent,
 } from './realtime';

@@ -458,13 +458,26 @@ export async function fetchCardMetric(
   return res.json();
 }
 
+/** What a numeric slider needs to know about its column: the bounds, plus the
+ *  granularity the bounds are drawn from. `dtype` and `unique` are what tell a
+ *  three-year survey column apart from a continuous measurement, so the slider
+ *  can stop on 2008 instead of on 2007.34 — see `buildNumericScale`. */
+export interface ColumnRange {
+  min: number | null;
+  max: number | null;
+  /** Polars dtype as recorded in the DC specs ("int64", "float64", …). */
+  dtype?: string | null;
+  /** Distinct value count from the DC specs. */
+  unique?: number | null;
+}
+
 /** Numeric range bounds for a column — backs RangeSlider min/max.
  *  Reads precomputed min/max from /deltatables/specs/{dcId}.
  */
 export async function fetchColumnRange(
   dcId: string,
   columnName: string,
-): Promise<{ min: number | null; max: number | null }> {
+): Promise<ColumnRange> {
   const specs = await fetchSpecs(dcId);
   if (Array.isArray(specs)) {
     // List shape: [{name, type, specs}]
@@ -475,6 +488,8 @@ export async function fetchColumnRange(
     return {
       min: typeof s.min === 'number' ? s.min : null,
       max: typeof s.max === 'number' ? s.max : null,
+      dtype: typeof entry?.type === 'string' ? (entry.type as string) : null,
+      unique: typeof s.unique === 'number' ? s.unique : null,
     };
   }
   // Dict shape (legacy)
@@ -483,6 +498,8 @@ export async function fetchColumnRange(
   return {
     min: typeof s.min === 'number' ? s.min : null,
     max: typeof s.max === 'number' ? s.max : null,
+    dtype: typeof s.type === 'string' ? (s.type as string) : null,
+    unique: typeof s.unique === 'number' ? s.unique : null,
   };
 }
 
@@ -1216,23 +1233,6 @@ export async function renderMap(
   return res.json();
 }
 
-/** JBrowse 2 iframe session payload. The standalone JBrowse server runs at
- *  localhost:3000 with sessions hosted at localhost:9010. Filter state may
- *  narrow the visible tracks via existing /jbrowse/* internal endpoints. If
- *  any of those services are unreachable, the backend returns 503.
- */
-export interface JBrowseSessionResponse {
-  iframe_url: string;
-  assembly: string;
-  location: string;
-  tracks?: string[];
-  metadata?: { filter_applied?: boolean };
-}
-
-export async function fetchJBrowseSession(
-  dashboardId: string,
-  componentId: string,
-  filters: InteractiveFilter[],
 /** Rows behind a map component, for the viewer's "show data" table. Every
  *  column of the data collection, in `{col: values}` form — deliberately the
  *  same shape `fetchAdvancedVizData` returns, so both feed the same grid. */
@@ -1264,6 +1264,23 @@ export async function fetchMapData(
   return (await res.json()) as MapDataResponse;
 }
 
+/** JBrowse 2 iframe session payload. The standalone JBrowse server runs at
+ *  localhost:3000 with sessions hosted at localhost:9010. Filter state may
+ *  narrow the visible tracks via existing /jbrowse/* internal endpoints. If
+ *  any of those services are unreachable, the backend returns 503.
+ */
+export interface JBrowseSessionResponse {
+  iframe_url: string;
+  assembly: string;
+  location: string;
+  tracks?: string[];
+  metadata?: { filter_applied?: boolean };
+}
+
+export async function fetchJBrowseSession(
+  dashboardId: string,
+  componentId: string,
+  filters: InteractiveFilter[],
   theme: 'light' | 'dark' = 'light',
 ): Promise<JBrowseSessionResponse> {
   const res = await fetch(

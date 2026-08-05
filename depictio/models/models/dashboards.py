@@ -1050,6 +1050,7 @@ class DashboardDataLite(BaseModel):
                         "threshold_direction": comp_dict.get("threshold_direction", "min"),
                         "threshold_warn": comp_dict.get("threshold_warn"),
                         "attrition_cols": comp_dict.get("attrition_cols") or [],
+                        "trend_col": comp_dict.get("trend_col"),
                     }
                 )
                 for f in [
@@ -1152,9 +1153,9 @@ class DashboardDataLite(BaseModel):
                     "choropleth_aggregation": None,
                     "color_continuous_scale": None,
                     "range_color": None,
-                }
                     "placement": "grid",
                     "floating_initial_state": "compact",
+                }
                 for field, default in _MAP_FULL_DEFAULTS.items():
                     full_comp[field] = comp_dict.get(field, default)
                 full_comp.update(
@@ -1219,7 +1220,6 @@ class DashboardDataLite(BaseModel):
             comp_dict = comp_obj if isinstance(comp_obj, dict) else comp_obj.model_dump()
             comp_type = comp.get("component_type", "figure")
 
-            # Extract x/y/w/h from nested layout (new format), flat fields (legacy), or auto-generate
             # Components lifted out of the grid get no layout item at all: the
             # React shell lays them out itself. 'top' is the Timeline in the
             # TopPanel, 'floating' is a map in the floating panel. Skipping
@@ -1228,6 +1228,7 @@ class DashboardDataLite(BaseModel):
             if comp.get("placement") in ("top", "floating"):
                 continue
 
+            # Extract x/y/w/h from nested layout (new format), flat fields (legacy), or auto-generate
             layout_nested = comp_dict.get("layout", {})
             if layout_nested and isinstance(layout_nested, dict):
                 x = layout_nested.get("x", 0)
