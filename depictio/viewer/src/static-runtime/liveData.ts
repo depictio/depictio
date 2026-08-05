@@ -14,10 +14,14 @@
  */
 import {
   HyparquetEngine,
+  limitsOf,
+  reduceFrame,
   refillFigure,
   resolveUri,
+  roundSigFigs,
   runPrologue,
   sortSlice,
+  type AdvancedVizTailSpec,
   type AggFn,
   type BindingTable,
   type BoundFilter,
@@ -371,6 +375,197 @@ export async function renderPrologueFigureLive(
     displayed: result.displayed,
     total: derived.length,
     filterApplied: bound.length > 0,
+  };
+}
+
+/** The DataRef's user-visible columns: its schema minus the build-time
+ *  companions (companion-map keys plus `__code__*` codebook codes, `__ts__*`
+ *  epoch-µs datetimes, `__fe__*` filter_expr booleans — companions.py). Those
+ *  exist only for the filter kernels; the live server's schema never has them,
+ *  so neither a projection nor a schema response may mention them. */
+export function userColumns(ref: DataRef): { name: string; dtype: string }[] {
+  const companions = new Set(Object.keys(ref.companions ?? {}));
+  return (ref.columns ?? []).filter(
+    (c) =>
+      !companions.has(c.name) &&
+      !c.name.startsWith('__code__') &&
+      !c.name.startsWith('__ts__') &&
+      !c.name.startsWith('__fe__'),
+  );
+}
+
+/** The dtypes the server rounds before serialising: `df.schema[c] in
+ *  (pl.Float32, pl.Float64)` (advanced_viz routes.py:838). Ints and decimals
+ *  are left alone there and here. */
+const FLOAT_DTYPE_RE = /^float(32|64)$/i;
+
+/** Request shape of the real `fetchAdvancedVizData` (api.ts:625–648) minus
+ *  `wfId`: there is one workflow in a bundle and the DC id alone keys the
+ *  bundled table. */
+export interface AdvancedVizLiveRequest {
+  dcId: string;
+  columns: string[];
+  filters?: InteractiveFilter[];
+  limitRows?: number;
+  fullLoad?: boolean;
+  vizKind?: string | null;
+  roles?: Record<string, string>;
+  tail?: AdvancedVizTailSpec | null;
+}
+
+/** `AdvancedVizDataResponse` (api.ts:593–609) with the optional fields the
+ *  live path always populates. */
+export interface AdvancedVizLiveResponse {
+  columns: string[];
+  rows: Record<string, unknown[]>;
+  row_count: number;
+  total_rows: number;
+  sampled: boolean;
+  sampling: { policy: string; exact: boolean; degraded: boolean };
+  filter_applied: boolean;
+}
+
+/**
+ * Live equivalent of `POST /advanced_viz/data`
+ * (advanced_viz_endpoints/routes.py:560–867) over the bundled Parquet.
+ *
+ * The server does mask + projection + reduction in one lazy scan; here the
+ * engine masks and materialises, and depictio-static-core's `reduceFrame` —
+ * the port of `_load_reduced` — makes the reduction decision. Everything
+ * `reduceFrame`'s doc leaves to the caller happens in this function: the
+ * explicit `limit_rows` / `full_load` request shapes (which never reach
+ * `_load_reduced`, routes.py:656–666), the projection, and the float
+ * rounding.
+ *
+ * Faithfulness notes, all pinned to the server's own lines:
+ *   projection  — requested ∪ filter columns, first occurrence wins, then
+ *     intersected with the DC's schema (routes.py:725–762). Filter columns
+ *     ride along because the reduction hashes the WHOLE projection
+ *     (`_hash_sample`, :289), so dropping them would change which rows a
+ *     sample keeps.
+ *   response `columns` — NOT the projection: `present = [c for c in columns
+ *     if c in df.columns]` (:826) echoes the REQUESTED columns that survived,
+ *     in request order, so a filter-only column is projected and hashed but
+ *     never serialised. `rows` carries exactly those columns.
+ *   rounding    — every Float column to 6 significant figures (:836–842),
+ *     after the reduction, so live values are byte-comparable with the
+ *     server's.
+ */
+export async function fetchAdvancedVizDataLive(
+  req: AdvancedVizLiveRequest,
+): Promise<AdvancedVizLiveResponse> {
+  const ref = dataRefFor(req.dcId);
+  if (!ref) throw new Error(`static bundle: no data_ref for dc "${req.dcId}"`);
+  const { handle } = await tableFor(req.dcId);
+
+  // Projection: requested columns first, then any column a filter names —
+  // deduped first-occurrence, then intersected with the DC's actual schema
+  // (the server's `available_cols` guard, which exists because link-resolved
+  // filters can name columns this DC doesn't have).
+  const schema = new Map(userColumns(ref).map((c) => [c.name, c.dtype]));
+  const filterCols = (req.filters ?? [])
+    .map((f) => f.column_name ?? f.metadata?.column_name)
+    .filter((c): c is string => Boolean(c));
+  const projection = [...new Set([...req.columns, ...filterCols])].filter((c) => schema.has(c));
+
+  // Mask exactly like every other live path (no filters → null mask = all
+  // rows), then materialise the projection over the surviving rows: the
+  // reduction kernels take plain arrays, not a scan.
+  const bound = toBoundFilters(req.filters ?? []);
+  const mask = bound.length ? (await engine.mask(handle, bound)).mask : null;
+  const cols = await engine.columns(handle, projection);
+  const sel: number[] = [];
+  for (let i = 0; i < ref.rows; i++) {
+    if (mask === null || mask[i] === 1) sel.push(i);
+  }
+  const data: Record<string, unknown[]> = {};
+  for (const name of projection) {
+    const src = cols[name];
+    const out: unknown[] = new Array(sel.length);
+    for (let k = 0; k < sel.length; k++) {
+      const v = src[sel[k]];
+      out[k] = v === undefined ? null : v;
+    }
+    data[name] = out;
+  }
+  // `total_rows` is always the count BEFORE any reduction — the "of M" half of
+  // the renderer's badge (routes.py:808–810). Taken from the mask rather than
+  // from `reduceFrame` so it stays right even when the projection came back
+  // empty (no requested column exists on this DC).
+  const total = sel.length;
+
+  let rows: Record<string, unknown[]>;
+  let rowCount: number;
+  let sampled: boolean;
+  let sampling: { policy: string; exact: boolean; degraded: boolean };
+
+  if (typeof req.limitRows === 'number') {
+    // Explicit cap (heatmap/upset previews): the server pushes it into the
+    // scan, so it is a PREFIX of the filtered frame, never a sample
+    // (routes.py:815–826). `exact` is false as soon as the frame reaches the
+    // cap — including when it lands exactly on it, which is what
+    // `df.height >= limit_rows` says.
+    const n = Math.max(0, Math.min(Math.floor(req.limitRows), total));
+    rows = {};
+    for (const name of projection) rows[name] = data[name].slice(0, n);
+    rowCount = n;
+    sampled = false;
+    sampling = { policy: 'explicit', exact: total < req.limitRows, degraded: false };
+  } else if (req.fullLoad) {
+    // Load-All. DELIBERATE DEVIATION: the server still caps a full load, at
+    // `figure_max_load_rows` (500k) — a transport bound on a Delta scan it has
+    // to serialise over HTTP — and therefore reports policy 'explicit' with
+    // `exact` false past that ceiling. The bundle's rows are already in the
+    // browser, so there is nothing to transport and no reason to truncate:
+    // Load-All here is genuinely the whole filtered frame, which is what
+    // policy 'full' + `exact: true` means (the same pair the server sends when
+    // its reduction bails to the unbounded row loader, routes.py:818–824).
+    rows = data;
+    rowCount = total;
+    sampled = false;
+    sampling = { policy: 'full', exact: true, degraded: false };
+  } else {
+    // Default path: the kind's policy decides (uniform / tail-preserving /
+    // none), against the building instance's ceilings pinned into the
+    // manifest.
+    const reduced = reduceFrame({
+      columns: projection,
+      data,
+      vizKind: req.vizKind,
+      roles: req.roles,
+      tail: req.tail,
+      limits: limitsOf(bundle()),
+    });
+    rows = reduced.rows;
+    rowCount = reduced.row_count;
+    sampled = reduced.sampled;
+    sampling = reduced.sampling;
+  }
+
+  // Serialise only the requested columns that survived projection, in request
+  // order, rounding the floats — the server's response-assembly step.
+  const present = req.columns.filter((c) => schema.has(c));
+  const payload: Record<string, unknown[]> = {};
+  for (const name of present) {
+    const values = rows[name] ?? [];
+    payload[name] = FLOAT_DTYPE_RE.test(schema.get(name) ?? '')
+      ? values.map(roundSigFigs)
+      : values;
+  }
+
+  return {
+    columns: present,
+    rows: payload,
+    row_count: rowCount,
+    total_rows: total,
+    sampled,
+    sampling,
+    // `bound`, not `req.filters`: an interactive component sitting at its empty
+    // value contributes a filter entry that selects nothing, and the other
+    // live paths (table/figure) already report those as "no filter applied".
+    // The server counts filter *entries* (`bool(filter_metadata)`, :854) — the
+    // two agree for every payload the viewer actually sends.
+    filter_applied: bound.length > 0,
   };
 }
 
