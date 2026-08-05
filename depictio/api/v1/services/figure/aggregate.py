@@ -28,6 +28,7 @@ Design rules:
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -79,6 +80,12 @@ _UNSUPPORTED_KWARGS = frozenset(
         # Alternate reductions / layouts we don't reimplement.
         "histfunc", "histnorm", "cumulative", "orientation", "barnorm", "groupnorm",
         "ecdfnorm", "ecdfmode",
+        # Both need the raw values a five-number summary no longer has: `points`
+        # draws one mark per row on top of the box, and a notch is derived from
+        # the sample size around the median. `_build_box` emits neither, so
+        # leaving them in the passthrough list meant a box that asked for them
+        # got a plain box back and nothing said so.
+        "points", "notched",
     }
 )  # fmt: skip
 
@@ -92,9 +99,17 @@ _STYLE_PASSTHROUGH = frozenset(
     {
         "title", "labels", "template", "color_discrete_sequence", "color_discrete_map",
         "color_continuous_scale", "range_color", "category_orders", "log_x", "log_y",
-        "range_x", "range_y", "barmode", "boxmode", "violinmode", "points", "notched",
+        "range_x", "range_y", "barmode", "boxmode", "violinmode",
         "height", "width", "opacity", "nbins", "nbinsx", "nbinsy", "text_auto",
     }
+)  # fmt: skip
+
+# Passthrough kwargs an author may have written as a JSON string in the
+# dashboard YAML. The px path decodes these in ``figure_builder``; this module
+# is upstream of that, so it decodes its own copy — see ``_as_json``.
+_JSON_STYLE_KEYS = frozenset(
+    {"color_discrete_map", "color_discrete_sequence", "color_continuous_scale",
+     "category_orders", "labels"}
 )  # fmt: skip
 
 # Default bin counts when the user didn't pick one. px lets Plotly choose in the
@@ -173,7 +188,7 @@ def plan_aggregation(visu_type: str, dict_kwargs: dict) -> AggPlan | None:
                 return None
             roles[key] = value
         elif key in _STYLE_PASSTHROUGH:
-            style[key] = value
+            style[key] = _as_json(value) if key in _JSON_STYLE_KEYS else value
         else:
             # Unknown key: it may well name a column. Refuse rather than guess.
             logger.debug(f"plan_aggregation: {visu} not planned — unrecognised kwarg {key!r}")
@@ -279,6 +294,44 @@ def _build_reduce(scan: pl.LazyFrame, plan: AggPlan, render_stats: dict | None) 
     if plan.visu_type == "histogram":
         return _build_histogram(scan, plan, render_stats)
     return _build_density(scan, plan, render_stats)
+
+
+def _as_json(value: Any) -> Any:
+    """Decode a kwarg that may still be the JSON string an author typed.
+
+    ``color_discrete_map`` and friends arrive from the dashboard YAML as strings
+    (``'{"Setosa": "#4C72B0"}'``); the px path decodes them in
+    ``figure_builder``, which the aggregate path never reaches. Anything that
+    isn't a JSON string is returned untouched, so a caller that already passed a
+    dict keeps it.
+    """
+    if not isinstance(value, str):
+        return value
+    try:
+        return json.loads(value)
+    except (json.JSONDecodeError, ValueError):
+        return value
+
+
+def _trace_colors(plan: AggPlan, names: list[str]) -> list[str | None]:
+    """The colour each trace gets, matching what px would have chosen.
+
+    The graph_objects builders add their traces by hand, so nothing assigns a
+    colour and Plotly falls back to its own default palette — which is how a
+    figure whose author set ``color_discrete_map`` rendered in the default blue/
+    red/green while the box plots beside it, built through px, used the map.
+
+    ``color_discrete_map`` wins per name, then ``color_discrete_sequence`` by
+    position, then px's default sequence. Same precedence px applies, and the
+    sequence cycles the same way for more groups than colours.
+    """
+    mapping = _as_json(plan.style.get("color_discrete_map")) or {}
+    sequence = _as_json(plan.style.get("color_discrete_sequence"))
+    if not isinstance(sequence, list) or not sequence:
+        sequence = list(px.colors.qualitative.Plotly)
+    if not isinstance(mapping, dict):
+        mapping = {}
+    return [mapping.get(name) or sequence[i % len(sequence)] for i, name in enumerate(names)]
 
 
 def _by_key(frame: pl.DataFrame, keys: list[str], column: str) -> dict[tuple, Any]:
@@ -418,7 +471,12 @@ def _build_box(scan: pl.LazyFrame, plan: AggPlan, render_stats: dict | None) -> 
     """
     from depictio.api.v1.configs.config import settings
 
-    keys = [k for k in (plan.x, plan.color) if k]
+    # Deduplicated: `x` and `color` are routinely the same column ("one box per
+    # variety, coloured by variety"), and passing it twice makes Polars reject
+    # the group_by outright. That raised inside `build_aggregated_figure`, which
+    # caught it and fell back to px — so the commonest box plot there is quietly
+    # never took this path at all.
+    keys = plan.group_keys
     y = plan.y
     assert y is not None  # guaranteed by plan_aggregation
 
@@ -488,10 +546,13 @@ def _build_box(scan: pl.LazyFrame, plan: AggPlan, render_stats: dict | None) -> 
         if plan.color
         else {(None,): stats}
     )
-    for key, part in groups.items():
+    names = [str(k[0]) if isinstance(k, tuple) else str(k) for k in groups]
+    colors = _trace_colors(plan, names)
+    for (key, part), color in zip(groups.items(), colors):
         name = str(key[0]) if isinstance(key, tuple) else str(key)
         fig.add_trace(
             go.Box(
+                marker_color=color,
                 x=part[plan.x].to_list() if plan.x else None,
                 q1=part["_q1"].to_list(),
                 median=part["_med"].to_list(),
@@ -567,7 +628,12 @@ def _build_histogram(
     # bars either side would sit adjacent — reading as a continuous distribution
     # where there is actually a gap. Reindex so every bin is present, count 0.
     centres = [lo + (b + 0.5) * width for b in range(nbins)]
-    for key, part in groups.items():
+    names = [str(k[0]) if isinstance(k, tuple) else str(k) for k in groups]
+    colors = _trace_colors(plan, names)
+    # px puts `opacity` on the trace, which is the whole point of `barmode:
+    # overlay` — without it the front series hides the ones behind it.
+    opacity = plan.style.get("opacity")
+    for (key, part), color in zip(groups.items(), colors):
         name = str(key[0]) if isinstance(key, tuple) else str(key)
         dense = [0] * nbins
         for b, c in zip(part["_bin"], part["_count"]):
@@ -578,6 +644,8 @@ def _build_histogram(
                 y=dense,
                 name=name if plan.color else (x or ""),
                 width=width,
+                marker_color=color,
+                opacity=opacity,
             )
         )
     fig.update_layout(
