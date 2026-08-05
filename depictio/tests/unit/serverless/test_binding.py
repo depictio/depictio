@@ -185,6 +185,30 @@ def test_continuous_color_and_size_bind_as_fields(penguins: pl.DataFrame) -> Non
     }
 
 
+def test_text_labels_bind_on_the_pruned_frame(penguins: pl.DataFrame) -> None:
+    """A ``text=`` figure binds against the frame the exporter actually bundles.
+
+    Regression: ``referenced_columns`` did not list ``text``, so pruning dropped
+    the label column from the bundled parquet; ``create_figure_from_data`` then
+    raised inside the binder and every ``text=`` figure froze with
+    ``binding_miss``. Building against the *pruned* frame is the whole point of
+    this test — the unpruned frame bound fine even before the fix.
+    """
+    from depictio.serverless.pruning import component_columns
+
+    component = _figure("bar", x="species", y="body_mass_g", color="species", text="individual_id")
+    keep = component_columns(component)
+    assert keep is not None and "individual_id" in keep
+
+    table = build_binding(component, penguins.select(sorted(keep)))
+    assert table is not None
+    assert table.group_cols == ["species"]
+    for trace in table.traces:
+        assert trace.fields["text"] == "individual_id"
+    # Bound arrays are stripped from the scaffold, `text` included.
+    assert all("text" not in trace for trace in table.scaffold["data"])
+
+
 def test_ols_trendline_pairs_with_its_raw_trace(penguins: pl.DataFrame) -> None:
     table = build_binding(
         _figure(x="flipper_length_mm", y="body_mass_g", color="species", trendline="ols"),

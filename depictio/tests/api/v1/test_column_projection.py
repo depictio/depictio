@@ -30,6 +30,49 @@ class TestReferencedColumns:
         cols = referenced_columns("scatter", {"x": "a", "y": "b", "size": "s", "facet_col": "f"})
         assert cols == {"a", "b", "s", "f"}
 
+    def test_text_labels_column_is_referenced(self):
+        # Regression: `text` was missing from the allowlist, so the label column
+        # got projected away and px raised "Value of 'text' is not the name of a
+        # column" -> the figure rendered as an error card (and froze with
+        # binding_miss in the serverless export).
+        cols = referenced_columns("bar", {"x": "a", "y": "b", "text": "label"})
+        assert cols == {"a", "b", "label"}
+
+    def test_error_bar_minus_columns_are_referenced(self):
+        # Asymmetric error bars name a second column per axis.
+        cols = referenced_columns(
+            "scatter",
+            {"x": "a", "y": "b", "error_y": "e_hi", "error_y_minus": "e_lo"},
+        )
+        assert cols == {"a", "b", "e_hi", "e_lo"}
+
+    def test_hierarchy_and_timeline_columns_are_referenced(self):
+        # px constructors outside ALLOWED_VISUALIZATIONS still have to be safe:
+        # the allowlist is a superset of px's column-name kwargs.
+        assert referenced_columns("treemap", {"ids": "i", "parents": "p", "values": "v"}) == {
+            "i",
+            "p",
+            "v",
+        }
+        assert referenced_columns("sunburst", {"path": ["region", "country"], "values": "v"}) == {
+            "region",
+            "country",
+            "v",
+        }
+        assert referenced_columns("timeline", {"x_start": "s", "x_end": "e", "y": "task"}) == {
+            "s",
+            "e",
+            "task",
+        }
+
+    def test_marginal_params_are_not_columns(self):
+        # `marginal_x`/`marginal_y` name a trace kind ("rug", "box", …), not a
+        # column — the marginal trace reads the existing x/y columns.
+        cols = referenced_columns(
+            "scatter", {"x": "a", "y": "b", "marginal_x": "rug", "marginal_y": "box"}
+        )
+        assert cols == {"a", "b"}
+
     def test_hover_data_json_list(self):
         cols = referenced_columns("bar", {"x": "a", "y": "b", "hover_data": '["h1", "h2"]'})
         assert cols == {"a", "b", "h1", "h2"}

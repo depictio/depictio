@@ -45,12 +45,32 @@ def ambiguous_frame() -> pl.DataFrame:
     )
 
 
+def pruned(component: dict[str, Any], df: pl.DataFrame) -> pl.DataFrame:
+    """The frame the exporter would actually bundle for this component — i.e.
+    projected to ``component_columns`` (which is ``referenced_columns`` for a
+    ui-mode figure). Binding against the *unpruned* frame hides pruning gaps."""
+    from depictio.serverless.pruning import component_columns
+
+    keep = component_columns(component)
+    if keep is None:
+        return df
+    return df.select([c for c in df.columns if c in keep])
+
+
 def cases(df: pl.DataFrame) -> list[tuple[str, dict[str, Any], pl.DataFrame, bool]]:
     """``(label, component dict, frame, expected-to-bind)``."""
     sexed = df.drop_nulls("sex")  # `sex` has 9 nulls; a null group never matches
 
     def figure(visu_type: str, **kwargs: Any) -> dict[str, Any]:
         return {"component_type": "figure", "visu_type": visu_type, "dict_kwargs": kwargs}
+
+    text_figure = figure(
+        "scatter",
+        x="flipper_length_mm",
+        y="body_mass_g",
+        color="species",
+        text="individual_id",
+    )
 
     return [
         (
@@ -123,6 +143,12 @@ def cases(df: pl.DataFrame) -> list[tuple[str, dict[str, Any], pl.DataFrame, boo
                 size="bill_length_mm",
             ),
             df,
+            True,
+        ),
+        (
+            "text labels (pruned frame)",
+            text_figure,
+            pruned(text_figure, df),
             True,
         ),
         (
