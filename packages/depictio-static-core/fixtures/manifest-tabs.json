@@ -1,0 +1,322 @@
+{
+ "manifest_version": 1,
+ "mode": "single-file",
+ "producer": "B",
+ "built_at": "2026-08-03T00:00:00Z",
+ "depictio_version": "0.0.0-fixture",
+ "dashboard": {
+  "id": "f1x70000000000000000c0de",
+  "title": "Overview",
+  "doc": {
+   "title": "Overview",
+   "stored_metadata": [
+    {
+     "index": "comp-card-1",
+     "component_type": "card",
+     "wf_id": null,
+     "dc_id": "dc00000000000000000000a1",
+     "column_name": "bill_length_mm",
+     "aggregation": "average"
+    },
+    {
+     "index": "comp-figure-1",
+     "component_type": "figure",
+     "wf_id": null,
+     "dc_id": "dc00000000000000000000a1",
+     "visu_type": "scatter",
+     "mode": "ui"
+    },
+    {
+     "index": "comp-interactive-1",
+     "component_type": "interactive",
+     "interactive_component_type": "MultiSelect",
+     "wf_id": null,
+     "dc_id": "dc00000000000000000000a1",
+     "column_name": "species"
+    },
+    {
+     "index": "comp-text-1",
+     "component_type": "text",
+     "title": "Fixture note",
+     "order": 3,
+     "body": "A hand-written fixture manifest. Everything frozen."
+    }
+   ],
+   "stored_layout_data": []
+  }
+ },
+ "tabs": [
+  {
+   "id": "f1x70000000000000000c0de",
+   "title": "Overview",
+   "tab_order": 0,
+   "is_main_tab": true,
+   "icon": "mdi:view-dashboard",
+   "icon_color": "orange",
+   "doc": {
+    "title": "Overview",
+    "stored_metadata": [
+     {
+      "index": "comp-card-1",
+      "component_type": "card",
+      "wf_id": null,
+      "dc_id": "dc00000000000000000000a1",
+      "column_name": "bill_length_mm",
+      "aggregation": "average"
+     },
+     {
+      "index": "comp-figure-1",
+      "component_type": "figure",
+      "wf_id": null,
+      "dc_id": "dc00000000000000000000a1",
+      "visu_type": "scatter",
+      "mode": "ui"
+     },
+     {
+      "index": "comp-interactive-1",
+      "component_type": "interactive",
+      "interactive_component_type": "MultiSelect",
+      "wf_id": null,
+      "dc_id": "dc00000000000000000000a1",
+      "column_name": "species"
+     },
+     {
+      "index": "comp-text-1",
+      "component_type": "text",
+      "title": "Fixture note",
+      "order": 3,
+      "body": "A hand-written fixture manifest. Everything frozen."
+     }
+    ],
+    "stored_layout_data": []
+   }
+  },
+  {
+   "id": "f1x70000000000000000cafe",
+   "title": "Distributions",
+   "tab_order": 1,
+   "is_main_tab": false,
+   "icon": "mdi:chart-bell-curve",
+   "icon_color": "blue",
+   "doc": {
+    "title": "Distributions",
+    "stored_metadata": [
+     {
+      "index": "comp-figure-2",
+      "component_type": "figure",
+      "wf_id": null,
+      "dc_id": "dc00000000000000000000a1",
+      "visu_type": "scatter",
+      "mode": "ui"
+     },
+     {
+      "index": "comp-text-2",
+      "component_type": "text",
+      "title": "Second tab note",
+      "order": 1,
+      "body": "Second tab body."
+     }
+    ],
+    "stored_layout_data": []
+   }
+  },
+  {
+   "id": "f1x70000000000000000beef",
+   "title": "Details",
+   "tab_order": 2,
+   "is_main_tab": false,
+   "icon": "mdi:table",
+   "icon_color": "grape",
+   "doc": {
+    "title": "Details",
+    "stored_metadata": [
+     {
+      "index": "comp-text-3",
+      "component_type": "text",
+      "title": "Third tab note",
+      "order": 0,
+      "body": "Third tab body."
+     }
+    ],
+    "stored_layout_data": []
+   }
+  }
+ ],
+ "provenance": {
+  "exported_by": "curator@example.org",
+  "exported_at": "2026-08-03T09:15:00",
+  "source": "https://demo.depictio.example",
+  "project_name": "Fixture project",
+  "dashboard_url": "https://demo.depictio.example/dashboard/f1x70000000000000000c0de"
+ },
+ "data_refs": {
+  "dc00000000000000000000a1": {
+   "uri": "inline:dc_dc00000000000000000000a1",
+   "rows": 3,
+   "size_bytes": 128,
+   "row_group_bytes": null,
+   "columns": [
+    {
+     "name": "species",
+     "dtype": "Utf8"
+    },
+    {
+     "name": "bill_length_mm",
+     "dtype": "Float64"
+    }
+   ],
+   "companions": {},
+   "codebooks": {},
+   "aggregation_hash": "fixture-hash"
+  }
+ },
+ "tiers": {
+  "comp-card-1": {
+   "tier": "frozen",
+   "reason": "unsupported",
+   "detail": "phase 0: all tiers frozen"
+  },
+  "comp-figure-1": {
+   "tier": "frozen",
+   "reason": "unsupported",
+   "detail": "phase 0: all tiers frozen"
+  },
+  "comp-interactive-1": {
+   "tier": "frozen",
+   "reason": "unsupported",
+   "detail": "phase 0: all tiers frozen"
+  },
+  "comp-text-1": {
+   "tier": "live",
+   "reason": null,
+   "detail": null
+  },
+  "comp-figure-2": {
+   "tier": "frozen",
+   "reason": "celery_compute",
+   "detail": "computed at export time \u2014 filters do not refresh this view"
+  },
+  "comp-text-2": {
+   "tier": "live",
+   "reason": null,
+   "detail": null
+  },
+  "comp-text-3": {
+   "tier": "live",
+   "reason": null,
+   "detail": null
+  }
+ },
+ "frozen": {
+  "comp-card-1": {
+   "kind": "card",
+   "payload": {
+    "values": {
+     "comp-card-1": 43.92
+    },
+    "secondary_values": {},
+    "aggregations": {
+     "comp-card-1": [
+      "average"
+     ]
+    },
+    "filter_applied": false,
+    "filter_count": 0
+   },
+   "filter_state": []
+  },
+  "comp-figure-1": {
+   "kind": "figure",
+   "payload": {
+    "figure": {
+     "data": [
+      {
+       "type": "scatter",
+       "mode": "markers",
+       "x": [
+        39.1,
+        39.5,
+        40.3
+       ],
+       "y": [
+        18.7,
+        17.4,
+        18.0
+       ]
+      }
+     ],
+     "layout": {
+      "title": {
+       "text": "Fixture scatter"
+      }
+     }
+    },
+    "metadata": {
+     "visu_type": "scatter",
+     "filter_applied": false
+    }
+   },
+   "filter_state": []
+  },
+  "comp-interactive-1": {
+   "kind": "interactive",
+   "payload": {
+    "unique": [
+     "Adelie",
+     "Chinstrap",
+     "Gentoo"
+    ]
+   },
+   "filter_state": []
+  },
+  "comp-figure-2": {
+   "kind": "figure",
+   "payload": {
+    "figure": {
+     "data": [
+      {
+       "type": "scatter",
+       "mode": "markers",
+       "x": [
+        39.1,
+        39.5,
+        40.3
+       ],
+       "y": [
+        18.7,
+        17.4,
+        18.0
+       ]
+      }
+     ],
+     "layout": {
+      "title": {
+       "text": "Second tab scatter"
+      }
+     }
+    },
+    "metadata": {
+     "visu_type": "scatter",
+     "filter_applied": false
+    }
+   },
+   "filter_state": []
+  }
+ },
+ "bindings": {},
+ "prologues": {},
+ "links": {
+  "configs": [],
+  "tables": {}
+ },
+ "limits": {
+  "figure_max_points": 10000,
+  "advanced_viz_no_sample_max_rows": 2000000,
+  "advanced_viz_tail_p_threshold": 0.05,
+  "advanced_viz_tail_effect_threshold": 1.0
+ },
+ "allow_network_tiles": false,
+ "inline_blobs": {
+  "dc_dc00000000000000000000a1": ""
+ }
+}

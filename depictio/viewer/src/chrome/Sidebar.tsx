@@ -36,6 +36,7 @@ import { useScrollOverflow } from './useScrollOverflow';
 import ServerStatusBadge from './ServerStatusBadge';
 import ProfileBadge from './ProfileBadge';
 import AuthModeBadge from './AuthModeBadge';
+import StaticProvenance from './StaticProvenance';
 import { dashboardHref, dashboardLinkClickHandler } from '../dashboards/lib/dashboardLinks';
 import './chrome.css';
 
@@ -847,6 +848,10 @@ const Sidebar: React.FC<SidebarProps> = ({
             </div>
           </>
         )}
+        {/* Static bundles only — who exported this file, from where, and with
+            which depictio. Renders null (and imports nothing extra) in the
+            server build. */}
+        <StaticProvenance />
       </Stack>
     </Stack>
   );

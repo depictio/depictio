@@ -24,6 +24,12 @@ export const PENGUINS_MANIFEST = join(
   REPO_ROOT,
   "depictio/viewer/demo/manifests/penguins.json",
 );
+/** Three-tab family + a filled `provenance` block. Regenerate with
+ *  `packages/depictio-static-core/scripts/generate_tabs_fixture.py`. */
+export const TABS_MANIFEST = join(
+  REPO_ROOT,
+  "packages/depictio-static-core/fixtures/manifest-tabs.json",
+);
 
 export function skipUnlessBundleBuilt(): void {
   test.skip(
