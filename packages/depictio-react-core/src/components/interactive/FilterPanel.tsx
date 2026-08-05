@@ -263,12 +263,30 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
     // `measuredWidth` would stay pinned at its seed for the rest of the session.
   }, [collapsed]);
 
+  // Sections whose controls are actually mounted — the same additive rule the
+  // grid applies to its own, and for the same reason: a folded `Accordion.Panel`
+  // keeps its children mounted, so a section collapsed by default was still
+  // fetching each control's option list or column range. See `renderedSections`
+  // in DashboardGrid.
+  const openSectionKeys = sections.filter((s) => collapse.isOpen(s.key)).map((s) => s.key);
+  const [renderedSections, setRenderedSections] = useState<Set<string>>(
+    () => new Set(openSectionKeys),
+  );
+  useEffect(() => {
+    setRenderedSections((prev) => {
+      const missing = openSectionKeys.filter((k) => !prev.has(k));
+      return missing.length ? new Set([...prev, ...missing]) : prev;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openSectionKeys.join(' ')]);
+
   // The inset probe is a section, so it can only be measured once one has
   // rendered — and again whenever the set of them changes, which a search can do
-  // without the panel itself resizing.
+  // without the panel itself resizing, or an expand can do on a panel whose
+  // sections all started folded.
   useEffect(() => {
     measureRef.current();
-  }, [sections]);
+  }, [sections, renderedSections]);
 
   const renderGroup = (group: InteractiveSection['groups'][number]) => {
     if (group.groupName) {
@@ -431,16 +449,18 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
                 <Accordion.Panel>
                   {/* Plain wrapper so the width available inside the section box
                       can be read off the DOM — see `sectionInset`. */}
-                  <div data-section-grid>
-                    {s.groups.length === 0 ? (
-                      // Only reachable in edit mode (`includeEmpty`).
-                      <Text size="xs" c="dimmed" ta="center" py="xs">
-                        No filters yet — pick this section when creating one.
-                      </Text>
-                    ) : (
-                      renderSectionBody(s)
-                    )}
-                  </div>
+                  {renderedSections.has(s.key) && (
+                    <div data-section-grid>
+                      {s.groups.length === 0 ? (
+                        // Only reachable in edit mode (`includeEmpty`).
+                        <Text size="xs" c="dimmed" ta="center" py="xs">
+                          No filters yet — pick this section when creating one.
+                        </Text>
+                      ) : (
+                        renderSectionBody(s)
+                      )}
+                    </div>
+                  )}
                 </Accordion.Panel>
               </SectionAccordionItem>
             ))}
@@ -543,10 +563,19 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
   }
 
   return (
+    // No border and no surface of its own. The panel already occupies its own
+    // column, and the app draws the divider between that column and the grid —
+    // so a box around the whole thing is a second boundary in the same place,
+    // and it nests: sections draw a rail, groups draw a card, and a control
+    // outside a group draws its own Paper. The outermost frame is the one that
+    // says the least and costs the most, since its border and radius come out
+    // of a ~280px column. The collapsed rail keeps its border: there the box IS
+    // the affordance, with nothing inside it to delimit.
     <Paper
       p="md"
-      withBorder
+      withBorder={false}
       radius="md"
+      bg="transparent"
       style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
       data-tour-id="filter-panel"
     >

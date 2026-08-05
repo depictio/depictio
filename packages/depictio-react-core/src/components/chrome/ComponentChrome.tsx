@@ -47,6 +47,22 @@ export interface ComponentChromeProps {
    *  also stays visible without hover is a further question — see
    *  `persistentReset` below. */
   sourceFilterActive?: boolean;
+  /**
+   * Render the action row at the density of a filter-panel row rather than of a
+   * dashboard tile.
+   *
+   * The row floats at the component's top-right, and a tile has a corner to
+   * spare there. An interactive control does not: it is a title line and its
+   * input, so a `sm` ActionIcon lands on the select's chevron or the slider's
+   * track. It also puts a second, larger set of icons next to the `xs` ones an
+   * `InteractiveGroupCard` header already carries, which reads as two unrelated
+   * toolbars stacked in a ~280px column rather than as one hierarchy.
+   *
+   * Only the chrome's own geometry changes — which actions exist, and what they
+   * do, is unaffected. The sizing itself lives in chrome.css, because each
+   * action is its own component with its own hard-coded `size`.
+   */
+  compact?: boolean;
 }
 
 /** View-accessible action visibility per component type. Mirrors the
@@ -116,6 +132,7 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
   extraActions,
   showDragHandle = false,
   sourceFilterActive = false,
+  compact = false,
 }) => {
   const localFullscreenRef = useRef<HTMLDivElement | null>(null);
   const fullscreenRef = externalFullscreenRef ?? localFullscreenRef;
@@ -208,11 +225,12 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
       }
     >
       <Group
-        gap={4}
+        gap={compact ? 2 : 4}
         className={
           'depictio-component-actions' +
           (orientationFor(componentType) === 'vertical' ? ' depictio-actions-vertical' : '') +
-          (persistentReset ? ' has-active-reset' : '')
+          (persistentReset ? ' has-active-reset' : '') +
+          (compact ? ' is-compact' : '')
         }
         wrap="nowrap"
       >

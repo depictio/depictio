@@ -63,6 +63,14 @@ export function useInView<T extends Element>(
       if (!el) return;
       const margin = parseInt(rootMargin, 10) || 0;
       const rect = el.getBoundingClientRect();
+      // An element with no area is not on screen, whatever its coordinates say.
+      // A collapsed container (`height: 0` + `overflow: hidden`, which is what
+      // Mantine's Collapse and Accordion.Panel render) gives its children a
+      // zero-height rect parked at the container's own y — inside the viewport
+      // by every test below, so the probe declared them visible and started
+      // their fetch. The observer, which measures actual intersection, is left
+      // attached and still fires if the element is later revealed.
+      if (rect.width === 0 && rect.height === 0) return;
       if (
         rect.bottom > -margin &&
         rect.top < window.innerHeight + margin &&

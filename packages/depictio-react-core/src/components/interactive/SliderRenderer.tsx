@@ -8,6 +8,7 @@ import {
   InteractiveFrame,
   InteractiveTitle,
   SLIDER_MARK_LABEL_STYLE,
+  SLIDER_MARKS_CLASS,
   interactiveAccent,
 } from './frame';
 import { buildNumericScale, formatSliderValue } from './numericScale';
@@ -190,6 +191,7 @@ const SliderRenderer: React.FC<{
       />
       <CompactControlSlot compact={compact}>
         <Slider
+          className={SLIDER_MARKS_CLASS}
           min={bounds.min}
           max={bounds.max}
           step={scale.step}

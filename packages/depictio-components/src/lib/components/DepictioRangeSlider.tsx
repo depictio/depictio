@@ -151,6 +151,11 @@ const DepictioRangeSlider: React.FC<DepictioRangeSliderProps> = ({
   const sliderMb = compact ? (show_marks ? 'sm' : 0) : 'xs';
   const slider = (
     <RangeSlider
+      // Pulls the first and last mark labels inside the track. The rule lives in
+      // depictio-react-core's `sliderMarks.css`, which this package cannot
+      // import — same split as `markLabel` below, and the two have to stay in
+      // step because the Filters panel stacks both sliders.
+      className="depictio-slider-marks"
       min={safeMin}
       max={safeMax}
       step={step ?? (safeMax - safeMin) / 100}

@@ -21,6 +21,7 @@ export interface WrapWithChromeOpts {
   extraActions?: React.ReactNode;
   showDragHandle?: boolean;
   sourceFilterActive?: boolean;
+  compact?: boolean;
 }
 
 /**
@@ -48,6 +49,7 @@ export function wrapWithChrome(
       extraActions: opts?.extraActions,
       showDragHandle: opts?.showDragHandle,
       sourceFilterActive: opts?.sourceFilterActive,
+      compact: opts?.compact,
     },
   );
 }

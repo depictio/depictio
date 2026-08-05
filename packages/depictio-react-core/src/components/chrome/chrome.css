@@ -80,6 +80,27 @@
   opacity: 1;
   pointer-events: auto;
 }
+/* Filter-panel density — see `compact` in ComponentChrome.
+ *
+ * Each action is its own component with its own hard-coded Mantine `size`, so
+ * the override lands here rather than being threaded through five props.
+ * `--ai-size` is ActionIcon's own sizing variable, which is why setting it is
+ * enough to match the `xs` icons an InteractiveGroupCard header already draws.
+ * The row also pulls into the corner: at 12px the default 12px offset leaves it
+ * floating in the middle of a control instead of over its edge. */
+.depictio-component-actions.is-compact {
+  top: 2px;
+  right: 2px;
+  padding: 1px;
+}
+.depictio-component-actions.is-compact .mantine-ActionIcon-root {
+  --ai-size: 18px;
+}
+.depictio-component-actions.is-compact .mantine-ActionIcon-root svg {
+  width: 12px;
+  height: 12px;
+}
+
 /* Vertical stack for figure/multiqc/map — mirrors the Dash editor's
  * `button_configs[type].orientation == "vertical"` from layouts/edit.py. */
 .depictio-component-actions.depictio-actions-vertical {

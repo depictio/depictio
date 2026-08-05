@@ -182,7 +182,11 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
     // with no `source` discriminator (only chart/table selections use one),
     // so the active check matches on `index` + empty-value semantics.
     const sourceFilterActive = isSourceFilterActive(filters, metadata.index, undefined);
-    return wrapWithChrome('interactive', metadata, undefined, inner, { onResetFilter, extraActions, showDragHandle, sourceFilterActive });
+    // Always the compact chrome, not just at compact density: an interactive
+    // control is a title line and its input at every density and in every
+    // placement, so there is never a corner for a tile-sized icon to sit in.
+    // See `compact` in ComponentChrome.
+    return wrapWithChrome('interactive', metadata, undefined, inner, { onResetFilter, extraActions, showDragHandle, sourceFilterActive, compact: true });
   }
 
   if (metadata.component_type === 'figure' && dashboardId) {

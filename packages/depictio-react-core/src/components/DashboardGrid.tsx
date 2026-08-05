@@ -264,12 +264,46 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
     () => sectionComponents(metadataList, gridSections, editMode),
     [metadataList, gridSections, editMode],
   );
-  // The inset probe is a section, so the first measurement can only happen once
-  // one has rendered — and again whenever the set of them changes, since a
-  // dashboard can go from no sections to some without the wrapper resizing.
+  /**
+   * Sections whose grid is actually rendered: the ones open now, plus every one
+   * that has been open at some point since mount.
+   *
+   * A section that has never been opened renders no grid at all. Mantine's
+   * `Accordion.Panel` collapses to `height: 0` but keeps its children mounted,
+   * so a folded section's figures were mounting, and mounting is what starts
+   * their fetch. The viewport gate does not save them either: a child inside a
+   * zero-height panel has a zero-height rect sitting at the section header's y,
+   * which `useInView`'s fallback probe reads as on-screen. So a dashboard whose
+   * author folded a section by default still paid for every figure in it —
+   * exactly the cost folding is supposed to avoid.
+   *
+   * Additive rather than tracking the current state, so collapsing a section
+   * again keeps its figures mounted and re-expanding is instant. Only the
+   * never-opened case is worth the refetch, and that is the case where there is
+   * nothing to throw away.
+   */
+  const openSectionKeys = sections.filter((s) => sectionCollapse.isOpen(s.key)).map((s) => s.key);
+  const [renderedSections, setRenderedSections] = useState<Set<string>>(
+    // Seeded from the first render so a section that starts open draws its grid
+    // immediately, rather than painting empty and filling in an effect later.
+    () => new Set(openSectionKeys),
+  );
+  useEffect(() => {
+    setRenderedSections((prev) => {
+      const missing = openSectionKeys.filter((k) => !prev.has(k));
+      return missing.length ? new Set([...prev, ...missing]) : prev;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openSectionKeys.join(' ')]);
+
+  // The inset probe is a section's grid, so the first measurement can only
+  // happen once one has rendered — and again whenever the set of them changes,
+  // since a dashboard can go from no sections to some without the wrapper
+  // resizing. `renderedSections` is in here for the all-folded dashboard, where
+  // the first grid to exist is the one the user has just expanded.
   useEffect(() => {
     measureRef.current();
-  }, [sections]);
+  }, [sections, renderedSections]);
 
   const breakpointRef = useRef<string>('lg');
   // Latest grid order per section, so a drag in one section can be merged with
@@ -530,8 +564,11 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
               </Accordion.Control>
               <Accordion.Panel>
                 {/* Plain wrapper so the width available inside the section box
-                    can be read off the DOM — see `sectionInset`. */}
-                <div data-section-grid>{renderGrid(section)}</div>
+                    can be read off the DOM — see `sectionInset`. Absent until
+                    the section has been opened once: see `renderedSections`. */}
+                {renderedSections.has(section.key) && (
+                  <div data-section-grid>{renderGrid(section)}</div>
+                )}
               </Accordion.Panel>
             </SectionAccordionItem>
           ))}
