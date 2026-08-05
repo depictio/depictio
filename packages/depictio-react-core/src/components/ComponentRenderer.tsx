@@ -22,6 +22,7 @@ import LoadAllButton, { LoadAllState } from './chrome/LoadAllButton';
 import MapDataButton from './map/MapDataButton';
 import { isMapSelectionEnabled } from '../selection';
 import { ActiveHighlight } from '../highlight';
+import type { GroupRenderState } from '../selectionGroups';
 
 // Heavy renderers are lazy-loaded so plotly / ag-grid / jbrowse resolve into
 // their own async chunks (see `manualChunks` in depictio/viewer/vite.config.ts)
@@ -56,6 +57,8 @@ interface ComponentRendererProps {
   refreshTick?: number;
   /** Batch currently highlighted; renderers glow its rows when the DC matches. */
   activeHighlight?: ActiveHighlight | null;
+  /** Selection groups to color figures by (figure components only). */
+  groupRender?: GroupRenderState;
   /** Extra action-icon nodes appended to the chrome row. Editor uses this to inject the per-cell "..." edit menu. */
   extraActions?: React.ReactNode;
   /** Show the drag handle (3×3 grip) on the chrome — typically only in editor mode. */
@@ -80,6 +83,7 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
   dashboardId,
   refreshTick,
   activeHighlight,
+  groupRender,
   extraActions,
   showDragHandle,
   compact,
@@ -198,6 +202,7 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
         onFilterChange={onFilterChange}
         refreshTick={refreshTick}
         activeHighlight={activeHighlight}
+        groupRender={groupRender}
         extraActions={extraActions}
         showDragHandle={showDragHandle}
       />
@@ -457,6 +462,7 @@ const FigureBlock: React.FC<{
   onFilterChange?: (filter: InteractiveFilter) => void;
   refreshTick?: number;
   activeHighlight?: ActiveHighlight | null;
+  groupRender?: GroupRenderState;
   extraActions?: React.ReactNode;
   showDragHandle?: boolean;
 }> = ({
@@ -466,6 +472,7 @@ const FigureBlock: React.FC<{
   onFilterChange,
   refreshTick,
   activeHighlight,
+  groupRender,
   extraActions,
   showDragHandle,
 }) => {
@@ -507,6 +514,7 @@ const FigureBlock: React.FC<{
         onFilterChange={onFilterChange}
         refreshTick={refreshTick}
         activeHighlight={activeHighlight}
+        groupRender={groupRender}
         onLoadAllState={setLoadAllState}
       />
     </Suspense>,

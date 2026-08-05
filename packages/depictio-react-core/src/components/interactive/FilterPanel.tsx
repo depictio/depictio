@@ -118,6 +118,10 @@ export interface FilterPanelProps {
    *  opaque node: the apps put the docked map panel here, and this component
    *  has no business knowing that. */
   footer?: React.ReactNode;
+  /** Rendered between the header and the active-filter summary. Opaque for the
+   *  same reason as `footer`: the apps put the selection-groups panel here, and
+   *  its state (groups are not filters) is theirs to own. */
+  groupsSection?: React.ReactNode;
 }
 
 function readDensity(): FilterPanelDensity {
@@ -144,6 +148,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
   collapsed = false,
   onToggleCollapsed,
   footer,
+  groupsSection,
 }) => {
   const [density, setDensity] = useState<FilterPanelDensity>(readDensity);
   const [search, setSearch] = useState('');
@@ -661,6 +666,8 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
           )}
         </Group>
       </Group>
+
+      {groupsSection}
 
       <ActiveFilterSummary
         filters={filters}

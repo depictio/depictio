@@ -8,6 +8,7 @@
  */
 
 import { enqueueFetch } from './fetchQueue';
+import type { GroupRenderDef } from './selectionGroups';
 
 const API_BASE = '/depictio/api/v1';
 
@@ -572,7 +573,11 @@ export type InteractiveFilterSource =
   | 'scatter_selection'
   | 'table_selection'
   | 'map_selection'
-  | 'image_selection';
+  | 'image_selection'
+  /** Derived projection of saved selection groups (see `selectionGroups.ts`).
+   *  Never merged into the user's filter list — composed at the fetch
+   *  boundary only. */
+  | 'group_filter';
 
 /** Per-component computed data (current value under the given filter state).
  *  `metadata.dc_id` is required for cross-DC link resolution server-side; any
@@ -667,7 +672,15 @@ export interface FigureResponse {
     total_data_count?: number;
     /** True when every point was rendered (no cap applied / full_load). */
     full_data_loaded?: boolean;
+    /** True when the figure was colored by the caller's selection groups. */
+    group_colored?: boolean;
   };
+}
+
+export interface RenderFigureOptions {
+  /** Selection groups to color/split the figure by (see `selectionGroups.ts`). */
+  groups?: GroupRenderDef[];
+  colorByGroup?: boolean;
 }
 
 export async function renderFigure(
@@ -677,12 +690,19 @@ export async function renderFigure(
   theme: 'light' | 'dark' = 'light',
   fullLoad = false,
   signal?: AbortSignal,
+  options?: RenderFigureOptions,
 ): Promise<FigureResponse> {
+  // Groups ride in the body only when coloring is actually requested, so every
+  // request without the feature stays byte-identical to what it was before.
+  const groupBody =
+    options?.colorByGroup && options.groups && options.groups.length > 0
+      ? { groups: options.groups, color_by_group: true }
+      : {};
   const res = await authFetch(
     `${API_BASE}/dashboards/render_figure/${dashboardId}/${componentId}`,
     {
       method: 'POST',
-      body: JSON.stringify({ filters, theme, full_load: fullLoad }),
+      body: JSON.stringify({ filters, theme, full_load: fullLoad, ...groupBody }),
       signal,
     },
   );

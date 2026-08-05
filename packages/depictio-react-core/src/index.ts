@@ -81,6 +81,8 @@ export {
 export { default as FilterPanel } from './components/interactive/FilterPanel';
 export { FILTER_PANEL_RAIL_WIDTH } from './components/interactive/FilterPanel';
 export type { FilterPanelProps } from './components/interactive/FilterPanel';
+export { default as SelectionGroupsPanel } from './components/interactive/SelectionGroupsPanel';
+export type { SelectionGroupsPanelProps } from './components/interactive/SelectionGroupsPanel';
 export { default as InteractiveGroupCard } from './components/InteractiveGroupCard';
 // One swatch for every place a section is drawn — the two panel headers and the
 // viewer's authoring UI — so a section named "QC" never looks different
@@ -336,6 +338,28 @@ export {
   persistableFloatingFilters,
 } from './floatingFilters';
 export type { FloatingFilterPayload } from './floatingFilters';
+
+// Selection groups: named, colored snapshots of selections ("select & compare")
+export {
+  GROUP_FILTER_SOURCE,
+  GROUP_FILTER_INDEX_PREFIX,
+  MAX_GROUP_VALUES,
+  selectableSelectionFilters,
+  groupFromSelectionFilter,
+  groupsToFilters,
+  groupsRenderPayload,
+  nextGroupColor,
+  readSelectionGroups,
+  writeSelectionGroups,
+} from './selectionGroups';
+export type {
+  SelectionGroup,
+  SelectionGroupsPayload,
+  GroupRenderDef,
+  GroupRenderState,
+} from './selectionGroups';
+export { useSelectionGroups } from './hooks/useSelectionGroups';
+export type { SelectionGroupsApi } from './hooks/useSelectionGroups';
 
 // Cross-DC available-values intersection (powers greying-out unavailable
 // options in interactive filter dropdowns).
