@@ -747,14 +747,17 @@ def test_producer_a_check_predicts_tiers_without_reading_any_delta(
     monkeypatch.setattr(core_mod, "dashboards_collection", _NoChildTabs())
     monkeypatch.setattr(db_mod, "projects_collection", _FakeCollection([_project_doc(_links())]))
 
-    def boom(*a, **kw):  # preflight must stay data-free
-        raise AssertionError("--check must not read any Delta table")
+    def boom(*a, **kw):  # the bind=False plan must stay data-free
+        raise AssertionError("the data-free plan must not read any Delta table")
 
     monkeypatch.setattr(dtu_mod, "load_deltatable_lite", boom)
     monkeypatch.setattr(dtu_mod, "schema_deltatable_lite", boom)
 
+    # bind=False: the instant plan. The default preflight loads the DCs (that is
+    # how it decides figures), which would put every link at tier B here — the
+    # DCs are unreadable in this test, so none of them would be bundled.
     result = export_static(
-        str(DASHBOARD_OID), check=True, user=ExportUser(id=ObjectId(), is_admin=True)
+        str(DASHBOARD_OID), check=True, bind=False, user=ExportUser(id=ObjectId(), is_admin=True)
     )
     assert result.manifest is None
     rows = {r.link_id: r for r in result.link_rows}

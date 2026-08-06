@@ -117,13 +117,13 @@ def test_the_three_kind_families_partition_every_kind():
 
 @pytest.mark.parametrize("kind", LIVE_KINDS)
 def test_data_path_kinds_are_live_in_both_producers(kind: str):
-    b_tier, b_reason, b_detail = classify_component(_spec_comp(kind))
-    assert (b_tier, b_reason) == (ComponentTier.LIVE, None)
-    assert b_detail and kind in b_detail
+    b = classify_component(_spec_comp(kind))
+    assert (b.tier, b.reason) == (ComponentTier.LIVE, None)
+    assert b.detail and kind in b.detail
 
-    a_tier, a_reason, a_detail = classify_stored_component(_stored_comp(kind))
-    assert (a_tier, a_reason) == (ComponentTier.LIVE, None)
-    assert a_detail and "in-browser engine" in a_detail
+    a = classify_stored_component(_stored_comp(kind))
+    assert (a.tier, a.reason) == (ComponentTier.LIVE, None)
+    assert a.detail and "in-browser engine" in a.detail
 
     assert serves_advanced_viz_live(_spec_comp(kind)) is True
 
@@ -132,9 +132,9 @@ def test_data_path_kinds_are_live_in_both_producers(kind: str):
 def test_celery_kinds_stay_omitted_in_producer_b(kind: str):
     """Producer B builds from a spec with no instance behind it — there is
     nothing to run the compute on, and no frozen path to fall back to."""
-    b_tier, b_reason, b_detail = classify_component(_spec_comp(kind))
-    assert (b_tier, b_reason) == (ComponentTier.OMITTED, TierReason.CELERY_COMPUTE)
-    assert b_detail and "Celery" in b_detail
+    b = classify_component(_spec_comp(kind))
+    assert (b.tier, b.reason) == (ComponentTier.OMITTED, TierReason.CELERY_COMPUTE)
+    assert b.detail and "Celery" in b.detail
 
     assert serves_advanced_viz_live(_spec_comp(kind)) is False
 
@@ -142,9 +142,9 @@ def test_celery_kinds_stay_omitted_in_producer_b(kind: str):
 def test_producer_a_freezes_a_derivable_celery_compute():
     """A config the task can be called with freezes with ``celery_compute``."""
     comp = _stored_comp("complex_heatmap", index_column="sample_id", value_columns=["f0", "f1"])
-    tier, reason, detail = classify_stored_component(comp)
-    assert (tier, reason) == (ComponentTier.FROZEN, TierReason.CELERY_COMPUTE)
-    assert detail and "computed at export time" in detail
+    plan = classify_stored_component(comp)
+    assert (plan.tier, plan.reason) == (ComponentTier.FROZEN, TierReason.CELERY_COMPUTE)
+    assert plan.detail and "computed at export time" in plan.detail
 
     task, request = celery_compute_request(comp)
     assert task == "compute_complex_heatmap"
@@ -158,17 +158,17 @@ def test_producer_a_freezes_a_table_driven_embedding_via_the_data_path():
     dim_*_col off the table, so that is the path producer A freezes."""
     comp = _stored_comp("embedding", sample_id_col="sample_id", dim_1_col="d1", dim_2_col="d2")
     assert celery_compute_request(comp) is None
-    tier, reason, detail = classify_stored_component(comp)
-    assert (tier, reason) == (ComponentTier.FROZEN, TierReason.UNSUPPORTED)
-    assert detail and "compute_method" in detail
+    plan = classify_stored_component(comp)
+    assert (plan.tier, plan.reason) == (ComponentTier.FROZEN, TierReason.UNSUPPORTED)
+    assert plan.detail and "compute_method" in plan.detail
 
 
 def test_producer_a_omits_a_celery_kind_it_cannot_call():
     comp = _stored_comp("sankey", x_col="a")  # needs >= 2 step_cols
     assert celery_compute_request(comp) is None
-    tier, reason, detail = classify_stored_component(comp)
-    assert (tier, reason) == (ComponentTier.OMITTED, TierReason.CELERY_COMPUTE)
-    assert detail and "no request can be derived" in detail
+    plan = classify_stored_component(comp)
+    assert (plan.tier, plan.reason) == (ComponentTier.OMITTED, TierReason.CELERY_COMPUTE)
+    assert plan.detail and "no request can be derived" in plan.detail
 
 
 def test_coverage_track_is_live_and_bundles_the_columns_its_task_projects():
@@ -195,10 +195,10 @@ def test_coverage_track_is_live_and_bundles_the_columns_its_task_projects():
         "sample",
     ]
 
-    a_tier, a_reason, _ = classify_stored_component(_stored_comp("coverage_track", **config))
-    assert (a_tier, a_reason) == (ComponentTier.LIVE, None)
-    b_tier, b_reason, _ = classify_component(_spec_comp("coverage_track", **config))
-    assert (b_tier, b_reason) == (ComponentTier.LIVE, None)
+    a = classify_stored_component(_stored_comp("coverage_track", **config))
+    assert (a.tier, a.reason) == (ComponentTier.LIVE, None)
+    b = classify_component(_spec_comp("coverage_track", **config))
+    assert (b.tier, b.reason) == (ComponentTier.LIVE, None)
 
 
 def test_phylogenetic_is_frozen_by_a_and_omitted_by_b():
@@ -206,13 +206,13 @@ def test_phylogenetic_is_frozen_by_a_and_omitted_by_b():
     into the frozen payload, producer B has no frozen path at all."""
     config = {"leaf_col": "tip", "tree_dc_id": "8" * 24}
 
-    b_tier, b_reason, b_detail = classify_component(_spec_comp("phylogenetic", **config))
-    assert (b_tier, b_reason) == (ComponentTier.OMITTED, TierReason.UNSUPPORTED)
-    assert b_detail and "Newick" in b_detail
+    b = classify_component(_spec_comp("phylogenetic", **config))
+    assert (b.tier, b.reason) == (ComponentTier.OMITTED, TierReason.UNSUPPORTED)
+    assert b.detail and "Newick" in b.detail
 
-    a_tier, a_reason, a_detail = classify_stored_component(_stored_comp("phylogenetic", **config))
-    assert (a_tier, a_reason) == (ComponentTier.FROZEN, TierReason.UNSUPPORTED)
-    assert a_detail and "Newick" in a_detail
+    a = classify_stored_component(_stored_comp("phylogenetic", **config))
+    assert (a.tier, a.reason) == (ComponentTier.FROZEN, TierReason.UNSUPPORTED)
+    assert a.detail and "Newick" in a.detail
 
     assert serves_advanced_viz_live(_spec_comp("phylogenetic", **config)) is False
 
@@ -227,21 +227,21 @@ def test_a_config_binding_no_column_degrades_in_both_producers():
         "viz_kind": "volcano",
         "config": {"viz_kind": "volcano", "top_n": 20},
     }
-    tier, reason, detail = classify_component(spec_comp)
-    assert (tier, reason) == (ComponentTier.OMITTED, TierReason.UNSUPPORTED)
-    assert detail and "binds no column" in detail
+    plan = classify_component(spec_comp)
+    assert (plan.tier, plan.reason) == (ComponentTier.OMITTED, TierReason.UNSUPPORTED)
+    assert plan.detail and "binds no column" in plan.detail
 
     stored = {"index": "av-empty", "component_type": "advanced_viz", "viz_kind": "volcano"}
-    tier, reason, detail = classify_stored_component(stored)
-    assert (tier, reason) == (ComponentTier.OMITTED, TierReason.UNSUPPORTED)
-    assert detail and "no derivable request" in detail
+    plan = classify_stored_component(stored)
+    assert (plan.tier, plan.reason) == (ComponentTier.OMITTED, TierReason.UNSUPPORTED)
+    assert plan.detail and "no derivable request" in plan.detail
 
 
 def test_producer_b_omits_an_advanced_viz_without_a_data_collection():
     comp = {"tag": "av-nodc", "component_type": "advanced_viz", "viz_kind": "volcano"}
-    tier, reason, detail = classify_component(comp)
-    assert (tier, reason) == (ComponentTier.OMITTED, TierReason.UNSUPPORTED)
-    assert detail and "no resolvable data collection" in detail
+    plan = classify_component(comp)
+    assert (plan.tier, plan.reason) == (ComponentTier.OMITTED, TierReason.UNSUPPORTED)
+    assert plan.detail and "no resolvable data collection" in plan.detail
 
 
 # ---------------------------------------------------------------------------

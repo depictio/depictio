@@ -213,24 +213,28 @@ def offline_export(monkeypatch: pytest.MonkeyPatch) -> BundleManifest:
 
 
 def test_planned_verdict_transpilable_offers_bind_and_refill():
-    tier, reason, detail = classify_stored_component(_code_component("c", LIVE_CODE))
-    assert tier is ComponentTier.FROZEN
-    assert reason is TierReason.BINDING_MISS
-    assert detail and "transpilable prologue" in detail
+    plan = classify_stored_component(_code_component("c", LIVE_CODE))
+    assert plan.tier is ComponentTier.FROZEN
+    assert plan.reason is TierReason.BINDING_MISS
+    assert plan.detail and "transpilable prologue" in plan.detail
+    # Only the frame can say whether it binds, so the verdict is undecided.
+    assert plan.provisional is True
 
 
 def test_planned_verdict_untranspilable_keeps_code_mode():
-    tier, reason, detail = classify_stored_component(_code_component("c", FROZEN_CODE))
-    assert tier is ComponentTier.FROZEN
-    assert reason is TierReason.CODE_MODE
-    assert detail and "with_columns" in detail
+    plan = classify_stored_component(_code_component("c", FROZEN_CODE))
+    assert plan.tier is ComponentTier.FROZEN
+    assert plan.reason is TierReason.CODE_MODE
+    assert plan.detail and "with_columns" in plan.detail
+    assert plan.provisional is False
 
 
 def test_planned_verdict_without_code_is_code_mode():
-    tier, reason, detail = classify_stored_component({"component_type": "figure", "mode": "code"})
-    assert tier is ComponentTier.FROZEN
-    assert reason is TierReason.CODE_MODE
-    assert detail
+    plan = classify_stored_component({"component_type": "figure", "mode": "code"})
+    assert plan.tier is ComponentTier.FROZEN
+    assert plan.reason is TierReason.CODE_MODE
+    assert plan.detail
+    assert plan.provisional is False
 
 
 def test_live_column_sets_widen_to_keep_all_for_a_transpilable_figure():

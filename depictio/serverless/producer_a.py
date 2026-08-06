@@ -65,10 +65,22 @@ deduplicated by dc_id over the family, which is where the size goes: six tabs
 over the same two tables used to mean six bundles each re-inlining both.
 ``manifest.provenance`` records who exported it, when, and from which instance.
 
-Permissions (RFC §8): ``--check`` needs *viewer* on the dashboard's project;
-the build itself needs *owner* — a bundle is bulk data exfiltration. Both are
-evaluated for EVERY tab of the family (they share a project in practice, so it
-is the same check repeated — but the bundle does not have to assume that).
+``--check`` (``export_static(check=True)``) is that same build, run for its
+verdicts and stopped before it produces anything: the data collections are
+loaded and pruned and every figure goes through the binder, because that is the
+only thing that can tell a live figure from a frozen one — but no Parquet is
+written, no payload frozen, no Celery compute dispatched and no manifest
+emitted. It costs seconds, and no FIGURE comes back ``provisional``; the rows it
+does not run (a Celery compute the build's budget may not cover, a frozen
+payload that may fail) are still the plan. ``bind=False`` opts back down to the
+instant, data-free plan (:func:`classify_stored_component`).
+
+Permissions (RFC §8): ``--check`` needs *viewer* on the dashboard's project —
+every row it reads is a row the render endpoints would already serve that
+viewer; the build itself needs *owner* — a bundle is bulk data exfiltration.
+Both are evaluated for EVERY tab of the family (they share a project in
+practice, so it is the same check repeated — but the bundle does not have to
+assume that).
 """
 
 from __future__ import annotations
@@ -110,14 +122,16 @@ from depictio.models.models.serverless import (
 from depictio.serverless.binding import (
     BindingMiss,
     build_binding_with_reason,
-    miss_detail,
+    frozen_miss_detail,
     miss_tier_reason,
+    planned_figure_miss,
 )
 from depictio.serverless.preflight import (
     LINK_TIER_A,
     LINK_TIER_B,
     LINK_TIER_INERT,
     LinkRow,
+    PlannedTier,
     TabRow,
     TierRow,
 )
@@ -129,6 +143,7 @@ from depictio.serverless.producer_b import (
     _depictio_version,
     _runtime_limits,
     render_bundle_html,
+    runtime_floor_bytes,
 )
 from depictio.serverless.prologue import transpile_with_reason
 from depictio.serverless.prologue_exec import execute_ops, terminal_px_call
@@ -228,6 +243,17 @@ _DOC_STRIP_KEYS = frozenset({"_id", "permissions", "project_realtime"})
 
 class ProducerAError(Exception):
     """Raised when a dashboard cannot be exported to a bundle."""
+
+
+class BundleTooLargeError(ProducerAError):
+    """Raised when a bundle crosses ``performance.static_bundle_max_mb``.
+
+    A subclass because it is the one producer-A refusal that is neither a
+    permission denial nor a missing document: the dashboard exists and the
+    caller may read it, the artifact is simply too big to hand over. The HTTP
+    surface maps it to its own status so a preflight of an oversized dashboard
+    does not answer "not found" (``serverless_endpoints/routes.py``).
+    """
 
 
 # ---------------------------------------------------------------------------
@@ -498,9 +524,7 @@ def family_components(tabs: list[FamilyTab]) -> list[tuple[FamilyTab, dict[str, 
 # ---------------------------------------------------------------------------
 
 
-def classify_stored_component(
-    comp: dict[str, Any],
-) -> tuple[ComponentTier, TierReason | None, str | None]:
+def classify_stored_component(comp: dict[str, Any]) -> PlannedTier:
     """Planned (data-free) tier verdict for one ``stored_metadata`` component.
 
     Mirrors producer B's ``classify_component`` where the logic transfers,
@@ -510,18 +534,20 @@ def classify_stored_component(
     ctype = comp.get("component_type") or ""
 
     if ctype in ("card", "interactive", "text"):
-        return ComponentTier.LIVE, None, None
+        return PlannedTier(ComponentTier.LIVE)
 
     if ctype == "table":
-        # Planned verdict only: the runtime serves a table live off the bundled
-        # Parquet, so the build upgrades this to LIVE once it knows the data
-        # collection shipped. It stays frozen when the DC could not be bundled —
-        # the same condition `renderTable` tests before taking its live path.
-        return (
-            ComponentTier.FROZEN,
-            TierReason.UNSUPPORTED,
-            "live once its data collection ships in the bundle; frozen at the "
-            "default filter state otherwise",
+        # Live (phase 3), like producer B plans it: `renderTableLive` reproduces
+        # render_table_endpoint in full — filter → sort → slice — off the
+        # bundled Parquet, so a table ships no frozen payload. The build
+        # downgrades this only when the table's data collection never landed in
+        # the bundle, the same condition `renderTable` tests before taking its
+        # live path.
+        return PlannedTier(
+            ComponentTier.LIVE,
+            None,
+            "served live from the bundled Parquet: `renderTableLive` reproduces "
+            "render_table_endpoint (filter → sort → slice) page by page",
         )
 
     if ctype == "figure":
@@ -531,23 +557,48 @@ def classify_stored_component(
             # from code that will freeze via the server figure pipeline.
             _, call, refusal = _code_figure_plan(comp)
             if call is None:
-                return (
+                return PlannedTier(
                     ComponentTier.FROZEN,
                     TierReason.CODE_MODE,
                     f"code-mode figure not transpilable: {refusal}; frozen via the "
                     "server figure pipeline (RestrictedPython) at the default filter state",
                 )
-            return (
+            # The same two data-free bail-outs, read off the terminal ``px``
+            # call rather than off stored_metadata: the code names its own
+            # visualisation, so `px.scatter_matrix(...)` is exactly as
+            # decidable here as a ui-mode whole-frame visu type. Same prefix
+            # :func:`decide_figure` uses, so plan and verdict read alike.
+            visu_type, px_kwargs = call
+            miss = planned_figure_miss({"visu_type": visu_type, "dict_kwargs": px_kwargs})
+            if miss is not None:
+                return PlannedTier(
+                    ComponentTier.FROZEN,
+                    miss_tier_reason(miss),
+                    frozen_miss_detail(miss, "code analyzed, but "),
+                )
+            return PlannedTier(
                 ComponentTier.FROZEN,
                 TierReason.BINDING_MISS,
                 "transpilable prologue; offered to bind-and-refill, upgraded to "
                 "live when the binding matches",
+                provisional=True,
             )
-        return (
+        # Two of the builder's bail-outs are decidable from stored_metadata
+        # alone, so decide them here — in the builder's own words — rather than
+        # deferring a verdict the build cannot change (``planned_figure_miss``).
+        miss = planned_figure_miss(comp)
+        if miss is not None:
+            return PlannedTier(
+                ComponentTier.FROZEN,
+                miss_tier_reason(miss),
+                frozen_miss_detail(miss),
+            )
+        return PlannedTier(
             ComponentTier.FROZEN,
             TierReason.BINDING_MISS,
             "planned frozen fallback; the build offers ui-mode figures to the "
             "bind-and-refill builder (RFC §4) first and upgrades bound ones to live",
+            provisional=True,
         )
 
     if ctype == "multiqc":
@@ -560,9 +611,9 @@ def classify_stored_component(
         # `table_styles` data bars keep the export-time full-cohort scale
         # (regenerating them needs matplotlib colormaps,
         # general_stats_payload.py:630).
-        return ComponentTier.LIVE, None, None
+        return PlannedTier(ComponentTier.LIVE)
     if ctype == "map":
-        return (
+        return PlannedTier(
             ComponentTier.FROZEN,
             TierReason.MAP_TILES,
             "frozen at the default filter state with the basemap forced to "
@@ -570,13 +621,13 @@ def classify_stored_component(
             "single-file bundle",
         )
     if ctype == "image":
-        return (
+        return PlannedTier(
             ComponentTier.OMITTED,
             TierReason.IMAGE,
             "image galleries read from S3; no object store in a static bundle",
         )
     if ctype == "jbrowse":
-        return (
+        return PlannedTier(
             ComponentTier.OMITTED,
             TierReason.JBROWSE,
             "JBrowse sessions need a genome-data backend",
@@ -589,7 +640,7 @@ def classify_stored_component(
             # as a frozen 'compute' payload, which the static runtime's
             # finishedJob shim hands back as a finished poll result.
             if celery_compute_request(comp) is not None:
-                return (
+                return PlannedTier(
                     ComponentTier.FROZEN,
                     TierReason.CELERY_COMPUTE,
                     CELERY_FROZEN_DETAIL.format(kind=kind),
@@ -600,13 +651,13 @@ def classify_stored_component(
                 # (fetchAdvancedVizData), so the data path is what to freeze.
                 # The other four kinds always dispatch — a frozen /data payload
                 # would feed their popovers and leave the plot itself empty.
-                return (
+                return PlannedTier(
                     ComponentTier.FROZEN,
                     TierReason.UNSUPPORTED,
                     "advanced_viz 'embedding' has no compute_method: its renderer reads "
                     "the coordinates from the table, frozen here at the default filter state",
                 )
-            return (
+            return PlannedTier(
                 ComponentTier.OMITTED,
                 TierReason.CELERY_COMPUTE,
                 f"advanced_viz '{kind}' is a server-side Celery compute and no request "
@@ -614,7 +665,7 @@ def classify_stored_component(
                 "or required column bindings)",
             )
         if kind in NON_TABULAR_VIZ_KINDS:
-            return (
+            return PlannedTier(
                 ComponentTier.FROZEN,
                 TierReason.UNSUPPORTED,
                 f"advanced_viz '{kind}' also reads a non-tabular tree data collection "
@@ -623,7 +674,7 @@ def classify_stored_component(
                 "kinds went live in phase 4",
             )
         if not serves_advanced_viz_live(comp) or advanced_viz_request(comp) is None:
-            return (
+            return PlannedTier(
                 ComponentTier.OMITTED,
                 TierReason.UNSUPPORTED,
                 f"advanced_viz '{kind or '?'}' has no derivable request: its config "
@@ -633,14 +684,14 @@ def classify_stored_component(
         # /advanced_viz/data payload — projection, tail-preserving sampling, the
         # kind's own reduction — from the bundled Parquet at every filter state,
         # so the component ships NO frozen payload (same rule as a bound figure).
-        return (
+        return PlannedTier(
             ComponentTier.LIVE,
             None,
             f"advanced_viz '{kind}' data path served by the in-browser engine "
             "from the bundled Parquet",
         )
 
-    return (
+    return PlannedTier(
         ComponentTier.OMITTED,
         TierReason.UNSUPPORTED,
         f"component type '{ctype or '?'}' is not supported by producer A",
@@ -658,18 +709,18 @@ def classify_stored_metadata(
     """
     rows: list[TierRow] = []
     for i, comp in enumerate(stored_metadata):
-        tier, reason, detail = classify_stored_component(comp)
+        plan = classify_stored_component(comp)
         fallback = f"{tab_id}-component-{i}" if tab_id else f"component-{i}"
         rows.append(
             TierRow(
                 component_id=str(comp.get("index") or fallback),
                 title=comp.get("title") or "",
                 component_type=comp.get("component_type") or "?",
-                tier=tier,
-                reason=reason,
-                detail=detail,
+                tier=plan.tier,
+                reason=plan.reason,
+                detail=plan.detail,
                 tab_id=tab_id,
-                provisional=(tier is ComponentTier.FROZEN and reason is TierReason.BINDING_MISS),
+                provisional=plan.provisional,
             )
         )
     return rows
@@ -925,25 +976,88 @@ def _freeze_advanced_viz(comp: dict[str, Any], user: ExportUser) -> dict[str, An
     The response's ``sampling`` block is kept verbatim — it is what the
     renderer's badge reads, and pinning it is what makes a reduced frozen
     frame honest about being reduced.
+
+    A phylogenetic tile is the one asymmetric case: its tree is the
+    visualisation and its tip metadata is decoration, so a failed tabular fetch
+    only costs the colours while a missing or unreadable tree is fatal
+    (:class:`ProducerAError` here, ``omitted`` with the reason in the manifest).
     """
     request = advanced_viz_request(comp)
     if request is None:
         raise ProducerAError(
             "advanced_viz component has no derivable columns (config carries no '*_col' bindings)"
         )
+    config = comp.get("config") or {}
+    # A phylogenetic tile reads TWO collections, and its own `dc_id` is the tree
+    # rather than the table: a `type: phylogeny` DC is a Newick file and has no
+    # Delta table at all, so asking `/advanced_viz/data` for it 404s with
+    # "no materialised Delta table" and the whole component drops to omitted.
+    # `PhylogeneticRenderer` reads the tip metadata from `metadata_wf_id` /
+    # `metadata_dc_id` instead (its data-fetching effect) — do the same.
+    # The runtime resolves either id back to this component (apiShim.ts,
+    # `advancedVizIndexFor`), so one frozen payload still answers both lookups.
+    is_phylo = advanced_viz_kind(comp) == "phylogenetic"
+    if is_phylo and config.get("metadata_dc_id"):
+        request = {
+            **request,
+            "wf_id": str(config.get("metadata_wf_id") or request["wf_id"]),
+            "dc_id": str(config["metadata_dc_id"]),
+        }
     av = _av_routes()
-    payload = av.fetch_advanced_viz_data(
-        _response(), payload=request, current_user=user, access_token=None
-    )
+    try:
+        payload = av.fetch_advanced_viz_data(
+            _response(), payload=request, current_user=user, access_token=None
+        )
+    except Exception as exc:
+        # For every other kind the table IS the visualisation, so a failure here
+        # is fatal. A phylogenetic tile is drawn from its tree; the tip metadata
+        # only colours and labels it, and `PhylogeneticRenderer` already treats
+        # it as optional (`metadata_dc_id` absent -> `Promise.resolve(null)` in
+        # its data-fetching effect). Losing the table must therefore cost the
+        # colours, not the tree: an unmaterialised metadata collection used to
+        # omit the whole component.
+        if not is_phylo:
+            raise
+        logger.warning(
+            "phylogenetic tile %s: tip metadata unavailable (%s) — shipping the tree alone",
+            comp.get("index"),
+            exc,
+        )
+        payload = {
+            "columns": [],
+            "rows": {},
+            "row_count": 0,
+            "total_rows": 0,
+            "sampled": False,
+            "sampling": {"policy": "none", "exact": True, "degraded": False},
+            "filter_applied": False,
+        }
     # Phylogenetic kind: its renderer also needs the tree; merge the Newick in
     # (frozen payloads are one slot per component — the shim reads the same
     # payload object for both lookups).
-    tree_dc_id = (comp.get("config") or {}).get("tree_dc_id")
+    #
+    # `config.tree_dc_id` and nothing else: `PhylogeneticRenderer` bails with
+    # "missing tree DC binding" before it ever calls `fetchPhylogenyNewick` when
+    # that key is unset, so a Newick fetched off the component's own `dc_id`
+    # would be a payload the runtime never reads.
+    tree_dc_id = config.get("tree_dc_id")
     if tree_dc_id:
         try:
             payload["newick"] = av.get_phylogeny_newick(ObjectId(str(tree_dc_id)), user)
-        except Exception:
-            pass  # best-effort — the tabular payload is still worth shipping
+        except Exception as exc:
+            # For a phylogenetic tile the TREE is the visualisation and the tip
+            # metadata only colours it, so no tree is fatal whatever the table
+            # did: the runtime reads a missing `newick` as `''`, the renderer
+            # returns null on an empty tree, and the reader gets a titled empty
+            # box with no message. Omitting says what happened instead.
+            if is_phylo:
+                raise ProducerAError(f"phylogeny tree could not be read: {exc}") from exc
+            logger.warning("phylogeny newick unavailable for %s: %s", comp.get("index"), exc)
+    elif is_phylo:
+        raise ProducerAError(
+            "phylogenetic tile has no tree data collection bound (config.tree_dc_id): "
+            "the renderer refuses it for the same reason"
+        )
     return payload
 
 
@@ -1276,6 +1390,288 @@ def _freeze_map(comp: dict[str, Any], user: ExportUser) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# Bundle size (RFC §8.1)
+#
+# A `single-file` bundle is one HTML document with every bundled data collection
+# base64'd inside it, so its size is producer-side state that has to be capped
+# BEFORE the bytes exist — nothing else stops one dashboard from base64-ing
+# hundreds of MB into a single string.
+# ---------------------------------------------------------------------------
+
+BYTES_PER_MB = 1024 * 1024
+
+# RFC §8.1: bundled data costs ~2 bytes per cell as snappy Parquet once the
+# columns are pruned and the categoricals are codebooked, and base64 inflates
+# that by 4/3. This is the only number available before anything is serialised
+# — the binding preflight loads and prunes every frame but never encodes one —
+# so it is what the preflight reports. It is an order-of-magnitude figure, not a
+# prediction: the density is entirely a function of how compressible the data
+# is, and small frames are dominated by Parquet's fixed footer rather than by
+# their cells. On a compressible frame it runs a factor of ~2 high, which is the
+# safe direction for a warning; against the exact runtime floor the *total* is
+# far closer than the data part alone.
+_ESTIMATED_PARQUET_BYTES_PER_CELL = 2
+_BASE64_INFLATION = 4 / 3
+
+# Preflight size verdicts, so a caller does not have to re-derive the ceilings
+# it was just handed.
+SIZE_OK = "ok"
+SIZE_OVER_SOFT_LIMIT = "over_soft_limit"
+SIZE_WOULD_BE_REFUSED = "would_be_refused"
+
+
+def estimated_blob_bytes(rows: int, columns: int) -> int:
+    """Base64 bytes a frame's Parquet blob is expected to add to the bundle."""
+    return int(rows * columns * _ESTIMATED_PARQUET_BYTES_PER_CELL * _BASE64_INFLATION)
+
+
+def _base64_length(raw_bytes: int) -> int:
+    """Length of the base64 encoding of ``raw_bytes`` bytes, without encoding them.
+
+    The running total is checked against this rather than against
+    ``len(b64encode(...))`` so the blob that breaches the ceiling is never
+    materialised — the whole point of failing fast.
+    """
+    return 4 * ((raw_bytes + 2) // 3)
+
+
+def _bundle_size_limits() -> tuple[int, int]:
+    """``(soft, hard)`` bundle ceilings in bytes; 0 means "that check is off".
+
+    Read defensively for the same reason :func:`_runtime_limits` is: producer A
+    also runs from the CLI, where server settings may not load at all. The
+    fallbacks restate ``PerformanceConfig``'s own defaults so a build without
+    loadable settings still enforces the documented behaviour instead of no
+    behaviour.
+    """
+    soft_mb, hard_mb = 25, 100
+    try:
+        from depictio.api.v1.configs.config import settings
+
+        soft_mb = settings.performance.static_bundle_warn_mb
+        hard_mb = settings.performance.static_bundle_max_mb
+    except Exception:
+        # WARNING, not debug: the fallbacks are the documented *defaults*, not
+        # the deployment's configured ceilings, so a settings failure silently
+        # enforces different numbers than the operator asked for. That has to be
+        # visible at the level a server actually logs at.
+        logger.warning(
+            "producer A: server settings unavailable; falling back to the default bundle "
+            "ceilings (%d MB soft / %d MB hard), which may differ from this deployment's "
+            "configured performance.static_bundle_warn_mb / static_bundle_max_mb",
+            soft_mb,
+            hard_mb,
+            exc_info=True,
+        )
+    return max(int(soft_mb), 0) * BYTES_PER_MB, max(int(hard_mb), 0) * BYTES_PER_MB
+
+
+def size_verdict(total_bytes: int, soft_limit: int, hard_limit: int) -> str:
+    """Which of the three buckets a bundle size falls into (0 = limit disabled)."""
+    if hard_limit and total_bytes > hard_limit:
+        return SIZE_WOULD_BE_REFUSED
+    if soft_limit and total_bytes > soft_limit:
+        return SIZE_OVER_SOFT_LIMIT
+    return SIZE_OK
+
+
+@dataclass(frozen=True)
+class BundleSize:
+    """How big a bundle is, or would be, against the ceilings in force.
+
+    ``runtime_bytes`` is never an estimate: it is the built static runtime's
+    real size, and on a small dashboard it is most of the total. ``data_bytes``
+    is measured on a build and estimated on a preflight (``estimated`` says
+    which) — the preflight prunes every frame but never serialises one, so exact
+    bytes do not exist on that path.
+
+    Frozen payloads are counted by neither. On the preflight path none have been
+    built, which is most of what makes it cheap; on any dashboard large enough
+    to approach a ceiling the live data dominates them anyway. On the reference
+    families they are worth 0.01–1.4 MB (RFC §8.1), so a total is optimistic by
+    about that much — and a full-load code-mode payload that then fails to bind
+    can be worth much more. That is why the ceiling is enforced a last time on
+    the rendered HTML (:func:`_refuse_oversized_render`), which is the only
+    measurement that counts everything the file contains.
+    """
+
+    runtime_bytes: int
+    data_bytes: int
+    total_bytes: int
+    soft_limit_bytes: int
+    hard_limit_bytes: int
+    verdict: str
+    estimated: bool
+
+
+def _bundle_size(data_bytes: int, estimated: bool) -> BundleSize:
+    soft_limit, hard_limit = _bundle_size_limits()
+    runtime = runtime_floor_bytes()
+    total = runtime + data_bytes
+    return BundleSize(
+        runtime_bytes=runtime,
+        data_bytes=data_bytes,
+        total_bytes=total,
+        soft_limit_bytes=soft_limit,
+        hard_limit_bytes=hard_limit,
+        verdict=size_verdict(total, soft_limit, hard_limit),
+        estimated=estimated,
+    )
+
+
+def estimate_bundle_size(data_refs: dict[str, DataRef]) -> BundleSize:
+    """Predicted bundle size from a set of DataRefs, nothing serialised.
+
+    Give it the FINAL refs — the ones a bundle would really carry, after the
+    DCs loaded speculatively for figures that then failed to bind have been
+    dropped — so it predicts the file the user would receive rather than the
+    work the producer did.
+    """
+    return _bundle_size(
+        sum(estimated_blob_bytes(ref.rows, len(ref.columns)) for ref in data_refs.values()),
+        estimated=True,
+    )
+
+
+def measured_bundle_size(inline_blobs: dict[str, str]) -> BundleSize:
+    """Actual bundle size from the base64 blobs a build produced."""
+    return _bundle_size(sum(len(blob) for blob in inline_blobs.values()), estimated=False)
+
+
+def report_bundle_size(size: BundleSize, dc_count: int) -> None:
+    """Log an oversized bundle once, past either ceiling.
+
+    Past the SOFT ceiling the bundle still builds and still works — it just
+    stops travelling well — so this reports rather than refuses. That is the
+    case this function exists for.
+
+    The HARD branch is a backstop rather than the normal road: both paths now
+    charge a running total while they walk their data collections
+    (:meth:`_RunningBundleSize.refuse_if_over_hard_limit`), and that total is
+    taken over every DC *loaded* while this one is taken over the DCs that
+    survived the ``used_dc_ids`` drop — so anything this could refuse has
+    already raised. It stays because the two are computed from different
+    quantities (a rendered bundle is measured once more in
+    :func:`export_static`) and a verdict that says "refused" must never be
+    logged as "still travels badly".
+    """
+    if size.verdict == SIZE_OK:
+        return
+    if size.verdict == SIZE_WOULD_BE_REFUSED:
+        consequence = (
+            f"past the {_mb(size.hard_limit_bytes)} hard ceiling "
+            "(performance.static_bundle_max_mb) — a build of this dashboard would be refused"
+        )
+    else:
+        consequence = (
+            f"past the {_mb(size.soft_limit_bytes)} soft ceiling "
+            "(performance.static_bundle_warn_mb) — it still builds, but it will not travel "
+            "well: mail attachments cap near 25 MB, and nothing renders until the whole "
+            "document is parsed"
+        )
+    logger.warning(
+        "producer A: static bundle %s %s (%s static runtime + %s of base64 Parquet over "
+        "%d data collection(s)), %s",
+        "is estimated at" if size.estimated else "is",
+        _mb(size.total_bytes),
+        _mb(size.runtime_bytes),
+        _mb(size.data_bytes),
+        dc_count,
+        consequence,
+    )
+
+
+def _mb(byte_count: float) -> str:
+    return f"{byte_count / BYTES_PER_MB:.1f} MB"
+
+
+@dataclass
+class _RunningBundleSize:
+    """The data total accumulated while ``_bundle_data_refs`` walks its DCs.
+
+    Exists so the hard ceiling can be enforced *during* the walk rather than
+    after it: the export is refused on the data collection that crosses the
+    line, and the ones behind it are never read. It keeps the per-DC
+    contributions because "your bundle is 140 MB" is not actionable without
+    "and these two data collections are 130 MB of it".
+
+    ``estimated`` says which number is being accumulated, because both paths
+    charge and both refuse. A serialising build charges the base64 length of
+    the Parquet it just wrote (a measurement); a preflight writes no Parquet
+    and charges :func:`estimated_blob_bytes` instead — the same RFC §8.1
+    density it reports. The preflight is the *open* path (viewer-gated, and
+    anonymous in public mode) and its peak memory is the larger of the two —
+    uncompressed Polars frames, retained for the binder — so leaving it
+    uncapped would mean the cheapest request to make is the one nothing bounds.
+    """
+
+    runtime_bytes: int
+    hard_limit: int
+    estimated: bool = False
+    # (dc_id, charged bytes, rows, columns), in the order they were charged.
+    blobs: list[tuple[str, int, int, int]] = field(default_factory=list)
+
+    @property
+    def data_bytes(self) -> int:
+        return sum(size for _dc, size, _rows, _cols in self.blobs)
+
+    @property
+    def total_bytes(self) -> int:
+        return self.runtime_bytes + self.data_bytes
+
+    def add(self, dc_id: str, blob_bytes: int, rows: int, columns: int) -> None:
+        self.blobs.append((dc_id, blob_bytes, rows, columns))
+
+    def _dominant(self) -> str:
+        """The three heaviest DCs so far, named for the refusal message."""
+        top = sorted(self.blobs, key=lambda blob: blob[1], reverse=True)[:3]
+        return ", ".join(
+            f"{dc_id} ({_mb(size)}, {rows} rows × {cols} columns)"
+            for dc_id, size, rows, cols in top
+        )
+
+    def refuse_if_over_hard_limit(self, total_dcs: int) -> None:
+        """Raise :class:`BundleTooLargeError` as soon as the hard ceiling is crossed.
+
+        Called once each DC has been charged and *before* its base64 is written,
+        so the blob that breaches the ceiling is the last one this process
+        touches. The total is over the DCs loaded so far, which includes any
+        loaded speculatively for a figure that may yet fail to bind — those
+        bytes were really produced, so charging them is right for a memory
+        ceiling even though the finished bundle would have dropped them.
+
+        The message names the path it came from: the two totals differ in kind
+        (measured base64 vs the §8.1 density), and a preflight's estimate runs
+        ~2x high on compressible frames, so a refusal there does not prove a
+        build would be refused as well.
+        """
+        if not self.hard_limit or self.total_bytes <= self.hard_limit:
+            return
+        if self.estimated:
+            data = (
+                f"{_mb(self.data_bytes)} of Parquet ESTIMATED at the RFC §8.1 density "
+                "(rows × columns × 2 bytes × 4/3)"
+            )
+            stopped = (
+                "so the preflight was refused before the remaining data collections were "
+                "loaded. That estimate runs high on compressible data, so a build may still "
+                "fit under the ceiling where this report did not"
+            )
+        else:
+            data = f"{_mb(self.data_bytes)} of base64 Parquet"
+            stopped = "so the export was refused before the remaining data was encoded"
+        raise BundleTooLargeError(
+            f"static bundle too large: {_mb(self.total_bytes)} after "
+            f"{len(self.blobs)} of {total_dcs} data collection(s) "
+            f"({_mb(self.runtime_bytes)} static runtime + {data}) exceeds the "
+            f"{_mb(self.hard_limit)} ceiling, {stopped}. Largest so far: {self._dominant()}. "
+            "Raise performance.static_bundle_max_mb "
+            "(DEPICTIO_PERFORMANCE_STATIC_BUNDLE_MAX_MB; 0 disables the check), or export "
+            "fewer/narrower components so less data has to be bundled."
+        )
+
+
+# ---------------------------------------------------------------------------
 # Data refs (live tier)
 # ---------------------------------------------------------------------------
 
@@ -1283,6 +1679,7 @@ def _freeze_map(comp: dict[str, Any], user: ExportUser) -> dict[str, Any]:
 def _bundle_data_refs(
     stored_metadata: list[dict[str, Any]],
     links: list[dict[str, Any]] | None = None,
+    serialize: bool = True,
 ) -> tuple[dict[str, DataRef], dict[str, str], dict[str, str], dict[str, pl.DataFrame]]:
     """Bundle every DC a live component, a ui-mode figure or a live
     advanced_viz consumes (:func:`_ships_data`).
@@ -1290,6 +1687,30 @@ def _bundle_data_refs(
     ``links`` are the emitted cross-DC link configs; their join columns are
     folded into the per-DC keep sets (:func:`link_join_column_sets`) so a
     bundled link always finds the column it resolves against.
+
+    ``serialize=False`` is the binding preflight's path (``export_manifest(...,
+    decide_only=True)``): the frames are loaded, pruned and given their
+    companions exactly as a real build would — the binder has to be handed the
+    frame the bundle *would* carry, or its verdict is about a different table —
+    but no Parquet is written and nothing is base64'd. ``inline_blobs`` then
+    stays empty and every ``DataRef`` reports ``size_bytes=0``; nothing on that
+    path reads the bytes, and encoding them is the largest cost of a verdict
+    that ships no bundle.
+
+    **Size ceilings (RFC §8.1).** BOTH runs keep a running total and are refused
+    the moment it crosses ``performance.static_bundle_max_mb``, so the loop
+    stops at the data collection that broke it either way and a 200 MB bundle is
+    never materialised. What they charge differs: a serialising run charges the
+    base64 length of the Parquet it just wrote, a preflight charges
+    :func:`estimated_blob_bytes` — it writes none. Charging on both paths is
+    what bounds the preflight at all: it is the *viewer*-gated one (anonymous in
+    public/demo mode), it loads every DC uncapped and holds each pruned frame
+    for the binder, and uncompressed Polars frames peak higher than the base64
+    a build accumulates.
+
+    The report is a separate number from the refusal, on both paths: it is taken
+    by the caller over the refs that SURVIVE the ``used_dc_ids`` drop, i.e. the
+    bytes a user would receive rather than the bytes the producer touched.
 
     Returns ``(data_refs, inline_blobs, failures, pruned_frames)``.
     ``failures`` maps ``dc_id`` → error string for DCs that could not be loaded
@@ -1314,6 +1735,12 @@ def _bundle_data_refs(
     inline_blobs: dict[str, str] = {}
     failures: dict[str, str] = {}
     pruned_frames: dict[str, pl.DataFrame] = {}
+
+    size = _RunningBundleSize(
+        runtime_bytes=runtime_floor_bytes(),
+        hard_limit=_bundle_size_limits()[1],
+        estimated=not serialize,
+    )
 
     for dc_id, comps in live_comps_by_dc.items():
         rep = comps[0]
@@ -1364,14 +1791,28 @@ def _bundle_data_refs(
         result = build_companions(df, categorical_cols, datetime_cols)
         pruned_frames[dc_id] = result.df
 
-        buf = io.BytesIO()
-        result.df.write_parquet(
-            buf, compression=PARQUET_COMPRESSION, row_group_size=PARQUET_ROW_GROUP_SIZE
-        )
-        parquet_bytes = buf.getvalue()
-
         blob_key = f"dc_{dc_id}"
-        inline_blobs[blob_key] = base64.b64encode(parquet_bytes).decode("ascii")
+        parquet_bytes = b""
+        if serialize:
+            buf = io.BytesIO()
+            result.df.write_parquet(
+                buf, compression=PARQUET_COMPRESSION, row_group_size=PARQUET_ROW_GROUP_SIZE
+            )
+            parquet_bytes = buf.getvalue()
+            charged = _base64_length(len(parquet_bytes))
+        else:
+            # No bytes exist on this path, so charge the number the preflight
+            # would REPORT for this frame — same density, same ceiling. Anything
+            # else would leave the open path capped by a different rule than the
+            # one it tells the caller about.
+            charged = estimated_blob_bytes(result.df.height, result.df.width)
+        # Charge the frame and check the ceiling BEFORE the base64 is written:
+        # over the ceiling nothing below this line runs, so the bundle stops
+        # growing at the DC that broke it instead of at the end of the loop.
+        size.add(dc_id, charged, result.df.height, result.df.width)
+        size.refuse_if_over_hard_limit(len(live_comps_by_dc))
+        if serialize:
+            inline_blobs[blob_key] = base64.b64encode(parquet_bytes).decode("ascii")
         data_refs[dc_id] = DataRef(
             uri=f"inline:{blob_key}",
             rows=result.df.height,
@@ -1381,8 +1822,11 @@ def _bundle_data_refs(
             ],
             companions=result.companions,
             codebooks=result.codebooks,
+            # The content hash is a fallback for a DC whose server-side
+            # aggregation hash is missing; with no bytes to hash there is
+            # nothing honest to put there.
             aggregation_hash=dtu._get_aggregation_hash(dc_id)
-            or hashlib.sha256(parquet_bytes).hexdigest(),
+            or (hashlib.sha256(parquet_bytes).hexdigest() if serialize else None),
         )
 
     return data_refs, inline_blobs, failures, pruned_frames
@@ -1409,6 +1853,218 @@ def _base_frame(
         c for c in df.columns if c in companions or c.startswith(("__code__", "__ts__", "__fe__"))
     ]
     return df.drop(drop) if drop else df
+
+
+def apply_dc_outcomes(
+    items: list[tuple[FamilyTab, dict[str, Any], str]],
+    tier_by_id: dict[str, TierRow],
+    data_refs: dict[str, DataRef],
+    dc_failures: dict[str, str],
+) -> None:
+    """Fold the outcome of the DC load back into the tier rows, in place.
+
+    Components with no data of their own (frozen figures & co.) survive a failed
+    DC — their payload is self-contained. The ones the runtime computes itself
+    cannot, so an unloadable DC omits them.
+    """
+    for _tab, comp, component_id in items:
+        if comp.get("component_type") not in LIVE_DATA_TYPES and not serves_advanced_viz_live(comp):
+            continue
+        dc_id = str(comp.get("dc_id") or "")
+        row = tier_by_id[component_id]
+        if dc_id in dc_failures:
+            row.tier = ComponentTier.OMITTED
+            row.reason = TierReason.UNSUPPORTED
+            row.detail = f"data collection {dc_id} not bundled: {dc_failures[dc_id]}"
+        elif comp.get("component_type") == "table" and dc_id not in data_refs:
+            # Planned live, but no Parquet to serve pages from — a table whose
+            # component carries no resolvable dc_id never even reached
+            # `_bundle_data_refs`, so it is neither bundled nor a failure. That
+            # is the one case where `renderTable` falls back to a server-rendered
+            # snapshot, so the freeze loop has to emit one.
+            row.tier = ComponentTier.FROZEN
+            row.reason = TierReason.UNSUPPORTED
+            row.detail = (
+                "table references no bundled data collection; frozen at the default filter state"
+            )
+
+
+def used_dc_ids(
+    items: list[tuple[FamilyTab, dict[str, Any], str]],
+    tier_by_id: dict[str, TierRow],
+    bindings: dict[str, BindingTable],
+) -> set[str]:
+    """The DCs whose bytes the bundle actually needs.
+
+    A DC bundled only for figures that failed to bind carries data the runtime
+    never reads (their frozen payloads are self-contained), so an unbindable
+    figure must not double the bundle's bytes. Code-mode figures ride the same
+    rule: a transpilable one had its DC bundled speculatively (keep-all), and
+    only a *bound* one keeps it. A live advanced_viz keeps its DC — the
+    in-browser engine reads it at every filter state — unless the build
+    downgraded it (unloadable DC).
+    """
+    return {
+        str(c["dc_id"])
+        for _tab, c, cid in items
+        if c.get("dc_id")
+        and (
+            c.get("component_type") in LIVE_DATA_TYPES
+            or cid in bindings
+            or (serves_advanced_viz_live(c) and tier_by_id[cid].tier is ComponentTier.LIVE)
+        )
+    }
+
+
+# ---------------------------------------------------------------------------
+# The figure verdict (bind-and-refill, RFC §4 / §7)
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class FigureDecision:
+    """What one figure turned out to be, and what deciding it produced.
+
+    :func:`decide_figure` is the only place a figure's tier is decided. The
+    build applies the whole thing (shipping ``binding`` / ``prologue``, or the
+    frozen ``payload``); the binding preflight applies the tier half and drops
+    the payload. Neither re-derives a verdict, so the report and the bundle
+    cannot disagree about a figure — which is the entire point of the seam.
+    """
+
+    tier: ComponentTier
+    reason: TierReason | None = None
+    detail: str | None = None
+    binding: BindingTable | None = None
+    prologue: list[PrologueOp] | None = None
+    payload: dict[str, Any] | None = None
+
+
+def decide_figure(
+    comp: dict[str, Any],
+    data_refs: dict[str, DataRef],
+    pruned_frames: dict[str, pl.DataFrame],
+) -> FigureDecision:
+    """Offer a figure to the bind-and-refill builder and read off its tier.
+
+    A bound figure re-renders live in the browser at every filter state —
+    including the default, empty one — so it ships NO frozen payload: the
+    scaffold already carries the authentic layout and the runtime refills the
+    arrays from the bundled Parquet, so a frozen snapshot would only be a second
+    copy of data the bundle already has.
+
+    Code-mode figures (phase 6, RFC §7) take the long way round: the figure
+    itself must come from the server pipeline — that is where the user's Python
+    runs under RestrictedPython, producer A never execs it here — and its
+    transpiled ops are replayed on the bundled base frame to rebuild the frame
+    the code handed to plotly-express, which the binder matches against the real
+    figure.
+
+    ``_freeze_figure`` runs on the non-binding path even when the caller throws
+    the payload away: the build-time ``was_sampled`` flag it returns is what
+    separates ``frozen`` from ``partial``, and there is no cheaper way to learn
+    it than to build the figure the server would have built.
+    """
+    binding: BindingTable | None = None
+    miss: BindingMiss | None = None
+    ops: list[PrologueOp] | None = None
+    payload: dict[str, Any] | None = None
+    sampled = False
+    code_mode = comp.get("mode", "ui") == "code"
+    refusal: str | None = None
+    # Set when the binder (or the prologue replay feeding it) *crashed*. A crash
+    # and a clean refusal both freeze the figure, but they are not the same
+    # verdict and must not read as one: a refusal is analysis, a crash is a bug
+    # in ours. It is logged where it happens and named in the detail below.
+    binder_error: str | None = None
+
+    if code_mode:
+        ops, call, refusal = _code_figure_plan(comp)
+        payload, sampled = _freeze_figure(comp, full_load=call is not None)
+        if call is not None and ops is not None:
+            df = _base_frame(str(comp.get("dc_id") or ""), data_refs, pruned_frames)
+            if df is not None:
+                try:
+                    import plotly.graph_objects as go
+
+                    binding, miss = build_binding_with_reason(
+                        {"visu_type": call[0], "dict_kwargs": call[1]},
+                        execute_ops(ops, df),
+                        fig=go.Figure(payload["figure"]),
+                    )
+                except Exception as exc:
+                    # any replay/builder crash freezes
+                    binding, miss = None, None
+                    binder_error = f"{type(exc).__name__}: {exc}"
+                    logger.warning(
+                        "producer A: prologue replay / bind-and-refill crashed for code-mode "
+                        "figure %s — freezing it: %s",
+                        comp.get("index"),
+                        exc,
+                        exc_info=True,
+                    )
+    else:
+        df = pruned_frames.get(str(comp.get("dc_id") or ""))
+        if df is not None:
+            try:
+                binding, miss = build_binding_with_reason(comp, df)
+            except Exception as exc:
+                binding, miss = None, None  # any builder crash freezes below
+                binder_error = f"{type(exc).__name__}: {exc}"
+                logger.warning(
+                    "producer A: bind-and-refill crashed for figure %s — freezing it: %s",
+                    comp.get("index"),
+                    exc,
+                    exc_info=True,
+                )
+
+    if binding is not None:
+        # An empty op list means the code needed no reshape: it binds to the
+        # base table, and the contract omits empty lists from
+        # ``manifest.prologues``.
+        prologue = ops or None
+        if binding.sampled:
+            return FigureDecision(
+                ComponentTier.PARTIAL,
+                TierReason.MAX_POINTS,
+                "the server samples above FIGURE_MAX_POINTS after filtering; "
+                "the bound figure refills every selected row instead — exact, "
+                "but heavier than the server's default view",
+                binding=binding,
+                prologue=prologue,
+            )
+        return FigureDecision(ComponentTier.LIVE, binding=binding, prologue=prologue)
+
+    if payload is None:
+        payload, sampled = _freeze_figure(comp)
+    if binder_error is not None:
+        # Distinguishable from a real binding miss on purpose: the binder never
+        # reached a verdict here, so reporting its "no unambiguous binding"
+        # wording would present our own crash as this figure's analysis.
+        reason = TierReason.BINDING_MISS
+        detail = (
+            f"the bind-and-refill builder failed with an error rather than a verdict "
+            f"({binder_error}); frozen at the default filter state — this one is a bug to "
+            "report, not a property of the chart"
+        )
+    elif code_mode and refusal is not None:
+        reason = TierReason.CODE_MODE
+        detail = f"code-mode figure not transpilable: {refusal}"
+    else:
+        # The binder names which of its bail-outs fired, and that sentence is
+        # what the badge tooltip shows — "computed over the whole table at once"
+        # is not "no unambiguous binding". Code mode says how far it got first.
+        reason = miss_tier_reason(miss)
+        detail = frozen_miss_detail(miss, "code analyzed, but " if code_mode else "")
+    if sampled:
+        return FigureDecision(
+            ComponentTier.PARTIAL,
+            TierReason.MAX_POINTS,
+            "build-time sampling before filtering (FIGURE_MAX_POINTS); "
+            "the frozen figure shows a downsampled default view",
+            payload=payload,
+        )
+    return FigureDecision(ComponentTier.FROZEN, reason, detail, payload=payload)
 
 
 # ---------------------------------------------------------------------------
@@ -1766,12 +2422,18 @@ class ExportResult:
     dashboard — while ``manifest.tabs`` stays empty in that case, per the
     contract ("empty = single-tab bundle"). Every tier row carries the
     ``tab_id`` it belongs to.
+
+    ``size`` is how big the bundle is or would be, against the ceilings in
+    force — estimated on the binding preflight, measured on a build. It stays
+    ``None`` only on the data-free plan (``check=True, bind=False``), which
+    reads no data collection and so has nothing to size.
     """
 
     manifest: BundleManifest | None
     tier_rows: list[TierRow]
     link_rows: list[LinkRow] = field(default_factory=list)
     tabs: list[TabRow] = field(default_factory=list)
+    size: BundleSize | None = None
 
 
 def _fetch_dashboard(dashboard_id: str) -> dict[str, Any]:
@@ -1837,6 +2499,7 @@ def export_manifest(
     user: ExportUser,
     single_tab: bool = False,
     budget: ComputeBudget | None = None,
+    decide_only: bool = False,
 ) -> ExportResult:
     """Assemble and validate the full ``BundleManifest`` for a dashboard family.
 
@@ -1845,18 +2508,39 @@ def export_manifest(
     component-keyed merges across the family; data collections are bundled ONCE
     however many tabs read them, which is the whole point — six tabs over the
     same two tables used to mean six bundles each re-inlining both.
+
+    ``decide_only=True`` is the binding preflight (``export_static(check=True)``):
+    the same body, run for its verdicts and stopped before it builds anything.
+    It loads and prunes the data collections and decides every FIGURE through
+    :func:`decide_figure` — that is the only way to know a figure's real tier —
+    but writes no Parquet, freezes no payload, runs no Celery compute and emits
+    no manifest. It is a *viewer*-gated read, not an export. Sharing one body
+    (rather than a second copy of the plumbing) is the point: a report that can
+    disagree with the bundle it predicts is worse than no report.
+
+    Only the figure rows are settled by it, though. Every other component keeps
+    its planned tier, and the build can still move one — a frozen payload that
+    fails, or a Celery compute the wall-clock budget cannot cover, both end up
+    ``omitted``. It also loads the same data collections a build would and is
+    refused at the same ceiling (``_bundle_data_refs``), because it is the more
+    open of the two paths.
     """
-    # Owner gate on the REQUESTED dashboard first, before any other document is
-    # read: a denied export must not walk someone else's family. Then per tab —
+    # Permission gate on the REQUESTED dashboard first, before any other document
+    # is read: a denied export must not walk someone else's family. Then per tab —
     # all tabs of a family share a project (the tab-creation route copies
     # project_id from the parent, and sync_tab_family_permissions keeps the ACLs
     # equal), so it is the same check repeated, but checking each tab's OWN
     # project makes that an observation rather than an assumption.
+    #
+    # Building needs *owner* (RFC §8 — a bundle is bulk data exfiltration);
+    # deciding needs *viewer*, since every row it reads is a row the normal
+    # render endpoints would already hand that viewer.
+    required = "viewer" if decide_only else "owner"
     entry_doc = _fetch_dashboard(dashboard_id)
-    _check_permission(entry_doc, user, "owner")
+    _check_permission(entry_doc, user, required)
     tabs, entry_tab = family_from_doc(entry_doc, single_tab=single_tab)
     for tab in tabs:
-        _check_permission(tab.doc, user, "owner")
+        _check_permission(tab.doc, user, required)
     project_ids = {str(tab.doc.get("project_id") or "") for tab in tabs}
     if len(project_ids) > 1:
         logger.warning(
@@ -1885,27 +2569,9 @@ def export_manifest(
     # live advanced_viz kinds) read — keyed by dc_id, so a DC read on three tabs
     # is loaded, pruned and inlined exactly once.
     data_refs, inline_blobs, dc_failures, pruned_frames = _bundle_data_refs(
-        stored_metadata, emitted_links
+        stored_metadata, emitted_links, serialize=not decide_only
     )
-    for _tab, comp, component_id in items:
-        # Components with no data of their own (frozen figures & co.) survive a
-        # failed DC — their payload is self-contained. The ones the runtime
-        # computes itself cannot.
-        if comp.get("component_type") not in LIVE_DATA_TYPES and not serves_advanced_viz_live(comp):
-            continue
-        dc_id = str(comp.get("dc_id") or "")
-        row = tier_by_id[component_id]
-        if dc_id in dc_failures:
-            row.tier = ComponentTier.OMITTED
-            row.reason = TierReason.UNSUPPORTED
-            row.detail = f"data collection {dc_id} not bundled: {dc_failures[dc_id]}"
-        elif comp.get("component_type") == "table" and dc_id in data_refs:
-            # The data landed, so `renderTableLive` will take over: no frozen
-            # snapshot is emitted for this component below, the way a bound
-            # figure ships none either.
-            row.tier = ComponentTier.LIVE
-            row.reason = None
-            row.detail = None
+    apply_dc_outcomes(items, tier_by_id, data_refs, dc_failures)
 
     # Frozen tier: real endpoint bodies, default (empty) filter state.
     # Bindings (bind-and-refill, RFC §4) — and, for code-mode figures, the
@@ -1918,23 +2584,28 @@ def export_manifest(
     computes_skipped = 0
 
     # Cards freeze per tab: bulk_compute_cards resolves component ids against
-    # ONE dashboard document, so a family needs one call per tab.
-    for tab in tabs:
-        cards = [
-            comp
-            for t, comp, cid in items
-            if t is tab
-            and comp.get("component_type") == "card"
-            and tier_by_id[cid].tier is ComponentTier.LIVE
-        ]
-        if not cards:
-            continue
-        try:
-            for idx, payload in _freeze_cards(ObjectId(tab.id), cards, user).items():
-                frozen[idx] = FrozenPayload(kind="card", payload=payload)
-        except Exception as exc:
-            # Fallback payloads only — cards stay live off the bundled data.
-            logger.warning("producer A: frozen card fallback failed for tab %s: %s", tab.id, exc)
+    # ONE dashboard document, so a family needs one call per tab. A card's tier
+    # is already settled by now (live, or omitted with its DC), so the preflight
+    # skips the fallback payload entirely.
+    if not decide_only:
+        for tab in tabs:
+            cards = [
+                comp
+                for t, comp, cid in items
+                if t is tab
+                and comp.get("component_type") == "card"
+                and tier_by_id[cid].tier is ComponentTier.LIVE
+            ]
+            if not cards:
+                continue
+            try:
+                for idx, payload in _freeze_cards(ObjectId(tab.id), cards, user).items():
+                    frozen[idx] = FrozenPayload(kind="card", payload=payload)
+            except Exception as exc:
+                # Fallback payloads only — cards stay live off the bundled data.
+                logger.warning(
+                    "producer A: frozen card fallback failed for tab %s: %s", tab.id, exc
+                )
 
     for tab, comp, component_id in items:
         row = tier_by_id[component_id]
@@ -1944,6 +2615,18 @@ def export_manifest(
         # data source, not a snapshot of a dead tile.
         if row.tier is not ComponentTier.FROZEN and ctype != "multiqc":
             continue
+        if decide_only and ctype != "figure":
+            # A figure is the only tier this loop can still SETTLE cheaply, so
+            # it is the only one it runs. The rest keep their planned verdict,
+            # which the build can still move: a frozen payload that fails drops
+            # the component to omitted, and a Celery compute the budget cannot
+            # cover is omitted by policy rather than by failure
+            # (:func:`freeze_celery_compute` returning ``None``). So on a
+            # dashboard with more computes than the budget covers, this reports
+            # `frozen` where the build will ship `omitted`. Running them here to
+            # find out would cost the bulk of an export's wall clock, which is
+            # not what a preflight is for.
+            continue
         dashboard_oid = ObjectId(tab.id)
         try:
             if ctype == "table":
@@ -1952,94 +2635,17 @@ def export_manifest(
                     payload=_freeze_table(dashboard_oid, component_id, user),
                 )
             elif ctype == "figure":
-                # Bind-and-refill first (RFC §4): a bound figure re-renders live
-                # in the browser at every filter state — including the default,
-                # empty one — so it ships NO frozen payload. The scaffold
-                # already carries the authentic layout, and the runtime refills
-                # the arrays from the bundled Parquet, so a frozen snapshot
-                # would only be a second copy of data the bundle already has.
-                binding = None
-                miss: BindingMiss | None = None
-                ops: list[PrologueOp] | None = None
-                payload: dict[str, Any] | None = None
-                sampled = False
-                code_mode = comp.get("mode", "ui") == "code"
-                refusal: str | None = None
-                if code_mode:
-                    # Phase 6 (RFC §7). The figure itself must come from the
-                    # server pipeline — that is where the user's Python runs
-                    # under RestrictedPython; producer A never execs it here.
-                    # Its ops are then replayed on the bundled base frame to
-                    # rebuild the frame the code handed to plotly-express, and
-                    # the binder matches the real figure against it.
-                    ops, call, refusal = _code_figure_plan(comp)
-                    payload, sampled = _freeze_figure(comp, full_load=call is not None)
-                    if call is not None and ops is not None:
-                        df = _base_frame(str(comp.get("dc_id") or ""), data_refs, pruned_frames)
-                        if df is not None:
-                            try:
-                                import plotly.graph_objects as go
-
-                                binding, miss = build_binding_with_reason(
-                                    {"visu_type": call[0], "dict_kwargs": call[1]},
-                                    execute_ops(ops, df),
-                                    fig=go.Figure(payload["figure"]),
-                                )
-                            except Exception:
-                                # any replay/builder crash freezes
-                                binding, miss = None, None
-                elif _refillable_figure(comp):
-                    df = pruned_frames.get(str(comp.get("dc_id") or ""))
-                    if df is not None:
-                        try:
-                            binding, miss = build_binding_with_reason(comp, df)
-                        except Exception:
-                            binding, miss = None, None  # any builder crash freezes below
-                if binding is not None:
-                    bindings[component_id] = binding
-                    if ops:
-                        # An empty op list means the code needed no reshape: it
-                        # binds to the base table, and the contract omits empty
-                        # lists from ``manifest.prologues``.
-                        prologues[component_id] = ops
-                    if binding.sampled:
-                        row.tier = ComponentTier.PARTIAL
-                        row.reason = TierReason.MAX_POINTS
-                        row.detail = (
-                            "the server samples above FIGURE_MAX_POINTS after filtering; "
-                            "the bound figure refills every selected row instead — exact, "
-                            "but heavier than the server's default view"
-                        )
-                    else:
-                        row.tier = ComponentTier.LIVE
-                        row.reason = None
-                        row.detail = None
-                    continue
-                if payload is None:
-                    payload, sampled = _freeze_figure(comp)
-                if code_mode and refusal is not None:
-                    row.reason = TierReason.CODE_MODE
-                    row.detail = f"code-mode figure not transpilable: {refusal}"
-                elif code_mode:
-                    # The binder names which of its bail-outs fired, and that
-                    # sentence is what the badge tooltip shows — "computed over
-                    # the whole table at once" is not "no unambiguous binding".
-                    row.reason = miss_tier_reason(miss)
-                    row.detail = (
-                        f"code analyzed, but {miss_detail(miss)}; "
-                        "frozen at the default filter state"
-                    )
-                elif _refillable_figure(comp):
-                    row.reason = miss_tier_reason(miss)
-                    row.detail = f"{miss_detail(miss)}; frozen at the default filter state"
-                if sampled:
-                    row.tier = ComponentTier.PARTIAL
-                    row.reason = TierReason.MAX_POINTS
-                    row.detail = (
-                        "build-time sampling before filtering (FIGURE_MAX_POINTS); "
-                        "the frozen figure shows a downsampled default view"
-                    )
-                frozen[component_id] = FrozenPayload(kind="figure", payload=payload)
+                decision = decide_figure(comp, data_refs, pruned_frames)
+                row.tier = decision.tier
+                row.reason = decision.reason
+                row.detail = decision.detail
+                row.provisional = False  # the binder ran; this IS the verdict
+                if decision.binding is not None:
+                    bindings[component_id] = decision.binding
+                    if decision.prologue:
+                        prologues[component_id] = decision.prologue
+                elif decision.payload is not None and not decide_only:
+                    frozen[component_id] = FrozenPayload(kind="figure", payload=decision.payload)
             elif ctype == "advanced_viz":
                 if celery_compute_request(comp) is not None:
                     # Server-side Celery kind: run the compute here and ship the
@@ -2072,26 +2678,44 @@ def export_manifest(
             row.reason = row.reason or TierReason.UNSUPPORTED
             row.detail = f"frozen payload could not be computed: {exc}"
 
-    # A DC bundled only for figures that failed to bind carries data the
-    # runtime never reads (their frozen payloads are self-contained) — drop the
-    # blob so an unbindable figure does not double the bundle's bytes. Code-mode
-    # figures ride the same rule: a transpilable one had its DC bundled
-    # speculatively (keep-all), and only a *bound* one keeps it. A live
-    # advanced_viz keeps its DC — the in-browser engine reads it at every
-    # filter state — unless the build downgraded it (unloadable DC).
-    used_dcs = {
-        str(c["dc_id"])
-        for _tab, c, cid in items
-        if c.get("dc_id")
-        and (
-            c.get("component_type") in LIVE_DATA_TYPES
-            or cid in bindings
-            or (serves_advanced_viz_live(c) and tier_by_id[cid].tier is ComponentTier.LIVE)
-        )
-    }
+    dcs_loaded = len(data_refs)
+    used_dcs = used_dc_ids(items, tier_by_id, bindings)
     for dc_id in [d for d in data_refs if d not in used_dcs]:
         del data_refs[dc_id]
         inline_blobs.pop(f"dc_{dc_id}", None)
+
+    # Size the bundle only now: the drop above is what makes the difference
+    # between the bytes the producer touched and the bytes the user receives,
+    # and both the warning and the preflight's verdict are about the latter.
+    bundle_size = (
+        estimate_bundle_size(data_refs) if decide_only else measured_bundle_size(inline_blobs)
+    )
+    report_bundle_size(bundle_size, len(data_refs))
+
+    if decide_only:
+        # Link tiers off the same surviving DC set the build would ship, but
+        # without precomputing any tier-B translation table — that reads a whole
+        # source column out of Delta to produce a mapping this call never emits.
+        _, link_rows = build_links_section(
+            project_links(project_doc), dc_ids, set(data_refs), precompute=False
+        )
+        logger.info(
+            "producer A: preflighted %s (%d tab(s), %d component(s), %d data collection(s) "
+            "loaded / %d a bundle would keep, %d figure(s) bound)",
+            entry_tab.id,
+            len(tabs),
+            len(tier_rows),
+            dcs_loaded,
+            len(data_refs),
+            len(bindings),
+        )
+        return ExportResult(
+            manifest=None,
+            tier_rows=tier_rows,
+            link_rows=link_rows,
+            tabs=[tab.tab_row() for tab in tabs],
+            size=bundle_size,
+        )
 
     # Links last: a link's tier depends on whether its SOURCE DC survived the
     # drop above, so this cannot run before the final data_refs are known.
@@ -2131,11 +2755,13 @@ def export_manifest(
     )
     logger.info(
         "producer A: exported %s (%d tab(s), %d component(s), %d data collection(s), "
-        "%d Celery compute(s) frozen, %d omitted, %.0fs of %.0fs compute budget spent)",
+        "%s of bundled data, %d Celery compute(s) frozen, %d omitted, "
+        "%.0fs of %.0fs compute budget spent)",
         entry_tab.id,
         len(tabs),
         len(tier_rows),
         len(data_refs),
+        _mb(bundle_size.data_bytes),
         computes_frozen,
         computes_skipped,
         budget.spent,
@@ -2146,6 +2772,38 @@ def export_manifest(
         tier_rows=tier_rows,
         link_rows=link_rows,
         tabs=[tab.tab_row() for tab in tabs],
+        size=bundle_size,
+    )
+
+
+def _refuse_oversized_render(html: str, size: BundleSize | None) -> None:
+    """Refuse a rendered bundle past the hard ceiling, before it is written.
+
+    The running total during ``_bundle_data_refs`` only ever sees base64
+    Parquet, and ``measured_bundle_size`` only ever sees the same blobs — so
+    everything else the file carries is unbounded by them: the frozen payloads,
+    and in particular a code-mode figure built with ``full_load=True`` whose
+    binding then missed, which embeds every point in the manifest JSON. The
+    documented meaning of ``static_bundle_max_mb`` is "the size above which an
+    export is refused", so it is checked one last time on the thing that
+    actually has a size — the HTML about to be written.
+
+    Named separately from the earlier refusals because the numbers are not
+    comparable: this one is the file, they are its data.
+    """
+    _, hard_limit = _bundle_size_limits()
+    rendered = len(html.encode("utf-8"))
+    if not hard_limit or rendered <= hard_limit:
+        return
+    data = f"{_mb(size.data_bytes)} of it is bundled data" if size else "size unavailable"
+    raise BundleTooLargeError(
+        f"static bundle too large: the rendered bundle is {_mb(rendered)}, past the "
+        f"{_mb(hard_limit)} ceiling (performance.static_bundle_max_mb), so it was not "
+        f"written. {data}; the rest is the static runtime and the frozen payloads (a "
+        "figure that could not be bound ships every point it draws), which the running "
+        "total during serialisation does not count. Raise "
+        "performance.static_bundle_max_mb (DEPICTIO_PERFORMANCE_STATIC_BUNDLE_MAX_MB; "
+        "0 disables the check), or export fewer/narrower components."
     )
 
 
@@ -2156,6 +2814,7 @@ def export_static(
     check: bool = False,
     user: Any = None,
     single_tab: bool = False,
+    bind: bool = True,
 ) -> ExportResult:
     """End-to-end: dashboard in Mongo → self-contained HTML at ``out_path``.
 
@@ -2165,17 +2824,37 @@ def export_static(
         out_path: Where to write the bundle (ignored with ``check=True``;
             required otherwise).
         mode: Bundle delivery mode — phase 2 supports ``single-file`` only.
-        check: Preflight — classify tiers (viewer permission), write nothing.
+        check: Preflight — report the tier table (viewer permission), write
+            nothing. By default the report is the REAL one: see ``bind``.
         user: A User-like object, an email string, or ``None`` (falls back to
             the instance's admin account). Building needs *owner* on the
             dashboard's project; ``--check`` needs viewer.
         single_tab: Export only the requested tab (no family).
+        bind: ``check`` only. True (the default) runs the binding preflight —
+            the export's own body, stopped before it builds anything: data
+            collections are loaded and pruned and every figure goes through the
+            binder, so each *figure* row is the tier the bundle would really get
+            and comes back non-``provisional``. It costs seconds, mostly in the
+            figure pipeline; it still skips the Celery computes, the frozen
+            payloads and the Parquet, so it stays well under a full export.
+            False gives the instant data-free plan
+            (:func:`classify_stored_component`), where every ui-mode figure is
+            an undecided ``binding_miss``.
+
+            Nothing in production passes ``bind=False``: the HTTP preflight and
+            the CLI both take the real road. It is an internal escape hatch —
+            for the tests, and for anyone debugging a dashboard whose data
+            cannot be read (an unreachable S3, a Delta table mid-rewrite) who
+            still wants the component inventory. Not public CLI surface.
     """
     bundle_mode = BundleMode(mode) if not isinstance(mode, BundleMode) else mode
     if bundle_mode is not BundleMode.SINGLE_FILE:
         raise ProducerAError(f"phase 2 supports only single-file mode, got {bundle_mode.value!r}")
 
     export_user = resolve_user(user)
+
+    if check and bind:
+        return export_manifest(dashboard_id, export_user, single_tab=single_tab, decide_only=True)
 
     if check:
         entry_doc = _fetch_dashboard(dashboard_id)
@@ -2189,7 +2868,7 @@ def export_static(
         stored_metadata = [comp for tab in tabs for comp in tab.components]
         # Predicted link tiers: a source DC that a data-shipping component reads
         # will be bundled (tier A), anything else needs a precomputed table
-        # (tier B). No Delta table is read — preflight stays data-free.
+        # (tier B). No Delta table is read — this path stays data-free.
         _, link_rows = build_links_section(
             project_links(_fetch_project(entry_tab.doc.get("project_id"))),
             dashboard_dc_ids(stored_metadata),
@@ -2209,6 +2888,8 @@ def export_static(
     result = export_manifest(dashboard_id, export_user, single_tab=single_tab)
     assert result.manifest is not None
     html = render_bundle_html(result.manifest)
+    # Last ceiling check, and the only one taken on the whole file (RFC §8.1).
+    _refuse_oversized_render(html, result.size)
     out = Path(out_path)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(html, encoding="utf-8")

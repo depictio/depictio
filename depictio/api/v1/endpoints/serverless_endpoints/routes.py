@@ -3,8 +3,12 @@
 Four thin endpoints around ``depictio.serverless.producer_a.export_static``:
 
 * ``GET  /export-static/{dashboard_id}/preflight`` — the ``--check`` tier table,
-  per component and per tab of the dashboard's family (viewer permission, reads
-  no data, writes nothing).
+  per component and per tab of the dashboard's family, plus the bundle's
+  estimated size against the two ceilings (viewer permission, writes nothing).
+  It *does* read data: deciding a figure's tier means running the
+  bind-and-refill builder over the frame the bundle would carry, so this is a
+  seconds-long call, not an instant one — and it is bounded by the same hard
+  size ceiling the build is, which it reports as a 413 rather than a 404.
 * ``POST /export-static/{dashboard_id}`` — owner-gated; enqueues the build as a
   Celery task and returns a ``job_id``. The bundle carries the whole tab family,
   entered on the requested tab.
@@ -41,7 +45,13 @@ from depictio.api.v1.endpoints.dashboards_endpoints.routes import check_project_
 from depictio.api.v1.endpoints.user_endpoints.routes import get_user_or_anonymous
 from depictio.api.v1.s3 import s3_client
 from depictio.serverless.preflight import rows_for_tab, tier_counts
-from depictio.serverless.producer_a import ProducerAError, export_static
+from depictio.serverless.producer_a import (
+    BYTES_PER_MB,
+    BundleSize,
+    BundleTooLargeError,
+    ProducerAError,
+    export_static,
+)
 
 serverless_endpoint_router = APIRouter()
 
@@ -57,6 +67,40 @@ _TIER_COUNT_KEYS = ("live", "partial", "frozen", "omitted")
 def _enum_value(value: Any) -> Any:
     """Enum → its ``.value``; anything else (incl. ``None``) unchanged."""
     return getattr(value, "value", value)
+
+
+def _size_estimate_payload(size: BundleSize | None) -> dict[str, Any] | None:
+    """The preflight's size block, or ``None`` when nothing was sized.
+
+    Every number is bytes so the caller never has to guess a unit; the two
+    ceilings are echoed in MB because that is how they are configured, and a
+    ceiling of 0 means that check is disabled. ``verdict`` is the thresholds
+    already applied, so a modal does not re-derive them and cannot disagree with
+    the producer that will run the build.
+
+    ``estimated_data_bytes`` really is an estimate: the preflight prunes every
+    frame but never serialises one, so its data figure is ``rows × columns × 2
+    bytes × 4/3`` (RFC §8.1) rather than a measurement. ``runtime_bytes`` — the
+    static runtime every bundle carries whatever its data — is exact, and on a
+    small dashboard it is most of the total.
+
+    ``verdict`` is therefore an advance warning, not a decision: it applies the
+    same thresholds the build applies, to a number of a different kind. The
+    density runs ~2x high on compressible frames, and neither figure counts the
+    frozen payloads. A preflight whose *running* total crosses the hard ceiling
+    does not return a verdict at all — it is refused outright (413), the same
+    way the build is.
+    """
+    if size is None:
+        return None
+    return {
+        "estimated_total_bytes": size.total_bytes,
+        "estimated_data_bytes": size.data_bytes,
+        "runtime_bytes": size.runtime_bytes,
+        "soft_limit_mb": size.soft_limit_bytes // BYTES_PER_MB,
+        "hard_limit_mb": size.hard_limit_bytes // BYTES_PER_MB,
+        "verdict": size.verdict,
+    }
 
 
 def _external_s3_endpoint() -> str | None:
@@ -217,14 +261,47 @@ async def preflight_export_static(
     bundle carries: every tier row names its ``tab_id`` and ``tabs`` repeats the
     per-tab counts. The top-level ``counts`` stay family-wide.
 
-    Needs *viewer* on the dashboard's project; reads no Delta data and writes
-    nothing. ``export_static`` is synchronous and hits Mongo, so it runs in a
-    worker thread rather than on the event loop.
+    The FIGURE tiers are the real ones, not a plan: ``export_static``'s default
+    preflight runs the export's own body — it loads and prunes the data
+    collections and puts every figure through the bind-and-refill builder — and
+    stops before it builds anything, so no figure row comes back
+    ``provisional``. That costs data reads and a server-side figure build per
+    unbound figure. A full export of the reference dashboards takes 5-15 s wall
+    clock, most of it in the Celery computes this skips entirely (no compute, no
+    frozen payload, no Parquet, no HTML), so expect a few seconds rather than a
+    few milliseconds.
+
+    Everything that is not a figure keeps its planned tier, and the build can
+    still move one: a frozen payload that fails to compute drops to ``omitted``,
+    and so does a Celery compute the build's wall-clock budget cannot cover —
+    that one by policy, not by failure, so a dashboard with many computes can
+    report ``frozen`` here and ship ``omitted``.
+
+    ``size_estimate`` predicts how big the bundle would be and which side of the
+    two ceilings it lands on (``ok`` / ``over_soft_limit`` / ``would_be_refused``
+    — see :func:`_size_estimate_payload`), so the size can be shown before the
+    build is paid for. It is an advance warning rather than the build's own
+    decision: same ceilings, but applied to an estimate that runs high on
+    compressible data. Crossing the hard ceiling *while loading* is a 413 here
+    exactly as it is a refusal there — the ceiling bounds this path's memory
+    too.
+
+    Needs *viewer* on the dashboard's project — every row it reads is a row the
+    normal render endpoints would already serve that viewer — and writes nothing.
+    ``export_static`` is synchronous and blocks on Mongo, S3 and plotly, so it
+    runs in a worker thread rather than on the event loop.
     """
     try:
         result = await anyio.to_thread.run_sync(
             functools.partial(export_static, dashboard_id, check=True, user=current_user)
         )
+    except BundleTooLargeError as exc:
+        # Not a 404: the dashboard exists and this caller may read it. Answering
+        # "not found" for a dashboard whose data is simply too big to bundle
+        # sends the reader looking for the wrong problem, and the message here
+        # names the ceiling and the data collections that crossed it.
+        logger.info(f"Static export preflight over the size ceiling for {dashboard_id}: {exc}")
+        raise HTTPException(status_code=413, detail=str(exc))
     except ProducerAError as exc:
         logger.info(f"Static export preflight refused for {dashboard_id}: {exc}")
         raise HTTPException(status_code=404, detail="Dashboard not found or access denied")
@@ -283,6 +360,7 @@ async def preflight_export_static(
         "tabs": tabs,
         "links": links,
         "counts": counts,
+        "size_estimate": _size_estimate_payload(result.size),
     }
 
 

@@ -30,6 +30,23 @@ from depictio.serverless.pruning import (
 _LIVE_TYPES = frozenset({"card", "interactive", "text"})
 
 
+@dataclass(frozen=True)
+class PlannedTier:
+    """One classifier verdict, before any data is read.
+
+    ``provisional`` is stated, not inferred: only the classifier knows whether
+    it *decided* or merely *defaulted*. A ui-mode figure frozen because its
+    trendline cannot be refit is a final verdict that happens to share
+    ``TierReason.BINDING_MISS`` with the placeholder the build overturns, so the
+    reason alone cannot tell the two apart.
+    """
+
+    tier: ComponentTier
+    reason: TierReason | None = None
+    detail: str | None = None
+    provisional: bool = False
+
+
 @dataclass
 class TierRow:
     """One row of the preflight table (and one ``tiers`` manifest entry).
@@ -51,10 +68,12 @@ class TierRow:
     provisional: bool = False
     """True when the build can still overturn this verdict.
 
-    Preflight reads no data, so it never runs the bind-and-refill builder: it
-    plans every figure as frozen/binding_miss and the build upgrades the ones it
-    can redraw in the browser. Consumers must present these as undecided rather
-    than as a verdict.
+    Preflight reads no data, so it never runs the bind-and-refill builder: a
+    ui-mode figure that clears the data-free gates
+    (``binding.planned_figure_miss``) is planned frozen/binding_miss and the
+    build upgrades it if it can redraw it in the browser. Consumers must present
+    those as undecided rather than as a verdict. A figure those gates *did*
+    refuse is not one of them — the build refuses it for the same reason.
     """
 
 
@@ -123,12 +142,22 @@ class LinkRow:
     note: str | None = None
 
 
-def classify_component(comp: dict[str, Any]) -> tuple[ComponentTier, TierReason | None, str | None]:
+def classify_component(comp: dict[str, Any]) -> PlannedTier:
     """Planned (data-free) tier verdict for one component."""
+    # Both function-local so importing this module stays cheap: `binding` pulls
+    # the API's figure_builder (plotly), `prologue_exec` pulls polars, and the
+    # CLI's `--check` needs neither until it meets a figure.
+    from depictio.serverless.binding import (
+        frozen_miss_detail,
+        miss_tier_reason,
+        planned_figure_miss,
+    )
+    from depictio.serverless.prologue_exec import terminal_px_call
+
     ctype = comp.get("component_type") or ""
 
     if ctype in _LIVE_TYPES:
-        return ComponentTier.LIVE, None, None
+        return PlannedTier(ComponentTier.LIVE)
 
     if ctype == "table":
         # Live tables (phase 3): the runtime recomputes every page — filter,
@@ -136,8 +165,8 @@ def classify_component(comp: dict[str, Any]) -> tuple[ComponentTier, TierReason 
         # server's render_table_endpoint), so a table whose data can ship
         # needs no frozen payload at all.
         if comp.get("workflow_tag") and comp.get("data_collection_tag"):
-            return ComponentTier.LIVE, None, None
-        return (
+            return PlannedTier(ComponentTier.LIVE)
+        return PlannedTier(
             ComponentTier.OMITTED,
             TierReason.UNSUPPORTED,
             "table references no resolvable data collection",
@@ -149,47 +178,84 @@ def classify_component(comp: dict[str, Any]) -> tuple[ComponentTier, TierReason 
             # code, so preflight can already tell a replayable prologue from one
             # that will freeze. The build refines the first case to live once
             # the binding matches (and omits either if the code fails to run).
-            ops, refusal = transpile_with_reason(comp.get("code_content") or "")
-            if ops is None:
-                return (
+            code = comp.get("code_content") or ""
+            ops, refusal = transpile_with_reason(code)
+            # BOTH halves have to succeed for the build to offer this figure to
+            # the binder, and the build folds them into one refusal — a
+            # transpiled prologue whose terminal ``px`` call is unreadable is
+            # frozen `code_mode` with "figure call not analyzable", never
+            # offered. Fold them here too, or the plan promises an upgrade for a
+            # figure that can never get one (producer B's build does this in
+            # ``build_manifest``'s code-mode branch; producer A in
+            # ``_code_figure_plan``).
+            call = terminal_px_call(code) if ops is not None else None
+            if call is None:
+                if ops is not None:
+                    refusal = "figure call not analyzable"
+                return PlannedTier(
                     ComponentTier.FROZEN,
                     TierReason.CODE_MODE,
                     f"code-mode figure not transpilable: {refusal}; executed locally "
                     "(trusted) and frozen at the default filter state — omitted if "
                     "execution fails",
                 )
-            return (
+            # The terminal ``px`` call names the visualisation the code builds,
+            # so the two data-free bail-outs apply to it exactly as they do to a
+            # ui-mode figure's own metadata. Same prefix producer B's build uses
+            # so plan and verdict read alike.
+            miss = planned_figure_miss({"visu_type": call[0], "dict_kwargs": call[1]})
+            if miss is not None:
+                return PlannedTier(
+                    ComponentTier.FROZEN,
+                    miss_tier_reason(miss),
+                    frozen_miss_detail(miss, "prologue transpiled, but "),
+                )
+            return PlannedTier(
                 ComponentTier.FROZEN,
                 TierReason.BINDING_MISS,
                 "transpilable prologue; offered to bind-and-refill, upgraded to "
                 "live when the binding matches",
+                provisional=True,
             )
-        return (
+        # Two of the builder's bail-outs read only the component's own metadata,
+        # so decide them here — with the builder's own wording — instead of
+        # calling the figure undecided and reporting the same thing after the
+        # build (RFC §4, ``planned_figure_miss``).
+        miss = planned_figure_miss(comp)
+        if miss is not None:
+            return PlannedTier(
+                ComponentTier.FROZEN,
+                miss_tier_reason(miss),
+                frozen_miss_detail(miss),
+            )
+        return PlannedTier(
             ComponentTier.FROZEN,
             TierReason.BINDING_MISS,
-            "ui-mode bind-and-refill lands in phase 5; frozen at the default filter state",
+            "offered to bind-and-refill (RFC §4), which only the frame can answer; "
+            "frozen at the default filter state if it does not bind",
+            provisional=True,
         )
 
     if ctype == "multiqc":
-        return (
+        return PlannedTier(
             ComponentTier.OMITTED,
             TierReason.MULTIQC,
             "MultiQC rendering needs the multiqc Python package (producer A)",
         )
     if ctype == "map":
-        return (
+        return PlannedTier(
             ComponentTier.OMITTED,
             TierReason.MAP_TILES,
             "maps need network tiles; single-file bundles are zero-network",
         )
     if ctype == "image":
-        return (
+        return PlannedTier(
             ComponentTier.OMITTED,
             TierReason.IMAGE,
             "image galleries read from S3; no object store in a static bundle",
         )
     if ctype == "jbrowse":
-        return (
+        return PlannedTier(
             ComponentTier.OMITTED,
             TierReason.JBROWSE,
             "JBrowse sessions need a genome-data backend",
@@ -197,7 +263,7 @@ def classify_component(comp: dict[str, Any]) -> tuple[ComponentTier, TierReason 
     if ctype == "advanced_viz":
         kind = advanced_viz_kind(comp)
         if kind in CELERY_VIZ_KINDS:
-            return (
+            return PlannedTier(
                 ComponentTier.OMITTED,
                 TierReason.CELERY_COMPUTE,
                 f"advanced_viz '{kind}' is a server-side Celery compute (producer A)",
@@ -206,20 +272,20 @@ def classify_component(comp: dict[str, Any]) -> tuple[ComponentTier, TierReason 
             # The tree lives in a second, non-tabular data collection (Newick),
             # which producer B has no way to read or bundle — and, unlike
             # producer A, no frozen payload to fall back on.
-            return (
+            return PlannedTier(
                 ComponentTier.OMITTED,
                 TierReason.UNSUPPORTED,
                 f"advanced_viz '{kind}' also reads a non-tabular tree data collection "
                 "(Newick); producer B bundles tabular Parquet only",
             )
         if not (comp.get("workflow_tag") and comp.get("data_collection_tag")):
-            return (
+            return PlannedTier(
                 ComponentTier.OMITTED,
                 TierReason.UNSUPPORTED,
                 "advanced_viz references no resolvable data collection",
             )
         if not advanced_viz_columns(comp):
-            return (
+            return PlannedTier(
                 ComponentTier.OMITTED,
                 TierReason.UNSUPPORTED,
                 f"advanced_viz '{kind or '?'}' config binds no column "
@@ -229,14 +295,14 @@ def classify_component(comp: dict[str, Any]) -> tuple[ComponentTier, TierReason 
         # recomputes the payload — projection, tail-preserving sampling, the
         # kind's own reduction — from the bundled Parquet at every filter state,
         # so no frozen payload is needed.
-        return (
+        return PlannedTier(
             ComponentTier.LIVE,
             None,
             f"advanced_viz '{kind}' data path served by the in-browser engine "
             "from the bundled Parquet",
         )
 
-    return (
+    return PlannedTier(
         ComponentTier.OMITTED,
         TierReason.UNSUPPORTED,
         f"component type '{ctype or '?'}' is not supported by producer B",
@@ -248,16 +314,16 @@ def classify_spec(spec: DashboardDataLite) -> list[TierRow]:
     rows: list[TierRow] = []
     for i, raw in enumerate(spec.components):
         comp = component_as_dict(raw)
-        tier, reason, detail = classify_component(comp)
+        plan = classify_component(comp)
         rows.append(
             TierRow(
                 component_id=comp.get("tag") or comp.get("index") or f"component-{i}",
                 title=comp.get("title") or "",
                 component_type=comp.get("component_type") or "?",
-                tier=tier,
-                reason=reason,
-                detail=detail,
-                provisional=(tier is ComponentTier.FROZEN and reason is TierReason.BINDING_MISS),
+                tier=plan.tier,
+                reason=plan.reason,
+                detail=plan.detail,
+                provisional=plan.provisional,
             )
         )
     return rows
@@ -276,6 +342,12 @@ def print_tier_table(rows: list[TierRow], console: Any, tabs: list[TabRow] | Non
     the table — with one bundle carrying every tab of a family, "which tab is
     that omitted component on?" is the first question the flat table cannot
     answer.
+
+    A ``provisional`` row is marked ``(planned)`` in its Tier cell rather than
+    given a column of its own: it is a property of that one verdict, and the
+    data-free plan is the only output where any row carries it. Unmarked, the
+    plan's "upgraded to live when the binding matches" reads as a promise
+    instead of as a maybe.
     """
     from rich.table import Table
 
@@ -299,10 +371,13 @@ def print_tier_table(rows: list[TierRow], console: Any, tabs: list[TabRow] | Non
         cells = [row.component_id]
         if tab_titles:
             cells.append(tab_titles.get(row.tab_id or "", "-"))
+        tier = f"[{styles[row.tier]}]{row.tier.value}[/{styles[row.tier]}]"
+        if row.provisional:
+            tier += " [dim](planned)[/dim]"
         cells += [
             row.title or "-",
             row.component_type,
-            f"[{styles[row.tier]}]{row.tier.value}[/{styles[row.tier]}]",
+            tier,
             row.reason.value if row.reason else "-",
             row.detail or "-",
         ]
@@ -310,6 +385,12 @@ def print_tier_table(rows: list[TierRow], console: Any, tabs: list[TabRow] | Non
     console.print(table)
 
     console.print(f"  {len(rows)} component(s): {_tier_summary(rows)}")
+    provisional = sum(1 for row in rows if row.provisional)
+    if provisional:
+        console.print(
+            f"  [dim](planned): {provisional} row(s) the build can still overturn — it offers "
+            "each figure to the bind-and-refill builder and upgrades the ones that bind.[/dim]"
+        )
     for tab in tabs or []:
         tab_rows = rows_for_tab(rows, tab.id)
         marker = " [dim](main)[/dim]" if tab.is_main_tab else ""
