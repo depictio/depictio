@@ -25,6 +25,7 @@ export {
   getSummaries,
   resolveFilters,
   streamAnalyze,
+  suggestFigures,
   summarizeSection,
 } from './api';
 export type { AIHealth, AnalyzeStreamHandlers } from './api';
@@ -37,6 +38,7 @@ export {
   useAnalyze,
   useComponentFromPrompt,
   useResolveFilters,
+  useSuggestFigures,
   useSummarizeSection,
 } from './hooks';
 
@@ -53,9 +55,12 @@ export type {
   FigureMutation,
   FilterAction,
   FilterProposal,
+  PlotSuggestion,
   ResolveFiltersRequest,
   ResolveFiltersResponse,
   ResolvedFilter,
+  SuggestFiguresRequest,
+  SuggestFiguresResponse,
   SummariesResponse,
   SummarizeSectionRequest,
   SummarizeSectionResponse,

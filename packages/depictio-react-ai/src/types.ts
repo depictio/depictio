@@ -36,6 +36,28 @@ export interface ComponentFromPromptResponse {
   validation_attempts: number;
 }
 
+export interface SuggestFiguresRequest {
+  data_collection_id: string;
+  /** How many suggestions to ask for (server clamps to 1..8). */
+  n?: number;
+}
+
+/** One Plotly Express configuration proposed by `/ai/suggest-figures`.
+ *  `dict_kwargs` is already in the builder's figure grammar, so a picked
+ *  suggestion drops straight into the create flow. `code` is display-only
+ *  Python synthesized server-side — never executed client-side. */
+export interface PlotSuggestion {
+  visu_type: string;
+  dict_kwargs: Record<string, unknown>;
+  title: string;
+  explanation: string;
+  code: string;
+}
+
+export interface SuggestFiguresResponse {
+  suggestions: PlotSuggestion[];
+}
+
 export interface ExecutionStep {
   thought: string;
   code: string;
