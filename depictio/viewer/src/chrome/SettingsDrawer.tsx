@@ -1,5 +1,5 @@
 import React from 'react';
-import { Drawer, Group, Text } from '@mantine/core';
+import { Divider, Drawer, Group, Text } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import type { DashboardData } from 'depictio-react-core';
@@ -9,6 +9,9 @@ interface SettingsDrawerProps {
   opened: boolean;
   onClose: () => void;
   dashboard: DashboardData | null;
+  /** Extra section rendered above the dashboard info (e.g. the AI key
+   *  section when the AI feature is enabled). */
+  extraSection?: React.ReactNode;
 }
 
 /**
@@ -17,7 +20,12 @@ interface SettingsDrawerProps {
  * The content lives in `DashboardInfoBody`, shared with the inspector's Info
  * tab — which is what the inspector replaces this drawer with when enabled.
  */
-const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ opened, onClose, dashboard }) => (
+const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
+  opened,
+  onClose,
+  dashboard,
+  extraSection,
+}) => (
   <Drawer
     opened={opened}
     onClose={onClose}
@@ -30,6 +38,12 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ opened, onClose, dashbo
       </Group>
     }
   >
+    {extraSection && (
+      <>
+        {extraSection}
+        <Divider my="md" />
+      </>
+    )}
     <DashboardInfoBody dashboard={dashboard} active={opened} />
   </Drawer>
 );

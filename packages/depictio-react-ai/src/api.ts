@@ -73,6 +73,19 @@ export function summarizeSection(
   return postJson<SummarizeSectionResponse>('/ai/summarize-section', body, llmKey);
 }
 
+export interface AIHealth {
+  status: string;
+  model: string;
+  allow_user_keys: boolean;
+  server_key_configured: boolean;
+}
+
+export async function getAIHealth(): Promise<AIHealth> {
+  const res = await authFetch(`${API_BASE}/ai/health`);
+  if (!res.ok) throw new Error(`/ai/health: ${res.status}`);
+  return (await res.json()) as AIHealth;
+}
+
 export async function getSummaries(dashboardId: string): Promise<SummariesResponse> {
   const res = await authFetch(`${API_BASE}/ai/summaries/${dashboardId}`);
   if (!res.ok) {

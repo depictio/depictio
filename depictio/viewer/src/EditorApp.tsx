@@ -81,7 +81,10 @@ import {
   MapPanelSurface,
   FILTER_PANEL_RAIL_WIDTH,
   countActiveFilters,
+  clearFiltersBySource,
 } from 'depictio-react-core';
+import { AIAnalyzePanel, AIKeySection, useAIHealth } from 'depictio-react-ai';
+import type { ApplyActionsPayload, ResolvedFilter } from 'depictio-react-ai';
 import type {
   DashboardData,
   DashboardPermissions,
@@ -100,6 +103,7 @@ import { applySectionOp, groupWith, sectionsFor } from './components/sections/se
 import type { SectionOp } from './components/sections/sectionMutations';
 import { Header, Sidebar, SettingsDrawer, TabModal } from './chrome';
 import type { TabModalSubmitPayload } from './chrome';
+import { useServerStatus } from './hooks/useServerStatus';
 import NotesFooter from './components/NotesFooter';
 import './chrome/chrome.css';
 
@@ -716,6 +720,74 @@ const EditorApp: React.FC = () => {
 
   const handleResetAllFilters = useCallback(() => setFilters([]), []);
 
+  // ---- AI assistant (mirrors App.tsx) ---------------------------------------
+  const { features: serverFeatures } = useServerStatus();
+  const aiEnabled = serverFeatures.ai;
+  const aiHealth = useAIHealth(aiEnabled);
+  const aiServerKeyAvailable = aiHealth?.server_key_configured === true;
+  const [aiFilterDescriptions, setAiFilterDescriptions] = useState<string[]>([]);
+
+  const handleApplyAIActions = useCallback(
+    ({ resolved }: ApplyActionsPayload) => {
+      const exprFilters: InteractiveFilter[] = [];
+      const widgetUpdates: InteractiveFilter[] = [];
+      const descriptions: string[] = [];
+
+      resolved.forEach((f: ResolvedFilter, i: number) => {
+        if (f.kind === 'set_widget' && f.component_id) {
+          const meta = (dashboard?.stored_metadata as Record<string, unknown>[] | undefined)?.find(
+            (m) => m?.index === f.component_id,
+          );
+          widgetUpdates.push(
+            enrichFilterWithDcId(
+              {
+                index: f.component_id,
+                value: f.value,
+                column_name: meta?.column_name as string | undefined,
+                interactive_component_type: meta?.interactive_component_type as
+                  | string
+                  | undefined,
+              },
+              dashboard?.stored_metadata,
+            ),
+          );
+          if (f.description) descriptions.push(f.description);
+        } else if (f.kind === 'filter_expr' && f.filter_expr) {
+          exprFilters.push({
+            index: `ai-${Date.now().toString(36)}-${i}`,
+            // Sentinel truthy value: expr-only filters carry no widget value,
+            // but a null value reads as "cleared" to merge/active-count logic.
+            value: true,
+            source: 'ai_prompt',
+            filter_expr: f.filter_expr,
+            metadata: {
+              dc_id: f.dc_id ?? undefined,
+              filter_expr: f.filter_expr,
+            },
+          });
+          descriptions.push(f.description || f.filter_expr);
+        }
+      });
+
+      setFilters((prev) => {
+        let next = clearFiltersBySource(prev, 'ai_prompt');
+        for (const update of widgetUpdates) next = mergeFiltersBySource(next, update);
+        return [...next, ...exprFilters];
+      });
+      setAiFilterDescriptions(descriptions);
+    },
+    [dashboard],
+  );
+
+  const aiFilterCount = useMemo(
+    () => filters.filter((f) => f.source === 'ai_prompt').length,
+    [filters],
+  );
+  const handleClearAIFilters = useCallback(() => {
+    setFilters((prev) => clearFiltersBySource(prev, 'ai_prompt'));
+    setAiFilterDescriptions([]);
+  }, []);
+
   // ---- Realtime: WebSocket subscription mirrors App.tsx ---------------------
   const [realtimeMode, setRealtimeMode] = useState<RealtimeMode>(() => {
     try {
@@ -1278,6 +1350,31 @@ const EditorApp: React.FC = () => {
                 overflowX: 'hidden',
               }}
             >
+              {aiEnabled && dashboardId && (
+                <>
+                  <AIAnalyzePanel
+                    dashboardId={dashboardId}
+                    activeFilters={filters}
+                    serverKeyAvailable={aiServerKeyAvailable}
+                    onApplyActions={handleApplyAIActions}
+                  />
+                  {aiFilterCount > 0 && (
+                    <Group gap={6} mb={6} data-testid="ai-filters-chip">
+                      <Button
+                        size="compact-xs"
+                        variant="light"
+                        color="violet"
+                        leftSection={<Icon icon="mdi:filter-outline" width={12} />}
+                        rightSection={<Icon icon="mdi:close" width={12} />}
+                        onClick={handleClearAIFilters}
+                        title={aiFilterDescriptions.join('\n')}
+                      >
+                        AI filters ({aiFilterCount})
+                      </Button>
+                    </Group>
+                  )}
+                </>
+              )}
               <RightComponentGrid
                 dashboardId={dashboardId!}
                 cardComponents={cardComponents}
@@ -1372,6 +1469,11 @@ const EditorApp: React.FC = () => {
         opened={settingsOpened}
         onClose={closeSettings}
         dashboard={dashboard}
+        extraSection={
+          aiEnabled && serverFeatures.ai_user_keys && dashboardId ? (
+            <AIKeySection dashboardId={dashboardId} />
+          ) : undefined
+        }
       />
 
       <TabModal
