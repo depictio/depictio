@@ -1097,6 +1097,35 @@ const App: React.FC = () => {
     [sectionSummaries, deferredFilterKey],
   );
 
+  // Every section present on this dashboard (null = the unsectioned grid),
+  // in encounter order — drives the "Summarize all" sweep.
+  const aiSummarySections = useMemo(() => {
+    const names: (string | null)[] = [];
+    const seen = new Set<string | null>();
+    for (const m of rightComponents) {
+      const s = (m.section as string | undefined) ?? null;
+      if (!seen.has(s)) {
+        seen.add(s);
+        names.push(s);
+      }
+    }
+    return names;
+  }, [rightComponents]);
+  const [aiSummarizingAll, setAiSummarizingAll] = useState(false);
+  // Sequential on purpose: one LLM call at a time keeps the load sane, and
+  // the server's hash cache short-circuits sections whose on-screen context
+  // hasn't changed since their last summary.
+  const handleSummarizeAll = useCallback(async () => {
+    setAiSummarizingAll(true);
+    try {
+      for (const section of aiSummarySections) {
+        await handleGenerateSummary(section, false);
+      }
+    } finally {
+      setAiSummarizingAll(false);
+    }
+  }, [aiSummarySections, handleGenerateSummary]);
+
   const renderSectionExtras = useCallback(
     (section: string | null) => {
       if (!aiEnabled) return null;
@@ -1472,6 +1501,26 @@ const App: React.FC = () => {
                           AI figure tweaks ({aiFigureOverrideCount})
                         </Button>
                       )}
+                    </Group>
+                  )}
+                  {aiSummarySections.length > 1 && (
+                    // With a single section the sparkle button in its header
+                    // (or above the unsectioned grid) already covers it.
+                    <Group justify="flex-end" mb={4}>
+                      <Button
+                        data-testid="ai-summarize-all"
+                        size="compact-xs"
+                        variant="subtle"
+                        color="violet"
+                        leftSection={
+                          <Icon icon="material-symbols:auto-awesome-outline" width={12} />
+                        }
+                        loading={aiSummarizingAll}
+                        onClick={() => void handleSummarizeAll()}
+                        title="Generate AI summaries for every section (cached sections are reused)"
+                      >
+                        Summarize all
+                      </Button>
                     </Group>
                   )}
                 </>
