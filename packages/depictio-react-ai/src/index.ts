@@ -10,6 +10,7 @@ export type { ApplyActionsPayload } from './components/ActionsPreview';
 export { default as AddWithAIModal } from './components/AddWithAIModal';
 export type { AvailableDataCollection } from './components/AddWithAIModal';
 export { default as AiFillModal } from './components/AiFillModal';
+export { default as AIAnalysisModal } from './components/AIAnalysisModal';
 export { default as ExecutionTrace } from './components/ExecutionTrace';
 export {
   SectionSummaryPanel,
@@ -22,6 +23,7 @@ export type { SectionSummaryState } from './components/SectionSummary';
 export {
   componentFromPrompt,
   getAIHealth,
+  getAnalyses,
   getSummaries,
   resolveFilters,
   streamAnalyze,
@@ -35,18 +37,26 @@ export type { AIChatMessage, AISession } from './store';
 
 export {
   useAIHealth,
+  useAnalysisReport,
   useAnalyze,
   useComponentFromPrompt,
   useResolveFilters,
   useSuggestFigures,
   useSummarizeSection,
 } from './hooks';
+export type { AnalysisRunState } from './hooks';
 
 export type {
   AIStreamEvent,
   AIStreamEventType,
+  AnalysesResponse,
+  AnalysisReport,
   AnalysisResult,
+  AnalyzeMode,
   AnalyzeRequest,
+  BudgetSpent,
+  BudgetTick,
+  Finding,
   ComponentFromPromptRequest,
   ComponentFromPromptResponse,
   ComponentType,

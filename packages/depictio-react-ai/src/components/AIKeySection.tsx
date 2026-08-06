@@ -52,7 +52,7 @@ const AIKeySection: React.FC<Props> = ({ dashboardId, modelOptions }) => {
     <Stack gap="xs">
       <Group justify="space-between" align="center">
         <Group gap={6} align="center">
-          <Icon icon="material-symbols:smart-toy-outline" width={18} />
+          <Icon icon="material-symbols:auto-awesome-outline" width={18} />
           <Text fw={600}>AI assistant</Text>
         </Group>
         {session.llmKey && (
