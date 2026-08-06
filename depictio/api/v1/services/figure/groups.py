@@ -132,7 +132,66 @@ def group_annotation_expr(
     return expr.otherwise(pl.lit(OTHER_LABEL)).alias(GROUP_COLUMN)
 
 
-def apply_group_coloring_kwargs(dict_kwargs: dict, groups: list[dict]) -> dict:
+MAX_COLOR_MAP_ENTRIES = 200
+MAX_COLUMN_NAME_LENGTH = 200
+
+
+def sanitize_color_by_column(raw: Any) -> dict | None:
+    """Validate the untrusted global "color by column" request payload.
+
+    Returns ``{"column_name": str, "color_map": dict[str, str]}`` (the map may
+    be empty) or ``None``. The column name is only ever compared against the
+    frame's real schema and passed to px as ``color=`` — it never reaches an
+    expression evaluator — so, as with group defs, this shape check is the
+    whole trust boundary.
+    """
+    if not isinstance(raw, dict):
+        return None
+    column = raw.get("column_name")
+    if not isinstance(column, str) or not column.strip():
+        return None
+    column = column.strip()
+    if len(column) > MAX_COLUMN_NAME_LENGTH:
+        return None
+    color_map: dict[str, str] = {}
+    raw_map = raw.get("color_map")
+    if isinstance(raw_map, dict):
+        for key, value in raw_map.items():
+            if len(color_map) >= MAX_COLOR_MAP_ENTRIES:
+                break
+            if isinstance(key, str) and isinstance(value, str) and _HEX_COLOR_RE.match(value):
+                color_map[key] = value
+    return {"column_name": column, "color_map": color_map}
+
+
+def apply_column_coloring_kwargs(dict_kwargs: dict, column: str, color_map: dict) -> dict:
+    """Copy of ``dict_kwargs`` with the global color-by-column override applied.
+
+    Overrides any existing ``color`` — same contract as the group override, and
+    the client surfaces it via the ``column_colored`` response flag. When the
+    client sent a stable color map (built from the column's unfiltered
+    universe), pin both the colors and the category order to it so categories
+    keep their hue and legend position as filters narrow the data.
+    """
+    out = dict(dict_kwargs)
+    out["color"] = column
+    if color_map:
+        out["color_discrete_map"] = dict(color_map)
+        out["category_orders"] = {
+            **(out.get("category_orders") if isinstance(out.get("category_orders"), dict) else {}),
+            column: list(color_map),
+        }
+    else:
+        # No stable map from the client: drop any authored map too — it is
+        # keyed to the figure's own color column's categories, and overlapping
+        # values would repaint the override column with unrelated colors.
+        out.pop("color_discrete_map", None)
+    return out
+
+
+def apply_group_coloring_kwargs(
+    dict_kwargs: dict, groups: list[dict], include_other: bool = True
+) -> dict:
     """Copy of ``dict_kwargs`` with color-by-group applied.
 
     Overrides any existing ``color`` — that is the point of the compare toggle,
@@ -141,14 +200,52 @@ def apply_group_coloring_kwargs(dict_kwargs: dict, groups: list[dict]) -> dict:
     json-parses *string* values for these params, dicts pass through.
     ``Other`` is forced last in the category order so groups keep their
     creation order in legends and grouped axes.
+
+    ``include_other=False`` must also drop the label from ``category_orders``,
+    not just rely on the caller filtering the rows: px keeps every listed
+    category even when absent from the data, so a leftover entry draws an
+    empty gray legend slot — and an empty panel in Split (facet) mode.
     """
     out = dict(dict_kwargs)
     out["color"] = GROUP_COLUMN
     color_map = {g["name"]: g["color"] for g in groups}
-    color_map[OTHER_LABEL] = OTHER_COLOR
+    if include_other:
+        color_map[OTHER_LABEL] = OTHER_COLOR
     out["color_discrete_map"] = color_map
     out["category_orders"] = {
         **(out.get("category_orders") if isinstance(out.get("category_orders"), dict) else {}),
-        GROUP_COLUMN: [g["name"] for g in groups] + [OTHER_LABEL],
+        GROUP_COLUMN: [g["name"] for g in groups] + ([OTHER_LABEL] if include_other else []),
     }
+    return out
+
+
+# Facet display ("Split" mode): one panel per category, wrapped so a dashboard
+# tile doesn't turn into a single unreadable row of panels.
+FACET_COL_WRAP = 4
+# Column mode can meet high-cardinality columns (the client's picker caps at
+# 50 uniques); beyond this many panels a split is unreadable — fall back to
+# color-only rather than render confetti.
+MAX_FACET_CATEGORIES = 12
+
+
+def sanitize_grouping_display(raw: Any) -> str:
+    """``"facet"`` or the default ``"color"`` — the only two display modes."""
+    return "facet" if raw == "facet" else "color"
+
+
+def apply_facet_kwargs(dict_kwargs: dict, column: str) -> dict:
+    """Copy of ``dict_kwargs`` with the "Split" display applied on ``column``.
+
+    Layered on top of the coloring override (callers apply that first): the
+    panels keep their category colors, which is what makes each facet
+    self-identifying. Overrides any authored ``facet_col`` — same visible,
+    reversible contract as the color override — and drops an authored
+    ``facet_col_wrap`` in favor of ours, but leaves ``facet_row`` alone so a
+    row-faceted figure becomes a grid. ``create_figure_from_data`` filters
+    kwargs against the px signature, so visu types without facet support
+    silently keep the color-only rendering.
+    """
+    out = dict(dict_kwargs)
+    out["facet_col"] = column
+    out["facet_col_wrap"] = FACET_COL_WRAP
     return out

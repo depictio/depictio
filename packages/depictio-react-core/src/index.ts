@@ -362,6 +362,8 @@ export {
   GROUP_FILTER_SOURCE,
   GROUP_FILTER_INDEX_PREFIX,
   MAX_GROUP_VALUES,
+  COLOR_BY_NONE,
+  resolveGroupRender,
   selectableSelectionFilters,
   groupFromSelectionFilter,
   groupsToFilters,
@@ -375,9 +377,14 @@ export type {
   SelectionGroupsPayload,
   GroupRenderDef,
   GroupRenderState,
+  ColorByState,
+  GroupingDisplay,
 } from './selectionGroups';
 export { useSelectionGroups } from './hooks/useSelectionGroups';
 export type { SelectionGroupsApi } from './hooks/useSelectionGroups';
+export { useCategoricalColumns, useColorByColumnRender } from './hooks/useColorByColumns';
+export type { ColorByColumn, ColorByColumnRender } from './hooks/useColorByColumns';
+export type { GroupSummaryRow } from './components/interactive/ActiveFilterSummary';
 
 // Cross-DC available-values intersection (powers greying-out unavailable
 // options in interactive filter dropdowns) + the funnel-filtering layer on

@@ -88,6 +88,9 @@ import {
   readEditorFilters,
   writeEditorFilters,
   useSelectionGroups,
+  useCategoricalColumns,
+  useColorByColumnRender,
+  resolveGroupRender,
   SelectionGroupsPanel,
 } from 'depictio-react-core';
 import type {
@@ -101,11 +104,12 @@ import type {
   RealtimeMode,
   ActiveHighlight,
   RealtimeJournalEntry,
-  GroupRenderDef,
+  GroupRenderState,
 } from 'depictio-react-core';
 
 import GridItemEditOverlay from './components/GridItemEditOverlay';
 import SectionModal from './components/sections/SectionModal';
+import GroupingHeaderControl from './components/GroupingHeaderControl';
 import SectionsModal from './components/sections/SectionsModal';
 import { applySectionOp, groupWith, sectionsFor } from './components/sections/sectionMutations';
 import type { SectionKind, SectionOp } from './components/sections/sectionMutations';
@@ -251,8 +255,15 @@ const EditorApp: React.FC = () => {
 
   // Saved selection groups — same hook and same storage key as the viewer, so
   // groups made in one mode are visible in the other. Groups stay out of the
-  // `filters` state and are composed in only where data is fetched.
-  const groupsApi = useSelectionGroups(dashboardId ?? undefined);
+  // `filters` state and are composed in only where data is fetched. Scoped to
+  // the dashboard FAMILY (parent id) so groups carry across tabs — see App.tsx.
+  const groupingScopeId = useMemo(() => {
+    if (!dashboard) return undefined;
+    const parent = dashboard.parent_dashboard_id as string | null | undefined;
+    const id = parent || dashboard.dashboard_id || dashboardId;
+    return id ? String(id) : undefined;
+  }, [dashboard, dashboardId]);
+  const groupsApi = useSelectionGroups(groupingScopeId);
   const combinedFilters = useMemo(
     () =>
       groupsApi.groupFilters.length > 0 ? [...filters, ...groupsApi.groupFilters] : filters,
@@ -362,7 +373,15 @@ const EditorApp: React.FC = () => {
       // snapping to ``…``. See App.tsx for the matching change.
       if (bulkCtrl.current) bulkCtrl.current.abort();
       bulkCtrl.current = new AbortController();
-      bulkComputeCards(dashboardId, combinedFilters, cardIds)
+      bulkComputeCards(
+        dashboardId,
+        combinedFilters,
+        cardIds,
+        groupsApi.bulkOptions,
+        // See App.tsx: prevents a slow superseded compare-on response from
+        // overwriting a newer one.
+        bulkCtrl.current.signal,
+      )
         .then((res) => {
           setCardValues(res.values);
           setCardSecondaryValues(res.secondary_values || {});
@@ -375,7 +394,14 @@ const EditorApp: React.FC = () => {
         .finally(() => setCardsLoading(false));
     }, 250);
     return () => clearTimeout(timer);
-  }, [dashboard, dashboardId, stableFilterKey(combinedFilters)]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    dashboard,
+    dashboardId,
+    stableFilterKey(combinedFilters),
+    // Undefined while compare is off, so group edits don't refire the fetch.
+    JSON.stringify(groupsApi.bulkOptions ?? null),
+  ]);
 
   // Mirror the live filters into the per-tab store so they survive the
   // builder's full-page round-trip (see editorFilters.ts). Writing on every
@@ -956,7 +982,17 @@ const EditorApp: React.FC = () => {
     [tabSiblings],
   );
 
-  const handleResetAllFilters = useCallback(() => setFilters([]), []);
+  const handleResetAllFilters = useCallback(() => {
+    setFilters([]);
+    // Mirrors App.tsx: group filters narrow the dashboard too.
+    groupsApi.deactivateAllGroupFilters();
+  }, [groupsApi.deactivateAllGroupFilters]);
+
+  // Filter-active groups as removable active-filter summary rows.
+  const groupSummaryRows = groupsApi.summaryRows;
+  // Global "Color by" column discovery + stable palette (mirrors App.tsx).
+  const colorByColumns = useCategoricalColumns(dashboard?.stored_metadata);
+  const colorByColumnRender = useColorByColumnRender(groupsApi.colorBy, colorByColumns);
 
   // One node, mounted in whichever FilterPanel is on screen (mirrors App.tsx).
   const groupsSection = (
@@ -964,13 +1000,22 @@ const EditorApp: React.FC = () => {
       filters={filters}
       components={dashboard?.stored_metadata ?? []}
       groups={groupsApi.groups}
-      colorByGroup={groupsApi.colorByGroup}
+      colorBy={groupsApi.colorBy}
+      colorByColumns={colorByColumns}
+      compareInCards={groupsApi.compareInCards}
       onCreateGroup={groupsApi.createGroupFromFilter}
       onClearSelection={handleFilterChange}
-      onRenameGroup={groupsApi.renameGroup}
+      onUpdateGroup={groupsApi.updateGroup}
       onDeleteGroup={groupsApi.deleteGroup}
       onToggleGroupFilter={groupsApi.toggleGroupFilter}
-      onColorByGroupChange={groupsApi.setColorByGroup}
+      onColorByChange={groupsApi.setColorBy}
+      onCompareInCardsChange={groupsApi.setCompareInCards}
+      displayMode={groupsApi.displayMode}
+      onDisplayModeChange={groupsApi.setDisplayMode}
+      showOther={groupsApi.showOther}
+      onShowOtherChange={groupsApi.setShowOther}
+      showOverall={groupsApi.showOverall}
+      onShowOverallChange={groupsApi.setShowOverall}
     />
   );
 
@@ -1455,7 +1500,7 @@ const EditorApp: React.FC = () => {
           onToggleDesktop={toggleDesktop}
           onOpenSettings={openSettings}
           onOpenFilters={isNarrow && leftComponents.length > 0 ? openFilterDrawer : undefined}
-          filterCount={countActiveFilters(filters)}
+          filterCount={countActiveFilters(filters) + groupSummaryRows.length}
           cardsLoading={cardsLoading}
           mode="edit"
           onAddComponent={handleAddComponent}
@@ -1464,6 +1509,14 @@ const EditorApp: React.FC = () => {
           isOwner={isOwner}
           rightExtras={
             <>
+              {dashboard && (
+                <GroupingHeaderControl
+                  groupCount={groupsApi.groups.length}
+                  colorBy={groupsApi.colorBy}
+                >
+                  {groupsSection}
+                </GroupingHeaderControl>
+              )}
               <MapPanelControl panel={mapPanel} />
               {realtimeEnabled && (
                 <span data-tour-id="realtime-indicator" style={{ display: 'inline-flex' }}>
@@ -1586,11 +1639,12 @@ const EditorApp: React.FC = () => {
                   onLayoutChange={handleLeftLayoutChange}
                   collapsed={!filterPanelOpened}
                   onToggleCollapsed={toggleFilterPanel}
-                  groupsSection={groupsSection}
+                  groupSummaryRows={groupSummaryRows}
                   footer={
                     <MapPanelDock
                       panel={mapPanel}
-                      filters={filters}
+                      // Docked maps render data: include group filters.
+                      filters={combinedFilters}
                       onFilterChange={handleFilterChange}
                       renderEditActions={renderMapPanelEditActions}
                     />
@@ -1636,11 +1690,13 @@ const EditorApp: React.FC = () => {
                 layoutData={dashboard.right_panel_layout_data}
                 gridSections={dashboard.grid_sections}
                 filters={combinedFilters}
-                groupRender={
-                  groupsApi.colorByGroup && groupsApi.renderGroups.length > 0
-                    ? { groups: groupsApi.renderGroups, colorByGroup: true }
-                    : undefined
-                }
+                groupRender={resolveGroupRender(
+                  groupsApi.colorBy,
+                  groupsApi.renderGroups,
+                  colorByColumnRender,
+                  groupsApi.displayMode,
+                  groupsApi.showOther,
+                )}
                 onFilterChange={handleFilterChange}
                 cardValues={cardValues}
                 cardSecondaryValues={cardSecondaryValues}
@@ -1709,7 +1765,7 @@ const EditorApp: React.FC = () => {
               layoutData={dashboard.left_panel_layout_data}
               filterSections={panelFilterSections}
               dashboardId={dashboardId}
-              groupsSection={groupsSection}
+              groupSummaryRows={groupSummaryRows}
             />
           </Drawer>
         )}
@@ -1723,7 +1779,8 @@ const EditorApp: React.FC = () => {
         {dashboard && dashboardId && (
           <MapPanelSurface
             panel={mapPanel}
-            filters={filters}
+            // Floating maps render data: include group filters.
+            filters={combinedFilters}
             onFilterChange={handleFilterChange}
             renderEditActions={renderMapPanelEditActions}
           />
@@ -1798,7 +1855,7 @@ interface RightComponentGridProps {
   onDuplicateComponent: (componentId: string) => void;
   onAddComponent: () => void;
   activeHighlight?: ActiveHighlight | null;
-  groupRender?: { groups: GroupRenderDef[]; colorByGroup: boolean };
+  groupRender?: GroupRenderState;
   /** Fired by each cell's "Move to section" action. The names on offer are
    *  derived from `gridSections`, which this component already receives. */
   onMoveToSection: (componentId: string, section: string | null) => void;

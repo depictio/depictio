@@ -106,6 +106,11 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
   // a lasso shrinks the chart to the selected points and the user can't lasso
   // again. Strip our own ``scatter_selection`` entry before fetching. Other
   // components still see it in their filters[] and narrow accordingly.
+  //
+  // Deliberately NOT stripped: a `group_filter` derived from a selection that
+  // was saved on this very figure. Once saved, a group is an ordinary
+  // dashboard filter (the live selection slot has been freed), so it narrows
+  // its source figure like everything else — see selectionGroups.ts.
   const filtersForFetch = useMemo(
     () =>
       filters.filter(
@@ -142,7 +147,13 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
           fullLoad,
           ctrl.signal,
           groupRender
-            ? { groups: groupRender.groups, colorByGroup: groupRender.colorByGroup }
+            ? {
+                groups: groupRender.groups,
+                colorByGroup: groupRender.colorByGroup,
+                colorByColumn: groupRender.colorByColumn,
+                display: groupRender.display,
+                showOther: groupRender.showOther,
+              }
             : undefined,
         ),
       metadata.layout?.y ?? 0,
@@ -442,16 +453,19 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
     return null;
   }, [renderMeta, fullLoad]);
 
-  // "Grouped" tag: the server confirmed it colored this figure by the user's
-  // selection groups (it may decline, e.g. when the group column isn't in this
-  // figure's data collection). Explicit because group coloring temporarily
-  // overrides the figure's own `color` mapping.
-  const groupedBadge =
-    renderMeta?.group_colored ? (
-      <Badge variant="light" color="blue" size="xs" radius="sm">
-        grouped
-      </Badge>
-    ) : null;
+  // "Grouped" / "by <column>" tag: the server confirmed it colored this figure
+  // by the user's selection groups or by the global Color-by column (it may
+  // decline, e.g. when the column isn't in this figure's data collection).
+  // Explicit because both modes temporarily override the figure's own `color`
+  // mapping.
+  let groupedBadgeLabel: string | null = null;
+  if (renderMeta?.group_colored) groupedBadgeLabel = 'grouped';
+  else if (renderMeta?.column_colored) groupedBadgeLabel = `by ${renderMeta.column_colored}`;
+  const groupedBadge = groupedBadgeLabel ? (
+    <Badge variant="light" color="blue" size="xs" radius="sm">
+      {groupedBadgeLabel}
+    </Badge>
+  ) : null;
 
   // Publish the sample/full state so the chrome can render the "load all points"
   // action icon in the same cluster as reset / fullscreen. Bidirectional: the

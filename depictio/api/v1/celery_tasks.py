@@ -150,22 +150,77 @@ def build_figure_preview(payload: dict) -> dict:
     # endpoint; re-checked here because preview callers build payloads too.
     # Code mode is excluded (arbitrary user code owns its own figure) and so
     # are whole-frame visus, whose column sets we can't reason about.
+    import polars as pl
+
     from depictio.api.v1.services.figure.figure_builder import _WHOLE_FRAME_VISU
     from depictio.api.v1.services.figure.groups import (
+        GROUP_COLUMN,
+        MAX_FACET_CATEGORIES,
+        OTHER_LABEL,
+        apply_column_coloring_kwargs,
+        apply_facet_kwargs,
         apply_group_coloring_kwargs,
         group_annotation_expr,
         group_source_columns,
+        sanitize_color_by_column,
         sanitize_group_defs,
+        sanitize_grouping_display,
     )
 
+    coloring_allowed = mode != "code" and (visu_type or "").lower() not in _WHOLE_FRAME_VISU
     group_defs = sanitize_group_defs(payload.get("groups"))
-    color_by_group = (
-        bool(payload.get("color_by_group"))
-        and bool(group_defs)
-        and mode != "code"
-        and (visu_type or "").lower() not in _WHOLE_FRAME_VISU
-    )
+    color_by_group = bool(payload.get("color_by_group")) and bool(group_defs) and coloring_allowed
     group_colored = False
+    # False drops rows outside every group instead of drawing them gray. Since
+    # "Other" is its own category, dropping it never changes the group traces —
+    # it only removes the gray context (and its facet panel in Split mode).
+    include_other = payload.get("include_other") is not False
+
+    # Global "color by <real column>" override (issue #89): same gates and the
+    # same revert-if-absent contract as group coloring, but the column is real
+    # so no synthetic annotation is needed. Groups win when both are requested
+    # (the endpoint enforces the same precedence).
+    color_by_column = None
+    if coloring_allowed and not color_by_group:
+        color_by_column = sanitize_color_by_column(payload.get("color_by_column"))
+    column_colored: str | None = None
+
+    # Display mode for either override: "color" overlays series in one panel,
+    # "facet" splits into small multiples (px facet_col on the same column the
+    # coloring uses). Faceting stays color-aware — each panel keeps its
+    # category color — and degrades to color-only when there would be too many
+    # panels to read. Applied via ``_apply_display`` wherever the coloring
+    # kwargs land so revert/re-apply paths can't disagree with it.
+    grouping_display = sanitize_grouping_display(payload.get("grouping_display"))
+
+    def _apply_display(kwargs: dict, facet_column: str, n_categories: int | None) -> dict:
+        if grouping_display != "facet":
+            return kwargs
+        # Unknown cardinality (column mode before the client's palette
+        # resolved, or a mapless request) degrades to overlay rather than
+        # faceting an unbounded category set — refuse rather than guess.
+        if n_categories is None or n_categories > MAX_FACET_CATEGORIES:
+            return kwargs
+        return apply_facet_kwargs(kwargs, facet_column)
+
+    def _grouped_kwargs(base: dict) -> dict:
+        # +1 when "Other" is shown: the synthetic column then carries the
+        # fallback label as its own category (and facet panel in Split mode).
+        return _apply_display(
+            apply_group_coloring_kwargs(base, group_defs, include_other=include_other),
+            GROUP_COLUMN,
+            len(group_defs) + (1 if include_other else 0),
+        )
+
+    def _column_kwargs(base: dict) -> dict:
+        assert color_by_column is not None
+        column = color_by_column["column_name"]
+        color_map = color_by_column["color_map"]
+        return _apply_display(
+            apply_column_coloring_kwargs(base, column, color_map),
+            column,
+            len(color_map) if color_map else None,
+        )
 
     # Column projection (#7): in UI mode the figure spec tells us exactly which
     # columns Plotly Express will read, so load only those — the loader folds in
@@ -188,6 +243,8 @@ def build_figure_preview(payload: dict) -> dict:
             # would silently drop it.
             if color_by_group:
                 cols = cols | group_source_columns(group_defs)
+            if color_by_column:
+                cols = cols | {color_by_column["column_name"]}
             select_columns = sorted(cols)
 
     # Only after the projection is computed from the ORIGINAL kwargs may the
@@ -197,7 +254,9 @@ def build_figure_preview(payload: dict) -> dict:
     # the group column turns out not to exist in this frame.
     original_dict_kwargs = dict_kwargs
     if color_by_group:
-        dict_kwargs = apply_group_coloring_kwargs(dict_kwargs, group_defs)
+        dict_kwargs = _grouped_kwargs(dict_kwargs)
+    elif color_by_column:
+        dict_kwargs = _column_kwargs(dict_kwargs)
 
     # Plot-level point cap: component override or global default, unless the
     # client explicitly asked for a full load (-1 disables sampling entirely).
@@ -280,6 +339,8 @@ def build_figure_preview(payload: dict) -> dict:
                     )
                     if group_expr is not None:
                         scan = scan.with_columns(group_expr)
+                        if not include_other:
+                            scan = scan.filter(pl.col(GROUP_COLUMN) != OTHER_LABEL)
                         group_colored = True
                     else:
                         # No group column in this frame: render ungrouped, and
@@ -287,12 +348,22 @@ def build_figure_preview(payload: dict) -> dict:
                         # groups by a column the scan doesn't have).
                         dict_kwargs = original_dict_kwargs
                         agg_plan = plan_aggregation(visu_type, dict_kwargs)
+                elif color_by_column:
+                    # The color-by column is a real column, so the scan needs no
+                    # annotation — just a schema check with the same
+                    # revert-and-replan contract as groups.
+                    if color_by_column["column_name"] in scan.collect_schema().names():
+                        column_colored = color_by_column["column_name"]
+                    else:
+                        dict_kwargs = original_dict_kwargs
+                        agg_plan = plan_aggregation(visu_type, dict_kwargs)
                 if agg_plan is not None:
                     agg_fig = build_aggregated_figure(scan, agg_plan, theme, render_stats)
                 if agg_fig is None:
                     # The reduction fell through to the row loader below, which
-                    # annotates the loaded frame itself — reset so it does.
+                    # re-checks/re-applies the override itself — reset so it does.
                     group_colored = False
+                    column_colored = None
 
     df = None
     if agg_fig is None and code_sample_cap:
@@ -317,7 +388,22 @@ def build_figure_preview(payload: dict) -> dict:
         group_expr = group_annotation_expr(group_defs, df.columns, dict(df.schema))
         if group_expr is not None:
             df = df.with_columns(group_expr)
+            if not include_other:
+                df = df.filter(pl.col(GROUP_COLUMN) != OTHER_LABEL)
+            # The agg path may have reverted dict_kwargs (scan lacked the group
+            # column) before falling through to this loader; re-apply so the
+            # kwargs and the flag can't disagree.
+            dict_kwargs = _grouped_kwargs(original_dict_kwargs)
             group_colored = True
+        else:
+            dict_kwargs = original_dict_kwargs
+    if color_by_column and agg_fig is None and df is not None and column_colored is None:
+        # Same contract as groups on the row path: apply only when the loaded
+        # frame really carries the column, re-applying from the originals in
+        # case the agg path reverted (kwargs and flag must agree).
+        if color_by_column["column_name"] in df.columns:
+            dict_kwargs = _column_kwargs(original_dict_kwargs)
+            column_colored = color_by_column["column_name"]
         else:
             dict_kwargs = original_dict_kwargs
     load_ms = int((time.monotonic() - started) * 1000)
@@ -434,6 +520,9 @@ def build_figure_preview(payload: dict) -> dict:
         # True when the figure was colored by the caller's selection groups —
         # the client surfaces it because group coloring overrides `color`.
         "group_colored": group_colored,
+        # Column the global "Color by" override actually applied to this frame
+        # (None when the frame doesn't carry the column or the mode is off).
+        "column_colored": column_colored,
         # Per-stage timings ride back through both the inline and the Celery
         # result-backend paths; the render endpoint lifts them into X-* headers
         # for the benchmark harness. Unknown key — the React client ignores it.

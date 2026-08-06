@@ -424,6 +424,28 @@ components:
       color_discrete_map: '{"Setosa": "#4C72B0", "Versicolor": "#DD8452", "Virginica": "#55A467"}'
     layout: {x: 0, y: 16, w: 8, h: 5}
 
+  # Plain scatter (no marginals/trendline) so lasso selection stays direct:
+  # selections narrow the dashboard and can be saved as named groups
+  # ("select & compare"). The bivariate above keeps its marginals instead.
+  - tag: petal-shape-scatter
+    component_type: figure
+    section: "Distributions"
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    visu_type: scatter
+    title: "Petal Shape — Length vs Width"
+    description: "Lasso a cluster to filter the dashboard, or save the selection as a group. Note: iris has no per-flower ID, so a selection captures whole varieties."
+    title_size: h3
+    dict_kwargs:
+      x: petal.length
+      y: petal.width
+      color: variety
+      opacity: 0.85
+      color_discrete_map: '{"Setosa": "#4C72B0", "Versicolor": "#DD8452", "Virginica": "#55A467"}'
+    selection_enabled: true
+    selection_column: variety
+    layout: {x: 0, y: 21, w: 8, h: 5}
+
   # ── Data table ─────────────────────────────────────────────────────
   - tag: data-table
     component_type: table
@@ -435,4 +457,4 @@ components:
     title_size: h3
     title_align: left
     page_size: 100
-    layout: {x: 0, y: 21, w: 8, h: 5}
+    layout: {x: 0, y: 26, w: 8, h: 5}

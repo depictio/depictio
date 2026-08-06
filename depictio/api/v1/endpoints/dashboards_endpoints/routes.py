@@ -1494,47 +1494,13 @@ def _agg_value(col: Any, aggregation: str) -> Any:
             v = frame.select(factory(_pl.col(frame.columns[0]))).item()
             return float(v) if v is not None else None
         if agg == "box_plot_stats":
-            # Compound Tukey box-and-whisker payload, computed in one scan.
-            # Returns a dict that flows through `secondary_values[idx]` as the
-            # single value for this aggregation — React reads all 9 fields and
-            # renders whiskers + IQR box + median + mean + outlier dots.
-            import polars as _pl
+            # Compound Tukey box-and-whisker payload — one dict flowing through
+            # `secondary_values[idx]` as this aggregation's value. Centralised
+            # in card_metrics so the per-group comparison path reduces
+            # identically.
+            from depictio.api.v1.services.card_metrics import compute_box_plot_stats
 
-            numeric = col.cast(_pl.Float64, strict=False).drop_nulls()
-            if numeric.len() == 0:
-                return None
-            mn = float(numeric.min())
-            mx = float(numeric.max())
-            q1 = float(numeric.quantile(0.25, interpolation="linear"))
-            q3 = float(numeric.quantile(0.75, interpolation="linear"))
-            median = float(numeric.median())
-            mean = float(numeric.mean())
-            iqr = q3 - q1
-            fence_lo = q1 - 1.5 * iqr
-            fence_hi = q3 + 1.5 * iqr
-            # Whisker = most extreme data point that's still within the fence.
-            # Falls back to min/max when the fence excludes everything (e.g.
-            # constant column → iqr=0 → both fences land on q1=q3=median).
-            within = numeric.filter((numeric >= fence_lo) & (numeric <= fence_hi))
-            lower_w = float(within.min()) if within.len() else mn
-            upper_w = float(within.max()) if within.len() else mx
-            outliers_series = numeric.filter((numeric < fence_lo) | (numeric > fence_hi))
-            outlier_count = int(outliers_series.len())
-            # Cap the outlier list at 100 — beyond that the dots overlap into
-            # a solid bar at this card scale; the count is exposed separately.
-            outliers = outliers_series.head(100).to_list() if outlier_count else []
-            return {
-                "min": mn,
-                "max": mx,
-                "q1": q1,
-                "q3": q3,
-                "median": median,
-                "mean": mean,
-                "lower_whisker": lower_w,
-                "upper_whisker": upper_w,
-                "outliers": outliers,
-                "outlier_count": outlier_count,
-            }
+            return compute_box_plot_stats(col)
         if agg == "mode":
             m = col.mode()
             return (
@@ -1901,9 +1867,23 @@ def bulk_compute_cards(
           edit path; this endpoint mirrors its math.
     """
     from depictio.api.v1.deltatables_utils import load_deltatable_lite
+    from depictio.api.v1.services.card_groups import compute_group_compare
+    from depictio.api.v1.services.figure.groups import (
+        group_source_columns,
+        sanitize_group_defs,
+    )
 
     filters = request.get("filters") or []
     requested_ids: list[str] | None = request.get("component_ids")
+    # "Compare groups in cards" (issue #89): sanitized at this trust boundary,
+    # reduced per group on the frame path below. ``include_other`` mirrors the
+    # figure toggle: False omits the "Other" bucket from the comparison strip.
+    group_defs = sanitize_group_defs(request.get("groups"))
+    compare_groups = bool(request.get("compare_groups")) and bool(group_defs)
+    include_other = request.get("include_other") is not False
+    # "Show overall (All)": an extra entry reduced over the whole frame, drawn
+    # as the reference row above the per-group rows. On by default.
+    include_overall = request.get("include_overall") is not False
 
     dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
     if not dashboard_data:
@@ -2060,6 +2040,10 @@ def bulk_compute_cards(
         # The expression is applied to the projected frame, so its columns have
         # to survive the projection even when no card displays them.
         key_cols |= _filter_expr_columns(card_filter_expr)
+        # Group comparison annotates the frame from the groups' real source
+        # columns — project them in (the loader schema-guards absent ones).
+        if compare_groups:
+            key_cols |= group_source_columns(group_defs)
 
     # Cards sharing a cache key share one Delta read; group them so the pushdown
     # below can answer all of their aggregations in a single query.
@@ -2196,12 +2180,12 @@ def bulk_compute_cards(
                             all_specs_present = False
                             break
                         sec[sa] = float(sv) if isinstance(sv, (int, float)) else sv
-                    if all_specs_present and not needs_breakdown:
+                    if all_specs_present and not needs_breakdown and not compare_groups:
                         secondary_values[idx] = sec
                         continue
                     # Fall through to slow path to compute secondary values
-                    # and/or the breakdown payload.
-                elif not needs_breakdown:
+                    # and/or the breakdown / group-compare payload.
+                elif not needs_breakdown and not compare_groups:
                     continue
                 # else: fall through to slow path so the breakdown gets
                 # computed even though the hero value came from specs.
@@ -2223,8 +2207,12 @@ def bulk_compute_cards(
 
         needs_breakdown_payload = _needs_server_payload(card)
         wanted_aggs = [aggregation] + list(secondary_aggs)
-        fully_pushed = not needs_breakdown_payload and all(
-            (idx, a) in pushdown_values for a in wanted_aggs
+        # Group comparison needs the frame in hand, so it disables the
+        # scalar-only pushdown short-circuit like a breakdown payload does.
+        fully_pushed = (
+            not needs_breakdown_payload
+            and not compare_groups
+            and all((idx, a) in pushdown_values for a in wanted_aggs)
         )
         if fully_pushed:
             values[idx] = pushdown_values[(idx, aggregation)]
@@ -2261,7 +2249,11 @@ def bulk_compute_cards(
                 logger.warning(
                     f"bulk_compute_cards: DC load failed for {cache_key}: {e}", exc_info=True
                 )
-                values[idx] = None
+                # Only null out cards the specs fast path didn't already serve:
+                # compare mode routes specs-served cards through this load too,
+                # and a comparison must never blank a good hero value (e.g. the
+                # corrupted-Delta case the specs path exists for).
+                values.setdefault(idx, None)
                 continue
             df_cache[cache_key] = df
 
@@ -2270,7 +2262,7 @@ def bulk_compute_cards(
                 f"bulk_compute_cards: column {column!r} not in df for {idx}; "
                 f"available cols (first 10): {df.columns[:10]}"
             )
-            values[idx] = None
+            values.setdefault(idx, None)
             continue
 
         values[idx] = _agg_value(df[column], aggregation)
@@ -2315,6 +2307,114 @@ def bulk_compute_cards(
                 logger.warning(
                     f"bulk_compute_cards: {sec_layout} on {column!r} failed for {idx}: {e}"
                 )
+
+        # Per-group comparison of the card's hero aggregation. `None` when the
+        # comparison can't be computed exactly for this card (group column not
+        # in the frame) — the card then renders without a strip rather than
+        # with wrong numbers. For layouts with a compact per-group form
+        # (GROUP_COMPARABLE_LAYOUTS) each entry additionally carries the same
+        # sub-payload shape the card's own secondary layout uses, computed over
+        # that group's partition, so the client can draw one mini-rendering per
+        # group in the group's color.
+        if compare_groups:
+            try:
+                import polars as pl
+
+                from depictio.api.v1.services.card_metrics import (
+                    GROUP_COMPARABLE_LAYOUTS,
+                    compute_box_plot_stats,
+                    compute_histogram,
+                    compute_trend_on_grid,
+                    trend_axis_grid,
+                )
+
+                payload_fn = None
+                gc_domain = None
+                # The tuple is the single gate: a layout absent from it keeps
+                # chips-only comparison no matter what the dispatch below could
+                # compute for it.
+                if sec_layout not in GROUP_COMPARABLE_LAYOUTS:
+                    pass
+                elif sec_layout in ("box_plot", "histogram"):
+                    # Shared domain over the whole (filtered) frame: the client
+                    # draws every group's slim box / sparkbars against one axis
+                    # — self-scaled shapes would render four identical forms
+                    # for four wildly different groups.
+                    numeric = df[column].cast(pl.Float64, strict=False).drop_nulls()
+                    if sec_layout == "box_plot":
+                        # Per-group outlier cap far below the hero's 100: the
+                        # payload is repeated once per group.
+                        payload_fn = lambda part: compute_box_plot_stats(  # noqa: E731
+                            part[column], max_outliers=20
+                        )
+                        if numeric.len() > 0:
+                            gc_domain = {"min": float(numeric.min()), "max": float(numeric.max())}
+                    elif numeric.len() > 1 and numeric.min() != numeric.max():
+                        h_lo, h_hi = float(numeric.min()), float(numeric.max())
+                        payload_fn = lambda part: compute_histogram(  # noqa: E731
+                            part, column, domain=(h_lo, h_hi)
+                        )
+                        gc_domain = {"min": h_lo, "max": h_hi}
+                elif (
+                    sec_layout in _BREAKDOWN_LAYOUTS
+                    and breakdown_col
+                    and breakdown_col in df.columns
+                ):
+                    # One breakdown per group partition: donut draws a mini-ring
+                    # per group, the other breakdown layouts a composition meter
+                    # per group (each is read alone at this scale, so divergent
+                    # category sets are acceptable).
+                    payload_fn = lambda part: compute_breakdown(  # noqa: E731
+                        part,
+                        column=column,
+                        breakdown_col=breakdown_col,
+                        aggregation=card.get("aggregation") or "count",
+                        top_n_count=int(card.get("top_n_count") or 3),
+                    )
+                elif sec_layout == "trend":
+                    trend_axis = card.get("trend_col")
+                    if trend_axis and str(trend_axis) in df.columns:
+                        # Same shared-scale rule as the histogram, on x: one
+                        # axis grid over the whole frame, every group's series
+                        # aligned on it so the client can overlay them.
+                        grid = trend_axis_grid(df, str(trend_axis))
+                        if grid is not None:
+                            trend_agg = str(card.get("aggregation") or "count")
+                            payload_fn = lambda part: compute_trend_on_grid(  # noqa: E731
+                                part, column, str(trend_axis), trend_agg, grid
+                            )
+                elif sec_layout in ("threshold", "completeness", "uniqueness"):
+                    payload_fn = lambda part: _numeric_layout_payload(  # noqa: E731
+                        part, card, column, sec_layout
+                    )
+                group_compare = compute_group_compare(
+                    df,
+                    group_defs,
+                    column,
+                    aggregation,
+                    _agg_expr,
+                    _coerce_agg_result,
+                    agg_value_fn=_agg_value,
+                    payload_fn=payload_fn,
+                    include_overall=include_overall,
+                )
+                if group_compare is not None:
+                    # The layout discriminator tells the client which compact
+                    # renderer the payloads belong to; coverage and gauge need
+                    # no server payload (value + the authored coverage_max
+                    # suffice) but still go through the tuple gate.
+                    if payload_fn is not None or (
+                        sec_layout in ("coverage", "gauge")
+                        and sec_layout in GROUP_COMPARABLE_LAYOUTS
+                    ):
+                        group_compare["layout"] = sec_layout
+                    if gc_domain is not None:
+                        group_compare["domain"] = gc_domain
+                    if not include_other:
+                        group_compare["other"] = None
+                    sec_results["__group_compare__"] = group_compare
+            except Exception as e:
+                logger.warning(f"bulk_compute_cards: group compare failed for {idx}: {e}")
 
         if sec_results:
             secondary_values[idx] = sec_results
@@ -2519,25 +2619,38 @@ async def render_figure_endpoint(
 
     Request body:
         {"filters": [...], "theme": "light" | "dark", "full_load": bool,
-         "groups": [{name, column_name, values, color}], "color_by_group": bool}
+         "groups": [{name, column_name, values, color}], "color_by_group": bool,
+         "color_by_column": {"column_name": str, "color_map": {value: "#rrggbb"}},
+         "grouping_display": "color" | "facet",
+         "include_other": bool}
 
     ``full_load`` (default False) bypasses the point-plot row cap so the client
     can explicitly render every point on demand (slow on large datasets).
 
     ``groups`` + ``color_by_group`` (optional) ask for the figure to be colored
-    by the caller's selection groups (issue #89); sanitized here at the trust
-    boundary, applied in ``build_figure_preview``.
+    by the caller's selection groups (issue #89); ``color_by_column`` asks for
+    the dashboard-global color-by-a-real-column override instead (groups win
+    when both are present). All sanitized here at the trust boundary, applied
+    in ``build_figure_preview``.
 
     Response:
         {"figure": <plotly fig dict>, "metadata": {visu_type, ...}}
     """
-    from depictio.api.v1.services.figure.groups import sanitize_group_defs
+    from depictio.api.v1.services.figure.groups import (
+        sanitize_color_by_column,
+        sanitize_group_defs,
+        sanitize_grouping_display,
+    )
 
     filters = request.get("filters") or []
     theme = request.get("theme") or "light"
     full_load = bool(request.get("full_load", False))
     group_defs = sanitize_group_defs(request.get("groups"))
     color_by_group = bool(request.get("color_by_group", False)) and bool(group_defs)
+    color_by_column = (
+        None if color_by_group else sanitize_color_by_column(request.get("color_by_column"))
+    )
+    grouping_display = sanitize_grouping_display(request.get("grouping_display"))
 
     dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
     if not dashboard_data:
@@ -2622,6 +2735,12 @@ async def render_figure_endpoint(
     if color_by_group:
         payload["groups"] = group_defs
         payload["color_by_group"] = True
+        if request.get("include_other") is False:
+            payload["include_other"] = False
+    elif color_by_column:
+        payload["color_by_column"] = color_by_column
+    if (color_by_group or color_by_column) and grouping_display == "facet":
+        payload["grouping_display"] = "facet"
     import time as _time
 
     _t0 = _time.perf_counter()
