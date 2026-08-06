@@ -1,0 +1,110 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1340" height="660" viewBox="0 0 1340 660">
+  <rect width="1340" height="660" fill="#ffffff"/>
+  <text x="60.0" y="52.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="25" fill="#1e1e1e" text-anchor="start" font-weight="normal">One tile, two collections</text>
+  <text x="60.0" y="78.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="15" fill="#5c5c5c" text-anchor="start" font-weight="normal">and its own dc_id names the wrong one</text>
+  <rect x="60.0" y="120.0" width="300.0" height="130.0" rx="6" fill="#f3f0ff"/>
+  <path d="M60.1,119.9 C161.4,121.4 261.3,118.7 360.0,119.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M59.2,119.3 C159.0,119.8 259.1,119.9 360.3,119.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M360.5,120.1 C360.0,164.1 359.5,205.3 360.3,250.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M360.1,120.3 C361.5,162.9 360.8,206.2 359.7,249.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M360.2,249.5 C259.9,250.7 160.3,249.8 59.5,249.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M359.3,249.6 C261.0,249.0 158.8,248.7 60.1,250.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M60.4,250.1 C59.5,206.2 59.3,162.7 59.6,119.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M60.1,250.7 C60.9,207.3 61.1,162.5 60.1,120.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="210.0" y="147.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">phylogeny tile</text>
+  <text x="210.0" y="171.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">dc_id → the TREE</text>
+  <text x="210.0" y="192.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">config.metadata_dc_id</text>
+  <text x="210.0" y="213.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">→ the tip table</text>
+  <rect x="560.0" y="96.0" width="330.0" height="116.0" rx="6" fill="#fff9db"/>
+  <path d="M559.2,96.5 C668.9,97.5 778.6,95.7 890.3,96.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M560.4,95.8 C671.0,97.4 780.1,97.6 890.8,95.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M890.7,96.7 C889.0,133.3 889.9,172.4 889.5,211.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M889.6,95.9 C890.1,133.6 890.1,174.3 890.6,211.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M890.3,211.9 C779.5,213.3 671.0,213.3 560.3,212.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M890.4,212.1 C780.4,211.2 669.3,211.7 560.1,212.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M560.5,211.6 C558.7,173.8 559.5,134.9 560.7,95.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M560.0,211.9 C560.2,173.5 559.2,134.9 560.3,95.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="725.0" y="123.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">tree collection</text>
+  <text x="725.0" y="147.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">type: phylogeny — a Newick file</text>
+  <text x="725.0" y="168.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">no Delta table, by construction</text>
+  <rect x="560.0" y="260.0" width="330.0" height="116.0" rx="6" fill="#e7f5ff"/>
+  <path d="M559.5,260.3 C669.6,260.9 778.9,261.2 889.5,259.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M560.3,260.1 C669.8,258.7 780.6,259.9 890.1,260.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M890.6,260.0 C889.4,299.9 888.7,338.5 890.4,376.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M889.7,260.7 C890.3,298.0 889.4,336.9 889.7,375.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M889.6,375.6 C779.7,377.0 669.9,376.2 559.3,375.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M889.9,375.4 C779.2,377.1 670.0,374.8 560.1,375.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M560.8,376.2 C561.1,336.6 561.1,297.9 559.3,260.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M559.3,376.4 C559.3,336.9 558.9,299.7 559.8,260.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="725.0" y="287.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">metadata collection</text>
+  <text x="725.0" y="311.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">the tip table</text>
+  <text x="725.0" y="332.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">colours and labels only</text>
+  <path d="M359.3,160.0 C423.2,161.6 489.7,168.3 552.8,171.4" fill="none" stroke="#c92a2a" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M359.9,159.4 C422.1,163.8 486.6,168.6 552.1,172.5" fill="none" stroke="#c92a2a" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M551.6,171.6 C548.7,169.7 544.3,166.7 540.5,164.3" fill="none" stroke="#c92a2a" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M552.4,171.9 C547.6,173.5 543.7,175.9 539.1,177.9" fill="none" stroke="#c92a2a" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="462.0" y="128.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#c92a2a" text-anchor="middle" font-weight="normal">asked for</text>
+  <text x="462.0" y="148.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#c92a2a" text-anchor="middle" font-weight="normal">tabular data</text>
+  <path d="M361.0,220.0 C425.0,250.4 487.2,279.9 551.3,307.8" fill="none" stroke="#adb5bd" stroke-width="1.7" stroke-linecap="round" stroke-dasharray="9 7"/>
+  <path d="M360.4,219.5 C425.1,250.0 486.2,277.9 552.1,307.4" fill="none" stroke="#adb5bd" stroke-width="1.7" stroke-linecap="round" stroke-dasharray="9 7"/>
+  <path d="M552.3,308.1 C549.0,303.4 546.0,300.4 543.5,296.6" fill="none" stroke="#adb5bd" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M552.3,308.1 C547.0,308.6 542.6,307.9 538.5,308.8" fill="none" stroke="#adb5bd" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="462.0" y="300.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">never asked</text>
+  <rect x="960.0" y="96.0" width="320.0" height="116.0" rx="6" fill="#ffe3e3"/>
+  <path d="M960.8,96.3 C1067.1,95.8 1173.7,97.3 1279.9,95.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M959.3,95.8 C1067.8,95.7 1173.0,94.6 1280.8,96.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1280.2,95.3 C1280.7,135.2 1279.3,172.3 1280.1,212.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1279.4,96.2 C1280.1,133.5 1278.6,173.2 1279.7,212.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1279.8,212.8 C1174.1,212.3 1066.8,211.0 959.6,211.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1280.7,211.2 C1173.3,212.1 1067.6,211.3 960.5,212.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M960.3,211.4 C961.3,172.2 960.6,136.1 960.7,96.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M960.5,212.4 C958.8,174.4 958.7,133.3 960.7,96.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="1120.0" y="123.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">404</text>
+  <text x="1120.0" y="147.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">no materialised Delta table</text>
+  <text x="1120.0" y="168.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">→ the WHOLE tile omitted</text>
+  <path d="M890.3,154.8 C910.7,153.1 931.6,156.0 951.4,154.5" fill="none" stroke="#c92a2a" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M889.4,153.1 C911.6,152.3 932.6,152.7 952.3,153.3" fill="none" stroke="#c92a2a" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M952.1,154.1 C948.8,150.8 944.4,150.1 939.9,147.6" fill="none" stroke="#c92a2a" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M952.0,154.4 C947.2,156.8 943.5,158.5 939.6,160.9" fill="none" stroke="#c92a2a" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1108.4,223.6 C1115.0,231.6 1124.4,240.3 1132.4,248.4" fill="none" stroke="#c92a2a" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1108.1,247.9 C1115.1,239.1 1124.2,233.1 1132.0,224.4" fill="none" stroke="#c92a2a" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="1120.0" y="268.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#c92a2a" text-anchor="middle" font-weight="normal">no tree in the bundle</text>
+  <path d="M60.2,420.3 C466.7,420.1 873.5,420.7 1279.8,420.1" fill="none" stroke="#adb5bd" stroke-width="1.2" stroke-linecap="round"/>
+  <text x="60.0" y="402.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="17" fill="#5c5c5c" text-anchor="start" font-weight="bold">AFTER — mirror what the renderer has always done</text>
+  <rect x="60.0" y="452.0" width="380.0" height="100.0" rx="6" fill="#ebfbee"/>
+  <path d="M59.4,452.0 C187.7,452.7 314.8,453.3 439.8,451.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M59.6,451.8 C186.7,453.5 314.2,450.7 440.6,451.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M440.1,452.8 C438.9,485.5 439.2,517.2 440.4,552.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M439.9,451.3 C438.9,485.5 440.4,519.5 440.7,551.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M439.3,551.9 C314.1,551.9 187.6,551.5 60.0,552.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M439.5,552.6 C313.0,552.5 186.3,552.7 60.7,551.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M60.4,552.4 C61.1,519.6 60.6,484.1 60.2,452.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M59.7,552.0 C61.4,519.1 61.4,484.2 60.0,452.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="250.0" y="479.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">tree ← tree_dc_id</text>
+  <text x="250.0" y="503.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">the Newick, always fetched</text>
+  <rect x="490.0" y="452.0" width="380.0" height="100.0" rx="6" fill="#ebfbee"/>
+  <path d="M489.8,452.4 C617.1,452.4 743.7,453.4 870.2,451.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M489.7,451.3 C616.2,450.9 741.8,451.5 870.0,451.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M869.6,451.4 C871.4,486.2 870.5,519.8 870.2,551.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M869.3,452.2 C871.6,485.1 871.2,517.9 870.3,551.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M870.8,551.4 C744.7,553.5 617.3,553.5 490.4,552.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M870.6,551.3 C744.1,551.5 616.8,552.3 489.8,551.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M489.4,551.9 C490.9,517.4 488.6,484.1 490.6,451.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M490.4,551.9 C488.7,519.2 489.5,485.6 490.4,452.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="680.0" y="479.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">tips ← metadata_dc_id</text>
+  <text x="680.0" y="503.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">the table the renderer reads</text>
+  <rect x="920.0" y="452.0" width="360.0" height="100.0" rx="6" fill="#ffffff"/>
+  <path d="M919.7,452.0 C1041.1,452.8 1161.3,452.8 1280.4,452.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M920.2,451.3 C1040.7,453.1 1161.0,452.1 1280.0,452.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1280.6,452.3 C1281.3,486.4 1279.8,517.8 1279.5,551.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1280.1,452.4 C1281.2,485.6 1278.8,520.2 1280.5,551.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1280.5,551.4 C1160.1,551.0 1040.4,551.8 919.5,551.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1279.5,552.5 C1158.4,551.7 1041.5,553.2 919.6,551.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M919.5,551.5 C920.4,518.0 919.0,484.0 920.7,451.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M919.8,552.4 C920.1,517.7 920.7,483.7 919.2,451.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="1100.0" y="479.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">failure is asymmetric</text>
+  <text x="1100.0" y="503.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">no table → the colours go</text>
+  <text x="1100.0" y="524.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">no tree → fatal, and it says so</text>
+  <text x="670.0" y="600.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">one frozen payload answers both lookups — advancedVizIndexFor resolves either id</text>
+  <text x="670.0" y="626.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">ampliseq: 166 265 characters of Newick, 11 994 tips × 9 columns</text>
+</svg>
