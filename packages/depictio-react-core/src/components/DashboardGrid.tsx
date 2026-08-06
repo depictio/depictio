@@ -71,6 +71,16 @@ interface DashboardGridProps {
   /** `DashboardData.grid_sections` — order, icons and default collapse for the
    *  grid's accordion sections. Empty means no sections, i.e. one flat grid. */
   gridSections?: FilterSectionSpec[];
+  /**
+   * Host-provided per-section extras (e.g. the AI summarize affordances).
+   * Called with the section name (`null` for the unsectioned grid).
+   * `trailing` lands in the section header next to the fold chips;
+   * `panelTop` renders inside the section panel above its grid (for the
+   * unsectioned grid, directly above it). Keeps this package AI-free.
+   */
+  renderSectionExtras?: (
+    sectionName: string | null,
+  ) => { trailing?: React.ReactNode; panelTop?: React.ReactNode } | null;
 }
 
 /**
@@ -102,6 +112,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
   onLayoutChange,
   renderItemOverlay,
   gridSections,
+  renderSectionExtras,
 }) => {
   // Memoised because it feeds the deps of everything below: rebuilding this
   // array on every render (a panel toggle, a collapse click) would invalidate
@@ -510,7 +521,12 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
       className={rootClass}
       style={{ width: '100%', overflowX: 'hidden' }}
     >
-      {unsectioned && renderGrid(unsectioned)}
+      {unsectioned && (
+        <>
+          {renderSectionExtras?.(null)?.panelTop}
+          {renderGrid(unsectioned)}
+        </>
+      )}
       {named.length > 0 && (
         <Group justify="flex-end" mb={4}>
           <Button
@@ -552,17 +568,21 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
                 <SectionHeader
                   spec={section.spec}
                   name={section.sectionName}
-                  // Only while folded: expanded, these numbers are already on
-                  // screen as the cards themselves. Folding a section must not
-                  // cost you the figures it was showing.
+                  // Metric chips only while folded: expanded, these numbers
+                  // are already on screen as the cards themselves. Host
+                  // extras (e.g. AI summarize) render in both states.
                   trailing={
-                    !sectionCollapse.isOpen(section.key) ? (
-                      <SectionSummary section={section} cardValues={cardValues} />
-                    ) : undefined
+                    <>
+                      {!sectionCollapse.isOpen(section.key) ? (
+                        <SectionSummary section={section} cardValues={cardValues} />
+                      ) : undefined}
+                      {renderSectionExtras?.(section.sectionName ?? null)?.trailing}
+                    </>
                   }
                 />
               </Accordion.Control>
               <Accordion.Panel>
+                {renderSectionExtras?.(section.sectionName ?? null)?.panelTop}
                 {/* Plain wrapper so the width available inside the section box
                     can be read off the DOM — see `sectionInset`. Absent until
                     the section has been opened once: see `renderedSections`. */}

@@ -45,9 +45,23 @@ import {
   FILTER_PANEL_RAIL_WIDTH,
   countActiveFilters,
   clearFiltersBySource,
+  renderFigure,
+  renderTable,
 } from 'depictio-react-core';
-import { AIAnalyzePanel, AIKeySection, useAIHealth } from 'depictio-react-ai';
-import type { ApplyActionsPayload, ResolvedFilter } from 'depictio-react-ai';
+import {
+  AIAnalyzePanel,
+  AIKeySection,
+  SectionSummaryPanel,
+  SummarizeSectionButton,
+  trimDigest,
+  useAIHealth,
+  useSectionSummaries,
+} from 'depictio-react-ai';
+import type {
+  ApplyActionsPayload,
+  ResolvedFilter,
+  SummaryComponentPayload,
+} from 'depictio-react-ai';
 import type {
   DashboardData,
   DashboardPermissions,
@@ -649,6 +663,136 @@ const App: React.FC = () => {
   // show it while the panel itself is off screen.
   const activeFilterCount = countActiveFilters(filters);
 
+  // ---- AI section summaries -------------------------------------------------
+  // Digests are assembled at summarize time: card values come from local
+  // state, figure/table payloads are refetched with the current filters (the
+  // render endpoints are what the tiles themselves use, so the digest matches
+  // what's on screen). Everything is client-trimmed before upload; the server
+  // trims again.
+  const buildAIContext = useCallback(
+    async (section: string | null) => {
+      if (!dashboard || !dashboardId) return { filters: [], components: [] };
+      const inSection = rightComponents.filter(
+        (m) => ((m.section as string | undefined) ?? null) === section,
+      );
+      const components: SummaryComponentPayload[] = [];
+      for (const m of inSection) {
+        const id = m.index;
+        const title = (m.title as string) || '';
+        const type = String(m.component_type);
+        if (type === 'card') {
+          components.push({
+            id,
+            type,
+            title,
+            digest: trimDigest({
+              column: m.column_name,
+              aggregation: m.aggregation,
+              value: cardValues[id],
+              secondary: cardSecondaryValues[id],
+            }),
+          });
+        } else if (type === 'figure') {
+          try {
+            const res = await renderFigure(dashboardId, id, deferredFilters);
+            components.push({
+              id,
+              type,
+              title,
+              digest: trimDigest(
+                {
+                  visu_type: res.metadata?.visu_type ?? m.visu_type,
+                  dict_kwargs: m.dict_kwargs,
+                  total_rows: res.metadata?.total_data_count,
+                  data: res.figure?.data,
+                },
+                40,
+                200,
+              ),
+            });
+          } catch {
+            components.push({
+              id,
+              type,
+              title,
+              digest: { visu_type: m.visu_type, dict_kwargs: m.dict_kwargs },
+            });
+          }
+        } else if (type === 'table') {
+          try {
+            const res = await renderTable(dashboardId, id, deferredFilters, 0, 15);
+            components.push({
+              id,
+              type,
+              title,
+              digest: trimDigest({ total_rows: res.total, rows: res.rows }),
+            });
+          } catch {
+            components.push({ id, type, title, digest: { columns: m.columns } });
+          }
+        } else {
+          // multiqc / map / image / jbrowse / advanced_viz: configuration-level
+          // digest only — their payloads are either binary or too large to be
+          // meaningful as text.
+          components.push({ id, type, title, digest: { component_type: type } });
+        }
+      }
+      return { filters: deferredFilters as unknown[], components };
+    },
+    [dashboard, dashboardId, rightComponents, cardValues, cardSecondaryValues, deferredFilters],
+  );
+
+  const sectionSummaries = useSectionSummaries(
+    dashboardId ?? '',
+    aiEnabled && Boolean(dashboardId),
+    buildAIContext,
+  );
+  // Client-local staleness: filters changed since this session generated the
+  // summary. (Server-side hash comparison would need the digests recomputed on
+  // every render — this heuristic is free and errs on the safe side.)
+  const [aiSummaryFilterKeys, setAiSummaryFilterKeys] = useState<Record<string, string>>({});
+  const handleGenerateSummary = useCallback(
+    async (section: string | null, force = false) => {
+      const res = await sectionSummaries.generate(section, force);
+      if (res) {
+        setAiSummaryFilterKeys((prev) => ({ ...prev, [section ?? '']: deferredFilterKey }));
+      }
+    },
+    [sectionSummaries, deferredFilterKey],
+  );
+
+  const renderSectionExtras = useCallback(
+    (section: string | null) => {
+      if (!aiEnabled) return null;
+      const key = section ?? '';
+      const entry = sectionSummaries.entries[key];
+      const pending = sectionSummaries.pendingSection === key;
+      const generatedKey = aiSummaryFilterKeys[key];
+      const stale = Boolean(entry && generatedKey !== undefined && generatedKey !== deferredFilterKey);
+      return {
+        trailing: (
+          <SummarizeSectionButton
+            section={section}
+            hasSummary={Boolean(entry)}
+            pending={pending}
+            onGenerate={(s, force) => void handleGenerateSummary(s, force)}
+          />
+        ),
+        panelTop: entry ? (
+          <SectionSummaryPanel
+            entry={entry}
+            stale={stale}
+            pending={pending}
+            error={pending ? null : sectionSummaries.error}
+            onRegenerate={(s, force) => void handleGenerateSummary(s, force)}
+            onDismiss={sectionSummaries.dismiss}
+          />
+        ) : undefined,
+      };
+    },
+    [aiEnabled, sectionSummaries, aiSummaryFilterKeys, deferredFilterKey, handleGenerateSummary],
+  );
+
   return (
     <AvailableFilterValuesProvider
       dashboardMetadata={dashboard?.stored_metadata}
@@ -979,6 +1123,7 @@ const App: React.FC = () => {
                     isDraggable={false}
                     isResizable={false}
                     editMode={false}
+                    renderSectionExtras={aiEnabled ? renderSectionExtras : undefined}
                   />
                 )}
               </Box>
