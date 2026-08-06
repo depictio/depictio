@@ -81,3 +81,56 @@ def test_seed_dc_ids_are_static(project_key: str, seed_path: Path) -> None:
         f"STATIC_IDS[{project_key!r}].data_collections — fresh deploys will 404 "
         f"on these components.\n  " + "\n  ".join(offenders)
     )
+
+
+def test_every_showcase_dashboard_yaml_has_a_seed() -> None:
+    """A dashboard YAML with no matching seed never reaches a fresh deployment.
+
+    This fired for the four `benchmark_*.yaml` tabs, which landed with the
+    benchmarking viz kinds but no seed: `db_init` created 23 showcase tabs and
+    not those four, so anything resolving them by title got a clean 404 from a
+    perfectly healthy API. Regenerate with
+    ``python -m depictio.dev_scripts.generate_benchmark_seeds``.
+
+    Scoped to the advanced-viz showcase on purpose. There is no repo-wide
+    YAML→seed naming convention to assert: iris keeps a `petal_analysis.yaml`
+    it deliberately does not seed, and ampliseq / viralrecon expand a single
+    `base.yaml` into several per-tab seeds. Only this project pairs one YAML
+    with one `dashboard_<stem>.json`, so only here is a missing seed
+    unambiguously a mistake.
+    """
+    project_dir = REPO_ROOT / "depictio" / "projects" / "init" / "advanced_viz_showcase"
+    seeds_dir = project_dir / ".db_seeds"
+    missing = [
+        yaml_path.name
+        for yaml_path in sorted((project_dir / "dashboards").glob("*.yaml"))
+        if not (seeds_dir / f"dashboard_{yaml_path.stem}.json").is_file()
+    ]
+    assert not missing, (
+        "advanced_viz_showcase: dashboard YAML with no "
+        ".db_seeds/dashboard_<stem>.json — db_init loads seeds only, so these "
+        f"are invisible on a fresh deploy: {missing}"
+    )
+
+
+def test_benchmark_seed_ids_match_static_ids() -> None:
+    """The generator duplicates STATIC_IDS; drift must fail here, not at render.
+
+    ``generate_benchmark_seeds`` hardcodes the ids so it can run without
+    settings or MongoDB. That is a second copy, and a second copy that silently
+    disagrees produces seeds whose components 404 while every test still passes.
+    """
+    from depictio.dev_scripts.generate_benchmark_seeds import (
+        DC_IDS,
+        PROJECT_ID,
+        WORKFLOW_ID,
+    )
+
+    static = STATIC_IDS["advanced_viz_showcase"]
+    assert PROJECT_ID == static["project"]
+    assert WORKFLOW_ID == static["workflows"]["advanced_viz_demo"]
+    for tag, oid in DC_IDS.items():
+        assert oid == static["data_collections"][tag], (
+            f"generate_benchmark_seeds maps {tag!r} to {oid}, "
+            f"STATIC_IDS says {static['data_collections'].get(tag)}"
+        )

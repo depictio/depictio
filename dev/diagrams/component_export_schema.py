@@ -5,21 +5,15 @@ The diagram summarises what a caller gets from the export endpoint: one componen
 one URL, and two formats whose coverage differs on purpose. It is generated rather
 than drawn so it can be corrected in a diff when the flow changes.
 
-The look is Excalidraw's: every stroke is drawn twice along a jittered bezier, and
-the text uses Virgil (Excalidraw's font). Jitter comes from a fixed seed, so
-re-running produces a byte-identical file instead of a spurious diff.
+Drawing primitives come from ``dev/diagrams/sketch.py``, the shared toolkit the
+other diagrams in this directory already use. This module used to carry its own
+copy, on the grounds that the shared module did not exist yet; it does now.
 
-Unlike its sibling `watch_trigger_schema.py`, this one **inlines Virgil** from the
-copy already vendored at ``depictio/viewer/src/assets/fonts/Virgil.ttf`` as a base64
-``@font-face``. Relying on a locally installed Virgil GS means the SVG silently
-renders in whatever cursive the fallback list finds — on a machine without the font
-(CI, a container) the result does not look hand-drawn at all. Embedding costs ~150 KB
-and makes the file portable.
-
-The ``Sketch`` primitives are duplicated from `watch_trigger_schema.py` on purpose:
-that module is not on `main` yet, and importing across two open branches would make
-this diagram depend on an unmerged one. Once both have landed they should be lifted
-into a shared `dev/diagrams/_sketch.py`.
+``embed_font=True`` inlines Virgil from the copy vendored at
+``depictio/viewer/src/assets/fonts/Virgil.ttf`` as a base64 ``@font-face``.
+Relying on a locally installed Virgil GS means the SVG silently renders in
+whatever cursive the fallback list finds — on a machine without the font (CI, a
+container) the result does not look hand-drawn at all.
 
 Usage:
     python dev/diagrams/component_export_schema.py --out docs/images/v0.12/react/schema
@@ -29,216 +23,32 @@ Usage:
 from __future__ import annotations
 
 import asyncio
-import base64
-import math
-import random
-from dataclasses import dataclass
+import sys
 from pathlib import Path
-from xml.sax.saxutils import escape
 
 import typer
 
+sys.path.insert(0, str(Path(__file__).parent))
+
+from sketch import (  # noqa: E402
+    BLUE,
+    DIM,
+    GREEN,
+    ORANGE,
+    RED,
+    VIOLET,
+    YELLOW,
+    Box,
+    Sketch,
+)
+
 app = typer.Typer(add_completion=False)
-
-# Excalidraw's default palette: near-black ink, pastel fills.
-INK = "#1e1e1e"
-DIM = "#5c5c5c"
-RED = "#c92a2a"
-BLUE = "#e7f5ff"
-YELLOW = "#fff9db"
-GREEN = "#ebfbee"
-VIOLET = "#f3f0ff"
-ORANGE = "#ffe8cc"
-
-FONT = "Virgil, Virgil GS, Excalifont, Comic Sans MS, Bradley Hand, cursive"
-
-REPO_ROOT = Path(__file__).resolve().parents[2]
-VIRGIL_TTF = REPO_ROOT / "depictio" / "viewer" / "src" / "assets" / "fonts" / "Virgil.ttf"
 
 W, H = 1240, 620
 
 
-@dataclass(frozen=True)
-class Box:
-    x: float
-    y: float
-    w: float
-    h: float
-    fill: str
-    title: str
-    lines: tuple[str, ...] = ()
-
-    @property
-    def cx(self) -> float:
-        return self.x + self.w / 2
-
-    @property
-    def cy(self) -> float:
-        return self.y + self.h / 2
-
-    @property
-    def right(self) -> float:
-        return self.x + self.w
-
-    @property
-    def bottom(self) -> float:
-        return self.y + self.h
-
-
-class Sketch:
-    """Accumulates SVG fragments drawn with a hand-drawn wobble."""
-
-    def __init__(self, seed: int = 11) -> None:
-        self._rng = random.Random(seed)
-        self._parts: list[str] = []
-
-    # -- primitives ---------------------------------------------------------
-
-    def _jitter(self, amount: float) -> float:
-        return self._rng.uniform(-amount, amount)
-
-    def _wobble(self, x1: float, y1: float, x2: float, y2: float, amount: float) -> str:
-        """One stroke as a cubic bezier whose control points wander off the line.
-
-        Bending the curve rather than displacing the endpoints is what keeps a
-        rectangle's corners meeting while its edges still bow.
-        """
-        cx1 = x1 + (x2 - x1) / 3 + self._jitter(amount)
-        cy1 = y1 + (y2 - y1) / 3 + self._jitter(amount)
-        cx2 = x1 + 2 * (x2 - x1) / 3 + self._jitter(amount)
-        cy2 = y1 + 2 * (y2 - y1) / 3 + self._jitter(amount)
-        sx, sy = x1 + self._jitter(amount / 2), y1 + self._jitter(amount / 2)
-        ex, ey = x2 + self._jitter(amount / 2), y2 + self._jitter(amount / 2)
-        return f"M{sx:.1f},{sy:.1f} C{cx1:.1f},{cy1:.1f} {cx2:.1f},{cy2:.1f} {ex:.1f},{ey:.1f}"
-
-    def line(
-        self,
-        x1: float,
-        y1: float,
-        x2: float,
-        y2: float,
-        *,
-        width: float = 1.7,
-        colour: str = INK,
-        amount: float = 2.0,
-        dashed: bool = False,
-        passes: int = 2,
-    ) -> None:
-        dash = ' stroke-dasharray="9 7"' if dashed else ""
-        for _ in range(passes):
-            d = self._wobble(x1, y1, x2, y2, amount)
-            self._parts.append(
-                f'<path d="{d}" fill="none" stroke="{colour}" stroke-width="{width}" '
-                f'stroke-linecap="round"{dash}/>'
-            )
-
-    def rect(self, box: Box) -> None:
-        # Fill first, as a plain rounded rect: a wobbling fill edge reads as a
-        # smudge, while a wobbling outline on top of it reads as a pen stroke.
-        self._parts.append(
-            f'<rect x="{box.x:.1f}" y="{box.y:.1f}" width="{box.w:.1f}" height="{box.h:.1f}" '
-            f'rx="6" fill="{box.fill}"/>'
-        )
-        corners = [
-            (box.x, box.y, box.right, box.y),
-            (box.right, box.y, box.right, box.bottom),
-            (box.right, box.bottom, box.x, box.bottom),
-            (box.x, box.bottom, box.x, box.y),
-        ]
-        for x1, y1, x2, y2 in corners:
-            self.line(x1, y1, x2, y2, amount=1.6)
-
-    def arrow(
-        self,
-        x1: float,
-        y1: float,
-        x2: float,
-        y2: float,
-        *,
-        dashed: bool = False,
-        colour: str = INK,
-    ) -> None:
-        self.line(x1, y1, x2, y2, dashed=dashed, colour=colour)
-        angle = math.atan2(y2 - y1, x2 - x1)
-        for sign in (1, -1):
-            head = angle + sign * math.radians(28)
-            self.line(
-                x2,
-                y2,
-                x2 - 14 * math.cos(head),
-                y2 - 14 * math.sin(head),
-                amount=1.0,
-                colour=colour,
-                passes=1,
-            )
-
-    def elbow(
-        self,
-        points: list[tuple[float, float]],
-        *,
-        colour: str = INK,
-    ) -> None:
-        """A multi-segment run with a single arrowhead on the final leg.
-
-        The fork out of the endpoint box needs to go sideways then up/down; one
-        straight arrow would cut diagonally across the annotations.
-        """
-        for (x1, y1), (x2, y2) in zip(points[:-2], points[1:-1]):
-            self.line(x1, y1, x2, y2, colour=colour, amount=1.4)
-        (px, py), (qx, qy) = points[-2], points[-1]
-        self.arrow(px, py, qx, qy, colour=colour)
-
-    def text(
-        self,
-        x: float,
-        y: float,
-        content: str,
-        *,
-        size: float = 16,
-        colour: str = INK,
-        anchor: str = "middle",
-        weight: str = "normal",
-    ) -> None:
-        self._parts.append(
-            f'<text x="{x:.1f}" y="{y:.1f}" font-family="{FONT}" font-size="{size}" '
-            f'fill="{colour}" text-anchor="{anchor}" font-weight="{weight}">'
-            f"{escape(content)}</text>"
-        )
-
-    def box(self, box: Box) -> None:
-        self.rect(box)
-        self.text(box.cx, box.y + 27, box.title, size=18, weight="bold")
-        for i, line in enumerate(box.lines):
-            self.text(box.cx, box.y + 51 + i * 21, line, size=14, colour=DIM)
-
-    def svg(self) -> str:
-        body = "\n  ".join(self._parts)
-        return (
-            f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" '
-            f'viewBox="0 0 {W} {H}">\n'
-            f"  {_font_face()}\n"
-            f'  <rect width="{W}" height="{H}" fill="#ffffff"/>\n  {body}\n</svg>\n'
-        )
-
-
-def _font_face() -> str:
-    """Inline Virgil so the SVG renders identically without a local install.
-
-    Falls back to a bare ``<defs/>`` when the vendored TTF is missing, in which case
-    the font stack in ``FONT`` still applies — the drawing renders, just not in
-    Excalidraw's handwriting.
-    """
-    if not VIRGIL_TTF.exists():
-        return "<defs/>"
-    b64 = base64.b64encode(VIRGIL_TTF.read_bytes()).decode()
-    return (
-        "<defs><style>@font-face{font-family:'Virgil';"
-        f"src:url(data:font/ttf;base64,{b64}) format('truetype');}}</style></defs>"
-    )
-
-
 def build() -> str:
-    s = Sketch()
+    s = Sketch(W, H, seed=11, embed_font=True)
 
     s.text(46, 52, "One component, two ways out", size=25, anchor="start")
     s.text(

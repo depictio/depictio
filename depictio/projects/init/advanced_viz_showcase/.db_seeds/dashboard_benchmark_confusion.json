@@ -1,0 +1,301 @@
+{
+  "title": "Confusion matrix (demo)",
+  "subtitle": "",
+  "version": 1,
+  "icon": "mdi:grid",
+  "icon_color": "blue",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "is_public": true,
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "email": "admin@example.com",
+        "is_admin": true
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_main_tab": false,
+  "tab_order": 26,
+  "main_tab_name": null,
+  "tab_icon": "mdi:grid",
+  "tab_icon_color": "blue",
+  "filter_sections": [],
+  "grid_sections": [],
+  "stored_metadata": [
+    {
+      "index": "cm-demo-intro",
+      "component_type": "text",
+      "title": "Confusion matrix",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "benchmark_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-06T21:04:56.018672",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": null,
+      "order": 1,
+      "alignment": "left",
+      "vertical_alignment": "center",
+      "body": "TP / FP / FN per caller (synthetic). Cell shade = the per-caller normalised fraction so cells stay comparable when TP \u226b FP/FN; the label is the raw count with luminance-aware contrast. The gear exposes normalisation mode, colour scale, colour bar and font size.\n",
+      "wf_tag": "advanced_viz_demo"
+    },
+    {
+      "index": "cm-filter-tool",
+      "component_type": "interactive",
+      "title": "Caller",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "benchmark_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d52"
+      },
+      "dc_config": {
+        "type": "table",
+        "metatype": "Aggregate",
+        "description": "Synthetic per-caller benchmark summary (precision/recall/F1 + counts + CIs)",
+        "data_collection_tag": "benchmark_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d52"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-06T21:04:56.018694",
+      "title_align": "left",
+      "section": null,
+      "interactive_component_type": "MultiSelect",
+      "column_name": "tool",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": null,
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#1E88E5",
+      "icon_name": "mdi:filter-variant",
+      "wf_tag": "advanced_viz_demo"
+    },
+    {
+      "index": "cm-filter-fp",
+      "component_type": "interactive",
+      "title": "False positives",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "benchmark_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d52"
+      },
+      "dc_config": {
+        "type": "table",
+        "metatype": "Aggregate",
+        "description": "Synthetic per-caller benchmark summary (precision/recall/F1 + counts + CIs)",
+        "data_collection_tag": "benchmark_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d52"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-06T21:04:56.018705",
+      "title_align": "left",
+      "section": null,
+      "interactive_component_type": "RangeSlider",
+      "column_name": "fp",
+      "column_type": "int64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": null,
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#E64A19",
+      "icon_name": "mdi:alert-decagram",
+      "wf_tag": "advanced_viz_demo"
+    },
+    {
+      "index": "cm-filter-fn",
+      "component_type": "interactive",
+      "title": "False negatives",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "benchmark_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d52"
+      },
+      "dc_config": {
+        "type": "table",
+        "metatype": "Aggregate",
+        "description": "Synthetic per-caller benchmark summary (precision/recall/F1 + counts + CIs)",
+        "data_collection_tag": "benchmark_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d52"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-06T21:04:56.018714",
+      "title_align": "left",
+      "section": null,
+      "interactive_component_type": "RangeSlider",
+      "column_name": "fn",
+      "column_type": "int64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": null,
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#F9A825",
+      "icon_name": "mdi:help-circle",
+      "wf_tag": "advanced_viz_demo"
+    },
+    {
+      "index": "cm-demo-viz",
+      "component_type": "advanced_viz",
+      "title": "Confusion matrix",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "benchmark_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d52"
+      },
+      "dc_config": {
+        "type": "table",
+        "metatype": "Aggregate",
+        "description": "Synthetic per-caller benchmark summary (precision/recall/F1 + counts + CIs)",
+        "data_collection_tag": "benchmark_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d52"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-06T21:04:56.018725",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": null,
+      "viz_kind": "confusion_matrix",
+      "config": {
+        "viz_kind": "confusion_matrix",
+        "label_col": "tool",
+        "tp_col": "tp",
+        "fp_col": "fp",
+        "fn_col": "fn",
+        "tn_col": null,
+        "normalize": false,
+        "normalize_mode": "per_caller",
+        "colorscale": "Blues"
+      },
+      "wf_tag": "advanced_viz_demo"
+    }
+  ],
+  "stored_layout_data": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-cm-filter-tool",
+      "x": 0,
+      "y": 1,
+      "w": 3,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-cm-filter-fp",
+      "x": 3,
+      "y": 1,
+      "w": 3,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-cm-filter-fn",
+      "x": 6,
+      "y": 1,
+      "w": 2,
+      "h": 3,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    {
+      "i": "box-cm-demo-intro",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 1,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-cm-demo-viz",
+      "x": 0,
+      "y": 4,
+      "w": 8,
+      "h": 9,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "tmp_children_data": [],
+  "stored_children_data": [],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d4a"
+  },
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d4a"
+  },
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "last_saved_ts": "2026-07-29 00:00:00"
+}

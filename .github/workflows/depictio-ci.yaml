@@ -284,7 +284,7 @@ jobs:
               docker-images/Dockerfile.api \
               docker-images/Dockerfile.worker \
               docker-images/Dockerfile.viewer \
-              docker-images/nginx.conf \
+              docker-images/nginx.conf.template \
               .dockerignore 2>/dev/null | sha256sum | cut -c1-12)
           CONTENT_HASH="${DOCKER_HASH}-${CONFIG_HASH}"
 

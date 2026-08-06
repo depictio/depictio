@@ -1,0 +1,251 @@
+{
+  "title": "ROC / PR curve (demo)",
+  "subtitle": "",
+  "version": 1,
+  "icon": "mdi:chart-bell-curve",
+  "icon_color": "teal",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "is_public": true,
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "email": "admin@example.com",
+        "is_admin": true
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_main_tab": false,
+  "tab_order": 25,
+  "main_tab_name": null,
+  "tab_icon": "mdi:chart-bell-curve",
+  "tab_icon_color": "teal",
+  "filter_sections": [],
+  "grid_sections": [],
+  "stored_metadata": [
+    {
+      "index": "roc-demo-intro",
+      "component_type": "text",
+      "title": "ROC / PR curve",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "roc_curve_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-06T21:04:56.012043",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": null,
+      "order": 1,
+      "alignment": "left",
+      "vertical_alignment": "center",
+      "body": "Threshold-sweep curves, one per caller, on synthetic data. Use the tab bar at the top of the panel to switch between **PR curve** (precision vs recall), **ROC** (true-positive vs false-positive rate, with the random-classifier diagonal) and **vs threshold** (precision & recall vs quality). AUC is shown per curve.\n",
+      "wf_tag": "advanced_viz_demo"
+    },
+    {
+      "index": "roc-filter-tool",
+      "component_type": "interactive",
+      "title": "Caller",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "roc_curve_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d53"
+      },
+      "dc_config": {
+        "type": "table",
+        "metatype": "Aggregate",
+        "description": "Synthetic threshold sweep (3 tools \u00d7 ~13 quality thresholds) for the PR/ROC curve",
+        "data_collection_tag": "roc_curve_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d53"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-06T21:04:56.012067",
+      "title_align": "left",
+      "section": null,
+      "interactive_component_type": "MultiSelect",
+      "column_name": "tool",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": null,
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#00897B",
+      "icon_name": "mdi:filter-variant",
+      "wf_tag": "advanced_viz_demo"
+    },
+    {
+      "index": "roc-filter-quality",
+      "component_type": "interactive",
+      "title": "Quality threshold",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "roc_curve_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d53"
+      },
+      "dc_config": {
+        "type": "table",
+        "metatype": "Aggregate",
+        "description": "Synthetic threshold sweep (3 tools \u00d7 ~13 quality thresholds) for the PR/ROC curve",
+        "data_collection_tag": "roc_curve_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d53"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-06T21:04:56.012078",
+      "title_align": "left",
+      "section": null,
+      "interactive_component_type": "RangeSlider",
+      "column_name": "quality",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": null,
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#5E35B1",
+      "icon_name": "mdi:tune",
+      "wf_tag": "advanced_viz_demo"
+    },
+    {
+      "index": "roc-demo-viz",
+      "component_type": "advanced_viz",
+      "title": "ROC / PR curve",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "roc_curve_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d53"
+      },
+      "dc_config": {
+        "type": "table",
+        "metatype": "Aggregate",
+        "description": "Synthetic threshold sweep (3 tools \u00d7 ~13 quality thresholds) for the PR/ROC curve",
+        "data_collection_tag": "roc_curve_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d53"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-06T21:04:56.012088",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": null,
+      "viz_kind": "roc_pr_curve",
+      "config": {
+        "viz_kind": "roc_pr_curve",
+        "recall_col": "recall",
+        "precision_col": "precision",
+        "fpr_col": "fpr",
+        "threshold_col": "quality",
+        "group_col": "tool",
+        "show_auc": true,
+        "fill": false
+      },
+      "wf_tag": "advanced_viz_demo"
+    }
+  ],
+  "stored_layout_data": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-roc-filter-tool",
+      "x": 0,
+      "y": 1,
+      "w": 4,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-roc-filter-quality",
+      "x": 4,
+      "y": 1,
+      "w": 4,
+      "h": 3,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    {
+      "i": "box-roc-demo-intro",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 1,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-roc-demo-viz",
+      "x": 0,
+      "y": 4,
+      "w": 8,
+      "h": 10,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "tmp_children_data": [],
+  "stored_children_data": [],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d49"
+  },
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d49"
+  },
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "last_saved_ts": "2026-07-29 00:00:00"
+}

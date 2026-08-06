@@ -13,6 +13,7 @@ the flow they describe changes — a hand-made PNG goes stale silently.
 from __future__ import annotations
 
 import asyncio
+import base64
 import math
 import random
 from dataclasses import dataclass
@@ -33,6 +34,34 @@ PINK = "#ffe3e3"
 WHITE = "#ffffff"
 
 FONT = "Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive"
+
+# When the TTF is embedded, the @font-face family must win over anything the
+# viewer happens to have installed — otherwise a machine with Virgil GS renders
+# from that instead, and "embedded so it looks the same everywhere" is not true.
+EMBEDDED_FONT = "Virgil, Virgil GS, Excalifont, Comic Sans MS, Bradley Hand, cursive"
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+VIRGIL_TTF = REPO_ROOT / "depictio" / "viewer" / "src" / "assets" / "fonts" / "Virgil.ttf"
+
+
+def font_face() -> str:
+    """Inline the vendored Virgil TTF as a base64 ``@font-face``.
+
+    ``FONT`` alone only asks for Virgil; it renders as handwriting solely on a
+    machine that happens to have Virgil GS installed, which CI and containers do
+    not. Embedding costs ~150 KB per SVG, so it is opt-in per sketch
+    (``Sketch(..., embed_font=True)``) rather than the default.
+
+    Falls back to a bare ``<defs/>`` when the TTF is missing: the drawing still
+    renders, just in whatever the font stack resolves to next.
+    """
+    if not VIRGIL_TTF.exists():
+        return "<defs/>"
+    b64 = base64.b64encode(VIRGIL_TTF.read_bytes()).decode()
+    return (
+        "<defs><style>@font-face{font-family:'Virgil';"
+        f"src:url(data:font/ttf;base64,{b64}) format('truetype');}}</style></defs>"
+    )
 
 
 @dataclass(frozen=True)
@@ -65,9 +94,13 @@ class Box:
 class Sketch:
     """Accumulates SVG fragments drawn with a hand-drawn wobble."""
 
-    def __init__(self, width: float, height: float, seed: int = 7) -> None:
+    def __init__(
+        self, width: float, height: float, seed: int = 7, *, embed_font: bool = False
+    ) -> None:
         self.width = width
         self.height = height
+        self.embed_font = embed_font
+        self.font = EMBEDDED_FONT if embed_font else FONT
         self._rng = random.Random(seed)
         self._parts: list[str] = []
 
@@ -179,6 +212,18 @@ class Sketch:
         for (x1, y1), (x2, y2) in zip(points, points[1:]):
             self.line(x1, y1, x2, y2, colour=colour, amount=1.4, width=1.5)
 
+    def elbow(self, points: list[tuple[float, float]], *, colour: str = INK) -> None:
+        """A multi-segment run with a single arrowhead on the final leg.
+
+        For a connector that has to go sideways and then up or down: one
+        straight arrow would cut diagonally across whatever sits between the
+        two boxes.
+        """
+        for (x1, y1), (x2, y2) in zip(points[:-2], points[1:-1]):
+            self.line(x1, y1, x2, y2, colour=colour, amount=1.4)
+        (px, py), (qx, qy) = points[-2], points[-1]
+        self.arrow(px, py, qx, qy, colour=colour)
+
     def cross(self, cx: float, cy: float, *, size: float = 11, colour: str = RED) -> None:
         """The "this does not happen" mark."""
         self.line(cx - size, cy - size, cx + size, cy + size, colour=colour, amount=1.2, passes=1)
@@ -196,7 +241,7 @@ class Sketch:
         weight: str = "normal",
     ) -> None:
         self._parts.append(
-            f'<text x="{x:.1f}" y="{y:.1f}" font-family="{FONT}" font-size="{size}" '
+            f'<text x="{x:.1f}" y="{y:.1f}" font-family="{self.font}" font-size="{size}" '
             f'fill="{colour}" text-anchor="{anchor}" font-weight="{weight}">'
             f"{escape(content)}</text>"
         )
@@ -214,9 +259,11 @@ class Sketch:
 
     def svg(self) -> str:
         body = "\n  ".join(self._parts)
+        defs = f"  {font_face()}\n" if self.embed_font else ""
         return (
             f'<svg xmlns="http://www.w3.org/2000/svg" width="{self.width:g}" '
             f'height="{self.height:g}" viewBox="0 0 {self.width:g} {self.height:g}">\n'
+            f"{defs}"
             f'  <rect width="{self.width:g}" height="{self.height:g}" fill="#ffffff"/>\n'
             f"  {body}\n</svg>\n"
         )

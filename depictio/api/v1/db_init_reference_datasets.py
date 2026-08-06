@@ -150,6 +150,10 @@ STATIC_IDS = {
             # never registered here, so seeded deploys 404'd on these tiles.
             "coverage_track_demo": "646b0f3c1e4a2d7f8e5b8d50",
             "categorical_flow_demo": "646b0f3c1e4a2d7f8e5b8d51",
+            # Variant-benchmarking fixtures behind the four benchmarking kinds
+            # (pr_benchmark / roc_pr_curve / confusion_matrix / metric_ci_bars).
+            "benchmark_demo": "646b0f3c1e4a2d7f8e5b8d52",
+            "roc_curve_demo": "646b0f3c1e4a2d7f8e5b8d53",
         },
         "dashboards": {
             # Main tab reuses the project_id so get_child_tabs(main_id) finds
@@ -179,6 +183,14 @@ STATIC_IDS = {
             "advanced_viz_qq": "646b0f3c1e4a2d7f8e5b8d43",
             "advanced_viz_sunburst": "646b0f3c1e4a2d7f8e5b8d44",
             "advanced_viz_oncoplot": "646b0f3c1e4a2d7f8e5b8d45",
+            # 8d46 / 8d47 are taken by the coverage-track and categorical-flow
+            # tabs, whose ids were baked into their seed JSON without being
+            # registered here — same omission this block already records for
+            # their data collections. The benchmarking tabs start after them.
+            "advanced_viz_benchmark_pr": "646b0f3c1e4a2d7f8e5b8d48",
+            "advanced_viz_benchmark_roc": "646b0f3c1e4a2d7f8e5b8d49",
+            "advanced_viz_benchmark_confusion": "646b0f3c1e4a2d7f8e5b8d4a",
+            "advanced_viz_benchmark_ci": "646b0f3c1e4a2d7f8e5b8d4b",
         },
     },
     # nf-core/viralrecon 3.0.0 viral-genome analysis template — five-tab

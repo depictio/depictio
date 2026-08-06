@@ -258,6 +258,21 @@ backend:
     # Performance - Reduced workers for better stability with multiple replicas
     DEPICTIO_FASTAPI_WORKERS: "4"
 
+    # Component export / embed — serves one dashboard component to another site.
+    # See docs/design/component-export.md. Off by default, and deliberately so:
+    # enabling it relaxes X-Frame-Options and CSP frame-ancestors on
+    # /depictio/api/v1/export/, and lets anonymous callers read PUBLIC projects
+    # even on an instance that is not otherwise in public mode.
+    DEPICTIO_FASTAPI_EMBED_ENABLED: "false"
+    # Comma-separated origins allowed to frame an embed; becomes the CSP
+    # frame-ancestors list. Empty means 'none' — embeds render standalone but
+    # cannot be iframed. Do NOT set "*": the settings validator rejects it at
+    # startup, so the pod CrashLoops rather than serving a wildcard.
+    DEPICTIO_FASTAPI_EMBED_ALLOWED_ORIGINS: ""
+    # Escape hatch: use script-src 'unsafe-inline' instead of per-script SHA-256
+    # hashes, for when a bundled dependency injects a script we cannot hash.
+    DEPICTIO_FASTAPI_EMBED_CSP_UNSAFE_INLINE: "false"
+
     # Redis Cache Configuration
     DEPICTIO_CACHE_REDIS_HOST: "redis"
     DEPICTIO_CACHE_REDIS_PORT: "6379"

@@ -63,6 +63,11 @@ data:
 
   # Performance
   DEPICTIO_FASTAPI_WORKERS: {{ .Values.backend.env.DEPICTIO_FASTAPI_WORKERS | quote }}
+  # Component export / embed. Backend only — the worker serves no export route,
+  # so these are deliberately absent from the celery ConfigMap below.
+  DEPICTIO_FASTAPI_EMBED_ENABLED: {{ .Values.backend.env.DEPICTIO_FASTAPI_EMBED_ENABLED | default "false" | quote }}
+  DEPICTIO_FASTAPI_EMBED_ALLOWED_ORIGINS: {{ .Values.backend.env.DEPICTIO_FASTAPI_EMBED_ALLOWED_ORIGINS | default "" | quote }}
+  DEPICTIO_FASTAPI_EMBED_CSP_UNSAFE_INLINE: {{ .Values.backend.env.DEPICTIO_FASTAPI_EMBED_CSP_UNSAFE_INLINE | default "false" | quote }}
   # Analytics
   DEPICTIO_ANALYTICS_ENABLED: {{ .Values.backend.env.DEPICTIO_ANALYTICS_ENABLED | default "true" | quote }}
   DEPICTIO_ANALYTICS_SESSION_TIMEOUT_MINUTES: {{ .Values.backend.env.DEPICTIO_ANALYTICS_SESSION_TIMEOUT_MINUTES | default "30" | quote }}

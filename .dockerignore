@@ -73,7 +73,15 @@ __pycache__/
 # -----------------------------
 # Exclude Node.js Dependencies (if applicable)
 # -----------------------------
+# Both forms are needed: .dockerignore patterns are matched against the path
+# relative to the context root with no implicit `**` prefix, so a bare
+# `node_modules/` excludes only the one at the root. The workspace keeps its
+# real installs under depictio/viewer/ and packages/*/, and the API image's
+# offline-bundles stage copies those directories in after running
+# `pnpm install` — a host node_modules would land on top of the pnpm symlink
+# farm and produce a mixed dependency tree.
 node_modules/
+**/node_modules/
 
 # -----------------------------
 # Exclude Temporary Files and OS Files

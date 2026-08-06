@@ -333,6 +333,14 @@ async def create_initial_dashboards(
                 "oncoplot",
                 "coverage_track",
                 "categorical_flow",
+                # Variant-benchmarking tabs. Unlike the rest of the showcase
+                # these ship as YAML too (dashboards/benchmark_*.yaml); the
+                # seeds are regenerated from it by
+                # depictio.dev_scripts.generate_benchmark_seeds.
+                "benchmark_pr",
+                "benchmark_roc",
+                "benchmark_confusion",
+                "benchmark_ci",
             )
         ),
         # nf-core/viralrecon multi-tab dashboard. Seed JSONs are snapshotted
