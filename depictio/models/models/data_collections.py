@@ -16,6 +16,7 @@ from depictio.models.models.data_collections_types.table import DCTableConfig
 from depictio.models.models.data_collections_types.table_coordinates import (
     DCTableCoordinatesConfig,
 )
+from depictio.models.models.manifest import validate_remote_url_syntax
 from depictio.models.models.transforms import TransformConfig
 
 
@@ -111,13 +112,125 @@ class ScanSingle(BaseModel):
         return v
 
 
+class ScanURL(BaseModel):
+    """Remote single-file acquisition: the DC's data lives at an absolute
+    s3:// or https:// URL instead of a scanned local path. Validation is
+    syntactic only — reachability/SSRF checks happen at the API fetch gateway.
+    """
+
+    url: str
+
+    class Config:
+        extra = "forbid"
+
+    @field_validator("url")
+    def validate_url(cls, v):
+        return validate_remote_url_syntax(v)
+
+
+class ScanS3Prefix(BaseModel):
+    """Remote prefix listing: enumerate the objects under an ``s3://`` prefix and
+    keep those whose key matches ``pattern``.
+
+    The remote counterpart of ``recursive``. It is S3-only by construction:
+    plain HTTPS exposes no listing operation, so a bare https:// prefix cannot
+    be enumerated — use ``url`` for one known file, or ``manifest`` to list
+    several explicitly.
+
+    ``id_regex`` optionally captures an entity id from the object key. It lands
+    on the File as ``manifest_id`` and is read back as the
+    ``depictio_manifest_id`` column, so a prefix scan gets the same cross-DC
+    join key as manifest mode without anyone writing a manifest.
+    """
+
+    prefix: str
+    # Glob (fnmatch) applied to the key *relative to* the prefix, so callers can
+    # write "*.csv" rather than repeating the prefix path.
+    pattern: str = "*"
+    id_regex: str | None = None
+    # Backstop against pointing a DC at a bucket root holding millions of keys.
+    max_files: int = 10_000
+
+    class Config:
+        extra = "forbid"
+
+    @field_validator("prefix")
+    def validate_prefix(cls, v):
+        if not v:
+            raise ValueError("prefix cannot be empty")
+        if not v.lower().startswith("s3://"):
+            raise ValueError(
+                f"prefix must be an s3:// URL (got '{v}'). HTTPS prefixes cannot be listed; "
+                "use scan mode 'url' for a single file or 'manifest' for an explicit list."
+            )
+        if not v[len("s3://") :].strip("/"):
+            raise ValueError("prefix must include a bucket, e.g. s3://my-bucket/run42/")
+        return v
+
+    @field_validator("pattern")
+    def validate_pattern(cls, v):
+        if not v or not v.strip():
+            raise ValueError("pattern cannot be empty (use '*' to match every key)")
+        return v.strip()
+
+    @field_validator("id_regex")
+    def validate_id_regex(cls, v):
+        if v is None:
+            return v
+        try:
+            compiled = re.compile(v)
+        except re.error as exc:
+            raise ValueError(f"Invalid id_regex: {exc}")
+        if compiled.groups != 1:
+            raise ValueError(
+                f"id_regex must have exactly one capture group (found {compiled.groups}) — "
+                "it captures the entity id used as the cross-DC join key"
+            )
+        return v
+
+
+class ScanManifest(BaseModel):
+    """Manifest-driven acquisition: this DC consumes every entry of the
+    manifest whose ``type`` equals ``manifest_type`` (= this DC's tag by
+    convention). ``manifest_url`` may be a remote URL or, in CLI context, a
+    local path. The ``*_field`` overrides remap non-canonical manifest
+    columns onto the contract's id/type/url/run fields.
+    """
+
+    manifest_url: str
+    manifest_type: str
+    id_field: str = "id"
+    url_field: str = "url"
+    type_field: str = "type"
+    run_field: str | None = "run"
+
+    class Config:
+        extra = "forbid"
+
+    @field_validator("manifest_url")
+    def validate_manifest_url(cls, v):
+        if not v:
+            raise ValueError("manifest_url cannot be empty")
+        # Local paths are legitimate in CLI context; remote URLs get the
+        # same syntactic screen as ScanURL. Reachability is checked at fetch.
+        if "://" in v:
+            return validate_remote_url_syntax(v)
+        return v
+
+    @field_validator("manifest_type")
+    def validate_manifest_type(cls, v):
+        if not v or not v.strip():
+            raise ValueError("manifest_type cannot be empty")
+        return v.strip()
+
+
 class Scan(BaseModel):
     mode: str
-    scan_parameters: ScanRecursive | ScanSingle
+    scan_parameters: ScanRecursive | ScanSingle | ScanURL | ScanS3Prefix | ScanManifest
 
     @field_validator("mode")
     def validate_mode(cls, v):
-        allowed_values = ["recursive", "single"]
+        allowed_values = ["recursive", "single", "url", "s3_prefix", "manifest"]
         if v.lower() not in allowed_values:
             raise ValueError(f"mode must be one of {allowed_values}")
         return v
@@ -139,6 +252,30 @@ class Scan(BaseModel):
                 if isinstance(scan_parameters, dict) and "filename" in scan_parameters:
                     try:
                         values["scan_parameters"] = ScanSingle(**scan_parameters)  # type: ignore[missing-argument]
+                    except Exception:
+                        # Keep original if conversion fails
+                        pass
+        elif type_value == "url":
+            if not isinstance(scan_parameters, ScanURL):
+                if isinstance(scan_parameters, dict) and "url" in scan_parameters:
+                    try:
+                        values["scan_parameters"] = ScanURL(**scan_parameters)  # type: ignore[missing-argument]
+                    except Exception:
+                        # Keep original if conversion fails
+                        pass
+        elif type_value == "s3_prefix":
+            if not isinstance(scan_parameters, ScanS3Prefix):
+                if isinstance(scan_parameters, dict) and "prefix" in scan_parameters:
+                    try:
+                        values["scan_parameters"] = ScanS3Prefix(**scan_parameters)
+                    except Exception:
+                        # Keep original if conversion fails
+                        pass
+        elif type_value == "manifest":
+            if not isinstance(scan_parameters, ScanManifest):
+                if isinstance(scan_parameters, dict) and "manifest_url" in scan_parameters:
+                    try:
+                        values["scan_parameters"] = ScanManifest(**scan_parameters)  # type: ignore[missing-argument]
                     except Exception:
                         # Keep original if conversion fails
                         pass

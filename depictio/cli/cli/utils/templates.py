@@ -39,14 +39,20 @@ def _load_yaml(path: str) -> dict:
 
 
 def locate_template(template_id: str) -> Path:
-    """Find template YAML by template_id (e.g., 'nf-core/ampliseq/2.16.0').
+    """Find template YAML by template_id (e.g., 'nf-core/ampliseq/2.16.0') or by path.
 
     Searches in the depictio/projects/ directory relative to the package installation.
     Looks for template.yaml first (dedicated template file), then falls back to
     project.yaml (for backwards compatibility).
 
+    A local directory or YAML file is also accepted. That is what makes an
+    exported bundle usable by whoever receives it: ``depictio template export``
+    produces a directory, and without this the recipient would have to copy it
+    into their own site-packages before it could be run.
+
     Args:
-        template_id: Template identifier (e.g., 'nf-core/ampliseq/2.16.0').
+        template_id: Template identifier (e.g., 'nf-core/ampliseq/2.16.0'), or a
+            path to a template directory / YAML file.
 
     Returns:
         Path to the template YAML file.
@@ -54,6 +60,21 @@ def locate_template(template_id: str) -> Path:
     Raises:
         FileNotFoundError: If no template YAML exists.
     """
+    # Path form first: an existing directory or YAML file wins over id lookup, so
+    # a local bundle is never shadowed by an installed template of the same name.
+    candidate_path = Path(template_id).expanduser()
+    if candidate_path.is_file() and candidate_path.suffix in (".yaml", ".yml"):
+        return candidate_path.resolve()
+    if candidate_path.is_dir():
+        for filename in ("template.yaml", "project.yaml"):
+            candidate = candidate_path / filename
+            if candidate.is_file():
+                return candidate.resolve()
+        raise FileNotFoundError(
+            f"Directory '{template_id}' holds no template.yaml or project.yaml. "
+            "Point --template at the directory produced by `depictio template export`."
+        )
+
     # Resolve relative to depictio package root
     package_root = Path(__file__).resolve().parents[4]  # cli/cli/utils/ -> depictio/
     template_dir = package_root / "depictio" / "projects" / template_id
@@ -668,11 +689,15 @@ def _auto_detect_metadata_columns(metadata_path: Path, variables: dict[str, str]
         logger.warning(f"Could not read metadata file for column detection: {exc}")
 
 
+UNBOUND_VAR_SENTINEL = "__DEPICTIO_UNBOUND_{name}__"
+
+
 def resolve_template(
     template_id: str,
-    data_root: str,
+    data_root: str | None,
     project_name: str | None = None,
     extra_vars: dict[str, str] | None = None,
+    allow_missing_vars: bool = False,
 ) -> tuple[dict[str, Any], TemplateMetadata, TemplateOrigin, list[Path], dict[str, str]]:
     """Load template YAML, substitute variables, apply conditionals, return resolved config.
 
@@ -690,7 +715,10 @@ def resolve_template(
 
     Args:
         template_id: Template identifier (e.g., 'nf-core/ampliseq/2.16.0').
-        data_root: Absolute path to user's data root directory.
+        data_root: Absolute path to user's data root directory, or None for
+            manifest-driven templates whose sources are remote (every
+            filesystem-local step — params introspection, samplesheet/metadata
+            auto-detection — is skipped in that case).
         project_name: Custom project name. If None, auto-generated from template.
         extra_vars: Additional variables from --var KEY=VALUE flags (e.g., METADATA_FILE).
 
@@ -718,20 +746,25 @@ def resolve_template(
     template_metadata = TemplateMetadata(**template_section)
     logger.info(f"Template: {template_metadata.template_id} v{template_metadata.version}")
 
-    # 3. Build variables dict: DATA_ROOT is always set; extra_vars adds --var values
-    data_root_abs = str(Path(data_root).absolute())
-    variables: dict[str, str] = {"DATA_ROOT": data_root_abs}
+    # 3. Build variables dict: DATA_ROOT when a local data root is given (None
+    # for manifest-driven templates); extra_vars adds --var values
+    data_root_abs: str | None = None
+    variables: dict[str, str] = {}
+    if data_root is not None:
+        data_root_abs = str(Path(data_root).absolute())
+        variables["DATA_ROOT"] = data_root_abs
     if extra_vars:
         variables.update(extra_vars)
 
     # 3a. Introspect the run's params.json to set protocol/skip flags + auto-fill
-    # METADATA_FILE (does not override explicit --var values).
-    _introspect_pipeline_params(data_root_abs, variables)
+    # METADATA_FILE (does not override explicit --var values). Local runs only.
+    if data_root_abs is not None:
+        _introspect_pipeline_params(data_root_abs, variables)
 
     # 3b. Auto-detect metadata annotation columns when METADATA_FILE is provided
     if "METADATA_FILE" in variables:
         metadata_path = Path(variables["METADATA_FILE"])
-        if not metadata_path.is_absolute():
+        if not metadata_path.is_absolute() and data_root_abs is not None:
             # Try relative to data_root first, then CWD
             candidate = Path(data_root_abs) / metadata_path
             if candidate.is_file():
@@ -744,8 +777,8 @@ def resolve_template(
     # supplied. nf-core/ampliseq copies the input samplesheet into <run>/input/
     # under a pipeline/user dependent name (e.g. "Samplesheet.tsv",
     # "samplesheet.csv"), so locate it case-insensitively rather than forcing the
-    # caller to pass an explicit path.
-    if "SAMPLESHEET_FILE" not in variables:
+    # caller to pass an explicit path. Local runs only.
+    if "SAMPLESHEET_FILE" not in variables and data_root_abs is not None:
         input_dir = Path(data_root_abs) / "input"
         if input_dir.is_dir():
             candidates = sorted(
@@ -778,6 +811,18 @@ def resolve_template(
     # 4. Validate required variables; warn about unknown extras
     required_vars = template_metadata.get_required_variable_names()
     missing_vars = [v for v in required_vars if v not in variables]
+    if missing_vars and allow_missing_vars:
+        # --bind replaces whole scan blocks after resolution, which can make a
+        # required variable irrelevant (e.g. MANIFEST_URL once every manifest DC
+        # is bound elsewhere). Substitute a sentinel now; the caller must verify
+        # none survives binding, so a genuinely-needed variable still fails loudly.
+        for name in missing_vars:
+            variables[name] = UNBOUND_VAR_SENTINEL.format(name=name)
+        logger.info(
+            f"Deferred template variables (expected to be replaced by --bind): "
+            f"{', '.join(missing_vars)}"
+        )
+        missing_vars = []
     if missing_vars:
         raise ValueError(
             f"Missing required template variables: {', '.join(missing_vars)}. "
@@ -829,7 +874,13 @@ def resolve_template(
     if project_name:
         resolved_config["name"] = project_name
     elif "name" not in resolved_config or not resolved_config.get("name"):
-        resolved_config["name"] = f"{template_id} - {Path(data_root).name}"
+        if data_root is not None:
+            suffix = Path(data_root).name
+        else:
+            # Manifest-driven: derive the suffix from the manifest filename.
+            manifest_url = variables.get("MANIFEST_URL", "")
+            suffix = Path(manifest_url.split("?", 1)[0]).stem or "manifest"
+        resolved_config["name"] = f"{template_id} - {suffix}"
 
     # 9. Build TemplateOrigin for DB tracking
     expected_dcs = _build_expected_dcs(dc_superset, resolved_config, removal_reasons)
