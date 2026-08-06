@@ -109,8 +109,18 @@ async def status():
     """
     Check if the server is online.
     This endpoint is public and does not require authentication.
+
+    ``features`` advertises boolean feature flags so the SPA can decide
+    which affordances to mount (booleans only — the endpoint is public).
     """
-    return {"status": "online", "version": get_version()}
+    return {
+        "status": "online",
+        "version": get_version(),
+        "features": {
+            "ai": settings.ai.enabled,
+            "ai_user_keys": settings.ai.enabled and settings.ai.allow_user_keys,
+        },
+    }
 
 
 @utils_endpoint_router.get("/public-config")
