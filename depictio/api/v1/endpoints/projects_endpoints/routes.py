@@ -19,6 +19,11 @@ from depictio.api.v1.db import (
     users_collection,
 )
 from depictio.api.v1.endpoints.migrate_endpoints.routes import _collect_s3_locations_for_project
+from depictio.api.v1.endpoints.projects_endpoints.from_manifest import (
+    FromManifestReport,
+    FromManifestRequest,
+    _create_project_from_manifest,
+)
 from depictio.api.v1.endpoints.projects_endpoints.ingestion_report import (
     IngestionReport,
     IngestionSummary,
@@ -289,6 +294,45 @@ async def ingest_manifest(
         url_field=payload.url_field,
         type_field=payload.type_field,
         run_field=payload.run_field,
+        dry_run=payload.dry_run,
+    )
+
+
+@projects_endpoint_router.post("/from_manifest", response_model=FromManifestReport)
+async def create_project_from_manifest(
+    payload: FromManifestRequest,
+    current_user=Depends(get_user_or_anonymous),
+):
+    """Create a project (and its dashboards) from a template + a Data Manifest.
+
+    The zero-install flow: fetch the manifest through the SSRF gateway,
+    resolve the manifest-driven template server-side, coverage-check the
+    manifest's ``type`` values against the template's DCs, create the
+    project, ingest every manifest DC, and import the template's dashboards
+    in-process. ``dry_run=true`` returns the plan (coverage + per-DC entry
+    counts) without creating anything.
+    """
+    if not current_user:
+        raise HTTPException(status_code=401, detail="User not found.")
+    # Mirror POST /projects/create's public/demo-mode gate.
+    if settings.auth.is_public_mode and not current_user.is_admin:
+        raise HTTPException(
+            status_code=403,
+            detail="Project creation is disabled in public/demo mode for non-admin users",
+        )
+    if not payload.dry_run:
+        from depictio.api.v1.endpoints.datacollections_endpoints.utils import (
+            _ensure_user_cli_token,
+        )
+
+        await _ensure_user_cli_token(current_user)
+    return await asyncio.to_thread(
+        _create_project_from_manifest,
+        manifest_url=payload.manifest_url,
+        template_id=payload.template_id,
+        current_user=current_user,
+        project_name=payload.project_name,
+        variables=payload.variables,
         dry_run=payload.dry_run,
     )
 

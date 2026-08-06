@@ -31,8 +31,13 @@ class WorkflowDataLocation(MongoModel):
 
             env_var_pattern = re.compile(r"\{([A-Z0-9_]+)\}")
 
-            expanded_paths = []
+            validated: list[str] = []
             for location in value:
+                # Remote locations (manifest/url-backed workflows) are not
+                # local directories — keep them verbatim, no existence check.
+                if re.match(r"^(s3|https?)://", location):
+                    validated.append(location)
+                    continue
                 matches = env_var_pattern.findall(location)
                 for match in matches:
                     env_value = os.environ.get(match)
@@ -45,10 +50,16 @@ class WorkflowDataLocation(MongoModel):
                         )
                     # Replace the placeholder with the actual value
                     location = location.replace(f"{{{match}}}", env_value)
-                expanded_paths.append(location)
+                # A local manifest file is a valid data location (it lists the
+                # actual sources) — only directories go through the scan-root
+                # existence validation.
+                if Path(location).is_file():
+                    validated.append(str(Path(location)))
+                    continue
+                # Validate the expanded local path (existence check)
+                validated.append(DirectoryPath(path=str(Path(location))).path)
 
-            # Validate the expanded paths if in CLI context
-            return [DirectoryPath(path=str(Path(location))).path for location in expanded_paths]
+            return validated
         else:
             return value
 

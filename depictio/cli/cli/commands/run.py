@@ -178,7 +178,17 @@ def register_run_command(app: typer.Typer):
             str | None,
             typer.Option(
                 "--data-root",
-                help="Root directory containing data for template. Required when --template is used.",
+                help="Root directory containing data for template. Required when --template "
+                "is used, unless --manifest is provided instead.",
+            ),
+        ] = None,
+        manifest: Annotated[
+            str | None,
+            typer.Option(
+                "--manifest",
+                help="Data Manifest URL (https://) or local file path listing "
+                "{id, type, url[, run]} entries. Alternative to --data-root for "
+                "manifest-driven templates (sets the MANIFEST_URL template variable).",
             ),
         ] = None,
         project_name: Annotated[
@@ -330,6 +340,9 @@ def register_run_command(app: typer.Typer):
 
         Template mode:
             depictio-cli run --template nf-core/ampliseq/2.16.0 --data-root /path/to/data
+
+        Manifest mode (remote data, no local root):
+            depictio-cli run --template generic/manifest-tables/1 --manifest https://data.example.org/run42/manifest.json
         """
         rich_print_command_usage("run")
 
@@ -342,8 +355,21 @@ def register_run_command(app: typer.Typer):
             )
             raise typer.Exit(code=1)
 
-        if template and not data_root:
-            rich_print_checked_statement("--data-root is required when using --template.", "error")
+        if manifest and not template:
+            rich_print_checked_statement("--manifest requires --template.", "error")
+            raise typer.Exit(code=1)
+
+        if manifest and data_root:
+            rich_print_checked_statement(
+                "--manifest and --data-root are mutually exclusive. Use one or the other.",
+                "error",
+            )
+            raise typer.Exit(code=1)
+
+        if template and not data_root and not manifest:
+            rich_print_checked_statement(
+                "--data-root (or --manifest) is required when using --template.", "error"
+            )
             raise typer.Exit(code=1)
 
         if dry_run:
@@ -420,8 +446,10 @@ def register_run_command(app: typer.Typer):
             try:
                 from depictio.cli.cli.utils.templates import resolve_template
 
-                # Check data root exists before doing anything
-                if not Path(data_root).is_dir():  # type: ignore[arg-type]
+                # Check data root exists before doing anything (manifest mode
+                # has no local root — everything is fetched from the manifest's
+                # URLs).
+                if data_root is not None and not Path(data_root).is_dir():
                     rich_print_checked_statement(
                         f"--data-root does not exist or is not a directory: {data_root}",
                         "error",
@@ -438,6 +466,22 @@ def register_run_command(app: typer.Typer):
                         raise typer.Exit(code=1)
                     k, val = v.split("=", 1)
                     extra_vars[k.strip()] = val.strip()
+
+                # Manifest mode: MANIFEST_URL is just a template variable. A
+                # local manifest path is resolved to absolute so the config
+                # stays valid from any working directory.
+                if manifest:
+                    from depictio.models.models.manifest import is_remote_url
+
+                    if not is_remote_url(manifest):
+                        manifest_path = Path(manifest).resolve()
+                        if not manifest_path.is_file():
+                            rich_print_checked_statement(
+                                f"--manifest file does not exist: {manifest}", "error"
+                            )
+                            raise typer.Exit(code=1)
+                        manifest = str(manifest_path)
+                    extra_vars.setdefault("MANIFEST_URL", manifest)
 
                 # Resolve template
                 (

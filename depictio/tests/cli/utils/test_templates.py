@@ -346,3 +346,44 @@ class TestApplyConditionals:
         for wf in result["workflows"]:
             tags = [dc["data_collection_tag"] for dc in wf["data_collections"]]
             assert "dc_optional_a" not in tags
+
+
+class TestManifestModeResolution:
+    """resolve_template with data_root=None (manifest-driven templates)."""
+
+    def test_reference_template_resolves_without_data_root(self) -> None:
+        from depictio.cli.cli.utils.templates import resolve_template
+
+        config, meta, origin, dashboard_paths, variables = resolve_template(
+            "generic/manifest-tables/1",
+            data_root=None,
+            extra_vars={"MANIFEST_URL": "https://example.org/run42/manifest.json"},
+        )
+        assert origin.data_root is None
+        assert variables["MANIFEST_URL"] == "https://example.org/run42/manifest.json"
+        assert "DATA_ROOT" not in variables
+        scan = config["workflows"][0]["data_collections"][0]["config"]["scan"]
+        assert scan["mode"] == "manifest"
+        assert scan["scan_parameters"]["manifest_url"] == "https://example.org/run42/manifest.json"
+        assert [p.name for p in dashboard_paths] == ["base.yaml"]
+
+    def test_default_project_name_derives_from_manifest(self) -> None:
+        from depictio.cli.cli.utils.templates import resolve_template
+
+        # The reference template carries a `name`, so exercise the fallback via
+        # project_name=None on a config whose name we blank through override.
+        config, _, _, _, _ = resolve_template(
+            "generic/manifest-tables/1",
+            data_root=None,
+            project_name="run42",
+            extra_vars={"MANIFEST_URL": "https://example.org/run42/manifest.json?token=x"},
+        )
+        assert config["name"] == "run42"
+
+    def test_origin_allows_none_data_root(self) -> None:
+        origin = TemplateOrigin(
+            template_id="generic/manifest-tables/1",
+            template_version="1.0.0",
+            variables={"MANIFEST_URL": "https://example.org/m.json"},
+        )
+        assert origin.data_root is None

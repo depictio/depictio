@@ -1342,6 +1342,13 @@ def scan_project_files(
             for dc in data_collections_to_scan
             if dc.config.scan and dc.config.scan.mode.lower() == "single"
         ]
+        # Remote acquisition modes: no filesystem walk, one synthetic File
+        # record set per DC (see scan_url/scan_manifest_for_data_collection).
+        remote_data_collections = [
+            dc
+            for dc in data_collections_to_scan
+            if dc.config.scan and dc.config.scan.mode.lower() in ("url", "manifest")
+        ]
         multiqc_data_collections = [
             dc
             for dc in data_collections_to_scan
@@ -1350,12 +1357,15 @@ def scan_project_files(
         # Note: Image DCs are now processed as single/aggregate (like Table DCs)
         # They have delta tables and scan configs, so no special handling needed
 
-        if multiqc_data_collections:
+        if multiqc_data_collections or remote_data_collections:
             parts = [
                 f"{len(aggregate_data_collections)} aggregate",
                 f"{len(single_data_collections)} single",
             ]
-            parts.append(f"{len(multiqc_data_collections)} MultiQC")
+            if remote_data_collections:
+                parts.append(f"{len(remote_data_collections)} remote (url/manifest)")
+            if multiqc_data_collections:
+                parts.append(f"{len(multiqc_data_collections)} MultiQC")
             rich_print_checked_statement(
                 f"  ↪ Found {', '.join(parts)} data collections",
                 "info",
@@ -1393,6 +1403,25 @@ def scan_project_files(
 
         # Scan single data collections individually (existing approach)
         for dc in single_data_collections:
+            scan_mode = dc.config.scan.mode.title() if dc.config.scan else "No scan config"
+            rich_print_checked_statement(
+                f"  ↪ Scanning Data Collection: [italic]'{dc.data_collection_tag}'[/italic] - type {dc.config.type} - metatype {scan_mode}",
+                "info",
+            )
+
+            scan_result = scan_files_for_data_collection(
+                workflow=workflow,
+                data_collection_id=str(dc.id),
+                CLI_config=CLI_config,
+                command_parameters=command_parameters,
+            )
+
+            if scan_result["result"] != "success":
+                raise Exception(f"Failed to scan data collection {dc.data_collection_tag}")
+
+        # Scan remote (url/manifest) data collections individually — same path
+        # as single DCs; scan_files_for_data_collection dispatches on mode.
+        for dc in remote_data_collections:
             scan_mode = dc.config.scan.mode.title() if dc.config.scan else "No scan config"
             rich_print_checked_statement(
                 f"  ↪ Scanning Data Collection: [italic]'{dc.data_collection_tag}'[/italic] - type {dc.config.type} - metatype {scan_mode}",
