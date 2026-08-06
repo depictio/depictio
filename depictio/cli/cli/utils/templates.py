@@ -1044,7 +1044,7 @@ def _auto_detect_metadata_columns(metadata_path: Path, variables: dict[str, str]
 
 def resolve_template(
     template_id: str,
-    data_root: str,
+    data_root: str | None,
     project_name: str | None = None,
     extra_vars: dict[str, str] | None = None,
     provenance_files: list[str] | None = None,
@@ -1066,7 +1066,10 @@ def resolve_template(
 
     Args:
         template_id: Template identifier (e.g., 'nf-core/ampliseq/2.16.0').
-        data_root: Absolute path to user's data root directory.
+        data_root: Absolute path to user's data root directory, or None for
+            manifest-driven templates whose sources are remote (every
+            filesystem-local step — params introspection, samplesheet/metadata
+            auto-detection — is skipped in that case).
         project_name: Custom project name. If None, auto-generated from template.
         extra_vars: Additional variables from --var KEY=VALUE flags (e.g., METADATA_FILE).
 
@@ -1094,15 +1097,20 @@ def resolve_template(
     template_metadata = TemplateMetadata(**template_section)
     logger.info(f"Template: {template_metadata.template_id} v{template_metadata.version}")
 
-    # 3. Build variables dict: DATA_ROOT is always set; extra_vars adds --var values
-    data_root_abs = str(Path(data_root).absolute())
-    variables: dict[str, str] = {"DATA_ROOT": data_root_abs}
+    # 3. Build variables dict: DATA_ROOT when a local data root is given (None
+    # for manifest-driven templates); extra_vars adds --var values
+    data_root_abs: str | None = None
+    variables: dict[str, str] = {}
+    if data_root is not None:
+        data_root_abs = str(Path(data_root).absolute())
+        variables["DATA_ROOT"] = data_root_abs
     if extra_vars:
         variables.update(extra_vars)
 
     # 3a. Introspect the run's params.json to set protocol/skip flags + auto-fill
-    # METADATA_FILE (does not override explicit --var values).
-    _introspect_pipeline_params(data_root_abs, variables)
+    # METADATA_FILE (does not override explicit --var values). Local runs only.
+    if data_root_abs is not None:
+        _introspect_pipeline_params(data_root_abs, variables)
 
     # 3b. Collect the run's provenance (parameters, thresholds, tool versions)
     # per the template's spec — persisted on TemplateOrigin for the ingestion
@@ -1114,7 +1122,7 @@ def resolve_template(
     # 3b. Auto-detect metadata annotation columns when METADATA_FILE is provided
     if "METADATA_FILE" in variables:
         metadata_path = Path(variables["METADATA_FILE"])
-        if not metadata_path.is_absolute():
+        if not metadata_path.is_absolute() and data_root_abs is not None:
             # Try relative to data_root first, then CWD
             candidate = Path(data_root_abs) / metadata_path
             if candidate.is_file():
@@ -1127,8 +1135,8 @@ def resolve_template(
     # supplied. nf-core/ampliseq copies the input samplesheet into <run>/input/
     # under a pipeline/user dependent name (e.g. "Samplesheet.tsv",
     # "samplesheet.csv"), so locate it case-insensitively rather than forcing the
-    # caller to pass an explicit path.
-    if "SAMPLESHEET_FILE" not in variables:
+    # caller to pass an explicit path. Local runs only.
+    if "SAMPLESHEET_FILE" not in variables and data_root_abs is not None:
         input_dir = Path(data_root_abs) / "input"
         if input_dir.is_dir():
             candidates = sorted(
@@ -1236,7 +1244,13 @@ def resolve_template(
         # template_metadata.template_id (resolved), not the raw template_id param —
         # otherwise "nf-core/ampliseq/latest" runs all name-collide under one
         # generic project name instead of the concrete version actually ingested.
-        resolved_config["name"] = f"{template_metadata.template_id} - {Path(data_root).name}"
+        if data_root is not None:
+            suffix = Path(data_root).name
+        else:
+            # Manifest-driven: derive the suffix from the manifest filename.
+            manifest_url = variables.get("MANIFEST_URL", "")
+            suffix = Path(manifest_url.split("?", 1)[0]).stem or "manifest"
+        resolved_config["name"] = f"{template_metadata.template_id} - {suffix}"
 
     # 9. Build TemplateOrigin for DB tracking
     expected_dcs = _build_expected_dcs(dc_superset, resolved_config, removal_reasons)
