@@ -28,9 +28,11 @@ from depictio.telemetry.buckets import LABELS  # noqa: E402
 from depictio.telemetry.constants import DEFAULT_ENDPOINT  # noqa: E402
 from depictio.telemetry.schema import (  # noqa: E402
     EVENT_CLI_COMMAND,
+    EVENT_CLI_INSTALL,
     EVENT_HEARTBEAT,
     EVENT_INSTALL,
     CliCommandProperties,
+    CliInstallProperties,
     CommonProperties,
     FeatureFlags,
     KubernetesResources,
@@ -119,12 +121,13 @@ or know which versions still need support.
 
 ## What is sent
 
-Three events. Nothing else.
+Four events. Nothing else.
 
 | Event | When |
 | --- | --- |
 | `{EVENT_INSTALL}` | Once per installation, ever. |
 | `{EVENT_HEARTBEAT}` | At most once per UTC day per installation — regardless of how many workers or replicas are running. |
+| `{EVENT_CLI_INSTALL}` | Once per machine that runs `depictio-cli`, ever. |
 | `{EVENT_CLI_COMMAND}` | Once per `depictio-cli` invocation. |
 
 Each event is identified by a random **installation ID** (server) or a random
@@ -169,6 +172,18 @@ reflected until the next Helm upgrade. A malformed value degrades to absent rath
 than being sent as-is — see `depictio/telemetry/k8s_resources.py`.
 
 {_field_table(KubernetesResources)}
+
+### `{EVENT_CLI_INSTALL}`
+
+Sent the first time the CLI runs on a machine, and never again. "Install" means
+that first run, not the `pip install`: nothing in a wheel executes at install
+time, and a package sitting unused in an environment is not a deployment.
+
+Unlike the first-run notice, this is not conditional on a terminal. A CLI first
+invoked from a job script is still an installation, and on a cluster that is the
+common case.
+
+{_field_table(CliInstallProperties, skip=common_fields)}
 
 ### `{EVENT_CLI_COMMAND}`
 

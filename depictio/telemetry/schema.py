@@ -21,9 +21,15 @@ from pydantic import BaseModel, ConfigDict, Field
 #: call sites and in the collector's own dashboards.
 EVENT_INSTALL: Final[str] = "server_install"
 EVENT_HEARTBEAT: Final[str] = "server_heartbeat"
+EVENT_CLI_INSTALL: Final[str] = "cli_install"
 EVENT_CLI_COMMAND: Final[str] = "cli_command"
 
-ALL_EVENTS: Final[tuple[str, ...]] = (EVENT_INSTALL, EVENT_HEARTBEAT, EVENT_CLI_COMMAND)
+ALL_EVENTS: Final[tuple[str, ...]] = (
+    EVENT_INSTALL,
+    EVENT_HEARTBEAT,
+    EVENT_CLI_INSTALL,
+    EVENT_CLI_COMMAND,
+)
 
 
 class _StrictBase(BaseModel):
@@ -181,6 +187,27 @@ class ServerHeartbeatProperties(CommonProperties):
         description=(
             "Distinct `depictio-cli` versions that talked to this instance recently, "
             "read from the CLI's request headers. Versions only — no host or user."
+        ),
+    )
+
+
+class CliInstallProperties(CommonProperties):
+    """Payload for `cli_install`, emitted once per machine that runs the CLI.
+
+    The counterpart of `server_install`. Without it the CLI reports usage but
+    never installs, so the only way to count `depictio-cli` deployments is PyPI
+    downloads, which conflate CI runs, mirrors and re-installs.
+
+    "Install" here means the first run on a machine, not the `pip install`: a
+    package sitting unused in an environment is not a deployment, and nothing in
+    a wheel executes at install time anyway.
+    """
+
+    is_ci: bool = Field(
+        description=(
+            "Whether an automated environment was detected. Always false in practice, "
+            "since CI suppresses the send entirely; retained so the collector can "
+            "prove that."
         ),
     )
 
