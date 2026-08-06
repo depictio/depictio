@@ -48,6 +48,10 @@ export interface SelectionGroupsApi {
   toggleGroupFilter: (id: string) => void;
   /** Turn off every group's filter participation (dashboard "Reset all"). */
   deactivateAllGroupFilters: () => void;
+  /** Back to defaults for every analysis mode (coloring, display, card
+   *  comparison). Saved groups and their filter toggles are kept — deleting
+   *  data stays an explicit per-group action. */
+  resetAnalysis: () => void;
   setColorBy: (next: ColorByState) => void;
   setCompareInCards: (on: boolean) => void;
   setDisplayMode: (mode: GroupingDisplay) => void;
@@ -82,6 +86,15 @@ export function useSelectionGroups(dashboardId: string | undefined): SelectionGr
   const [showOther, setShowOtherState] = useState<boolean>(stored?.showOther ?? true);
   const [showOverall, setShowOverallState] = useState<boolean>(stored?.showOverall ?? true);
 
+  // Which dashboard id the current state actually reflects. The write-through
+  // below must not run for a dashboardId the state hasn't been re-hydrated for
+  // yet: on page load the id typically arrives one commit before the stored
+  // values land in state, and writing (or key-removing, for all-default state)
+  // in that window destroys the payload if the page reloads before the next
+  // commit re-writes it. State rather than a ref so the write effect of the
+  // pre-hydration commit still sees the old value.
+  const [hydratedFor, setHydratedFor] = useState(dashboardId);
+
   // Re-hydrate when the mounted app switches dashboards under us.
   const idRef = useRef(dashboardId);
   useEffect(() => {
@@ -94,12 +107,13 @@ export function useSelectionGroups(dashboardId: string | undefined): SelectionGr
     setDisplayModeState(stored?.displayMode ?? 'color');
     setShowOtherState(stored?.showOther ?? true);
     setShowOverallState(stored?.showOverall ?? true);
+    setHydratedFor(dashboardId);
   }, [dashboardId]);
 
   // Write-through: any state change lands in storage so a reload (or the
   // sibling viewer/editor app) picks it up.
   useEffect(() => {
-    if (!dashboardId) return;
+    if (!dashboardId || hydratedFor !== dashboardId) return;
     writeSelectionGroups(
       dashboardId,
       groups,
@@ -109,7 +123,16 @@ export function useSelectionGroups(dashboardId: string | undefined): SelectionGr
       showOther,
       showOverall,
     );
-  }, [dashboardId, groups, colorBy, compareInCards, displayMode, showOther, showOverall]);
+  }, [
+    dashboardId,
+    hydratedFor,
+    groups,
+    colorBy,
+    compareInCards,
+    displayMode,
+    showOther,
+    showOverall,
+  ]);
 
   // Mirror of `groups` so `createGroupFromFilter` can build the group outside
   // the state updater (updaters are double-invoked under StrictMode and must
@@ -170,6 +193,14 @@ export function useSelectionGroups(dashboardId: string | undefined): SelectionGr
     );
   }, []);
 
+  const resetAnalysis = useCallback(() => {
+    setColorByState(COLOR_BY_NONE);
+    setCompareInCardsState(false);
+    setDisplayModeState('color');
+    setShowOtherState(true);
+    setShowOverallState(true);
+  }, []);
+
   const groupFilters = useMemo(() => groupsToFilters(groups), [groups]);
   const renderGroups = useMemo(() => groupsRenderPayload(groups), [groups]);
 
@@ -189,10 +220,14 @@ export function useSelectionGroups(dashboardId: string | undefined): SelectionGr
 
   const bulkOptions = useMemo<BulkComputeOptions | undefined>(
     () =>
-      compareInCards && renderGroups.length > 0
+      // Suspended (not cleared) while coloring by a column: cards comparing
+      // selection groups under figures grouped by a different column would put
+      // two grouping semantics on screen at once. Leaving column mode resumes
+      // the comparison with its stored settings.
+      compareInCards && colorBy.kind !== 'column' && renderGroups.length > 0
         ? { groups: renderGroups, compareGroups: true, showOther, showOverall }
         : undefined,
-    [compareInCards, renderGroups, showOther, showOverall],
+    [compareInCards, colorBy.kind, renderGroups, showOther, showOverall],
   );
 
   return useMemo(
@@ -208,6 +243,7 @@ export function useSelectionGroups(dashboardId: string | undefined): SelectionGr
       deleteGroup,
       toggleGroupFilter,
       deactivateAllGroupFilters,
+      resetAnalysis,
       // React state setters are identity-stable — expose them directly.
       setColorBy: setColorByState,
       setCompareInCards: setCompareInCardsState,
@@ -231,6 +267,7 @@ export function useSelectionGroups(dashboardId: string | undefined): SelectionGr
       deleteGroup,
       toggleGroupFilter,
       deactivateAllGroupFilters,
+      resetAnalysis,
       groupFilters,
       renderGroups,
       summaryRows,

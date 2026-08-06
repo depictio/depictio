@@ -24,6 +24,7 @@ import type { ColorByColumn } from '../../hooks/useColorByColumns';
 import {
   COLOR_BY_NONE,
   MAX_GROUP_VALUES,
+  defaultGroupName,
   nextGroupColor,
   selectableSelectionFilters,
   type ColorByState,
@@ -68,6 +69,8 @@ export interface SelectionGroupsPanelProps {
   onDisplayModeChange: (mode: GroupingDisplay) => void;
   onShowOtherChange: (on: boolean) => void;
   onShowOverallChange: (on: boolean) => void;
+  /** Panel-level reset: every analysis mode back to defaults, groups kept. */
+  onResetAnalysis: () => void;
 }
 
 const COLOR_BY_NONE_VALUE = '__depictio_none__';
@@ -135,6 +138,7 @@ const SelectionGroupsPanel: React.FC<SelectionGroupsPanelProps> = ({
   onDisplayModeChange,
   onShowOtherChange,
   onShowOverallChange,
+  onResetAnalysis,
 }) => {
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [name, setName] = useState('');
@@ -187,14 +191,7 @@ const SelectionGroupsPanel: React.FC<SelectionGroupsPanelProps> = ({
   }, [colorByColumns, components]);
 
   const defaultColor = nextGroupColor(groups);
-  // First unused "Group N": names are identity on the wire (the server dedups
-  // by name), so the default must not collide with a survivor after deletes.
-  const defaultName = (() => {
-    const taken = new Set(groups.map((g) => g.name));
-    let n = groups.length + 1;
-    while (taken.has(`Group ${n}`)) n += 1;
-    return `Group ${n}`;
-  })();
+  const defaultName = defaultGroupName(groups);
   const selectedCandidate =
     candidates.find((f) => `${f.index}:${f.source}` === sourceIndex) ?? candidates[0];
 
@@ -226,11 +223,37 @@ const SelectionGroupsPanel: React.FC<SelectionGroupsPanelProps> = ({
   return (
     <Box>
       {/* ── Section 1: standard color-by from a real column ─────────────── */}
-      <Divider
-        label="Color by column"
-        labelPosition="left"
-        styles={{ label: { fontSize: 11, fontWeight: 600 } }}
-      />
+      <Group gap={6} wrap="nowrap" align="center">
+        <Divider
+          label="Color by column"
+          labelPosition="left"
+          styles={{ label: { fontSize: 11, fontWeight: 600 } }}
+          style={{ flex: 1 }}
+        />
+        <Tooltip
+          label="Back to defaults: no coloring, overlay display, no card comparison. Saved groups are kept."
+          withArrow
+          openDelay={400}
+        >
+          <Button
+            size="compact-xs"
+            variant="subtle"
+            color="gray"
+            disabled={
+              colorBy.kind === 'none' &&
+              !compareInCards &&
+              displayMode === 'color' &&
+              showOther &&
+              showOverall
+            }
+            onClick={onResetAnalysis}
+            leftSection={<Icon icon="mdi:restore" width={12} height={12} />}
+            styles={{ label: { fontSize: 11 } }}
+          >
+            Reset
+          </Button>
+        </Tooltip>
+      </Group>
       <Tooltip
         label="Color every figure whose dataset carries the column"
         withArrow
@@ -240,12 +263,17 @@ const SelectionGroupsPanel: React.FC<SelectionGroupsPanelProps> = ({
           size="xs"
           mt={4}
           data={columnSelectData}
-          value={colorBy.kind === 'column' ? colorBy.columnName : COLOR_BY_NONE_VALUE}
+          // Null (rather than the sentinel "None" value) when no column is
+          // active, so `clearable`'s × only appears once there is something
+          // to clear.
+          value={colorBy.kind === 'column' ? colorBy.columnName : null}
+          placeholder="None"
           onChange={(v) =>
             onColorByChange(
               !v || v === COLOR_BY_NONE_VALUE ? COLOR_BY_NONE : { kind: 'column', columnName: v },
             )
           }
+          clearable
           allowDeselect={false}
           searchable={colorByColumns.length > 8}
           // The panel can live inside a header popover; a portaled dropdown
@@ -564,7 +592,11 @@ const SelectionGroupsPanel: React.FC<SelectionGroupsPanelProps> = ({
               </>
             )}
             <Tooltip
-              label="Show each card's metric broken down per group"
+              label={
+                colorBy.kind === 'column'
+                  ? 'Paused while coloring by a column: cards comparing groups under figures grouped by something else would mix two encodings'
+                  : "Show each card's metric broken down per group"
+              }
               withArrow
               openDelay={400}
             >
@@ -573,12 +605,16 @@ const SelectionGroupsPanel: React.FC<SelectionGroupsPanelProps> = ({
                   size="xs"
                   label="Compare groups in cards"
                   checked={compareInCards}
+                  // Disabled (not hidden, and not cleared) in column mode: the
+                  // stored value survives, so leaving column mode resumes the
+                  // comparison exactly as it was.
+                  disabled={colorBy.kind === 'column'}
                   onChange={(e) => onCompareInCardsChange(e.currentTarget.checked)}
                   styles={{ label: { fontSize: 11 } }}
                 />
               </span>
             </Tooltip>
-            {compareInCards && (
+            {compareInCards && colorBy.kind !== 'column' && (
               <Tooltip
                 label="Add an “All rows” reference entry above the per-group rows"
                 withArrow

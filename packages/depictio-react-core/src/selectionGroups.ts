@@ -274,6 +274,16 @@ export function uniqueGroupName(
   }
 }
 
+/** First unused "Group N" default name. Starts at groups.length + 1 and walks
+ *  up past survivors of deletions, so the default can never collide with an
+ *  existing group (names are identity on the wire — see uniqueGroupName). */
+export function defaultGroupName(groups: SelectionGroup[]): string {
+  const taken = new Set(groups.map((g) => g.name));
+  let n = groups.length + 1;
+  while (taken.has(`Group ${n}`)) n += 1;
+  return `Group ${n}`;
+}
+
 /** First palette color not already used by an existing group; wraps around
  *  when every color is taken. */
 export function nextGroupColor(
