@@ -2515,6 +2515,25 @@ def _load_natural_page(
     return df.slice(start, limit)
 
 
+def merge_dict_kwargs_patch(
+    stored_dict_kwargs: dict | None,
+    patch: object,
+    mode: str,
+) -> dict:
+    """Merge a transient, per-request Plotly kwargs override (AI "figure
+    mutations") over a figure component's stored dict_kwargs.
+
+    Nothing is persisted. Code-mode figures ignore the patch — their output
+    is produced by the stored code, not by dict_kwargs. Non-dict or empty
+    patches are ignored rather than erroring so a malformed client payload
+    degrades to the stored rendering.
+    """
+    dict_kwargs = dict(stored_dict_kwargs or {})
+    if isinstance(patch, dict) and patch and mode == "ui":
+        dict_kwargs.update(patch)
+    return dict_kwargs
+
+
 @dashboards_endpoint_router.post("/render_figure/{dashboard_id}/{component_id}")
 async def render_figure_endpoint(
     dashboard_id: PyObjectId,
@@ -2552,6 +2571,7 @@ async def render_figure_endpoint(
     filters = request.get("filters") or []
     theme = request.get("theme") or "light"
     full_load = bool(request.get("full_load", False))
+    dict_kwargs_patch = request.get("dict_kwargs_patch")
 
     dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
     if not dashboard_data:
@@ -2599,12 +2619,13 @@ async def render_figure_endpoint(
     # body re-coerces wf_id back to ObjectId for `load_deltatable_lite`.
     dc_config = component.get("dc_config") or {}
     mode = component.get("mode", "ui")
+    dict_kwargs = merge_dict_kwargs_patch(component.get("dict_kwargs"), dict_kwargs_patch, mode)
     metadata = {
         "wf_id": str(wf_id),
         "dc_id": str(dc_id),
         "dc_config": convert_objectid_to_str(dc_config),
         "visu_type": component.get("visu_type", "scatter"),
-        "dict_kwargs": component.get("dict_kwargs") or {},
+        "dict_kwargs": dict_kwargs,
         "mode": mode,
         "code_content": component.get("code_content", ""),
         "selection_enabled": bool(component.get("selection_enabled", False)),

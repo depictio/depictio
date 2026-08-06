@@ -43,6 +43,9 @@ interface FigureRendererProps {
   /** Reports the sample/full state so the chrome can render a "load all points"
    *  action icon. ``null`` when the figure isn't downsampled. */
   onLoadAllState?: (state: LoadAllState | null) => void;
+  /** Transient Plotly kwargs override (AI figure mutations) merged server-side
+   *  over the stored dict_kwargs. Never persisted; UI-mode figures only. */
+  dictKwargsPatch?: Record<string, unknown>;
 }
 
 /**
@@ -65,6 +68,7 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
   refreshTick,
   activeHighlight,
   onLoadAllState,
+  dictKwargsPatch,
 }) => {
   const [figure, setFigure] = useState<{ data?: unknown[]; layout?: Record<string, unknown> } | null>(null);
   const [renderMeta, setRenderMeta] = useState<FigureResponse['metadata'] | null>(null);
@@ -136,6 +140,7 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
           theme,
           fullLoad,
           ctrl.signal,
+          dictKwargsPatch,
         ),
       metadata.layout?.y ?? 0,
     )
@@ -163,7 +168,7 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
       ctrl.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dashboardId, metadata.index, JSON.stringify(filtersForFetch), theme, inView, refreshTick, fullLoad]);
+  }, [dashboardId, metadata.index, JSON.stringify(filtersForFetch), theme, inView, refreshTick, fullLoad, JSON.stringify(dictKwargsPatch ?? null)]);
 
   // First-paint loader vs refetch overlay: only show the big "Rendering…"
   // block until we have something to show; subsequent fetches keep the

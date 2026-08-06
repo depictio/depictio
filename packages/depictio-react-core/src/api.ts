@@ -680,12 +680,22 @@ export async function renderFigure(
   theme: 'light' | 'dark' = 'light',
   fullLoad = false,
   signal?: AbortSignal,
+  /** Transient Plotly kwargs override merged server-side over the stored
+   *  dict_kwargs (UI-mode figures only). Never persisted. */
+  dictKwargsPatch?: Record<string, unknown>,
 ): Promise<FigureResponse> {
   const res = await authFetch(
     `${API_BASE}/dashboards/render_figure/${dashboardId}/${componentId}`,
     {
       method: 'POST',
-      body: JSON.stringify({ filters, theme, full_load: fullLoad }),
+      body: JSON.stringify({
+        filters,
+        theme,
+        full_load: fullLoad,
+        ...(dictKwargsPatch && Object.keys(dictKwargsPatch).length > 0
+          ? { dict_kwargs_patch: dictKwargsPatch }
+          : {}),
+      }),
       signal,
     },
   );

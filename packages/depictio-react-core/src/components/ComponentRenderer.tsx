@@ -64,6 +64,10 @@ interface ComponentRendererProps {
    *  rangeslider / timeline children drop their own Paper and tighten internal
    *  spacing. Marks default to hidden unless the metadata sets show_marks=true. */
   compact?: boolean;
+  /** Transient Plotly kwargs override (AI figure mutations) for figure
+   *  components. Merged server-side over the stored dict_kwargs; never
+   *  persisted. Ignored by every other component type. */
+  dictKwargsPatch?: Record<string, unknown>;
 }
 
 /**
@@ -83,6 +87,7 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
   extraActions,
   showDragHandle,
   compact,
+  dictKwargsPatch,
 }) => {
   if (metadata.component_type === 'card') {
     return wrapWithChrome(
@@ -200,6 +205,7 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
         activeHighlight={activeHighlight}
         extraActions={extraActions}
         showDragHandle={showDragHandle}
+        dictKwargsPatch={dictKwargsPatch}
       />
     );
   }
@@ -459,6 +465,7 @@ const FigureBlock: React.FC<{
   activeHighlight?: ActiveHighlight | null;
   extraActions?: React.ReactNode;
   showDragHandle?: boolean;
+  dictKwargsPatch?: Record<string, unknown>;
 }> = ({
   dashboardId,
   metadata,
@@ -468,6 +475,7 @@ const FigureBlock: React.FC<{
   activeHighlight,
   extraActions,
   showDragHandle,
+  dictKwargsPatch,
 }) => {
   const [loadAllState, setLoadAllState] = React.useState<LoadAllState | null>(null);
   // Only scatter / scatter_3d traces carry the per-row customdata we need for
@@ -508,6 +516,7 @@ const FigureBlock: React.FC<{
         refreshTick={refreshTick}
         activeHighlight={activeHighlight}
         onLoadAllState={setLoadAllState}
+        dictKwargsPatch={dictKwargsPatch}
       />
     </Suspense>,
     { onResetFilter: onResetSelection, extraActions: combinedExtras, showDragHandle, sourceFilterActive },
