@@ -2,7 +2,7 @@ import asyncio
 
 import boto3
 from bson import ObjectId
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import ValidationError
 
 from depictio.api.v1.configs.config import settings
@@ -19,6 +19,11 @@ from depictio.api.v1.db import (
     users_collection,
 )
 from depictio.api.v1.endpoints.migrate_endpoints.routes import _collect_s3_locations_for_project
+from depictio.api.v1.endpoints.projects_endpoints.export_template import (
+    ExportTemplateRequest,
+    build_template_bundle,
+    bundle_to_zip,
+)
 from depictio.api.v1.endpoints.projects_endpoints.from_manifest import (
     FromManifestReport,
     FromManifestRequest,
@@ -360,6 +365,42 @@ async def get_refresh_manifest_run(
     if not current_user:
         raise HTTPException(status_code=401, detail="User not found.")
     return await asyncio.to_thread(_get_refresh_run_report, run_id, current_user)
+
+
+@projects_endpoint_router.post("/{project_id}/export_template")
+async def export_project_template(
+    project_id: str,
+    payload: ExportTemplateRequest,
+    current_user=Depends(get_user_or_anonymous),
+):
+    """Export the project and its dashboards as a template bundle (ZIP).
+
+    The archive holds ``template.yaml`` + ``dashboards/*.yaml`` ready to drop
+    into ``depictio/projects/<template_id>/``: runtime fields stripped, stored
+    manifest URLs re-parameterized to ``{MANIFEST_URL}``, an optional local
+    ``data_root`` prefix to ``{DATA_ROOT}``, dashboard references as portable
+    tags. The bundle is round-trip-checked before it is returned.
+    """
+    if not current_user:
+        raise HTTPException(status_code=401, detail="User not found.")
+    bundle = await asyncio.to_thread(
+        build_template_bundle,
+        project_id,
+        current_user,
+        template_id=payload.template_id,
+        description=payload.description,
+        version=payload.version,
+        data_root=payload.data_root,
+    )
+    return Response(
+        content=bundle_to_zip(bundle),
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="{payload.template_id.replace("/", "_")}.zip"'
+            )
+        },
+    )
 
 
 @projects_endpoint_router.get("/{project_id}/storage", response_model=ProjectStorageConfigOut)
