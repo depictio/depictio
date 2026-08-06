@@ -1,0 +1,71 @@
+# Generic Manifest Tables Template
+# ============================================================================
+# This is a TEMPLATE project configuration driven by a Data Manifest — a
+# remote JSON/CSV index of {id, type, url[, run]} entries where `type` maps
+# onto the data collection tags below. Use with:
+#
+#   depictio-cli run --template generic/manifest-tables/1 \
+#     --manifest https://data.example.org/run42/manifest.json
+#
+# or server-side via POST /projects/from_manifest. No local data root is
+# needed: every file is fetched from the URLs the manifest lists, and the
+# manifest `id` of each row is injected as a `depictio_manifest_id` column —
+# the zero-config cross-DC join key.
+# ============================================================================
+
+template:
+  template_id: "generic/manifest-tables/1"
+  description: "Generic table dashboards over a {id, type, url} Data Manifest"
+  version: "1.0.0"
+  variables:
+    - name: "MANIFEST_URL"
+      description: "URL of the Data Manifest (JSON or CSV) listing {id, type, url[, run]} entries"
+      required: true
+  dashboards:
+    - "dashboards/base.yaml"
+
+# ============================================================================
+# PROJECT CONFIGURATION
+# ============================================================================
+
+name: "Manifest Tables"
+project_type: "basic"
+is_public: false
+workflows:
+  - name: "manifest"
+    engine:
+      name: "python"
+    data_location:
+      structure: "flat"
+      locations:
+        - "{MANIFEST_URL}"
+    data_collections:
+      - data_collection_tag: "samples"
+        description: "Per-sample tables (manifest type 'samples'), one file per manifest entry"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: manifest
+            scan_parameters:
+              manifest_url: "{MANIFEST_URL}"
+              manifest_type: "samples"
+          dc_specific_properties:
+            format: "CSV"
+            columns_description:
+              "depictio_manifest_id": "Manifest entry id (cross-DC join key)"
+
+      - data_collection_tag: "measurements"
+        optional: true
+        description: "Per-sample measurement tables (manifest type 'measurements')"
+        config:
+          type: "Table"
+          scan:
+            mode: manifest
+            scan_parameters:
+              manifest_url: "{MANIFEST_URL}"
+              manifest_type: "measurements"
+          dc_specific_properties:
+            format: "CSV"
+            columns_description:
+              "depictio_manifest_id": "Manifest entry id (cross-DC join key)"

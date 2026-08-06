@@ -5542,56 +5542,20 @@ def _import_multi_tab_dashboard(
     }
 
 
-@dashboards_endpoint_router.post("/import/yaml")
-async def import_dashboard_from_yaml(
-    yaml_content: str = Body(..., media_type="text/plain"),
-    project_id: PyObjectId | None = None,
-    overwrite: bool = False,
-    current_user: User = Depends(get_current_user),
-):
+def import_dashboard_yaml_content(
+    yaml_content: str,
+    project_id: PyObjectId | None,
+    overwrite: bool,
+    current_user: User,
+) -> dict:
+    """Parse and import dashboard YAML (single or multi-tab format).
+
+    The full import pipeline behind ``POST /dashboards/import/yaml``, minus the
+    route-level auth gates — shared so server-side orchestration (e.g.
+    ``POST /projects/from_manifest``) imports dashboards in-process instead of
+    HTTP-to-self. Synchronous throughout (pymongo collections); raises
+    ``HTTPException`` on any failure.
     """
-    Import a dashboard from YAML content.
-
-    Supports both single dashboard and multi-tab dashboard formats:
-    - Single: Standard YAML with title, components, etc.
-    - Multi-tab: YAML with main_dashboard and tabs keys
-
-    A new dashboard_id will be generated, and the current user will be set as owner.
-
-    If `overwrite=True` and a dashboard with the same title exists in the project,
-    the existing dashboard will be updated instead of creating a new one.
-
-    Project identification:
-    - If `project_id` is provided, uses that project directly
-    - If `project_id` is not provided, extracts `project_tag` from YAML and
-      looks up the project by name
-
-    Args:
-        yaml_content: The YAML content defining the dashboard(s)
-        project_id: Optional project ID (if not provided, uses project_tag from YAML)
-        overwrite: If True, update existing dashboard with same title (default: False)
-        current_user: The authenticated user (will be set as owner)
-
-    Returns:
-        Created/updated dashboard information including dashboard_id
-    """
-    # Public/demo mode hard-blocks imports — visitors are auto-minted temp
-    # users that pass `get_current_user`, so the frontend disable on the
-    # Import tab is the only client-side gate. Mirror it here.
-    if settings.auth.is_public_mode:
-        raise HTTPException(
-            status_code=403,
-            detail="Dashboard import is disabled in public/demo mode",
-        )
-
-    # Allow anonymous users in single-user mode (they have admin privileges)
-    if hasattr(current_user, "is_anonymous") and current_user.is_anonymous:
-        if not settings.auth.is_single_user_mode:
-            raise HTTPException(
-                status_code=403,
-                detail="Anonymous users cannot import dashboards. Please login to continue.",
-            )
-
     # Parse YAML to detect format
     try:
         yaml_data = yaml.safe_load(yaml_content)
@@ -5763,6 +5727,59 @@ async def import_dashboard_from_yaml(
         "project_id": str(project_id),
         "dash_url": settings.viewer.external_url,
     }
+
+
+@dashboards_endpoint_router.post("/import/yaml")
+async def import_dashboard_from_yaml(
+    yaml_content: str = Body(..., media_type="text/plain"),
+    project_id: PyObjectId | None = None,
+    overwrite: bool = False,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Import a dashboard from YAML content.
+
+    Supports both single dashboard and multi-tab dashboard formats:
+    - Single: Standard YAML with title, components, etc.
+    - Multi-tab: YAML with main_dashboard and tabs keys
+
+    A new dashboard_id will be generated, and the current user will be set as owner.
+
+    If `overwrite=True` and a dashboard with the same title exists in the project,
+    the existing dashboard will be updated instead of creating a new one.
+
+    Project identification:
+    - If `project_id` is provided, uses that project directly
+    - If `project_id` is not provided, extracts `project_tag` from YAML and
+      looks up the project by name
+
+    Args:
+        yaml_content: The YAML content defining the dashboard(s)
+        project_id: Optional project ID (if not provided, uses project_tag from YAML)
+        overwrite: If True, update existing dashboard with same title (default: False)
+        current_user: The authenticated user (will be set as owner)
+
+    Returns:
+        Created/updated dashboard information including dashboard_id
+    """
+    # Public/demo mode hard-blocks imports — visitors are auto-minted temp
+    # users that pass `get_current_user`, so the frontend disable on the
+    # Import tab is the only client-side gate. Mirror it here.
+    if settings.auth.is_public_mode:
+        raise HTTPException(
+            status_code=403,
+            detail="Dashboard import is disabled in public/demo mode",
+        )
+
+    # Allow anonymous users in single-user mode (they have admin privileges)
+    if hasattr(current_user, "is_anonymous") and current_user.is_anonymous:
+        if not settings.auth.is_single_user_mode:
+            raise HTTPException(
+                status_code=403,
+                detail="Anonymous users cannot import dashboards. Please login to continue.",
+            )
+
+    return import_dashboard_yaml_content(yaml_content, project_id, overwrite, current_user)
 
 
 # ============================================================================

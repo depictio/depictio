@@ -330,8 +330,10 @@ One orchestration endpoint, `POST /projects/from_manifest`:
 3. Coverage check: manifest `type` values vs the template's DC tags; prune
    `optional` DCs with no rows, recording removal reasons in
    `expected_data_collections` (the report UI already exists).
-4. Create the project (the same path CLI `run.py` uses), then scan + process
-   each DC (§5), Celery-fanned.
+4. Create the project (same identity/uniqueness rules as `POST
+   /projects/create`), then scan + process each manifest DC (§5) —
+   sequentially, like `/projects/ingest_manifest`; Celery fan-out is the
+   phase-4 internal switch.
 5. Import dashboards: factor the core of `import_dashboards_from_template`
    (read YAML, `{VAR}` substitution, body construction) into a shared function
    so the server calls the import handler directly instead of HTTP-to-self.
@@ -407,10 +409,13 @@ change, one endpoint, one security module, no templates or manifests involved.
   assert the Delta table and `/deltatables/get` round-trip; per-format spike
   matrix (parquet/csv/tsv over https, s3) recorded in the test names; SSRF
   gateway unit tests (private ranges, redirects, schemes).
-- **Phase 3:** Playwright E2E — `POST /projects/from_manifest` with the
-  reference template, assert redirect target renders components bound to the
-  manifest DCs; existing template E2E suites must stay green (the
-  `resolve_template` refactor is gate-don't-rewrite).
+- **Phase 3:** orchestration-contract tests over `POST /projects/from_manifest`
+  run against the *real* reference template (`generic/manifest-tables/1`), so
+  the shipped fixture is validated end-to-end at the API layer (coverage
+  checks, optional-DC pruning, per-DC ingest report, in-process dashboard
+  import); existing template suites must stay green (the `resolve_template`
+  refactor is gate-don't-rewrite). A Playwright E2E over the live stack
+  (manifest → rendered dashboard) lands with the phase-4 builder UI.
 
 ## 11. Open questions
 
