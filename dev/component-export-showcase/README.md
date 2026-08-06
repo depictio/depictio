@@ -186,6 +186,7 @@ instance whose public projects are ones you would publish.
 | `shoot_site.py` | the gallery's three delivery modes, one shot each |
 | `shoot_page.py` | a single route, for iterating on one page's styling |
 | `freeze_site.py` | writes the site out as static files, for sharing |
+| `seed_benchmark_dashboards.py` | re-imports the four benchmark YAMLs into a running instance |
 
 The notebook is generated rather than committed with outputs, because a
 committed `.ipynb` is JSON with embedded base64 and cannot be reviewed in a diff.

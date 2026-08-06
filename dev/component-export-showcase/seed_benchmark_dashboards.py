@@ -1,11 +1,19 @@
 #!/usr/bin/env python3
 """Import the variantbenchmarking demo dashboards into this instance.
 
-The four benchmarking dashboards ship as YAML under
-``depictio/projects/init/advanced_viz_showcase/dashboards/`` rather than as
-``.db_seeds/*.json``, so ``db_init`` does not create them and the export API has
-nothing to serve. This posts them through the same ``/dashboards/import/yaml``
-route the UI's Import tab uses.
+A freshly initialised instance already has these four: they ship as YAML under
+``depictio/projects/init/advanced_viz_showcase/dashboards/`` *and* as
+``.db_seeds/dashboard_benchmark_*.json``, which is what ``db_init`` reads.
+
+This script is for the other case — an instance that was initialised before the
+seeds existed, or one where a YAML has been edited since. It posts the YAML
+through the same ``/dashboards/import/yaml`` route the UI's Import tab uses, so
+the running instance picks the change up without a re-init.
+
+After editing a YAML, regenerate the seed too, or a fresh deployment and a
+re-seeded one will disagree::
+
+    python -m depictio.dev_scripts.generate_benchmark_seeds
 
 Idempotent: ``overwrite=true`` updates a dashboard of the same title instead of
 creating duplicates, so re-running after editing a YAML does the right thing.
