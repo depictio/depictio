@@ -913,6 +913,9 @@ export interface RenderFigureOptions {
   display?: GroupingDisplay;
   /** Groups mode only: false drops ungrouped ("Other") rows from figures. */
   showOther?: boolean;
+  /** Transient Plotly kwargs override merged server-side over the stored
+   *  dict_kwargs (UI-mode figures only). Never persisted. */
+  dictKwargsPatch?: Record<string, unknown>;
 }
 
 export async function renderFigure(
@@ -945,7 +948,15 @@ export async function renderFigure(
     `${API_BASE}/dashboards/render_figure/${dashboardId}/${componentId}`,
     {
       method: 'POST',
-      body: JSON.stringify({ filters, theme, full_load: fullLoad, ...groupBody }),
+      body: JSON.stringify({
+        filters,
+        theme,
+        full_load: fullLoad,
+        ...groupBody,
+        ...(options?.dictKwargsPatch && Object.keys(options.dictKwargsPatch).length > 0
+          ? { dict_kwargs_patch: options.dictKwargsPatch }
+          : {}),
+      }),
       signal,
     },
   );

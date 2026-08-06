@@ -1184,9 +1184,14 @@ const EditorApp: React.FC = () => {
   const aiHealth = useAIHealth(aiEnabled);
   const aiServerKeyAvailable = aiHealth?.server_key_configured === true;
   const [aiFilterDescriptions, setAiFilterDescriptions] = useState<string[]>([]);
+  // Transient per-figure dict_kwargs overrides from applied AI plans, keyed by
+  // component index. Threaded into the render request; never persisted.
+  const [aiFigureOverrides, setAiFigureOverrides] = useState<
+    Record<string, Record<string, unknown>>
+  >({});
 
   const handleApplyAIActions = useCallback(
-    ({ resolved }: ApplyActionsPayload) => {
+    ({ actions, resolved }: ApplyActionsPayload) => {
       const exprFilters: InteractiveFilter[] = [];
       const widgetUpdates: InteractiveFilter[] = [];
       const descriptions: string[] = [];
@@ -1233,6 +1238,35 @@ const EditorApp: React.FC = () => {
         return [...next, ...exprFilters];
       });
       setAiFilterDescriptions(descriptions);
+
+      // Figure mutations: transient dict_kwargs overrides, applied only to
+      // components that exist on this dashboard as figures. A new plan
+      // replaces the previous overrides wholesale.
+      const overrides: Record<string, Record<string, unknown>> = {};
+      let skippedMutations = 0;
+      for (const m of actions?.figure_mutations ?? []) {
+        const target = (
+          dashboard?.stored_metadata as Record<string, unknown>[] | undefined
+        )?.find((c) => c?.index === m.component_id && c?.component_type === 'figure');
+        if (
+          target &&
+          m.dict_kwargs_patch &&
+          typeof m.dict_kwargs_patch === 'object' &&
+          Object.keys(m.dict_kwargs_patch).length > 0
+        ) {
+          overrides[m.component_id] = m.dict_kwargs_patch;
+        } else {
+          skippedMutations += 1;
+        }
+      }
+      setAiFigureOverrides(overrides);
+      if (skippedMutations > 0) {
+        notifications.show({
+          color: 'yellow',
+          title: 'AI figure changes partially applied',
+          message: `${skippedMutations} proposed figure change(s) referenced components that are not figures on this dashboard and were skipped.`,
+        });
+      }
     },
     [dashboard],
   );
@@ -1245,6 +1279,8 @@ const EditorApp: React.FC = () => {
     setFilters((prev) => clearFiltersBySource(prev, 'ai_prompt'));
     setAiFilterDescriptions([]);
   }, []);
+  const aiFigureOverrideCount = Object.keys(aiFigureOverrides).length;
+  const handleClearAIFigureOverrides = useCallback(() => setAiFigureOverrides({}), []);
 
   // ---- "Add component → With AI…" flow --------------------------------------
   const [aiModalOpened, setAiModalOpened] = useState(false);
@@ -2018,19 +2054,36 @@ const EditorApp: React.FC = () => {
                     serverKeyAvailable={aiServerKeyAvailable}
                     onApplyActions={handleApplyAIActions}
                   />
-                  {aiFilterCount > 0 && (
-                    <Group gap={6} mb={6} data-testid="ai-filters-chip">
-                      <Button
-                        size="compact-xs"
-                        variant="light"
-                        color="violet"
-                        leftSection={<Icon icon="mdi:filter-outline" width={12} />}
-                        rightSection={<Icon icon="mdi:close" width={12} />}
-                        onClick={handleClearAIFilters}
-                        title={aiFilterDescriptions.join('\n')}
-                      >
-                        AI filters ({aiFilterCount})
-                      </Button>
+                  {(aiFilterCount > 0 || aiFigureOverrideCount > 0) && (
+                    <Group gap={6} mb={6}>
+                      {aiFilterCount > 0 && (
+                        <Button
+                          data-testid="ai-filters-chip"
+                          size="compact-xs"
+                          variant="light"
+                          color="violet"
+                          leftSection={<Icon icon="mdi:filter-outline" width={12} />}
+                          rightSection={<Icon icon="mdi:close" width={12} />}
+                          onClick={handleClearAIFilters}
+                          title={aiFilterDescriptions.join('\n')}
+                        >
+                          AI filters ({aiFilterCount})
+                        </Button>
+                      )}
+                      {aiFigureOverrideCount > 0 && (
+                        <Button
+                          data-testid="ai-figure-overrides-chip"
+                          size="compact-xs"
+                          variant="light"
+                          color="violet"
+                          leftSection={<Icon icon="mdi:chart-scatter-plot" width={12} />}
+                          rightSection={<Icon icon="mdi:close" width={12} />}
+                          onClick={handleClearAIFigureOverrides}
+                          title="Temporary AI changes to figure settings — click to revert"
+                        >
+                          AI figure tweaks ({aiFigureOverrideCount})
+                        </Button>
+                      )}
                     </Group>
                   )}
                 </>
@@ -2057,6 +2110,7 @@ const EditorApp: React.FC = () => {
                 renderSectionActions={renderGridSectionAction}
                 onComponentFontScale={handleComponentFontScale}
                 refreshTick={plotThemeTick}
+                figureOverrides={aiFigureOverrideCount > 0 ? aiFigureOverrides : undefined}
               />
               {bottomGridSections.length > 0 && (
                 <PersistentSectionsHost
@@ -2244,6 +2298,8 @@ interface RightComponentGridProps {
   onComponentFontScale: (componentId: string, scale: number) => void;
   /** Bumped when the dashboard plot theme changes, so figures refetch. */
   refreshTick?: number;
+  /** Transient AI figure mutations (component index → dict_kwargs patch). */
+  figureOverrides?: Record<string, Record<string, unknown>>;
 }
 
 /**
@@ -2276,6 +2332,7 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
   renderSectionActions,
   onComponentFontScale,
   refreshTick,
+  figureOverrides,
 }) => {
   const allComponents = useMemo(
     () => [...cardComponents, ...otherComponents],
@@ -2341,6 +2398,7 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
       isResizable={true}
       editMode={true}
       renderSectionActions={renderSectionActions}
+      figureOverrides={figureOverrides}
       onLayoutChange={onLayoutChange}
       renderItemOverlay={(componentId, metadata) => (
         <GridItemEditOverlay
