@@ -79,6 +79,12 @@ services:
       DEPICTIO_BOOTSTRAP_SEED_TEST_USER: "${DEPICTIO_BOOTSTRAP_SEED_TEST_USER:-false}"
       DEPICTIO_BOOTSTRAP_TEST_USER_EMAIL: "${DEPICTIO_BOOTSTRAP_TEST_USER_EMAIL:-test_user@example.com}"
       DEPICTIO_BOOTSTRAP_TEST_USER_PASSWORD: "${DEPICTIO_BOOTSTRAP_TEST_USER_PASSWORD:-test_pwd}"
+      # Anonymous installation telemetry — see .env.example and docs/telemetry.md.
+      # Set DEPICTIO_TELEMETRY_ENABLED=false (or DO_NOT_TRACK=1) in .env to opt out.
+      # The kind is stated rather than guessed: a Compose container and a Helm pod
+      # look identical from the inside.
+      DEPICTIO_TELEMETRY_ENABLED: "${DEPICTIO_TELEMETRY_ENABLED:-true}"
+      DEPICTIO_TELEMETRY_DEPLOYMENT_KIND: "${DEPICTIO_TELEMETRY_DEPLOYMENT_KIND:-docker-compose}"
     command: ["/app/run_fastapi.sh"]
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:8058/health > /dev/null"]

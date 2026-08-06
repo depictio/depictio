@@ -5,6 +5,11 @@ from typing import Any, Literal, Optional
 from pydantic import AliasChoices, Field, SecretStr, computed_field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Import kept to the dependency-free constants module on purpose — this file is
+# the earliest import in every context and must not pull in httpx.
+from depictio.telemetry.constants import DEFAULT_API_KEY as DEFAULT_TELEMETRY_API_KEY
+from depictio.telemetry.constants import DEFAULT_ENDPOINT as DEFAULT_TELEMETRY_ENDPOINT
+
 # Passwords we refuse to accept on a server boot. Lower-cased before comparison.
 _WEAK_PASSWORDS: frozenset[str] = frozenset(
     {
@@ -183,6 +188,12 @@ class MongoDBConfig(ServiceConfig):
         task_events_collection: str = Field(default="task_events")
         ingestion_runs_collection: str = Field(default="ingestion_runs")
         app_logs_collection: str = Field(default="app_logs")
+        # Holds the anonymous installation identity and the per-day send guards.
+        # Deliberately its own collection: the wipe path in lifespan.py clears
+        # everything except the init lock out of `initialization`, so an identity
+        # stored there would be regenerated on every dev wipe and inflate the
+        # project's installation count.
+        telemetry_collection: str = Field(default="telemetry")
         test_collection: str = Field(default="test")
 
     collections: Collections = Field(default_factory=Collections)
@@ -1124,6 +1135,106 @@ class AnalyticsConfig(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_ANALYTICS_")
 
 
+class TelemetryConfig(BaseSettings):
+    """Configuration for anonymous *outbound* installation telemetry.
+
+    Distinct from :class:`AnalyticsConfig`, which records per-user sessions into
+    this deployment's own MongoDB and never transmits anything. This one sends
+    anonymous, aggregate, bucketed data to the Depictio maintainers so the project
+    can tell how many installations exist and which features are used — GHCR
+    publishes no pull counts for either the container images or the OCI Helm
+    chart, so there is otherwise no signal at all.
+
+    Enabled by default, which is only defensible because opting out is one
+    variable, ``DO_NOT_TRACK`` is honoured, the exact payload is documented in
+    ``docs/telemetry.md``, and an admin endpoint renders what would be sent.
+    Nothing identifying is ever collected; see
+    :mod:`depictio.telemetry.schema` for the enforced payload shape.
+    """
+
+    enabled: bool = Field(
+        default=True,
+        description=(
+            "Send anonymous installation telemetry. Set false to disable entirely. "
+            "Also suppressed by DO_NOT_TRACK, in CI, under pytest, and when "
+            "DEPICTIO_MONGODB_WIPE is set."
+        ),
+    )
+    endpoint: str = Field(
+        default=DEFAULT_TELEMETRY_ENDPOINT,
+        description="Collector ingestion URL (PostHog-compatible capture endpoint).",
+    )
+    api_key: str = Field(
+        default=DEFAULT_TELEMETRY_API_KEY,
+        description=(
+            "Collector project token. Public write-only key; carries no read access. "
+            "Defaults to Depictio's own PostHog project — override only to point at "
+            "your own collector. Empty disables sending."
+        ),
+    )
+    interval_hours: int = Field(
+        default=24,
+        description="Hours between heartbeat attempts. At most one send per UTC day either way.",
+        ge=1,
+        le=168,
+    )
+    deployment_kind: str | None = Field(
+        default=None,
+        description=(
+            "Override the detected deployment kind: helm, kubernetes, "
+            "docker-compose, docker-compose-dev, docker, devcontainer or local. "
+            "Auto-detected when unset."
+        ),
+    )
+    include_usage_metrics: bool = Field(
+        default=True,
+        description=(
+            "Include bucketed deployment-size counts (users, projects, dashboards, …). "
+            "Disable to send only the install identity and version."
+        ),
+    )
+    replicas: int | None = Field(
+        default=None,
+        description=(
+            "Configured backend replica count, stated by the Helm chart from its own "
+            "values.yaml. Unset outside Helm."
+        ),
+    )
+    cpu_request: str | None = Field(
+        default=None,
+        description=(
+            "Configured backend CPU request as a raw Kubernetes quantity (e.g. '0.5', "
+            "'500m'), stated by the Helm chart. Parsed to millicores before it can "
+            "reach the telemetry payload; never sent as-is."
+        ),
+    )
+    cpu_limit: str | None = Field(
+        default=None,
+        description="Configured backend CPU limit, same format and handling as cpu_request.",
+    )
+    memory_request: str | None = Field(
+        default=None,
+        description=(
+            "Configured backend memory request as a raw Kubernetes quantity (e.g. "
+            "'1Gi'), stated by the Helm chart. Parsed to MiB before it can reach the "
+            "telemetry payload; never sent as-is."
+        ),
+    )
+    memory_limit: str | None = Field(
+        default=None,
+        description="Configured backend memory limit, same format and handling as memory_request.",
+    )
+    debug: bool = Field(
+        default=False,
+        description=(
+            "Log the payload that would be sent instead of sending it. Lets an "
+            "operator audit telemetry on their own deployment before deciding."
+        ),
+    )
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_TELEMETRY_")
+
+
 class GoogleAnalyticsConfig(BaseSettings):
     """Configuration for Google Analytics tracking."""
 
@@ -1218,6 +1329,7 @@ class Settings(BaseSettings):
     # Observability & development
     performance: PerformanceConfig = Field(default_factory=PerformanceConfig)
     analytics: AnalyticsConfig = Field(default_factory=AnalyticsConfig)
+    telemetry: TelemetryConfig = Field(default_factory=TelemetryConfig)
     google_analytics: GoogleAnalyticsConfig = Field(default_factory=GoogleAnalyticsConfig)
     profiling: ProfilingConfig = Field(default_factory=ProfilingConfig)
 

@@ -290,6 +290,28 @@ backend:
     DEPICTIO_ANALYTICS_TRACK_ANONYMOUS_USERS: "true"
     DEPICTIO_ANALYTICS_CLEANUP_ENABLED: "true"
 
+    # Anonymous installation telemetry
+    # Sends an anonymous daily heartbeat (random installation ID, version,
+    # deployment kind, enabled features, and deployment size as coarse buckets)
+    # so the project can count installations — GHCR publishes no pull counts for
+    # the images or this chart, so there is no other signal.
+    # Never sends emails, names, hostnames, URLs, IPs, paths or secrets.
+    # Audit the exact payload: GET /depictio/api/v1/utils/telemetry/preview
+    # Details: docs/telemetry.md
+    DEPICTIO_TELEMETRY_ENABLED: "true"
+    # Stated explicitly by this chart rather than auto-detected — distinguishes a
+    # Helm install from a hand-rolled deployment, which would otherwise both just
+    # look like "kubernetes" from inside the pod.
+    DEPICTIO_TELEMETRY_DEPLOYMENT_KIND: "helm"
+    # Configured (not live) replica count and CPU/memory requests/limits are
+    # derived from backend.replicas / backend.resources below by
+    # templates/configmaps.yaml — not repeated here as literals that could drift
+    # out of sync with the actual deployment shape.
+    # Set false to send only the install identity and version, no size metrics.
+    DEPICTIO_TELEMETRY_INCLUDE_USAGE_METRICS: "true"
+    # Set true to log the payload instead of sending it.
+    DEPICTIO_TELEMETRY_DEBUG: "false"
+
     # Google Analytics configuration (GA4)
     # Enable to track page views, user interactions, and engagement metrics
     # Get your tracking ID from Google Analytics dashboard (Property → Data Streams)

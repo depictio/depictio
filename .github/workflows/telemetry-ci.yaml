@@ -1,0 +1,135 @@
+name: telemetry-ci
+
+# Dedicated CI for anonymous installation telemetry. Runs only when telemetry code,
+# its config, its docs generator or its verification scripts change.
+#
+# The unit tests already run in the main quality job. What this adds is the part
+# they structurally cannot cover: they patch `depictio.telemetry.posthog.capture`,
+# so nothing between the payload builder and the socket is exercised, and the
+# browser client is not exercised at all. The checks below run the real code
+# against a loopback collector, which is what catches a wrong endpoint, a body a
+# collector would reject, a guard that lets every worker send, or a consent path
+# that throws into the host page.
+#
+# Nothing here transmits anything. The scripts default to a collector started in
+# the job's own process, and CI is a hard suppression in the gates regardless.
+on:
+  pull_request:
+    paths:
+      - "depictio/telemetry/**"
+      - "depictio/api/v1/telemetry/**"
+      - "depictio/cli/cli/utils/telemetry.py"
+      - "packages/depictio-react-core/src/telemetry.ts"
+      - "depictio/tests/**/test_telemetry*.py"
+      - "scripts/telemetry_*_check.py"
+      - "scripts/telemetry_browser_check.mjs"
+      - "scripts/gen_telemetry_docs.py"
+      - "docs/telemetry.md"
+      - ".github/workflows/telemetry-ci.yaml"
+  push:
+    branches: [main]
+    paths:
+      - "depictio/telemetry/**"
+      - "depictio/api/v1/telemetry/**"
+      - "depictio/cli/cli/utils/telemetry.py"
+      - "packages/depictio-react-core/src/telemetry.ts"
+      - "scripts/telemetry_*_check.py"
+      - "scripts/telemetry_browser_check.mjs"
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    runs-on: ubuntu-22.04
+    services:
+      # The payload builder and the send-once guard both talk to MongoDB. Mocking
+      # it would defeat the point: the guard's correctness *is* the DuplicateKeyError
+      # on a unique _id, which only a real server produces.
+      mongo:
+        image: mongo:7
+        ports:
+          - 27018:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ping:1})'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DEPICTIO_MONGODB_SERVICE_NAME: localhost
+      DEPICTIO_MONGODB_SERVICE_PORT: 27018
+      DEPICTIO_MONGODB_DB_NAME: telemetry_ci
+      # Importing anything under `depictio.api.v1.telemetry` pulls in the whole
+      # `Settings` model, whose server-context validator refuses to build without
+      # this. Nothing in this job talks to MinIO; the value only has to clear the
+      # length and known-default checks in `settings_models.py`.
+      DEPICTIO_MINIO_ROOT_PASSWORD: telemetry-ci-not-a-real-secret
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version-file: "pyproject.toml"
+
+      - name: Install dependencies
+        run: |
+          uv venv --python 3.12.9 venv
+          source venv/bin/activate
+          uv pip install -e ".[dev]"
+
+      - name: Unit tests
+        run: |
+          source venv/bin/activate
+          python -m pytest \
+            depictio/tests/unit/test_telemetry_core.py \
+            depictio/tests/api/v1/test_telemetry.py \
+            depictio/tests/cli/utils/test_telemetry.py -q
+
+      - name: Docs match the schema
+        # docs/telemetry.md is generated from depictio/telemetry/schema.py. A
+        # payload that has drifted from its own documentation is the specific
+        # failure this whole subsystem cannot afford.
+        run: |
+          source venv/bin/activate
+          python scripts/gen_telemetry_docs.py --check
+
+      - name: End-to-end send path
+        run: |
+          source venv/bin/activate
+          python scripts/telemetry_e2e_check.py
+
+      - name: Boot path and send-once guard
+        run: |
+          source venv/bin/activate
+          python scripts/telemetry_boot_check.py
+
+      - name: CLI events and argument scrubbing
+        run: |
+          source venv/bin/activate
+          python scripts/telemetry_cli_check.py
+
+  browser:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install esbuild
+        # The check runs the real TypeScript source; esbuild strips the types.
+        # Installed standalone rather than through the workspace so this job does
+        # not depend on the frontend toolchain resolving.
+        run: npm install --no-save esbuild@0.21.5
+
+      - name: Browser client consent and opt-out
+        run: node scripts/telemetry_browser_check.mjs

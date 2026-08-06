@@ -28,6 +28,20 @@ register_standalone_commands(app)
 register_run_command(app)
 
 
+def _version_callback(value: bool) -> None:
+    """Print the version and exit, for ``--version``/``-V``.
+
+    Complements the existing ``depictio-cli version`` sub-command; the flag is what
+    people (and our own tooling) reach for first.
+    """
+    if not value:
+        return
+    from depictio.cli.cli.utils.telemetry import cli_version
+
+    typer.echo(f"Depictio CLI version: {cli_version()}")
+    raise typer.Exit()
+
+
 @app.callback()
 def verbose_callback(
     verbose: bool = typer.Option(
@@ -39,6 +53,14 @@ def verbose_callback(
         "-vl",
         help="Set verbose logging level",
         is_eager=True,
+    ),
+    version: bool = typer.Option(
+        False,
+        "--version",
+        "-V",
+        help="Show the Depictio CLI version and exit",
+        is_eager=True,
+        callback=_version_callback,
     ),
 ):
     # """Set up logging for all commands"""
@@ -173,4 +195,41 @@ def main():
     if sys.stdout.isatty():
         display_depictio_cli_logo()
 
-    app()
+    from depictio.cli.cli.utils.telemetry import (
+        CommandTimer,
+        maybe_print_first_run_notice,
+        resolve_command_path,
+        send_command_event,
+    )
+
+    # Before the command runs, not after: an opt-out notice printed underneath a
+    # command's output is one the user has already been counted by.
+    maybe_print_first_run_notice()
+
+    timer = CommandTimer()
+    # Resolved from argv up front: Typer/Click raise SystemExit for --help and for
+    # bad usage, so by the time we reach the finally block the parsed context is
+    # gone. Only tokens matching registered command names survive this call.
+    command = resolve_command_path(sys.argv[1:], depictiocli)
+    succeeded = True
+    interrupted = False
+
+    try:
+        app()
+    except SystemExit as exc:
+        # Typer signals both success (exit 0, e.g. --help) and failure this way.
+        succeeded = exc.code in (0, None)
+        raise
+    except KeyboardInterrupt:
+        # Someone pressing Ctrl-C wants out now. Skip the send entirely rather
+        # than making them wait out a network timeout to leave.
+        interrupted = True
+        raise
+    except BaseException:
+        succeeded = False
+        raise
+    finally:
+        if not interrupted:
+            # Fire-and-forget on the way out, under a 2s cap. A collector that is
+            # slow or gone delays the shell prompt slightly, nothing more.
+            send_command_event(command, succeeded=succeeded, duration_seconds=timer.elapsed())
