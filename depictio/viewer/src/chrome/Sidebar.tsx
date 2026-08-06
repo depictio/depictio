@@ -15,10 +15,9 @@ import {
 import { Icon } from '@iconify/react';
 
 import type { DashboardSummary } from 'depictio-react-core';
-import ThemeToggle from './ThemeToggle';
-import ServerStatusBadge from './ServerStatusBadge';
-import ProfileBadge from './ProfileBadge';
-import AuthModeBadge from './AuthModeBadge';
+import { useIsStaticBundle } from 'depictio-react-core';
+import { isMultiqcIcon, multiqcLogoSrc } from './multiqcLogo';
+import SidebarFooter from './SidebarFooter';
 import { dashboardHref } from '../dashboards/lib/dashboardLinks';
 import './chrome.css';
 
@@ -29,17 +28,9 @@ function isImagePath(s: string | null | undefined): boolean {
   return /^(\/|https?:\/\/|data:)/.test(s) || /\.(png|svg|jpe?g|webp)$/i.test(s);
 }
 
-/** True when the tab metadata points at a MultiQC logo (legacy PNG or any of
- *  the new SVG variants). */
-function isMultiqcIcon(path: string | null | undefined): boolean {
-  if (!path) return false;
-  return /\/assets\/images\/logos\/multiqc(\.png|_icon_(dark|white|color)\.svg)$/i.test(path);
-}
-
 /** Many legacy YAML/seed entries point at the old MultiQC PNG
  * (`/assets/images/logos/multiqc.png`). Swap those to the new official icon
- * (https://github.com/MultiQC/logo) served via the SPA's `/dashboard/logos/`
- * mount.
+ * (https://github.com/MultiQC/logo).
  *
  *   - Active tab → always white SVG (sits on a filled gray background, white
  *     gives the right contrast in both light & dark modes).
@@ -49,12 +40,11 @@ function rewriteLegacyMultiqcIcon(
   path: string,
   theme: 'light' | 'dark',
   isActive = false,
+  inline = false,
 ): string {
   if (!isMultiqcIcon(path)) return path;
-  if (isActive) return '/dashboard/logos/multiqc_icon_white.svg';
-  return theme === 'dark'
-    ? '/dashboard/logos/multiqc_icon_white.svg'
-    : '/dashboard/logos/multiqc_icon_dark.svg';
+  if (isActive) return multiqcLogoSrc('white', inline);
+  return multiqcLogoSrc(theme === 'dark' ? 'white' : 'dark', inline);
 }
 
 /** Resolve a YAML asset path (e.g. `/assets/images/logos/multiqc.png`) to a
@@ -143,6 +133,10 @@ const Sidebar: React.FC<SidebarProps> = ({
   const { colorScheme } = useMantineColorScheme();
   const theme: 'light' | 'dark' = colorScheme === 'dark' ? 'dark' : 'light';
   const isEdit = mode === 'edit';
+  // Static bundles have no backend and no other routes: hide navigation to
+  // the management page and the server/profile chrome (the theme toggle stays
+  // — it's fully client-side). Inert in server builds (always false there).
+  const isStaticBundle = useIsStaticBundle();
 
   // Lift the per-tab menu open-state up here so only ONE "..." menu can be
   // open at a time. Each child Menu was previously self-contained, so opening
@@ -180,21 +174,24 @@ const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <Stack gap="sm" h="100%" justify="space-between">
-      {/* Top region — centered, grey back link to match Dash sidebar */}
-      <Stack gap="sm" align="stretch">
-        <Anchor
-          href="/dashboards"
-          size="sm"
-          fw={500}
-          underline="hover"
-          ta="center"
-          c="dimmed"
-          className="depictio-chrome-link"
-        >
-          ← Back to Dashboards
-        </Anchor>
-        <Divider />
-      </Stack>
+      {/* Top region — centered, grey back link to match Dash sidebar.
+          Hidden in static bundles: there is no /dashboards route to go to. */}
+      {!isStaticBundle && (
+        <Stack gap="sm" align="stretch">
+          <Anchor
+            href="/dashboards"
+            size="sm"
+            fw={500}
+            underline="hover"
+            ta="center"
+            c="dimmed"
+            className="depictio-chrome-link"
+          >
+            ← Back to Dashboards
+          </Anchor>
+          <Divider />
+        </Stack>
+      )}
 
       {/* Middle region — scrollable tab list */}
       <ScrollArea style={{ flex: 1 }} type="auto">
@@ -254,7 +251,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                         ? d.icon
                         : null;
                   const yamlImage = yamlImageRaw
-                    ? rewriteLegacyMultiqcIcon(yamlImageRaw, theme, isActive)
+                    ? rewriteLegacyMultiqcIcon(yamlImageRaw, theme, isActive, isStaticBundle)
                     : null;
                   const iconName = resolveTabIcon(d, isParent);
                   const leftSection = yamlImage ? (
@@ -362,17 +359,8 @@ const Sidebar: React.FC<SidebarProps> = ({
         </Stack>
       </ScrollArea>
 
-      {/* Bottom region — centered stack, original Dash order: theme,
-        server, profile. AuthModeBadge sits above the avatar to surface the
-        active server mode (Demo / Public / Single User), matching
-        `depictio/dash/layouts/sidebar.py:create_sidebar_footer`. */}
-      <Stack gap="xs" align="center">
-        <Divider w="100%" />
-        <ThemeToggle />
-        <ServerStatusBadge />
-        <AuthModeBadge />
-        <ProfileBadge />
-      </Stack>
+      {/* Bottom region — shared with the management rail, see SidebarFooter. */}
+      <SidebarFooter />
     </Stack>
   );
 };

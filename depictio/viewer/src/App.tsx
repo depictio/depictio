@@ -70,6 +70,7 @@ const ingestionBannerKey = (projectId: string) =>
 const FILTER_DEBOUNCE_MS = 250;
 import { notifications } from '@mantine/notifications';
 import { Header, Sidebar, SettingsDrawer } from './chrome';
+import ExportStaticModal from './chrome/ExportStaticModal';
 import { useSidebarOpen } from './hooks/useSidebarOpen';
 import { useFilterPanelOpen } from './hooks/useFilterPanelOpen';
 import { FILTER_PANEL_WIDTH_VAR, useFilterPanelWidth } from './hooks/useFilterPanelWidth';
@@ -155,6 +156,8 @@ const App: React.FC = () => {
   // `sidebar-collapsed` localStorage key the Dash app writes.
   const [desktopOpened, toggleDesktop] = useSidebarOpen();
   const [settingsOpened, { open: openSettings, close: closeSettings }] = useDisclosure(false);
+  const [exportStaticOpened, { open: openExportStatic, close: closeExportStatic }] =
+    useDisclosure(false);
   const { user: currentUser, inspectorEnabled } = useCurrentUser();
   const isOwner = isDashboardOwner(dashboard, currentUser?.email ?? null);
   // `control` is null while the flag is off, so no provider value reaches the
@@ -955,6 +958,20 @@ const App: React.FC = () => {
         opened={settingsOpened}
         onClose={closeSettings}
         dashboard={dashboard}
+        dashboardId={dashboardId}
+        // Hand off rather than stack: a Modal opened over an still-open Drawer
+        // leaves two Mantine focus traps and two overlays fighting each other.
+        onExportStatic={() => {
+          closeSettings();
+          openExportStatic();
+        }}
+        isOwner={isOwner}
+      />
+      <ExportStaticModal
+        opened={exportStaticOpened}
+        onClose={closeExportStatic}
+        dashboardId={dashboardId}
+        dashboardTitle={dashboard?.title ?? null}
       />
     </AppShell>
       </InspectorProviders>
@@ -970,7 +987,17 @@ export default App;
 function extractDashboardId(): string | null {
   const path = window.location.pathname;
   const match = path.match(/\/dashboard\/([^/?#]+)/);
-  return match?.[1] || null;
+  if (match?.[1]) return match[1];
+  // Serverless static bundles have no /dashboard/<id> route (they load from
+  // file:// or an arbitrary static host); their entry sets this global from
+  // the bundle manifest before mounting. Undefined in the server build.
+  return window.__DEPICTIO_STATIC_DASHBOARD_ID__ ?? null;
+}
+
+declare global {
+  interface Window {
+    __DEPICTIO_STATIC_DASHBOARD_ID__?: string;
+  }
 }
 
 function stableFilterKey(filters: InteractiveFilter[]): string {

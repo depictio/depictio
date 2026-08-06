@@ -15,13 +15,14 @@ placeholder) — Phase B wires their computes.
 
 from __future__ import annotations
 
-import json
 import math
 from typing import Any
 
 import yaml
 
 from depictio.models.components.advanced_viz.catalog import CATALOG_DIR
+from depictio.serverless.inject import inject
+from depictio.serverless.inject import json_safe as _json_safe  # noqa: F401 — re-exported
 
 # Prebuilt single-file viewer bundle (`pnpm run build:catalog-preview`).
 TEMPLATE_PATH = CATALOG_DIR.parent / "viewer" / "dist-catalog-preview" / "catalog-preview.html"
@@ -919,27 +920,6 @@ def _logo_data_uris() -> dict[str, str]:
     return result
 
 
-def _json_safe(o: Any) -> Any:
-    """Replace non-finite floats (NaN / ±Infinity) with ``None``.
-
-    Plotly figures and computed stats can carry NaN/Inf; Python's ``json`` emits
-    them as bare ``NaN``/``Infinity`` tokens, which are valid for ``json.loads``
-    but make the browser's ``JSON.parse`` throw — blanking the embedded bundle.
-    """
-    if isinstance(o, dict):
-        return {k: _json_safe(v) for k, v in o.items()}
-    if isinstance(o, (list, tuple)):
-        return [_json_safe(v) for v in o]
-    # numpy arrays / scalars — Plotly UI-mode figures (px.* on a pandas frame)
-    # keep numpy in their traces; json.dumps(default=str) would stringify an
-    # ndarray into a useless "['a' 'b']" blob. Convert to plain Python first.
-    if hasattr(o, "dtype") and hasattr(o, "tolist"):
-        return _json_safe(o.tolist())
-    if isinstance(o, float):
-        return o if math.isfinite(o) else None
-    return o
-
-
 def _inject(payload: dict[str, Any]) -> str:
     """Embed a computed payload into the prebuilt single-file bundle."""
     if not TEMPLATE_PATH.exists():
@@ -947,8 +927,7 @@ def _inject(payload: dict[str, Any]) -> str:
             f"catalog-preview bundle not built: {TEMPLATE_PATH} is missing — run "
             f"`cd depictio/viewer && pnpm run build:catalog-preview`"
         )
-    blob = json.dumps(_json_safe(payload), default=str).replace("</", "<\\/")
-    html = TEMPLATE_PATH.read_text().replace("__CATALOG_PAYLOAD__", blob)
+    html = inject(TEMPLATE_PATH.read_text(), "__CATALOG_PAYLOAD__", payload)
     # Patch server-relative logo paths → inline data URIs so they render offline.
     for server_path, data_uri in _logo_data_uris().items():
         html = html.replace(server_path, data_uri)

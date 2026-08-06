@@ -49,18 +49,37 @@ _SAMPLABLE_PLOT_TYPES = _POINT_PLOT_TYPES | frozenset({"line", "area", "ecdf"})
 _ORDERED_PLOT_TYPES = frozenset({"line", "area"})
 
 # Plotly Express keyword args whose value is a single DataFrame column name.
+#
+# This must stay a **superset** of every px kwarg that names a column, across
+# every constructor — not just the ones in ``ALLOWED_VISUALIZATIONS`` today.
+# Omitting one is a hard bug, not a missed optimisation: the column is projected
+# away before px sees the frame and px raises ``Value of '<kwarg>' is not the
+# name of a column``, so the figure renders as an error card (and, in the
+# serverless export, freezes with ``binding_miss`` because the pruned parquet no
+# longer carries the column). A *spurious* entry is harmless by comparison —
+# ``_project_scan`` intersects with the real schema and the serverless binder
+# intersects with ``df.columns``, so a name that is not a column is dropped.
+#
+# Deliberately NOT here: ``marginal_x``/``marginal_y`` (values are trace kinds —
+# "rug"/"box"/… — and the extra trace reads the existing x/y columns),
+# ``trendline``, ``line_shape``, ``orientation``, ``facet_col_wrap`` and the
+# ``*_spacing`` params — none of them name a column.
 _PX_COLUMN_PARAMS: frozenset[str] = frozenset(
     {
         "x", "y", "z", "color", "size", "symbol", "line_dash", "line_group",
-        "pattern_shape", "hover_name", "names", "values", "facet_col", "facet_row",
-        "animation_frame", "animation_group", "base", "r", "theta", "a", "b", "c",
+        "pattern_shape", "hover_name", "text", "names", "values", "ids", "parents",
+        "facet_col", "facet_row", "animation_frame", "animation_group", "base",
+        "r", "theta", "a", "b", "c", "x_start", "x_end", "lat", "lon", "locations",
         "error_x", "error_y", "error_z",
+        "error_x_minus", "error_y_minus", "error_z_minus",
     }
 )  # fmt: skip
 
 # Plotly Express keyword args whose value is a list (or ``{col: bool}`` dict) of
 # column names.
-_PX_COLUMN_LIST_PARAMS: frozenset[str] = frozenset({"hover_data", "custom_data", "dimensions"})
+_PX_COLUMN_LIST_PARAMS: frozenset[str] = frozenset(
+    {"hover_data", "custom_data", "dimensions", "path"}
+)
 
 # Visualisations that read the whole frame (or a column set we can't reliably
 # enumerate from dict_kwargs): projecting them risks dropping needed columns, so

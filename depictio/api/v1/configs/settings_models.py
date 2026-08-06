@@ -194,6 +194,7 @@ class MongoDBConfig(ServiceConfig):
         # stored there would be regenerated on every dev wipe and inflate the
         # project's installation count.
         telemetry_collection: str = Field(default="telemetry")
+        static_exports_collection: str = Field(default="static_exports")
         test_collection: str = Field(default="test")
 
     collections: Collections = Field(default_factory=Collections)
@@ -1065,6 +1066,39 @@ class PerformanceConfig(BaseSettings):
     # (TableLiteComponent.page_size) already defaults to 100, and the React grid
     # reads that value directly — a settings knob would be dead config.
 
+    # Serverless static-bundle ceilings — a `single-file` bundle is one HTML
+    # document with every data collection base64'd inside it, so its size is a
+    # producer-side cap like the render caps above (RFC §8.1).
+    static_bundle_warn_mb: int = Field(
+        default=25,
+        description=(
+            "Static-bundle size (MB) above which the export is reported as "
+            "oversized but still built and delivered. Roughly 300k rows × 20 "
+            "columns of bundled data on top of the ~7.7 MB static runtime every "
+            "bundle carries. It marks where the file stops travelling well "
+            "rather than where it stops working: a mail attachment caps near "
+            "25 MB, and load time is already noticeable because nothing renders "
+            "until the whole document is parsed. Reported by the export and, as "
+            "an estimate, by its preflight — so the size is knowable before the "
+            "build is paid for. 0 disables the report."
+        ),
+    )
+    static_bundle_max_mb: int = Field(
+        default=100,
+        description=(
+            "Static-bundle size (MB) above which the export is refused instead "
+            "of built. The browser holds the payload three to four times over "
+            "while loading it (document text, base64 string, ArrayBuffer, "
+            "materialised columns), so the practical wall arrives well before "
+            "V8's ~512M-character string limit; 100 MB is where distribution "
+            "fails outright, GitHub rejecting a file that size. Enforced against "
+            "a running base64 total while the data collections are serialised, "
+            "so an oversized bundle is refused mid-encode rather than after it "
+            "has been materialised in memory. Must be ≥ "
+            "`static_bundle_warn_mb` to be meaningful. 0 disables the check."
+        ),
+    )
+
     # Playwright/browser timeouts (in milliseconds)
     browser_navigation_timeout: int = Field(default=60000)  # 60s default
     browser_page_load_timeout: int = Field(default=90000)  # 90s default
@@ -1105,6 +1139,29 @@ class PerformanceConfig(BaseSettings):
     )
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_PERFORMANCE_")
+
+    @model_validator(mode="after")
+    def _static_bundle_ceilings_ordered(self) -> "PerformanceConfig":
+        """The hard ceiling must not sit below the soft one.
+
+        Inverted, the pair is unusable rather than merely odd: an export past
+        the "still builds, just travels badly" line would be refused outright,
+        so the warning could never be seen. 0 means "that check is off" for
+        either field, which is not an ordering violation.
+        """
+        if (
+            self.static_bundle_max_mb
+            and self.static_bundle_warn_mb
+            and self.static_bundle_max_mb < self.static_bundle_warn_mb
+        ):
+            raise ValueError(
+                "static_bundle_max_mb "
+                f"({self.static_bundle_max_mb} MB) must be >= static_bundle_warn_mb "
+                f"({self.static_bundle_warn_mb} MB): the hard ceiling refuses the export, "
+                "the soft one only warns about it, so a hard ceiling below the soft one "
+                "makes the warning unreachable. Use 0 to disable either check."
+            )
+        return self
 
 
 class AnalyticsConfig(BaseSettings):

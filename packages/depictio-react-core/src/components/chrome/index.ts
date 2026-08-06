@@ -5,6 +5,13 @@ import type { StoredMetadata } from '../../api';
 
 export { default as ComponentChrome, actionsFor } from './ComponentChrome';
 export type { ComponentChromeProps, ChromeAction } from './ComponentChrome';
+export {
+  StaticBadgeProvider,
+  StaticTierBadge,
+  staticTierExplanation,
+  useIsStaticBundle,
+} from './StaticBadgeContext';
+export type { StaticTierEntry, StaticTierMap } from './StaticBadgeContext';
 export { default as MetadataPopover } from './MetadataPopover';
 export { default as MetadataBody } from './MetadataBody';
 export { default as FullscreenButton } from './FullscreenButton';

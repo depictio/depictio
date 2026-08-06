@@ -1,0 +1,14 @@
+[
+  {
+    "id": "phase-0",
+    "title": "Phase 0 — static runtime, everything frozen",
+    "manifest": "../../packages/depictio-static-core/fixtures/manifest-basic.json",
+    "description": "The real viewer mounted offline from a hand-written manifest: card, Plotly figure, MultiSelect and text component, all served from frozen payloads with tier badges. No backend, no network."
+  },
+  {
+    "id": "penguins-live",
+    "title": "Penguins fully LIVE — cards, filters, figures, tables, advanced viz, cross-DC links (phases 1+3+4+5+6+7)",
+    "manifest": "demo/manifests/penguins.json",
+    "description": "Built by producer B from a spec + local Parquet (depictio dashboard build-static). All 12 components are live, none frozen: change the species or year selection and the cards recompute, the scatter re-renders (bind-and-refill), the live table re-filters, the sunburst and dot plot reload their frames through the in-browser port of the advanced-viz sampling policy — and the CODE-MODE bar chart re-derives itself, replaying its Python prologue (group_by + sort, transpiled to a JSON IR) over the filtered rows before refilling. The bundle now carries TWO data collections joined by a cross-DC link: the Region selector lives on a small island → region lookup table, and `region` is not a penguins column at all — picking one runs the in-browser link resolver (translate region → island on the lookup collection, then apply the islands it resolved to), so every penguins component re-filters through the link. Region \"Uncharted\" maps to an island no penguin lives on: the whole dashboard drops to its zero state. Header-click sorting and pagination included, all computed offline through the in-browser hyparquet engine with server-exact Polars semantics. Regenerate with depictio/serverless/examples/generate_demo_manifest.py."
+  }
+]

@@ -1,0 +1,1237 @@
+{
+  "$defs": {
+    "AggFn": {
+      "description": "Closed allowlist of ``group_by().agg()`` reducers.",
+      "enum": [
+        "sum",
+        "mean",
+        "median",
+        "min",
+        "max",
+        "count",
+        "len",
+        "nunique",
+        "std",
+        "var",
+        "first",
+        "last"
+      ],
+      "title": "AggFn",
+      "type": "string"
+    },
+    "AggSpec": {
+      "additionalProperties": false,
+      "description": "One reducer of a ``group_by().agg()``.\n\n``col`` is null only for ``fn == \"len\"`` spelled bare (``pl.len()`` /\nthe deprecated ``pl.count()``): the group size reads no column. The\ncolumn-attached spelling ``pl.col(c).len()`` keeps ``col = c`` \u2014 Polars\nstill returns the group size there, but names the output after ``c``, and\na missing ``c`` still raises.",
+      "properties": {
+        "alias": {
+          "description": "Output column name. Polars defaults it to ``col``, except for a bare ``pl.len()`` -> 'len' and a bare ``pl.count()`` -> 'count'",
+          "title": "Alias",
+          "type": "string"
+        },
+        "col": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Source column reduced; null only for a bare ``len`` (group size)",
+          "title": "Col"
+        },
+        "fn": {
+          "$ref": "#/$defs/AggFn"
+        }
+      },
+      "required": [
+        "fn",
+        "alias"
+      ],
+      "title": "AggSpec",
+      "type": "object"
+    },
+    "AndPred": {
+      "additionalProperties": false,
+      "description": "``{\"and\": [<Pred>, ...]}`` \u2014 the field is aliased because ``and`` is a keyword.",
+      "properties": {
+        "and": {
+          "description": "Conjuncts, evaluated left to right",
+          "items": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/CmpPred"
+              },
+              {
+                "$ref": "#/$defs/IsNullPred"
+              },
+              {
+                "$ref": "#/$defs/IsNotNullPred"
+              },
+              {
+                "$ref": "#/$defs/IsInPred"
+              },
+              {
+                "$ref": "#/$defs/AndPred"
+              },
+              {
+                "$ref": "#/$defs/OrPred"
+              },
+              {
+                "$ref": "#/$defs/NotPred"
+              }
+            ]
+          },
+          "title": "And",
+          "type": "array"
+        }
+      },
+      "required": [
+        "and"
+      ],
+      "title": "AndPred",
+      "type": "object"
+    },
+    "BindingTable": {
+      "additionalProperties": false,
+      "description": "Everything the runtime needs to refill a ui-mode figure (RFC \u00a74).",
+      "properties": {
+        "group_cols": {
+          "description": "px grouping columns in order [color, symbol, line_dash, line_group, pattern_shape, facet_row, facet_col]",
+          "items": {
+            "type": "string"
+          },
+          "title": "Group Cols",
+          "type": "array"
+        },
+        "sampled": {
+          "default": false,
+          "description": "True when the build sampled before filtering (FIGURE_MAX_POINTS) -> partial tier",
+          "title": "Sampled",
+          "type": "boolean"
+        },
+        "scaffold": {
+          "additionalProperties": true,
+          "description": "Full figure JSON from the real create_figure_from_data, data arrays stripped",
+          "title": "Scaffold",
+          "type": "object"
+        },
+        "traces": {
+          "items": {
+            "$ref": "#/$defs/TraceBinding"
+          },
+          "title": "Traces",
+          "type": "array"
+        },
+        "trendlines": {
+          "items": {
+            "$ref": "#/$defs/TrendlineBinding"
+          },
+          "title": "Trendlines",
+          "type": "array"
+        }
+      },
+      "required": [
+        "scaffold",
+        "traces"
+      ],
+      "title": "BindingTable",
+      "type": "object"
+    },
+    "BundleMode": {
+      "description": "Delivery mode \u2014 only ``data_refs[].uri`` semantics change between them.",
+      "enum": [
+        "single-file",
+        "static-dir",
+        "remote"
+      ],
+      "title": "BundleMode",
+      "type": "string"
+    },
+    "CmpArgs": {
+      "additionalProperties": false,
+      "description": "Argument of ``cmp``: column, operator, literal.",
+      "properties": {
+        "col": {
+          "title": "Col",
+          "type": "string"
+        },
+        "op": {
+          "$ref": "#/$defs/CmpOperator"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "description": "JSON scalar compared against the column (never null \u2014 use is_null)",
+          "title": "Value"
+        }
+      },
+      "required": [
+        "col",
+        "op",
+        "value"
+      ],
+      "title": "CmpArgs",
+      "type": "object"
+    },
+    "CmpOperator": {
+      "description": "Comparison operators expressible in a prologue predicate.",
+      "enum": [
+        "<",
+        "<=",
+        ">",
+        ">=",
+        "==",
+        "!="
+      ],
+      "title": "CmpOperator",
+      "type": "string"
+    },
+    "CmpPred": {
+      "additionalProperties": false,
+      "description": "``{\"cmp\": {\"col\": \"q_val\", \"op\": \"<\", \"value\": 0.05}}``",
+      "properties": {
+        "cmp": {
+          "$ref": "#/$defs/CmpArgs"
+        }
+      },
+      "required": [
+        "cmp"
+      ],
+      "title": "CmpPred",
+      "type": "object"
+    },
+    "ColRef": {
+      "additionalProperties": false,
+      "description": "Argument of the unary null predicates: ``{\"col\": \"x\"}``.",
+      "properties": {
+        "col": {
+          "description": "Column the predicate tests",
+          "title": "Col",
+          "type": "string"
+        }
+      },
+      "required": [
+        "col"
+      ],
+      "title": "ColRef",
+      "type": "object"
+    },
+    "ColumnSpec": {
+      "additionalProperties": false,
+      "description": "One physical column of a bundled Parquet file.",
+      "properties": {
+        "dtype": {
+          "description": "Polars dtype string at export time (e.g. 'Int64', 'Utf8')",
+          "title": "Dtype",
+          "type": "string"
+        },
+        "name": {
+          "description": "Column name as stored in the Parquet file",
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "dtype"
+      ],
+      "title": "ColumnSpec",
+      "type": "object"
+    },
+    "ComponentTier": {
+      "description": "Per-component liveness in the static runtime (RFC \u00a73.2).",
+      "enum": [
+        "live",
+        "partial",
+        "frozen",
+        "omitted"
+      ],
+      "title": "ComponentTier",
+      "type": "string"
+    },
+    "DashboardSection": {
+      "additionalProperties": false,
+      "description": "The dashboard document the runtime mounts.",
+      "properties": {
+        "doc": {
+          "additionalProperties": true,
+          "description": "DashboardDataLite-shaped document: layout + stored_metadata components",
+          "title": "Doc",
+          "type": "object"
+        },
+        "id": {
+          "description": "Dashboard id the runtime passes to App \u2014 real Mongo id (producer A/C) or synthetic sha1(workflow_tag + ':' + dc_tag)[:24]-style id (producer B). Must be non-empty: ComponentRenderer silently no-ops several component types without a dashboardId.",
+          "title": "Id",
+          "type": "string"
+        },
+        "title": {
+          "default": "",
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "doc"
+      ],
+      "title": "DashboardSection",
+      "type": "object"
+    },
+    "DataRef": {
+      "additionalProperties": false,
+      "description": "One data collection's bundled table.\n\nMirrors the shape of ``load_deltatable_lite``'s ``init_data`` entries\n(``deltatables_utils.py:1393``) \u2014 the proven \"resolve a DC without an API\nround-trip\" contract \u2014 extended with serverless-only fields.",
+      "properties": {
+        "aggregation_hash": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Staleness token: server-side _get_aggregation_hash for producer A, hash of the input Parquet bytes for producer B",
+          "title": "Aggregation Hash"
+        },
+        "codebooks": {
+          "additionalProperties": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object"
+          },
+          "description": "Per categorical non-String column: JSON-serialized option value -> integer code stored in the '__code__<col>' companion. Keys are serialized with the same _json_safe path that produces MultiSelect options, so option values and codebook keys are byte-identical. A selected value absent from the codebook matches nothing (same as a failed cast server-side).",
+          "title": "Codebooks",
+          "type": "object"
+        },
+        "columns": {
+          "description": "Physical schema after pruning + companions",
+          "items": {
+            "$ref": "#/$defs/ColumnSpec"
+          },
+          "title": "Columns",
+          "type": "array"
+        },
+        "companions": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Companion column name -> source. '__ts__<col>': epoch-microsecond datetime companion for <col>; '__fe__<sha8>': boolean column for the component-static filter_expr whose source text is the value; '__code__<col>': Int32 codebook codes for categorical column <col>.",
+          "title": "Companions",
+          "type": "object"
+        },
+        "row_group_bytes": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Target row-group size used at export (tuned for Range requests in remote mode)",
+          "title": "Row Group Bytes"
+        },
+        "rows": {
+          "description": "Row count at export time",
+          "minimum": 0,
+          "title": "Rows",
+          "type": "integer"
+        },
+        "size_bytes": {
+          "description": "Parquet file size in bytes",
+          "minimum": 0,
+          "title": "Size Bytes",
+          "type": "integer"
+        },
+        "uri": {
+          "description": "Where the Parquet bytes live. 'inline:dc_<id>' (single-file, resolved against inline_blobs), a bundle-relative path like 'data/<id>.parquet' (static-dir), or an absolute URL (remote). All resolution goes through the runtime's single resolveUri() helper.",
+          "title": "Uri",
+          "type": "string"
+        }
+      },
+      "required": [
+        "uri",
+        "rows",
+        "size_bytes",
+        "columns"
+      ],
+      "title": "DataRef",
+      "type": "object"
+    },
+    "ExportProvenance": {
+      "additionalProperties": false,
+      "description": "Who built the bundle, from where, and against which data.\n\nSurfaced in the bundle's left rail: a bundle outlives the instance it came\nfrom, so a reader needs to know whose export it is and how old.",
+      "properties": {
+        "dashboard_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Absolute URL of the live dashboard, when the builder knows it",
+          "title": "Dashboard Url"
+        },
+        "exported_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "ISO 8601; mirrors built_at, kept here for display",
+          "title": "Exported At"
+        },
+        "exported_by": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Email of the exporting user",
+          "title": "Exported By"
+        },
+        "project_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Name"
+        },
+        "source": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Instance the export ran against (host or deployment name)",
+          "title": "Source"
+        }
+      },
+      "title": "ExportProvenance",
+      "type": "object"
+    },
+    "FilterOp": {
+      "additionalProperties": false,
+      "description": "``df.filter(<pred>)`` \u2014 row selection. Nulls never match.",
+      "properties": {
+        "op": {
+          "const": "filter",
+          "default": "filter",
+          "title": "Op",
+          "type": "string"
+        },
+        "pred": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CmpPred"
+            },
+            {
+              "$ref": "#/$defs/IsNullPred"
+            },
+            {
+              "$ref": "#/$defs/IsNotNullPred"
+            },
+            {
+              "$ref": "#/$defs/IsInPred"
+            },
+            {
+              "$ref": "#/$defs/AndPred"
+            },
+            {
+              "$ref": "#/$defs/OrPred"
+            },
+            {
+              "$ref": "#/$defs/NotPred"
+            }
+          ],
+          "title": "Pred"
+        }
+      },
+      "required": [
+        "pred"
+      ],
+      "title": "FilterOp",
+      "type": "object"
+    },
+    "FrozenPayload": {
+      "additionalProperties": false,
+      "description": "A precomputed component payload, rendered when the component is frozen.",
+      "properties": {
+        "filter_state": {
+          "description": "Filter state the payload was computed at (default state = [])",
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Filter State",
+          "type": "array"
+        },
+        "kind": {
+          "description": "Component type the payload feeds (figure|table|card|multiqc|advanced_viz|map|image)",
+          "title": "Kind",
+          "type": "string"
+        },
+        "payload": {
+          "additionalProperties": true,
+          "description": "Exactly what the corresponding api.ts function would have returned",
+          "title": "Payload",
+          "type": "object"
+        }
+      },
+      "required": [
+        "kind",
+        "payload"
+      ],
+      "title": "FrozenPayload",
+      "type": "object"
+    },
+    "GroupByOp": {
+      "additionalProperties": false,
+      "description": "``df.group_by(by, maintain_order=True).agg(...)`` \u2014 first-appearance group order.",
+      "properties": {
+        "agg": {
+          "items": {
+            "$ref": "#/$defs/AggSpec"
+          },
+          "title": "Agg",
+          "type": "array"
+        },
+        "by": {
+          "description": "Grouping key columns; a null key forms its own group",
+          "items": {
+            "type": "string"
+          },
+          "title": "By",
+          "type": "array"
+        },
+        "op": {
+          "const": "group_by",
+          "default": "group_by",
+          "title": "Op",
+          "type": "string"
+        }
+      },
+      "required": [
+        "by",
+        "agg"
+      ],
+      "title": "GroupByOp",
+      "type": "object"
+    },
+    "IsInArgs": {
+      "additionalProperties": false,
+      "description": "Argument of ``is_in``: column plus the literal membership set.",
+      "properties": {
+        "col": {
+          "title": "Col",
+          "type": "string"
+        },
+        "values": {
+          "description": "Literal scalars the column must be one of",
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              }
+            ]
+          },
+          "title": "Values",
+          "type": "array"
+        }
+      },
+      "required": [
+        "col",
+        "values"
+      ],
+      "title": "IsInArgs",
+      "type": "object"
+    },
+    "IsInPred": {
+      "additionalProperties": false,
+      "description": "``{\"is_in\": {\"col\": \"x\", \"values\": [...]}}``",
+      "properties": {
+        "is_in": {
+          "$ref": "#/$defs/IsInArgs"
+        }
+      },
+      "required": [
+        "is_in"
+      ],
+      "title": "IsInPred",
+      "type": "object"
+    },
+    "IsNotNullPred": {
+      "additionalProperties": false,
+      "description": "``{\"is_not_null\": {\"col\": \"x\"}}``",
+      "properties": {
+        "is_not_null": {
+          "$ref": "#/$defs/ColRef"
+        }
+      },
+      "required": [
+        "is_not_null"
+      ],
+      "title": "IsNotNullPred",
+      "type": "object"
+    },
+    "IsNullPred": {
+      "additionalProperties": false,
+      "description": "``{\"is_null\": {\"col\": \"x\"}}``",
+      "properties": {
+        "is_null": {
+          "$ref": "#/$defs/ColRef"
+        }
+      },
+      "required": [
+        "is_null"
+      ],
+      "title": "IsNullPred",
+      "type": "object"
+    },
+    "LinkTable": {
+      "additionalProperties": false,
+      "description": "Precomputed value-mapping for a DC link whose source DC is not bundled (tier B).",
+      "properties": {
+        "values": {
+          "additionalProperties": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "description": "Source value -> translated target values",
+          "title": "Values",
+          "type": "object"
+        }
+      },
+      "title": "LinkTable",
+      "type": "object"
+    },
+    "LinksSection": {
+      "additionalProperties": false,
+      "description": "DC link configs plus precomputed translation tables (RFC \u00a78).",
+      "properties": {
+        "configs": {
+          "description": "Link configs as stored in Mongo, verbatim",
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Configs",
+          "type": "array"
+        },
+        "tables": {
+          "additionalProperties": {
+            "$ref": "#/$defs/LinkTable"
+          },
+          "description": "link_id -> precomputed translation table",
+          "title": "Tables",
+          "type": "object"
+        }
+      },
+      "title": "LinksSection",
+      "type": "object"
+    },
+    "NotPred": {
+      "additionalProperties": false,
+      "description": "``{\"not\": <Pred>}``",
+      "properties": {
+        "not": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CmpPred"
+            },
+            {
+              "$ref": "#/$defs/IsNullPred"
+            },
+            {
+              "$ref": "#/$defs/IsNotNullPred"
+            },
+            {
+              "$ref": "#/$defs/IsInPred"
+            },
+            {
+              "$ref": "#/$defs/AndPred"
+            },
+            {
+              "$ref": "#/$defs/OrPred"
+            },
+            {
+              "$ref": "#/$defs/NotPred"
+            }
+          ],
+          "description": "Negated sub-predicate",
+          "title": "Not"
+        }
+      },
+      "required": [
+        "not"
+      ],
+      "title": "NotPred",
+      "type": "object"
+    },
+    "OrPred": {
+      "additionalProperties": false,
+      "description": "``{\"or\": [<Pred>, ...]}``",
+      "properties": {
+        "or": {
+          "description": "Disjuncts, evaluated left to right",
+          "items": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/CmpPred"
+              },
+              {
+                "$ref": "#/$defs/IsNullPred"
+              },
+              {
+                "$ref": "#/$defs/IsNotNullPred"
+              },
+              {
+                "$ref": "#/$defs/IsInPred"
+              },
+              {
+                "$ref": "#/$defs/AndPred"
+              },
+              {
+                "$ref": "#/$defs/OrPred"
+              },
+              {
+                "$ref": "#/$defs/NotPred"
+              }
+            ]
+          },
+          "title": "Or",
+          "type": "array"
+        }
+      },
+      "required": [
+        "or"
+      ],
+      "title": "OrPred",
+      "type": "object"
+    },
+    "Producer": {
+      "description": "Which producer built the bundle (RFC \u00a73.3).",
+      "enum": [
+        "A",
+        "B",
+        "C"
+      ],
+      "title": "Producer",
+      "type": "string"
+    },
+    "RenameOp": {
+      "additionalProperties": false,
+      "description": "``df.rename({\"old\": \"new\"})``.",
+      "properties": {
+        "map": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Old column name -> new column name",
+          "title": "Map",
+          "type": "object"
+        },
+        "op": {
+          "const": "rename",
+          "default": "rename",
+          "title": "Op",
+          "type": "string"
+        }
+      },
+      "required": [
+        "map"
+      ],
+      "title": "RenameOp",
+      "type": "object"
+    },
+    "RuntimeLimits": {
+      "additionalProperties": false,
+      "description": "Sampling ceilings the runtime enforces, pinned from the building instance.\n\nMirrors ``PerformanceConfig`` (settings_models.py): the advanced_viz data\npath reduces the filtered frame to ``figure_max_points`` rows under the\nkind's policy, and flags aggregating kinds as degraded past\n``advanced_viz_no_sample_max_rows``. Defaults match the server defaults so\nmanifests built before this field existed keep the same behaviour.",
+      "properties": {
+        "advanced_viz_no_sample_max_rows": {
+          "default": 2000000,
+          "description": "Ceiling past which 'none'-policy kinds are sampled anyway (degraded); 0 disables",
+          "title": "Advanced Viz No Sample Max Rows",
+          "type": "integer"
+        },
+        "advanced_viz_tail_effect_threshold": {
+          "default": 1.0,
+          "description": "Fallback tail threshold for signed effect columns",
+          "title": "Advanced Viz Tail Effect Threshold",
+          "type": "number"
+        },
+        "advanced_viz_tail_p_threshold": {
+          "default": 0.05,
+          "description": "Fallback tail threshold for raw p-value columns",
+          "title": "Advanced Viz Tail P Threshold",
+          "type": "number"
+        },
+        "figure_max_points": {
+          "default": 10000,
+          "description": "Scan-level reduction cap (rows) for sampled render paths",
+          "title": "Figure Max Points",
+          "type": "integer"
+        }
+      },
+      "title": "RuntimeLimits",
+      "type": "object"
+    },
+    "SortOp": {
+      "additionalProperties": false,
+      "description": "``df.sort(by, descending=desc)`` with Polars' default null placement.",
+      "properties": {
+        "by": {
+          "items": {
+            "type": "string"
+          },
+          "title": "By",
+          "type": "array"
+        },
+        "desc": {
+          "description": "Per-key direction; same length as ``by``",
+          "items": {
+            "type": "boolean"
+          },
+          "title": "Desc",
+          "type": "array"
+        },
+        "op": {
+          "const": "sort",
+          "default": "sort",
+          "title": "Op",
+          "type": "string"
+        }
+      },
+      "required": [
+        "by",
+        "desc"
+      ],
+      "title": "SortOp",
+      "type": "object"
+    },
+    "TabEntry": {
+      "additionalProperties": false,
+      "description": "One tab of a bundled tab family.\n\nServer-side a family is a main tab (``is_main_tab``) plus children carrying\n``parent_dashboard_id``; the viewer's left rail switches between them by\nnavigating to /dashboard/<id>. A bundle has no routing, so it carries every\ntab's document and switches in place.",
+      "properties": {
+        "doc": {
+          "additionalProperties": true,
+          "description": "That tab's DashboardDataLite-shaped document",
+          "title": "Doc",
+          "type": "object"
+        },
+        "icon": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Iconify id shown on the tab pill",
+          "title": "Icon"
+        },
+        "icon_color": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Icon Color"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "is_main_tab": {
+          "default": false,
+          "title": "Is Main Tab",
+          "type": "boolean"
+        },
+        "tab_order": {
+          "default": 0,
+          "description": "0 for the main tab, then child order",
+          "title": "Tab Order",
+          "type": "integer"
+        },
+        "title": {
+          "default": "",
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "doc"
+      ],
+      "title": "TabEntry",
+      "type": "object"
+    },
+    "TierEntry": {
+      "additionalProperties": false,
+      "description": "Per-component liveness verdict, shown by ``--check`` and the runtime badge.",
+      "properties": {
+        "detail": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Human string for the --check table and badge tooltip",
+          "title": "Detail"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TierReason"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Machine-readable cause when tier != live"
+        },
+        "tier": {
+          "$ref": "#/$defs/ComponentTier"
+        }
+      },
+      "required": [
+        "tier"
+      ],
+      "title": "TierEntry",
+      "type": "object"
+    },
+    "TierReason": {
+      "description": "Why a component is not fully live. ``detail`` carries the human string.",
+      "enum": [
+        "multiqc",
+        "celery_compute",
+        "code_mode",
+        "binding_miss",
+        "max_points",
+        "link_table_too_big",
+        "map_tiles",
+        "jbrowse",
+        "image",
+        "whole_frame_viz",
+        "filter_expr_window",
+        "unsupported"
+      ],
+      "title": "TierReason",
+      "type": "string"
+    },
+    "TraceBinding": {
+      "additionalProperties": false,
+      "description": "One trace's binding in the bind-and-refill scheme (RFC \u00a74).",
+      "properties": {
+        "axes": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Facet-cell disambiguation: 'xaxis'/'yaxis' -> plotly axis id",
+          "title": "Axes",
+          "type": "object"
+        },
+        "customdata": {
+          "description": "Source columns feeding the 2-D customdata array, in plotly's column order \u2014 customdata[k] is this list's k-th column, which is what the hovertemplate's %{customdata[k]} indices address",
+          "items": {
+            "type": "string"
+          },
+          "title": "Customdata",
+          "type": "array"
+        },
+        "fields": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Trace field path (e.g. 'x', 'y', 'marker.size') -> source column",
+          "title": "Fields",
+          "type": "object"
+        },
+        "group": {
+          "additionalProperties": true,
+          "description": "Equality predicates (grouping column -> value) selecting this trace's rows",
+          "title": "Group",
+          "type": "object"
+        },
+        "i": {
+          "description": "Trace index in the scaffold figure",
+          "minimum": 0,
+          "title": "I",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "i",
+        "fields"
+      ],
+      "title": "TraceBinding",
+      "type": "object"
+    },
+    "TrendlineBinding": {
+      "additionalProperties": false,
+      "description": "A trendline trace refit client-side via closed-form 1-predictor OLS.",
+      "properties": {
+        "i": {
+          "description": "Trendline trace index in the scaffold",
+          "minimum": 0,
+          "title": "I",
+          "type": "integer"
+        },
+        "on": {
+          "description": "Index of the raw-data trace it is fit against",
+          "minimum": 0,
+          "title": "On",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "i",
+        "on"
+      ],
+      "title": "TrendlineBinding",
+      "type": "object"
+    },
+    "UnpivotOp": {
+      "additionalProperties": false,
+      "description": "``df.unpivot(on=, index=, variable_name=, value_name=)`` (a.k.a. legacy ``melt``).",
+      "properties": {
+        "index": {
+          "description": "Columns carried through unchanged",
+          "items": {
+            "type": "string"
+          },
+          "title": "Index",
+          "type": "array"
+        },
+        "on": {
+          "description": "Columns melted into (variable, value) pairs, in block order",
+          "items": {
+            "type": "string"
+          },
+          "title": "On",
+          "type": "array"
+        },
+        "op": {
+          "const": "unpivot",
+          "default": "unpivot",
+          "title": "Op",
+          "type": "string"
+        },
+        "value": {
+          "default": "value",
+          "description": "Name of the emitted value column",
+          "title": "Value",
+          "type": "string"
+        },
+        "variable": {
+          "default": "variable",
+          "description": "Name of the emitted variable column",
+          "title": "Variable",
+          "type": "string"
+        }
+      },
+      "required": [
+        "on"
+      ],
+      "title": "UnpivotOp",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "The serverless bundle contract (RFC \u00a73.1). manifest_version 1.",
+  "properties": {
+    "allow_network_tiles": {
+      "default": false,
+      "description": "Permit MapLibre tile fetches (static-dir/remote); single-file freezes maps unless style is white-bg",
+      "title": "Allow Network Tiles",
+      "type": "boolean"
+    },
+    "bindings": {
+      "additionalProperties": {
+        "$ref": "#/$defs/BindingTable"
+      },
+      "description": "component_id -> bind-and-refill table (phase 5)",
+      "title": "Bindings",
+      "type": "object"
+    },
+    "built_at": {
+      "description": "ISO 8601 build timestamp",
+      "title": "Built At",
+      "type": "string"
+    },
+    "dashboard": {
+      "$ref": "#/$defs/DashboardSection"
+    },
+    "data_refs": {
+      "additionalProperties": {
+        "$ref": "#/$defs/DataRef"
+      },
+      "description": "dc_id -> bundled table",
+      "title": "Data Refs",
+      "type": "object"
+    },
+    "depictio_version": {
+      "description": "Depictio version that built the bundle",
+      "title": "Depictio Version",
+      "type": "string"
+    },
+    "frozen": {
+      "additionalProperties": {
+        "$ref": "#/$defs/FrozenPayload"
+      },
+      "description": "component_id -> precomputed payload",
+      "title": "Frozen",
+      "type": "object"
+    },
+    "inline_blobs": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "single-file only: 'dc_<id>' -> base64 Parquet bytes referenced by inline: URIs",
+      "title": "Inline Blobs",
+      "type": "object"
+    },
+    "limits": {
+      "$ref": "#/$defs/RuntimeLimits",
+      "description": "Sampling ceilings pinned from the building instance's PerformanceConfig"
+    },
+    "links": {
+      "$ref": "#/$defs/LinksSection"
+    },
+    "manifest_version": {
+      "default": 1,
+      "title": "Manifest Version",
+      "type": "integer"
+    },
+    "mode": {
+      "$ref": "#/$defs/BundleMode"
+    },
+    "producer": {
+      "$ref": "#/$defs/Producer"
+    },
+    "prologues": {
+      "additionalProperties": {
+        "items": {
+          "discriminator": {
+            "mapping": {
+              "filter": "#/$defs/FilterOp",
+              "group_by": "#/$defs/GroupByOp",
+              "rename": "#/$defs/RenameOp",
+              "sort": "#/$defs/SortOp",
+              "unpivot": "#/$defs/UnpivotOp"
+            },
+            "propertyName": "op"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/FilterOp"
+            },
+            {
+              "$ref": "#/$defs/UnpivotOp"
+            },
+            {
+              "$ref": "#/$defs/GroupByOp"
+            },
+            {
+              "$ref": "#/$defs/SortOp"
+            },
+            {
+              "$ref": "#/$defs/RenameOp"
+            }
+          ]
+        },
+        "type": "array"
+      },
+      "description": "component_id -> code-mode prologue IR (phase 6): the ops the runtime replays on the filtered frame before bind-and-refill. Absent for components whose code needs no reshape (they bind to the base table)",
+      "title": "Prologues",
+      "type": "object"
+    },
+    "provenance": {
+      "$ref": "#/$defs/ExportProvenance"
+    },
+    "tabs": {
+      "description": "Every tab of the bundled family, main tab first, each with its own document. Empty for a single-tab bundle, where `dashboard` is the whole story; when populated it includes the entry tab too, so `dashboard.doc` duplicates one entry. Component-keyed sections (tiers, frozen, bindings, prologues) span the whole family \u2014 component ids are uuids, so they never collide across tabs",
+      "items": {
+        "$ref": "#/$defs/TabEntry"
+      },
+      "title": "Tabs",
+      "type": "array"
+    },
+    "tiers": {
+      "additionalProperties": {
+        "$ref": "#/$defs/TierEntry"
+      },
+      "description": "component_id -> liveness verdict",
+      "title": "Tiers",
+      "type": "object"
+    }
+  },
+  "required": [
+    "mode",
+    "producer",
+    "built_at",
+    "depictio_version",
+    "dashboard"
+  ],
+  "title": "BundleManifest",
+  "type": "object"
+}

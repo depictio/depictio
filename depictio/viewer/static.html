@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Depictio</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <!-- Bundle manifest injected by the serverless producers (token replacement,
+         same convention as catalog-preview). The token must appear nowhere else
+         in this file: producers may replace only the first occurrence. -->
+    <script id="bundle-manifest" type="application/json">__BUNDLE_MANIFEST__</script>
+    <script type="module" src="/src/static-runtime/main.tsx"></script>
+  </body>
+</html>

@@ -11,10 +11,7 @@ import {
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
-import ThemeToggle from './ThemeToggle';
-import ServerStatusBadge from './ServerStatusBadge';
-import ProfileBadge from './ProfileBadge';
-import AuthModeBadge from './AuthModeBadge';
+import SidebarFooter from './SidebarFooter';
 import { useCurrentUser } from '../hooks/useCurrentUser';
 
 export type SidebarSection =
@@ -135,13 +132,7 @@ const AppSidebar: React.FC<AppSidebarProps> = ({ active }) => {
         </Stack>
       </ScrollArea>
 
-      <Stack gap="xs" align="center">
-        <Divider w="100%" />
-        <ThemeToggle />
-        <ServerStatusBadge />
-        <AuthModeBadge />
-        <ProfileBadge />
-      </Stack>
+      <SidebarFooter />
     </Stack>
   );
 };

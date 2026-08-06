@@ -2690,6 +2690,30 @@ jobs:
           mkdir -p data/depictioDB data/minio_data data/prof_files data/cache data/redis
           chmod 777 data data/depictioDB data/minio_data data/prof_files data/cache data/redis
 
+      # Static-export template — single-user leg only. The celery worker
+      # bind-mounts this checkout (docker-compose.dev.yaml: ./depictio:/app/depictio),
+      # so building depictio/viewer/dist-static/static.html on the host makes it
+      # visible to the export task in-container. On the other two legs the export
+      # spec's full-flow test self-skips via its "static-runtime bundle not built"
+      # branch — by design, so only one leg pays the build cost.
+      - name: Set up pnpm (static export template)
+        if: matrix.auth_mode == 'single-user'
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - name: Set up Node.js 22 (static export template)
+        if: matrix.auth_mode == 'single-user'
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: pnpm
+      - name: Build static export template
+        if: matrix.auth_mode == 'single-user'
+        run: |
+          pnpm install --frozen-lockfile
+          cd depictio/viewer
+          pnpm run build:static
+
       - name: Log in and start services
         run: |
           echo ${{ secrets.GHCR_PAT }} | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin

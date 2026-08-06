@@ -1,7 +1,7 @@
 import React from 'react';
 import { Anchor, Group, Text } from '@mantine/core';
 
-import { useColorScheme } from '../hooks/useColorScheme';
+import DepictioLogo from './DepictioLogo';
 
 /**
  * "Powered by Depictio" badge — themed Depictio logo + label, linking to docs.
@@ -14,12 +14,6 @@ interface PoweredByProps {
 }
 
 const PoweredBy: React.FC<PoweredByProps> = ({ withRightBorder = false }) => {
-  const { colorScheme } = useColorScheme();
-
-  // Both `logo_black.svg` and `logo_white.svg` are byte-identical (a base64-
-  // embedded PNG inside an SVG wrapper), so swapping `src` does nothing.
-  // Apply a CSS filter on dark mode to invert the embedded raster while
-  // preserving brand hues — the standard treatment for single-asset wordmarks.
   const groupStyle: React.CSSProperties = withRightBorder
     ? {
         marginRight: 15,
@@ -40,16 +34,7 @@ const PoweredBy: React.FC<PoweredByProps> = ({ withRightBorder = false }) => {
         <Text size="xs" c="dimmed" fw={700}>
           Powered by
         </Text>
-        <img
-          src="/dashboard/logos/logo_black.svg"
-          alt="Depictio"
-          style={{
-            height: 20,
-            width: 'auto',
-            display: 'block',
-            filter: colorScheme === 'dark' ? 'invert(1) hue-rotate(180deg)' : undefined,
-          }}
-        />
+        <DepictioLogo height={20} />
       </Group>
     </Anchor>
   );

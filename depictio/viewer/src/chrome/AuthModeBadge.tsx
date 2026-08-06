@@ -1,8 +1,14 @@
 import React from 'react';
-import { Badge, Center } from '@mantine/core';
+import { Badge, Center, ThemeIcon, Tooltip } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import { useCurrentUser } from '../hooks/useCurrentUser';
+
+interface AuthModeBadgeProps {
+  /** Icon only, label in a tooltip — for the sidebar footer row, where the
+   *  chip shares a 250px rail with three other controls. */
+  compact?: boolean;
+}
 
 /**
  * Sidebar footer badge that surfaces public/demo deployments to the visitor.
@@ -16,44 +22,41 @@ import { useCurrentUser } from '../hooks/useCurrentUser';
  * inline label inside `ProfileBadge`, so we skip those here to avoid
  * duplicating the mode chip in the footer.
  */
-const AuthModeBadge: React.FC = () => {
+const AuthModeBadge: React.FC<AuthModeBadgeProps> = ({ compact = false }) => {
   const { isPublicMode, isDemoMode, isSingleUserMode, authMode } = useCurrentUser();
 
   if (isSingleUserMode || authMode === 'unauthenticated') return null;
 
-  if (isDemoMode) {
+  const mode = isDemoMode
+    ? { label: 'Demo Mode', color: 'violet', icon: 'mdi:compass-outline' }
+    : isPublicMode
+      ? { label: 'Public Mode', color: 'teal', icon: 'mdi:earth' }
+      : null;
+  if (!mode) return null;
+
+  if (compact) {
     return (
-      <Center>
-        <Badge
-          variant="light"
-          color="violet"
-          size="lg"
-          leftSection={<Icon icon="mdi:compass-outline" width={14} />}
-          style={{ textTransform: 'none' }}
-        >
-          Demo Mode
-        </Badge>
-      </Center>
+      <Tooltip label={mode.label} withArrow>
+        <ThemeIcon variant="light" color={mode.color} size="sm" aria-label={mode.label}>
+          <Icon icon={mode.icon} width={14} />
+        </ThemeIcon>
+      </Tooltip>
     );
   }
 
-  if (isPublicMode) {
-    return (
-      <Center>
-        <Badge
-          variant="light"
-          color="teal"
-          size="lg"
-          leftSection={<Icon icon="mdi:earth" width={14} />}
-          style={{ textTransform: 'none' }}
-        >
-          Public Mode
-        </Badge>
-      </Center>
-    );
-  }
-
-  return null;
+  return (
+    <Center>
+      <Badge
+        variant="light"
+        color={mode.color}
+        size="lg"
+        leftSection={<Icon icon={mode.icon} width={14} />}
+        style={{ textTransform: 'none' }}
+      >
+        {mode.label}
+      </Badge>
+    </Center>
+  );
 };
 
 export default AuthModeBadge;

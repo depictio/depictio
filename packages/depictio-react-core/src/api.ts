@@ -3135,6 +3135,146 @@ export async function exportDashboardJson(
   return res.json();
 }
 
+// ---- Serverless static export --------------------------------------------
+//
+// Owner-gated "Export static" flow: preflight tells the user which components
+// stay live / degrade / drop before they commit; dispatch + poll mirror the
+// advanced-viz Celery job contract; download streams the built single-file
+// HTML artifact. Endpoints live under `/serverless/export-static`.
+
+/** One row of the preflight per-component liveness verdict. `tier` mirrors
+ *  `StaticTierEntry` in StaticBadgeContext (the badge the bundle itself
+ *  renders); `reason`/`detail` explain non-live verdicts. */
+export interface StaticExportTierRow {
+  component_id: string;
+  title?: string | null;
+  component_type?: string | null;
+  tier: 'live' | 'partial' | 'frozen' | 'omitted';
+  reason?: string | null;
+  detail?: string | null;
+  /** Dashboard id of the tab this component sits on, for a tab-family export. */
+  tab_id?: string | null;
+  /** True while the build can still overturn this row. A provisional row is
+   *  undecided, not a verdict.
+   *
+   *  The preflight now runs the real bind-and-refill decision before it
+   *  answers, so no figure comes back provisional from a current API. The field
+   *  survives for a viewer talking to an older one, which classified without
+   *  reading data: it called every figure frozen and left the build to upgrade
+   *  the ones it could redraw. */
+  provisional?: boolean;
+}
+
+/** Cross-DC link resolution plan for the bundle. */
+export interface StaticExportLinkRow {
+  link_id: string;
+  source: string;
+  target: string;
+  resolver: string;
+  tier: 'A' | 'B' | 'inert';
+  enabled: boolean;
+  entries: number;
+  note?: string | null;
+}
+
+/** How big the bundle would be, and which side of the deployment's two
+ *  ceilings it lands on — the preflight's answer to "is this worth building?".
+ *
+ *  Every field is optional: an API older than this block returns nothing at
+ *  all, and a report that read no data returns `null` rather than a fabricated
+ *  zero. Sizes are bytes; the ceilings are megabytes, because that is how they
+ *  are configured, and `0` means that check is disabled.
+ *
+ *  `estimated_total_bytes` is an UPPER BOUND, not a measurement: the exact
+ *  `runtime_bytes` plus a data figure derived from row/column counts before any
+ *  compression, which runs roughly 2x high on compressible frames. Present it
+ *  as a ceiling ("up to about N MB"), never as a size. */
+export interface StaticExportSizeEstimate {
+  estimated_total_bytes?: number;
+  estimated_data_bytes?: number;
+  /** The static runtime every bundle carries whatever its data. Exact, and on
+   *  a small dashboard most of the total. */
+  runtime_bytes?: number;
+  soft_limit_mb?: number;
+  hard_limit_mb?: number;
+  /** The thresholds already applied, so a caller cannot disagree with the
+   *  producer that would run the build. */
+  verdict?: 'ok' | 'over_soft_limit' | 'would_be_refused';
+}
+
+export interface StaticExportPreflight {
+  dashboard_id: string;
+  tiers: StaticExportTierRow[];
+  links: StaticExportLinkRow[];
+  counts: { live: number; partial: number; frozen: number; omitted: number };
+  size_estimate?: StaticExportSizeEstimate | null;
+}
+
+export interface StaticExportResult {
+  s3_key: string;
+  bucket: string;
+  size_bytes: number;
+  built_at: string;
+  /** Pre-signed URL when the deployment can mint one; null otherwise —
+   *  callers should prefer the authenticated download endpoint anyway. */
+  download_url: string | null;
+}
+
+export interface StaticExportJob {
+  job_id: string;
+  status: 'pending' | 'done' | 'failed';
+  result?: StaticExportResult | null;
+  error?: string | null;
+}
+
+/** Preflight a static export: per-component tier verdicts + link plan.
+ *  404 (`detail`) when the dashboard is unknown or not viewable. */
+export async function preflightStaticExport(
+  dashboardId: string,
+): Promise<StaticExportPreflight> {
+  const res = await authFetch(`${API_BASE}/serverless/export-static/${dashboardId}/preflight`);
+  if (!res.ok) await throwHttpDetailError(res, 'Static export preflight failed');
+  return res.json();
+}
+
+/** Dispatch the static-export Celery build. Owner-only (404 otherwise).
+ *  Returns a job the caller polls via pollStaticExport(). */
+export async function dispatchStaticExport(
+  dashboardId: string,
+): Promise<StaticExportJob> {
+  const res = await authFetch(`${API_BASE}/serverless/export-static/${dashboardId}`, {
+    method: 'POST',
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to dispatch static export');
+  return res.json();
+}
+
+/** Poll a previously-dispatched static export build. */
+export async function pollStaticExport(jobId: string): Promise<StaticExportJob> {
+  const res = await authFetch(`${API_BASE}/serverless/export-static/status/${jobId}`);
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to poll static export');
+  return res.json();
+}
+
+/** Download the built HTML artifact (409 while not ready) and save it via the
+ *  blob → anchor-click flow, same as exportProjectZip(). */
+export async function downloadStaticExport(
+  jobId: string,
+  filename: string,
+): Promise<void> {
+  const res = await authFetch(`${API_BASE}/serverless/export-static/download/${jobId}`);
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to download static export');
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 // ---- Admin (system-wide) helpers ----------------------------------------
 //
 // These back the React /admin page. Backend already enforces `is_admin`

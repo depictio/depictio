@@ -1,10 +1,11 @@
 """
 Dashboard CLI commands.
 
-Provides three simple commands for dashboard YAML management:
+Provides simple commands for dashboard YAML management:
 - validate: Validate a YAML file locally (and optionally against server schema)
 - import: Import YAML to server (project from YAML or --project override)
 - export: Export dashboard from server to YAML
+- build-static: Build a backend-less static bundle from a spec + local Parquet
 """
 
 from pathlib import Path
@@ -571,6 +572,235 @@ def import_yaml(
     except httpx.RequestError as e:
         console.print(f"[red]Error: {e}[/red]")
         raise typer.Exit(1)
+
+
+@app.command("build-static")
+def build_static(
+    spec: Annotated[
+        Path, typer.Option("--spec", help="Dashboard spec (DashboardDataLite YAML or JSON)")
+    ],
+    data: Annotated[
+        Path,
+        typer.Option(
+            "--data",
+            help=(
+                "Data directory: {data}/{workflow_tag}/{data_collection_tag}.parquet, "
+                "or an explicit tag→path map in {data}/data.yaml"
+            ),
+        ),
+    ],
+    out: Annotated[
+        Path, typer.Option("--out", "-o", help="Output HTML path (single-file bundle)")
+    ] = Path("dashboard-static.html"),
+    check: Annotated[
+        bool,
+        typer.Option(
+            "--check",
+            help="Preflight only: print the per-component live/frozen/omitted table, write nothing",
+        ),
+    ] = False,
+    mode: Annotated[
+        str, typer.Option("--mode", help="Bundle delivery mode (phase 1: single-file only)")
+    ] = "single-file",
+    open_browser: Annotated[
+        bool, typer.Option("--open", help="Open the built bundle in a browser tab")
+    ] = False,
+) -> None:
+    """Build a backend-less static dashboard bundle (serverless producer B).
+
+    Reads a DashboardDataLite spec plus local Parquet files and emits one
+    self-contained HTML file — no running Depictio instance, no Mongo, no S3.
+    Components the producer cannot serve live are frozen at the default filter
+    state or omitted with a reason; use --check to see the tier table first.
+
+    Example:
+        depictio dashboard build-static --spec dashboard.yaml --data ./parquet/ --out bundle.html
+        depictio dashboard build-static --spec dashboard.yaml --data ./parquet/ --check
+    """
+    from depictio.models.models.serverless import BundleMode
+    from depictio.serverless.preflight import classify_spec, print_links_summary, print_tier_table
+    from depictio.serverless.producer_b import (
+        ProducerBError,
+        build_link_configs,
+        build_manifest,
+        load_spec,
+        render_bundle_html,
+    )
+
+    try:
+        bundle_mode = BundleMode(mode)
+    except ValueError:
+        console.print(f"[red]Error: unknown mode {mode!r} (phase 1 supports 'single-file')[/red]")
+        raise typer.Exit(1)
+
+    try:
+        lite = load_spec(spec)
+    except (ProducerBError, ValueError) as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(1)
+
+    console.print(f"[cyan]Spec:[/cyan] {spec}  ({lite.title!r}, {len(lite.components)} components)")
+
+    if check:
+        print_tier_table(classify_spec(lite), console)
+        print_links_summary(build_link_configs(lite)[1], console)
+        console.print("[dim]Preflight only (--check): nothing written.[/dim]")
+        raise typer.Exit(0)
+
+    try:
+        result = build_manifest(lite, data, mode=bundle_mode)
+        html = render_bundle_html(result.manifest)
+    except ProducerBError as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(1)
+
+    print_tier_table(result.tier_rows, console)
+    print_links_summary(result.link_rows, console)
+
+    manifest = result.manifest
+    for dc_id, ref in manifest.data_refs.items():
+        console.print(
+            f"  [dim]dc {dc_id}[/dim]: {ref.rows} rows × {len(ref.columns)} cols, "
+            f"{ref.size_bytes / 1024:.1f} KiB parquet"
+        )
+
+    from depictio.cli.cli.commands.catalog import _emit_html
+
+    size_mb = len(html.encode("utf-8")) / 1_048_576
+    out.parent.mkdir(parents=True, exist_ok=True)
+    _emit_html(
+        html,
+        out,
+        f"✓ Static bundle written: {out} ({size_mb:.2f} MB)",
+        no_open=not open_browser,
+    )
+
+
+@app.command("export-static")
+def export_static_cmd(
+    dashboard_id: Annotated[str, typer.Argument(help="Dashboard ID (Mongo ObjectId) to export")],
+    out: Annotated[
+        Path, typer.Option("--out", "-o", help="Output HTML path (single-file bundle)")
+    ] = Path("dashboard-static.html"),
+    mode: Annotated[
+        str, typer.Option("--mode", help="Bundle delivery mode (phase 2: single-file only)")
+    ] = "single-file",
+    check: Annotated[
+        bool,
+        typer.Option(
+            "--check",
+            help=(
+                "Preflight only: print the per-component live/frozen/omitted table, write "
+                "nothing. Reads the data collections and runs the binder, so the tiers are "
+                "the real ones — a few seconds, not instant."
+            ),
+        ),
+    ] = False,
+    single_tab: Annotated[
+        bool,
+        typer.Option(
+            "--single-tab",
+            help=(
+                "Export only this tab. Default: the whole tab family it belongs to, "
+                "entered on this tab."
+            ),
+        ),
+    ] = False,
+    open_browser: Annotated[
+        bool, typer.Option("--open", help="Open the built bundle in a browser tab")
+    ] = False,
+    user_email: Annotated[
+        str | None,
+        typer.Option(
+            "--user",
+            help=(
+                "Email of the acting user (permission checks: viewer for --check, "
+                "owner for the build). Defaults to the instance's admin account."
+            ),
+        ),
+    ] = None,
+) -> None:
+    """Export a static bundle from a RUNNING instance (serverless producer A).
+
+    Runs fully local against the instance's backing services — MongoDB and
+    S3/MinIO must be reachable from this process (configure via the standard
+    DEPICTIO_MONGODB_* / DEPICTIO_MINIO_* environment variables, exactly as the
+    API reads them). There is intentionally no HTTP path: the export calls the
+    server render pipeline in-process (the API-endpoint flavour is producer C,
+    RFC §3.3). Run it on the instance host, inside the backend container, or
+    anywhere with port-forwards to Mongo + S3.
+
+    Components the static runtime can serve live (cards, filters, text) ship
+    their data; everything else is frozen at the default filter state or
+    omitted with a reason — use --check to see the tier table first.
+
+    The bundle carries the dashboard's whole TAB FAMILY (one copy of each data
+    collection, however many tabs read it), entered on the tab you named. Pass
+    --single-tab for just that tab.
+
+    Example:
+        depictio dashboard export-static 6824cb3b89d2b72169309737 --check
+        depictio dashboard export-static 6824cb3b89d2b72169309737 --out bundle.html
+        depictio dashboard export-static 6824cb3b89d2b72169309737 --single-tab
+    """
+    from depictio.models.models.serverless import BundleMode
+
+    try:
+        bundle_mode = BundleMode(mode)
+    except ValueError:
+        console.print(f"[red]Error: unknown mode {mode!r} (phase 2 supports 'single-file')[/red]")
+        raise typer.Exit(1)
+
+    # Importing producer A pulls in the API's Mongo/S3 modules; DEPICTIO_CONTEXT
+    # is already "CLI" (set by the depictio entrypoint), which skips the
+    # server-only Settings secret validation.
+    from depictio.serverless.preflight import print_links_summary, print_tier_table
+    from depictio.serverless.producer_a import ProducerAError, export_static
+    from depictio.serverless.producer_b import ProducerBError
+
+    try:
+        result = export_static(
+            dashboard_id,
+            out_path=None if check else out,
+            mode=bundle_mode,
+            check=check,
+            user=user_email,
+            single_tab=single_tab,
+        )
+    except (ProducerAError, ProducerBError) as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(1)
+    except Exception as e:  # Mongo/S3 unreachable, auth, ...
+        console.print(f"[red]Error: {e}[/red]")
+        console.print(
+            "[yellow]Hint: export-static needs the instance's MongoDB and S3 reachable "
+            "from this process (DEPICTIO_MONGODB_* / DEPICTIO_MINIO_* env vars).[/yellow]"
+        )
+        raise typer.Exit(1)
+
+    # A family export gets the per-tab breakdown; a single-tab one keeps the
+    # flat table it always had.
+    print_tier_table(result.tier_rows, console, tabs=result.tabs if len(result.tabs) > 1 else None)
+    print_links_summary(result.link_rows, console)
+
+    if check:
+        console.print("[dim]Preflight only (--check): nothing written.[/dim]")
+        raise typer.Exit(0)
+
+    manifest = result.manifest
+    assert manifest is not None
+    for dc_id, ref in manifest.data_refs.items():
+        console.print(
+            f"  [dim]dc {dc_id}[/dim]: {ref.rows} rows × {len(ref.columns)} cols, "
+            f"{ref.size_bytes / 1024:.1f} KiB parquet"
+        )
+
+    size_mb = out.stat().st_size / 1_048_576
+    console.print(f"[green]✓ Static bundle written: {out} ({size_mb:.2f} MB)[/green]")
+    if open_browser:
+        import webbrowser
+
+        webbrowser.open(out.resolve().as_uri())
 
 
 @app.command()

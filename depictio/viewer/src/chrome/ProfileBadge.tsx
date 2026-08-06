@@ -1,9 +1,23 @@
 import React from 'react';
-import { Avatar, Button, Group, Loader, Menu, Text, UnstyledButton } from '@mantine/core';
+import {
+  Avatar,
+  Button,
+  Group,
+  Loader,
+  Menu,
+  Text,
+  Tooltip,
+  UnstyledButton,
+} from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import { dispatchWalkthroughRestart } from '../walkthrough';
+
+interface ProfileBadgeProps {
+  /** Glyph only, identity in a tooltip — for the sidebar footer row. */
+  compact?: boolean;
+}
 
 /**
  * Profile badge — initials avatar + email-name for logged-in users; outlined
@@ -13,7 +27,7 @@ import { dispatchWalkthroughRestart } from '../walkthrough';
  * (the restart entry point for the walkthrough engine). For unauthenticated
  * visitors the same menu lets them re-launch the explorer tour.
  */
-const ProfileBadge: React.FC = () => {
+const ProfileBadge: React.FC<ProfileBadgeProps> = ({ compact = false }) => {
   const { user, authMode, isPublicMode, isDemoMode, loading } = useCurrentUser();
 
   if (loading) {
@@ -43,7 +57,7 @@ const ProfileBadge: React.FC = () => {
     <Menu shadow="md" width={210} position="bottom-end" withArrow>
       <Menu.Target>
         <UnstyledButton style={{ color: 'inherit' }}>
-          {renderBadgeContent(user, authMode)}
+          {renderBadgeContent(user, authMode, compact)}
         </UnstyledButton>
       </Menu.Target>
       <Menu.Dropdown>
@@ -67,47 +81,44 @@ const ProfileBadge: React.FC = () => {
 
 type BadgeUser = { email: string } | null;
 
-function renderBadgeContent(user: BadgeUser, authMode: string): React.ReactElement {
-  if (authMode === 'single_user') {
-    return (
+/** Icon + label for each identity state. `compact` keeps the glyph and moves
+ *  the label into a tooltip, so the footer row fits the 250px rail. */
+function renderBadgeContent(
+  user: BadgeUser,
+  authMode: string,
+  compact: boolean,
+): React.ReactElement {
+  const wrap = (glyph: React.ReactNode, label: string) =>
+    compact ? (
+      <Tooltip label={label} withArrow>
+        <Group gap={0} wrap="nowrap" aria-label={label}>
+          {glyph}
+        </Group>
+      </Tooltip>
+    ) : (
       <Group gap="xs" wrap="nowrap">
-        <Icon icon="mdi:account-circle-outline" width={18} />
-        <Text size="sm" c="dimmed">
-          Single user mode
+        {glyph}
+        <Text size="sm" c={user ? undefined : 'dimmed'} truncate maw={120}>
+          {label}
         </Text>
       </Group>
     );
+
+  if (authMode === 'single_user') {
+    return wrap(<Icon icon="mdi:account-circle-outline" width={18} />, 'Single user mode');
   }
   if (authMode === 'unauthenticated') {
-    return (
-      <Group gap="xs" wrap="nowrap">
-        <Icon icon="mdi:incognito" width={18} />
-        <Text size="sm" c="dimmed">
-          Unauthenticated mode
-        </Text>
-      </Group>
-    );
+    return wrap(<Icon icon="mdi:incognito" width={18} />, 'Unauthenticated mode');
   }
   if (!user) {
-    return (
-      <Group gap="xs" wrap="nowrap">
-        <Icon icon="mdi:account-circle-outline" width={18} />
-        <Text size="sm" c="dimmed">
-          Guest
-        </Text>
-      </Group>
-    );
+    return wrap(<Icon icon="mdi:account-circle-outline" width={18} />, 'Guest');
   }
   const localPart = user.email.split('@')[0] || user.email;
-  return (
-    <Group gap="xs" wrap="nowrap">
-      <Avatar size="sm" radius="xl" color="blue">
-        {computeInitials(localPart)}
-      </Avatar>
-      <Text size="sm" truncate maw={120}>
-        {localPart}
-      </Text>
-    </Group>
+  return wrap(
+    <Avatar size="sm" radius="xl" color="blue">
+      {computeInitials(localPart)}
+    </Avatar>,
+    localPart,
   );
 }
 

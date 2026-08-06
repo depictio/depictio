@@ -1121,7 +1121,7 @@ tabs:
     secondary_layout: coverage
     coverage_max: 11
     display:
-      icon_name: mdi:biology
+      icon_name: mdi:dna
       icon_color: '#4CAF50'
       title_color: '#4CAF50'
       title_font_size: xl

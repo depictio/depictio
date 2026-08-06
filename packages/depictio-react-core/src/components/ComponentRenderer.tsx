@@ -370,10 +370,19 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
     );
   }
 
-  return (
+  // Wrapped like every other branch, even though there is nothing to act on:
+  // the chrome is what carries the static-bundle tier badge, and this fallback
+  // also catches the typed branches above when `dashboardId` is missing. Left
+  // bare, exactly the tiles a bundle degraded hardest would be the only ones
+  // with no badge explaining why.
+  return wrapWithChrome(
+    metadata.component_type || 'unknown',
+    metadata,
+    undefined,
     <div className="dashboard-error" style={{ fontSize: '0.75rem' }}>
       Component type "{metadata.component_type}" not yet ported.
-    </div>
+    </div>,
+    { extraActions, showDragHandle },
   );
 };
 

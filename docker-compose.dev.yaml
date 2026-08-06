@@ -221,6 +221,10 @@ services:
       - ./dashboards:/app/dashboards
       - ./packages/plotly-complexheatmap:/app/packages/plotly-complexheatmap
       - ./packages/plotly-upset:/app/packages/plotly-upset
+      # Same mount as the backend. The worker runs the static export, which
+      # stamps the version into the bundle's provenance block — without this it
+      # reports the image's baked VERSION instead of the source's.
+      - ./VERSION:/app/VERSION
       - ./docker-images/run_celery_worker.sh:/app/run_celery_worker.sh
       - ./${DATA_DIR}/prof_files:/app/prof_files
       # Phase 2: same mount as the backend — worker writes here during

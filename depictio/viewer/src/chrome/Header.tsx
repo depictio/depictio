@@ -3,6 +3,8 @@ import { ActionIcon, Badge, Box, Button, Group, Loader, Title, Tooltip, useManti
 import { Icon } from '@iconify/react';
 
 import type { DashboardData, DashboardSummary } from 'depictio-react-core';
+import { useIsStaticBundle } from 'depictio-react-core';
+import { isMultiqcIcon, multiqcLogoSrc } from './multiqcLogo';
 import PoweredBy from './PoweredBy';
 
 /** True for path-like icon values (PNG/SVG file URLs) — these came from the
@@ -12,18 +14,11 @@ function isImagePath(s: string | null | undefined): boolean {
   return /^(\/|https?:\/\/|data:)/.test(s) || /\.(png|svg|jpe?g|webp)$/i.test(s);
 }
 
-function isMultiqcIcon(path: string | null | undefined): boolean {
-  if (!path) return false;
-  return /\/assets\/images\/logos\/multiqc(\.png|_icon_(dark|white|color)\.svg)$/i.test(path);
-}
-
-/** Map any MultiQC logo path (legacy PNG or new SVGs) to the SPA-served
- *  themed SVG. Mirrors the same helper in Sidebar.tsx. */
-function rewriteMultiqcIcon(path: string, theme: 'light' | 'dark'): string {
+/** Map any MultiQC logo path (legacy PNG or new SVGs) to the themed SVG.
+ *  Mirrors the same helper in Sidebar.tsx. */
+function rewriteMultiqcIcon(path: string, theme: 'light' | 'dark', inline: boolean): string {
   if (!isMultiqcIcon(path)) return path;
-  return theme === 'dark'
-    ? '/dashboard/logos/multiqc_icon_white.svg'
-    : '/dashboard/logos/multiqc_icon_dark.svg';
+  return multiqcLogoSrc(theme === 'dark' ? 'white' : 'dark', inline);
 }
 
 /** Dash precedence: `tab.tab_icon || tab.icon`, `tab.tab_icon_color || tab.icon_color`. */
@@ -81,7 +76,8 @@ interface HeaderProps {
 /**
  * Replaces the contents of `<AppShell.Header>`. Three regions:
  *   Left:  Burgers + active-tab icon + dashboard title (with parent breadcrumb)
- *   Right: PoweredBy | Edit | Settings (Reset lives in the Filters panel now).
+ *   Right: PoweredBy | Edit | Settings (Reset lives in the Filters panel, and
+ *          "Export static" in the Settings drawer, now).
  *
  * Visual parity with `depictio/dash/layouts/header.py:design_header`.
  */
@@ -108,13 +104,17 @@ const Header: React.FC<HeaderProps> = ({
 }) => {
   const { colorScheme } = useMantineColorScheme();
   const theme: 'light' | 'dark' = colorScheme === 'dark' ? 'dark' : 'light';
+  // Static bundles are read-only snapshots with no backend: the editor route
+  // does not exist there, so the Edit / Exit-Edit affordance is hidden
+  // entirely instead of rendered disabled. Inert in server builds (false).
+  const isStaticBundle = useIsStaticBundle();
 
   const tabIconRaw = resolveTabIcon(activeTab);
   const tabIconIsImage = isImagePath(tabIconRaw);
   // Image path → swap MultiQC PNG/SVG variants to the SPA-served themed SVG.
   // Iconify names (mdi:..., bx:...) pass through unchanged.
   const tabIconImageSrc =
-    tabIconIsImage && tabIconRaw ? rewriteMultiqcIcon(tabIconRaw, theme) : null;
+    tabIconIsImage && tabIconRaw ? rewriteMultiqcIcon(tabIconRaw, theme, isStaticBundle) : null;
   const resolvedColor = resolveTabColor(activeTab);
   const tabIconColor = resolvedColor || 'gray';
   // Title text color:
@@ -304,7 +304,7 @@ const Header: React.FC<HeaderProps> = ({
             </Button>
           </Tooltip>
         )}
-        {mode === 'view' ? (
+        {isStaticBundle ? null : mode === 'view' ? (
           <Tooltip
             label="You can only edit dashboards you own. Duplicate this one to get your own copy."
             disabled={isOwner}
