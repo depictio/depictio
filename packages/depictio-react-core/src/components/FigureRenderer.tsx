@@ -50,6 +50,9 @@ interface FigureRendererProps {
   /** Selection groups to color the figure by. Folded into the render request;
    *  the server annotates rows and colors traces by group membership. */
   groupRender?: GroupRenderState;
+  /** Transient Plotly kwargs override (AI figure mutations) merged server-side
+   *  over the stored dict_kwargs. Never persisted; UI-mode figures only. */
+  dictKwargsPatch?: Record<string, unknown>;
 }
 
 /**
@@ -73,6 +76,7 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
   activeHighlight,
   onLoadAllState,
   groupRender,
+  dictKwargsPatch,
 }) => {
   const [figure, setFigure] = useState<{ data?: unknown[]; layout?: Record<string, unknown> } | null>(null);
   const [renderMeta, setRenderMeta] = useState<FigureResponse['metadata'] | null>(null);
@@ -154,13 +158,18 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
           theme,
           fullLoad,
           ctrl.signal,
-          groupRender
+          groupRender || dictKwargsPatch
             ? {
-                groups: groupRender.groups,
-                colorByGroup: groupRender.colorByGroup,
-                colorByColumn: groupRender.colorByColumn,
-                display: groupRender.display,
-                showOther: groupRender.showOther,
+                ...(groupRender
+                  ? {
+                      groups: groupRender.groups,
+                      colorByGroup: groupRender.colorByGroup,
+                      colorByColumn: groupRender.colorByColumn,
+                      display: groupRender.display,
+                      showOther: groupRender.showOther,
+                    }
+                  : {}),
+                dictKwargsPatch,
               }
             : undefined,
         ),
@@ -190,7 +199,7 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
       ctrl.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dashboardId, metadata.index, JSON.stringify(filtersForFetch), theme, inView, refreshTick, fullLoad, JSON.stringify(groupRender ?? null)]);
+  }, [dashboardId, metadata.index, JSON.stringify(filtersForFetch), theme, inView, refreshTick, fullLoad, JSON.stringify(groupRender ?? null), JSON.stringify(dictKwargsPatch ?? null)]);
 
   // First-paint loader vs refetch overlay: only show the big "Rendering…"
   // block until we have something to show; subsequent fetches keep the

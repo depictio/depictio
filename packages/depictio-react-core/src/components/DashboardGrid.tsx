@@ -118,6 +118,11 @@ interface DashboardGridProps {
   renderSectionExtras?: (
     sectionName: string | null,
   ) => { trailing?: React.ReactNode; panelTop?: React.ReactNode } | null;
+  /** Transient per-figure Plotly kwargs overrides (AI figure mutations),
+   *  keyed by component index. Merged server-side over the stored
+   *  dict_kwargs; never persisted. Keeps this package AI-free — the host
+   *  owns where the overrides come from and when they clear. */
+  figureOverrides?: Record<string, Record<string, unknown>>;
 }
 
 /**
@@ -193,6 +198,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
   beforeSections,
   renderSectionActions,
   renderSectionExtras,
+  figureOverrides,
 }) => {
   // Memoised because it feeds the deps of everything below: rebuilding this
   // array on every render (a panel toggle, a collapse click) would invalidate
@@ -564,6 +570,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
                 groupRender={groupRender}
                 extraActions={showOverlays ? renderItemOverlay!(m.index, m) : undefined}
                 showDragHandle={editMode && isDraggable}
+                dictKwargsPatch={figureOverrides?.[m.index]}
               />
             </div>
           </div>
@@ -586,6 +593,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
     renderItemOverlay,
     editMode,
     isDraggable,
+    figureOverrides,
   ]);
 
   const renderGrid = (section: ComponentSection) =>
@@ -692,17 +700,21 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
               <SectionHeader
                 spec={section.spec}
                 name={section.sectionName}
-                // Only while folded: expanded, these numbers are already on
-                // screen as the cards themselves. Folding a section must not
-                // cost you the figures it was showing.
+                // Metric chips only while folded: expanded, these numbers
+                // are already on screen as the cards themselves. Host
+                // extras (e.g. AI summarize) render in both states.
                 trailing={
-                  !sectionCollapse.isOpen(section.key) ? (
-                    <SectionSummary section={section} cardValues={cardValues} />
-                  ) : undefined
+                  <>
+                    {!sectionCollapse.isOpen(section.key) ? (
+                      <SectionSummary section={section} cardValues={cardValues} />
+                    ) : undefined}
+                    {renderSectionExtras?.(section.sectionName ?? null)?.trailing}
+                  </>
                 }
               />
             </Accordion.Control>
             <Accordion.Panel>
+              {renderSectionExtras?.(section.sectionName ?? null)?.panelTop}
               {/* Plain wrapper so the width available inside the section box
                   can be read off the DOM — see `sectionInset`. Absent until
                   the section has been opened once: see `renderedSections`. */}
