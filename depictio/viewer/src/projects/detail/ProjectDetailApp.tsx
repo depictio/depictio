@@ -64,6 +64,7 @@ import { AppSidebar } from '../../chrome';
 import JoinsGraph from './JoinsGraph';
 import IngestionReportPanel from './IngestionReportPanel';
 import StoragePanel from './StoragePanel';
+import ExportTemplateModal from './ExportTemplateModal';
 import { parseTemplate, TemplateChip, templateDocsUrl } from '../template';
 import {
   DcTypeBadges,
@@ -296,6 +297,7 @@ const ProjectDetailApp: React.FC = () => {
   const [manageTarget, setManageTarget] = useState<DataCollectionShape | null>(null);
   const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(null);
   const [createDcOpened, setCreateDcOpened] = useState(false);
+  const [exportTemplateOpened, setExportTemplateOpened] = useState(false);
   /** Cross-DC links for this project. Fetched alongside the project doc and
    *  refreshed when the user creates / edits / deletes a link from the
    *  Links section. Wired into the JoinsGraph for visualization. */
@@ -468,6 +470,19 @@ const ProjectDetailApp: React.FC = () => {
             </Title>
           </Group>
           <Group gap="xs">
+            {canMutate && (
+              <Button
+                variant="light"
+                color="teal"
+                data-testid="export-template-button"
+                leftSection={
+                  <Icon icon="mdi:package-variant-closed" width={16} />
+                }
+                onClick={() => setExportTemplateOpened(true)}
+              >
+                Export as template
+              </Button>
+            )}
             <Button
               component="a"
               href={`/projects/${projectId}/permissions`}
@@ -625,6 +640,13 @@ const ProjectDetailApp: React.FC = () => {
         </Box>
       </AppShell.Main>
 
+      {projectId && (
+        <ExportTemplateModal
+          projectId={projectId}
+          opened={exportTemplateOpened}
+          onClose={() => setExportTemplateOpened(false)}
+        />
+      )}
       <CreateDataCollectionModal
         opened={createDcOpened}
         projectType={projectType}
