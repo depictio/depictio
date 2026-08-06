@@ -132,7 +132,11 @@ def _live_dc_index(project_dict: dict) -> dict[str, tuple[int, int]]:
 
 
 def _run_dc_ingest(
-    workflow_dict: dict, dc_id: str, current_user, sync_files: bool = False
+    workflow_dict: dict,
+    dc_id: str,
+    current_user,
+    sync_files: bool = False,
+    remote_storage_options: dict | None = None,
 ) -> tuple[bool, str | None]:
     """Scan + process one DC through the CLI helpers. Returns (ok, error_message).
 
@@ -158,7 +162,9 @@ def _run_dc_ingest(
     except Exception as exc:
         return False, f"Could not parse workflow: {exc}"
 
-    cli_config = _build_cli_config_for_user(current_user)
+    cli_config = _build_cli_config_for_user(
+        current_user, remote_storage_options=remote_storage_options
+    )
 
     scan_result = process_data_collection_helper(
         CLI_config=cli_config,
@@ -305,6 +311,12 @@ def _ingest_manifest_into_project(
     # read the DC config from the project document.
     projects_collection.update_one({"_id": project_oid}, {"$set": {"workflows": workflows}})
 
+    from depictio.api.v1.endpoints.projects_endpoints.storage_config import (
+        storage_options_for_project,
+    )
+
+    remote_options = storage_options_for_project(project_oid)
+
     all_ok = True
     for tag in matched_tags:
         wf_i, dc_i = live[tag]
@@ -312,7 +324,9 @@ def _ingest_manifest_into_project(
         dc_id = str(dc_dict.get("_id") or dc_dict.get("id") or "")
         entry_count = len(manifest.entries_for_type(tag))
         try:
-            ok, message = _run_dc_ingest(workflows[wf_i], dc_id, current_user)
+            ok, message = _run_dc_ingest(
+                workflows[wf_i], dc_id, current_user, remote_storage_options=remote_options
+            )
         except HTTPException:
             raise
         except Exception as exc:  # helper crash — treat as a per-DC failure
@@ -413,6 +427,17 @@ def _refresh_manifest_in_project(
     report = ManifestRefreshReport(project_id=str(project_oid), dry_run=dry_run)
     workflows = project_dict.get("workflows", []) or []
 
+    # Project-scoped read credentials (per-project storage config), resolved
+    # once; async workers re-resolve for themselves so no secret ever crosses
+    # the broker.
+    remote_options: dict | None = None
+    if not dry_run and not async_run:
+        from depictio.api.v1.endpoints.projects_endpoints.storage_config import (
+            storage_options_for_project,
+        )
+
+        remote_options = storage_options_for_project(project_oid)
+
     # Each DC carries its own manifest URL + field map; fetch each distinct
     # combination once. Failures are per-DC, not global — one dead manifest
     # must not block refreshing DCs backed by a different one.
@@ -496,7 +521,13 @@ def _refresh_manifest_in_project(
             continue
 
         try:
-            ok, message = _run_dc_ingest(workflows[wf_i], dc_id, current_user, sync_files=True)
+            ok, message = _run_dc_ingest(
+                workflows[wf_i],
+                dc_id,
+                current_user,
+                sync_files=True,
+                remote_storage_options=remote_options,
+            )
         except HTTPException:
             raise
         except Exception as exc:  # helper crash — treat as a per-DC failure
