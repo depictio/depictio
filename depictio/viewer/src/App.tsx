@@ -1086,6 +1086,17 @@ const App: React.FC = () => {
             onRegenerate={(s, force) => void handleGenerateSummary(s, force)}
             onDismiss={sectionSummaries.dismiss}
           />
+        ) : section === null ? (
+          // The unsectioned grid has no header to host the sparkle button, so
+          // it gets a discreet right-aligned one above the grid instead.
+          <Group justify="flex-end" mb={4}>
+            <SummarizeSectionButton
+              section={null}
+              hasSummary={false}
+              pending={pending}
+              onGenerate={(s, force) => void handleGenerateSummary(s, force)}
+            />
+          </Group>
         ) : undefined,
       };
     },
