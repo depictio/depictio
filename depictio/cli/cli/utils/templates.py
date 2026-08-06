@@ -89,7 +89,7 @@ def _load_yaml(path: str) -> dict:
 
 
 def locate_template(template_id: str) -> Path:
-    """Find template YAML by template_id (e.g., 'nf-core/ampliseq/2.16.0').
+    """Find template YAML by template_id (e.g., 'nf-core/ampliseq/2.16.0') or by path.
 
     Searches in the depictio/projects/ directory relative to the package installation.
     Looks for template.yaml first (dedicated template file), then falls back to
@@ -99,9 +99,14 @@ def locate_template(template_id: str) -> Path:
     (``nf-core/ampliseq/latest`` / ``nf-core/ampliseq``): both resolve to the
     highest version directory shipping a template, so callers never need to
     hardcode a pinned version.
+    A local directory or YAML file is also accepted. That is what makes an
+    exported bundle usable by whoever receives it: ``depictio template export``
+    produces a directory, and without this the recipient would have to copy it
+    into their own site-packages before it could be run.
 
     Args:
-        template_id: Template identifier (e.g., 'nf-core/ampliseq/2.16.0').
+        template_id: Template identifier (e.g., 'nf-core/ampliseq/2.16.0'), or a
+            path to a template directory / YAML file.
 
     Returns:
         Path to the template YAML file.
@@ -109,6 +114,21 @@ def locate_template(template_id: str) -> Path:
     Raises:
         FileNotFoundError: If no template YAML exists.
     """
+    # Path form first: an existing directory or YAML file wins over id lookup, so
+    # a local bundle is never shadowed by an installed template of the same name.
+    candidate_path = Path(template_id).expanduser()
+    if candidate_path.is_file() and candidate_path.suffix in (".yaml", ".yml"):
+        return candidate_path.resolve()
+    if candidate_path.is_dir():
+        for filename in ("template.yaml", "project.yaml"):
+            candidate = candidate_path / filename
+            if candidate.is_file():
+                return candidate.resolve()
+        raise FileNotFoundError(
+            f"Directory '{template_id}' holds no template.yaml or project.yaml. "
+            "Point --template at the directory produced by `depictio template export`."
+        )
+
     # Resolve relative to depictio package root
     package_root = Path(__file__).resolve().parents[4]  # cli/cli/utils/ -> depictio/
     projects_dir = package_root / "depictio" / "projects"
@@ -1042,12 +1062,16 @@ def _auto_detect_metadata_columns(metadata_path: Path, variables: dict[str, str]
         logger.warning(f"Could not read metadata file for column detection: {exc}")
 
 
+UNBOUND_VAR_SENTINEL = "__DEPICTIO_UNBOUND_{name}__"
+
+
 def resolve_template(
     template_id: str,
     data_root: str | None,
     project_name: str | None = None,
     extra_vars: dict[str, str] | None = None,
     provenance_files: list[str] | None = None,
+    allow_missing_vars: bool = False,
 ) -> tuple[dict[str, Any], TemplateMetadata, TemplateOrigin, list[Path], dict[str, str]]:
     """Load template YAML, substitute variables, apply conditionals, return resolved config.
 
@@ -1169,6 +1193,18 @@ def resolve_template(
     # 4. Validate required variables; warn about unknown extras
     required_vars = template_metadata.get_required_variable_names()
     missing_vars = [v for v in required_vars if v not in variables]
+    if missing_vars and allow_missing_vars:
+        # --bind replaces whole scan blocks after resolution, which can make a
+        # required variable irrelevant (e.g. MANIFEST_URL once every manifest DC
+        # is bound elsewhere). Substitute a sentinel now; the caller must verify
+        # none survives binding, so a genuinely-needed variable still fails loudly.
+        for name in missing_vars:
+            variables[name] = UNBOUND_VAR_SENTINEL.format(name=name)
+        logger.info(
+            f"Deferred template variables (expected to be replaced by --bind): "
+            f"{', '.join(missing_vars)}"
+        )
+        missing_vars = []
     if missing_vars:
         raise ValueError(
             f"Missing required template variables: {', '.join(missing_vars)}. "

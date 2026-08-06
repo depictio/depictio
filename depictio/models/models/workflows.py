@@ -108,6 +108,11 @@ class WorkflowRun(MongoModel):
 
     @field_validator("run_location", mode="after")
     def validate_and_recast_parent_runs_location(cls, value):
+        # Remote acquisition modes (url / s3_prefix / manifest) put the source
+        # URL here, not a directory. There is nothing on the local filesystem to
+        # check, and the CLI branch below would reject every one of them.
+        if value and value.lower().startswith(("s3://", "https://", "http://")):
+            return value
         if DEPICTIO_CONTEXT == "CLI":
             # Recast to List[DirectoryPath] and validate
             env_var_pattern = re.compile(r"\{([A-Z0-9_]+)\}")
@@ -127,6 +132,12 @@ class WorkflowRun(MongoModel):
                 # Replace the placeholder with the actual value
                 location = location.replace(f"{{{match}}}", env_value)
             expanded_paths.append(location)
+
+            # A manifest run records the manifest itself as its location, and a
+            # manifest is a file. Only require a *directory* when the location is
+            # actually a scan root.
+            if Path(location).is_file():
+                return str(Path(location))
 
             # Validate the expanded paths if in CLI context
             return DirectoryPath(path=str(Path(location))).path

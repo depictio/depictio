@@ -35,13 +35,14 @@ import {
   Alert,
   Anchor,
   Modal,
+  SegmentedControl,
   Select,
   Switch,
   Textarea,
   TextInput,
 } from '@mantine/core';
 
-import { checkMultiQCUniformity, createDataCollectionFromUpload, createMultiQCDataCollection, deleteDataCollection, fetchDataCollectionPreview, fetchMultiQCByDataCollection, fetchProject, fetchVizSuggestions, renameDataCollection, useBrandAccents } from 'depictio-react-core';
+import { checkMultiQCUniformity, createDataCollectionFromUpload, createDataCollectionFromUrl, createMultiQCDataCollection, deleteDataCollection, fetchDataCollectionPreview, fetchMultiQCByDataCollection, fetchProject, fetchVizSuggestions, renameDataCollection, useBrandAccents } from 'depictio-react-core';
 import type {
   ProjectListEntry,
   PreviewResult,
@@ -1109,6 +1110,12 @@ const CreateDataCollectionModal: React.FC<{
 }> = ({ opened, projectType, projectId, onClose, onSuccess }) => {
   const accent = useBrandAccents();
   const [dcType, setDcType] = useState<'table' | 'multiqc'>('table');
+  // Where the table comes from. 'upload' pushes bytes through the browser;
+  // 'url' hands the server a location to fetch itself, which is the only
+  // workable route for files too large to upload or buckets the browser
+  // cannot reach.
+  const [tableSource, setTableSource] = useState<'upload' | 'url'>('upload');
+  const [remoteUrl, setRemoteUrl] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -1243,6 +1250,8 @@ const CreateDataCollectionModal: React.FC<{
       setLonColumn(null);
       setCoordsConfirmed(false);
       setParsingHeader(false);
+      setTableSource('upload');
+      setRemoteUrl('');
       multiqcDropzone.clear();
       tableDropzone.clear();
     }
@@ -1265,6 +1274,25 @@ const CreateDataCollectionModal: React.FC<{
       setName(stem);
     }
   }, [file, name]);
+
+  // Same auto-fill for the remote-URL source: the last path segment plays the
+  // role the picked filename plays above.
+  useEffect(() => {
+    if (tableSource !== 'url') return;
+    const trimmed = remoteUrl.trim();
+    if (!trimmed) return;
+    const basename = trimmed.split('?')[0].split('/').pop() || '';
+    if (!basename) return;
+    const guessed = guessFormat(basename);
+    if (guessed) {
+      setFileFormat(guessed);
+      setSeparator(guessed === 'tsv' ? '\t' : ',');
+    }
+    if (!name.trim()) setName(basename.replace(/\.[^.]+$/, ''));
+    // `name` is intentionally read but not depended on: re-running on every
+    // keystroke of the name field would fight the user's own edits.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [remoteUrl, tableSource]);
 
   // Clear any prior uniformity mismatch (and stale pass state) when the user
   // changes the dropped file set — both refer to a different set of reports.
@@ -1397,6 +1425,41 @@ const CreateDataCollectionModal: React.FC<{
           message: result.message || `"${name.trim()}" is ready.`,
           autoClose: 4000,
         });
+      } else if (tableSource === 'url') {
+        const url = remoteUrl.trim();
+        if (!url) {
+          setError('Enter the URL of the file.');
+          setSubmitting(false);
+          return;
+        }
+        if (!/^(https:\/\/|s3:\/\/|http:\/\/)/i.test(url)) {
+          setError('The URL must start with https:// or s3://.');
+          setSubmitting(false);
+          return;
+        }
+        if (separator === 'custom' && !customSeparator) {
+          setError('Custom separator cannot be empty.');
+          setSubmitting(false);
+          return;
+        }
+        const result = await createDataCollectionFromUrl({
+          projectId,
+          name: name.trim(),
+          description: description.trim(),
+          dataType: 'table',
+          fileFormat,
+          separator,
+          customSeparator: separator === 'custom' ? customSeparator : null,
+          compression,
+          hasHeader,
+          url,
+        });
+        notifications.show({
+          color: 'teal',
+          title: 'Data collection created',
+          message: result.message || `"${name.trim()}" is ready.`,
+          autoClose: 2500,
+        });
       } else {
         if (!file) {
           setError('Pick a file to upload.');
@@ -1506,21 +1569,42 @@ const CreateDataCollectionModal: React.FC<{
 
           <Tabs.Panel value="table" pt="md">
             <Stack gap="xs">
-              <TableFileDropZone
-                dropzone={tableDropzone}
-                file={file}
-                submitting={submitting}
-                icon="mdi:file-upload-outline"
-                title="Drop a CSV, TSV, Parquet, or Feather file"
-                onRemove={() => {
-                  setFile(null);
-                  setCsvColumns([]);
-                  setLatColumn(null);
-                  setLonColumn(null);
-                  setCoordsConfirmed(false);
-                  tableDropzone.clear();
-                }}
+              <SegmentedControl
+                fullWidth
+                value={tableSource}
+                onChange={(value) => setTableSource(value as 'upload' | 'url')}
+                disabled={submitting}
+                data={[
+                  { label: 'Upload a file', value: 'upload' },
+                  { label: 'Remote URL', value: 'url' },
+                ]}
               />
+              {tableSource === 'url' ? (
+                <TextInput
+                  label="File URL"
+                  placeholder="https://example.org/data.csv or s3://bucket/key.csv"
+                  description="Fetched by the server, so the file never travels through your browser. Private buckets use this project's storage credentials."
+                  value={remoteUrl}
+                  onChange={(e) => setRemoteUrl(e.currentTarget.value)}
+                  disabled={submitting}
+                />
+              ) : (
+                <TableFileDropZone
+                  dropzone={tableDropzone}
+                  file={file}
+                  submitting={submitting}
+                  icon="mdi:file-upload-outline"
+                  title="Drop a CSV, TSV, Parquet, or Feather file"
+                  onRemove={() => {
+                    setFile(null);
+                    setCsvColumns([]);
+                    setLatColumn(null);
+                    setLonColumn(null);
+                    setCoordsConfirmed(false);
+                    tableDropzone.clear();
+                  }}
+                />
+              )}
               {file && (
                 <Paper p="sm" withBorder radius="sm" bg="var(--mantine-color-default-hover)">
                   <Stack gap="xs">
@@ -1782,9 +1866,11 @@ const CreateDataCollectionModal: React.FC<{
           icon={<Icon icon="mdi:information-outline" width={18} />}
         >
           <Text size="xs">
-            The file will be scanned and aggregated to a Delta table on the
-            server. Larger files take longer — keep this dialog open until you
-            see the success notification. Need the legacy flow?{' '}
+            {dcType === 'table' && tableSource === 'url'
+              ? 'The server fetches the URL itself and aggregates it to a Delta table. The address is screened before any request is made, so private and internal addresses are refused. '
+              : 'The file will be scanned and aggregated to a Delta table on the server. '}
+            Larger files take longer — keep this dialog open until you see the
+            success notification. Need the legacy flow?{' '}
             <Anchor
               href={`/project/${readProjectIdFromPath()}/data`}
               target="_blank"
@@ -1808,8 +1894,10 @@ const CreateDataCollectionModal: React.FC<{
               !name.trim() ||
               (dcType === 'multiqc'
                 ? multiqcDropzone.files.length === 0
-                : !file ||
-                  (coordsConfirmed && (!latColumn || !lonColumn)))
+                : tableSource === 'url'
+                  ? !remoteUrl.trim()
+                  : !file ||
+                    (coordsConfirmed && (!latColumn || !lonColumn)))
             }
             leftSection={<Icon icon="mdi:cloud-upload-outline" width={16} />}
           >
