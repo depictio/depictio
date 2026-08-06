@@ -109,14 +109,14 @@ def build_embed_csp() -> str:
     ``connect-src 'none'`` is the interesting one: the bundle makes no network
     calls at all, so declaring that both hardens the page and proves the claim.
 
-    ``'unsafe-eval'`` is not a concession, it is what WebGL costs: Plotly draws
-    ``scattergl`` / ``scatter3d`` through regl, which compiles its shaders with
-    the ``Function`` constructor and throws ``EvalError`` without it. Volcano,
-    Manhattan, DotPlot, QQ, Lollipop and Embedding all take that path, so
-    omitting it renders those embeds blank rather than merely degraded. The main
-    app's baseline CSP carries it for the same reason (see api/main.py); the
-    Pyodide-only ``'wasm-unsafe-eval'`` is deliberately not mirrored here, as an
-    embed has no Code Mode.
+    Deliberately *without* ``'unsafe-eval'``, unlike the main app's baseline CSP
+    (``api/main.py``), whose comment attributes it to Plotly's WebGL path. That
+    does not apply here, and it was checked rather than assumed: served over HTTP
+    under this policy with ``'unsafe-eval'`` withheld, an inline probe confirms
+    ``new Function`` throws ``EvalError`` while a volcano still renders as
+    ``scattergl`` across three WebGL canvases with no console error. Whatever the
+    main app needs it for, an embed does not — so it stays out, because this is
+    the one page on the instance that a third-party site is invited to frame.
     """
     origins = list(settings.fastapi.embed_allowed_origins)
     frame_ancestors = " ".join(origins) if origins else "'none'"
@@ -127,7 +127,7 @@ def build_embed_csp() -> str:
         )
     return (
         "default-src 'none'; "
-        "script-src {script_src} 'unsafe-eval'; "
+        "script-src {script_src}; "
         "style-src 'unsafe-inline'; "
         "img-src data: blob:; "
         "font-src data:; "
