@@ -108,6 +108,16 @@ interface DashboardGridProps {
    * from where it is seen.
    */
   renderSectionActions?: (sectionName: string | null) => React.ReactNode;
+  /**
+   * Host-provided per-section extras (e.g. the AI summarize affordances).
+   * Called with the section name (`null` for the unsectioned grid).
+   * `trailing` lands in the section header next to the fold chips;
+   * `panelTop` renders inside the section panel above its grid (for the
+   * unsectioned grid, directly above it). Keeps this package AI-free.
+   */
+  renderSectionExtras?: (
+    sectionName: string | null,
+  ) => { trailing?: React.ReactNode; panelTop?: React.ReactNode } | null;
 }
 
 /**
@@ -182,6 +192,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
   gridSections,
   beforeSections,
   renderSectionActions,
+  renderSectionExtras,
 }) => {
   // Memoised because it feeds the deps of everything below: rebuilding this
   // array on every render (a panel toggle, a collapse click) would invalidate
@@ -710,6 +721,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
       className={rootClass}
       style={{ width: '100%', overflowX: 'hidden' }}
     >
+      {renderSectionExtras?.(null)?.panelTop}
       {leadBucket && renderGrid(leadBucket)}
       {named.length > 0 && (
         <Group justify="flex-end" mb={4}>
