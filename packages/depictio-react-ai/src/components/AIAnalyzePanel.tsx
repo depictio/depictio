@@ -19,6 +19,7 @@ import { Icon } from '@iconify/react';
 import { useAnalyze } from '../hooks';
 import { useAISession, useAIStore } from '../store';
 import ActionsPreview, { type ApplyActionsPayload } from './ActionsPreview';
+import AIAnalysisModal from './AIAnalysisModal';
 import ExecutionTrace from './ExecutionTrace';
 
 interface Props {
@@ -57,6 +58,7 @@ const AIAnalyzePanel: React.FC<Props> = ({
   const { run: runAnalyze, cancel } = useAnalyze(dashboardId);
   const [prompt, setPrompt] = useState('');
   const [open, setOpen] = useState(true);
+  const [analysisOpen, setAnalysisOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [appliedIds, setAppliedIds] = useState<Set<string>>(new Set());
 
@@ -93,7 +95,7 @@ const AIAnalyzePanel: React.FC<Props> = ({
       <Stack gap="xs">
         <Group gap="xs" align="center" wrap="nowrap">
           <Icon
-            icon="material-symbols:smart-toy-outline"
+            icon="material-symbols:auto-awesome-outline"
             width={18}
             color="var(--mantine-color-violet-6)"
           />
@@ -117,6 +119,19 @@ const AIAnalyzePanel: React.FC<Props> = ({
             </Group>
           )}
           <Group gap={2} ml="auto">
+            {hasCreds && (
+              <Tooltip label="Deep analysis (read-only report)">
+                <Button
+                  size="compact-xs"
+                  variant="light"
+                  color="violet"
+                  leftSection={<Icon icon="material-symbols:query-stats" width={14} />}
+                  onClick={() => setAnalysisOpen(true)}
+                >
+                  Analyze
+                </Button>
+              </Tooltip>
+            )}
             {hasTranscript && (
               <Tooltip label="Clear">
                 <ActionIcon
@@ -202,7 +217,7 @@ const AIAnalyzePanel: React.FC<Props> = ({
                         icon={
                           m.role === 'user'
                             ? 'material-symbols:person-outline'
-                            : 'material-symbols:smart-toy-outline'
+                            : 'material-symbols:auto-awesome-outline'
                         }
                         width={14}
                       />
@@ -218,7 +233,11 @@ const AIAnalyzePanel: React.FC<Props> = ({
                     {m.steps && m.steps.length > 0 && (
                       <ExecutionTrace steps={m.steps} />
                     )}
-                    {m.result?.actions && (
+                    {/* A read-only reply never gets an actions surface at
+                        all: the server has already stripped them, and
+                        rendering an empty preview would imply the model
+                        simply had nothing to propose. */}
+                    {m.result?.actions && m.result.mode !== 'analyze' && (
                       <ActionsPreview
                         actions={m.result.actions}
                         resolved={m.result.resolved_filters ?? []}
@@ -233,6 +252,15 @@ const AIAnalyzePanel: React.FC<Props> = ({
                         applied={appliedIds.has(m.id)}
                       />
                     )}
+                    {(m.result?.warnings?.length ?? 0) > 0 && (
+                      <Stack gap={2}>
+                        {m.result?.warnings?.map((w, i) => (
+                          <Text key={i} size="xs" c="dimmed">
+                            {w}
+                          </Text>
+                        ))}
+                      </Stack>
+                    )}
                   </Stack>
                 ))}
               </Stack>
@@ -240,6 +268,13 @@ const AIAnalyzePanel: React.FC<Props> = ({
           </Collapse>
         )}
       </Stack>
+
+      <AIAnalysisModal
+        dashboardId={dashboardId}
+        opened={analysisOpen}
+        onClose={() => setAnalysisOpen(false)}
+        activeFilters={activeFilters}
+      />
     </Paper>
   );
 };

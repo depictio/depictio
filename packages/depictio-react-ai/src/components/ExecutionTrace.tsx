@@ -34,6 +34,15 @@ const STATUS_ICON: Record<string, string> = {
 
 type Filter = 'all' | 'code' | 'errors';
 
+/** "1,203 → 47" — the cardinality trail. A filter that silently kept
+ *  everything and one that silently kept nothing read identically in the
+ *  narrative; they cannot hide in this column. */
+function cardinality(step: ExecutionStep): string | null {
+  if (step.rows_in == null) return null;
+  const rin = step.rows_in.toLocaleString();
+  return step.rows_out != null ? `${rin} → ${step.rows_out.toLocaleString()}` : rin;
+}
+
 /**
  * Collapsible per-step trace borrowed from the LiteLLM prototype's
  * `render_execution_trace`. Each step surfaces the LLM's thought, the
@@ -107,6 +116,21 @@ const ExecutionTrace: React.FC<Props> = ({ steps, defaultOpen = false }) => {
                   <Text size="sm" lineClamp={1} flex={1}>
                     {step.thought || (step.code ? 'Compute' : 'Step')}
                   </Text>
+                  {step.dc_tag && (
+                    <Badge size="xs" variant="outline" color="gray">
+                      {step.dc_tag}
+                    </Badge>
+                  )}
+                  {cardinality(step) && (
+                    <Badge size="xs" variant="light" color="gray">
+                      {cardinality(step)}
+                    </Badge>
+                  )}
+                  {step.seconds != null && step.seconds > 0 && (
+                    <Text size="xs" c="dimmed">
+                      {step.seconds.toFixed(1)}s
+                    </Text>
+                  )}
                   <Badge size="xs" variant="light" color={color}>
                     {step.status}
                   </Badge>
