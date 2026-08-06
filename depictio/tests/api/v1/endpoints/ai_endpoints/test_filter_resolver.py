@@ -42,6 +42,13 @@ def patch_delta(monkeypatch):
         return df.select(kwargs.get("select_columns") or df.columns)
 
     monkeypatch.setattr(filter_resolver, "load_deltatable_lite", fake_load)
+    # Resolved from Mongo and passed as an argument to the loader, so it
+    # runs even though the loader is faked.
+    monkeypatch.setattr(
+        filter_resolver,
+        "init_data_for_dc",
+        lambda dc_id: {str(dc_id): {"delta_location": "s3://fake", "dc_type": "table"}},
+    )
     return df
 
 
@@ -163,7 +170,7 @@ class TestThreshold:
         assert resolved == []
         assert any("unsupported column name" in w for w in warnings)
 
-    def test_active_filters_are_passed_to_loader(self, dashboard_ctx, monkeypatch):
+    def test_active_filters_are_passed_to_loader(self, patch_delta, dashboard_ctx, monkeypatch):
         captured: dict = {}
 
         def fake_load(**kwargs):

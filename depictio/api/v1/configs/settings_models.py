@@ -183,6 +183,7 @@ class MongoDBConfig(ServiceConfig):
         task_events_collection: str = Field(default="task_events")
         ingestion_runs_collection: str = Field(default="ingestion_runs")
         ai_summaries_collection: str = Field(default="ai_summaries")
+        ai_analyses_collection: str = Field(default="ai_analyses")
         app_logs_collection: str = Field(default="app_logs")
         test_collection: str = Field(default="test")
 
@@ -736,6 +737,25 @@ class AIConfig(BaseSettings):
         default=4_096,
         ge=256,
         description="Completion token cap for each LLM call",
+    )
+    # Read-only analysis budget: three bounds, whichever is hit first ends
+    # the run. Steps are the hard ceiling, tokens are the cost lever,
+    # wall clock is the UX lever.
+    analyze_max_steps: int = Field(
+        default=20,
+        ge=1,
+        le=100,
+        description="Hard ceiling on LLM/executor round-trips per analysis run",
+    )
+    analyze_max_tokens_total: int = Field(
+        default=200_000,
+        ge=1_000,
+        description="Total LLM tokens (prompt + completion) an analysis run may spend",
+    )
+    analyze_max_wall_clock_s: int = Field(
+        default=300,
+        ge=10,
+        description="Wall-clock seconds an analysis run may take before it must conclude",
     )
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_AI_")

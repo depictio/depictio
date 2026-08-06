@@ -22,10 +22,44 @@ from bson import ObjectId
 from fastapi import HTTPException
 
 from depictio.api.v1.configs.config import settings
-from depictio.api.v1.db import dashboards_collection, projects_collection
+from depictio.api.v1.db import (
+    dashboards_collection,
+    deltatables_collection,
+    projects_collection,
+)
 from depictio.api.v1.deltatables_utils import load_deltatable_lite
 
 logger = logging.getLogger(__name__)
+
+
+def init_data_for_dc(data_collection_id: str) -> dict[str, dict]:
+    """Delta-table location to hand `load_deltatable_lite(init_data=...)`.
+
+    Without it the loader falls back to `GET /deltatables/get/{dc_id}`,
+    i.e. the API calls itself over HTTP. Every AI flow runs inside a
+    request handler, so that self-call cannot be served while the caller
+    is holding the event loop: it does not 401, it times out after
+    httpx's default 5s and surfaces as "Error loading deltatable".
+
+    advanced_viz_endpoints and celery_tasks resolve the location from
+    Mongo for the same reason; this mirrors them.
+    """
+    dt_doc = deltatables_collection.find_one({"data_collection_id": ObjectId(data_collection_id)})
+    if not dt_doc or not dt_doc.get("delta_table_location"):
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                f"No materialised delta table for data collection {data_collection_id}. "
+                "Ingest the data collection before using the AI assistant on it."
+            ),
+        )
+    return {
+        str(data_collection_id): {
+            "delta_location": dt_doc["delta_table_location"],
+            "dc_type": "table",
+            "size_bytes": (dt_doc.get("flexible_metadata") or {}).get("deltatable_size_bytes", 0),
+        }
+    }
 
 
 _PII_PATTERNS = [
@@ -121,6 +155,22 @@ class FilterSummary:
 
 
 @dataclass
+class ComponentSummary:
+    """Any component on the dashboard, whatever its type.
+
+    Figures and interactives get richer summaries above; this is the flat
+    inventory, and it exists because the earlier walk skipped every other
+    type outright. A card, table, multiqc or map component was invisible
+    to the model even though its data collection was sitting right there.
+    """
+
+    component_id: str
+    component_type: str
+    dc_id: str | None = None
+    title: str | None = None
+
+
+@dataclass
 class DashboardContext:
     """Snapshot of what is currently on the dashboard.
 
@@ -131,6 +181,18 @@ class DashboardContext:
     dashboard_id: str
     figures: list[FigureSummary]
     filters: list[FilterSummary]
+    components: list[ComponentSummary] = field(default_factory=list)
+    # Every DC referenced by any component, in first-seen order.
+    dc_ids: list[str] = field(default_factory=list)
+
+    def components_block(self) -> str:
+        if not self.components:
+            return "(no components)"
+        return "\n".join(
+            f"- {c.component_id} ({c.component_type}, dc={c.dc_id})"
+            + (f" — {c.title}" if c.title else "")
+            for c in self.components
+        )
 
     def figures_block(self) -> str:
         if not self.figures:
@@ -158,30 +220,26 @@ async def _resolve_dc_and_project(
 ) -> tuple[str, str | None, dict[str, Any], dict[str, Any]]:
     """Return (workflow_id, workflow_tag, dc_doc, project_doc) for a DC id.
 
-    Permission gate mirrors `check_project_permission(..., "viewer")`:
-    owners, editors, viewers, wildcard viewers, or a public project.
+    Permission is delegated to the dashboards endpoints'
+    `check_project_permission(..., "viewer")` — the same gate
+    `build_dashboard_context` uses. An earlier version re-implemented the
+    check as inline Mongo `$or` clauses and silently diverged from it: no
+    admin override, no anonymous-user handling, so an admin without an
+    explicit permissions entry got a 404 here while the dashboard flow
+    let them through.
+
+    Denial is still reported as the same 404 as absence, so the endpoint
+    does not reveal which DC ids exist.
     """
+    from depictio.api.v1.endpoints.dashboards_endpoints.routes import check_project_permission
+
     try:
         dc_oid = ObjectId(data_collection_id)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"invalid data_collection_id: {e}")
 
-    user_id = getattr(current_user, "id", None)
-    access_clauses: list[dict[str, Any]] = [
-        {"permissions.owners._id": user_id},
-        {"permissions.editors._id": user_id},
-        {"permissions.viewers._id": user_id},
-        {"permissions.viewers": "*"},
-        {"is_public": True},
-    ]
-
     pipeline = [
-        {
-            "$match": {
-                "workflows.data_collections._id": dc_oid,
-                "$or": access_clauses,
-            }
-        },
+        {"$match": {"workflows.data_collections._id": dc_oid}},
         {"$unwind": "$workflows"},
         {"$unwind": "$workflows.data_collections"},
         {"$match": {"workflows.data_collections._id": dc_oid}},
@@ -202,6 +260,11 @@ async def _resolve_dc_and_project(
             detail="Data collection not found or access denied.",
         )
     row = rows[0]
+    if not check_project_permission(row["_id"], current_user, "viewer"):
+        raise HTTPException(
+            status_code=404,
+            detail="Data collection not found or access denied.",
+        )
     project_doc = {
         "name": row.get("project_name"),
         "description": row.get("project_description"),
@@ -253,6 +316,7 @@ async def build_data_context(
     df = load_deltatable_lite(
         workflow_id=ObjectId(workflow_id),
         data_collection_id=ObjectId(data_collection_id),
+        init_data=init_data_for_dc(data_collection_id),
     )
     if df is None:
         raise HTTPException(status_code=404, detail="Failed to load data collection.")
@@ -325,21 +389,38 @@ def _coerce_id(value: Any) -> str | None:
 
 def _summarize_dashboard(
     dashboard_doc: dict[str, Any],
-) -> tuple[list[FigureSummary], list[FilterSummary], str | None]:
-    """Extract figures + interactive filter values + best-guess primary DC."""
+) -> tuple[list[FigureSummary], list[FilterSummary], list[ComponentSummary], list[str]]:
+    """Inventory the dashboard: figures, interactives, every component, every DC.
+
+    The DC list is ordered by first appearance in `stored_metadata`, and
+    its head doubles as the default data source. Treat that default as an
+    arbitrary pick, not a "main" table: `stored_metadata` is a Mongo array
+    whose order reflects insertion, not layout and not importance. That is
+    precisely why the multi-DC context exists — so the model chooses its
+    source per step instead of inheriting whichever component was saved
+    first.
+    """
     figures: list[FigureSummary] = []
     filters: list[FilterSummary] = []
-    primary_dc: str | None = None
+    components: list[ComponentSummary] = []
+    dc_ids: list[str] = []
 
     for meta in dashboard_doc.get("stored_metadata", []) or []:
         comp_type = meta.get("component_type") or meta.get("type") or ""
         cid = _component_id(meta) or ""
 
-        # Track the first DC we encounter — gives us a default for analyze
-        # when the request body does not specify one.
         dc_id = _coerce_id(meta.get("dc_id") or (meta.get("metadata") or {}).get("dc_id"))
-        if dc_id and primary_dc is None:
-            primary_dc = dc_id
+        if dc_id and dc_id not in dc_ids:
+            dc_ids.append(dc_id)
+
+        components.append(
+            ComponentSummary(
+                component_id=cid,
+                component_type=str(comp_type),
+                dc_id=dc_id,
+                title=meta.get("title") or (meta.get("metadata") or {}).get("title"),
+            )
+        )
 
         if comp_type in FIGURE_TYPES or comp_type.lower() == "figure":
             dict_kwargs = (
@@ -370,7 +451,166 @@ def _summarize_dashboard(
                 )
             )
 
-    return figures, filters, primary_dc
+    return figures, filters, components, dc_ids
+
+
+# ---------- Multi-DC context (analysis) ----------
+
+
+@dataclass
+class JoinSummary:
+    """A declared join between two of the dashboard's data collections."""
+
+    left_dc: str
+    right_dc: str
+    on_columns: list[str]
+    how: str = "inner"
+
+    def to_prompt_line(self) -> str:
+        cols = ", ".join(self.on_columns)
+        return f"- {self.left_dc} {self.how} join {self.right_dc} on [{cols}]"
+
+
+@dataclass
+class DashboardDataContext:
+    """Every data collection the dashboard touches, plus how they relate.
+
+    Replaces the single `DataContext` for the analysis flow. The single
+    version forced every question through whichever DC happened to be
+    stored first; comparing two collections was not expressible at all,
+    even though `join` has always been in the executor allowlist. What was
+    missing was never the verb, only something to join against.
+    """
+
+    dashboard_id: str
+    collections: list[DataContext] = field(default_factory=list)
+    joins: list[JoinSummary] = field(default_factory=list)
+
+    def tags(self) -> list[str]:
+        return [c.data_collection_tag or c.data_collection_id for c in self.collections]
+
+    def collections_block(self, *, with_samples: bool = True) -> str:
+        if not self.collections:
+            return "(no data collections)"
+        chunks = []
+        for c in self.collections:
+            tag = c.data_collection_tag or c.data_collection_id
+            head = f'dc["{tag}"] — {c.row_count:,} rows'
+            if c.dc_description:
+                head += f" — {c.dc_description}"
+            body = [head, c.schema_block()]
+            if with_samples:
+                body.append(f"  sample: {c.sample_block()}")
+            chunks.append("\n".join(body))
+        return "\n\n".join(chunks)
+
+    def joins_block(self) -> str:
+        if not self.joins:
+            return "(no declared joins)"
+        return "\n".join(j.to_prompt_line() for j in self.joins)
+
+
+def _joins_for_tags(project_doc: dict[str, Any], tags: set[str]) -> list[JoinSummary]:
+    """Project-declared joins where both sides are on this dashboard.
+
+    `left_dc`/`right_dc` are DC tags and may carry a `workflow.tag` scope
+    prefix (see `depictio/models/models/joins.py`), so compare on the
+    trailing segment.
+    """
+
+    def bare(value: Any) -> str:
+        return str(value or "").split(".")[-1]
+
+    out: list[JoinSummary] = []
+    for raw in project_doc.get("joins") or []:
+        if not isinstance(raw, dict):
+            continue
+        left, right = bare(raw.get("left_dc")), bare(raw.get("right_dc"))
+        if not left or not right or left not in tags or right not in tags:
+            continue
+        cols = [str(c) for c in (raw.get("on_columns") or []) if c]
+        if not cols:
+            continue
+        out.append(
+            JoinSummary(
+                left_dc=left,
+                right_dc=right,
+                on_columns=cols,
+                how=str(raw.get("how") or "inner"),
+            )
+        )
+    return out
+
+
+# Ceiling on how many collections we describe to the model. A dashboard
+# with dozens of DCs would otherwise blow the context budget on schemas
+# alone; what gets dropped is reported to the caller rather than silently
+# trimmed.
+MAX_ANALYSIS_COLLECTIONS = 8
+
+
+async def build_dashboard_data_context(
+    dashboard_ctx: DashboardContext,
+    current_user: Any,
+) -> tuple[DashboardDataContext, list[str]]:
+    """Summarise every DC on the dashboard. Returns (context, warnings).
+
+    Permission is already settled by the time we get here: all of these
+    collections belong to the dashboard's project, and
+    `build_dashboard_context` has checked viewer access to it.
+
+    Each collection is summarised through `build_data_context`, so this
+    reads every frame the dashboard uses. Those reads go through the same
+    Redis-backed cache the dashboard itself populates, so they are usually
+    warm; it has not been measured, and if a trace ever shows it hurting,
+    the fix is to have the sandbox child report schemas instead of loading
+    twice.
+    """
+    warnings: list[str] = []
+    dc_ids = dashboard_ctx.dc_ids
+    if len(dc_ids) > MAX_ANALYSIS_COLLECTIONS:
+        dropped = dc_ids[MAX_ANALYSIS_COLLECTIONS:]
+        warnings.append(
+            f"{len(dropped)} of {len(dc_ids)} data collections were left out of the "
+            f"analysis context (limit {MAX_ANALYSIS_COLLECTIONS})."
+        )
+        dc_ids = dc_ids[:MAX_ANALYSIS_COLLECTIONS]
+
+    collections: list[DataContext] = []
+    project_doc: dict[str, Any] = {}
+    for dc_id in dc_ids:
+        try:
+            ctx = await build_data_context(dc_id, current_user)
+        except Exception as e:  # noqa: BLE001 — one bad DC must not void the rest
+            logger.warning("analysis context: skipping dc %s: %s", dc_id, e)
+            warnings.append(f"Data collection {dc_id} could not be read and was skipped.")
+            continue
+        collections.append(ctx)
+
+    if collections:
+        project_doc = _project_doc_for_dc(collections[0].data_collection_id) or {}
+
+    tags = {c.data_collection_tag or c.data_collection_id for c in collections}
+    return (
+        DashboardDataContext(
+            dashboard_id=dashboard_ctx.dashboard_id,
+            collections=collections,
+            joins=_joins_for_tags(project_doc, tags),
+        ),
+        warnings,
+    )
+
+
+def _project_doc_for_dc(data_collection_id: str) -> dict[str, Any] | None:
+    """Fetch the owning project doc (for its `joins` list)."""
+    try:
+        oid = ObjectId(data_collection_id)
+    except Exception:  # noqa: BLE001
+        return None
+    return projects_collection.find_one(
+        {"workflows.data_collections._id": oid},
+        {"joins": 1, "name": 1},
+    )
 
 
 async def build_dashboard_context(
@@ -407,12 +647,14 @@ async def build_dashboard_context(
             detail="You don't have permission to access this dashboard.",
         )
 
-    figures, filters, primary_dc = _summarize_dashboard(doc)
+    figures, filters, components, dc_ids = _summarize_dashboard(doc)
     return (
         DashboardContext(
             dashboard_id=dashboard_id,
             figures=figures,
             filters=filters,
+            components=components,
+            dc_ids=dc_ids,
         ),
-        primary_dc,
+        dc_ids[0] if dc_ids else None,
     )

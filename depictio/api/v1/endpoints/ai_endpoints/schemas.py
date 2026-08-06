@@ -86,12 +86,20 @@ class ExecutionStep(BaseModel):
     Fields are deliberately permissive — the executor surfaces failures as
     steps with status="error" rather than raising, so the trace is always
     renderable end-to-end.
+
+    `rows_in`/`rows_out` are what make a step auditable. A filter that
+    silently matched every row and one that silently matched none produce
+    identical prose; they produce very different cardinalities.
     """
 
     thought: str = ""
     code: str = ""
     output: str = ""
     status: Literal["success", "error", "warning"] = "success"
+    dc_tag: str = ""
+    rows_in: int | None = None
+    rows_out: int | None = None
+    seconds: float = 0.0
 
 
 class FilterAction(BaseModel):
@@ -172,13 +180,78 @@ class DashboardActions(BaseModel):
     filter_proposals: list[FilterProposal] = Field(default_factory=list)
 
 
+AnalyzeMode = Literal["mutate", "analyze"]
+"""Which half of the assistant a `/ai/analyze` request is asking for.
+
+``mutate`` is the original conversational flow: answer a question *and*
+propose dashboard actions the user can Apply. ``analyze`` is read-only —
+the model may execute code and narrate, but `actions` is stripped
+server-side and no Apply affordance is ever rendered. Keeping the two
+exclusive is what lets the UI decide how to render a reply.
+"""
+
+
 class AnalysisResult(BaseModel):
     """Returned by `/ai/analyze` (prompt-driven analysis)."""
 
     answer: str
     steps: list[ExecutionStep]
+    mode: AnalyzeMode = "mutate"
     actions: DashboardActions = Field(default_factory=DashboardActions)
     resolved_filters: list[ResolvedFilter] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
+# ---------- Analysis reports (read-only mode's artifact) ----------
+
+
+class Finding(BaseModel):
+    """One claim the analysis makes, tied to the steps that ground it.
+
+    `evidence_step_ids` is required and non-empty by validation, not by
+    convention: a claim with no executed evidence behind it is exactly the
+    failure mode this artifact exists to prevent — asserting a conclusion
+    from a handful of sample rows. Claims that fail this check are dropped
+    and the drop is recorded in the report's warnings, never rendered with
+    a caveat.
+    """
+
+    claim: str = Field(min_length=1)
+    evidence_step_ids: list[int] = Field(min_length=1)
+    confidence: Literal["low", "medium", "high"] = "medium"
+
+    @field_validator("evidence_step_ids")
+    @classmethod
+    def _non_empty_evidence(cls, v: list[int]) -> list[int]:
+        if not v:
+            raise ValueError("a finding must cite at least one executed step")
+        return v
+
+
+class BudgetSpent(BaseModel):
+    steps: int = 0
+    tokens: int = 0
+    seconds: float = 0.0
+
+
+class AnalysisReport(BaseModel):
+    """The persisted artifact of one read-only analysis run.
+
+    Stored in the `ai_analyses` collection — a derived document, never
+    written into the dashboard itself, same policy as `ai_summaries`.
+    """
+
+    id: str
+    dashboard_id: str
+    created_at: str
+    model: str
+    prompt: str
+    status: Literal["running", "complete", "failed", "cancelled"] = "running"
+    findings: list[Finding] = Field(default_factory=list)
+    steps: list[ExecutionStep] = Field(default_factory=list)
+    narrative_md: str = ""
+    budget_spent: BudgetSpent = Field(default_factory=BudgetSpent)
+    warnings: list[str] = Field(default_factory=list)
 
 
 # ---------- Request bodies ----------
@@ -211,6 +284,9 @@ class AnalyzeRequest(BaseModel):
     # Currently-active InteractiveFilter dicts from the client — threshold
     # resolution computes quantiles on the *filtered* data the user sees.
     filters: list[dict[str, Any]] = Field(default_factory=list)
+    # Defaults to "mutate" so existing clients keep the behaviour they
+    # were written against; the read-only surface opts in explicitly.
+    mode: AnalyzeMode = "mutate"
 
 
 class ResolveFiltersRequest(BaseModel):
@@ -289,6 +365,13 @@ StreamEventType = Literal[
     "answer",
     "actions",
     "result",
+    # Read-only analysis additions: `plan` once after the first turn (the
+    # model's stated intent, shown before the minutes of waiting), and
+    # `budget` each turn ({steps_used, tokens_used, seconds}) so the
+    # countdown the model sees is also visible to the user.
+    "plan",
+    "budget",
+    "report",
     "error",
     "done",
 ]
