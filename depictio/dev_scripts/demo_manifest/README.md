@@ -57,10 +57,15 @@ depictio run --template generic/manifest-tables/1 \
 - Both coverage cards show 3 entries (`nunique` of `depictio_manifest_id`).
 - The manifest-entry MultiSelect filters both raw tables at once — that's the
   injected `depictio_manifest_id` join key, no join config anywhere.
-- Re-run after editing a CSV or removing a manifest entry, then
-  `POST /projects/refresh_manifest` (or the project page's refresh) to see
-  overwrite-with-report semantics; dropping a whole `type` marks that DC
-  failed instead of silently emptying it.
+- Re-run after editing a CSV or removing a manifest entry, then click
+  **Refresh manifest** on the project detail page (or
+  `POST /projects/refresh_manifest`) to see overwrite-with-report semantics;
+  dropping a whole `type` marks that DC failed instead of silently emptying
+  it, and the failure reason lands in the notification verbatim.
+- Single-URL flavour, no manifest needed: project detail → *Add data
+  collection* → Table → **From URL** source → paste any public HTTPS CSV
+  (e.g. a seaborn-data raw GitHub URL) — same server-side ingestion, zero
+  gateway configuration for public HTTPS hosts.
 - Export the project back to a template: project page → *Export as template*
   (or `depictio template export <project_id> -t my-lab/demo/1 -c admin_config.yaml`)
   and diff the bundle against `depictio/projects/generic/manifest-tables/1/`.

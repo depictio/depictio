@@ -2948,6 +2948,59 @@ export async function exportProjectTemplate(
   return res.blob();
 }
 
+/** Per-DC outcome inside a ManifestRefreshReport. `status` is one of
+ *  "planned" | "ingested" | "failed" | "dispatched" | "running"; `message`
+ *  carries the human-readable reason for failed/skipped entries (meaningful —
+ *  surface it verbatim). */
+export interface ManifestRefreshDCResult {
+  data_collection_tag: string;
+  data_collection_id: string;
+  entries: number;
+  status: string;
+  message?: string | null;
+}
+
+/** Report returned by POST /projects/refresh_manifest and its polling GET.
+ *  Async runs carry a `run_id`; the run is terminal once no entry is still
+ *  "dispatched"/"running". */
+export interface ManifestRefreshReport {
+  project_id: string;
+  refreshed: ManifestRefreshDCResult[];
+  run_id?: string | null;
+  dry_run: boolean;
+  success: boolean;
+}
+
+/** Re-ingest the manifest-backed data collections of a project. With
+ *  `async_run: true` the backend dispatches Celery tasks and returns a
+ *  `run_id` to poll via getManifestRefreshRun; without it the report is
+ *  already terminal. */
+export async function refreshProjectManifest(payload: {
+  project_id: string;
+  data_collection_tag?: string | null;
+  dry_run?: boolean;
+  async_run?: boolean;
+}): Promise<ManifestRefreshReport> {
+  const res = await authFetch(`${API_BASE}/projects/refresh_manifest`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to refresh manifest');
+  return res.json();
+}
+
+/** Poll the state of an async manifest refresh run. Same report shape as the
+ *  POST; terminal when no entry is "dispatched" or "running" anymore. */
+export async function getManifestRefreshRun(
+  runId: string,
+): Promise<ManifestRefreshReport> {
+  const res = await authFetch(
+    `${API_BASE}/projects/refresh_manifest/${runId}`,
+  );
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to poll manifest refresh');
+  return res.json();
+}
+
 /** MultiQC report list response shape — used to render the DC viewer panel
  *  for multiqc-typed data collections. The backend stamps everything inside
  *  `report` (the embedded MultiQCReport doc) so callers should always read
@@ -3077,6 +3130,36 @@ export async function createDataCollectionFromUpload(
     }
     throw new Error(detail || `Upload failed: ${res.status}`);
   }
+  return res.json();
+}
+
+/** JSON body for POST /datacollections/create_from_url. Mirrors the
+ *  create_from_upload form fields, with the file replaced by a remote `url`
+ *  (https:// or s3://; http:// only when the instance allows it). */
+export interface CreateDCFromUrlInput {
+  project_id: string;
+  name: string;
+  url: string;
+  data_type?: string;
+  file_format?: string;
+  separator?: string;
+  custom_separator?: string | null;
+  compression?: string;
+  has_header?: boolean;
+  description?: string;
+}
+
+/** Create a data collection from a remote URL. The server fetches the file
+ *  through its SSRF gateway — 422s carry meaningful `{detail}` strings (e.g.
+ *  private-address rejection) which are surfaced verbatim. */
+export async function createDataCollectionFromUrl(
+  input: CreateDCFromUrlInput,
+): Promise<{ success: boolean; message: string; data_collection_id: string }> {
+  const res = await authFetch(`${API_BASE}/datacollections/create_from_url`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to create data collection from URL');
   return res.json();
 }
 

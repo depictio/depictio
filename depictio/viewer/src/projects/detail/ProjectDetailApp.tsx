@@ -34,6 +34,7 @@ import {
   Alert,
   Anchor,
   Modal,
+  SegmentedControl,
   Select,
   Switch,
   Textarea,
@@ -47,9 +48,12 @@ import {
   renameDataCollection,
   deleteDataCollection,
   createDataCollectionFromUpload,
+  createDataCollectionFromUrl,
   createMultiQCDataCollection,
   checkMultiQCUniformity,
   fetchVizSuggestions,
+  refreshProjectManifest,
+  getManifestRefreshRun,
 } from 'depictio-react-core';
 import type {
   ProjectListEntry,
@@ -57,6 +61,7 @@ import type {
   MultiQCReportSummary,
   DCLink,
   VizSuggestionsResponse,
+  ManifestRefreshReport,
 } from 'depictio-react-core';
 import LinksSection from './LinksSection';
 import ManageDataCollectionModal, {
@@ -375,6 +380,145 @@ const ProjectDetailApp: React.FC = () => {
     [workflows],
   );
 
+  // Manifest-backed projects (scan.mode === "manifest" on any DC) can be
+  // re-ingested in place from the header. Scan mode casing varies, so compare
+  // case-insensitively.
+  const hasManifest = useMemo(
+    () =>
+      workflows.some((wf) =>
+        (wf.data_collections || []).some((dc) => {
+          const scan = (dc.config as { scan?: { mode?: string } } | undefined)
+            ?.scan;
+          return (
+            typeof scan?.mode === 'string' &&
+            scan.mode.toLowerCase() === 'manifest'
+          );
+        }),
+      ),
+    [workflows],
+  );
+
+  // "Refresh manifest" run state. The async endpoint returns a run_id we poll
+  // every 2s (max ~5 min); the interval is held in a ref so unmount clears it.
+  const [manifestRefreshing, setManifestRefreshing] = useState(false);
+  const [manifestProgress, setManifestProgress] = useState<string | null>(null);
+  const manifestPollRef = useRef<number | null>(null);
+  const stopManifestPoll = () => {
+    if (manifestPollRef.current != null) {
+      window.clearInterval(manifestPollRef.current);
+      manifestPollRef.current = null;
+    }
+  };
+  useEffect(() => stopManifestPoll, []);
+
+  const handleRefreshManifest = async () => {
+    if (!projectId || manifestRefreshing) return;
+
+    const isPending = (r: ManifestRefreshReport) =>
+      r.refreshed.some(
+        (e) => e.status === 'dispatched' || e.status === 'running',
+      );
+    const finish = (report: ManifestRefreshReport) => {
+      stopManifestPoll();
+      setManifestRefreshing(false);
+      setManifestProgress(null);
+      const failed = report.refreshed.filter((e) => e.status === 'failed');
+      if (report.success && failed.length === 0) {
+        const ingested = report.refreshed.filter(
+          (e) => e.status === 'ingested',
+        );
+        const entries = ingested.reduce((s, e) => s + (e.entries || 0), 0);
+        notifications.show({
+          color: 'teal',
+          title: 'Manifest refreshed',
+          message: `${ingested.length} collection${
+            ingested.length === 1 ? '' : 's'
+          } re-ingested (${entries} entr${entries === 1 ? 'y' : 'ies'}).`,
+          autoClose: 5000,
+        });
+        refresh();
+      } else {
+        // Per-DC failure messages are meaningful (e.g. "manifest no longer
+        // lists type X — collection left untouched") — surface them verbatim.
+        const lines = failed.map(
+          (e) => `${e.data_collection_tag}: ${e.message || e.status}`,
+        );
+        notifications.show({
+          color: 'orange',
+          title: 'Manifest refresh finished with failures',
+          message: lines.join(' · ') || 'Some collections failed to refresh.',
+          autoClose: false,
+        });
+      }
+    };
+
+    setManifestRefreshing(true);
+    setManifestProgress(null);
+    try {
+      const report = await refreshProjectManifest({
+        project_id: projectId,
+        async_run: true,
+      });
+      // Sync fallback: no run_id (or nothing left in flight) means the report
+      // is already terminal — handle it directly, no polling.
+      if (!report.run_id || !isPending(report)) {
+        finish(report);
+        return;
+      }
+      const runId = report.run_id;
+      const startedAt = Date.now();
+      let inFlight = false;
+      manifestPollRef.current = window.setInterval(async () => {
+        if (inFlight) return;
+        inFlight = true;
+        try {
+          const state = await getManifestRefreshRun(runId);
+          if (!isPending(state)) {
+            finish(state);
+            return;
+          }
+          const done = state.refreshed.filter(
+            (e) => e.status !== 'dispatched' && e.status !== 'running',
+          ).length;
+          setManifestProgress(`Refreshing… ${done}/${state.refreshed.length}`);
+          if (Date.now() - startedAt > 5 * 60 * 1000) {
+            stopManifestPoll();
+            setManifestRefreshing(false);
+            setManifestProgress(null);
+            notifications.show({
+              color: 'red',
+              title: 'Manifest refresh timed out',
+              message:
+                'The refresh is still running server-side — reload the page later to see the result.',
+              autoClose: false,
+            });
+          }
+        } catch (err) {
+          stopManifestPoll();
+          setManifestRefreshing(false);
+          setManifestProgress(null);
+          notifications.show({
+            color: 'red',
+            title: 'Manifest refresh failed',
+            message: (err as Error).message || 'Polling the refresh run failed.',
+            autoClose: false,
+          });
+        } finally {
+          inFlight = false;
+        }
+      }, 2000);
+    } catch (err) {
+      setManifestRefreshing(false);
+      setManifestProgress(null);
+      notifications.show({
+        color: 'red',
+        title: 'Manifest refresh failed',
+        message: (err as Error).message || 'Failed to refresh manifest.',
+        autoClose: false,
+      });
+    }
+  };
+
   // Advanced projects let the user filter DCs by workflow. When no workflow
   // is selected, show all. Basic projects ignore this filter.
   const dataCollections = useMemo(() => {
@@ -482,6 +626,18 @@ const ProjectDetailApp: React.FC = () => {
             </Title>
           </Group>
           <Group gap="xs">
+            {canMutate && hasManifest && (
+              <Button
+                variant="light"
+                color="teal"
+                data-testid="refresh-manifest-button"
+                leftSection={<Icon icon="mdi:refresh" width={16} />}
+                loading={manifestRefreshing}
+                onClick={handleRefreshManifest}
+              >
+                {manifestProgress ?? 'Refresh manifest'}
+              </Button>
+            )}
             {canMutate && (
               <Button
                 variant="light"
@@ -1119,6 +1275,10 @@ const CreateDataCollectionModal: React.FC<{
   onSuccess: () => void;
 }> = ({ opened, projectType, projectId, onClose, onSuccess }) => {
   const [dcType, setDcType] = useState<'table' | 'multiqc'>('table');
+  // Table DCs come from either a local file upload or a remote URL the server
+  // fetches (https:// or s3://; http:// only when the instance allows it).
+  const [tableSource, setTableSource] = useState<'upload' | 'url'>('upload');
+  const [url, setUrl] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -1237,6 +1397,8 @@ const CreateDataCollectionModal: React.FC<{
   useEffect(() => {
     if (!opened) {
       setDcType('table');
+      setTableSource('upload');
+      setUrl('');
       setFile(null);
       setName('');
       setDescription('');
@@ -1274,6 +1436,26 @@ const CreateDataCollectionModal: React.FC<{
       setName(stem);
     }
   }, [file, name]);
+
+  // Same auto-fill for the From-URL source: once the typed/pasted URL ends in
+  // a filename with an extension, guess the format and (if the user hasn't
+  // typed one) prefill the name from the basename without its extension.
+  // Requiring the extension keeps char-by-char typing from leaking partial
+  // hostnames into the name field.
+  useEffect(() => {
+    if (dcType !== 'table' || tableSource !== 'url') return;
+    const m = url
+      .trim()
+      .match(/^(?:https?|s3):\/\/[^/]+\/(?:.*\/)?([^/?#]+\.[^/?#.]+)(?:[?#].*)?$/i);
+    if (!m) return;
+    const basename = m[1];
+    const guessed = guessFormat(basename);
+    if (guessed) {
+      setFileFormat(guessed);
+      setSeparator(guessed === 'tsv' ? '\t' : ',');
+    }
+    if (!name.trim()) setName(basename.replace(/\.[^.]+$/, ''));
+  }, [dcType, tableSource, url, name]);
 
   // Clear any prior uniformity mismatch (and stale pass state) when the user
   // changes the dropped file set — both refer to a different set of reports.
@@ -1406,6 +1588,36 @@ const CreateDataCollectionModal: React.FC<{
           message: result.message || `"${name.trim()}" is ready.`,
           autoClose: 4000,
         });
+      } else if (tableSource === 'url') {
+        const trimmedUrl = url.trim();
+        if (!/^(https?|s3):\/\//i.test(trimmedUrl)) {
+          setError('URL must start with https://, s3:// or http://.');
+          setSubmitting(false);
+          return;
+        }
+        if (separator === 'custom' && !customSeparator) {
+          setError('Custom separator cannot be empty.');
+          setSubmitting(false);
+          return;
+        }
+        const result = await createDataCollectionFromUrl({
+          project_id: projectId,
+          name: name.trim(),
+          url: trimmedUrl,
+          data_type: 'table',
+          file_format: fileFormat,
+          separator,
+          custom_separator: separator === 'custom' ? customSeparator : null,
+          compression,
+          has_header: hasHeader,
+          description: description.trim(),
+        });
+        notifications.show({
+          color: 'teal',
+          title: 'Data collection created',
+          message: result.message || `"${name.trim()}" is ready.`,
+          autoClose: 4000,
+        });
       } else {
         if (!file) {
           setError('Pick a file to upload.');
@@ -1459,6 +1671,17 @@ const CreateDataCollectionModal: React.FC<{
         setError(parsed.summary);
       } else {
         setError(rawMessage);
+        // The URL flow's backend rejections (e.g. the SSRF gateway refusing a
+        // private address) are meaningful — surface them as a notification
+        // too, mirroring the success path. Modal stays open for a retry.
+        if (dcType === 'table' && tableSource === 'url') {
+          notifications.show({
+            color: 'red',
+            title: 'Failed to create from URL',
+            message: rawMessage,
+            autoClose: 8000,
+          });
+        }
       }
     } finally {
       setSubmitting(false);
@@ -1466,6 +1689,7 @@ const CreateDataCollectionModal: React.FC<{
   };
 
   const isDelimited = fileFormat === 'csv' || fileFormat === 'tsv';
+  const urlSchemeOk = /^(https?|s3):\/\//i.test(url.trim());
 
   return (
     <Modal
@@ -1521,6 +1745,38 @@ const CreateDataCollectionModal: React.FC<{
 
           <Tabs.Panel value="table" pt="md">
             <Stack gap="xs">
+              <SegmentedControl
+                data-testid="dc-source-url-toggle"
+                fullWidth
+                value={tableSource}
+                onChange={(v) => {
+                  setTableSource(v as 'upload' | 'url');
+                  setError(null);
+                }}
+                disabled={submitting}
+                data={[
+                  { value: 'upload', label: 'Upload file' },
+                  { value: 'url', label: 'From URL' },
+                ]}
+              />
+              {tableSource === 'url' && (
+                <TextInput
+                  data-testid="dc-url-input"
+                  label="File URL"
+                  placeholder="https://raw.githubusercontent.com/.../data.csv"
+                  description="Publicly reachable https:// URL or s3:// object — the server fetches and ingests it."
+                  required
+                  value={url}
+                  onChange={(e) => setUrl(e.currentTarget.value)}
+                  disabled={submitting}
+                  error={
+                    url.trim() && !urlSchemeOk
+                      ? 'URL must start with https://, s3:// or http://.'
+                      : undefined
+                  }
+                />
+              )}
+              {tableSource === 'upload' && (
               <TableFileDropZone
                 dropzone={tableDropzone}
                 file={file}
@@ -1536,7 +1792,8 @@ const CreateDataCollectionModal: React.FC<{
                   tableDropzone.clear();
                 }}
               />
-              {file && (
+              )}
+              {tableSource === 'upload' && file && (
                 <Paper p="sm" withBorder radius="sm" bg="var(--mantine-color-default-hover)">
                   <Stack gap="xs">
                     <Switch
@@ -1811,8 +2068,10 @@ const CreateDataCollectionModal: React.FC<{
               !name.trim() ||
               (dcType === 'multiqc'
                 ? multiqcDropzone.files.length === 0
-                : !file ||
-                  (coordsConfirmed && (!latColumn || !lonColumn)))
+                : tableSource === 'url'
+                  ? !urlSchemeOk
+                  : !file ||
+                    (coordsConfirmed && (!latColumn || !lonColumn)))
             }
             leftSection={<Icon icon="mdi:cloud-upload-outline" width={16} />}
           >
