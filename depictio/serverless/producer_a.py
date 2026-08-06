@@ -1334,11 +1334,32 @@ def _freeze_multiqc(
         payload = routes.render_multiqc_general_stats_endpoint(
             dashboard_oid, component_id, request, current_user=user
         )
-        return "multiqc-general-stats", payload
+        return "multiqc-general-stats", _multiqc_payload(payload, component_id)
     payload = routes.render_multiqc_endpoint(
         dashboard_oid, component_id, request, current_user=user
     )
-    return "multiqc", payload
+    return "multiqc", _multiqc_payload(payload, component_id)
+
+
+def _multiqc_payload(payload: Any, component_id: str) -> dict[str, Any]:
+    """The endpoint's dict, or a readable refusal when it answered otherwise.
+
+    ``render_multiqc_endpoint`` returns a ``JSONResponse`` rather than a dict
+    when the pre-render for that collection is not warm yet — the figures are
+    built by a Celery task on first use, and an export that lands in that
+    window gets a status body instead of a figure. Pydantic then rejects it
+    while validating ``FrozenPayload`` and the component is omitted with a
+    `dict_type` validation error in its detail, which tells a reader nothing.
+    Name the actual condition instead: it is transient, and re-exporting once
+    the pre-render has finished is the fix.
+    """
+    if isinstance(payload, dict):
+        return payload
+    raise ProducerAError(
+        f"MultiQC component {component_id}: the endpoint returned no figure "
+        f"({type(payload).__name__}), which is what it does while the pre-render for this "
+        "data collection is still being built. Re-export once it has finished."
+    )
 
 
 def _freeze_map(comp: dict[str, Any], user: ExportUser) -> dict[str, Any]:

@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """Render the serverless-deployment schemas as hand-drawn SVGs.
 
-Two diagrams, each carrying one idea that is tedious to state in prose:
+Three diagrams, each carrying one idea that is tedious to state in prose:
 
+* ``architecture``        — the whole shape: one manifest contract, three
+  producers that write it, the real viewer running against a shimmed api, and
+  the four tiers a component can land in.
 * ``preflight_decides``   — why the export preflight used to answer "Undecided"
   for every figure, and what changed when it became the build's own decision
   path stopped early rather than a second, data-free guess.
@@ -45,6 +48,89 @@ from sketch import (  # noqa: E402
 )
 
 app = typer.Typer(add_completion=False)
+
+
+# --------------------------------------------------------------------------
+# 0. The whole shape: one contract, three producers, one runtime, four tiers.
+# --------------------------------------------------------------------------
+
+ARCH_W, ARCH_H = 1420, 860
+
+CAPTION_ARCH = (
+    "Three producers write one manifest; the real viewer runs against a shimmed api that answers "
+    "from it, so a bundle is the same React app reading a file instead of a server. Each component "
+    "lands in one of four tiers, and only the top one keeps its interactivity."
+)
+
+
+def _architecture() -> Sketch:
+    s = Sketch(ARCH_W, ARCH_H, seed=5)
+    s.heading(
+        60, 52,
+        "A dashboard that opens without Depictio",
+        "one manifest contract · three producers · the real viewer, shimmed",
+    )
+
+    # ---- producers --------------------------------------------------------
+    s.text(60, 122, "PRODUCERS", size=15, anchor="start", weight="bold", colour=DIM)
+    pa = Box(60, 140, 300, 104, BLUE, "A — from an instance", ("Mongo + Delta + S3",))
+    pb = Box(60, 262, 300, 104, BLUE, "B — from a spec", ("YAML + local Parquet",))
+    pc = Box(60, 384, 300, 104, BLUE, "C — over the API", ("owner-gated, Celery job",))
+    for box in (pa, pb, pc):
+        s.box(box)
+
+    # ---- contract ---------------------------------------------------------
+    manifest = Box(470, 178, 380, 272, YELLOW, "BundleManifest", (
+        "dashboard document (every tab)",
+        "data_refs + inline Parquet",
+        "bindings · prologues · links",
+        "frozen payloads",
+        "tiers + provenance",
+    ))
+    s.box(manifest)
+    s.text(660, 476, "schema-pinned, validated both ways", size=14, colour=DIM)
+
+    for box in (pa, pb, pc):
+        s.arrow(box.right, box.cy, manifest.x - 8, manifest.cy + (box.cy - pb.cy) * 0.45)
+
+    # ---- runtime ----------------------------------------------------------
+    s.text(960, 122, "RUNTIME", size=15, anchor="start", weight="bold", colour=DIM)
+    runtime = Box(960, 168, 400, 292, GREEN, "the real viewer", (
+        "App.tsx, unmodified",
+        "",
+        "api.ts → shimmed at build time",
+        "hyparquet reads the Parquet",
+        "query kernels mirror Polars",
+        "bind-and-refill redraws figures",
+    ))
+    s.box(runtime)
+    s.arrow(manifest.right, manifest.cy, runtime.x - 8, runtime.cy)
+    s.text(905, manifest.cy - 16, "one", size=13, colour=DIM)
+    s.text(905, manifest.cy + 4, "file", size=13, colour=DIM)
+
+    # ---- tiers ------------------------------------------------------------
+    s.line(60, 560, 1360, 560, colour=GREY, width=1.2, amount=0.8, passes=1)
+    s.text(60, 542, "FOUR TIERS — what a component keeps", size=15,
+           anchor="start", weight="bold", colour=DIM)
+
+    tiers = [
+        (60, GREEN, "live", ("filters still work",), "184 of 205"),
+        (395, BLUE, "partial", ("exact, but heavier",), "0"),
+        (730, YELLOW, "frozen", ("a snapshot, and it says so",), "21"),
+        (1065, PINK, "omitted", ("absent, with a reason",), "0"),
+    ]
+    for x, fill, title, lines, count in tiers:
+        b = Box(x, 592, 295, 104, fill, title, lines)
+        s.box(b)
+        s.text(b.cx, 724, count, size=17, weight="bold")
+
+    s.text(710, 768, "across the five reference dashboards, after this branch", size=14, colour=DIM)
+    s.text(
+        710, 800,
+        "every bundle is zero-network: no fetch, no CDN, no tile server, no font host",
+        size=14, colour=DIM,
+    )
+    return s
 
 
 # --------------------------------------------------------------------------
@@ -226,9 +312,11 @@ def main(
     png: bool = typer.Option(True, help="Also rasterise each SVG (needs Playwright)."),
 ) -> None:
     """Render every serverless schema under the given prefix."""
+    write(_architecture(), out, "architecture", png=png)
     write(_preflight(), out, "preflight-decides", png=png)
     write(_phylogeny(), out, "phylogeny-two-dcs", png=png)
     print("\ncaptions:")
+    print(f"  architecture      : {CAPTION_ARCH}")
     print(f"  preflight-decides : {CAPTION_PREFLIGHT}")
     print(f"  phylogeny-two-dcs : {CAPTION_PHYLOGENY}")
 
