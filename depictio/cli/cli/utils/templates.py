@@ -109,6 +109,66 @@ def _list_available_templates(package_root: Path) -> list[str]:
     return sorted(templates)
 
 
+def _version_key(version: str) -> tuple:
+    """Sortable key for a version dir name (numeric components, then the raw tail)."""
+    parts = re.findall(r"\d+", version)
+    return (tuple(int(p) for p in parts), version)
+
+
+def _list_pipeline_versions(pipeline_name: str) -> list[str]:
+    """Version folder names available for a pipeline (e.g. ['2.14.0', '2.16.0'])."""
+    package_root = Path(__file__).resolve().parents[4]
+    pipeline_dir = package_root / "depictio" / "projects" / pipeline_name
+    if not pipeline_dir.is_dir():
+        return []
+    versions: list[str] = []
+    for child in pipeline_dir.iterdir():
+        if not child.is_dir():
+            continue
+        if (child / "template.yaml").is_file() or (child / "project.yaml").is_file():
+            versions.append(child.name)
+    return sorted(versions, key=_version_key)
+
+
+def detect_template_from_run_dir(run_dir: str | Path) -> tuple[str | None, Any]:
+    """Detect the template matching a workflow run directory (any engine).
+
+    Reads the run's provenance via the engine-agnostic registry
+    (``read_run_info`` — nf-core, Snakemake, …), then resolves a template id: the
+    exact ``<pipeline>/<version>`` if present, otherwise the closest available
+    version of the same pipeline (with a warning). Returns ``(template_id, info)``
+    where ``template_id`` is ``None`` when no template matches (caller falls back
+    to catalog auto-composition) and ``info`` is the ``WorkflowRunInfo`` (or None).
+    """
+    from depictio.models.models.run_info import read_run_info
+
+    info = read_run_info(run_dir)
+    if info is None or not info.pipeline_name:
+        return None, info
+
+    # 1. Exact match on either version spelling (with / without leading "v").
+    for template_id in info.template_ids():
+        try:
+            locate_template(template_id)
+            return template_id, info
+        except FileNotFoundError:
+            continue
+
+    # 2. Closest available version of the same pipeline.
+    available = _list_pipeline_versions(info.pipeline_name)
+    if not available:
+        return None, info
+
+    target = (info.pipeline_version or "").lstrip("v")
+    not_newer = [v for v in available if _version_key(v) <= _version_key(target)] if target else []
+    chosen = not_newer[-1] if not_newer else available[-1]
+    logger.warning(
+        f"No exact template for {info.pipeline_name} {target or '?'}; "
+        f"using closest available version {chosen}."
+    )
+    return f"{info.pipeline_name}/{chosen}", info
+
+
 def substitute_template_variables(config: Any, variables: dict[str, str]) -> Any:
     """Recursively substitute {VAR_NAME} placeholders in config dict/list/str.
 

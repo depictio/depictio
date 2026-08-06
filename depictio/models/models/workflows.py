@@ -70,6 +70,13 @@ class WorkflowDataLocation(MongoModel):
 class WorkflowConfig(MongoModel):
     version: str | None = None
     workflow_parameters: dict | None = None
+    # Per-run Nextflow provenance (read from the run's pipeline_info/). Stored on
+    # the run-scoped WorkflowConfig so a workflow can aggregate runs of different
+    # pipeline versions without conflict.
+    engine_name: str | None = None
+    pipeline_version: str | None = None
+    nextflow_version: str | None = None
+    tools_executed: list[str] | None = None
 
 
 class WorkflowRunScan(BaseModel):
