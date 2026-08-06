@@ -1,5 +1,5 @@
 import React from 'react';
-import { ActionIcon, Badge, Box, Button, Group, Loader, Title, Tooltip, useMantineColorScheme } from '@mantine/core';
+import { ActionIcon, Badge, Box, Button, Group, Loader, Menu, Title, Tooltip, useMantineColorScheme } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import type { DashboardData, DashboardSummary } from 'depictio-react-core';
@@ -54,6 +54,9 @@ interface HeaderProps {
   mode?: 'view' | 'edit';
   /** Edit-mode only: invoked when the user clicks "Add component". */
   onAddComponent?: () => void;
+  /** Edit-mode only: when set, "Add component" becomes a split menu with a
+   *  "With AI…" entry invoking this. Omitted ⇒ plain button (AI off). */
+  onAddWithAI?: () => void;
   /** Edit-mode only: opens the Sections manager. */
   onOpenSections?: () => void;
   /** Edit-mode only: invoked when the user clicks "Save". Should force-flush any pending debounced save. */
@@ -98,6 +101,7 @@ const Header: React.FC<HeaderProps> = ({
   cardsLoading = false,
   mode = 'view',
   onAddComponent,
+  onAddWithAI,
   onOpenSections,
   onSave,
   isOwner = true,
@@ -247,7 +251,7 @@ const Header: React.FC<HeaderProps> = ({
       {/* Right region — colors mirror depictio/dash/layouts/header.py */}
       <Group gap={8} wrap="nowrap" style={{ flexShrink: 0 }}>
         <PoweredBy withRightBorder />
-        {mode === 'edit' && onAddComponent && (
+        {mode === 'edit' && onAddComponent && !onAddWithAI && (
           <Tooltip
             label="You can only edit dashboards you own. Duplicate this one to get your own copy."
             disabled={isOwner}
@@ -264,6 +268,44 @@ const Header: React.FC<HeaderProps> = ({
             >
               Add component
             </Button>
+          </Tooltip>
+        )}
+        {mode === 'edit' && onAddComponent && onAddWithAI && (
+          <Tooltip
+            label="You can only edit dashboards you own. Duplicate this one to get your own copy."
+            disabled={isOwner}
+            withArrow
+          >
+            <Menu shadow="md" position="bottom-end" withinPortal>
+              <Menu.Target>
+                <Button
+                  leftSection={<Icon icon="mdi:plus-circle" width={14} />}
+                  rightSection={<Icon icon="mdi:chevron-down" width={14} />}
+                  color="green"
+                  variant="filled"
+                  size="xs"
+                  disabled={!dashboardId || !isOwner}
+                  data-tour-id="editor-add-component"
+                >
+                  Add component
+                </Button>
+              </Menu.Target>
+              <Menu.Dropdown>
+                <Menu.Item
+                  leftSection={<Icon icon="mdi:pencil-outline" width={14} />}
+                  onClick={onAddComponent}
+                >
+                  Manually
+                </Menu.Item>
+                <Menu.Item
+                  leftSection={<Icon icon="mdi:auto-fix" width={14} />}
+                  onClick={onAddWithAI}
+                  data-testid="add-with-ai"
+                >
+                  With AI…
+                </Menu.Item>
+              </Menu.Dropdown>
+            </Menu>
           </Tooltip>
         )}
         {mode === 'edit' && onOpenSections && (

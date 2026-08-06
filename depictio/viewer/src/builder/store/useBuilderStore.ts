@@ -96,6 +96,9 @@ export interface BuilderState {
   catalogMode: boolean;
   // When catalogMode, the tool+output that supplied the pre-fill (for the banner).
   catalogSource: { toolName: string; outputId: string; description?: string } | null;
+  // Set when the component was pre-filled by the AI flow; persisted as
+  // `ai_source` provenance on the saved metadata (mirrors catalog_source).
+  aiSource: { flow: 'component-from-prompt'; prompt?: string } | null;
 
   // UI status flags
   saving: boolean;
@@ -143,6 +146,14 @@ export interface BuilderActions {
     config: Record<string, unknown>;
     source: { toolName: string; outputId: string; description?: string };
   }) => void;
+  initFromPrompt: (patch: {
+    componentType: ComponentType;
+    wfId: string;
+    dcId: string;
+    projectId: string | null;
+    config: Record<string, unknown>;
+    prompt?: string;
+  }) => void;
   loadExisting: (m: StoredMetadata) => void;
   setSaving: (b: boolean) => void;
   setSaveError: (e: string | null) => void;
@@ -179,6 +190,7 @@ const INITIAL: BuilderState = {
   sourceMode: 'unset',
   catalogMode: false,
   catalogSource: null,
+  aiSource: null,
   saving: false,
   saveError: null,
   previewReady: true,
@@ -274,6 +286,40 @@ export const useBuilderStore = create<BuilderState & BuilderActions>((set) => ({
       sourceMode: 'catalog',
       catalogMode: true,
       catalogSource: source,
+      previewReady: true,
+      dcConfigType: 'table',
+      ...figureFields,
+    }));
+  },
+  initFromPrompt: ({ componentType, wfId, dcId, projectId, config, prompt }) => {
+    // Mirrors initFromCatalog: jump straight to the Design step with the
+    // validated component dict as config. The AI dict comes from
+    // /ai/component-from-prompt (lite-model field names — same shape the
+    // per-type builders read).
+    const cfg = config as Record<string, unknown>;
+    const figureFields =
+      componentType === 'figure'
+        ? {
+            figureMode:
+              (cfg.mode as FigureMode) === 'code' ? ('code' as FigureMode) : ('ui' as FigureMode),
+            visuType: (cfg.visu_type as string) || 'scatter',
+            dictKwargs: (cfg.dict_kwargs as Record<string, unknown>) || {},
+            codeContent: (cfg.code_content as string) || '',
+          }
+        : {};
+    set((s) => ({
+      ...INITIAL,
+      mode: 'create',
+      dashboardId: s.dashboardId,
+      componentId: s.componentId,
+      componentType,
+      wfId,
+      dcId,
+      projectId,
+      config,
+      step: 2,
+      sourceMode: 'manual',
+      aiSource: { flow: 'component-from-prompt', prompt },
       previewReady: true,
       dcConfigType: 'table',
       ...figureFields,

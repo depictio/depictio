@@ -82,9 +82,15 @@ import {
   FILTER_PANEL_RAIL_WIDTH,
   countActiveFilters,
   clearFiltersBySource,
+  fetchProjectFromDashboard,
 } from 'depictio-react-core';
-import { AIAnalyzePanel, AIKeySection, useAIHealth } from 'depictio-react-ai';
-import type { ApplyActionsPayload, ResolvedFilter } from 'depictio-react-ai';
+import { AddWithAIModal, AIAnalyzePanel, AIKeySection, useAIHealth } from 'depictio-react-ai';
+import type {
+  ApplyActionsPayload,
+  AvailableDataCollection,
+  ComponentType as AIComponentType,
+  ResolvedFilter,
+} from 'depictio-react-ai';
 import type {
   DashboardData,
   DashboardPermissions,
@@ -788,6 +794,77 @@ const EditorApp: React.FC = () => {
     setAiFilterDescriptions([]);
   }, []);
 
+  // ---- "Add component → With AI…" flow --------------------------------------
+  const [aiModalOpened, setAiModalOpened] = useState(false);
+  const [aiDataCollections, setAiDataCollections] = useState<AvailableDataCollection[]>([]);
+  const aiProjectIdRef = useRef<string | null>(null);
+
+  // The project (workflows + DCs with tags) loads once the AI feature is on;
+  // it's the same payload the manual stepper's Data step fetches.
+  useEffect(() => {
+    if (!aiEnabled || !dashboardId) return;
+    let cancelled = false;
+    fetchProjectFromDashboard(dashboardId)
+      .then(({ project }) => {
+        if (cancelled) return;
+        aiProjectIdRef.current = project._id ?? null;
+        const list: AvailableDataCollection[] = [];
+        for (const wf of project.workflows ?? []) {
+          for (const dc of wf.data_collections ?? []) {
+            list.push({
+              dcId: dc._id,
+              dcTag: dc.data_collection_tag || dc._id,
+              wfId: wf._id,
+              wfTag: wf.workflow_tag || wf.name,
+            });
+          }
+        }
+        setAiDataCollections(list);
+      })
+      .catch(() => {
+        if (!cancelled) setAiDataCollections([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [aiEnabled, dashboardId]);
+
+  const handleAddWithAI = useCallback(() => setAiModalOpened(true), []);
+
+  /** Stash the validated component and land the user on the create page's
+   *  Design step, pre-filled. The stash is consumed (and cleared) by
+   *  CreateComponentPage on mount. */
+  const handleAIComponentReady = useCallback(
+    (
+      parsed: Record<string, unknown>,
+      componentType: AIComponentType,
+      dc: AvailableDataCollection,
+    ) => {
+      if (!dashboardId) return;
+      const newId =
+        typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+          ? crypto.randomUUID()
+          : fallbackUuid();
+      try {
+        sessionStorage.setItem(
+          `depictio.ai.pending-fill.${newId}`,
+          JSON.stringify({
+            componentType,
+            config: parsed,
+            dcId: dc.dcId,
+            wfId: dc.wfId ?? null,
+            projectId: aiProjectIdRef.current,
+          }),
+        );
+      } catch {
+        return; // sessionStorage unavailable — nothing sane to do
+      }
+      setAiModalOpened(false);
+      window.location.assign(`/dashboard-edit/${dashboardId}/component/add/${newId}`);
+    },
+    [dashboardId],
+  );
+
   // ---- Realtime: WebSocket subscription mirrors App.tsx ---------------------
   const [realtimeMode, setRealtimeMode] = useState<RealtimeMode>(() => {
     try {
@@ -1196,6 +1273,7 @@ const EditorApp: React.FC = () => {
           cardsLoading={cardsLoading}
           mode="edit"
           onAddComponent={handleAddComponent}
+          onAddWithAI={aiEnabled ? handleAddWithAI : undefined}
           onOpenSections={openSections}
           onSave={handleForceSave}
           isOwner={isOwner}
@@ -1475,6 +1553,17 @@ const EditorApp: React.FC = () => {
           ) : undefined
         }
       />
+
+      {aiEnabled && dashboardId && (
+        <AddWithAIModal
+          opened={aiModalOpened}
+          onClose={() => setAiModalOpened(false)}
+          dashboardId={dashboardId}
+          availableDataCollections={aiDataCollections}
+          onApply={handleAIComponentReady}
+          serverKeyAvailable={aiServerKeyAvailable}
+        />
+      )}
 
       <TabModal
         opened={tabModalState.open}

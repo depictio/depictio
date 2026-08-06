@@ -34,6 +34,7 @@ export function buildMetadata(state: BuilderState): StoredMetadata {
     // Persist catalog origin so the dashboard can show a "from catalog" badge.
     // Preserved through edits via the ...existing spread in per-type builders.
     ...(state.catalogSource ? { catalog_source: state.catalogSource } : {}),
+    ...(state.aiSource ? { ai_source: state.aiSource } : {}),
   };
   // For edit mode, preserve any existing keys we don't explicitly set
   // (e.g. parent_index, panel, dc_config caches).
