@@ -23,7 +23,14 @@ from depictio.models.models.base import PyObjectId
 from depictio.models.models.serverless import ComponentTier, TierReason
 from depictio.models.models.users import User
 from depictio.serverless.preflight import LinkRow, TabRow, TierRow
-from depictio.serverless.producer_a import ExportResult, ProducerAError
+from depictio.serverless.producer_a import (
+    BYTES_PER_MB,
+    SIZE_OVER_SOFT_LIMIT,
+    BundleSize,
+    BundleTooLargeError,
+    ExportResult,
+    ProducerAError,
+)
 
 DASHBOARD_OID = ObjectId("6824cb3b89d2b72169309737")
 PROJECT_OID = ObjectId("646b0f3c1e4a2d7f8e5b8c9d")
@@ -219,11 +226,26 @@ MAIN_TAB_ID = str(DASHBOARD_OID)
 CHILD_TAB_ID = "6824cb3b89d2b72169309741"
 
 
+def _fake_size() -> BundleSize:
+    """A preflight size verdict over the soft ceiling: 8 MB of runtime plus an
+    estimated 30 MB of data, against the 25/100 MB pair."""
+    return BundleSize(
+        runtime_bytes=8 * BYTES_PER_MB,
+        data_bytes=30 * BYTES_PER_MB,
+        total_bytes=38 * BYTES_PER_MB,
+        soft_limit_bytes=25 * BYTES_PER_MB,
+        hard_limit_bytes=100 * BYTES_PER_MB,
+        verdict=SIZE_OVER_SOFT_LIMIT,
+        estimated=True,
+    )
+
+
 def _fake_export_result() -> ExportResult:
     """A two-tab family: one live component on the main tab, one omitted
     compute on the child — the shape the preflight endpoint reshapes."""
     return ExportResult(
         manifest=None,
+        size=_fake_size(),
         tier_rows=[
             TierRow("c1", "Card", "card", ComponentTier.LIVE, tab_id=MAIN_TAB_ID),
             TierRow(
@@ -314,7 +336,34 @@ def test_preflight_happy_path(client, owner, monkeypatch: pytest.MonkeyPatch):
             }
         ],
         "counts": {"live": 1, "partial": 0, "frozen": 0, "omitted": 1},
+        # Sizes in bytes (no unit to guess), ceilings in MB (how they are
+        # configured), and the verdict already applied so the caller never
+        # re-derives the thresholds it was just handed.
+        "size_estimate": {
+            "estimated_total_bytes": 38 * BYTES_PER_MB,
+            "estimated_data_bytes": 30 * BYTES_PER_MB,
+            "runtime_bytes": 8 * BYTES_PER_MB,
+            "soft_limit_mb": 25,
+            "hard_limit_mb": 100,
+            "verdict": "over_soft_limit",
+        },
     }
+
+
+def test_preflight_without_a_sized_report_says_so_explicitly(
+    client, owner, monkeypatch: pytest.MonkeyPatch
+):
+    """``size_estimate`` is null, never a fabricated zero, when the report read
+    no data collection — a bundle of unknown size must not look like an empty
+    one to the modal."""
+    result = _fake_export_result()
+    result.size = None
+    monkeypatch.setattr(routes_mod, "export_static", lambda *a, **kw: result)
+    _as_user(client, owner)
+
+    resp = client.get(f"/serverless/export-static/{DASHBOARD_OID}/preflight")
+    assert resp.status_code == 200
+    assert resp.json()["size_estimate"] is None
 
 
 def test_preflight_producer_error_is_404(client, stranger, monkeypatch: pytest.MonkeyPatch):
@@ -327,6 +376,25 @@ def test_preflight_producer_error_is_404(client, stranger, monkeypatch: pytest.M
     resp = client.get(f"/serverless/export-static/{DASHBOARD_OID}/preflight")
     assert resp.status_code == 404
     assert resp.json()["detail"] == "Dashboard not found or access denied"
+
+
+def test_preflight_over_the_size_ceiling_is_413_with_the_reason(
+    client, owner, monkeypatch: pytest.MonkeyPatch
+):
+    """The preflight loads data collections and is refused at the same hard
+    ceiling the build is (that is what bounds its memory). "Not found" would be
+    a lie about a dashboard the caller can read, and would send them looking for
+    the wrong problem — so it gets its own status and the real message."""
+
+    def too_big(*args, **kwargs):
+        raise BundleTooLargeError("static bundle too large: 140.0 MB after 2 of 3 …")
+
+    monkeypatch.setattr(routes_mod, "export_static", too_big)
+    _as_user(client, owner)
+
+    resp = client.get(f"/serverless/export-static/{DASHBOARD_OID}/preflight")
+    assert resp.status_code == 413
+    assert "static bundle too large" in resp.json()["detail"]
 
 
 # ---------------------------------------------------------------------------

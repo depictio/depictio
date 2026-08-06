@@ -70,7 +70,7 @@ from depictio.models.models.serverless import (
 from depictio.serverless.binding import (
     BindingMiss,
     build_binding_with_reason,
-    miss_detail,
+    frozen_miss_detail,
     miss_tier_reason,
 )
 from depictio.serverless.companions import build_companions
@@ -109,6 +109,30 @@ def _template_path() -> Path:
     """
     override = os.environ.get(TEMPLATE_PATH_ENV)
     return Path(override) if override else TEMPLATE_PATH
+
+
+# The static runtime is the floor under every single-file bundle: measured at
+# ~7.7 MB of HTML/JS/CSS before a single row of data (RFC §8.1, v1.5.0). Used
+# only when the template itself cannot be read — see :func:`runtime_floor_bytes`.
+RUNTIME_FLOOR_FALLBACK_BYTES = int(7.7 * 1024 * 1024)
+
+
+def runtime_floor_bytes() -> int:
+    """What a bundle costs before any data: the built static runtime's size.
+
+    Measured off the template this process would actually inject into, so the
+    number tracks the runtime instead of lagging it. The fallback is only for
+    when there is no template to measure — a preflight on a box with no Node
+    build, or a container that mounts the template elsewhere without setting
+    ``DEPICTIO_SERVERLESS_TEMPLATE_PATH``. It drifts whenever the runtime's own
+    bundle does (new renderers, newly vendored libraries, a change to the CI
+    byte budget of 3.20 MB gzip), which is exactly why it is the fallback and
+    not the primary source.
+    """
+    try:
+        return _template_path().stat().st_size
+    except OSError:
+        return RUNTIME_FLOOR_FALLBACK_BYTES
 
 
 # Engine-spike builder rule (docs/design/serverless-engine-spike.md §4): the
@@ -724,10 +748,7 @@ def build_manifest(
                 # The binder names which bail-out fired; that sentence is the
                 # badge tooltip, so it has to be the true one.
                 row.reason = miss_tier_reason(miss)
-                row.detail = (
-                    f"prologue transpiled, but {miss_detail(miss)}; "
-                    "frozen at the default filter state"
-                )
+                row.detail = frozen_miss_detail(miss, "prologue transpiled, but ")
             frozen[row.component_id] = FrozenPayload(
                 kind="figure", payload=_code_figure_payload(fig)
             )
@@ -756,7 +777,7 @@ def build_manifest(
                 continue
             payload, sampled = _freeze_ui_figure(comp, df)
             row.reason = miss_tier_reason(miss)
-            row.detail = f"{miss_detail(miss)}; frozen at the default filter state"
+            row.detail = frozen_miss_detail(miss)
             if sampled:
                 row.tier = ComponentTier.PARTIAL
                 row.reason = TierReason.MAX_POINTS

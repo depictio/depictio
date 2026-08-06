@@ -689,7 +689,11 @@ def export_static_cmd(
         bool,
         typer.Option(
             "--check",
-            help="Preflight only: print the per-component live/frozen/omitted table, write nothing",
+            help=(
+                "Preflight only: print the per-component live/frozen/omitted table, write "
+                "nothing. Reads the data collections and runs the binder, so the tiers are "
+                "the real ones — a few seconds, not instant."
+            ),
         ),
     ] = False,
     single_tab: Annotated[

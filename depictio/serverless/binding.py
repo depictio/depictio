@@ -176,6 +176,47 @@ def miss_tier_reason(miss: BindingMiss | None) -> TierReason:
     return TierReason.BINDING_MISS
 
 
+def frozen_miss_detail(miss: BindingMiss | None, prefix: str = "") -> str:
+    """The detail line a refused figure carries — one sentence, one place.
+
+    Every producer and every data-free classifier reports a refusal with this
+    wording, so the tier table a preflight prints and the manifest a build emits
+    cannot word the same verdict differently. ``prefix`` is the only part that
+    varies: a code-mode figure says how far it got before the binder refused it.
+    """
+    return f"{prefix}{miss_detail(miss)}; frozen at the default filter state"
+
+
+def planned_figure_miss(component_meta: dict[str, Any]) -> BindingMiss | None:
+    """The refusals :func:`build_binding_with_reason` reaches *without* data.
+
+    Two of its bail-outs are decided from the component's own metadata alone —
+    a whole-frame visualisation and a non-OLS trendline — so the data-free tier
+    classifiers can reach the same verdict, in the same words, instead of
+    reporting the figure as undecided until the build has tried it. The builder
+    itself calls this, which is what keeps plan and build from drifting apart.
+
+    ``None`` means "nothing decidable here": every other bail-out needs the
+    frame, or the figure the server pipeline produces from it.
+    """
+    from depictio.api.v1.services.figure.figure_builder import _WHOLE_FRAME_VISU
+
+    visu_type = component_meta.get("visu_type") or "scatter"
+    if str(visu_type).lower() in _WHOLE_FRAME_VISU:
+        return BindingMiss.WHOLE_FRAME_VISU
+
+    # ``figure_params`` is the lite spec's key for the px kwargs, ``dict_kwargs``
+    # the stored_metadata one — the same two the builder reads.
+    dict_kwargs = component_meta.get("figure_params") or component_meta.get("dict_kwargs") or {}
+    if not isinstance(dict_kwargs, dict):
+        return None
+    trendline_kind = dict_kwargs.get("trendline") or ""
+    if trendline_kind and str(trendline_kind).lower() != "ols":
+        # the runtime only refits closed-form 1-predictor OLS
+        return BindingMiss.TRENDLINE_UNSUPPORTED
+    return None
+
+
 # px grouping kwargs, in the order the manifest contract pins for
 # ``BindingTable.group_cols``.
 PX_GROUP_KWARGS: tuple[str, ...] = (
@@ -614,7 +655,6 @@ def build_binding_with_reason(
     ``sampled`` stays False.
     """
     from depictio.api.v1.services.figure.figure_builder import (
-        _WHOLE_FRAME_VISU,
         create_figure_from_data,
         referenced_columns,
     )
@@ -623,13 +663,15 @@ def build_binding_with_reason(
     dict_kwargs = component_meta.get("figure_params") or component_meta.get("dict_kwargs") or {}
     if not isinstance(dict_kwargs, dict) or not isinstance(df, pl.DataFrame) or df.height == 0:
         return None, BindingMiss.NO_DATA
-    if str(visu_type).lower() in _WHOLE_FRAME_VISU:
-        return None, BindingMiss.WHOLE_FRAME_VISU
-
+    # The two bail-outs that need no data (whole-frame visu, non-OLS trendline).
+    # They live in :func:`planned_figure_miss` so the preflight classifiers can
+    # reach them too — same order, same verdicts.
+    data_free_miss = planned_figure_miss(component_meta)
+    if data_free_miss is not None:
+        return None, data_free_miss
+    # Past that gate a trendline can only be OLS; the matcher below still needs
+    # to know whether one was asked for at all.
     trendline_kind = dict_kwargs.get("trendline") or ""
-    if trendline_kind and str(trendline_kind).lower() != "ols":
-        # the runtime only refits closed-form 1-predictor OLS
-        return None, BindingMiss.TRENDLINE_UNSUPPORTED
 
     referenced = referenced_columns(visu_type, dict_kwargs)
     if not referenced:
