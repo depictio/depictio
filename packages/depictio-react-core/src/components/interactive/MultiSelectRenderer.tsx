@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
-import { DepictioMultiSelect } from 'depictio-components';
+import { CompactControlSlot, DepictioMultiSelect } from 'depictio-components';
+import ComponentSkeleton from '../ComponentSkeleton';
 
 import {
   fetchUniqueValues,
@@ -7,6 +8,7 @@ import {
   StoredMetadata,
 } from '../../api';
 import { useAvailableSet } from '../../availableValues';
+import { INTERACTIVE_FRAME, InteractiveFrame, InteractiveTitle } from './frame';
 
 // Module-level cache for unique-values fetches. Keyed by `${dcId}|${column}`.
 // Cleared on page reload — adequate for the MVP; a longer-lived cache (TTL +
@@ -17,7 +19,9 @@ const MultiSelectRenderer: React.FC<{
   metadata: StoredMetadata;
   filters: InteractiveFilter[];
   onChange?: (filter: InteractiveFilter) => void;
-}> = ({ metadata, filters, onChange }) => {
+  /** Compact rendering — drops the frame, relies on the parent group's card. */
+  compact?: boolean;
+}> = ({ metadata, filters, onChange, compact }) => {
   const [options, setOptions] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const mountedRef = useRef(true);
@@ -78,50 +82,40 @@ const MultiSelectRenderer: React.FC<{
       .map((v) => ({ value: v, label: v, disabled: !availableSet.has(v) }));
   }, [options, availableSet]);
 
-  // Mirrors Dash DEFAULT_ICONS in interactive_component/utils.py:1622.
-  const defaultIcon =
-    metadata.interactive_component_type === 'SegmentedControl' ||
-    metadata.interactive_component_type === 'Switch'
-      ? 'mdi:toggle-switch'
-      : 'mdi:form-select';
+  // Skeleton on first load so this widget matches the rest of the dashboard's
+  // loading treatment instead of flashing an empty select. Framed like the
+  // loaded state, so the panel row doesn't gain a border on arrival.
+  if (loading) {
+    return (
+      <InteractiveFrame compact={compact}>
+        <ComponentSkeleton variant="control" />
+      </InteractiveFrame>
+    );
+  }
 
   return (
-    <DepictioMultiSelect
-      title={metadata.title}
-      column_name={metadata.column_name}
-      interactive_component_type={metadata.interactive_component_type}
-      options={optionItems}
-      value={selected}
-      placeholder={
-        loading
-          ? 'Loading options…'
-          : `Select ${metadata.column_name || 'values'}…`
-      }
-      color={
-        // Mirrors `kwargs.get("color") or kwargs.get("custom_color")` from
-        // depictio/dash/modules/interactive_component/utils.py:1612
-        ((metadata as Record<string, unknown>).color as string | undefined) ||
-        ((metadata as Record<string, unknown>).custom_color as string | undefined)
-      }
-      icon_name={metadata.icon_name || defaultIcon}
-      icon_color={metadata.icon_color}
-      title_color={metadata.title_color}
-      title_size={
-        ((metadata as Record<string, unknown>).title_size as
-          | 'xs' | 'sm' | 'md' | 'lg' | 'xl' | undefined) ||
-        metadata.title_font_size ||
-        'md'
-      }
-      onChange={(next) =>
-        onChange?.({
-          index: metadata.index,
-          value: next,
-          column_name: metadata.column_name,
-          interactive_component_type: metadata.interactive_component_type,
-          filter_expr: metadata.filter_expr,
-        })
-      }
-    />
+    <InteractiveFrame compact={compact}>
+      <InteractiveTitle metadata={metadata} compact={compact} />
+      <CompactControlSlot compact={compact}>
+        <DepictioMultiSelect
+          bare
+          size={compact ? 'xs' : INTERACTIVE_FRAME.controlSize}
+          column_name={metadata.column_name}
+          options={optionItems}
+          value={selected}
+          placeholder={`Select ${metadata.column_name || 'values'}…`}
+          onChange={(next) =>
+            onChange?.({
+              index: metadata.index,
+              value: next,
+              column_name: metadata.column_name,
+              interactive_component_type: metadata.interactive_component_type,
+              filter_expr: metadata.filter_expr,
+            })
+          }
+        />
+      </CompactControlSlot>
+    </InteractiveFrame>
   );
 };
 

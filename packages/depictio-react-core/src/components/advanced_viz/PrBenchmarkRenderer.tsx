@@ -91,7 +91,15 @@ const PrBenchmarkRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetchAdvancedVizData(metadata.wf_id, metadata.dc_id, requiredCols, filters)
+    fetchAdvancedVizData({
+      wfId: metadata.wf_id,
+      dcId: metadata.dc_id,
+      columns: requiredCols,
+      filters,
+      // One point per callset: there is nothing to sample, and the server's
+      // policy table says so too.
+      vizKind: 'pr_benchmark',
+    })
       .then((res) => {
         if (!cancelled) setRows(res.rows);
       })

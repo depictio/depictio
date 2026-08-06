@@ -1083,10 +1083,31 @@ const AdminMonitoringPanel: React.FC = () => {
   // Match AdminApp's gate: single-user always allowed; only pure public/demo hides.
   const visible = isSingleUserMode || (!isPublicMode && !isDemoMode);
 
+  // Probe whether real-time events are enabled server-side before opening the
+  // socket. When they're disabled the WS handshake is rejected (403) and the
+  // client reconnects on a loop, spamming the API access log — so gate on this
+  // flag and fall back to the polling baseline instead of connecting.
+  const [eventsEnabled, setEventsEnabled] = useState(false);
+  useEffect(() => {
+    if (!visible) return undefined;
+    let cancelled = false;
+    fetchMonitoringHealth()
+      .then((h) => {
+        if (!cancelled) setEventsEnabled(h.events_enabled);
+      })
+      .catch(() => {
+        if (!cancelled) setEventsEnabled(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [visible]);
+
   // Live push: bump a signal on each task/ingestion event so the active pane
-  // refreshes instantly. No-op (socket never delivers) when events are disabled.
+  // refreshes instantly. Only connects when events are enabled server-side;
+  // otherwise the panes keep working off their polling baseline.
   const { status: liveStatus } = useMonitoringEvents({
-    enabled: visible,
+    enabled: visible && eventsEnabled,
     onEvent: useCallback(() => setLiveSignal((n) => n + 1), []),
   });
 

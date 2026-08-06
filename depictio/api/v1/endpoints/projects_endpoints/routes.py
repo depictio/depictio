@@ -33,6 +33,7 @@ from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user, ge
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 from depictio.models.models.projects import Project, ProjectPermissionRequest, ProjectResponse
 from depictio.models.models.users import Permission, UserBase
+from depictio.models.timestamps import preserved_creation_time, utc_now_str
 
 projects_endpoint_router = APIRouter()
 
@@ -301,7 +302,10 @@ async def create_project(project: Project, current_user=Depends(get_user_or_anon
     except HTTPException as e:
         return {"success": False, "message": str(e.detail), "status_code": e.status_code}
 
-    projects_collection.insert_one(project.mongo())
+    create_payload = project.mongo()
+    create_payload["registration_time"] = utc_now_str()
+    create_payload["last_modified"] = create_payload["registration_time"]
+    projects_collection.insert_one(create_payload)
 
     return {
         "success": True,
@@ -328,7 +332,15 @@ async def update_project(project: Project, current_user=Depends(get_current_user
         raise HTTPException(status_code=404, detail="Project not found.")
 
     validate_workflow_uniqueness_in_project(project)
-    projects_collection.update_one({"_id": project.id}, {"$set": project.mongo()})
+    update_payload = project.mongo()
+    # `registration_time` is write-once: the client round-trips the whole project
+    # document, so trusting its payload would let an update reset the creation
+    # date and make both time columns show the same value (issue #932).
+    update_payload["registration_time"] = preserved_creation_time(
+        existing_project_dict, project.id, utc_now_str()
+    )
+    update_payload["last_modified"] = utc_now_str()
+    projects_collection.update_one({"_id": project.id}, {"$set": update_payload})
 
     return {
         "success": True,
@@ -469,6 +481,7 @@ async def add_or_update_permission(
     project = ProjectResponse.from_mongo(project)
     project = project.mongo()
 
+    project["last_modified"] = utc_now_str()
     projects_collection.update_one(
         {"_id": ObjectId(permission_request.project_id)},
         {"$set": project},
@@ -503,7 +516,8 @@ async def toggle_public_private(
     is_public_bool = is_public.lower() == "true"
 
     projects_collection.update_one(
-        {"_id": ObjectId(project_id)}, {"$set": {"is_public": is_public_bool}}
+        {"_id": ObjectId(project_id)},
+        {"$set": {"is_public": is_public_bool, "last_modified": utc_now_str()}},
     )
 
     return {

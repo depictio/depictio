@@ -15,6 +15,8 @@ import {
   InteractiveFilter,
   StoredMetadata,
 } from '../../api';
+import { isStaleFetch } from '../../fetchQueue';
+import { adaptGlTrace, SVG_MAX_POINTS, useWebglSlot } from '../../webglBudget';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragment } from './plotlyTheme';
 
@@ -61,6 +63,18 @@ const MARenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
   const [rows, setRows] = useState<Record<string, unknown[]> | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  // Server-side downsampling state (mirrors the scatter-figure Load-All UX).
+  const [fullLoad, setFullLoad] = useState(false);
+  const [reduction, setReduction] = useState<{
+    displayed: number;
+    total: number;
+    sampled: boolean;
+  } | null>(null);
+
+  const filterSig = JSON.stringify(filters);
+  useEffect(() => {
+    setFullLoad(false);
+  }, [filterSig]);
 
   useEffect(() => {
     if (!metadata.wf_id || !metadata.dc_id || requiredCols.length < 3) {
@@ -69,22 +83,65 @@ const MARenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
       return;
     }
     let cancelled = false;
+    const ctrl = new AbortController();
     setLoading(true);
     setError(null);
-    fetchAdvancedVizData(metadata.wf_id, metadata.dc_id, requiredCols, filters)
+    fetchAdvancedVizData(
+      {
+        wfId: metadata.wf_id,
+        dcId: metadata.dc_id,
+        columns: requiredCols,
+        filters,
+        fullLoad,
+        vizKind: 'ma',
+        roles: {
+          feature_id: config.feature_id_col,
+          avg_log_intensity: config.avg_log_intensity_col,
+          log2_fold_change: config.log2_fold_change_col,
+        },
+        // Same reasoning as the volcano: keep the hits whole, sample the blob.
+        // An MA plot defines its hits by p-value when one is bound and by fold
+        // change otherwise, and the saved threshold is used rather than the live
+        // slider so dragging it doesn't refetch the table.
+        tail: config.significance_col
+          ? {
+              column: config.significance_col,
+              direction: 'low',
+              threshold: config.significance_threshold ?? 0.05,
+            }
+          : {
+              column: config.log2_fold_change_col,
+              direction: 'both',
+              threshold: config.fold_change_threshold ?? 1.0,
+            },
+      },
+      ctrl.signal,
+    )
       .then((res) => {
-        if (!cancelled) setRows(res.rows);
+        if (cancelled) return;
+        setRows(res.rows);
+        setReduction({
+          displayed: res.row_count,
+          total: res.total_rows ?? res.row_count,
+          sampled: Boolean(res.sampled),
+        });
       })
       .catch((err: unknown) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
+        if (cancelled || isStaleFetch(err)) return;
+        setError(err instanceof Error ? err.message : String(err));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
     return () => {
       cancelled = true;
+      ctrl.abort();
     };
-  }, [metadata.wf_id, metadata.dc_id, JSON.stringify(requiredCols), JSON.stringify(filters), refreshTick]);
+  }, [metadata.wf_id, metadata.dc_id, JSON.stringify(requiredCols), filterSig, refreshTick, fullLoad]);
+
+  // Always a marker cloud, so always in the running for a WebGL slot; without
+  // one the trace renders as downsampled SVG — see webglBudget.
+  const glGranted = useWebglSlot(true);
 
   const figure = useMemo(() => {
     if (!rows) return null;
@@ -167,21 +224,24 @@ const MARenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
       tiers,
       counts,
       data: [
-        {
-          type: 'scattergl' as const,
-          mode: 'markers' as const,
-          x: xs,
-          y: ys,
-          text: ids.map((v) => String(v ?? '')),
-          customdata,
-          hovertemplate:
-            `<b>%{customdata[0]}</b>  <span style="opacity:0.7">[%{customdata[2]}]</span>` +
-            `<br>${config.avg_log_intensity_col}: %{x:.3f}` +
-            `<br>${config.log2_fold_change_col}: %{y:.3f}` +
-            (sigRaw ? `<br>${config.significance_col}: %{customdata[1]:.2e}` : '') +
-            `<extra></extra>`,
-          marker: { color: colors, size: sizes, opacity: 0.85 },
-        },
+        adaptGlTrace(
+          {
+            type: 'scattergl' as const,
+            mode: 'markers' as const,
+            x: xs,
+            y: ys,
+            text: ids.map((v) => String(v ?? '')),
+            customdata,
+            hovertemplate:
+              `<b>%{customdata[0]}</b>  <span style="opacity:0.7">[%{customdata[2]}]</span>` +
+              `<br>${config.avg_log_intensity_col}: %{x:.3f}` +
+              `<br>${config.log2_fold_change_col}: %{y:.3f}` +
+              (sigRaw ? `<br>${config.significance_col}: %{customdata[1]:.2e}` : '') +
+              `<extra></extra>`,
+            marker: { color: colors, size: sizes, opacity: 0.85 },
+          },
+          glGranted,
+        ),
       ],
       layout: {
         ...plotlyThemeFragment(isDark, theme),
@@ -221,7 +281,7 @@ const MARenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
         autosize: true,
       },
     };
-  }, [rows, config, sigThreshold, fcThreshold, topN, search, showLabels, isDark, theme]);
+  }, [rows, config, sigThreshold, fcThreshold, topN, search, showLabels, isDark, theme, glGranted]);
 
   const controls = useMemo(
     () => (
@@ -305,6 +365,22 @@ const MARenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
       dataColumns={requiredCols}
       counts={figure?.counts}
       tierAnnotation={tierAnnotation}
+      reduction={
+        reduction && (reduction.sampled || fullLoad)
+          ? {
+              // Without a WebGL slot the trace is drawn as downsampled SVG, so
+              // the badge must report what is on screen, not what arrived.
+              displayed: glGranted
+                ? reduction.displayed
+                : Math.min(reduction.displayed, SVG_MAX_POINTS),
+              total: reduction.total,
+              sampled: reduction.sampled,
+              full: fullLoad,
+              loading,
+              onToggle: () => setFullLoad((v) => !v),
+            }
+          : undefined
+      }
     >
       {figure ? (
         <Plot

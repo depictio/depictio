@@ -17,6 +17,7 @@ spec:
         app: mongo-init
         release: {{ .Release.Name }}
     spec:
+      enableServiceLinks: {{ .Values.enableServiceLinks | default false }}
       restartPolicy: OnFailure
       containers:
         - name: mongo-init

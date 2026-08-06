@@ -6,6 +6,11 @@
  * it. Mirrors the main viewer's provider + stylesheet setup so the real
  * ComponentRenderer renders identically.
  */
+// REQUIRED FIRST: registers the bundled Iconify icons. The single-file bundle
+// is opened straight from disk with no network, so unbundled icons could never
+// resolve. See src/icons.ts.
+import '../icons';
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { MantineProvider } from '@mantine/core';

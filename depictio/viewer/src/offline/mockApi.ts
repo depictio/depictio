@@ -198,8 +198,8 @@ export async function renderMultiQCGeneralStats(_dashboardId: string, componentI
 
 // ---- advanced viz (keyed by dc_id) ----------------------------------------
 
-export async function fetchAdvancedVizData(_wfId: string, dcId: string) {
-  return need(DATA().advancedVizData, dcId, 'advanced-viz-data') as never;
+export async function fetchAdvancedVizData(req: { dcId: string }) {
+  return need(DATA().advancedVizData, req.dcId, 'advanced-viz-data') as never;
 }
 
 export async function fetchPhylogenyNewick(dcId: string): Promise<string> {

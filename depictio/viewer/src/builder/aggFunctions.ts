@@ -1,12 +1,17 @@
 /**
  * Per-column-type capabilities for the React component builder.
- * Mirrors the two Dash source-of-truth dicts:
- *  - depictio/api/v1/utils.py:agg_functions      (card_methods)
- *  - depictio/dash/modules/interactive_component/utils.py:agg_functions
- *    (input_methods — interactive variants per type)
  *
- * Keep the two TS maps in sync with those files. Both `cardMethods` and
- * `inputMethods` are filtered by the column type the user picked in the form.
+ * `cardMethods` must stay a subset of the Pydantic source of truth,
+ * `AGGREGATION_COMPATIBILITY` in depictio/models/components/constants.py —
+ * offering an aggregation the model rejects produces a card that renders but
+ * fails validation on export. `depictio/tests/api/v1/test_aggregation_parity.py`
+ * enforces that, and parses this file to do it, so keep the maps as plain
+ * literals.
+ *
+ * `inputMethods` (interactive variants per type) has no server-side counterpart
+ * and is owned here.
+ *
+ * Both maps are filtered by the column type the user picked in the form.
  */
 
 export interface AggMethodMeta {
@@ -23,7 +28,10 @@ interface ColumnTypeMeta {
 
 const NUMERIC_CARD: Record<string, AggMethodMeta> = {
   count: { description: 'Counts the number of non-NA cells', label: 'Count' },
-  unique: { description: 'Number of distinct elements', label: 'Distinct count' },
+  // `nunique`, not `unique`: the latter is the key the precompute step stores
+  // specs under, but the model's AggregationFunction literal only knows
+  // `nunique`, so saving `unique` produced a card that failed YAML export.
+  nunique: { description: 'Number of distinct elements', label: 'Distinct count' },
   sum: { description: 'Sum of non-NA values', label: 'Sum' },
   average: { description: 'Mean of non-NA values', label: 'Average' },
   median: { description: 'Arithmetic median of non-NA values', label: 'Median' },

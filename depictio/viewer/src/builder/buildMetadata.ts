@@ -7,7 +7,7 @@
  * so no Pydantic validation regressions on POST /dashboards/save.
  */
 import type { StoredMetadata } from 'depictio-react-core';
-import { readMultiqcSelection } from 'depictio-react-core';
+import { defaultInteractiveTitle, readMultiqcSelection } from 'depictio-react-core';
 import type { BuilderState } from './store/useBuilderStore';
 import { autoCardTitle } from './card/cardTitle';
 import { buildAdvancedVizConfigBlob } from './advanced_viz/configBlob';
@@ -24,6 +24,12 @@ export function buildMetadata(state: BuilderState): StoredMetadata {
     wf_id: state.wfId || undefined,
     dc_id: state.dcId || undefined,
     project_id: state.projectId || undefined,
+    // Set here rather than in each per-type branch: `section` lives on the base
+    // component model, `SectionSelect` is mounted once for every builder, and
+    // `base` is spread after `existing` everywhere — so the picker's choice
+    // always wins, including clearing it back to unsectioned. Empty string from
+    // a cleared Select means "no section", which must persist as undefined.
+    section: as<{ section?: string }>(state.config).section?.trim() || undefined,
     last_updated: new Date().toISOString(),
     // Persist catalog origin so the dashboard can show a "from catalog" badge.
     // Preserved through edits via the ...existing spread in per-type builders.
@@ -85,10 +91,20 @@ function buildCard(
       | 'box_plot'
       | 'top_n'
       | 'coverage'
-      | 'concentration';
+      | 'concentration'
+      | 'composition'
+      | 'donut'
+      | 'histogram'
+      | 'threshold'
+      | 'completeness'
+      | 'attrition';
     breakdown_col?: string | null;
     coverage_max?: number | null;
     top_n_count?: number;
+    threshold_value?: number | null;
+    threshold_direction?: string;
+    threshold_warn?: number | null;
+    attrition_cols?: string[] | null;
     background_color?: string;
     title_color?: string;
     icon_name?: string;
@@ -115,6 +131,12 @@ function buildCard(
     breakdown_col: (c.breakdown_col ?? null) as unknown as string | undefined,
     coverage_max: (c.coverage_max ?? null) as unknown as number | undefined,
     top_n_count: typeof c.top_n_count === 'number' ? c.top_n_count : 3,
+    // QC layouts. Same ``null``-not-``undefined`` rule as the block above: the
+    // server distinguishes "no threshold set" from "field absent".
+    threshold_value: (c.threshold_value ?? null) as unknown as number | undefined,
+    threshold_direction: (c.threshold_direction ?? 'min') as unknown as string | undefined,
+    threshold_warn: (c.threshold_warn ?? null) as unknown as number | undefined,
+    attrition_cols: (c.attrition_cols ?? []) as unknown as string[] | undefined,
     background_color: c.background_color || '',
     title_color: c.title_color || '',
     icon_name: c.icon_name || 'mdi:chart-line',
@@ -134,7 +156,9 @@ function buildFigure(
   const c = as<{
     selection_enabled?: boolean;
     selection_column?: string;
+    max_points?: number | null;
   }>(state.config);
+  const maxPoints = typeof c.max_points === 'number' ? c.max_points : null;
   if (state.figureMode === 'code') {
     return {
       ...existing,
@@ -157,6 +181,7 @@ function buildFigure(
     code_content: null,
     selection_enabled: Boolean(c.selection_enabled),
     selection_column: c.selection_column,
+    max_points: maxPoints,
   };
 }
 
@@ -170,17 +195,28 @@ function buildInteractive(
     column_name?: string;
     column_type?: string;
     title?: string;
-    title_size?: string;
     color?: string;
     icon_name?: string;
+    section?: string;
+    group?: string;
+    placement?: string;
+    show_marks?: boolean;
   }>(state.config);
   // Mirror Dash design_interactive: the form surfaces only the basics, no
   // default value/range, marks, or scale. Those are derived at render time.
+  // The fallback title is the viewer's own default, so an author who leaves the
+  // field empty gets the same string the renderer would have shown.
+  // No `title_size`: interactive titles render at one fixed size so the Filters
+  // panel stays uniform (see `components/interactive/frame.tsx`).
   const title =
     (c.title && c.title.trim()) ||
-    (c.interactive_component_type && c.column_name
-      ? `${c.interactive_component_type} on ${c.column_name}`
-      : '');
+    defaultInteractiveTitle(c.interactive_component_type, c.column_name);
+  // `placement: 'top'` is allow-listed to Timeline in the Pydantic model
+  // (validate_placement in depictio/models/components/lite.py). Clamp here so
+  // switching an existing top-placed Timeline to another variant can't save a
+  // component the backend will then reject.
+  const placement =
+    c.placement === 'top' && c.interactive_component_type === 'Timeline' ? 'top' : 'left';
   return {
     ...existing,
     ...base,
@@ -188,9 +224,14 @@ function buildInteractive(
     column_name: c.column_name,
     column_type: c.column_type,
     title,
-    title_size: c.title_size ?? 'md',
     color: c.color ?? '',
     icon_name: c.icon_name ?? 'bx:slider-alt',
+    // Empty string from a cleared Autocomplete means "no group", which must
+    // persist as undefined so the panel treats it as ungrouped. (`section` is
+    // set once on `base`.)
+    group: c.group?.trim() || undefined,
+    placement,
+    show_marks: c.show_marks,
   };
 }
 
@@ -204,6 +245,7 @@ function buildTable(
     striped?: boolean;
     compact?: boolean;
     export_csv?: boolean;
+    page_size?: number;
     row_selection_enabled?: boolean;
     row_selection_column?: string;
   }>(state.config);
@@ -214,6 +256,7 @@ function buildTable(
     striped: c.striped ?? true,
     compact: c.compact ?? false,
     export_csv: c.export_csv ?? false,
+    page_size: typeof c.page_size === 'number' ? c.page_size : 100,
     // Row selection drives `table_selection` filters in
     // packages/depictio-react-core/src/components/ComponentRenderer.tsx —
     // mirrors what map / figure do with `selection_enabled`.
@@ -274,6 +317,7 @@ function buildText(
     title?: string;
     order?: number | string;
     alignment?: string;
+    vertical_alignment?: string;
     body?: string;
   }>(state.config);
   return {
@@ -289,6 +333,10 @@ function buildText(
     order: clampOrder(c.order ?? 1),
     alignment:
       c.alignment === 'center' || c.alignment === 'right' ? c.alignment : 'left',
+    vertical_alignment:
+      c.vertical_alignment === 'top' || c.vertical_alignment === 'bottom'
+        ? c.vertical_alignment
+        : 'center',
     body: c.body ?? '',
   };
 }
@@ -335,6 +383,8 @@ function buildMap(
     selection_enabled?: boolean;
     selection_column?: string;
     title?: string;
+    placement?: StoredMetadata['placement'];
+    floating_initial_state?: StoredMetadata['floating_initial_state'];
   }>(state.config);
   return {
     ...existing,
@@ -350,5 +400,9 @@ function buildMap(
     selection_enabled: Boolean(c.selection_enabled),
     selection_column: c.selection_column,
     title: c.title ?? '',
+    // 'floating' lifts the map out of the grid into the dashboard-wide panel.
+    // Written unconditionally so switching back to 'grid' actually clears it.
+    placement: c.placement ?? 'grid',
+    floating_initial_state: c.floating_initial_state ?? 'compact',
   };
 }

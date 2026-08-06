@@ -89,7 +89,6 @@ def render_map(
     trigger_data: dict,
     theme: str = "light",
     existing_metadata: dict | None = None,
-    active_selection_values: list | None = None,
     access_token: str | None = None,
 ) -> tuple[Any, dict]:
     """Render a Plotly map figure from DataFrame and configuration.
@@ -103,9 +102,12 @@ def render_map(
         theme: Theme name ('light' or 'dark').
         existing_metadata: Previous render metadata with stored center/zoom
             to preserve viewport when filters change.
-        active_selection_values: Values currently selected on the map (from
-            interactive-values-store).  When provided, ``selectedpoints`` is
-            set so Plotly renders selected/unselected styling.
+
+    Note:
+        Selection highlighting is entirely client-side (``MapRenderer`` sets
+        ``selectedpoints`` on the traces it hands Plotly). The server never
+        sees a map's own selection: the viewer strips that filter before
+        fetching, so the figure returned here is always the unhighlighted one.
 
     Returns:
         Tuple of (plotly_figure, data_info_dict).
@@ -307,28 +309,6 @@ def render_map(
             }
         fig.update_layout(**layout_kwargs)
 
-        # Apply per-point opacity to show selection state.  Plotly's
-        # selected/unselected trace properties don't work reliably on
-        # scatter_map traces, so we set marker.opacity as an array directly.
-        # When color encoding is used, px.scatter_map creates one trace per
-        # category -- we must set opacity per-trace using each trace's
-        # customdata to identify which points are selected.
-        if (
-            map_type != "choropleth_map"
-            and active_selection_values
-            and selection_column
-            and selection_column in pandas_df.columns
-        ):
-            selected_set = {str(v) for v in active_selection_values}
-            for trace in fig.data:
-                cd = trace.customdata
-                if cd is not None and len(cd) > 0:
-                    trace_opacity = [opacity if str(row[0]) in selected_set else 0.2 for row in cd]
-                    trace.marker.opacity = trace_opacity
-                else:
-                    # No customdata — dim entire trace
-                    trace.marker.opacity = 0.2
-
     except Exception as e:
         logger.error(f"Map rendering failed: {e}", exc_info=True)
         template = get_theme_template(theme)
@@ -404,9 +384,17 @@ def _render_scatter_map(
         if valid_hover:
             kwargs["hover_data"] = valid_hover
 
-    # Inject selection_column into custom_data
+    # Inject selection_column into custom_data.
+    #
+    # Stringified, and passed as an array rather than a column name: plotly.py
+    # >= 6 serialises a *numeric* custom_data column as a base64 typed array
+    # (``{"dtype": "i1", "bdata": ..., "shape": ...}``) instead of a nested
+    # list, and the viewer reads ``customdata`` straight off the trace to
+    # decide which points to highlight. It compares with ``String(...)``
+    # anyway, so text is the shape both ends already agree on. Passing an
+    # array-like keeps the column out of the hovertemplate.
     if selection_enabled and selection_column and selection_column in df.columns:
-        kwargs["custom_data"] = [selection_column]
+        kwargs["custom_data"] = [df[selection_column].astype(str)]
 
     _merge_extra_kwargs(kwargs, extra_kwargs)
 

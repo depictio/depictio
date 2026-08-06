@@ -246,6 +246,11 @@ depictio/api/static/screenshots/**
 # 646b0f3c1e4a2d7f8e5b8..., viralrecon 746b0f3c1e4a2d7f8e5b9...); runtime
 # dashboards get random ObjectIds and stay ignored.
 !depictio/api/static/screenshots/?46b0f3c1e4a2d7f8e5b*.png
+# Iris Petal Analysis (6a720e8b59acf2d013e48100) — a static-ID init dashboard
+# like iris and penguins, but not yet created by db_init, so this thumbnail is
+# ahead of the seeding it belongs to.
+!depictio/api/static/screenshots/6a720e8b59acf2d013e48100_light.png
+!depictio/api/static/screenshots/6a720e8b59acf2d013e48100_dark.png
 
 # Ensure parent directories are also un-ignored
 !depictio/
@@ -347,6 +352,8 @@ cache/
 .env.instance
 .env
 data/depictio-*/
+# Generated MultiQC scale-test fixtures + their machine-local project configs
+data/scale_scenarios/
 .devcontainer/docker-compose.git-mount.yaml
 docker-compose.override.yaml
 
@@ -389,6 +396,11 @@ dev/advanced_viz_docs_screenshots/fixtures/
 
 # Generated catalog-preview single-file bundle (built via pnpm run build:catalog-preview)
 depictio/viewer/dist-catalog-preview/
+depictio/viewer/dist-table-harness/
+
+# Generated Iconify icon subset (emitted by depictio/viewer/scripts/generate-icon-subset.mjs,
+# which every `pnpm dev` / `pnpm build` runs first). Regenerate with `pnpm run icons`.
+depictio/viewer/src/generated/
 
 # Generated component-embed single-file bundle (built via pnpm run build:embed).
 # The API image builds and copies this in; see docker-images/Dockerfile.api.
@@ -398,3 +410,8 @@ depictio/viewer/dist-embed/
 .nextflow/
 .nextflow.log*
 work/
+
+# Benchmark harness generated artifacts (datasets + results are generated live,
+# never committed — see benchmark/README.md). The glob covers the per-run
+# directories a `--output` flag creates alongside the default one.
+benchmark/output*/

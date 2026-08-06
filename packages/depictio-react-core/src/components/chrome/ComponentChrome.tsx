@@ -5,11 +5,19 @@ import { Icon } from '@iconify/react';
 import { StoredMetadata } from '../../api';
 import MetadataPopover from './MetadataPopover';
 import FullscreenButton from './FullscreenButton';
+import InspectButton from './InspectButton';
+import { useInspectorControl } from './InspectorContext';
 import DownloadButton from './DownloadButton';
 import ResetButton from './ResetButton';
 import './chrome.css';
 
-export type ChromeAction = 'metadata' | 'fullscreen' | 'download' | 'reset' | 'drag';
+export type ChromeAction =
+  | 'inspect'
+  | 'metadata'
+  | 'fullscreen'
+  | 'download'
+  | 'reset'
+  | 'drag';
 
 export interface ComponentChromeProps {
   metadata: StoredMetadata;
@@ -35,8 +43,26 @@ export interface ComponentChromeProps {
    *  (e.g. a scatter selection, a table row selection, a map polygon). The
    *  reset action icon stays in its original position in the chrome row but
    *  switches to a filled-orange style; otherwise it renders disabled in the
-   *  light variant. The action-icon order is preserved either way. */
+   *  light variant. The action-icon order is preserved either way. Whether it
+   *  also stays visible without hover is a further question — see
+   *  `persistentReset` below. */
   sourceFilterActive?: boolean;
+  /**
+   * Render the action row at the density of a filter-panel row rather than of a
+   * dashboard tile.
+   *
+   * The row floats at the component's top-right, and a tile has a corner to
+   * spare there. An interactive control does not: it is a title line and its
+   * input, so a `sm` ActionIcon lands on the select's chevron or the slider's
+   * track. It also puts a second, larger set of icons next to the `xs` ones an
+   * `InteractiveGroupCard` header already carries, which reads as two unrelated
+   * toolbars stacked in a ~280px column rather than as one hierarchy.
+   *
+   * Only the chrome's own geometry changes — which actions exist, and what they
+   * do, is unaffected. The sizing itself lives in chrome.css, because each
+   * action is its own component with its own hard-coded `size`.
+   */
+  compact?: boolean;
 }
 
 /** View-accessible action visibility per component type. Mirrors the
@@ -106,6 +132,7 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
   extraActions,
   showDragHandle = false,
   sourceFilterActive = false,
+  compact = false,
 }) => {
   const localFullscreenRef = useRef<HTMLDivElement | null>(null);
   const fullscreenRef = externalFullscreenRef ?? localFullscreenRef;
@@ -119,10 +146,48 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
     return () => document.removeEventListener('fullscreenchange', onChange);
   }, [fullscreenRef]);
 
-  const actions = actionsFor(componentType);
+  // Prepended rather than folded into `actionsFor`, which stays a pure function
+  // of the component type: whether this action exists is a property of the app
+  // (is the inspector enabled?), not of the component. A null control — the
+  // default when no provider is mounted — leaves the chrome exactly as it was.
+  const inspector = useInspectorControl();
+  const actions: ChromeAction[] = [];
+  if (inspector) actions.push('inspect');
+  actions.push(...actionsFor(componentType));
+
+  /**
+   * Whether the reset icon stays on screen without hover.
+   *
+   * The action row floats over the component, so a persistent icon costs
+   * whatever is under the top-right corner. A figure, table or map has plot
+   * area to spare there, and it needs the icon: a scatter selection or a
+   * highlighted row is easy to miss, and nothing else on screen says the
+   * component is filtering the dashboard.
+   *
+   * An interactive control has neither. Its frame is a title line and the
+   * control itself with nothing in reserve, so the icon lands on the slider
+   * track or the select's chevron — and it is the one component type whose
+   * active filter is already legible, because the value is displayed in the
+   * control. The panel's summary list, the group headers and "Reset all" all
+   * carry a persistent clear for it too. So here the icon reverts to
+   * hover-only, like every other action; it still turns filled-orange when
+   * revealed, so the state it signalled is not lost.
+   */
+  const persistentReset =
+    sourceFilterActive && Boolean(onResetFilter) && componentType !== 'interactive';
 
   const renderAction = (action: ChromeAction) => {
     switch (action) {
+      case 'inspect':
+        if (!inspector) return null;
+        return (
+          <InspectButton
+            key="inspect"
+            componentId={metadata.index}
+            active={inspector.selectedId === metadata.index}
+            onInspect={inspector.select}
+          />
+        );
       case 'metadata':
         return <MetadataPopover key="metadata" metadata={metadata} />;
       case 'fullscreen':
@@ -160,11 +225,12 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
       }
     >
       <Group
-        gap={4}
+        gap={compact ? 2 : 4}
         className={
           'depictio-component-actions' +
           (orientationFor(componentType) === 'vertical' ? ' depictio-actions-vertical' : '') +
-          (sourceFilterActive && onResetFilter ? ' has-active-reset' : '')
+          (persistentReset ? ' has-active-reset' : '') +
+          (compact ? ' is-compact' : '')
         }
         wrap="nowrap"
       >
@@ -194,7 +260,13 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
           </span>
         )}
         {actions.map((a) => {
-          const isActiveReset = a === 'reset' && sourceFilterActive && Boolean(onResetFilter);
+          // Render first and skip actions that produce nothing (e.g. `reset`
+          // with no `onResetFilter`). Emitting an empty wrapper span would
+          // leave a `gap`-sized hole in the row, so any following icon (the
+          // Load-All toggle) looks detached / misaligned from the rest.
+          const node = renderAction(a);
+          if (!node) return null;
+          const isActiveReset = a === 'reset' && persistentReset;
           return (
             <span
               key={a}
@@ -204,7 +276,7 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
               onTouchStart={(e) => e.stopPropagation()}
               onPointerDown={(e) => e.stopPropagation()}
             >
-              {renderAction(a)}
+              {node}
             </span>
           );
         })}

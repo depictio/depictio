@@ -1,0 +1,8 @@
+# RTG Tools — `vcfeval` is the variant-comparison subcommand this catalogues.
+# Identity is derived from the nf-core meta.yml that `nf_core_url` points at.
+# No `biotools_url`: that meta.yml declares an empty `identifier`, and inventing
+# one here would be a claim this repo cannot check.
+id: rtgtools
+name: RTG Tools
+homepage: https://www.realtimegenomics.com/products/rtg-tools
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/rtgtools/vcfeval

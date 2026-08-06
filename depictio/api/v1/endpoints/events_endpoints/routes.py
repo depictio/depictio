@@ -328,6 +328,13 @@ def _build_event_payload(dc_id: str, operation: str = "update") -> dict[str, Any
     # Live row count — read the delta directly via polars (no API hop). The
     # delta_location came from the same MongoDB record we just queried, so
     # we already know exactly what to scan.
+    #
+    # Everything below stays LAZY on purpose. This runs synchronously inside the
+    # upsert request, for every upsert, whether or not anyone is subscribed — so
+    # its cost is charged to ingestion. Collecting the frames here (which an
+    # earlier version did, twice, plus two Python lists of ids) peaked at 8.3 GB
+    # on a 14M-row DC and OOM-killed the backend worker mid-ingest. A row count
+    # and a bounded id sample never need the rows in memory.
     if delta_location:
         try:
             import polars as pl
@@ -335,8 +342,9 @@ def _build_event_payload(dc_id: str, operation: str = "update") -> dict[str, Any
 
             from depictio.api.v1.s3 import polars_s3_config
 
-            current_df = pl.scan_delta(delta_location, storage_options=polars_s3_config).collect()
-            payload["row_count"] = int(current_df.height)
+            current_lf = pl.scan_delta(delta_location, storage_options=polars_s3_config)
+            current_count = int(current_lf.select(pl.len()).collect().item())
+            payload["row_count"] = current_count
 
             # Diff against the previous Delta Lake version to surface what
             # actually changed. Delta versions are commit ids, monotonic per
@@ -348,32 +356,45 @@ def _build_event_payload(dc_id: str, operation: str = "update") -> dict[str, Any
                 current_version = dt.version()
                 payload["delta_version"] = int(current_version)
                 if current_version > 0:
-                    prev_df = pl.scan_delta(
+                    prev_lf = pl.scan_delta(
                         delta_location,
                         version=current_version - 1,
                         storage_options=polars_s3_config,
-                    ).collect()
-                    prev_count = int(prev_df.height)
+                    )
+                    prev_count = int(prev_lf.select(pl.len()).collect().item())
                     payload["prev_row_count"] = prev_count
-                    payload["row_delta"] = int(current_df.height) - prev_count
+                    payload["row_delta"] = current_count - prev_count
 
                     # If we can spot a stable id-ish column, expose a small
                     # sample of new ids — gives the journal something to point
-                    # at without dumping the whole new dataset.
-                    id_col = _pick_id_column(current_df.columns)
-                    if id_col is not None and id_col in prev_df.columns:
+                    # at without dumping the whole new dataset. An anti-join
+                    # keeps this in Arrow (one id column, hashed) instead of
+                    # building Python sets/lists over every row; duplicates on
+                    # the current side survive, matching the previous semantics.
+                    current_cols = current_lf.collect_schema().names()
+                    id_col = _pick_id_column(current_cols)
+                    if id_col is not None and id_col in prev_lf.collect_schema().names():
                         try:
-                            prev_ids = set(prev_df.get_column(id_col).cast(pl.Utf8).to_list())
-                            current_ids = current_df.get_column(id_col).cast(pl.Utf8).to_list()
-                            new_ids = [v for v in current_ids if v not in prev_ids]
+                            new_lf = current_lf.select(pl.col(id_col).cast(pl.Utf8)).join(
+                                prev_lf.select(pl.col(id_col).cast(pl.Utf8)).unique(),
+                                on=id_col,
+                                how="anti",
+                            )
+                            # Bounded sample first: if the delta is empty we
+                            # skip the (full-scan) count entirely.
+                            new_ids = (
+                                new_lf.limit(_MAX_NEW_IDS).collect().get_column(id_col).to_list()
+                            )
                             if new_ids:
                                 payload["id_column"] = id_col
                                 payload["new_ids_sample"] = new_ids[:10]
-                                payload["new_ids_total"] = len(new_ids)
+                                payload["new_ids_total"] = int(
+                                    new_lf.select(pl.len()).collect().item()
+                                )
                                 # Full (bounded) id set so the frontend can
                                 # highlight every row a batch added and re-apply
                                 # that highlight later from the event log.
-                                payload["new_ids"] = new_ids[:_MAX_NEW_IDS]
+                                payload["new_ids"] = new_ids
                         except Exception:
                             pass
             except Exception as diff_err:

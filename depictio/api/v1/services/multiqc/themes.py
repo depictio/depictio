@@ -1,20 +1,14 @@
-"""Plotly theme helpers (extracted from depictio.dash.modules.figure_component.utils).
+"""Plotly theme helpers.
 
-Lives under api/v1/services/ so the celery prerender tasks can import it
-without dragging in the Dash modules. The template names map to mantine
-themes registered at app startup via dmc.add_figure_templates().
+The implementation now lives in ``depictio.cli.cli.utils.mantine_templates`` so
+that the CLI offline MultiQC figure prerender and the API render path share one
+``theme -> template name`` mapping. This module is a thin re-export kept in
+place so every existing ``from depictio.api.v1.services.multiqc.themes import
+get_theme_template`` import continues to work unchanged.
 """
 
+from __future__ import annotations
 
-def get_theme_template(theme: str) -> str:
-    """Return the Plotly template name for the given UI theme.
+from depictio.cli.cli.utils.mantine_templates import get_theme_template
 
-    Args:
-        theme: theme name (e.g. "light", "dark"); empty / falsy values fall back to light.
-
-    Returns:
-        "mantine_light" or "mantine_dark".
-    """
-    if not theme or theme == {} or theme == "{}":
-        theme = "light"
-    return "mantine_dark" if theme == "dark" else "mantine_light"
+__all__ = ["get_theme_template"]

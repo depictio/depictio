@@ -23,7 +23,7 @@ uv run pytest -xvs -n auto     # testpaths (pyproject.toml) = tests/{api,models,
 cd depictio/tests/e2e-playwright && npx playwright test
 # targets depictio-viewer-dev; override with PLAYWRIGHT_BASE_URL / PLAYWRIGHT_API_URL
 ```
-`depictio/tests/e2e-tests/` is the **legacy Cypress** suite — not run in CI.
+Playwright is the only e2e suite; the legacy Cypress suite has been removed.
 
 ### Code Quality
 ```bash
@@ -44,9 +44,6 @@ pre-commit run --all-files         # mandatory after all code changes
   `packages/depictio-react-core`, `packages/plotly-complexheatmap`, `packages/plotly-upset`
 - Key deps: FastAPI, Beanie, Celery, Polars, Delta Lake, Pydantic, Plotly, Playwright
 - Config: `pyproject.toml`, `pixi.toml`, `docker-compose.dev.yaml`
-
-> `depictio/react-frontend/` is an **abandoned scaffold** (its README still calls Dash
-> production). Not built or served by either compose file — don't edit it.
 
 ## Conventions & Rules
 

@@ -21,7 +21,65 @@ from typing import Any
 from bson import ObjectId
 
 from depictio.api.celery_app import celery_app
+from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
+
+# For point plots we random-sample down to the plotted-point target, but we only
+# need to *load* a modest multiple of it for that sample to be representative —
+# scanning the whole table just to discard most rows is the dominant render cost.
+_POINT_LOAD_OVERSAMPLE = 4
+
+
+def _load_uniform_sample(
+    wf_oid,
+    dc_id: str,
+    filter_metadata: list | None,
+    init_data: dict,
+    cap: int,
+    render_stats: dict,
+):
+    """Load at most ``cap`` rows drawn uniformly from the whole (filtered) table.
+
+    Used for code-mode figures, where we can't know which columns the user's code
+    reads (so no projection) or whether it aggregates (so no reduction) — but we
+    still must bound how much lands in the worker. The one thing we *can* fix is
+    which rows: a uniform sample instead of the leading N.
+
+    Returns ``None`` if the scan can't be opened, so the caller falls back to the
+    ordinary loader. Records the pre-sample total in ``render_stats`` so the
+    viewer's badge can say "N of M" instead of silently showing a slice.
+    """
+    import polars as _pl
+
+    from depictio.api.v1.deltatables_utils import open_deltatable_scan
+
+    scan = open_deltatable_scan(
+        workflow_id=wf_oid,
+        data_collection_id=dc_id,
+        metadata=filter_metadata or None,
+        init_data=init_data,
+    )
+    if scan is None:
+        return None
+    try:
+        total = int(scan.select(_pl.len()).collect().item())
+        if total <= cap:
+            return scan.collect()
+        # Hash the whole row rather than one column: hashing a single column
+        # would keep or drop every row sharing a value, which biases exactly the
+        # grouped comparisons code-mode figures usually make.
+        stride = -(-total // cap)  # ceil
+        sampled = scan.filter(_pl.struct(_pl.all()).hash(seed=0) % stride == 0).collect()
+        render_stats["sampled"] = True
+        render_stats["total_rows"] = total
+        logger.info(
+            f"_load_uniform_sample: dc={dc_id} sampled {sampled.height} of {total} rows "
+            f"(cap {cap}) — uniform, not a prefix"
+        )
+        return sampled
+    except Exception as e:
+        logger.warning(f"_load_uniform_sample: failed for dc={dc_id}: {e} — using the plain loader")
+        return None
 
 
 def _ensure_mantine_templates() -> None:
@@ -55,14 +113,16 @@ def build_figure_preview(payload: dict) -> dict:
         {"figure": <plotly fig dict>, "metadata": {"visu_type": str, "filter_applied": bool}}
     """
     from depictio.api.v1.db import deltatables_collection
-    from depictio.api.v1.deltatables_utils import load_deltatable_lite
+    from depictio.api.v1.deltatables_utils import count_deltatable_lite, load_deltatable_lite
 
     metadata = payload.get("metadata") or {}
     filter_metadata = payload.get("filter_metadata") or []
     theme = payload.get("theme") or "light"
+    full_load = bool(payload.get("full_load", False))
 
     wf_id = metadata.get("wf_id")
     dc_id = metadata.get("dc_id")
+    wf_oid = ObjectId(str(wf_id)) if not isinstance(wf_id, ObjectId) else wf_id
 
     dc_config = metadata.get("dc_config") or {}
     init_data: dict[str, dict] = {}
@@ -90,23 +150,106 @@ def build_figure_preview(payload: dict) -> dict:
     # filter columns and schema-guards the set. Code mode can reference any
     # column via arbitrary user code, so it always loads the full frame.
     select_columns: list[str] | None = None
-    if mode != "code":
-        from depictio.api.v1.services.figure.figure_builder import referenced_columns
+    from depictio.api.v1.services.figure.figure_builder import (
+        _SAMPLABLE_PLOT_TYPES,
+        referenced_columns,
+    )
 
+    if mode != "code":
         cols = referenced_columns(visu_type, dict_kwargs)
         if cols is not None:
             if selection_enabled and selection_column:
                 cols = cols | {selection_column}
             select_columns = sorted(cols)
 
+    # Plot-level point cap: component override or global default, unless the
+    # client explicitly asked for a full load (-1 disables sampling entirely).
+    if full_load:
+        effective_max_points = -1
+    else:
+        effective_max_points = metadata.get("max_points") or settings.performance.figure_max_points
+
+    # Row ceiling: for mark-per-row plots (scatter family, line/area/ecdf) and
+    # code-mode figures, bound how many rows we pull from Delta so a 10 GB table
+    # doesn't fully materialise just to be downsampled/plotted. We only need a
+    # modest multiple of the plotted-point target for the sample to stay
+    # representative — loading the whole table just to throw ~95% away is the
+    # main render-latency cost, so cap the scan near the sample size.
+    # Reducing plots (box/histogram/density/bar) don't reach here at all: they're
+    # served by the scan-level aggregation below, which reads every row without
+    # materialising any. ``full_load`` bypasses the cap entirely.
+    limit_rows: int | None = None
+    is_samplable = visu_type in _SAMPLABLE_PLOT_TYPES
+    if not full_load:
+        if is_samplable and effective_max_points > 0:
+            limit_rows = min(
+                effective_max_points * _POINT_LOAD_OVERSAMPLE,
+                settings.performance.figure_max_load_rows,
+            )
+        elif is_samplable:
+            limit_rows = settings.performance.figure_max_load_rows
+
+    # Code mode: cap the rows the user's code receives, but draw them uniformly.
+    # This used to ride on ``limit_rows``, i.e. a prefix — and since parquet row
+    # order follows ingest order, "the first 500k rows" is typically just the
+    # first few files/samples. That is a biased view presented as if it were the
+    # data. A uniform sample of the same size is strictly better at the same
+    # cost; it is still approximate, which is why it's surfaced as sampled below.
+    # The cap is per-component (``max_points``) so a user whose code aggregates
+    # can raise it, or take Load-All for the exact frame.
+    code_sample_cap: int | None = None
+    if mode == "code" and not full_load:
+        code_sample_cap = int(
+            metadata.get("max_points") or settings.performance.figure_max_load_rows
+        )
+
+    render_stats: dict[str, Any] = {}
+
+    # Scan-level aggregation fast path. Reducing visualisations (box, histogram,
+    # density_*, bar) are a handful of numbers per group, which Polars computes
+    # as a pushdown over parquet — no frame is ever materialised. Without this a
+    # 1 GB box plot collects ~28 M rows and then ships every raw value inside the
+    # trace. `plan_aggregation` returns None for anything it can't reproduce
+    # exactly, and `build_aggregated_figure` returns None if the reduction turns
+    # out not to be viable, so both fall through to the load below.
+    #
+    # Code mode is excluded (arbitrary user code can reference any column) and so
+    # is `full_load`, which is the user explicitly asking for the exact px render.
+    agg_fig = None
     started = time.monotonic()
-    df = load_deltatable_lite(
-        workflow_id=ObjectId(str(wf_id)) if not isinstance(wf_id, ObjectId) else wf_id,
-        data_collection_id=str(dc_id),
-        metadata=filter_metadata or None,
-        select_columns=select_columns,
-        init_data=init_data,
-    )
+    if mode != "code" and not full_load:
+        from depictio.api.v1.deltatables_utils import open_deltatable_scan
+        from depictio.api.v1.services.figure.aggregate import (
+            build_aggregated_figure,
+            plan_aggregation,
+        )
+
+        agg_plan = plan_aggregation(visu_type, dict_kwargs)
+        if agg_plan is not None:
+            scan = open_deltatable_scan(
+                workflow_id=wf_oid,
+                data_collection_id=str(dc_id),
+                metadata=filter_metadata or None,
+                init_data=init_data,
+                select_columns=select_columns,
+            )
+            if scan is not None:
+                agg_fig = build_aggregated_figure(scan, agg_plan, theme, render_stats)
+
+    df = None
+    if agg_fig is None and code_sample_cap:
+        df = _load_uniform_sample(
+            wf_oid, str(dc_id), filter_metadata, init_data, code_sample_cap, render_stats
+        )
+    if agg_fig is None and df is None:
+        df = load_deltatable_lite(
+            workflow_id=wf_oid,
+            data_collection_id=str(dc_id),
+            metadata=filter_metadata or None,
+            select_columns=select_columns,
+            limit_rows=limit_rows,
+            init_data=init_data,
+        )
     load_ms = int((time.monotonic() - started) * 1000)
 
     _ensure_mantine_templates()
@@ -118,7 +261,10 @@ def build_figure_preview(payload: dict) -> dict:
 
     build_started = time.monotonic()
     code_error: str | None = None
-    if mode == "code":
+    if agg_fig is not None:
+        # Already built by the aggregation path above; nothing left to do.
+        fig = agg_fig
+    elif mode == "code":
         ok, fig, detected = process_code_mode_figure(code_content, df, theme, "viewer")
         if not ok:
             # `process_code_mode_figure` returns `(False, error_fig, None)` when
@@ -159,6 +305,8 @@ def build_figure_preview(payload: dict) -> dict:
             theme=theme,
             selection_enabled=selection_enabled,
             selection_column=selection_column,
+            max_points=effective_max_points,
+            render_stats=render_stats,
         )
     build_ms = int((time.monotonic() - build_started) * 1000)
 
@@ -171,12 +319,62 @@ def build_figure_preview(payload: dict) -> dict:
 
     logger.info(
         f"celery_tasks.build_figure_preview wf={wf_id} dc={dc_id} mode={mode} "
-        f"visu={visu_type} load_ms={load_ms} build_ms={build_ms}"
+        f"visu={visu_type} load_ms={load_ms} build_ms={build_ms} "
+        f"aggregated={bool(render_stats.get('aggregated'))}"
     )
+
+    # Sampling accounting for the "showing N of M points" indicator. A figure is
+    # "sampled" when either the UI-mode point-plot downsample fired, or the
+    # scan-level load cap truncated the source (code mode / very large point
+    # plot). Only run the extra count query when something was actually capped —
+    # a full load or an uncapped small frame needs no total lookup.
+    loaded_height = df.height if df is not None and hasattr(df, "height") else 0
+    displayed_count = int(
+        render_stats.get("displayed", render_stats.get("rows_displayed", loaded_height))
+    )
+    # An aggregation never truncates: it reads every row, it just doesn't keep
+    # them. Only the row-returning loader can hit its cap.
+    load_truncated = df is not None and bool(limit_rows) and loaded_height >= limit_rows
+    was_sampled = bool(render_stats.get("sampled", False)) or load_truncated
+    if render_stats.get("total_rows") is not None:
+        # The aggregation path already knows the pre-sample total (it needed the
+        # row count to size the subsample), so skip the extra count query.
+        total_data_count = max(int(render_stats["total_rows"]), displayed_count)
+    elif was_sampled and not full_load:
+        total_data_count = max(
+            count_deltatable_lite(
+                workflow_id=wf_oid,
+                data_collection_id=str(dc_id),
+                metadata=filter_metadata or None,
+                init_data=init_data,
+            ),
+            displayed_count,
+        )
+    else:
+        total_data_count = displayed_count
 
     response_metadata: dict[str, Any] = {
         "visu_type": visu_type,
         "filter_applied": bool(filter_metadata),
+        # Sampling indicator fields consumed by the React viewer badge.
+        "was_sampled": was_sampled,
+        "displayed_data_count": displayed_count,
+        "total_data_count": total_data_count,
+        "full_data_loaded": full_load or not was_sampled,
+        # Per-stage timings ride back through both the inline and the Celery
+        # result-backend paths; the render endpoint lifts them into X-* headers
+        # for the benchmark harness. Unknown key — the React client ignores it.
+        "timings": {
+            "load_ms": load_ms,
+            "build_ms": build_ms,
+            # Benchmark attribution: how many rows the render actually had to
+            # read, and whether a scan-level aggregate served it. ``rows_loaded``
+            # is 0 on the aggregate path precisely because that's the win.
+            "rows_loaded": loaded_height,
+            "rows_displayed": displayed_count,
+            "aggregated": bool(render_stats.get("aggregated")),
+            "frame_bytes": df.estimated_size() if df is not None else 0,
+        },
     }
     if code_error:
         # Surface the underlying Plotly error to the React Code-mode Status
@@ -312,6 +510,11 @@ def build_multiqc_preview(payload: dict) -> dict:
 
         if not s3_locations:
             raise ValueError("No s3_locations resolved for general_stats preview.")
+        # The violin figure is built with `template="mantine_light"`
+        # (services/multiqc/general_stats_payload.py). Those templates are
+        # registered per-process, so without this the worker raises "Invalid
+        # value of type 'builtins.str' ... for the 'template' property".
+        _ensure_mantine_templates()
         parquet_path = _get_local_path_for_s3(s3_locations[0])
         gs_payload = build_general_stats_payload(parquet_path=parquet_path, show_hidden=True)
         violin = gs_payload.get("modes", {}).get("mean", {}).get("violin_figure") or {

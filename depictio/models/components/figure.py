@@ -73,6 +73,14 @@ class FigureComponent(FigureLiteComponent):
     # Timestamp for caching/updates
     last_updated: str | None = Field(default=None, description="Last update timestamp")
 
+    # Per-component point cap (scatter family). None → global default
+    # (settings.performance.figure_max_points). Above this the figure is
+    # downsampled before serialising to Plotly.
+    max_points: int | None = Field(
+        default=None,
+        description="Max plotted points for scatter-family figures (None = global default)",
+    )
+
     # Rendering state (populated at render time)
     displayed_data_count: int = Field(default=0, description="Number of data points displayed")
     total_data_count: int = Field(default=0, description="Total data points available")

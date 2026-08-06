@@ -3,35 +3,24 @@
  *
  * Mirrors the Dash equivalent at depictio/dash/layouts/notes_footer.py but
  * reimplemented natively in React + Mantine. The toggle button is a fixed
- * floating control anchored bottom-left; clicking it opens a Mantine Drawer
- * (position="bottom") containing a Mantine RichTextEditor (TipTap-based).
+ * floating control anchored bottom-right; clicking it opens a Mantine Drawer
+ * (position="bottom") containing the shared notes editor.
  *
- * Storage:
- *   The content is persisted on the dashboard document's `notes_content`
- *   string field via `saveDashboardNotes` (GET → mutate → POST). Auto-saves
- *   1 second after the user stops typing. A small status indicator next to
- *   the toolbar shows 'Saving…' / 'Saved at HH:MM:SS' / 'Save failed'.
+ * The editor itself — TipTap instance, permission gate and debounced autosave —
+ * lives in `notes/useNotesEditor`, shared with the inspector's Notes tab. Only
+ * one of the two surfaces is mounted at a time: two live editors on the same
+ * dashboard would each run their own save and clobber each other, which is why
+ * the app drops this footer when the inspector is enabled.
  *
  * Drawer open/closed state is persisted per dashboard in localStorage under
  * `notes-footer-open:{dashboardId}` so a reload preserves the user's choice.
- *
- * Concurrency note: `saveDashboardNotes` and the editor's component/layout
- * saves both follow the same GET → mutate → POST pattern, so there's a small
- * race where a user editing notes while rearranging the grid in another tab
- * could clobber one or the other. Acceptable for this feature.
  */
-import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { ActionIcon, Badge, Drawer, Group, Text, Tooltip } from '@mantine/core';
+import React, { useCallback, useState } from 'react';
+import { ActionIcon, Drawer, Group, Text, Tooltip } from '@mantine/core';
 import { Icon } from '@iconify/react';
-import { RichTextEditor, Link } from '@mantine/tiptap';
-import { useEditor } from '@tiptap/react';
-import StarterKit from '@tiptap/starter-kit';
-import { saveDashboardNotes } from 'depictio-react-core';
-import type {
-  DashboardPermissions,
-  DashboardPermissionsUser,
-} from 'depictio-react-core';
-import { useCurrentUser } from '../hooks/useCurrentUser';
+import type { DashboardPermissions } from 'depictio-react-core';
+import { useNotesEditor } from './notes/useNotesEditor';
+import NotesEditorSurface, { NotesSaveStatusIndicator } from './notes/NotesEditorSurface';
 
 interface NotesFooterProps {
   dashboardId: string;
@@ -43,9 +32,6 @@ interface NotesFooterProps {
   permissions?: DashboardPermissions;
 }
 
-type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
-
-const AUTO_SAVE_DEBOUNCE_MS = 1000;
 const STORAGE_KEY_PREFIX = 'notes-footer-open:';
 
 function readStoredOpen(dashboardId: string): boolean {
@@ -64,14 +50,6 @@ function writeStoredOpen(dashboardId: string, open: boolean): void {
   }
 }
 
-function formatTime(d: Date): string {
-  return d.toLocaleTimeString(undefined, {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  });
-}
-
 const NotesFooter: React.FC<NotesFooterProps> = ({
   dashboardId,
   initialContent,
@@ -79,85 +57,11 @@ const NotesFooter: React.FC<NotesFooterProps> = ({
 }) => {
   const [opened, setOpened] = useState<boolean>(() => readStoredOpen(dashboardId));
   const [fullscreen, setFullscreen] = useState<boolean>(false);
-  const [status, setStatus] = useState<SaveStatus>('idle');
-  const [savedAt, setSavedAt] = useState<Date | null>(null);
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Snapshot of the most-recently persisted content. Used to skip no-op saves
-  // (e.g. the initial onUpdate fired right after editor mount).
-  const lastSavedRef = useRef<string>(initialContent || '');
-
-  // Only dashboard owners may author notes; viewers / editors / anonymous
-  // public visitors see the same content but can't modify it. Loading state
-  // defaults to read-only — flipping editable later (see effect below) is
-  // safer than letting a brief write window slip through before auth resolves.
-  const { user, loading: userLoading } = useCurrentUser();
-  const canEdit = useMemo<boolean>(() => {
-    if (userLoading || !user) return false;
-    const owners = permissions?.owners ?? [];
-    return owners.some((o: DashboardPermissionsUser) => {
-      if (user.id && (o._id === user.id || o.id === user.id)) return true;
-      if (user.email && o.email && o.email === user.email) return true;
-      return false;
-    });
-  }, [permissions, user, userLoading]);
-
-  const editor = useEditor({
-    extensions: [
-      StarterKit,
-      Link.configure({ openOnClick: false }),
-    ],
-    content: initialContent || '',
-    editable: canEdit,
-    onUpdate: ({ editor: ed }) => {
-      if (!canEdit) return;
-      const html = ed.getHTML();
-      if (html === lastSavedRef.current) return;
-      setStatus('saving');
-      if (saveTimer.current) clearTimeout(saveTimer.current);
-      saveTimer.current = setTimeout(() => {
-        saveDashboardNotes(dashboardId, html)
-          .then(() => {
-            lastSavedRef.current = html;
-            setStatus('saved');
-            setSavedAt(new Date());
-          })
-          .catch((err) => {
-            console.error('[NotesFooter] save failed:', err);
-            setStatus('error');
-          });
-      }, AUTO_SAVE_DEBOUNCE_MS);
-    },
-  });
-
-  // Tiptap caches `editable` from initial options. When auth resolves and
-  // the user turns out to own the dashboard, flip the live editor's state
-  // so they can actually type. Same goes the other way around for safety.
-  useEffect(() => {
-    if (!editor) return;
-    if (editor.isEditable !== canEdit) {
-      editor.setEditable(canEdit);
-    }
-  }, [editor, canEdit]);
-
-  // If the parent re-fetches the dashboard and feeds in different
-  // initialContent (e.g. after a layout save), reflect that in the editor.
-  // We compare against lastSavedRef so we don't stomp on the user's in-flight
-  // edits with a stale prop.
-  useEffect(() => {
-    if (!editor) return;
-    if (initialContent === undefined || initialContent === null) return;
-    if (initialContent === lastSavedRef.current) return;
-    if (initialContent === editor.getHTML()) return;
-    lastSavedRef.current = initialContent;
-    editor.commands.setContent(initialContent, false);
-  }, [editor, initialContent]);
-
-  // Persist any pending save when the drawer closes / component unmounts.
-  useEffect(() => {
-    return () => {
-      if (saveTimer.current) clearTimeout(saveTimer.current);
-    };
-  }, []);
+  const { editor, canEdit, status, savedAt } = useNotesEditor(
+    dashboardId,
+    initialContent,
+    permissions,
+  );
 
   const handleToggle = useCallback(() => {
     setOpened((prev) => {
@@ -208,19 +112,8 @@ const NotesFooter: React.FC<NotesFooterProps> = ({
           <Group justify="space-between" align="center" wrap="nowrap" w="100%">
             <Group gap="xs" align="center">
               <Icon icon="material-symbols:edit-note" width={20} />
-              <Text fw={600}>Notes & Documentation</Text>
-              {canEdit ? (
-                <SaveStatusIndicator status={status} savedAt={savedAt} />
-              ) : (
-                <Badge
-                  variant="light"
-                  color="gray"
-                  size="xs"
-                  leftSection={<Icon icon="mdi:lock" width={10} />}
-                >
-                  Read-only
-                </Badge>
-              )}
+              <Text fw={600}>Notes &amp; Documentation</Text>
+              <NotesSaveStatusIndicator status={status} savedAt={savedAt} canEdit={canEdit} />
             </Group>
             <Group gap={4} wrap="nowrap">
               <Tooltip
@@ -261,8 +154,8 @@ const NotesFooter: React.FC<NotesFooterProps> = ({
         }
         styles={{
           title: { width: '100%' },
-          // Flex column body so the RichTextEditor can stretch to fill the
-          // drawer and its content area scrolls independently of the toolbar.
+          // Flex column body so the editor can stretch to fill the drawer and
+          // its content area scrolls independently of the toolbar.
           body: {
             paddingTop: 8,
             display: 'flex',
@@ -276,78 +169,9 @@ const NotesFooter: React.FC<NotesFooterProps> = ({
           },
         }}
       >
-        <RichTextEditor
-          editor={editor}
-          style={{
-            flex: 1,
-            minHeight: 0,
-            display: 'flex',
-            flexDirection: 'column',
-          }}
-        >
-          {canEdit && (
-            <RichTextEditor.Toolbar sticky stickyOffset={0}>
-              <RichTextEditor.ControlsGroup>
-                <RichTextEditor.Bold />
-                <RichTextEditor.Italic />
-                <RichTextEditor.Underline />
-                <RichTextEditor.Strikethrough />
-                <RichTextEditor.Code />
-              </RichTextEditor.ControlsGroup>
-              <RichTextEditor.ControlsGroup>
-                <RichTextEditor.H1 />
-                <RichTextEditor.H2 />
-                <RichTextEditor.H3 />
-              </RichTextEditor.ControlsGroup>
-              <RichTextEditor.ControlsGroup>
-                <RichTextEditor.Blockquote />
-                <RichTextEditor.BulletList />
-                <RichTextEditor.OrderedList />
-              </RichTextEditor.ControlsGroup>
-              <RichTextEditor.ControlsGroup>
-                <RichTextEditor.Link />
-                <RichTextEditor.Unlink />
-              </RichTextEditor.ControlsGroup>
-              <RichTextEditor.ControlsGroup>
-                <RichTextEditor.Undo />
-                <RichTextEditor.Redo />
-              </RichTextEditor.ControlsGroup>
-            </RichTextEditor.Toolbar>
-          )}
-          <RichTextEditor.Content style={{ flex: 1, minHeight: 0, overflowY: 'auto' }} />
-        </RichTextEditor>
+        <NotesEditorSurface editor={editor} canEdit={canEdit} />
       </Drawer>
     </>
-  );
-};
-
-interface SaveStatusIndicatorProps {
-  status: SaveStatus;
-  savedAt: Date | null;
-}
-
-const SaveStatusIndicator: React.FC<SaveStatusIndicatorProps> = ({ status, savedAt }) => {
-  if (status === 'idle') return null;
-  let label: string;
-  let color: string | undefined;
-  switch (status) {
-    case 'saving':
-      label = 'Saving…';
-      color = undefined;
-      break;
-    case 'saved':
-      label = savedAt ? `Saved at ${formatTime(savedAt)}` : 'Saved';
-      color = undefined;
-      break;
-    case 'error':
-      label = 'Save failed';
-      color = 'red';
-      break;
-  }
-  return (
-    <Text size="xs" c={color || 'dimmed'} ml="xs">
-      {label}
-    </Text>
   );
 };
 

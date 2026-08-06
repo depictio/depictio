@@ -68,7 +68,7 @@ jobs:
           enable-cache: true
 
       - name: "Set up Python"
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version-file: "pyproject.toml"
           cache-dependency-path: "pyproject.toml"
@@ -897,7 +897,7 @@ jobs:
           enable-cache: true
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version-file: "pyproject.toml"
           cache-dependency-path: "pyproject.toml"
@@ -1719,7 +1719,7 @@ jobs:
           enable-cache: true
 
       - name: "Set up Python"
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version-file: "pyproject.toml"
           cache-dependency-path: "pyproject.toml"
@@ -2706,7 +2706,7 @@ jobs:
       # Node + Playwright setup runs while the docker stack boots; the
       # explicit health gate below is the only wait.
       - name: Set up Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: "20"
           cache: npm

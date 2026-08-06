@@ -1,0 +1,8 @@
+# som.py — the somatic-variant comparison tool shipped inside the hap.py suite.
+# Catalogued as its own tool because its output is a distinct table with its own
+# shape, but its identity is hap.py's: the nf-core module is `happy/sompy` and
+# both share the biotools:happy identifier declared in that meta.yml.
+id: sompy
+name: som.py
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/happy/sompy
+biotools_url: https://bio.tools/happy # from nf-core meta.yml identifier (hap.py suite)

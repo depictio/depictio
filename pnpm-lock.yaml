@@ -102,6 +102,45 @@ importers:
         specifier: ^5.0.0
         version: 5.0.12(@types/react@18.3.28)(react@18.3.1)(use-sync-external-store@1.6.0(react@18.3.1))
     devDependencies:
+      '@iconify-json/bi':
+        specifier: ^1.2.7
+        version: 1.2.7
+      '@iconify-json/bx':
+        specifier: ^1.2.3
+        version: 1.2.3
+      '@iconify-json/carbon':
+        specifier: ^1.2.24
+        version: 1.2.24
+      '@iconify-json/formkit':
+        specifier: ^1.2.2
+        version: 1.2.2
+      '@iconify-json/ic':
+        specifier: ^1.2.4
+        version: 1.2.4
+      '@iconify-json/material-symbols':
+        specifier: ^1.2.87
+        version: 1.2.87
+      '@iconify-json/mdi':
+        specifier: ^1.2.3
+        version: 1.2.3
+      '@iconify-json/mingcute':
+        specifier: ^1.2.7
+        version: 1.2.7
+      '@iconify-json/octicon':
+        specifier: ^1.2.30
+        version: 1.2.30
+      '@iconify-json/ph':
+        specifier: ^1.2.2
+        version: 1.2.2
+      '@iconify-json/simple-icons':
+        specifier: ^1.2.92
+        version: 1.2.92
+      '@iconify-json/tabler':
+        specifier: ^1.2.38
+        version: 1.2.38
+      '@iconify/utils':
+        specifier: ^3.1.4
+        version: 3.1.4
       '@types/js-yaml':
         specifier: ^4.0.9
         version: 4.0.9
@@ -254,6 +293,9 @@ importers:
         version: 5.9.3
 
 packages:
+
+  '@antfu/install-pkg@1.1.0':
+    resolution: {integrity: sha512-MGQsmw10ZyI+EJo45CdSER4zEb+p31LpDAFp2Z3gkSd1yqVZGi0Ebx++YTEMonJy4oChEMLsxZ64j8FH6sSqtQ==}
 
   '@babel/code-frame@7.29.0':
     resolution: {integrity: sha512-9NhCeYjq9+3uxgdtp20LSiJXJvN0FeCtNGpJxuMFZ1Kv3cWUNb6DOhJwUvcVCzKGR66cw4njwM6hrJLqgOwbcw==}
@@ -983,6 +1025,42 @@ packages:
   '@floating-ui/utils@0.2.11':
     resolution: {integrity: sha512-RiB/yIh78pcIxl6lLMG0CgBXAZ2Y0eVHqMPYugu+9U0AeT6YBeiJpf7lbdJNIugFP5SIjwNRgo4DhR1Qxi26Gg==}
 
+  '@iconify-json/bi@1.2.7':
+    resolution: {integrity: sha512-IPz8WNxmLkH1I9msl+0Q4OnmjjvP4uU0Z61a4i4sqonB6vKSbMGUWuGn8/YuuszlReVj8rf+3gNv5JU8Xoljyg==}
+
+  '@iconify-json/bx@1.2.3':
+    resolution: {integrity: sha512-ihvX+2d688otgW7MAvUEdKVln+fZ28BJTlygazKUU/+RCODWT+2KObjAHe8+KPs4VhC8V6Tgoy1qrX0Myn/upA==}
+
+  '@iconify-json/carbon@1.2.24':
+    resolution: {integrity: sha512-b7u/eTWE3xFa7UXlRJBSEm6At1y6+F0P3imBEip5/8QeRzouxVjBf80Y2xnu1GYsFo9MYlHA0bZfxxMd5givfw==}
+
+  '@iconify-json/formkit@1.2.2':
+    resolution: {integrity: sha512-vrv5X44zie1F46e1AsPjN2MEi8ui+6SA1EvWETphAbkd+MaXmxyD4vra3hdTOYYNJDn5dkC7vMGf5WieCMu9zA==}
+
+  '@iconify-json/ic@1.2.4':
+    resolution: {integrity: sha512-pzPMmrZrBQuwT7nmtrYdkttun8KalRGgZPIL1Ny9KpF2zjRGIUPN+npTfuD3lrgO/OnSwAoJWuekQwBpt/Cqrw==}
+
+  '@iconify-json/material-symbols@1.2.87':
+    resolution: {integrity: sha512-q7rEWgfn9w0wnN19YF/BibZPM4kcd/HjGYpg/TtZUYBs6JCVLSWhwcTBD8mOKtvy0AFEdusQemoploFonl6PdA==}
+
+  '@iconify-json/mdi@1.2.3':
+    resolution: {integrity: sha512-O3cLwbDOK7NNDf2ihaQOH5F9JglnulNDFV7WprU2dSoZu3h3cWH//h74uQAB87brHmvFVxIOkuBX2sZSzYhScg==}
+
+  '@iconify-json/mingcute@1.2.7':
+    resolution: {integrity: sha512-bp4z6F53KAQp99aSL7qPCHL7HWUNGMNKIhfo/dx9pwVHiad/WusUbTOFXEZfpA44syJPzSOxa3O6Pwiq7qZz1g==}
+
+  '@iconify-json/octicon@1.2.30':
+    resolution: {integrity: sha512-6wi8HjjRTKlZ/2BBoQIT00vur67Onr86NSpRqbELsegowjea+L2oEbvtiisc/EhRvMlh3GWIdEfhqyFuPZcd5g==}
+
+  '@iconify-json/ph@1.2.2':
+    resolution: {integrity: sha512-PgkEZNtqa8hBGjHXQa4pMwZa93hmfu8FUSjs/nv4oUU6yLsgv+gh9nu28Kqi8Fz9CCVu4hj1MZs9/60J57IzFw==}
+
+  '@iconify-json/simple-icons@1.2.92':
+    resolution: {integrity: sha512-hR0ozxR97t1dzWw+esoxFijZ15gagt7EIgF3CNifu2yICXhS7gnun4Y+j+odJQtNSl7wvqMdoLbViIShwe/fdw==}
+
+  '@iconify-json/tabler@1.2.38':
+    resolution: {integrity: sha512-9v6ooRU/bKOK/Whv4w2aiK5gBnfCV9Ei+uD1iDDeLu2b+EnF3G3ZKkRKWEOOLG8bJyfKn6XEia6gUQ9oO7cF+Q==}
+
   '@iconify/react@5.2.1':
     resolution: {integrity: sha512-37GDR3fYDZmnmUn9RagyaX+zca24jfVOMY8E1IXTqJuE8pxNtN51KWPQe3VODOWvuUurq7q9uUu3CFrpqj5Iqg==}
     peerDependencies:
@@ -990,6 +1068,9 @@ packages:
 
   '@iconify/types@2.0.0':
     resolution: {integrity: sha512-+wluvCrRhXrhyOmRDJ3q8mux9JkKy5SJ/v8ol2tu4FVjyYvtEzkc/3pK15ET6RKg4b4w4BmTk1+gsCUhf21Ykg==}
+
+  '@iconify/utils@3.1.4':
+    resolution: {integrity: sha512-b1S7B1k9ohZ+iNTi2ATxbRYG9fTrJmUT0rc46bvVnNxqNRGW7dyo/vRREwyniI5IRN2RSJHDcm+s3BjWrSAjHw==}
 
   '@jridgewell/gen-mapping@0.3.13':
     resolution: {integrity: sha512-2kkt/7niJ6MgEPxF0bYdQ6etZaA+fQvDcLKckhy1yIQOzaoKjBBjSj63/aLVjYE3qhRt5dvM+uUyfCg6UKCBbA==}
@@ -2285,6 +2366,9 @@ packages:
     engines: {node: '>=8'}
     hasBin: true
 
+  import-meta-resolve@4.2.0:
+    resolution: {integrity: sha512-Iqv2fzaTQN28s/FwZAoFq0ZSs/7hMAHJVX+w8PZl3cY19Pxk6jFFalxQoIfW2826i/fDLXv8IiEZRIT0lDuWcg==}
+
   inherits@2.0.4:
     resolution: {integrity: sha512-k/vGaX4/Yla3WzyMCvTQOXYeIHvqOKtnqBduzTHpzpQZzAskKMhZ2K+EnBiSM9zGSoIFeMpXKxa4dYeZIQqewQ==}
 
@@ -2552,6 +2636,9 @@ packages:
   p-try@2.2.0:
     resolution: {integrity: sha512-R4nPAVTAU0B9D35/Gk3uJf/7XYbQcyohSKdvAxIRSNghFl4e71hVoGnBNQz9cWaXxO2I10KTC+3jMdvvoKw6dQ==}
     engines: {node: '>=6'}
+
+  package-manager-detector@1.8.0:
+    resolution: {integrity: sha512-yQA4H19AmPEoMUeavPMDIe1higySl/gH/yaQrkT/s07Qp+7pp2hYz30N3z2l5BkjVkF9Ow6o0wjJamm2y7Sn0A==}
 
   parenthesis@3.1.8:
     resolution: {integrity: sha512-KF/U8tk54BgQewkJPvB4s/US3VQY68BRDpH638+7O/n58TpnwiwnOtGIOsT2/i+M78s61BBpeC83STB88d8sqw==}
@@ -3088,6 +3175,10 @@ packages:
   tinycolor2@1.6.0:
     resolution: {integrity: sha512-XPaBkWQJdsf3pLKJV9p4qN/S+fm2Oj8AIPo1BTUhg5oxkvm9+SVEGFdhyOz7tTdUTfvxMiAs4sp6/eZO2Ew+pw==}
 
+  tinyexec@1.2.4:
+    resolution: {integrity: sha512-SHf/r48b7vOrjve9PxJo3MN5v5yuyjHvdUcrQffT3WXMUfnGmHDVbC4k3sHJaJTgZCwpUplIaAo5ANtMyp3YHg==}
+    engines: {node: '>=18'}
+
   tinyqueue@2.0.3:
     resolution: {integrity: sha512-ppJZNDuKGgxzkHihX8v9v9G5f+18gzaTfrukGrq6ueg0lmH4nqVnA2IPG0AEH3jKEk2GRJCUhDoqpoiw3PHLBA==}
 
@@ -3373,6 +3464,11 @@ packages:
         optional: true
 
 snapshots:
+
+  '@antfu/install-pkg@1.1.0':
+    dependencies:
+      package-manager-detector: 1.8.0
+      tinyexec: 1.2.4
 
   '@babel/code-frame@7.29.0':
     dependencies:
@@ -4211,12 +4307,66 @@ snapshots:
 
   '@floating-ui/utils@0.2.11': {}
 
+  '@iconify-json/bi@1.2.7':
+    dependencies:
+      '@iconify/types': 2.0.0
+
+  '@iconify-json/bx@1.2.3':
+    dependencies:
+      '@iconify/types': 2.0.0
+
+  '@iconify-json/carbon@1.2.24':
+    dependencies:
+      '@iconify/types': 2.0.0
+
+  '@iconify-json/formkit@1.2.2':
+    dependencies:
+      '@iconify/types': 2.0.0
+
+  '@iconify-json/ic@1.2.4':
+    dependencies:
+      '@iconify/types': 2.0.0
+
+  '@iconify-json/material-symbols@1.2.87':
+    dependencies:
+      '@iconify/types': 2.0.0
+
+  '@iconify-json/mdi@1.2.3':
+    dependencies:
+      '@iconify/types': 2.0.0
+
+  '@iconify-json/mingcute@1.2.7':
+    dependencies:
+      '@iconify/types': 2.0.0
+
+  '@iconify-json/octicon@1.2.30':
+    dependencies:
+      '@iconify/types': 2.0.0
+
+  '@iconify-json/ph@1.2.2':
+    dependencies:
+      '@iconify/types': 2.0.0
+
+  '@iconify-json/simple-icons@1.2.92':
+    dependencies:
+      '@iconify/types': 2.0.0
+
+  '@iconify-json/tabler@1.2.38':
+    dependencies:
+      '@iconify/types': 2.0.0
+
   '@iconify/react@5.2.1(react@18.3.1)':
     dependencies:
       '@iconify/types': 2.0.0
       react: 18.3.1
 
   '@iconify/types@2.0.0': {}
+
+  '@iconify/utils@3.1.4':
+    dependencies:
+      '@antfu/install-pkg': 1.1.0
+      '@iconify/types': 2.0.0
+      import-meta-resolve: 4.2.0
 
   '@jridgewell/gen-mapping@0.3.13':
     dependencies:
@@ -5627,6 +5777,8 @@ snapshots:
       pkg-dir: 4.2.0
       resolve-cwd: 3.0.0
 
+  import-meta-resolve@4.2.0: {}
+
   inherits@2.0.4: {}
 
   ini@4.1.3: {}
@@ -5890,6 +6042,8 @@ snapshots:
       p-limit: 4.0.0
 
   p-try@2.2.0: {}
+
+  package-manager-detector@1.8.0: {}
 
   parenthesis@3.1.8: {}
 
@@ -6571,6 +6725,8 @@ snapshots:
       xtend: 4.0.2
 
   tinycolor2@1.6.0: {}
+
+  tinyexec@1.2.4: {}
 
   tinyqueue@2.0.3: {}
 

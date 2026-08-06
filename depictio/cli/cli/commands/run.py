@@ -292,6 +292,15 @@ def register_run_command(app: typer.Typer):
             "--preview-recipes",
             help="Show recipe input sources and transformed output before writing to Delta Lake",
         ),
+        streaming: bool = typer.Option(
+            False,
+            "--streaming",
+            help=(
+                "Stream the Delta write instead of materialising the whole table in "
+                "memory (lower peak RSS on large ingests). Experimental; falls back "
+                "to the standard write on any failure."
+            ),
+        ),
         # General options
         continue_on_error: bool = typer.Option(
             False, "--continue-on-error", help="Continue execution even if a step fails"
@@ -759,6 +768,7 @@ def register_run_command(app: typer.Typer):
                                 "overwrite": overwrite,
                                 "rich_tables": rich_tables,
                                 "preview_recipes": preview_recipes,
+                                "streaming": streaming,
                             }
 
                             process_result = process_project_helper(

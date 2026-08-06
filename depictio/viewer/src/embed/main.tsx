@@ -8,6 +8,11 @@
  * Provider and stylesheet setup mirrors the main viewer's so the real
  * ComponentRenderer renders identically to the dashboard it came from.
  */
+// REQUIRED FIRST: registers the bundled Iconify icons. An embed is served with
+// `connect-src 'none'` and is also opened straight from disk, so an icon that
+// isn't bundled can never resolve — without this every icon renders as an empty
+// box. Same contract as src/catalog-preview/main.tsx. See src/icons.ts.
+import '../icons';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { MantineProvider } from '@mantine/core';
@@ -34,9 +39,12 @@ import type { EmbedGlobal } from '../offline/mockApi';
 // Replacing the fetch implementation is the robust way to stop them: unlike
 // `addAPIProvider(..., { resources: [] })` — which Iconify rejects as invalid —
 // or per-prefix custom loaders, it cannot be outflanked by a renderer adding an
-// icon from a new prefix later. Icons that aren't bundled simply don't render,
-// which is the right trade for a page whose contract is "opens from file:// with
-// the network off".
+// icon from a new prefix later.
+//
+// This is the backstop, not the fix: the `../icons` import above bundles the
+// subset the source tree actually uses, so the icons an embed needs resolve
+// locally. Only a prefix the generator's scanner missed reaches here, and it
+// fails silently rather than firing a request that could not have succeeded.
 _api.setFetch(
   (() => Promise.reject(new Error('offline embed: icon API disabled'))) as typeof fetch,
 );

@@ -219,7 +219,7 @@ def build(
         # Highlighting the sub-threshold side means the *lowest* scores matter.
         reverse = not (threshold is not None and highlight == "below")
         candidates.sort(
-            key=lambda i: (scores[i] if scores[i] is not None else math.inf), reverse=reverse
+            key=lambda i: scores[i] if scores[i] is not None else math.inf, reverse=reverse
         )
         for i in candidates[:top_n]:
             label = (

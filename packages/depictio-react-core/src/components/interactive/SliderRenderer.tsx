@@ -1,23 +1,33 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Paper, Stack, Text, Group, Slider } from '@mantine/core';
-import { Icon } from '@iconify/react';
+import { Text, Slider } from '@mantine/core';
+import { CompactControlSlot } from 'depictio-components';
 
-import { fetchColumnRange, InteractiveFilter, StoredMetadata } from '../../api';
+import { ColumnRange, fetchColumnRange, InteractiveFilter, StoredMetadata } from '../../api';
+import ComponentSkeleton from '../ComponentSkeleton';
+import {
+  InteractiveFrame,
+  InteractiveTitle,
+  SLIDER_MARK_LABEL_STYLE,
+  SLIDER_MARKS_CLASS,
+  interactiveAccent,
+} from './frame';
+import { buildNumericScale, formatSliderValue } from './numericScale';
 
 /**
  * Single-value Slider renderer for the React viewer.
  *
  * Mirror of the Dash `_build_slider_component` for `interactive_component_type === "Slider"`.
- * Reads the column's precomputed numeric min/max via `fetchColumnRange`, then renders a
- * Mantine `Slider` with marks. On change emits `{index, value, column_name,
- * interactive_component_type: 'Slider'}` upstream.
+ * Reads the column's precomputed specs via `fetchColumnRange`, then renders a Mantine
+ * `Slider` whose stops come from the column's own granularity (`buildNumericScale`).
+ * On change emits `{index, value, column_name, interactive_component_type: 'Slider'}`
+ * upstream.
  *
  * Mirrors the data-fetch + module-level cache pattern used by RangeSliderRenderer in
  * ComponentRenderer.tsx so multiple Slider instances on the same (dc_id, column) share
  * one in-flight fetch.
  */
 
-const rangeCache = new Map<string, Promise<{ min: number | null; max: number | null }>>();
+const rangeCache = new Map<string, Promise<ColumnRange>>();
 
 const SliderRenderer: React.FC<{
   metadata: StoredMetadata;
@@ -26,13 +36,17 @@ const SliderRenderer: React.FC<{
   /** Compact rendering — drops the inner Paper, defaults marks to hidden. */
   compact?: boolean;
 }> = ({ metadata, filters, onChange, compact }) => {
-  const [bounds, setBounds] = useState<{ min: number; max: number } | null>(null);
+  const [bounds, setBounds] = useState<{
+    min: number;
+    max: number;
+    dtype?: string | null;
+    unique?: number | null;
+  } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const defaultState = (metadata.default_state || {}) as Record<string, unknown>;
-  const scale = (defaultState.scale as string) || 'linear';
-  const useLogScale = scale === 'log10';
+  const useLogScale = ((defaultState.scale as string) || 'linear') === 'log10';
   const marksNumber = Math.max(
     2,
     typeof defaultState.marks_number === 'number' ? (defaultState.marks_number as number) : 5,
@@ -70,7 +84,7 @@ const SliderRenderer: React.FC<{
         }
         setBounds({ min: Math.log10(rawMin), max: Math.log10(rawMax) });
       } else {
-        setBounds({ min: rawMin, max: rawMax });
+        setBounds({ min: rawMin, max: rawMax, dtype: res.dtype, unique: res.unique });
       }
     })
       .catch((err) => {
@@ -90,21 +104,38 @@ const SliderRenderer: React.FC<{
   const selectedValue =
     typeof filterEntry?.value === 'number' ? (filterEntry!.value as number) : null;
 
-  // YAML wins; otherwise compact mode hides marks for higher density.
+  const scale = useMemo(
+    () =>
+      bounds
+        ? buildNumericScale(bounds, {
+            marksNumber,
+            // Log bounds are transformed: whole numbers on them say nothing
+            // about the column's own granularity.
+            continuous: useLogScale,
+            // Display label uses the original (non-log) value for log-scale
+            // sliders, matching the Dash port at utils.py:184-198.
+            format: (v) => formatSliderValue(useLogScale ? 10 ** v : v),
+          })
+        : null,
+    [bounds, marksNumber, useLogScale],
+  );
+
+  // YAML wins; otherwise compact mode hides marks for higher density — except
+  // on a discrete scale, where the marks are the only thing saying which values
+  // the thumb can reach.
   const marksVisible =
-    typeof metadata.show_marks === 'boolean' ? metadata.show_marks : !compact;
-  const marks = useMemo(() => {
-    if (!bounds || !marksVisible) return undefined;
-    const n = Math.max(2, marksNumber);
-    const stepSize = (bounds.max - bounds.min) / (n - 1);
-    return Array.from({ length: n }, (_, i) => {
-      const v = bounds.min + stepSize * i;
-      // Display label uses the original (non-log) value for log-scale sliders,
-      // matching the Dash port at utils.py:184-198.
-      const labelVal = useLogScale ? 10 ** v : v;
-      return { value: v, label: formatMark(labelVal) };
-    });
-  }, [bounds, marksNumber, useLogScale, marksVisible]);
+    typeof metadata.show_marks === 'boolean'
+      ? metadata.show_marks
+      : !compact || Boolean(scale?.discrete);
+  // A restricted slider still needs its marks passed even when their labels are
+  // suppressed — they are what it snaps to.
+  const marks = !scale
+    ? undefined
+    : marksVisible
+      ? scale.marks
+      : scale.discrete
+        ? scale.marks.map((m) => ({ value: m.value }))
+        : undefined;
 
   // Hook order is fixed for every render — keep useCallback BEFORE any
   // early returns. Otherwise React's hook-count check (error #310) trips on
@@ -124,92 +155,70 @@ const SliderRenderer: React.FC<{
 
   if (error) {
     return (
-      <div
-        className="dashboard-error"
-        style={{ fontSize: '0.75rem', color: 'var(--mantine-color-red-6)' }}
-      >
-        {error}
-      </div>
+      <InteractiveFrame compact={compact}>
+        <Text size="xs" c="red" className="dashboard-error">
+          {error}
+        </Text>
+      </InteractiveFrame>
     );
   }
 
-  if (loading || !bounds) {
+  if (loading || !bounds || !scale) {
     return (
-      <div className="dashboard-loading" style={{ minHeight: 80, fontSize: '0.75rem' }}>
-        Loading range…
-      </div>
+      <InteractiveFrame compact={compact}>
+        <ComponentSkeleton variant="control" />
+      </InteractiveFrame>
     );
   }
 
   const value = selectedValue != null ? selectedValue : bounds.min;
-  const displayTitle =
-    metadata.title || (metadata.column_name ? `Slider on ${metadata.column_name}` : '');
-  const iconCol = metadata.icon_color || 'var(--mantine-color-blue-6)';
-  const stepSize = (bounds.max - bounds.min) / 100;
-
-  const inner = (
-    <Stack gap={compact ? 2 : 'md'}>
-      {displayTitle && (
-        <Group gap="xs" align="center" wrap="nowrap" justify="space-between">
-          <Group gap="xs" align="center" wrap="nowrap" style={{ minWidth: 0, flex: 1 }}>
-            {metadata.icon_name && (
-              <Icon
-                icon={metadata.icon_name}
-                width={compact ? 14 : 18}
-                height={compact ? 14 : 18}
-                style={{ color: iconCol, flexShrink: 0 }}
-              />
-            )}
-            <Text fw={600} size={compact ? 'xs' : 'sm'} truncate>
-              {displayTitle}
-            </Text>
-          </Group>
-          <Text size="xs" c="dimmed">
-            {formatMark(useLogScale ? 10 ** value : value)}
-          </Text>
-        </Group>
-      )}
-      <Slider
-        min={bounds.min}
-        max={bounds.max}
-        step={stepSize}
-        value={value}
-        onChangeEnd={handleChange}
-        marks={marks}
-        size={compact ? 'sm' : 'md'}
-        thumbSize={compact ? 12 : undefined}
-        color={metadata.icon_color || undefined}
-        label={(v) => formatMark(useLogScale ? 10 ** v : v)}
-        mb={compact ? 0 : 'xs'}
-      />
-    </Stack>
-  );
-
-  if (compact) return inner;
+  const readout = (v: number) => formatSliderValue(useLogScale ? 10 ** v : v);
+  // Mantine takes a palette name on `color`; a raw hex has to be painted onto
+  // the parts, which is also where the tick-label size is set.
+  const accent = interactiveAccent(metadata);
+  const rawAccent = accent?.startsWith('#') || accent?.startsWith('rgb') || accent?.startsWith('var(');
 
   return (
-    <Paper
-      p="md"
-      radius="md"
-      shadow="xs"
-      withBorder
-      className="dashboard-component-hover"
-      style={{
-        height: '100%',
-        boxSizing: 'border-box',
-      }}
-    >
-      {inner}
-    </Paper>
+    <InteractiveFrame compact={compact}>
+      <InteractiveTitle
+        metadata={metadata}
+        compact={compact}
+        right={
+          <Text size="xs" c="dimmed" style={{ fontVariantNumeric: 'tabular-nums' }}>
+            {readout(value)}
+          </Text>
+        }
+      />
+      <CompactControlSlot compact={compact}>
+        <Slider
+          className={SLIDER_MARKS_CLASS}
+          min={bounds.min}
+          max={bounds.max}
+          step={scale.step}
+          restrictToMarks={scale.discrete}
+          value={value}
+          onChangeEnd={handleChange}
+          marks={marks}
+          size={compact ? 'sm' : 'md'}
+          thumbSize={compact ? 12 : undefined}
+          color={accent && !rawAccent ? accent : undefined}
+          styles={{
+            markLabel: SLIDER_MARK_LABEL_STYLE,
+            ...(accent && rawAccent
+              ? {
+                  bar: { backgroundColor: accent },
+                  thumb: { borderColor: accent, backgroundColor: accent },
+                }
+              : {}),
+          }}
+          label={readout}
+          // Mark labels hang below the track, so they need the room a compact
+          // slider otherwise gives away.
+          mb={compact ? (marksVisible ? 'sm' : 0) : 'xs'}
+        />
+      </CompactControlSlot>
+    </InteractiveFrame>
   );
 };
-
-function formatMark(v: number): string {
-  if (!Number.isFinite(v)) return String(v);
-  if (Number.isInteger(v)) return String(v);
-  const abs = Math.abs(v);
-  if (abs >= 1000 || (abs > 0 && abs < 0.01)) return v.toExponential(2);
-  return v.toFixed(2).replace(/\.?0+$/, '');
-}
 
 export default SliderRenderer;

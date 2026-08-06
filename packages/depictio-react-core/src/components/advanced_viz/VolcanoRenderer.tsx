@@ -16,6 +16,8 @@ import {
   InteractiveFilter,
   StoredMetadata,
 } from '../../api';
+import { isStaleFetch } from '../../fetchQueue';
+import { adaptGlTrace, SVG_MAX_POINTS, useWebglSlot } from '../../webglBudget';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragment } from './plotlyTheme';
 
@@ -68,6 +70,20 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
   const [rows, setRows] = useState<Record<string, unknown[]> | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  // Server-side downsampling state (mirrors the scatter-figure Load-All UX).
+  const [fullLoad, setFullLoad] = useState(false);
+  const [reduction, setReduction] = useState<{
+    displayed: number;
+    total: number;
+    sampled: boolean;
+  } | null>(null);
+
+  // A new filter slice may have a different row count — drop back to the
+  // sampled view so the user re-opts into a full load for the new data.
+  const filterSig = JSON.stringify(filters);
+  useEffect(() => {
+    setFullLoad(false);
+  }, [filterSig]);
 
   useEffect(() => {
     if (!metadata.wf_id || !metadata.dc_id || requiredCols.length < 3) {
@@ -76,20 +92,52 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
       return;
     }
     let cancelled = false;
+    const ctrl = new AbortController();
     setLoading(true);
     setError(null);
     fetchAdvancedVizData(
-      metadata.wf_id,
-      metadata.dc_id,
-      requiredCols,
-      filters,
+      {
+        wfId: metadata.wf_id,
+        dcId: metadata.dc_id,
+        columns: requiredCols,
+        filters,
+        fullLoad,
+        vizKind: 'volcano',
+        roles: {
+          feature_id: config.feature_id_col,
+          effect_size: config.effect_size_col,
+          significance: config.significance_col,
+        },
+        // The server reduces a large frame to ~10k rows, and a uniform sample
+        // of a genome-wide table keeps essentially none of the hits — the plot
+        // that exists to show them would show a cloud. Sending the cutoff this
+        // volcano draws its own line at keeps precisely those rows whole.
+        //
+        // Deliberately the *saved* threshold, not the live `sigThreshold`
+        // control: that one is a client-side slider, and refetching a 17M-row
+        // table on every drag to widen the tail is a worse trade than leaving
+        // the newly-significant rows to the uniform sample of the middle.
+        tail: {
+          column: config.significance_col,
+          direction: config.significance_is_neg_log10 ? 'high' : 'low',
+          threshold: config.significance_is_neg_log10
+            ? -Math.log10(config.significance_threshold ?? 0.05)
+            : (config.significance_threshold ?? 0.05),
+        },
+      },
+      ctrl.signal,
     )
       .then((res) => {
         if (cancelled) return;
         setRows(res.rows);
+        setReduction({
+          displayed: res.row_count,
+          total: res.total_rows ?? res.row_count,
+          sampled: Boolean(res.sampled),
+        });
       })
       .catch((err: unknown) => {
-        if (cancelled) return;
+        if (cancelled || isStaleFetch(err)) return;
         setError(err instanceof Error ? err.message : String(err));
       })
       .finally(() => {
@@ -97,8 +145,13 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
       });
     return () => {
       cancelled = true;
+      ctrl.abort();
     };
-  }, [metadata.wf_id, metadata.dc_id, JSON.stringify(requiredCols), JSON.stringify(filters), refreshTick]);
+  }, [metadata.wf_id, metadata.dc_id, JSON.stringify(requiredCols), filterSig, refreshTick, fullLoad]);
+
+  // A volcano always draws a marker cloud, so it always competes for one of
+  // the bounded WebGL slots. Without one it renders as SVG — see webglBudget.
+  const glGranted = useWebglSlot(true);
 
   const figure = useMemo(() => {
     if (!rows) return null;
@@ -201,7 +254,8 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
       tiers,
       counts,
       data: [
-        {
+        adaptGlTrace(
+          {
           type: 'scattergl' as const,
           mode: 'markers' as const,
           x: xs,
@@ -215,7 +269,9 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
             `<br>-log10(sig): %{y:.2f}` +
             `<extra></extra>`,
           marker: { color: colors, size: sizes, opacity: 0.85 },
-        },
+          },
+          glGranted,
+        ),
       ],
       layout: {
         ...plotlyThemeFragment(isDark, theme),
@@ -267,7 +323,7 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
         autosize: true,
       },
     };
-  }, [rows, config, sigThreshold, effectThreshold, topN, search, showLabels, isDark, theme]);
+  }, [rows, config, sigThreshold, effectThreshold, topN, search, showLabels, isDark, theme, glGranted]);
 
   // Memoised so AdvancedVizFrame's `extras` useMemo doesn't invalidate on
   // every render — otherwise the published popover JSX is republished on
@@ -352,6 +408,22 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
       dataColumns={requiredCols}
       counts={figure?.counts}
       tierAnnotation={tierAnnotation}
+      reduction={
+        reduction && (reduction.sampled || fullLoad)
+          ? {
+              // Without a WebGL slot the trace is drawn as downsampled SVG, so
+              // the badge must report what is on screen, not what arrived.
+              displayed: glGranted
+                ? reduction.displayed
+                : Math.min(reduction.displayed, SVG_MAX_POINTS),
+              total: reduction.total,
+              sampled: reduction.sampled,
+              full: fullLoad,
+              loading,
+              onToggle: () => setFullLoad((v) => !v),
+            }
+          : undefined
+      }
     >
       {figure ? (
         <Plot

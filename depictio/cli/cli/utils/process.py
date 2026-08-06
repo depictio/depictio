@@ -1,10 +1,35 @@
 # depictio/cli/cli/utils/process.py
 
+import os
+
 from depictio.cli.cli.utils.rich_utils import (
     rich_print_checked_statement,
 )
 from depictio.cli.cli_logging import logger
 from depictio.models.models.cli import CLIConfig
+
+# Upper bound on the DC pool. Each worker holds a full dataset in memory during
+# its collect/write, so the cap is about RAM, not CPU: 4 concurrent 1 GB
+# aggregations is already ~8 GB of peak RSS on the default (non-streaming) path.
+_MAX_DC_WORKERS = 4
+
+
+def data_collection_workers(n_data_collections: int) -> int:
+    """How many data collections to ingest concurrently (1 = sequential).
+
+    Opt-in via ``DEPICTIO_INGEST_DC_WORKERS`` (new features default off). The
+    result is clamped to the number of DCs and to :data:`_MAX_DC_WORKERS`, so an
+    over-large value degrades to the cap rather than spawning a thread per DC.
+    """
+    raw = os.getenv("DEPICTIO_INGEST_DC_WORKERS", "").strip()
+    if not raw:
+        return 1
+    try:
+        requested = int(raw)
+    except ValueError:
+        logger.warning(f"Invalid DEPICTIO_INGEST_DC_WORKERS={raw!r}; ingesting sequentially.")
+        return 1
+    return max(1, min(requested, _MAX_DC_WORKERS, n_data_collections))
 
 
 def process_project_data_collections(
@@ -27,12 +52,22 @@ def process_project_data_collections(
     Returns:
         dict: Results summary
     """
-    if command_parameters is None:
-        command_parameters = {}
-
     rich_print_checked_statement(
         f"Processing Project: [italic]'{project_config.name}'[/italic]", "info"
     )
+
+    # Cross-DC links live on the project, but the columns they match on are
+    # needed down in the per-DC write (to cluster the Delta table on the key it
+    # will be filtered by). Resolve them once here and carry them alongside the
+    # other run-level options rather than re-deriving them per DC. Rebuilt, not
+    # mutated in place, so a caller's dict is left alone (and ``None`` becomes
+    # the empty defaults the rest of this function already assumed).
+    from depictio.cli.cli.utils.deltatables import link_columns_by_dc
+
+    command_parameters = {
+        **(command_parameters or {}),
+        "link_columns_by_dc": link_columns_by_dc(project_config),
+    }
 
     # Filter workflows if specific workflow_name is provided
     workflows_to_process = project_config.workflows
@@ -72,15 +107,22 @@ def process_project_data_collections(
                 )
                 continue
 
-        # Process each data collection
-        for dc in data_collections_to_process:
+        # Ingest the data collections, then report. Reporting is deliberately a
+        # second, sequential pass over the original order: with a worker pool the
+        # completion order is arbitrary, and interleaving rich output from several
+        # threads would scramble the console. Splitting the two keeps the printed
+        # summary byte-identical to the sequential path.
+        outcomes = _ingest_data_collections(
+            workflow=workflow,
+            data_collections=data_collections_to_process,
+            CLI_config=CLI_config,
+            command_parameters=command_parameters,
+        )
+
+        for dc, result, error in outcomes:
             try:
-                result = process_single_data_collection(
-                    workflow=workflow,
-                    data_collection=dc,
-                    CLI_config=CLI_config,
-                    command_parameters=command_parameters,
-                )
+                if error is not None:
+                    raise error
 
                 if result["success"]:
                     rich_print_checked_statement(
@@ -150,6 +192,53 @@ def process_project_data_collections(
         "failed_tags": failed_tags,
         "skipped_optional": skipped_optional,
     }
+
+
+def _ingest_data_collections(
+    workflow,
+    data_collections: list,
+    CLI_config: CLIConfig,
+    command_parameters: dict | None,
+) -> list[tuple]:
+    """Ingest every DC, returning ``(dc, result, error)`` in **input order**.
+
+    Data collections are independent — each scans its own files and writes its
+    own delta table — so they can overlap. The work is I/O-bound (S3 upload plus
+    API round-trips, which measurably dominate: at 100 MB the upsert alone was
+    ~4.3 s of a 7.4 s ingest), and polars releases the GIL for the CPU-bound
+    parts, so threads are enough; processes would force the config and clients to
+    be pickled for no gain.
+
+    Exceptions are captured rather than raised so one failing DC cannot abandon
+    the others mid-flight — the caller re-raises them during its reporting pass,
+    preserving the original per-DC error handling.
+    """
+    workers = data_collection_workers(len(data_collections))
+
+    def run_one(dc):
+        try:
+            return (
+                dc,
+                process_single_data_collection(
+                    workflow=workflow,
+                    data_collection=dc,
+                    CLI_config=CLI_config,
+                    command_parameters=command_parameters,
+                ),
+                None,
+            )
+        except Exception as exc:
+            return dc, None, exc
+
+    if workers <= 1:
+        return [run_one(dc) for dc in data_collections]
+
+    logger.info(f"Ingesting {len(data_collections)} data collections with {workers} workers")
+    from concurrent.futures import ThreadPoolExecutor
+
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        # ``map`` yields in submission order, which is what the reporting pass wants.
+        return list(pool.map(run_one, data_collections))
 
 
 def process_single_data_collection(

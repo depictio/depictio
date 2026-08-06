@@ -2,6 +2,10 @@ packages:
   - 'packages/*'
   - 'depictio/viewer'
 
+allowBuilds:
+  es5-ext: set this to true or false
+  esbuild: set this to true or false
+
 # pnpm v10+ doesn't run lifecycle/postinstall scripts unless explicitly
 # approved. esbuild's postinstall is what installs the platform-specific
 # native binary; without it Vite's esbuild service dies on first transform

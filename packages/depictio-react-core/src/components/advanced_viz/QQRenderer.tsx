@@ -9,7 +9,7 @@ import {
   useMantineColorScheme,
   useMantineTheme,
 } from '@mantine/core';
-import Plot from 'react-plotly.js';
+import AdvancedVizPlot from './AdvancedVizPlot';
 
 import {
   fetchAdvancedVizData,
@@ -69,7 +69,13 @@ const QQRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetchAdvancedVizData(metadata.wf_id, metadata.dc_id, requiredCols, filters)
+    fetchAdvancedVizData({
+      wfId: metadata.wf_id,
+      dcId: metadata.dc_id,
+      columns: requiredCols,
+      filters,
+      vizKind: 'qq',
+    })
       .then((res) => {
         if (!cancelled) setRows(res.rows);
       })
@@ -411,7 +417,7 @@ const QQRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
       dataColumns={requiredCols}
     >
       {figure ? (
-        <Plot
+        <AdvancedVizPlot
           data={applyDataTheme(figure.data, isDark, theme) as any}
           layout={applyLayoutTheme(figure.layout as any, isDark, theme) as any}
           useResizeHandler

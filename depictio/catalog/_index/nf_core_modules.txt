@@ -6,12 +6,16 @@
 # Run `depictio catalog refresh-index` (needs network) to replace it with the
 # authoritative nf-core/modules list, so typo'd module paths are caught.
 fastqc
+happy/happy
+happy/sompy
 ivar/variants
 metaphlan/metaphlan
 mosdepth
 multiqc
 nextclade/run
 pangolin/run
+rtgtools/vcfeval
+truvari/bench
 qiime2/ancombc
 qiime2/barplot
 qiime2/diversityalphararefaction

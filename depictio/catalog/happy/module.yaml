@@ -1,0 +1,8 @@
+# hap.py — Illumina's haplotype-aware variant benchmarking tool. Multi-output
+# tool → a folder. Lightweight: identity is derived from the nf-core meta.yml
+# that `nf_core_url` points at (not duplicated). Override a field here only on
+# drift. The depictio glue (find/recipe/renders_as) lives in the output YAMLs.
+id: happy
+name: hap.py
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/happy/happy
+biotools_url: https://bio.tools/happy # from nf-core meta.yml identifier

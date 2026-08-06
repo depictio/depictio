@@ -66,7 +66,10 @@ TOP_PANEL_INTERACTIVE_TYPES: tuple[str, ...] = ("Timeline",)
 TIMELINE_TIMESCALES: tuple[str, ...] = ("year", "month", "day", "hour", "minute")
 
 # Maximum number of interactive components that may share the same `group`.
-MAX_INTERACTIVE_GROUP_SIZE: int = 3
+# The cap guards against a group card so tall it defeats the point of grouping.
+# It was 3 when a group was an always-expanded stack; groups are collapsible and
+# render their members compact now, so a taller card stays usable.
+MAX_INTERACTIVE_GROUP_SIZE: int = 6
 
 # ---------------------------------------------------------------------------
 # Valid map types and styles
@@ -83,6 +86,16 @@ MAP_STYLES: tuple[str, ...] = (
     "carto-positron",
     "carto-darkmatter",
 )
+
+# Where a map renders: as a normal dashboard tile, or lifted out of the grid
+# into the panel that is available from every tab of the dashboard family.
+MAP_PLACEMENTS: tuple[str, ...] = ("grid", "floating")
+
+# How that panel presents itself on a viewer's first visit. 'compact' and
+# 'expanded' are the two sizes; as a draggable card they are its footprint, and
+# 'docked' pins it below the dashboard's filter panel where they are its height.
+# The viewer's own saved preference takes over from then on.
+FLOATING_PANEL_STATES: tuple[str, ...] = ("compact", "expanded", "docked", "hidden")
 
 # ---------------------------------------------------------------------------
 # Card aggregation × column_type compatibility
@@ -103,6 +116,10 @@ AGGREGATION_COMPATIBILITY: dict[str, list[str]] = {
         "std_dev",
         "skewness",
         "kurtosis",
+        # Quantiles are well defined on integers, the builder has always offered
+        # this option, and the precompute step already records it — the omission
+        # here was the outlier, and it rejected cards the UI could produce.
+        "percentile",
         "q1",
         "q3",
         "box_plot_stats",

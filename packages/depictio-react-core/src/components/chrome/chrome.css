@@ -72,11 +72,35 @@
 }
 /* The reset icon stays visible without hover when its component is the
  * source of the dashboard's active filter — gives users a persistent
- * affordance to clear the filter from where it originated. */
+ * affordance to clear the filter from where it originated. Which components
+ * get it is decided in ComponentChrome (`persistentReset`); interactive
+ * controls are excluded, because this row floats and their frame has nothing
+ * under the top-right corner to spare. */
 .depictio-component-actions > .depictio-active-reset {
   opacity: 1;
   pointer-events: auto;
 }
+/* Filter-panel density — see `compact` in ComponentChrome.
+ *
+ * Each action is its own component with its own hard-coded Mantine `size`, so
+ * the override lands here rather than being threaded through five props.
+ * `--ai-size` is ActionIcon's own sizing variable, which is why setting it is
+ * enough to match the `xs` icons an InteractiveGroupCard header already draws.
+ * The row also pulls into the corner: at 12px the default 12px offset leaves it
+ * floating in the middle of a control instead of over its edge. */
+.depictio-component-actions.is-compact {
+  top: 2px;
+  right: 2px;
+  padding: 1px;
+}
+.depictio-component-actions.is-compact .mantine-ActionIcon-root {
+  --ai-size: 18px;
+}
+.depictio-component-actions.is-compact .mantine-ActionIcon-root svg {
+  width: 12px;
+  height: 12px;
+}
+
 /* Vertical stack for figure/multiqc/map — mirrors the Dash editor's
  * `button_configs[type].orientation == "vertical"` from layouts/edit.py. */
 .depictio-component-actions.depictio-actions-vertical {
@@ -88,7 +112,15 @@
   background: var(--mantine-color-body);
   padding: 1rem;
 }
-.depictio-component-chrome.fullscreen-active > * {
+/* Only the wrapped renderer fills the fullscreen viewport. The action row is
+ * the chrome's other direct child and is absolutely positioned, so it must be
+ * excluded: at `height: 100%` a horizontal row (Mantine Group centres on the
+ * cross axis) drops its icons to the vertical middle of the screen, and the
+ * hover pill — `::before { inset: 0 }` inside the row's z-index 1100 stacking
+ * context — inflates into a full-height opaque panel painted over the content.
+ * Vertical rows escape both effects because their cross axis is horizontal,
+ * which is why this only ever showed up on the table/AG Grid chrome. */
+.depictio-component-chrome.fullscreen-active > *:not(.depictio-component-actions) {
   height: 100%;
 }
 

@@ -81,7 +81,15 @@ const RocPrCurveRenderer: React.FC<Props> = ({ metadata, filters, refreshTick })
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetchAdvancedVizData(metadata.wf_id, metadata.dc_id, requiredCols, filters)
+    fetchAdvancedVizData({
+      wfId: metadata.wf_id,
+      dcId: metadata.dc_id,
+      columns: requiredCols,
+      filters,
+      // An ordered threshold sweep: a uniform sample would not coarsen the
+      // curve, it would shred the ordering the curve is made of.
+      vizKind: 'roc_pr_curve',
+    })
       .then((res) => {
         if (!cancelled) setRows(res.rows);
       })

@@ -1,10 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Paper, Loader, Text, Stack, useMantineColorScheme } from '@mantine/core';
+import { Paper, Text, Stack, useMantineColorScheme } from '@mantine/core';
 import Plot from 'react-plotly.js';
 
 import { renderMultiQC, InteractiveFilter, StoredMetadata } from '../../api';
 import { useInView } from '../../hooks/useInView';
+import { enqueueFetch, isStaleFetch } from '../../fetchQueue';
 import { readMultiqcSelection } from '../../utils/multiqcSelection';
+import ComponentSkeleton from '../ComponentSkeleton';
+import RefetchOverlay from '../RefetchOverlay';
+import { useReportLoadStatus } from '../DashboardLoadingProvider';
 import MultiQCGeneralStats from './MultiQCGeneralStats';
 
 interface MultiQCFigureProps {
@@ -68,6 +72,19 @@ const MultiQCFigureBody: React.FC<MultiQCFigureProps> = ({
   const theme: 'light' | 'dark' = colorScheme === 'dark' ? 'dark' : 'light';
   const [containerRef, inView] = useInView<HTMLDivElement>('200px');
 
+  // Match FigureRenderer's loading story: a full-panel ComponentSkeleton on the
+  // first paint (chunk + data fetch read as one continuous shimmer), then keep
+  // the previous figure mounted under a small RefetchOverlay on filter/theme
+  // refetches instead of tearing the Plotly figure down. Also report status to
+  // the dashboard load registry so the header progress bar counts MultiQC.
+  const isInitialLoad = figure === null;
+  const showInitialLoader = !inView || (isInitialLoad && loading);
+  const showRefetchOverlay = !isInitialLoad && loading;
+  useReportLoadStatus(
+    metadata.index,
+    !inView ? null : figure != null ? 'ready' : error ? 'error' : 'loading',
+  );
+
   useEffect(() => {
     if (!inView) return;
     let cancelled = false;
@@ -77,7 +94,13 @@ const MultiQCFigureBody: React.FC<MultiQCFigureProps> = ({
     const attempt = (): void => {
       setLoading(true);
       setError(null);
-      renderMultiQC(dashboardId, metadata.index, filters, theme)
+      // Queue the render POST so a dense dashboard paints top-down (vertical
+      // position = priority) instead of firing every MultiQC panel at once —
+      // mirrors FigureRenderer. Each 202-poll retry re-enqueues.
+      enqueueFetch(
+        () => renderMultiQC(dashboardId, metadata.index, filters, theme),
+        metadata.layout?.y ?? 0,
+      )
         .then((res) => {
           if (cancelled) return;
           if (res.status === 'preparing') {
@@ -96,7 +119,13 @@ const MultiQCFigureBody: React.FC<MultiQCFigureProps> = ({
         })
         .catch((err) => {
           if (cancelled) return;
-          setError(err?.message || String(err));
+          // A superseded queue generation (filter changed mid-flight) is not an
+          // error — the effect is about to re-run with the new inputs. Clear
+          // `loading` either way: a generation bump that doesn't also change
+          // this component's deps leaves the effect un-re-run, and a stuck
+          // `loading` pins the RefetchOverlay and keeps reporting 'loading' to
+          // the dashboard load registry so the header bar never completes.
+          if (!isStaleFetch(err)) setError(err?.message || String(err));
           setLoading(false);
         });
     };
@@ -163,20 +192,27 @@ const MultiQCFigureBody: React.FC<MultiQCFigureProps> = ({
           {titleText}
         </Text>
       )}
-      {(!inView || loading) && (
-        <Stack align="center" justify="center" gap="xs" style={{ flex: 1 }}>
-          <Loader size="sm" />
-          <Text size="xs" c="dimmed">
-            {preparing ? 'Preparing MultiQC figures…' : 'Rendering MultiQC plot…'}
-          </Text>
-        </Stack>
+      {showInitialLoader && <ComponentSkeleton variant="block" />}
+      {/* Paper-level, not inside the figure block: on a cold DC the backend
+          202s and `figure` stays null for the whole poll window (up to
+          PREPARE_POLL_MAX_MS), so a caption scoped to the rendered figure could
+          only ever appear on a refetch — i.e. never when it's actually needed.
+          Here it explains the 30-75s shimmer on first open. */}
+      {preparing && (
+        <Text
+          size="xs"
+          c="dimmed"
+          style={{ position: 'absolute', bottom: 6, left: 10, zIndex: 1001 }}
+        >
+          Preparing MultiQC figures…
+        </Text>
       )}
       {error && !loading && (
         <Stack style={{ flex: 1 }} justify="center" align="center">
           <Text size="sm" c="red" className="dashboard-error">MultiQC failed: {error}</Text>
         </Stack>
       )}
-      {figure && !loading && !error && (
+      {figure && !error && (
         <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
           <Plot
             data={plotData as any[]}
@@ -186,6 +222,7 @@ const MultiQCFigureBody: React.FC<MultiQCFigureProps> = ({
             style={PLOT_STYLE}
             useResizeHandler
           />
+          <RefetchOverlay visible={showRefetchOverlay} />
           {/* MultiQC logo overlay — official icon set
             (https://github.com/MultiQC/logo). Dark icon on light backgrounds,
             white icon in dark mode. Asset shipped via the SPA's public/ folder

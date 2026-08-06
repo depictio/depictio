@@ -14,6 +14,8 @@ import {
   InteractiveFilter,
   StoredMetadata,
 } from '../../api';
+import ComponentSkeleton from '../ComponentSkeleton';
+import { INTERACTIVE_FRAME, InteractiveTitle, SLIDER_MARK_LABEL_STYLE } from './frame';
 import './TimelineRenderer.css';
 
 /**
@@ -301,11 +303,7 @@ const TimelineRenderer: React.FC<{
     );
   }
   if (loading) {
-    return (
-      <Text size="xs" c="dimmed">
-        Loading timeline…
-      </Text>
-    );
+    return <ComponentSkeleton variant="control" />;
   }
   // Only genuinely-missing bounds (non-finite) are "unavailable". A single
   // distinct timestamp (min === max) is a normal early-stream state for a
@@ -416,20 +414,20 @@ const TimelineRenderer: React.FC<{
   const fmt = (v: number): string =>
     stampMarks ? formatStampLabel(v, hi - lo) : formatAt(scale, v, ctx);
 
-  const title = metadata.title || (metadata.column_name ? `Timeline · ${metadata.column_name}` : 'Timeline');
-
   return (
-    <Stack gap={6}>
+    <Stack gap={INTERACTIVE_FRAME.gap}>
       {/* Compact header: title left, selected-range readout right. Keeps the
-       * footer to two rows (header + slider/timescale row below). */}
-      <Group gap="xs" wrap="nowrap" align="center" justify="space-between">
-        <Text size="sm" fw={600} truncate style={{ minWidth: 0 }}>
-          {title}
-        </Text>
-        <Text size="xs" c="dimmed" truncate style={{ flexShrink: 0 }}>
-          {fmt(value[0])} → {fmt(value[1])}
-        </Text>
-      </Group>
+       * footer to two rows (header + slider/timescale row below). Shares the
+       * Filters panel's title row so the top panel and the sidebar read as one
+       * control surface. */}
+      <InteractiveTitle
+        metadata={metadata}
+        right={
+          <Text size="xs" c="dimmed" truncate style={{ flexShrink: 0 }}>
+            {fmt(value[0])} → {fmt(value[1])}
+          </Text>
+        }
+      />
       {/* Main row: range slider (flex) + timescale picker share one line so
        * the footer stays compact. */}
       <Group gap="sm" wrap="nowrap" align="center">
@@ -452,6 +450,7 @@ const TimelineRenderer: React.FC<{
           // With per-acquisition dots we render our own clickable marks+labels
           // overlay below; hand Mantine no marks so they don't double up.
           marks={stampMarks ? undefined : marks}
+          styles={{ markLabel: SLIDER_MARK_LABEL_STYLE }}
           value={value}
           onChange={(v) => handleSliderChange(v as [number, number])}
           // Show the snapped timestamp in the drag tooltip so it never displays a

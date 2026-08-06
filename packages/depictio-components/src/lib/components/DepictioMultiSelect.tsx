@@ -2,6 +2,7 @@ import React, { useCallback } from 'react';
 import { Paper, Stack, Text, Group, MultiSelect } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
+
 /**
  * MultiSelect interactive filter component. Mirrors the DMC-based render in
  * `depictio/dash/modules/interactive_component/utils.py:_build_select_component`
@@ -49,6 +50,13 @@ export interface DepictioMultiSelectProps {
   searchable?: boolean;
   /** Max options rendered in dropdown (virtualization hint). */
   limit?: number;
+  /** Render the bare Mantine input: no Paper, no title row. Used by the React
+   *  viewer, whose interactive renderers supply one shared frame for every
+   *  control type (see `components/interactive/frame.tsx` in
+   *  depictio-react-core) so the Filters panel stays visually uniform. */
+  bare?: boolean;
+  /** Mantine size token for the input itself. */
+  size?: string;
   /** Dash setProps — when present, changing the selection triggers Dash callbacks. */
   setProps?: (props: Partial<DepictioMultiSelectProps>) => void;
   /** Non-Dash React onChange handler for the React viewer use case. */
@@ -79,6 +87,8 @@ const DepictioMultiSelect: React.FC<DepictioMultiSelectProps> = ({
   clearable = true,
   searchable = true,
   limit = 100,
+  bare = false,
+  size = 'sm',
   setProps,
   onChange,
 }) => {
@@ -113,6 +123,23 @@ const DepictioMultiSelect: React.FC<DepictioMultiSelectProps> = ({
     resolveColor(color) ||
     'var(--mantine-color-text)';
 
+  const input = (
+    <MultiSelect
+      data={normalizeOptions(options)}
+      value={value || []}
+      onChange={handleChange}
+      placeholder={placeholder || `Select ${column_name || 'values'}...`}
+      searchable={searchable}
+      clearable={clearable}
+      limit={limit}
+      size={size}
+      maxDropdownHeight={220}
+      comboboxProps={{ withinPortal: true }}
+    />
+  );
+
+  if (bare) return input;
+
   return (
     <Paper
       p="xs"
@@ -143,17 +170,7 @@ const DepictioMultiSelect: React.FC<DepictioMultiSelectProps> = ({
             </Text>
           </Group>
         )}
-        <MultiSelect
-          data={normalizeOptions(options)}
-          value={value || []}
-          onChange={handleChange}
-          placeholder={placeholder || `Select ${column_name || 'values'}...`}
-          searchable={searchable}
-          clearable={clearable}
-          limit={limit}
-          maxDropdownHeight={220}
-          comboboxProps={{ withinPortal: true }}
-        />
+        {input}
       </Stack>
     </Paper>
   );

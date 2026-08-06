@@ -1,0 +1,7 @@
+# Truvari — structural-variant benchmarking; `bench` is the subcommand this
+# catalogues. Identity is derived from the nf-core meta.yml that `nf_core_url`
+# points at. No `biotools_url`: that meta.yml declares an empty `identifier`.
+id: truvari
+name: Truvari
+homepage: https://github.com/ACEnglish/truvari
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/truvari/bench

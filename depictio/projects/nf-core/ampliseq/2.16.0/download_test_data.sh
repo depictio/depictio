@@ -13,6 +13,20 @@ TARGET="${1:-./ampliseq-2.16.0-testdata}"
 echo "Downloading ampliseq 2.16.0 test data to: $TARGET"
 mkdir -p "$TARGET"
 
+# --- Pipeline params ---
+# The CLI reads pipeline_info/params*.json to learn how the run was configured:
+# it auto-fills METADATA_FILE (this run used --metadata) and sets the route/skip
+# flags that decide which data collections the template keeps. Without it the
+# metadata and ANCOM-BC collections are pruned and the files below go unused.
+aws s3 cp "$S3_PREFIX/pipeline_info/params_2026-02-13_10-48-05.json" \
+  "$TARGET/pipeline_info/params.json" --no-sign-request
+
+# --- Samplesheet (user-provided input) ---
+# Required: the samplesheet DC is not optional, and SAMPLESHEET_FILE is
+# auto-detected from <TARGET>/input/. Without this file the template run stops
+# at validation with "{SAMPLESHEET_FILE} does not exist".
+aws s3 cp "$S3_PREFIX/input/Samplesheet_full.tsv" "$TARGET/input/Samplesheet_full.tsv" --no-sign-request
+
 # --- Metadata (user-provided input) ---
 aws s3 cp "$S3_PREFIX/input/Metadata_full.tsv" "$TARGET/input/Metadata_full.tsv" --no-sign-request
 
@@ -48,20 +62,15 @@ find "$TARGET" -type f | wc -l
 echo ""
 echo "=== Quick test commands ==="
 echo ""
-echo "# 1. List available recipes"
-echo "depictio recipe list"
+echo "# METADATA_FILE and the route flags come from pipeline_info/params.json, so"
+echo "# no --var is needed for them. GROUP_COL is auto-detected as the first"
+echo "# annotation column ('name', one value per sample); 'habitat' is the one the"
+echo "# ANCOM-BC slices were computed on, so pass it for meaningful grouping."
 echo ""
-echo "# 2. Test individual recipes against downloaded data"
-echo "depictio recipe run nf-core/ampliseq/alpha_diversity.py -d $TARGET"
-echo "depictio recipe run qiime2/alpha_rarefaction.py -d $TARGET"
-echo "depictio recipe run qiime2/taxonomy_composition.py -d $TARGET"
-echo "depictio recipe run qiime2/ancombc.py -d $TARGET"
+echo "# 1. Dry run (validates the template against the data, no ingestion)"
+echo "depictio-cli run --template nf-core/ampliseq/2.16.0 --data-root $TARGET \\"
+echo "  --var GROUP_COL=habitat --dry-run"
 echo ""
-echo "# 3. Full template run (requires running depictio server)"
-echo "depictio run --template nf-core/ampliseq/2.16.0 --data-root $TARGET"
-echo ""
-echo "# 4. Dry run (validate template without server)"
-echo "depictio run --template nf-core/ampliseq/2.16.0 --data-root $TARGET --dry-run"
-echo ""
-echo "# 5. Deep validation (checks file headers match expected columns)"
-echo "depictio run --template nf-core/ampliseq/2.16.0 --data-root $TARGET --dry-run --deep"
+echo "# 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)"
+echo "depictio-cli run --template nf-core/ampliseq/2.16.0 --data-root $TARGET \\"
+echo "  --var GROUP_COL=habitat"

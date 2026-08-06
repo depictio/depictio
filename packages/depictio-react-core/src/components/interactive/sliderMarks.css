@@ -1,0 +1,36 @@
+/*
+ * Keep a slider's end mark labels inside the slider.
+ *
+ * Mantine centres every mark label on its mark: `translateX(-50%)`, plus half a
+ * mark's width to re-centre on the tick. That is right for the labels in
+ * between and wrong for the two on the ends, which are centred on the track's
+ * extremes and therefore hang half their width past them — a "2007" spilling
+ * ~14px to the left of the track and a "2009" the same to the right.
+ *
+ * On a dashboard tile there is usually padding to absorb that. In the Filters
+ * panel there is not: the column is ~280px, a sectioned control starts against
+ * its section's rail, and the scroll area reserves a gutter on the other side,
+ * so the first label crosses the rail and the last is clipped mid-glyph — the
+ * penguins "Sampling season" slider rendered its last year as "200".
+ *
+ * So the ends align to the track's ends instead of to their own centres: the
+ * first label's left edge and the last label's right edge. The Y half of the
+ * transform is Mantine's own and has to be repeated verbatim, since `transform`
+ * is one property and overriding X alone is not possible.
+ *
+ * `:first-of-type` / `:last-of-type` are the mark *wrappers*, which are the only
+ * children of the marks container, so they do identify the extreme marks.
+ * Scoped to `.depictio-slider-marks` rather than applied to every Mantine
+ * slider on the page: this changes where a label sits, and only the ones we lay
+ * out ourselves should get it.
+ */
+
+.depictio-slider-marks :is(.mantine-Slider-markWrapper, .mantine-RangeSlider-markWrapper):first-of-type
+  :is(.mantine-Slider-markLabel, .mantine-RangeSlider-markLabel) {
+  transform: translate(calc(var(--slider-size) / 2), calc(var(--mantine-spacing-xs) / 2));
+}
+
+.depictio-slider-marks :is(.mantine-Slider-markWrapper, .mantine-RangeSlider-markWrapper):last-of-type
+  :is(.mantine-Slider-markLabel, .mantine-RangeSlider-markLabel) {
+  transform: translate(calc(-100% + var(--slider-size) / 2), calc(var(--mantine-spacing-xs) / 2));
+}
