@@ -22,6 +22,8 @@ import type {
   ComponentFromPromptResponse,
   ResolveFiltersRequest,
   ResolveFiltersResponse,
+  SuggestFiguresRequest,
+  SuggestFiguresResponse,
   SummariesResponse,
   SummarizeSectionRequest,
   SummarizeSectionResponse,
@@ -57,6 +59,13 @@ export function componentFromPrompt(
     body,
     llmKey,
   );
+}
+
+export function suggestFigures(
+  body: SuggestFiguresRequest,
+  llmKey: string | null | undefined,
+): Promise<SuggestFiguresResponse> {
+  return postJson<SuggestFiguresResponse>('/ai/suggest-figures', body, llmKey);
 }
 
 export function resolveFilters(
