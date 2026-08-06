@@ -14,6 +14,7 @@ export { default as ExecutionTrace } from './components/ExecutionTrace';
 export {
   SectionSummaryPanel,
   SummarizeSectionButton,
+  trimDigest,
   useSectionSummaries,
 } from './components/SectionSummary';
 export type { SectionSummaryState } from './components/SectionSummary';

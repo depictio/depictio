@@ -41,19 +41,48 @@ export interface SectionSummaryState {
   error: string | null;
 }
 
+/** Client-side digest trimming, mirroring the server's caps (which still
+ *  apply — this just keeps multi-megabyte Plotly traces off the wire).
+ *  Long lists keep head+tail with a marker; long strings keep a prefix. */
+export function trimDigest(value: unknown, maxList = 60, maxStr = 400): unknown {
+  if (typeof value === 'string') {
+    return value.length > maxStr ? `${value.slice(0, maxStr)}… [trimmed]` : value;
+  }
+  if (Array.isArray(value)) {
+    if (value.length > maxList) {
+      const head = Math.floor(maxList / 2);
+      const tail = maxList - head;
+      return [
+        ...value.slice(0, head).map((v) => trimDigest(v, maxList, maxStr)),
+        `… [${value.length - maxList} items trimmed]`,
+        ...value.slice(value.length - tail).map((v) => trimDigest(v, maxList, maxStr)),
+      ];
+    }
+    return value.map((v) => trimDigest(v, maxList, maxStr));
+  }
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      out[k] = trimDigest(v, maxList, maxStr);
+    }
+    return out;
+  }
+  return value;
+}
+
 /** Host-facing hook: cached summaries on load + per-section generation.
  *
  *  `buildContext(section)` must return the current filters + component
  *  digests for that section — the host owns rendering state, so only it
- *  can assemble what the user actually sees.
+ *  can assemble what the user actually sees. May be async (e.g. when the
+ *  host refetches figure/table data at summarize time).
  */
 export function useSectionSummaries(
   dashboardId: string,
   enabled: boolean,
-  buildContext: (section: string | null) => {
-    filters: unknown[];
-    components: SummaryComponentPayload[];
-  },
+  buildContext: (section: string | null) =>
+    | { filters: unknown[]; components: SummaryComponentPayload[] }
+    | Promise<{ filters: unknown[]; components: SummaryComponentPayload[] }>,
 ) {
   const [entries, setEntries] = useState<Record<string, SummaryEntry>>({});
   const [pendingSection, setPendingSection] = useState<string | null>(null);
@@ -82,10 +111,21 @@ export function useSectionSummaries(
 
   const generate = useCallback(
     async (section: string | null, force = false): Promise<SummarizeSectionResponse | null> => {
-      const { filters, components } = buildContext(section);
-      if (components.length === 0) return null;
       setPendingSection(keyOf(section));
       setError(null);
+      let filters: unknown[];
+      let components: SummaryComponentPayload[];
+      try {
+        ({ filters, components } = await buildContext(section));
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+        setPendingSection(null);
+        return null;
+      }
+      if (components.length === 0) {
+        setPendingSection(null);
+        return null;
+      }
       try {
         const res = await run({ section, filters, components, force });
         setEntries((prev) => ({
