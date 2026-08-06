@@ -9,8 +9,9 @@ Two halves, both used by the producers when they turn a code-mode figure into a
     same frame the browser re-derives at every filter state via
     ``packages/depictio-static-core/src/prologue.ts``. It mirrors the
     *source grammar* of :mod:`depictio.serverless.prologue` term for term
-    (``maintain_order=True`` group_by, Polars-default sort/null placement, the
-    ``len`` vs ``count`` split), and it is pinned against the cross-language
+    (``maintain_order=True`` group_by *and* sort, Polars-default null
+    placement, the ``len`` vs ``count`` split), and it is pinned against the
+    cross-language
     fixture by ``depictio/tests/unit/serverless/test_prologue_exec.py``: the
     transpiler, this executor and the TypeScript interpreter all answer to the
     same arbiter (``fixtures/prologue-expected.json``).
@@ -156,7 +157,13 @@ def execute_ops(ops: list[PrologueOp], df: pl.DataFrame) -> pl.DataFrame:
         elif isinstance(op, GroupByOp):
             df = df.group_by(op.by, maintain_order=True).agg([_agg_expr(spec) for spec in op.agg])
         elif isinstance(op, SortOp):
-            df = df.sort(op.by, descending=op.desc)
+            # maintain_order=True is NOT the Polars default: without it ties come
+            # out in whatever order the parallel sort produced, so replaying the
+            # same IR over the same frame twice can give two different row
+            # orders. The IR is replayed on both sides of the bundle (here at
+            # build time, prologue.ts at every filter state), and the TypeScript
+            # interpreter's sort is stable, so "stable" is the pinned semantics.
+            df = df.sort(op.by, descending=op.desc, maintain_order=True)
         elif isinstance(op, RenameOp):
             df = df.rename(op.map)
         else:

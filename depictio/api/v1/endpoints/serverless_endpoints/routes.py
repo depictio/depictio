@@ -244,6 +244,7 @@ async def preflight_export_static(
                 "reason": _enum_value(row.reason),
                 "detail": row.detail,
                 "tab_id": row.tab_id,
+                "provisional": row.provisional,
             }
         )
 

@@ -47,12 +47,16 @@ kinds go ``live`` (their DC is bundled, pruned to the columns their ``config``
 binds, and the in-browser engine recomputes ``/advanced_viz/data`` at every
 filter state — no frozen payload); ``phylogenetic`` stays frozen, because its
 Newick tree DC is a second, non-tabular source one bundled table cannot carry;
-and the five Celery-computed kinds (embedding, complex_heatmap, upset, sankey,
-coverage_track) are *pre-exported*: the producer calls their task functions
-in-process and ships the result as a frozen ``compute`` payload, which the
-runtime's dispatch/poll shim hands back as a finished job. They are badged as
+and the four Celery-computed kinds (embedding, complex_heatmap, upset, sankey)
+are *pre-exported*: the producer calls their task functions in-process and
+ships the result as a frozen ``compute`` payload, which the runtime's
+dispatch/poll shim hands back as a finished job. They are badged as
 computed-at-export — no filter refreshes them — and degrade to ``omitted``
 (with the reason) when the compute fails or runs past its budget.
+``coverage_track`` dispatches server-side too but left that family in phase 8:
+its task is row-wise plus a per-(chromosome, sample) rolling mean, so the
+browser recomputes it live from the bundled Parquet like any data-path kind
+(see ``CELERY_VIZ_KINDS``).
 
 One bundle carries a whole **tab family** (RFC §3.1 ``BundleManifest.tabs``):
 the requested dashboard is the entry tab, its main tab and siblings ride along,
@@ -103,7 +107,12 @@ from depictio.models.models.serverless import (
     TierEntry,
     TierReason,
 )
-from depictio.serverless.binding import build_binding
+from depictio.serverless.binding import (
+    BindingMiss,
+    build_binding_with_reason,
+    miss_detail,
+    miss_tier_reason,
+)
 from depictio.serverless.preflight import (
     LINK_TIER_A,
     LINK_TIER_B,
@@ -139,7 +148,10 @@ from depictio.serverless.pruning import (
 # so the bind-and-refill runtime can refill bound traces from it. advanced_viz
 # components go through :func:`serves_advanced_viz_live` for the same reason —
 # their data-path kinds are recomputed in the browser since phase 4.
-LIVE_DATA_TYPES = frozenset({"card", "interactive"})
+# Tables are here because the runtime reproduces `render_table_endpoint` in full
+# (filter → sort → slice, `renderTableLive`), so their DC must ship — unpruned,
+# since any column can be sorted or filtered on (pruning.component_columns).
+LIVE_DATA_TYPES = frozenset({"card", "interactive", "table"})
 
 logger = logging.getLogger(__name__)
 
@@ -198,9 +210,9 @@ def _ships_data(comp: dict[str, Any]) -> bool:
     )
 
 
-# Frozen tables inline their rows into the manifest — cap them like the catalog
-# preview does so a large DC cannot blow the single-file byte budget. (Producer
-# B's tables are live now; producer A's go live in a later phase.)
+# A table only freezes when its data collection could not be bundled. That
+# fallback inlines rows into the manifest, so cap them like the catalog preview
+# does — a large DC must not blow the single-file byte budget.
 TABLE_FROZEN_MAX_ROWS = 1_000
 
 # render_table_endpoint clamps ``limit`` to 500 per request; page up to the
@@ -501,10 +513,15 @@ def classify_stored_component(
         return ComponentTier.LIVE, None, None
 
     if ctype == "table":
+        # Planned verdict only: the runtime serves a table live off the bundled
+        # Parquet, so the build upgrades this to LIVE once it knows the data
+        # collection shipped. It stays frozen when the DC could not be bundled —
+        # the same condition `renderTable` tests before taking its live path.
         return (
             ComponentTier.FROZEN,
             TierReason.UNSUPPORTED,
-            "live tables land in phase 3; frozen at the default filter state",
+            "live once its data collection ships in the bundle; frozen at the "
+            "default filter state otherwise",
         )
 
     if ctype == "figure":
@@ -534,11 +551,16 @@ def classify_stored_component(
         )
 
     if ctype == "multiqc":
-        return (
-            ComponentTier.FROZEN,
-            TierReason.MULTIQC,
-            "MultiQC renders server-side; frozen at the default filter state",
-        )
+        # `render_multiqc` only ever fetched a figure keyed on inputs frozen into
+        # stored_metadata and then applied the pure `patch_multiqc_figures`
+        # (patching.py:59); the runtime ships the same figure and re-applies the
+        # same patch under the current filters, with the sample list resolved
+        # through the offline link walk. General Statistics rides the same path —
+        # its table rows and violin points are the filtered truth; only the
+        # `table_styles` data bars keep the export-time full-cohort scale
+        # (regenerating them needs matplotlib colormaps,
+        # general_stats_payload.py:630).
+        return ComponentTier.LIVE, None, None
     if ctype == "map":
         return (
             ComponentTier.FROZEN,
@@ -647,6 +669,7 @@ def classify_stored_metadata(
                 reason=reason,
                 detail=detail,
                 tab_id=tab_id,
+                provisional=(tier is ComponentTier.FROZEN and reason is TierReason.BINDING_MISS),
             )
         )
     return rows
@@ -1099,27 +1122,6 @@ def celery_compute_request(comp: dict[str, Any]) -> tuple[str, dict[str, Any]] |
             "color_intersections_by": config.get("color_intersections_by") or "none",
         }
 
-    if kind == "coverage_track":
-        chromosome_col = config.get("chromosome_col")
-        position_col = config.get("position_col")
-        value_col = config.get("value_col")
-        if not (chromosome_col and position_col and value_col):
-            return None
-        smoothing = config.get("smoothing_window")
-        return "compute_coverage_track", {
-            **base,
-            "chromosome_col": chromosome_col,
-            "position_col": position_col,
-            "value_col": value_col,
-            "end_col": config.get("end_col") or None,
-            "sample_col": config.get("sample_col") or None,
-            "category_col": config.get("category_col") or None,
-            "chromosomes_filter": list(config.get("chromosomes_filter") or []) or None,
-            "samples_filter": list(config.get("samples_filter") or []) or None,
-            # The renderer seeds its slider at 5 when the config says nothing.
-            "smoothing_window": 5 if smoothing is None else int(smoothing),
-        }
-
     if kind == "sankey":
         available = config.get("available_step_cols") or []
         step_cols = list(config.get("step_cols") or [])
@@ -1495,6 +1497,39 @@ def _link_config_json(link: dict[str, Any]) -> dict[str, Any]:
     for key in ("id", "source_dc_id", "target_dc_id"):
         if config.get(key) is not None:
             config[key] = str(config[key])
+
+    # `sample_mapping` links store ``mappings: null`` in Mongo — the server
+    # auto-fetches them from multiqc_collection at resolve time
+    # (links_endpoints/routes.py:716-737), which a bundle cannot do. Bake them in
+    # so the offline resolver expands canonical ids into the report variants
+    # MultiQC actually keys its traces by ("SRR10070130" → "SRR10070130_1",
+    # "SRR10070130 - First read: Adapter 1"). Merge shape mirrors render_multiqc's
+    # own fetch. Costs ~2.5 KB on a 12-sample report.
+    link_config = config.get("link_config") or {}
+    if (
+        config.get("target_type") == "multiqc"
+        and link_config.get("resolver") == "sample_mapping"
+        and not link_config.get("mappings")
+    ):
+        from depictio.api.v1.db import multiqc_collection
+
+        mappings: dict[str, list[str]] = {}
+        try:
+            for report in multiqc_collection.find(
+                {"data_collection_id": str(config.get("target_dc_id") or "")},
+                {"metadata.sample_mappings": 1},
+            ):
+                for key, variants in (
+                    (report.get("metadata") or {}).get("sample_mappings") or {}
+                ).items():
+                    bucket = mappings.setdefault(str(key), [])
+                    for variant in variants:
+                        if str(variant) not in bucket:
+                            bucket.append(str(variant))
+        except Exception as exc:  # noqa: BLE001 - a link without mappings still resolves
+            logger.warning("producer A: multiqc sample_mappings fetch failed: %s", exc)
+        if mappings:
+            config["link_config"] = {**link_config, "mappings": mappings}
     return config
 
 
@@ -1859,11 +1894,18 @@ def export_manifest(
         if comp.get("component_type") not in LIVE_DATA_TYPES and not serves_advanced_viz_live(comp):
             continue
         dc_id = str(comp.get("dc_id") or "")
+        row = tier_by_id[component_id]
         if dc_id in dc_failures:
-            row = tier_by_id[component_id]
             row.tier = ComponentTier.OMITTED
             row.reason = TierReason.UNSUPPORTED
             row.detail = f"data collection {dc_id} not bundled: {dc_failures[dc_id]}"
+        elif comp.get("component_type") == "table" and dc_id in data_refs:
+            # The data landed, so `renderTableLive` will take over: no frozen
+            # snapshot is emitted for this component below, the way a bound
+            # figure ships none either.
+            row.tier = ComponentTier.LIVE
+            row.reason = None
+            row.detail = None
 
     # Frozen tier: real endpoint bodies, default (empty) filter state.
     # Bindings (bind-and-refill, RFC §4) — and, for code-mode figures, the
@@ -1896,10 +1938,13 @@ def export_manifest(
 
     for tab, comp, component_id in items:
         row = tier_by_id[component_id]
-        if row.tier is not ComponentTier.FROZEN:
+        ctype = comp.get("component_type")
+        # A live MultiQC still ships a payload: the runtime re-slices that figure
+        # under the current filters, it cannot rebuild it. The payload is its
+        # data source, not a snapshot of a dead tile.
+        if row.tier is not ComponentTier.FROZEN and ctype != "multiqc":
             continue
         dashboard_oid = ObjectId(tab.id)
-        ctype = comp.get("component_type")
         try:
             if ctype == "table":
                 frozen[component_id] = FrozenPayload(
@@ -1914,6 +1959,7 @@ def export_manifest(
                 # the arrays from the bundled Parquet, so a frozen snapshot
                 # would only be a second copy of data the bundle already has.
                 binding = None
+                miss: BindingMiss | None = None
                 ops: list[PrologueOp] | None = None
                 payload: dict[str, Any] | None = None
                 sampled = False
@@ -1934,20 +1980,21 @@ def export_manifest(
                             try:
                                 import plotly.graph_objects as go
 
-                                binding = build_binding(
+                                binding, miss = build_binding_with_reason(
                                     {"visu_type": call[0], "dict_kwargs": call[1]},
                                     execute_ops(ops, df),
                                     fig=go.Figure(payload["figure"]),
                                 )
                             except Exception:
-                                binding = None  # any replay/builder crash freezes
+                                # any replay/builder crash freezes
+                                binding, miss = None, None
                 elif _refillable_figure(comp):
                     df = pruned_frames.get(str(comp.get("dc_id") or ""))
                     if df is not None:
                         try:
-                            binding = build_binding(comp, df)
+                            binding, miss = build_binding_with_reason(comp, df)
                         except Exception:
-                            binding = None  # any builder crash freezes below
+                            binding, miss = None, None  # any builder crash freezes below
                 if binding is not None:
                     bindings[component_id] = binding
                     if ops:
@@ -1974,17 +2021,17 @@ def export_manifest(
                     row.reason = TierReason.CODE_MODE
                     row.detail = f"code-mode figure not transpilable: {refusal}"
                 elif code_mode:
-                    row.reason = TierReason.BINDING_MISS
+                    # The binder names which of its bail-outs fired, and that
+                    # sentence is what the badge tooltip shows — "computed over
+                    # the whole table at once" is not "no unambiguous binding".
+                    row.reason = miss_tier_reason(miss)
                     row.detail = (
-                        "code analyzed, but no unambiguous trace↔group binding "
-                        "(RFC §4); frozen at the default filter state"
-                    )
-                elif _refillable_figure(comp):
-                    row.reason = TierReason.BINDING_MISS
-                    row.detail = (
-                        "no unambiguous trace↔group binding (RFC §4); "
+                        f"code analyzed, but {miss_detail(miss)}; "
                         "frozen at the default filter state"
                     )
+                elif _refillable_figure(comp):
+                    row.reason = miss_tier_reason(miss)
+                    row.detail = f"{miss_detail(miss)}; frozen at the default filter state"
                 if sampled:
                     row.tier = ComponentTier.PARTIAL
                     row.reason = TierReason.MAX_POINTS

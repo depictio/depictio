@@ -17,7 +17,7 @@ from typing import Any
 
 import polars as pl
 
-from depictio.serverless.binding import build_binding
+from depictio.serverless.binding import build_binding_with_reason
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 PENGUINS_DATA = REPO_ROOT / "depictio" / "projects" / "init" / "penguins" / "data"
@@ -185,10 +185,12 @@ def cases(df: pl.DataFrame) -> list[tuple[str, dict[str, Any], pl.DataFrame, boo
             True,
         ),
         (
+            # px stacks hover columns into a 2-D customdata array; the binder
+            # resolves it column by column so the hovertemplate keeps working.
             "hover_data (2-D customdata)",
             figure("scatter", x="flipper_length_mm", y="body_mass_g", hover_data=["island"]),
             df,
-            False,
+            True,
         ),
     ]
 
@@ -199,17 +201,19 @@ def main() -> None:
     unexpected: list[str] = []
     print(f"binding coverage — penguins frame: {df.height} rows, {len(df.columns)} columns\n")
     for label, component, frame, expect_bound in cases(df):
-        table = build_binding(component, frame)
+        table, miss = build_binding_with_reason(component, frame)
         if table is not None:
             matched += 1
+            customdata = sorted({c for t in table.traces for c in t.customdata})
             summary = (
                 f"MATCHED  group_cols={table.group_cols} "
                 f"traces={len(table.traces)} trendlines={len(table.trendlines)} "
                 f"sampled={table.sampled} "
                 f"fields={sorted({f for t in table.traces for f in t.fields})}"
+                + (f" customdata={customdata}" if customdata else "")
             )
         else:
-            summary = "REFUSED  (component freezes with binding_miss)"
+            summary = f"REFUSED  ({miss.value if miss else 'unknown'} -> frozen)"
         flag = " " if (table is not None) == expect_bound else "!"
         if flag == "!":
             unexpected.append(label)

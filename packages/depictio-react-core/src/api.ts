@@ -3152,6 +3152,11 @@ export interface StaticExportTierRow {
   tier: 'live' | 'partial' | 'frozen' | 'omitted';
   reason?: string | null;
   detail?: string | null;
+  /** Dashboard id of the tab this component sits on, for a tab-family export. */
+  tab_id?: string | null;
+  /** Preflight reads no data, so it plans every figure as frozen and lets the
+   *  build overturn that. A provisional row is undecided, not a verdict. */
+  provisional?: boolean;
 }
 
 /** Cross-DC link resolution plan for the bundle. */

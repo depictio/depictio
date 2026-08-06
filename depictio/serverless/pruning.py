@@ -36,9 +36,16 @@ DATA_COMPONENT_TYPES = frozenset({"figure", "card", "interactive", "table", "adv
 # the RFC §2.4 list). They read no columns from a bundled table — there is no
 # in-browser equivalent of the compute — so neither producer bundles data for
 # them.
-CELERY_VIZ_KINDS = frozenset(
-    {"embedding", "complex_heatmap", "upset", "upset_plot", "sankey", "coverage_track"}
-)
+#
+# ``coverage_track`` dispatches on the server but is NOT here: its task
+# (``compute_coverage_track``, celery_tasks.py:1340) is a projection, two
+# whitelist row masks, a sort, a per-(chromosome, sample) rolling mean and an
+# every-Nth decimation — all of it row-wise or partitioned by the very columns
+# a dashboard filter masks on, so the mask commutes with the computation and
+# the browser can redo the whole thing (``coverageTrackLive``). Freezing it
+# also cost more than shipping the data: the frozen payload is the aggregated
+# rows as JSON, several times the size of the same rows as bundled Parquet.
+CELERY_VIZ_KINDS = frozenset({"embedding", "complex_heatmap", "upset", "upset_plot", "sankey"})
 
 # Data-path kinds that additionally read a SECOND, non-tabular source: the
 # phylogenetic kind pairs its tabular DC with a Newick tree DC (``tree_dc_id``).

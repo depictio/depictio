@@ -67,7 +67,12 @@ from depictio.models.models.serverless import (
     TierEntry,
     TierReason,
 )
-from depictio.serverless.binding import build_binding
+from depictio.serverless.binding import (
+    BindingMiss,
+    build_binding_with_reason,
+    miss_detail,
+    miss_tier_reason,
+)
 from depictio.serverless.companions import build_companions
 from depictio.serverless.preflight import (
     LINK_TIER_A,
@@ -691,15 +696,17 @@ def build_manifest(
                 row.detail = f"code-mode figure not locally computable: {exc}"
                 continue
             binding = None
+            miss: BindingMiss | None = None
             if call is not None:
                 assert ops is not None
                 try:
                     derived = execute_ops(ops, df)
-                    binding = build_binding(
+                    binding, miss = build_binding_with_reason(
                         {"visu_type": call[0], "dict_kwargs": call[1]}, derived, fig=fig
                     )
                 except Exception:
-                    binding = None  # any executor/builder failure freezes below
+                    # any executor/builder failure freezes below
+                    binding, miss = None, None
             if binding is not None:
                 bindings[row.component_id] = binding
                 if ops:
@@ -714,10 +721,12 @@ def build_manifest(
                 row.reason = TierReason.CODE_MODE
                 row.detail = f"code-mode figure not transpilable: {refusal}"
             else:
-                row.reason = TierReason.BINDING_MISS
+                # The binder names which bail-out fired; that sentence is the
+                # badge tooltip, so it has to be the true one.
+                row.reason = miss_tier_reason(miss)
                 row.detail = (
-                    "prologue transpiled, but no unambiguous trace↔group binding "
-                    "(RFC §4); frozen at the default filter state"
+                    f"prologue transpiled, but {miss_detail(miss)}; "
+                    "frozen at the default filter state"
                 )
             frozen[row.component_id] = FrozenPayload(
                 kind="figure", payload=_code_figure_payload(fig)
@@ -729,7 +738,7 @@ def build_manifest(
             # the authentic layout, and the runtime refills the arrays from the
             # bundled Parquet, so a frozen snapshot would only be a second copy
             # of data the bundle already has.
-            binding = build_binding(comp, df)
+            binding, miss = build_binding_with_reason(comp, df)
             if binding is not None:
                 bindings[row.component_id] = binding
                 if binding.sampled:
@@ -746,10 +755,8 @@ def build_manifest(
                     row.detail = None
                 continue
             payload, sampled = _freeze_ui_figure(comp, df)
-            row.reason = TierReason.BINDING_MISS
-            row.detail = (
-                "no unambiguous trace↔group binding (RFC §4); frozen at the default filter state"
-            )
+            row.reason = miss_tier_reason(miss)
+            row.detail = f"{miss_detail(miss)}; frozen at the default filter state"
             if sampled:
                 row.tier = ComponentTier.PARTIAL
                 row.reason = TierReason.MAX_POINTS

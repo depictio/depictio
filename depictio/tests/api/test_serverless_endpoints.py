@@ -272,6 +272,7 @@ def test_preflight_happy_path(client, owner, monkeypatch: pytest.MonkeyPatch):
                 "reason": None,
                 "detail": None,
                 "tab_id": MAIN_TAB_ID,
+                "provisional": False,
             },
             {
                 "component_id": "c2",
@@ -281,6 +282,7 @@ def test_preflight_happy_path(client, owner, monkeypatch: pytest.MonkeyPatch):
                 "reason": "celery_compute",
                 "detail": "needs a Celery worker",
                 "tab_id": CHILD_TAB_ID,
+                "provisional": False,
             },
         ],
         "tabs": [

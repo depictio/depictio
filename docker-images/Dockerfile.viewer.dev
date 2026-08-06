@@ -22,6 +22,11 @@ RUN corepack enable && corepack prepare pnpm@10 --activate
 COPY pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY packages ./packages/
 COPY depictio/viewer ./depictio/viewer/
+# Kept in step with Dockerfile.viewer: the icon-subset generator scans the
+# project corpus for tab icon ids. Cosmetic here (the dev server sends no CSP,
+# so an unbundled id still resolves from the Iconify API), but it keeps dev and
+# prod resolving the same set.
+COPY depictio/projects ./depictio/projects/
 
 RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
     pnpm install --frozen-lockfile

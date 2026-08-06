@@ -91,10 +91,20 @@ test("a Celery-computed view says filters do not reach it", async ({ page }) => 
   await expect(badge).toHaveAttribute("data-static-tier", "frozen");
 
   await badge.hover();
-  await expect(page.getByText("Filters do not affect this view")).toBeVisible();
-  await expect(
-    page.getByText("computed at export time — filters do not refresh this view"),
-  ).toBeVisible();
+  const card = page.locator(".mantine-HoverCard-dropdown");
+  await expect(card).toContainText("Filters do not affect this view");
+  await expect(card).toContainText(
+    "This view comes from a heavy computation that ran once",
+  );
+
+  // This fixture's build note reads as prose, so it is offered — one click
+  // away, never as the headline.
+  const detail = card.locator("[data-testid='static-tier-detail']");
+  await expect(detail).toHaveCount(0);
+  await card.locator("[data-testid='static-tier-detail-toggle']").click();
+  await expect(detail).toHaveText(
+    "computed at export time — filters do not refresh this view",
+  );
 });
 
 test("a single-tab bundle renders exactly as before", async ({ page }) => {

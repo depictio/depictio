@@ -18,16 +18,47 @@ import {
   dispatchStaticExport,
   pollStaticExport,
   downloadStaticExport,
+  staticTierExplanation,
   STATIC_TIER_BADGE_LABEL,
   STATIC_TIER_BADGE_COLOR,
 } from 'depictio-react-core';
-import type { StaticExportPreflight } from 'depictio-react-core';
+import type { StaticExportPreflight, StaticExportTierRow } from 'depictio-react-core';
 
 /** 'live' is deliberately absent from the shared maps — the in-bundle badge
  *  only renders non-live tiers. The preflight table shows every component, so
  *  the modal supplies the live entry itself. */
 const TIER_LABEL: Record<string, string> = { live: 'Live', ...STATIC_TIER_BADGE_LABEL };
 const TIER_COLOR: Record<string, string> = { live: 'green', ...STATIC_TIER_BADGE_COLOR };
+
+/** Vocabulary for a row the preflight cannot settle (see `isProvisional`).
+ *  One word, because it shares the narrow Tier column with 'Live'/'Frozen';
+ *  the note spells out that the verdict comes with the build. */
+const UNDECIDED_LABEL = 'Undecided';
+const UNDECIDED_COLOR = 'gray';
+const UNDECIDED_NOTE =
+  'Depictio tries to redraw this chart in your browser while it builds the bundle. ' +
+  'If it succeeds the chart stays interactive; if not, it ships as a snapshot of the whole dataset.';
+
+/**
+ * Whether the build can still overturn this row's verdict.
+ *
+ * The preflight classifier reads no data, so it never runs the bind-and-refill
+ * builder: it calls EVERY figure frozen/binding_miss and the build then
+ * upgrades the ones it can redraw in the browser. Presenting that guess as a
+ * verdict promises far more frozen tiles than a bundle actually ships (on the
+ * reference dashboards, 18 predicted binding misses against 5 real ones), so
+ * those rows are shown as undecided instead of frozen.
+ *
+ * The endpoint says so itself with `provisional`; the inferred fallback keeps a
+ * viewer built against an older API honest, since the shape of that guess
+ * identifies exactly the rows it could not settle.
+ */
+function isProvisional(row: StaticExportTierRow): boolean {
+  if (typeof row.provisional === 'boolean') return row.provisional;
+  return (
+    row.component_type === 'figure' && row.tier === 'frozen' && row.reason === 'binding_miss'
+  );
+}
 
 /** Link tiers (A = fully resolved, B = partially resolved, inert = shipped
  *  disabled). Distinct axis from component tiers, hence a separate map. */
@@ -163,6 +194,16 @@ const ExportStaticModal: React.FC<ExportStaticModalProps> = ({
     }
   };
 
+  // Counts are recomputed from the rows rather than read from `preflight.counts`
+  // so the badges and the table agree on what is settled: the endpoint's counts
+  // include the undecided figures as frozen.
+  const rows: StaticExportTierRow[] = preflight?.tiers ?? [];
+  const undecidedCount = rows.filter(isProvisional).length;
+  const decidedCounts = { live: 0, partial: 0, frozen: 0, omitted: 0 };
+  for (const row of rows) {
+    if (!isProvisional(row) && row.tier in decidedCounts) decidedCounts[row.tier] += 1;
+  }
+
   return (
     <Modal
       opened={opened}
@@ -211,10 +252,32 @@ const ExportStaticModal: React.FC<ExportStaticModalProps> = ({
                   variant="light"
                   style={{ textTransform: 'none' }}
                 >
-                  {TIER_LABEL[tier]}: {preflight.counts[tier] ?? 0}
+                  {TIER_LABEL[tier]}: {decidedCounts[tier]}
                 </Badge>
               ))}
+              {undecidedCount > 0 && (
+                <Badge
+                  color={UNDECIDED_COLOR}
+                  variant="outline"
+                  style={{ textTransform: 'none' }}
+                  data-testid="undecided-count-badge"
+                >
+                  {UNDECIDED_LABEL}: {undecidedCount}
+                </Badge>
+              )}
             </Group>
+
+            {undecidedCount > 0 && (
+              // The counts above are only the settled rows, so say what the
+              // rest are: promising "24 frozen" and shipping 9 is the failure
+              // mode this replaces.
+              <Text size="xs" c="dimmed">
+                {undecidedCount} chart{undecidedCount > 1 ? 's are' : ' is'} not decided yet: the
+                build redraws each one in your browser where it can and falls back to a snapshot
+                where it cannot. The counts above cover the {rows.length - undecidedCount}{' '}
+                component{rows.length - undecidedCount === 1 ? '' : 's'} already decided.
+              </Text>
+            )}
 
             <Table.ScrollContainer minWidth={480}>
               <Table verticalSpacing="xs" striped highlightOnHover>
@@ -222,33 +285,45 @@ const ExportStaticModal: React.FC<ExportStaticModalProps> = ({
                   <Table.Tr>
                     <Table.Th>Component</Table.Th>
                     <Table.Th>Type</Table.Th>
-                    <Table.Th>Tier</Table.Th>
+                    {/* Fixed: auto layout hands the Note column everything and
+                        ellipsises the tier badge down to "Und…". */}
+                    <Table.Th w={104}>Tier</Table.Th>
                     <Table.Th>Note</Table.Th>
                   </Table.Tr>
                 </Table.Thead>
                 <Table.Tbody>
-                  {preflight.tiers.map((row) => (
-                    <Table.Tr key={row.component_id}>
-                      <Table.Td>{row.title || row.component_id}</Table.Td>
-                      <Table.Td>{row.component_type || '—'}</Table.Td>
-                      <Table.Td>
-                        <Badge
-                          size="xs"
-                          variant="light"
-                          color={TIER_COLOR[row.tier] ?? 'gray'}
-                          style={{ textTransform: 'none' }}
-                          data-static-tier={row.tier}
-                        >
-                          {TIER_LABEL[row.tier] ?? row.tier}
-                        </Badge>
-                      </Table.Td>
-                      <Table.Td>
-                        <Text size="xs" c="dimmed">
-                          {row.detail || row.reason || ''}
-                        </Text>
-                      </Table.Td>
-                    </Table.Tr>
-                  ))}
+                  {rows.map((row) => {
+                    const undecided = isProvisional(row);
+                    return (
+                      <Table.Tr key={row.component_id}>
+                        <Table.Td>{row.title || row.component_id}</Table.Td>
+                        <Table.Td>{row.component_type || '—'}</Table.Td>
+                        {/* nowrap: the Note column otherwise squeezes this one
+                            until Mantine ellipsises the badge label ("Dec…"). */}
+                        <Table.Td style={{ whiteSpace: 'nowrap' }}>
+                          <Badge
+                            size="xs"
+                            variant={undecided ? 'outline' : 'light'}
+                            color={undecided ? UNDECIDED_COLOR : (TIER_COLOR[row.tier] ?? 'gray')}
+                            style={{ textTransform: 'none' }}
+                            data-static-tier={undecided ? 'provisional' : row.tier}
+                          >
+                            {undecided ? UNDECIDED_LABEL : (TIER_LABEL[row.tier] ?? row.tier)}
+                          </Badge>
+                        </Table.Td>
+                        <Table.Td>
+                          {/* Never the producer's `detail` and never the raw
+                              `reason` token: the note says what the reader will
+                              lose, in the words the bundle's own badge uses. */}
+                          <Text size="xs" c="dimmed">
+                            {undecided
+                              ? UNDECIDED_NOTE
+                              : (staticTierExplanation(row.tier, row.reason) ?? '')}
+                          </Text>
+                        </Table.Td>
+                      </Table.Tr>
+                    );
+                  })}
                 </Table.Tbody>
               </Table>
             </Table.ScrollContainer>

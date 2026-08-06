@@ -28,19 +28,17 @@ exactly. ``legendgroup``/``name``/``xaxis``/``yaxis`` are still recorded (axes
 in ``TraceBinding.axes``) but are not load-bearing.
 
 That makes the matcher self-checking: every px behaviour we did *not* model —
-NaN-size row dropping, category ordering, re-sorting, an aggregating trace, a
-group px did not emit — shows up as "no combination reproduces this array" and
-returns ``None``. A frozen figure is correct; a mis-bound one is wrong, so
-**every ambiguity returns ``None``** and the caller freezes with
-``binding_miss``:
+NaN-size row dropping, category ordering, an aggregating trace, a group px did
+not emit — shows up as "no combination reproduces this array" and returns
+``None``. A frozen figure is correct; a mis-bound one is wrong, so **every
+ambiguity returns ``None``** (with a :class:`BindingMiss` naming which one) and
+the caller freezes with ``binding_miss``:
 
 * no anchor field (nothing in the trace we can tie back to a kwarg column);
 * a trace matching zero or 2+ group combinations;
 * a group combination px emitted no trace for (rows would silently vanish);
 * a row-length array in a trace whose source column is undeterminable, or
-  determinable in more than one way (e.g. 2-D ``customdata`` from
-  ``hover_data``/``custom_data``: the runtime writes 1-D arrays, so those
-  figures freeze);
+  determinable in more than one way;
 * a whole-frame visualisation (heatmap, scatter_matrix, parallel_*, imshow,
   scatter_geo, choropleth — ``_WHOLE_FRAME_VISU``);
 * every grouping value null, so px would plot nothing at all;
@@ -48,11 +46,15 @@ returns ``None``. A frozen figure is correct; a mis-bound one is wrong, so
 
 A *single* null grouping value is not one of them — see :func:`_combinations`.
 
+Row ORDER is not one of them either, for the visualisations where it draws
+nothing — see :func:`_order_free_trace` and :func:`_permutation`.
+
 Stripping convention (what ``refill.ts`` expects)
 -------------------------------------------------
 ``refill.ts`` deep-clones ``scaffold`` and **writes** every bound field with
-``setPath`` (creating intermediates as needed), so bound arrays must simply be
-**absent** from the scaffold — we ``del`` them rather than emptying them. An
+``setPath`` (creating intermediates as needed) and rebuilds ``customdata`` by
+zipping its bound columns, so bound arrays must simply be **absent** from the
+scaffold — we ``del`` them rather than emptying them. An
 empty-list placeholder would work too but costs bytes; a *left-in* array would
 be a full-length stale array whenever the runtime failed to overwrite it, so
 absence is also the safer failure mode. Every array in a bound trace whose
@@ -86,11 +88,93 @@ import base64
 import binascii
 import math
 from datetime import date, datetime, time
+from enum import Enum
 from typing import Any
 
 import polars as pl
 
-from depictio.models.models.serverless import BindingTable, TraceBinding, TrendlineBinding
+from depictio.models.models.serverless import (
+    BindingTable,
+    TierReason,
+    TraceBinding,
+    TrendlineBinding,
+)
+
+
+class BindingMiss(str, Enum):
+    """Which bail-out refused a figure.
+
+    The caller turns this into the sentence a user reads in the frozen-badge
+    tooltip, so the members name the *actual* obstacle: "computed over the whole
+    table" and "a trace array the runtime cannot refill" are different facts
+    about a figure, and collapsing both into "no unambiguous trace↔group
+    binding" tells the user something false about one of them.
+    """
+
+    NO_DATA = "no_data"
+    WHOLE_FRAME_VISU = "whole_frame_visu"
+    TRENDLINE_UNSUPPORTED = "trendline_unsupported"
+    NO_SOURCE_COLUMNS = "no_source_columns"
+    ALL_NULL_GROUPING = "all_null_grouping"
+    NO_TRACES = "no_traces"
+    TRENDLINE_UNEXPECTED = "trendline_unexpected"
+    NO_ANCHOR = "no_anchor"
+    TRACE_AMBIGUOUS = "trace_ambiguous"
+    TRACE_COLLISION = "trace_collision"
+    ARRAY_2D = "array_2d"
+    COLUMN_AMBIGUOUS = "column_ambiguous"
+    NO_BOUND_FIELD = "no_bound_field"
+    GROUP_UNPLOTTED = "group_unplotted"
+    TRENDLINE_UNPAIRABLE = "trendline_unpairable"
+    TRACE_UNEXPLAINED = "trace_unexplained"
+
+
+#: One user-facing clause per bail-out, written to read after "this figure is
+#: frozen because …". Kept next to the code that raises them so a new bail-out
+#: cannot ship without its sentence.
+BINDING_MISS_DETAIL: dict[BindingMiss, str] = {
+    BindingMiss.NO_DATA: "no data to bind against (empty table, or unreadable figure params)",
+    BindingMiss.WHOLE_FRAME_VISU: (
+        "this visualisation is computed over the whole table at once, so it has no "
+        "per-row binding to refill"
+    ),
+    BindingMiss.TRENDLINE_UNSUPPORTED: "only an OLS trendline can be refit in the browser",
+    BindingMiss.NO_SOURCE_COLUMNS: "the figure names no column of the bundled table",
+    BindingMiss.ALL_NULL_GROUPING: "every grouping value is null, so the figure plots nothing",
+    BindingMiss.NO_TRACES: "the server produced a figure with no traces",
+    BindingMiss.TRENDLINE_UNEXPECTED: "the figure carries a fitted trace the params did not ask for",
+    BindingMiss.NO_ANCHOR: "no trace field ties back to a source column",
+    BindingMiss.TRACE_AMBIGUOUS: "a trace reproduces no group of the data, or more than one",
+    BindingMiss.TRACE_COLLISION: "two traces claim the same group in the same subplot",
+    BindingMiss.ARRAY_2D: "a trace array has a shape the runtime cannot refill",
+    BindingMiss.COLUMN_AMBIGUOUS: "a trace array does not resolve to exactly one source column",
+    BindingMiss.NO_BOUND_FIELD: "nothing in the trace could be bound to a column",
+    BindingMiss.GROUP_UNPLOTTED: "a group of the data has no trace, so filtering would drop rows",
+    BindingMiss.TRENDLINE_UNPAIRABLE: (
+        "a trendline could not be paired with the trace it was fit against"
+    ),
+    BindingMiss.TRACE_UNEXPLAINED: "the figure holds a trace the binder cannot account for",
+}
+
+
+def miss_detail(miss: BindingMiss | None) -> str:
+    """The user-facing clause for a refusal (a safe fallback for ``None``)."""
+    if miss is None:
+        return "no unambiguous trace↔group binding (RFC §4)"
+    return BINDING_MISS_DETAIL[miss]
+
+
+def miss_tier_reason(miss: BindingMiss | None) -> TierReason:
+    """The manifest tier reason a refusal maps to.
+
+    Only the whole-frame case has its own ``TierReason`` — the runtime badge
+    already has copy for it ("computed over the whole table at once"), and it is
+    not a *matching* failure at all. Everything else is a binding miss.
+    """
+    if miss is BindingMiss.WHOLE_FRAME_VISU:
+        return TierReason.WHOLE_FRAME_VIZ
+    return TierReason.BINDING_MISS
+
 
 # px grouping kwargs, in the order the manifest contract pins for
 # ``BindingTable.group_cols``.
@@ -214,8 +298,113 @@ def _as_list(value: Any) -> list[Any] | None:
     return out
 
 
+def _as_matrix(value: Any) -> list[list[Any]] | None:
+    """A 2-D trace attribute as rows of normalised scalars, or ``None``.
+
+    The one that occurs is ``customdata``: px stacks ``hover_data``/
+    ``custom_data`` into an (n, k) array, which reaches us either as a numpy
+    object array (live figure) or as a tuple/list of row lists (a figure rebuilt
+    from JSON, i.e. every producer-A code-mode figure). A ragged shape, a
+    non-scalar cell or an empty matrix is ``None`` — not column-bound.
+    """
+    if isinstance(value, dict):
+        return None  # a base64 typed array is 1-D by construction (see _typed_array)
+    if value is None or isinstance(value, (str, bytes)):
+        return None
+    if hasattr(value, "tolist"):
+        value = value.tolist()
+    if not isinstance(value, (list, tuple)) or not value:
+        return None
+    rows: list[list[Any]] = []
+    width: int | None = None
+    for row in value:
+        if hasattr(row, "tolist"):
+            row = row.tolist()
+        if not isinstance(row, (list, tuple)) or not row:
+            return None
+        if width is None:
+            width = len(row)
+        elif len(row) != width:
+            return None
+        cells: list[Any] = []
+        for cell in row:
+            if isinstance(cell, (list, tuple, dict)) or hasattr(cell, "to_plotly_json"):
+                return None
+            cells.append(_norm(cell))
+        rows.append(cells)
+    return rows
+
+
 def _equal(left: list[Any], right: list[Any]) -> bool:
     return len(left) == len(right) and all(a == b for a, b in zip(left, right))
+
+
+# Visualisations whose traces are an unordered *collection* of marks: permuting
+# a trace's rows moves nothing on screen (a bar segment sits at its x category,
+# a box/violin/histogram aggregates, a marker sits at its coordinates). Anything
+# that draws a path through its vertices in array order — line, area, ecdf,
+# funnel — is deliberately absent: there, a reordering is a different picture.
+_ORDER_FREE_VISU: frozenset[str] = frozenset({"bar", "box", "violin", "histogram", "strip"})
+
+
+def _order_free_trace(visu_type: str, trace_json: dict[str, Any]) -> bool:
+    """Whether this trace's row order is free to differ from the frame's.
+
+    A scatter qualifies only when its ``mode`` says markers and nothing else:
+    px writes the mode explicitly, and an *absent* mode is not "markers" —
+    plotly.js infers ``lines+markers`` below 20 points, which would draw a path.
+    """
+    kind = str(visu_type).lower()
+    if kind in _ORDER_FREE_VISU:
+        return True
+    if kind != "scatter":
+        return False
+    mode = trace_json.get("mode")
+    return isinstance(mode, str) and "lines" not in mode
+
+
+def _permutation(
+    anchors: list[tuple[str, list[Any]]],
+    hypothesis: dict[str, str],
+    columns: _Columns,
+    rows: list[int],
+) -> list[int] | None:
+    """Positions in ``rows`` the trace's anchor arrays are in, or ``None``.
+
+    Element-wise matching answers "is this trace this group, in this order?".
+    That extra clause is a real false negative: the user's own Polars decides
+    the frame's row order, and ``group_by`` defaults to ``maintain_order=False``
+    while ``sort`` breaks ties arbitrarily, so a figure built on the server's
+    frame and the same figure built on the replayed frame (``prologue_exec``
+    pins both to be deterministic) can hold the same rows in different orders.
+    Nothing downstream depends on that order — ``refill.ts`` overwrites every
+    bound array with its own replay's row order at first paint, the default
+    filter state included — so for the order-free visualisations we match on the
+    joint anchor MULTISET instead, and hand back the permutation that proves it.
+
+    Returning the permutation (rather than a bool) keeps step 2 exactly as
+    strict as before: every other array is still verified element-wise, just
+    against the rows in the trace's order. Duplicate anchor tuples are consumed
+    first-come-first-served; if that assignment makes another field disagree the
+    figure freezes, which is the safe direction.
+    """
+    length = len(anchors[0][1])
+    if any(len(values) != length for _, values in anchors) or length != len(rows):
+        return None
+    projected = [columns.project(hypothesis[path], rows) for path, _ in anchors]
+    buckets: dict[tuple[Any, ...], list[int]] = {}
+    try:
+        for position in range(len(rows)):
+            buckets.setdefault(tuple(values[position] for values in projected), []).append(position)
+        out: list[int] = []
+        for index in range(length):
+            queue = buckets.get(tuple(values[index] for _, values in anchors))
+            if not queue:
+                return None  # a row of the trace this group does not have
+            out.append(queue.pop())
+    except TypeError:
+        return None  # an unhashable cell — fall back to "does not match"
+    return out
 
 
 class _Columns:
@@ -242,6 +431,15 @@ class _Columns:
 # ---------------------------------------------------------------------------
 
 
+def _trace_attr(trace_obj: Any, key: str) -> Any:
+    """One attribute off a graph-objects trace, or ``None`` if it has no such
+    property (the JSON and the object can disagree on exotic keys)."""
+    try:
+        return trace_obj[key]
+    except (KeyError, ValueError, TypeError):
+        return None
+
+
 def _collect_arrays(
     trace_json: dict[str, Any], trace_obj: Any, prefix: str = ""
 ) -> list[tuple[str, list[Any] | None]]:
@@ -257,10 +455,7 @@ def _collect_arrays(
     out: list[tuple[str, list[Any] | None]] = []
     for key, json_value in trace_json.items():
         path = f"{prefix}{key}"
-        try:
-            raw = trace_obj[key]
-        except (KeyError, ValueError, TypeError):
-            raw = None
+        raw = _trace_attr(trace_obj, key)
         is_typed_array = isinstance(json_value, dict) and "bdata" in json_value
         is_ndarray = not isinstance(json_value, (dict, str, bytes)) and hasattr(
             json_value, "tolist"
@@ -282,6 +477,33 @@ def _strip_path(trace_json: dict[str, Any], path: str) -> None:
             return
     if isinstance(cursor, dict):
         cursor.pop(parts[-1], None)
+
+
+def _customdata_columns(
+    matrix: list[list[Any]], candidates: list[str], columns: _Columns, rows: list[int]
+) -> list[str] | None:
+    """The source columns behind a trace's 2-D ``customdata``, in plotly's own
+    column order, or ``None`` when any of them is not uniquely determined.
+
+    px stacks ``hover_data``/``custom_data`` into an (n, k) array and the
+    hovertemplate addresses it positionally (``%{customdata[2]}``), so the order
+    *is* the contract: ``refill.ts`` rebuilds the array by zipping these columns
+    back in this order, which keeps every index in the (untouched) hovertemplate
+    pointing at the same value it did on the server.
+
+    Which column feeds which slot is resolved the same way every other array is
+    — by reproducing the data, not by re-deriving px's kwarg ordering. Two
+    candidates with identical values in a slot are ambiguous, and ambiguity
+    freezes.
+    """
+    out: list[str] = []
+    for slot in range(len(matrix[0])):
+        values = [row[slot] for row in matrix]
+        resolved = [c for c in candidates if _equal(values, columns.project(c, rows))]
+        if len(resolved) != 1:
+            return None
+        out.append(resolved[0])
+    return out
 
 
 def _axes_of(trace_json: dict[str, Any]) -> dict[str, str]:
@@ -367,8 +589,19 @@ def build_binding(
     """Binding table for one figure component, or ``None``.
 
     ``None`` means "not bindable with certainty" — the caller must freeze the
-    component with ``binding_miss``. See the module docstring for the exhaustive
-    list of bail-outs.
+    component with ``binding_miss``. Callers that show the user *why* want
+    :func:`build_binding_with_reason` instead.
+    """
+    return build_binding_with_reason(component_meta, df, fig=fig)[0]
+
+
+def build_binding_with_reason(
+    component_meta: dict[str, Any], df: pl.DataFrame, fig: Any = None
+) -> tuple[BindingTable | None, BindingMiss | None]:
+    """Like :func:`build_binding`, plus the :class:`BindingMiss` it refused on.
+
+    See the module docstring for the exhaustive list of bail-outs; every one of
+    them names itself here, because the caller's freeze reason is read by users.
 
     ``fig`` is an already-built ``plotly.graph_objects.Figure`` to use as the
     authoritative scaffold instead of calling ``create_figure_from_data``. That
@@ -389,25 +622,27 @@ def build_binding(
     visu_type = component_meta.get("visu_type") or "scatter"
     dict_kwargs = component_meta.get("figure_params") or component_meta.get("dict_kwargs") or {}
     if not isinstance(dict_kwargs, dict) or not isinstance(df, pl.DataFrame) or df.height == 0:
-        return None
+        return None, BindingMiss.NO_DATA
     if str(visu_type).lower() in _WHOLE_FRAME_VISU:
-        return None
+        return None, BindingMiss.WHOLE_FRAME_VISU
 
     trendline_kind = dict_kwargs.get("trendline") or ""
     if trendline_kind and str(trendline_kind).lower() != "ols":
-        return None  # the runtime only refits closed-form 1-predictor OLS
+        # the runtime only refits closed-form 1-predictor OLS
+        return None, BindingMiss.TRENDLINE_UNSUPPORTED
 
     referenced = referenced_columns(visu_type, dict_kwargs)
     if not referenced:
-        return None
+        return None, BindingMiss.NO_SOURCE_COLUMNS
     candidates = sorted(c for c in referenced if c in df.columns)
     if not candidates:
-        return None
+        return None, BindingMiss.NO_SOURCE_COLUMNS
 
     group_cols = _group_columns(dict_kwargs, df)
     combos = _combinations(df, group_cols)
     if not combos:
-        return None  # every grouping value is null: px plots nothing to bind
+        # every grouping value is null: px plots nothing to bind
+        return None, BindingMiss.ALL_NULL_GROUPING
 
     # Authoritative figure: the caller's prebuilt one (code mode), else the real
     # service on the unfiltered frame (errata #10).
@@ -431,7 +666,8 @@ def build_binding(
     scaffold = fig.to_plotly_json()
     traces_json: list[dict[str, Any]] = list(scaffold.get("data") or [])
     if not traces_json:
-        return None  # no traces (e.g. create_figure_from_data returned an error figure)
+        # e.g. create_figure_from_data returned an error figure
+        return None, BindingMiss.NO_TRACES
 
     hypothesis: dict[str, str] = {}
     for kwarg, path in _FIELD_PATH_BY_KWARG.items():
@@ -459,42 +695,75 @@ def build_binding(
         )
         if isinstance(hovertemplate, str) and _TRENDLINE_MARK in hovertemplate:
             if not trendline_kind:
-                return None  # a fitted trace we did not ask for — do not guess
+                # a fitted trace we did not ask for — do not guess
+                return None, BindingMiss.TRENDLINE_UNEXPECTED
             trendline_indexes.append(index)
             strip[index] = ["x", "y"]
             continue
 
-        arrays = _collect_arrays(trace_json, fig.data[index])
+        trace_obj = fig.data[index]
+        arrays = _collect_arrays(trace_json, trace_obj)
 
         # 1. Anchor the trace on the fields whose source column the kwargs name.
-        anchors = [(path, values) for path, values in arrays if path in hypothesis]
-        if not anchors or any(values is None for _, values in anchors):
-            return None
+        anchors: list[tuple[str, list[Any]]] = []
+        for path, values in arrays:
+            if path not in hypothesis:
+                continue
+            if values is None:
+                return None, BindingMiss.NO_ANCHOR
+            anchors.append((path, values))
+        if not anchors:
+            return None, BindingMiss.NO_ANCHOR
+        # (combination, the order its rows appear in inside the trace).
+        identity_order = list(range(len(anchors[0][1])))
         matches = [
-            combo_index
+            (combo_index, identity_order)
             for combo_index, (_, rows) in enumerate(combos)
             if all(
-                values is not None and _equal(values, columns.project(hypothesis[path], rows))  # type: ignore[arg-type]
-                for path, values in anchors
+                _equal(values, columns.project(hypothesis[path], rows)) for path, values in anchors
             )
         ]
+        if len(matches) != 1 and _order_free_trace(visu_type, trace_json):
+            # Same rows, different order (see _permutation) — still this group.
+            matches = []
+            for combo_index, (_, rows) in enumerate(combos):
+                order = _permutation(anchors, hypothesis, columns, rows)
+                if order is not None:
+                    matches.append((combo_index, order))
         if len(matches) != 1:
-            return None  # unmatched or ambiguous — freeze rather than guess
-        combo_index = matches[0]
-        group_values, rows = combos[combo_index]
+            # unmatched or ambiguous — freeze rather than guess
+            return None, BindingMiss.TRACE_AMBIGUOUS
+        combo_index, order = matches[0]
+        group_values, combo_rows = combos[combo_index]
+        rows = [combo_rows[position] for position in order]
         key = (combo_index, axes.get("xaxis", ""), axes.get("yaxis", ""))
         if key in claimed:
-            return None  # two traces claim the same group in the same subplot
+            return None, BindingMiss.TRACE_COLLISION
         claimed.add(key)
         matched_combos.add(combo_index)
 
         # 2. Every row-length array must resolve to exactly one source column.
         fields: dict[str, str] = {}
+        customdata: list[str] = []
         for path, values in arrays:
             if values is None:
-                # Unflattenable (2-D customdata, sub-objects). Only fatal when
-                # it is row-bound, which we cannot rule out — so bail.
-                return None
+                # Not a flat array. ``customdata`` legitimately is not — px
+                # stacks hover_data/custom_data into (n, k) — and binds column
+                # by column below; anything else (sub-objects, a 2-D array we
+                # have no contract for) stays unrefillable, and we cannot rule
+                # out that it is row-bound, so bail.
+                matrix = (
+                    _as_matrix(_trace_attr(trace_obj, "customdata"))
+                    if path == "customdata"
+                    else None
+                )
+                if matrix is None or len(matrix) != len(rows):
+                    return None, BindingMiss.ARRAY_2D
+                resolved_customdata = _customdata_columns(matrix, candidates, columns, rows)
+                if resolved_customdata is None:
+                    return None, BindingMiss.COLUMN_AMBIGUOUS
+                customdata = resolved_customdata
+                continue
             if len(values) != len(rows):
                 continue  # not row-bound (e.g. a 2-colour list); leave in scaffold
             guess = hypothesis.get(path)
@@ -503,20 +772,26 @@ def build_binding(
                 continue
             resolved = [c for c in candidates if _equal(values, columns.project(c, rows))]
             if len(resolved) != 1:
-                return None
+                return None, BindingMiss.COLUMN_AMBIGUOUS
             fields[path] = resolved[0]
         if not fields:
-            return None
+            return None, BindingMiss.NO_BOUND_FIELD
 
         trace_bindings.append(
-            TraceBinding(i=index, group=dict(group_values), fields=fields, axes=axes)
+            TraceBinding(
+                i=index,
+                group=dict(group_values),
+                fields=fields,
+                customdata=customdata,
+                axes=axes,
+            )
         )
-        strip[index] = list(fields)
+        strip[index] = [*fields, *(["customdata"] if customdata else [])]
 
     # Every group px could have plotted must be bound, or filtering would drop
     # rows the server would have shown.
     if len(matched_combos) != len(combos):
-        return None
+        return None, BindingMiss.GROUP_UNPLOTTED
 
     # 3. Trendlines: pair each with its unique raw trace (same name/legendgroup
     #    and subplot), which must carry x and y bindings for the runtime refit.
@@ -530,20 +805,24 @@ def build_binding(
             and "y" in binding.fields
         ]
         if len(partners) != 1:
-            return None
+            return None, BindingMiss.TRENDLINE_UNPAIRABLE
         trendlines.append(TrendlineBinding(i=index, on=partners[0]))
     if len(by_index) + len(trendlines) != len(traces_json):
-        return None  # an unexplained trace is a mis-render waiting to happen
+        # an unexplained trace is a mis-render waiting to happen
+        return None, BindingMiss.TRACE_UNEXPLAINED
 
     # 4. Strip the data arrays; layout is untouched.
     for index, paths in strip.items():
         for path in paths:
             _strip_path(traces_json[index], path)
 
-    return BindingTable(
-        scaffold=scaffold,
-        group_cols=group_cols,
-        traces=trace_bindings,
-        trendlines=trendlines,
-        sampled=sampled,
+    return (
+        BindingTable(
+            scaffold=scaffold,
+            group_cols=group_cols,
+            traces=trace_bindings,
+            trendlines=trendlines,
+            sampled=sampled,
+        ),
+        None,
     )

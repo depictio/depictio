@@ -31,6 +31,10 @@ RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
 # ---- Source + build ----
 COPY packages ./packages/
 COPY depictio/viewer ./depictio/viewer/
+# Dashboard tab icons are authored in the project corpus, not in source, and the
+# icon-subset generator scans it. Without this the built viewer ships blank tab
+# icons: the CSP forbids resolving them from the Iconify API at runtime.
+COPY depictio/projects ./depictio/projects/
 
 # Memory caps for typical 6 GB container limits: sourcemaps off (peak-mem
 # win, not shipped to users anyway), heap capped at 4 GB to leave cgroup

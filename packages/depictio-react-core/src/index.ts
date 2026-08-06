@@ -149,6 +149,8 @@ export type {
 export {
   BADGE_LABEL as STATIC_TIER_BADGE_LABEL,
   BADGE_COLOR as STATIC_TIER_BADGE_COLOR,
+  // Curated per-verdict sentence — the modal promises what the badge will say.
+  staticTierExplanation,
 } from './components/chrome/StaticBadgeContext';
 
 // API surface — fetchers, payload types, filter types

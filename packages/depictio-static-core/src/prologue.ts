@@ -38,11 +38,15 @@
  *     within a block; `index` columns repeated per block; output column order
  *     is [index..., variable, value]; `variable` holds the source column NAME.
  *
- *   sort — pl.DataFrame.sort(by, descending=desc) DEFAULTS: nulls FIRST in
- *     BOTH directions (nulls_last=False; null placement is not reversed by
- *     descending — verified: sort desc of [2,None,1] is [None,2,1]); NaN is
- *     the greatest float and DOES participate in direction reversal; stable
- *     (input order preserved on full ties).
+ *   sort — pl.DataFrame.sort(by, descending=desc, maintain_order=True): nulls
+ *     FIRST in BOTH directions (nulls_last=False is the Polars default; null
+ *     placement is not reversed by descending — verified: sort desc of
+ *     [2,None,1] is [None,2,1]); NaN is the greatest float and DOES participate
+ *     in direction reversal; STABLE — input order preserved on full ties.
+ *     Stability is a pinned choice, not a Polars default: `maintain_order` is
+ *     False there, so the build side sets it explicitly (prologue_exec.py) to
+ *     answer the same way twice, and this interpreter tie-breaks on the input
+ *     index to answer the same way as the build side.
  *
  *   rename — every map key must exist (polars raises ColumnNotFoundError);
  *     renaming keeps each column's position; a resulting duplicate name is an

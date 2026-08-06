@@ -4,6 +4,7 @@ import { Icon } from '@iconify/react';
 
 import type { DashboardData, DashboardSummary } from 'depictio-react-core';
 import { useIsStaticBundle } from 'depictio-react-core';
+import { isMultiqcIcon, multiqcLogoSrc } from './multiqcLogo';
 import PoweredBy from './PoweredBy';
 
 /** True for path-like icon values (PNG/SVG file URLs) — these came from the
@@ -13,18 +14,11 @@ function isImagePath(s: string | null | undefined): boolean {
   return /^(\/|https?:\/\/|data:)/.test(s) || /\.(png|svg|jpe?g|webp)$/i.test(s);
 }
 
-function isMultiqcIcon(path: string | null | undefined): boolean {
-  if (!path) return false;
-  return /\/assets\/images\/logos\/multiqc(\.png|_icon_(dark|white|color)\.svg)$/i.test(path);
-}
-
-/** Map any MultiQC logo path (legacy PNG or new SVGs) to the SPA-served
- *  themed SVG. Mirrors the same helper in Sidebar.tsx. */
-function rewriteMultiqcIcon(path: string, theme: 'light' | 'dark'): string {
+/** Map any MultiQC logo path (legacy PNG or new SVGs) to the themed SVG.
+ *  Mirrors the same helper in Sidebar.tsx. */
+function rewriteMultiqcIcon(path: string, theme: 'light' | 'dark', inline: boolean): string {
   if (!isMultiqcIcon(path)) return path;
-  return theme === 'dark'
-    ? '/dashboard/logos/multiqc_icon_white.svg'
-    : '/dashboard/logos/multiqc_icon_dark.svg';
+  return multiqcLogoSrc(theme === 'dark' ? 'white' : 'dark', inline);
 }
 
 /** Dash precedence: `tab.tab_icon || tab.icon`, `tab.tab_icon_color || tab.icon_color`. */
@@ -123,7 +117,7 @@ const Header: React.FC<HeaderProps> = ({
   // Image path → swap MultiQC PNG/SVG variants to the SPA-served themed SVG.
   // Iconify names (mdi:..., bx:...) pass through unchanged.
   const tabIconImageSrc =
-    tabIconIsImage && tabIconRaw ? rewriteMultiqcIcon(tabIconRaw, theme) : null;
+    tabIconIsImage && tabIconRaw ? rewriteMultiqcIcon(tabIconRaw, theme, isStaticBundle) : null;
   const resolvedColor = resolveTabColor(activeTab);
   const tabIconColor = resolvedColor || 'gray';
   // Title text color:

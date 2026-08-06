@@ -241,6 +241,85 @@ describe('refillFigure — group value serialization', () => {
   });
 });
 
+describe('refillFigure — 2-D customdata', () => {
+  // px stacks hover_data/custom_data into one (n, k) array whose columns the
+  // hovertemplate addresses POSITIONALLY, so the binding's column order is the
+  // contract the refilled array has to reproduce row by row.
+  function customdataBinding(): BindingTable {
+    return {
+      scaffold: {
+        data: [
+          {
+            name: 'A',
+            hovertemplate: 'x=%{x}<br>lbl=%{customdata[0]}<br>sz=%{customdata[1]}<extra></extra>',
+          },
+        ],
+        layout: {},
+      },
+      group_cols: ['grp'],
+      traces: [
+        {
+          i: 0,
+          group: { grp: 'A' },
+          fields: { x: 'xcol', y: 'ycol' },
+          customdata: ['lbl', 'szcol'],
+          axes: {},
+        },
+      ],
+      trendlines: [],
+      sampled: false,
+    };
+  }
+
+  const LBL = ['a0', 'a1', 'b2', 'a3', 'b4', 'b5', 'a6', 'b7'];
+  const columns = (names: string[]) => {
+    const table: Record<string, ArrayLike<unknown>> = { ...FIXTURE_COLUMNS, lbl: LBL };
+    return Promise.resolve(
+      Object.fromEntries(
+        names.map((n) => {
+          const col = table[n];
+          if (col === undefined) throw new Error(`fixture: unknown column "${n}"`);
+          return [n, col];
+        }),
+      ),
+    );
+  };
+
+  it('zips the bound columns back into rows, in binding order', async () => {
+    const { figure } = await refillFigure({ binding: customdataBinding(), columns, mask: null });
+    const trace = figure.data[0] as Trace;
+    // Group A is rows 0,1,3,6 — customdata[0] is lbl, customdata[1] is szcol,
+    // exactly the indices the untouched hovertemplate reads.
+    expect(trace.customdata).toEqual([
+      ['a0', 10],
+      ['a1', 20],
+      ['a3', 40],
+      ['a6', 70],
+    ]);
+    expect(trace.x).toEqual([1, 2, 4, 7]);
+  });
+
+  it('stays row-aligned with x/y under a mask', async () => {
+    const mask = new Uint8Array([1, 0, 0, 1, 0, 0, 0, 1]);
+    const { figure } = await refillFigure({ binding: customdataBinding(), columns, mask });
+    const trace = figure.data[0] as Trace;
+    expect(trace.x).toEqual([1, 4]);
+    expect(trace.customdata).toEqual([
+      ['a0', 10],
+      ['a3', 40],
+    ]);
+  });
+
+  it('is left alone when the binding has no customdata (older bundles)', async () => {
+    const { figure } = await refillFigure({
+      binding: fixtureBinding(),
+      columns: fixtureColumns,
+      mask: null,
+    });
+    expect((figure.data[0] as Trace).customdata).toBeUndefined();
+  });
+});
+
 // ---------------------------------------------------------------------------
 // contract integration: the demo penguins bundle (self-skips until the
 // producer lands its bindings entry — parallel work stream).

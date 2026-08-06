@@ -16,6 +16,7 @@ import { Icon } from '@iconify/react';
 
 import type { DashboardSummary } from 'depictio-react-core';
 import { useIsStaticBundle } from 'depictio-react-core';
+import { isMultiqcIcon, multiqcLogoSrc } from './multiqcLogo';
 import ThemeToggle from './ThemeToggle';
 import ServerStatusBadge from './ServerStatusBadge';
 import ProfileBadge from './ProfileBadge';
@@ -31,17 +32,9 @@ function isImagePath(s: string | null | undefined): boolean {
   return /^(\/|https?:\/\/|data:)/.test(s) || /\.(png|svg|jpe?g|webp)$/i.test(s);
 }
 
-/** True when the tab metadata points at a MultiQC logo (legacy PNG or any of
- *  the new SVG variants). */
-function isMultiqcIcon(path: string | null | undefined): boolean {
-  if (!path) return false;
-  return /\/assets\/images\/logos\/multiqc(\.png|_icon_(dark|white|color)\.svg)$/i.test(path);
-}
-
 /** Many legacy YAML/seed entries point at the old MultiQC PNG
  * (`/assets/images/logos/multiqc.png`). Swap those to the new official icon
- * (https://github.com/MultiQC/logo) served via the SPA's `/dashboard/logos/`
- * mount.
+ * (https://github.com/MultiQC/logo).
  *
  *   - Active tab → always white SVG (sits on a filled gray background, white
  *     gives the right contrast in both light & dark modes).
@@ -51,12 +44,11 @@ function rewriteLegacyMultiqcIcon(
   path: string,
   theme: 'light' | 'dark',
   isActive = false,
+  inline = false,
 ): string {
   if (!isMultiqcIcon(path)) return path;
-  if (isActive) return '/dashboard/logos/multiqc_icon_white.svg';
-  return theme === 'dark'
-    ? '/dashboard/logos/multiqc_icon_white.svg'
-    : '/dashboard/logos/multiqc_icon_dark.svg';
+  if (isActive) return multiqcLogoSrc('white', inline);
+  return multiqcLogoSrc(theme === 'dark' ? 'white' : 'dark', inline);
 }
 
 /** Resolve a YAML asset path (e.g. `/assets/images/logos/multiqc.png`) to a
@@ -263,7 +255,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                         ? d.icon
                         : null;
                   const yamlImage = yamlImageRaw
-                    ? rewriteLegacyMultiqcIcon(yamlImageRaw, theme, isActive)
+                    ? rewriteLegacyMultiqcIcon(yamlImageRaw, theme, isActive, isStaticBundle)
                     : null;
                   const iconName = resolveTabIcon(d, isParent);
                   const leftSection = yamlImage ? (

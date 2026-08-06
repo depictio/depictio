@@ -169,6 +169,14 @@ class TraceBinding(BaseModel):
     fields: dict[str, str] = Field(
         description="Trace field path (e.g. 'x', 'y', 'marker.size') -> source column"
     )
+    customdata: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Source columns feeding the 2-D customdata array, in plotly's column "
+            "order — customdata[k] is this list's k-th column, which is what the "
+            "hovertemplate's %{customdata[k]} indices address"
+        ),
+    )
     axes: dict[str, str] = Field(
         default_factory=dict,
         description="Facet-cell disambiguation: 'xaxis'/'yaxis' -> plotly axis id",

@@ -85,6 +85,13 @@ export interface TraceBinding {
   group: Record<string, unknown>;
   /** Trace field path (e.g. 'x', 'y', 'marker.size') -> source column. */
   fields: Record<string, string>;
+  /**
+   * Source columns feeding the 2-D `customdata` array, in plotly's column
+   * order: `customdata[k]` is this list's k-th column, which is what the
+   * hovertemplate's `%{customdata[k]}` indices address. Absent/empty when the
+   * trace has no customdata (and absent in pre-phase-8 bundles).
+   */
+  customdata?: string[];
   /** Facet-cell disambiguation: 'xaxis'/'yaxis' -> plotly axis id. */
   axes: Record<string, string>;
 }

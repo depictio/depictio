@@ -30,9 +30,12 @@ Pinned semantics exercised by the cases below
   ``median`` interpolates linearly; ``first``/``last`` are positional.
 * ``unpivot``  — one block per ``on`` column in ``on`` order, original row order
   inside each block.
-* ``sort``     — ``DataFrame.sort(by, descending=desc)`` with Polars' default
-  null placement (nulls first ascending), and Polars' default (unstable) tie
-  handling; every sort case here therefore uses a tie-free key set.
+* ``sort``     — ``DataFrame.sort(by, descending=desc, maintain_order=True)``:
+  Polars' default null placement (nulls first ascending) and STABLE ties.
+  ``maintain_order`` is not the Polars default; the IR pins it because the same
+  program is replayed on both sides of a bundle (and twice on the build side, a
+  rebuild being one), and an arbitrary tie order there is a rebuild that answers
+  differently every time.
 
 Serialisation conventions (both files)
 --------------------------------------
@@ -266,7 +269,7 @@ def apply_ops(df: pl.DataFrame, ops: list[dict[str, Any]]) -> pl.DataFrame:
                 [agg_expr(spec) for spec in op["agg"]]
             )
         elif kind == "sort":
-            df = df.sort(op["by"], descending=op["desc"])
+            df = df.sort(op["by"], descending=op["desc"], maintain_order=True)
         elif kind == "rename":
             df = df.rename(op["map"])
         else:
@@ -499,6 +502,13 @@ def cases() -> list[tuple[str, list[Any]]]:
         (
             "sort_datetime_desc",
             [SortOp(by=["event_time"], desc=[True])],
+        ),
+        (
+            # Ties on purpose: `habitat` has repeated values (and a null group),
+            # so this case answers only under a STABLE sort — input order inside
+            # each habitat. It is the pin for maintain_order=True.
+            "sort_ties_keep_input_order",
+            [SortOp(by=["habitat"], desc=[False])],
         ),
         # -- rename ---------------------------------------------------------
         (

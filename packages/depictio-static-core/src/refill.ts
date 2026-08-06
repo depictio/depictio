@@ -12,6 +12,12 @@
  * touched; empty traces flip `visible:false` but are never dropped, so trace
  * indices (and trendline `on` references) stay stable.
  *
+ * Every bound array is REPLACED wholesale, in this side's own row order — so
+ * the order the build-time figure happened to hold is discarded at first paint,
+ * the default (empty) filter state included. That is what lets the builder
+ * match a trace to its group by row multiset where row order draws nothing
+ * (binding.py's `_order_free_trace`).
+ *
  * Group matching convention: `group` values were emitted by the Python
  * builder and arrive through manifest JSON; column values come from the
  * decoded Parquet. Both sides are compared through `serializeOption` — the
@@ -77,6 +83,7 @@ export async function refillFigure(input: RefillInput): Promise<RefillResult> {
   for (const t of binding.traces) {
     for (const col of Object.values(t.fields)) needed.add(col);
     for (const col of Object.keys(t.group)) needed.add(col);
+    for (const col of t.customdata ?? []) needed.add(col);
   }
   const cols = needed.size > 0 ? await input.columns([...needed]) : {};
 
@@ -100,6 +107,19 @@ export async function refillFigure(input: RefillInput): Promise<RefillResult> {
     displayed += sel.length;
     for (const [path, col] of Object.entries(t.fields)) {
       setPath(trace, path, gather(cols[col], sel, col));
+    }
+    if (t.customdata !== undefined && t.customdata.length > 0) {
+      // px stacks hover_data/custom_data into one (n, k) array and the
+      // hovertemplate addresses it POSITIONALLY (`%{customdata[2]}`), so the
+      // binding's column order is the contract: zip the gathered columns back
+      // in that order and every index in the (untouched) hovertemplate keeps
+      // pointing at the value the server put there.
+      const gathered = t.customdata.map((col) => gather(cols[col], sel, col));
+      const rowsOut: unknown[][] = new Array(sel.length);
+      for (let k = 0; k < sel.length; k++) {
+        rowsOut[k] = gathered.map((values) => values[k]);
+      }
+      trace.customdata = rowsOut;
     }
     if (sel.length === 0) {
       // Empty group under this filter: the server would render an empty

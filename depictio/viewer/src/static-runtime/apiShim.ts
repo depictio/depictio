@@ -61,6 +61,7 @@ import { bundle, bundledTabs, frozenPayload, interactiveIndexFor, rawBundle } fr
 import {
   columnRangeLive,
   computeCardsLive,
+  coverageTrackLive,
   dataRefFor,
   fetchAdvancedVizDataLive,
   renderFigureLive,
@@ -69,8 +70,10 @@ import {
   specsLive,
   uniqueValuesLive,
   userColumns,
+  type CoverageTrackLiveRequest,
 } from './liveData';
 import { themedFrozenFigure } from './mantinePlotlyTemplate';
+import { renderMultiQCGeneralStatsStatic, renderMultiQCStatic } from './multiqcShim';
 
 // ---- dashboard shell -------------------------------------------------------
 
@@ -368,12 +371,28 @@ export async function fetchJBrowseSession(_dashboardId: string, componentId: str
   return frozenPayload(componentId, 'jbrowse') as never;
 }
 
-export async function renderMultiQC(_dashboardId: string, componentId: string) {
-  return frozenPayload(componentId, 'multiqc') as never;
+/** Live path: `render_multiqc` never recomputed anything at request time — it
+ *  fetched a figure keyed on inputs frozen into `stored_metadata` (s3 locations,
+ *  module, plot, dataset, theme), then ran the pure `patch_multiqc_figures` over
+ *  it (patching.py:59). Both halves are in the bundle, so the shipped payload is
+ *  re-sliced under the current filters instead of being served verbatim.
+ *  Degrades to the unpatched figure on any resolution failure — never an error
+ *  tile. */
+export async function renderMultiQC(
+  _dashboardId: string,
+  componentId: string,
+  filters: InteractiveFilter[] = [],
+  theme: 'light' | 'dark' = 'light',
+) {
+  return (await renderMultiQCStatic(componentId, filters, theme)) as never;
 }
 
-export async function renderMultiQCGeneralStats(_dashboardId: string, componentId: string) {
-  return frozenPayload(componentId, 'multiqc-general-stats') as never;
+export async function renderMultiQCGeneralStats(
+  _dashboardId: string,
+  componentId: string,
+  filters: InteractiveFilter[] = [],
+) {
+  return (await renderMultiQCGeneralStatsStatic(componentId, filters)) as never;
 }
 
 // ---- cards (App calls bulkComputeCards once, data flows down as props) -----
@@ -536,8 +555,10 @@ export async function fetchPhylogenyNewick(dcId: string): Promise<string> {
   return p.newick ?? '';
 }
 
-// Celery dispatch/poll kinds: results are frozen, so dispatch returns a
-// finished job immediately and poll echoes it (catalog-preview precedent).
+// Celery dispatch/poll kinds: the compute has no in-browser equivalent, so the
+// result is frozen at export time — dispatch returns a finished job
+// immediately and poll echoes it (catalog-preview precedent). `coverage_track`
+// left this family in phase 8; see its override below.
 function finishedJob(dcId: string) {
   const p = frozenPayload<{ result?: unknown }>(advancedVizIndexFor(dcId), 'compute');
   return { job_id: dcId, status: 'done' as const, result: p.result, from_cache: true };
@@ -560,7 +581,28 @@ export async function dispatchUpset(p: { dc_id: string }) {
 export async function pollUpset(jobId: string) {
   return finishedJob(jobId) as never;
 }
-export async function dispatchCoverageTrack(p: { dc_id: string }) {
+/** Live path (phase 8): `coverage_track` dispatches to Celery on a server, but
+ *  its task is a projection + two whitelist masks + a sort + a
+ *  per-(chromosome, sample) rolling mean, all of which commute with the
+ *  dashboard filters — so the browser recomputes it from the bundled Parquet
+ *  and the tile responds to filters instead of freezing. Gated on DATA_REF
+ *  presence like every other live path; a bundle built before phase 8 still
+ *  carries the frozen `compute` payload and takes the echo below.
+ *
+ *  The compute resolves inside the dispatch, so the renderer's `status ===
+ *  'done'` branch accepts it and `pollCoverageTrack` is never reached for a
+ *  live component. Not wrapped in a try/catch, for the same reason
+ *  `fetchAdvancedVizData` is not: there is no frozen payload behind it, so
+ *  swallowing the throw would trade a readable message for an empty chart. */
+export async function dispatchCoverageTrack(p: CoverageTrackLiveRequest) {
+  if (dataRefFor(p.dc_id)) {
+    return {
+      job_id: p.dc_id,
+      status: 'done' as const,
+      result: await coverageTrackLive(p),
+      from_cache: false,
+    } as never;
+  }
   return finishedJob(p.dc_id) as never;
 }
 export async function pollCoverageTrack(jobId: string) {

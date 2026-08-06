@@ -28,8 +28,7 @@
         "metatype": null,
         "description": "Per-sample alignment, coverage, and variant calling summary metrics",
         "data_collection_tag": "summary_metrics",
-        "dc_specific_properties": null,
-        "_id": null
+        "dc_specific_properties": null
       },
       "cols_json": {},
       "parent_index": null,
@@ -601,8 +600,7 @@
         "metatype": null,
         "description": "Per-sample alignment, coverage, and variant calling summary metrics",
         "data_collection_tag": "summary_metrics",
-        "dc_specific_properties": null,
-        "_id": null
+        "dc_specific_properties": null
       },
       "cols_json": {},
       "parent_index": null,
@@ -695,7 +693,7 @@
       "breakdown_col": null,
       "top_n_count": 3,
       "coverage_max": 11.0,
-      "icon_name": "mdi:biology",
+      "icon_name": "mdi:dna",
       "icon_color": "#4CAF50",
       "title_color": "#4CAF50",
       "title_font_size": "xl",
@@ -1020,7 +1018,7 @@
         "flexible_metadata": null,
         "hash": null,
         "email": "admin@example.com",
-        "is_admin": false,
+        "is_admin": true,
         "is_anonymous": false,
         "is_temporary": false,
         "expiration_time": null
@@ -1030,7 +1028,7 @@
     "viewers": []
   },
   "is_public": false,
-  "last_saved_ts": "2026-05-20 21:27:37",
+  "last_saved_ts": "2026-08-05 21:07:55",
   "project_id": {
     "$oid": "746b0f3c1e4a2d7f8e5b9ca2"
   },

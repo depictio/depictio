@@ -17,7 +17,7 @@ import polars as pl
 import pytest
 
 from depictio.models.models.serverless import BindingTable
-from depictio.serverless.binding import build_binding
+from depictio.serverless.binding import BindingMiss, build_binding, build_binding_with_reason
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 PENGUINS_DATA = REPO_ROOT / "depictio" / "projects" / "init" / "penguins" / "data"
@@ -368,17 +368,6 @@ def test_all_grouping_values_null_returns_none() -> None:
     assert build_binding(_figure(x="x", y="y", color="grp"), frame) is None
 
 
-def test_two_dimensional_customdata_returns_none(penguins: pl.DataFrame) -> None:
-    # hover_data/custom_data produce an (n, k) customdata array; the runtime
-    # only writes 1-D arrays, so a bound figure would break its hovertemplate.
-    assert (
-        build_binding(
-            _figure(x="flipper_length_mm", y="body_mass_g", hover_data=["island"]), penguins
-        )
-        is None
-    )
-
-
 def test_whole_frame_and_unsupported_trendline_return_none(penguins: pl.DataFrame) -> None:
     assert build_binding(_figure("scatter_matrix", dimensions=["body_mass_g"]), penguins) is None
     assert (
@@ -390,6 +379,205 @@ def test_whole_frame_and_unsupported_trendline_return_none(penguins: pl.DataFram
 def test_empty_frame_returns_none() -> None:
     empty = pl.DataFrame({"x": [], "y": []}, schema={"x": pl.Float64, "y": pl.Float64})
     assert build_binding(_figure(x="x", y="y"), empty) is None
+
+
+# ---------------------------------------------------------------------------
+# 2-D customdata (hover_data / custom_data)
+# ---------------------------------------------------------------------------
+
+
+def test_two_dimensional_customdata_binds_column_by_column(penguins: pl.DataFrame) -> None:
+    """``hover_data`` stacks its columns into one (n, k) array that the
+    hovertemplate addresses positionally, so the binding records the columns in
+    plotly's own order and refill.ts zips them back the same way."""
+    component = _figure(
+        x="flipper_length_mm",
+        y="body_mass_g",
+        hover_data=["island", "bill_length_mm"],
+    )
+    table = build_binding(component, penguins)
+    assert table is not None
+    trace = table.traces[0]
+    assert trace.fields == {"x": "flipper_length_mm", "y": "body_mass_g"}
+    assert trace.customdata == ["island", "bill_length_mm"]
+    # The indices baked into the (untouched) hovertemplate must address exactly
+    # those columns, in that order — that is what the order is FOR.
+    hovertemplate = table.scaffold["data"][0]["hovertemplate"]
+    for index, column in enumerate(trace.customdata):
+        assert f"{column}=%{{customdata[{index}]}}" in hovertemplate
+    # And the array itself is stripped, like every other bound array.
+    assert "customdata" not in table.scaffold["data"][0]
+
+
+def test_customdata_binds_per_group_with_colour(penguins: pl.DataFrame) -> None:
+    component = _figure(
+        x="flipper_length_mm", y="body_mass_g", color="species", hover_data=["island"]
+    )
+    table = build_binding(component, penguins)
+    assert table is not None
+    assert len(table.traces) == 3
+    assert all(trace.customdata == ["island"] for trace in table.traces)
+    assert all("customdata" not in trace for trace in table.scaffold["data"])
+
+
+def test_ambiguous_customdata_column_returns_none(penguins: pl.DataFrame) -> None:
+    """A customdata slot that two candidate columns reproduce is not resolvable,
+    and an unresolvable slot would send the hovertemplate at the wrong column."""
+    frame = penguins.with_columns(pl.col("body_mass_g").alias("body_mass_copy"))
+    component = _figure(
+        x="flipper_length_mm",
+        y="bill_length_mm",
+        hover_data=["body_mass_g", "body_mass_copy"],
+    )
+    table, miss = build_binding_with_reason(component, frame)
+    assert table is None
+    assert miss is BindingMiss.COLUMN_AMBIGUOUS
+
+
+# ---------------------------------------------------------------------------
+# Row order — free where it draws nothing, load-bearing where it draws a path
+# ---------------------------------------------------------------------------
+#
+# The frame the figure was built on and the frame the binding is built against
+# can hold the same rows in a different ORDER: user code reaches px through
+# ``group_by`` (maintain_order=False by default) and ``sort`` (arbitrary ties),
+# while the serverless replay pins both to be deterministic. Nothing downstream
+# depends on that order — refill.ts replaces every bound array with its own
+# replay's order at first paint — so for the visualisations where the order
+# draws nothing, a trace still binds to the group whose rows it holds.
+
+
+def _reordered_figure(component: dict[str, Any], frame: pl.DataFrame, order: list[int]) -> Any:
+    """The real server figure, built on ``frame`` permuted by ``order``."""
+    from depictio.api.v1.services.figure.figure_builder import create_figure_from_data
+
+    return create_figure_from_data(
+        frame[order], component["visu_type"], component["dict_kwargs"], theme="light"
+    )
+
+
+@pytest.fixture(scope="module")
+def tied_counts() -> pl.DataFrame:
+    """A per-group count table with ties — the shape whose row order the user's
+    own ``group_by(...).agg(...).sort(...)`` leaves arbitrary."""
+    return pl.DataFrame(
+        {
+            "gene": ["A", "B", "C", "D", "A", "B", "C"],
+            "kind": ["missense", "missense", "missense", "missense", "other", "other", "other"],
+            "count": [7, 2, 2, 2, 5, 1, 1],
+        }
+    )
+
+
+def test_bar_binds_when_only_the_row_order_differs(tied_counts: pl.DataFrame) -> None:
+    component = _figure("bar", x="gene", y="count", color="kind", barmode="stack")
+    shuffled = [3, 1, 2, 0, 6, 5, 4]  # ties reshuffled inside both groups
+    figure = _reordered_figure(component, tied_counts, shuffled)
+
+    table = build_binding(component, tied_counts, fig=figure)
+    assert table is not None
+    assert [t.group for t in table.traces] == [{"kind": "missense"}, {"kind": "other"}]
+    for trace in table.traces:
+        assert trace.fields == {"x": "gene", "y": "count"}
+    # Nothing row-bound is left behind for the runtime to inherit stale.
+    assert all(_arrays_in(trace) == [] for trace in table.scaffold["data"])
+
+
+def test_line_still_freezes_when_the_row_order_differs(tied_counts: pl.DataFrame) -> None:
+    """The relaxation is gated: a line draws a path THROUGH its vertices in
+    array order, so a reordering is a different picture and must not bind."""
+    component = _figure("line", x="gene", y="count", color="kind")
+    figure = _reordered_figure(component, tied_counts, [3, 1, 2, 0, 6, 5, 4])
+
+    table, miss = build_binding_with_reason(component, tied_counts, fig=figure)
+    assert table is None
+    assert miss is BindingMiss.TRACE_AMBIGUOUS
+    # Same figure, same frame order: the strict path binds it.
+    assert (
+        build_binding(
+            component, tied_counts, fig=_reordered_figure(component, tied_counts, list(range(7)))
+        )
+        is not None
+    )
+
+
+def test_order_free_match_must_still_be_unique() -> None:
+    """Relaxing the ORDER does not relax the uniqueness rule: two groups holding
+    the same rows are still not attributable, in any order."""
+    frame = pl.DataFrame(
+        {
+            "grp": ["a", "a", "b", "b"],
+            "x": ["p", "q", "p", "q"],
+            "y": [1.0, 2.0, 1.0, 2.0],
+        }
+    )
+    component = _figure("bar", x="x", y="y", color="grp")
+    table, miss = build_binding_with_reason(component, frame)
+    assert table is None
+    assert miss is BindingMiss.TRACE_AMBIGUOUS
+
+
+def test_order_free_match_verifies_the_other_fields_in_trace_order(
+    tied_counts: pl.DataFrame,
+) -> None:
+    """The permutation the anchors prove is what every other array is then
+    checked against — so ``text`` binds to its column, not to a lookalike."""
+    frame = tied_counts.with_columns(
+        pl.concat_str([pl.col("gene"), pl.col("kind")], separator="/").alias("label")
+    )
+    component = _figure("bar", x="gene", y="count", color="kind", text="label")
+    figure = _reordered_figure(component, frame, [3, 1, 2, 0, 6, 5, 4])
+
+    table = build_binding(component, frame, fig=figure)
+    assert table is not None
+    assert all(trace.fields["text"] == "label" for trace in table.traces)
+
+
+# ---------------------------------------------------------------------------
+# Refusal causes — the caller shows them to users, so they must be specific
+# ---------------------------------------------------------------------------
+
+
+def test_each_bail_out_names_itself(penguins: pl.DataFrame) -> None:
+    from depictio.serverless.binding import BINDING_MISS_DETAIL, miss_detail
+
+    cases = [
+        (_figure("scatter_matrix", dimensions=["body_mass_g"]), BindingMiss.WHOLE_FRAME_VISU),
+        (
+            _figure(x="flipper_length_mm", y="body_mass_g", trendline="lowess"),
+            BindingMiss.TRENDLINE_UNSUPPORTED,
+        ),
+    ]
+    for component, expected in cases:
+        table, miss = build_binding_with_reason(component, penguins)
+        assert table is None and miss is expected
+
+    empty = pl.DataFrame({"x": [], "y": []}, schema={"x": pl.Float64, "y": pl.Float64})
+    assert build_binding_with_reason(_figure(x="x", y="y"), empty)[1] is BindingMiss.NO_DATA
+
+    all_null = pl.DataFrame(
+        {"grp": [None, None], "x": [1.0, 2.0], "y": [3.0, 4.0]},
+        schema={"grp": pl.Utf8, "x": pl.Float64, "y": pl.Float64},
+    )
+    assert (
+        build_binding_with_reason(_figure(x="x", y="y", color="grp"), all_null)[1]
+        is BindingMiss.ALL_NULL_GROUPING
+    )
+
+    # Every member carries the sentence the badge tooltip shows.
+    assert set(BINDING_MISS_DETAIL) == set(BindingMiss)
+    assert all(miss_detail(m) for m in BindingMiss)
+
+
+def test_a_bound_figure_reports_no_cause(penguins: pl.DataFrame) -> None:
+    table, miss = build_binding_with_reason(
+        _figure(x="flipper_length_mm", y="body_mass_g", color="species"), penguins
+    )
+    assert table is not None and miss is None
+    # The plain wrapper keeps its old signature for callers that only branch.
+    assert isinstance(
+        build_binding(_figure(x="flipper_length_mm", y="body_mass_g"), penguins), BindingTable
+    )
 
 
 # ---------------------------------------------------------------------------
