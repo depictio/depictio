@@ -37,6 +37,7 @@ from pydantic import ValidationError
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.endpoints.ai_endpoints import component_yaml, llm_client, prompts
+from depictio.api.v1.endpoints.ai_endpoints import summaries as summaries_mod
 from depictio.api.v1.endpoints.ai_endpoints.code_gen import figure_python_code
 from depictio.api.v1.endpoints.ai_endpoints.context import (
     build_dashboard_context,
@@ -57,6 +58,9 @@ from depictio.api.v1.endpoints.ai_endpoints.schemas import (
     StreamEvent,
     SuggestFiguresRequest,
     SuggestFiguresResponse,
+    SummariesResponse,
+    SummarizeSectionRequest,
+    SummarizeSectionResponse,
 )
 from depictio.api.v1.endpoints.user_endpoints.routes import get_user_or_anonymous
 from depictio.models.models.users import User
@@ -269,6 +273,89 @@ async def resolve_filters(
     )
     explanation = str(parsed.get("explanation", "")) if isinstance(parsed, dict) else ""
     return ResolveFiltersResponse(applied=resolved, explanation=explanation, warnings=warnings)
+
+
+# ---------------------------------------------------------------------------
+# Section summaries
+# ---------------------------------------------------------------------------
+
+
+@ai_endpoint_router.post("/summarize-section", response_model=SummarizeSectionResponse)
+async def summarize_section(
+    body: SummarizeSectionRequest,
+    current_user: User = Depends(get_user_or_anonymous),
+    user_api_key: str | None = Depends(_llm_key),
+) -> SummarizeSectionResponse:
+    """Summarize one dashboard section from client-supplied rendered state.
+
+    Cached by (dashboard, section, context hash): same visible data ⇒ the
+    stored summary comes back without an LLM call. `force=true` regenerates
+    regardless.
+    """
+    # Permission gate — same project-viewer rule as every other AI read.
+    await build_dashboard_context(body.dashboard_id, current_user)
+
+    components = [summaries_mod.trim_component(c) for c in body.components]
+    context_hash = summaries_mod.compute_context_hash(body.section, body.filters, components)
+
+    if not body.force:
+        cached = await asyncio.to_thread(
+            summaries_mod.get_cached, body.dashboard_id, body.section, context_hash
+        )
+        if cached:
+            return SummarizeSectionResponse(
+                summary_md=cached.get("summary_md", ""),
+                generated_at=cached.get("generated_at", ""),
+                model=cached.get("model", ""),
+                context_hash=context_hash,
+                cached=True,
+            )
+
+    if not components:
+        raise HTTPException(status_code=422, detail="Nothing to summarize (no components).")
+
+    messages = summaries_mod.summarize_section_messages(body.section, body.filters, components)
+    try:
+        summary_md = await asyncio.to_thread(
+            llm_client.completion,
+            messages,
+            user_api_key=user_api_key,
+        )
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"LLM error: {e}") from e
+
+    model = llm_client.get_default_model()
+    entry = await asyncio.to_thread(
+        summaries_mod.put_cache,
+        body.dashboard_id,
+        body.section,
+        context_hash,
+        summary_md.strip(),
+        model,
+    )
+    return SummarizeSectionResponse(
+        summary_md=entry["summary_md"],
+        generated_at=entry["generated_at"],
+        model=model,
+        context_hash=context_hash,
+        cached=False,
+    )
+
+
+@ai_endpoint_router.get("/summaries/{dashboard_id}", response_model=SummariesResponse)
+async def get_summaries(
+    dashboard_id: str,
+    current_user: User = Depends(get_user_or_anonymous),
+) -> SummariesResponse:
+    """Stored summaries for a dashboard (one per section, latest wins).
+
+    The client compares each entry's `context_hash` against the hash of
+    what it currently renders to decide between "fresh" and "stale —
+    regenerate?".
+    """
+    await build_dashboard_context(dashboard_id, current_user)
+    entries = await asyncio.to_thread(summaries_mod.latest_for_dashboard, dashboard_id)
+    return SummariesResponse(summaries=entries)
 
 
 # ---------------------------------------------------------------------------
