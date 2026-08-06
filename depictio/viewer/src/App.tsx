@@ -54,7 +54,10 @@ import {
   SelectionGroupsPanel,
   SaveGroupContext,
   BrandScope,
+  clearFiltersBySource,
 } from 'depictio-react-core';
+import { AIAnalyzePanel, AIKeySection, useAIHealth } from 'depictio-react-ai';
+import type { ApplyActionsPayload, ResolvedFilter } from 'depictio-react-ai';
 import type {
   DashboardData,
   DashboardPermissions,
@@ -81,6 +84,7 @@ const ingestionBannerKey = (projectId: string) =>
 const FILTER_DEBOUNCE_MS = 250;
 import { notifications } from '@mantine/notifications';
 import { Header, Sidebar, SettingsDrawer, TabIntro } from './chrome';
+import { useServerStatus } from './hooks/useServerStatus';
 import { useSidebarOpen } from './hooks/useSidebarOpen';
 import { useContentScaleStyle } from './hooks/useUiScalePref';
 import { useFilterPanelOpen } from './hooks/useFilterPanelOpen';
@@ -521,6 +525,81 @@ const App: React.FC = () => {
     // with no visible chip explaining why.
     groupsApi.deactivateAllGroupFilters();
   }, [groupsApi.deactivateAllGroupFilters]);
+
+  // ---- AI assistant -------------------------------------------------------
+  // Everything AI is gated on the server's feature flag: when off, no AI UI
+  // mounts anywhere and no /ai request is ever made.
+  const { features: serverFeatures } = useServerStatus();
+  const aiEnabled = serverFeatures.ai;
+  const aiHealth = useAIHealth(aiEnabled);
+  const aiServerKeyAvailable = aiHealth?.server_key_configured === true;
+  // Human-readable provenance for the currently-applied AI filters, shown in
+  // the "AI filters" chip tooltip.
+  const [aiFilterDescriptions, setAiFilterDescriptions] = useState<string[]>([]);
+
+  const handleApplyAIActions = useCallback(
+    ({ resolved }: ApplyActionsPayload) => {
+      const exprFilters: InteractiveFilter[] = [];
+      const widgetUpdates: InteractiveFilter[] = [];
+      const descriptions: string[] = [];
+
+      resolved.forEach((f: ResolvedFilter, i: number) => {
+        if (f.kind === 'set_widget' && f.component_id) {
+          const meta = (dashboard?.stored_metadata as Record<string, unknown>[] | undefined)?.find(
+            (m) => m?.index === f.component_id,
+          );
+          widgetUpdates.push(
+            enrichFilterWithDcId(
+              {
+                index: f.component_id,
+                value: f.value,
+                column_name: meta?.column_name as string | undefined,
+                interactive_component_type: meta?.interactive_component_type as
+                  | string
+                  | undefined,
+              },
+              dashboard?.stored_metadata,
+            ),
+          );
+          if (f.description) descriptions.push(f.description);
+        } else if (f.kind === 'filter_expr' && f.filter_expr) {
+          exprFilters.push({
+            // Unique per apply so successive plans don't collide; the whole
+            // 'ai_prompt' group is replaced below anyway.
+            index: `ai-${Date.now().toString(36)}-${i}`,
+            // Sentinel truthy value: expr-only filters carry no widget value,
+            // but a null value reads as "cleared" to merge/active-count logic.
+            value: true,
+            source: 'ai_prompt',
+            filter_expr: f.filter_expr,
+            metadata: {
+              dc_id: f.dc_id ?? undefined,
+              filter_expr: f.filter_expr,
+            },
+          });
+          descriptions.push(f.description || f.filter_expr);
+        }
+      });
+
+      setFilters((prev) => {
+        // A new AI plan replaces the previous one's injected filters.
+        let next = clearFiltersBySource(prev, 'ai_prompt');
+        for (const update of widgetUpdates) next = mergeFiltersBySource(next, update);
+        return [...next, ...exprFilters];
+      });
+      setAiFilterDescriptions(descriptions);
+    },
+    [dashboard],
+  );
+
+  const aiFilterCount = useMemo(
+    () => filters.filter((f) => f.source === 'ai_prompt').length,
+    [filters],
+  );
+  const handleClearAIFilters = useCallback(() => {
+    setFilters((prev) => clearFiltersBySource(prev, 'ai_prompt'));
+    setAiFilterDescriptions([]);
+  }, []);
 
   // The dashboard-wide map panel: the tab family's floating maps, its own
   // hidden/floating/docked state, shared by the header control and the panel
@@ -1163,6 +1242,31 @@ const App: React.FC = () => {
                   holds — including a foreign `pin: top` section, which would
                   otherwise introduce another tab before this one is named. */}
               <TabIntro dashboard={dashboard} activeTab={activeTab} />
+              {aiEnabled && dashboardId && (
+                <>
+                  <AIAnalyzePanel
+                    dashboardId={dashboardId}
+                    activeFilters={deferredFilters}
+                    serverKeyAvailable={aiServerKeyAvailable}
+                    onApplyActions={handleApplyAIActions}
+                  />
+                  {aiFilterCount > 0 && (
+                    <Group gap={6} mb={6} data-testid="ai-filters-chip">
+                      <Button
+                        size="compact-xs"
+                        variant="light"
+                        color="violet"
+                        leftSection={<Icon icon="mdi:filter-outline" width={12} />}
+                        rightSection={<Icon icon="mdi:close" width={12} />}
+                        onClick={handleClearAIFilters}
+                        title={aiFilterDescriptions.join('\n')}
+                      >
+                        AI filters ({aiFilterCount})
+                      </Button>
+                    </Group>
+                  )}
+                </>
+              )}
               {/* Only claims the leftover height when nothing follows it —
                   otherwise a short grid would push the bottom-pinned sections
                   to the fold with a gap above them. */}
@@ -1338,6 +1442,11 @@ const App: React.FC = () => {
         opened={settingsOpened}
         onClose={closeSettings}
         dashboard={dashboard}
+        extraSection={
+          aiEnabled && serverFeatures.ai_user_keys && dashboardId ? (
+            <AIKeySection dashboardId={dashboardId} />
+          ) : undefined
+        }
       />
     </AppShell>
       </BrandScope>
