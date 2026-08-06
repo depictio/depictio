@@ -114,11 +114,62 @@ class FigureMutation(BaseModel):
     reason: str = ""
 
 
+class ThresholdSpec(BaseModel):
+    """A percentile-style threshold the server resolves to a concrete value.
+
+    "top 3% of X" → `{column: "X", kind: "quantile", q: 0.97, op: ">="}`.
+    The quantile is computed server-side on the delta table (respecting the
+    currently-active filters), keeping the filter-expression allowlist free
+    of quantile/rank primitives.
+    """
+
+    column: str
+    kind: Literal["quantile"] = "quantile"
+    q: float = Field(ge=0.0, le=1.0)
+    op: Literal[">=", ">", "<=", "<"] = ">="
+
+
+class FilterProposal(BaseModel):
+    """One LLM-proposed dashboard filter, before server-side resolution.
+
+    - `set_widget`: set an existing interactive component's value
+      (component_id + value required).
+    - `filter_expr`: a Polars filter expression string, validated through
+      `validate_filter_expr` before it ever reaches a client.
+    - `threshold`: a percentile request resolved server-side to a concrete
+      `filter_expr` (see ThresholdSpec).
+    """
+
+    kind: Literal["set_widget", "filter_expr", "threshold"]
+    component_id: str | None = None
+    value: Any = None
+    filter_expr: str | None = None
+    threshold: ThresholdSpec | None = None
+    reason: str = ""
+
+
+class ResolvedFilter(BaseModel):
+    """A proposal after validation/resolution — safe for the client to apply.
+
+    `set_widget` entries target an existing interactive component;
+    `filter_expr` entries are injected client-side as an
+    `InteractiveFilter{source: 'ai_prompt'}` carrying only the expression.
+    """
+
+    kind: Literal["set_widget", "filter_expr"]
+    component_id: str | None = None
+    value: Any = None
+    filter_expr: str | None = None
+    dc_id: str | None = None
+    description: str = ""
+
+
 class DashboardActions(BaseModel):
     """All side-effects the analyze flow may apply to the dashboard."""
 
     filters: list[FilterAction] = Field(default_factory=list)
     figure_mutations: list[FigureMutation] = Field(default_factory=list)
+    filter_proposals: list[FilterProposal] = Field(default_factory=list)
 
 
 class AnalysisResult(BaseModel):
@@ -127,6 +178,7 @@ class AnalysisResult(BaseModel):
     answer: str
     steps: list[ExecutionStep]
     actions: DashboardActions = Field(default_factory=DashboardActions)
+    resolved_filters: list[ResolvedFilter] = Field(default_factory=list)
 
 
 # ---------- Request bodies ----------
@@ -156,6 +208,23 @@ class AnalyzeRequest(BaseModel):
     dashboard_id: str
     prompt: str = Field(min_length=1, max_length=2000)
     selected_component_id: str | None = None
+    # Currently-active InteractiveFilter dicts from the client — threshold
+    # resolution computes quantiles on the *filtered* data the user sees.
+    filters: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class ResolveFiltersRequest(BaseModel):
+    """Body for `/ai/resolve-filters` (direct NL → filters, no ReAct loop)."""
+
+    dashboard_id: str
+    prompt: str = Field(min_length=1, max_length=2000)
+    filters: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class ResolveFiltersResponse(BaseModel):
+    applied: list[ResolvedFilter] = Field(default_factory=list)
+    explanation: str = ""
+    warnings: list[str] = Field(default_factory=list)
 
 
 # ---------- Streaming envelope ----------

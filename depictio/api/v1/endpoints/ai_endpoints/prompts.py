@@ -337,15 +337,88 @@ Respond with valid JSON of the form:
   "code": "<polars expression or empty string>",
   "answer": "natural-language answer once you have the result",
   "actions": {{
-      "filters": [{{"component_id": "...", "value": ..., "reason": "..."}}],
-      "figure_mutations": [{{"component_id": "...", "dict_kwargs_patch": {{...}}, "reason": "..."}}]
+      "figure_mutations": [{{"component_id": "...", "dict_kwargs_patch": {{...}}, "reason": "..."}}],
+      "filter_proposals": [<FilterProposal>, ...]
   }}
 }}
 
+{FILTER_PROPOSAL_CONTRACT}
+
 - Use the `code` field if and only if you need to compute something.
-- Use `actions.filters` to suggest setting interactive components.
+- Use `actions.filter_proposals` to change what data the dashboard shows.
 - Use `actions.figure_mutations` to propose patches to existing figures
   (keys mapped to null are removed).
+- Do not wrap the JSON in markdown fences.
+"""
+    return [
+        {"role": "system", "content": system},
+        {"role": "user", "content": user_prompt},
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Filter proposals (analyze + resolve-filters)
+# ---------------------------------------------------------------------------
+
+FILTER_PROPOSAL_CONTRACT = """\
+Each FilterProposal is one of three kinds:
+1. Set an existing interactive component (PREFERRED whenever a listed
+   interactive component covers the column you want to constrain — the user
+   sees and can adjust the widget):
+   {"kind": "set_widget", "component_id": "<id from CURRENT FILTERS>",
+    "value": <widget value>, "reason": "..."}
+2. A Polars filter expression on the data collection (for conditions no
+   widget covers). Grammar: col('<column>') with comparisons (==, !=, >,
+   >=, <, <=), combined with & | ~ and parentheses; helpers: is_in([...]),
+   is_between(a, b), str.contains/starts_with/ends_with, and mean/sum/min/
+   max/count/median (optionally .over('<column>')):
+   {"kind": "filter_expr", "filter_expr": "(col('depth') >= 30) & (col('qc') == 'pass')",
+    "reason": "..."}
+3. A percentile threshold — NEVER hand-compute percentile cutoffs; the
+   server resolves the quantile on the live data. "top 3% of X" is
+   q=0.97 with op ">=", "bottom 5%" is q=0.05 with op "<=":
+   {"kind": "threshold", "threshold": {"column": "<numeric column>",
+    "kind": "quantile", "q": 0.97, "op": ">="}, "reason": "..."}\
+"""
+
+
+def resolve_filters_messages(
+    data_ctx: DataContext,
+    dashboard_ctx: DashboardContext,
+    user_prompt: str,
+) -> list[dict]:
+    """Single-shot NL → filter proposals (no ReAct loop).
+
+    The model only plans filters here — no code execution, no prose
+    analysis. Kept separate from `analyze_messages` so the drawer's
+    "apply to dashboard" box stays fast and cheap.
+    """
+    system = f"""You translate a user's natural-language request into dashboard filters.
+
+CONTEXT:
+{data_ctx.metadata_block()}
+
+DATASET SCHEMA:
+{data_ctx.schema_block()}
+
+SAMPLE ROWS:
+{data_ctx.sample_block()}
+
+CURRENT FILTERS (interactive components on the dashboard):
+{dashboard_ctx.filters_block()}
+
+Respond with valid JSON of the form:
+{{
+  "explanation": "one short sentence describing what will be filtered",
+  "proposals": [<FilterProposal>, ...]
+}}
+
+{FILTER_PROPOSAL_CONTRACT}
+
+- Reference only columns from DATASET SCHEMA.
+- Emit the smallest set of proposals that satisfies the request.
+- If the request is not a filtering request, return an empty proposals
+  list and say why in "explanation".
 - Do not wrap the JSON in markdown fences.
 """
     return [
