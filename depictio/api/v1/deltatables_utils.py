@@ -376,21 +376,25 @@ def process_metadata_and_filter(
     for component in metadata:
         if "metadata" in component:
             meta = component["metadata"]
-            interactive_component_type = meta["interactive_component_type"]
-            column_name = meta["column_name"]
+            interactive_component_type = meta.get("interactive_component_type")
+            column_name = meta.get("column_name")
             filter_expr = meta.get("filter_expr") or component.get("filter_expr")
         else:
-            interactive_component_type = component["interactive_component_type"]
-            column_name = component["column_name"]
+            interactive_component_type = component.get("interactive_component_type")
+            column_name = component.get("column_name")
             filter_expr = component.get("filter_expr")
 
-        add_filter(
-            filter_list,
-            interactive_component_type=interactive_component_type,
-            column_name=column_name,
-            value=component["value"],
-            dtype=schema.get(column_name) if schema else None,
-        )
+        # Expression-only filters (e.g. AI-injected `source: 'ai_prompt'`
+        # entries) carry a filter_expr but no widget type/column/value —
+        # only widget-backed entries go through add_filter.
+        if interactive_component_type and column_name:
+            add_filter(
+                filter_list,
+                interactive_component_type=interactive_component_type,
+                column_name=column_name,
+                value=component.get("value"),
+                dtype=schema.get(column_name) if schema else None,
+            )
 
         if filter_expr:
             try:
