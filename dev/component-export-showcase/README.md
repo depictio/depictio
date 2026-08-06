@@ -65,9 +65,15 @@ and the backend container, so nothing is hardcoded to one machine.
 | no spec, by design | 9 |
 | failed | 1 (`phylogenetic`, data gap — see below) |
 
+These are the counts `export_all.py` produced on the run that generated the
+screenshots below; re-run it to refresh them. They predate the four
+benchmarking kinds and their dashboards, so `json` coverage is now higher than
+the table says — the point of the table is the shape of the gap, not the
+arithmetic.
+
 `json` is the number that matters, because a spec is what a consumer can
 actually reuse. It covers `figure`, `multiqc`, `map`, the Celery-backed
-advanced-viz kinds (`complex_heatmap`, `upset_plot`, `sankey`) and the nine
+advanced-viz kinds (`complex_heatmap`, `upset_plot`, `sankey`) and the thirteen
 ported to Python under `services/advanced_viz/kinds/`.
 
 The remaining types split into two groups:

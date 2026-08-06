@@ -144,3 +144,57 @@ class TestFilterOptionShapes:
             )
             is None
         )
+
+
+class TestRegistryIsTheOnlyJsonGate:
+    """A kind's JSON support must come from the registry, never from the table.
+
+    ``AV_JSON_SOURCE`` used to name the ported kinds ``"python"`` outright, with
+    a comment claiming the registry overrode it. It does not — it only upgrades
+    ``client_only`` to ``"python"``. So a builder-package import failure (which
+    ``figure_registry._ensure_loaded`` swallows deliberately) emptied the
+    registry while the table went on advertising JSON: the request reached
+    ``required_columns`` and died on a bare ``HTTPException(501, ...)`` with a
+    plain-string detail, instead of degrading to ``format=html`` as documented
+    in two places.
+    """
+
+    def test_every_python_kind_is_client_only_in_the_static_table(self) -> None:
+        """The table is a floor. Anything above it has to be earned at runtime."""
+        from depictio.api.v1.services.advanced_viz.figure_registry import supported_kinds
+
+        offenders = sorted(k for k in supported_kinds() if AV_JSON_SOURCE.get(k) == "python")
+        assert not offenders, (
+            "these kinds declare 'python' in AV_JSON_SOURCE, so they would still "
+            "advertise JSON with no builder registered: " + ", ".join(offenders)
+        )
+
+    def test_registered_builder_grants_json(self) -> None:
+        from depictio.api.v1.services.advanced_viz.figure_registry import supported_kinds
+
+        for kind in supported_kinds():
+            assert advanced_viz_json_source(kind) == "python", kind
+            assert ExportFormat.JSON in formats_for("advanced_viz", kind), kind
+
+    def test_empty_registry_degrades_to_html(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The failure this whole change exists for: no builders, no JSON claim."""
+        import depictio.api.v1.services.export.capabilities as cap
+
+        monkeypatch.setattr(cap, "_python_builder_kinds", lambda: frozenset())
+
+        assert cap.advanced_viz_json_source("volcano") == "client_only"
+        assert cap.formats_for("advanced_viz", "volcano") == frozenset({ExportFormat.HTML})
+
+        reason = cap.unsupported_reason("advanced_viz", "volcano")
+        assert reason is not None
+        assert "format=html" in reason
+
+    def test_celery_kinds_are_unaffected_by_the_registry(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Celery-built kinds have no Python builder and must not be downgraded."""
+        import depictio.api.v1.services.export.capabilities as cap
+
+        monkeypatch.setattr(cap, "_python_builder_kinds", lambda: frozenset())
+        assert cap.advanced_viz_json_source("complex_heatmap") == "celery"
+        assert ExportFormat.JSON in cap.formats_for("advanced_viz", "complex_heatmap")

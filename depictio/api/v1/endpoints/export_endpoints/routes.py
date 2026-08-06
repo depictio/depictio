@@ -95,6 +95,15 @@ async def get_embed_user(
     widening is therefore *public projects only* — private dashboards still require
     a bearer token — and only on this router, only when ``embed_enabled``.
     """
+    # Gate first. FastAPI resolves dependencies before the handler body, so the
+    # handlers' own `_require_embed_enabled()` runs *after* this function has
+    # already looked the caller up: on an instance with embedding off and no
+    # anonymous user seeded, the caller got 401 "supply a bearer token" instead
+    # of the documented 404 `embed_disabled`, and every request to a disabled
+    # feature cost a Mongo round-trip. The handlers keep their call as the guard
+    # for any future route that does not take this dependency.
+    _require_embed_enabled()
+
     if token is not None:
         try:
             return await get_current_user(token)
@@ -351,6 +360,30 @@ async def _export(
         if cors:
             exc.headers = {**(exc.headers or {}), **cors}
         raise
+    except Exception as exc:
+        # An unexpected failure in a render path is the case a host page can
+        # least afford to see as an opaque network error: it looks identical to
+        # "the origin is not allow-listed", which is a configuration problem the
+        # embedder would go and chase instead. Convert to an HTTPException so it
+        # carries the same CORS headers as every other error on this router; the
+        # detail stays generic because the traceback is the server's business.
+        logger.exception(
+            "export: unhandled error for dashboard=%s component=%s format=%s",
+            dashboard_id,
+            component_id,
+            export_format.value,
+        )
+        http_exc = HTTPException(
+            status_code=500,
+            detail={
+                "code": "export_failed",
+                "message": "The component could not be exported. See the server logs.",
+            },
+        )
+        cors = embed_cors_headers(request)
+        if cors:
+            http_exc.headers = dict(cors)
+        raise http_exc from exc
 
 
 async def _export_inner(

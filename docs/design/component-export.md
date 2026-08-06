@@ -33,7 +33,7 @@ equivalent. `json` can only serve what Python can build.
 | `figure` | ✅ | ✅ | `services/figure/figure_builder.py` |
 | `map` | ✅ | ✅ | `services/map/render.py` |
 | `multiqc` | ✅ | ✅ | 503 while the figure cache warms; `html` waits it out |
-| `advanced_viz` | 12 of 18 kinds | ✅ | see below |
+| `advanced_viz` | 16 of 22 kinds | ✅ | see below |
 | `table` | ❌ | ✅ | AG Grid, not Plotly |
 | `card` | ❌ | ✅ | scalar + DOM |
 | `image` | ❌ | ✅ | S3 path list |
@@ -46,8 +46,9 @@ equivalent. `json` can only serve what Python can build.
 - **Server-built already** — `complex_heatmap`, `upset_plot`, `sankey`. Their Celery
   compute tasks return a figure, so `json` works.
 - **Ported to Python** — `volcano`, `ma`, `qq`, `manhattan`, `embedding`,
-  `stacked_taxonomy`, `da_barplot`, `enrichment`, `sunburst`
-  (`services/advanced_viz/kinds/`).
+  `stacked_taxonomy`, `da_barplot`, `enrichment`, `sunburst`, and the four
+  benchmarking kinds `roc_pr_curve`, `pr_benchmark`, `confusion_matrix`,
+  `metric_ci_bars` (`services/advanced_viz/kinds/`).
 - **Client-only** — the remaining 6: `rarefaction`, `dot_plot`, `lollipop`,
   `oncoplot`, `coverage_track`, `phylogenetic`. `json` answers **501** with
   `html_available: true` and an `html_url`; `html` works today.
@@ -153,8 +154,32 @@ and deliberately omits `Content-Security-Policy` and `X-Frame-Options`.
 skipped in the middleware. The exemption is scoped to `text/html` responses, so the
 `json` format keeps the strict defaults.
 
-All four pieces — middleware exemption, handler headers, nginx block, script hashes
-— are required. Any one missing leaves cross-origin embedding broken.
+Behind the bundled nginx, all four pieces — middleware exemption, handler headers,
+nginx block, script hashes — are required, and any one missing leaves cross-origin
+embedding broken.
+
+### Kubernetes
+
+The Helm chart routes the API on its **own host** (`depictio.apiUrl`, see
+`templates/ingress.yaml`) straight to the backend Service, bypassing the viewer's
+nginx entirely. The `location` block above is therefore never consulted on k8s, and
+the chart sets no CSP or `X-Frame-Options` of its own — the middleware exemption is
+the only thing in play.
+
+Enable it with three values under `backend.env`, which reach the backend through
+`{{ .Release.Name }}-backend-config`:
+
+```yaml
+backend:
+  env:
+    DEPICTIO_FASTAPI_EMBED_ENABLED: "true"
+    DEPICTIO_FASTAPI_EMBED_ALLOWED_ORIGINS: "https://lab.example.org"
+```
+
+They are deliberately absent from the celery ConfigMap: the worker serves no export
+route. Note that an invalid value fails at **startup**, not per request — the
+settings validator rejects `*` and any entry that is not a bare `scheme://host[:port]`,
+so a malformed origin is a CrashLoopBackOff rather than a silently widened header.
 
 ## Implementation map
 

@@ -16,10 +16,11 @@ The three tiers, for orientation:
   ``map`` (``services/map/render.py``), ``multiqc`` (``services/multiqc/figures.py``),
   and the ``complex_heatmap`` / ``upset_plot`` / ``sankey`` advanced-viz kinds which
   already return ``{"figure": {...}}`` from their Celery compute tasks.
-* Plotly *visually*, but the spec is built client-side in TypeScript — the other 15
-  advanced-viz kinds. They are HTML-exportable immediately (the offline bundle runs
-  the real renderers) and become JSON-exportable one at a time as Python builders
-  land in ``services/advanced_viz/kinds/``.
+* Plotly *visually*, but the spec is built client-side in TypeScript — the
+  advanced-viz kinds with no Python builder yet (6 of 22 today). They are
+  HTML-exportable immediately (the offline bundle runs the real renderers) and
+  become JSON-exportable one at a time as Python builders land in
+  ``services/advanced_viz/kinds/``.
 * Not Plotly at all — ``card``, ``interactive``, ``table``, ``image``, ``text``.
   HTML only. ``jbrowse`` is neither: it is an iframe onto a live JBrowse2 server,
   so it cannot be made offline-self-contained and is unsupported in both formats.
@@ -84,35 +85,49 @@ COMPONENT_FORMATS: dict[str, frozenset[ExportFormat]] = {
 #: both read this table.
 AvJsonSource = Literal["celery", "python", "client_only"]
 
+#: The *floor* for each kind, not its answer. ``advanced_viz_json_source`` only
+#: ever upgrades a ``client_only`` entry to ``"python"`` on the strength of a
+#: registered builder, so every kind whose figure is built by
+#: ``services/advanced_viz/kinds/`` is listed here as ``client_only``.
+#:
+#: This used to record those kinds as ``"python"`` directly, with a comment
+#: saying the registry overrode the table. It does not — it only widens. So when
+#: the builder package failed to import (``_ensure_loaded`` swallows that on
+#: purpose, to keep one broken builder from taking down the whole export
+#: router), the registry went empty, this table still advertised JSON, and the
+#: request reached ``figure_registry.required_columns`` and died on a bare 501
+#: with a string detail — no ``code``, no ``html_url``, none of what
+#: ``ExportUnsupported`` carries. The documented "a broken builder degrades that
+#: kind to format=html" behaviour did not exist. With the floor set to
+#: ``client_only``, the registry is the only thing that can grant JSON, so it is
+#: also the only thing that can withdraw it.
 AV_JSON_SOURCE: dict[str, AvJsonSource] = {
-    # Already server-built.
+    # Server-built by a Celery task rather than a figure builder; not gated on
+    # the registry, so these stay declared here.
     "complex_heatmap": "celery",
     "upset_plot": "celery",
     "sankey": "celery",
-    # Ported to Python; see services/advanced_viz/kinds/. Listed as client_only
-    # only until a builder lands — `_python_builder_kinds()` overrides this table
-    # from the registry, so these entries are documentation rather than a gate.
-    "volcano": "python",
-    "embedding": "python",
-    "manhattan": "python",
-    "stacked_taxonomy": "python",
+    # Everything below is client_only until `figure_registry` says otherwise.
+    "volcano": "client_only",
+    "embedding": "client_only",
+    "manhattan": "client_only",
+    "stacked_taxonomy": "client_only",
     "phylogenetic": "client_only",
     "rarefaction": "client_only",
-    "da_barplot": "python",
-    "enrichment": "python",
-    "ma": "python",
+    "da_barplot": "client_only",
+    "enrichment": "client_only",
+    "ma": "client_only",
     "dot_plot": "client_only",
     "lollipop": "client_only",
-    "qq": "python",
-    "sunburst": "python",
+    "qq": "client_only",
+    "sunburst": "client_only",
     "oncoplot": "client_only",
     "coverage_track": "client_only",
-    # Benchmarking kinds (nf-core/variantbenchmarking). Ported alongside the
-    # rest; see services/advanced_viz/kinds/.
-    "roc_pr_curve": "python",
-    "pr_benchmark": "python",
-    "confusion_matrix": "python",
-    "metric_ci_bars": "python",
+    # Benchmarking kinds (nf-core/variantbenchmarking).
+    "roc_pr_curve": "client_only",
+    "pr_benchmark": "client_only",
+    "confusion_matrix": "client_only",
+    "metric_ci_bars": "client_only",
 }
 
 

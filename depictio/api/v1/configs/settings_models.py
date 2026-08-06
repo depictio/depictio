@@ -1,4 +1,5 @@
 import os
+import re
 from pathlib import Path
 from typing import Any, Literal, Optional
 
@@ -79,6 +80,37 @@ class ServiceConfig(BaseSettings):
         return self.external_port
 
 
+# A frame-ancestors source: scheme://host, an optional port, and an optional
+# leading `*.` wildcard on the host (which CSP allows and which is not the bare
+# `*` rejected separately). Anchored, so nothing may follow the port.
+_EMBED_ORIGIN_RE = re.compile(
+    r"^https?://(\*\.)?[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?(:\d{1,5})?$"
+)
+
+
+def _assert_embeddable_origin(origin: str) -> None:
+    """Reject anything that is not exactly one CSP source expression.
+
+    ``build_embed_csp`` joins these with spaces into ``frame-ancestors``. A value
+    carrying a ``;`` therefore closes that directive and opens another, so a
+    single malformed config entry — ``https://a; script-src *`` — rewrites the
+    whole policy of every embed the instance serves. Whitespace splits one entry
+    into two sources the same way. Braces are rejected for a duller reason: the
+    CSP is assembled with ``str.format``, so a ``{`` in an origin raises at
+    request time rather than at startup, which is the wrong place to find out.
+
+    Validated here rather than at render time so a bad value fails the process
+    that reads it, loudly, instead of silently widening a security header.
+    """
+    if not _EMBED_ORIGIN_RE.match(origin):
+        raise ValueError(
+            f"DEPICTIO_FASTAPI_EMBED_ALLOWED_ORIGINS entry {origin!r} is not a valid "
+            "origin. Expected scheme://host[:port] (e.g. https://lab.example.org), "
+            "optionally with a '*.' host wildcard. It becomes a CSP frame-ancestors "
+            "source, so separators such as ';' or whitespace are not allowed."
+        )
+
+
 class FastAPIConfig(ServiceConfig):
     """FastAPI backend server configuration."""
 
@@ -154,6 +186,8 @@ class FastAPIConfig(ServiceConfig):
                 "DEPICTIO_FASTAPI_EMBED_ALLOWED_ORIGINS contains '*'. Frame-ancestors "
                 "must list explicit origins (e.g. https://lab.example.org)."
             )
+        for origin in self.embed_allowed_origins:
+            _assert_embeddable_origin(origin)
         return self
 
 

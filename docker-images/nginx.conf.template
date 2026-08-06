@@ -104,8 +104,7 @@ server {
         add_header Cache-Control "no-cache";
     }
 
-    # Component export / embed. Must come before `location /depictio/api/` for
-    # readability (nginx evaluates regex locations before prefix ones anyway).
+    # Component export / embed.
     #
     # The server-level `add_header ... always` directives at the bottom of this
     # file would otherwise apply here too, and multiple CSP headers are enforced
@@ -114,7 +113,19 @@ server {
     # wholesale, which is exactly what we want: re-declare the baseline headers
     # we still care about and deliberately omit Content-Security-Policy and
     # X-Frame-Options so the backend's per-response values survive.
-    location ~ ^/depictio/api/v[0-9]+/export/ {
+    #
+    # Ordering: nginx picks the longest matching *prefix* location, then tests
+    # regex locations in file order and lets the first match win over it. So
+    # this block beats `location /depictio/api/` below. What keeps that safe is
+    # not the order but the anchoring — the SPA-route regex earlier in this file
+    # is anchored at `^/(auth|dashboards|…)` and cannot match an /depictio/api
+    # path. A future SPA route added to that alternation could steal this one,
+    # so keep it anchored.
+    #
+    # `(/|$)` rather than a mandatory trailing slash: FastAPI's redirect_slashes
+    # would bounce a bare `…/export` through the prefix location instead, where
+    # the strict server-level CSP applies and the embed stops being framable.
+    location ~ ^/depictio/api/v[0-9]+/export(/|$) {
         set $upstream ${DEPICTIO_API_UPSTREAM}; proxy_pass http://$upstream;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
@@ -123,6 +134,9 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_buffering off;
         proxy_read_timeout 3600s;
+        # An embed page is a single ~7 MB document; the 60s default send timeout
+        # is a real risk for a slow client on the other side of the world.
+        proxy_send_timeout 3600s;
 
         add_header X-Content-Type-Options "nosniff" always;
         add_header Referrer-Policy "strict-origin-when-cross-origin" always;
