@@ -13,6 +13,7 @@ import {
   getAIHealth,
   resolveFilters as apiResolveFilters,
   streamAnalyze as apiStreamAnalyze,
+  suggestFigures as apiSuggestFigures,
   summarizeSection as apiSummarizeSection,
   type AIHealth,
 } from './api';
@@ -24,6 +25,7 @@ import type {
   ComponentFromPromptResponse,
   DashboardActions,
   ExecutionStep,
+  PlotSuggestion,
   ResolveFiltersResponse,
   SummarizeSectionRequest,
   SummarizeSectionResponse,
@@ -98,6 +100,48 @@ export function useComponentFromPrompt(dashboardId: string) {
   return useMemo(
     () => ({ run, pending, error, lastResponse }),
     [run, pending, error, lastResponse],
+  );
+}
+
+/** Data-grounded figure suggestions for one data collection. Suggestions
+ *  reset when the target DC changes so a stale list is never shown against
+ *  the wrong columns. */
+export function useSuggestFigures(dashboardId: string) {
+  const session = useAISession(dashboardId);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [suggestions, setSuggestions] = useState<PlotSuggestion[]>([]);
+
+  const run = useCallback(
+    async (dataCollectionId: string, n = 4): Promise<PlotSuggestion[]> => {
+      setPending(true);
+      setError(null);
+      try {
+        const res = await apiSuggestFigures(
+          { data_collection_id: dataCollectionId, n },
+          session.llmKey || null,
+        );
+        setSuggestions(res.suggestions);
+        return res.suggestions;
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        setError(msg);
+        throw e;
+      } finally {
+        setPending(false);
+      }
+    },
+    [session.llmKey],
+  );
+
+  const reset = useCallback(() => {
+    setSuggestions([]);
+    setError(null);
+  }, []);
+
+  return useMemo(
+    () => ({ run, reset, suggestions, pending, error }),
+    [run, reset, suggestions, pending, error],
   );
 }
 
