@@ -115,11 +115,18 @@ async def status():
     and nothing else, and the two are routinely different hosts and ports. This
     is the deployment's public front door, the address people type into a
     browser, so publishing it here adds no exposure that browsing to it does not.
+
+    ``features`` advertises boolean feature flags so the SPA can decide
+    which affordances to mount (booleans only — the endpoint is public).
     """
     return {
         "status": "online",
         "version": get_version(),
         "viewer_url": settings.viewer.external_url,
+        "features": {
+            "ai": settings.ai.enabled,
+            "ai_user_keys": settings.ai.enabled and settings.ai.allow_user_keys,
+        },
     }
 
 
