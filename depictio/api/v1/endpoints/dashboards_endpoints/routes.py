@@ -5852,8 +5852,27 @@ async def export_dashboard_as_yaml(
         )
         child_tabs = child_tabs_docs
 
+    yaml_content = dashboard_yaml_content(dashboard_doc, project_name, child_tabs)
+    return Response(
+        content=yaml_content,
+        media_type="application/x-yaml",
+        headers={
+            "Content-Disposition": f'attachment; filename="{dashboard_doc.get("title", "dashboard")}.yaml"'
+        },
+    )
+
+
+def dashboard_yaml_content(dashboard_doc: dict, project_name: str, child_tabs: list[dict]) -> str:
+    """Tag-based YAML export of a dashboard (single or multi-tab family).
+
+    The shared core of ``GET /dashboards/{id}/yaml``, also used by the
+    template exporter (``/projects/{id}/export_template``) so exported
+    bundles and one-off dashboard exports can never drift apart. Enrichment
+    converts wf/dc ObjectIds to portable tags — the exact inverse of what
+    ``_resolve_workflow_tags`` re-binds at import time.
+    """
     # Single dashboard export (no children or is a child tab itself)
-    if not child_tabs and is_main_tab:
+    if not child_tabs and dashboard_doc.get("is_main_tab", True):
         # Enrich dashboard with workflow and data collection tags from MongoDB
         from depictio.models.yaml_serialization.utils import enrich_dashboard_with_tags
 
@@ -5862,15 +5881,7 @@ async def export_dashboard_as_yaml(
         # Convert to DashboardDataLite for export
         lite = DashboardDataLite.from_full(enriched_dashboard)
         lite.project_tag = project_name
-        yaml_content = lite.to_yaml()
-
-        return Response(
-            content=yaml_content,
-            media_type="application/x-yaml",
-            headers={
-                "Content-Disposition": f'attachment; filename="{dashboard_doc.get("title", "dashboard")}.yaml"'
-            },
-        )
+        return lite.to_yaml()
 
     # Multi-tab export: main dashboard + child tabs in single YAML
     multi_tab_dict: dict[str, Any] = {}
@@ -5918,15 +5929,7 @@ async def export_dashboard_as_yaml(
     raw_yaml = yaml.dump(
         multi_tab_dict, default_flow_style=False, sort_keys=False, allow_unicode=True, indent=4
     )
-    yaml_content = DashboardDataLite._apply_section_comments(raw_yaml)
-
-    return Response(
-        content=yaml_content,
-        media_type="application/x-yaml",
-        headers={
-            "Content-Disposition": f'attachment; filename="{dashboard_doc.get("title", "dashboard")}.yaml"'
-        },
-    )
+    return DashboardDataLite._apply_section_comments(raw_yaml)
 
 
 @dashboards_endpoint_router.get("/{dashboard_id}/yaml/family", deprecated=True)
