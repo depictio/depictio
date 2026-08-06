@@ -15,15 +15,21 @@ helpers in ``depictio/api/v1/services/figure/groups.py``:
 import polars as pl
 
 from depictio.api.v1.services.figure.groups import (
+    FACET_COL_WRAP,
     GROUP_COLUMN,
+    MAX_COLOR_MAP_ENTRIES,
     MAX_GROUPS,
     MAX_VALUES_PER_GROUP,
     OTHER_COLOR,
     OTHER_LABEL,
+    apply_column_coloring_kwargs,
+    apply_facet_kwargs,
     apply_group_coloring_kwargs,
     group_annotation_expr,
     group_source_columns,
+    sanitize_color_by_column,
     sanitize_group_defs,
+    sanitize_grouping_display,
 )
 
 
@@ -169,6 +175,15 @@ class TestApplyGroupColoringKwargs:
         apply_group_coloring_kwargs(original, sanitize_group_defs([_group()]))
         assert original == {"color": "habitat"}
 
+    def test_include_other_false_drops_the_category_entirely(self):
+        # px keeps every category listed in category_orders even when absent
+        # from the (filtered) data — a leftover "Other" draws an empty facet
+        # panel in Split mode.
+        groups = sanitize_group_defs([_group(name="A"), _group(name="B")])
+        out = apply_group_coloring_kwargs({}, groups, include_other=False)
+        assert OTHER_LABEL not in out["color_discrete_map"]
+        assert out["category_orders"][GROUP_COLUMN] == ["A", "B"]
+
 
 class TestFigureIntegration:
     def _annotated_df(self):
@@ -215,3 +230,160 @@ class TestFigureIntegration:
             dict_kwargs=apply_group_coloring_kwargs({"y": "y"}, groups),
         )
         assert {t.name for t in fig.data} == {"A", "B", OTHER_LABEL}
+
+
+class TestSanitizeColorByColumn:
+    def test_non_dict_input_yields_none(self):
+        assert sanitize_color_by_column(None) is None
+        assert sanitize_color_by_column("variety") is None
+        assert sanitize_color_by_column(["variety"]) is None
+
+    def test_missing_or_empty_column_yields_none(self):
+        assert sanitize_color_by_column({}) is None
+        assert sanitize_color_by_column({"column_name": ""}) is None
+        assert sanitize_color_by_column({"column_name": "   "}) is None
+        assert sanitize_color_by_column({"column_name": 42}) is None
+
+    def test_column_only_yields_empty_map(self):
+        out = sanitize_color_by_column({"column_name": " variety "})
+        assert out == {"column_name": "variety", "color_map": {}}
+
+    def test_invalid_map_entries_are_dropped(self):
+        out = sanitize_color_by_column(
+            {
+                "column_name": "variety",
+                "color_map": {
+                    "Setosa": "#4C72B0",
+                    "Versicolor": "not-a-color",
+                    "Virginica": 42,
+                    3: "#000000",
+                },
+            }
+        )
+        assert out is not None
+        assert out["color_map"] == {"Setosa": "#4C72B0"}
+
+    def test_map_cap_enforced(self):
+        big_map = {f"v{i}": "#112233" for i in range(MAX_COLOR_MAP_ENTRIES + 20)}
+        out = sanitize_color_by_column({"column_name": "c", "color_map": big_map})
+        assert out is not None
+        assert len(out["color_map"]) == MAX_COLOR_MAP_ENTRIES
+
+    def test_overlong_column_name_yields_none(self):
+        assert sanitize_color_by_column({"column_name": "c" * 500}) is None
+
+
+class TestApplyColumnColoringKwargs:
+    def test_overrides_color_and_pins_map_and_order(self):
+        cmap = {"Setosa": "#4C72B0", "Versicolor": "#DD8452"}
+        out = apply_column_coloring_kwargs({"x": "a", "color": "other"}, "variety", cmap)
+        assert out["x"] == "a"
+        assert out["color"] == "variety"
+        assert out["color_discrete_map"] == cmap
+        # Category order pinned to the map's (universe) order.
+        assert out["category_orders"]["variety"] == ["Setosa", "Versicolor"]
+
+    def test_empty_map_only_sets_color(self):
+        out = apply_column_coloring_kwargs({"x": "a"}, "variety", {})
+        assert out["color"] == "variety"
+        assert "color_discrete_map" not in out
+        assert "category_orders" not in out
+
+    def test_empty_map_drops_authored_map(self):
+        # An authored map is keyed to the figure's own color column; keeping it
+        # while recoloring by another column would repaint overlapping values.
+        out = apply_column_coloring_kwargs(
+            {"color": "habitat", "color_discrete_map": {"reef": "#112233"}}, "variety", {}
+        )
+        assert out["color"] == "variety"
+        assert "color_discrete_map" not in out
+
+    def test_existing_category_orders_preserved(self):
+        out = apply_column_coloring_kwargs(
+            {"category_orders": {"habitat": ["x", "y"]}}, "variety", {"Setosa": "#4C72B0"}
+        )
+        assert out["category_orders"]["habitat"] == ["x", "y"]
+        assert out["category_orders"]["variety"] == ["Setosa"]
+
+    def test_input_not_mutated(self):
+        original = {"color": "habitat"}
+        apply_column_coloring_kwargs(original, "variety", {"Setosa": "#4C72B0"})
+        assert original == {"color": "habitat"}
+
+
+class TestFacetDisplay:
+    def test_sanitize_grouping_display(self):
+        assert sanitize_grouping_display("facet") == "facet"
+        assert sanitize_grouping_display("color") == "color"
+        assert sanitize_grouping_display(None) == "color"
+        assert sanitize_grouping_display("junk") == "color"
+        assert sanitize_grouping_display(42) == "color"
+
+    def test_apply_facet_kwargs_sets_facet_and_wrap(self):
+        out = apply_facet_kwargs({"x": "a", "color": GROUP_COLUMN}, GROUP_COLUMN)
+        assert out["facet_col"] == GROUP_COLUMN
+        assert out["facet_col_wrap"] == FACET_COL_WRAP
+        assert out["x"] == "a"
+        assert out["color"] == GROUP_COLUMN
+
+    def test_apply_facet_kwargs_overrides_authored_facet(self):
+        out = apply_facet_kwargs({"facet_col": "habitat", "facet_row": "year"}, GROUP_COLUMN)
+        assert out["facet_col"] == GROUP_COLUMN
+        # facet_row is the author's own split axis; a grid is still readable.
+        assert out["facet_row"] == "year"
+
+    def test_apply_facet_kwargs_does_not_mutate(self):
+        original = {"x": "a"}
+        apply_facet_kwargs(original, GROUP_COLUMN)
+        assert original == {"x": "a"}
+
+    def test_scatter_faceted_by_group_builds_subplots(self):
+        from depictio.api.v1.services.figure.figure_builder import create_figure_from_data
+
+        df = pl.DataFrame(
+            {
+                "sample": [f"s{i}" for i in range(10)],
+                "x": list(range(10)),
+                "y": [v * 2.0 for v in range(10)],
+            }
+        )
+        groups = sanitize_group_defs(
+            [
+                _group(name="A", values=[f"s{i}" for i in range(5)]),
+                _group(name="B", values=[f"s{i}" for i in range(5, 10)]),
+            ]
+        )
+        expr = group_annotation_expr(groups, df.columns, dict(df.schema))
+        kwargs = apply_facet_kwargs(
+            apply_group_coloring_kwargs({"x": "x", "y": "y"}, groups), GROUP_COLUMN
+        )
+        fig = create_figure_from_data(
+            df=df.with_columns(expr), visu_type="scatter", dict_kwargs=kwargs
+        )
+        # One subplot per present category: A, B (no Other rows here).
+        xaxes = {t.xaxis for t in fig.data}
+        assert len(xaxes) == 2
+
+
+class TestColumnColoringIntegration:
+    def test_scatter_colored_by_real_column_with_stable_map(self):
+        from depictio.api.v1.services.figure.figure_builder import create_figure_from_data
+
+        df = pl.DataFrame(
+            {
+                "x": [1.0, 2.0, 3.0, 4.0],
+                "y": [2.0, 4.0, 6.0, 8.0],
+                "variety": ["Setosa", "Setosa", "Virginica", "Virginica"],
+            }
+        )
+        cmap = {"Setosa": "#4C72B0", "Versicolor": "#DD8452", "Virginica": "#55A467"}
+        fig = create_figure_from_data(
+            df=df,
+            visu_type="scatter",
+            dict_kwargs=apply_column_coloring_kwargs({"x": "x", "y": "y"}, "variety", cmap),
+        )
+        by_name = {t.name: t for t in fig.data}
+        # Only the present categories get traces, with the universe's colors.
+        assert set(by_name) == {"Setosa", "Virginica"}
+        assert by_name["Setosa"].marker.color == "#4C72B0"
+        assert by_name["Virginica"].marker.color == "#55A467"

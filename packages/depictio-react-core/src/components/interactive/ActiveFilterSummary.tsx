@@ -3,6 +3,7 @@ import {
   ActionIcon,
   Box,
   Collapse,
+  ColorSwatch,
   Group,
   Stack,
   Text,
@@ -40,6 +41,18 @@ const SELECTION_ICONS: Record<string, string> = {
 /** Fallback for a selection whose source component can't be resolved. */
 const SELECTION_ICON_FALLBACK = 'mdi:selection-drag';
 
+/** A filter-active selection group, summarised alongside the user filters.
+ *  Group filters live outside the filter list (see `selectionGroups.ts`), so
+ *  the apps pass them as their own rows rather than as InteractiveFilters —
+ *  routing them through `onClear` would corrupt the user filter list. */
+export interface GroupSummaryRow {
+  id: string;
+  name: string;
+  color: string;
+  count: number;
+  onClear: () => void;
+}
+
 interface ActiveFilterSummaryProps {
   filters: InteractiveFilter[];
   /** Full stored_metadata — chart/table selections resolve their label from
@@ -48,6 +61,8 @@ interface ActiveFilterSummaryProps {
   /** Emits `{ index, value: null, source }`, which mergeFiltersBySource
    *  interprets as "drop the entry for this (index, source) pair". */
   onClear: (filter: InteractiveFilter) => void;
+  /** Filter-active selection groups, shown after the user filters. */
+  groupRows?: GroupSummaryRow[];
   open: boolean;
   onToggle: () => void;
 }
@@ -78,18 +93,20 @@ const ActiveFilterSummary: React.FC<ActiveFilterSummaryProps> = ({
   filters,
   components,
   onClear,
+  groupRows = [],
   open,
   onToggle,
 }) => {
   const active = activeFiltersFor(filters);
-  if (active.length === 0) return null;
+  const totalActive = active.length + groupRows.length;
+  if (totalActive === 0) return null;
 
   return (
     <Box mt={6}>
       <UnstyledButton onClick={onToggle} aria-expanded={open} style={{ width: '100%' }}>
         <Group gap={4} wrap="nowrap" justify="space-between">
           <Text size="xs" c="dimmed">
-            {active.length === 1 ? '1 filter active' : `${active.length} filters active`}
+            {totalActive === 1 ? '1 filter active' : `${totalActive} filters active`}
           </Text>
           <Icon
             icon={open ? 'mdi:chevron-up' : 'mdi:chevron-down'}
@@ -182,6 +199,31 @@ const ActiveFilterSummary: React.FC<ActiveFilterSummaryProps> = ({
               </Group>
             );
           })}
+          {groupRows.map((g) => (
+            <Group key={`group:${g.id}`} gap={6} wrap="nowrap" style={{ minWidth: 0 }}>
+              <Tooltip label={`Filtering by group ${g.name}`} withArrow openDelay={400}>
+                <span style={{ display: 'flex', flexShrink: 0 }}>
+                  <ColorSwatch color={g.color} size={INTERACTIVE_FRAME.compactIconSize} />
+                </span>
+              </Tooltip>
+              <Text size="xs" fw={500} truncate style={{ flex: '1 1 auto', minWidth: 0 }}>
+                Group: {g.name}
+              </Text>
+              <Text size="xs" c="dimmed" truncate style={{ flex: '0 1 auto', minWidth: 0 }}>
+                {g.count}
+              </Text>
+              <ActionIcon
+                variant="subtle"
+                color="gray"
+                size="xs"
+                aria-label={`Stop filtering by group ${g.name}`}
+                onClick={g.onClear}
+                style={{ flexShrink: 0 }}
+              >
+                <Icon icon="mdi:close" width={12} height={12} />
+              </ActionIcon>
+            </Group>
+          ))}
         </Stack>
       </Collapse>
     </Box>

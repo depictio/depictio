@@ -41,7 +41,7 @@ import {
 } from '../../utils/leftPanelLayout';
 import ComponentRenderer from '../ComponentRenderer';
 import InteractiveGroupCard from '../InteractiveGroupCard';
-import ActiveFilterSummary from './ActiveFilterSummary';
+import ActiveFilterSummary, { type GroupSummaryRow } from './ActiveFilterSummary';
 
 /**
  * The dashboard's left filter panel, shared by the viewer and the editor.
@@ -118,10 +118,11 @@ export interface FilterPanelProps {
    *  opaque node: the apps put the docked map panel here, and this component
    *  has no business knowing that. */
   footer?: React.ReactNode;
-  /** Rendered between the header and the active-filter summary. Opaque for the
-   *  same reason as `footer`: the apps put the selection-groups panel here, and
-   *  its state (groups are not filters) is theirs to own. */
-  groupsSection?: React.ReactNode;
+  /** Filter-active selection groups, summarised as removable rows alongside
+   *  the user filters (see `GroupSummaryRow`). They also count toward the
+   *  panel's active-filter badges. The Grouping panel itself lives in the
+   *  header (GroupingHeaderControl), not here. */
+  groupSummaryRows?: GroupSummaryRow[];
 }
 
 function readDensity(): FilterPanelDensity {
@@ -148,7 +149,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
   collapsed = false,
   onToggleCollapsed,
   footer,
-  groupsSection,
+  groupSummaryRows,
 }) => {
   const [density, setDensity] = useState<FilterPanelDensity>(readDensity);
   const [search, setSearch] = useState('');
@@ -190,7 +191,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
     [visibleComponents, filterSections, layoutData, editMode, search],
   );
 
-  const activeCount = countActiveFilters(filters);
+  const activeCount = countActiveFilters(filters) + (groupSummaryRows?.length ?? 0);
   const compactMembers = density === 'compact';
 
   // Everything the panel can fold: its named sections and its group cards. The
@@ -667,12 +668,11 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
         </Group>
       </Group>
 
-      {groupsSection}
-
       <ActiveFilterSummary
         filters={filters}
         components={allMetadata ?? components}
         onClear={onFilterChange}
+        groupRows={groupSummaryRows}
         open={collapse.isOpen(SUMMARY_KEY)}
         onToggle={() => collapse.toggle(SUMMARY_KEY)}
       />

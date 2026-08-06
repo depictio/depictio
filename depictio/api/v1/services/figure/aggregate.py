@@ -101,6 +101,10 @@ _STYLE_PASSTHROUGH = frozenset(
         "color_continuous_scale", "range_color", "category_orders", "log_x", "log_y",
         "range_x", "range_y", "barmode", "boxmode", "violinmode",
         "height", "width", "opacity", "nbins", "nbinsx", "nbinsy", "text_auto",
+        # Panel wrap count only — the data reduction is per facet_col category
+        # either way. Refusing it would kick every Split-mode figure off the
+        # scan aggregation onto a full-frame load.
+        "facet_col_wrap",
     }
 )  # fmt: skip
 
