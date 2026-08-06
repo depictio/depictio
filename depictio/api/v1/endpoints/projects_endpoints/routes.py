@@ -38,6 +38,15 @@ from depictio.api.v1.endpoints.projects_endpoints.manifest_ingest import (
     _ingest_manifest_into_project,
     _refresh_manifest_in_project,
 )
+from depictio.api.v1.endpoints.projects_endpoints.storage_config import (
+    ProjectStorageConfigIn,
+    ProjectStorageConfigOut,
+    StorageTestResult,
+    _delete_project_storage,
+    _get_project_storage,
+    _set_project_storage,
+    _test_project_storage,
+)
 from depictio.api.v1.endpoints.projects_endpoints.templates_catalog import (
     TemplateCatalog,
     list_templates_catalog,
@@ -351,6 +360,47 @@ async def get_refresh_manifest_run(
     if not current_user:
         raise HTTPException(status_code=401, detail="User not found.")
     return await asyncio.to_thread(_get_refresh_run_report, run_id, current_user)
+
+
+@projects_endpoint_router.get("/{project_id}/storage", response_model=ProjectStorageConfigOut)
+async def get_project_storage(project_id: str, current_user=Depends(get_user_or_anonymous)):
+    """Storage config of a project (secret never returned — only ``has_secret``)."""
+    if not current_user:
+        raise HTTPException(status_code=401, detail="User not found.")
+    return await asyncio.to_thread(_get_project_storage, project_id, current_user)
+
+
+@projects_endpoint_router.put("/{project_id}/storage", response_model=ProjectStorageConfigOut)
+async def set_project_storage(
+    project_id: str,
+    payload: ProjectStorageConfigIn,
+    current_user=Depends(get_user_or_anonymous),
+):
+    """Attach S3-compatible credentials to a project (owners only).
+
+    The secret is write-only: it is encrypted at rest and omitted secrets keep
+    the stored value. The endpoint URL goes through the same host gating as
+    remote data URLs.
+    """
+    if not current_user:
+        raise HTTPException(status_code=401, detail="User not found.")
+    return await asyncio.to_thread(_set_project_storage, project_id, payload, current_user)
+
+
+@projects_endpoint_router.delete("/{project_id}/storage")
+async def delete_project_storage(project_id: str, current_user=Depends(get_user_or_anonymous)):
+    """Remove a project's storage credentials (owners only)."""
+    if not current_user:
+        raise HTTPException(status_code=401, detail="User not found.")
+    return await asyncio.to_thread(_delete_project_storage, project_id, current_user)
+
+
+@projects_endpoint_router.post("/{project_id}/storage/test", response_model=StorageTestResult)
+async def test_project_storage(project_id: str, current_user=Depends(get_user_or_anonymous)):
+    """Probe the configured endpoint/bucket with the stored credentials."""
+    if not current_user:
+        raise HTTPException(status_code=401, detail="User not found.")
+    return await asyncio.to_thread(_test_project_storage, project_id, current_user)
 
 
 @projects_endpoint_router.get("/templates", response_model=TemplateCatalog)

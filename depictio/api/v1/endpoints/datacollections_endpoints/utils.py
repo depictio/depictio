@@ -1086,11 +1086,14 @@ async def _ensure_user_cli_token(current_user) -> None:
     await _add_token(token_data)
 
 
-def _build_cli_config_for_user(current_user):
+def _build_cli_config_for_user(current_user, remote_storage_options: dict | None = None):
     """Build a CLIConfig for in-process processor calls.
 
     The CLI helpers expect a stored token doc (they call back into the API
     over httpx). Mirrors the table-DC flow at ``_create_dc_from_upload``.
+    ``remote_storage_options`` carries a project's own read credentials for
+    remote url/manifest sources (per-project storage config); the instance
+    MinIO config stays the Delta write target either way.
     """
     from depictio.models.models.cli import CLIConfig, UserBaseCLIConfig
 
@@ -1107,6 +1110,7 @@ def _build_cli_config_for_user(current_user):
         ),
         api_base_url=settings.fastapi.url,
         s3_storage=settings.minio,
+        remote_storage_options=remote_storage_options,
     )
 
 

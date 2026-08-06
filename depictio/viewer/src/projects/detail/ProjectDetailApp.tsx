@@ -72,6 +72,7 @@ import { useCurrentUser } from '../../hooks/useCurrentUser';
 import { AppSidebar } from '../../chrome';
 import JoinsGraph from './JoinsGraph';
 import IngestionReportPanel from './IngestionReportPanel';
+import StoragePanel from './StoragePanel';
 import { parseTemplate, TemplateChip, templateDocsUrl } from '../template';
 import { DcTypeIcon } from '../dcTypeIcon';
 
@@ -354,6 +355,14 @@ const ProjectDetailApp: React.FC = () => {
     );
   }, [user, project]);
 
+  // Storage credentials are owners-only (stricter than canMutate, which also
+  // covers editors) — mirrors the backend's owner gate on /storage.
+  const isOwner = useMemo(() => {
+    if (!user || !project) return false;
+    if (user.is_admin) return true;
+    return !!project.permissions?.owners?.some((u) => (u._id ?? u.id) === user.id);
+  }, [user, project]);
+
   const workflows = useMemo<WorkflowShape[]>(
     () => (project?.workflows as WorkflowShape[] | undefined) || [],
     [project],
@@ -557,6 +566,9 @@ const ProjectDetailApp: React.FC = () => {
                       canMutate={canMutate}
                       onLinksChange={setProjectLinks}
                     />
+                  )}
+                  {projectId && (
+                    <StoragePanel projectId={projectId} canManage={isOwner} />
                   )}
                   <Box ref={dcViewerRef}>
                     {selectedDc && (

@@ -15,7 +15,7 @@ from bson import ObjectId
 from fastapi import HTTPException
 
 from depictio.api.v1.endpoints.datacollections_endpoints import utils as dc_utils
-from depictio.api.v1.endpoints.projects_endpoints import manifest_ingest
+from depictio.api.v1.endpoints.projects_endpoints import manifest_ingest, storage_config
 from depictio.models.models.users import UserBase
 
 MANIFEST_JSON = """
@@ -124,6 +124,8 @@ def mock_db(monkeypatch):
         patch.object(manifest_ingest, "projects_collection", database["projects"]),
         patch.object(dc_utils, "projects_collection", database["projects"]),
         patch.object(dc_utils, "tokens_collection", database["tokens"]),
+        # The ingest flow resolves per-project storage credentials.
+        patch.object(storage_config, "project_storage_collection", database["project_storage"]),
     ):
         yield database
 
