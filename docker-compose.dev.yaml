@@ -118,6 +118,19 @@ services:
         # the numbers useless. The shipped docker-compose.yaml has it on.
         DEPICTIO_TELEMETRY_ENABLED: "${DEPICTIO_TELEMETRY_ENABLED:-false}"
         DEPICTIO_TELEMETRY_DEPLOYMENT_KIND: "${DEPICTIO_TELEMETRY_DEPLOYMENT_KIND:-docker-compose-dev}"
+        # AI assistant — opt-in. With enabled=false the /ai router is never
+        # mounted and /utils/status advertises the flag off, so the SPA hides
+        # every AI affordance. These reach the backend through this block, not
+        # through env_file, so per-instance overrides belong in .env.instance.
+        DEPICTIO_AI_ENABLED: "${DEPICTIO_AI_ENABLED:-false}"
+        # Mirrors the AIConfig default in settings_models.py; keep the two in
+        # sync (an unset var would otherwise pass "" and clobber the default).
+        DEPICTIO_AI_DEFAULT_MODEL: "${DEPICTIO_AI_DEFAULT_MODEL:-openrouter/anthropic/claude-sonnet-4-6}"
+        # Server-side fallback key. Unset means pure BYOK: the user pastes their
+        # own key in the dashboard Settings drawer and it rides per request on
+        # X-LLM-API-Key, never persisted or logged server-side.
+        DEPICTIO_AI_API_KEY: "${DEPICTIO_AI_API_KEY:-}"
+        DEPICTIO_AI_ALLOW_USER_KEYS: "${DEPICTIO_AI_ALLOW_USER_KEYS:-true}"
         # Belt-and-suspenders: the editable plotly-upset / plotly-complexheatmap
         # packages are installed into the venv at image build (uv sync). If the
         # build re-used a cached layer (pre-dating the package addition), the
@@ -174,6 +187,7 @@ services:
       - ./depictio/viewer/public:/build/depictio/viewer/public
       - ./packages/depictio-components/src:/build/packages/depictio-components/src
       - ./packages/depictio-react-core/src:/build/packages/depictio-react-core/src
+      - ./packages/depictio-react-ai/src:/build/packages/depictio-react-ai/src
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
     depends_on:
