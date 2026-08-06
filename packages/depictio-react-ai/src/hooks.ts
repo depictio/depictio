@@ -6,13 +6,15 @@
  * streaming analyze flow).
  */
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import {
   componentFromPrompt as apiComponentFromPrompt,
+  getAIHealth,
   resolveFilters as apiResolveFilters,
   streamAnalyze as apiStreamAnalyze,
   summarizeSection as apiSummarizeSection,
+  type AIHealth,
 } from './api';
 import { useAISession, useAIStore } from './store';
 import type {
@@ -29,6 +31,33 @@ import type {
 
 function newId(): string {
   return `m_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/** One-shot /ai/health probe. `enabled=false` (feature off) never fetches
+ *  and reports a null health. Used to decide whether a server-side
+ *  fallback key exists, i.e. whether the UI works without a user key. */
+export function useAIHealth(enabled: boolean): AIHealth | null {
+  const [health, setHealth] = useState<AIHealth | null>(null);
+
+  useEffect(() => {
+    if (!enabled) {
+      setHealth(null);
+      return;
+    }
+    let cancelled = false;
+    getAIHealth()
+      .then((h) => {
+        if (!cancelled) setHealth(h);
+      })
+      .catch(() => {
+        if (!cancelled) setHealth(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [enabled]);
+
+  return health;
 }
 
 /** Prompt-driven typed component creation.

@@ -29,7 +29,7 @@ const STATUS_ICON: Record<string, string> = {
   success: 'material-symbols:check-circle-outline',
   warning: 'material-symbols:warning-outline',
   error: 'material-symbols:error-outline',
-  running: 'svg-spinners:90-ring',
+  running: 'mdi:loading',
 };
 
 type Filter = 'all' | 'code' | 'errors';

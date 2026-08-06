@@ -20,17 +20,19 @@ export type { SectionSummaryState } from './components/SectionSummary';
 
 export {
   componentFromPrompt,
+  getAIHealth,
   getSummaries,
   resolveFilters,
   streamAnalyze,
   summarizeSection,
 } from './api';
-export type { AnalyzeStreamHandlers } from './api';
+export type { AIHealth, AnalyzeStreamHandlers } from './api';
 
 export { useAISession, useAIStore } from './store';
 export type { AIChatMessage, AISession } from './store';
 
 export {
+  useAIHealth,
   useAnalyze,
   useComponentFromPrompt,
   useResolveFilters,
