@@ -206,6 +206,7 @@ class MongoDBConfig(ServiceConfig):
         multiqc_prerender_collection: str = Field(default="multiqc_prerender")
         task_events_collection: str = Field(default="task_events")
         ingestion_runs_collection: str = Field(default="ingestion_runs")
+        project_storage_collection: str = Field(default="project_storage_configs")
         app_logs_collection: str = Field(default="app_logs")
         # Instance branding: the singleton overrides document and the uploaded
         # logo bytes. Named here so backup/restore can reach them like any other

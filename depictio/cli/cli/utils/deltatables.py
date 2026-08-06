@@ -806,10 +806,14 @@ def client_aggregate_data(
     file_format = dc_props.get("format", "csv").lower()
     polars_kwargs = dict(dc_props.get("polars_kwargs", {}))
     with timed("parse"):
-        # Remote s3:// locations read through the instance's own S3 config
-        # (phase 1 — per-project storage config is a later phase of the RFC).
+        # Remote locations read with the project's own storage credentials
+        # when configured (per-project storage config, RFC §5.3), falling back
+        # to the instance's S3 config. The Delta write target below always
+        # stays on the instance config — read and write are two different
+        # credentials by design.
+        remote_options = CLI_config.remote_storage_options or storage_options.model_dump()
         lazy_frames = read_files_lazy(
-            files, file_format, polars_kwargs, remote_storage_options=storage_options.model_dump()
+            files, file_format, polars_kwargs, remote_storage_options=remote_options
         )
     record("n_files", len(files) if files else 0)
 

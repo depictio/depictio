@@ -301,13 +301,28 @@ allowlist-only mode.
 
 ### 5.3 Trap №2 — credentials for private buckets
 
-Phase-gated. First slice: public `https` plus the instance's own configured S3
-credentials (whatever `DEPICTIO_MINIO_*` points at). Private third-party
-buckets need **per-project storage configuration** (roadmap issue 383): a
-`ProjectStorageConfig` (endpoint URL, bucket, keys — encrypted at rest like
-existing token storage) threaded into `storage_options` for that project's
-remote reads. The model is defined by this RFC; implementation is its own
-phase.
+*Implemented (phase 4).* Private third-party buckets go through
+**per-project storage configuration** (roadmap issue 383):
+
+- Credentials live in their own `project_storage_configs` collection — never
+  on the `Project` document — which keeps them out of `ProjectResponse`
+  (`extra="allow"`) and away from the `.mongo()`/`SecretStr` serialization
+  traps. (The original "encrypted at rest like existing token storage"
+  framing was a false premise: tokens are stored in plaintext. This is the
+  codebase's first encrypt-at-rest primitive — Fernet, key generated and
+  persisted under `DEPICTIO_KEYS_DIR` next to the JWT keypair.)
+- Owner-only CRUD at `PUT/GET/DELETE /projects/{id}/storage` plus
+  `POST /projects/{id}/storage/test` (boto3 probe, sanitized errors). The
+  secret is **write-only**: responses carry `has_secret`, omitted secrets
+  keep the stored value. Endpoint URLs pass the same host gating as remote
+  data URLs (own MinIO exempt; private ranges need
+  `DEPICTIO_REMOTE_URL_ALLOWLIST`) — a project-supplied endpoint is the same
+  SSRF surface.
+- Read side: `storage_options_for_project` → `CLIConfig.remote_storage_options`
+  → the remote-read branch of the aggregation. **Read creds ≠ write creds**:
+  the Delta write target always stays on the instance's own S3 config. Celery
+  refresh workers re-resolve credentials from Mongo so no secret ever crosses
+  the broker.
 
 ## 6. Manifest → project + dashboard flow
 

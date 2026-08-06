@@ -3264,6 +3264,86 @@ export async function updateProjectPermissions(
   if (!res.ok) await throwHttpError(res, 'Failed to update permissions');
 }
 
+/** Per-project S3-compatible storage configuration, as returned by the
+ *  backend. The secret is write-only: it is stored encrypted server-side and
+ *  never echoed back — responses only carry `has_secret`. */
+export interface ProjectStorageConfig {
+  endpoint_url: string;
+  bucket: string | null;
+  region: string;
+  access_key_id: string | null;
+  has_secret: boolean;
+  updated_at: string | null;
+}
+
+/** PUT body for the storage config. Omitting (or nulling)
+ *  `secret_access_key` KEEPS the previously stored secret, so edits don't
+ *  require retyping it; a non-empty string replaces it. */
+export interface ProjectStorageConfigInput {
+  endpoint_url: string;
+  bucket?: string | null;
+  region?: string;
+  access_key_id?: string | null;
+  secret_access_key?: string | null;
+}
+
+/** Result of POST /projects/{id}/storage/test. A failed connection is NOT an
+ *  HTTP error — it comes back 200 with `success: false` and a sanitized
+ *  message. */
+export interface ProjectStorageTestResult {
+  success: boolean;
+  message: string;
+}
+
+/** Fetch a project's storage config. Returns null when none is set (the
+ *  backend answers 404 for "not configured" — that's a normal state, not an
+ *  error). Other failures (401/403, invalid project) throw with the backend's
+ *  `{detail}` string. */
+export async function getProjectStorage(
+  projectId: string,
+): Promise<ProjectStorageConfig | null> {
+  const res = await authFetch(`${API_BASE}/projects/${projectId}/storage`);
+  if (res.status === 404) return null;
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to load storage configuration');
+  return (await res.json()) as ProjectStorageConfig;
+}
+
+/** Create or update a project's storage config (owners only). Backend 400s
+ *  carry actionable `{detail}` strings (e.g. a rejected private endpoint
+ *  host) — surfaced verbatim. */
+export async function setProjectStorage(
+  projectId: string,
+  input: ProjectStorageConfigInput,
+): Promise<ProjectStorageConfig> {
+  const res = await authFetch(`${API_BASE}/projects/${projectId}/storage`, {
+    method: 'PUT',
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to save storage configuration');
+  return (await res.json()) as ProjectStorageConfig;
+}
+
+/** Remove a project's storage config, including the stored secret. */
+export async function deleteProjectStorage(projectId: string): Promise<void> {
+  const res = await authFetch(`${API_BASE}/projects/${projectId}/storage`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to remove storage configuration');
+}
+
+/** Test the saved storage credentials against the configured endpoint.
+ *  Connection failures come back as `{success: false, message}` rather than
+ *  throwing; only transport/authorization errors throw. */
+export async function testProjectStorage(
+  projectId: string,
+): Promise<ProjectStorageTestResult> {
+  const res = await authFetch(`${API_BASE}/projects/${projectId}/storage/test`, {
+    method: 'POST',
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Storage connection test failed');
+  return (await res.json()) as ProjectStorageTestResult;
+}
+
 /** Upload a project .zip and create the project from its contents.
  *  Hits the migrate router's import-project-zip endpoint (the sibling of
  *  exportProjectZip's /migrate/export-project below). */

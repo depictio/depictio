@@ -2139,6 +2139,9 @@ def manifest_refresh_dc_task(payload: dict) -> dict:
     """
     from depictio.api.v1.db import projects_collection
     from depictio.api.v1.endpoints.projects_endpoints.manifest_ingest import _run_dc_ingest
+    from depictio.api.v1.endpoints.projects_endpoints.storage_config import (
+        storage_options_for_project,
+    )
     from depictio.api.v1.monitoring import store
     from depictio.models.models.users import UserBase
 
@@ -2160,6 +2163,8 @@ def manifest_refresh_dc_task(payload: dict) -> dict:
             payload["dc_id"],
             user,
             sync_files=bool(payload.get("sync_files", True)),
+            # Resolved worker-side so credentials never cross the broker.
+            remote_storage_options=storage_options_for_project(payload["project_id"]),
         )
     except Exception as exc:  # noqa: BLE001 — any crash is a per-DC failure
         logger.error(f"Manifest refresh task crashed for DC '{tag}': {exc}")
