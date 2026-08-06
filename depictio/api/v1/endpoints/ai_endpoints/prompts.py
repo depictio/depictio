@@ -7,10 +7,14 @@ from __future__ import annotations
 
 from typing import Literal
 
+from depictio.api.v1.configs.config import settings
 from depictio.api.v1.endpoints.ai_endpoints.context import (
     DashboardContext,
+    DashboardDataContext,
     DataContext,
 )
+from depictio.api.v1.endpoints.ai_endpoints.executor import grammar_block
+from depictio.api.v1.endpoints.ai_endpoints.schemas import AnalyzeMode
 from depictio.models.components.constants import (
     AGGREGATION_COMPATIBILITY,
     INTERACTIVE_COMPATIBILITY,
@@ -283,35 +287,146 @@ Each PlotSuggestion follows this schema:
     ]
 
 
+def _data_block(
+    data_ctx: DataContext,
+    multi: DashboardDataContext | None,
+    warnings: list[str] | None,
+) -> tuple[str, list[str]]:
+    """Render the data section, degrading gracefully under the char budget.
+
+    `max_context_chars` has always been documented as a hard cap and has
+    only ever been enforced on the section-summary prompt. Describing N
+    schemas instead of one is exactly the case that overruns it, so this
+    is where it starts to matter. Sample rows go first (they illustrate
+    shape, they are not evidence), then whole collections from the tail.
+    Whatever is dropped is reported, because a silently shortened context
+    reads to the model as the complete picture.
+    """
+    budget = settings.ai.max_context_chars
+    notes: list[str] = []
+
+    if multi is None or not multi.collections:
+        return (
+            f"DATASET SCHEMA:\n{data_ctx.schema_block()}\n\n"
+            f"SAMPLE ROWS:\n{data_ctx.sample_block()}",
+            [],
+        )
+
+    def render(collections: list[DataContext], with_samples: bool) -> str:
+        view = DashboardDataContext(
+            dashboard_id=multi.dashboard_id, collections=collections, joins=multi.joins
+        )
+        return (
+            f"DATA COLLECTIONS:\n{view.collections_block(with_samples=with_samples)}\n\n"
+            f"DECLARED JOINS:\n{view.joins_block()}"
+        )
+
+    kept = list(multi.collections)
+    block = render(kept, True)
+    if len(block) > budget:
+        block = render(kept, False)
+        notes.append("Sample rows were omitted from the context to stay within the size budget.")
+    while len(block) > budget and len(kept) > 1:
+        dropped = kept.pop()
+        notes.append(
+            f"Data collection '{dropped.data_collection_tag or dropped.data_collection_id}' "
+            "was left out of the context to stay within the size budget."
+        )
+        block = render(kept, False)
+
+    if warnings is not None:
+        warnings.extend(notes)
+    return block, [c.data_collection_tag or c.data_collection_id for c in kept]
+
+
 def analyze_messages(
     data_ctx: DataContext,
     dashboard_ctx: DashboardContext,
     user_prompt: str,
     selected_component_id: str | None,
+    mode: AnalyzeMode = "mutate",
+    multi: DashboardDataContext | None = None,
+    warnings: list[str] | None = None,
 ) -> list[dict]:
-    """System prompt for the analyze flow.
+    """System prompt for the analyze flow, in one of two exclusive modes.
 
-    The model is asked to produce a plan: free-text reasoning, optional
-    Polars expression(s) for execution, an answer, and any dashboard
-    actions (filter changes / figure mutations) — all wrapped in a single
-    JSON envelope so we can parse incrementally.
+    ``mutate`` asks for the original envelope: reasoning, optional Polars
+    code, an answer, and dashboard actions the user can Apply.
+
+    ``analyze`` is read-only. `actions` is absent from the envelope and
+    stripped server-side if the model emits it anyway, so the surface
+    rendering the reply never has to guess whether an Apply button
+    belongs there.
+
+    `mode` is the first field of the envelope in both cases: the loop is
+    driven by blocking completions today, so nothing reads it early, but
+    it keeps the door open for token-level streaming to route the
+    rendering before the reply is complete.
     """
     selected = (
         f"\nThe user has selected component '{selected_component_id}'."
         if selected_component_id
         else ""
     )
-    system = f"""You are a data analyst assistant for a bioinformatics dashboard.
-You can answer questions about the data and propose changes to the dashboard.
+    if mode == "analyze":
+        role = """You are a data analyst producing a traceable analysis report for a
+bioinformatics dashboard. You answer by computing, step by step. You do
+NOT change the dashboard: this request is read-only, and any dashboard
+action you propose will be discarded."""
+        envelope = """{
+  "mode": "analyze",
+  "plan": "on your FIRST reply only: 2-4 lines stating how you will approach the question",
+  "thought": "what this step is for",
+  "code": "<polars expression, or empty string when you are done>",
+  "answer": "final narrative in Markdown — only when code is empty",
+  "findings": [
+      {"claim": "one specific, quantified statement",
+       "evidence_step_ids": [<indices of the executed steps that prove it>],
+       "confidence": "low" | "medium" | "high"}
+  ]
+}"""
+        rules = """- Iterate: explore, verify, cross-check. You will see your remaining
+  budget (steps, tokens, seconds) after every step — plan to conclude
+  before it runs out rather than being cut off.
+- Every finding MUST cite evidence_step_ids of steps that ran
+  successfully. A finding without evidence is dropped server-side.
+  The sample rows illustrate the shape of the data; they are never
+  evidence. Steps are numbered from 0 in the order they executed.
+- Prefer aggregates over row dumps; output is capped per step.
+- Do NOT emit an "actions" key. It will be discarded.
+- Do not wrap the JSON in markdown fences."""
+        contract = ""
+    else:
+        role = """You are a data analyst assistant for a bioinformatics dashboard.
+You can answer questions about the data and propose changes to the dashboard."""
+        envelope = """{
+  "mode": "mutate",
+  "thought": "what you intend to do",
+  "code": "<polars expression or empty string>",
+  "answer": "natural-language answer once you have the result",
+  "actions": {
+      "figure_mutations": [{"component_id": "...", "dict_kwargs_patch": {...}, "reason": "..."}],
+      "filter_proposals": [<FilterProposal>, ...]
+  }
+}"""
+        rules = """- Use the `code` field if and only if you need to compute something.
+- Use `actions.filter_proposals` to change what data the dashboard shows.
+- Use `actions.figure_mutations` to propose patches to existing figures
+  (keys mapped to null are removed).
+- Do not wrap the JSON in markdown fences."""
+        contract = f"\n{FILTER_PROPOSAL_CONTRACT}\n"
+
+    data_block, tags = _data_block(data_ctx, multi, warnings)
+
+    system = f"""{role}
 
 CONTEXT:
 {data_ctx.metadata_block()}
 
-DATASET SCHEMA:
-{data_ctx.schema_block()}
+{data_block}
 
-SAMPLE ROWS:
-{data_ctx.sample_block()}
+DASHBOARD COMPONENTS:
+{dashboard_ctx.components_block()}
 
 CURRENT DASHBOARD FIGURES:
 {dashboard_ctx.figures_block()}
@@ -320,35 +435,12 @@ CURRENT FILTERS:
 {dashboard_ctx.filters_block()}
 {selected}
 
-When you need to compute something, write a single Polars expression on a
-DataFrame named `df`. Only the following are allowed:
-- `df` and `pl` (polars import)
-- DataFrame methods: filter, select, with_columns, group_by, agg, sort,
-  head, drop_nulls, unique, describe, value_counts, n_unique, null_count,
-  min/max/mean/median/sum/std/var/count
-- pl helpers: col, lit, when, sum/mean/min/max/count, type casts (Int64,
-  Float64, Utf8, Boolean, Date)
-
-NO imports, NO file I/O, NO lambdas, NO bare function calls.
+{grammar_block(tags)}
 
 Respond with valid JSON of the form:
-{{
-  "thought": "what you intend to do",
-  "code": "<polars expression or empty string>",
-  "answer": "natural-language answer once you have the result",
-  "actions": {{
-      "figure_mutations": [{{"component_id": "...", "dict_kwargs_patch": {{...}}, "reason": "..."}}],
-      "filter_proposals": [<FilterProposal>, ...]
-  }}
-}}
-
-{FILTER_PROPOSAL_CONTRACT}
-
-- Use the `code` field if and only if you need to compute something.
-- Use `actions.filter_proposals` to change what data the dashboard shows.
-- Use `actions.figure_mutations` to propose patches to existing figures
-  (keys mapped to null are removed).
-- Do not wrap the JSON in markdown fences.
+{envelope}
+{contract}
+{rules}
 """
     return [
         {"role": "system", "content": system},
@@ -356,9 +448,63 @@ Respond with valid JSON of the form:
     ]
 
 
+def analysis_continuation(
+    step_index: int,
+    step_output: str,
+    rows_in: int | None,
+    rows_out: int | None,
+    seconds: float,
+    *,
+    steps_left: int,
+    tokens_left: int,
+    seconds_left: float,
+    conclude: bool,
+) -> str:
+    """The message that drives the read-only loop forward.
+
+    The earlier continuation told the model, verbatim, to set `code` to ''
+    and answer — which capped every analysis at exactly one executed step
+    no matter what MAX_ANALYZE_STEPS said. This one permits iteration and
+    shows the countdown, so concluding is a decision rather than an
+    interruption.
+    """
+    cardinality = ""
+    if rows_in is not None:
+        arrow = f"{rows_in:,} rows in"
+        if rows_out is not None:
+            arrow += f" -> {rows_out:,} rows out"
+        cardinality = f" ({arrow}, {seconds:.1f}s)"
+
+    header = f"Observation for step {step_index}{cardinality}:\n{step_output}"
+    if conclude:
+        return (
+            f"{header}\n\n"
+            "Your budget is exhausted. Respond with the same JSON envelope, "
+            'set "code" to "", and provide your final "answer" and "findings" '
+            "based on the steps that already ran."
+        )
+    return (
+        f"{header}\n\n"
+        f"Budget remaining: {steps_left} steps, ~{tokens_left:,} tokens, "
+        f"{seconds_left:.0f}s.\n"
+        'Respond with the same JSON envelope. Set "code" to your next '
+        'expression to keep investigating, or set "code" to "" and provide '
+        'your final "answer" and "findings".'
+    )
+
+
 # ---------------------------------------------------------------------------
 # Filter proposals (analyze + resolve-filters)
 # ---------------------------------------------------------------------------
+#
+# The grammar recited below is the one enforced by `validate_filter_expr`
+# in `depictio/models/components/filter_expr.py`, NOT the executor's
+# allowlist. They are separate sandboxes guarding different lifetimes: a
+# filter_expr is persisted on the dashboard document and re-evaluated on
+# every render, whereas executor code runs once and is discarded. That is
+# why this grammar is the narrower of the two and why `.over(...)`,
+# `is_between` and `str.contains` appearing here says nothing about what
+# `grammar_block()` will accept.
 
 FILTER_PROPOSAL_CONTRACT = """\
 Each FilterProposal is one of three kinds:
