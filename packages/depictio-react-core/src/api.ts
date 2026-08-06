@@ -3406,6 +3406,35 @@ export async function exportProjectZip(projectId: string): Promise<void> {
   URL.revokeObjectURL(url);
 }
 
+/** POST body for /projects/{id}/export_template. `template_id` is a
+ *  slash-separated path (e.g. `my-lab/rnaseq-qc/1`) — each segment must match
+ *  `[A-Za-z0-9][A-Za-z0-9._-]*`. `data_root` re-parameterizes a local path
+ *  prefix as `{DATA_ROOT}` in the exported config; leave it unset for
+ *  manifest-driven projects. */
+export interface ExportTemplateRequest {
+  template_id: string;
+  description?: string | null;
+  version?: string;
+  data_root?: string | null;
+}
+
+/** Export a project as a reusable template bundle (owners/editors/admins).
+ *  Resolves to the zip Blob — the caller decides how to hand it to the user.
+ *  Backend 422s carry meaningful `{detail}` strings (bad template_id format,
+ *  or the exported config failing its round-trip self-check) — surfaced
+ *  verbatim. */
+export async function exportProjectTemplate(
+  projectId: string,
+  payload: ExportTemplateRequest,
+): Promise<Blob> {
+  const res = await authFetch(`${API_BASE}/projects/${projectId}/export_template`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to export template');
+  return res.blob();
+}
+
 /** MultiQC report list response shape — used to render the DC viewer panel
  *  for multiqc-typed data collections. The backend stamps everything inside
  *  `report` (the embedded MultiQCReport doc) so callers should always read
