@@ -428,6 +428,54 @@ class TestProcessMetadataAndFilter:
         # Assert
         assert len(result) == 0
 
+    def test_process_metadata_and_filter_expr_only_component(self):
+        """An AI-injected filter carries filter_expr but no widget fields."""
+        metadata = [
+            {
+                "index": "ai-1234",
+                "source": "ai_prompt",
+                "value": None,
+                "metadata": {"filter_expr": "col('price') >= 30", "dc_id": "abc"},
+            }
+        ]
+
+        result = process_metadata_and_filter(metadata)
+
+        assert len(result) == 1
+        # The produced expression must actually filter rows.
+        df = pl.DataFrame({"price": [10, 30, 50]})
+        assert df.filter(result[0]).height == 2
+
+    def test_process_metadata_and_filter_expr_only_mixed_with_widget(self):
+        """Expr-only and widget-backed filters coexist in one request."""
+        metadata = [
+            {
+                "metadata": {"interactive_component_type": "Select", "column_name": "category"},
+                "value": ["A"],
+            },
+            {
+                "source": "ai_prompt",
+                "filter_expr": "col('price') < 100",
+            },
+        ]
+
+        result = process_metadata_and_filter(metadata)
+
+        assert len(result) == 2
+
+    def test_process_metadata_and_filter_invalid_expr_is_skipped(self):
+        """A malformed filter_expr degrades to no filter, not an exception."""
+        metadata = [
+            {
+                "source": "ai_prompt",
+                "filter_expr": "__import__('os').system('true')",
+            }
+        ]
+
+        result = process_metadata_and_filter(metadata)
+
+        assert result == []
+
 
 class TestConvertFilterModelToMetadata:
     """Test filter model conversion functionality."""
