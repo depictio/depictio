@@ -80,26 +80,48 @@ test.describe("AI assistant", () => {
     await expect(page.locator("[data-testid='add-with-ai']")).toHaveCount(0);
   });
 
-  test("analyze prompt answers and applying the plan raises the AI filters chip", async ({
+  test("analyze prompt answers and applying the plan raises the AI chips", async ({
     loginAsAdmin,
     page,
   }) => {
     await mockFeatures(page, true);
     await mockAIHealth(page);
 
-    const sse = [
-      'event: status\ndata: {"message":"thinking"}',
-      'event: answer\ndata: {"answer":"Median depth is 50."}',
-      'event: actions\ndata: {"filters":[],"figure_mutations":[],"filter_proposals":[],"resolved_filters":[{"kind":"filter_expr","filter_expr":"col(\'depth\') >= 50.0","dc_id":null,"description":"depth at or above the median"}],"warnings":[]}',
-      'event: result\ndata: {"answer":"Median depth is 50.","steps":[],"actions":{"filters":[],"figure_mutations":[],"filter_proposals":[]},"resolved_filters":[{"kind":"filter_expr","filter_expr":"col(\'depth\') >= 50.0","dc_id":null,"description":"depth at or above the median"}]}',
-      "event: done\ndata: {}",
-    ].join("\n\n");
-    await page.route("**/depictio/api/v1/ai/analyze", (route) =>
-      route.fulfill({
+    // The canned plan carries one expr filter plus one figure mutation.
+    // The mutation must target a REAL figure on whatever dashboard is
+    // seeded first (the host validates ids against stored_metadata), so we
+    // sniff the dashboard payload as the app loads it and template the id
+    // into the SSE body at request time.
+    let figureId: string | null = null;
+    await page.route("**/depictio/api/v1/dashboards/get/*", async (route) => {
+      const res = await route.fetch();
+      const json = (await res.json()) as {
+        stored_metadata?: { index?: string; component_type?: string }[];
+      };
+      figureId =
+        json.stored_metadata?.find((m) => m.component_type === "figure")?.index ??
+        null;
+      await route.fulfill({ json });
+    });
+
+    await page.route("**/depictio/api/v1/ai/analyze", (route) => {
+      const mutations = figureId
+        ? `[{"component_id":"${figureId}","dict_kwargs_patch":{"log_y":true},"reason":"log scale"}]`
+        : "[]";
+      const resolved =
+        '[{"kind":"filter_expr","filter_expr":"col(\'depth\') >= 50.0","dc_id":null,"description":"depth at or above the median"}]';
+      const sse = [
+        'event: status\ndata: {"message":"thinking"}',
+        'event: answer\ndata: {"answer":"Median depth is 50."}',
+        `event: actions\ndata: {"filters":[],"figure_mutations":${mutations},"filter_proposals":[],"resolved_filters":${resolved},"warnings":[]}`,
+        `event: result\ndata: {"answer":"Median depth is 50.","steps":[],"actions":{"filters":[],"figure_mutations":${mutations},"filter_proposals":[]},"resolved_filters":${resolved}}`,
+        "event: done\ndata: {}",
+      ].join("\n\n");
+      return route.fulfill({
         contentType: "text/event-stream",
         body: `${sse}\n\n`,
-      }),
-    );
+      });
+    });
 
     await loginAsAdmin();
     await openFirstDashboard(page);
@@ -122,6 +144,17 @@ test.describe("AI assistant", () => {
 
     await expect(page.locator("[data-testid='ai-filters-chip']")).toBeVisible();
     await expect(page.getByText("AI filters (1)")).toBeVisible();
+
+    // The figure mutation becomes a transient override with its own chip.
+    // `figureId` was sniffed while the dashboard loaded (long before Apply),
+    // so it reliably tells us whether the plan carried a mutation at all.
+    if (figureId) {
+      await expect(page.getByText("AI figure tweaks (1)")).toBeVisible();
+      await page.getByText("AI figure tweaks (1)").click();
+      await expect(
+        page.locator("[data-testid='ai-figure-overrides-chip']"),
+      ).toHaveCount(0);
+    }
 
     // Clearing the chip removes the injected filter group.
     await page.getByText("AI filters (1)").click();
@@ -176,5 +209,64 @@ test.describe("AI assistant", () => {
       timeout: 15_000,
     });
     await expect(page.getByText("Refine with AI")).toBeVisible();
+  });
+
+  test("figure suggestions land in the builder's Design step", async ({
+    loginAsAdmin,
+    page,
+  }) => {
+    await mockFeatures(page, true);
+    await mockAIHealth(page);
+    await page.route("**/depictio/api/v1/ai/suggest-figures", (route) =>
+      route.fulfill({
+        json: {
+          suggestions: [
+            {
+              visu_type: "histogram",
+              dict_kwargs: { x: "depth" },
+              title: "Depth distribution",
+              explanation: "Shows how sequencing depth spreads across samples.",
+              code: 'px.histogram(df, x="depth")',
+            },
+            {
+              visu_type: "scatter",
+              dict_kwargs: { x: "depth", y: "coverage" },
+              title: "Depth vs coverage",
+              explanation: "Correlation between depth and coverage.",
+              code: 'px.scatter(df, x="depth", y="coverage")',
+            },
+          ],
+        },
+      }),
+    );
+
+    await loginAsAdmin();
+    const dashboardId = await openFirstDashboard(page);
+    await page.goto(`/dashboard-edit/${dashboardId}`);
+
+    const addButton = page.locator("[data-tour-id='editor-add-component']");
+    await expect(addButton).toBeEnabled({ timeout: 20_000 });
+    await addButton.click();
+    await page.locator("[data-testid='add-with-ai']").click();
+    await expect(page.getByText("Add component with AI")).toBeVisible();
+
+    // Figure is the default type; flip to suggestions mode and fetch.
+    await page.getByRole("radio", { name: "Suggestions" }).click();
+    await page.locator("[data-testid='ai-suggest-run']").click();
+
+    await expect(page.getByText("Depth distribution")).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(page.getByText("Depth vs coverage")).toBeVisible();
+
+    // Picking one reuses the component-from-prompt hand-off.
+    await page
+      .locator("[data-testid='ai-suggestion-0']")
+      .getByRole("button", { name: "Use this" })
+      .click();
+    await expect(page).toHaveURL(/\/component\/add\//, { timeout: 15_000 });
+    await expect(page.getByText("Component Design")).toBeVisible({
+      timeout: 15_000,
+    });
   });
 });

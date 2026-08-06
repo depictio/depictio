@@ -9,6 +9,9 @@ three user-facing flows:
    figure data and table rows, with the active filters applied. Summaries
    are cached server-side and reload with the dashboard; a **stale** badge
    with one-click *Regenerate* appears when filters change afterwards.
+   Dashboards with several sections also get a **Summarize all** button
+   above the grid — a sequential sweep where the hash cache short-circuits
+   sections whose on-screen context hasn't changed.
 2. **Live dashboard updates from a prompt** — the "Ask the dashboard" panel
    (viewer + editor) answers data questions and can propose dashboard
    actions. *Hybrid, expression-first*: when an existing interactive
@@ -19,6 +22,11 @@ three user-facing flows:
    concrete threshold on the live, filtered data — the expression sandbox
    never gains quantile primitives, and the provenance ("top 3% of depth ⇒
    depth ≥ 97") is kept with the filter.
+   Plans can also carry **figure mutations** ("switch that scatter to a
+   log scale"): applied ones become *transient* per-request `dict_kwargs`
+   overrides on the figure render (UI-mode figures only — never persisted,
+   code-mode figures ignore them), shown as a removable **AI figure
+   tweaks (n) ×** chip next to the AI filters chip.
 3. **Component from a prompt** — *Add component → With AI…* in the editor
    takes a component type, a data collection and a prompt, has the LLM emit
    YAML in the exact grammar `depictio-cli dashboard import` consumes,
@@ -26,6 +34,10 @@ three user-facing flows:
    feedback-and-retry round), and lands you on the builder's Design step
    with the live preview rendering. An *AI fill / Refine with AI* button
    inside the Design step iterates on the current component.
+   For figures the modal also offers a **Suggestions** mode: the LLM
+   proposes a few plots grounded in the data collection's actual columns
+   (title, rationale, display-only Python) and picking one lands in the
+   same Design-step hand-off — no prompt required.
 
 ## Enabling
 
@@ -68,7 +80,8 @@ All under `/depictio/api/v1/ai`, feature-gated, authenticated like every
 other read (`get_user_or_anonymous` + project-viewer permission checks):
 
 - `GET /ai/health` — configured model + key posture (no key material).
-- `POST /ai/suggest-figures` — data-grounded figure suggestions.
+- `POST /ai/suggest-figures` — data-grounded figure suggestions (the
+  *Suggestions* mode of the Add-with-AI modal).
 - `POST /ai/component-from-prompt` — YAML component generation +
   validation (2 attempts).
 - `POST /ai/resolve-filters` — single-shot NL → validated filter plan.
@@ -88,7 +101,10 @@ other read (`get_user_or_anonymous` + project-viewer permission checks):
     (`depictio/models/components/filter_expr.py`);
   - analyze code runs under an AST allowlist (`df`/`pl` only, no imports,
     no dunders, no bare calls);
-  - percentile thresholds are computed by the server, not the model.
+  - percentile thresholds are computed by the server, not the model;
+  - figure mutations are transient render-request overrides — nothing is
+    written to the dashboard document, code-mode figures ignore them, and
+    the chip reverts them in one click.
 - Sample rows sent to the LLM pass a PII redaction pass (emails, phones).
 - Reverse proxies must not buffer the analyze stream: for nginx, set
   `proxy_buffering off;` on `/depictio/api/v1/ai/analyze` (the response
