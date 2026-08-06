@@ -357,6 +357,39 @@ not in the hover-revealed action row, since a viewer must see it without hoverin
 **Permissions (producers A and C).** `viewer` for preflight, **`owner`** for the build itself: a
 bundle is bulk data exfiltration and should not be available to every viewer.
 
+### 8.1 Size envelope for `single-file`
+
+Measured on the five reference families (v1.5.0, 2026-08-06):
+
+| family | file | Parquet (base64) | rows × cols | frozen payloads |
+|---|---|---|---|---|
+| iris | 8.1 MB | 0.01 MB | 150 × 7 | 0.01 MB |
+| penguins | 8.1 MB | 0.01 MB | 342 × 12 | 0.04 MB |
+| advanced-viz-showcase | 8.7 MB | 0.19 MB | 11 793 × 55 | 0.33 MB |
+| ampliseq | 11.0 MB | 1.37 MB | 58 495 × 68 | 1.33 MB |
+| viralrecon | 11.1 MB | 0.20 MB | 21 096 × 75 | 1.39 MB |
+
+Three facts fall out, and they set the budget:
+
+* **The runtime is the floor** — ~7.7 MB raw in every bundle whatever the data. The CI byte budget
+  (3.20 MB gzip) guards *that* number; this section is about everything on top of it.
+* **Data is cheap**: ~2 bytes per cell in snappy Parquet after column pruning and codebooks.
+* **Frozen payloads are not** — viralrecon ships 1.39 MB of frozen figures against 0.20 MB of live
+  data. Every component moved from frozen to live makes the bundle *smaller*, not larger.
+
+**Recommended ceiling: 25 MB**, roughly 300k rows × 20 columns at the measured density. Beyond that
+`single-file` degrades for reasons that are not the file size itself: nothing renders until the whole
+document is parsed, and the payload is resident three to four times over (HTML text, base64 string,
+ArrayBuffer, materialised columns). The hard wall is V8's maximum string length (~512 M chars), but
+distribution bites long before — GitHub rejects a file over 100 MB, mail attachments cap near 25 MB.
+
+Above the ceiling the answer is a different `BundleMode`, not a bigger file: hyparquet reads Parquet
+by byte range, so a directory-mode bundle fetches only the column chunks it touches and the ceiling
+essentially disappears. The trade is distribution, not capability — a page opened from `file://`
+cannot `fetch` its sibling files (Chrome blocks `file://` sub-resources from a `file://` origin), so
+directory mode needs a host, even a local one. The two modes serve two channels; neither replaces
+the other.
+
 ## 9. Phasing
 
 Roughly 9–12 engineer-weeks for someone fluent in the codebase; ~3 months part-time.
