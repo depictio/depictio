@@ -24,12 +24,13 @@ or know which versions still need support.
 
 ## What is sent
 
-Three events. Nothing else.
+Four events. Nothing else.
 
 | Event | When |
 | --- | --- |
 | `server_install` | Once per installation, ever. |
 | `server_heartbeat` | At most once per UTC day per installation — regardless of how many workers or replicas are running. |
+| `cli_install` | Once per machine that runs `depictio-cli`, ever. |
 | `cli_command` | Once per `depictio-cli` invocation. |
 
 Each event is identified by a random **installation ID** (server) or a random
@@ -117,6 +118,20 @@ than being sent as-is — see `depictio/telemetry/k8s_resources.py`.
 | `cpu_limit_millicores` | int, optional | Configured CPU limit, in millicores. |
 | `memory_request_mib` | int, optional | Configured memory request, in MiB. |
 | `memory_limit_mib` | int, optional | Configured memory limit, in MiB. |
+
+### `cli_install`
+
+Sent the first time the CLI runs on a machine, and never again. "Install" means
+that first run, not the `pip install`: nothing in a wheel executes at install
+time, and a package sitting unused in an environment is not a deployment.
+
+Unlike the first-run notice, this is not conditional on a terminal. A CLI first
+invoked from a job script is still an installation, and on a cluster that is the
+common case.
+
+| Field | Type | What it is |
+| --- | --- | --- |
+| `is_ci` | boolean | Whether an automated environment was detected. Always false in practice, since CI suppresses the send entirely; retained so the collector can prove that. |
 
 ### `cli_command`
 

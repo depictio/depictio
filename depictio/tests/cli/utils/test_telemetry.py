@@ -289,6 +289,84 @@ class TestFirstRunNotice:
             notice()
 
 
+class TestCliInstallEvent:
+    """The CLI counterpart of `server_install`.
+
+    Without it the CLI reports usage but never installs, leaving PyPI download
+    counts as the only way to count `depictio-cli` deployments — a number that
+    conflates CI runs, mirrors and re-installs.
+    """
+
+    @pytest.fixture
+    def send(self, monkeypatch, tmp_path):
+        """Run the install event against an empty state dir, return the send mock."""
+        from depictio.cli.cli.utils import telemetry as cli_telemetry
+
+        monkeypatch.setenv("DEPICTIO_TELEMETRY_STATE_DIR", str(tmp_path))
+
+        def run(*, accepted: bool = True):
+            with patch("depictio.telemetry.posthog.capture", return_value=accepted) as capture:
+                cli_telemetry.maybe_send_install_event()
+            return capture
+
+        return run
+
+    def test_reported_once_per_machine(self, send, allow_telemetry):
+        first = send()
+        assert first.call_count == 1
+        assert first.call_args.args[0] == "cli_install"
+
+        assert send().call_count == 0, "a second install from one machine is a phantom install"
+
+    def test_a_refused_send_is_retried_on_the_next_run(self, send, allow_telemetry):
+        """A first run behind a firewall must not cost the install permanently.
+
+        The flag is written only once the collector has taken the event, so an
+        offline first run reports later rather than never. This is the opposite
+        trade-off from the notice, which is marked shown even though nothing was
+        sent: a missed disclosure cannot be recovered, a missed count can.
+        """
+        assert send(accepted=False).call_count == 1
+        assert send().call_count == 1
+
+    def test_silent_when_telemetry_is_suppressed(self, send, monkeypatch):
+        monkeypatch.setenv("DO_NOT_TRACK", "1")
+        assert send().call_count == 0
+
+    def test_reported_from_a_script_even_though_the_notice_is_not(
+        self, send, allow_telemetry, monkeypatch
+    ):
+        """An install is an install whether or not anyone is watching the terminal.
+
+        The first-run notice is gated on a TTY because there is nobody to read it
+        otherwise. Applying the same gate here would drop every installation whose
+        first contact with the CLI was a script, which is most of them on a
+        cluster.
+        """
+        monkeypatch.setattr("sys.stderr.isatty", lambda: False)
+        assert send().call_count == 1
+
+    def test_not_reported_when_the_id_cannot_be_persisted(self, send, allow_telemetry):
+        """An ID that does not survive the process would report a new install each run."""
+        from depictio.cli.cli.utils import telemetry as cli_telemetry
+        from depictio.telemetry.state import AnonymousId
+
+        with patch.object(
+            cli_telemetry,
+            "get_or_create_anonymous_id",
+            return_value=AnonymousId(value="abc", ephemeral=True),
+        ):
+            assert send().call_count == 0
+
+    def test_never_raises(self, send, allow_telemetry):
+        from depictio.cli.cli.utils import telemetry as cli_telemetry
+
+        with patch.object(
+            cli_telemetry, "get_or_create_anonymous_id", side_effect=RuntimeError("boom")
+        ):
+            send()
+
+
 class TestCliVersion:
     def test_returns_a_string(self):
         assert isinstance(cli_version(), str)

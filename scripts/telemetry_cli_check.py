@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import tempfile
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any
@@ -31,6 +32,13 @@ os.environ.pop("DO_NOT_TRACK", None)
 os.environ.pop("PYTEST_CURRENT_TEST", None)
 for _ci_var in ("CI", "CONTINUOUS_INTEGRATION", "GITHUB_ACTIONS", "GITLAB_CI"):
     os.environ.pop(_ci_var, None)
+
+# A throwaway state directory, so the run neither reads nor writes the developer's
+# real ``~/.depictio/telemetry.json``. Without this the script mutates the machine
+# it is run on, and the once-per-machine events (``cli_install``) fire on the first
+# run and never again, which makes the checks below pass or fail depending on
+# whether anyone has run the script here before.
+os.environ["DEPICTIO_TELEMETRY_STATE_DIR"] = tempfile.mkdtemp(prefix="depictio-cli-check-")
 
 RECEIVED: list[dict[str, Any]] = []
 
@@ -130,14 +138,28 @@ def main() -> int:
         ("misspelled sub-command", ["config", "shwo-nonsense", CANARIES[3]], "config"),
     ]
 
-    for label, argv, expected_command in invocations:
+    for index, (label, argv, expected_command) in enumerate(invocations):
         before = len(RECEIVED)
         run_cli(argv)
         sent = RECEIVED[before:]
-        if not check(f"{label}: emitted exactly one event", len(sent) == 1, f"got {len(sent)}"):
+        # The very first invocation on a fresh state directory also reports the
+        # one-off `cli_install`. Counted separately below rather than tolerated
+        # here, so "one command, one command event" stays an exact assertion.
+        commands = [event for event in sent if event.get("event") == "cli_command"]
+        installs = [event for event in sent if event.get("event") == "cli_install"]
+
+        expected_installs = 1 if index == 0 else 0
+        failures += not check(
+            f"{label}: emitted {expected_installs} install event(s)",
+            len(installs) == expected_installs,
+            f"got {len(installs)}",
+        )
+        if not check(
+            f"{label}: emitted exactly one command event", len(commands) == 1, f"got {len(commands)}"
+        ):
             failures += 1
             continue
-        actual = sent[0].get("properties", {}).get("command")
+        actual = commands[0].get("properties", {}).get("command")
         failures += not check(
             f"{label}: command == {expected_command!r}", actual == expected_command, repr(actual)
         )

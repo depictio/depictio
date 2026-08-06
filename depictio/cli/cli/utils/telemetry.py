@@ -35,11 +35,18 @@ from depictio.telemetry.constants import (
 )
 from depictio.telemetry.env import detect_ci, detect_deployment_kind, platform_info
 from depictio.telemetry.gates import telemetry_allowed
-from depictio.telemetry.schema import EVENT_CLI_COMMAND, CliCommandProperties
+from depictio.telemetry.schema import (
+    EVENT_CLI_COMMAND,
+    EVENT_CLI_INSTALL,
+    CliCommandProperties,
+    CliInstallProperties,
+)
 from depictio.telemetry.state import (
     first_run_notice_shown,
     get_or_create_anonymous_id,
+    install_reported,
     mark_first_run_notice_shown,
+    mark_install_reported,
 )
 
 #: Opt-out, matching the server's variable name.
@@ -197,6 +204,56 @@ def build_properties(command: str, *, succeeded: bool, duration_seconds: float) 
         id_ephemeral=anon.ephemeral,
     )
     return properties.model_dump(mode="json")
+
+
+def maybe_send_install_event() -> None:
+    """Report this machine once, the first time the CLI runs. Never raises.
+
+    The counterpart of the server's ``server_install``. Sent from the same exit
+    path as the command event so a first run pays one round trip rather than two,
+    and so the notice is never delayed behind a network call.
+
+    Not gated on a terminal, unlike the first-run notice: a CLI first invoked from
+    a script is still an installation, even though there is nobody there to read a
+    disclosure. The flag is written only once the collector has accepted the
+    event, so a first run behind a firewall reports on the next run instead of
+    being lost.
+    """
+    try:
+        if suppression_reason() is not None:
+            return
+        if install_reported():
+            return
+
+        from depictio.telemetry.posthog import capture
+
+        anon = get_or_create_anonymous_id()
+        if anon.ephemeral:
+            # Nothing would remember that this was sent, so every later run would
+            # report another install from the same machine.
+            return
+
+        platform = platform_info()
+        properties = CliInstallProperties(
+            depictio_version=cli_version(),
+            deployment_kind=detect_deployment_kind(),
+            os=platform["os"],
+            arch=platform["arch"],
+            python_version=platform["python_version"],
+            is_ci=detect_ci(),
+        )
+        accepted = capture(
+            EVENT_CLI_INSTALL,
+            anon.value,
+            properties.model_dump(mode="json"),
+            api_key=os.getenv(API_KEY_ENV) or _DEFAULT_API_KEY,
+            endpoint=os.getenv(ENDPOINT_ENV) or DEFAULT_ENDPOINT,
+            timeout=CLI_TIMEOUT_SECONDS,
+        )
+        if accepted:
+            mark_install_reported()
+    except Exception as exc:
+        logger.debug(f"CLI telemetry install event failed: {exc}")
 
 
 def send_command_event(command: str, *, succeeded: bool, duration_seconds: float) -> None:

@@ -198,6 +198,7 @@ def main():
     from depictio.cli.cli.utils.telemetry import (
         CommandTimer,
         maybe_print_first_run_notice,
+        maybe_send_install_event,
         resolve_command_path,
         send_command_event,
     )
@@ -232,4 +233,5 @@ def main():
         if not interrupted:
             # Fire-and-forget on the way out, under a 2s cap. A collector that is
             # slow or gone delays the shell prompt slightly, nothing more.
+            maybe_send_install_event()
             send_command_event(command, succeeded=succeeded, duration_seconds=timer.elapsed())

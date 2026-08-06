@@ -72,6 +72,17 @@ def build_body(
     }
 
 
+def _headers() -> dict[str, str]:
+    """Headers for a capture request.
+
+    An explicit User-Agent because httpx's default (``python-httpx/x.y.z``) is
+    classified as bot traffic by PostHog, which flags every Depictio event as
+    ``Automation`` and hides it from any query that filters bots out. Data that is
+    ingested but invisible is indistinguishable from data that never arrived.
+    """
+    return {"User-Agent": "depictio-telemetry"}
+
+
 def _log_outcome(event: str, response_status: int | None, error: Exception | None) -> bool:
     """Log the result of a send at debug level and report success."""
     if error is not None:
@@ -104,7 +115,7 @@ def capture(
     body = build_body(event, distinct_id, properties, api_key=api_key)
     try:
         with httpx.Client(timeout=timeout) as client:
-            response = client.post(endpoint, json=body)
+            response = client.post(endpoint, json=body, headers=_headers())
         return _log_outcome(event, response.status_code, None)
     except Exception as exc:
         return _log_outcome(event, None, exc)
@@ -136,7 +147,7 @@ async def acapture(
     async with httpx.AsyncClient(timeout=timeout) as client:
         for attempt in range(retries + 1):
             try:
-                response = await client.post(endpoint, json=body)
+                response = await client.post(endpoint, json=body, headers=_headers())
                 last_status = response.status_code
                 if response.status_code < 400:
                     return _log_outcome(event, response.status_code, None)

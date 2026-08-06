@@ -46,6 +46,16 @@ backend:
   env:
     DEPICTIO_LOGGING_VERBOSITY_LEVEL: "DEBUG"
     DEPICTIO_AUTH_SINGLE_USER_MODE: "true"
+    # This chart is installed into a throwaway minikube on every chart-touching
+    # run, with a fresh MongoDB each time. Left enabled it mints a new anonymous
+    # identity per run and reports a brand new installation, which is how the
+    # first four "installations" the project ever recorded came to be its own CI.
+    #
+    # The automatic CI suppression in depictio/telemetry/gates.py cannot catch
+    # this: it reads CI and GITHUB_ACTIONS from the environment, and those exist
+    # on the runner, not inside the pod. A container orchestrated by CI has to be
+    # told, so this file tells it.
+    DEPICTIO_TELEMETRY_ENABLED: "false"
 
 viewer:
   resources:

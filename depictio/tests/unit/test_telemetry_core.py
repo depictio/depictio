@@ -8,7 +8,7 @@ not a flaky test.
 import json
 import os
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
@@ -342,6 +342,39 @@ class TestPostHogBody:
         rendered = render_for_debug(build_body("e", "d", {}, api_key="phc_super_secret"))
         assert "phc_super_secret" not in rendered
         assert "<redacted>" in rendered
+
+
+class TestCaptureIdentifiesItself:
+    """Every send must carry a User-Agent that is not httpx's default.
+
+    PostHog classifies ``python-httpx/x.y.z`` as bot traffic. Every event Depictio
+    sent before this was flagged ``Automation``, which hides it from any query
+    that filters bots out — data that is ingested but invisible is
+    indistinguishable from data that never arrived.
+    """
+
+    def _sent_headers(self, sender):
+        client = MagicMock()
+        client.__enter__ = Mock(return_value=client)
+        client.__exit__ = Mock(return_value=False)
+        client.post.return_value = Mock(status_code=200)
+
+        with patch("depictio.telemetry.posthog.httpx.Client", return_value=client):
+            sender()
+        return client.post.call_args.kwargs["headers"]
+
+    def test_capture_sets_an_explicit_user_agent(self):
+        from depictio.telemetry.posthog import capture
+
+        headers = self._sent_headers(lambda: capture("e", "d", {}, api_key="phc_test"))
+        assert "httpx" not in headers["User-Agent"].lower()
+        assert "depictio" in headers["User-Agent"].lower()
+
+    def test_the_async_sender_agrees_with_the_sync_one(self):
+        """The server uses acapture; a header on only one path fixes only one channel."""
+        from depictio.telemetry.posthog import _headers
+
+        assert _headers()["User-Agent"] == "depictio-telemetry"
 
 
 class TestDocsStayInSyncWithTheSchema:

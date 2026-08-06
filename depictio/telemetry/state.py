@@ -49,6 +49,14 @@ _ID_KEY: Final[str] = "anonymous_id"
 #: exactly the users whose first contact with the CLI was automated.
 _NOTICE_KEY: Final[str] = "notice_shown"
 
+#: Key recording that the one-off ``cli_install`` event has been accepted.
+#:
+#: Written only after the collector takes the event, so a first run without
+#: network reports the install on the next run instead of losing it. Persisted
+#: rather than inferred from "the ID was created in this process", because the ID
+#: is created on the first run whether or not the send succeeds.
+_INSTALL_KEY: Final[str] = "install_reported"
+
 
 class AnonymousId(NamedTuple):
     """An anonymous CLI ID plus whether it survived to disk."""
@@ -156,6 +164,27 @@ def mark_first_run_notice_shown() -> None:
         _write_state(state_path(), {_NOTICE_KEY: True})
     except (OSError, RuntimeError) as exc:
         logger.debug("Could not record the telemetry notice as shown: %s", exc)
+
+
+def install_reported() -> bool:
+    """Whether this machine has already reported ``cli_install``.
+
+    True on any failure to find out, which is the direction that cannot corrupt
+    the metric: a missed install undercounts by one, a repeated one manufactures
+    installations that do not exist.
+    """
+    try:
+        return _read_state(state_path()).get(_INSTALL_KEY) is True
+    except (OSError, RuntimeError):
+        return True
+
+
+def mark_install_reported() -> None:
+    """Record that the install event was accepted by the collector. Never raises."""
+    try:
+        _write_state(state_path(), {_INSTALL_KEY: True})
+    except (OSError, RuntimeError) as exc:
+        logger.debug("Could not record the telemetry install as reported: %s", exc)
 
 
 def get_or_create_anonymous_id() -> AnonymousId:
