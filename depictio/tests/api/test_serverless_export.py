@@ -2058,3 +2058,25 @@ def test_export_check_against_live_instance():
     result = export_static(str(doc["dashboard_id"]), check=True, bind=False, user=None)
     assert result.manifest is None
     assert len(result.tier_rows) == len(doc.get("stored_metadata") or [])
+
+
+def test_a_cold_multiqc_prerender_is_named_not_leaked_as_a_validation_error(monkeypatch):
+    """`render_multiqc_endpoint` answers with a JSONResponse while the
+    pre-render for that collection is still building. Pydantic used to reject
+    it deep inside `FrozenPayload`, so the tile was omitted carrying a
+    `dict_type` validation error — true, and useless to the reader."""
+    from starlette.responses import JSONResponse
+
+    routes_mod = producer_a._routes()
+    monkeypatch.setattr(
+        routes_mod, "_resolve_selected_keys", lambda comp: (None, None, None, False)
+    )
+    monkeypatch.setattr(
+        routes_mod,
+        "render_multiqc_endpoint",
+        lambda *a, **k: JSONResponse({"status": "building"}, status_code=202),
+    )
+    with pytest.raises(ProducerAError, match="pre-render for this data collection"):
+        producer_a._freeze_multiqc(
+            ObjectId(), {"index": "mqc-1"}, ExportUser(id=ObjectId(), is_admin=True)
+        )
