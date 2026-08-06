@@ -17,11 +17,7 @@ import { Icon } from '@iconify/react';
 import type { DashboardSummary } from 'depictio-react-core';
 import { useIsStaticBundle } from 'depictio-react-core';
 import { isMultiqcIcon, multiqcLogoSrc } from './multiqcLogo';
-import ThemeToggle from './ThemeToggle';
-import ServerStatusBadge from './ServerStatusBadge';
-import ProfileBadge from './ProfileBadge';
-import AuthModeBadge from './AuthModeBadge';
-import StaticProvenance from './StaticProvenance';
+import SidebarFooter from './SidebarFooter';
 import { dashboardHref } from '../dashboards/lib/dashboardLinks';
 import './chrome.css';
 
@@ -363,27 +359,8 @@ const Sidebar: React.FC<SidebarProps> = ({
         </Stack>
       </ScrollArea>
 
-      {/* Bottom region — centered stack, original Dash order: theme,
-        server, profile. AuthModeBadge sits above the avatar to surface the
-        active server mode (Demo / Public / Single User), matching
-        `depictio/dash/layouts/sidebar.py:create_sidebar_footer`. */}
-      <Stack gap="xs" align="center">
-        <Divider w="100%" />
-        <ThemeToggle />
-        {/* Server/auth/profile chrome is meaningless without a backend — a
-            bundle has no server to report on and no account to manage. */}
-        {!isStaticBundle && (
-          <>
-            <ServerStatusBadge />
-            <AuthModeBadge />
-            <ProfileBadge />
-          </>
-        )}
-        {/* Static bundles only — who exported this file, from where, and with
-            which depictio. Renders null (and imports nothing extra) in the
-            server build. */}
-        <StaticProvenance />
-      </Stack>
+      {/* Bottom region — shared with the management rail, see SidebarFooter. */}
+      <SidebarFooter />
     </Stack>
   );
 };

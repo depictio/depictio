@@ -122,10 +122,27 @@ export function tabSummaries(): DashboardSummary[] {
   }));
 }
 
-/** Frozen payload for a component index; throws a readable error on a miss. */
+/** Frozen payload for a component index; throws a readable error on a miss.
+ *
+ *  A miss has two very different causes and the reader deserves to be told
+ *  which. Usually the producer decided this component could not be included at
+ *  all — it is `omitted` in the manifest, with a `detail` naming the reason —
+ *  and the renderer that mounted anyway would otherwise show "no frozen newick
+ *  payload", which reads as a bug in the bundle rather than as a component the
+ *  export could not carry. Only a genuinely inconsistent manifest (a tier that
+ *  claims frozen with nothing behind it) falls through to the internal wording.
+ */
 export function frozenPayload<T>(componentIndex: string, kind: string): T {
   const entry = bundle().frozen[componentIndex];
   if (!entry) {
+    const tier = bundle().tiers?.[componentIndex];
+    if (tier?.tier === 'omitted') {
+      throw new Error(
+        tier.detail
+          ? `This view could not be included in the export: ${tier.detail}`
+          : 'This view could not be included in the export.',
+      );
+    }
     throw new Error(`static bundle: no frozen ${kind} payload for "${componentIndex}"`);
   }
   return entry.payload as T;

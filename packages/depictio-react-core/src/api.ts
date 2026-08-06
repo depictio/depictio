@@ -3154,8 +3154,14 @@ export interface StaticExportTierRow {
   detail?: string | null;
   /** Dashboard id of the tab this component sits on, for a tab-family export. */
   tab_id?: string | null;
-  /** Preflight reads no data, so it plans every figure as frozen and lets the
-   *  build overturn that. A provisional row is undecided, not a verdict. */
+  /** True while the build can still overturn this row. A provisional row is
+   *  undecided, not a verdict.
+   *
+   *  The preflight now runs the real bind-and-refill decision before it
+   *  answers, so no figure comes back provisional from a current API. The field
+   *  survives for a viewer talking to an older one, which classified without
+   *  reading data: it called every figure frozen and left the build to upgrade
+   *  the ones it could redraw. */
   provisional?: boolean;
 }
 
@@ -3171,11 +3177,37 @@ export interface StaticExportLinkRow {
   note?: string | null;
 }
 
+/** How big the bundle would be, and which side of the deployment's two
+ *  ceilings it lands on — the preflight's answer to "is this worth building?".
+ *
+ *  Every field is optional: an API older than this block returns nothing at
+ *  all, and a report that read no data returns `null` rather than a fabricated
+ *  zero. Sizes are bytes; the ceilings are megabytes, because that is how they
+ *  are configured, and `0` means that check is disabled.
+ *
+ *  `estimated_total_bytes` is an UPPER BOUND, not a measurement: the exact
+ *  `runtime_bytes` plus a data figure derived from row/column counts before any
+ *  compression, which runs roughly 2x high on compressible frames. Present it
+ *  as a ceiling ("up to about N MB"), never as a size. */
+export interface StaticExportSizeEstimate {
+  estimated_total_bytes?: number;
+  estimated_data_bytes?: number;
+  /** The static runtime every bundle carries whatever its data. Exact, and on
+   *  a small dashboard most of the total. */
+  runtime_bytes?: number;
+  soft_limit_mb?: number;
+  hard_limit_mb?: number;
+  /** The thresholds already applied, so a caller cannot disagree with the
+   *  producer that would run the build. */
+  verdict?: 'ok' | 'over_soft_limit' | 'would_be_refused';
+}
+
 export interface StaticExportPreflight {
   dashboard_id: string;
   tiers: StaticExportTierRow[];
   links: StaticExportLinkRow[];
   counts: { live: number; partial: number; frozen: number; omitted: number };
+  size_estimate?: StaticExportSizeEstimate | null;
 }
 
 export interface StaticExportResult {

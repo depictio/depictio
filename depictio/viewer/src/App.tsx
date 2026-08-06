@@ -605,7 +605,6 @@ const App: React.FC = () => {
           onOpenSettings={openSettings}
           onOpenFilters={isNarrow && leftComponents.length > 0 ? openFilterDrawer : undefined}
           filterCount={activeFilterCount}
-          onExportStatic={openExportStatic}
           cardsLoading={cardsLoading}
           isOwner={isOwner}
           titleExtras={
@@ -959,6 +958,14 @@ const App: React.FC = () => {
         opened={settingsOpened}
         onClose={closeSettings}
         dashboard={dashboard}
+        dashboardId={dashboardId}
+        // Hand off rather than stack: a Modal opened over an still-open Drawer
+        // leaves two Mantine focus traps and two overlays fighting each other.
+        onExportStatic={() => {
+          closeSettings();
+          openExportStatic();
+        }}
+        isOwner={isOwner}
       />
       <ExportStaticModal
         opened={exportStaticOpened}

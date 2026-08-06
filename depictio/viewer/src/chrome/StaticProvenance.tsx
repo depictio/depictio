@@ -1,5 +1,5 @@
 import React from 'react';
-import { Anchor, Divider, Group, Stack, Text, Tooltip } from '@mantine/core';
+import { Anchor, Group, Stack, Text, Tooltip } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import type { BundleManifest } from 'depictio-static-core';
@@ -87,33 +87,39 @@ function provenanceRows(manifest: BundleManifest): ProvenanceRow[] {
   return rows;
 }
 
+/**
+ * The provenance block itself, with no chrome of its own — the sidebar footer
+ * renders it inside the popover behind the Depictio logo. It used to sit
+ * permanently at the bottom of the rail: a heading, a sentence and up to seven
+ * label/value rows, all dimmed and all always on screen, for information a
+ * reader looks up once if at all.
+ */
 const StaticProvenance: React.FC = () => {
   const manifest = typeof window === 'undefined' ? undefined : window.__DEPICTIO_BUNDLE__;
   if (!manifest) return null;
   const rows = provenanceRows(manifest);
 
   return (
-    <Stack gap={4} w="100%">
-      <Divider w="100%" />
-      <Group gap={6} justify="center" wrap="nowrap">
+    <Stack gap="xs">
+      <Group gap={6} wrap="nowrap">
         <Icon icon="mdi:package-variant-closed" width={14} height={14} />
-        <Text size="xs" fw={600} c="dimmed">
+        <Text size="xs" fw={600}>
           Static export
         </Text>
       </Group>
-      <Text size="xs" c="dimmed" ta="center" lh={1.3}>
+      <Text size="xs" c="dimmed" lh={1.3}>
         A self-contained copy of this dashboard. No server, no live data.
       </Text>
       {rows.length > 0 && (
-        <Stack gap={0} mt={2}>
+        <Stack gap={2}>
           {rows.map((row) => (
             <Group key={row.label} gap={8} justify="space-between" wrap="nowrap">
               <Text size="xs" c="dimmed" style={{ flexShrink: 0 }}>
                 {row.label}
               </Text>
-              {/* The rail is 250px wide and a source URL or an email is easily
-                  longer, so values truncate and carry the full string in a
-                  tooltip. */}
+              {/* The dropdown is wider than the rail but a source URL or an
+                  email still overflows it, so values truncate and carry the
+                  full string in a tooltip. */}
               <Tooltip
                 label={row.hint ?? row.href ?? row.value}
                 withArrow
@@ -121,18 +127,11 @@ const StaticProvenance: React.FC = () => {
                 multiline
               >
                 {row.href ? (
-                  <Anchor
-                    href={row.href}
-                    target="_blank"
-                    rel="noreferrer"
-                    size="xs"
-                    c="dimmed"
-                    truncate
-                  >
+                  <Anchor href={row.href} target="_blank" rel="noreferrer" size="xs" truncate>
                     {row.value}
                   </Anchor>
                 ) : (
-                  <Text size="xs" c="dimmed" truncate>
+                  <Text size="xs" truncate>
                     {row.value}
                   </Text>
                 )}
