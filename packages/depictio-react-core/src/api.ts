@@ -9,7 +9,7 @@
 
 import { enqueueFetch } from './fetchQueue';
 
-const API_BASE = '/depictio/api/v1';
+export const API_BASE = '/depictio/api/v1';
 
 /** localStorage key shared with the Dash app — same payload shape. */
 const SESSION_KEY = 'local-store';
@@ -572,7 +572,10 @@ export type InteractiveFilterSource =
   | 'scatter_selection'
   | 'table_selection'
   | 'map_selection'
-  | 'image_selection';
+  | 'image_selection'
+  /** Filter injected by the AI assistant (prompt-driven). Carries only a
+   *  `filter_expr` (no widget value); cleared as a group via the AI chip. */
+  | 'ai_prompt';
 
 /** Per-component computed data (current value under the given filter state).
  *  `metadata.dc_id` is required for cross-DC link resolution server-side; any
