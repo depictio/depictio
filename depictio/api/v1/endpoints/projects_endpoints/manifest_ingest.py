@@ -58,6 +58,23 @@ class ManifestIngestDCResult(BaseModel):
     message: str | None = None
 
 
+class RefreshManifestRequest(BaseModel):
+    """Body of POST /projects/refresh_manifest."""
+
+    project_id: str
+    # Restrict the refresh to one DC tag; None refreshes every manifest DC.
+    data_collection_tag: str | None = None
+    # Plan-only: report what would be refreshed without touching any data.
+    dry_run: bool = False
+
+
+class ManifestRefreshReport(BaseModel):
+    project_id: str
+    refreshed: list[ManifestIngestDCResult] = Field(default_factory=list)
+    dry_run: bool = False
+    success: bool = False
+
+
 class ManifestIngestReport(BaseModel):
     project_id: str
     manifest_url: str
@@ -108,11 +125,18 @@ def _live_dc_index(project_dict: dict) -> dict[str, tuple[int, int]]:
     return index
 
 
-def _run_dc_ingest(workflow_dict: dict, dc_id: str, current_user) -> tuple[bool, str | None]:
+def _run_dc_ingest(
+    workflow_dict: dict, dc_id: str, current_user, sync_files: bool = False
+) -> tuple[bool, str | None]:
     """Scan + process one DC through the CLI helpers. Returns (ok, error_message).
 
     Synchronous on purpose — the helpers use a sync httpx client back into
     this same FastAPI process (see ``_push_workflow_and_ingest``).
+
+    ``sync_files=True`` forces File-record updates during the scan. The scan's
+    change detection keys on ``sha256(url|id)`` — an *identity* hash — so a
+    refresh over a manifest whose URLs are unchanged but whose remote content
+    moved would otherwise skip the File metadata update.
     """
     from depictio.api.v1.endpoints.datacollections_endpoints.utils import (
         _build_cli_config_for_user,
@@ -131,7 +155,11 @@ def _run_dc_ingest(workflow_dict: dict, dc_id: str, current_user) -> tuple[bool,
     cli_config = _build_cli_config_for_user(current_user)
 
     scan_result = process_data_collection_helper(
-        CLI_config=cli_config, wf=workflow, dc_id=dc_id, mode="scan"
+        CLI_config=cli_config,
+        wf=workflow,
+        dc_id=dc_id,
+        mode="scan",
+        command_parameters={"sync_files": True} if sync_files else {},
     )
     if (scan_result or {}).get("result") != "success":
         return False, f"Scan failed: {(scan_result or {}).get('message', 'unknown error')}"
@@ -301,6 +329,178 @@ def _ingest_manifest_into_project(
 
     if not all_ok:
         projects_collection.update_one({"_id": project_oid}, {"$set": {"workflows": workflows}})
+
+    report.success = all_ok
+    return report
+
+
+def _manifest_dc_index(project_dict: dict) -> dict[str, tuple[int, int, dict]]:
+    """{dc_tag: (workflow_index, dc_index, scan_parameters)} for manifest-mode DCs."""
+    index: dict[str, tuple[int, int, dict]] = {}
+    for wf_i, wf in enumerate(project_dict.get("workflows", []) or []):
+        for dc_i, dc in enumerate(wf.get("data_collections", []) or []):
+            tag = dc.get("data_collection_tag")
+            scan = (dc.get("config") or {}).get("scan") or {}
+            if tag and tag not in index and str(scan.get("mode", "")).lower() == "manifest":
+                index[tag] = (wf_i, dc_i, scan.get("scan_parameters") or {})
+    return index
+
+
+def _refresh_manifest_in_project(
+    *,
+    project_id: str,
+    current_user,
+    data_collection_tag: str | None = None,
+    dry_run: bool = False,
+) -> ManifestRefreshReport:
+    """Re-fetch each manifest DC's stored manifest and re-ingest it in place.
+
+    Refresh semantics are overwrite-with-report (RFC open question 2): the scan
+    prunes File records for entries dropped from the manifest, ``sync_files``
+    forces metadata updates for kept entries, and the Delta table is rebuilt
+    from the resulting file set. The scan configs are already persisted on the
+    project, so — unlike first ingestion — nothing is written to the project
+    document and no revert bookkeeping is needed. A manifest that no longer has
+    any row of a DC's type marks that DC failed *without* running the scan, so
+    a refresh never silently empties a data collection.
+
+    Synchronous on purpose (sync httpx callbacks in the CLI helpers) — callers
+    must dispatch via ``asyncio.to_thread``.
+    """
+    from depictio.api.v1.endpoints.datacollections_endpoints.utils import (
+        _user_can_edit_project,
+    )
+
+    try:
+        project_oid = ObjectId(project_id)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid project_id: {exc}")
+
+    project_dict = projects_collection.find_one({"_id": project_oid})
+    if not project_dict:
+        raise HTTPException(status_code=404, detail="Project not found.")
+    if not _user_can_edit_project(
+        project_dict, current_user.id, getattr(current_user, "is_admin", False)
+    ):
+        raise HTTPException(
+            status_code=403, detail="You don't have edit permission on this project."
+        )
+
+    manifest_index = _manifest_dc_index(project_dict)
+    if not manifest_index:
+        raise HTTPException(
+            status_code=422,
+            detail="Project has no manifest-backed data collections to refresh.",
+        )
+    if data_collection_tag is not None:
+        if data_collection_tag not in manifest_index:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"'{data_collection_tag}' is not a manifest-backed data collection. "
+                    f"Manifest DCs in this project: {sorted(manifest_index)}."
+                ),
+            )
+        manifest_index = {data_collection_tag: manifest_index[data_collection_tag]}
+
+    report = ManifestRefreshReport(project_id=str(project_oid), dry_run=dry_run)
+    workflows = project_dict.get("workflows", []) or []
+
+    # Each DC carries its own manifest URL + field map; fetch each distinct
+    # combination once. Failures are per-DC, not global — one dead manifest
+    # must not block refreshing DCs backed by a different one.
+    manifests: dict[tuple, DataManifest | str] = {}  # key -> manifest or error text
+    all_ok = True
+    for tag, (wf_i, dc_i, scan_params) in manifest_index.items():
+        dc_dict = workflows[wf_i]["data_collections"][dc_i]
+        dc_id = str(dc_dict.get("_id") or dc_dict.get("id") or "")
+        manifest_url = str(scan_params.get("manifest_url") or "")
+
+        field_map = {
+            "id": scan_params.get("id_field") or "id",
+            "type": scan_params.get("type_field") or "type",
+            "url": scan_params.get("url_field") or "url",
+        }
+        run_field = scan_params.get("run_field")
+        if run_field:
+            field_map["run"] = run_field
+
+        key = (manifest_url, tuple(sorted(field_map.items())))
+        if key not in manifests:
+            try:
+                # The stored URL may predate the gateway or come from a CLI
+                # ingest of a local manifest path — re-validate before fetching.
+                validate_remote_url(manifest_url)
+                if manifest_url.startswith("s3://"):
+                    raise RemoteURLRejected(
+                        "s3:// manifest locations are not supported yet — "
+                        "serve the manifest over https."
+                    )
+                manifests[key] = _fetch_and_parse_manifest(manifest_url, field_map)
+            except (RemoteURLRejected, ValueError) as exc:
+                manifests[key] = f"Could not fetch manifest: {exc}"
+
+        manifest = manifests[key]
+        if isinstance(manifest, str):
+            all_ok = False
+            report.refreshed.append(
+                ManifestIngestDCResult(
+                    data_collection_tag=tag,
+                    data_collection_id=dc_id,
+                    entries=0,
+                    status="failed",
+                    message=manifest,
+                )
+            )
+            continue
+
+        manifest_type = str(scan_params.get("manifest_type") or tag)
+        entry_count = len(manifest.entries_for_type(manifest_type))
+        if entry_count == 0:
+            all_ok = False
+            report.refreshed.append(
+                ManifestIngestDCResult(
+                    data_collection_tag=tag,
+                    data_collection_id=dc_id,
+                    entries=0,
+                    status="failed",
+                    message=(
+                        f"Manifest has no entries of type '{manifest_type}' — "
+                        "refresh skipped to avoid emptying the data collection."
+                    ),
+                )
+            )
+            continue
+
+        if dry_run:
+            report.refreshed.append(
+                ManifestIngestDCResult(
+                    data_collection_tag=tag,
+                    data_collection_id=dc_id,
+                    entries=entry_count,
+                    status="planned",
+                )
+            )
+            continue
+
+        try:
+            ok, message = _run_dc_ingest(workflows[wf_i], dc_id, current_user, sync_files=True)
+        except HTTPException:
+            raise
+        except Exception as exc:  # helper crash — treat as a per-DC failure
+            logger.error(f"Manifest refresh crashed for DC '{tag}': {exc}")
+            ok, message = False, str(exc)
+        if not ok:
+            all_ok = False
+        report.refreshed.append(
+            ManifestIngestDCResult(
+                data_collection_tag=tag,
+                data_collection_id=dc_id,
+                entries=entry_count,
+                status="ingested" if ok else "failed",
+                message=message,
+            )
+        )
 
     report.success = all_ok
     return report

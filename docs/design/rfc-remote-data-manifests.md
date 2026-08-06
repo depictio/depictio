@@ -422,9 +422,14 @@ change, one endpoint, one security module, no templates or manifests involved.
 1. **Polars-over-HTTPS coverage per format.** `scan_parquet` over https is
    solid; csv may route through a full download; xlsx always fetch-to-temp.
    Phase-1 spikes decide streaming vs fetch-to-temp per format.
-2. **Manifest refresh semantics.** Re-fetch on demand: overwrite vs append vs
-   diff. Proposal: overwrite-with-report first (same shape as the serverless
-   RFC's staleness question).
+2. **Manifest refresh semantics.** *Resolved (phase 4):* overwrite-with-report,
+   as `POST /projects/refresh_manifest`. The stored per-DC scan configs are the
+   source of truth (no caller-supplied URL), `sync_files` defeats the
+   `sha256(url|id)` identity-hash skip so File metadata follows content moved
+   behind unchanged URLs, and the Delta table is rebuilt from the resulting
+   file set. A manifest that dropped a DC's type marks that DC failed without
+   scanning — a refresh never silently empties a data collection. Append/diff
+   modes remain future work if a deployment needs incremental semantics.
 3. **Non-table DC types from manifests** (multiqc parquet URLs, image URLs,
    geojson). Each has an existing S3-pointer precedent
    (`DCMultiQC.s3_location`, `DCImageConfig.s3_base_folder`,

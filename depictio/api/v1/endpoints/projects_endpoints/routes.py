@@ -35,7 +35,14 @@ from depictio.api.v1.endpoints.projects_endpoints.ingestion_report import (
 from depictio.api.v1.endpoints.projects_endpoints.manifest_ingest import (
     IngestManifestRequest,
     ManifestIngestReport,
+    ManifestRefreshReport,
+    RefreshManifestRequest,
     _ingest_manifest_into_project,
+    _refresh_manifest_in_project,
+)
+from depictio.api.v1.endpoints.projects_endpoints.templates_catalog import (
+    TemplateCatalog,
+    list_templates_catalog,
 )
 from depictio.api.v1.endpoints.projects_endpoints.utils import (
     _async_get_all_projects,
@@ -319,6 +326,50 @@ async def ingest_manifest(
         run_field=payload.run_field,
         dry_run=payload.dry_run,
     )
+
+
+@projects_endpoint_router.post("/refresh_manifest", response_model=ManifestRefreshReport)
+async def refresh_manifest(
+    payload: RefreshManifestRequest,
+    current_user=Depends(get_user_or_anonymous),
+):
+    """Re-fetch and re-ingest a project's manifest-backed data collections.
+
+    Overwrite-with-report semantics: File records sync to the manifest's
+    current entries (``sync_files`` beats the identity-hash skip) and each
+    Delta table is rebuilt from the resulting file set. A DC whose manifest
+    no longer lists its type is reported failed and left untouched.
+    ``dry_run=true`` reports what would refresh (per-DC entry counts) without
+    touching any data.
+    """
+    if not current_user:
+        raise HTTPException(status_code=401, detail="User not found.")
+    if not payload.dry_run:
+        from depictio.api.v1.endpoints.datacollections_endpoints.utils import (
+            _ensure_user_cli_token,
+        )
+
+        await _ensure_user_cli_token(current_user)
+    return await asyncio.to_thread(
+        _refresh_manifest_in_project,
+        project_id=payload.project_id,
+        current_user=current_user,
+        data_collection_tag=payload.data_collection_tag,
+        dry_run=payload.dry_run,
+    )
+
+
+@projects_endpoint_router.get("/templates", response_model=TemplateCatalog)
+async def list_project_templates(current_user=Depends(get_user_or_anonymous)):
+    """List the project templates shipped with this instance.
+
+    Backs the builder UI's template picker — the ``manifest_capable`` flag
+    marks templates usable with ``POST /projects/from_manifest``. Purely
+    filesystem-derived; template YAMLs that fail to parse are skipped.
+    """
+    if not current_user:
+        raise HTTPException(status_code=401, detail="User not found.")
+    return await asyncio.to_thread(list_templates_catalog)
 
 
 @projects_endpoint_router.post("/from_manifest", response_model=FromManifestReport)
