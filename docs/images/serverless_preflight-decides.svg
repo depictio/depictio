@@ -1,0 +1,134 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1340" height="700" viewBox="0 0 1340 700">
+  <rect width="1340" height="700" fill="#ffffff"/>
+  <text x="60.0" y="52.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="25" fill="#1e1e1e" text-anchor="start" font-weight="normal">The preflight decides</text>
+  <text x="60.0" y="78.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="15" fill="#5c5c5c" text-anchor="start" font-weight="normal">one decision path, reached from two entry points</text>
+  <text x="60.0" y="116.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="17" fill="#5c5c5c" text-anchor="start" font-weight="bold">BEFORE</text>
+  <path d="M150.0,110.1 C526.6,110.1 904.0,109.9 1279.7,110.0" fill="none" stroke="#adb5bd" stroke-width="1.2" stroke-linecap="round"/>
+  <rect x="60.0" y="136.0" width="300.0" height="118.0" rx="6" fill="#ffe3e3"/>
+  <path d="M59.3,136.5 C160.4,136.9 258.7,135.4 360.3,135.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M59.5,135.2 C161.5,137.5 260.5,136.4 360.0,135.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M359.9,136.5 C359.0,174.5 358.5,214.6 360.0,254.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M360.8,136.8 C360.0,175.9 359.9,214.0 360.5,254.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M360.4,253.8 C259.4,253.1 159.3,252.6 60.6,253.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M360.7,254.0 C261.5,255.1 158.4,253.1 60.8,253.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M59.3,253.7 C58.6,215.1 60.9,174.6 60.7,136.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M60.5,253.5 C58.8,213.9 58.7,173.9 60.1,135.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="210.0" y="163.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">preflight</text>
+  <text x="210.0" y="187.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">reads no data</text>
+  <text x="210.0" y="208.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">classifies from metadata</text>
+  <rect x="430.0" y="136.0" width="330.0" height="118.0" rx="6" fill="#ffe3e3"/>
+  <path d="M429.4,135.9 C539.0,136.7 648.8,136.5 759.5,135.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M429.5,135.8 C541.5,137.0 649.4,137.2 760.6,136.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M760.4,135.7 C758.7,176.9 759.1,213.9 759.7,253.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M759.8,135.9 C758.7,175.6 759.2,215.0 760.7,254.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M760.7,254.5 C650.2,255.2 539.0,252.9 429.6,253.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M760.6,254.2 C650.8,255.4 539.0,255.4 429.9,253.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M429.6,254.5 C428.5,216.1 429.2,176.0 430.2,135.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M430.1,254.6 C429.0,215.4 428.6,174.5 430.2,135.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="595.0" y="163.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">every figure:</text>
+  <text x="595.0" y="187.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">frozen / binding_miss</text>
+  <text x="595.0" y="208.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">shown as “Undecided”</text>
+  <rect x="950.0" y="136.0" width="330.0" height="118.0" rx="6" fill="#e7f5ff"/>
+  <path d="M949.9,135.3 C1061.3,135.1 1168.5,135.3 1279.5,135.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M950.8,136.3 C1060.2,134.8 1169.6,137.3 1280.3,136.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1280.3,136.7 C1278.8,173.8 1278.5,216.0 1279.2,254.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1279.3,136.1 C1279.9,176.1 1279.4,216.3 1280.4,254.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1279.8,254.3 C1170.8,254.7 1060.9,255.3 950.6,254.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1280.2,253.8 C1169.7,254.9 1061.2,254.2 950.1,254.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M950.4,253.8 C948.7,215.1 951.6,176.5 950.4,136.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M949.2,254.2 C949.8,215.7 948.7,176.1 950.0,135.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="1115.0" y="163.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">build</text>
+  <text x="1115.0" y="187.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">loads the data</text>
+  <text x="1115.0" y="208.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">binds, then decides</text>
+  <path d="M359.5,194.0 C381.5,195.0 401.8,196.7 421.6,195.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M359.9,195.8 C379.5,193.7 403.0,195.6 421.7,195.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M422.4,194.9 C417.3,192.7 414.4,191.4 409.7,188.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M422.2,195.5 C417.2,197.2 414.4,200.1 409.4,201.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M768.3,195.0 C825.8,194.1 882.9,194.7 941.6,195.7" fill="none" stroke="#5c5c5c" stroke-width="1.7" stroke-linecap="round" stroke-dasharray="9 7"/>
+  <path d="M768.7,194.1 C827.9,194.8 882.3,193.1 942.4,195.1" fill="none" stroke="#5c5c5c" stroke-width="1.7" stroke-linecap="round" stroke-dasharray="9 7"/>
+  <path d="M942.0,194.5 C937.5,193.4 932.8,189.9 930.0,188.2" fill="none" stroke="#5c5c5c" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M942.1,195.2 C937.2,196.3 934.0,199.3 929.9,202.0" fill="none" stroke="#5c5c5c" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="855.0" y="153.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">…until the</text>
+  <text x="855.0" y="173.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">build says</text>
+  <path d="M844.4,229.0 C852.1,234.9 858.3,241.6 865.3,248.6" fill="none" stroke="#c92a2a" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M845.1,249.3 C851.1,242.0 858.8,235.7 864.9,229.4" fill="none" stroke="#c92a2a" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="855.0" y="271.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#c92a2a" text-anchor="middle" font-weight="normal">two answers</text>
+  <text x="670.0" y="292.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="15" fill="#c92a2a" text-anchor="middle" font-weight="normal">on the reference dashboards: 18 predicted binding misses, 5 real ones</text>
+  <text x="60.0" y="376.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="17" fill="#5c5c5c" text-anchor="start" font-weight="bold">AFTER</text>
+  <path d="M139.7,370.0 C520.6,369.3 900.7,370.4 1280.1,370.3" fill="none" stroke="#adb5bd" stroke-width="1.2" stroke-linecap="round"/>
+  <rect x="60.0" y="400.0" width="270.0" height="96.0" rx="6" fill="#f3f0ff"/>
+  <path d="M60.7,399.9 C149.6,400.2 241.2,400.9 330.2,399.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M59.5,400.6 C150.7,401.0 240.5,400.7 330.8,400.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M330.6,399.8 C330.1,432.9 329.4,465.3 329.3,495.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M330.5,399.3 C330.2,432.9 330.0,462.5 330.5,495.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M330.0,496.4 C239.5,496.9 148.8,494.9 60.5,496.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M329.6,496.0 C241.4,496.0 151.4,494.7 59.7,496.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M59.7,495.8 C60.4,464.1 61.1,432.2 60.6,400.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M60.1,495.5 C59.1,465.1 61.5,432.1 60.1,400.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="195.0" y="427.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">preflight</text>
+  <text x="195.0" y="451.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">viewer</text>
+  <rect x="60.0" y="528.0" width="270.0" height="96.0" rx="6" fill="#e7f5ff"/>
+  <path d="M59.8,528.5 C150.3,526.5 241.5,528.1 330.1,528.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M60.7,528.7 C150.6,526.6 240.1,527.7 329.6,528.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M330.0,527.7 C328.8,559.8 331.0,593.3 329.5,624.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M329.5,527.6 C331.4,558.8 330.9,590.5 330.3,623.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M329.4,624.0 C239.5,624.4 148.7,624.7 59.6,623.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M330.0,623.5 C240.1,623.8 149.6,623.7 59.5,624.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M60.6,623.6 C60.4,592.1 61.1,560.4 60.4,528.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M59.5,624.8 C61.3,591.4 59.4,561.4 60.6,527.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="195.0" y="555.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">build</text>
+  <text x="195.0" y="579.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">owner</text>
+  <rect x="430.0" y="424.0" width="400.0" height="176.0" rx="6" fill="#ebfbee"/>
+  <path d="M430.5,423.9 C562.5,424.7 695.9,422.7 830.5,423.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M430.3,424.7 C563.0,424.6 695.1,423.0 830.7,423.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M829.5,423.3 C830.0,483.5 830.0,541.9 829.4,599.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M829.5,423.5 C830.2,482.7 830.2,540.2 830.5,600.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M829.9,600.4 C698.0,598.7 561.9,601.4 429.7,599.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M830.3,600.6 C696.7,599.8 563.7,598.4 429.5,599.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M430.0,599.2 C430.8,541.0 429.0,481.6 430.6,424.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M430.2,600.0 C430.7,542.5 430.4,482.4 430.8,424.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="630.0" y="451.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">decide_figure</text>
+  <text x="630.0" y="475.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">load the data collection</text>
+  <text x="630.0" y="496.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">build the server figure</text>
+  <text x="630.0" y="517.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">match each trace to one group</text>
+  <path d="M330.6,447.8 C359.7,459.6 392.3,469.1 422.8,478.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M330.4,447.1 C361.4,459.1 392.4,467.6 421.7,477.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M421.7,478.4 C417.8,474.4 415.8,471.5 412.5,467.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M422.5,478.1 C417.7,478.9 412.9,479.4 408.4,480.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M329.5,575.8 C362.6,564.1 391.8,557.0 421.1,545.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M330.1,576.0 C360.2,564.4 390.3,557.6 422.9,546.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M422.1,546.3 C418.4,545.5 413.4,543.5 407.8,544.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M422.1,545.6 C418.1,549.3 414.9,552.7 412.7,556.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <rect x="930.0" y="400.0" width="350.0" height="96.0" rx="6" fill="#ffffff"/>
+  <path d="M930.2,400.1 C1046.8,400.3 1162.9,399.3 1279.7,400.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M929.5,400.4 C1046.0,398.4 1162.5,398.5 1279.8,400.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1279.3,400.6 C1280.8,430.6 1281.6,465.4 1279.9,496.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1280.4,399.9 C1281.5,431.2 1280.1,465.4 1280.8,496.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1279.5,495.3 C1163.7,494.8 1047.1,495.9 930.0,495.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1280.1,495.9 C1163.2,496.5 1046.5,495.2 930.4,496.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M929.4,496.6 C931.6,465.4 930.7,431.2 930.5,400.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M930.1,496.2 C929.5,463.3 930.6,432.2 930.4,399.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="1105.0" y="427.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">tier table</text>
+  <text x="1105.0" y="451.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">24 live · 2 frozen · 0 undecided</text>
+  <rect x="930.0" y="528.0" width="350.0" height="96.0" rx="6" fill="#ffffff"/>
+  <path d="M929.3,527.3 C1045.9,529.5 1164.7,529.2 1279.6,527.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M929.3,528.3 C1047.1,526.7 1163.5,526.6 1280.1,528.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1280.4,528.5 C1279.6,559.9 1279.1,591.5 1279.3,623.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1279.9,527.6 C1281.0,560.4 1280.9,591.1 1280.5,623.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1280.4,624.7 C1163.8,625.6 1046.1,624.2 929.9,623.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1280.1,624.0 C1162.0,625.2 1045.3,622.7 930.3,623.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M929.3,623.7 C930.9,590.6 929.1,560.5 930.4,528.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M929.8,623.4 C929.3,590.9 929.5,560.7 930.3,528.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="1105.0" y="555.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">bundle</text>
+  <text x="1105.0" y="579.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">the same verdicts, shipped</text>
+  <path d="M830.6,477.6 C862.3,469.8 893.0,457.8 921.6,447.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M829.7,477.7 C862.4,469.6 890.3,457.4 921.8,447.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M922.3,448.1 C916.8,447.3 913.4,446.5 907.9,445.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M922.0,448.1 C919.5,450.9 914.6,454.8 912.8,458.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M829.2,545.2 C861.9,554.3 891.5,567.2 922.5,576.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M830.3,545.5 C859.0,556.5 889.9,567.0 921.4,576.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M922.5,576.2 C918.8,573.2 915.3,569.0 912.3,566.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M922.3,576.2 C917.8,577.2 913.6,577.4 908.6,578.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="630.0" y="634.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">the preflight stops here: no Parquet, no Celery compute, no manifest</text>
+  <text x="630.0" y="660.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">penguins: the 2 survivors are a lowess trendline and a pandas .groupby()</text>
+</svg>
