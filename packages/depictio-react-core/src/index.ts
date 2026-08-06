@@ -230,6 +230,7 @@ export {
   clearSession,
   validateSession,
   authFetch,
+  API_BASE,
   refreshAccessToken,
   startSessionKeepAlive,
   stopSessionKeepAlive,
