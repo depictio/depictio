@@ -173,6 +173,24 @@ def upsert_ingestion_step(
     return result.matched_count > 0
 
 
+def set_ingestion_step(
+    run_id: str, *, step: dict[str, Any], current_step: Optional[str] = None
+) -> bool:
+    """Atomically replace one pre-seeded step of a run, keyed by step name.
+
+    Unlike ``upsert_ingestion_step`` (read-modify-write, fine for a single
+    writer), this uses a positional update so concurrent workers updating
+    *different* steps of the same run can't lose each other's writes. The step
+    must have been seeded at run creation — an unknown name is not appended.
+    Returns False if the run or the step name is unknown.
+    """
+    result = ingestion_runs_collection.update_one(
+        {"run_id": run_id, "steps.name": step.get("name")},
+        {"$set": {"steps.$": step, "current_step": current_step}},
+    )
+    return result.matched_count > 0
+
+
 def query_ingestion_runs(
     *,
     instance: Optional[str] = None,

@@ -3104,6 +3104,102 @@ export async function createProject(
   return { ...result, project_id: result.project_id ?? newId };
 }
 
+/** One data collection ingested (or planned, under dry_run) from a manifest. */
+export interface ManifestIngestDCResult {
+  data_collection_tag: string;
+  data_collection_id: string | null;
+  entries: number;
+  status: 'ingested' | 'failed' | 'planned';
+  message: string | null;
+}
+
+/** One template dashboard imported (or planned) for a from-manifest project. */
+export interface DashboardImportResult {
+  path: string;
+  success: boolean;
+  dashboard_id: string | null;
+  title: string | null;
+  error: string | null;
+}
+
+/** Inputs for POST /projects/from_manifest. The backend injects the
+ *  `MANIFEST_URL` template variable from `manifest_url` — never send it via
+ *  `variables`. With `dry_run` nothing is created and the report comes back
+ *  with `planned` statuses and null ids. */
+export interface FromManifestRequest {
+  manifest_url: string;
+  template_id: string;
+  project_name?: string | null;
+  variables?: Record<string, string>;
+  dry_run?: boolean;
+}
+
+/** Report returned by POST /projects/from_manifest — both for real creation
+ *  and for a dry-run plan. `success: false` means the project exists but some
+ *  collections/dashboards failed (per-row `message`/`error` says why). */
+export interface FromManifestReport {
+  project_id: string | null;
+  project_name: string;
+  template_id: string;
+  manifest_url: string;
+  manifest_entries: number;
+  ingestion: ManifestIngestDCResult[];
+  dashboards: DashboardImportResult[];
+  unmatched_manifest_types: string[];
+  pruned_optional_dcs: string[];
+  dry_run: boolean;
+  success: boolean;
+}
+
+/** Create (or, with `dry_run`, plan) a project from a Data Manifest URL.
+ *  Backend errors carry actionable `{detail}` strings (rejected URL, unknown
+ *  template, duplicate name, unparseable manifest) — surfaced verbatim. */
+export async function createProjectFromManifest(
+  input: FromManifestRequest,
+): Promise<FromManifestReport> {
+  const res = await authFetch(`${API_BASE}/projects/from_manifest`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to create project from manifest');
+  return (await res.json()) as FromManifestReport;
+}
+
+/** A variable a project template accepts. `MANIFEST_URL` is special-cased by
+ *  the from-manifest endpoint and must not be collected from the user. */
+export interface TemplateVariable {
+  name: string;
+  description: string | null;
+  required: boolean;
+  default: string | null;
+}
+
+/** One entry from GET /projects/templates. Only templates with
+ *  `manifest_capable` can back the from-manifest flow. */
+export interface TemplateInfo {
+  template_id: string;
+  name: string;
+  description: string | null;
+  version: string | null;
+  manifest_capable: boolean;
+  variables: TemplateVariable[];
+  dashboards: string[];
+}
+
+/** Envelope returned by GET /projects/templates. */
+export interface TemplateListResponse {
+  templates: TemplateInfo[];
+}
+
+/** List the project templates known to the backend, unwrapping the
+ *  `{templates}` envelope. */
+export async function listProjectTemplates(): Promise<TemplateInfo[]> {
+  const res = await authFetch(`${API_BASE}/projects/templates`);
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to list project templates');
+  const body = (await res.json()) as TemplateListResponse;
+  return body.templates ?? [];
+}
+
 /** Fields editable via the Edit modal. Update-project endpoint accepts a
  *  full Project, so the caller fetches the existing project, merges these
  *  fields, and PUTs the merged document. */

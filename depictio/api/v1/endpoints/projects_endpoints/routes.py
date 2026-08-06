@@ -37,6 +37,7 @@ from depictio.api.v1.endpoints.projects_endpoints.manifest_ingest import (
     ManifestIngestReport,
     ManifestRefreshReport,
     RefreshManifestRequest,
+    _get_refresh_run_report,
     _ingest_manifest_into_project,
     _refresh_manifest_in_project,
 )
@@ -356,7 +357,23 @@ async def refresh_manifest(
         current_user=current_user,
         data_collection_tag=payload.data_collection_tag,
         dry_run=payload.dry_run,
+        async_run=payload.async_run,
     )
+
+
+@projects_endpoint_router.get("/refresh_manifest/{run_id}", response_model=ManifestRefreshReport)
+async def get_refresh_manifest_run(
+    run_id: str,
+    current_user=Depends(get_user_or_anonymous),
+):
+    """Poll an async manifest refresh (``async_run=true``) by its run_id.
+
+    Aggregates the ingestion-run steps back into the same report shape as a
+    synchronous refresh; ``success`` flips once every worker finished green.
+    """
+    if not current_user:
+        raise HTTPException(status_code=401, detail="User not found.")
+    return await asyncio.to_thread(_get_refresh_run_report, run_id, current_user)
 
 
 @projects_endpoint_router.get("/templates", response_model=TemplateCatalog)

@@ -66,11 +66,17 @@ class RefreshManifestRequest(BaseModel):
     data_collection_tag: str | None = None
     # Plan-only: report what would be refreshed without touching any data.
     dry_run: bool = False
+    # Fan the per-DC re-ingestions out to Celery workers instead of running
+    # them inline — for long manifests. The response then reports each DC as
+    # "dispatched" with a run_id to poll via GET /projects/refresh_manifest/{run_id}.
+    async_run: bool = False
 
 
 class ManifestRefreshReport(BaseModel):
     project_id: str
     refreshed: list[ManifestIngestDCResult] = Field(default_factory=list)
+    # Ingestion-run id for polling, set when async_run dispatched workers.
+    run_id: str | None = None
     dry_run: bool = False
     success: bool = False
 
@@ -352,6 +358,7 @@ def _refresh_manifest_in_project(
     current_user,
     data_collection_tag: str | None = None,
     dry_run: bool = False,
+    async_run: bool = False,
 ) -> ManifestRefreshReport:
     """Re-fetch each manifest DC's stored manifest and re-ingest it in place.
 
@@ -410,6 +417,7 @@ def _refresh_manifest_in_project(
     # combination once. Failures are per-DC, not global — one dead manifest
     # must not block refreshing DCs backed by a different one.
     manifests: dict[tuple, DataManifest | str] = {}  # key -> manifest or error text
+    to_dispatch: list[tuple[str, str, int, int]] = []  # (tag, dc_id, wf_i, entries)
     all_ok = True
     for tag, (wf_i, dc_i, scan_params) in manifest_index.items():
         dc_dict = workflows[wf_i]["data_collections"][dc_i]
@@ -483,6 +491,10 @@ def _refresh_manifest_in_project(
             )
             continue
 
+        if async_run:
+            to_dispatch.append((tag, dc_id, wf_i, entry_count))
+            continue
+
         try:
             ok, message = _run_dc_ingest(workflows[wf_i], dc_id, current_user, sync_files=True)
         except HTTPException:
@@ -502,5 +514,161 @@ def _refresh_manifest_in_project(
             )
         )
 
+    if to_dispatch:
+        dispatch_ok = _dispatch_refresh_tasks(
+            project_dict=project_dict,
+            to_dispatch=to_dispatch,
+            current_user=current_user,
+            report=report,
+        )
+        all_ok = all_ok and dispatch_ok
+
     report.success = all_ok
+    return report
+
+
+def _dispatch_refresh_tasks(
+    *,
+    project_dict: dict,
+    to_dispatch: list[tuple[str, str, int, int]],
+    current_user,
+    report: ManifestRefreshReport,
+) -> bool:
+    """Fan the per-DC refreshes out to Celery, backed by an ingestion run.
+
+    Steps are pre-seeded (one per DC tag, status "pending") so the workers'
+    ``set_ingestion_step`` positional updates are atomic under concurrency.
+    Poll ``GET /projects/refresh_manifest/{run_id}`` for the aggregate report —
+    Mongo is the durable status of record; Celery is only the transport.
+    """
+    from uuid import uuid4
+
+    from depictio.api.v1.monitoring import store
+    from depictio.models.models.monitoring import (
+        IngestionDataCollection,
+        IngestionRun,
+        IngestionStep,
+    )
+
+    run_id = uuid4().hex
+    store.create_ingestion_run(
+        IngestionRun(
+            run_id=run_id,
+            source="ui",
+            cli_instance_label="Web UI",
+            user_id=str(current_user.id),
+            email=getattr(current_user, "email", None),
+            project_id=str(project_dict["_id"]),
+            project_name=project_dict.get("name"),
+            command="refresh_manifest",
+            data_collections=[
+                IngestionDataCollection(tag=tag, scan_mode="manifest", file_count=entries)
+                for tag, _dc_id, _wf_i, entries in to_dispatch
+            ],
+            status="running",
+            steps=[
+                IngestionStep(name=tag, status="pending")
+                for tag, _dc_id, _wf_i, _entries in to_dispatch
+            ],
+        )
+    )
+    report.run_id = run_id
+
+    # Task import is lazy: the API process only needs the signature, and tests
+    # patch the dispatch without a broker.
+    from depictio.api.v1.celery_tasks import manifest_refresh_dc_task
+
+    user_ctx = {
+        "id": str(current_user.id),
+        "email": getattr(current_user, "email", None),
+        "is_admin": bool(getattr(current_user, "is_admin", False)),
+    }
+    all_dispatched = True
+    for tag, dc_id, wf_i, entries in to_dispatch:
+        payload = {
+            "run_id": run_id,
+            "project_id": str(project_dict["_id"]),
+            "wf_index": wf_i,
+            "dc_id": dc_id,
+            "dc_tag": tag,
+            "sync_files": True,
+            "user": user_ctx,
+        }
+        try:
+            manifest_refresh_dc_task.apply_async(args=[payload])
+            status, message = "dispatched", None
+        except Exception as exc:  # broker down — a per-DC failure, not a 5xx
+            logger.error(f"Could not dispatch manifest refresh for DC '{tag}': {exc}")
+            all_dispatched = False
+            status, message = "failed", f"Could not dispatch worker task: {exc}"
+            store.set_ingestion_step(
+                run_id,
+                step={"name": tag, "status": "failed", "detail": message},
+                current_step=None,
+            )
+        report.refreshed.append(
+            ManifestIngestDCResult(
+                data_collection_tag=tag,
+                data_collection_id=dc_id,
+                entries=entries,
+                status=status,
+                message=message,
+            )
+        )
+    if not all_dispatched:
+        # If nothing was dispatched no worker will ever finalize the run —
+        # close it now (no-op while any step is still pending/running).
+        from depictio.api.v1.celery_tasks import _finalize_manifest_refresh_run
+
+        _finalize_manifest_refresh_run(run_id)
+    return all_dispatched
+
+
+_REFRESH_STEP_TO_DC_STATUS = {
+    "pending": "dispatched",
+    "running": "running",
+    "success": "ingested",
+    "failed": "failed",
+}
+
+
+def _get_refresh_run_report(run_id: str, current_user) -> ManifestRefreshReport:
+    """Aggregate an async refresh run into the same report shape as sync mode."""
+    from depictio.api.v1.monitoring import store
+
+    doc = store.get_ingestion_run(run_id)
+    if not doc or doc.get("command") != "refresh_manifest":
+        raise HTTPException(status_code=404, detail="Refresh run not found.")
+    if not getattr(current_user, "is_admin", False) and doc.get("user_id") != str(current_user.id):
+        raise HTTPException(status_code=403, detail="This refresh run belongs to another user.")
+
+    entries_by_tag = {
+        dc.get("tag"): dc.get("file_count") or 0 for dc in doc.get("data_collections") or []
+    }
+    # dc ids aren't stored on the run — rebuild the mapping from the live
+    # project (empty if the project has been deleted since).
+    dc_ids_by_tag: dict[str, str] = {}
+    project_dict = (
+        projects_collection.find_one({"_id": ObjectId(doc["project_id"])})
+        if doc.get("project_id")
+        else None
+    )
+    if project_dict:
+        for tag, (wf_i, dc_i, _params) in _manifest_dc_index(project_dict).items():
+            dc = project_dict["workflows"][wf_i]["data_collections"][dc_i]
+            dc_ids_by_tag[tag] = str(dc.get("_id") or dc.get("id") or "")
+
+    report = ManifestRefreshReport(project_id=str(doc.get("project_id") or ""), run_id=run_id)
+    for step in doc.get("steps") or []:
+        tag = str(step.get("name") or "")
+        report.refreshed.append(
+            ManifestIngestDCResult(
+                data_collection_tag=tag,
+                data_collection_id=dc_ids_by_tag.get(tag, ""),
+                entries=entries_by_tag.get(tag, 0),
+                status=_REFRESH_STEP_TO_DC_STATUS.get(str(step.get("status")), "failed"),
+                message=step.get("detail"),
+            )
+        )
+    report.success = doc.get("status") == "success"
     return report
