@@ -3080,6 +3080,51 @@ export async function createDataCollectionFromUpload(
   return res.json();
 }
 
+export interface CreateDataCollectionUrlInput {
+  projectId: string;
+  name: string;
+  description?: string;
+  dataType?: string;
+  fileFormat: string;
+  separator: string;
+  customSeparator?: string | null;
+  compression: string;
+  hasHeader: boolean;
+  /** Absolute https:// or s3:// URL. Screened server-side by the SSRF gateway. */
+  url: string;
+  latColumn?: string | null;
+  lonColumn?: string | null;
+}
+
+/** Create a data collection from a remote URL — the no-upload twin of
+ *  `createDataCollectionFromUpload`. The file is fetched server-side, so this
+ *  works for data far too large to push through the browser, and for buckets
+ *  the browser cannot reach. */
+export async function createDataCollectionFromUrl(
+  input: CreateDataCollectionUrlInput,
+): Promise<CreateDataCollectionResult> {
+  const res = await authFetch(`${API_BASE}/datacollections/create_from_url`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      project_id: input.projectId,
+      name: input.name,
+      description: input.description ?? '',
+      data_type: input.dataType ?? 'table',
+      file_format: input.fileFormat,
+      separator: input.separator,
+      custom_separator: input.customSeparator ?? null,
+      compression: input.compression,
+      has_header: input.hasHeader,
+      url: input.url,
+      lat_column: input.latColumn ?? null,
+      lon_column: input.lonColumn ?? null,
+    }),
+  });
+  if (!res.ok) await throwHttpError(res, 'Failed to create data collection from URL');
+  return res.json();
+}
+
 /** Fields the management Create-modal collects. Matches the allowlist on
  *  POST /dashboards/save/{id} — we hand the rest of the payload defaults
  *  client-side so the user only fills what's interesting. */

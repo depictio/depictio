@@ -94,6 +94,10 @@ def _ingestion_data_collections(project_config) -> list[dict]:
                     pattern = getattr(rc, "pattern", None) if rc else None
                 elif mode == "url":
                     pattern = getattr(params, "url", None)
+                elif mode == "s3_prefix":
+                    prefix = getattr(params, "prefix", None)
+                    glob = getattr(params, "pattern", None)
+                    pattern = f"{prefix}{glob}" if prefix and glob else prefix
                 elif mode == "manifest":
                     pattern = getattr(params, "manifest_url", None)
                 else:
@@ -218,6 +222,20 @@ def register_run_command(app: typer.Typer):
                     "Extra template variable as KEY=VALUE. Repeatable. "
                     "Example: --var SAMPLESHEET_FILE=/path/to/samplesheet.csv "
                     "--var METADATA_FILE=/path/to/metadata.tsv"
+                ),
+            ),
+        ] = [],
+        bind: Annotated[
+            list[str],
+            typer.Option(
+                "--bind",
+                help=(
+                    "Point one data collection at where its data actually is, as "
+                    "TAG=LOCATION. Repeatable. The scan mode is inferred from the "
+                    "location: a local directory or glob scans locally, a local file "
+                    "is a single file, https:// is a remote file, an s3:// prefix or "
+                    "glob is listed remotely. Example: "
+                    "--bind samples=s3://my-bucket/run42/*.samples.csv"
                 ),
             ),
         ] = [],
@@ -370,9 +388,12 @@ def register_run_command(app: typer.Typer):
             )
             raise typer.Exit(code=1)
 
-        if template and not data_root and not manifest:
+        # --bind supplies each DC's location itself, so it satisfies the same need
+        # as --data-root / --manifest and is accepted in their place.
+        if template and not data_root and not manifest and not bind:
             rich_print_checked_statement(
-                "--data-root (or --manifest) is required when using --template.", "error"
+                "--data-root (or --manifest, or --bind) is required when using --template.",
+                "error",
             )
             raise typer.Exit(code=1)
 
@@ -499,6 +520,10 @@ def register_run_command(app: typer.Typer):
                     data_root=data_root,  # type: ignore[arg-type]
                     project_name=project_name,
                     extra_vars=extra_vars or None,
+                    # --bind can make a declared variable irrelevant by replacing
+                    # the scan block that used it; assert_no_unbound_vars below
+                    # still fails when it turns out to be genuinely needed.
+                    allow_missing_vars=bool(bind),
                 )
 
                 rich_print_checked_statement(
@@ -512,6 +537,24 @@ def register_run_command(app: typer.Typer):
                 )
 
                 template_resolved_config = resolved_config
+
+                # --bind overrides the template author's scan choice per DC.
+                # Applied after resolution so it wins over {DATA_ROOT} / {MANIFEST_URL}
+                # substitution rather than being overwritten by it.
+                if bind:
+                    from depictio.cli.cli.utils.bindings import (
+                        BindingError,
+                        apply_bindings,
+                        assert_no_unbound_vars,
+                    )
+
+                    try:
+                        for note in apply_bindings(template_resolved_config, list(bind)):
+                            rich_print_checked_statement(f"Bound {note}", "info")
+                        assert_no_unbound_vars(template_resolved_config)
+                    except BindingError as exc:
+                        rich_print_checked_statement(str(exc), "error")
+                        raise typer.Exit(code=1)
 
                 # Resolve dashboard paths: CLI --dashboard overrides template defaults
                 if dashboard:
@@ -611,6 +654,26 @@ def register_run_command(app: typer.Typer):
                     CLI_config, validation_response = validate_template_project_config(
                         CLI_config_path=CLI_config_path,
                         resolved_config=template_resolved_config,
+                    )
+                elif bind:
+                    # --bind without a template: patch the YAML in memory and take
+                    # the dict path, since the file on disk must stay untouched.
+                    import yaml as _yaml
+
+                    from depictio.cli.cli.utils.bindings import BindingError, apply_bindings
+                    from depictio.cli.cli.utils.config import validate_template_project_config
+
+                    with open(project_config_path) as handle:
+                        bound_config = _yaml.safe_load(handle)
+                    try:
+                        for note in apply_bindings(bound_config, list(bind)):
+                            rich_print_checked_statement(f"Bound {note}", "info")
+                    except BindingError as exc:
+                        rich_print_checked_statement(str(exc), "error")
+                        raise typer.Exit(code=1)
+                    CLI_config, validation_response = validate_template_project_config(
+                        CLI_config_path=CLI_config_path,
+                        resolved_config=bound_config,
                     )
                 else:
                     # Standard mode: load from YAML file

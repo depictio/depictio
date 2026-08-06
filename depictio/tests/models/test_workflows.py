@@ -194,6 +194,54 @@ class TestWorkflowRun:
         # Would be validated by DirectoryPath
         assert isinstance(run.run_location, str)
 
+    @pytest.mark.parametrize(
+        "location",
+        [
+            "s3://bucket/run42/",
+            "https://data.example.org/manifest.json",
+            "http://host:8099/manifest.json",
+        ],
+    )
+    def test_remote_run_location_skips_the_directory_check(self, location):
+        """Remote acquisition modes (url / s3_prefix / manifest) record their
+        source URL here. There is nothing local to stat, and the CLI-context
+        branch would otherwise reject every remote run."""
+        run = WorkflowRun(
+            workflow_id=PyObjectId(),
+            run_tag="test",
+            workflow_config_id=PyObjectId(),
+            run_location=location,
+            creation_time="2025-01-01 10:00:00",
+            last_modification_time="2025-01-01 11:00:00",
+            permissions=Permission(
+                owners=[UserBase(email="test_user@example.com", is_admin=False)],
+                editors=[],
+                viewers=[],
+            ),
+        )
+        assert run.run_location == location
+
+    @patch("depictio.models.config.DEPICTIO_CONTEXT", "CLI")
+    def test_file_run_location_accepted_in_cli_context(self, tmp_path):
+        """A manifest run records the manifest itself, and a manifest is a file:
+        only a real scan root has to be a directory."""
+        manifest = tmp_path / "manifest.json"
+        manifest.write_text("[]")
+        run = WorkflowRun(
+            workflow_id=PyObjectId(),
+            run_tag="test",
+            workflow_config_id=PyObjectId(),
+            run_location=str(manifest),
+            creation_time="2025-01-01 10:00:00",
+            last_modification_time="2025-01-01 11:00:00",
+            permissions=Permission(
+                owners=[UserBase(email="test_user@example.com", is_admin=False)],
+                editors=[],
+                viewers=[],
+            ),
+        )
+        assert run.run_location == str(manifest)
+
     def test_invalid_hash_length(self):
         """Test validation with invalid hash length."""
         with pytest.raises(ValidationError):

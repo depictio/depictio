@@ -387,3 +387,39 @@ class TestManifestModeResolution:
             variables={"MANIFEST_URL": "https://example.org/m.json"},
         )
         assert origin.data_root is None
+
+
+class TestLocateTemplateByPath:
+    """A received bundle must be runnable where it lands.
+
+    `depictio template export` produces a directory; without path support the
+    recipient would have to copy it into their own site-packages before
+    `--template` could see it, which is exactly what blocks sharing.
+    """
+
+    def test_directory_containing_template_yaml(self, tmp_path):
+        bundle = tmp_path / "recu"
+        bundle.mkdir()
+        (bundle / "template.yaml").write_text("name: x\n")
+        assert locate_template(str(bundle)) == (bundle / "template.yaml").resolve()
+
+    def test_direct_yaml_file(self, tmp_path):
+        target = tmp_path / "template.yaml"
+        target.write_text("name: x\n")
+        assert locate_template(str(target)) == target.resolve()
+
+    def test_project_yaml_fallback(self, tmp_path):
+        bundle = tmp_path / "legacy"
+        bundle.mkdir()
+        (bundle / "project.yaml").write_text("name: x\n")
+        assert locate_template(str(bundle)) == (bundle / "project.yaml").resolve()
+
+    def test_directory_without_a_template_explains_what_is_missing(self, tmp_path):
+        empty = tmp_path / "empty"
+        empty.mkdir()
+        with pytest.raises(FileNotFoundError, match="no template.yaml or project.yaml"):
+            locate_template(str(empty))
+
+    def test_installed_ids_still_resolve(self):
+        """Path support must not shadow the shipped catalogue."""
+        assert locate_template("generic/manifest-tables/1").is_file()
