@@ -20,14 +20,35 @@ import hashlib
 import json
 import logging
 import time
+from collections import OrderedDict
 from collections.abc import Iterator
-from typing import Any
+from typing import Any, NamedTuple
 
 from depictio.api.v1.configs.config import settings
 
 logger = logging.getLogger(__name__)
 
-_cache: dict[str, str] = {}
+
+class CompletionUsage(NamedTuple):
+    """Token accounting for one completion, as the provider reported it."""
+
+    prompt_tokens: int
+    completion_tokens: int
+    total_tokens: int
+
+
+class Completion(NamedTuple):
+    content: str
+    usage: CompletionUsage
+    cached: bool
+
+
+# Process-local completion cache, bounded FIFO. The key includes a hash of
+# the resolved API key: without it, a keyless user could be served a
+# completion another user paid for with their own key. (Two users sharing
+# the *server* key still share entries, which is fine — same payer.)
+_CACHE_MAX_ENTRIES = 256
+_cache: OrderedDict[str, Completion] = OrderedDict()
 
 
 def _litellm():
@@ -51,9 +72,15 @@ def _resolve_api_key(user_key: str | None) -> str | None:
     return None
 
 
-def _cache_key(messages: list[dict[str, Any]], model: str, fmt: str) -> str:
+def _cache_key(messages: list[dict[str, Any]], model: str, fmt: str, api_key: str | None) -> str:
     payload = json.dumps(
-        {"messages": messages, "model": model, "fmt": fmt},
+        {
+            "messages": messages,
+            "model": model,
+            "fmt": fmt,
+            # Hash, never the key itself: the cache key shows up in logs.
+            "key": hashlib.sha256((api_key or "").encode()).hexdigest(),
+        },
         sort_keys=True,
     )
     return hashlib.sha256(payload.encode()).hexdigest()
@@ -66,7 +93,7 @@ def _log_messages(messages: list[dict[str, Any]]) -> None:
         logger.debug("%s", msg.get("content", ""))
 
 
-def completion(
+def completion_with_usage(
     messages: list[dict[str, Any]],
     *,
     model: str | None = None,
@@ -74,18 +101,26 @@ def completion(
     response_format: type | None = None,
     temperature: float = 0,
     max_tokens: int | None = None,
-) -> str:
-    """Single non-streaming completion. Returns the assistant message content."""
+) -> Completion:
+    """Non-streaming completion returning content plus token usage.
+
+    The analysis budget needs the numbers `completion` was already
+    computing for its log line; this sibling returns them instead of
+    changing the signature the other four flows are written against.
+    A cache hit reports the *original* usage with `cached=True`, so the
+    budget can choose not to charge for it.
+    """
     model = model or get_default_model()
     max_tokens = max_tokens or settings.ai.max_tokens
     fmt_name = response_format.__name__ if response_format else "None"
-    key = _cache_key(messages, model, fmt_name)
+    api_key = _resolve_api_key(user_api_key)
+    key = _cache_key(messages, model, fmt_name, api_key)
 
     if key in _cache:
         logger.info("═══ Cache HIT ═══  key=%s format=%s", key[:12], fmt_name)
-        return _cache[key]
+        hit = _cache[key]
+        return Completion(content=hit.content, usage=hit.usage, cached=True)
 
-    api_key = _resolve_api_key(user_api_key)
     logger.info(
         "═══ LLM Request ═══  model=%s fmt=%s key=%s",
         model,
@@ -110,21 +145,49 @@ def completion(
     elapsed = time.perf_counter() - t0
     content = response.choices[0].message.content or ""
 
-    usage = getattr(response, "usage", None)
-    if usage:
+    raw_usage = getattr(response, "usage", None)
+    usage = CompletionUsage(
+        prompt_tokens=int(getattr(raw_usage, "prompt_tokens", 0) or 0),
+        completion_tokens=int(getattr(raw_usage, "completion_tokens", 0) or 0),
+        total_tokens=int(getattr(raw_usage, "total_tokens", 0) or 0),
+    )
+    if raw_usage:
         logger.info(
             "═══ LLM Response (%.1fs) ═══  Tokens: %d + %d = %d",
             elapsed,
-            getattr(usage, "prompt_tokens", 0),
-            getattr(usage, "completion_tokens", 0),
-            getattr(usage, "total_tokens", 0),
+            usage.prompt_tokens,
+            usage.completion_tokens,
+            usage.total_tokens,
         )
     else:
         logger.info("═══ LLM Response (%.1fs) ═══", elapsed)
     logger.debug("─── Raw Response ───\n%s", content)
 
-    _cache[key] = content
-    return content
+    result = Completion(content=content, usage=usage, cached=False)
+    _cache[key] = result
+    while len(_cache) > _CACHE_MAX_ENTRIES:
+        _cache.popitem(last=False)
+    return result
+
+
+def completion(
+    messages: list[dict[str, Any]],
+    *,
+    model: str | None = None,
+    user_api_key: str | None = None,
+    response_format: type | None = None,
+    temperature: float = 0,
+    max_tokens: int | None = None,
+) -> str:
+    """Single non-streaming completion. Returns the assistant message content."""
+    return completion_with_usage(
+        messages,
+        model=model,
+        user_api_key=user_api_key,
+        response_format=response_format,
+        temperature=temperature,
+        max_tokens=max_tokens,
+    ).content
 
 
 def stream_completion(

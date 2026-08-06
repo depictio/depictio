@@ -27,7 +27,7 @@ from typing import Any
 from bson import ObjectId
 
 from depictio.api.v1.deltatables_utils import load_deltatable_lite
-from depictio.api.v1.endpoints.ai_endpoints.context import DashboardContext
+from depictio.api.v1.endpoints.ai_endpoints.context import DashboardContext, init_data_for_dc
 from depictio.api.v1.endpoints.ai_endpoints.schemas import (
     FilterProposal,
     ResolvedFilter,
@@ -73,6 +73,7 @@ def resolve_threshold(
         data_collection_id=ObjectId(data_collection_id),
         metadata=active_filters or None,
         select_columns=[spec.column],
+        init_data=init_data_for_dc(data_collection_id),
     )
     if df is None or df.height == 0:
         raise ValueError("no rows available to compute the threshold on")
