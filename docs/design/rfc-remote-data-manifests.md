@@ -332,8 +332,14 @@ One orchestration endpoint, `POST /projects/from_manifest`:
    `expected_data_collections` (the report UI already exists).
 4. Create the project (same identity/uniqueness rules as `POST
    /projects/create`), then scan + process each manifest DC (§5) —
-   sequentially, like `/projects/ingest_manifest`; Celery fan-out is the
-   phase-4 internal switch.
+   sequentially, like `/projects/ingest_manifest`. Celery fan-out (phase 4)
+   shipped on the *refresh* path (`refresh_manifest` with `async_run=true`:
+   one worker task per DC, an `ingestion_runs` ledger with pre-seeded steps
+   for atomic per-step updates, polled via `GET
+   /projects/refresh_manifest/{run_id}`). First ingestion stays sequential on
+   purpose: it writes and must be able to revert per-DC scan configs on the
+   project document, which concurrent workers would clobber — refresh writes
+   nothing to the project, which is what makes its parallelism safe.
 5. Import dashboards: factor the core of `import_dashboards_from_template`
    (read YAML, `{VAR}` substitution, body construction) into a shared function
    so the server calls the import handler directly instead of HTTP-to-self.

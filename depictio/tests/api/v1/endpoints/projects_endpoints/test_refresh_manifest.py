@@ -265,6 +265,142 @@ def test_unfetchable_manifest_fails_per_dc(mock_db):
     ingest.assert_not_called()
 
 
+def test_async_run_dispatches_workers(mock_db, served_manifest):
+    from depictio.api.v1.monitoring import store as monitoring_store
+
+    user = _user()
+    doc = _project_doc(user.id, tags=["counts", "annotations"])
+    mock_db["projects"].insert_one(doc)
+
+    with (
+        patch.object(monitoring_store, "ingestion_runs_collection", mock_db["ingestion_runs"]),
+        patch("depictio.api.v1.celery_tasks.manifest_refresh_dc_task") as task,
+    ):
+        report = manifest_ingest._refresh_manifest_in_project(
+            project_id=str(doc["_id"]), current_user=user, async_run=True
+        )
+
+    assert report.success is True
+    assert report.run_id is not None
+    assert all(r.status == "dispatched" for r in report.refreshed)
+    assert task.apply_async.call_count == 2
+    payloads = [
+        c.kwargs.get("args", c.args[0] if c.args else None)[0]
+        for c in task.apply_async.call_args_list
+    ]
+    assert all(p["run_id"] == report.run_id and p["sync_files"] is True for p in payloads)
+
+    run_doc = mock_db["ingestion_runs"].find_one({"run_id": report.run_id})
+    assert run_doc["status"] == "running"
+    assert run_doc["command"] == "refresh_manifest"
+    assert {s["name"]: s["status"] for s in run_doc["steps"]} == {
+        "counts": "pending",
+        "annotations": "pending",
+    }
+
+
+def test_async_task_body_updates_steps_and_finalizes(mock_db):
+    from depictio.api.v1 import celery_tasks
+    from depictio.api.v1.monitoring import store as monitoring_store
+
+    user = _user()
+    doc = _project_doc(user.id, tags=["counts", "annotations"])
+    mock_db["projects"].insert_one(doc)
+    mock_db["ingestion_runs"].insert_one(
+        {
+            "run_id": "run123",
+            "command": "refresh_manifest",
+            "user_id": str(user.id),
+            "project_id": str(doc["_id"]),
+            "status": "running",
+            "steps": [
+                {"name": "counts", "status": "pending", "detail": None},
+                {"name": "annotations", "status": "pending", "detail": None},
+            ],
+            "data_collections": [
+                {"tag": "counts", "file_count": 2},
+                {"tag": "annotations", "file_count": 1},
+            ],
+        }
+    )
+
+    def _payload(tag: str) -> dict:
+        wf = doc["workflows"][0]
+        dc = next(d for d in wf["data_collections"] if d["data_collection_tag"] == tag)
+        return {
+            "run_id": "run123",
+            "project_id": str(doc["_id"]),
+            "wf_index": 0,
+            "dc_id": str(dc["_id"]),
+            "dc_tag": tag,
+            "sync_files": True,
+            "user": {"id": str(user.id), "email": user.email, "is_admin": False},
+        }
+
+    with (
+        patch.object(monitoring_store, "ingestion_runs_collection", mock_db["ingestion_runs"]),
+        patch("depictio.api.v1.db.projects_collection", mock_db["projects"]),
+        patch.object(manifest_ingest, "_run_dc_ingest", return_value=(True, None)),
+    ):
+        celery_tasks.manifest_refresh_dc_task(_payload("counts"))
+        run_doc = mock_db["ingestion_runs"].find_one({"run_id": "run123"})
+        assert run_doc["status"] == "running"  # one step still pending
+
+    with (
+        patch.object(monitoring_store, "ingestion_runs_collection", mock_db["ingestion_runs"]),
+        patch("depictio.api.v1.db.projects_collection", mock_db["projects"]),
+        patch.object(manifest_ingest, "_run_dc_ingest", return_value=(False, "boom")),
+    ):
+        celery_tasks.manifest_refresh_dc_task(_payload("annotations"))
+
+    run_doc = mock_db["ingestion_runs"].find_one({"run_id": "run123"})
+    steps = {s["name"]: s for s in run_doc["steps"]}
+    assert steps["counts"]["status"] == "success"
+    assert steps["annotations"]["status"] == "failed"
+    assert "boom" in (steps["annotations"]["detail"] or "")
+    # One green + one red worker → the run closes as partial.
+    assert run_doc["status"] == "partial"
+    assert "boom" in (run_doc["error"] or "")
+
+
+def test_poll_endpoint_maps_run_to_report(mock_db):
+    from depictio.api.v1.monitoring import store as monitoring_store
+
+    user = _user()
+    doc = _project_doc(user.id, tags=["counts"])
+    mock_db["projects"].insert_one(doc)
+    mock_db["ingestion_runs"].insert_one(
+        {
+            "run_id": "run456",
+            "command": "refresh_manifest",
+            "user_id": str(user.id),
+            "project_id": str(doc["_id"]),
+            "status": "success",
+            "steps": [{"name": "counts", "status": "success", "detail": None}],
+            "data_collections": [{"tag": "counts", "file_count": 2}],
+        }
+    )
+
+    with patch.object(monitoring_store, "ingestion_runs_collection", mock_db["ingestion_runs"]):
+        report = manifest_ingest._get_refresh_run_report("run456", user)
+        assert report.success is True
+        assert report.run_id == "run456"
+        assert report.refreshed[0].status == "ingested"
+        assert report.refreshed[0].entries == 2
+        # dc id rebuilt from the live project document
+        expected_dc_id = str(doc["workflows"][0]["data_collections"][0]["_id"])
+        assert report.refreshed[0].data_collection_id == expected_dc_id
+
+        # Another (non-admin) user must not see the run.
+        with pytest.raises(HTTPException) as exc:
+            manifest_ingest._get_refresh_run_report("run456", _user())
+        assert exc.value.status_code == 403
+
+        with pytest.raises(HTTPException) as exc:
+            manifest_ingest._get_refresh_run_report("nope", user)
+        assert exc.value.status_code == 404
+
+
 def test_run_dc_ingest_threads_sync_files(mock_db):
     # Unit check on the seam itself: sync_files=True must reach the scan call.
     user = _user()

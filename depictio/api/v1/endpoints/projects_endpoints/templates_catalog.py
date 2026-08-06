@@ -18,6 +18,9 @@ class TemplateVariableInfo(BaseModel):
     name: str
     description: str | None = None
     required: bool = True
+    # Templates don't declare defaults today; kept for forward compatibility
+    # with the picker UI's form contract.
+    default: str | None = None
 
 
 class TemplateInfo(BaseModel):
