@@ -227,6 +227,60 @@ class ResolveFiltersResponse(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
+# ---------- Section summaries ----------
+
+
+class SummaryComponent(BaseModel):
+    """One rendered component as the client sees it, digest included.
+
+    `digest` is the visible payload: a card's computed value, a figure's
+    trimmed Plotly `{data, layout}`, a table's first rows. The server trims
+    it again (defense in depth) before it reaches a prompt.
+    """
+
+    id: str
+    type: str
+    title: str = ""
+    digest: Any = None
+
+
+class SummarizeSectionRequest(BaseModel):
+    """Body for `/ai/summarize-section` — client-supplied context.
+
+    The client sends exactly what the user sees (filters applied); the
+    server never re-renders. `section` is None for un-sectioned components
+    ("the whole grid" on section-less dashboards).
+    """
+
+    dashboard_id: str
+    section: str | None = None
+    filters: list[dict[str, Any]] = Field(default_factory=list)
+    components: list[SummaryComponent] = Field(default_factory=list, max_length=40)
+    force: bool = False
+
+
+class SummarizeSectionResponse(BaseModel):
+    summary_md: str
+    generated_at: str
+    model: str
+    context_hash: str
+    cached: bool = False
+
+
+class SummaryEntry(BaseModel):
+    """One cached summary as returned by `GET /ai/summaries/{dashboard_id}`."""
+
+    section: str | None = None
+    summary_md: str
+    generated_at: str
+    model: str
+    context_hash: str
+
+
+class SummariesResponse(BaseModel):
+    summaries: list[SummaryEntry] = Field(default_factory=list)
+
+
 # ---------- Streaming envelope ----------
 
 StreamEventType = Literal[
