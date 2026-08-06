@@ -78,7 +78,15 @@ export { default as PhylogeneticRenderer } from './components/advanced_viz/Phylo
 export { imageServeUrl } from './components/advanced_viz/spatial_cells/spatialLayout';
 export { default as MapRenderer } from './components/MapRenderer';
 export { default as TextRenderer } from './components/TextRenderer';
-export { default as Glyph, glyphColorVar, isImagePath, isMultiqcIcon, themedIconSrc } from './components/Glyph';
+export {
+  default as Glyph,
+  glyphColorVar,
+  isImagePath,
+  isMultiqcIcon,
+  setMultiqcLogoSources,
+  themedIconSrc,
+} from './components/Glyph';
+export type { MultiqcLogoSources } from './components/Glyph';
 export {
   DEFAULT_PALETTE_SHADE,
   paletteHex,
@@ -457,6 +465,8 @@ export type {
 export {
   BADGE_LABEL as STATIC_TIER_BADGE_LABEL,
   BADGE_COLOR as STATIC_TIER_BADGE_COLOR,
+  // Curated per-verdict sentence — the modal promises what the badge will say.
+  staticTierExplanation,
 } from './components/chrome/StaticBadgeContext';
 
 // Component comments & annotation threads (/comments API).

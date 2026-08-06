@@ -68,7 +68,9 @@ from depictio.serverless.producer_a import (
         # mode defaults to "ui"
         ({"component_type": "figure"}, ComponentTier.FROZEN, TierReason.BINDING_MISS),
         ({"component_type": "figure", "mode": "code"}, ComponentTier.FROZEN, TierReason.CODE_MODE),
-        ({"component_type": "multiqc"}, ComponentTier.FROZEN, TierReason.MULTIQC),
+        # MultiQC only ever fetched a figure keyed on frozen inputs and then
+        # applied a pure patch — the runtime re-applies that patch offline.
+        ({"component_type": "multiqc"}, ComponentTier.LIVE, None),
         ({"component_type": "map"}, ComponentTier.FROZEN, TierReason.MAP_TILES),
         ({"component_type": "image"}, ComponentTier.OMITTED, TierReason.IMAGE),
         ({"component_type": "jbrowse"}, ComponentTier.OMITTED, TierReason.JBROWSE),
@@ -242,7 +244,7 @@ def test_split_bulk_cards():
 
 
 def test_live_column_sets_covers_bundled_data_components():
-    dc_a, dc_b = ObjectId(), ObjectId()
+    dc_a, dc_b, dc_c = ObjectId(), ObjectId(), ObjectId()
     stored = [
         {"component_type": "card", "dc_id": dc_a, "column_name": "bill", "breakdown_col": "isl"},
         {
@@ -256,14 +258,17 @@ def test_live_column_sets_covers_bundled_data_components():
         # ui-mode figures contribute their referenced columns (bind-and-refill
         # needs them in the bundled Parquet)…
         {"component_type": "figure", "dc_id": dc_a, "dict_kwargs": {"x": "flipper"}},
-        # …but code-mode figures, tables and text contribute nothing.
+        # …but an untranspilable code-mode figure and text contribute nothing.
         {"component_type": "figure", "mode": "code", "dc_id": dc_a, "code_content": "fig = 1"},
-        {"component_type": "table", "dc_id": dc_a},
         {"component_type": "text", "dc_id": dc_a},
+        # A table widens its DC to every column: sorting or filtering offline
+        # may touch any of them.
+        {"component_type": "table", "dc_id": dc_c},
     ]
     sets = live_column_sets(stored)
     assert sets[str(dc_a)] == {"bill", "isl", "mass", "q", "year", "flipper"}
     assert sets[str(dc_b)] == {"species"}
+    assert sets[str(dc_c)] is None
     assert interactive_filter_columns(stored) == {"year", "species"}
 
 
@@ -387,8 +392,9 @@ def _dashboard_doc() -> dict[str, Any]:
                 "dc_config": dc_config,
             },
             {
-                # Refused: hover_data makes 2-D customdata, which the static
-                # runtime cannot refill -> frozen with binding_miss.
+                # Binds too: hover_data makes a 2-D customdata array, which the
+                # binder resolves column by column (TraceBinding.customdata) so
+                # the runtime can zip it back for the hovertemplate -> LIVE.
                 "index": "fig-2",
                 "component_type": "figure",
                 "mode": "ui",
@@ -587,11 +593,13 @@ def offline_export(monkeypatch: pytest.MonkeyPatch) -> BundleManifest:
     result = export_manifest(str(DASHBOARD_OID), ExportUser(id=ObjectId(), is_admin=True))
     assert result.manifest is not None
     assert av_calls == ["phylogenetic"]
-    # The table freeze paged through the 500-row endpoint clamp.
-    assert table_calls == [(0, 500), (500, 500)]
+    # The table's DC shipped, so it went live off the bundled Parquet and the
+    # frozen paging fallback never ran.
+    assert table_calls == []
     # Only the unbindable figures fell back to the frozen figure pipeline —
-    # the bound fig-1 never touched it (it ships a binding table instead).
-    assert preview_calls == ["scatter:ui", "scatter:code", "heatmap:ui"]
+    # the bound fig-1/fig-2 never touched it (they ship a binding table
+    # instead; the code-mode fig-3 always renders here, bound or not).
+    assert preview_calls == ["scatter:code", "heatmap:ui"]
     return result.manifest
 
 
@@ -625,18 +633,24 @@ def test_offline_export_tiers(offline_export: BundleManifest):
     assert tiers["card-1"].tier is ComponentTier.LIVE
     assert tiers["filter-1"].tier is ComponentTier.LIVE
     assert tiers["text-1"].tier is ComponentTier.LIVE
-    # The bound figure was upgraded to LIVE (bind-and-refill, RFC §4).
-    assert tiers["fig-1"].tier is ComponentTier.LIVE
-    assert tiers["fig-1"].reason is None and tiers["fig-1"].detail is None
-    # The refused figures froze with binding_miss (same wording as producer B).
-    for refused in ("fig-2", "fig-4"):
-        assert tiers[refused].tier is ComponentTier.FROZEN
-        assert tiers[refused].reason is TierReason.BINDING_MISS
-        assert tiers[refused].detail and "binding" in tiers[refused].detail
+    # The bound figures were upgraded to LIVE (bind-and-refill, RFC §4) —
+    # fig-2 included, since its 2-D customdata binds column by column.
+    for bound in ("fig-1", "fig-2"):
+        assert tiers[bound].tier is ComponentTier.LIVE
+        assert tiers[bound].reason is None and tiers[bound].detail is None
+    # The refused figure froze with the binder's own cause in its detail.
+    assert tiers["fig-4"].tier is ComponentTier.FROZEN
+    # A whole-frame visu is a binding_miss until the caller maps the binder's
+    # cause onto TierReason.WHOLE_FRAME_VIZ (build_binding_with_reason).
+    assert tiers["fig-4"].reason in (TierReason.BINDING_MISS, TierReason.WHOLE_FRAME_VIZ)
+    assert tiers["fig-4"].detail and "frozen at the default filter state" in tiers["fig-4"].detail
     # Sampled frozen code figure was refined to partial (FIGURE_MAX_POINTS).
     assert tiers["fig-3"].tier is ComponentTier.PARTIAL
     assert tiers["fig-3"].reason is TierReason.MAX_POINTS
-    assert tiers["tbl-1"].tier is ComponentTier.FROZEN
+    # The table's DC shipped, so the build upgraded it off its planned frozen
+    # verdict: `renderTableLive` reproduces render_table_endpoint in full.
+    assert tiers["tbl-1"].tier is ComponentTier.LIVE
+    assert tiers["tbl-1"].reason is None and tiers["tbl-1"].detail is None
     # advanced_viz data-path kinds go live (phase 4); phylogenetic stays frozen
     # because its Newick tree DC is a second, non-tabular source.
     assert tiers["av-1"].tier is ComponentTier.LIVE
@@ -694,16 +708,12 @@ def test_offline_export_frozen_payloads(offline_export: BundleManifest):
     # Card fallback keeps the bulk response shape.
     assert frozen["card-1"].kind == "card"
     assert frozen["card-1"].payload["values"] == {"card-1": 40.75}
-    # Table paged to the endpoint clamp, all 700 rows captured.
-    tbl = frozen["tbl-1"].payload
-    assert tbl["total"] == TABLE_TOTAL
-    assert len(tbl["rows"]) == TABLE_TOTAL
-    assert tbl["rows"][0] == {"i": 0} and tbl["rows"][-1] == {"i": TABLE_TOTAL - 1}
+    # A live table ships no frozen snapshot: it would be a second copy of the
+    # Parquet the bundle already carries.
+    assert "tbl-1" not in frozen
     # Refused/code figures came straight from build_figure_preview; the bound
-    # fig-1 ships NO frozen payload (the runtime refills from the Parquet).
-    assert "fig-1" not in frozen
-    assert frozen["fig-2"].kind == "figure"
-    assert frozen["fig-2"].payload["metadata"]["was_sampled"] is False
+    # fig-1/fig-2 ship NO frozen payload (the runtime refills from the Parquet).
+    assert "fig-1" not in frozen and "fig-2" not in frozen
     assert frozen["fig-3"].kind == "figure"
     assert frozen["fig-3"].payload["metadata"]["was_sampled"] is True
     assert frozen["fig-4"].kind == "figure"
@@ -729,23 +739,33 @@ def test_offline_export_bindings(offline_export: BundleManifest):
     """The bound ui figure ships a binding table built from the SAME pruned
     frame whose Parquet is in the bundle — live badge, no frozen copy."""
     manifest = offline_export
-    assert set(manifest.bindings) == {"fig-1"}
+    assert set(manifest.bindings) == {"fig-1", "fig-2"}
     binding = manifest.bindings["fig-1"]
     assert binding.sampled is False
     assert binding.group_cols == []  # plain scatter: one ungrouped trace
     assert [t.i for t in binding.traces] == [0]
     assert binding.traces[0].group == {}
     assert binding.traces[0].fields == {"x": "bill", "y": "flipper"}
+    assert binding.traces[0].customdata == []
     # Stripping convention: bound arrays are ABSENT from the scaffold (the
     # runtime writes them back); layout is the real figure service's.
     trace = binding.scaffold["data"][0]
     assert "x" not in trace and "y" not in trace
     assert binding.scaffold["layout"]["xaxis"]["title"]["text"] == "bill"
+
+    # fig-2's hover column is bound positionally, so the hovertemplate's
+    # %{customdata[0]} keeps addressing it after every refill.
+    hover = manifest.bindings["fig-2"]
+    assert hover.traces[0].customdata == ["species"]
+    hover_trace = hover.scaffold["data"][0]
+    assert "customdata" not in hover_trace
+    assert "species=%{customdata[0]}" in hover_trace["hovertemplate"]
+
     # Every bound column exists in the bundled DataRef (pruning kept them).
     ref = manifest.data_refs[str(DC_OID)]
     bundled = {c.name for c in ref.columns}
-    for t in binding.traces:
-        assert set(t.fields.values()) <= bundled
+    for t in [*binding.traces, *hover.traces]:
+        assert set(t.fields.values()) | set(t.customdata) <= bundled
     # The manifest round-trips with the binding in place.
     BundleManifest.model_validate(manifest.model_dump(mode="json"))
 

@@ -332,23 +332,26 @@ def test_unbindable_figure_falls_back_to_frozen(data_dir: Path) -> None:
     spec_dict = yaml.safe_load(EXAMPLE_SPEC.read_text())
     for comp in spec_dict["components"]:
         if comp["tag"] == "scatter-mass-flipper":
-            # `hover_data` gives every point an (n, k) customdata array. The
-            # runtime writes 1-D arrays only, so a bound figure would refill the
-            # points and leave their hover text describing other rows — the
-            # matcher refuses rather than ship that.
-            comp["dict_kwargs"]["hover_data"] = ["island"]
+            # A LOWESS trendline is a fitted trace the runtime cannot recompute
+            # (it only refits closed-form 1-predictor OLS), so the matcher
+            # refuses the figure rather than ship a line frozen at the
+            # unfiltered fit.
+            comp["dict_kwargs"]["trendline"] = "lowess"
     manifest = build_manifest(DashboardDataLite.model_validate(spec_dict), data_dir).manifest
 
     assert "scatter-mass-flipper" not in manifest.bindings
     entry = manifest.tiers["scatter-mass-flipper"]
     assert entry.tier is ComponentTier.FROZEN
     assert entry.reason is TierReason.BINDING_MISS
-    assert entry.detail and "binding" in entry.detail
+    # The detail names the actual bail-out (build_binding's BindingMiss), so
+    # assert the shared clause rather than one refusal's wording.
+    assert entry.detail and "frozen at the default filter state" in entry.detail
     frozen = manifest.frozen["scatter-mass-flipper"]
     assert frozen.kind == "figure"
     assert frozen.filter_state == []  # default filter state
     fig = frozen.payload["figure"]
-    assert sum(_trace_points(t) for t in fig["data"]) == 342
+    raw_traces = [t for t in fig["data"] if "trendline</b>" not in (t.get("hovertemplate") or "")]
+    assert sum(_trace_points(t) for t in raw_traces) == 342
     meta = frozen.payload["metadata"]
     assert meta["filter_applied"] is False
     assert meta["was_sampled"] is False

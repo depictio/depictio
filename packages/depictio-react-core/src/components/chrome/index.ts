@@ -9,6 +9,7 @@ export type { ComponentChromeProps, ChromeAction } from './ComponentChrome';
 export {
   StaticBadgeProvider,
   StaticTierBadge,
+  staticTierExplanation,
   useIsStaticBundle,
 } from './StaticBadgeContext';
 export type { StaticTierEntry, StaticTierMap } from './StaticBadgeContext';

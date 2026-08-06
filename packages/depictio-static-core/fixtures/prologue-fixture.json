@@ -1161,6 +1161,20 @@
       ]
     },
     {
+      "name": "sort_ties_keep_input_order",
+      "ops": [
+        {
+          "op": "sort",
+          "by": [
+            "habitat"
+          ],
+          "desc": [
+            false
+          ]
+        }
+      ]
+    },
+    {
       "name": "rename_two_columns",
       "ops": [
         {

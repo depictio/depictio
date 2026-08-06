@@ -32,9 +32,30 @@ export function isMultiqcIcon(path: string | null | undefined): boolean {
  */
 export function themedIconSrc(path: string, isDark: boolean, onFilled = false): string {
   if (!isMultiqcIcon(path)) return path;
-  return onFilled || isDark
-    ? '/dashboard/logos/multiqc_icon_white.svg'
-    : '/dashboard/logos/multiqc_icon_dark.svg';
+  return onFilled || isDark ? multiqcLogoSources.white : multiqcLogoSources.dark;
+}
+
+/** Where `themedIconSrc` points the MultiQC logo, per variant. */
+export interface MultiqcLogoSources {
+  dark: string;
+  white: string;
+}
+
+let multiqcLogoSources: MultiqcLogoSources = {
+  dark: '/dashboard/logos/multiqc_icon_dark.svg',
+  white: '/dashboard/logos/multiqc_icon_white.svg',
+};
+
+/**
+ * Replace the URLs `themedIconSrc` hands out for the MultiQC logo.
+ *
+ * A serverless static bundle opens from file://, where `/dashboard/logos/...`
+ * resolves outside the bundle and draws a broken-image glyph; its entry hands
+ * in inlined (data: URI) copies once, before the first render. Server builds
+ * never call it and keep the SPA-served, separately cacheable SVGs.
+ */
+export function setMultiqcLogoSources(sources: MultiqcLogoSources): void {
+  multiqcLogoSources = sources;
 }
 
 /**

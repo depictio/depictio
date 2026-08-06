@@ -4,11 +4,12 @@ Three things move together and are pinned here:
 
 1. **Classification** — the 18 advanced_viz kinds split three ways. The
    data-path kinds go live in both producers (the in-browser engine recomputes
-   ``/advanced_viz/data`` from the bundled Parquet); the Celery-computed kinds
-   have no in-browser equivalent, so producer B omits them and producer A
-   pre-computes them at export time into a frozen payload; ``phylogenetic``
-   also reads a non-tabular Newick DC, so producer A keeps freezing it and
-   producer B — which has no frozen path — omits it.
+   ``/advanced_viz/data`` from the bundled Parquet, and ``coverage_track``'s
+   Celery task alongside it since phase 8); the Celery-computed kinds have no
+   in-browser equivalent, so producer B omits them and producer A pre-computes
+   them at export time into a frozen payload; ``phylogenetic`` also reads a
+   non-tabular Newick DC, so producer A keeps freezing it and producer B —
+   which has no frozen path — omits it.
 2. **Column derivation** — one implementation (``pruning.advanced_viz_columns``)
    feeds both producer A's ``/advanced_viz/data`` request and producer B's
    column pruning, so the bundled Parquet carries exactly the columns the
@@ -65,8 +66,11 @@ ALL_VIZ_KINDS = (
     "sankey",
 )
 
-# The 13 kinds served by the /advanced_viz/data path (everything the Celery
-# dispatch does not compute), of which the 12 purely tabular ones go live.
+# The 14 kinds the browser can serve itself (everything but the Celery
+# computes), of which the 13 purely tabular ones go live. ``coverage_track``
+# counts here even though it dispatches server-side: its task is row-wise plus
+# a partitioned rolling mean, so the runtime replays it from the same bundled
+# Parquet the /advanced_viz/data kinds read.
 DATA_PATH_KINDS = tuple(k for k in ALL_VIZ_KINDS if k not in CELERY_VIZ_KINDS)
 LIVE_KINDS = tuple(k for k in DATA_PATH_KINDS if k not in NON_TABULAR_VIZ_KINDS)
 
@@ -101,12 +105,13 @@ def _stored_comp(kind: str, **config) -> dict:
 
 
 def test_the_three_kind_families_partition_every_kind():
-    """No kind falls between the stools: 12 live, 5 Celery, 1 tree = 18."""
+    """No kind falls between the stools: 13 live, 4 Celery, 1 tree = 18."""
     celery = [k for k in ALL_VIZ_KINDS if k in CELERY_VIZ_KINDS]
-    assert len(celery) == 5  # 'upset' is a legacy alias of 'upset_plot'
+    assert len(celery) == 4  # 'upset' is a legacy alias of 'upset_plot'
+    assert "coverage_track" not in CELERY_VIZ_KINDS  # live since phase 8
     assert NON_TABULAR_VIZ_KINDS == {"phylogenetic"}
-    assert len(DATA_PATH_KINDS) == 13
-    assert len(LIVE_KINDS) == 12
+    assert len(DATA_PATH_KINDS) == 14
+    assert len(LIVE_KINDS) == 13
     assert set(LIVE_KINDS) | set(celery) | NON_TABULAR_VIZ_KINDS == set(ALL_VIZ_KINDS)
 
 
@@ -158,19 +163,42 @@ def test_producer_a_freezes_a_table_driven_embedding_via_the_data_path():
     assert detail and "compute_method" in detail
 
 
-@pytest.mark.parametrize(
-    "kind,config",
-    [
-        ("sankey", {"x_col": "a"}),  # needs >= 2 step_cols
-        ("coverage_track", {"x_col": "a"}),  # needs chromosome/position/value
-    ],
-)
-def test_producer_a_omits_a_celery_kind_it_cannot_call(kind: str, config: dict):
-    comp = _stored_comp(kind, **config)
+def test_producer_a_omits_a_celery_kind_it_cannot_call():
+    comp = _stored_comp("sankey", x_col="a")  # needs >= 2 step_cols
     assert celery_compute_request(comp) is None
     tier, reason, detail = classify_stored_component(comp)
     assert (tier, reason) == (ComponentTier.OMITTED, TierReason.CELERY_COMPUTE)
     assert detail and "no request can be derived" in detail
+
+
+def test_coverage_track_is_live_and_bundles_the_columns_its_task_projects():
+    """Phase 8: ``compute_coverage_track`` is replayed in the browser, so the
+    kind leaves the Celery family — and the six columns its ``project_cols``
+    selects have to survive pruning, while the two value lists beside them
+    (which name samples and chromosomes, not columns) must not."""
+    config = {
+        "chromosome_col": "chromosome",
+        "position_col": "position",
+        "value_col": "value",
+        "end_col": "end",
+        "sample_col": "sample",
+        "chromosomes_filter": ["MN908947.3"],
+        "samples_filter": ["SAMPLE1"],
+        "smoothing_window": 5,
+    }
+    assert celery_compute_request(_stored_comp("coverage_track", **config)) is None
+    assert advanced_viz_columns(_spec_comp("coverage_track", **config)) == [
+        "chromosome",
+        "position",
+        "value",
+        "end",
+        "sample",
+    ]
+
+    a_tier, a_reason, _ = classify_stored_component(_stored_comp("coverage_track", **config))
+    assert (a_tier, a_reason) == (ComponentTier.LIVE, None)
+    b_tier, b_reason, _ = classify_component(_spec_comp("coverage_track", **config))
+    assert (b_tier, b_reason) == (ComponentTier.LIVE, None)
 
 
 def test_phylogenetic_is_frozen_by_a_and_omitted_by_b():

@@ -602,6 +602,7 @@ CASE_CODE: dict[str, str] = {
         "df_modified = df.sort(['habitat', 'q_val'], descending=[True, False])"
     ),
     "sort_datetime_desc": "df_modified = df.sort('event_time', descending=True)",
+    "sort_ties_keep_input_order": "df_modified = df.sort('habitat')",
     "rename_two_columns": ("df_modified = df.rename({'value': 'measurement', 'habitat': 'site'})"),
     "chain_filter_unpivot_group_sort": (
         "df_modified = (df.filter(pl.col('habitat').is_not_null())"

@@ -48,6 +48,14 @@ class TierRow:
     reason: TierReason | None = None
     detail: str | None = None
     tab_id: str | None = None
+    provisional: bool = False
+    """True when the build can still overturn this verdict.
+
+    Preflight reads no data, so it never runs the bind-and-refill builder: it
+    plans every figure as frozen/binding_miss and the build upgrades the ones it
+    can redraw in the browser. Consumers must present these as undecided rather
+    than as a verdict.
+    """
 
 
 @dataclass
@@ -249,6 +257,7 @@ def classify_spec(spec: DashboardDataLite) -> list[TierRow]:
                 tier=tier,
                 reason=reason,
                 detail=detail,
+                provisional=(tier is ComponentTier.FROZEN and reason is TierReason.BINDING_MISS),
             )
         )
     return rows

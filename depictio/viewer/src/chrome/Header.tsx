@@ -10,7 +10,7 @@ import {
 import { Icon } from '@iconify/react';
 
 import type { BrandTheme, DashboardData, DashboardSummary } from 'depictio-react-core';
-import { paletteVar, useIsStaticBundle } from 'depictio-react-core';
+import { isMultiqcIcon, paletteVar, themedIconSrc, useIsStaticBundle } from 'depictio-react-core';
 import PoweredBy from './PoweredBy';
 import { PublishedLockBadge } from '../projects/detail/PublishedLockBadge';
 import { useFeedbackLink } from '../feedback';
@@ -23,18 +23,10 @@ function isImagePath(s: string | null | undefined): boolean {
   return /^(\/|https?:\/\/|data:)/.test(s) || /\.(png|svg|jpe?g|webp)$/i.test(s);
 }
 
-function isMultiqcIcon(path: string | null | undefined): boolean {
-  if (!path) return false;
-  return /\/assets\/images\/logos\/multiqc(\.png|_icon_(dark|white|color)\.svg)$/i.test(path);
-}
-
-/** Map any MultiQC logo path (legacy PNG or new SVGs) to the SPA-served
- *  themed SVG. Mirrors the same helper in Sidebar.tsx. */
+/** Map any MultiQC logo path (legacy PNG or new SVGs) to the themed SVG —
+ *  `themedIconSrc`, so a static bundle's inlined copies apply here too. */
 function rewriteMultiqcIcon(path: string, theme: 'light' | 'dark'): string {
-  if (!isMultiqcIcon(path)) return path;
-  return theme === 'dark'
-    ? '/dashboard/logos/multiqc_icon_white.svg'
-    : '/dashboard/logos/multiqc_icon_dark.svg';
+  return themedIconSrc(path, theme === 'dark');
 }
 
 /** Dash precedence: `tab.tab_icon || tab.icon`, `tab.tab_icon_color || tab.icon_color`. */

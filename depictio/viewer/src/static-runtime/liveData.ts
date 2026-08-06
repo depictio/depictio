@@ -19,6 +19,7 @@
 import {
   HyparquetEngine,
   applyResolver,
+  comparePolars,
   extendFiltersViaLinks,
   limitsOf,
   needsTranslation,
@@ -742,6 +743,270 @@ export async function fetchAdvancedVizDataLive(
     // The server counts filter *entries* (`bool(filter_metadata)`, :854) — the
     // two agree for every payload the viewer actually sends.
     filter_applied: bound.length > 0,
+  };
+}
+
+/** Request shape of the real `dispatchCoverageTrack` payload
+ *  (`CoverageTrackPayload`, api.ts:1031–1045) minus `wf_id`: there is one
+ *  workflow in a bundle and the DC id alone keys the bundled table. */
+export interface CoverageTrackLiveRequest {
+  dc_id: string;
+  chromosome_col: string;
+  position_col: string;
+  value_col: string;
+  end_col?: string | null;
+  sample_col?: string | null;
+  category_col?: string | null;
+  chromosomes_filter?: string[] | null;
+  samples_filter?: string[] | null;
+  smoothing_window?: number;
+  max_rows?: number | null;
+  filter_metadata?: InteractiveFilter[];
+}
+
+/** `CoverageTrackResult` (api.ts:1047–1068), every field the renderer reads. */
+export interface CoverageTrackLiveResult {
+  rows: Record<string, unknown[]>;
+  columns: {
+    chromosome: string;
+    position: string;
+    value: string;
+    end?: string | null;
+    sample?: string | null;
+    category?: string | null;
+  };
+  summary: {
+    row_count: number;
+    chromosomes: string[];
+    samples: string[];
+    n_samples: number;
+    mean_value: number | null;
+    max_value: number | null;
+  };
+  row_count: number;
+  compute_ms: number;
+}
+
+/** `int(payload.get("max_rows") or 200_000)` — the task's own ceiling; the
+ *  renderer never sends one (CoverageTrackRenderer.tsx:116–129). */
+const COVERAGE_MAX_ROWS = 200_000;
+
+/**
+ * Live equivalent of the `compute_coverage_track` Celery task
+ * (celery_tasks.py:1340–1495) over the bundled Parquet.
+ *
+ * Unlike its four siblings in `CELERY_VIZ_KINDS`, this task is not a compute
+ * the browser has no answer for: it projects six bound columns, masks rows on
+ * two whitelists, sorts, takes a rolling mean partitioned by (chromosome,
+ * sample) and decimates. Every step is row-wise or partitioned by columns a
+ * dashboard filter itself masks on, so the filter commutes with the whole
+ * chain — which is why the component ships its DATA rather than a frozen
+ * payload and this function replays the task at every filter state.
+ *
+ * Faithfulness notes, pinned to the task's own lines:
+ *   whitelists  — applied AFTER the dashboard filters, and the summaries the
+ *     MultiSelects read are computed from the post-whitelist frame, so the
+ *     option lists narrow with the selection exactly as they do live (:1418).
+ *   sort        — `df.sort([sample, chromosome, position])`, whose Polars
+ *     defaults are nulls FIRST (unlike the table path's `nulls_last=True`)
+ *     (:1430). Ties keep input order: `maintain_order` is not set, so the
+ *     server's tie order is unspecified and a stable one cannot disagree.
+ *   rolling mean — trailing window of `smoothing_window` rows within each
+ *     (chromosome, sample) group in the SORTED order, `min_periods=1`. Nulls
+ *     occupy a slot but are excluded from both numerator and denominator
+ *     (verified on Polars 1.42.1), and a window with no non-null value yields
+ *     null (:1435).
+ *   decimation  — every `floor(height / max_rows)`-th row of the sorted frame,
+ *     which is what `with_row_index` + modulo does (:1444).
+ *
+ * BigInt: genomic positions are Int64, which hyparquet decodes as BigInt — so
+ * every value that reaches arithmetic (the sort comparator, the rolling mean,
+ * the summary reductions) goes through {@link jsonNumber} first.
+ */
+export async function coverageTrackLive(
+  req: CoverageTrackLiveRequest,
+): Promise<CoverageTrackLiveResult> {
+  const startedAt = performance.now();
+  const ref = dataRefFor(req.dc_id);
+  if (!ref) throw new Error(`static bundle: no data_ref for dc "${req.dc_id}"`);
+  const { handle } = await tableFor(req.dc_id);
+
+  const chromCol = req.chromosome_col;
+  const posCol = req.position_col;
+  const valCol = req.value_col;
+  const endCol = req.end_col || null;
+  const sampleCol = req.sample_col || null;
+  const catCol = req.category_col || null;
+  if (!chromCol || !posCol || !valCol) {
+    throw new Error('coverage track: chromosome_col, position_col, value_col are required');
+  }
+
+  // Projection = the task's `project_cols` (:1400), schema-guarded: pruning
+  // put exactly these columns in the bundle, but a stale bundle must degrade
+  // to a missing series rather than throw inside the engine.
+  const schema = new Set(userColumns(ref).map((c) => c.name));
+  const projection = [...new Set([chromCol, posCol, valCol, endCol, sampleCol, catCol])].filter(
+    (c): c is string => Boolean(c) && schema.has(c as string),
+  );
+
+  // The dashboard filters are the task's `metadata=filter_metadata` load
+  // argument; cross-DC links resolve first, like every other live path.
+  const bound = toBoundFilters(await resolveLinkFilters(req.dc_id, req.filter_metadata ?? []));
+  const mask = bound.length ? (await engine.mask(handle, bound)).mask : null;
+  const cols = await engine.columns(handle, projection);
+
+  // Per-setting whitelists on top of the mask (:1418–1421). Compared as
+  // strings: the option lists the MultiSelects feed back are this function's
+  // own `summary`, which the wire type declares as `string[]`.
+  const chromWhitelist = req.chromosomes_filter?.length ? new Set(req.chromosomes_filter) : null;
+  const sampleWhitelist =
+    sampleCol && req.samples_filter?.length ? new Set(req.samples_filter) : null;
+  const chromValues = cols[chromCol];
+  const sampleValues = sampleCol ? cols[sampleCol] : undefined;
+  let sel: number[] = [];
+  for (let i = 0; i < ref.rows; i++) {
+    if (mask !== null && mask[i] !== 1) continue;
+    if (chromWhitelist && !chromWhitelist.has(String(chromValues?.[i]))) continue;
+    if (sampleWhitelist && !sampleWhitelist.has(String(sampleValues?.[i]))) continue;
+    sel.push(i);
+  }
+
+  // Universe summaries from the post-filter frame, so the MultiSelects reflect
+  // what is actually showing (:1423). `sorted()` on a Python str list is
+  // code-point order — `comparePolars`' string branch. Nulls are skipped: the
+  // server's `sorted()` would raise on a mixed None/str list, and a crash is
+  // not a behaviour worth mirroring.
+  const universe = (values: ArrayLike<unknown> | undefined): string[] => {
+    if (!values) return [];
+    const seen = new Set<string>();
+    for (const i of sel) {
+      const v = values[i];
+      if (v === null || v === undefined) continue;
+      seen.add(String(v));
+    }
+    return [...seen].sort(comparePolars);
+  };
+  const chromosomes = universe(chromValues);
+  const samples = universe(sampleValues);
+
+  // Sort keys (:1430), schema-guarded the same way the projection is.
+  const sortKeys = (sampleCol ? [sampleCol, chromCol, posCol] : [chromCol, posCol]).filter((c) =>
+    projection.includes(c),
+  );
+  const sortValues = sortKeys.map((c) => cols[c]);
+  sel.sort((a, b) => {
+    for (const values of sortValues) {
+      const va = jsonNumber(values[a] ?? null);
+      const vb = jsonNumber(values[b] ?? null);
+      // Nulls FIRST in both directions: `df.sort(...)` leaves `nulls_last` at
+      // its Polars default of False.
+      if (va === null || vb === null) {
+        if (va === null && vb === null) continue;
+        return va === null ? -1 : 1;
+      }
+      const c = comparePolars(va, vb);
+      if (c !== 0) return c;
+    }
+    return a - b;
+  });
+
+  // Rolling mean over the sorted order, partitioned by (chromosome, sample)
+  // (:1435). Written as a per-group trailing window with a running sum rather
+  // than assuming the groups came out contiguous — they do for these sort
+  // keys, but the grouping is a separate contract from the ordering.
+  const window = Math.max(0, Math.min(200, Math.floor(req.smoothing_window || 0)));
+  const rawValues = cols[valCol];
+  let smoothed: (number | null)[] | null = null;
+  if (window > 1 && rawValues) {
+    const groups = new Map<string, { queue: (number | null)[]; sum: number; n: number }>();
+    smoothed = new Array(sel.length);
+    for (let k = 0; k < sel.length; k++) {
+      const i = sel[k];
+      const key = `${String(chromValues?.[i])} ${sampleCol ? String(sampleValues?.[i]) : ''}`;
+      let g = groups.get(key);
+      if (!g) {
+        g = { queue: [], sum: 0, n: 0 };
+        groups.set(key, g);
+      }
+      const raw = jsonNumber(rawValues[i]);
+      const v = typeof raw === 'number' ? raw : null;
+      g.queue.push(v);
+      if (v !== null) {
+        g.sum += v;
+        g.n += 1;
+      }
+      if (g.queue.length > window) {
+        const gone = g.queue.shift()!;
+        if (gone !== null) {
+          g.sum -= gone;
+          g.n -= 1;
+        }
+      }
+      smoothed[k] = g.n > 0 ? g.sum / g.n : null;
+    }
+  }
+
+  // Last-ditch decimation for runaway DCs (:1444): every Nth row of the
+  // sorted frame, which keeps each track continuous.
+  const maxRows = Math.floor(req.max_rows || COVERAGE_MAX_ROWS);
+  if (sel.length > maxRows) {
+    const keepEvery = Math.max(1, Math.floor(sel.length / maxRows));
+    const kept: number[] = [];
+    const keptSmoothed: (number | null)[] = [];
+    for (let k = 0; k < sel.length; k++) {
+      if (k % keepEvery !== 0) continue;
+      kept.push(sel[k]);
+      if (smoothed) keptSmoothed.push(smoothed[k]);
+    }
+    sel = kept;
+    if (smoothed) smoothed = keptSmoothed;
+  }
+
+  // Column-oriented output in the task's own key order, deduplicated (:1450).
+  const rows: Record<string, unknown[]> = {};
+  for (const name of [chromCol, posCol, valCol, endCol, sampleCol, catCol]) {
+    if (!name || name in rows || !projection.includes(name)) continue;
+    if (name === valCol && smoothed) {
+      rows[name] = smoothed;
+      continue;
+    }
+    const src = cols[name];
+    rows[name] = sel.map((i) => jsonNumber(src[i] ?? null));
+  }
+
+  // `Series.cast(Float64).mean()/.max()` over the final frame, nulls ignored
+  // (:1455). NaN is left to propagate through the mean exactly as Polars does.
+  const finalValues = (rows[valCol] ?? []) as (number | null)[];
+  let sum = 0;
+  let n = 0;
+  let max: number | null = null;
+  for (const v of finalValues) {
+    if (typeof v !== 'number') continue;
+    sum += v;
+    n += 1;
+    if (max === null || v > max) max = v;
+  }
+
+  return {
+    rows,
+    columns: {
+      chromosome: chromCol,
+      position: posCol,
+      value: valCol,
+      end: endCol,
+      sample: sampleCol,
+      category: catCol,
+    },
+    summary: {
+      row_count: sel.length,
+      chromosomes,
+      samples,
+      n_samples: samples.length,
+      mean_value: n > 0 ? sum / n : null,
+      max_value: max,
+    },
+    row_count: sel.length,
+    compute_ms: Math.round(performance.now() - startedAt),
   };
 }
 
