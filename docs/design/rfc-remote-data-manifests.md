@@ -366,12 +366,20 @@ CLI mirror: `depictio run --template X --manifest URL|PATH` (the
 `--template`/`--data-root` scaffolding in `cli/commands/run.py` already has the
 mutual-exclusion structure to extend) — same shared functions, no new logic.
 
-**Template-free fallback (later):** match manifest types/filenames against the
-catalog's `find` rules (`match_run_dir` / `compose_run_dir`, which the catalog
-TODO already earmarks for ingestion wiring) and auto-layout the proposed
-components. This needs the layout packer that doesn't exist yet (the only
-grid-packing code is `benchmark/configgen.py`'s `auto_generate_layout`);
-template-first covers the primary ask without it.
+**Growing the template pool — export, not auto-compose.** The original
+phase-5 idea (match manifest types against the catalog's `find` rules and
+auto-layout the proposed components) is **rejected for now**: it presumes a
+much more mature catalog plus a layout packer that doesn't exist (the only
+grid-packing code is `benchmark/configgen.py`'s `auto_generate_layout`), for
+a mediocre first-render. The virtuous loop runs the other way: build one good
+project + dashboard by hand, then **freeze it into a template** —
+`export_template` takes an existing project and its dashboards and emits a
+template bundle (`template.yaml` + `dashboards/*.yaml`): runtime fields
+stripped, stored manifest URLs re-parameterized to `{MANIFEST_URL}`, common
+local scan roots to `{DATA_ROOT}`, dashboard references converted to portable
+tags. The round-trip is the contract: an exported template must re-instantiate
+through `resolve_template` unchanged. Auto-compose can be revisited once the
+catalog and a real layout packer exist.
 
 ## 7. Trap №3 — `run` vs `id` semantics
 
@@ -414,7 +422,7 @@ Each phase independently shippable.
 | **2** | `ScanManifest` + manifest ingestion into an existing project: type→tag mapping, `depictio_manifest_id` injection, `POST /projects/ingest_manifest` + per-DC report (sequential; Celery fan-out moved to phase 4) | same model files; `cli/utils/deltatables.py`; `projects_endpoints/manifest_ingest.py` (new) |
 | **3** | Manifest-driven templates end-to-end: `resolve_template` data-root-optional refactor, shared dashboard-import function, `POST /projects/from_manifest`, CLI `--manifest`, reference template + E2E test | `cli/utils/templates.py`; `models/models/templates.py`; `projects_endpoints/routes.py`; `cli/commands/run.py`; `depictio/projects/generic/manifest-tables/` (new) |
 | **4** | Hardening & access: per-project storage config (issue 383), manifest re-ingest/refresh, Celery fan-out for long manifests, builder UI (paste a URL / a manifest) | `ProjectStorageConfig` (new); `projects_endpoints`; `celery_endpoints/`; viewer/builder |
-| **5** | Catalog auto-compose fallback (manifest → catalog match → auto-layout, no template) | `models/components/advanced_viz/catalog.py`; `catalog_endpoints`; layout packer |
+| **5** | Template authoring: export an existing project + dashboards as a template bundle (`export_template`, round-trips through `resolve_template`); catalog auto-compose rejected for now (§6) | `projects_endpoints/export_template.py` (new); `cli/commands/`; `cli/utils/templates.py` |
 | **6** | Serverless remote bundles from the same manifest (resolves the serverless RFC's producer-B question) | branch: `depictio/serverless/producer_b.py`; `packages/depictio-static-core` |
 
 Phase 1 is demoable on its own: "paste a URL, get a table DC" — one model
