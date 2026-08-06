@@ -20,6 +20,7 @@ import SecondaryMetrics, {
 } from './card/SecondaryMetrics';
 import { wrapWithChrome } from './chrome';
 import LoadAllButton, { LoadAllState } from './chrome/LoadAllButton';
+import SaveGroupAction, { selectionCandidateFor } from './chrome/SaveGroupAction';
 import MapDataButton from './map/MapDataButton';
 import { isMapSelectionEnabled } from '../selection';
 import { ActiveHighlight } from '../highlight';
@@ -89,6 +90,20 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
   showDragHandle,
   compact,
 }) => {
+  // Live selection on THIS component → offer the in-place "save selection as
+  // group" action beside the other chrome icons. It rides the chrome's
+  // persistent-when-filtering row and renders nothing when no app-level
+  // SaveGroupContext is mounted (project previews, catalog).
+  const saveCandidate = selectionCandidateFor(filters, metadata.index);
+  const chromeExtras = saveCandidate ? (
+    <>
+      <SaveGroupAction filter={saveCandidate} />
+      {extraActions}
+    </>
+  ) : (
+    extraActions
+  );
+
   if (metadata.component_type === 'card') {
     return wrapWithChrome(
       'card',
@@ -204,7 +219,7 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
         refreshTick={refreshTick}
         activeHighlight={activeHighlight}
         groupRender={groupRender}
-        extraActions={extraActions}
+        extraActions={chromeExtras}
         showDragHandle={showDragHandle}
       />
     );
@@ -219,7 +234,7 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
         onFilterChange={onFilterChange}
         refreshTick={refreshTick}
         activeHighlight={activeHighlight}
-        extraActions={extraActions}
+        extraActions={chromeExtras}
         showDragHandle={showDragHandle}
       />
     );
@@ -249,7 +264,7 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
         refreshTick={refreshTick}
         activeHighlight={activeHighlight}
       />,
-      { onResetFilter: onResetSelection, extraActions, showDragHandle, sourceFilterActive },
+      { onResetFilter: onResetSelection, extraActions: chromeExtras, showDragHandle, sourceFilterActive },
     );
   }
 
@@ -269,7 +284,7 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
     // `extraActions` slot — so `actionsFor('map')` needs no change.
     const mapExtras = (
       <>
-        {extraActions}
+        {chromeExtras}
         <MapDataButton
           dashboardId={dashboardId}
           metadata={metadata}

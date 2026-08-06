@@ -52,6 +52,7 @@ import {
   useColorByColumnRender,
   resolveGroupRender,
   SelectionGroupsPanel,
+  SaveGroupContext,
 } from 'depictio-react-core';
 import type {
   DashboardData,
@@ -734,6 +735,7 @@ const App: React.FC = () => {
       onShowOtherChange={groupsApi.setShowOther}
       showOverall={groupsApi.showOverall}
       onShowOverallChange={groupsApi.setShowOverall}
+      onResetAnalysis={groupsApi.resetAnalysis}
     />
   );
   const cardComponents = useMemo(
@@ -768,6 +770,18 @@ const App: React.FC = () => {
   // projected `groupFilters` merge same-column groups and would undercount).
   const activeFilterCount = countActiveFilters(filters) + groupSummaryRows.length;
 
+  // In-place "save selection as group" on any component with a live selection
+  // (chart lasso, table rows, map polygon) — same create/clear flow as the
+  // Analysis panel, without the trip to the header.
+  const saveGroupApi = useMemo(
+    () => ({
+      groups: groupsApi.groups,
+      createGroup: groupsApi.createGroupFromFilter,
+      clearSelection: handleFilterChange,
+    }),
+    [groupsApi.groups, groupsApi.createGroupFromFilter, handleFilterChange],
+  );
+
   return (
     <AvailableFilterValuesProvider
       dashboardMetadata={summaryMetadata}
@@ -780,6 +794,7 @@ const App: React.FC = () => {
     >
       <DashboardLoadingProvider>
       <InspectorProviders control={inspectorControl}>
+      <SaveGroupContext.Provider value={saveGroupApi}>
       <AppShell
       header={{ height: 50 }}
       navbar={{
@@ -1227,6 +1242,7 @@ const App: React.FC = () => {
         dashboard={dashboard}
       />
     </AppShell>
+      </SaveGroupContext.Provider>
       </InspectorProviders>
       </DashboardLoadingProvider>
     </AvailableFilterValuesProvider>

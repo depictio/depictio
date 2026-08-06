@@ -92,6 +92,7 @@ import {
   useColorByColumnRender,
   resolveGroupRender,
   SelectionGroupsPanel,
+  SaveGroupContext,
 } from 'depictio-react-core';
 import type {
   DashboardData,
@@ -418,6 +419,17 @@ const EditorApp: React.FC = () => {
       setFilters((prev) => mergeFiltersBySource(prev, enriched));
     },
     [dashboard],
+  );
+
+  // In-place "save selection as group" on components with a live selection
+  // (mirrors App.tsx).
+  const saveGroupApi = useMemo(
+    () => ({
+      groups: groupsApi.groups,
+      createGroup: groupsApi.createGroupFromFilter,
+      clearSelection: handleFilterChange,
+    }),
+    [groupsApi.groups, groupsApi.createGroupFromFilter, handleFilterChange],
   );
 
   // Authors see the panel as viewers will. Cross-tab (floating) filter
@@ -1016,6 +1028,7 @@ const EditorApp: React.FC = () => {
       onShowOtherChange={groupsApi.setShowOther}
       showOverall={groupsApi.showOverall}
       onShowOverallChange={groupsApi.setShowOverall}
+      onResetAnalysis={groupsApi.resetAnalysis}
     />
   );
 
@@ -1476,6 +1489,7 @@ const EditorApp: React.FC = () => {
   return (
     <>
     <InspectorProviders control={inspectorControl}>
+    <SaveGroupContext.Provider value={saveGroupApi}>
     <AppShell
       header={{ height: 50 }}
       navbar={{
@@ -1828,6 +1842,7 @@ const EditorApp: React.FC = () => {
         onManageAll={handleManageAllSections}
       />
     </AppShell>
+    </SaveGroupContext.Provider>
     </InspectorProviders>
     </>
   );
