@@ -271,6 +271,7 @@ export {
   renameDataCollection,
   deleteDataCollection,
   createDataCollectionFromUpload,
+  createDataCollectionFromUrl,
   // Admin
   listAllUsers,
   deleteUser,

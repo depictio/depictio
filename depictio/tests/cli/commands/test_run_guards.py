@@ -37,7 +37,23 @@ def test_manifest_and_data_root_are_exclusive(tmp_path):
 def test_template_requires_data_root_or_manifest():
     result = runner.invoke(app, ["run", "--template", "generic/manifest-tables/1"])
     assert result.exit_code == 1
-    assert "--data-root (or --manifest)" in result.output
+    assert "--data-root (or --manifest, or --bind)" in result.output
+
+
+def test_template_accepts_bind_instead_of_data_root():
+    """--bind names each DC's location itself, so it satisfies the same
+    requirement as --data-root / --manifest and must clear this guard."""
+    result = runner.invoke(
+        app,
+        [
+            "run",
+            "--template",
+            "generic/manifest-tables/1",
+            "--bind",
+            "samples=s3://bucket/run42/*.samples.csv",
+        ],
+    )
+    assert "is required when using --template" not in result.output
 
 
 def test_ingestion_summary_covers_url_and_manifest_scan_modes():
