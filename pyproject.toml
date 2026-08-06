@@ -36,6 +36,9 @@ dependencies = [
   # polars-lts-cpu is legacy; the modern LTS/older-CPU build is polars[rtcompat]
   # (-> polars-runtime-compat). rtcompat also matches multiqc 1.35's requirement.
   "polars[rtcompat,numpy,pandas,pyarrow,excel,deltalake]==1.42.1",
+  # LLM client for the AI endpoints (provider-agnostic; lazy-imported so the
+  # app boots without a working install when DEPICTIO_AI_ENABLED is false)
+  "litellm>=1.50,<2",
   # API and web
   "devtools==0.12.2",
   "diskcache==5.6.3",

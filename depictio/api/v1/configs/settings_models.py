@@ -182,6 +182,7 @@ class MongoDBConfig(ServiceConfig):
         multiqc_prerender_collection: str = Field(default="multiqc_prerender")
         task_events_collection: str = Field(default="task_events")
         ingestion_runs_collection: str = Field(default="ingestion_runs")
+        ai_summaries_collection: str = Field(default="ai_summaries")
         app_logs_collection: str = Field(default="app_logs")
         test_collection: str = Field(default="test")
 
@@ -682,6 +683,62 @@ class JBrowseConfig(BaseSettings):
     enabled: bool = Field(default=False, description="Enable JBrowse genomics viewer integration")
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_JBROWSE_")
+
+
+class AIConfig(BaseSettings):
+    """AI assistant configuration (LLM-backed analysis, filters and component generation).
+
+    Off by default: when ``enabled`` is false the ``/ai`` router is not
+    registered and the viewer hides every AI affordance (the public
+    ``/utils/status`` endpoint advertises the flag to the SPA).
+
+    Keys resolve per request: a user-supplied ``X-LLM-API-Key`` header wins
+    (when ``allow_user_keys`` is true), otherwise ``api_key`` is used. The
+    user key is never persisted or logged server-side.
+    """
+
+    enabled: bool = Field(default=False, description="Enable the AI assistant endpoints and UI")
+    default_model: str = Field(
+        default="openrouter/anthropic/claude-sonnet-4-6",
+        description=(
+            "LiteLLM model identifier used for all AI flows, e.g. "
+            "'openrouter/anthropic/claude-sonnet-4-6', 'anthropic/claude-sonnet-4-6' "
+            "or 'ollama/llama3'. The provider prefix decides which API key applies."
+        ),
+    )
+    api_key: SecretStr | None = Field(
+        default=None,
+        description=(
+            "Server-side LLM API key used as fallback when the request carries no "
+            "X-LLM-API-Key header. Optional — deployments may rely purely on "
+            "user-supplied keys."
+        ),
+    )
+    allow_user_keys: bool = Field(
+        default=True,
+        description=(
+            "Accept per-request X-LLM-API-Key headers from the UI (BYOK). When "
+            "false, only the server-side api_key is ever used."
+        ),
+    )
+    max_sample_rows: int = Field(
+        default=8,
+        ge=0,
+        le=50,
+        description="Sample rows from the data collection included in LLM prompts",
+    )
+    max_context_chars: int = Field(
+        default=60_000,
+        ge=1_000,
+        description="Hard cap on the total prompt context size handed to the LLM",
+    )
+    max_tokens: int = Field(
+        default=4_096,
+        ge=256,
+        description="Completion token cap for each LLM call",
+    )
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_AI_")
 
 
 class BackupConfig(BaseSettings):
@@ -1210,6 +1267,7 @@ class Settings(BaseSettings):
 
     # Optional features
     jbrowse: JBrowseConfig = Field(default_factory=JBrowseConfig)
+    ai: AIConfig = Field(default_factory=AIConfig)
     backup: BackupConfig = Field(default_factory=BackupConfig)
     events: EventsConfig = Field(default_factory=EventsConfig)
     monitoring: MonitoringConfig = Field(default_factory=MonitoringConfig)
