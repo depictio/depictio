@@ -92,6 +92,10 @@ def _ingestion_data_collections(project_config) -> list[dict]:
                 elif mode == "recursive":
                     rc = getattr(params, "regex_config", None)
                     pattern = getattr(rc, "pattern", None) if rc else None
+                elif mode == "url":
+                    pattern = getattr(params, "url", None)
+                elif mode == "manifest":
+                    pattern = getattr(params, "manifest_url", None)
                 else:
                     pattern = None
                 dcsp = getattr(cfg, "dc_specific_properties", None) if cfg else None
