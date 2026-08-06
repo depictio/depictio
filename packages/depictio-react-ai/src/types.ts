@@ -63,6 +63,13 @@ export interface ExecutionStep {
   code: string;
   output: string;
   status: 'success' | 'error' | 'warning' | 'running';
+  /** Which data collection the step ran against (analysis mode). */
+  dc_tag?: string;
+  /** Cardinalities: a filter that kept everything and one that kept
+   *  nothing read identically in prose and very differently here. */
+  rows_in?: number | null;
+  rows_out?: number | null;
+  seconds?: number;
 }
 
 export interface FilterAction {
@@ -113,15 +120,27 @@ export interface DashboardActions {
   filter_proposals?: FilterProposal[];
 }
 
+/** Which half of the assistant a request asks for.
+ *  - `mutate`: answer *and* propose dashboard actions the user can Apply.
+ *  - `analyze`: read-only. The server strips `actions`, so no Apply
+ *    affordance may ever render for a reply in this mode. */
+export type AnalyzeMode = 'mutate' | 'analyze';
+
 export interface AnalysisResult {
   answer: string;
   steps: ExecutionStep[];
+  mode: AnalyzeMode;
   actions: DashboardActions;
   resolved_filters?: ResolvedFilter[];
+  /** Things the server dropped or could not do, e.g. actions proposed in
+   *  read-only mode, or a malformed action payload. */
+  warnings?: string[];
 }
 
-/** SSE event names emitted by /ai/analyze, in order:
- *    status* → step* → answer → actions → result → done
+/** SSE event names emitted by /ai/analyze.
+ *  Mutate mode: status* → step* → answer → actions → result → done.
+ *  Analyze mode: status* → (plan) → (budget|step)* → answer → report →
+ *  result → done.
  *  `error` may interrupt the stream at any point and is followed by `done`. */
 export type AIStreamEventType =
   | 'status'
@@ -129,6 +148,9 @@ export type AIStreamEventType =
   | 'answer'
   | 'actions'
   | 'result'
+  | 'plan'
+  | 'budget'
+  | 'report'
   | 'error'
   | 'done';
 
@@ -144,6 +166,53 @@ export interface AnalyzeRequest {
   /** Active InteractiveFilter list — threshold quantiles are computed on
    *  the filtered rows the user currently sees. */
   filters?: unknown[];
+  /** Omitted means `mutate`, matching the server default. */
+  mode?: AnalyzeMode;
+}
+
+// ---------- Analysis reports (read-only mode's artifact) ----------
+
+export interface Finding {
+  claim: string;
+  /** Indices into AnalysisReport.steps. Non-empty by server validation:
+   *  a claim without executed evidence is dropped server-side, never
+   *  delivered. */
+  evidence_step_ids: number[];
+  confidence: 'low' | 'medium' | 'high';
+}
+
+export interface BudgetSpent {
+  steps: number;
+  tokens: number;
+  seconds: number;
+}
+
+export interface AnalysisReport {
+  id: string;
+  dashboard_id: string;
+  created_at: string;
+  model: string;
+  prompt: string;
+  status: 'running' | 'complete' | 'failed' | 'cancelled';
+  findings: Finding[];
+  steps: ExecutionStep[];
+  narrative_md: string;
+  budget_spent: BudgetSpent;
+  warnings: string[];
+}
+
+export interface AnalysesResponse {
+  analyses: AnalysisReport[];
+}
+
+/** Payload of the per-turn `budget` event: the countdown the model sees. */
+export interface BudgetTick {
+  steps_used: number;
+  tokens_used: number;
+  seconds: number;
+  max_steps: number;
+  max_tokens: number;
+  max_seconds: number;
 }
 
 export interface ResolveFiltersRequest {

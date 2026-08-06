@@ -17,6 +17,7 @@ import { API_BASE, authFetch } from 'depictio-react-core';
 import type {
   AIStreamEvent,
   AIStreamEventType,
+  AnalysesResponse,
   AnalyzeRequest,
   ComponentFromPromptRequest,
   ComponentFromPromptResponse,
@@ -102,6 +103,16 @@ export async function getSummaries(dashboardId: string): Promise<SummariesRespon
     throw new Error(`/ai/summaries: ${res.status} ${text || res.statusText}`);
   }
   return (await res.json()) as SummariesResponse;
+}
+
+/** Past analysis reports for a dashboard, newest first. */
+export async function getAnalyses(dashboardId: string): Promise<AnalysesResponse> {
+  const res = await authFetch(`${API_BASE}/ai/analyses/${dashboardId}`);
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`/ai/analyses: ${res.status} ${text || res.statusText}`);
+  }
+  return (await res.json()) as AnalysesResponse;
 }
 
 export interface AnalyzeStreamHandlers {

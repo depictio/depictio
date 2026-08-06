@@ -165,7 +165,7 @@ const AddWithAIModal: React.FC<Props> = ({
       title={
         <Group gap="xs">
           <Icon
-            icon="material-symbols:auto-fix"
+            icon="material-symbols:auto-awesome-outline"
             width={18}
             color="var(--mantine-color-violet-6)"
           />
@@ -343,7 +343,7 @@ const AddWithAIModal: React.FC<Props> = ({
               <Button
                 variant="filled"
                 color="violet"
-                leftSection={<Icon icon="material-symbols:auto-fix" width={14} />}
+                leftSection={<Icon icon="material-symbols:auto-awesome-outline" width={14} />}
                 onClick={() => void send()}
                 disabled={!canSend}
                 loading={pending}

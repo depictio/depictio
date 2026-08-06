@@ -1,7 +1,7 @@
 # AI assistant
 
 Depictio ships an opt-in, LLM-backed assistant (issue #79 / epic #844) with
-three user-facing flows:
+four user-facing flows:
 
 1. **Per-section summaries** — a sparkle button in each dashboard section
    header (and above the grid on section-less dashboards) generates a
@@ -27,7 +27,31 @@ three user-facing flows:
    overrides on the figure render (UI-mode figures only — never persisted,
    code-mode figures ignore them), shown as a removable **AI figure
    tweaks (n) ×** chip next to the AI filters chip.
-3. **Component from a prompt** — *Add component → With AI…* in the editor
+3. **Read-only deep analysis** — the **Analyze** button next to the "Ask
+   the dashboard" panel opens a full-screen surface running the assistant
+   in `mode: "analyze"`. The two modes are exclusive by contract: the
+   mutating flow above proposes dashboard actions; the analysis flow can
+   never apply anything (the server strips any `actions` the model emits
+   and records the drop as a warning). In exchange it gets much more
+   room:
+   - **Every data collection on the dashboard** is in scope, with the
+     project's declared `joins:` in the prompt; the model addresses them
+     as `dc["<tag>"]` and can join across collections.
+   - The loop runs under a **three-bound budget** (steps, total tokens,
+     wall clock — first bound hit ends the run) with the countdown shown
+     to the model each turn so it concludes deliberately.
+   - Code executes in a **killable subprocess sandbox**: a step that
+     overruns its deadline is killed mid-flight and surfaced as an error
+     step the model can react to, instead of wedging a worker thread.
+   - The output is an **AnalysisReport**: a Markdown narrative plus
+     findings, where every finding must cite `evidence_step_ids` of
+     successfully executed steps — claims without executed evidence are
+     dropped at validation, never rendered with a caveat. Each step
+     records `rows_in → rows_out` cardinalities, which is what makes a
+     silently-matched-everything filter visible. Reports persist in the
+     `ai_analyses` Mongo collection (derived artifacts, never written to
+     the dashboard) and past runs reload from the modal's history pane.
+4. **Component from a prompt** — *Add component → With AI…* in the editor
    takes a component type, a data collection and a prompt, has the LLM emit
    YAML in the exact grammar `depictio-cli dashboard import` consumes,
    validates it through `DashboardDataLite.from_yaml` (with one
@@ -58,8 +82,11 @@ Settings (env prefix `DEPICTIO_AI_`, see `AIConfig` in
 | `DEPICTIO_AI_API_KEY` | *(unset)* | Server-side fallback LLM key (optional) |
 | `DEPICTIO_AI_ALLOW_USER_KEYS` | `true` | Accept per-request `X-LLM-API-Key` headers (BYOK) |
 | `DEPICTIO_AI_MAX_SAMPLE_ROWS` | `8` | Sample rows included in prompts |
-| `DEPICTIO_AI_MAX_CONTEXT_CHARS` | `60000` | Hard cap on prompt context size |
+| `DEPICTIO_AI_MAX_CONTEXT_CHARS` | `60000` | Hard cap on prompt context size (enforced on summaries and the multi-DC analysis context, which degrades by dropping samples then whole collections, with a warning) |
 | `DEPICTIO_AI_MAX_TOKENS` | `4096` | Completion token cap per call |
+| `DEPICTIO_AI_ANALYZE_MAX_STEPS` | `20` | Read-only analysis: hard ceiling on LLM/executor round-trips per run |
+| `DEPICTIO_AI_ANALYZE_MAX_TOKENS_TOTAL` | `200000` | Read-only analysis: total tokens (prompt + completion) per run — the cost lever |
+| `DEPICTIO_AI_ANALYZE_MAX_WALL_CLOCK_S` | `300` | Read-only analysis: wall-clock bound per run — the UX lever |
 
 ### Keys: BYOK with a server fallback
 
@@ -85,9 +112,16 @@ other read (`get_user_or_anonymous` + project-viewer permission checks):
 - `POST /ai/component-from-prompt` — YAML component generation +
   validation (2 attempts).
 - `POST /ai/resolve-filters` — single-shot NL → validated filter plan.
-- `POST /ai/analyze` — streaming (SSE over chunked POST) ReAct loop with
-  an AST-allowlisted Polars executor; emits
-  `status/step/answer/actions/result/error/done` events.
+- `POST /ai/analyze` — streaming (SSE over chunked POST). `mode` picks the
+  loop: `mutate` (default) is the short ReAct loop with dashboard actions,
+  emitting `status/step/answer/actions/result/error/done`; `analyze` is
+  the read-only budgeted loop, emitting
+  `status/plan/budget/step/answer/report/result/error/done` and never
+  `actions`. Both execute Polars through the AST allowlist; `analyze`
+  additionally runs it in the killable subprocess sandbox with the
+  multi-DC `dc["<tag>"]` scope.
+- `GET /ai/analyses/{dashboard_id}` — recent `AnalysisReport`s for the
+  dashboard (Mongo collection `ai_analyses`), newest first.
 - `POST /ai/summarize-section` + `GET /ai/summaries/{dashboard_id}` —
   summary generation and the hash-keyed cache (Mongo collection
   `ai_summaries`; summaries are derived artifacts, never stored on the
