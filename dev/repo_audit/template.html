@@ -1,0 +1,168 @@
+<title>depictio — Weekly Repo Audit</title>
+<style>
+  :root{
+    --bg:#f5f6f5; --surface:#ffffff; --surface-2:#eef1ef; --ink:#1a2321; --muted:#5c6a65;
+    --line:#dde3e0; --accent:#2c6e63; --accent-soft:#e2efec;
+    --good:#2f8f5b; --good-soft:#e5f4ec; --warn:#a9760b; --warn-soft:#faf1de;
+    --bad:#c1443c; --bad-soft:#fbe9e7;
+    --shadow:0 1px 2px rgba(20,30,26,.06),0 8px 24px -16px rgba(20,30,26,.18);
+    --code-bg:rgba(0,0,0,.06);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#121614; --surface:#181e1b; --surface-2:#1f2622; --ink:#e7ece9; --muted:#93a29c;
+      --line:#2b332f; --accent:#5fb3a1; --accent-soft:#1c2b27;
+      --good:#5fbf8b; --good-soft:#173226; --warn:#d8a548; --warn-soft:#332a15;
+      --bad:#e08079; --bad-soft:#391f1e;
+      --shadow:0 1px 2px rgba(0,0,0,.3),0 12px 32px -16px rgba(0,0,0,.5);
+      --code-bg:rgba(255,255,255,.08);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#121614; --surface:#181e1b; --surface-2:#1f2622; --ink:#e7ece9; --muted:#93a29c;
+    --line:#2b332f; --accent:#5fb3a1; --accent-soft:#1c2b27;
+    --good:#5fbf8b; --good-soft:#173226; --warn:#d8a548; --warn-soft:#332a15;
+    --bad:#e08079; --bad-soft:#391f1e;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 12px 32px -16px rgba(0,0,0,.5);
+    --code-bg:rgba(255,255,255,.08);
+  }
+  :root[data-theme="light"]{
+    --bg:#f5f6f5; --surface:#ffffff; --surface-2:#eef1ef; --ink:#1a2321; --muted:#5c6a65;
+    --line:#dde3e0; --accent:#2c6e63; --accent-soft:#e2efec;
+    --good:#2f8f5b; --good-soft:#e5f4ec; --warn:#a9760b; --warn-soft:#faf1de;
+    --bad:#c1443c; --bad-soft:#fbe9e7;
+    --shadow:0 1px 2px rgba(20,30,26,.06),0 8px 24px -16px rgba(20,30,26,.18);
+    --code-bg:rgba(0,0,0,.06);
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:ui-sans-serif,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    line-height:1.5; -webkit-font-smoothing:antialiased;
+  }
+  code,.mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; font-variant-numeric:tabular-nums;}
+  main{max-width:960px; margin:0 auto; padding:2.5rem 1.5rem 5rem;}
+  .eyebrow{
+    display:inline-block; font-size:.72rem; letter-spacing:.09em; text-transform:uppercase;
+    color:var(--accent); font-weight:700; margin-bottom:.6rem;
+  }
+  h1{font-size:1.9rem; margin:0 0 .35rem; letter-spacing:-.01em; text-wrap:balance;}
+  .sub{color:var(--muted); font-size:.95rem; max-width:64ch;}
+  h2{font-size:1.15rem; margin:0 0 .2rem; letter-spacing:-.005em;}
+  .section-head{margin:2.6rem 0 1rem;}
+  .section-head p{margin:.15rem 0 0; color:var(--muted); font-size:.88rem; max-width:62ch;}
+
+  .stats{display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:.7rem; margin-top:1.4rem;}
+  .stat{background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:.85rem 1rem; box-shadow:var(--shadow);}
+  .stat .n{font-size:1.5rem; font-weight:700; font-family:ui-monospace,monospace;}
+  .stat .l{font-size:.74rem; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; margin-top:.15rem;}
+
+  table{width:100%; border-collapse:collapse; font-size:.87rem;}
+  .twrap{overflow-x:auto; border:1px solid var(--line); border-radius:10px; background:var(--surface); box-shadow:var(--shadow);}
+  th,td{padding:.55rem .75rem; text-align:left; border-bottom:1px solid var(--line); vertical-align:top;}
+  th{font-size:.72rem; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); background:var(--surface-2); font-weight:600;}
+  tr:last-child td{border-bottom:none;}
+
+  a{color:var(--accent);}
+  a.ref{
+    font-family:ui-monospace,monospace; color:var(--accent); text-decoration:none;
+    white-space:nowrap; border-bottom:1px solid transparent; margin-right:.35em;
+  }
+  a.ref:hover{border-bottom-color:var(--accent);}
+  a.ref:focus-visible{outline:2px solid var(--accent); outline-offset:2px; border-radius:2px;}
+
+  .pill{display:inline-flex; align-items:center; padding:.15em .6em; border-radius:99px; font-size:.72rem; font-weight:600; white-space:nowrap;}
+  .pill.good{background:var(--good-soft); color:var(--good);}
+
+  .callout{
+    border:1px solid var(--line); border-left:3px solid var(--accent); background:var(--accent-soft);
+    border-radius:8px; padding:.9rem 1.1rem; font-size:.88rem; margin-bottom:.6rem;
+  }
+  .callout strong{display:block; margin-bottom:.25rem;}
+  .callout.warn{border-left-color:var(--warn); background:var(--warn-soft);}
+  .callout.bad{border-left-color:var(--bad); background:var(--bad-soft);}
+  .callout.good{border-left-color:var(--good); background:var(--good-soft);}
+  .callout code{background:var(--code-bg); padding:.05em .35em; border-radius:4px;}
+
+  .roadmap{display:grid; gap:.6rem; margin-top:1.4rem;}
+  .rcard{
+    background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:.9rem 1.1rem;
+    box-shadow:var(--shadow); display:grid; grid-template-columns:5.5rem 1fr; gap:1rem; align-items:center;
+  }
+  .rver{font-family:ui-monospace,monospace; font-weight:700; font-size:.95rem; color:var(--accent);}
+  .rver .n{display:block; font-size:.68rem; color:var(--muted); font-weight:500; margin-top:.1rem;}
+  .rtitle{font-weight:600; font-size:.92rem;}
+  .rtitle a{text-decoration:none;}
+  .rtitle a:hover{text-decoration:underline;}
+  .rmeta{font-size:.78rem; color:var(--muted); margin-top:.25rem; line-height:1.7;}
+
+  .notes{background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:.4rem 1.1rem; box-shadow:var(--shadow);}
+  .notes p{font-size:.88rem;}
+  .notes .empty{color:var(--muted); font-style:italic;}
+
+  footer{margin-top:3rem; padding-top:1.2rem; border-top:1px solid var(--line); font-size:.78rem; color:var(--muted);}
+</style>
+
+<main>
+  <header>
+    <span class="eyebrow">Weekly audit · {{REPO}}</span>
+    <h1>Repo Audit</h1>
+    <p class="sub">Generated {{GENERATED_AT}} by <code>dev/repo_audit/build.py</code>. Every figure below is computed from the GitHub API, so week-to-week differences reflect the repo, not the report.</p>
+  </header>
+
+  <div class="stats">{{STATS}}</div>
+
+  <section>
+    <div class="section-head">
+      <h2>Hygiene checks</h2>
+      <p>Mechanical checks only: closed milestones holding open work, milestones missing an epic, epics whose title claims a version another milestone owns, unassigned issues, and unscheduled issues missing the <code>backlog</code> label.</p>
+    </div>
+    {{ALERTS}}
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>Active roadmap</h2>
+      <p>Open milestones only, sorted by version number regardless of any <code>v</code> prefix.</p>
+    </div>
+    <div class="roadmap">{{ROADMAP}}</div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>Notes</h2>
+      <p>Written by hand into <code>dev/repo_audit/notes.md</code>. The only part of this page not derived mechanically.</p>
+    </div>
+    <div class="notes">{{NOTES}}</div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>Confirmed issue ↔ PR links</h2>
+      <p>PRs whose body carries a <code>closes</code>/<code>fixes</code>/<code>resolves</code> keyword, so merging closes the issue automatically. Anything not listed needs the keyword added by hand.</p>
+    </div>
+    <div class="twrap">
+      <table>
+        <thead><tr><th>PR</th><th>Closes</th><th>Status</th></tr></thead>
+        <tbody>{{LINK_ROWS}}</tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>Backlog ({{BACKLOG_COUNT}})</h2>
+      <p>Open issues labelled <code>backlog</code>: no milestone, not scheduled for a release.</p>
+    </div>
+    <div class="twrap">
+      <table>
+        <thead><tr><th>Issue</th><th>Title</th><th>Labels</th></tr></thead>
+        <tbody>{{BACKLOG_ROWS}}</tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer>
+    Covers open issues, open PRs and all milestones. Closed history is not walked: it needs no scheduling and would only grow the page each week.
+  </footer>
+</main>
