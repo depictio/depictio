@@ -1,17 +1,20 @@
 /**
  * "Copy link with filters" — captures the current view (issue #936).
  *
- * Builds a `#filters=<base64url>` URL for the current dashboard and copies it
- * to the clipboard. The recipient's viewer decodes the fragment on load and
- * applies the filters, so the link reproduces the exact filtered view; with no
- * active filters it degrades to the plain dashboard URL, which keeps the
- * button predictable. Very large selections (thousands of image/table ids)
- * can exceed what survives chat apps and proxies — those refuse to copy and
- * say why instead of producing a link that breaks in transit.
+ * Builds a `#filters=` URL for the current dashboard and copies it to the
+ * clipboard. The recipient's viewer decodes the fragment on load and applies
+ * the filters, so the link reproduces the exact filtered view; with no active
+ * filters it degrades to the plain dashboard URL, which keeps the button
+ * predictable. Very large selections (thousands of image/table ids) can
+ * exceed what survives chat apps and proxies — those refuse to copy and say
+ * why instead of producing a link that breaks in transit.
+ *
+ * Rendered as a full-width button inside the dashboard settings drawer's
+ * Share section.
  */
 
 import React, { useState } from 'react';
-import { ActionIcon, Tooltip } from '@mantine/core';
+import { Button } from '@mantine/core';
 import { useClipboard } from '@mantine/hooks';
 import { Icon } from '@iconify/react';
 import { buildFilterShareUrl } from 'depictio-react-core';
@@ -45,21 +48,21 @@ const ShareFiltersButton: React.FC<ShareFiltersButtonProps> = ({ filters, active
         : 'Copy dashboard link';
 
   return (
-    <Tooltip label={label} withArrow opened={clipboard.copied || tooLarge ? true : undefined}>
-      <ActionIcon
-        variant="subtle"
-        color={tooLarge ? 'red' : clipboard.copied ? 'teal' : 'gray'}
-        size="lg"
-        aria-label="Copy link with current filters"
-        onClick={handleCopy}
-      >
+    <Button
+      variant="light"
+      fullWidth
+      color={tooLarge ? 'red' : clipboard.copied ? 'teal' : undefined}
+      leftSection={
         <Icon
           icon={clipboard.copied ? 'mdi:check' : 'mdi:link-variant'}
-          width={18}
-          height={18}
+          width={16}
+          height={16}
         />
-      </ActionIcon>
-    </Tooltip>
+      }
+      onClick={handleCopy}
+    >
+      {label}
+    </Button>
   );
 };
 

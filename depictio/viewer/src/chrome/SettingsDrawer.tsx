@@ -1,23 +1,38 @@
 import React from 'react';
-import { Drawer, Group, Text } from '@mantine/core';
+import { Divider, Drawer, Group, Text } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
-import type { DashboardData } from 'depictio-react-core';
+import type { DashboardData, InteractiveFilter } from 'depictio-react-core';
 import DashboardInfoBody from './DashboardInfoBody';
+import ShareFiltersButton from './ShareFiltersButton';
 
 interface SettingsDrawerProps {
   opened: boolean;
   onClose: () => void;
   dashboard: DashboardData | null;
+  /** Current filter state, for the Share section's copy-link button.
+   *  Omitted by hosts without one (the editor) — the button then copies the
+   *  plain page URL. */
+  filters?: InteractiveFilter[];
+  activeFilterCount?: number;
 }
 
 /**
- * Right-side drawer with read-only metadata about the current dashboard.
+ * Right-side drawer with read-only metadata about the current dashboard,
+ * followed by per-dashboard actions grouped in labelled sections (Share
+ * today; serverless export is planned as a sibling section).
  *
- * The content lives in `DashboardInfoBody`, shared with the inspector's Info
- * tab — which is what the inspector replaces this drawer with when enabled.
+ * The metadata content lives in `DashboardInfoBody`, shared with the
+ * inspector's Info tab — which is what the inspector replaces this drawer
+ * with when enabled.
  */
-const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ opened, onClose, dashboard }) => (
+const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
+  opened,
+  onClose,
+  dashboard,
+  filters = [],
+  activeFilterCount = 0,
+}) => (
   <Drawer
     opened={opened}
     onClose={onClose}
@@ -31,6 +46,8 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ opened, onClose, dashbo
     }
   >
     <DashboardInfoBody dashboard={dashboard} active={opened} />
+    <Divider label="Share" labelPosition="left" my="md" />
+    <ShareFiltersButton filters={filters} activeCount={activeFilterCount} />
   </Drawer>
 );
 
