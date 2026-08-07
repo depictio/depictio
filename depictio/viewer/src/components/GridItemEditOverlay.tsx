@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ActionIcon, Menu, ScrollArea } from '@mantine/core';
+import { ActionIcon, Group, Menu, ScrollArea, Text } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import { SectionIcon } from 'depictio-react-core';
 import type { FilterSectionSpec } from 'depictio-react-core';
@@ -24,6 +24,24 @@ import type { FilterSectionSpec } from 'depictio-react-core';
  * read-only mode.
  */
 const DUPLICATABLE_COMPONENT_TYPES = new Set(['card', 'interactive', 'figure']);
+
+/** Steps for the per-figure font-size multiplier. Wider than the
+ *  dashboard-wide preference on purpose: axis labels on a dense figure are
+ *  the case that motivates going up to 2×. */
+const FONT_SCALE_STEPS = [0.7, 0.85, 1, 1.15, 1.3, 1.5, 1.75, 2];
+
+function nearestStepIndex(scale: number): number {
+  let best = FONT_SCALE_STEPS.indexOf(1);
+  let bestDist = Infinity;
+  FONT_SCALE_STEPS.forEach((step, idx) => {
+    const dist = Math.abs(step - scale);
+    if (dist < bestDist) {
+      best = idx;
+      bestDist = dist;
+    }
+  });
+  return best;
+}
 
 interface GridItemEditOverlayProps {
   dashboardId: string;
@@ -56,6 +74,12 @@ interface GridItemEditOverlayProps {
   /** Size of the group that would move with this component, when > 1. Shown so
    *  the user isn't surprised that three controls moved rather than one. */
   groupSize?: number;
+  /** Current per-component font-size multiplier (`font_scale` on the
+   *  component's stored_metadata). Defaults to 1. */
+  fontScale?: number;
+  /** Fires with the new multiplier when the user steps the font-size control.
+   *  Only rendered for figure components; omit to hide the control. */
+  onFontScale?: (componentId: string, scale: number) => void;
 }
 
 const GridItemEditOverlay: React.FC<GridItemEditOverlayProps> = ({
@@ -69,6 +93,8 @@ const GridItemEditOverlay: React.FC<GridItemEditOverlayProps> = ({
   currentSection,
   onMoveToSection,
   groupSize = 1,
+  fontScale,
+  onFontScale,
 }) => {
   // The dropdown shows one page at a time: the actions, or the section list.
   // A dashboard can declare any number of sections, and a flat list would grow
@@ -101,6 +127,14 @@ const GridItemEditOverlay: React.FC<GridItemEditOverlayProps> = ({
   // is where that starts, so offering only "No section" here would be a dead
   // end.
   const showMoveToSection = !!onMoveToSection && !!sections?.length;
+
+  // Per-figure font-size multiplier (#854 follow-up). Figures only: their
+  // whole Plotly layout font (axis labels, ticks, legend) follows it.
+  const showFontScale = !!onFontScale && componentType === 'figure';
+  const currentScale = fontScale && fontScale > 0 ? fontScale : 1;
+  const scaleIdx = nearestStepIndex(currentScale);
+  const canScaleDown = scaleIdx > 0;
+  const canScaleUp = scaleIdx < FONT_SCALE_STEPS.length - 1;
 
   // The tick goes on the right, so the section icons keep the left column and
   // every label starts at the same x — the icon is what identifies a section
@@ -153,6 +187,52 @@ const GridItemEditOverlay: React.FC<GridItemEditOverlayProps> = ({
               >
                 Move to section
               </Menu.Item>
+            )}
+            {showFontScale && (
+              <>
+                <Menu.Divider />
+                <Menu.Label>Font size</Menu.Label>
+                {/* Inline control rather than Menu.Items so stepping A− / A+
+                    doesn't close the menu between clicks. */}
+                <Group gap={6} px="sm" pb={6} wrap="nowrap" data-testid="figure-font-scale">
+                  <ActionIcon.Group>
+                    <ActionIcon
+                      variant="default"
+                      size="sm"
+                      disabled={!canScaleDown}
+                      onClick={() => onFontScale!(componentId, FONT_SCALE_STEPS[scaleIdx - 1])}
+                      data-testid="figure-font-scale-decrease"
+                      aria-label="Decrease figure font size"
+                    >
+                      <Icon icon="mdi:format-font-size-decrease" width={14} />
+                    </ActionIcon>
+                    <ActionIcon
+                      variant="default"
+                      size="sm"
+                      disabled={!canScaleUp}
+                      onClick={() => onFontScale!(componentId, FONT_SCALE_STEPS[scaleIdx + 1])}
+                      data-testid="figure-font-scale-increase"
+                      aria-label="Increase figure font size"
+                    >
+                      <Icon icon="mdi:format-font-size-increase" width={14} />
+                    </ActionIcon>
+                  </ActionIcon.Group>
+                  <Text size="xs" c={currentScale === 1 ? 'dimmed' : undefined} w={38} ta="center">
+                    {Math.round(currentScale * 100)}%
+                  </Text>
+                  {currentScale !== 1 && (
+                    <ActionIcon
+                      variant="subtle"
+                      size="sm"
+                      onClick={() => onFontScale!(componentId, 1)}
+                      data-testid="figure-font-scale-reset"
+                      aria-label="Reset figure font size"
+                    >
+                      <Icon icon="mdi:restore" width={14} />
+                    </ActionIcon>
+                  )}
+                </Group>
+              </>
             )}
             <Menu.Divider />
             <Menu.Item

@@ -155,20 +155,20 @@ function brandingThemeOptions(branding: Branding | null): {
 
 /**
  * Theme + UI-scale + branding root. Rebuilds the Mantine theme whenever the
- * user's font-size preference changes (Header's A−/A+ control writes it
- * through useUiScalePref's shared subscriber list) or the instance branding
- * resolves (cached in localStorage for a flash-free first paint on return
- * visits; the /utils/public-config fetch updates it in-flight). The numeric
- * scale reaches the non-Mantine surfaces (Plotly fonts, AG Grid row metrics)
- * via UiScaleContext; the branding reaches logo/title consumers via
- * BrandingContext.
+ * instance branding resolves (cached in localStorage for a flash-free first
+ * paint on return visits; the /utils/public-config fetch updates it
+ * in-flight). The font-size preference deliberately does NOT touch the theme:
+ * it scales dashboard content only (see useContentScaleStyle), never the app
+ * chrome. The numeric scale reaches the non-Mantine content surfaces (Plotly
+ * fonts, AG Grid row metrics) via UiScaleContext; the branding reaches
+ * logo/title consumers via BrandingContext.
  */
 function ThemeRoot({ children }: { children: React.ReactNode }) {
   const { scale } = useUiScalePref();
   const branding = React.useSyncExternalStore(subscribeBranding, getBranding);
   const theme = React.useMemo(
-    () => buildDepictioTheme({ scale, ...brandingThemeOptions(branding) }),
-    [scale, branding],
+    () => buildDepictioTheme(brandingThemeOptions(branding)),
+    [branding],
   );
 
   React.useEffect(() => {

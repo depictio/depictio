@@ -6,12 +6,13 @@ import time
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 from typing import Annotated, Any
 from uuid import UUID
 
 import yaml
 from bson import ObjectId
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, File, HTTPException, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, Response
 
@@ -712,6 +713,86 @@ async def save_dashboard(
         return {"message": message, "dashboard_id": dashboard_id_str}
     else:
         raise HTTPException(status_code=404, detail="Failed to insert or update dashboard data.")
+
+
+# Dashboard logos — uploaded through the editor's Settings drawer and served
+# by the /static/dashboard_logos mount (api/main.py). Derived from __file__ so
+# the path holds both in Docker (/app/depictio/...) and local runs.
+_DASHBOARD_LOGOS_DIR = Path(__file__).resolve().parents[3] / "static" / "dashboard_logos"
+# SVG is deliberately excluded: a stored SVG can carry scripts and is served
+# same-origin, which hands an XSS foothold to anyone navigating to it directly.
+# Extension + accepted magic-byte prefixes per declared content type.
+_LOGO_TYPES: dict[str, tuple[str, tuple[bytes, ...]]] = {
+    "image/png": (".png", (b"\x89PNG\r\n\x1a\n",)),
+    "image/jpeg": (".jpg", (b"\xff\xd8\xff",)),
+    "image/webp": (".webp", (b"RIFF",)),
+}
+_LOGO_MAX_BYTES = 2 * 1024 * 1024
+
+
+@dashboards_endpoint_router.post("/upload_logo/{dashboard_id}")
+async def upload_dashboard_logo(
+    dashboard_id: PyObjectId,
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_user_or_anonymous),
+):
+    """Store a dashboard logo image and stamp `logo_url` on the document.
+
+    File write and field update happen in one ownership-checked call so the
+    stored URL can never point at a file that was rejected. Removal goes
+    through the regular save path (`logo_url: null`); the file on disk is
+    simply overwritten by the next upload for this dashboard.
+    """
+    if hasattr(current_user, "is_anonymous") and current_user.is_anonymous:
+        if not settings.auth.is_single_user_mode:
+            raise HTTPException(
+                status_code=403,
+                detail="Anonymous users cannot modify dashboards. Please login to continue.",
+            )
+
+    dashboard = dashboards_collection.find_one({"dashboard_id": dashboard_id})
+    if not dashboard:
+        raise HTTPException(status_code=404, detail="Dashboard not found.")
+    project_id = dashboard.get("project_id")
+    if not project_id or not check_project_permission(project_id, current_user, "editor"):
+        raise HTTPException(
+            status_code=403, detail="You don't have permission to update this dashboard."
+        )
+
+    spec = _LOGO_TYPES.get(file.content_type or "")
+    if not spec:
+        raise HTTPException(
+            status_code=415, detail="Unsupported image type — use PNG, JPEG or WebP."
+        )
+    ext, magic_prefixes = spec
+
+    content = await file.read()
+    if len(content) > _LOGO_MAX_BYTES:
+        raise HTTPException(status_code=413, detail="Logo file too large (max 2MB).")
+    # The declared content type decides the extension the static mount serves
+    # with, so make sure the bytes actually are that format.
+    valid_magic = content.startswith(magic_prefixes)
+    if valid_magic and ext == ".webp":
+        valid_magic = content[8:12] == b"WEBP"
+    if not valid_magic:
+        raise HTTPException(
+            status_code=415, detail="File content does not match the declared image type."
+        )
+
+    _DASHBOARD_LOGOS_DIR.mkdir(parents=True, exist_ok=True)
+    # One logo per dashboard — drop whatever extension the previous upload had.
+    for old in _DASHBOARD_LOGOS_DIR.glob(f"{dashboard_id}.*"):
+        old.unlink(missing_ok=True)
+    (_DASHBOARD_LOGOS_DIR / f"{dashboard_id}{ext}").write_bytes(content)
+
+    # `?v=` cache-busts the browser after a replacement (same idiom as the
+    # screenshot thumbnails' `screenshot_ts`).
+    logo_url = f"/static/dashboard_logos/{dashboard_id}{ext}?v={int(time.time())}"
+    dashboards_collection.update_one(
+        {"dashboard_id": dashboard_id}, {"$set": {"logo_url": logo_url}}
+    )
+    logger.info(f"Dashboard {dashboard_id} logo updated ({len(content)} bytes, {ext})")
+    return {"logo_url": logo_url}
 
 
 @dashboards_endpoint_router.delete("/delete/{dashboard_id}")

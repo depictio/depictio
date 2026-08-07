@@ -1,11 +1,14 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { DEFAULT_THEME } from '@mantine/core';
 import { UI_SCALE_DEFAULT, UI_SCALE_STEPS } from 'depictio-react-core';
 
 /**
- * Dashboard-wide font-size preference (issue #854), persisted per browser like
- * the dark-mode toggle. Two independent consumers read it — the Header control
- * and ThemeRoot (which rebuilds the Mantine theme with `scale`) — so writes go
- * through a module-level subscriber list to keep both in sync within the tab.
+ * Dashboard font-size preference (issue #854), persisted per browser like the
+ * dark-mode toggle. It scales dashboard content only (figures, tables, cards,
+ * interactive tiles) — never the app chrome (header, sidebar, drawers).
+ * Several independent consumers read it — the SettingsDrawer control, the
+ * content containers (via useContentScaleStyle) and UiScaleContext — so writes
+ * go through a module-level subscriber list to keep them in sync within the tab.
  */
 
 const STORAGE_KEY = 'depictio-ui-scale';
@@ -87,4 +90,35 @@ export function useUiScalePref() {
   }, []);
 
   return { scale, increase, decrease, reset, canIncrease, canDecrease };
+}
+
+/**
+ * CSS custom properties applying the font-size preference to a dashboard
+ * content container (and nothing outside it).
+ *
+ * Two mechanisms compose:
+ * - `--mantine-scale` cascades into the `calc(<rem> * var(--mantine-scale))`
+ *   expressions Mantine emits per component (inline `rem()` conversions,
+ *   component-level size vars), which resolve at the component element and so
+ *   pick up the container override.
+ * - The font-size / heading tokens are *precomputed* at `:root` (a custom
+ *   property substitutes `var(--mantine-scale)` where it is declared, not
+ *   where it is consumed), so they must be re-declared here with the scale
+ *   baked in for `size="sm"` texts and `<Title>`s to follow.
+ *
+ * Returns `undefined` at 100% so the default renders untouched.
+ */
+export function useContentScaleStyle(): CSSProperties | undefined {
+  const { scale } = useUiScalePref();
+  return useMemo(() => {
+    if (scale === 1) return undefined;
+    const vars: Record<string, string> = { '--mantine-scale': String(scale) };
+    for (const [size, value] of Object.entries(DEFAULT_THEME.fontSizes)) {
+      vars[`--mantine-font-size-${size}`] = `calc(${value} * ${scale})`;
+    }
+    for (const [heading, spec] of Object.entries(DEFAULT_THEME.headings.sizes)) {
+      vars[`--mantine-${heading}-font-size`] = `calc(${spec.fontSize} * ${scale})`;
+    }
+    return vars as CSSProperties;
+  }, [scale]);
 }

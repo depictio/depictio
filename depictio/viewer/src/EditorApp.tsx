@@ -44,6 +44,7 @@ import { useDisclosure, useMediaQuery } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { Icon } from '@iconify/react';
 import { useSidebarOpen } from './hooks/useSidebarOpen';
+import { useContentScaleStyle } from './hooks/useUiScalePref';
 import { useFilterPanelOpen } from './hooks/useFilterPanelOpen';
 import { FILTER_PANEL_WIDTH_VAR, useFilterPanelWidth } from './hooks/useFilterPanelWidth';
 import { useCurrentUser } from './hooks/useCurrentUser';
@@ -75,6 +76,7 @@ import {
   useRealtimeJournal,
   batchIdsFromPayload,
   authFetch,
+  uploadDashboardLogo,
   useMapPanel,
   MapPanelControl,
   MapPanelDock,
@@ -175,6 +177,7 @@ const EditorApp: React.FC = () => {
   // Persist across tab/page navigations (matches App.tsx + Dash app).
   const [desktopOpened, toggleDesktop] = useSidebarOpen();
   const [settingsOpened, { open: openSettings, close: closeSettings }] = useDisclosure(false);
+  const contentScaleStyle = useContentScaleStyle();
   // Bumped after a plot_theme save lands so figure components refetch and pick
   // up the new dashboard-level template/colorway (the server reads plot_theme
   // from the DB at render time, so the request body doesn't change).
@@ -370,6 +373,25 @@ const EditorApp: React.FC = () => {
     [handleSectionOp],
   );
 
+  /** Per-figure font-size multiplier, stored on the component's
+   *  stored_metadata entry so the viewer renders the same emphasis. Goes
+   *  through the debounced save like layout nudges — stepping A− / A+
+   *  repeatedly produces one POST. */
+  const handleComponentFontScale = useCallback(
+    (componentId: string, scale: number) => {
+      const cur = dashboardRef.current;
+      if (!cur) return;
+      const next = {
+        ...cur,
+        stored_metadata: (cur.stored_metadata || []).map((m) =>
+          m.index === componentId ? { ...m, font_scale: scale === 1 ? undefined : scale } : m,
+        ),
+      };
+      scheduleSave(next);
+    },
+    [scheduleSave],
+  );
+
   /** Dashboard-level plot theme (#397). Saved immediately (not debounced):
    *  the server resolves `plot_theme` from the DB at figure-render time, so
    *  figures can only refetch once the save has landed. */
@@ -392,6 +414,47 @@ const EditorApp: React.FC = () => {
     },
     [dashboardId, applyDashboard],
   );
+
+  /** Dashboard logo upload. The upload endpoint persists `logo_url` on the
+   *  dashboard document itself (file write + field update in one
+   *  ownership-checked call), so on success only the local state needs the
+   *  new URL. Errors propagate to the drawer, which displays them. */
+  const handleUploadLogo = useCallback(
+    async (file: File) => {
+      const cur = dashboardRef.current;
+      if (!cur || !dashboardId) return;
+      setSaveStatus('saving');
+      try {
+        const logoUrl = await uploadDashboardLogo(dashboardId, file);
+        // Re-read the ref: another action (plot theme, layout…) may have
+        // advanced the dashboard while the upload was in flight — merging
+        // into the pre-await snapshot would silently revert it.
+        applyDashboard({ ...(dashboardRef.current ?? cur), logo_url: logoUrl });
+        setSaveStatus('saved');
+      } catch (err) {
+        setSaveStatus('error');
+        throw err;
+      }
+    },
+    [dashboardId, applyDashboard],
+  );
+
+  /** Clears the logo through the regular save path (mirrors plot theme). The
+   *  uploaded file stays on disk — harmless, and overwritten by the next
+   *  upload for this dashboard. */
+  const handleRemoveLogo = useCallback(() => {
+    const cur = dashboardRef.current;
+    if (!cur || !dashboardId) return;
+    const next = { ...cur, logo_url: null };
+    applyDashboard(next);
+    setSaveStatus('saving');
+    saveDashboard(dashboardId, next)
+      .then(() => setSaveStatus('saved'))
+      .catch((err) => {
+        console.error('[EditorApp] logo removal save failed:', err);
+        setSaveStatus('error');
+      });
+  }, [dashboardId, applyDashboard]);
 
   const handleLeftLayoutChange = useCallback(
     (newLayout: Layout[]) => {
@@ -1193,6 +1256,7 @@ const EditorApp: React.FC = () => {
           onEditTab={openEditTabModal}
           onDeleteTab={handleDeleteTab}
           onMoveTab={handleMoveTab}
+          logoUrl={dashboard?.logo_url}
         />
       </AppShell.Navbar>
 
@@ -1299,11 +1363,15 @@ const EditorApp: React.FC = () => {
               px={4}
               py={4}
               data-tour-id="editor-grid"
+              data-testid="dashboard-content"
               style={{
                 height: '100%',
                 minWidth: 0,
                 overflowY: 'auto',
                 overflowX: 'hidden',
+                // Content font-size preference — scales the dashboard tiles
+                // below, never the surrounding chrome (header, sidebar, panel).
+                ...contentScaleStyle,
               }}
             >
               <RightComponentGrid
@@ -1323,6 +1391,7 @@ const EditorApp: React.FC = () => {
                 onAddComponent={handleAddComponent}
                 activeHighlight={activeHighlight}
                 onMoveToSection={handleMoveToSection}
+                onComponentFontScale={handleComponentFontScale}
                 refreshTick={plotThemeTick}
               />
             </Box>
@@ -1341,11 +1410,13 @@ const EditorApp: React.FC = () => {
                 background: 'var(--mantine-color-body)',
               }}
             >
-              <TopPanel
-                components={topComponents}
-                filters={filters}
-                onFilterChange={handleFilterChange}
-              />
+              <Box style={contentScaleStyle}>
+                <TopPanel
+                  components={topComponents}
+                  filters={filters}
+                  onFilterChange={handleFilterChange}
+                />
+              </Box>
             </Box>
           )}
           </div>
@@ -1402,6 +1473,8 @@ const EditorApp: React.FC = () => {
         onClose={closeSettings}
         dashboard={dashboard}
         onChangePlotTheme={handlePlotThemeChange}
+        onUploadLogo={handleUploadLogo}
+        onRemoveLogo={handleRemoveLogo}
       />
 
       <TabModal
@@ -1450,6 +1523,8 @@ interface RightComponentGridProps {
   /** Fired by each cell's "Move to section" action. The names on offer are
    *  derived from `gridSections`, which this component already receives. */
   onMoveToSection: (componentId: string, section: string | null) => void;
+  /** Fired by a figure cell's font-size control with the new multiplier. */
+  onComponentFontScale: (componentId: string, scale: number) => void;
   /** Bumped when the dashboard plot theme changes, so figures refetch. */
   refreshTick?: number;
 }
@@ -1479,6 +1554,7 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
   onAddComponent,
   activeHighlight,
   onMoveToSection,
+  onComponentFontScale,
   refreshTick,
 }) => {
   const allComponents = useMemo(
@@ -1551,6 +1627,8 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
           sections={gridSections}
           currentSection={metadata.section ?? null}
           onMoveToSection={onMoveToSection}
+          fontScale={typeof metadata.font_scale === 'number' ? metadata.font_scale : undefined}
+          onFontScale={onComponentFontScale}
         />
       )}
     />
