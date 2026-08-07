@@ -56,8 +56,11 @@ import {
   startSessionKeepAlive,
   validateSession,
 } from 'depictio-react-core';
+import { UiScaleContext } from 'depictio-react-core';
 import BootSplash from './components/BootSplash';
-import { depictioTheme } from './theme';
+import { buildDepictioTheme } from './theme';
+import { readStoredScheme } from './hooks/useColorScheme';
+import { useUiScalePref } from './hooks/useUiScalePref';
 import { initGoogleAnalytics } from './googleAnalytics';
 import { WalkthroughHost } from './walkthrough';
 
@@ -117,18 +120,39 @@ function resolveTree(): React.ReactElement {
 }
 
 // Mirrors depictio/dash/layouts/shared_app_shell.py:create_app_shell MantineProvider config.
-// forceColorScheme initial value comes from localStorage — same key as the Dash app writes.
-// Defensive parse: stale/invalid stored value must NOT crash the SPA on boot.
-function readInitialColorScheme(): 'light' | 'dark' | 'auto' {
-  try {
-    const raw = localStorage.getItem('theme-store');
-    if (!raw) return 'light';
-    const parsed = JSON.parse(raw);
-    const scheme = parsed?.colorScheme;
-    return scheme === 'dark' || scheme === 'auto' ? scheme : 'light';
-  } catch {
-    return 'light';
-  }
+// Initial value comes from localStorage — same key/parser as useColorScheme, so
+// the boot-time read and the hook's hydration can never disagree.
+function readInitialColorScheme(): 'light' | 'dark' {
+  return readStoredScheme() ?? 'light';
+}
+
+/**
+ * Theme + UI-scale root. Rebuilds the Mantine theme whenever the user's
+ * font-size preference changes (Header's A−/A+ control writes it through
+ * useUiScalePref's shared subscriber list), and exposes the numeric scale to
+ * the non-Mantine surfaces (Plotly fonts, AG Grid row metrics) via
+ * UiScaleContext.
+ */
+function ThemeRoot({ children }: { children: React.ReactNode }) {
+  const { scale } = useUiScalePref();
+  const theme = React.useMemo(() => buildDepictioTheme({ scale }), [scale]);
+
+  return (
+    <UiScaleContext.Provider value={scale}>
+      <MantineProvider theme={theme} defaultColorScheme={readInitialColorScheme()}>
+        {/* DatesProvider is required for @mantine/dates components to pick up
+            locale + first-day-of-week settings. Matches what DMC does
+            internally for ``dmc.DatePickerInput``. */}
+        <DatesProvider settings={{ locale: 'en', firstDayOfWeek: 1 }}>
+          <Notifications position="bottom-right" />
+          <ErrorBoundary>
+            <Suspense fallback={<BootSplash />}>{children}</Suspense>
+          </ErrorBoundary>
+          <WalkthroughHost />
+        </DatesProvider>
+      </MantineProvider>
+    </UiScaleContext.Provider>
+  );
 }
 
 // Boot-time session bootstrap. Four jobs:
@@ -266,20 +290,7 @@ if (isBareRoot) {
     startSessionKeepAlive();
     ReactDOM.createRoot(document.getElementById('root')!).render(
       <React.StrictMode>
-        <MantineProvider theme={depictioTheme} defaultColorScheme={readInitialColorScheme()}>
-          {/* DatesProvider is required for @mantine/dates components to pick up
-              locale + first-day-of-week settings. Matches what DMC does
-              internally for ``dmc.DatePickerInput``. */}
-          <DatesProvider settings={{ locale: 'en', firstDayOfWeek: 1 }}>
-            <Notifications position="bottom-right" />
-            <ErrorBoundary>
-              <Suspense fallback={<BootSplash />}>
-                {resolveTree()}
-              </Suspense>
-            </ErrorBoundary>
-            <WalkthroughHost />
-          </DatesProvider>
-        </MantineProvider>
+        <ThemeRoot>{resolveTree()}</ThemeRoot>
       </React.StrictMode>,
     );
   });

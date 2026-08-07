@@ -6,6 +6,7 @@ import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-alpine.css';
 
 import { extractRowSelection } from '../../selection';
+import { useUiScale } from '../../uiScale';
 
 /**
  * The "underlying data" grid, shared by every show-data popover.
@@ -84,6 +85,7 @@ const DataGridBody: React.FC<DataGridBodyProps> = ({
   onClose,
 }) => {
   const { colorScheme } = useMantineColorScheme();
+  const uiScale = useUiScale();
   const gridApiRef = useRef<GridApi | null>(null);
   const selectable = selection != null;
 
@@ -312,16 +314,19 @@ const DataGridBody: React.FC<DataGridBodyProps> = ({
             height,
             flex: height === '100%' ? 1 : undefined,
             minHeight: 0,
-            '--ag-font-size': '11px',
-            '--ag-row-height': '24px',
-            '--ag-header-height': '28px',
+            '--ag-font-size': `${Math.round(11 * uiScale)}px`,
+            '--ag-row-height': `${Math.round(24 * uiScale)}px`,
+            '--ag-header-height': `${Math.round(28 * uiScale)}px`,
             '--ag-cell-horizontal-padding': '6px',
             '--ag-grid-size': '4px',
-            '--ag-list-item-height': '20px',
+            '--ag-list-item-height': `${Math.round(20 * uiScale)}px`,
           } as React.CSSProperties
         }
       >
         <AgGridReact
+          // rowHeight/headerHeight are initial-only grid options — remount on
+          // font-scale change so the new metrics apply.
+          key={`scale-${uiScale}`}
           rowData={rowData}
           columnDefs={colDefs}
           // Stable row identity → AG Grid diffs rows instead of replacing
@@ -342,8 +347,8 @@ const DataGridBody: React.FC<DataGridBodyProps> = ({
           onSelectionChanged={selectable ? onSelectionChanged : undefined}
           animateRows={false}
           rowBuffer={25}
-          rowHeight={24}
-          headerHeight={28}
+          rowHeight={Math.round(24 * uiScale)}
+          headerHeight={Math.round(28 * uiScale)}
           pagination={paginated}
           paginationPageSize={100}
           paginationPageSizeSelector={[50, 100, 250, 500]}
