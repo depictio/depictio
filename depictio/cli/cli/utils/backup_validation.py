@@ -234,10 +234,26 @@ def check_backup_collections_coverage() -> Dict[str, Any]:
         #   - 'multiqc'            : parsed MultiQC reports (regenerated on ingestion)
         #   - 'multiqc_prerender'  : prerender cache (regenerated on demand)
         derived_collections = ["jbrowse", "multiqc", "multiqc_prerender"]
+        # Operational / deployment-local collections: observability and telemetry
+        # state that describes *this* deployment's runtime, not user data. Carrying
+        # them across a restore would be wrong, not merely redundant:
+        #   - 'task_events'    : Celery task events, TTL-expired after retention_days
+        #   - 'ingestion_runs' : per-run ingestion progress for the monitoring views
+        #   - 'app_logs'       : capped collection of recent application logs
+        #   - 'telemetry'      : anonymous installation identity + per-day send guards;
+        #                        restoring it elsewhere would clone the install identity
+        operational_collections = ["task_events", "ingestion_runs", "app_logs", "telemetry"]
         core_collections = {
             col
             for col in collections_in_settings
-            if col not in ["test", "initialization", "tokens", *derived_collections]
+            if col
+            not in [
+                "test",
+                "initialization",
+                "tokens",
+                *derived_collections,
+                *operational_collections,
+            ]
         }
         missing_from_expected_core = core_collections - expected_set
 
