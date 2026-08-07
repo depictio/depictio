@@ -1,12 +1,11 @@
 """
-Utility functions for Google OAuth authentication.
+Utility functions for SSO authentication (Google OAuth, shared SSO user mapping).
 
 This module contains helper functions for managing OAuth state, token exchange,
-and user creation for Google OAuth 2.0 authentication flow.
+and user creation for browser SSO flows.
 """
 
 import secrets
-from datetime import datetime, timedelta
 from typing import Any
 
 import httpx
@@ -14,61 +13,29 @@ from fastapi import HTTPException
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
+from depictio.api.v1.endpoints.auth_endpoints.state_store import (
+    consume_auth_state,
+    store_auth_state,
+)
 from depictio.models.models.google_oauth import GoogleUserInfo
 from depictio.models.models.users import UserBeanie
-
-# In-memory state storage (in production, use Redis or database)
-_oauth_states: dict[str, datetime] = {}
 
 
 def generate_oauth_state() -> str:
     """Generate a secure random state parameter for OAuth CSRF protection."""
-    from depictio.api.v1.configs.logging_init import logger
-
     state = secrets.token_urlsafe(32)
-    # Store state with expiration (10 minutes)
-    expiry = datetime.now() + timedelta(minutes=10)
-    _oauth_states[state] = expiry
-    logger.debug(f"Generated OAuth state: {state}, expires at: {expiry}")
+    store_auth_state("oauth", state)
+    logger.debug(f"Generated OAuth state: {state}")
     return state
 
 
 def validate_oauth_state(state: str) -> bool:
-    """Validate OAuth state parameter and remove if valid."""
-    import os
-
-    from depictio.api.v1.configs.logging_init import logger
-
-    # In development mode, skip state validation due to multi-worker issues
-    if os.getenv("DEPICTIO_DEV_MODE", "false").lower() == "true":
-        logger.debug(f"DEPICTIO_DEV_MODE: Skipping OAuth state validation for: {state}")
-        return True
-
-    logger.debug(f"Validating OAuth state: {state}")
-    logger.debug(f"Current stored states: {list(_oauth_states.keys())}")
-
-    if state not in _oauth_states:
-        logger.warning(f"State {state} not found in stored states")
+    """Validate an OAuth state parameter, consuming it so it cannot be replayed."""
+    if consume_auth_state("oauth", state) is None:
+        logger.warning(f"OAuth state unknown, already used, or expired: {state}")
         return False
-
-    # Check if state is expired
-    if _oauth_states[state] < datetime.now():
-        logger.warning(f"State {state} has expired")
-        del _oauth_states[state]
-        return False
-
-    # Remove used state
-    del _oauth_states[state]
     logger.debug(f"State {state} validated successfully")
     return True
-
-
-def cleanup_expired_states() -> None:
-    """Clean up expired OAuth states."""
-    now = datetime.now()
-    expired_states = [state for state, expiry in _oauth_states.items() if expiry < now]
-    for state in expired_states:
-        del _oauth_states[state]
 
 
 async def exchange_code_for_token(code: str) -> dict[str, Any]:
@@ -124,16 +91,16 @@ async def fetch_google_user_info(access_token: str) -> GoogleUserInfo:
         return GoogleUserInfo(**user_data)
 
 
-async def create_or_get_user(
-    google_user: GoogleUserInfo, *, allow_create: bool = True
+async def create_or_get_sso_user(
+    email: str, *, allow_create: bool = True
 ) -> tuple[UserBeanie | None, bool]:
-    """Create new user or get existing user from Google OAuth info.
+    """Create or fetch a user for an IdP-verified email (Google OAuth, SAML).
 
     Args:
-        google_user: Verified Google account info.
+        email: Email address already verified by the identity provider.
         allow_create: When False, never provision a new account — return
             ``(None, False)`` for an unknown email. Used to honour
-            ``registration_disabled`` so OAuth is a login-only door for
+            ``registration_disabled`` so SSO is a login-only door for
             pre-provisioned accounts, not a registration bypass.
 
     Returns:
@@ -141,32 +108,40 @@ async def create_or_get_user(
         created. ``user`` is None when the email is unknown and
         ``allow_create`` is False.
     """
-    # Check if user already exists
-    existing_user = await UserBeanie.find_one({"email": google_user.email})
+    from depictio.api.v1.endpoints.user_endpoints.core_functions import _hash_password
+
+    existing_user = await UserBeanie.find_one({"email": email})
 
     if existing_user:
-        logger.info(f"Existing user found for OAuth login: {google_user.email}")
+        logger.info(f"Existing user found for SSO login: {email}")
         return existing_user, False
 
     if not allow_create:
         logger.warning(
-            f"OAuth login rejected for unregistered email (registration disabled): "
-            f"{google_user.email}"
+            f"SSO login rejected for unregistered email (registration disabled): {email}"
         )
         return None, False
 
-    # Create new user
-    logger.info(f"Creating new user from OAuth: {google_user.email}")
+    logger.info(f"Creating new user from SSO: {email}")
 
     new_user = UserBeanie(
-        email=google_user.email,
-        password="$2b$12$oauth.user.no.password",  # OAuth users don't have passwords
+        email=email,
+        # SSO users have no usable password; a hash of an unguessable random
+        # secret keeps password login structurally valid but never satisfiable.
+        password=_hash_password(secrets.token_urlsafe(32)),
         is_admin=False,
         is_active=True,
-        is_verified=True,  # Google email is already verified
+        is_verified=True,  # Email is verified by the identity provider
     )
 
     await new_user.save()
-    logger.info(f"Created new OAuth user: {new_user.id}")
+    logger.info(f"Created new SSO user: {new_user.id}")
 
     return new_user, True
+
+
+async def create_or_get_user(
+    google_user: GoogleUserInfo, *, allow_create: bool = True
+) -> tuple[UserBeanie | None, bool]:
+    """Create new user or get existing user from Google OAuth info."""
+    return await create_or_get_sso_user(google_user.email, allow_create=allow_create)

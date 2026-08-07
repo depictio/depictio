@@ -187,6 +187,7 @@ export {
   getAnonymousSession,
   startGoogleOAuth,
   handleGoogleCallback,
+  samlLoginUrl,
   exchangeMagicToken,
   persistSession,
   clearSession,

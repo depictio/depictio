@@ -65,8 +65,32 @@ backend:
     # Google OAuth Configuration
     DEPICTIO_AUTH_GOOGLE_OAUTH_ENABLED: "true"
 
+    # SAML SSO (EMBL Keycloak) — see the `auth:` block below for the IdP/SP
+    # settings. Flip to "true" once the SP is registered in the realm.
+    DEPICTIO_AUTH_SAML_ENABLED: "false"
+
     # Celery Configuration - Disabled for now
     # DEPICTIO_CELERY_ENABLED: "false"
+
+# SAML SSO reference configuration (EMBL Keycloak, ktest realm).
+# The IdP signing certificate is PUBLIC X.509 material (Keycloak → Realm
+# Settings → Keys → RS256 → Certificate, wrapped in PEM header/footer), so it
+# can live here — no secret rides in this block.
+#
+# IdP-side registration (Keycloak SAML client in the EMBL-HD realm):
+#   - Client ID            = DEPICTIO_AUTH_SAML_SP_ENTITY_ID below
+#   - ACS / redirect URL   = https://api.depictio.embl.org/depictio/api/v1/auth/saml/callback
+#   - Sign assertions: ON, Client signature required: OFF
+#   (or import GET https://api.depictio.embl.org/depictio/api/v1/auth/saml/metadata)
+auth:
+  DEPICTIO_AUTH_SAML_IDP_ENTITY_ID: "https://auth.ktest.embl.de/realms/EMBL-HD"
+  DEPICTIO_AUTH_SAML_IDP_SSO_URL: "https://auth.ktest.embl.de/realms/EMBL-HD/protocol/saml"
+  DEPICTIO_AUTH_SAML_SP_ENTITY_ID: "https://api.depictio.embl.org/depictio"
+  DEPICTIO_AUTH_SAML_LOGIN_LABEL: "Sign in with EMBL"
+  # DEPICTIO_AUTH_SAML_IDP_CERT: |
+  #   -----BEGIN CERTIFICATE-----
+  #   ...realm RS256 signing certificate...
+  #   -----END CERTIFICATE-----
 
 
 mongo:

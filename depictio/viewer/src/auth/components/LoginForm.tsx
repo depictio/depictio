@@ -1,11 +1,15 @@
 import { Anchor, Button, Divider, Group, PasswordInput, Stack, Text, TextInput } from '@mantine/core';
 import { useState } from 'react';
-import { loginUser, persistSession, startGoogleOAuth } from 'depictio-react-core';
+import { loginUser, persistSession, samlLoginUrl, startGoogleOAuth } from 'depictio-react-core';
 
 const EMAIL_RE = /^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$/;
 
 interface Props {
   googleEnabled: boolean;
+  /** SAML SSO login enabled (e.g. EMBL Keycloak). */
+  samlEnabled?: boolean;
+  /** Label for the SAML button, e.g. "Sign in with EMBL". */
+  samlLabel?: string;
   /** Switch to the register view. Omit to hide the Register button entirely
    *  (e.g. when registration is disabled on this instance). */
   onSwitchToRegister?: () => void;
@@ -13,7 +17,7 @@ interface Props {
   onSuccess: () => void;
 }
 
-export default function LoginForm({ googleEnabled, onSwitchToRegister, onSuccess }: Props) {
+export default function LoginForm({ googleEnabled, samlEnabled, samlLabel, onSwitchToRegister, onSuccess }: Props) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -102,27 +106,40 @@ export default function LoginForm({ googleEnabled, onSwitchToRegister, onSuccess
           </Anchor>
         )}
       </Group>
-      {googleEnabled && (
+      {(googleEnabled || samlEnabled) && (
         <Stack gap="xs">
           <Divider label="Or" labelPosition="center" />
-          <Button
-            id="google-oauth-button"
-            variant="outline"
-            radius="md"
-            fullWidth
-            onClick={handleGoogleClick}
-            leftSection={
-              <img
-                src="https://www.google.com/favicon.ico"
-                alt=""
-                width={18}
-                height={18}
-                style={{ display: 'block' }}
-              />
-            }
-          >
-            Sign in with Google
-          </Button>
+          {googleEnabled && (
+            <Button
+              id="google-oauth-button"
+              variant="outline"
+              radius="md"
+              fullWidth
+              onClick={handleGoogleClick}
+              leftSection={
+                <img
+                  src="https://www.google.com/favicon.ico"
+                  alt=""
+                  width={18}
+                  height={18}
+                  style={{ display: 'block' }}
+                />
+              }
+            >
+              Sign in with Google
+            </Button>
+          )}
+          {samlEnabled && (
+            <Button
+              id="saml-login-button"
+              variant="outline"
+              radius="md"
+              fullWidth
+              onClick={() => window.location.assign(samlLoginUrl('/dashboards'))}
+            >
+              {samlLabel || 'Sign in with SSO'}
+            </Button>
+          )}
         </Stack>
       )}
     </Stack>

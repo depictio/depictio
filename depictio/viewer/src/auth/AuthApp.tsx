@@ -122,6 +122,8 @@ export default function AuthApp() {
           <AuthCard heading="Welcome to Depictio :">
             <LoginForm
               googleEnabled={status?.google_oauth_enabled ?? false}
+              samlEnabled={status?.saml_enabled ?? false}
+              samlLabel={status?.saml_login_label}
               onSwitchToRegister={
                 status?.registration_disabled ? undefined : () => setView('register')
               }

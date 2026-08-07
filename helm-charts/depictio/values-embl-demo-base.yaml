@@ -76,6 +76,11 @@ backend:
     # NOTE: DEPICTIO_FASTAPI_PUBLIC_URL must be set in environment-specific values files
     # (values-embl-demo.yaml, values-embl-demo-dev.yaml) to match the ingress host
 
+    # NOTE: To enable EMBL SSO (SAML via Keycloak), copy the
+    # DEPICTIO_AUTH_SAML_ENABLED env flag and the top-level `auth:` block from
+    # values-embl-auth.yaml into the environment-specific values file, adjusting
+    # the SP entity ID / ACS host to that environment's API hostname.
+
 
 mongo:
   useOperator: true     # Use Percona PSMDB Operator for HA replica set
