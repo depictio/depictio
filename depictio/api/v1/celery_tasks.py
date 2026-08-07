@@ -234,7 +234,17 @@ def build_figure_preview(payload: dict) -> dict:
                 select_columns=select_columns,
             )
             if scan is not None:
-                agg_fig = build_aggregated_figure(scan, agg_plan, theme, render_stats)
+                from depictio.api.v1.services.figure.figure_builder import (
+                    resolve_template_override,
+                )
+
+                agg_fig = build_aggregated_figure(
+                    scan,
+                    agg_plan,
+                    theme,
+                    render_stats,
+                    template_override=resolve_template_override(dict_kwargs.get("template")),
+                )
 
     df = None
     if agg_fig is None and code_sample_cap:

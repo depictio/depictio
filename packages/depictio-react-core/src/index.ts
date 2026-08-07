@@ -179,6 +179,12 @@ export {
   fetchFigureVisualizationList,
   upsertComponent,
   saveDashboardNotes,
+  uploadDashboardLogo,
+  // Instance branding (admin panel)
+  fetchBrandingAdmin,
+  updateBrandingAdmin,
+  resetBrandingAdmin,
+  uploadBrandingLogo,
   // Auth helpers (React /auth page)
   fetchAuthStatus,
   loginUser,
@@ -281,6 +287,8 @@ export {
   fetchCatalogPreviewPayload,
 } from './api';
 export type {
+  BrandingFields,
+  AdminBrandingState,
   FloatingComponent,
   FloatingComponentsResponse,
   TableMutationResult,
@@ -359,6 +367,11 @@ export type { RealtimeJournalEntry } from './hooks/useRealtimeJournal';
 export { batchIdsFromPayload } from './highlight';
 export type { ActiveHighlight } from './highlight';
 
+// Dashboard-wide UI scale (font-size) preference. The viewer app owns the
+// provider; Plotly/AG Grid renderers consume the value for their non-Mantine
+// pixel metrics.
+export { UiScaleContext, useUiScale, UI_SCALE_STEPS, UI_SCALE_DEFAULT } from './uiScale';
+
 // Render-fetch queue. Apps that own the filter state call
 // ``bumpFetchGeneration`` when it changes, so requests queued for the previous
 // filter are dropped instead of running against a question nobody is asking.
@@ -375,6 +388,7 @@ export type {
   StoredMetadata,
   DashboardData,
   FilterSectionSpec,
+  DashboardThemeSpec,
   DashboardSummary,
   InteractiveFilter,
   InteractiveFilterSource,

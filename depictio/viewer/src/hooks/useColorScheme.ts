@@ -13,7 +13,7 @@ const STORAGE_KEY = 'theme-store';
 
 type Scheme = 'light' | 'dark';
 
-function readStoredScheme(): Scheme | null {
+export function readStoredScheme(): Scheme | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;

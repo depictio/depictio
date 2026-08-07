@@ -71,6 +71,7 @@ const FILTER_DEBOUNCE_MS = 250;
 import { notifications } from '@mantine/notifications';
 import { Header, Sidebar, SettingsDrawer } from './chrome';
 import { useSidebarOpen } from './hooks/useSidebarOpen';
+import { useContentScaleStyle } from './hooks/useUiScalePref';
 import { useFilterPanelOpen } from './hooks/useFilterPanelOpen';
 import { FILTER_PANEL_WIDTH_VAR, useFilterPanelWidth } from './hooks/useFilterPanelWidth';
 import { useCurrentUser } from './hooks/useCurrentUser';
@@ -155,6 +156,7 @@ const App: React.FC = () => {
   // `sidebar-collapsed` localStorage key the Dash app writes.
   const [desktopOpened, toggleDesktop] = useSidebarOpen();
   const [settingsOpened, { open: openSettings, close: closeSettings }] = useDisclosure(false);
+  const contentScaleStyle = useContentScaleStyle();
   const { user: currentUser, inspectorEnabled } = useCurrentUser();
   const isOwner = isDashboardOwner(dashboard, currentUser?.email ?? null);
   // `control` is null while the flag is off, so no provider value reaches the
@@ -639,7 +641,7 @@ const App: React.FC = () => {
       </AppShell.Header>
 
       <AppShell.Navbar p="md" data-tour-id="sidebar">
-        <Sidebar tabs={tabSiblings} activeId={dashboardId} />
+        <Sidebar tabs={tabSiblings} activeId={dashboardId} logoUrl={dashboard?.logo_url} />
       </AppShell.Navbar>
 
       <AppShell.Main style={{ height: 'calc(100vh - 50px)' }}>
@@ -811,6 +813,7 @@ const App: React.FC = () => {
             <Box
               px={4}
               py={4}
+              data-testid="dashboard-content"
               style={{
                 height: '100%',
                 minWidth: 0,
@@ -818,6 +821,9 @@ const App: React.FC = () => {
                 overflowX: 'hidden',
                 display: 'flex',
                 flexDirection: 'column',
+                // Content font-size preference — scales the dashboard tiles
+                // below, never the surrounding chrome (header, sidebar, panel).
+                ...contentScaleStyle,
               }}
             >
               <Box style={{ flex: 1, minHeight: 0 }}>
@@ -895,12 +901,14 @@ const App: React.FC = () => {
                 background: 'var(--mantine-color-body)',
               }}
             >
-              <TopPanel
-                components={topComponents}
-                filters={filters}
-                onFilterChange={handleFilterChange}
-                refreshTick={refreshTick}
-              />
+              <Box style={contentScaleStyle}>
+                <TopPanel
+                  components={topComponents}
+                  filters={filters}
+                  onFilterChange={handleFilterChange}
+                  refreshTick={refreshTick}
+                />
+              </Box>
             </Box>
           )}
           </div>

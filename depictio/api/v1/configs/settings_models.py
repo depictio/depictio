@@ -1,4 +1,5 @@
 import os
+import re
 from pathlib import Path
 from typing import Any, Literal, Optional
 
@@ -1252,6 +1253,70 @@ class GoogleAnalyticsConfig(BaseSettings):
         return self.enabled and self.tracking_id is not None
 
 
+class BrandingConfig(BaseSettings):
+    """Instance-level branding (issue #397).
+
+    Lets a deployment (e.g. a core facility) replace the depictio logo, name
+    the instance, and re-tint the UI and server-rendered Plotly figures —
+    all env-driven, exposed to the SPA through ``/utils/public-config``
+    (same channel as ``GoogleAnalyticsConfig``). The "Powered by Depictio"
+    header badge is not affected.
+    """
+
+    logo_url: Optional[str] = Field(
+        default=None,
+        description=(
+            "URL of the custom logo shown in the sidebar and on the login page "
+            "(absolute https:// URL or a path served by this deployment). "
+            "Replaces the depictio logo when set."
+        ),
+    )
+    logo_url_dark: Optional[str] = Field(
+        default=None,
+        description=(
+            "Optional dark-mode variant of the custom logo. Falls back to logo_url when unset."
+        ),
+    )
+    app_name: Optional[str] = Field(
+        default=None,
+        description=(
+            "Instance display name, used for the browser tab title and the login-page greeting."
+        ),
+    )
+    primary_color: Optional[str] = Field(
+        default=None,
+        description=(
+            "Primary UI color: a Mantine palette name (e.g. 'teal') or a hex "
+            "color (e.g. '#0ca678') the viewer expands into a palette."
+        ),
+    )
+    colorway: Optional[str] = Field(
+        default=None,
+        description=(
+            "Comma-separated hex colors (e.g. '#1f77b4,#ff7f0e,...') used as "
+            "the categorical colorway of server-rendered Plotly figures."
+        ),
+    )
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_BRANDING_")
+
+    @property
+    def colorway_list(self) -> Optional[list[str]]:
+        """Parsed & validated colorway; None when unset or nothing valid remains."""
+        if not self.colorway:
+            return None
+        colors = [
+            color.strip()
+            for color in self.colorway.split(",")
+            if re.fullmatch(r"#[0-9a-fA-F]{6}", color.strip())
+        ]
+        return colors or None
+
+    @property
+    def is_configured(self) -> bool:
+        return any((self.logo_url, self.app_name, self.primary_color, self.colorway_list))
+
+
 class ProfilingConfig(BaseSettings):
     """Configuration for application profiling."""
 
@@ -1331,6 +1396,7 @@ class Settings(BaseSettings):
     analytics: AnalyticsConfig = Field(default_factory=AnalyticsConfig)
     telemetry: TelemetryConfig = Field(default_factory=TelemetryConfig)
     google_analytics: GoogleAnalyticsConfig = Field(default_factory=GoogleAnalyticsConfig)
+    branding: BrandingConfig = Field(default_factory=BrandingConfig)
     profiling: ProfilingConfig = Field(default_factory=ProfilingConfig)
 
     disable_example_dashboards: bool = Field(
