@@ -4,6 +4,56 @@ import { Icon } from '@iconify/react';
 
 import type { DashboardData, DashboardSummary } from 'depictio-react-core';
 import PoweredBy from './PoweredBy';
+import { useUiScalePref } from '../hooks/useUiScalePref';
+
+/** A− / percent / A+ control for the dashboard-wide font-size preference
+ *  (#854). The percent label doubles as a reset button and only appears when
+ *  the scale is off 100%, so the default header stays compact. */
+const FontSizeControl: React.FC = () => {
+  const { scale, increase, decrease, reset, canIncrease, canDecrease } = useUiScalePref();
+
+  return (
+    <ActionIcon.Group data-testid="font-size-control">
+      <Tooltip label="Decrease font size" withArrow>
+        <ActionIcon
+          variant="default"
+          size="input-xs"
+          onClick={decrease}
+          disabled={!canDecrease}
+          data-testid="font-size-decrease"
+          aria-label="Decrease font size"
+        >
+          <Icon icon="mdi:format-font-size-decrease" width={14} />
+        </ActionIcon>
+      </Tooltip>
+      {scale !== 1 && (
+        <Tooltip label="Reset font size" withArrow>
+          <Button
+            variant="default"
+            size="compact-xs"
+            h="var(--input-height-xs)"
+            onClick={reset}
+            data-testid="font-size-reset"
+          >
+            {Math.round(scale * 100)}%
+          </Button>
+        </Tooltip>
+      )}
+      <Tooltip label="Increase font size" withArrow>
+        <ActionIcon
+          variant="default"
+          size="input-xs"
+          onClick={increase}
+          disabled={!canIncrease}
+          data-testid="font-size-increase"
+          aria-label="Increase font size"
+        >
+          <Icon icon="mdi:format-font-size-increase" width={14} />
+        </ActionIcon>
+      </Tooltip>
+    </ActionIcon.Group>
+  );
+};
 
 /** True for path-like icon values (PNG/SVG file URLs) — these came from the
  *  Dash YAML and aren't valid Iconify names. */
@@ -351,6 +401,7 @@ const Header: React.FC<HeaderProps> = ({
             Exit Edit
           </Button>
         )}
+        <FontSizeControl />
         <Button
           leftSection={<Icon icon="ic:baseline-settings" width={14} />}
           color="gray"

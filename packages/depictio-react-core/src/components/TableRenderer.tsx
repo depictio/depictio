@@ -28,6 +28,7 @@ import { enqueueFetch, isStaleFetch } from '../fetchQueue';
 import { useNewItemIds } from '../hooks/useNewItemIds';
 import { useTransientFlag } from '../hooks/useTransientFlag';
 import { ActiveHighlight } from '../highlight';
+import { useUiScale } from '../uiScale';
 import RefetchOverlay from './RefetchOverlay';
 import ComponentSkeleton from './ComponentSkeleton';
 import { useReportLoadStatus } from './DashboardLoadingProvider';
@@ -104,6 +105,7 @@ const TableRenderer: React.FC<TableRendererProps> = ({
   const pageSize = clampPageSize(metadata.page_size);
   const { colorScheme } = useMantineColorScheme();
   const isDark = colorScheme === 'dark';
+  const uiScale = useUiScale();
   const [containerRef, inView] = useInView<HTMLDivElement>('200px');
 
   // The table must NOT filter itself by its own row-selection — otherwise
@@ -702,12 +704,31 @@ const TableRenderer: React.FC<TableRendererProps> = ({
           )}
           <div
             className={isDark ? 'ag-theme-alpine-dark' : 'ag-theme-alpine'}
-            style={{ width: '100%', flex: 1, minHeight: 0, position: 'relative' }}
+            style={
+              {
+                width: '100%',
+                flex: 1,
+                minHeight: 0,
+                position: 'relative',
+                // Scale the Alpine defaults (13px font, 42px rows, 48px header)
+                // with the dashboard-wide font preference. Compact mode sets
+                // explicit JS row/header props below, which win over these vars.
+                ...(uiScale !== 1
+                  ? {
+                      '--ag-font-size': `${Math.round(13 * uiScale)}px`,
+                      '--ag-row-height': `${Math.round(42 * uiScale)}px`,
+                      '--ag-header-height': `${Math.round(48 * uiScale)}px`,
+                    }
+                  : {}),
+              } as React.CSSProperties
+            }
           >
             <AgGridReact
               // Remount when switching row models — AG Grid can't swap
-              // infinite ↔ client-side on a live instance.
-              key={showAll ? 'client' : 'infinite'}
+              // infinite ↔ client-side on a live instance. uiScale is in the
+              // key too: rowHeight/headerHeight are initial-only grid options,
+              // so a font-size change needs a fresh grid to take effect.
+              key={`${showAll ? 'client' : 'infinite'}-${uiScale}`}
               columnDefs={colDefs}
               defaultColDef={defaultColDef}
               {...(showAll
@@ -723,8 +744,8 @@ const TableRenderer: React.FC<TableRendererProps> = ({
               // so a size selector (which changes page size) can't be offered
               // there — only in client-side "Show all" mode.
               paginationPageSizeSelector={showAll ? pageSizeSelector : false}
-              rowHeight={metadata.compact ? 28 : undefined}
-              headerHeight={metadata.compact ? 32 : undefined}
+              rowHeight={metadata.compact ? Math.round(28 * uiScale) : undefined}
+              headerHeight={metadata.compact ? Math.round(32 * uiScale) : undefined}
               onGridReady={onGridReady}
               getRowClass={getRowClass}
               getRowId={
