@@ -230,7 +230,8 @@
       "wf_tag": "nextflow/ampliseq",
       "description": "Sample identifiers, habitat types, geographic coordinates, and collection dates",
       "title_size": "md",
-      "title_align": "left"
+      "title_align": "left",
+      "section": "Sample metadata"
     },
     {
       "index": "71d770cf-c4d6-4ea5-8f06-9e3a22165d52",
@@ -575,14 +576,14 @@
         }
       },
       "wf_tag": "nextflow/ampliseq",
-      "description": "Inner ring is Kingdom; outer rings expand to Phylum \u2192 Class. Click any wedge to drill in. Add Habitat (or other ranks) as the leading column via the Settings popover. Switch the Colour-by ring there to recolour at a different level.",
+      "description": "Inner ring is Kingdom; outer rings expand to Phylum → Class. Click any wedge to drill in. Add Habitat (or other ranks) as the leading column via the Settings popover. Switch the Colour-by ring there to recolour at a different level.",
       "title_size": "md",
       "title_align": "left"
     },
     {
       "index": "adv-sankey",
       "component_type": "advanced_viz",
-      "title": "Taxonomic flow (Kingdom \u2192 Phylum \u2192 taxon)",
+      "title": "Taxonomic flow (Kingdom → Phylum → taxon)",
       "workflow_tag": "ampliseq",
       "data_collection_tag": "sankey_canonical",
       "wf_id": {
@@ -594,7 +595,7 @@
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "Sankey-ready hierarchical flow (Kingdom \u2192 Phylum \u2192 taxon, weight=abundance)",
+        "description": "Sankey-ready hierarchical flow (Kingdom → Phylum → taxon, weight=abundance)",
         "data_collection_tag": "sankey_canonical",
         "dc_specific_properties": null,
         "_id": {
@@ -649,7 +650,7 @@
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "UpSet-ready taxon \u00d7 habitat binary presence matrix",
+        "description": "UpSet-ready taxon × habitat binary presence matrix",
         "data_collection_tag": "upset_canonical",
         "dc_specific_properties": null,
         "_id": {
@@ -680,7 +681,7 @@
         }
       },
       "wf_tag": "nextflow/ampliseq",
-      "description": "Set-intersection plot of taxa shared across habitats \u2014 bars show intersection cardinality; dots indicate the participating habitat set.",
+      "description": "Set-intersection plot of taxa shared across habitats — bars show intersection cardinality; dots indicate the participating habitat set.",
       "title_size": "md",
       "title_align": "left"
     }
@@ -897,7 +898,7 @@
   "icon_color": "green",
   "icon_variant": "filled",
   "workflow_system": "nf-core",
-  "notes_content": "<h2>Community &amp; Diversity</h2><p>Within-sample taxonomic structure across habitats. Stacked taxonomy and sunburst views show how relative abundance partitions across the Kingdom \u2192 Phylum \u2192 taxon hierarchy; Sankey makes the cross-rank flow explicit; UpSet shows which taxa are shared (or unique) across habitats.</p><p>Top-N collapsing in stacked / sunburst views hides rare taxa for legend readability \u2014 switch ranks or increase the top-N if you suspect a long tail of habitat-specific signal.</p>",
+  "notes_content": "<h2>Community &amp; Diversity</h2><p>Within-sample taxonomic structure across habitats. Stacked taxonomy and sunburst views show how relative abundance partitions across the Kingdom → Phylum → taxon hierarchy; Sankey makes the cross-rank flow explicit; UpSet shows which taxa are shared (or unique) across habitats.</p><p>Top-N collapsing in stacked / sunburst views hides rare taxa for legend readability — switch ranks or increase the top-N if you suspect a long tail of habitat-specific signal.</p>",
   "permissions": {
     "owners": [
       {
@@ -930,5 +931,15 @@
   "main_tab_name": null,
   "tab_icon": "mdi:bacteria-outline",
   "tab_icon_color": "teal",
-  "parent_dashboard_title": null
+  "parent_dashboard_title": null,
+  "grid_sections": [
+    {
+      "name": "Sample metadata",
+      "icon": "mdi:table-account",
+      "color": "teal",
+      "description": "Project metadata table, shown on every tab",
+      "collapsed": true,
+      "persistent": true
+    }
+  ]
 }

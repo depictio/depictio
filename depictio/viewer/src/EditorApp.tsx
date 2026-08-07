@@ -76,6 +76,7 @@ import {
   batchIdsFromPayload,
   authFetch,
   useMapPanel,
+  useCrossTabComponents,
   MapPanelControl,
   MapPanelDock,
   MapPanelSurface,
@@ -311,9 +312,14 @@ const EditorApp: React.FC = () => {
 
   // Authors see the panel as viewers will. Cross-tab filter persistence is
   // deliberately viewer-only: an editing session's filter state is scratch, and
-  // carrying it between tabs would be surprising here.
+  // carrying it between tabs would be surprising here. Foreign persistent
+  // sections are also not rendered in the editor — a persistent section is
+  // edited on its owner tab, and keeping foreign members out of this app keeps
+  // them out of the layout merge that writes `right_panel_layout_data`.
+  const crossTab = useCrossTabComponents(dashboardId ?? '');
   const mapPanel = useMapPanel({
-    dashboardId: dashboardId ?? '',
+    components: crossTab.floating,
+    familyId: crossTab.familyId,
     filters,
     onFilterChange: handleFilterChange,
   });

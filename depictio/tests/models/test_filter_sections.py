@@ -179,6 +179,7 @@ class TestToFullPassthrough:
                 "color": "teal",
                 "description": None,
                 "collapsed": False,
+                "persistent": False,
             }
         ]
 
@@ -333,3 +334,48 @@ class TestGridSections:
         assert len(back.grid_sections) == 1
         assert back.grid_sections[0].name == "QC"
         assert back.grid_sections[0].collapsed is True
+
+
+# ---------------------------------------------------------------------------
+# `persistent` — cross-tab fan-out flag
+# ---------------------------------------------------------------------------
+
+
+class TestPersistentFlag:
+    """A section marked persistent renders on every tab of its dashboard family
+    (grid sections above the sibling tabs' grids, filter sections' controls in
+    every tab's panel). The flag is presentation-only server-side: it must
+    default off, parse from YAML, and survive both round-trip directions."""
+
+    def test_defaults_to_false(self):
+        assert FilterSectionSpec(name="Sample metadata").persistent is False
+
+    def test_parses_from_dashboard_yaml_shape(self):
+        dash = _dashboard(
+            [_figure("f", section="Sample metadata")],
+            grid_sections=[{"name": "Sample metadata", "persistent": True}],
+        )
+        assert dash.grid_sections[0].persistent is True
+
+    def test_reaches_the_full_dashboard(self):
+        dash = _dashboard(
+            [_interactive("a", section="Sample filters")],
+            filter_sections=[{"name": "Sample filters", "persistent": True}],
+        )
+        assert dash.to_full()["filter_sections"][0]["persistent"] is True
+
+    def test_survives_a_round_trip(self):
+        dash = _dashboard(
+            [_figure("f", section="Sample metadata")],
+            grid_sections=[{"name": "Sample metadata", "persistent": True}],
+        )
+        back = DashboardDataLite.from_full(dash.to_full())
+        assert back.grid_sections[0].persistent is True
+
+    def test_exported_yaml_carries_the_flag(self):
+        dash = _dashboard(
+            [_figure("f", section="Sample metadata")],
+            grid_sections=[{"name": "Sample metadata", "persistent": True}],
+        )
+        yaml_text = DashboardDataLite.from_full(dash.to_full()).to_yaml()
+        assert "persistent: true" in yaml_text
