@@ -179,6 +179,10 @@ export {
   fetchFigureVisualizationList,
   upsertComponent,
   saveDashboardNotes,
+  // Per-user dashboard filter state
+  fetchDashboardFilterState,
+  saveDashboardFilterState,
+  deleteDashboardFilterState,
   // Auth helpers (React /auth page)
   fetchAuthStatus,
   loginUser,
@@ -337,6 +341,14 @@ export {
   persistableFloatingFilters,
 } from './floatingFilters';
 export type { FloatingFilterPayload } from './floatingFilters';
+export {
+  encodeFiltersForHash,
+  decodeFiltersFromHash,
+  readFiltersFromLocation,
+  stripFilterHashFromLocation,
+  buildFilterShareUrl,
+  sanitizeRestoredFilters,
+} from './filterShare';
 
 // Cross-DC available-values intersection (powers greying-out unavailable
 // options in interactive filter dropdowns).
@@ -378,6 +390,7 @@ export type {
   DashboardSummary,
   InteractiveFilter,
   InteractiveFilterSource,
+  DashboardFilterStateResponse,
   BulkComputeResponse,
   FigureResponse,
   TableResponse,

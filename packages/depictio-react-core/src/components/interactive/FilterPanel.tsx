@@ -118,6 +118,11 @@ export interface FilterPanelProps {
    *  opaque node: the apps put the docked map panel here, and this component
    *  has no business knowing that. */
   footer?: React.ReactNode;
+  /** "Remember filters" persistence toggle. Rendered only when the change
+   *  handler is provided, so callers without persistence (the editor) are
+   *  untouched. */
+  rememberFilters?: boolean;
+  onRememberFiltersChange?: (on: boolean) => void;
 }
 
 function readDensity(): FilterPanelDensity {
@@ -144,6 +149,8 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
   collapsed = false,
   onToggleCollapsed,
   footer,
+  rememberFilters = true,
+  onRememberFiltersChange,
 }) => {
   const [density, setDensity] = useState<FilterPanelDensity>(readDensity);
   const [search, setSearch] = useState('');
@@ -643,6 +650,32 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
               />
             </ActionIcon>
           </Tooltip>
+          {onRememberFiltersChange && (
+            <Tooltip
+              label={
+                rememberFilters
+                  ? 'Filters are remembered on this dashboard — click to stop'
+                  : 'Remember filters on this dashboard'
+              }
+              withArrow
+              openDelay={400}
+            >
+              <ActionIcon
+                variant={rememberFilters ? 'light' : 'subtle'}
+                color={rememberFilters ? 'blue' : 'gray'}
+                size="sm"
+                aria-label="Remember filters"
+                aria-pressed={rememberFilters}
+                onClick={() => onRememberFiltersChange(!rememberFilters)}
+              >
+                <Icon
+                  icon={rememberFilters ? 'mdi:pin' : 'mdi:pin-off-outline'}
+                  width={16}
+                  height={16}
+                />
+              </ActionIcon>
+            </Tooltip>
+          )}
           {onResetAllFilters && (
             <Button
               leftSection={<Icon icon="bx:reset" width={12} />}

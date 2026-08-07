@@ -2015,6 +2015,65 @@ export async function saveDashboardNotes(
   if (!res.ok) await throwHttpError(res, 'Failed to save dashboard notes');
 }
 
+// ---- Per-user dashboard filter state -------------------------------------
+//
+// Server-side twin of the localStorage filter persistence: one document per
+// (user, dashboard) so a returning user gets their filters back on any
+// browser. Best-effort by design — every failure path degrades to "no server
+// state" and must never break the viewer. In public/anonymous mode the server
+// answers `persisted: false` and stores nothing (the anonymous account is
+// shared), so localStorage is the only layer for those visitors.
+
+export interface DashboardFilterStateResponse {
+  filters: InteractiveFilter[];
+  enabled: boolean;
+  updated_at: string | null;
+  persisted: boolean;
+}
+
+export async function fetchDashboardFilterState(
+  dashboardId: string,
+): Promise<DashboardFilterStateResponse | null> {
+  try {
+    const res = await authFetch(`${API_BASE}/dashboards/filter_state/${dashboardId}`);
+    if (!res.ok) return null;
+    return (await res.json()) as DashboardFilterStateResponse;
+  } catch {
+    return null;
+  }
+}
+
+export async function saveDashboardFilterState(
+  dashboardId: string,
+  filters: InteractiveFilter[],
+  enabled: boolean,
+  opts?: { keepalive?: boolean },
+): Promise<{ persisted: boolean }> {
+  try {
+    const res = await authFetch(`${API_BASE}/dashboards/filter_state/${dashboardId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ filters, enabled }),
+      // `keepalive` lets the pagehide flush outlive the page — tab switches
+      // are full navigations here.
+      ...(opts?.keepalive ? { keepalive: true } : {}),
+    });
+    if (!res.ok) return { persisted: false };
+    return (await res.json()) as { persisted: boolean };
+  } catch {
+    return { persisted: false };
+  }
+}
+
+export async function deleteDashboardFilterState(dashboardId: string): Promise<void> {
+  try {
+    await authFetch(`${API_BASE}/dashboards/filter_state/${dashboardId}`, {
+      method: 'DELETE',
+    });
+  } catch {
+    // Best-effort cleanup only.
+  }
+}
+
 export async function fetchCurrentUser(): Promise<CurrentUser | null> {
   const res = await authFetch(`${API_BASE}/auth/me/optional`);
   if (!res.ok) return null;
