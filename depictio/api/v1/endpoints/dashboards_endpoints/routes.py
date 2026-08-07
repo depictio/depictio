@@ -3355,6 +3355,54 @@ def map_data_endpoint(
     }
 
 
+def _resolve_tab_family(
+    dashboard_id: PyObjectId,
+    current_user: User,
+    projection: dict[str, int],
+) -> tuple[PyObjectId, list[dict[str, Any]]]:
+    """Resolve a dashboard's whole tab family, permission-checked.
+
+    The family is the parent plus all its children; a main tab is its own
+    parent. Returns the family id and the tabs sorted by ``tab_order``.
+    Raises 404 for an unknown dashboard and 403 when the caller lacks viewer
+    permission on the owning project.
+    """
+    dashboard_data = dashboards_collection.find_one(
+        {"dashboard_id": dashboard_id},
+        {"project_id": 1, "parent_dashboard_id": 1},
+    )
+    if not dashboard_data:
+        raise HTTPException(status_code=404, detail=f"Dashboard '{dashboard_id}' not found.")
+
+    project_id = dashboard_data.get("project_id")
+    if not project_id or not check_project_permission(project_id, current_user, "viewer"):
+        raise HTTPException(status_code=403, detail="Permission denied.")
+
+    parent_id = dashboard_data.get("parent_dashboard_id") or dashboard_id
+    family = dashboards_collection.find(
+        {"$or": [{"dashboard_id": parent_id}, {"parent_dashboard_id": parent_id}]},
+        projection,
+    )
+    tabs = sorted(family, key=lambda t: (t.get("tab_order") is None, t.get("tab_order") or 0))
+    return parent_id, tabs
+
+
+def _floating_components_of(tabs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The family's floating maps, each paired with its owning tab."""
+    components: list[dict[str, Any]] = []
+    for tab in tabs:
+        for meta in tab.get("stored_metadata") or []:
+            if meta.get("component_type") == "map" and meta.get("placement") == "floating":
+                components.append(
+                    {
+                        "dashboard_id": str(tab.get("dashboard_id")),
+                        "tab_title": tab.get("title"),
+                        "metadata": convert_objectid_to_str(meta),
+                    }
+                )
+    return components
+
+
 @dashboards_endpoint_router.get("/floating_components/{dashboard_id}")
 def get_floating_components(
     dashboard_id: PyObjectId,
@@ -3373,40 +3421,107 @@ def get_floating_components(
     parameter and gates on the same project-level permission, so rendering tab
     A's map while viewing tab B needs no special casing.
     """
-    dashboard_data = dashboards_collection.find_one(
-        {"dashboard_id": dashboard_id},
-        {"project_id": 1, "parent_dashboard_id": 1},
-    )
-    if not dashboard_data:
-        raise HTTPException(status_code=404, detail=f"Dashboard '{dashboard_id}' not found.")
-
-    project_id = dashboard_data.get("project_id")
-    if not project_id or not check_project_permission(project_id, current_user, "viewer"):
-        raise HTTPException(status_code=403, detail="Permission denied.")
-
-    # The family is the parent plus all its children; a main tab is its own parent.
-    parent_id = dashboard_data.get("parent_dashboard_id") or dashboard_id
-    family = dashboards_collection.find(
-        {"$or": [{"dashboard_id": parent_id}, {"parent_dashboard_id": parent_id}]},
+    parent_id, tabs = _resolve_tab_family(
+        dashboard_id,
+        current_user,
         {"dashboard_id": 1, "title": 1, "tab_order": 1, "stored_metadata": 1},
     )
-
-    components: list[dict[str, Any]] = []
-    for tab in sorted(family, key=lambda t: (t.get("tab_order") is None, t.get("tab_order") or 0)):
-        for meta in tab.get("stored_metadata") or []:
-            if meta.get("component_type") == "map" and meta.get("placement") == "floating":
-                components.append(
-                    {
-                        "dashboard_id": str(tab.get("dashboard_id")),
-                        "tab_title": tab.get("title"),
-                        "metadata": convert_objectid_to_str(meta),
-                    }
-                )
 
     # The viewer keys its per-dashboard panel state (and its cross-tab filter
     # persistence) on the family id, so hand it back rather than making the
     # client re-derive it from the dashboard list.
-    return {"parent_dashboard_id": str(parent_id), "components": components}
+    return {"parent_dashboard_id": str(parent_id), "components": _floating_components_of(tabs)}
+
+
+@dashboards_endpoint_router.get("/cross_tab_components/{dashboard_id}")
+def get_cross_tab_components(
+    dashboard_id: PyObjectId,
+    current_user: User = Depends(get_user_or_anonymous),
+):
+    """Return everything a tab renders on behalf of its siblings, in one request.
+
+    Supersedes ``/floating_components`` for the React viewer (that endpoint
+    stays for compatibility): alongside the family's floating maps, this
+    returns every section marked ``persistent: true`` in a tab's
+    ``grid_sections`` / ``filter_sections``, with its member components and —
+    for grid sections — the owner tab's layout entries for those members. Each
+    member carries its owning ``dashboard_id``, so render calls target the
+    owner tab exactly like floating maps do.
+
+    Sections are keyed ``(owner_dashboard_id, kind, name)``: two tabs each
+    declaring a persistent section with the same name stay two sections.
+    """
+    parent_id, tabs = _resolve_tab_family(
+        dashboard_id,
+        current_user,
+        {
+            "dashboard_id": 1,
+            "title": 1,
+            "tab_order": 1,
+            "stored_metadata": 1,
+            "grid_sections": 1,
+            "filter_sections": 1,
+            "right_panel_layout_data": 1,
+        },
+    )
+
+    persistent_sections: list[dict[str, Any]] = []
+    for tab in tabs:
+        metas = tab.get("stored_metadata") or []
+        for kind, spec_field in (("grid", "grid_sections"), ("filter", "filter_sections")):
+            for spec in tab.get(spec_field) or []:
+                if not spec.get("persistent"):
+                    continue
+                members = []
+                for meta in metas:
+                    if meta.get("section") != spec.get("name"):
+                        continue
+                    # Same membership rule as the viewer's `isFilterMember`:
+                    # interactive components live in filter sections, everything
+                    # else in grid sections. Floating maps are excluded — they
+                    # already fan out through `floating`.
+                    is_filter = meta.get("component_type") == "interactive"
+                    if is_filter != (kind == "filter"):
+                        continue
+                    if meta.get("component_type") == "map" and meta.get("placement") == "floating":
+                        continue
+                    members.append(
+                        {
+                            "dashboard_id": str(tab.get("dashboard_id")),
+                            "tab_title": tab.get("title"),
+                            "metadata": convert_objectid_to_str(meta),
+                        }
+                    )
+                member_indices = {m["metadata"].get("index") for m in members}
+                # Raw owner-tab layout entries, so the client reuses the exact
+                # parsing it already applies to its own `right_panel_layout_data`
+                # (`box-` prefixes and all). Only meaningful for grid sections.
+                layouts = (
+                    [
+                        convert_objectid_to_str(item)
+                        for item in tab.get("right_panel_layout_data") or []
+                        if isinstance(item, dict)
+                        and str(item.get("i", "")).removeprefix("box-") in member_indices
+                    ]
+                    if kind == "grid"
+                    else []
+                )
+                persistent_sections.append(
+                    {
+                        "kind": kind,
+                        "owner_dashboard_id": str(tab.get("dashboard_id")),
+                        "owner_tab_title": tab.get("title"),
+                        "spec": convert_objectid_to_str(spec),
+                        "components": members,
+                        "layouts": layouts,
+                    }
+                )
+
+    return {
+        "parent_dashboard_id": str(parent_id),
+        "floating": _floating_components_of(tabs),
+        "persistent_sections": persistent_sections,
+    }
 
 
 # ============================================================================

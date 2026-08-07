@@ -154,6 +154,13 @@ class FilterSectionSpec(BaseModel):
         description="Start the section collapsed. Defaults to expanded so no filter is "
         "hidden on first visit.",
     )
+    persistent: bool = Field(
+        default=False,
+        description="Render this section on every tab of the dashboard family. Grid "
+        "sections appear read-only above each sibling tab's own content; filter "
+        "sections' controls appear in every tab's filter panel and their values "
+        "survive tab switches. No effect on single-tab dashboards.",
+    )
 
 
 class DashboardDataLite(BaseModel):

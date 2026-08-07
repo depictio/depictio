@@ -35,6 +35,7 @@ const SectionForm: React.FC<SectionFormProps> = ({ initial, taken, onSubmit, onC
   const [color, setColor] = useState(initial?.color ?? '');
   const [description, setDescription] = useState(initial?.description ?? '');
   const [collapsed, setCollapsed] = useState(initial?.collapsed ?? false);
+  const [persistent, setPersistent] = useState(initial?.persistent ?? false);
 
   const trimmed = name.trim();
   const duplicate = taken.includes(trimmed.toLowerCase());
@@ -51,6 +52,7 @@ const SectionForm: React.FC<SectionFormProps> = ({ initial, taken, onSubmit, onC
       color: color || undefined,
       description: description.trim() || undefined,
       collapsed,
+      persistent,
     });
   };
 
@@ -134,6 +136,13 @@ const SectionForm: React.FC<SectionFormProps> = ({ initial, taken, onSubmit, onC
           description="Applies to first-time visitors. Anyone who has already opened this dashboard keeps the state they left it in."
           checked={collapsed}
           onChange={(e) => setCollapsed(e.currentTarget.checked)}
+        />
+
+        <Switch
+          label="Show on every tab"
+          description="Renders this section on all of this dashboard's tabs; filter values set in it survive tab switches. Only affects dashboards with tabs."
+          checked={persistent}
+          onChange={(e) => setPersistent(e.currentTarget.checked)}
         />
 
         <Group justify="flex-end" gap="sm">

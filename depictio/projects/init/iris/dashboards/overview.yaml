@@ -5,6 +5,7 @@ version: 1
 title: "Iris Dataset Analysis"
 subtitle: "Overview of sepal/petal measurements across the three Iris varieties"
 project_tag: "Iris Dataset Project Data Analysis"
+main_tab_name: "Overview"
 
 # `filter_sections` and `grid_sections` are two independent lists: the first
 # groups the left panel's interactive controls, the second groups everything
@@ -19,10 +20,13 @@ project_tag: "Iris Dataset Project Data Analysis"
 # the narrower list the editor's Sections manager offers
 # (depictio/viewer/src/components/sections/sectionIcons.ts).
 filter_sections:
+  # Persistent: this filter renders in every tab's panel and the variety picked
+  # here survives tab switches (FilterSectionSpec.persistent, cross-tab fan-out).
   - name: "Variety"
     icon: "mdi:filter-variant"
     color: "blue"
-    description: "Which flowers to look at"
+    description: "Which flowers to look at, on every tab"
+    persistent: true
   - name: "Measurements"
     icon: "mdi:ruler"
     color: "indigo"
@@ -51,11 +55,14 @@ grid_sections:
     icon: "mdi:chart-bell-curve"
     color: "violet"
     description: "Where the three varieties separate, and where they do not"
+  # Persistent: the raw-data table renders (read-only) at the top of every tab
+  # in the family — the "records in view on landing" slot of issue #858.
   - name: "Raw Data"
     icon: "mdi:table"
     color: "gray"
-    description: "Per-flower records behind every figure above"
+    description: "Per-flower records behind every figure, shown on every tab"
     collapsed: true
+    persistent: true
 
 components:
   # ── Narrative intro ────────────────────────────────────────────────

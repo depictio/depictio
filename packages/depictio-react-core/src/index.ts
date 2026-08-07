@@ -11,6 +11,8 @@ import './styles/realtime-highlight.css';
 
 // Grid + top-level renderer
 export { default as DashboardGrid } from './components/DashboardGrid';
+export { default as PersistentSectionsHost } from './components/PersistentSectionsHost';
+export type { PersistentSectionsHostProps } from './components/PersistentSectionsHost';
 export { default as ComponentRenderer } from './components/ComponentRenderer';
 export { default as ErrorBoundary } from './components/ErrorBoundary';
 export { default as ComponentSkeleton } from './components/ComponentSkeleton';
@@ -144,6 +146,7 @@ export {
   fetchDashboard,
   fetchAllDashboards,
   fetchFloatingComponents,
+  fetchCrossTabComponents,
   fetchSpecs,
   fetchUniqueValues,
   fetchBreakdown,
@@ -283,6 +286,8 @@ export {
 export type {
   FloatingComponent,
   FloatingComponentsResponse,
+  PersistentSection,
+  CrossTabComponentsResponse,
   TableMutationResult,
   RoleDtypeSpec,
   IngestionReport,
@@ -325,18 +330,20 @@ export { default as MapPanelDock } from './components/mapPanel/MapPanelDock';
 export type { MapPanelDockProps } from './components/mapPanel/MapPanelDock';
 export { useMapPanel } from './components/mapPanel/useMapPanel';
 export type { MapPanel, UseMapPanelOptions } from './components/mapPanel/useMapPanel';
+export { useCrossTabComponents } from './hooks/useCrossTabComponents';
+export type { CrossTabComponents } from './hooks/useCrossTabComponents';
 export type {
   MapPanelMode,
   MapPanelCardSize,
   MapPanelState,
 } from './components/mapPanel/useMapPanelState';
 export {
-  readFloatingFilters,
-  writeFloatingFilters,
-  clearFloatingFilters,
-  persistableFloatingFilters,
-} from './floatingFilters';
-export type { FloatingFilterPayload } from './floatingFilters';
+  readCrossTabFilters,
+  writeCrossTabFilters,
+  clearCrossTabFilters,
+  persistableCrossTabFilters,
+} from './crossTabFilters';
+export type { CrossTabFilterPayload } from './crossTabFilters';
 
 // Cross-DC available-values intersection (powers greying-out unavailable
 // options in interactive filter dropdowns).

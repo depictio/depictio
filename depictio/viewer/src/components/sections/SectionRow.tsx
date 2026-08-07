@@ -43,6 +43,24 @@ const SectionRow: React.FC<SectionRowProps> = ({
               </Badge>
             </Tooltip>
           )}
+          {spec.persistent && (
+            <Tooltip
+              label="Pinned to every tab of this dashboard; filter values set in it survive tab switches"
+              withArrow
+              multiline
+              w={260}
+            >
+              {/* Same pin the viewer draws in the section headers — one mark
+                  for "persistent" everywhere. */}
+              <Icon
+                icon="mdi:pin"
+                width={14}
+                height={14}
+                color="var(--mantine-color-dimmed)"
+                style={{ flexShrink: 0, transform: 'rotate(30deg)' }}
+              />
+            </Tooltip>
+          )}
           {sharedName && (
             <Tooltip
               label="The other tab has a section with this name. They are separate — renaming one leaves the other alone."

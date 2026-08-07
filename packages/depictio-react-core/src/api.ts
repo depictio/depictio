@@ -316,6 +316,11 @@ export interface FilterSectionSpec {
   color?: string | null;
   description?: string | null;
   collapsed?: boolean;
+  /** Render this section on every tab of the dashboard family: grid sections
+   *  appear read-only above each sibling tab's own content, filter sections'
+   *  controls join every tab's filter panel and their values survive tab
+   *  switches. No effect on single-tab dashboards. */
+  persistent?: boolean;
 }
 
 export interface DashboardData {
@@ -392,6 +397,63 @@ export async function fetchFloatingComponents(
     // filters hydrated from storage, and a rejection would leave a stale
     // cross-tab selection applied with nothing left to prune it.
     console.warn('[api] fetchFloatingComponents failed:', err);
+    return empty;
+  }
+}
+
+/** One section marked `persistent: true`, fanned out to the whole tab family.
+ *  Members carry their owning tab's `dashboard_id` (the floating-component
+ *  convention) so render calls target the owner while viewing a sibling.
+ *  Sections are keyed `(owner_dashboard_id, kind, name)` — two tabs declaring
+ *  a persistent section with the same name stay two sections. */
+export interface PersistentSection {
+  kind: 'grid' | 'filter';
+  owner_dashboard_id: string;
+  owner_tab_title?: string;
+  spec: FilterSectionSpec;
+  components: FloatingComponent[];
+  /** Owner tab's raw `right_panel_layout_data` entries for the grid members,
+   *  in the stored shape (`box-` prefixes and all). Empty for filter sections. */
+  layouts: unknown[];
+}
+
+export interface CrossTabComponentsResponse {
+  parent_dashboard_id: string | null;
+  floating: FloatingComponent[];
+  persistent_sections: PersistentSection[];
+}
+
+/**
+ * Fetch everything the current tab renders on behalf of its siblings — the
+ * family's floating maps plus its persistent sections — in one request.
+ * Supersedes `fetchFloatingComponents` for the viewer. Resolves empty rather
+ * than throwing, for the same reason as `fetchFloatingComponents`: the caller
+ * uses this result to validate filters hydrated from storage.
+ */
+export async function fetchCrossTabComponents(
+  dashboardId: string,
+): Promise<CrossTabComponentsResponse> {
+  const empty: CrossTabComponentsResponse = {
+    parent_dashboard_id: null,
+    floating: [],
+    persistent_sections: [],
+  };
+  try {
+    const res = await authFetch(
+      `${API_BASE}/dashboards/cross_tab_components/${dashboardId}`,
+    );
+    if (!res.ok) return empty;
+    const data = await res.json();
+    if (!Array.isArray(data?.floating)) return empty;
+    return {
+      parent_dashboard_id: data.parent_dashboard_id ?? null,
+      floating: data.floating,
+      persistent_sections: Array.isArray(data.persistent_sections)
+        ? data.persistent_sections
+        : [],
+    };
+  } catch (err) {
+    console.warn('[api] fetchCrossTabComponents failed:', err);
     return empty;
   }
 }

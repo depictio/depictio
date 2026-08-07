@@ -99,7 +99,9 @@ export function sectionComponents(
   const specByName = new Map(specs.map((s) => [s.name, s]));
 
   // Declared sections come first, in declaration order, even when a component
-  // for a later-declared one appears earlier in stored_metadata.
+  // for a later-declared one appears earlier in stored_metadata. Persistent
+  // sections outrank the rest: they render first on every tab of the family,
+  // so the shared content sits in the same place wherever the viewer lands.
   const order: string[] = specs.map((s) => s.name);
   const bucketed = new Map<string, StoredMetadata[]>();
   const unsectioned: StoredMetadata[] = [];
@@ -117,11 +119,17 @@ export function sectionComponents(
     bucketed.get(name)!.push(m);
   }
 
+  const isPersistent = (name: string) => Boolean(specByName.get(name)?.persistent);
+  const orderedNames = [
+    ...order.filter(isPersistent),
+    ...order.filter((name) => !isPersistent(name)),
+  ];
+
   const out: ComponentSection[] = [];
   if (unsectioned.length > 0) {
     out.push({ key: '', members: unsectioned });
   }
-  for (const name of order) {
+  for (const name of orderedNames) {
     const members = bucketed.get(name) ?? [];
     if (members.length === 0 && !includeEmpty) continue;
     out.push({

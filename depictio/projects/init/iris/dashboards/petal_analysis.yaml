@@ -6,6 +6,14 @@ title: "Iris Petal Analysis"
 subtitle: "Multi-metric summaries and conditional filters on petal measurements"
 project_tag: "Iris Dataset Project Data Analysis"
 
+# Child tab of the Iris overview dashboard. The variety filter and the raw-data
+# table are NOT declared here: the overview marks its "Variety" filter section
+# and "Raw Data" grid section persistent, so both reach this tab through the
+# cross-tab fan-out (and the variety picked survives the tab switch).
+is_main_tab: false
+parent_dashboard_tag: "Iris Dataset Analysis"
+tab_order: 1
+
 # `filter_sections` and `grid_sections` are two independent lists: the first
 # groups the left panel's interactive controls, the second groups everything
 # else in the main grid.
@@ -19,10 +27,6 @@ project_tag: "Iris Dataset Project Data Analysis"
 # the narrower list the editor's Sections manager offers
 # (depictio/viewer/src/components/sections/sectionIcons.ts).
 filter_sections:
-  - name: "Variety"
-    icon: "mdi:filter-variant"
-    color: "blue"
-    description: "Which flowers to look at"
   - name: "Measurements"
     icon: "mdi:ruler"
     color: "indigo"
@@ -47,11 +51,6 @@ grid_sections:
     icon: "mdi:chart-scatter-plot"
     color: "violet"
     description: "How far a petal cut-off gets you toward naming the variety"
-  - name: "Raw Data"
-    icon: "mdi:table"
-    color: "gray"
-    description: "Per-flower records behind every figure above"
-    collapsed: true
 
 components:
   # ── Narrative intro ────────────────────────────────────────────────
@@ -227,20 +226,6 @@ components:
     title: "Varieties > 4 cm"
     layout: {x: 6, y: 3, w: 2, h: 2}
 
-  # ── Interactive filters — left panel, one section each ─────────────
-  - tag: variety-picker
-    component_type: interactive
-    section: "Variety"
-    workflow_tag: python/iris_workflow
-    data_collection_tag: iris_table
-    interactive_component_type: MultiSelect
-    column_name: variety
-    column_type: object
-    custom_color: "#DD8452"
-    icon_name: mdi:filter-variant
-    title: "Variety"
-    layout: {x: 0, y: 0, w: 1, h: 3}
-
   # Two `group`s inside one section: the panel nests section → group → control,
   # so "Measurements" holds a Petal card and a Sepal card rather than four
   # loose sliders. Every member of a group must name the same section.
@@ -394,16 +379,3 @@ components:
       opacity: 0.7
       color_discrete_map: '{"Setosa": "#4C72B0", "Versicolor": "#DD8452", "Virginica": "#55A467"}'
     layout: {x: 0, y: 15, w: 8, h: 5}
-
-  # ── Data table ─────────────────────────────────────────────────────
-  - tag: petal-data-table
-    component_type: table
-    section: "Raw Data"
-    workflow_tag: python/iris_workflow
-    data_collection_tag: iris_table
-    title: "Iris Measurements"
-    description: "Per-flower sepal + petal measurements, with the assigned variety."
-    title_size: h3
-    title_align: left
-    page_size: 100
-    layout: {x: 0, y: 20, w: 8, h: 5}
