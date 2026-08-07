@@ -1,4 +1,7 @@
-import { Center, Image, Paper, Stack, Title, useMantineColorScheme } from '@mantine/core';
+import { Center, Paper, Stack, Title } from '@mantine/core';
+
+import BrandLogo from '../../chrome/BrandLogo';
+import { useBranding } from '../../branding';
 
 interface Props {
   heading: string;
@@ -11,12 +14,16 @@ interface Props {
  *
  * Mirrors render_login_form / render_register_form in users_management.py so
  * the React form sits in the same visual frame as the prior Dash version.
+ *
+ * On a branded instance (#397) the logo is the deployment's own and the
+ * literal "Depictio" in headings is swapped for the instance name — done here
+ * rather than at every call site so the greeting logic lives in one place.
  */
 export default function AuthCard({ heading, children }: Props) {
-  const { colorScheme } = useMantineColorScheme();
-  const logoSrc = colorScheme === 'dark'
-    ? '/dashboard/logos/logo_white.svg'
-    : '/dashboard/logos/logo_black.svg';
+  const branding = useBranding();
+  const resolvedHeading = branding?.app_name
+    ? heading.replace('Depictio', branding.app_name)
+    : heading;
 
   return (
     <Paper
@@ -28,7 +35,7 @@ export default function AuthCard({ heading, children }: Props) {
     >
       <Stack gap="md">
         <Center>
-          <Image src={logoSrc} alt="Depictio" h={60} w="auto" fit="contain" />
+          <BrandLogo height={60} />
         </Center>
         <Center>
           <Title
@@ -37,7 +44,7 @@ export default function AuthCard({ heading, children }: Props) {
             c="gray"
             style={{ fontFamily: 'Virgil' }}
           >
-            {heading}
+            {resolvedHeading}
           </Title>
         </Center>
         {children}

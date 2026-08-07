@@ -1,0 +1,46 @@
+# =====================================================
+# Instance Branding Configuration Example
+# =====================================================
+# This values file demonstrates how to brand a Depictio deployment for
+# your institute / core facility: your own logo, instance name, primary
+# UI color and Plotly figure colorway.
+#
+# Usage:
+#   helm upgrade depictio ./helm-charts/depictio \
+#     -f values.yaml \
+#     -f examples/values-branding.yaml
+
+# The BACKEND is the only place these belong. The viewer ships as a static,
+# pre-built bundle served by nginx, so it cannot read environment variables at
+# runtime — it fetches this configuration from the API at boot instead
+# (GET /depictio/api/v1/utils/public-config).
+backend:
+  env:
+    # Custom logo shown in the sidebar and on the login page, replacing the
+    # depictio logo. Absolute https:// URL, or a path served by this
+    # deployment. The "Powered by Depictio" header badge is unaffected.
+    DEPICTIO_BRANDING_LOGO_URL: "https://example.org/assets/facility-logo.svg"
+
+    # Optional dark-mode variant. Falls back to DEPICTIO_BRANDING_LOGO_URL
+    # when unset (no automatic color inversion is applied to custom logos).
+    # DEPICTIO_BRANDING_LOGO_URL_DARK: "https://example.org/assets/facility-logo-dark.svg"
+
+    # Instance display name — browser tab title and login-page greeting
+    # ("Welcome to <name> :").
+    DEPICTIO_BRANDING_APP_NAME: "My Core Facility"
+
+    # Primary UI color: a Mantine palette name (blue, teal, grape, ...) or a
+    # hex color the viewer expands into a full palette.
+    DEPICTIO_BRANDING_PRIMARY_COLOR: "#0ca678"
+
+    # Categorical colorway for server-rendered Plotly figures: comma-separated
+    # hex colors. Overrides the default Mantine colorway in both light and
+    # dark themes.
+    # DEPICTIO_BRANDING_COLORWAY: "#0ca678,#f76707,#7048e8,#1c7ed6,#e64980"
+
+# Notes:
+# - All keys are optional and independent — set only what you need.
+# - Remote logo URLs work out of the box (the viewer's CSP already allows
+#   https: images); host the files somewhere stable and CDN-cached.
+# - Component- and dashboard-level color settings still take precedence over
+#   the instance colorway for individual figures.

@@ -1688,6 +1688,14 @@ export interface PublicConfigResponse {
     enabled: boolean;
     tracking_id: string | null;
   };
+  /** Instance branding (#397): custom logo / name / colors. All-null when unset. */
+  branding?: {
+    logo_url: string | null;
+    logo_url_dark: string | null;
+    app_name: string | null;
+    primary_color: string | null;
+    colorway: string[] | null;
+  };
 }
 
 export async function fetchPublicConfig(): Promise<PublicConfigResponse> {
