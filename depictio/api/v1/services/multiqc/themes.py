@@ -11,11 +11,10 @@ a path that never calls ``ensure_mantine_templates`` directly.
 
 from __future__ import annotations
 
+from depictio.api.v1.services.figure.mantine_templates import apply_branding_colorway
 from depictio.cli.cli.utils.mantine_templates import (
     get_theme_template as _get_theme_template_base,
 )
-
-from depictio.api.v1.services.figure.mantine_templates import apply_branding_colorway
 
 
 def get_theme_template(theme: str) -> str:

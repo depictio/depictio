@@ -45,10 +45,10 @@ from depictio.api.v1.services.card_metrics import (
     compute_trend_on_grid,
     trend_axis_grid,
 )
-from depictio.api.v1.services.figure.figure_builder import merge_dashboard_plot_theme
 from depictio.api.v1.services.card_metrics import (
     numeric_layout_payload as _numeric_layout_payload,
 )
+from depictio.api.v1.services.figure.figure_builder import merge_dashboard_plot_theme
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 from depictio.models.models.dashboards import DashboardData, DashboardDataLite
 from depictio.models.models.users import User

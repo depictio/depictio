@@ -1274,15 +1274,13 @@ class BrandingConfig(BaseSettings):
     logo_url_dark: Optional[str] = Field(
         default=None,
         description=(
-            "Optional dark-mode variant of the custom logo. Falls back to "
-            "logo_url when unset."
+            "Optional dark-mode variant of the custom logo. Falls back to logo_url when unset."
         ),
     )
     app_name: Optional[str] = Field(
         default=None,
         description=(
-            "Instance display name, used for the browser tab title and the "
-            "login-page greeting."
+            "Instance display name, used for the browser tab title and the login-page greeting."
         ),
     )
     primary_color: Optional[str] = Field(
