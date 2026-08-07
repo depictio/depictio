@@ -42,6 +42,12 @@ import {
   writeFloatingFilters,
   clearFloatingFilters,
   persistableFloatingFilters,
+  readFiltersFromLocation,
+  stripFilterHashFromLocation,
+  encodeFiltersForHash,
+  sanitizeRestoredFilters,
+  fetchDashboardFilterState,
+  saveDashboardFilterState,
   FILTER_PANEL_RAIL_WIDTH,
   countActiveFilters,
 } from 'depictio-react-core';
@@ -68,6 +74,11 @@ const ingestionBannerKey = (projectId: string) =>
  *  Long enough to swallow a burst of MultiSelect picks or a slider drag, short
  *  enough that a single deliberate change still feels immediate. */
 const FILTER_DEBOUNCE_MS = 250;
+
+/** Debounce for the per-user server-side filter-state write. Longer than the
+ *  fetch debounce: persistence has no visible latency to hide, so it can wait
+ *  out a whole burst of interaction. */
+const SAVE_FILTER_STATE_DEBOUNCE_MS = 800;
 import { notifications } from '@mantine/notifications';
 import { Header, Sidebar, SettingsDrawer } from './chrome';
 import { useSidebarOpen } from './hooks/useSidebarOpen';
@@ -75,6 +86,13 @@ import { useFilterPanelOpen } from './hooks/useFilterPanelOpen';
 import { FILTER_PANEL_WIDTH_VAR, useFilterPanelWidth } from './hooks/useFilterPanelWidth';
 import { useCurrentUser } from './hooks/useCurrentUser';
 import { isDashboardOwner } from './lib/dashboardOwnership';
+import {
+  readLocalFilterState,
+  writeLocalFilterState,
+  clearLocalFilterState,
+  readRememberToggle,
+  writeRememberToggle,
+} from './lib/filterStateStorage';
 import FilterPanelResizer, { FILTER_PANEL_RESIZER_WIDTH } from './components/FilterPanelResizer';
 import Inspector from './chrome/inspector/Inspector';
 import { useInspectorChrome } from './chrome/inspector/useInspectorChrome';
@@ -103,15 +121,21 @@ const App: React.FC = () => {
   const [allDashboards, setAllDashboards] = useState<DashboardSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  // Seed from the floating panel's persisted selection, synchronously. A
-  // selection made on the floating map is meant to survive a tab switch, and
-  // hydrating in an effect instead would let every grid tile fetch once
+  // Seed synchronously from three sources merged per (index, source) key, in
+  // ascending priority: the per-dashboard localStorage state (if "Remember
+  // filters" is on) → the floating panel's cross-tab selection → a `#filters=`
+  // share-link fragment (consumed once, then stripped from the address bar).
+  // Hydrating in an effect instead would let every grid tile fetch once
   // unfiltered before the seed landed, then again straight after. The seed is
-  // validated against the real floating components once they resolve
-  // (`handleFloatingResolved`), which is what discards stale entries.
-  const [filters, setFilters] = useState<InteractiveFilter[]>(
-    () => readFloatingFilters()?.filters ?? [],
-  );
+  // validated later: map selections against the real floating components
+  // (`handleFloatingResolved`), everything else against `stored_metadata` once
+  // the dashboard loads. Lazily via a ref: `useRef`'s argument is evaluated on
+  // EVERY render and the hydration reads storage + decodes the URL fragment.
+  const hydrationRef = useRef<InitialFilterHydration | null>(null);
+  if (hydrationRef.current === null) {
+    hydrationRef.current = hydrateInitialFilters(extractDashboardId());
+  }
+  const [filters, setFilters] = useState<InteractiveFilter[]>(hydrationRef.current.filters);
   // Indices we hydrated from storage. Only these may be pruned as stale — a
   // selection the viewer makes on a *grid* map during this page load must
   // never be swept up by the validation pass.
@@ -303,8 +327,15 @@ const App: React.FC = () => {
       .finally(() => setCardsLoading(false));
   }, [dashboard, dashboardId, deferredFilterKey, refreshTick]);
 
+  // True once the user has changed any filter this page load. Gates the
+  // server-state reconcile (never replace what the user is actively doing)
+  // and the debounced server write (never round-trip a state that is only
+  // the hydration echoed back).
+  const userTouchedRef = useRef(false);
+
   const handleFilterChange = useCallback(
     (update: InteractiveFilter) => {
+      userTouchedRef.current = true;
       const enriched = enrichFilterWithDcId(update, dashboard?.stored_metadata);
       // Dedupe by (index, source) so chart selections coexist with the same
       // component's other filters. Mirrors mergeFiltersBySource in
@@ -314,7 +345,10 @@ const App: React.FC = () => {
     [dashboard],
   );
 
-  const handleResetAllFilters = useCallback(() => setFilters([]), []);
+  const handleResetAllFilters = useCallback(() => {
+    userTouchedRef.current = true;
+    setFilters([]);
+  }, []);
 
   // ---- Floating panel: validate the hydrated cross-tab selection -----------
   // Runs once the family's floating components are known. Anything we seeded
@@ -367,6 +401,157 @@ const App: React.FC = () => {
       persistableFloatingFilters(filters, floatingIndices),
     );
   }, [filters, floatingFamilyId, floatingIndices]);
+
+  // ---- Per-user filter persistence (issue #936) -----------------------------
+  // Hybrid: localStorage restores instantly (hydrated in the useState
+  // initializer above), the server copy reconciles asynchronously so the view
+  // follows the user across browsers. All five filter levels ride along for
+  // free — left-panel controls and scatter/table/map/image selections share
+  // the one `filters` array being persisted.
+
+  // "Remember filters" toggle, per dashboard. Absent key = ON.
+  const [rememberFilters, setRememberFilters] = useState<boolean>(() =>
+    dashboardId ? readRememberToggle(dashboardId) : true,
+  );
+
+  // Mirror of `filters` for callbacks that shouldn't rebuild per keystroke.
+  const filtersRef = useRef(filters);
+  filtersRef.current = filters;
+
+  const handleRememberFiltersChange = useCallback(
+    (on: boolean) => {
+      setRememberFilters(on);
+      if (!dashboardId) return;
+      writeRememberToggle(dashboardId, on);
+      if (on) {
+        writeLocalFilterState(dashboardId, filtersRef.current);
+        void saveDashboardFilterState(dashboardId, filtersRef.current, true);
+      } else {
+        // Forget the stored state but keep the current on-screen filters —
+        // turning the toggle off is about the next visit, not this one. The
+        // PUT (not DELETE) makes the OFF preference roam across browsers.
+        clearLocalFilterState(dashboardId);
+        void saveDashboardFilterState(dashboardId, [], false);
+      }
+    },
+    [dashboardId],
+  );
+
+  // Prune hydrated non-map entries that no longer match a component on this
+  // dashboard (stale storage, or a tab-propagated share hash from a sibling
+  // tab). Uses the hydration's own snapshot of indices, not
+  // `hydratedIndicesRef` — that ref belongs to the floating-map pass, which
+  // may run first and clear it. Map selections stay `handleFloatingResolved`'s
+  // job: floating maps are not in this tab's stored_metadata.
+  const sanitizedNonMapRef = useRef(false);
+  useEffect(() => {
+    if (!dashboard || sanitizedNonMapRef.current) return;
+    sanitizedNonMapRef.current = true;
+    const hydration = hydrationRef.current;
+    if (!hydration || hydration.filters.length === 0) return;
+    const hydratedIndices = new Set(hydration.filters.map((f) => f.index));
+    const known = new Set((dashboard.stored_metadata || []).map((m) => m.index));
+    setFilters((prev) =>
+      prev.filter((f) => {
+        if (!hydratedIndices.has(f.index) || f.source === 'map_selection') return true;
+        return known.has(f.index);
+      }),
+    );
+  }, [dashboard]);
+
+  // Local write: derived from `filters` on every change (like the floating
+  // write above), so "Reset all" empties the stored copy for free.
+  useEffect(() => {
+    if (!dashboardId || !rememberFilters) return;
+    writeLocalFilterState(dashboardId, filters);
+  }, [filters, dashboardId, rememberFilters]);
+
+  // Server write: debounced, and only once the user has actually touched a
+  // filter — hydration alone must not echo state back to the server.
+  const serverSaveTimer = useRef<number | null>(null);
+  const pendingServerSave = useRef<InteractiveFilter[] | null>(null);
+  useEffect(() => {
+    if (!dashboardId || !rememberFilters || !userTouchedRef.current) return;
+    pendingServerSave.current = filters;
+    if (serverSaveTimer.current) window.clearTimeout(serverSaveTimer.current);
+    serverSaveTimer.current = window.setTimeout(() => {
+      pendingServerSave.current = null;
+      void saveDashboardFilterState(dashboardId, filters, true);
+    }, SAVE_FILTER_STATE_DEBOUNCE_MS);
+    return () => {
+      if (serverSaveTimer.current) window.clearTimeout(serverSaveTimer.current);
+    };
+  }, [filters, dashboardId, rememberFilters]);
+
+  // Tab switches are full page navigations, so a click right after a filter
+  // change would lose the debounced write. `keepalive` lets the request
+  // outlive the page.
+  useEffect(() => {
+    if (!dashboardId) return;
+    const flush = () => {
+      if (pendingServerSave.current === null) return;
+      void saveDashboardFilterState(dashboardId, pendingServerSave.current, true, {
+        keepalive: true,
+      });
+      pendingServerSave.current = null;
+    };
+    window.addEventListener('pagehide', flush);
+    return () => window.removeEventListener('pagehide', flush);
+  }, [dashboardId]);
+
+  // Server reconcile: fetch once per dashboard, apply only when it is the
+  // best information available — persisted, newer than what localStorage
+  // hydrated, no share-link in play, and the user hasn't started interacting.
+  // Applied via the same per-key merge as hydration, sanitized against
+  // stored_metadata (hence gated on `dashboard`).
+  const serverStateAppliedRef = useRef(false);
+  const [serverFilterState, setServerFilterState] = useState<InteractiveFilter[] | null>(null);
+  useEffect(() => {
+    if (!dashboardId) return;
+    let cancelled = false;
+    (async () => {
+      const res = await fetchDashboardFilterState(dashboardId);
+      if (cancelled || !res || !res.persisted) return;
+      if (res.enabled === false) {
+        // The user turned "Remember filters" off on another browser; adopt it.
+        setRememberFilters(false);
+        writeRememberToggle(dashboardId, false);
+        clearLocalFilterState(dashboardId);
+        return;
+      }
+      if (!readRememberToggle(dashboardId)) return;
+      if (hydrationRef.current?.urlConsumed) return;
+      const serverAt = res.updated_at ? Date.parse(res.updated_at) : 0;
+      if (Number.isNaN(serverAt) || serverAt <= (hydrationRef.current?.localUpdatedAt ?? 0)) {
+        return;
+      }
+      if (res.filters.length > 0) setServerFilterState(res.filters);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [dashboardId]);
+  useEffect(() => {
+    if (!serverFilterState || !dashboard || serverStateAppliedRef.current) return;
+    serverStateAppliedRef.current = true;
+    if (userTouchedRef.current) return;
+    const known = new Set((dashboard.stored_metadata || []).map((m) => m.index));
+    const sane = sanitizeRestoredFilters(serverFilterState, known);
+    if (sane.length === 0) return;
+    setFilters((prev) => {
+      let merged = prev;
+      for (const f of sane) merged = mergeFiltersBySource(merged, f);
+      return merged;
+    });
+  }, [serverFilterState, dashboard]);
+
+  // Share-link hash for the sidebar's tab links, so the current view survives
+  // the full page navigation a tab switch is. Recomputed lazily — it's a few
+  // string ops, only meaningful when filters are active.
+  const tabLinkHash = useMemo(
+    () => (countActiveFilters(filters) > 0 ? encodeFiltersForHash(filters) : null),
+    [filters],
+  );
 
   // ---- Realtime: WebSocket subscription + UI toggle -------------------------
   // Mode toggle persisted to localStorage so the user's choice survives
@@ -639,7 +824,7 @@ const App: React.FC = () => {
       </AppShell.Header>
 
       <AppShell.Navbar p="md" data-tour-id="sidebar">
-        <Sidebar tabs={tabSiblings} activeId={dashboardId} />
+        <Sidebar tabs={tabSiblings} activeId={dashboardId} tabLinkHash={tabLinkHash} />
       </AppShell.Navbar>
 
       <AppShell.Main style={{ height: 'calc(100vh - 50px)' }}>
@@ -788,6 +973,8 @@ const App: React.FC = () => {
                   filterSections={dashboard.filter_sections}
                   dashboardId={dashboardId}
                   refreshTick={refreshTick}
+                  rememberFilters={rememberFilters}
+                  onRememberFiltersChange={handleRememberFiltersChange}
                   collapsed={!filterPanelOpened}
                   onToggleCollapsed={toggleFilterPanel}
                   footer={
@@ -925,6 +1112,8 @@ const App: React.FC = () => {
               filterSections={dashboard.filter_sections}
               dashboardId={dashboardId}
               refreshTick={refreshTick}
+              rememberFilters={rememberFilters}
+              onRememberFiltersChange={handleRememberFiltersChange}
             />
           </Drawer>
         )}
@@ -955,6 +1144,8 @@ const App: React.FC = () => {
         opened={settingsOpened}
         onClose={closeSettings}
         dashboard={dashboard}
+        filters={filters}
+        activeFilterCount={activeFilterCount}
       />
     </AppShell>
       </InspectorProviders>
@@ -971,6 +1162,39 @@ function extractDashboardId(): string | null {
   const path = window.location.pathname;
   const match = path.match(/\/dashboard\/([^/?#]+)/);
   return match?.[1] || null;
+}
+
+interface InitialFilterHydration {
+  filters: InteractiveFilter[];
+  /** A `#filters=` fragment was decoded and applied — URL state wins over the
+   *  async server reconcile for this page load. */
+  urlConsumed: boolean;
+  /** `updatedAt` of the local state as read BEFORE any of this load's writes
+   *  refresh it, so the server reconcile compares against the previous visit,
+   *  not against the write this mount just made. */
+  localUpdatedAt: number;
+}
+
+/** Merge the persisted / cross-tab / share-link filter sources, in ascending
+ *  priority so a URL entry replaces a persisted one for the same
+ *  (index, source) key, while entries the URL doesn't mention survive.
+ *  Wholesale replacement would make a tab-propagated hash wipe the
+ *  destination tab's own remembered filters. */
+function hydrateInitialFilters(dashboardId: string | null): InitialFilterHydration {
+  const url = readFiltersFromLocation();
+  if (url) stripFilterHashFromLocation();
+  const localState =
+    dashboardId && readRememberToggle(dashboardId) ? readLocalFilterState(dashboardId) : null;
+  const floating = readFloatingFilters()?.filters ?? [];
+  let merged: InteractiveFilter[] = [];
+  for (const f of [...(localState?.filters ?? []), ...floating, ...(url ?? [])]) {
+    merged = mergeFiltersBySource(merged, f);
+  }
+  return {
+    filters: merged,
+    urlConsumed: url !== null,
+    localUpdatedAt: localState?.updatedAt ?? 0,
+  };
 }
 
 function stableFilterKey(filters: InteractiveFilter[]): string {

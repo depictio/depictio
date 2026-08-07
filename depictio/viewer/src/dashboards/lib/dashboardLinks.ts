@@ -10,10 +10,14 @@ export type DashboardMode = 'view' | 'edit';
 export function dashboardHref(
   dashboardId: string,
   mode: DashboardMode = 'view',
+  /** Encoded `#filters=` payload (from `encodeFiltersForHash`). Appended so
+   *  the current view survives the full page navigation a tab switch is —
+   *  the destination consumes and strips it on load. */
+  filterHash?: string | null,
 ): string {
-  return mode === 'edit'
-    ? `/dashboard-edit/${dashboardId}`
-    : `/dashboard/${dashboardId}`;
+  const base =
+    mode === 'edit' ? `/dashboard-edit/${dashboardId}` : `/dashboard/${dashboardId}`;
+  return filterHash ? `${base}#filters=${filterHash}` : base;
 }
 
 export function dashboardHrefFor(d: DashboardListEntry, mode: DashboardMode = 'view'): string {
