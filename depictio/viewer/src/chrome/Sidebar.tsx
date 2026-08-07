@@ -121,6 +121,9 @@ interface SidebarProps {
   onDeleteTab?: (tab: DashboardSummary) => void;
   onMoveTab?: (tab: DashboardSummary, direction: TabMoveDirection) => void;
   onAddTab?: () => void;
+  /** Dashboard logo (uploaded via the editor's Settings drawer). Rendered
+   *  centered at the bottom of the sidebar, just above the footer divider. */
+  logoUrl?: string | null;
 }
 
 /**
@@ -139,6 +142,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   onDeleteTab,
   onMoveTab,
   onAddTab,
+  logoUrl,
 }) => {
   const { colorScheme } = useMantineColorScheme();
   const theme: 'light' | 'dark' = colorScheme === 'dark' ? 'dark' : 'light';
@@ -367,6 +371,15 @@ const Sidebar: React.FC<SidebarProps> = ({
         active server mode (Demo / Public / Single User), matching
         `depictio/dash/layouts/sidebar.py:create_sidebar_footer`. */}
       <Stack gap="xs" align="center">
+        {/* Dashboard logo — centered, right above the footer divider. */}
+        {logoUrl && (
+          <img
+            src={logoUrl}
+            alt=""
+            data-testid="dashboard-logo"
+            style={{ maxWidth: '80%', maxHeight: 60, objectFit: 'contain', display: 'block' }}
+          />
+        )}
         <Divider w="100%" />
         <ThemeToggle />
         <ServerStatusBadge />

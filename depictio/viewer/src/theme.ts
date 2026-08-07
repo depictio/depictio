@@ -7,8 +7,6 @@ import { createTheme, MantineColorsTuple } from '@mantine/core';
  */
 
 export interface DepictioThemeOptions {
-  /** Global size multiplier (`theme.scale` → `--mantine-scale`). */
-  scale?: number;
   /** Mantine palette name to use as the primary color. */
   primaryColor?: string;
   /** Extra palettes to register (e.g. a generated brand palette). */
@@ -23,7 +21,6 @@ export function buildDepictioTheme(options: DepictioThemeOptions = {}) {
     defaultRadius: 'md',
     primaryColor: options.primaryColor ?? 'blue',
     ...(options.colors ? { colors: options.colors } : {}),
-    ...(options.scale && options.scale !== 1 ? { scale: options.scale } : {}),
     // Headings use the normal sans stack — the Virgil hand-drawn font is opt-in
     // per-place (e.g. AuthCard's "Welcome to Depictio") via inline style, not the
     // global default.

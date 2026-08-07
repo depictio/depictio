@@ -187,6 +187,12 @@ export {
   fetchFigureVisualizationList,
   upsertComponent,
   saveDashboardNotes,
+  uploadDashboardLogo,
+  // Instance branding (admin panel)
+  fetchBrandingAdmin,
+  updateBrandingAdmin,
+  resetBrandingAdmin,
+  uploadBrandingLogo,
   // Auth helpers (React /auth page)
   fetchAuthStatus,
   loginUser,
@@ -292,6 +298,8 @@ export {
   fetchCatalogPreviewPayload,
 } from './api';
 export type {
+  BrandingFields,
+  AdminBrandingState,
   FloatingComponent,
   FloatingComponentsResponse,
   PersistentSection,

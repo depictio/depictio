@@ -321,6 +321,13 @@ class DashboardDataLite(BaseModel):
         "figure components of this dashboard.",
     )
 
+    # Dashboard logo, shown at the bottom of the dashboard sidebar. Uploaded
+    # through /dashboards/upload_logo and served from /static/dashboard_logos/.
+    logo_url: str | None = Field(
+        default=None,
+        description="URL of the dashboard logo image (uploaded server-side).",
+    )
+
     # Components using Lite models
     components: list[LiteComponent | dict[str, Any]] = Field(
         default_factory=list, description="List of dashboard components"
@@ -435,6 +442,7 @@ class DashboardDataLite(BaseModel):
         "filter_sections",
         "grid_sections",
         "plot_theme",
+        "logo_url",
     ]
 
     @staticmethod
@@ -808,6 +816,22 @@ class DashboardDataLite(BaseModel):
         except ValueError as e:
             return False, [{"type": "yaml_error", "msg": str(e)}]
 
+    @staticmethod
+    def _exportable_logo_url(logo_url: Any) -> str | None:
+        """Only external logo URLs survive an export.
+
+        Uploaded logos live under the instance-local ``/static/dashboard_logos/``
+        mount, named after this instance's ``dashboard_id`` (which imports
+        re-mint) and never shipped with the code — carrying the URL into a
+        YAML/seed would render a silently broken image on any other
+        deployment. Hand-written external URLs round-trip untouched.
+        """
+        if not logo_url or not isinstance(logo_url, str):
+            return None
+        if logo_url.startswith("/static/dashboard_logos/"):
+            return None
+        return logo_url
+
     @classmethod
     def from_full(cls, dashboard_data: dict[str, Any]) -> "DashboardDataLite":
         """Convert full dashboard dict to lite format.
@@ -990,6 +1014,8 @@ class DashboardDataLite(BaseModel):
                     lite_comp["selection_column"] = comp["selection_column"]
                 if comp.get("max_points") is not None:
                     lite_comp["max_points"] = comp["max_points"]
+                if comp.get("font_scale") and comp["font_scale"] != 1:
+                    lite_comp["font_scale"] = comp["font_scale"]
 
             elif comp_type == "card":
                 lite_comp["aggregation"] = comp.get("aggregation", "")
@@ -1128,6 +1154,7 @@ class DashboardDataLite(BaseModel):
             grid_sections=dashboard_data.get("grid_sections") or [],
             funnel_filtering=bool(dashboard_data.get("funnel_filtering", True)),
             plot_theme=dashboard_data.get("plot_theme") or None,
+            logo_url=cls._exportable_logo_url(dashboard_data.get("logo_url")),
             # Tab fields
             is_main_tab=dashboard_data.get("is_main_tab", True),
             tab_order=dashboard_data.get("tab_order", 0),
@@ -1198,6 +1225,7 @@ class DashboardDataLite(BaseModel):
             "grid_sections": [s.model_dump() for s in self.grid_sections],
             "funnel_filtering": self.funnel_filtering,
             "plot_theme": self.plot_theme.model_dump() if self.plot_theme else None,
+            "logo_url": self.logo_url,
             # parent_dashboard_tag is resolved to parent_dashboard_id during import
         }
 
@@ -1244,6 +1272,7 @@ class DashboardDataLite(BaseModel):
                         # Selection filtering fields
                         "selection_enabled": comp_dict.get("selection_enabled", False),
                         "selection_column": comp_dict.get("selection_column"),
+                        "font_scale": comp_dict.get("font_scale"),
                     }
                 )
 
@@ -1530,6 +1559,8 @@ class DashboardData(MongoModel):
     # Dashboard-level figure theme defaults. None for dashboards saved before
     # the feature existed — figures then follow the UI theme exactly as before.
     plot_theme: DashboardThemeSpec | None = None
+    # Dashboard logo URL (uploaded via /dashboards/upload_logo). None hides it.
+    logo_url: str | None = None
     buttons_data: dict = {
         "unified_edit_mode": True,  # Default edit mode ON for dashboard owners
         "add_components_button": {"count": 0},

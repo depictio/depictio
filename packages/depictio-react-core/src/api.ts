@@ -295,6 +295,10 @@ export interface StoredMetadata {
    *  When omitted, the renderer defaults to visible for ungrouped components and
    *  hidden for components inside a group (compact mode). */
   show_marks?: boolean;
+  /** Per-component font-size multiplier (figures: scales the whole Plotly
+   *  layout font — axis labels, ticks, legend). Multiplies the dashboard-wide
+   *  content scale; 1/undefined = no override. */
+  font_scale?: number;
   // Table
   /** Column allowlist for table components — when non-empty, only these
    *  columns are rendered (empty / undefined = show all columns). */
@@ -355,6 +359,9 @@ export interface DashboardData {
   funnel_filtering?: boolean;
   /** Dashboard-level Plotly template/colorway defaults for figures. */
   plot_theme?: DashboardThemeSpec | null;
+  /** Dashboard logo (uploaded via /dashboards/upload_logo), shown at the
+   *  bottom of the dashboard sidebar. Served from /static/dashboard_logos/. */
+  logo_url?: string | null;
   /** Project-level realtime config — only when ``enabled === true`` should
    *  the viewer mount the WebSocket subscription / live-updates indicator. */
   project_realtime?: { enabled: boolean; debounce_ms: number };
@@ -2282,6 +2289,79 @@ export async function saveDashboardNotes(
     body: JSON.stringify(payload),
   });
   if (!res.ok) await throwHttpError(res, 'Failed to save dashboard notes');
+}
+
+// ---- Instance branding (admin panel) --------------------------------------
+
+/** One branding value set: what /utils/public-config serves as `branding`. */
+export interface BrandingFields {
+  logo_url: string | null;
+  logo_url_dark: string | null;
+  app_name: string | null;
+  primary_color: string | null;
+  colorway: string[] | null;
+}
+
+/** Admin view: per-field overrides layered on the deployment env defaults. */
+export interface AdminBrandingState {
+  overrides: Partial<BrandingFields>;
+  env_defaults: BrandingFields;
+  effective: BrandingFields;
+}
+
+export async function fetchBrandingAdmin(): Promise<AdminBrandingState> {
+  const res = await authFetch(`${API_BASE}/utils/branding`);
+  if (!res.ok) await throwHttpError(res, 'Failed to load branding settings');
+  return res.json();
+}
+
+/** Replace the override set — omitted/null fields fall back to env defaults. */
+export async function updateBrandingAdmin(
+  overrides: Partial<BrandingFields>,
+): Promise<AdminBrandingState> {
+  const res = await authFetch(`${API_BASE}/utils/branding`, {
+    method: 'PUT',
+    body: JSON.stringify(overrides),
+  });
+  if (!res.ok) await throwHttpError(res, 'Failed to save branding settings');
+  return res.json();
+}
+
+export async function resetBrandingAdmin(): Promise<AdminBrandingState> {
+  const res = await authFetch(`${API_BASE}/utils/branding`, { method: 'DELETE' });
+  if (!res.ok) await throwHttpError(res, 'Failed to reset branding settings');
+  return res.json();
+}
+
+/** Upload an instance logo variant; the server stores it under
+ *  /static/branding/ and points the matching override at it. */
+export async function uploadBrandingLogo(
+  variant: 'light' | 'dark',
+  file: File,
+): Promise<AdminBrandingState> {
+  const form = new FormData();
+  form.append('file', file);
+  const res = await authFetch(`${API_BASE}/utils/branding/logo/${variant}`, {
+    method: 'POST',
+    body: form,
+  });
+  if (!res.ok) await throwHttpError(res, 'Failed to upload branding logo');
+  return res.json();
+}
+
+/** Upload a dashboard logo image. The server stores the file, sets
+ *  `logo_url` on the dashboard document (ownership-checked) and returns the
+ *  cache-busted URL. */
+export async function uploadDashboardLogo(dashboardId: string, file: File): Promise<string> {
+  const form = new FormData();
+  form.append('file', file);
+  const res = await authFetch(`${API_BASE}/dashboards/upload_logo/${dashboardId}`, {
+    method: 'POST',
+    body: form,
+  });
+  if (!res.ok) await throwHttpError(res, 'Failed to upload dashboard logo');
+  const data = (await res.json()) as { logo_url: string };
+  return data.logo_url;
 }
 
 export async function fetchCurrentUser(): Promise<CurrentUser | null> {

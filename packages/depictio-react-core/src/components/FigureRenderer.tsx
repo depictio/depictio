@@ -82,6 +82,10 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
   const { colorScheme } = useMantineColorScheme();
   const theme: 'light' | 'dark' = colorScheme === 'dark' ? 'dark' : 'light';
   const uiScale = useUiScale();
+  // Per-figure font-size multiplier on top of the dashboard-wide preference.
+  const componentFontScale =
+    typeof metadata.font_scale === 'number' && metadata.font_scale > 0 ? metadata.font_scale : 1;
+  const effectiveFontScale = uiScale * componentFontScale;
   const [containerRef, inView] = useInView<HTMLDivElement>('200px');
 
   // Cross-filtering only fires meaningful events on scatter-like traces —
@@ -414,14 +418,15 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
         ...((figure?.layout?.margin as Record<string, unknown>) || {}),
       },
     };
-    if (uiScale !== 1) {
+    if (effectiveFontScale !== 1) {
       // The mantine templates set font family only, so server figures land at
       // Plotly's default 12px base. Scale it with the dashboard-wide font
-      // preference; per-figure size overrides (if any) are preserved by
-      // scaling whatever base the server sent.
+      // preference times this figure's own `font_scale` (labels, ticks and
+      // legend all inherit layout.font); per-figure size overrides (if any)
+      // are preserved by scaling whatever base the server sent.
       const serverFont = (figure?.layout?.font as Record<string, unknown>) || {};
       const serverSize = typeof serverFont.size === 'number' ? serverFont.size : 12;
-      base.font = { ...serverFont, size: serverSize * uiScale };
+      base.font = { ...serverFont, size: serverSize * effectiveFontScale };
     }
     if (selectionEnabled && !base.dragmode) {
       const mode =
@@ -437,7 +442,7 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
     // changes don't bump refreshTick, so zoom/pan still survive those.
     base.uirevision = `tick-${refreshTick ?? 0}`;
     return base;
-  }, [figure, selectionEnabled, metadata.selection_mode, refreshTick, uiScale]);
+  }, [figure, selectionEnabled, metadata.selection_mode, refreshTick, effectiveFontScale]);
 
   // "N of M points" indicator. Passive/informational — the full-load toggle
   // itself lives in the component chrome (see the onLoadAllState effect below),
