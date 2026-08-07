@@ -9,13 +9,32 @@ dependencies = [
   # Core dependencies
   "bcrypt==5.0.0",
   "bleach==6.4.0",
-  # No longer held at 2.0.0. beanie 2.1.0 calls list_collection_names(nameOnly=
-  # True, authorizedCollections=True) during init, which mongomock's Database
-  # rejects — that failed 81 tests and blocked this pin for two monthly bumps.
-  # mongomock 4.3.0 / mongomock-motor 0.0.36 are still the newest releases, so
-  # rather than keep waiting, the test suite now drops those two kwargs (both
-  # no-ops against a mock) in depictio/tests/conftest.py.
-  "beanie==2.1.0",
+  # Held at 2.0.0 — blocked on motor, not on the test suite. beanie 2.1.0's
+  # Initializer does:
+  #     elif database is not None and callable(database.client.append_metadata):
+  #         database.client.append_metadata(_DRIVER_METADATA)
+  # append_metadata only exists on pymongo's native AsyncMongoClient (>=4.14).
+  # motor has no such method, and its client returns a MotorDatabase for any
+  # unknown attribute (treating it as a database name). MotorDatabase defines
+  # __call__ purely to raise a friendly error, so `callable(...)` is True, the
+  # guard passes, and init_beanie dies with "MotorDatabase object is not
+  # callable" — the API never finishes startup. Verified on CI in PR #966:
+  # unit tests green, every docker/e2e job red.
+  #
+  # Note the unit suite CANNOT catch this: on mongomock-motor the same attribute
+  # resolves to a non-callable, so beanie skips the branch entirely. The mock is
+  # more permissive than the real driver in exactly the way that hides the bug.
+  #
+  # Unblocking this means migrating motor -> pymongo.AsyncMongoClient (motor is
+  # deprecated upstream), which touches lifespan.py, celery_app.py,
+  # mongodb_watcher.py, log_handler.py, cli/utils/api_calls.py and the test
+  # conftests. That is its own piece of work, not a dependency bump.
+  #
+  # Secondary blocker, still open once the above is done: beanie 2.1.0 also
+  # calls list_collection_names(nameOnly=True, authorizedCollections=True),
+  # which mongomock's Database rejects (81 test failures). mongomock 4.3.0 /
+  # mongomock-motor 0.0.36 remain the newest releases.
+  "beanie==2.0.0",
   # Capped at 1.43.0: s3fs 2026.4.0 -> aiobotocore caps botocore<1.43.1, so this
   # is the highest boto3 compatible with the pinned s3fs/aiobotocore chain.
   "boto3==1.43.0",
