@@ -65,7 +65,8 @@
       "title_size": "md",
       "custom_color": "#45B8AC",
       "icon_name": "mdi:flask",
-      "wf_tag": "nextflow/ampliseq"
+      "wf_tag": "nextflow/ampliseq",
+      "section": "Sample filters"
     },
     {
       "index": "multiqc-habitat-filter",
@@ -100,7 +101,8 @@
       "title_size": "md",
       "custom_color": "#984EA3",
       "icon_name": "mdi:earth",
-      "wf_tag": "nextflow/ampliseq"
+      "wf_tag": "nextflow/ampliseq",
+      "section": "Sample filters"
     },
     {
       "index": "multiqc-sampling-date",
@@ -135,7 +137,8 @@
       "title_size": "md",
       "custom_color": "#FF6B6B",
       "icon_name": "mdi:calendar-range",
-      "wf_tag": "nextflow/ampliseq"
+      "wf_tag": "nextflow/ampliseq",
+      "section": "Sample filters"
     },
     {
       "index": "8a810350-66a2-41cb-a441-66d3952566a2",
@@ -813,7 +816,7 @@
   "icon_color": "green",
   "icon_variant": "filled",
   "workflow_system": "nf-core",
-  "notes_content": "<h2>MultiQC notes</h2><p>This tab aggregates per-sample quality reports from the nf-core/ampliseq pipeline. The most informative panels are typically <b>FastQC per-base sequence quality</b>, <b>Cutadapt adapter content</b>, and <b>DADA2 read-tracking</b>.</p><p>Look for samples with elevated GC%, sudden quality drop-off in the last 50\u2013100 bp, or unusual adapter contamination \u2014 these often correlate with sequencing batch effects and may justify exclusion before alpha/beta diversity analysis.</p><p>Sample- and habitat-level filters at the top of the tab compose forward into the Community, Ordination and Differential tabs.</p>",
+  "notes_content": "<h2>MultiQC notes</h2><p>This tab aggregates per-sample quality reports from the nf-core/ampliseq pipeline. The most informative panels are typically <b>FastQC per-base sequence quality</b>, <b>Cutadapt adapter content</b>, and <b>DADA2 read-tracking</b>.</p><p>Look for samples with elevated GC%, sudden quality drop-off in the last 50–100 bp, or unusual adapter contamination — these often correlate with sequencing batch effects and may justify exclusion before alpha/beta diversity analysis.</p><p>Sample- and habitat-level filters at the top of the tab compose forward into the Community, Ordination and Differential tabs.</p>",
   "permissions": {
     "owners": [
       {
@@ -844,5 +847,15 @@
   "main_tab_name": "MultiQC",
   "tab_icon": "/assets/images/logos/multiqc.png",
   "tab_icon_color": "orange",
-  "parent_dashboard_title": null
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Sample filters",
+      "icon": "mdi:filter-variant",
+      "color": "teal",
+      "description": "Applies to every tab",
+      "collapsed": false,
+      "persistent": true
+    }
+  ]
 }

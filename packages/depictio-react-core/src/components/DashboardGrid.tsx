@@ -652,7 +652,7 @@ const SectionSummary: React.FC<{
   );
 };
 
-function normalizeLayout(
+export function normalizeLayout(
   metadataList: StoredMetadata[],
   layoutData: unknown,
   interactive: boolean,

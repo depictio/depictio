@@ -76,6 +76,7 @@ import {
   batchIdsFromPayload,
   authFetch,
   useMapPanel,
+  useCrossTabComponents,
   MapPanelControl,
   MapPanelDock,
   MapPanelSurface,
@@ -343,8 +344,10 @@ const EditorApp: React.FC = () => {
   // surprising here. Same-dashboard persistence within this browser tab is a
   // different matter — see editorFilters.ts, which keeps filters alive across
   // the builder round-trip.
+  const crossTab = useCrossTabComponents(dashboardId ?? '');
   const mapPanel = useMapPanel({
-    dashboardId: dashboardId ?? '',
+    components: crossTab.floating,
+    familyId: crossTab.familyId,
     filters,
     onFilterChange: handleFilterChange,
   });

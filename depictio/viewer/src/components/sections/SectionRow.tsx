@@ -43,6 +43,18 @@ const SectionRow: React.FC<SectionRowProps> = ({
               </Badge>
             </Tooltip>
           )}
+          {spec.persistent && (
+            <Tooltip
+              label="Shown on every tab of this dashboard; filter values set in it survive tab switches"
+              withArrow
+              multiline
+              w={260}
+            >
+              <Badge size="xs" variant="light">
+                every tab
+              </Badge>
+            </Tooltip>
+          )}
           {sharedName && (
             <Tooltip
               label="The other tab has a section with this name. They are separate — renaming one leaves the other alone."
