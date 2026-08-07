@@ -3,6 +3,7 @@ import { Responsive as ResponsiveGridLayout } from 'react-grid-layout';
 import { Accordion } from '@mantine/core';
 
 import type { InteractiveFilter, PersistentSection } from '../api';
+import { bulkComputeCards } from '../api';
 import { useCollapseState } from '../hooks/useCollapseState';
 import {
   applyAccordionValue,
@@ -41,8 +42,10 @@ const hostSectionKey = (s: PersistentSection) => `${s.owner_dashboard_id}:${s.sp
  * *owning* tab's id — the floating-map convention — so the per-component data
  * endpoints need no special casing.
  *
- * `card` members are skipped: card values arrive via a per-dashboard bulk
- * compute, which only covers the tab being viewed. Documented v1 limitation.
+ * Card members get their values from a bulk-compute of their own: the app's
+ * per-tab `bulkComputeCards` call only covers the tab being viewed, so the
+ * host fires one more per owning tab, scoped to the fanned-out card ids and
+ * fed the same (debounced) filters as everything else on screen.
  */
 const PersistentSectionsHost: React.FC<PersistentSectionsHostProps> = ({
   sections,
@@ -51,15 +54,10 @@ const PersistentSectionsHost: React.FC<PersistentSectionsHostProps> = ({
   onFilterChange,
   refreshTick,
 }) => {
-  // Members this host can actually render. A section left with none (e.g. it
-  // only held cards) is dropped entirely rather than opening onto nothing.
   const renderable = useMemo(
     () =>
       sections
-        .map((s) => ({
-          section: s,
-          members: s.components.filter((c) => c.metadata.component_type !== 'card'),
-        }))
+        .map((s) => ({ section: s, members: s.components }))
         .filter((s) => s.members.length > 0),
     [sections],
   );
@@ -90,6 +88,71 @@ const PersistentSectionsHost: React.FC<PersistentSectionsHostProps> = ({
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openKeys.join(' ')]);
+
+  // Values for the fanned-out cards. Keyed by component index, like the app's
+  // own bulk-compute state — indices are unique across a family, so one map
+  // can hold every owner's results.
+  const [cardValues, setCardValues] = useState<Record<string, unknown>>({});
+  const [cardSecondaryValues, setCardSecondaryValues] = useState<
+    Record<string, Record<string, unknown>>
+  >({});
+  const [cardsLoading, setCardsLoading] = useState(false);
+  const cardFetchId = useRef(0);
+
+  // Card ids per owning tab, restricted to sections whose grid is mounted —
+  // the same lazy rule the members below follow, so a folded section's cards
+  // cost nothing until it is opened.
+  const cardIdsByOwner = useMemo(() => {
+    const byOwner = new Map<string, string[]>();
+    for (const { section, members } of renderable) {
+      if (!renderedKeys.has(hostSectionKey(section))) continue;
+      for (const m of members) {
+        if (m.metadata.component_type !== 'card') continue;
+        const list = byOwner.get(m.dashboard_id) ?? [];
+        list.push(m.metadata.index);
+        byOwner.set(m.dashboard_id, list);
+      }
+    }
+    return byOwner;
+  }, [renderable, renderedKeys]);
+  const cardIdsKey = useMemo(
+    () =>
+      [...cardIdsByOwner.entries()]
+        .map(([owner, ids]) => `${owner}:${ids.join(',')}`)
+        .sort()
+        .join(' '),
+    [cardIdsByOwner],
+  );
+
+  useEffect(() => {
+    if (cardIdsByOwner.size === 0) return;
+    const fetchId = ++cardFetchId.current;
+    setCardsLoading(true);
+    Promise.all(
+      [...cardIdsByOwner.entries()].map(([owner, ids]) =>
+        bulkComputeCards(owner, filters, ids).catch((err) => {
+          console.warn('[PersistentSectionsHost] bulk-compute failed:', err);
+          return null;
+        }),
+      ),
+    )
+      .then((results) => {
+        if (fetchId !== cardFetchId.current) return; // a newer fetch superseded us
+        const values: Record<string, unknown> = {};
+        const secondary: Record<string, Record<string, unknown>> = {};
+        for (const res of results) {
+          if (!res) continue;
+          Object.assign(values, res.values);
+          Object.assign(secondary, res.secondary_values || {});
+        }
+        setCardValues(values);
+        setCardSecondaryValues(secondary);
+      })
+      .finally(() => {
+        if (fetchId === cardFetchId.current) setCardsLoading(false);
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cardIdsKey, JSON.stringify(filters), refreshTick]);
 
   // Measure our own wrapper; the accordion box chrome is accounted for with a
   // probe, mirroring DashboardGrid's `sectionInset`.
@@ -179,6 +242,9 @@ const PersistentSectionsHost: React.FC<PersistentSectionsHostProps> = ({
                               filters={filters}
                               onFilterChange={onFilterChange}
                               refreshTick={refreshTick}
+                              cardValue={cardValues[member.metadata.index]}
+                              cardSecondaryValues={cardSecondaryValues[member.metadata.index]}
+                              cardLoading={cardsLoading}
                             />
                           </div>
                         </div>

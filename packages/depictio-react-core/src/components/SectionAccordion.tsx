@@ -1,5 +1,6 @@
 import React from 'react';
-import { Accordion, Group, Text } from '@mantine/core';
+import { Accordion, Group, Text, Tooltip } from '@mantine/core';
+import { Icon } from '@iconify/react';
 
 import type { FilterSectionSpec } from '../api';
 import type { CollapseState } from '../hooks/useCollapseState';
@@ -102,6 +103,26 @@ export const SectionHeader: React.FC<{
             {name}
           </Text>
           {badge}
+          {/* Rendered here rather than by each caller so a persistent section
+              is marked the same in the grid, the filter panel and the
+              cross-tab host. A pin, not a text badge: the header is already
+              dense, and the tooltip carries the explanation. */}
+          {spec?.persistent && (
+            <Tooltip
+              label="Pinned to every tab of this dashboard; filter values set in it survive tab switches"
+              withArrow
+              multiline
+              w={260}
+            >
+              <Icon
+                icon="mdi:pin"
+                width={14}
+                height={14}
+                color="var(--mantine-color-dimmed)"
+                style={{ flexShrink: 0, transform: 'rotate(30deg)' }}
+              />
+            </Tooltip>
+          )}
         </Group>
         {spec?.description && (
           <Text size="sm" c="dimmed" truncate>
