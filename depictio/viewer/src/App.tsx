@@ -93,7 +93,6 @@ import {
   readRememberToggle,
   writeRememberToggle,
 } from './lib/filterStateStorage';
-import ShareFiltersButton from './chrome/ShareFiltersButton';
 import FilterPanelResizer, { FILTER_PANEL_RESIZER_WIDTH } from './components/FilterPanelResizer';
 import Inspector from './chrome/inspector/Inspector';
 import { useInspectorChrome } from './chrome/inspector/useInspectorChrome';
@@ -797,7 +796,6 @@ const App: React.FC = () => {
           }
           rightExtras={
             <>
-              <ShareFiltersButton filters={filters} activeCount={activeFilterCount} />
               <MapPanelControl panel={mapPanel} />
               {realtimeEnabled && (
                 <span data-tour-id="realtime-indicator" style={{ display: 'inline-flex' }}>
@@ -1146,6 +1144,8 @@ const App: React.FC = () => {
         opened={settingsOpened}
         onClose={closeSettings}
         dashboard={dashboard}
+        filters={filters}
+        activeFilterCount={activeFilterCount}
       />
     </AppShell>
       </InspectorProviders>
