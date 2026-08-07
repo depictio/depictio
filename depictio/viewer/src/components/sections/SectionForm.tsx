@@ -137,10 +137,10 @@ const SectionForm: React.FC<SectionFormProps> = ({ initial, taken, onSubmit, onC
         />
 
         <Group justify="flex-end" gap="sm">
-          <Button variant="default" size="xs" onClick={onCancel}>
+          <Button variant="default" onClick={onCancel}>
             Cancel
           </Button>
-          <Button size="xs" onClick={submit} disabled={!canSubmit}>
+          <Button onClick={submit} disabled={!canSubmit}>
             {initial ? 'Save section' : 'Add section'}
           </Button>
         </Group>

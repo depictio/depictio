@@ -14,6 +14,7 @@ import {
 import { Icon } from '@iconify/react';
 
 import { useAISession, useAIStore } from '../store';
+import { AI_ICON } from '../icons';
 
 interface Props {
   dashboardId: string;
@@ -52,7 +53,7 @@ const AIKeySection: React.FC<Props> = ({ dashboardId, modelOptions }) => {
     <Stack gap="xs">
       <Group justify="space-between" align="center">
         <Group gap={6} align="center">
-          <Icon icon="material-symbols:auto-awesome-outline" width={18} />
+          <Icon icon={AI_ICON} width={18} />
           <Text fw={600}>AI assistant</Text>
         </Group>
         {session.llmKey && (

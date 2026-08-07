@@ -23,7 +23,7 @@
 
 import { create } from 'zustand';
 
-import type { AnalysisResult, ExecutionStep } from './types';
+import type { AnalysisResult, AnalyzeMode, ExecutionStep } from './types';
 
 const STORAGE_KEY = 'depictio.ai.creds';
 
@@ -121,6 +121,10 @@ export interface AIChatMessage {
   steps?: ExecutionStep[];
   /** Filled in once the analyze stream produces a final result. */
   result?: AnalysisResult;
+  /** Which prompt level ran this exchange — set on both messages at send
+   *  time so the transcript can label an exchange before (and even
+   *  without) a final result. */
+  mode?: AnalyzeMode;
   ts: number;
 }
 
@@ -156,6 +160,8 @@ interface Actions {
     pending: boolean,
     abort?: AbortController | null,
   ) => void;
+  /** Drop specific messages (one exchange = its user + assistant ids). */
+  removeMessages: (dashboardId: string, messageIds: string[]) => void;
   reset: (dashboardId: string) => void;
 }
 
@@ -269,6 +275,22 @@ export const useAIStore = create<State & Actions>((set, get) => ({
             ...cur,
             pending,
             abort: pending ? abort : null,
+          },
+        },
+      };
+    }),
+
+  removeMessages: (dashboardId, messageIds) =>
+    set((s) => {
+      const cur = s.sessions[dashboardId];
+      if (!cur) return s;
+      const drop = new Set(messageIds);
+      return {
+        sessions: {
+          ...s.sessions,
+          [dashboardId]: {
+            ...cur,
+            messages: cur.messages.filter((m) => !drop.has(m.id)),
           },
         },
       };

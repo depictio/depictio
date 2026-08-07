@@ -7,7 +7,7 @@ import { Alert, Button, Center, Group, Paper, Stack, Text, Title } from '@mantin
 import { Icon } from '@iconify/react';
 import { notifications } from '@mantine/notifications';
 import { fetchSpecs, upsertComponent } from 'depictio-react-core';
-import { AiFillModal, useAIHealth } from 'depictio-react-ai';
+import { AI_ICON, AiFillModal, useAIHealth } from 'depictio-react-ai';
 import { useServerStatus } from '../../hooks/useServerStatus';
 import { useBuilderStore } from '../store/useBuilderStore';
 import type { ColumnSpec } from '../store/useBuilderStore';
@@ -166,7 +166,7 @@ const StepDesign: React.FC = () => {
               size="xs"
               variant="light"
               color="violet"
-              leftSection={<Icon icon="mdi:auto-fix" width={14} />}
+              leftSection={<Icon icon={AI_ICON} width={14} />}
               onClick={() => setAiFillOpened(true)}
               data-testid="ai-fill-open"
             >

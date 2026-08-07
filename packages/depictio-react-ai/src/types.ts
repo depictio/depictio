@@ -112,6 +112,9 @@ export interface ResolvedFilter {
   filter_expr?: string | null;
   dc_id?: string | null;
   description: string;
+  /** Human handle for set_widget targets (the widget's column) — show this,
+   *  keep `component_id` for tooltips. */
+  label?: string | null;
 }
 
 export interface DashboardActions {

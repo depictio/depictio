@@ -56,8 +56,16 @@ const MultiSelectRenderer: React.FC<{
     };
   }, [metadata.dc_id, metadata.column_name, metadata.filter_expr]);
 
-  const selected =
-    (filters.find((f) => f.index === metadata.index)?.value as string[]) || [];
+  // Coerce rather than cast: programmatic writers (AI set_widget plans,
+  // hand-edited dashboards) can carry a scalar here, and handing Mantine's
+  // MultiSelect a bare string crashes the whole page render (`.map` on a
+  // non-array).
+  const rawSelected = filters.find((f) => f.index === metadata.index)?.value;
+  const selected = Array.isArray(rawSelected)
+    ? rawSelected.map(String)
+    : rawSelected == null
+      ? []
+      : [String(rawSelected)];
 
   // Grey out values that the filter's source DC declares but that aren't
   // present in the dashboard's joined data — see `availableValues.tsx`.

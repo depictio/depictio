@@ -308,6 +308,8 @@ export {
   clearFiltersBySource,
   hasSelectionFilters,
   enrichFilterWithDcId,
+  applyAIPlanToFilters,
+  revertAIPlanFilters,
 } from './selection';
 
 // Map panel: a map lifted out of the grid, available from every tab as a

@@ -120,7 +120,6 @@ const SectionList: React.FC<SectionListProps> = ({ kind, dashboard, onOp }) => {
         <Group>
           <Button
             variant="light"
-            size="xs"
             leftSection={<Icon icon="mdi:plus" width={14} />}
             onClick={() => setEditing('')}
           >
@@ -163,12 +162,11 @@ const SectionList: React.FC<SectionListProps> = ({ kind, dashboard, onOp }) => {
             />
           )}
           <Group justify="flex-end" gap="sm">
-            <Button variant="default" size="xs" onClick={() => setDeleting(null)}>
+            <Button variant="default" onClick={() => setDeleting(null)}>
               Cancel
             </Button>
             <Button
               color="red"
-              size="xs"
               disabled={deleteMode === 'move' && !deleteTarget}
               onClick={confirmDelete}
             >

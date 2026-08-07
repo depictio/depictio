@@ -81,7 +81,7 @@ export const authBuilderWalkthrough: WalkthroughDefinition = {
       target: 'editor-add-component',
       route: /^\/dashboard-edit\//,
       title: 'Add your first component',
-      body: 'A dashboard is built from components. Click "Add component" to open the builder.',
+      body: 'A dashboard is built from components. Click "Add", then Component → Manually to open the builder.',
       position: 'bottom',
       awaitClick: true,
     },

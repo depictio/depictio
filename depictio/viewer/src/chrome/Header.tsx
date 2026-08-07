@@ -1,6 +1,7 @@
 import React from 'react';
 import { ActionIcon, Badge, Box, Button, Group, Loader, Menu, Title, Tooltip, useMantineColorScheme } from '@mantine/core';
 import { Icon } from '@iconify/react';
+import { AI_ICON } from 'depictio-react-ai';
 
 import type { DashboardData, DashboardSummary } from 'depictio-react-core';
 import PoweredBy from './PoweredBy';
@@ -57,8 +58,9 @@ interface HeaderProps {
   /** Edit-mode only: when set, "Add component" becomes a split menu with a
    *  "With AI…" entry invoking this. Omitted ⇒ plain button (AI off). */
   onAddWithAI?: () => void;
-  /** Edit-mode only: opens the Sections manager. */
-  onOpenSections?: () => void;
+  /** Edit-mode only: opens the add-section dialog ("Add" menu is add-only —
+   *  editing sections happens from the "…" on each section header). */
+  onAddSection?: () => void;
   /** Edit-mode only: invoked when the user clicks "Save". Should force-flush any pending debounced save. */
   onSave?: () => void;
   /** True when the current user owns this dashboard. When false, the
@@ -102,7 +104,7 @@ const Header: React.FC<HeaderProps> = ({
   mode = 'view',
   onAddComponent,
   onAddWithAI,
-  onOpenSections,
+  onAddSection,
   onSave,
   isOwner = true,
   rightExtras,
@@ -251,7 +253,7 @@ const Header: React.FC<HeaderProps> = ({
       {/* Right region — colors mirror depictio/dash/layouts/header.py */}
       <Group gap={8} wrap="nowrap" style={{ flexShrink: 0 }}>
         <PoweredBy withRightBorder />
-        {mode === 'edit' && onAddComponent && !onAddWithAI && (
+        {mode === 'edit' && onAddComponent && !onAddWithAI && !onAddSection && (
           <Tooltip
             label="You can only edit dashboards you own. Duplicate this one to get your own copy."
             disabled={isOwner}
@@ -270,7 +272,7 @@ const Header: React.FC<HeaderProps> = ({
             </Button>
           </Tooltip>
         )}
-        {mode === 'edit' && onAddComponent && onAddWithAI && (
+        {mode === 'edit' && onAddComponent && (onAddWithAI || onAddSection) && (
           <Tooltip
             label="You can only edit dashboards you own. Duplicate this one to get your own copy."
             disabled={isOwner}
@@ -287,44 +289,66 @@ const Header: React.FC<HeaderProps> = ({
                   disabled={!dashboardId || !isOwner}
                   data-tour-id="editor-add-component"
                 >
-                  Add component
+                  Add
                 </Button>
               </Menu.Target>
               <Menu.Dropdown>
-                <Menu.Item
-                  leftSection={<Icon icon="mdi:pencil-outline" width={14} />}
-                  onClick={onAddComponent}
-                >
-                  Manually
-                </Menu.Item>
-                <Menu.Item
-                  leftSection={<Icon icon="mdi:auto-fix" width={14} />}
-                  onClick={onAddWithAI}
-                  data-testid="add-with-ai"
-                >
-                  With AI…
-                </Menu.Item>
+                {onAddWithAI ? (
+                  /* Mantine 7 has no public Menu.Sub — a nested hover Menu
+                     anchored on a Menu.Item is the supported way to get a
+                     second level ("Component ▸ Manually / With AI…"). */
+                  <Menu
+                    trigger="click-hover"
+                    position="right-start"
+                    offset={4}
+                    shadow="md"
+                    withinPortal
+                  >
+                    <Menu.Target>
+                      <Menu.Item
+                        closeMenuOnClick={false}
+                        leftSection={<Icon icon="mdi:view-grid-plus-outline" width={14} />}
+                        rightSection={<Icon icon="mdi:chevron-right" width={14} />}
+                        data-testid="add-component-submenu"
+                      >
+                        Component
+                      </Menu.Item>
+                    </Menu.Target>
+                    <Menu.Dropdown>
+                      <Menu.Item
+                        leftSection={<Icon icon="mdi:pencil-outline" width={14} />}
+                        onClick={onAddComponent}
+                      >
+                        Manually
+                      </Menu.Item>
+                      <Menu.Item
+                        leftSection={<Icon icon={AI_ICON} width={14} />}
+                        onClick={onAddWithAI}
+                        data-testid="add-with-ai"
+                      >
+                        With AI…
+                      </Menu.Item>
+                    </Menu.Dropdown>
+                  </Menu>
+                ) : (
+                  <Menu.Item
+                    leftSection={<Icon icon="mdi:view-grid-plus-outline" width={14} />}
+                    onClick={onAddComponent}
+                  >
+                    Component
+                  </Menu.Item>
+                )}
+                {onAddSection && (
+                  <Menu.Item
+                    leftSection={<Icon icon="mdi:format-list-group" width={14} />}
+                    onClick={onAddSection}
+                    data-testid="add-section"
+                  >
+                    Section
+                  </Menu.Item>
+                )}
               </Menu.Dropdown>
             </Menu>
-          </Tooltip>
-        )}
-        {mode === 'edit' && onOpenSections && (
-          <Tooltip
-            label="You can only edit dashboards you own. Duplicate this one to get your own copy."
-            disabled={isOwner}
-            withArrow
-          >
-            <Button
-              leftSection={<Icon icon="mdi:format-list-group" width={14} />}
-              color="grape"
-              variant="filled"
-              size="xs"
-              onClick={onOpenSections}
-              disabled={!dashboardId || !isOwner}
-              data-tour-id="editor-sections"
-            >
-              Sections
-            </Button>
           </Tooltip>
         )}
         {mode === 'edit' && onSave && (

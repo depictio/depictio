@@ -45,10 +45,13 @@ import {
   FILTER_PANEL_RAIL_WIDTH,
   countActiveFilters,
   clearFiltersBySource,
+  applyAIPlanToFilters,
+  revertAIPlanFilters,
   renderFigure,
   renderTable,
 } from 'depictio-react-core';
 import {
+  AI_ICON,
   AIAnalyzePanel,
   AIKeySection,
   SectionSummaryPanel,
@@ -350,6 +353,11 @@ const App: React.FC = () => {
     Record<string, Record<string, unknown>>
   >({});
 
+  // Widget index → the entry it had before the currently-applied AI plan
+  // touched it (null = it was unset). What lets the next apply (or the
+  // chip clear) restore ground state instead of stacking plans.
+  const aiTouchedWidgetsRef = useRef<Map<string, InteractiveFilter | null> | null>(null);
+
   const handleApplyAIActions = useCallback(
     ({ actions, resolved }: ApplyActionsPayload) => {
       const exprFilters: InteractiveFilter[] = [];
@@ -395,10 +403,17 @@ const App: React.FC = () => {
       });
 
       setFilters((prev) => {
-        // A new AI plan replaces the previous one's injected filters.
-        let next = clearFiltersBySource(prev, 'ai_prompt');
-        for (const update of widgetUpdates) next = mergeFiltersBySource(next, update);
-        return [...next, ...exprFilters];
+        // A new AI plan replaces the previous one wholesale: its expression
+        // filters are dropped AND every widget it moved is restored to its
+        // pre-plan value before this plan's updates land.
+        const { next, touched } = applyAIPlanToFilters(
+          prev,
+          widgetUpdates,
+          exprFilters,
+          aiTouchedWidgetsRef.current,
+        );
+        aiTouchedWidgetsRef.current = touched;
+        return next;
       });
       setAiFilterDescriptions(descriptions);
 
@@ -440,7 +455,11 @@ const App: React.FC = () => {
     [filters],
   );
   const handleClearAIFilters = useCallback(() => {
-    setFilters((prev) => clearFiltersBySource(prev, 'ai_prompt'));
+    setFilters((prev) => {
+      const next = revertAIPlanFilters(prev, aiTouchedWidgetsRef.current);
+      aiTouchedWidgetsRef.current = null;
+      return next;
+    });
     setAiFilterDescriptions([]);
   }, []);
   const aiFigureOverrideCount = Object.keys(aiFigureOverrides).length;
@@ -1169,9 +1188,7 @@ const App: React.FC = () => {
                         size="compact-xs"
                         variant="subtle"
                         color="violet"
-                        leftSection={
-                          <Icon icon="material-symbols:auto-awesome-outline" width={12} />
-                        }
+                        leftSection={<Icon icon={AI_ICON} width={12} />}
                         loading={aiSummarizingAll}
                         onClick={() => void handleSummarizeAll()}
                         title="Generate AI summaries for every section (cached sections are reused)"

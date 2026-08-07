@@ -52,6 +52,11 @@ const MAX_LABEL_CHARS = 28;
  * or date arrays read as a range, which covers RangeSlider and DateRangePicker.
  */
 export function formatFilterValue(filter: InteractiveFilter): string {
+  // Expression-only filters (AI-injected) carry a sentinel `value: true`
+  // and the actual narrowing lives in `filter_expr` — show that, not "on".
+  const expr = filter.filter_expr || filter.metadata?.filter_expr;
+  if (expr && !filter.column_name) return truncate(expr);
+
   const v = filter.value;
   if (v == null) return '';
 
@@ -105,6 +110,6 @@ export function filterDisplayLabel(
     filter.column_name ||
     meta?.column_name ||
     filter.metadata?.selection_column ||
-    'Filter'
+    (filter.source === 'ai_prompt' ? 'AI filter' : 'Filter')
   );
 }

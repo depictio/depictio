@@ -6,7 +6,7 @@
  * Step labels, descriptions, stepper props, and the "Component Ready!"
  * completion page are taken verbatim from depictio/dash/layouts/stepper.py.
  */
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
   AppShell,
   Button,
@@ -75,12 +75,20 @@ const CreateComponentPage: React.FC<CreateComponentPageProps> = ({
   const dcId = useBuilderStore((s) => s.dcId);
   const componentType = useBuilderStore((s) => s.componentType);
 
+  // The stash is cleared on first read, but under React.StrictMode this
+  // effect runs twice (mount → cleanup+reset → remount): the second pass
+  // would find sessionStorage empty and dump the user on the bare type
+  // grid. Keep the popped value in a ref so every re-run of the effect
+  // can re-hydrate from it.
+  const pendingRef = useRef<AIPendingFill | null>(null);
+
   useEffect(() => {
     init({ mode: 'create', dashboardId, componentId: newComponentId });
     // AI hand-off: hydrate AFTER init() so the reset doesn't clobber the
     // pre-fill. Lands the user directly on the Design step with the live
     // preview rendering the AI-authored component.
-    const pending = popAIPendingFill(newComponentId);
+    const pending = popAIPendingFill(newComponentId) ?? pendingRef.current;
+    pendingRef.current = pending;
     if (pending && pending.wfId) {
       initFromPrompt({
         componentType: pending.componentType,

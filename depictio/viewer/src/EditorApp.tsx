@@ -28,6 +28,7 @@ import React, {
   useMemo,
 } from 'react';
 import {
+  ActionIcon,
   AppShell,
   Button,
   Center,
@@ -39,6 +40,7 @@ import {
   Paper,
   Stack,
   Title,
+  Tooltip,
 } from '@mantine/core';
 import { useDisclosure, useMediaQuery } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
@@ -82,9 +84,12 @@ import {
   FILTER_PANEL_RAIL_WIDTH,
   countActiveFilters,
   clearFiltersBySource,
+  applyAIPlanToFilters,
+  revertAIPlanFilters,
   fetchProjectFromDashboard,
 } from 'depictio-react-core';
 import { AddWithAIModal, AIAnalyzePanel, AIKeySection, useAIHealth } from 'depictio-react-ai';
+import AISuggestionPreview from './components/ai/AISuggestionPreview';
 import type {
   ApplyActionsPayload,
   AvailableDataCollection,
@@ -104,6 +109,7 @@ import type {
 } from 'depictio-react-core';
 
 import GridItemEditOverlay from './components/GridItemEditOverlay';
+import AddSectionModal from './components/sections/AddSectionModal';
 import SectionsModal from './components/sections/SectionsModal';
 import { applySectionOp, groupWith, sectionsFor } from './components/sections/sectionMutations';
 import type { SectionOp } from './components/sections/sectionMutations';
@@ -185,6 +191,7 @@ const EditorApp: React.FC = () => {
   const [desktopOpened, toggleDesktop] = useSidebarOpen();
   const [settingsOpened, { open: openSettings, close: closeSettings }] = useDisclosure(false);
   const [sectionsOpened, { open: openSections, close: closeSections }] = useDisclosure(false);
+  const [addSectionOpened, { open: openAddSection, close: closeAddSection }] = useDisclosure(false);
   const { user: currentUser, loading: userLoading, inspectorEnabled } = useCurrentUser();
   // `control` is null while the flag is off, so no provider value reaches the
   // component chrome and no inspect action is rendered anywhere.
@@ -738,6 +745,11 @@ const EditorApp: React.FC = () => {
     Record<string, Record<string, unknown>>
   >({});
 
+  // Widget index → the entry it had before the currently-applied AI plan
+  // touched it (null = it was unset). What lets the next apply (or the
+  // chip clear) restore ground state instead of stacking plans.
+  const aiTouchedWidgetsRef = useRef<Map<string, InteractiveFilter | null> | null>(null);
+
   const handleApplyAIActions = useCallback(
     ({ actions, resolved }: ApplyActionsPayload) => {
       const exprFilters: InteractiveFilter[] = [];
@@ -781,9 +793,17 @@ const EditorApp: React.FC = () => {
       });
 
       setFilters((prev) => {
-        let next = clearFiltersBySource(prev, 'ai_prompt');
-        for (const update of widgetUpdates) next = mergeFiltersBySource(next, update);
-        return [...next, ...exprFilters];
+        // A new AI plan replaces the previous one wholesale: its expression
+        // filters are dropped AND every widget it moved is restored to its
+        // pre-plan value before this plan's updates land.
+        const { next, touched } = applyAIPlanToFilters(
+          prev,
+          widgetUpdates,
+          exprFilters,
+          aiTouchedWidgetsRef.current,
+        );
+        aiTouchedWidgetsRef.current = touched;
+        return next;
       });
       setAiFilterDescriptions(descriptions);
 
@@ -824,7 +844,11 @@ const EditorApp: React.FC = () => {
     [filters],
   );
   const handleClearAIFilters = useCallback(() => {
-    setFilters((prev) => clearFiltersBySource(prev, 'ai_prompt'));
+    setFilters((prev) => {
+      const next = revertAIPlanFilters(prev, aiTouchedWidgetsRef.current);
+      aiTouchedWidgetsRef.current = null;
+      return next;
+    });
     setAiFilterDescriptions([]);
   }, []);
   const aiFigureOverrideCount = Object.keys(aiFigureOverrides).length;
@@ -1207,12 +1231,11 @@ const EditorApp: React.FC = () => {
     [tabSiblings, allDashboards, refreshTabList],
   );
 
-  /** Closing the manager flushes the debounce: the next thing a user does after
-   *  reorganising sections is often "Edit" or "Add component", both of which
-   *  navigate away with `window.location.assign` and would drop a pending
-   *  save. */
-  const handleCloseSections = useCallback(() => {
-    closeSections();
+  /** Closing a sections dialog flushes the debounce: the next thing a user
+   *  does after touching sections is often "Edit" or "Add component", both of
+   *  which navigate away with `window.location.assign` and would drop a
+   *  pending save. */
+  const flushSectionSave = useCallback(() => {
     if (!dashboardId) return;
     const cur = dashboardRef.current;
     if (!cur) return;
@@ -1227,7 +1250,17 @@ const EditorApp: React.FC = () => {
         console.error('[EditorApp] section save failed:', err);
         setSaveStatus('error');
       });
-  }, [closeSections, dashboardId]);
+  }, [dashboardId]);
+
+  const handleCloseSections = useCallback(() => {
+    closeSections();
+    flushSectionSave();
+  }, [closeSections, flushSectionSave]);
+
+  const handleCloseAddSection = useCallback(() => {
+    closeAddSection();
+    flushSectionSave();
+  }, [closeAddSection, flushSectionSave]);
 
   /** Force-save: cancel any pending debounce and POST current state now.
    *  Mirrors depictio/dash/layouts/save.py:save_dashboard_minimal — uses
@@ -1310,7 +1343,7 @@ const EditorApp: React.FC = () => {
           mode="edit"
           onAddComponent={handleAddComponent}
           onAddWithAI={aiEnabled ? handleAddWithAI : undefined}
-          onOpenSections={openSections}
+          onAddSection={openAddSection}
           onSave={handleForceSave}
           isOwner={isOwner}
           rightExtras={
@@ -1523,6 +1556,7 @@ const EditorApp: React.FC = () => {
                 onAddComponent={handleAddComponent}
                 activeHighlight={activeHighlight}
                 onMoveToSection={handleMoveToSection}
+                onEditSections={openSections}
                 figureOverrides={aiFigureOverrideCount > 0 ? aiFigureOverrides : undefined}
               />
             </Box>
@@ -1616,6 +1650,9 @@ const EditorApp: React.FC = () => {
           availableDataCollections={aiDataCollections}
           onApply={handleAIComponentReady}
           serverKeyAvailable={aiServerKeyAvailable}
+          renderSuggestionPreview={(s, dc) => (
+            <AISuggestionPreview suggestion={s} dc={dc} />
+          )}
         />
       )}
 
@@ -1631,6 +1668,13 @@ const EditorApp: React.FC = () => {
       <SectionsModal
         opened={sectionsOpened}
         onClose={handleCloseSections}
+        dashboard={dashboard}
+        onOp={handleSectionOp}
+      />
+
+      <AddSectionModal
+        opened={addSectionOpened}
+        onClose={handleCloseAddSection}
         dashboard={dashboard}
         onOp={handleSectionOp}
       />
@@ -1665,6 +1709,9 @@ interface RightComponentGridProps {
   /** Fired by each cell's "Move to section" action. The names on offer are
    *  derived from `gridSections`, which this component already receives. */
   onMoveToSection: (componentId: string, section: string | null) => void;
+  /** Opens the Sections manager — surfaces a "…" action on each section
+   *  header so a section can be edited from where it is seen. */
+  onEditSections?: () => void;
   /** Transient AI figure mutations (component index → dict_kwargs patch). */
   figureOverrides?: Record<string, Record<string, unknown>>;
 }
@@ -1694,11 +1741,41 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
   onAddComponent,
   activeHighlight,
   onMoveToSection,
+  onEditSections,
   figureOverrides,
 }) => {
   const allComponents = useMemo(
     () => [...cardComponents, ...otherComponents],
     [cardComponents, otherComponents],
+  );
+
+  // Same slot the viewer uses for the AI summarize sparkle: `trailing` sits in
+  // the accordion header, so the click must not toggle the fold. Named
+  // sections only — the unsectioned grid has no header to host it.
+  const renderSectionExtras = useCallback(
+    (sectionName: string | null) => {
+      if (!onEditSections || sectionName === null) return null;
+      return {
+        trailing: (
+          <Tooltip label="Edit sections" withArrow>
+            <ActionIcon
+              size="sm"
+              variant="subtle"
+              color="gray"
+              aria-label="Edit sections"
+              data-testid="section-edit-actions"
+              onClick={(e) => {
+                e.stopPropagation();
+                onEditSections();
+              }}
+            >
+              <Icon icon="tabler:dots-vertical" width={16} />
+            </ActionIcon>
+          </Tooltip>
+        ),
+      };
+    },
+    [onEditSections],
   );
 
   if (allComponents.length === 0) {
@@ -1754,6 +1831,7 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
       isResizable={true}
       editMode={true}
       figureOverrides={figureOverrides}
+      renderSectionExtras={onEditSections ? renderSectionExtras : undefined}
       onLayoutChange={onLayoutChange}
       renderItemOverlay={(componentId, metadata) => (
         <GridItemEditOverlay

@@ -231,3 +231,53 @@ export function enrichFilterWithDcId(
     },
   };
 }
+
+/**
+ * Apply an AI plan (widget updates + expression filters) on top of the
+ * current filter list, first undoing whatever the PREVIOUS plan did.
+ *
+ * AI `set_widget` updates merge as regular widget entries (no `source`),
+ * so replacing a plan cannot rely on `clearFiltersBySource` alone: a
+ * widget the old plan set and the new plan ignores would silently keep
+ * the old value. The `previouslyTouched` map (widget index → the entry it
+ * had before the old plan, or null if it had none) is what lets the new
+ * apply restore that ground state before layering its own updates.
+ *
+ * Returns the next filter list plus the `touched` map to remember for the
+ * plan being applied now.
+ */
+export function applyAIPlanToFilters(
+  prev: InteractiveFilter[],
+  widgetUpdates: InteractiveFilter[],
+  exprFilters: InteractiveFilter[],
+  previouslyTouched: Map<string, InteractiveFilter | null> | null,
+): { next: InteractiveFilter[]; touched: Map<string, InteractiveFilter | null> } {
+  let next = revertAIPlanFilters(prev, previouslyTouched);
+
+  // Snapshot the pre-plan state of every widget this plan touches — after
+  // the revert, so a widget touched by both plans snapshots its true
+  // (user-set or empty) baseline rather than the old plan's value.
+  const touched = new Map<string, InteractiveFilter | null>();
+  for (const update of widgetUpdates) {
+    const existing = next.find((f) => f.index === update.index && f.source === undefined);
+    touched.set(update.index, existing ? { ...existing } : null);
+  }
+
+  for (const update of widgetUpdates) next = mergeFiltersBySource(next, update);
+  return { next: [...next, ...exprFilters], touched };
+}
+
+/** Undo an applied AI plan: drop its expression filters and restore every
+ *  widget it touched to its remembered pre-plan entry. */
+export function revertAIPlanFilters(
+  prev: InteractiveFilter[],
+  touched: Map<string, InteractiveFilter | null> | null,
+): InteractiveFilter[] {
+  let next = clearFiltersBySource(prev, 'ai_prompt');
+  if (touched) {
+    for (const [index, before] of touched) {
+      next = mergeFiltersBySource(next, before ?? { index, value: null });
+    }
+  }
+  return next;
+}

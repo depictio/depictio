@@ -1,6 +1,7 @@
 import hashlib
 import json
 import os
+import re
 import sys
 import threading
 import warnings
@@ -397,6 +398,20 @@ def process_metadata_and_filter(
             )
 
         if filter_expr:
+            # Expression filters fan out to every component render, whatever
+            # DC it reads (e.g. the AI panel's global `col('x') >= n`). When
+            # the schema is known, drop expressions referencing columns this
+            # DC does not have — otherwise the filter builds fine here and
+            # only explodes at collect time, taking the whole render with it.
+            if schema is not None:
+                referenced = set(re.findall(r"col\(\s*['\"]([^'\"]+)['\"]\s*\)", filter_expr))
+                missing = referenced - set(schema.keys())
+                if missing:
+                    logger.debug(
+                        f"Skipping filter_expr {filter_expr!r}: column(s) "
+                        f"{sorted(missing)} not in this DC's schema"
+                    )
+                    continue
             try:
                 from depictio.models.components.filter_expr import build_filter_expr
 

@@ -1757,26 +1757,32 @@ def _resolve_link_filters_cached(
 def _build_filter_metadata(filters: list[dict]) -> list[dict]:
     """Convert React filter payloads into the shape ``load_deltatable_lite`` expects.
 
-    Skips entries that are missing a ``column_name`` or whose value is empty;
-    those wouldn't survive ``process_metadata_and_filter`` anyway.
+    Skips widget entries that are missing a ``column_name`` or whose value is
+    empty; those wouldn't survive ``process_metadata_and_filter`` anyway.
 
     Carries ``filter_expr`` through (top-level or under ``metadata``) so the
     server-side pipeline can AND the source's row-scoping expression alongside
-    the user-supplied value.
+    the user-supplied value. Expression-only entries (the AI panel's
+    ``source: 'ai_prompt'`` filters) have no widget column/value at all — they
+    must survive on the strength of their ``filter_expr`` alone, and
+    ``process_metadata_and_filter`` handles exactly that shape.
     """
     out: list[dict] = []
     for f in filters:
         meta = f.get("metadata") or {}
         column_name = f.get("column_name") or meta.get("column_name")
-        if not column_name or f.get("value") in (None, [], ""):
-            continue
-        entry: dict = {
-            "interactive_component_type": f.get("interactive_component_type")
-            or meta.get("interactive_component_type"),
-            "column_name": column_name,
-            "value": f.get("value"),
-        }
         filter_expr = f.get("filter_expr") or meta.get("filter_expr")
+        has_widget_value = bool(column_name) and f.get("value") not in (None, [], "")
+        if not has_widget_value and not filter_expr:
+            continue
+        entry: dict = {}
+        if has_widget_value:
+            entry = {
+                "interactive_component_type": f.get("interactive_component_type")
+                or meta.get("interactive_component_type"),
+                "column_name": column_name,
+                "value": f.get("value"),
+            }
         if filter_expr:
             entry["filter_expr"] = filter_expr
         out.append(entry)
