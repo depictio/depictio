@@ -9,19 +9,19 @@ dependencies = [
   # Core dependencies
   "bcrypt==5.0.0",
   "bleach==6.4.0",
-  # Held at 2.0.0: beanie 2.1.0 calls list_collection_names(authorizedCollections=
-  # True) during init, which the latest mongomock (4.3.0) test double doesn't
-  # accept, breaking the unit suite. Bump once mongomock supports the kwarg.
-  # Re-checked 2026-08 (dependabot runtime group): still blocked — mongomock
-  # 4.3.0 / mongomock-motor 0.0.36 are still the newest releases on PyPI, and
-  # beanie 2.1.0 fails 81 tests, all on the same TypeError.
-  "beanie==2.0.0",
+  # No longer held at 2.0.0. beanie 2.1.0 calls list_collection_names(nameOnly=
+  # True, authorizedCollections=True) during init, which mongomock's Database
+  # rejects — that failed 81 tests and blocked this pin for two monthly bumps.
+  # mongomock 4.3.0 / mongomock-motor 0.0.36 are still the newest releases, so
+  # rather than keep waiting, the test suite now drops those two kwargs (both
+  # no-ops against a mock) in depictio/tests/conftest.py.
+  "beanie==2.1.0",
   # Capped at 1.43.0: s3fs 2026.4.0 -> aiobotocore caps botocore<1.43.1, so this
   # is the highest boto3 compatible with the pinned s3fs/aiobotocore chain.
   "boto3==1.43.0",
   "celery==5.6.3",
   "cloudpickle==3.1.2",
-  "cryptography==49.0.0",
+  "cryptography==50.0.0",
   "colorlog==6.12.0",
   # Visualization
   "plotly-express==0.4.1",
@@ -35,15 +35,15 @@ dependencies = [
   "pandas==3.0.5",
   # polars-lts-cpu is legacy; the modern LTS/older-CPU build is polars[rtcompat]
   # (-> polars-runtime-compat). rtcompat also matches multiqc 1.35's requirement.
-  "polars[rtcompat,numpy,pandas,pyarrow,excel,deltalake]==1.42.1",
+  "polars[rtcompat,numpy,pandas,pyarrow,excel,deltalake]==1.43.2",
   # API and web
   "devtools==0.12.2",
   "diskcache==5.6.3",
   "fastapi==0.141.1",
   "gunicorn==26.0.0",
   "httpx==0.28.1",
-  "uvicorn==0.52.0",
-  "websockets==17.0",
+  "uvicorn==0.52.1",
+  "websockets==17.0.1",
   # Database
   "motor==3.7.1",
   "pymongo==4.17.0",
@@ -55,7 +55,7 @@ dependencies = [
   "python-multipart==0.0.32",
   "restrictedpython==8.4",
   # Playwright for screenshots (pure Python - installs its own browsers)
-  "playwright==1.61.0",
+  "playwright==1.62.0",
   # Utilities
   "multiqc==1.35",
   "mypy-boto3-s3==1.43.50",
@@ -66,9 +66,9 @@ dependencies = [
   # event listener (connection_manager) — it starves the API event loop, so
   # internal HTTP self-calls time out and reference-dataset ingestion never
   # writes deltatables. Bisecting via CI; bump again once that's resolved.
-  # Left pinned in the 2026-08 runtime bump: the unit suite does not cover this
-  # regression (it's runtime pub/sub behaviour), so a green `pytest` run is not
-  # evidence that redis 8 is safe — verifying it needs the e2e/docker jobs.
+  # Still pinned as of the 2026-08 runtime bumps: the unit suite does not cover
+  # this regression (it's runtime pub/sub behaviour), so a green `pytest` run is
+  # not evidence that redis 8 is safe — verifying it needs the e2e/docker jobs.
   "redis==5.2.1",
   "tomli==2.4.1",
   "types-requests==2.33.0.20260712",

@@ -29,3 +29,32 @@ _PYTEST_DEFAULTS = {
 
 for _k, _v in _PYTEST_DEFAULTS.items():
     os.environ.setdefault(_k, _v)
+
+
+# beanie >= 2.1.0 calls
+#   database.list_collection_names(nameOnly=True, authorizedCollections=True)
+# during init_beanie. mongomock-motor forwards **kwargs straight through to
+# mongomock's synchronous Database, which accepts neither argument, so every
+# test that inits beanie against the mock dies with a TypeError.
+#
+# Both arguments are no-ops against a mock: authorizedCollections filters the
+# result by the connection's privileges (there is no auth here) and nameOnly is
+# a server-side projection hint. beanie only wants the collection names, which
+# is what the mock returns either way — so dropping them is safe and keeps the
+# real driver untouched.
+#
+# Remove this once mongomock accepts the kwargs; until then it is what lets the
+# beanie pin move at all. See mongomock-motor's with_async_methods() wrapper.
+from mongomock_motor import AsyncMongoMockDatabase  # noqa: E402
+
+_list_collection_names = AsyncMongoMockDatabase.list_collection_names
+_UNSUPPORTED_LIST_COLLECTION_KWARGS = ("authorizedCollections", "nameOnly")
+
+
+async def _list_collection_names_compat(self, *args, **kwargs):
+    for _kwarg in _UNSUPPORTED_LIST_COLLECTION_KWARGS:
+        kwargs.pop(_kwarg, None)
+    return await _list_collection_names(self, *args, **kwargs)
+
+
+AsyncMongoMockDatabase.list_collection_names = _list_collection_names_compat
