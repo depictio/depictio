@@ -64,6 +64,7 @@ def merge_dashboard_plot_theme(plot_theme: dict | None, dict_kwargs: dict) -> di
         merged["template"] = template
     return merged
 
+
 # Scatter-family plots — one marker per row, and the only types we force to WebGL.
 _POINT_PLOT_TYPES = frozenset(
     {"scatter", "scatter_3d", "scatter_ternary", "scatter_polar", "strip"}
