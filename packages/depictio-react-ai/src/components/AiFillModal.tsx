@@ -30,6 +30,7 @@ import { Icon } from '@iconify/react';
 
 import { useComponentFromPrompt } from '../hooks';
 import { useAISession } from '../store';
+import { AI_ICON } from '../icons';
 import type {
   ComponentFromPromptResponse,
   ComponentType,
@@ -105,7 +106,7 @@ const AiFillModal: React.FC<Props> = ({
       title={
         <Group gap="xs">
           <Icon
-            icon="material-symbols:auto-awesome-outline"
+            icon={AI_ICON}
             width={18}
             color="var(--mantine-color-violet-6)"
           />
@@ -204,7 +205,7 @@ const AiFillModal: React.FC<Props> = ({
             <Button
               variant="filled"
               color="violet"
-              leftSection={<Icon icon="material-symbols:auto-awesome-outline" width={14} />}
+              leftSection={<Icon icon={AI_ICON} width={14} />}
               onClick={() => void send()}
               disabled={!canSend}
               loading={pending}

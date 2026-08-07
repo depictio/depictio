@@ -305,6 +305,13 @@ ALLOWED_NODE_TYPES: tuple[type, ...] = (
     ast.FloorDiv,
     ast.Mod,
     ast.Pow,
+    # Polars combines expression predicates with the bitwise operators —
+    # `(pl.col(...) == 'a') & (pl.col(...) > 1)` — so blocking them rejects
+    # nearly every compound filter the LLM writes. `~` (Invert) is already
+    # allowed above for the same reason.
+    ast.BitAnd,
+    ast.BitOr,
+    ast.BitXor,
     ast.USub,
     ast.UAdd,
     ast.Invert,
@@ -564,6 +571,7 @@ The sandbox is an AST allowlist; only these pass:
 - Expression namespaces:
 {namespaces}
 
+Combine predicates with `&` / `|` / `~` (parenthesize each side).
 NO imports, NO file I/O, NO lambdas, NO assignments, NO comprehensions,
 NO f-strings, NO bare function calls. Write one expression, not a script.
 Results are capped at {MAX_OUTPUT_ROWS} rows — aggregate rather than dumping rows."""

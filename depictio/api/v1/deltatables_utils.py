@@ -1,6 +1,7 @@
 import hashlib
 import json
 import os
+import re
 import sys
 import threading
 import warnings
@@ -397,6 +398,20 @@ def process_metadata_and_filter(
             )
 
         if filter_expr:
+            # Expression filters fan out to every component render, whatever
+            # DC it reads (e.g. the AI panel's global `col('x') >= n`). When
+            # the schema is known, drop expressions referencing columns this
+            # DC does not have — otherwise the filter builds fine here and
+            # only explodes at collect time, taking the whole render with it.
+            if schema is not None:
+                referenced = set(re.findall(r"col\(\s*['\"]([^'\"]+)['\"]\s*\)", filter_expr))
+                missing = referenced - set(schema.keys())
+                if missing:
+                    logger.debug(
+                        f"Skipping filter_expr {filter_expr!r}: column(s) "
+                        f"{sorted(missing)} not in this DC's schema"
+                    )
+                    continue
             try:
                 from depictio.models.components.filter_expr import build_filter_expr
 
@@ -1207,24 +1222,32 @@ def clean_filter_payload(filters: list[dict] | None) -> list[dict]:
     Same contract as the dashboards render endpoints (their
     ``_build_filter_metadata`` delegates here): reads ``column_name`` /
     ``interactive_component_type`` from the top level or the nested
-    ``metadata`` dict, drops entries missing a column or carrying an empty
-    value (``None`` / ``[]`` / ``""`` — those wouldn't survive
+    ``metadata`` dict, drops widget entries missing a column or carrying an
+    empty value (``None`` / ``[]`` / ``""`` — those wouldn't survive
     ``process_metadata_and_filter`` anyway), and carries ``filter_expr``
     through so the source's row scoping is applied alongside the selection.
+
+    Expression-only entries (the AI panel's ``source: 'ai_prompt'`` filters)
+    have no widget column/value at all — they survive on the strength of their
+    ``filter_expr`` alone, and ``process_metadata_and_filter`` handles exactly
+    that shape.
     """
     out: list[dict] = []
     for f in filters or []:
         meta = f.get("metadata") or {}
         column_name = f.get("column_name") or meta.get("column_name")
-        if not column_name or f.get("value") in (None, [], ""):
-            continue
-        entry: dict = {
-            "interactive_component_type": f.get("interactive_component_type")
-            or meta.get("interactive_component_type"),
-            "column_name": column_name,
-            "value": f.get("value"),
-        }
         filter_expr = f.get("filter_expr") or meta.get("filter_expr")
+        has_widget_value = bool(column_name) and f.get("value") not in (None, [], "")
+        if not has_widget_value and not filter_expr:
+            continue
+        entry: dict = {}
+        if has_widget_value:
+            entry = {
+                "interactive_component_type": f.get("interactive_component_type")
+                or meta.get("interactive_component_type"),
+                "column_name": column_name,
+                "value": f.get("value"),
+            }
         if filter_expr:
             entry["filter_expr"] = filter_expr
         out.append(entry)

@@ -2,8 +2,9 @@
  * Quick-prompt modal for adding a new dashboard component with AI.
  *
  * Surfaced from the editor's "Add component" menu as a sibling to the
- * manual stepper flow. The user picks a component type (chip strip) +
- * data collection (dropdown) + types a prompt; we call
+ * manual stepper flow. The user picks a component type (tile grid styled
+ * like the stepper's type cards) + data collection (dropdown) + types a
+ * prompt; we call
  * /ai/component-from-prompt and hand the validated component dict back
  * to the host via `onApply` for hydration into the builder store.
  *
@@ -21,13 +22,15 @@ import {
   Alert,
   Badge,
   Button,
-  Chip,
+  Card,
+  Center,
   Code,
   Group,
   Modal,
   Paper,
   SegmentedControl,
   Select,
+  SimpleGrid,
   Stack,
   Text,
   Textarea,
@@ -35,6 +38,7 @@ import {
 import { Icon } from '@iconify/react';
 
 import { useComponentFromPrompt, useSuggestFigures } from '../hooks';
+import { AI_ICON } from '../icons';
 import { useAISession } from '../store';
 import type { ComponentType, PlotSuggestion } from '../types';
 
@@ -67,17 +71,81 @@ interface Props {
   /** True when the server holds a fallback LLM key, so the modal works
    *  without a user-supplied key. */
   serverKeyAvailable?: boolean;
+  /** Host-provided live preview for a figure suggestion (the package has
+   *  no plotting dependency). Rendered inside each suggestion card. */
+  renderSuggestionPreview?: (
+    suggestion: PlotSuggestion,
+    dc: AvailableDataCollection,
+  ) => React.ReactNode;
 }
 
-const TYPE_CHIPS: { type: ComponentType; label: string; icon: string }[] = [
-  { type: 'figure', label: 'Figure', icon: 'mdi:graph-box' },
-  { type: 'card', label: 'Card', icon: 'formkit:number' },
-  { type: 'interactive', label: 'Filter', icon: 'bx:slider-alt' },
-  { type: 'table', label: 'Table', icon: 'octicon:table-24' },
-  { type: 'multiqc', label: 'MultiQC', icon: 'mdi:chart-line' },
-  { type: 'image', label: 'Image', icon: 'mdi:image-area' },
-  { type: 'map', label: 'Map', icon: 'mdi:map-marker-multiple' },
+/** Same labels, icons and tile colors as the manual stepper's type grid
+ *  (viewer builder/componentTypes.ts) so both "Add component" paths read
+ *  as one menu. MultiQC renders its themed SVG logo, like the stepper. */
+const TYPE_TILES: {
+  type: ComponentType;
+  label: string;
+  icon: string;
+  iconBg: string;
+}[] = [
+  { type: 'figure', label: 'Figure', icon: 'mdi:graph-box', iconBg: '#9966cc' },
+  { type: 'card', label: 'Card', icon: 'formkit:number', iconBg: '#45b8ac' },
+  { type: 'interactive', label: 'Interactive', icon: 'bx:slider-alt', iconBg: '#8bc34a' },
+  { type: 'table', label: 'Table', icon: 'octicon:table-24', iconBg: '#6495ed' },
+  { type: 'multiqc', label: 'MultiQC', icon: 'mdi:chart-line', iconBg: 'transparent' },
+  { type: 'image', label: 'Image', icon: 'mdi:image-area', iconBg: '#e6779f' },
+  { type: 'map', label: 'Map', icon: 'mdi:map-marker-multiple', iconBg: '#7A5DC7' },
 ];
+
+/** Compact version of the stepper's TypeCard: colored icon tile + label,
+ *  same selection treatment (blue border, lift, shadow). */
+const TypeTile: React.FC<{
+  tile: (typeof TYPE_TILES)[number];
+  selected: boolean;
+  onClick: () => void;
+}> = ({ tile, selected, onClick }) => (
+  <Card
+    withBorder
+    radius="md"
+    p="xs"
+    shadow={selected ? 'md' : 'sm'}
+    onClick={onClick}
+    data-testid={`ai-type-${tile.type}`}
+    style={{
+      cursor: 'pointer',
+      textAlign: 'center',
+      transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+      transform: selected ? 'translateY(-2px)' : undefined,
+      borderColor: selected ? 'var(--mantine-color-blue-5)' : undefined,
+      borderWidth: selected ? 2 : 1,
+    }}
+  >
+    <Stack gap={6} align="center">
+      <Center
+        style={{
+          width: 40,
+          height: 40,
+          borderRadius: 10,
+          background: tile.iconBg,
+        }}
+      >
+        {tile.type === 'multiqc' ? (
+          <img
+            src="/dashboard/logos/multiqc_icon_dark.svg"
+            alt="MultiQC"
+            className="multiqc-icon-themed"
+            style={{ width: 38, height: 38, objectFit: 'contain' }}
+          />
+        ) : (
+          <Icon icon={tile.icon} width={22} color="white" />
+        )}
+      </Center>
+      <Text fw={600} size="sm">
+        {tile.label}
+      </Text>
+    </Stack>
+  </Card>
+);
 
 const AddWithAIModal: React.FC<Props> = ({
   opened,
@@ -86,6 +154,7 @@ const AddWithAIModal: React.FC<Props> = ({
   availableDataCollections,
   onApply,
   serverKeyAvailable = false,
+  renderSuggestionPreview,
 }) => {
   const session = useAISession(dashboardId);
   const { run, pending, error } = useComponentFromPrompt(dashboardId);
@@ -161,14 +230,10 @@ const AddWithAIModal: React.FC<Props> = ({
     <Modal
       opened={opened}
       onClose={onClose}
-      size="lg"
+      size={960}
       title={
         <Group gap="xs">
-          <Icon
-            icon="material-symbols:auto-awesome-outline"
-            width={18}
-            color="var(--mantine-color-violet-6)"
-          />
+          <Icon icon={AI_ICON} width={18} color="var(--mantine-color-violet-6)" />
           <Text fw={600}>Add component with AI</Text>
           {session.model && (
             <Badge size="xs" variant="light" color="blue">
@@ -195,22 +260,16 @@ const AddWithAIModal: React.FC<Props> = ({
           <Text size="sm" fw={500}>
             Component type
           </Text>
-          <Chip.Group
-            multiple={false}
-            value={componentType}
-            onChange={(v) => setComponentType(v as ComponentType)}
-          >
-            <Group gap="xs">
-              {TYPE_CHIPS.map((c) => (
-                <Chip key={c.type} value={c.type} size="sm" color="violet">
-                  <Group gap={4} wrap="nowrap" align="center">
-                    <Icon icon={c.icon} width={14} />
-                    {c.label}
-                  </Group>
-                </Chip>
-              ))}
-            </Group>
-          </Chip.Group>
+          <SimpleGrid cols={{ base: 4, sm: 7 }} spacing="xs">
+            {TYPE_TILES.map((t) => (
+              <TypeTile
+                key={t.type}
+                tile={t}
+                selected={componentType === t.type}
+                onClick={() => setComponentType(t.type)}
+              />
+            ))}
+          </SimpleGrid>
         </Stack>
 
         <Select
@@ -247,7 +306,7 @@ const AddWithAIModal: React.FC<Props> = ({
             value={prompt}
             onChange={(e) => setPrompt(e.currentTarget.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+              if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 void send();
               }
@@ -267,42 +326,46 @@ const AddWithAIModal: React.FC<Props> = ({
                 plots grounded in the actual data.
               </Text>
             )}
-            {suggest.suggestions.map((s, i) => (
-              <Paper
-                key={i}
-                withBorder
-                radius="md"
-                p="sm"
-                data-testid={`ai-suggestion-${i}`}
-              >
-                <Stack gap={6}>
-                  <Group gap="xs" align="center" wrap="nowrap">
-                    <Badge size="xs" variant="light" color="violet">
-                      {s.visu_type}
-                    </Badge>
-                    <Text size="sm" fw={600} style={{ flex: 1 }}>
-                      {s.title}
+            {suggest.suggestions.map((s, i) => {
+              const dc = availableDataCollections.find((d) => d.dcId === dcId);
+              return (
+                <Paper
+                  key={i}
+                  withBorder
+                  radius="md"
+                  p="sm"
+                  data-testid={`ai-suggestion-${i}`}
+                >
+                  <Stack gap={6}>
+                    <Group gap="xs" align="center" wrap="nowrap">
+                      <Badge size="xs" variant="light" color="violet">
+                        {s.visu_type}
+                      </Badge>
+                      <Text size="sm" fw={600} style={{ flex: 1 }}>
+                        {s.title}
+                      </Text>
+                      <Button
+                        size="compact-xs"
+                        variant="light"
+                        color="violet"
+                        onClick={() => applySuggestion(s)}
+                      >
+                        Use this
+                      </Button>
+                    </Group>
+                    <Text size="xs" c="dimmed">
+                      {s.explanation}
                     </Text>
-                    <Button
-                      size="compact-xs"
-                      variant="light"
-                      color="violet"
-                      onClick={() => applySuggestion(s)}
-                    >
-                      Use this
-                    </Button>
-                  </Group>
-                  <Text size="xs" c="dimmed">
-                    {s.explanation}
-                  </Text>
-                  {s.code && (
-                    <Code block fz={11}>
-                      {s.code}
-                    </Code>
-                  )}
-                </Stack>
-              </Paper>
-            ))}
+                    {renderSuggestionPreview && dc && renderSuggestionPreview(s, dc)}
+                    {s.code && (
+                      <Code block fz={11}>
+                        {s.code}
+                      </Code>
+                    )}
+                  </Stack>
+                </Paper>
+              );
+            })}
           </Stack>
         )}
 
@@ -316,7 +379,9 @@ const AddWithAIModal: React.FC<Props> = ({
 
         <Group justify="space-between" align="center">
           <Text size="xs" c="dimmed">
-            {suggestMode ? 'Pick a suggestion to land in the builder' : 'Cmd/Ctrl+Enter to send'}
+            {suggestMode
+              ? 'Pick a suggestion to land in the builder'
+              : 'Enter to send · Shift+Enter for a new line'}
           </Text>
           <Group gap="xs">
             <Button
@@ -331,7 +396,7 @@ const AddWithAIModal: React.FC<Props> = ({
               <Button
                 variant="filled"
                 color="violet"
-                leftSection={<Icon icon="material-symbols:auto-awesome-outline" width={14} />}
+                leftSection={<Icon icon={AI_ICON} width={14} />}
                 onClick={() => void (dcId && suggest.run(dcId).catch(() => {}))}
                 disabled={!canSuggest}
                 loading={suggest.pending}
@@ -343,7 +408,7 @@ const AddWithAIModal: React.FC<Props> = ({
               <Button
                 variant="filled"
                 color="violet"
-                leftSection={<Icon icon="material-symbols:auto-awesome-outline" width={14} />}
+                leftSection={<Icon icon={AI_ICON} width={14} />}
                 onClick={() => void send()}
                 disabled={!canSend}
                 loading={pending}

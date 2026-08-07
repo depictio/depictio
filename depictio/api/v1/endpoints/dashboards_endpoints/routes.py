@@ -1830,8 +1830,8 @@ def _resolve_link_filters_cached(
 def _build_filter_metadata(filters: list[dict]) -> list[dict]:
     """Convert React filter payloads into the shape ``load_deltatable_lite`` expects.
 
-    Skips entries that are missing a ``column_name`` or whose value is empty;
-    those wouldn't survive ``process_metadata_and_filter`` anyway.
+    Skips widget entries that are missing a ``column_name`` or whose value is
+    empty; those wouldn't survive ``process_metadata_and_filter`` anyway.
 
     Carries ``filter_expr`` through (top-level or under ``metadata``) so the
     server-side pipeline can AND the source's row-scoping expression alongside
