@@ -28,7 +28,8 @@ dependencies = [
   # Unblocking this means migrating motor -> pymongo.AsyncMongoClient (motor is
   # deprecated upstream), which touches lifespan.py, celery_app.py,
   # mongodb_watcher.py, log_handler.py, cli/utils/api_calls.py and the test
-  # conftests. That is its own piece of work, not a dependency bump.
+  # conftests. That is its own piece of work, not a dependency bump — tracked
+  # in #971.
   #
   # Secondary blocker, still open once the above is done: beanie 2.1.0 also
   # calls list_collection_names(nameOnly=True, authorizedCollections=True),
