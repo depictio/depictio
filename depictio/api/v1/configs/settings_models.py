@@ -2,7 +2,14 @@ import os
 from pathlib import Path
 from typing import Any, Literal, Optional
 
-from pydantic import AliasChoices, Field, SecretStr, computed_field, model_validator
+from pydantic import (
+    AliasChoices,
+    Field,
+    SecretStr,
+    computed_field,
+    field_validator,
+    model_validator,
+)
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Import kept to the dependency-free constants module on purpose — this file is
@@ -331,6 +338,65 @@ class AuthConfig(BaseSettings):
     google_oauth_redirect_uri: Optional[str] = Field(
         default=None, description="Google OAuth redirect URI"
     )
+
+    # SAML SSO (SP-initiated, python3-saml). Designed for the EMBL Keycloak
+    # IdP but provider-agnostic.
+    saml_enabled: bool = Field(default=False, description="Enable SAML SSO authentication")
+    saml_idp_entity_id: Optional[str] = Field(
+        default=None,
+        description="IdP entityID, e.g. https://auth.ktest.embl.de/realms/EMBL-HD",
+    )
+    saml_idp_sso_url: Optional[str] = Field(
+        default=None,
+        description="IdP SSO endpoint (HTTP-Redirect binding), "
+        "e.g. https://auth.ktest.embl.de/realms/EMBL-HD/protocol/saml",
+    )
+    saml_idp_cert: Optional[str] = Field(
+        default=None,
+        description="IdP X.509 signing certificate: inline PEM "
+        "(-----BEGIN CERTIFICATE-----...) or a path to a PEM file",
+    )
+    saml_sp_entity_id: Optional[str] = Field(
+        default=None,
+        description="SP entityID / issuer registered with the IdP",
+    )
+    saml_sp_base_url: Optional[str] = Field(
+        default=None,
+        description="Public base URL of the API used to build the ACS URL; "
+        "defaults to the FastAPI service external URL",
+    )
+    saml_name_id_format: str = Field(
+        default="urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress",
+        description="Requested NameID format",
+    )
+    saml_attribute_email: Optional[str] = Field(
+        default=None,
+        description="SAML attribute name carrying the email; unset → use NameID",
+    )
+    saml_attribute_username: Optional[str] = Field(
+        default=None, description="SAML attribute name carrying the username (informational)"
+    )
+    saml_login_label: str = Field(
+        default="Sign in with SSO",
+        description="Label for the SSO button in the login form (e.g. 'Sign in with EMBL')",
+    )
+
+    @field_validator(
+        "saml_idp_entity_id",
+        "saml_idp_sso_url",
+        "saml_idp_cert",
+        "saml_sp_entity_id",
+        "saml_sp_base_url",
+        "saml_attribute_email",
+        "saml_attribute_username",
+        mode="before",
+    )
+    @classmethod
+    def _empty_saml_str_to_none(cls, v: Any) -> Any:
+        # Helm/compose render unset values as empty strings; treat them as unset.
+        if isinstance(v, str) and not v.strip():
+            return None
+        return v
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_AUTH_", case_sensitive=False)
 

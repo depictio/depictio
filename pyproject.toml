@@ -92,6 +92,13 @@ classifiers = [
 ]
 
 [project.optional-dependencies]
+# SAML SSO support (python3-saml needs the native xmlsec/libxml2 toolchain at
+# build time — see docker-images/Dockerfile.api). Kept out of the base deps so
+# plain `pip install depictio` (CLI usage) needs no native libs.
+saml = [
+  "python3-saml==1.16.0",
+  "defusedxml==0.7.1",
+]
 dev = [
   "bandit==1.9.4",
   "ruff==0.16.1",

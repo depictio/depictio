@@ -2062,6 +2062,10 @@ export interface AuthStatusResponse {
    *  treat absent as `false`. */
   registration_disabled?: boolean;
   google_oauth_enabled: boolean;
+  /** SAML SSO login enabled. Older backends omit this — treat absent as `false`. */
+  saml_enabled?: boolean;
+  /** Label for the SAML login button (e.g. "Sign in with EMBL"). */
+  saml_login_label?: string;
   /** Development mode (DEPICTIO_DEV_MODE). Suppresses the walkthrough. */
   is_dev_mode?: boolean;
   /** Explicit walkthrough kill switch (DEPICTIO_WALKTHROUGH_DISABLED). */
@@ -2224,6 +2228,13 @@ export async function startGoogleOAuth(): Promise<{ authorization_url: string; s
   const res = await fetch(`${API_BASE}/auth/google/login`);
   if (!res.ok) await throwHttpError(res, 'Failed to start Google OAuth');
   return (await res.json()) as { authorization_url: string; state: string };
+}
+
+/** URL starting the SAML SP-initiated login. Use as a full-page navigation
+ *  (window.location.assign), NOT a fetch — the backend 302s to the IdP.
+ *  `next` must be a same-origin path; the backend re-validates it. */
+export function samlLoginUrl(next: string = '/dashboards'): string {
+  return `${API_BASE}/auth/saml/login?next=${encodeURIComponent(next)}`;
 }
 
 /** Complete the Google OAuth flow with the code/state from the redirect URL. */

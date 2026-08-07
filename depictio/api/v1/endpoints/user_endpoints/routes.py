@@ -629,9 +629,8 @@ async def get_current_user_info_optional(
     # walkthrough (and any other onboarding hints) during local development —
     # devs hot-reload the page constantly and don't need the tour popping back
     # up every time the auth-builder definition bumps its version. The env var
-    # already gates dev-only behavior elsewhere (Dash hot reload, OAuth state
-    # skip in `auth_endpoints/utils.py`), so we surface it here rather than
-    # adding a parallel knob.
+    # already gates dev-only behavior elsewhere, so we surface it here rather
+    # than adding a parallel knob.
     is_dev_mode = os.getenv("DEPICTIO_DEV_MODE", "false").lower() in ("true", "1", "yes")
     # DEPICTIO_WALKTHROUGH_DISABLED is the explicit kill switch for the
     # walkthrough independent of dev mode — useful for deployments that just
@@ -654,6 +653,8 @@ async def get_current_user_info_optional(
         "walkthrough_disabled": walkthrough_disabled,
         "unauthenticated_mode": getattr(settings.auth, "unauthenticated_mode", False),
         "google_oauth_enabled": settings.auth.google_oauth_enabled,
+        "saml_enabled": settings.auth.saml_enabled,
+        "saml_login_label": settings.auth.saml_login_label,
         "temporary_user_expiry_hours": settings.auth.temporary_user_expiry_hours,
         "temporary_user_expiry_minutes": settings.auth.temporary_user_expiry_minutes,
         # Viewer feature flags ride along here rather than on an endpoint of

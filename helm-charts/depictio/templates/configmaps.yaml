@@ -12,6 +12,9 @@ data:
   DEPICTIO_FASTAPI_PUBLIC_URL: {{ .Values.backend.env.DEPICTIO_FASTAPI_PUBLIC_URL | default (include "depictio.apiUrlWithProtocol" .) | quote }}
   DEPICTIO_VIEWER_SERVICE_PORT: {{ .Values.backend.env.DEPICTIO_VIEWER_SERVICE_PORT | quote }}
   DEPICTIO_VIEWER_SERVICE_NAME: {{ printf "%s-depictio-viewer" .Release.Name | quote }}
+  # Public viewer URL: the backend builds browser-facing redirect/link targets
+  # from it (magic-link login URLs, SAML ACS → /auth/magic hand-off).
+  DEPICTIO_VIEWER_PUBLIC_URL: {{ .Values.backend.env.DEPICTIO_VIEWER_PUBLIC_URL | default (include "depictio.frontendUrlWithProtocol" .) | quote }}
   {{- if .Values.mongo.useOperator }}
   DEPICTIO_MONGODB_SERVICE_NAME: {{ printf "%s-mongo-rs0" .Release.Name | quote }}
   DEPICTIO_MONGODB_SERVICE_PORT: "27017"
@@ -59,6 +62,21 @@ data:
   DEPICTIO_AUTH_GOOGLE_OAUTH_CLIENT_ID: ""
   DEPICTIO_AUTH_GOOGLE_OAUTH_CLIENT_SECRET: ""
   DEPICTIO_AUTH_GOOGLE_OAUTH_REDIRECT_URI: ""
+  {{- end }}
+
+  # SAML SSO Configuration (see helm-charts/depictio/values-embl-auth.yaml for
+  # a working EMBL Keycloak reference block). The IdP signing certificate is
+  # public X.509 material — a ConfigMap is fine; no key material rides here.
+  # Empty strings are coerced to "unset" by the backend settings model.
+  DEPICTIO_AUTH_SAML_ENABLED: {{ .Values.backend.env.DEPICTIO_AUTH_SAML_ENABLED | default "false" | quote }}
+  {{- if .Values.auth }}
+  DEPICTIO_AUTH_SAML_IDP_ENTITY_ID: {{ .Values.auth.DEPICTIO_AUTH_SAML_IDP_ENTITY_ID | default "" | quote }}
+  DEPICTIO_AUTH_SAML_IDP_SSO_URL: {{ .Values.auth.DEPICTIO_AUTH_SAML_IDP_SSO_URL | default "" | quote }}
+  DEPICTIO_AUTH_SAML_IDP_CERT: {{ .Values.auth.DEPICTIO_AUTH_SAML_IDP_CERT | default "" | quote }}
+  DEPICTIO_AUTH_SAML_SP_ENTITY_ID: {{ .Values.auth.DEPICTIO_AUTH_SAML_SP_ENTITY_ID | default "" | quote }}
+  DEPICTIO_AUTH_SAML_SP_BASE_URL: {{ .Values.auth.DEPICTIO_AUTH_SAML_SP_BASE_URL | default "" | quote }}
+  DEPICTIO_AUTH_SAML_ATTRIBUTE_EMAIL: {{ .Values.auth.DEPICTIO_AUTH_SAML_ATTRIBUTE_EMAIL | default "" | quote }}
+  DEPICTIO_AUTH_SAML_LOGIN_LABEL: {{ .Values.auth.DEPICTIO_AUTH_SAML_LOGIN_LABEL | default "Sign in with SSO" | quote }}
   {{- end }}
 
   # Performance

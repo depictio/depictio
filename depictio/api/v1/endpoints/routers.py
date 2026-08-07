@@ -15,6 +15,7 @@ from depictio.api.v1.endpoints.analytics_data_endpoints.routes import (
 )
 from depictio.api.v1.endpoints.analytics_endpoints.routes import router as analytics_router
 from depictio.api.v1.endpoints.auth_endpoints.google_oauth_routes import google_oauth_router
+from depictio.api.v1.endpoints.auth_endpoints.saml_routes import saml_router
 from depictio.api.v1.endpoints.backup_endpoints.routes import backup_endpoint_router
 from depictio.api.v1.endpoints.catalog_endpoints.routes import catalog_endpoint_router
 from depictio.api.v1.endpoints.celery_endpoints.routes import celery_endpoint_router
@@ -161,6 +162,12 @@ router.include_router(
     google_oauth_router,
     prefix="/auth/google",
     tags=["Google OAuth"],
+)
+
+router.include_router(
+    saml_router,
+    prefix="/auth/saml",
+    tags=["SAML SSO"],
 )
 
 # Include Analytics routes

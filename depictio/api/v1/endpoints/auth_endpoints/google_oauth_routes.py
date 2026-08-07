@@ -15,7 +15,6 @@ from fastapi import APIRouter, HTTPException, Query
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.endpoints.auth_endpoints.utils import (
-    cleanup_expired_states,
     create_or_get_user,
     exchange_code_for_token,
     fetch_google_user_info,
@@ -55,9 +54,6 @@ async def google_oauth_login() -> GoogleOAuthLoginResponse:
         ]
     ):
         raise HTTPException(status_code=500, detail="Google OAuth configuration incomplete")
-
-    # Clean up expired states
-    cleanup_expired_states()
 
     # Generate state parameter for CSRF protection
     state = generate_oauth_state()
