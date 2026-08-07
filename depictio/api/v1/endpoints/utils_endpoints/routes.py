@@ -117,12 +117,23 @@ async def public_config():
     injected, so exposing it changes nothing.
     """
     ga = settings.google_analytics
+    branding = settings.branding
     return {
         "google_analytics": {
             "enabled": ga.is_configured,
             # Withheld unless actually enabled, so a half-configured deployment
             # does not leak a property ID it is not using.
             "tracking_id": ga.tracking_id if ga.is_configured else None,
+        },
+        # Instance branding (#397): custom logo / name / colors for e.g. a core
+        # facility deployment. Always emitted (nulls when unset) so the client
+        # contract stays shape-stable.
+        "branding": {
+            "logo_url": branding.logo_url,
+            "logo_url_dark": branding.logo_url_dark,
+            "app_name": branding.app_name,
+            "primary_color": branding.primary_color,
+            "colorway": branding.colorway_list,
         },
     }
 

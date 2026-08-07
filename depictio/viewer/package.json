@@ -15,6 +15,7 @@
     "@iconify/react": "^5.0.2",
     "@mantine/carousel": "^7.14.0",
     "@mantine/code-highlight": "^7.14.0",
+    "@mantine/colors-generator": "^7.17.8",
     "@mantine/core": "^7.14.0",
     "@mantine/dates": "^7.14.0",
     "@mantine/hooks": "^7.14.0",

@@ -7,10 +7,10 @@ import {
   ScrollArea,
   Stack,
   Text,
-  useComputedColorScheme,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
+import BrandLogo from './BrandLogo';
 import ThemeToggle from './ThemeToggle';
 import ServerStatusBadge from './ServerStatusBadge';
 import ProfileBadge from './ProfileBadge';
@@ -73,10 +73,6 @@ interface AppSidebarProps {
 }
 
 const AppSidebar: React.FC<AppSidebarProps> = ({ active }) => {
-  // useComputedColorScheme resolves 'auto' to the actual rendered scheme
-  // (dark/light) by reading prefers-color-scheme — useMantineColorScheme
-  // can return 'auto' which our equality check would never match.
-  const colorScheme = useComputedColorScheme('light', { getInitialValueInEffect: true });
   const { user } = useCurrentUser();
 
   // Show the Administration link only to admins (matches the Dash sidebar
@@ -90,21 +86,7 @@ const AppSidebar: React.FC<AppSidebarProps> = ({ active }) => {
       <Stack gap="sm" align="stretch">
         <Center pt="md">
           <Anchor href="/" underline="never">
-            {/* Both `logo_black.svg` and `logo_white.svg` ship byte-identical
-                (base64-embedded PNG inside an SVG wrapper), so swapping `src`
-                does nothing. Apply a CSS filter in dark mode to invert the
-                raster while preserving brand hues — same trick as
-                `PoweredBy.tsx`. */}
-            <img
-              src="/dashboard/logos/logo_black.svg"
-              alt="depictio"
-              style={{
-                width: 185,
-                display: 'block',
-                filter:
-                  colorScheme === 'dark' ? 'invert(1) hue-rotate(180deg)' : undefined,
-              }}
-            />
+            <BrandLogo width={185} />
           </Anchor>
         </Center>
         <Divider />
