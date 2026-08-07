@@ -47,6 +47,12 @@ export function percent(share: number, digits = 0): string {
 export function hexWithAlpha(hex: string | null | undefined, alpha: number): string {
   const fallback = `rgba(69,184,172,${alpha})`;
   if (!hex || typeof hex !== 'string') return fallback;
+  // rgb()/rgba() inputs keep their channels with the requested alpha. Without
+  // this, neutral tokens like METRIC.remainder fell through to the teal
+  // fallback, so an "All"/"Other" ring rank-tinted teal while its siblings
+  // drew the intended gray.
+  const rgba = hex.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
+  if (rgba) return `rgba(${rgba[1]},${rgba[2]},${rgba[3]},${alpha})`;
   const cleaned = hex.replace('#', '').trim();
   if (cleaned.length !== 6 || !/^[0-9a-fA-F]{6}$/.test(cleaned)) return fallback;
   const r = parseInt(cleaned.slice(0, 2), 16);

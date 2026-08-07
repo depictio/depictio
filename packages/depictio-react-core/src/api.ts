@@ -8,6 +8,7 @@
  */
 
 import { enqueueFetch } from './fetchQueue';
+import type { GroupingDisplay, GroupRenderDef } from './selectionGroups';
 
 const API_BASE = '/depictio/api/v1';
 
@@ -572,7 +573,11 @@ export type InteractiveFilterSource =
   | 'scatter_selection'
   | 'table_selection'
   | 'map_selection'
-  | 'image_selection';
+  | 'image_selection'
+  /** Derived projection of saved selection groups (see `selectionGroups.ts`).
+   *  Never merged into the user's filter list — composed at the fetch
+   *  boundary only. */
+  | 'group_filter';
 
 /** Per-component computed data (current value under the given filter state).
  *  `metadata.dc_id` is required for cross-DC link resolution server-side; any
@@ -636,16 +641,41 @@ export interface BulkComputeResponse {
   filter_count: number;
 }
 
+export interface BulkComputeOptions {
+  /** Selection groups to compare per card ("Compare groups in cards"). */
+  groups?: GroupRenderDef[];
+  compareGroups?: boolean;
+  /** False omits the "Other" bucket from the per-group comparison. */
+  showOther?: boolean;
+  /** False omits the "All rows" reference entry from the comparison. */
+  showOverall?: boolean;
+}
+
 export async function bulkComputeCards(
   dashboardId: string,
   filters: InteractiveFilter[],
   componentIds?: string[],
+  options?: BulkComputeOptions,
+  signal?: AbortSignal,
 ): Promise<BulkComputeResponse> {
+  // Group state rides in the body only when the comparison is actually on, so
+  // requests without the feature stay byte-identical.
+  const groupBody: Record<string, unknown> =
+    options?.compareGroups && options.groups && options.groups.length > 0
+      ? { groups: options.groups, compare_groups: true }
+      : {};
+  if (groupBody.compare_groups && options?.showOther === false) {
+    groupBody.include_other = false;
+  }
+  if (groupBody.compare_groups && options?.showOverall === false) {
+    groupBody.include_overall = false;
+  }
   const res = await authFetch(
     `${API_BASE}/dashboards/bulk_compute_cards/${dashboardId}`,
     {
       method: 'POST',
-      body: JSON.stringify({ filters, component_ids: componentIds }),
+      body: JSON.stringify({ filters, component_ids: componentIds, ...groupBody }),
+      signal,
     },
   );
   if (!res.ok) throw new Error(`Failed to bulk-compute cards: ${res.status}`);
@@ -667,7 +697,25 @@ export interface FigureResponse {
     total_data_count?: number;
     /** True when every point was rendered (no cap applied / full_load). */
     full_data_loaded?: boolean;
+    /** True when the figure was colored by the caller's selection groups. */
+    group_colored?: boolean;
+    /** Column the figure was actually colored by (global "Color by" mode),
+     *  null/absent when the override didn't apply to this frame. */
+    column_colored?: string | null;
   };
+}
+
+export interface RenderFigureOptions {
+  /** Selection groups to color/split the figure by (see `selectionGroups.ts`). */
+  groups?: GroupRenderDef[];
+  colorByGroup?: boolean;
+  /** Global "color by <real column>" override; the color map is the stable
+   *  palette computed client-side from the column's unfiltered universe. */
+  colorByColumn?: { columnName: string; colorMap?: Record<string, string> };
+  /** Overlay ("color", default) vs small-multiples ("facet") display. */
+  display?: GroupingDisplay;
+  /** Groups mode only: false drops ungrouped ("Other") rows from figures. */
+  showOther?: boolean;
 }
 
 export async function renderFigure(
@@ -677,12 +725,30 @@ export async function renderFigure(
   theme: 'light' | 'dark' = 'light',
   fullLoad = false,
   signal?: AbortSignal,
+  options?: RenderFigureOptions,
 ): Promise<FigureResponse> {
+  // Grouping state rides in the body only when coloring is actually requested,
+  // so every request without the feature stays byte-identical to what it was
+  // before. Groups win over a column override (the endpoint enforces the same
+  // precedence).
+  let groupBody: Record<string, unknown> = {};
+  if (options?.colorByGroup && options.groups && options.groups.length > 0) {
+    groupBody = { groups: options.groups, color_by_group: true };
+    if (options.showOther === false) groupBody.include_other = false;
+  } else if (options?.colorByColumn) {
+    const { columnName, colorMap } = options.colorByColumn;
+    groupBody = {
+      color_by_column: { column_name: columnName, ...(colorMap ? { color_map: colorMap } : {}) },
+    };
+  }
+  if (Object.keys(groupBody).length > 0 && options?.display === 'facet') {
+    groupBody.grouping_display = 'facet';
+  }
   const res = await authFetch(
     `${API_BASE}/dashboards/render_figure/${dashboardId}/${componentId}`,
     {
       method: 'POST',
-      body: JSON.stringify({ filters, theme, full_load: fullLoad }),
+      body: JSON.stringify({ filters, theme, full_load: fullLoad, ...groupBody }),
       signal,
     },
   );

@@ -44,6 +44,12 @@ import {
   persistableFloatingFilters,
   FILTER_PANEL_RAIL_WIDTH,
   countActiveFilters,
+  useSelectionGroups,
+  useCategoricalColumns,
+  useColorByColumnRender,
+  resolveGroupRender,
+  SelectionGroupsPanel,
+  SaveGroupContext,
 } from 'depictio-react-core';
 import type {
   DashboardData,
@@ -76,6 +82,7 @@ import { FILTER_PANEL_WIDTH_VAR, useFilterPanelWidth } from './hooks/useFilterPa
 import { useCurrentUser } from './hooks/useCurrentUser';
 import { isDashboardOwner } from './lib/dashboardOwnership';
 import FilterPanelResizer, { FILTER_PANEL_RESIZER_WIDTH } from './components/FilterPanelResizer';
+import GroupingHeaderControl from './components/GroupingHeaderControl';
 import Inspector from './chrome/inspector/Inspector';
 import { useInspectorChrome } from './chrome/inspector/useInspectorChrome';
 import InspectorProviders from './chrome/inspector/InspectorProviders';
@@ -125,12 +132,35 @@ const App: React.FC = () => {
   }
   const [floatingIndices, setFloatingIndices] = useState<Set<string> | null>(null);
   const [floatingFamilyId, setFloatingFamilyId] = useState<string | null>(null);
+  // Saved selection groups ("select & compare"): annotation state kept apart
+  // from `filters` — the user's filter list stays theirs, and the active
+  // groups are only *composed in* at the fetch boundary below. That keeps
+  // group entries out of mergeFiltersBySource / the clear-chip path, where a
+  // derived filter could not be cleared meaningfully.
+  //
+  // Scoped to the dashboard FAMILY (parent id), not the tab: a multi-tab
+  // dashboard's tabs share the same data collections, so groups saved on one
+  // tab apply on the others — same reasoning as the floating map's cross-tab
+  // filters. Undefined until the dashboard loads; the hook re-hydrates when
+  // the scope id lands.
+  const groupingScopeId = useMemo(() => {
+    if (!dashboard) return undefined;
+    const parent = dashboard.parent_dashboard_id as string | null | undefined;
+    const id = parent || dashboard.dashboard_id || extractDashboardId();
+    return id ? String(id) : undefined;
+  }, [dashboard]);
+  const groupsApi = useSelectionGroups(groupingScopeId);
+  const combinedFilters = useMemo(
+    () =>
+      groupsApi.groupFilters.length > 0 ? [...filters, ...groupsApi.groupFilters] : filters,
+    [filters, groupsApi.groupFilters],
+  );
   // Data fetches follow a *settled* filter, not every intermediate value of one.
   // Interactive components keep reading `filters` directly so their own UI stays
   // instant; only the components that hit the API wait for the pause. Without
   // this, picking three values in a MultiSelect fires three full rounds of
   // renders and the first two are obsolete before they land.
-  const [deferredFilters] = useDebouncedValue(filters, FILTER_DEBOUNCE_MS);
+  const [deferredFilters] = useDebouncedValue(combinedFilters, FILTER_DEBOUNCE_MS);
 
   // Invalidate whatever the previous filter left queued.
   //
@@ -292,7 +322,16 @@ const App: React.FC = () => {
     // snap every card back to ``…`` on every keystroke / drag step.
     if (bulkCtrl.current) bulkCtrl.current.abort();
     bulkCtrl.current = new AbortController();
-    bulkComputeCards(dashboardId, deferredFilters, cardIds)
+    bulkComputeCards(
+      dashboardId,
+      deferredFilters,
+      cardIds,
+      groupsApi.bulkOptions,
+      // Wired to the abort above: without it a slow superseded response (e.g.
+      // compare-on forces real Delta loads) could land after a fast newer one
+      // and resurrect stale card strips.
+      bulkCtrl.current.signal,
+    )
       .then((res) => {
         setCardValues(res.values);
         setCardSecondaryValues(res.secondary_values || {});
@@ -301,7 +340,15 @@ const App: React.FC = () => {
         if (err?.name !== 'AbortError') console.warn('[App] bulk-compute failed:', err);
       })
       .finally(() => setCardsLoading(false));
-  }, [dashboard, dashboardId, deferredFilterKey, refreshTick]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    dashboard,
+    dashboardId,
+    deferredFilterKey,
+    refreshTick,
+    // Undefined while compare is off, so group edits don't refire the fetch.
+    JSON.stringify(groupsApi.bulkOptions ?? null),
+  ]);
 
   const handleFilterChange = useCallback(
     (update: InteractiveFilter) => {
@@ -314,7 +361,13 @@ const App: React.FC = () => {
     [dashboard],
   );
 
-  const handleResetAllFilters = useCallback(() => setFilters([]), []);
+  const handleResetAllFilters = useCallback(() => {
+    setFilters([]);
+    // Group filters live outside the filter list but narrow the dashboard all
+    // the same — "Reset all" must release them too or the data stays filtered
+    // with no visible chip explaining why.
+    groupsApi.deactivateAllGroupFilters();
+  }, [groupsApi.deactivateAllGroupFilters]);
 
   // ---- Floating panel: validate the hydrated cross-tab selection -----------
   // Runs once the family's floating components are known. Anything we seeded
@@ -540,6 +593,39 @@ const App: React.FC = () => {
     const seen = new Set(own.map((m) => m.index));
     return [...own, ...mapPanel.components.map((c) => c.metadata).filter((m) => !seen.has(m.index))];
   }, [dashboard, mapPanel.components]);
+  // Filter-active groups as removable active-filter summary rows.
+  const groupSummaryRows = groupsApi.summaryRows;
+  // Categorical columns offered by the global "Color by" select, and the
+  // stable palette for the currently selected column (built from the column's
+  // unfiltered universe so colors survive filtering).
+  const colorByColumns = useCategoricalColumns(dashboard?.stored_metadata);
+  const colorByColumnRender = useColorByColumnRender(groupsApi.colorBy, colorByColumns);
+  // One node, mounted in whichever FilterPanel is on screen (desktop panel or
+  // narrow drawer — never both at once).
+  const groupsSection = (
+    <SelectionGroupsPanel
+      filters={filters}
+      components={summaryMetadata}
+      groups={groupsApi.groups}
+      colorBy={groupsApi.colorBy}
+      colorByColumns={colorByColumns}
+      compareInCards={groupsApi.compareInCards}
+      onCreateGroup={groupsApi.createGroupFromFilter}
+      onClearSelection={handleFilterChange}
+      onUpdateGroup={groupsApi.updateGroup}
+      onDeleteGroup={groupsApi.deleteGroup}
+      onToggleGroupFilter={groupsApi.toggleGroupFilter}
+      onColorByChange={groupsApi.setColorBy}
+      onCompareInCardsChange={groupsApi.setCompareInCards}
+      displayMode={groupsApi.displayMode}
+      onDisplayModeChange={groupsApi.setDisplayMode}
+      showOther={groupsApi.showOther}
+      onShowOtherChange={groupsApi.setShowOther}
+      showOverall={groupsApi.showOverall}
+      onShowOverallChange={groupsApi.setShowOverall}
+      onResetAnalysis={groupsApi.resetAnalysis}
+    />
+  );
   const cardComponents = useMemo(
     () => (dashboard?.stored_metadata || []).filter((m) => m.component_type === 'card'),
     [dashboard],
@@ -567,8 +653,22 @@ const App: React.FC = () => {
   );
 
   // Same count the panel badges, hoisted so the narrow-screen header button can
-  // show it while the panel itself is off screen.
-  const activeFilterCount = countActiveFilters(filters);
+  // show it while the panel itself is off screen. Active group filters count
+  // too — one per group, matching the panel badge and the summary rows (the
+  // projected `groupFilters` merge same-column groups and would undercount).
+  const activeFilterCount = countActiveFilters(filters) + groupSummaryRows.length;
+
+  // In-place "save selection as group" on any component with a live selection
+  // (chart lasso, table rows, map polygon) — same create/clear flow as the
+  // Analysis panel, without the trip to the header.
+  const saveGroupApi = useMemo(
+    () => ({
+      groups: groupsApi.groups,
+      createGroup: groupsApi.createGroupFromFilter,
+      clearSelection: handleFilterChange,
+    }),
+    [groupsApi.groups, groupsApi.createGroupFromFilter, handleFilterChange],
+  );
 
   return (
     <AvailableFilterValuesProvider
@@ -577,6 +677,7 @@ const App: React.FC = () => {
     >
       <DashboardLoadingProvider>
       <InspectorProviders control={inspectorControl}>
+      <SaveGroupContext.Provider value={saveGroupApi}>
       <AppShell
       header={{ height: 50 }}
       navbar={{
@@ -611,6 +712,11 @@ const App: React.FC = () => {
           }
           rightExtras={
             <>
+              {dashboard && (
+                <GroupingHeaderControl groupCount={groupsApi.groups.length} colorBy={groupsApi.colorBy}>
+                  {groupsSection}
+                </GroupingHeaderControl>
+              )}
               <MapPanelControl panel={mapPanel} />
               {realtimeEnabled && (
                 <span data-tour-id="realtime-indicator" style={{ display: 'inline-flex' }}>
@@ -790,10 +896,14 @@ const App: React.FC = () => {
                   refreshTick={refreshTick}
                   collapsed={!filterPanelOpened}
                   onToggleCollapsed={toggleFilterPanel}
+                  groupSummaryRows={groupSummaryRows}
                   footer={
                     <MapPanelDock
                       panel={mapPanel}
-                      filters={filters}
+                      // Docked maps render data, so they must see active group
+                      // filters too (instant copy: group toggles are single
+                      // clicks, no debounce needed).
+                      filters={combinedFilters}
                       onFilterChange={handleFilterChange}
                       refreshTick={refreshTick}
                     />
@@ -872,6 +982,13 @@ const App: React.FC = () => {
                     cardValuesLoading={cardsLoading}
                     refreshTick={refreshTick}
                     activeHighlight={activeHighlight}
+                    groupRender={resolveGroupRender(
+                      groupsApi.colorBy,
+                      groupsApi.renderGroups,
+                      colorByColumnRender,
+                      groupsApi.displayMode,
+                      groupsApi.showOther,
+                    )}
                     isDraggable={false}
                     isResizable={false}
                     editMode={false}
@@ -925,6 +1042,7 @@ const App: React.FC = () => {
               filterSections={dashboard.filter_sections}
               dashboardId={dashboardId}
               refreshTick={refreshTick}
+              groupSummaryRows={groupSummaryRows}
             />
           </Drawer>
         )}
@@ -938,7 +1056,9 @@ const App: React.FC = () => {
         {dashboard && dashboardId && (
           <MapPanelSurface
             panel={mapPanel}
-            filters={filters}
+            // Floating maps render data: give them group filters too (see the
+            // docked MapPanelDock above).
+            filters={combinedFilters}
             onFilterChange={handleFilterChange}
             refreshTick={refreshTick}
           />
@@ -957,6 +1077,7 @@ const App: React.FC = () => {
         dashboard={dashboard}
       />
     </AppShell>
+      </SaveGroupContext.Provider>
       </InspectorProviders>
       </DashboardLoadingProvider>
     </AvailableFilterValuesProvider>

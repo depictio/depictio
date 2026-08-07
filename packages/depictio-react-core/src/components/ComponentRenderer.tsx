@@ -13,15 +13,18 @@ import DatePickerRenderer from './interactive/DatePickerRenderer';
 import CheckboxSwitchRenderer from './interactive/CheckboxSwitchRenderer';
 import SegmentedControlRenderer from './interactive/SegmentedControlRenderer';
 import TimelineRenderer from './interactive/TimelineRenderer';
+import GroupCompareStrip, { type GroupComparePayload } from './card/GroupCompareStrip';
 import SecondaryMetrics, {
   NUMERIC_LAYOUTS,
   type SecondaryLayout,
 } from './card/SecondaryMetrics';
 import { wrapWithChrome } from './chrome';
 import LoadAllButton, { LoadAllState } from './chrome/LoadAllButton';
+import SaveGroupAction, { selectionCandidateFor } from './chrome/SaveGroupAction';
 import MapDataButton from './map/MapDataButton';
 import { isMapSelectionEnabled } from '../selection';
 import { ActiveHighlight } from '../highlight';
+import type { GroupRenderState } from '../selectionGroups';
 
 // Heavy renderers are lazy-loaded so plotly / ag-grid / jbrowse resolve into
 // their own async chunks (see `manualChunks` in depictio/viewer/vite.config.ts)
@@ -56,6 +59,8 @@ interface ComponentRendererProps {
   refreshTick?: number;
   /** Batch currently highlighted; renderers glow its rows when the DC matches. */
   activeHighlight?: ActiveHighlight | null;
+  /** Selection groups to color figures by (figure components only). */
+  groupRender?: GroupRenderState;
   /** Extra action-icon nodes appended to the chrome row. Editor uses this to inject the per-cell "..." edit menu. */
   extraActions?: React.ReactNode;
   /** Show the drag handle (3×3 grip) on the chrome — typically only in editor mode. */
@@ -80,10 +85,25 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
   dashboardId,
   refreshTick,
   activeHighlight,
+  groupRender,
   extraActions,
   showDragHandle,
   compact,
 }) => {
+  // Live selection on THIS component → offer the in-place "save selection as
+  // group" action beside the other chrome icons. It rides the chrome's
+  // persistent-when-filtering row and renders nothing when no app-level
+  // SaveGroupContext is mounted (project previews, catalog).
+  const saveCandidate = selectionCandidateFor(filters, metadata.index);
+  const chromeExtras = saveCandidate ? (
+    <>
+      <SaveGroupAction filter={saveCandidate} />
+      {extraActions}
+    </>
+  ) : (
+    extraActions
+  );
+
   if (metadata.component_type === 'card') {
     return wrapWithChrome(
       'card',
@@ -198,7 +218,8 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
         onFilterChange={onFilterChange}
         refreshTick={refreshTick}
         activeHighlight={activeHighlight}
-        extraActions={extraActions}
+        groupRender={groupRender}
+        extraActions={chromeExtras}
         showDragHandle={showDragHandle}
       />
     );
@@ -213,7 +234,7 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
         onFilterChange={onFilterChange}
         refreshTick={refreshTick}
         activeHighlight={activeHighlight}
-        extraActions={extraActions}
+        extraActions={chromeExtras}
         showDragHandle={showDragHandle}
       />
     );
@@ -243,7 +264,7 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
         refreshTick={refreshTick}
         activeHighlight={activeHighlight}
       />,
-      { onResetFilter: onResetSelection, extraActions, showDragHandle, sourceFilterActive },
+      { onResetFilter: onResetSelection, extraActions: chromeExtras, showDragHandle, sourceFilterActive },
     );
   }
 
@@ -263,7 +284,7 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
     // `extraActions` slot — so `actionsFor('map')` needs no change.
     const mapExtras = (
       <>
-        {extraActions}
+        {chromeExtras}
         <MapDataButton
           dashboardId={dashboardId}
           metadata={metadata}
@@ -457,6 +478,7 @@ const FigureBlock: React.FC<{
   onFilterChange?: (filter: InteractiveFilter) => void;
   refreshTick?: number;
   activeHighlight?: ActiveHighlight | null;
+  groupRender?: GroupRenderState;
   extraActions?: React.ReactNode;
   showDragHandle?: boolean;
 }> = ({
@@ -466,6 +488,7 @@ const FigureBlock: React.FC<{
   onFilterChange,
   refreshTick,
   activeHighlight,
+  groupRender,
   extraActions,
   showDragHandle,
 }) => {
@@ -507,6 +530,7 @@ const FigureBlock: React.FC<{
         onFilterChange={onFilterChange}
         refreshTick={refreshTick}
         activeHighlight={activeHighlight}
+        groupRender={groupRender}
         onLoadAllState={setLoadAllState}
       />
     </Suspense>,
@@ -550,9 +574,11 @@ const CardRenderer: React.FC<{
 
   // Preserve the YAML-declared order; fall back to the keys returned by the
   // server. Drop the hero aggregation if it appears in the list (the API
-  // already strips it but defend in depth).
+  // already strips it but defend in depth), and drop synthetic `__…__`
+  // payload keys (`__breakdown__`, `__group_compare__`, …) — those are
+  // injected below by their own explicit handlers, never as stat rows.
   const aggregationOrder = (metadata.aggregations || Object.keys(secondaryValues || {})).filter(
-    (a) => a && a !== metadata.aggregation,
+    (a) => a && a !== metadata.aggregation && !a.startsWith('__'),
   );
   const orderedSecondary = aggregationOrder
     .map((a) => ({ name: a, value: secondaryValues?.[a] }))
@@ -585,6 +611,33 @@ const CardRenderer: React.FC<{
     }
   }
 
+  // "Compare groups in cards": per-group hero values, rendered as its own
+  // strip — the comparison is runtime session state, not part of the card's
+  // authored config.
+  const groupCompare = secondaryValues?.['__group_compare__'] as
+    | GroupComparePayload
+    | undefined;
+  // When the server shipped per-group layout payloads (`layout` set), the
+  // strip REPLACES the aggregate secondary rendering: the ~110px strip budget
+  // of a default-height card fits one of the two, not both stacked.
+  const groupCompareRich = typeof groupCompare?.layout === 'string';
+
+  const coverageMax = typeof metadata.coverage_max === 'number' ? metadata.coverage_max : null;
+  // ``coverage`` and ``gauge`` don't rely on the secondary aggregations
+  // array — they read the card's hero ``value`` + the YAML-declared
+  // ``coverage_max``. So even with empty ``orderedSecondary`` we still render
+  // the metrics when those inputs are present.
+  const hasSecondaryContent =
+    orderedSecondary.length > 0 ||
+    ((metadata.secondary_layout === 'coverage' || metadata.secondary_layout === 'gauge') &&
+      coverageMax !== null);
+  const showSecondaryMetrics = !groupCompareRich && hasSecondaryContent;
+  // Any card with a secondary view gets the compact one-line header (value
+  // beside the title, aggregation label on hover) so the strip owns the
+  // height — grouped or not, the layout reads the same. Bare title+value
+  // cards keep the classic stacked hero.
+  const compactHeader = groupCompareRich || hasSecondaryContent;
+
   // Aggregation description line — sits in the existing card slot just below
   // the hero value. We enrich it with breakdown info when available so the
   // "(Count)" line carries useful context (top-N share) without needing its
@@ -606,12 +659,12 @@ const CardRenderer: React.FC<{
     }
     if (
       (layout === 'coverage' || layout === 'gauge') &&
-      typeof metadata.coverage_max === 'number' &&
-      typeof value === 'number' &&
-      metadata.coverage_max > 0
+      coverageMax !== null &&
+      coverageMax > 0 &&
+      typeof value === 'number'
     ) {
-      const pct = Math.round((value / (metadata.coverage_max as number)) * 100);
-      return `${base} · ${pct}% of ${metadata.coverage_max}`;
+      const pct = Math.round((value / coverageMax) * 100);
+      return `${base} · ${pct}% of ${coverageMax}`;
     }
     return base;
   })();
@@ -640,37 +693,43 @@ const CardRenderer: React.FC<{
         background_color={metadata.background_color}
         title_font_size={metadata.title_font_size || 'md'}
         value_font_size={metadata.value_font_size || 'xl'}
-        aggregation_description={aggDesc}
+        // With a secondary view the header collapses to one line (value
+        // beside the title) and the aggregation description moves into a
+        // hover tooltip on that header — both rows yield their height to the
+        // strip below.
+        aggregation_description={compactHeader ? undefined : aggDesc}
+        inline_header={compactHeader}
+        header_tooltip={compactHeader ? aggDesc : undefined}
         filter_applied={filterApplied}
         secondaryStrip={
-          // ``coverage`` and ``gauge`` don't rely on the secondary aggregations
-          // array — they read the card's hero ``value`` + the YAML-declared
-          // ``coverage_max``. So even with empty ``orderedSecondary`` we
-          // still render the strip when those inputs are present.
-          orderedSecondary.length > 0 ||
-          ((metadata.secondary_layout === 'coverage' ||
-            metadata.secondary_layout === 'gauge') &&
-            typeof metadata.coverage_max === 'number') ? (
-            <SecondaryMetrics
-              rows={orderedSecondary}
-              layout={
-                // Cast through the renderer's own exported union rather than
-                // respelling it here — an inline copy silently drops any layout
-                // added later, which is how a new one renders as `vertical`.
-                (metadata.secondary_layout as SecondaryLayout | undefined) || 'vertical'
-              }
-              color={
-                (metadata.icon_color as string | undefined) ||
-                (metadata.title_color as string | undefined) ||
-                null
-              }
-              coverageValue={typeof value === 'number' ? value : null}
-              coverageMax={
-                typeof metadata.coverage_max === 'number'
-                  ? (metadata.coverage_max as number)
-                  : null
-              }
-            />
+          showSecondaryMetrics || groupCompare !== undefined ? (
+            <>
+              {showSecondaryMetrics && (
+                <SecondaryMetrics
+                  rows={orderedSecondary}
+                  layout={
+                    // Cast through the renderer's own exported union rather than
+                    // respelling it here — an inline copy silently drops any layout
+                    // added later, which is how a new one renders as `vertical`.
+                    (metadata.secondary_layout as SecondaryLayout | undefined) || 'vertical'
+                  }
+                  color={
+                    (metadata.icon_color as string | undefined) ||
+                    (metadata.title_color as string | undefined) ||
+                    null
+                  }
+                  coverageValue={typeof value === 'number' ? value : null}
+                  coverageMax={coverageMax}
+                />
+              )}
+              {groupCompare && (
+                <GroupCompareStrip
+                  payload={groupCompare}
+                  formatValue={formatValue}
+                  coverageMax={coverageMax}
+                />
+              )}
+            </>
           ) : undefined
         }
       />

@@ -81,6 +81,12 @@ import {
   MapPanelSurface,
   FILTER_PANEL_RAIL_WIDTH,
   countActiveFilters,
+  useSelectionGroups,
+  useCategoricalColumns,
+  useColorByColumnRender,
+  resolveGroupRender,
+  SelectionGroupsPanel,
+  SaveGroupContext,
 } from 'depictio-react-core';
 import type {
   DashboardData,
@@ -92,9 +98,11 @@ import type {
   RealtimeMode,
   ActiveHighlight,
   RealtimeJournalEntry,
+  GroupRenderState,
 } from 'depictio-react-core';
 
 import GridItemEditOverlay from './components/GridItemEditOverlay';
+import GroupingHeaderControl from './components/GroupingHeaderControl';
 import SectionsModal from './components/sections/SectionsModal';
 import { applySectionOp, groupWith, sectionsFor } from './components/sections/sectionMutations';
 import type { SectionOp } from './components/sections/sectionMutations';
@@ -192,6 +200,23 @@ const EditorApp: React.FC = () => {
 
   const dashboardId = extractDashboardId();
 
+  // Saved selection groups — same hook and same storage key as the viewer, so
+  // groups made in one mode are visible in the other. Groups stay out of the
+  // `filters` state and are composed in only where data is fetched. Scoped to
+  // the dashboard FAMILY (parent id) so groups carry across tabs — see App.tsx.
+  const groupingScopeId = useMemo(() => {
+    if (!dashboard) return undefined;
+    const parent = dashboard.parent_dashboard_id as string | null | undefined;
+    const id = parent || dashboard.dashboard_id || dashboardId;
+    return id ? String(id) : undefined;
+  }, [dashboard, dashboardId]);
+  const groupsApi = useSelectionGroups(groupingScopeId);
+  const combinedFilters = useMemo(
+    () =>
+      groupsApi.groupFilters.length > 0 ? [...filters, ...groupsApi.groupFilters] : filters,
+    [filters, groupsApi.groupFilters],
+  );
+
   // Left filter panel chrome — same hooks and same storage keys as the viewer,
   // so collapsing or resizing in one mode carries over to the other.
   const {
@@ -286,7 +311,15 @@ const EditorApp: React.FC = () => {
       // snapping to ``…``. See App.tsx for the matching change.
       if (bulkCtrl.current) bulkCtrl.current.abort();
       bulkCtrl.current = new AbortController();
-      bulkComputeCards(dashboardId, filters, cardIds)
+      bulkComputeCards(
+        dashboardId,
+        combinedFilters,
+        cardIds,
+        groupsApi.bulkOptions,
+        // See App.tsx: prevents a slow superseded compare-on response from
+        // overwriting a newer one.
+        bulkCtrl.current.signal,
+      )
         .then((res) => {
           setCardValues(res.values);
           setCardSecondaryValues(res.secondary_values || {});
@@ -299,7 +332,14 @@ const EditorApp: React.FC = () => {
         .finally(() => setCardsLoading(false));
     }, 250);
     return () => clearTimeout(timer);
-  }, [dashboard, dashboardId, stableFilterKey(filters)]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    dashboard,
+    dashboardId,
+    stableFilterKey(combinedFilters),
+    // Undefined while compare is off, so group edits don't refire the fetch.
+    JSON.stringify(groupsApi.bulkOptions ?? null),
+  ]);
 
   const handleFilterChange = useCallback(
     (update: InteractiveFilter) => {
@@ -307,6 +347,17 @@ const EditorApp: React.FC = () => {
       setFilters((prev) => mergeFiltersBySource(prev, enriched));
     },
     [dashboard],
+  );
+
+  // In-place "save selection as group" on components with a live selection
+  // (mirrors App.tsx).
+  const saveGroupApi = useMemo(
+    () => ({
+      groups: groupsApi.groups,
+      createGroup: groupsApi.createGroupFromFilter,
+      clearSelection: handleFilterChange,
+    }),
+    [groupsApi.groups, groupsApi.createGroupFromFilter, handleFilterChange],
   );
 
   // Authors see the panel as viewers will. Cross-tab filter persistence is
@@ -714,7 +765,43 @@ const EditorApp: React.FC = () => {
     [tabSiblings],
   );
 
-  const handleResetAllFilters = useCallback(() => setFilters([]), []);
+  const handleResetAllFilters = useCallback(() => {
+    setFilters([]);
+    // Mirrors App.tsx: group filters narrow the dashboard too.
+    groupsApi.deactivateAllGroupFilters();
+  }, [groupsApi.deactivateAllGroupFilters]);
+
+  // Filter-active groups as removable active-filter summary rows.
+  const groupSummaryRows = groupsApi.summaryRows;
+  // Global "Color by" column discovery + stable palette (mirrors App.tsx).
+  const colorByColumns = useCategoricalColumns(dashboard?.stored_metadata);
+  const colorByColumnRender = useColorByColumnRender(groupsApi.colorBy, colorByColumns);
+
+  // One node, mounted in whichever FilterPanel is on screen (mirrors App.tsx).
+  const groupsSection = (
+    <SelectionGroupsPanel
+      filters={filters}
+      components={dashboard?.stored_metadata ?? []}
+      groups={groupsApi.groups}
+      colorBy={groupsApi.colorBy}
+      colorByColumns={colorByColumns}
+      compareInCards={groupsApi.compareInCards}
+      onCreateGroup={groupsApi.createGroupFromFilter}
+      onClearSelection={handleFilterChange}
+      onUpdateGroup={groupsApi.updateGroup}
+      onDeleteGroup={groupsApi.deleteGroup}
+      onToggleGroupFilter={groupsApi.toggleGroupFilter}
+      onColorByChange={groupsApi.setColorBy}
+      onCompareInCardsChange={groupsApi.setCompareInCards}
+      displayMode={groupsApi.displayMode}
+      onDisplayModeChange={groupsApi.setDisplayMode}
+      showOther={groupsApi.showOther}
+      onShowOtherChange={groupsApi.setShowOther}
+      showOverall={groupsApi.showOverall}
+      onShowOverallChange={groupsApi.setShowOverall}
+      onResetAnalysis={groupsApi.resetAnalysis}
+    />
+  );
 
   // ---- Realtime: WebSocket subscription mirrors App.tsx ---------------------
   const [realtimeMode, setRealtimeMode] = useState<RealtimeMode>(() => {
@@ -1096,6 +1183,7 @@ const EditorApp: React.FC = () => {
   return (
     <>
     <InspectorProviders control={inspectorControl}>
+    <SaveGroupContext.Provider value={saveGroupApi}>
     <AppShell
       header={{ height: 50 }}
       navbar={{
@@ -1120,7 +1208,7 @@ const EditorApp: React.FC = () => {
           onToggleDesktop={toggleDesktop}
           onOpenSettings={openSettings}
           onOpenFilters={isNarrow && leftComponents.length > 0 ? openFilterDrawer : undefined}
-          filterCount={countActiveFilters(filters)}
+          filterCount={countActiveFilters(filters) + groupSummaryRows.length}
           cardsLoading={cardsLoading}
           mode="edit"
           onAddComponent={handleAddComponent}
@@ -1129,6 +1217,14 @@ const EditorApp: React.FC = () => {
           isOwner={isOwner}
           rightExtras={
             <>
+              {dashboard && (
+                <GroupingHeaderControl
+                  groupCount={groupsApi.groups.length}
+                  colorBy={groupsApi.colorBy}
+                >
+                  {groupsSection}
+                </GroupingHeaderControl>
+              )}
               <MapPanelControl panel={mapPanel} />
               {realtimeEnabled && (
                 <span data-tour-id="realtime-indicator" style={{ display: 'inline-flex' }}>
@@ -1249,10 +1345,12 @@ const EditorApp: React.FC = () => {
                   onLayoutChange={handleLeftLayoutChange}
                   collapsed={!filterPanelOpened}
                   onToggleCollapsed={toggleFilterPanel}
+                  groupSummaryRows={groupSummaryRows}
                   footer={
                     <MapPanelDock
                       panel={mapPanel}
-                      filters={filters}
+                      // Docked maps render data: include group filters.
+                      filters={combinedFilters}
                       onFilterChange={handleFilterChange}
                       renderEditActions={renderMapPanelEditActions}
                     />
@@ -1284,7 +1382,14 @@ const EditorApp: React.FC = () => {
                 otherComponents={otherComponents}
                 layoutData={dashboard.right_panel_layout_data}
                 gridSections={dashboard.grid_sections}
-                filters={filters}
+                filters={combinedFilters}
+                groupRender={resolveGroupRender(
+                  groupsApi.colorBy,
+                  groupsApi.renderGroups,
+                  colorByColumnRender,
+                  groupsApi.displayMode,
+                  groupsApi.showOther,
+                )}
                 onFilterChange={handleFilterChange}
                 cardValues={cardValues}
                 cardSecondaryValues={cardSecondaryValues}
@@ -1342,6 +1447,7 @@ const EditorApp: React.FC = () => {
               layoutData={dashboard.left_panel_layout_data}
               filterSections={dashboard.filter_sections}
               dashboardId={dashboardId}
+              groupSummaryRows={groupSummaryRows}
             />
           </Drawer>
         )}
@@ -1355,7 +1461,8 @@ const EditorApp: React.FC = () => {
         {dashboard && dashboardId && (
           <MapPanelSurface
             panel={mapPanel}
-            filters={filters}
+            // Floating maps render data: include group filters.
+            filters={combinedFilters}
             onFilterChange={handleFilterChange}
             renderEditActions={renderMapPanelEditActions}
           />
@@ -1390,6 +1497,7 @@ const EditorApp: React.FC = () => {
         onOp={handleSectionOp}
       />
     </AppShell>
+    </SaveGroupContext.Provider>
     </InspectorProviders>
     </>
   );
@@ -1417,6 +1525,7 @@ interface RightComponentGridProps {
   onDuplicateComponent: (componentId: string) => void;
   onAddComponent: () => void;
   activeHighlight?: ActiveHighlight | null;
+  groupRender?: GroupRenderState;
   /** Fired by each cell's "Move to section" action. The names on offer are
    *  derived from `gridSections`, which this component already receives. */
   onMoveToSection: (componentId: string, section: string | null) => void;
@@ -1446,6 +1555,7 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
   onDuplicateComponent,
   onAddComponent,
   activeHighlight,
+  groupRender,
   onMoveToSection,
 }) => {
   const allComponents = useMemo(
@@ -1502,6 +1612,7 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
       cardSecondaryValues={cardSecondaryValues}
       cardValuesLoading={cardsLoading}
       activeHighlight={activeHighlight}
+      groupRender={groupRender}
       isDraggable={true}
       isResizable={true}
       editMode={true}
