@@ -149,9 +149,13 @@ class FigureSummary:
 @dataclass
 class FilterSummary:
     component_id: str
-    component_type: str  # multiselect | slider | date_picker | ...
+    component_type: str  # stored component_type ("interactive")
     column: str | None
     value: Any
+    # The widget flavour ("MultiSelect", "Slider", ...) — what
+    # `add_filter` keys on when a set_widget proposal is turned into a
+    # concrete row filter (e.g. for threshold resolution).
+    interactive_component_type: str | None = None
 
 
 @dataclass
@@ -442,12 +446,18 @@ def _summarize_dashboard(
             if value is None:
                 value = (meta.get("metadata") or {}).get("value")
             column = meta.get("column_name") or (meta.get("metadata") or {}).get("column_name")
+            widget_type = meta.get("interactive_component_type") or (
+                meta.get("metadata") or {}
+            ).get("interactive_component_type")
             filters.append(
                 FilterSummary(
                     component_id=cid,
                     component_type=str(comp_type),
                     column=column if isinstance(column, str) else None,
                     value=value,
+                    interactive_component_type=widget_type
+                    if isinstance(widget_type, str)
+                    else None,
                 )
             )
 

@@ -1,16 +1,55 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Accordion,
   Badge,
   Code,
+  Collapse,
   Group,
   Stack,
   Text,
   SegmentedControl,
+  UnstyledButton,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
+import { formatPolarsCode } from '../formatPolars';
 import type { ExecutionStep } from '../types';
+
+/** A labeled code block that folds — long Polars chains and row dumps
+ *  shouldn't monopolize the panel once the reader has seen them. */
+const FoldableCode: React.FC<{
+  label: string;
+  color: string;
+  content: string;
+  defaultOpen?: boolean;
+}> = ({ label, color, content, defaultOpen = true }) => {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <Stack gap={4}>
+      <UnstyledButton onClick={() => setOpen((v) => !v)} aria-expanded={open}>
+        <Group gap={4} wrap="nowrap">
+          <Badge size="xs" variant="light" color={color}>
+            {label}
+          </Badge>
+          <Icon
+            icon={open ? 'material-symbols:keyboard-arrow-up' : 'material-symbols:keyboard-arrow-down'}
+            width={14}
+            style={{ color: 'var(--mantine-color-dimmed)' }}
+          />
+        </Group>
+      </UnstyledButton>
+      <Collapse in={open}>
+        <Code
+          block
+          color={color === 'red' ? 'red' : undefined}
+          style={{ fontSize: 12, whiteSpace: 'pre-wrap' }}
+        >
+          {content}
+        </Code>
+      </Collapse>
+    </Stack>
+  );
+};
 
 interface Props {
   steps: ExecutionStep[];
@@ -50,6 +89,23 @@ function cardinality(step: ExecutionStep): string | null {
  */
 const ExecutionTrace: React.FC<Props> = ({ steps, defaultOpen = false }) => {
   const [filter, setFilter] = useState<Filter>('all');
+  // Controlled so failed steps pop open as they stream in — an error the
+  // user has to hunt for behind a collapsed accordion is an invisible
+  // error. Keys index into `steps`, not the filtered view, so they stay
+  // stable when the filter changes.
+  const [opened, setOpened] = useState<string[]>(
+    defaultOpen ? steps.map((_, i) => `s${i}`) : [],
+  );
+  useEffect(() => {
+    const errKeys = steps
+      .map((s, i) => (s.status === 'error' ? `s${i}` : null))
+      .filter((k): k is string => k !== null);
+    if (errKeys.length === 0) return;
+    setOpened((prev) => {
+      const missing = errKeys.filter((k) => !prev.includes(k));
+      return missing.length ? [...prev, ...missing] : prev;
+    });
+  }, [steps]);
 
   const counts = useMemo(() => {
     const c = { success: 0, warning: 0, error: 0, running: 0 };
@@ -58,9 +114,10 @@ const ExecutionTrace: React.FC<Props> = ({ steps, defaultOpen = false }) => {
   }, [steps]);
 
   const visible = useMemo(() => {
-    if (filter === 'errors') return steps.filter((s) => s.status === 'error');
-    if (filter === 'code') return steps.filter((s) => s.code.trim().length > 0);
-    return steps;
+    const indexed = steps.map((step, index) => ({ step, index }));
+    if (filter === 'errors') return indexed.filter(({ step }) => step.status === 'error');
+    if (filter === 'code') return indexed.filter(({ step }) => step.code.trim().length > 0);
+    return indexed;
   }, [steps, filter]);
 
   if (steps.length === 0) return null;
@@ -101,15 +158,16 @@ const ExecutionTrace: React.FC<Props> = ({ steps, defaultOpen = false }) => {
 
       <Accordion
         multiple
-        defaultValue={defaultOpen ? steps.map((_, i) => `s${i}`) : []}
+        value={opened}
+        onChange={setOpened}
         variant="separated"
         styles={{ control: { paddingTop: 6, paddingBottom: 6 } }}
       >
-        {visible.map((step, i) => {
+        {visible.map(({ step, index }) => {
           const color = STATUS_COLOR[step.status] ?? 'gray';
           const icon = STATUS_ICON[step.status] ?? 'material-symbols:help-outline';
           return (
-            <Accordion.Item key={`s${i}`} value={`s${i}`}>
+            <Accordion.Item key={`s${index}`} value={`s${index}`}>
               <Accordion.Control>
                 <Group gap="xs" wrap="nowrap">
                   <Icon icon={icon} width={16} color={`var(--mantine-color-${color}-6)`} />
@@ -144,28 +202,23 @@ const ExecutionTrace: React.FC<Props> = ({ steps, defaultOpen = false }) => {
                     </Text>
                   )}
                   {step.code && (
-                    <Stack gap={4}>
-                      <Badge size="xs" variant="light" color="violet">
-                        Polars
-                      </Badge>
-                      <Code block style={{ fontSize: 12, whiteSpace: 'pre' }}>
-                        {step.code}
-                      </Code>
-                    </Stack>
+                    <FoldableCode
+                      label="Polars"
+                      color="violet"
+                      content={formatPolarsCode(step.code)}
+                    />
                   )}
                   {step.output && (
-                    <Stack gap={4}>
-                      <Badge size="xs" variant="light" color="gray">
-                        Output
-                      </Badge>
-                      <Code
-                        block
-                        color={step.status === 'error' ? 'red' : undefined}
-                        style={{ fontSize: 12, whiteSpace: 'pre-wrap' }}
-                      >
-                        {step.output}
-                      </Code>
-                    </Stack>
+                    <FoldableCode
+                      label={step.status === 'error' ? 'Error' : 'Output'}
+                      color={step.status === 'error' ? 'red' : 'gray'}
+                      content={step.output}
+                    />
+                  )}
+                  {!step.output && step.status === 'error' && (
+                    <Text size="xs" c="red">
+                      Step failed but returned no error output.
+                    </Text>
                   )}
                 </Stack>
               </Accordion.Panel>

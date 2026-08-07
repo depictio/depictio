@@ -2,6 +2,7 @@ import React from 'react';
 import { ActionIcon, Badge, Box, Button, Group, Loader, Menu, Title, Tooltip, useMantineColorScheme } from '@mantine/core';
 import { BRAND_PALETTES, useBrandAccent, useBranding } from 'depictio-react-core';
 import { Icon } from '@iconify/react';
+import { AI_ICON } from 'depictio-react-ai';
 
 import type { BrandTheme, DashboardData, DashboardSummary } from 'depictio-react-core';
 import PoweredBy from './PoweredBy';
@@ -328,7 +329,7 @@ const Header: React.FC<HeaderProps> = ({
                       Manually
                     </Menu.Item>
                     <Menu.Item
-                      leftSection={<Icon icon="mdi:auto-fix" width={14} />}
+                      leftSection={<Icon icon={AI_ICON} width={14} />}
                       onClick={onAddWithAI}
                       data-testid="add-with-ai"
                     >

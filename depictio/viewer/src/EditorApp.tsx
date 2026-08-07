@@ -98,9 +98,12 @@ import {
   SaveGroupContext,
   BrandScope,
   clearFiltersBySource,
+  applyAIPlanToFilters,
+  revertAIPlanFilters,
   fetchProjectFromDashboard,
 } from 'depictio-react-core';
 import { AddWithAIModal, AIAnalyzePanel, AIKeySection, useAIHealth } from 'depictio-react-ai';
+import AISuggestionPreview from './components/ai/AISuggestionPreview';
 import type {
   ApplyActionsPayload,
   AvailableDataCollection,
@@ -1190,6 +1193,11 @@ const EditorApp: React.FC = () => {
     Record<string, Record<string, unknown>>
   >({});
 
+  // Widget index → the entry it had before the currently-applied AI plan
+  // touched it (null = it was unset). What lets the next apply (or the
+  // chip clear) restore ground state instead of stacking plans.
+  const aiTouchedWidgetsRef = useRef<Map<string, InteractiveFilter | null> | null>(null);
+
   const handleApplyAIActions = useCallback(
     ({ actions, resolved }: ApplyActionsPayload) => {
       const exprFilters: InteractiveFilter[] = [];
@@ -1233,9 +1241,17 @@ const EditorApp: React.FC = () => {
       });
 
       setFilters((prev) => {
-        let next = clearFiltersBySource(prev, 'ai_prompt');
-        for (const update of widgetUpdates) next = mergeFiltersBySource(next, update);
-        return [...next, ...exprFilters];
+        // A new AI plan replaces the previous one wholesale: its expression
+        // filters are dropped AND every widget it moved is restored to its
+        // pre-plan value before this plan's updates land.
+        const { next, touched } = applyAIPlanToFilters(
+          prev,
+          widgetUpdates,
+          exprFilters,
+          aiTouchedWidgetsRef.current,
+        );
+        aiTouchedWidgetsRef.current = touched;
+        return next;
       });
       setAiFilterDescriptions(descriptions);
 
@@ -1276,7 +1292,11 @@ const EditorApp: React.FC = () => {
     [filters],
   );
   const handleClearAIFilters = useCallback(() => {
-    setFilters((prev) => clearFiltersBySource(prev, 'ai_prompt'));
+    setFilters((prev) => {
+      const next = revertAIPlanFilters(prev, aiTouchedWidgetsRef.current);
+      aiTouchedWidgetsRef.current = null;
+      return next;
+    });
     setAiFilterDescriptions([]);
   }, []);
   const aiFigureOverrideCount = Object.keys(aiFigureOverrides).length;
@@ -2224,6 +2244,9 @@ const EditorApp: React.FC = () => {
           availableDataCollections={aiDataCollections}
           onApply={handleAIComponentReady}
           serverKeyAvailable={aiServerKeyAvailable}
+          renderSuggestionPreview={(s, dc) => (
+            <AISuggestionPreview suggestion={s} dc={dc} />
+          )}
         />
       )}
 
@@ -2254,6 +2277,7 @@ const EditorApp: React.FC = () => {
         onClose={handleCloseSectionModal}
         onManageAll={handleManageAllSections}
       />
+
     </AppShell>
     </BrandScope>
     </SaveGroupContext.Provider>

@@ -171,6 +171,14 @@ export default defineConfig({
         find: 'depictio-react-core',
         replacement: path.resolve(__dirname, '../../packages/depictio-react-core/src'),
       },
+      // Same deal for depictio-react-ai: without the alias Vite resolves it
+      // through node_modules and pre-bundles it into .vite/deps, so package
+      // edits (e.g. new exports) are served from a stale optimizer cache and
+      // get no HMR.
+      {
+        find: 'depictio-react-ai',
+        replacement: path.resolve(__dirname, '../../packages/depictio-react-ai/src'),
+      },
       // Force any bare `plotly.js` import to resolve to the prebuilt browser
       // UMD bundle that react-plotly.js itself uses internally. Otherwise
       // Vite/esbuild walks `plotly.js/src/traces/image/helpers.js` which has
