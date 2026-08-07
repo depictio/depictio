@@ -72,6 +72,30 @@ class TestSetWidget:
         assert resolved[0].kind == "set_widget"
         assert resolved[0].component_id == "widget-depth"
         assert resolved[0].value == [10, 50]
+        assert resolved[0].label == "depth"
+
+    def test_scalar_value_for_multiselect_widget_is_wrapped(self):
+        # LLMs write value: "Adelie" where the MultiSelect needs ["Adelie"];
+        # the raw scalar crashes the client render (`.map` on a non-array).
+        ctx = DashboardContext(
+            dashboard_id="d" * 24,
+            figures=[],
+            filters=[
+                FilterSummary(
+                    component_id="widget-species",
+                    component_type="interactive",
+                    column="species",
+                    value=None,
+                    interactive_component_type="MultiSelect",
+                )
+            ],
+        )
+        resolved, warnings = _resolve(
+            [FilterProposal(kind="set_widget", component_id="widget-species", value="Adelie")],
+            ctx,
+        )
+        assert warnings == []
+        assert resolved[0].value == ["Adelie"]
 
     def test_unknown_widget_is_dropped_with_warning(self, dashboard_ctx):
         resolved, warnings = _resolve(
@@ -190,6 +214,104 @@ class TestThreshold:
             active=active,
         )
         assert captured["metadata"] == active
+
+    def test_threshold_moves_an_existing_range_slider(self, monkeypatch):
+        # A dashboard with a RangeSlider on the threshold column gets its
+        # WIDGET moved ([threshold, column max] for >=) instead of an
+        # invisible expression filter stacked next to it.
+        def fake_load(**kwargs):
+            return pl.DataFrame({"depth": [float(x) for x in range(1, 101)]})
+
+        monkeypatch.setattr(filter_resolver, "load_deltatable_lite", fake_load)
+        monkeypatch.setattr(
+            filter_resolver,
+            "init_data_for_dc",
+            lambda dc_id: {str(dc_id): {"delta_location": "s3://fake", "dc_type": "table"}},
+        )
+        ctx = DashboardContext(
+            dashboard_id="d" * 24,
+            figures=[],
+            filters=[
+                FilterSummary(
+                    component_id="widget-depth",
+                    component_type="interactive",
+                    column="depth",
+                    value=None,
+                    interactive_component_type="RangeSlider",
+                )
+            ],
+        )
+        resolved, warnings = _resolve(
+            [
+                FilterProposal(
+                    kind="threshold",
+                    threshold=ThresholdSpec(column="depth", q=0.97, op=">="),
+                )
+            ],
+            ctx,
+        )
+        assert warnings == []
+        (entry,) = resolved
+        assert entry.kind == "set_widget"
+        assert entry.component_id == "widget-depth"
+        assert entry.value == [97.0, 100.0]
+        assert "top 3% of depth" in entry.description
+
+    def test_threshold_sees_co_proposed_filters(self, dashboard_ctx, monkeypatch):
+        # "top 10% among Adelie on Dream" must quantile over the rows the
+        # plan itself scopes to — the sibling set_widget / filter_expr
+        # proposals join the loader metadata, and a proposed value replaces
+        # the same widget's currently-active one.
+        captured: dict = {}
+
+        def fake_load(**kwargs):
+            captured.update(kwargs)
+            return pl.DataFrame({"depth": [1.0, 2.0, 3.0]})
+
+        monkeypatch.setattr(filter_resolver, "load_deltatable_lite", fake_load)
+        monkeypatch.setattr(
+            filter_resolver,
+            "init_data_for_dc",
+            lambda dc_id: {str(dc_id): {"delta_location": "s3://fake", "dc_type": "table"}},
+        )
+        ctx = DashboardContext(
+            dashboard_id="d" * 24,
+            figures=[],
+            filters=[
+                FilterSummary(
+                    component_id="widget-species",
+                    component_type="interactive",
+                    column="species",
+                    value=None,
+                    interactive_component_type="MultiSelect",
+                )
+            ],
+        )
+        active = [
+            {"index": "widget-species", "value": ["B"]},  # replaced by the proposal
+            {"index": "widget-other", "value": [1, 5]},  # untouched
+        ]
+        _resolve(
+            [
+                FilterProposal(kind="set_widget", component_id="widget-species", value=["A"]),
+                FilterProposal(kind="filter_expr", filter_expr="col('depth') > 10"),
+                FilterProposal(
+                    kind="threshold",
+                    threshold=ThresholdSpec(column="depth", q=0.9, op=">="),
+                ),
+            ],
+            ctx,
+            active=active,
+        )
+        assert captured["metadata"] == [
+            {"index": "widget-other", "value": [1, 5]},
+            {
+                "interactive_component_type": "MultiSelect",
+                "column_name": "species",
+                "value": ["A"],
+            },
+            {"filter_expr": "col('depth') > 10"},
+        ]
 
 
 class TestMixedBatch:

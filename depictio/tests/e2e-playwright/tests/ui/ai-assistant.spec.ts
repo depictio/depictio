@@ -129,6 +129,9 @@ test.describe("AI assistant", () => {
     const panel = page.getByText("Ask the dashboard");
     await expect(panel).toBeVisible({ timeout: 20_000 });
 
+    // The prompt has two levels; only "Update dashboard" may propose
+    // actions. Interpret is the default, so flip the toggle first.
+    await page.getByRole("radio", { name: "Update dashboard" }).click();
     await page
       .getByPlaceholder(/Show the top 3%/)
       .fill("median depth then filter to it");
@@ -256,10 +259,11 @@ test.describe("AI assistant", () => {
     const dashboardId = await openFirstDashboard(page);
     await page.goto(`/dashboard-edit/${dashboardId}`);
 
-    // Split menu: "Add component" opens a dropdown with the AI entry.
+    // Nested menu: "Add" > "Component" submenu holds the AI entry.
     const addButton = page.locator("[data-tour-id='editor-add-component']");
     await expect(addButton).toBeEnabled({ timeout: 20_000 });
     await addButton.click();
+    await page.locator("[data-testid='add-component-submenu']").click();
     await page.locator("[data-testid='add-with-ai']").click();
 
     const modal = page.getByText("Add component with AI");
@@ -314,6 +318,7 @@ test.describe("AI assistant", () => {
     const addButton = page.locator("[data-tour-id='editor-add-component']");
     await expect(addButton).toBeEnabled({ timeout: 20_000 });
     await addButton.click();
+    await page.locator("[data-testid='add-component-submenu']").click();
     await page.locator("[data-testid='add-with-ai']").click();
     await expect(page.getByText("Add component with AI")).toBeVisible();
 

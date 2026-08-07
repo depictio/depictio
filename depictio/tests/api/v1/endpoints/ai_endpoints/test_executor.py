@@ -36,6 +36,21 @@ class TestAllowedExpressions:
         assert step.status == "success"
         assert "30" in step.output
 
+    def test_compound_predicates_use_bitwise_operators(self, df):
+        # `&` / `|` / `~` are how Polars combines expression predicates —
+        # the allowlist must accept BitAnd/BitOr/Invert or the LLM's most
+        # common filter shape dies with BlockedByPolicy.
+        step = execute_polars(
+            "df.filter((pl.col('depth') >= 20) & (pl.col('quality') > 0.6))",
+            df,
+        )
+        assert step.status == "success"
+        step = execute_polars(
+            "df.filter((pl.col('sample') == 'a') | ~(pl.col('depth') < 40))",
+            df,
+        )
+        assert step.status == "success"
+
     def test_group_by_agg(self, df):
         step = execute_polars(
             "df.group_by('sample').agg(pl.col('depth').mean())",

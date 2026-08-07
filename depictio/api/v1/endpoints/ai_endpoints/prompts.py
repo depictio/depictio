@@ -5,7 +5,7 @@ Kept in one place so prompt iteration is decoupled from route handlers.
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Literal, get_args
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.endpoints.ai_endpoints.context import (
@@ -22,6 +22,7 @@ from depictio.models.components.constants import (
     MAP_TYPES,
     VISU_TYPES,
 )
+from depictio.models.components.lite import CardLiteComponent
 
 ComponentType = Literal[
     "figure",
@@ -46,6 +47,18 @@ def _aggregation_lines() -> str:
     )
 
 
+def _card_layout_lines() -> str:
+    """Advertise the multi-metric layouts straight from the lite model.
+
+    Derived rather than hand-written so a new ``secondary_layout`` option
+    (or a changed companion-field contract in the field description) shows
+    up in the prompt without anyone remembering to update it.
+    """
+    field = CardLiteComponent.model_fields["secondary_layout"]
+    layouts = ", ".join(get_args(field.annotation))
+    return f"  secondary_layout ∈ {{{layouts}}}\n  {field.description}"
+
+
 def _interactive_lines() -> str:
     return "\n".join(
         f"  {col_type:9s} -> {', '.join(types) if types else '(unsupported)'}"
@@ -66,6 +79,11 @@ _CONSTRAINT_SHEETS: dict[str, str] = {
         "Allowed aggregation × column_type:\n"
         f"{_aggregation_lines()}\n"
         "Optional: aggregations (list of secondary stats, same compatibility rules),\n"
+        "secondary_layout — how the strip under the hero renders. Match the user's\n"
+        "wording: 'histogram'/'distribution' -> histogram, 'box plot' -> box_plot,\n"
+        "'trend'/'over time' -> trend, 'top N'/'breakdown' -> top_n. Never leave the\n"
+        "default 'vertical' when the user names a visual style.\n"
+        f"{_card_layout_lines()}\n"
         "filter_expr (Polars expression scoped to the DC), icon_name, icon_color, title."
     ),
     "interactive": (

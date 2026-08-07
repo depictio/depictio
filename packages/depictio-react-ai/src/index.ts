@@ -2,6 +2,10 @@
  * Public surface of depictio-react-ai.
  */
 
+// The one AI affordance icon (star) — hosts reuse it for their own AI
+// entry points (menus, builder buttons) so the cue stays uniform.
+export { AI_ICON } from './icons';
+
 // Components
 export { default as AIAnalyzePanel } from './components/AIAnalyzePanel';
 export { default as AIKeySection } from './components/AIKeySection';

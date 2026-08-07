@@ -24,6 +24,7 @@ import { Icon } from '@iconify/react';
 
 import { getSummaries } from '../api';
 import { useSummarizeSection } from '../hooks';
+import { AI_ICON } from '../icons';
 import type {
   SummarizeSectionResponse,
   SummaryComponentPayload,
@@ -190,7 +191,7 @@ export const SummarizeSectionButton: React.FC<ButtonProps> = ({
       aria-label="Summarize section"
       data-testid={`ai-summarize-${section ?? 'dashboard'}`}
     >
-      <Icon icon="material-symbols:auto-awesome-outline" width={16} />
+      <Icon icon={AI_ICON} width={16} />
     </ActionIcon>
   </Tooltip>
 );
@@ -230,7 +231,7 @@ export const SectionSummaryPanel: React.FC<PanelProps> = ({
       <Stack gap={6}>
         <Group gap="xs" align="center">
           <Icon
-            icon="material-symbols:auto-awesome-outline"
+            icon={AI_ICON}
             width={16}
             color="var(--mantine-color-violet-6)"
           />

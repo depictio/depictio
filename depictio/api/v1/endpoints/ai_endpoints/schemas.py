@@ -170,6 +170,9 @@ class ResolvedFilter(BaseModel):
     filter_expr: str | None = None
     dc_id: str | None = None
     description: str = ""
+    # Human handle for set_widget targets (the widget's column) so clients
+    # can show "body_mass_g → [4450, 6300]" instead of a raw component id.
+    label: str | None = None
 
 
 class DashboardActions(BaseModel):

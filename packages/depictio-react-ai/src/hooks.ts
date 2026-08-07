@@ -239,10 +239,13 @@ export function useAnalyze(dashboardId: string) {
     ): Promise<AnalysisResult | null> => {
       const userMsgId = newId();
       const assistantId = newId();
+      // Server default is the mutating flow when mode is omitted.
+      const mode = opts.mode ?? 'mutate';
       appendMessage(dashboardId, {
         id: userMsgId,
         role: 'user',
         content: prompt,
+        mode,
         ts: Date.now(),
       });
       appendMessage(dashboardId, {
@@ -250,6 +253,7 @@ export function useAnalyze(dashboardId: string) {
         role: 'assistant',
         content: '',
         steps: [],
+        mode,
         ts: Date.now(),
       });
 
@@ -306,6 +310,16 @@ export function useAnalyze(dashboardId: string) {
             },
           },
         );
+      } catch (err) {
+        // Transport-level failures (HTTP status, network drop, aborted
+        // stream) never come through as an SSE `error` event — surface
+        // them on the assistant message so the run doesn't end silently.
+        const aborted = err instanceof DOMException && err.name === 'AbortError';
+        if (!aborted) {
+          patchMessage(dashboardId, assistantId, {
+            content: `Error: ${err instanceof Error ? err.message : String(err)}`,
+          });
+        }
       } finally {
         setPending(dashboardId, false);
       }

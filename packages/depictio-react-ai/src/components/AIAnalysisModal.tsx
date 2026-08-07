@@ -20,6 +20,7 @@ import {
 import { Icon } from '@iconify/react';
 
 import { useAnalysisReport } from '../hooks';
+import { AI_ICON } from '../icons';
 import type { AnalysisReport, Finding } from '../types';
 import ExecutionTrace from './ExecutionTrace';
 
@@ -86,7 +87,7 @@ const AIAnalysisModal: React.FC<Props> = ({ dashboardId, opened, onClose, active
       fullScreen
       title={
         <Group gap="xs">
-          <Icon icon="material-symbols:query-stats" width={20} />
+          <Icon icon={AI_ICON} width={20} />
           <Title order={4}>Analyze this dashboard</Title>
           <Badge variant="light" color="violet">
             read-only
@@ -108,7 +109,10 @@ const AIAnalysisModal: React.FC<Props> = ({ dashboardId, opened, onClose, active
                 value={prompt}
                 onChange={(e) => setPrompt(e.currentTarget.value)}
                 onKeyDown={(e) => {
-                  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') submit();
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    submit();
+                  }
                 }}
               />
               {pending ? (

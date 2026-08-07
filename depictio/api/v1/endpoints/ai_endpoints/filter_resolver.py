@@ -59,8 +59,8 @@ def resolve_threshold(
     workflow_id: str,
     data_collection_id: str,
     active_filters: list[dict[str, Any]] | None = None,
-) -> tuple[str, str]:
-    """Compute the concrete (filter_expr, description) for a ThresholdSpec.
+) -> tuple[float, str, str]:
+    """Compute the concrete (value, filter_expr, description) for a ThresholdSpec.
 
     Raises ValueError with an LLM/user-readable message on any failure
     (unknown column, non-numeric column, empty data).
@@ -92,7 +92,50 @@ def resolve_threshold(
     # Belt and braces: the synthesized expression must itself pass the
     # sandbox validator before we hand it to any client.
     validate_filter_expr(expr)
-    return expr, _describe_threshold(spec, float(value))
+    return float(value), expr, _describe_threshold(spec, float(value))
+
+
+def _column_bounds(
+    column: str, *, workflow_id: str, data_collection_id: str
+) -> tuple[float, float] | None:
+    """Unfiltered (min, max) of a numeric column, or None when unavailable.
+
+    Used to turn a one-sided threshold into a RangeSlider value: the other
+    end of the range must sit at the column's true bound, not at the bound
+    of the currently-filtered rows, so the slider reads as "everything from
+    the threshold up" rather than an arbitrary-looking span.
+    """
+    try:
+        df = load_deltatable_lite(
+            workflow_id=ObjectId(workflow_id),
+            data_collection_id=ObjectId(data_collection_id),
+            metadata=None,
+            select_columns=[column],
+            init_data=init_data_for_dc(data_collection_id),
+        )
+        series = df.get_column(column)
+        lo, hi = series.min(), series.max()
+        if lo is None or hi is None:
+            return None
+        return float(lo), float(hi)  # type: ignore[arg-type]
+    except Exception:  # noqa: BLE001 — bounds are an enhancement, never fatal
+        return None
+
+
+def _coerce_widget_value(widget_type: str | None, value: Any) -> Any:
+    """Shape an LLM-proposed widget value to what the widget expects.
+
+    The LLM freely writes ``"Adelie"`` where a MultiSelect needs
+    ``["Adelie"]`` (and sometimes the reverse for single-value widgets);
+    handing the raw shape to the client crashes the render.
+    """
+    if value is None or widget_type is None:
+        return value
+    if widget_type in ("MultiSelect",):
+        return value if isinstance(value, list) else [value]
+    if widget_type in ("Select", "SegmentedControl", "TextInput") and isinstance(value, list):
+        return value[0] if len(value) == 1 else value
+    return value
 
 
 def resolve_proposals(
@@ -106,7 +149,43 @@ def resolve_proposals(
     """Validate/resolve proposals; return (resolved, warnings)."""
     resolved: list[ResolvedFilter] = []
     warnings: list[str] = []
-    widget_ids = {f.component_id for f in dashboard_ctx.filters if f.component_id}
+    widgets = {f.component_id: f for f in dashboard_ctx.filters if f.component_id}
+    widget_ids = set(widgets)
+
+    # A threshold like "top 10% of body_mass among Adelie on Dream" must be
+    # computed on the rows the PLAN leaves visible, not just the rows the
+    # dashboard already shows — otherwise the quantile silently comes from
+    # the unfiltered table and contradicts the sibling widget proposals.
+    # So: turn the plan's own set_widget / filter_expr proposals into filter
+    # metadata first, and resolve every threshold against active ∪ proposed
+    # (proposed value wins when the same widget appears in both).
+    co_proposed: list[dict[str, Any]] = []
+    overridden_widgets: set[str] = set()
+    for proposal in proposals:
+        if proposal.kind == "set_widget" and proposal.component_id in widgets:
+            widget = widgets[proposal.component_id]
+            if widget.column and widget.interactive_component_type:
+                overridden_widgets.add(proposal.component_id)
+                co_proposed.append(
+                    {
+                        "interactive_component_type": widget.interactive_component_type,
+                        "column_name": widget.column,
+                        "value": _coerce_widget_value(
+                            widget.interactive_component_type, proposal.value
+                        ),
+                    }
+                )
+        elif proposal.kind == "filter_expr" and proposal.filter_expr:
+            try:
+                validate_filter_expr(proposal.filter_expr)
+            except Exception:  # noqa: BLE001 — warned about in the main loop
+                continue
+            co_proposed.append({"filter_expr": proposal.filter_expr})
+
+    threshold_base = [
+        f for f in (active_filters or []) if str(f.get("index") or "") not in overridden_widgets
+    ]
+    threshold_filters = threshold_base + co_proposed
 
     for proposal in proposals:
         if proposal.kind == "set_widget":
@@ -122,9 +201,13 @@ def resolve_proposals(
                 ResolvedFilter(
                     kind="set_widget",
                     component_id=proposal.component_id,
-                    value=proposal.value,
+                    value=_coerce_widget_value(
+                        widgets[proposal.component_id].interactive_component_type,
+                        proposal.value,
+                    ),
                     dc_id=data_collection_id,
                     description=proposal.reason,
+                    label=widgets[proposal.component_id].column,
                 )
             )
 
@@ -154,17 +237,55 @@ def resolve_proposals(
                 warnings.append("threshold proposal but no data collection in scope — skipped")
                 continue
             try:
-                expr, description = resolve_threshold(
+                value, expr, description = resolve_threshold(
                     proposal.threshold,
                     workflow_id=workflow_id,
                     data_collection_id=data_collection_id,
-                    active_filters=active_filters,
+                    active_filters=threshold_filters,
                 )
             except Exception as e:  # noqa: BLE001
                 warnings.append(f"threshold on {proposal.threshold.column!r} failed: {e}")
                 continue
             if proposal.reason:
                 description = f"{description} ({proposal.reason})"
+
+            # When the dashboard already has a RangeSlider on this column,
+            # materialize the threshold by MOVING THAT WIDGET instead of
+            # stacking an invisible expression filter next to it — the user
+            # sees the handle move and the active-filters list stays the
+            # single source of truth. RangeSlider filtering is inclusive on
+            # both ends, so only the inclusive ops translate faithfully.
+            slider = next(
+                (
+                    w
+                    for w in dashboard_ctx.filters
+                    if w.component_id
+                    and w.column == proposal.threshold.column
+                    and w.interactive_component_type == "RangeSlider"
+                ),
+                None,
+            )
+            if slider and proposal.threshold.op in (">=", "<="):
+                bounds = _column_bounds(
+                    proposal.threshold.column,
+                    workflow_id=workflow_id,
+                    data_collection_id=data_collection_id,
+                )
+                if bounds is not None:
+                    lo, hi = bounds
+                    slider_value = [value, hi] if proposal.threshold.op == ">=" else [lo, value]
+                    resolved.append(
+                        ResolvedFilter(
+                            kind="set_widget",
+                            component_id=slider.component_id,
+                            value=slider_value,
+                            dc_id=data_collection_id,
+                            description=description,
+                            label=slider.column,
+                        )
+                    )
+                    continue
+
             resolved.append(
                 ResolvedFilter(
                     kind="filter_expr",
