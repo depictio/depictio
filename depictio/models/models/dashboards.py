@@ -156,6 +156,40 @@ class FilterSectionSpec(BaseModel):
     )
 
 
+class DashboardThemeSpec(BaseModel):
+    """Dashboard-level defaults for server-rendered Plotly figures (#397).
+
+    Applied to every figure component that doesn't set the corresponding
+    option itself — component-explicit values always win, and the instance
+    branding / mantine defaults apply when this is unset.
+
+    Example YAML:
+        plot_theme:
+          template: seaborn
+          colorway:
+            - "#0ca678"
+            - "#f76707"
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    template: str | None = Field(
+        default=None,
+        description="Plotly template name (e.g. 'seaborn', 'plotly_white') used by all "
+        "figures whose component doesn't pick one. Unset/`mantine_light`/`mantine_dark` "
+        "mean 'follow the UI theme'.",
+    )
+    colorway: list[str] | None = Field(
+        default=None,
+        description="Default categorical color sequence (hex list) for figures that set "
+        "neither `color_discrete_sequence` nor `color_discrete_map`.",
+    )
+
+    @property
+    def is_empty(self) -> bool:
+        return self.template is None and not self.colorway
+
+
 class DashboardDataLite(BaseModel):
     """Minimal dashboard format for YAML import/export.
 
@@ -250,6 +284,13 @@ class DashboardDataLite(BaseModel):
         default_factory=list,
         description="Optional presentation for the main grid's sections. Same shape "
         "as `filter_sections`, applied to non-interactive components.",
+    )
+
+    # Dashboard-level figure theme defaults (template + colorway)
+    plot_theme: DashboardThemeSpec | None = Field(
+        default=None,
+        description="Optional Plotly template/colorway applied as the default for all "
+        "figure components of this dashboard.",
     )
 
     # Components using Lite models
@@ -364,6 +405,7 @@ class DashboardDataLite(BaseModel):
         "workflow_system",
         "filter_sections",
         "grid_sections",
+        "plot_theme",
     ]
 
     @staticmethod
@@ -1027,6 +1069,7 @@ class DashboardDataLite(BaseModel):
             # "declared nowhere, sorted by first appearance".
             filter_sections=dashboard_data.get("filter_sections") or [],
             grid_sections=dashboard_data.get("grid_sections") or [],
+            plot_theme=dashboard_data.get("plot_theme") or None,
             # Tab fields
             is_main_tab=dashboard_data.get("is_main_tab", True),
             tab_order=dashboard_data.get("tab_order", 0),
@@ -1095,6 +1138,7 @@ class DashboardDataLite(BaseModel):
             # order sections and render their icons.
             "filter_sections": [s.model_dump() for s in self.filter_sections],
             "grid_sections": [s.model_dump() for s in self.grid_sections],
+            "plot_theme": self.plot_theme.model_dump() if self.plot_theme else None,
             # parent_dashboard_tag is resolved to parent_dashboard_id during import
         }
 
@@ -1421,6 +1465,9 @@ class DashboardData(MongoModel):
     # sections existed, which renders exactly as it did then.
     filter_sections: list[FilterSectionSpec] = []
     grid_sections: list[FilterSectionSpec] = []
+    # Dashboard-level figure theme defaults. None for dashboards saved before
+    # the feature existed — figures then follow the UI theme exactly as before.
+    plot_theme: DashboardThemeSpec | None = None
     buttons_data: dict = {
         "unified_edit_mode": True,  # Default edit mode ON for dashboard owners
         "add_components_button": {"count": 0},

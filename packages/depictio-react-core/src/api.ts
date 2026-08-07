@@ -318,6 +318,15 @@ export interface FilterSectionSpec {
   collapsed?: boolean;
 }
 
+/** Dashboard-level Plotly defaults. Mirrors DashboardThemeSpec in
+ *  depictio/models/models/dashboards.py — component-explicit values win. */
+export interface DashboardThemeSpec {
+  /** Plotly template name; null/mantine_* mean "follow the UI theme". */
+  template?: string | null;
+  /** Default categorical color sequence (hex list). */
+  colorway?: string[] | null;
+}
+
 export interface DashboardData {
   _id?: string;
   dashboard_id?: string;
@@ -330,6 +339,8 @@ export interface DashboardData {
   /** Ordering + icons for the left panel's filter sections. */
   filter_sections?: FilterSectionSpec[];
   grid_sections?: FilterSectionSpec[];
+  /** Dashboard-level Plotly template/colorway defaults for figures. */
+  plot_theme?: DashboardThemeSpec | null;
   /** Project-level realtime config — only when ``enabled === true`` should
    *  the viewer mount the WebSocket subscription / live-updates indicator. */
   project_realtime?: { enabled: boolean; debounce_ms: number };
@@ -1731,6 +1742,9 @@ export interface FigurePreviewRequest {
   metadata: Record<string, unknown>;
   filters?: InteractiveFilter[];
   theme?: 'light' | 'dark';
+  /** Owning dashboard — lets the server fold the dashboard's `plot_theme`
+   *  defaults into the preview so it matches the saved render. */
+  dashboard_id?: string;
 }
 
 export async function previewFigure(
