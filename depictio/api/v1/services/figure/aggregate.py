@@ -232,6 +232,7 @@ def build_aggregated_figure(
     plan: AggPlan,
     theme: str = "light",
     render_stats: dict | None = None,
+    template_override: str | None = None,
 ) -> go.Figure | None:
     """Execute ``plan`` against ``scan`` and return the figure.
 
@@ -239,11 +240,14 @@ def build_aggregated_figure(
     at the data (missing column, cardinality blow-up); the caller then falls back
     to the px path. Never raises for data reasons — a fallback is always better
     than a failed render.
+
+    ``template_override`` pins an explicit Plotly template (component- or
+    dashboard-level choice); left ``None`` the figure follows the UI theme.
     """
     from depictio.api.v1.services.figure.mantine_templates import ensure_mantine_templates
 
     ensure_mantine_templates()
-    template = get_theme_template(theme)
+    template = template_override or get_theme_template(theme)
 
     try:
         available = set(scan.collect_schema().names())

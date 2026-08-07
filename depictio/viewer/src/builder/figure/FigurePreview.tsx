@@ -59,7 +59,13 @@ const FigurePreview: React.FC = () => {
       const id = ++reqId.current;
       setLoading(true);
       setError(null);
-      previewFigure({ metadata: buildMetadata(state), filters: previewFilters })
+      previewFigure({
+        metadata: buildMetadata(state),
+        filters: previewFilters,
+        // Fold the dashboard's plot_theme defaults into the preview so it
+        // matches what the saved component will render.
+        dashboard_id: state.dashboardId ?? undefined,
+      })
         .then((res) => {
           if (reqId.current !== id) return;
           setFigure(res);

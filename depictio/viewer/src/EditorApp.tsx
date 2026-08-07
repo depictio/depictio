@@ -98,6 +98,7 @@ import type {
   DashboardData,
   DashboardPermissions,
   DashboardSummary,
+  DashboardThemeSpec,
   FilterSectionSpec,
   PersistentSection,
   InteractiveFilter,
@@ -227,6 +228,10 @@ const EditorApp: React.FC = () => {
   // Persist across tab/page navigations (matches App.tsx + Dash app).
   const [desktopOpened, toggleDesktop] = useSidebarOpen();
   const [settingsOpened, { open: openSettings, close: closeSettings }] = useDisclosure(false);
+  // Bumped after a plot_theme save lands so figure components refetch and pick
+  // up the new dashboard-level template/colorway (the server reads plot_theme
+  // from the DB at render time, so the request body doesn't change).
+  const [plotThemeTick, setPlotThemeTick] = useState(0);
   const [sectionsOpened, { open: openSections, close: closeSections }] = useDisclosure(false);
   /** The one add/edit dialog. `fromManager` is what sends the user back to the
    *  Sections manager on close — the manager closes while this is open rather
@@ -560,6 +565,28 @@ const EditorApp: React.FC = () => {
     const own = new Set((cur.stored_metadata ?? []).map((m) => m.index));
     return layout.filter((item) => own.has(stripBoxPrefix(String(item.i))));
   }, []);
+  /** Dashboard-level plot theme (#397). Saved immediately (not debounced):
+   *  the server resolves `plot_theme` from the DB at figure-render time, so
+   *  figures can only refetch once the save has landed. */
+  const handlePlotThemeChange = useCallback(
+    (spec: DashboardThemeSpec | null) => {
+      const cur = dashboardRef.current;
+      if (!cur || !dashboardId) return;
+      const next = { ...cur, plot_theme: spec };
+      applyDashboard(next);
+      setSaveStatus('saving');
+      saveDashboard(dashboardId, next)
+        .then(() => {
+          setSaveStatus('saved');
+          setPlotThemeTick((t) => t + 1);
+        })
+        .catch((err) => {
+          console.error('[EditorApp] plot theme save failed:', err);
+          setSaveStatus('error');
+        });
+    },
+    [dashboardId, applyDashboard],
+  );
 
   const handleLeftLayoutChange = useCallback(
     (newLayout: Layout[]) => {
@@ -1768,6 +1795,7 @@ const EditorApp: React.FC = () => {
                 activeHighlight={activeHighlight}
                 onMoveToSection={handleMoveToSection}
                 renderSectionActions={renderGridSectionAction}
+                refreshTick={plotThemeTick}
               />
               {bottomGridSections.length > 0 && (
                 <PersistentSectionsHost
@@ -1860,6 +1888,7 @@ const EditorApp: React.FC = () => {
         onClose={closeSettings}
         dashboard={dashboard}
         onToggleFunnelFiltering={handleToggleFunnelFiltering}
+        onChangePlotTheme={handlePlotThemeChange}
       />
 
       <TabModal
@@ -1924,6 +1953,8 @@ interface RightComponentGridProps {
   onMoveToSection: (componentId: string, section: string | null) => void;
   /** Per-section header action — the "…" that opens that section's settings. */
   renderSectionActions?: (sectionName: string | null) => React.ReactNode;
+  /** Bumped when the dashboard plot theme changes, so figures refetch. */
+  refreshTick?: number;
 }
 
 /**
@@ -1953,6 +1984,7 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
   groupRender,
   onMoveToSection,
   renderSectionActions,
+  refreshTick,
 }) => {
   const allComponents = useMemo(
     () => [...cardComponents, ...otherComponents],
@@ -2009,6 +2041,7 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
       cardValuesLoading={cardsLoading}
       activeHighlight={activeHighlight}
       groupRender={groupRender}
+      refreshTick={refreshTick}
       isDraggable={true}
       isResizable={true}
       editMode={true}

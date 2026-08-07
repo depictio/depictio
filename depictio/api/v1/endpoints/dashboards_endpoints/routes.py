@@ -45,6 +45,7 @@ from depictio.api.v1.services.card_metrics import (
     compute_trend_on_grid,
     trend_axis_grid,
 )
+from depictio.api.v1.services.figure.figure_builder import merge_dashboard_plot_theme
 from depictio.api.v1.services.card_metrics import (
     numeric_layout_payload as _numeric_layout_payload,
 )
@@ -2698,7 +2699,9 @@ async def render_figure_endpoint(
         "dc_id": str(dc_id),
         "dc_config": convert_objectid_to_str(dc_config),
         "visu_type": component.get("visu_type", "scatter"),
-        "dict_kwargs": component.get("dict_kwargs") or {},
+        "dict_kwargs": merge_dashboard_plot_theme(
+            dashboard_data.get("plot_theme"), component.get("dict_kwargs") or {}
+        ),
         "mode": mode,
         "code_content": component.get("code_content", ""),
         "selection_enabled": bool(component.get("selection_enabled", False)),

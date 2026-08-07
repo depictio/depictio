@@ -436,6 +436,7 @@ export type {
   StoredMetadata,
   DashboardData,
   FilterSectionSpec,
+  DashboardThemeSpec,
   DashboardSummary,
   InteractiveFilter,
   InteractiveFilterSource,
