@@ -4,6 +4,7 @@ import {
   Alert,
   AppShell,
   Avatar,
+  Badge,
   Box,
   Button,
   Center,
@@ -30,9 +31,11 @@ import {
   deleteMyAvatar,
   fetchAuthStatus,
   fetchCurrentUserFull,
+  listMyGroups,
   uploadMyAvatar,
   type AuthStatusResponse,
   type AvatarInfo,
+  type MyGroup,
   type ProfileUser,
 } from 'depictio-react-core';
 
@@ -171,6 +174,7 @@ const ProfileApp: React.FC = () => {
   const [user, setUser] = useState<ProfileUser | null>(null);
   const guest = useGuestSignIn();
   const [status, setStatus] = useState<AuthStatusResponse | null>(null);
+  const [myGroups, setMyGroups] = useState<MyGroup[]>([]);
   const [loading, setLoading] = useState(true);
   // Account is open on a first visit; the rest start folded and are remembered.
   const [openSections, setOpenSections] = useOpenSections('depictio-account-sections', [
@@ -186,11 +190,18 @@ const ProfileApp: React.FC = () => {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    Promise.all([fetchCurrentUserFull(), fetchAuthStatus()])
-      .then(([u, s]) => {
+    Promise.all([
+      fetchCurrentUserFull(),
+      fetchAuthStatus(),
+      // Groups are decorative on this page — never fail the whole profile
+      // when the endpoint is unavailable (e.g. anonymous session).
+      listMyGroups().catch(() => [] as MyGroup[]),
+    ])
+      .then(([u, s, g]) => {
         if (cancelled) return;
         setUser(u);
         setStatus(s);
+        setMyGroups(g);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -317,6 +328,7 @@ const ProfileApp: React.FC = () => {
           <AccountDetails
             user={user}
             status={status}
+            groups={myGroups}
             avatarDisabledReason={avatarDisabledReason(user, status)}
             onAvatarChange={handleAvatarChange}
           />
@@ -480,9 +492,10 @@ function providerLabel(provider: string | null | undefined): string {
 const AccountDetails: React.FC<{
   user: ProfileUser;
   status: AuthStatusResponse | null;
+  groups: MyGroup[];
   avatarDisabledReason: string | null;
   onAvatarChange: (info: AvatarInfo | null) => void;
-}> = ({ user, status, avatarDisabledReason: disabledReason, onAvatarChange }) => {
+}> = ({ user, status, groups, avatarDisabledReason: disabledReason, onAvatarChange }) => {
   const avatarUrl = useMyAvatar();
   const [busy, setBusy] = useState<'upload' | 'remove' | null>(null);
   const hasPicture = Boolean(status?.user?.avatar_updated_at);
@@ -613,7 +626,10 @@ const AccountDetails: React.FC<{
       </Group>
       <Stack gap="xs">
         <UserInfoRow label="Email" value={user.email} />
+        {user.display_name && <UserInfoRow label="Name" value={user.display_name} />}
+        {user.title && <UserInfoRow label="Title" value={user.title} />}
         <UserInfoRow label="Role" value={user.is_admin ? 'Administrator' : 'User'} />
+        <GroupsInfoRow groups={groups} />
         <UserInfoRow label="Database ID" value={user.id || 'N/A'} />
         <UserInfoRow
           label="Registration date"
@@ -643,6 +659,45 @@ const UserInfoRow: React.FC<{ label: string; value: string }> = ({ label, value 
       <Text size="sm" ta="right" style={{ wordBreak: 'break-word' }}>
         {value}
       </Text>
+    </Group>
+  </Paper>
+);
+
+/** Same Paper chrome as UserInfoRow, but the value is a badge-per-group.
+ *  Crown marks the groups the user is P.I. of, shield the ones they
+ *  administer. */
+const GroupsInfoRow: React.FC<{ groups: MyGroup[] }> = ({ groups }) => (
+  <Paper p="xs" px="sm" radius="md" withBorder data-testid="profile-info-groups">
+    <Group justify="space-between" wrap="nowrap" align="flex-start">
+      <Text fw={500} size="sm">
+        Groups
+      </Text>
+      {groups.length === 0 ? (
+        <Text size="sm" c="dimmed">
+          None
+        </Text>
+      ) : (
+        <Group gap={6} justify="flex-end" style={{ flex: 1 }}>
+          {groups.map((group) => (
+            <Badge
+              key={group.id}
+              color={group.is_pi ? 'yellow' : group.is_group_admin ? 'blue' : 'gray'}
+              variant="light"
+              size="sm"
+              radius="sm"
+              leftSection={
+                group.is_pi ? (
+                  <Icon icon="mdi:crown-outline" width={12} />
+                ) : group.is_group_admin ? (
+                  <Icon icon="mdi:shield-account-outline" width={12} />
+                ) : undefined
+              }
+            >
+              {group.name}
+            </Badge>
+          ))}
+        </Group>
+      )}
     </Group>
   </Paper>
 );

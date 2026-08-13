@@ -14,6 +14,7 @@ import { asEnum, asScalar, decodeListingParams, encodeListingParams } from './li
 
 export const ADMIN_TABS = [
   'users',
+  'groups',
   'projects',
   'dashboards',
   'branding',
