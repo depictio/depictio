@@ -18,12 +18,13 @@ import { Icon } from '@iconify/react';
 import { AppSidebar } from '../chrome';
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import AdminUsersPanel from './AdminUsersPanel';
+import AdminGroupsPanel from './AdminGroupsPanel';
 import AdminProjectsPanel from './AdminProjectsPanel';
 import AdminDashboardsPanel from './AdminDashboardsPanel';
 import AdminMaintenancePanel from './AdminMaintenancePanel';
 import AdminMonitoringPanel from './AdminMonitoringPanel';
 
-type AdminTab = 'users' | 'projects' | 'dashboards' | 'monitoring' | 'maintenance';
+type AdminTab = 'users' | 'groups' | 'projects' | 'dashboards' | 'monitoring' | 'maintenance';
 
 /** Persist the active tab so a refresh keeps the admin where they left off. */
 const TAB_KEY = 'admin-active-tab';
@@ -33,6 +34,7 @@ function readInitialTab(): AdminTab {
     const raw = localStorage.getItem(TAB_KEY);
     if (
       raw === 'users' ||
+      raw === 'groups' ||
       raw === 'projects' ||
       raw === 'dashboards' ||
       raw === 'monitoring' ||
@@ -111,6 +113,12 @@ const AdminApp: React.FC = () => {
           <Tabs.Tab value="users" leftSection={<Icon icon="mdi:account-group" width={16} />}>
             Users
           </Tabs.Tab>
+          <Tabs.Tab
+            value="groups"
+            leftSection={<Icon icon="mdi:account-multiple-outline" width={16} />}
+          >
+            Groups
+          </Tabs.Tab>
           <Tabs.Tab value="projects" leftSection={<Icon icon="mdi:jira" width={16} />}>
             Projects
           </Tabs.Tab>
@@ -135,6 +143,9 @@ const AdminApp: React.FC = () => {
 
         <Tabs.Panel value="users" pt="md">
           <AdminUsersPanel currentUserEmail={user.email} />
+        </Tabs.Panel>
+        <Tabs.Panel value="groups" pt="md">
+          <AdminGroupsPanel />
         </Tabs.Panel>
         <Tabs.Panel value="projects" pt="md">
           <AdminProjectsPanel />

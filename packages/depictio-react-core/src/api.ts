@@ -3606,6 +3606,10 @@ export interface ProfileUser {
   is_temporary: boolean;
   registration_date?: string | null;
   last_login?: string | null;
+  /** SSO-provided profile attributes (UserBaseUI.display_name/title) —
+   *  present only when populated by sso_sync on SAML/OAuth login. */
+  display_name?: string | null;
+  title?: string | null;
 }
 
 export async function fetchCurrentUserFull(): Promise<ProfileUser | null> {
@@ -3621,6 +3625,8 @@ export async function fetchCurrentUserFull(): Promise<ProfileUser | null> {
     is_temporary: Boolean(data.is_temporary),
     registration_date: (data.registration_date as string | null | undefined) ?? null,
     last_login: (data.last_login as string | null | undefined) ?? null,
+    display_name: (data.display_name as string | null | undefined) ?? null,
+    title: (data.title as string | null | undefined) ?? null,
   };
 }
 

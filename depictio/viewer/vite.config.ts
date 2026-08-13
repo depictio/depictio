@@ -18,6 +18,7 @@ const SPA_ROUTE_PREFIXES = [
   'about',
   'admin',
   'profile',
+  'groups',
   'cli-agents',
 ];
 const SPA_ROUTE_RE = new RegExp(
