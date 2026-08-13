@@ -13,6 +13,7 @@ from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import db
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
+from depictio.api.v1.permissions import build_access_query, get_user_group_ids
 from depictio.api.v1.s3 import s3_client
 from depictio.models.models.base import convert_objectid_to_str
 from depictio.models.models.files import File
@@ -109,16 +110,13 @@ async def list_registered_files(data_collection_id: str, current_user=Depends(ge
             detail="Data collection id must be provided.",
         )
 
-    user_oid = ObjectId(current_user.id)
     target_data_collection_id = ObjectId(data_collection_id)
     # SECURITY: same predicate shape as delete_file below — admin status is
     # a property of the *caller*, not of the file's owners. Keying off
     # ``permissions.owners.is_admin`` previously let any caller list every
     # file whose owner happened to be admin.
-    if current_user.is_admin:
-        permission_match: dict = {}
-    else:
-        permission_match = {"permissions.owners._id": user_oid}
+    group_ids = [] if current_user.is_admin else get_user_group_ids(current_user.id)
+    permission_match = build_access_query(current_user, "owner", group_ids)
     pipeline = [
         {"$match": {**permission_match, "data_collection_id": target_data_collection_id}},
     ]
@@ -146,19 +144,16 @@ async def delete_file(file_id: str, current_user=Depends(get_current_user)):
             detail="File id must be provided.",
         )
 
-    user_oid = ObjectId(current_user.id)
     target_file_id = ObjectId(file_id)
     # SECURITY: the previous predicate ``{"permissions.owners.is_admin": True}``
     # matched any file whose owner happens to be an admin — meaning a
     # non-admin user could delete *another* admin's files. The correct check
     # is on the caller (``current_user.is_admin``), not on the file's owners.
-    if current_user.is_admin:
-        query: dict = {"_id": target_file_id}
-    else:
-        query = {
-            "_id": target_file_id,
-            "permissions.owners._id": user_oid,
-        }
+    group_ids = [] if current_user.is_admin else get_user_group_ids(current_user.id)
+    query = {
+        "_id": target_file_id,
+        **build_access_query(current_user, "owner", group_ids),
+    }
 
     result = files_collection.delete_one(query)
     if result.deleted_count == 0:

@@ -22,6 +22,7 @@ from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import deltatables_collection, projects_collection, users_collection
 from depictio.api.v1.endpoints.deltatables_endpoints.utils import precompute_columns_specs
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user, get_user_or_anonymous
+from depictio.api.v1.permissions import build_access_query, get_user_group_ids
 from depictio.api.v1.s3 import polars_s3_config
 from depictio.api.v1.services.card_breakdown import compute_breakdown
 from depictio.api.v1.services.card_metrics import NUMERIC_LAYOUTS, numeric_layout_payload
@@ -365,14 +366,11 @@ def _build_permission_pipeline(data_collection_id: PyObjectId, current_user: Use
     owner/viewer filter — they wouldn't appear in the project's permissions
     list, so the explicit-membership check would otherwise reject them.
     """
-    match_clause: dict = {"workflows.data_collections._id": ObjectId(data_collection_id)}
-    if not current_user.is_admin:
-        match_clause["$or"] = [
-            {"permissions.owners._id": current_user.id},
-            {"permissions.viewers._id": current_user.id},
-            {"permissions.viewers": "*"},
-            {"is_public": True},
-        ]
+    group_ids = [] if current_user.is_admin else get_user_group_ids(current_user.id)
+    match_clause: dict = {
+        "workflows.data_collections._id": ObjectId(data_collection_id),
+        **build_access_query(current_user, "viewer", group_ids),
+    }
     return [
         {"$match": match_clause},
         {"$unwind": "$workflows"},

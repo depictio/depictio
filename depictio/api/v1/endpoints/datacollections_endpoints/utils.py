@@ -2,6 +2,7 @@ import os
 import shutil
 import tempfile
 import time
+from types import SimpleNamespace
 from typing import Any
 
 from bson import ObjectId
@@ -10,6 +11,7 @@ from fastapi import HTTPException
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import projects_collection, tokens_collection
+from depictio.api.v1.permissions import get_user_group_ids, has_permission
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 
 
@@ -543,15 +545,8 @@ def _validate_coord_columns_in_file(
 def _user_can_edit_project(project_dict: dict, user_id: ObjectId, is_admin: bool) -> bool:
     if is_admin:
         return True
-    perms = project_dict.get("permissions") or {}
-    for level in ("owners", "editors"):
-        for entry in perms.get(level, []) or []:
-            if not isinstance(entry, dict):
-                continue
-            entry_id = entry.get("_id") or entry.get("id")
-            if entry_id and ObjectId(str(entry_id)) == user_id:
-                return True
-    return False
+    user = SimpleNamespace(id=user_id, is_admin=False, is_anonymous=False)
+    return has_permission(project_dict, user, "editor", get_user_group_ids(user_id))
 
 
 def _create_dc_from_upload(
