@@ -11,6 +11,7 @@ from depictio.models.models.base import PyObjectId
 from depictio.models.models.cli import UserBaseCLIConfig
 from depictio.models.models.users import (  # UserBaseGroupLess,
     Group,
+    GroupBase,
     GroupBeanie,
     Permission,
     RequestEditPassword,
@@ -492,6 +493,74 @@ class TestGroup:
         group_dict = group.model_dump()
 
         assert group_dict["name"] == "Test Group"
+        assert group_dict["admin_ids"] == []
+        assert group_dict["pi_id"] is None
+        assert group_dict["sso_managed"] is False
+
+    def test_group_defaults(self):
+        """New governance fields default to empty/manual."""
+        group = Group(name="Lab X")
+
+        assert group.users_ids == []
+        assert group.admin_ids == []
+        assert group.pi_id is None
+        assert group.sso_managed is False
+
+    def test_group_admins_auto_added_to_members(self):
+        """Group admins are auto-added to users_ids by the validator."""
+        admin_id = PyObjectId()
+        member_id = PyObjectId()
+        group = Group(name="Lab X", users_ids=[member_id], admin_ids=[admin_id])
+
+        member_ids = {str(uid) for uid in group.users_ids}
+        assert str(admin_id) in member_ids
+        assert str(member_id) in member_ids
+
+    def test_group_pi_auto_added_to_members(self):
+        """The P.I. is auto-added to users_ids by the validator."""
+        pi_id = PyObjectId()
+        group = Group(name="Lab X", pi_id=pi_id)
+
+        assert str(pi_id) in {str(uid) for uid in group.users_ids}
+
+    def test_group_existing_member_not_duplicated(self):
+        """An admin already listed as member is not duplicated."""
+        user_id = PyObjectId()
+        group = Group(name="Lab X", users_ids=[user_id], admin_ids=[user_id], pi_id=user_id)
+
+        assert len(group.users_ids) == 1
+
+    def test_group_id_serialization(self):
+        """admin_ids and pi_id serialize to strings."""
+        admin_id = PyObjectId()
+        group = Group(name="Lab X", admin_ids=[admin_id], pi_id=admin_id)
+        dumped = group.model_dump()
+
+        assert dumped["admin_ids"] == [str(admin_id)]
+        assert dumped["pi_id"] == str(admin_id)
+
+
+# ---------------------------------
+# Tests for GroupBase
+# ---------------------------------
+
+
+class TestGroupBase:
+    def test_group_base_creation(self):
+        """GroupBase is a minimal {id, name} snapshot."""
+        group_id = PyObjectId()
+        snapshot = GroupBase(id=group_id, name="Lab X")
+
+        assert snapshot.name == "Lab X"
+        assert str(snapshot.id) == str(group_id)
+
+    def test_group_base_from_mongo(self):
+        """GroupBase.from_mongo maps _id to id."""
+        group_id = PyObjectId()
+        snapshot = GroupBase.from_mongo({"_id": group_id, "name": "Lab X"})
+
+        assert snapshot.name == "Lab X"
+        assert str(snapshot.id) == str(group_id)
 
 
 # ---------------------------------
@@ -825,9 +894,20 @@ class TestPermission:
         assert permission.editors == []
         assert permission.viewers == []
 
+        assert permission.group_owners == []
+        assert permission.group_editors == []
+        assert permission.group_viewers == []
+
         # Test dict method with empty lists
         perm_dict = permission.dict()
-        assert perm_dict == {"owners": [], "editors": [], "viewers": []}
+        assert perm_dict == {
+            "owners": [],
+            "editors": [],
+            "viewers": [],
+            "group_owners": [],
+            "group_editors": [],
+            "group_viewers": [],
+        }
 
     def test_permission_with_users(self):
         """Test creating a Permission with valid users."""
@@ -1001,6 +1081,67 @@ class TestPermission:
         perm_dict = permission.dict()
         assert perm_dict["owners"][0]["id"] == str(user1_id)
         assert perm_dict["editors"][0]["id"] == str(user2_id)
+
+    def test_permission_legacy_document_validates(self):
+        """Stored documents from before group-sharing (no group keys) validate."""
+        legacy = {
+            "owners": [{"_id": PyObjectId(), "email": "owner@example.com", "is_admin": False}],
+            "editors": [],
+            "viewers": ["*"],
+        }
+        permission = Permission.model_validate(legacy)
+
+        assert permission.group_owners == []
+        assert permission.group_editors == []
+        assert permission.group_viewers == []
+
+    def test_permission_with_groups(self):
+        """Group snapshots are accepted as dicts and normalized to GroupBase."""
+        group_id = PyObjectId()
+        permission = Permission(
+            group_owners=[{"_id": group_id, "name": "Lab X", "extra_key": "dropped"}],
+        )
+
+        assert len(permission.group_owners) == 1
+        assert isinstance(permission.group_owners[0], GroupBase)
+        assert permission.group_owners[0].name == "Lab X"
+        assert str(permission.group_owners[0].id) == str(group_id)
+
+        perm_dict = permission.dict()
+        assert perm_dict["group_owners"][0]["name"] == "Lab X"
+        assert perm_dict["group_owners"][0]["id"] == str(group_id)
+
+    def test_permission_group_unique_validation(self):
+        """A group may hold at most one group role."""
+        group = GroupBase(id=PyObjectId(), name="Lab X")
+
+        with pytest.raises(ValidationError, match="A Group cannot be both an owner and an editor"):
+            Permission(group_owners=[group], group_editors=[group])
+
+        with pytest.raises(ValidationError, match="A Group cannot be both an owner and a viewer"):
+            Permission(group_owners=[group], group_viewers=[group])
+
+        with pytest.raises(ValidationError, match="A Group cannot be both an editor and a viewer"):
+            Permission(group_editors=[group], group_viewers=[group])
+
+    def test_permission_user_and_group_overlap_allowed(self):
+        """A user with a direct role may also belong to a group with another
+        role — effective role resolves highest-wins at read time."""
+        user = UserBase(id=PyObjectId(), email="user@example.com")  # type: ignore[invalid-argument-type]
+        group = GroupBase(id=PyObjectId(), name="Lab X")
+
+        permission = Permission(viewers=[user], group_owners=[group])
+
+        assert len(permission.viewers) == 1
+        assert len(permission.group_owners) == 1
+
+    def test_permission_group_invalid_types(self):
+        """Invalid entries in group lists are rejected."""
+        with pytest.raises(ValueError):
+            Permission(group_owners=[123])
+
+        with pytest.raises(ValueError):
+            Permission(group_viewers=["*"])  # wildcard is a user-viewers concept only
 
 
 # ---------------------------------

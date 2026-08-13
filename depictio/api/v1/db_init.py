@@ -791,12 +791,16 @@ async def initialize_db(wipe: bool = False) -> UserBeanie | None:
             "name": "admin",
             "description": "Admin group",
             "users_ids": [_ADMIN_USER_STATIC_ID],
+            "admin_ids": [_ADMIN_USER_STATIC_ID],
+            "sso_managed": False,
         },
         {
             "id": _USERS_GROUP_STATIC_ID,
             "name": "users",
             "description": "Users group",
             "users_ids": [_TEST_USER_STATIC_ID, _ADMIN_USER_STATIC_ID],
+            "admin_ids": [_ADMIN_USER_STATIC_ID],
+            "sso_managed": False,
         },
     ):
         group = GroupBeanie(**group_config)  # type: ignore[missing-argument]
