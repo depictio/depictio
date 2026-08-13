@@ -1,6 +1,7 @@
 import asyncio
 import mimetypes
 import posixpath
+from typing import Any
 from urllib.parse import unquote
 
 from bson import ObjectId
@@ -14,6 +15,7 @@ from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import db
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user, get_user_or_anonymous
+from depictio.api.v1.permissions import build_access_query, get_user_group_ids, has_permission
 from depictio.api.v1.s3 import s3_client
 from depictio.models.models.base import convert_objectid_to_str
 from depictio.models.models.data_collections_types.indexed_file import (
@@ -144,16 +146,18 @@ async def list_registered_files(data_collection_id: str, current_user=Depends(ge
             detail="Data collection id must be provided.",
         )
 
-    user_oid = ObjectId(current_user.id)
     target_data_collection_id = ObjectId(data_collection_id)
     # SECURITY: same predicate shape as delete_file below — admin status is
     # a property of the *caller*, not of the file's owners. Keying off
     # ``permissions.owners.is_admin`` previously let any caller list every
     # file whose owner happened to be admin.
-    if current_user.is_admin or _can_read_data_collection(target_data_collection_id, user_oid):
+    group_ids = [] if current_user.is_admin else get_user_group_ids(current_user.id)
+    if current_user.is_admin or _can_read_data_collection(
+        target_data_collection_id, current_user, group_ids
+    ):
         permission_match: dict = {}
     else:
-        permission_match = {"permissions.owners._id": user_oid}
+        permission_match = build_access_query(current_user, "owner", group_ids)
     pipeline = [
         {"$match": {**permission_match, "data_collection_id": target_data_collection_id}},
     ]
@@ -164,17 +168,18 @@ async def list_registered_files(data_collection_id: str, current_user=Depends(ge
         # A reader sees which files feed the project, not who registered them:
         # the owners' entries carry their emails.
         for file in files:
-            owners = file.get("permissions", {}).get("owners", [])
-            if not any(owner.get("_id") == user_oid for owner in owners):
+            if not has_permission(file, current_user, "owner", group_ids):
                 file.pop("permissions", None)
     return convert_objectid_to_str(files)
 
 
-def _can_read_data_collection(data_collection_id: ObjectId, user_oid: ObjectId) -> bool:
+def _can_read_data_collection(
+    data_collection_id: ObjectId, user: Any, group_ids: list[ObjectId] | None = None
+) -> bool:
     """Whether the user may read the project holding ``data_collection_id``.
 
-    Mirrors ``deltatables_endpoints._build_permission_pipeline``: an owner, a
-    viewer (explicitly or through ``"*"``), or anyone for a public project.
+    Mirrors ``deltatables_endpoints._build_permission_pipeline``: any viewer-level
+    access (direct or through a group, ``"*"`` wildcard, or a public project).
     Those users can already read the data itself, so they may also list the
     files it was built from.
     """
@@ -184,12 +189,7 @@ def _can_read_data_collection(data_collection_id: ObjectId, user_oid: ObjectId) 
         projects_collection.find_one(
             {
                 "workflows.data_collections._id": data_collection_id,
-                "$or": [
-                    {"permissions.owners._id": user_oid},
-                    {"permissions.viewers._id": user_oid},
-                    {"permissions.viewers": "*"},
-                    {"is_public": True},
-                ],
+                **build_access_query(user, "viewer", group_ids),
             },
             {"_id": 1},
         )
@@ -225,9 +225,11 @@ async def delete_files_batch(
     if oids:
         # Same predicate as delete_file: admin bypass keyed on the caller, never
         # on a document field.
-        query: dict = {"_id": {"$in": oids}}
-        if not current_user.is_admin:
-            query["permissions.owners._id"] = ObjectId(current_user.id)
+        group_ids = [] if current_user.is_admin else get_user_group_ids(current_user.id)
+        query: dict = {
+            "_id": {"$in": oids},
+            **build_access_query(current_user, "owner", group_ids),
+        }
         result = await asyncio.to_thread(files_collection.delete_many, query)
         deleted = result.deleted_count
 
@@ -252,19 +254,16 @@ async def delete_file(file_id: str, current_user=Depends(get_current_user)):
             detail="File id must be provided.",
         )
 
-    user_oid = ObjectId(current_user.id)
     target_file_id = ObjectId(file_id)
     # SECURITY: the previous predicate ``{"permissions.owners.is_admin": True}``
     # matched any file whose owner happens to be an admin — meaning a
     # non-admin user could delete *another* admin's files. The correct check
     # is on the caller (``current_user.is_admin``), not on the file's owners.
-    if current_user.is_admin:
-        query: dict = {"_id": target_file_id}
-    else:
-        query = {
-            "_id": target_file_id,
-            "permissions.owners._id": user_oid,
-        }
+    group_ids = [] if current_user.is_admin else get_user_group_ids(current_user.id)
+    query = {
+        "_id": target_file_id,
+        **build_access_query(current_user, "owner", group_ids),
+    }
 
     result = files_collection.delete_one(query)
     if result.deleted_count == 0:

@@ -45,6 +45,7 @@ from depictio.api.v1.endpoints.user_endpoints.routes import (
     oauth2_scheme_optional,
 )
 from depictio.api.v1.filter_links import extend_filters_via_links
+from depictio.api.v1.permissions import get_user_group_ids, has_permission
 from depictio.api.v1.services.branding import (
     LOGO_CACHE_CONTROL,
     dashboard_logo_key,
@@ -528,34 +529,12 @@ def check_project_permission(
     if not project:
         return False
 
-    # A public project grants READ access only. Editor/owner must come from
-    # explicit permissions below — otherwise any signed-in visitor of a public
-    # (e.g. demo) project could edit or delete its dashboards.
-    if hasattr(user, "is_anonymous") and user.is_anonymous:
-        return required_permission == "viewer" and project.get("is_public", False)
-
-    if project.get("is_public", False) and required_permission == "viewer":
-        return True
-
-    user_id = ObjectId(user.id)
-    permissions = project.get("permissions", {})
-
-    # Check based on required permission level
-    if required_permission == "owner":
-        return any(owner.get("_id") == user_id for owner in permissions.get("owners", []))
-    elif required_permission == "editor":
-        # Editors can also access if they are owners
-        return any(owner.get("_id") == user_id for owner in permissions.get("owners", [])) or any(
-            editor.get("_id") == user_id for editor in permissions.get("editors", [])
-        )
-    else:  # viewer
-        # Viewers can access if they are owners, editors, or viewers
-        return (
-            any(owner.get("_id") == user_id for owner in permissions.get("owners", []))
-            or any(editor.get("_id") == user_id for editor in permissions.get("editors", []))
-            or any(viewer.get("_id") == user_id for viewer in permissions.get("viewers", []))
-            or "*" in permissions.get("viewers", [])
-        )
+    # A public project grants READ access only (viewer floor in the chokepoint).
+    # Editor/owner must come from explicit direct or group permissions —
+    # otherwise any signed-in visitor of a public (e.g. demo) project could
+    # edit or delete its dashboards.
+    group_ids = get_user_group_ids(user.id)
+    return has_permission(project, user, required_permission, group_ids)
 
 
 def is_dashboard_owner(dashboard_doc: dict, user: User) -> bool:
