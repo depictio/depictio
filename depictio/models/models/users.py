@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from beanie import Document, Link, PydanticObjectId
+from beanie import Document, PydanticObjectId
 from pydantic import BaseModel, EmailStr, Field, field_serializer, field_validator, model_validator
 from pymongo import IndexModel
 
@@ -185,6 +185,41 @@ class MagicLinkTicketBeanie(MagicLinkTicket, Document):
 class Group(MongoModel):
     name: str
     users_ids: list[PyObjectId] = Field(default_factory=list)
+    admin_ids: list[PyObjectId] = Field(default_factory=list)
+    pi_id: PyObjectId | None = None
+    sso_managed: bool = False
+
+    @field_serializer("admin_ids")
+    def serialize_admin_ids(self, admin_ids: list[PyObjectId]) -> list[str]:
+        return [str(admin_id) for admin_id in admin_ids]
+
+    @field_serializer("pi_id")
+    def serialize_pi_id(self, pi_id: PyObjectId | None) -> str | None:
+        return str(pi_id) if pi_id is not None else None
+
+    @model_validator(mode="after")
+    def _admins_and_pi_are_members(self):
+        """Group admins and the P.I. are always members: auto-add rather than
+        reject, so callers (db_init seeding, SSO sync, promote endpoints) can
+        pass admins without pre-listing them in users_ids."""
+        member_ids = {str(user_id) for user_id in self.users_ids}
+        for admin_id in self.admin_ids:
+            if str(admin_id) not in member_ids:
+                self.users_ids.append(admin_id)
+                member_ids.add(str(admin_id))
+        if self.pi_id is not None and str(self.pi_id) not in member_ids:
+            self.users_ids.append(self.pi_id)
+        return self
+
+
+class GroupBase(MongoModel):
+    """Denormalized group snapshot embedded in Permission documents.
+
+    Mirrors UserBase's role: only identity fields (id, name) are stored inside
+    permissions.group_* arrays; membership is always resolved live from the
+    groups collection."""
+
+    name: str
 
 
 class UserBase(MongoModel):
@@ -249,10 +284,6 @@ class UserContext:
         )
 
 
-class GroupUI(Group):
-    users: list[UserBase] = []
-
-
 class UserBaseUI(UserBase):
     # tokens: List[Token] = Field(default_factory=list)
     # current_access_token: Optional[str] = None
@@ -260,6 +291,11 @@ class UserBaseUI(UserBase):
     is_verified: bool = False
     last_login: str | None = None
     registration_date: str | None = None
+    # SSO-provided profile attributes (populated by sso_sync on SAML/OAuth login)
+    display_name: str | None = None
+    title: str | None = None
+    login: str | None = None
+    sso_provider: str | None = None
 
 
 class User(UserBaseUI):
@@ -302,9 +338,9 @@ class UserBeanie(User, Document):
 
 
 class GroupBeanie(Group, Document):
-    name: str
-    users_ids: list[Link[UserBeanie]] = Field(default_factory=list)
-
+    # Membership is stored as plain ObjectIds (inherited from Group) — the
+    # documents on disk are raw ObjectIds, not DBRefs, and nothing fetch_links
+    # on groups.
     class Settings:
         name = "groups"  # Collection name
 
@@ -313,6 +349,11 @@ class Permission(BaseModel):
     owners: list[UserBase] = []  # Default to an empty list
     editors: list[UserBase] = []  # Default to an empty list
     viewers: list[UserBase | str] = []  # Allow string wildcard "*" in viewers
+    # Group-level sharing: snapshots of groups granted a role on the resource.
+    # Defaults keep every pre-groups document valid without migration.
+    group_owners: list[GroupBase] = []
+    group_editors: list[GroupBase] = []
+    group_viewers: list[GroupBase] = []
 
     def dict(self, **kwargs):
         # Generate list of owner and viewer dictionaries
@@ -322,7 +363,14 @@ class Permission(BaseModel):
             viewer.model_dump(**kwargs) if isinstance(viewer, UserBase) else viewer
             for viewer in self.viewers
         ]
-        return {"owners": owners_list, "editors": editors_list, "viewers": viewers_list}
+        return {
+            "owners": owners_list,
+            "editors": editors_list,
+            "viewers": viewers_list,
+            "group_owners": [group.model_dump(**kwargs) for group in self.group_owners],
+            "group_editors": [group.model_dump(**kwargs) for group in self.group_editors],
+            "group_viewers": [group.model_dump(**kwargs) for group in self.group_viewers],
+        }
 
     # Step 1: Convert lists to UserBase or validate items
     @field_validator("owners", "editors", "viewers", mode="before")
@@ -335,11 +383,11 @@ class Permission(BaseModel):
         for item in v:
             # logger.debug(f"Converting {item} to UserBase")
             if isinstance(item, dict):
-                # keep only id, email, is_admin, groups
+                # keep only id, email, is_admin
                 item = {
                     key: value
                     for key, value in item.items()
-                    if key in ["id", "_id", "email", "is_admin", "groups"]
+                    if key in ["id", "_id", "email", "is_admin"]
                 }
                 # logger.debug(f"Filtered dictionary: {item}")
 
@@ -355,9 +403,31 @@ class Permission(BaseModel):
         # logger.debug(f"Converted list to UserBase: {result}")
         return result
 
+    @field_validator("group_owners", "group_editors", "group_viewers", mode="before")
+    def convert_list_to_groupbase(cls, v):
+        if not isinstance(v, list):
+            raise ValueError(f"Expected a list, got {type(v)}")
+
+        result = []
+        for item in v:
+            if isinstance(item, dict):
+                # keep only identity fields — membership is never embedded
+                item = {key: value for key, value in item.items() if key in ["id", "_id", "name"]}
+                result.append(GroupBase.from_mongo(item))
+            elif isinstance(item, GroupBase):
+                result.append(item)
+            else:
+                raise ValueError("Group permission entries must be GroupBase instances or dicts")
+        return result
+
     # Step 2: Validate permissions after field-level validation
     @model_validator(mode="after")
     def ensure_owners_and_viewers_are_unique(self):
+        """A user may hold at most one DIRECT role, and a group at most one
+        group role. There is deliberately NO cross-check between the user lists
+        and the group lists: a user may be e.g. a direct viewer while one of
+        their groups is an owner — the effective role resolves to the highest
+        at read time (see depictio.api.v1.permissions)."""
         owners = self.owners
         editors = self.editors
         viewers = self.viewers
@@ -375,6 +445,17 @@ class Permission(BaseModel):
             raise ValueError("A User cannot be both an owner and a viewer.")
         if not editor_ids.isdisjoint(viewer_ids):
             raise ValueError("A User cannot be both an editor and a viewer.")
+
+        group_owner_ids = {group.id for group in self.group_owners}
+        group_editor_ids = {group.id for group in self.group_editors}
+        group_viewer_ids = {group.id for group in self.group_viewers}
+
+        if not group_owner_ids.isdisjoint(group_editor_ids):
+            raise ValueError("A Group cannot be both an owner and an editor.")
+        if not group_owner_ids.isdisjoint(group_viewer_ids):
+            raise ValueError("A Group cannot be both an owner and a viewer.")
+        if not group_editor_ids.isdisjoint(group_viewer_ids):
+            raise ValueError("A Group cannot be both an editor and a viewer.")
 
         return self
 
