@@ -30,10 +30,18 @@ import type { ColDef, ICellRendererParams, CellValueChangedEvent } from 'ag-grid
 import {
   fetchProject,
   listAllUsers,
+  listGroups,
+  listMyGroups,
   toggleProjectVisibility,
   updateProjectPermissions,
 } from 'depictio-react-core';
-import type { AdminUser, ProjectListEntry } from 'depictio-react-core';
+import type {
+  AdminUser,
+  GroupSummary,
+  MyGroup,
+  PermissionsGroup,
+  ProjectListEntry,
+} from 'depictio-react-core';
 
 import { useCurrentUser } from '../../hooks/useCurrentUser';
 import { AppSidebar } from '../../chrome';
@@ -45,6 +53,14 @@ interface UserRow {
   Editor: boolean;
   Viewer: boolean;
   is_admin?: boolean;
+}
+
+interface GroupRow {
+  _id: string;
+  name: string;
+  Owner: boolean;
+  Editor: boolean;
+  Viewer: boolean;
 }
 
 function readProjectIdFromPath(): string | null {
@@ -106,6 +122,58 @@ function rowsToPermissions(rows: UserRow[]): {
   };
 }
 
+/** Group counterpart of buildRows — one grid row per group, with three
+ *  exclusive role flags (the server 422s a group holding several roles). */
+function buildGroupRows(project: ProjectListEntry | null): GroupRow[] {
+  if (!project) return [];
+  const byKey = new Map<string, GroupRow>();
+  const seed = (
+    list: PermissionsGroup[] | undefined,
+    role: 'Owner' | 'Editor' | 'Viewer',
+  ) => {
+    (list || []).forEach((g) => {
+      const id = (g._id ?? g.id ?? '') as string;
+      const name = g.name || '';
+      const key = id || name;
+      if (!key) return;
+      const existing = byKey.get(key);
+      if (existing) {
+        existing[role] = true;
+      } else {
+        byKey.set(key, {
+          _id: id,
+          name,
+          Owner: role === 'Owner',
+          Editor: role === 'Editor',
+          Viewer: role === 'Viewer',
+        });
+      }
+    });
+  };
+  seed(project.permissions?.group_owners, 'Owner');
+  seed(project.permissions?.group_editors, 'Editor');
+  seed(project.permissions?.group_viewers, 'Viewer');
+  return Array.from(byKey.values());
+}
+
+/** Inverse of buildGroupRows — flatten the grid back into the API's
+ *  group_owners/group_editors/group_viewers shape. Drops role-less groups. */
+function rowsToGroupPermissions(rows: GroupRow[]): {
+  group_owners: PermissionsGroup[];
+  group_editors: PermissionsGroup[];
+  group_viewers: PermissionsGroup[];
+} {
+  const collect = (role: 'Owner' | 'Editor' | 'Viewer') =>
+    rows
+      .filter((r) => r[role])
+      .map((r) => ({ _id: r._id, name: r.name }));
+  return {
+    group_owners: collect('Owner'),
+    group_editors: collect('Editor'),
+    group_viewers: collect('Viewer'),
+  };
+}
+
 /** Big public/private state badge for the visibility-change confirm modal.
  *  Two side-by-side instances visualise the from→to transition. */
 const VisibilityCard: React.FC<{
@@ -151,15 +219,24 @@ const PermissionsApp: React.FC = () => {
 
   const [project, setProject] = useState<ProjectListEntry | null>(null);
   const [rows, setRows] = useState<UserRow[]>([]);
+  const [groupRows, setGroupRows] = useState<GroupRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [emailInput, setEmailInput] = useState('');
   const [adding, setAdding] = useState(false);
+  const [groupInput, setGroupInput] = useState('');
+  const [addingGroup, setAddingGroup] = useState(false);
   /** Cached email list for the Autocomplete. Populated only when the
    *  current user can list users (admin); otherwise stays empty and the
    *  Autocomplete degrades to a plain text field. */
   const [allUsers, setAllUsers] = useState<AdminUser[]>([]);
+  /** All groups (names only) for the group Autocomplete — the list endpoint
+   *  works for any authenticated user. */
+  const [allGroups, setAllGroups] = useState<GroupSummary[]>([]);
+  /** The caller's own groups (with is_group_admin) — feeds the canManage
+   *  gate for group admins of owner groups. Failure tolerated as []. */
+  const [myGroups, setMyGroups] = useState<MyGroup[]>([]);
 
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure(false);
   const [desktopOpened, { toggle: toggleDesktop }] = useDisclosure(true);
@@ -186,6 +263,30 @@ const PermissionsApp: React.FC = () => {
       .catch(() => {
         if (!cancelled) setAllUsers([]);
       });
+    // Groups list (any authenticated user). Unlike listAllUsers this is not
+    // expected to fail for non-admins, so a failure gets a visible toast.
+    listGroups()
+      .then((groups) => {
+        if (!cancelled) setAllGroups(groups);
+      })
+      .catch((err: Error) => {
+        if (cancelled) return;
+        setAllGroups([]);
+        notifications.show({
+          color: 'red',
+          title: 'Could not load groups',
+          message: err.message || 'Group suggestions are unavailable.',
+        });
+      });
+    // My groups — only used to widen canManage for group admins of owner
+    // groups; a failure just falls back to the user/admin gate.
+    listMyGroups()
+      .then((mine) => {
+        if (!cancelled) setMyGroups(mine);
+      })
+      .catch(() => {
+        if (!cancelled) setMyGroups([]);
+      });
     return () => {
       cancelled = true;
     };
@@ -203,6 +304,7 @@ const PermissionsApp: React.FC = () => {
       .then(({ project }) => {
         setProject(project);
         setRows(buildRows(project));
+        setGroupRows(buildGroupRows(project));
       })
       .catch((err: Error) =>
         setLoadError(err.message || 'Failed to load project.'),
@@ -212,24 +314,38 @@ const PermissionsApp: React.FC = () => {
 
   const refresh = () => setRefreshKey((k) => k + 1);
 
-  // Owner-only gate (matches backend `update_project_permissions` rule).
+  // Owner-only gate (matches backend `update_project_permissions` rule):
+  // sysadmin, direct owner, or group admin of a group in group_owners.
   const canManage = useMemo(() => {
     if (!user || !project) return false;
     if (user.is_admin) return true;
-    return !!project.permissions?.owners?.some(
-      (o) => (o._id ?? o.id) === user.id,
+    if (
+      project.permissions?.owners?.some((o) => (o._id ?? o.id) === user.id)
+    ) {
+      return true;
+    }
+    const ownerGroupIds = new Set(
+      (project.permissions?.group_owners || [])
+        .map((g) => (g._id ?? g.id) as string | undefined)
+        .filter(Boolean),
     );
-  }, [user, project]);
+    return myGroups.some((g) => g.is_group_admin && ownerGroupIds.has(g.id));
+  }, [user, project, myGroups]);
 
-  const persist = async (nextRows: UserRow[]) => {
+  /** Single save path — always sends BOTH the user lists and the group
+   *  lists, so a change to one grid can't wipe the other. */
+  const persist = async (nextRows: UserRow[], nextGroupRows: GroupRow[]) => {
     if (!projectId) return;
     const perms = rowsToPermissions(nextRows);
-    if (perms.owners.length === 0) {
-      throw new Error('A project must have at least one owner.');
+    const groupPerms = rowsToGroupPermissions(nextGroupRows);
+    if (perms.owners.length === 0 && groupPerms.group_owners.length === 0) {
+      throw new Error(
+        'A project must have at least one owner (user or group).',
+      );
     }
     await updateProjectPermissions({
       project_id: projectId,
-      permissions: perms,
+      permissions: { ...perms, ...groupPerms },
     });
     refresh();
   };
@@ -253,7 +369,7 @@ const PermissionsApp: React.FC = () => {
     }
     next[idx] = updated;
     try {
-      await persist(next);
+      await persist(next, groupRows);
       notifications.show({
         color: 'teal',
         title: 'Permissions updated',
@@ -315,7 +431,7 @@ const PermissionsApp: React.FC = () => {
         throw new Error(`${row.email} is already in this project.`);
       }
       const next = [...rows, row];
-      await persist(next);
+      await persist(next, groupRows);
       setEmailInput('');
       notifications.show({
         color: 'teal',
@@ -337,11 +453,109 @@ const PermissionsApp: React.FC = () => {
   const handleDelete = async (rowToDelete: UserRow) => {
     const next = rows.filter((r) => r._id !== rowToDelete._id);
     try {
-      await persist(next);
+      await persist(next, groupRows);
       notifications.show({
         color: 'teal',
         title: 'User removed',
         message: rowToDelete.email,
+        autoClose: 2000,
+      });
+    } catch (err) {
+      notifications.show({
+        color: 'red',
+        title: 'Remove failed',
+        message: (err as Error).message,
+      });
+    }
+  };
+
+  const handleGroupCellChange = async (e: CellValueChangedEvent<GroupRow>) => {
+    const next = [...groupRows];
+    const idx = next.findIndex((r) => r._id === e.data._id);
+    if (idx < 0) return;
+    // A group may hold exactly one role (server 422s otherwise) — enabling
+    // one clears the others on the same row, mirroring handleCellChange.
+    const updated: GroupRow = { ...e.data };
+    const flippedOn = e.colDef.field as 'Owner' | 'Editor' | 'Viewer' | undefined;
+    if (flippedOn && updated[flippedOn]) {
+      const others = (['Owner', 'Editor', 'Viewer'] as const).filter(
+        (r) => r !== flippedOn,
+      );
+      others.forEach((r) => {
+        updated[r] = false;
+      });
+    }
+    next[idx] = updated;
+    try {
+      await persist(rows, next);
+      notifications.show({
+        color: 'teal',
+        title: 'Permissions updated',
+        message: e.data.name,
+        autoClose: 1500,
+      });
+    } catch (err) {
+      notifications.show({
+        color: 'red',
+        title: 'Update failed',
+        message: (err as Error).message,
+      });
+      // Revert
+      refresh();
+    }
+  };
+
+  const handleAddGroup = async () => {
+    const trimmed = groupInput.trim();
+    if (!trimmed) return;
+    setAddingGroup(true);
+    try {
+      const g = allGroups.find(
+        (x) => (x.name || '').toLowerCase() === trimmed.toLowerCase(),
+      );
+      if (!g) {
+        throw new Error(
+          `No group named "${trimmed}". Pick one from the suggestions.`,
+        );
+      }
+      if (groupRows.some((r) => r._id === g.id || r.name === g.name)) {
+        throw new Error(`Group "${g.name}" is already in this project.`);
+      }
+      const row: GroupRow = {
+        _id: g.id,
+        name: g.name,
+        Owner: false,
+        Editor: false,
+        Viewer: true, // default newly-added groups to Viewer
+      };
+      const next = [...groupRows, row];
+      await persist(rows, next);
+      setGroupInput('');
+      notifications.show({
+        color: 'teal',
+        title: 'Group added',
+        message: `${row.name} (Viewer)`,
+        autoClose: 2000,
+      });
+    } catch (err) {
+      notifications.show({
+        color: 'red',
+        title: 'Add failed',
+        message: (err as Error).message,
+      });
+    } finally {
+      setAddingGroup(false);
+    }
+  };
+
+  const handleDeleteGroup = async (rowToDelete: GroupRow) => {
+    const next = groupRows.filter((r) => r._id !== rowToDelete._id);
+    try {
+      await persist(rows, next);
+      notifications.show({
+        color: 'teal',
+        title: 'Group removed',
+        message: rowToDelete.name,
         autoClose: 2000,
       });
     } catch (err) {
@@ -478,7 +692,103 @@ const PermissionsApp: React.FC = () => {
         },
       },
     ],
-    [canManage, rows],
+    // groupRows: handleDelete's persist path sends the group lists too.
+    [canManage, rows, groupRows],
+  );
+
+  const groupColDefs = useMemo<ColDef<GroupRow>[]>(
+    () => [
+      { field: '_id', hide: true },
+      {
+        field: 'name',
+        headerName: 'Group',
+        flex: 2,
+        minWidth: 220,
+        editable: false,
+        cellRenderer: (params: ICellRendererParams<GroupRow>) => {
+          const v = params.value as string;
+          const sso = allGroups.find(
+            (g) => g.id === params.data?._id,
+          )?.sso_managed;
+          return (
+            <Group gap="xs" h="100%" wrap="nowrap">
+              <Icon
+                icon="mdi:account-group-outline"
+                width={16}
+                color="var(--mantine-color-gray-6)"
+              />
+              <Text size="sm">{v}</Text>
+              {sso && (
+                <Badge color="grape" variant="light" radius="sm" size="xs">
+                  SSO
+                </Badge>
+              )}
+            </Group>
+          );
+        },
+      },
+      {
+        field: 'Owner',
+        headerName: 'Owner',
+        width: 100,
+        cellRenderer: 'agCheckboxCellRenderer',
+        cellStyle: {
+          textAlign: 'center',
+          pointerEvents: canManage ? 'auto' : 'none',
+        },
+        editable: canManage,
+        suppressKeyboardEvent: () => !canManage,
+      },
+      {
+        field: 'Editor',
+        headerName: 'Editor',
+        width: 100,
+        cellRenderer: 'agCheckboxCellRenderer',
+        cellStyle: {
+          textAlign: 'center',
+          pointerEvents: canManage ? 'auto' : 'none',
+        },
+        editable: canManage,
+        suppressKeyboardEvent: () => !canManage,
+      },
+      {
+        field: 'Viewer',
+        headerName: 'Viewer',
+        width: 100,
+        cellRenderer: 'agCheckboxCellRenderer',
+        cellStyle: {
+          textAlign: 'center',
+          pointerEvents: canManage ? 'auto' : 'none',
+        },
+        editable: canManage,
+        suppressKeyboardEvent: () => !canManage,
+      },
+      {
+        headerName: '',
+        width: 70,
+        sortable: false,
+        filter: false,
+        editable: false,
+        cellRenderer: (params: ICellRendererParams<GroupRow>) => {
+          if (!params.data) return null;
+          return (
+            <Center h="100%">
+              <ActionIcon
+                size="sm"
+                variant="subtle"
+                color="red"
+                disabled={!canManage}
+                title={canManage ? 'Remove group' : 'Owner permission required'}
+                onClick={() => handleDeleteGroup(params.data!)}
+              >
+                <Icon icon="mdi:delete" width={16} />
+              </ActionIcon>
+            </Center>
+          );
+        },
+      },
+    ],
+    [canManage, rows, groupRows, allGroups],
   );
 
   return (
@@ -655,6 +965,7 @@ const PermissionsApp: React.FC = () => {
                       height: Math.max(160, 56 + rows.length * 36 + 4),
                       width: '100%',
                     }}
+                    data-testid="permissions-users-grid"
                   >
                     <AgGridReact<UserRow>
                       rowData={rows}
@@ -712,6 +1023,85 @@ const PermissionsApp: React.FC = () => {
                         data-testid="permissions-add-user-btn"
                       >
                         Add user
+                      </Button>
+                    </Group>
+                  )}
+                </Stack>
+              </Card>
+
+              <Card withBorder radius="md" p="md">
+                <Stack gap="sm">
+                  <Group justify="space-between">
+                    <Group gap="xs">
+                      <Icon
+                        icon="mdi:account-group-outline"
+                        width={22}
+                        color="var(--mantine-color-blue-6)"
+                      />
+                      <Title order={5}>Groups</Title>
+                      <Badge color="blue" variant="light" radius="sm" size="sm">
+                        {groupRows.length}
+                      </Badge>
+                    </Group>
+                  </Group>
+                  <Box
+                    className={isDark ? 'ag-theme-alpine-dark' : 'ag-theme-alpine'}
+                    style={{
+                      height: Math.max(160, 56 + groupRows.length * 36 + 4),
+                      width: '100%',
+                    }}
+                    data-testid="permissions-groups-grid"
+                  >
+                    <AgGridReact<GroupRow>
+                      rowData={groupRows}
+                      columnDefs={groupColDefs}
+                      headerHeight={36}
+                      rowHeight={36}
+                      suppressCellFocus
+                      onCellValueChanged={handleGroupCellChange}
+                      stopEditingWhenCellsLoseFocus
+                      overlayNoRowsTemplate={
+                        '<span style="color:var(--mantine-color-dimmed);font-size:12px">No groups yet — share this project with a group below.</span>'
+                      }
+                    />
+                  </Box>
+                  {canManage && (
+                    <Group gap="xs" align="flex-end">
+                      <Autocomplete
+                        flex={1}
+                        size="sm"
+                        label={undefined}
+                        placeholder="Type to search groups…"
+                        value={groupInput}
+                        onChange={setGroupInput}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !addingGroup) handleAddGroup();
+                        }}
+                        disabled={addingGroup}
+                        leftSection={
+                          <Icon icon="mdi:account-group-outline" width={16} />
+                        }
+                        // Suggestions: every known group that isn't already
+                        // attached to the project.
+                        data={allGroups
+                          .map((g) => g.name)
+                          .filter(
+                            (n) => n && !groupRows.some((r) => r.name === n),
+                          )}
+                        limit={20}
+                        comboboxProps={{ withinPortal: true }}
+                        data-testid="permissions-add-group-input"
+                      />
+                      <Button
+                        size="sm"
+                        color="teal"
+                        loading={addingGroup}
+                        onClick={handleAddGroup}
+                        disabled={!groupInput.trim()}
+                        leftSection={<Icon icon="mdi:plus" width={14} />}
+                        data-testid="permissions-add-group-btn"
+                      >
+                        Add group
                       </Button>
                     </Group>
                   )}
