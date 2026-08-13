@@ -32,6 +32,7 @@ from depictio.api.v1.endpoints.events_endpoints.routes import events_router
 from depictio.api.v1.endpoints.export_endpoints.routes import export_endpoint_router
 from depictio.api.v1.endpoints.figure_endpoints.routes import figure_endpoint_router
 from depictio.api.v1.endpoints.files_endpoints.routes import files_endpoint_router
+from depictio.api.v1.endpoints.groups_endpoints.routes import groups_endpoint_router
 from depictio.api.v1.endpoints.jbrowse_endpoints.routes import jbrowse_endpoints_router
 from depictio.api.v1.endpoints.jobs_endpoints.routes import jobs_endpoint_router
 from depictio.api.v1.endpoints.links_endpoints.routes import links_endpoint_router
@@ -189,6 +190,12 @@ if settings.jobs.enabled:
         tags=["Jobs"],
     )
 
+
+router.include_router(
+    groups_endpoint_router,
+    prefix="/groups",
+    tags=["groups"],
+)
 
 router.include_router(
     auth_endpoint_router,
