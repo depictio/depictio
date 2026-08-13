@@ -2407,10 +2407,20 @@ export interface DashboardPermissionsUser {
   id?: string;
   email: string;
 }
+/** Group snapshot embedded in permissions blocks ({id, name} only —
+ *  membership always resolves live server-side). */
+export interface PermissionsGroup {
+  _id?: string;
+  id?: string;
+  name: string;
+}
 export interface DashboardPermissions {
   owners?: DashboardPermissionsUser[];
   viewers?: DashboardPermissionsUser[];
   editors?: DashboardPermissionsUser[];
+  group_owners?: PermissionsGroup[];
+  group_editors?: PermissionsGroup[];
+  group_viewers?: PermissionsGroup[];
 }
 
 /** Full dashboard list entry. Superset of `DashboardSummary` — the same
@@ -2695,6 +2705,9 @@ export interface ProjectPermissionsInput {
     owners?: DashboardPermissionsUser[];
     editors?: DashboardPermissionsUser[];
     viewers?: DashboardPermissionsUser[];
+    group_owners?: PermissionsGroup[];
+    group_editors?: PermissionsGroup[];
+    group_viewers?: PermissionsGroup[];
   };
 }
 
@@ -2706,6 +2719,138 @@ export async function updateProjectPermissions(
     body: JSON.stringify(input),
   });
   if (!res.ok) await throwHttpError(res, 'Failed to update permissions');
+}
+
+// ---- Groups (user groups: membership, group admins, project sharing)
+
+export interface GroupSummary {
+  id: string;
+  name: string;
+  description?: string | null;
+  member_count: number;
+  sso_managed: boolean;
+}
+
+export interface MyGroup extends GroupSummary {
+  is_group_admin: boolean;
+  is_pi: boolean;
+}
+
+export interface GroupMember {
+  id: string;
+  email: string;
+  display_name?: string | null;
+  is_group_admin: boolean;
+  is_pi: boolean;
+}
+
+export interface GroupDetail {
+  id: string;
+  name: string;
+  description?: string | null;
+  sso_managed: boolean;
+  pi_id?: string | null;
+  admin_ids: string[];
+  members: GroupMember[];
+}
+
+/** Any authenticated user may list groups (names only, for sharing pickers). */
+export async function listGroups(): Promise<GroupSummary[]> {
+  const res = await authFetch(`${API_BASE}/groups/list`);
+  if (!res.ok) await throwHttpError(res, 'Failed to list groups');
+  return res.json();
+}
+
+export async function listMyGroups(): Promise<MyGroup[]> {
+  const res = await authFetch(`${API_BASE}/groups/mine`);
+  if (!res.ok) await throwHttpError(res, 'Failed to list your groups');
+  return res.json();
+}
+
+/** Full detail incl. members — sysadmins, group admins and members only. */
+export async function fetchGroup(groupId: string): Promise<GroupDetail> {
+  const res = await authFetch(`${API_BASE}/groups/${groupId}`);
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to fetch group');
+  return res.json();
+}
+
+export async function createGroup(input: {
+  name: string;
+  description?: string;
+  pi_id?: string;
+}): Promise<GroupDetail> {
+  const res = await authFetch(`${API_BASE}/groups`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to create group');
+  return res.json();
+}
+
+export async function updateGroup(
+  groupId: string,
+  input: { name?: string; description?: string },
+): Promise<GroupDetail> {
+  const res = await authFetch(`${API_BASE}/groups/${groupId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to update group');
+  return res.json();
+}
+
+export async function deleteGroup(groupId: string): Promise<void> {
+  const res = await authFetch(`${API_BASE}/groups/${groupId}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to delete group');
+}
+
+export async function addGroupMember(
+  groupId: string,
+  userId: string,
+): Promise<GroupDetail> {
+  const res = await authFetch(`${API_BASE}/groups/${groupId}/members/${userId}`, {
+    method: 'POST',
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to add group member');
+  return res.json();
+}
+
+export async function removeGroupMember(
+  groupId: string,
+  userId: string,
+): Promise<GroupDetail> {
+  const res = await authFetch(`${API_BASE}/groups/${groupId}/members/${userId}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to remove group member');
+  return res.json();
+}
+
+export async function setGroupAdmin(
+  groupId: string,
+  userId: string,
+  makeAdmin: boolean,
+): Promise<GroupDetail> {
+  const res = await authFetch(
+    `${API_BASE}/groups/${groupId}/admins/${userId}/${makeAdmin ? 'True' : 'False'}`,
+    { method: 'POST' },
+  );
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to update group admin');
+  return res.json();
+}
+
+/** Sysadmin only: designate the group's P.I. (auto-added to members+admins). */
+export async function setGroupPI(
+  groupId: string,
+  userId: string,
+): Promise<GroupDetail> {
+  const res = await authFetch(`${API_BASE}/groups/${groupId}/pi/${userId}`, {
+    method: 'POST',
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to set group P.I.');
+  return res.json();
 }
 
 /** Upload a project .zip and create the project from its contents.
