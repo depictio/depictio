@@ -1,0 +1,183 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1560" height="820" viewBox="0 0 1560 820">
+  <rect width="1560" height="820" fill="#ffffff"/>
+  <text x="40.0" y="52.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="25" fill="#1e1e1e" text-anchor="start" font-weight="normal">SSO group sync &amp; group governance</text>
+  <text x="40.0" y="78.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="15" fill="#5c5c5c" text-anchor="start" font-weight="normal">SAML attributes provision groups and profile on every login - compatible with PR #968, wired by 3 lines</text>
+  <rect x="40.0" y="140.0" width="230.0" height="96.0" rx="6" fill="#e7f5ff"/>
+  <path d="M39.3,140.6 C117.6,139.3 194.9,141.2 269.9,139.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M40.8,140.6 C116.9,138.8 192.8,139.8 269.8,140.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M269.6,139.5 C268.7,172.7 268.8,204.5 270.6,236.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M270.6,140.6 C271.5,173.5 271.2,203.6 270.3,236.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M270.6,236.7 C194.3,236.4 117.7,236.4 40.6,236.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M270.5,236.1 C193.5,235.8 117.3,235.7 39.9,235.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M40.5,236.1 C40.8,203.7 40.6,173.4 40.6,140.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M39.6,235.8 C38.5,203.7 41.0,171.8 39.9,140.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="155.0" y="167.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">EMBL Keycloak</text>
+  <text x="155.0" y="191.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">SAML IdP</text>
+  <text x="155.0" y="212.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">(any IdP works)</text>
+  <rect x="400.0" y="140.0" width="300.0" height="120.0" rx="6" fill="#ffffff"/>
+  <path d="M399.4,140.1 C498.8,140.2 598.9,140.2 700.3,140.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M400.3,140.0 C498.9,140.1 598.7,139.0 699.3,140.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M699.2,139.5 C699.3,179.3 700.4,219.8 699.3,259.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M699.3,139.9 C700.0,179.2 699.8,218.5 700.4,260.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M700.4,260.5 C600.6,259.7 500.8,260.1 400.6,259.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M700.2,259.8 C601.5,260.5 498.6,260.4 399.9,259.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M399.5,260.4 C400.0,220.7 401.2,178.7 400.8,140.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M400.0,260.4 C398.8,220.0 398.6,178.8 400.1,140.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="550.0" y="167.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">ACS callback  (PR #968)</text>
+  <text x="550.0" y="194.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">/auth/saml/callback</text>
+  <text x="550.0" y="216.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">create_or_get_sso_user(email)</text>
+  <text x="550.0" y="238.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">-&gt; magic-link ticket -&gt; viewer</text>
+  <path d="M270.4,187.6 C313.2,188.2 354.8,186.1 399.4,188.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M270.4,188.8 C313.1,189.1 356.5,188.2 399.7,187.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M400.4,187.7 C396.5,185.7 391.8,184.5 387.3,181.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M399.5,188.1 C396.1,189.7 392.7,191.9 387.8,194.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="335.0" y="132.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="13" fill="#5c5c5c" text-anchor="middle" font-weight="normal">assertion:</text>
+  <text x="335.0" y="150.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="13" fill="#5c5c5c" text-anchor="middle" font-weight="normal">memberOf, title,</text>
+  <text x="335.0" y="168.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="13" fill="#5c5c5c" text-anchor="middle" font-weight="normal">displayName, uid</text>
+  <rect x="830.0" y="130.0" width="330.0" height="150.0" rx="6" fill="#fff9db"/>
+  <path d="M829.5,129.3 C938.8,131.4 1051.2,129.6 1160.0,129.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M829.7,129.6 C939.7,128.8 1049.8,129.6 1159.5,130.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1159.8,130.4 C1159.2,178.9 1161.5,229.3 1160.2,279.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1159.3,129.9 C1160.2,180.6 1161.6,231.0 1160.7,279.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1159.5,280.4 C1048.7,281.3 939.0,280.8 829.5,279.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1159.9,280.1 C1050.1,281.2 938.6,279.0 830.4,279.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M829.5,279.7 C830.7,229.3 829.1,179.4 830.0,130.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M830.3,280.1 C831.0,231.3 831.1,180.7 830.2,129.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="995.0" y="157.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">sync_sso_user(user, attrs)</text>
+  <text x="995.0" y="181.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">auth_endpoints/sso_sync.py</text>
+  <text x="995.0" y="202.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">settings: DEPICTIO_AUTH_</text>
+  <text x="995.0" y="223.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">SAML_ATTRIBUTE_GROUPS /</text>
+  <text x="995.0" y="244.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">_TITLE / _DISPLAY_NAME / _LOGIN</text>
+  <text x="995.0" y="265.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">idempotent, runs on every login</text>
+  <path d="M700.2,200.8 C744.8,202.5 786.7,202.2 830.9,205.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round" stroke-dasharray="9 7"/>
+  <path d="M700.2,200.0 C744.3,201.7 784.7,204.5 830.1,204.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round" stroke-dasharray="9 7"/>
+  <path d="M829.8,205.2 C826.7,203.3 821.5,201.0 817.9,197.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M829.5,205.1 C826.2,207.4 820.7,209.4 817.3,210.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="765.0" y="140.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#c92a2a" text-anchor="middle" font-weight="normal">+3 lines</text>
+  <text x="765.0" y="158.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="13" fill="#5c5c5c" text-anchor="middle" font-weight="normal">when #968</text>
+  <text x="765.0" y="174.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="13" fill="#5c5c5c" text-anchor="middle" font-weight="normal">merges</text>
+  <rect x="1250.0" y="110.0" width="270.0" height="130.0" rx="6" fill="#f3f0ff"/>
+  <path d="M1249.5,109.8 C1340.7,110.6 1430.2,109.8 1519.5,109.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1249.7,110.4 C1340.2,110.9 1429.1,110.7 1519.3,109.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1520.0,109.4 C1519.0,151.8 1519.2,195.1 1520.6,240.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1519.2,110.0 C1520.6,153.4 1521.2,195.4 1519.8,240.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1520.3,240.5 C1429.4,238.7 1341.4,241.1 1250.4,239.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1519.8,240.4 C1428.9,238.9 1341.2,241.2 1250.5,240.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1250.5,239.9 C1249.3,197.8 1249.2,152.4 1250.5,110.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1250.0,240.6 C1248.4,198.2 1250.0,153.3 1249.5,110.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="1385.0" y="137.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">Lab X  (sso_managed)</text>
+  <text x="1385.0" y="161.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">created if missing</text>
+  <text x="1385.0" y="182.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">membership re-synced</text>
+  <text x="1385.0" y="203.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">each login: adds AND</text>
+  <text x="1385.0" y="224.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">removals</text>
+  <path d="M1160.6,175.2 C1188.8,176.9 1219.3,175.2 1249.1,175.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1160.6,174.2 C1188.4,176.7 1222.0,176.7 1250.0,174.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1250.0,175.5 C1245.5,172.0 1242.0,170.8 1238.0,168.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1249.7,174.8 C1245.1,177.3 1242.4,178.6 1237.8,182.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <rect x="1250.0" y="270.0" width="270.0" height="96.0" rx="6" fill="#adb5bd"/>
+  <path d="M1249.6,269.5 C1338.8,268.4 1431.4,269.1 1519.3,270.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1250.6,269.3 C1340.3,269.5 1428.8,270.6 1520.6,269.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1520.7,270.3 C1521.2,301.3 1518.9,333.5 1520.3,366.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1519.8,270.7 C1519.4,303.3 1518.9,333.6 1519.5,365.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1520.7,366.8 C1429.5,365.2 1339.4,367.6 1249.3,365.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1519.3,365.3 C1431.0,367.3 1340.8,364.6 1250.0,366.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1250.4,365.9 C1251.1,335.3 1251.3,301.4 1250.2,270.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1249.2,366.7 C1248.6,334.6 1249.4,302.4 1249.5,270.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="1385.0" y="297.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">manual group</text>
+  <text x="1385.0" y="321.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">created by a sysadmin</text>
+  <text x="1385.0" y="342.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">(sso_managed=false)</text>
+  <path d="M1160.2,224.3 C1191.3,256.2 1218.7,285.9 1249.8,318.9" fill="none" stroke="#5c5c5c" stroke-width="1.7" stroke-linecap="round" stroke-dasharray="9 7"/>
+  <path d="M1159.1,225.0 C1188.9,254.6 1218.9,288.0 1250.2,317.2" fill="none" stroke="#5c5c5c" stroke-width="1.7" stroke-linecap="round" stroke-dasharray="9 7"/>
+  <path d="M1193.6,261.4 C1201.2,269.4 1209.2,276.2 1216.0,283.2" fill="none" stroke="#c92a2a" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1193.5,283.3 C1202.2,276.3 1209.4,268.3 1215.5,261.0" fill="none" stroke="#c92a2a" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="1385.0" y="394.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#c92a2a" text-anchor="middle" font-weight="normal">never touched</text>
+  <rect x="830.0" y="330.0" width="330.0" height="104.0" rx="6" fill="#ebfbee"/>
+  <path d="M830.2,330.4 C940.3,328.8 1051.3,329.1 1160.2,329.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M829.9,329.9 C940.1,330.4 1050.0,331.3 1159.3,329.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1160.7,330.3 C1160.5,365.3 1161.1,398.5 1160.6,434.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1159.7,329.8 C1159.7,363.9 1160.9,398.3 1159.8,434.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1160.7,433.9 C1049.1,434.3 940.3,432.6 830.3,433.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1159.5,434.1 C1050.6,434.9 938.6,435.3 829.7,433.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M830.1,434.4 C831.1,400.8 828.9,363.4 830.0,329.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M829.4,433.6 C828.9,399.2 830.8,365.7 830.3,330.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="995.0" y="357.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">user profile</text>
+  <text x="995.0" y="381.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">title . display_name . login</text>
+  <text x="995.0" y="402.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">sso_provider = saml</text>
+  <text x="995.0" y="423.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">shown on /profile</text>
+  <path d="M994.1,279.9 C996.7,294.8 995.6,312.9 994.4,330.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M995.8,279.9 C993.0,297.6 996.3,314.5 995.4,330.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M994.7,330.4 C997.9,326.6 999.0,321.0 1001.5,317.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M995.0,329.8 C993.7,326.7 990.4,322.7 988.5,318.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M39.3,489.6 C535.0,490.5 1025.8,488.7 1519.7,489.9" fill="none" stroke="#adb5bd" stroke-width="1.7" stroke-linecap="round" stroke-dasharray="9 7"/>
+  <path d="M39.6,490.1 C532.8,489.0 1025.5,491.1 1519.9,490.3" fill="none" stroke="#adb5bd" stroke-width="1.7" stroke-linecap="round" stroke-dasharray="9 7"/>
+  <text x="40.0" y="530.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="22" fill="#1e1e1e" text-anchor="start" font-weight="normal">who runs a group</text>
+  <rect x="40.0" y="560.0" width="280.0" height="120.0" rx="6" fill="#ffe8cc"/>
+  <path d="M39.7,559.4 C134.2,560.9 225.4,560.4 320.7,560.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M39.8,559.5 C132.3,559.9 227.9,560.5 319.3,560.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M319.8,559.5 C321.4,601.1 319.2,640.2 319.5,680.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M319.7,559.3 C319.9,600.3 319.4,641.4 319.3,680.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M319.8,680.0 C225.2,678.8 134.0,680.0 39.5,680.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M320.2,679.2 C228.0,678.5 133.4,679.1 40.1,679.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M40.4,679.8 C40.3,638.5 39.0,599.4 39.6,559.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M40.2,680.1 C41.2,640.5 40.1,598.7 40.1,559.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="180.0" y="587.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">sysadmin</text>
+  <text x="180.0" y="611.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">creates / deletes groups</text>
+  <text x="180.0" y="632.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">designates the P.I.</text>
+  <text x="180.0" y="653.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">(seeded admin/users</text>
+  <text x="180.0" y="674.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">groups protected)</text>
+  <rect x="420.0" y="560.0" width="280.0" height="120.0" rx="6" fill="#ffe3e3"/>
+  <path d="M420.3,559.2 C512.8,561.0 607.7,560.5 699.4,559.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M420.7,560.5 C514.4,561.4 605.2,561.5 699.5,559.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M699.4,560.3 C700.3,599.6 698.9,639.6 700.3,680.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M700.2,559.9 C700.8,599.2 701.3,641.1 699.7,680.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M700.5,679.4 C606.6,679.7 514.5,679.0 420.7,679.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M699.5,680.3 C607.3,679.2 512.6,679.8 420.5,679.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M420.4,679.7 C421.0,638.7 421.6,599.2 419.7,560.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M420.1,680.5 C420.9,640.4 419.3,598.8 420.7,560.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="560.0" y="587.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">P.I.  (carol)</text>
+  <text x="560.0" y="611.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">group admin by default</text>
+  <text x="560.0" y="632.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">can promote more</text>
+  <text x="560.0" y="653.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">group admins</text>
+  <rect x="800.0" y="560.0" width="330.0" height="120.0" rx="6" fill="#f3f0ff"/>
+  <path d="M800.2,560.5 C909.9,559.9 1019.4,559.5 1130.5,559.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M800.0,560.7 C908.9,560.4 1019.3,559.2 1130.4,559.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1129.3,559.3 C1130.7,598.5 1130.0,641.2 1130.2,679.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1129.5,560.6 C1129.9,600.1 1129.5,640.8 1130.6,679.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1130.1,679.4 C1019.5,680.5 910.6,678.5 800.5,680.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1130.2,680.7 C1019.3,680.9 908.7,680.5 799.6,679.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M800.5,679.3 C801.6,639.4 801.4,598.5 799.6,559.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M799.6,680.8 C799.3,639.2 801.0,599.1 800.2,559.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="965.0" y="587.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">group admins</text>
+  <text x="965.0" y="611.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">add / remove members</text>
+  <text x="965.0" y="632.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">promote / demote admins</text>
+  <text x="965.0" y="653.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">rename, edit description</text>
+  <text x="965.0" y="674.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">manage group-owned project sharing</text>
+  <rect x="1230.0" y="560.0" width="290.0" height="120.0" rx="6" fill="#e7f5ff"/>
+  <path d="M1229.3,560.4 C1327.6,558.9 1422.6,561.0 1519.3,560.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1229.2,559.8 C1327.0,560.1 1423.1,559.9 1520.2,559.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1519.7,560.5 C1520.9,600.6 1520.6,639.7 1520.1,679.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1519.9,560.5 C1520.3,600.2 1519.1,641.1 1519.4,679.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1519.3,679.6 C1424.3,680.1 1326.2,681.1 1229.9,679.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1519.4,680.5 C1422.0,680.8 1325.8,681.4 1229.8,680.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1230.2,679.5 C1230.3,639.1 1230.0,599.8 1229.4,560.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1229.4,680.3 C1229.4,640.4 1230.9,601.3 1230.6,560.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="1375.0" y="587.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">where</text>
+  <text x="1375.0" y="611.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">/groups page (self-service)</text>
+  <text x="1375.0" y="632.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">Admin -&gt; Groups tab</text>
+  <text x="1375.0" y="653.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">project permissions page:</text>
+  <text x="1375.0" y="674.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">Groups card</text>
+  <path d="M319.2,620.3 C352.7,620.6 387.2,621.6 420.1,619.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M319.3,620.6 C355.0,618.5 388.0,618.3 420.7,619.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M420.0,619.6 C415.3,617.5 410.9,615.2 408.0,613.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M420.4,619.9 C415.9,621.9 412.6,624.0 408.1,627.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M701.0,620.5 C732.1,619.4 766.4,618.9 799.6,619.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M699.3,620.9 C731.5,621.1 768.4,621.5 800.6,619.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M800.2,619.7 C795.3,618.1 791.4,615.6 788.1,613.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M800.3,619.7 C796.4,622.6 791.1,623.5 787.3,626.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1130.4,619.8 C1163.9,621.6 1198.0,619.9 1230.6,619.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1131.0,620.3 C1163.4,618.5 1197.6,621.3 1230.7,620.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1230.3,620.2 C1225.7,617.0 1220.9,615.1 1218.0,613.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1230.0,619.8 C1224.9,622.3 1221.7,624.3 1217.7,626.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="780.0" y="740.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">guards: no self-demotion . a group keeps &gt;= 1 admin (sysadmin may override) .</text>
+  <text x="780.0" y="762.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">removing a member also drops their admin role and clears P.I. if it was them</text>
+</svg>
