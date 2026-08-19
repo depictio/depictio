@@ -37,7 +37,6 @@ import {
   ShieldCheck,
   Sun,
   UserRound,
-  UsersRound,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -61,7 +60,6 @@ export const STROKE = 1.6;
 export const SECTION_ICON: Record<SidebarSection, LucideIcon> = {
   dashboards: LayoutDashboard,
   projects: FolderKanban,
-  groups: UsersRound,
   admin: ShieldCheck,
   about: Info,
   profile: UserRound,
@@ -79,7 +77,6 @@ export function useSectionPalettes(): Record<SidebarSection, string> {
     () => ({
       dashboards: brandAccent(brand, 'tertiary', 'logoOrange'),
       projects: brandAccent(brand, 'secondary', 'logoTeal'),
-      groups: 'grape',
       admin: BRAND_PALETTES.primary,
       about: 'gray',
       profile: BRAND_PALETTES.primary,
@@ -91,7 +88,6 @@ export function useSectionPalettes(): Record<SidebarSection, string> {
 const SECTION_LABEL: Record<SidebarSection, string> = {
   dashboards: 'Dashboards',
   projects: 'Projects',
-  groups: 'Groups',
   admin: 'Administration',
   about: 'About',
   profile: 'Account settings',

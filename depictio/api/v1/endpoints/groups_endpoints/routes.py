@@ -28,6 +28,7 @@ from depictio.api.v1.endpoints.groups_endpoints.models import (
     GroupCreateRequest,
     GroupDetail,
     GroupMemberOut,
+    GroupPendingPIRequest,
     GroupSummary,
     GroupUpdateRequest,
     MyGroup,
@@ -74,6 +75,14 @@ def _get_user_oid_or_404(user_id: PyObjectId) -> ObjectId:
     if users_collection.find_one({"_id": user_oid}, {"_id": 1}) is None:
         raise HTTPException(status_code=404, detail=f"User '{user_id}' not found.")
     return user_oid
+
+
+def _find_user_oid_by_email(email: str) -> ObjectId | None:
+    """Resolve an email to a user id, case-insensitively. None when unknown."""
+    user_doc = users_collection.find_one(
+        {"email": {"$regex": f"^{re.escape(email)}$", "$options": "i"}}, {"_id": 1}
+    )
+    return user_doc["_id"] if user_doc else None
 
 
 def _name_conflict(name: str, exclude_id: ObjectId | None = None) -> bool:
@@ -125,6 +134,7 @@ def _group_detail(group_doc: dict) -> GroupDetail:
         description=group_doc.get("description"),
         sso_managed=bool(group_doc.get("sso_managed", False)),
         pi_id=str(pi_id) if pi_id is not None else None,
+        pending_pi_email=group_doc.get("pending_pi_email"),
         admin_ids=admin_ids,
         members=members,
     )
@@ -201,8 +211,16 @@ async def create_group(payload: GroupCreateRequest, current_user: User = Depends
             status_code=409, detail=f"A group named '{payload.name}' already exists."
         )
 
+    pi_oid: ObjectId | None = None
+    pending_pi_email: str | None = None
     if payload.pi_id is not None:
-        _get_user_oid_or_404(payload.pi_id)
+        pi_oid = _get_user_oid_or_404(payload.pi_id)
+    elif payload.pi_email is not None:
+        # An address that already has an account is a normal designation; an
+        # unknown one is parked until that person first signs in.
+        pi_oid = _find_user_oid_by_email(payload.pi_email)
+        if pi_oid is None:
+            pending_pi_email = payload.pi_email
 
     try:
         # GroupBeanie runs the model validators (P.I./admins auto-added to
@@ -210,8 +228,9 @@ async def create_group(payload: GroupCreateRequest, current_user: User = Depends
         group = GroupBeanie(
             name=payload.name,
             description=payload.description,
-            pi_id=payload.pi_id,
-            admin_ids=[payload.pi_id] if payload.pi_id is not None else [],
+            pi_id=PyObjectId(str(pi_oid)) if pi_oid is not None else None,
+            pending_pi_email=pending_pi_email,
+            admin_ids=[PyObjectId(str(pi_oid))] if pi_oid is not None else [],
         )
     except ValidationError as exc:
         raise HTTPException(status_code=400, detail=f"Invalid group payload: {exc}")
@@ -377,9 +396,56 @@ async def set_group_pi(
     groups_collection.update_one(
         {"_id": group_doc["_id"]},
         {
-            "$set": {"pi_id": user_oid},
+            # A resolved P.I. supersedes any parked designation.
+            "$set": {"pi_id": user_oid, "pending_pi_email": None},
             "$addToSet": {"users_ids": user_oid, "admin_ids": user_oid},
         },
     )
     logger.info(f"User {user_oid} set as P.I. of group {group_doc['_id']} by {current_user.email}")
+    return _refetch_detail(group_doc["_id"])
+
+
+@groups_endpoint_router.post("/{group_id}/pending-pi", response_model=GroupDetail)
+async def set_group_pending_pi(
+    group_id: PyObjectId,
+    payload: GroupPendingPIRequest,
+    current_user: User = Depends(require_admin),
+):
+    """Park a P.I. designation on an email address (sysadmin only).
+
+    Lets an admin name the P.I. of a group before that person has ever signed
+    in — the promotion is applied by ``claim_pending_pi_groups`` on their first
+    login, in any auth mode. An address that already resolves to an account is
+    applied immediately instead of parked. ``email=None`` clears the parking.
+    """
+    group_doc = _get_group_or_404(group_id)
+
+    if payload.email is None:
+        groups_collection.update_one(
+            {"_id": group_doc["_id"]}, {"$set": {"pending_pi_email": None}}
+        )
+        logger.info(f"Pending P.I. cleared on group {group_doc['_id']} by {current_user.email}")
+        return _refetch_detail(group_doc["_id"])
+
+    email = payload.email.strip().lower()
+    existing_oid = _find_user_oid_by_email(email)
+    if existing_oid is not None:
+        groups_collection.update_one(
+            {"_id": group_doc["_id"]},
+            {
+                "$set": {"pi_id": existing_oid, "pending_pi_email": None},
+                "$addToSet": {"users_ids": existing_oid, "admin_ids": existing_oid},
+            },
+        )
+        logger.info(
+            f"P.I. of group {group_doc['_id']} set to existing user {existing_oid} "
+            f"(resolved from '{email}') by {current_user.email}"
+        )
+        return _refetch_detail(group_doc["_id"])
+
+    groups_collection.update_one({"_id": group_doc["_id"]}, {"$set": {"pending_pi_email": email}})
+    logger.info(
+        f"P.I. of group {group_doc['_id']} parked on '{email}' (no account yet) "
+        f"by {current_user.email}"
+    )
     return _refetch_detail(group_doc["_id"])

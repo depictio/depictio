@@ -22,7 +22,6 @@ import { useCurrentUser } from '../hooks/useCurrentUser';
 export type SidebarSection =
   | 'dashboards'
   | 'projects'
-  | 'groups'
   | 'admin'
   | 'about'
   | 'profile';
@@ -59,13 +58,6 @@ export const NAV_ENTRIES: NavEntry[] = [
     color: 'teal',
   },
   {
-    key: 'groups',
-    label: 'Groups',
-    icon: 'mdi:account-multiple-outline',
-    href: '/groups',
-    color: 'grape',
-  },
-  {
     key: 'admin',
     label: 'Administration',
     icon: 'material-symbols:settings',
@@ -88,16 +80,12 @@ interface AppSidebarProps {
 }
 
 /** The entries this reader may see: Administration only for admins (matches
- *  the Dash sidebar visibility callback at sidebar.py:721-756); Groups for any
- *  authenticated user — hidden while anonymous. Shared with the Glass page
- *  shell (chrome/variants/glass/pages). */
+ *  the Dash sidebar visibility callback at sidebar.py:721-756). Group
+ *  administration lives inside that page; members reach their own groups from
+ *  /profile. Shared with the Glass page shell (chrome/variants/glass/pages). */
 export function useAppNavEntries(): NavEntry[] {
   const { user } = useCurrentUser();
-  return NAV_ENTRIES.filter((entry) => {
-    if (entry.key === 'admin') return Boolean(user?.is_admin);
-    if (entry.key === 'groups') return Boolean(user);
-    return true;
-  });
+  return NAV_ENTRIES.filter((entry) => entry.key !== 'admin' || Boolean(user?.is_admin));
 }
 
 const AppSidebar: React.FC<AppSidebarProps> = ({ active }) => {

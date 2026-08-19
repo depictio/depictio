@@ -590,6 +590,7 @@ export {
   removeGroupMember,
   setGroupAdmin,
   setGroupPI,
+  setGroupPendingPI,
   // Admin
   listAllUsers,
   deleteUser,

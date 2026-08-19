@@ -15,6 +15,7 @@ already-extracted ``dict[str, list[str]]`` attribute payload.
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
+from depictio.api.v1.endpoints.groups_endpoints.pending_pi import claim_pending_pi_groups
 from depictio.models.models.users import GroupBeanie, UserBeanie
 
 
@@ -34,13 +35,18 @@ async def sync_sso_user(user: UserBeanie, attributes: dict[str, list[str]] | Non
     wipes state). Each step is independently skipped when its
     ``settings.auth.saml_attribute_*`` mapping is unset.
 
+    Group and profile sync are followed by ``claim_pending_pi_groups``: a P.I.
+    designated by email before the account existed is promoted here, on the
+    login that first asserts the group.
+
     Group sync (``saml_attribute_groups``):
         The attribute's value list is taken verbatim as group names (whitespace
         stripped, empties dropped) — IdPs may send full DNs or plain names; no
         parsing is attempted, the raw value is the group name. For each
         incoming name the group is created if missing (``sso_managed=True``,
-        no admins, no P.I. — a sysadmin designates the P.I. later) and the
-        user is added to ``users_ids``. The user is then removed from every
+        no admins, no P.I. — a sysadmin designates the P.I. afterwards, either
+        directly or by parking an email via ``pending_pi_email``) and the user
+        is added to ``users_ids``. The user is then removed from every
         ``sso_managed`` group NOT named in the assertion (including
         ``admin_ids``, and ``pi_id`` is cleared if it was them). Manually
         created groups (``sso_managed=False``) are never touched.
@@ -64,6 +70,10 @@ async def sync_sso_user(user: UserBeanie, attributes: dict[str, list[str]] | Non
 
     await _sync_groups(user, attributes)
     await _sync_profile(user, attributes)
+    # Groups whose P.I. was designated by email before this account existed.
+    # Runs after group sync so a freshly mirrored group can be claimed in the
+    # same login.
+    await claim_pending_pi_groups(user)
 
 
 async def _sync_groups(user: UserBeanie, attributes: dict[str, list[str]]) -> None:
