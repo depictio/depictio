@@ -73,6 +73,11 @@ const stageLabel = (stage: FunnelStage, position: number): string => {
   return short ? `${position}. ${name} = ${short}` : `${position}. ${name}`;
 };
 
+/** Left gutter reserved for the stage labels, in px. Sized for the longest
+ *  label `stageLabel` can emit (a position, a column name and a 24-char value)
+ *  so the chart never has to measure its own ticks. */
+const STAGE_LABEL_GUTTER = 240;
+
 type LabelMode = 'value' | 'percent initial' | 'percent previous';
 
 export interface FunnelViewProps {
@@ -218,10 +223,16 @@ const FunnelView: React.FC<FunnelViewProps> = ({ opened, onClose, dashboardId, f
     () =>
       applyLayoutTheme(
         {
-          margin: { l: 16, r: 24, t: 8, b: 24 },
+          // Fixed left margin, NOT `yaxis.automargin`. Automargin resizes the
+          // plot to fit the tick labels, the container is width:100%, and a
+          // resize feeds back into another automargin pass: inside a modal
+          // that is still animating open, the two chase each other and the
+          // renderer spins. Stage labels are length-capped by `stageLabel`, so
+          // a fixed gutter holds them without measuring.
+          margin: { l: STAGE_LABEL_GUTTER, r: 24, t: 8, b: 24 },
           // Funnel bands read top-down; Plotly's category axis defaults to
           // bottom-up, which would put "Unfiltered" at the bottom.
-          yaxis: { autorange: 'reversed', automargin: true },
+          yaxis: { autorange: 'reversed' },
           showlegend: chartedDcs.length > 1,
           legend: { orientation: 'h', y: -0.12 },
           funnelmode: 'group',
@@ -302,12 +313,15 @@ const FunnelView: React.FC<FunnelViewProps> = ({ opened, onClose, dashboardId, f
               </Group>
 
               <Box style={{ width: '100%' }}>
+                {/* `responsive: true` alone. Pairing it with react-plotly's
+                    `useResizeHandler` gives the figure two independent resize
+                    paths onto one width:100% container, which is the other
+                    half of the relayout loop the fixed margin above avoids. */}
                 <Plot
                   data={plotData as never}
                   layout={layout as never}
                   config={{ displayModeBar: false, responsive: true }}
                   style={{ width: '100%', height: chartHeight }}
-                  useResizeHandler
                 />
               </Box>
 

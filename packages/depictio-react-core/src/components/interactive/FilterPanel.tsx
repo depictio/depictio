@@ -726,22 +726,9 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
               </ActionIcon>
             </Tooltip>
           )}
-          <Title
-            order={5}
-            style={{
-              minWidth: 0,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}
-          >
+          <Title order={5} style={{ whiteSpace: 'nowrap' }}>
             Filters
           </Title>
-          {activeCount > 0 && (
-            <Badge size="sm" variant="light" circle>
-              {activeCount}
-            </Badge>
-          )}
         </Group>
         {/* One icon per control does not fit: the panel column is ~280px and
             the header already carries a title, a count badge and Reset all.
