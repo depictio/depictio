@@ -16,20 +16,14 @@ export const DC_TYPE_ICON: Record<string, { icon: string; color: string; label: 
 
 const FALLBACK = { icon: 'mdi:file-document-outline', color: 'gray', label: 'unknown' };
 
-/** Resolve a DC type (+ optional coordinates flag) to its icon descriptor. */
+/** Resolve a DC type to its icon descriptor. Coordinates capability is NOT
+ *  part of this axis — a table with lat/lon hints keeps the Table icon; the
+ *  additional "Geo" badge carries the capability signal. */
 export function dcTypeMeta(
   type: string | null | undefined,
-  isCoord?: boolean,
 ): { icon: string; color: string; label: string; isMultiqc: boolean } {
   const t = (type || '').toLowerCase();
   if (t === 'multiqc') return { icon: '', color: 'violet', label: 'MultiQC', isMultiqc: true };
-  if (isCoord)
-    return {
-      icon: 'mdi:map-marker-radius-outline',
-      color: 'grape',
-      label: 'Coordinates',
-      isMultiqc: false,
-    };
   const m = DC_TYPE_ICON[t] ?? { ...FALLBACK, label: type || 'unknown' };
   return { ...m, isMultiqc: false };
 }
@@ -37,11 +31,10 @@ export function dcTypeMeta(
 /** Renders the icon for a DC type — the MultiQC logo or a coloured mdi glyph. */
 export const DcTypeIcon: React.FC<{
   type: string | null | undefined;
-  isCoord?: boolean;
   size?: number;
   withTooltip?: boolean;
-}> = ({ type, isCoord, size = 18, withTooltip = true }) => {
-  const m = dcTypeMeta(type, isCoord);
+}> = ({ type, size = 18, withTooltip = true }) => {
+  const m = dcTypeMeta(type);
   const el = m.isMultiqc ? (
     <img
       src={`${import.meta.env.BASE_URL}logos/multiqc_icon_color.svg`}

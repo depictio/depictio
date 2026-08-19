@@ -1181,21 +1181,22 @@ const CreateDataCollectionModal: React.FC<{
     [csvColumns],
   );
 
-  // Auto-confirm coords on lat/lon header detection. Gated by a per-file ref
-  // so a user who toggles the switch off doesn't have it flipped back on by
-  // this effect (the auto-fill fires once per file, then stays out of the way).
-  const autoConfirmedForFileRef = useRef<File | null>(null);
+  // Prefill lat/lon pickers on header detection — a SUGGESTION only. The
+  // "Save as a coordinates table" switch stays off until the user flips it:
+  // silently opting a table in used to turn every metadata table carrying
+  // latitude/longitude columns into a "Coordinates" table, hiding its
+  // Metadata nature. Gated by a per-file ref so it fires once per file.
+  const prefilledForFileRef = useRef<File | null>(null);
   useEffect(() => {
     if (!file) {
-      autoConfirmedForFileRef.current = null;
+      prefilledForFileRef.current = null;
       return;
     }
     if (!coordsGuess) return;
-    if (autoConfirmedForFileRef.current === file) return;
-    autoConfirmedForFileRef.current = file;
+    if (prefilledForFileRef.current === file) return;
+    prefilledForFileRef.current = file;
     setLatColumn(coordsGuess.latColumn);
     setLonColumn(coordsGuess.lonColumn);
-    setCoordsConfirmed(true);
   }, [file, coordsGuess]);
 
   // Reset everything when the modal closes — otherwise re-opening shows stale
@@ -1505,6 +1506,18 @@ const CreateDataCollectionModal: React.FC<{
               {file && (
                 <Paper p="sm" withBorder radius="sm" bg="var(--mantine-color-default-hover)">
                   <Stack gap="xs">
+                    {coordsGuess && !coordsConfirmed && (
+                      <Alert
+                        color="grape"
+                        variant="light"
+                        icon={<Icon icon="mdi:map-marker-radius-outline" />}
+                        data-testid="coords-detected-alert"
+                      >
+                        Geographic columns detected ({coordsGuess.latColumn} /{' '}
+                        {coordsGuess.lonColumn}). Turn on the switch below to make this
+                        table available to Map components.
+                      </Alert>
+                    )}
                     <Switch
                       label="Save as a coordinates table"
                       description="Adds latitude / longitude column metadata so the data collection can power Map components."
@@ -2515,14 +2528,15 @@ const DataCollectionsTable: React.FC<{
             // One consistent classification per DC. An aggregate table looks the
             // same whether the backend stamped metatype="Aggregated" or left it null
             // (inferred) — fixes the old grey "AGGREGATED" vs orange "AGGREGATE"
-            // split for what is the same thing.
-            const kind = isCoord
-              ? { label: 'Coordinates', color: 'grape' }
-              : (metatype || '').toLowerCase().startsWith('metadat')
-                ? { label: 'Metadata', color: 'gray' }
-                : projectType === 'advanced' && isTable
-                  ? { label: 'Aggregate', color: 'orange' }
-                  : null;
+            // split for what is the same thing. Coordinates is NOT part of this
+            // axis: it's an orthogonal capability (the table can power Map
+            // components) rendered as an extra "Geo" badge, so a metadata table
+            // with lat/lon columns stays visibly a metadata table.
+            const kind = (metatype || '').toLowerCase().startsWith('metadat')
+              ? { label: 'Metadata', color: 'gray' }
+              : projectType === 'advanced' && isTable
+                ? { label: 'Aggregate', color: 'orange' }
+                : null;
             return (
               <Table.Tr
                 key={id}
@@ -2534,7 +2548,7 @@ const DataCollectionsTable: React.FC<{
               >
                 <Table.Td>
                   <Group gap={6} wrap="nowrap">
-                    <DcTypeIcon type={type} isCoord={isCoord} withTooltip={false} />
+                    <DcTypeIcon type={type} withTooltip={false} />
                     <Text size="xs" c="dimmed">
                       {type}
                     </Text>
@@ -2546,15 +2560,28 @@ const DataCollectionsTable: React.FC<{
                   </Text>
                 </Table.Td>
                 <Table.Td>
-                  {kind ? (
-                    <Badge color={kind.color} variant="light" size="sm">
-                      {kind.label}
-                    </Badge>
-                  ) : (
-                    <Text size="xs" c="dimmed">
-                      —
-                    </Text>
-                  )}
+                  <Group gap={4} wrap="nowrap">
+                    {kind && (
+                      <Badge color={kind.color} variant="light" size="sm">
+                        {kind.label}
+                      </Badge>
+                    )}
+                    {isCoord && (
+                      <Badge
+                        color="grape"
+                        variant="light"
+                        size="sm"
+                        leftSection={<Icon icon="mdi:map-marker-radius-outline" width={12} />}
+                      >
+                        Geo
+                      </Badge>
+                    )}
+                    {!kind && !isCoord && (
+                      <Text size="xs" c="dimmed">
+                        —
+                      </Text>
+                    )}
+                  </Group>
                 </Table.Td>
                 <Table.Td>
                   <Text size="sm">{sizeBytes > 0 ? formatBytes(sizeBytes) : '—'}</Text>
@@ -2698,19 +2725,9 @@ const DataCollectionViewer: React.FC<{
             />
           ) : (
             <Icon
-              icon={
-                isCoordTable
-                  ? 'mdi:map-marker-radius-outline'
-                  : type === 'table'
-                    ? 'mdi:table'
-                    : 'mdi:file-document-outline'
-              }
+              icon={type === 'table' ? 'mdi:table' : 'mdi:file-document-outline'}
               width={22}
-              color={
-                isCoordTable
-                  ? 'var(--mantine-color-grape-6)'
-                  : 'var(--mantine-color-teal-6)'
-              }
+              color="var(--mantine-color-teal-6)"
             />
           )}
           <Title order={4}>{dc.data_collection_tag || dcId}</Title>
@@ -2783,7 +2800,7 @@ const DataCollectionViewer: React.FC<{
                     </Badge>
                   }
                 />
-              ) : projectType === 'advanced' && isAggregate && !isCoordTable ? (
+              ) : projectType === 'advanced' && isAggregate ? (
                 <DetailRow
                   label="Metatype"
                   badge={
