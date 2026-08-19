@@ -40,6 +40,10 @@ workflows:
             polars_kwargs:
               separator: "\t"
               try_parse_dates: true
+            # Geo capability: lets the Map builder list this DC and prefill
+            # its latitude/longitude pickers (DCTableCoordinatesConfig).
+            lat_column: "latitude"
+            lon_column: "longitude"
             columns_description:
               sample: "Sample identifier — the join key to `taxonomy` and the map's selection column"
               habitat: "Environment type (Riverwater, Groundwater, Sediment, Soil)"

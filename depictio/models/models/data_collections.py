@@ -245,6 +245,13 @@ class DataCollectionConfig(MongoModel):
                     try:
                         values["dc_specific_properties"] = target_cls(**dc_specific_properties)
                     except Exception:
+                        if has_coord_keys:
+                            # A half-populated coordinates config (only one of
+                            # lat/lon, or lat == lon) must surface a clear
+                            # validation error to the YAML author — silently
+                            # keeping the raw dict would just strip the geo
+                            # capability without telling anyone.
+                            raise
                         # Keep original if conversion fails
                         pass
         elif type_value == "jbrowse2":
