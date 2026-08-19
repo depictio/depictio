@@ -137,10 +137,12 @@ const App: React.FC = () => {
 
   // Funnel filtering (issue #939). The dashboard's `funnel_filtering` field is
   // the author's default; the panel button flips it for this page view only
-  // (viewers may lack edit rights, so the button never writes back).
-  const [funnelEnabled, setFunnelEnabled] = useState(false);
+  // (viewers may lack edit rights, so the button never writes back). The field
+  // defaults to on, so only an explicit `false` disables it: a dashboard saved
+  // before the field existed has no value and must still get the funnel.
+  const [funnelEnabled, setFunnelEnabled] = useState(true);
   const [funnelViewOpen, setFunnelViewOpen] = useState(false);
-  const funnelDefault = Boolean(dashboard?.funnel_filtering);
+  const funnelDefault = dashboard?.funnel_filtering !== false;
   useEffect(() => {
     setFunnelEnabled(funnelDefault);
   }, [funnelDefault]);

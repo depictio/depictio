@@ -44,7 +44,7 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
         <Switch
           label="Funnel filtering by default"
           description="Highlight, in every other filter, the values that still lead to a non-empty result set. Viewers can still turn it off from the filter panel."
-          checked={Boolean(dashboard?.funnel_filtering)}
+          checked={dashboard?.funnel_filtering !== false}
           onChange={(e) => onToggleFunnelFiltering(e.currentTarget.checked)}
           color="teal"
         />

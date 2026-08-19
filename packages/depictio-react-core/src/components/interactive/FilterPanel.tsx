@@ -9,6 +9,7 @@ import {
   Box,
   Button,
   Group,
+  Menu,
   Paper,
   Stack,
   Text,
@@ -134,10 +135,10 @@ export interface FilterPanelProps {
    *  has no business knowing that. */
   footer?: React.ReactNode;
   /** Funnel filtering (issue #939). Omitted → the controls are hidden (the
-   *  dashboard hasn't opted in, or the host — e.g. the editor — doesn't wire
-   *  it). `onOpenView` opens the funnel overview modal; it's only offered
-   *  while the toggle is on, since the overview is computed by the same
-   *  opt-in machinery. */
+   *  host, e.g. the editor, doesn't wire it). `onOpenView` opens the funnel
+   *  overview modal; the button stays mounted while the toggle is off but
+   *  disabled, since the overview is computed by the same opt-in machinery
+   *  and hiding it would make the feature undiscoverable. */
   funnel?: {
     enabled: boolean;
     onToggle: () => void;
@@ -725,91 +726,126 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
               </ActionIcon>
             </Tooltip>
           )}
-          <Title order={5}>Filters</Title>
+          <Title
+            order={5}
+            style={{
+              minWidth: 0,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            Filters
+          </Title>
           {activeCount > 0 && (
             <Badge size="sm" variant="light" circle>
               {activeCount}
             </Badge>
           )}
         </Group>
-        <Group gap={4} wrap="nowrap">
+        {/* One icon per control does not fit: the panel column is ~280px and
+            the header already carries a title, a count badge and Reset all.
+            So the two funnel controls stay out (they are the feature this
+            header is about) as one attached pair, and the panel's own display
+            preferences move into an overflow menu. */}
+        <Group gap={6} wrap="nowrap" style={{ flexShrink: 0 }}>
           {funnel && (
-            <Tooltip
-              label={
-                funnel.enabled
-                  ? 'Funnel filtering on — values with no remaining results are greyed out'
-                  : 'Enable funnel filtering'
-              }
-              withArrow
-              openDelay={400}
-            >
-              <ActionIcon
-                variant={funnel.enabled ? 'filled' : 'subtle'}
-                color={funnel.enabled ? 'teal' : 'gray'}
-                size="sm"
-                aria-label="Toggle funnel filtering"
-                aria-pressed={funnel.enabled}
-                onClick={funnel.onToggle}
-                data-testid="funnel-toggle"
+            <ActionIcon.Group>
+              <Tooltip
+                label={
+                  funnel.enabled
+                    ? 'Funnel filtering on: values with no remaining results are greyed out'
+                    : 'Enable funnel filtering'
+                }
+                withArrow
+                openDelay={400}
               >
-                <Icon icon="mdi:filter-variant" width={16} height={16} />
-              </ActionIcon>
-            </Tooltip>
-          )}
-          {funnel?.enabled && (
-            <Tooltip label="Show the funnel overview" withArrow openDelay={400}>
-              <ActionIcon
-                variant="subtle"
-                color="teal"
-                size="sm"
-                aria-label="Show funnel overview"
-                onClick={funnel.onOpenView}
-                data-testid="funnel-view-button"
+                <ActionIcon
+                  variant={funnel.enabled ? 'filled' : 'default'}
+                  color={funnel.enabled ? 'teal' : 'gray'}
+                  size="sm"
+                  aria-label="Toggle funnel filtering"
+                  aria-pressed={funnel.enabled}
+                  onClick={funnel.onToggle}
+                  data-testid="funnel-toggle"
+                >
+                  {/* Not `mdi:filter-variant`: that is the panel's own icon on
+                      the collapsed rail, so reusing it here made the toggle
+                      read as a second "filters" button. */}
+                  <Icon icon="mdi:filter-check-outline" width={16} height={16} />
+                </ActionIcon>
+              </Tooltip>
+              {/* Kept mounted while the funnel is off, disabled rather than
+                  hidden: the overview is how you find out what the funnel does,
+                  and a control that appears only once you already enabled the
+                  feature cannot teach that. It also stops the header reflowing
+                  on every toggle. */}
+              <Tooltip
+                label={
+                  funnel.enabled
+                    ? 'Show the funnel overview'
+                    : 'Enable funnel filtering to see the overview'
+                }
+                withArrow
+                openDelay={400}
               >
-                <Icon icon="mdi:chart-sankey" width={16} height={16} />
-              </ActionIcon>
-            </Tooltip>
+                <ActionIcon
+                  variant="default"
+                  color="gray"
+                  size="sm"
+                  aria-label="Show funnel overview"
+                  disabled={!funnel.enabled}
+                  onClick={funnel.onOpenView}
+                  data-testid="funnel-view-button"
+                >
+                  <Icon icon="mdi:chart-timeline-variant" width={16} height={16} />
+                </ActionIcon>
+              </Tooltip>
+            </ActionIcon.Group>
           )}
-          {collapsibleKeys.length > 0 && (
-            <Tooltip
-              label={anyOpen ? 'Collapse all' : 'Expand all'}
-              withArrow
-              openDelay={400}
-            >
-              <ActionIcon
-                variant="subtle"
-                color="gray"
-                size="sm"
-                aria-label={anyOpen ? 'Collapse all' : 'Expand all'}
-                onClick={() => collapse.setAll(collapsibleKeys, anyOpen)}
+          <Menu shadow="md" position="bottom-end" withinPortal>
+            <Menu.Target>
+              <Tooltip label="Panel options" withArrow openDelay={400}>
+                <ActionIcon
+                  variant="subtle"
+                  color="gray"
+                  size="sm"
+                  aria-label="Panel options"
+                  data-testid="filter-panel-options"
+                >
+                  <Icon icon="mdi:dots-vertical" width={16} height={16} />
+                </ActionIcon>
+              </Tooltip>
+            </Menu.Target>
+            <Menu.Dropdown>
+              {collapsibleKeys.length > 0 && (
+                <Menu.Item
+                  leftSection={
+                    <Icon
+                      icon={anyOpen ? 'mdi:unfold-less-horizontal' : 'mdi:unfold-more-horizontal'}
+                      width={16}
+                      height={16}
+                    />
+                  }
+                  onClick={() => collapse.setAll(collapsibleKeys, anyOpen)}
+                >
+                  {anyOpen ? 'Collapse all' : 'Expand all'}
+                </Menu.Item>
+              )}
+              <Menu.Item
+                leftSection={
+                  <Icon
+                    icon={density === 'compact' ? 'mdi:view-sequential' : 'mdi:view-headline'}
+                    width={16}
+                    height={16}
+                  />
+                }
+                onClick={toggleDensity}
               >
-                <Icon
-                  icon={anyOpen ? 'mdi:unfold-less-horizontal' : 'mdi:unfold-more-horizontal'}
-                  width={16}
-                  height={16}
-                />
-              </ActionIcon>
-            </Tooltip>
-          )}
-          <Tooltip
-            label={density === 'compact' ? 'Comfortable density' : 'Compact density'}
-            withArrow
-            openDelay={400}
-          >
-            <ActionIcon
-              variant="subtle"
-              color="gray"
-              size="sm"
-              aria-label="Toggle filter density"
-              onClick={toggleDensity}
-            >
-              <Icon
-                icon={density === 'compact' ? 'mdi:view-sequential' : 'mdi:view-headline'}
-                width={16}
-                height={16}
-              />
-            </ActionIcon>
-          </Tooltip>
+                {density === 'compact' ? 'Comfortable density' : 'Compact density'}
+              </Menu.Item>
+            </Menu.Dropdown>
+          </Menu>
           {onResetAllFilters && (
             <Button
               leftSection={<Icon icon="bx:reset" width={12} />}
@@ -819,11 +855,11 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
               // reads as an alert on a panel that is otherwise quiet, which is
               // most of the time.
               variant={activeCount > 0 ? 'filled' : 'light'}
-              size="xs"
+              size="compact-xs"
               onClick={onResetAllFilters}
               disabled={activeCount === 0}
             >
-              Reset all
+              Reset
             </Button>
           )}
         </Group>

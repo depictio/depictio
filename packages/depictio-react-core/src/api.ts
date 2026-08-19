@@ -339,7 +339,9 @@ export interface DashboardData {
   /** Ordering + icons for the left panel's filter sections. */
   filter_sections?: FilterSectionSpec[];
   grid_sections?: FilterSectionSpec[];
-  /** Funnel filtering (issue #939): author-level opt-in, off by default. */
+  /** Funnel filtering (issue #939): on by default, authors opt out per
+   *  dashboard. Absent on payloads cached before the field existed, which is
+   *  why every reader tests `!== false` rather than `Boolean(...)`. */
   funnel_filtering?: boolean;
   /** Project-level realtime config — only when ``enabled === true`` should
    *  the viewer mount the WebSocket subscription / live-updates indicator. */
