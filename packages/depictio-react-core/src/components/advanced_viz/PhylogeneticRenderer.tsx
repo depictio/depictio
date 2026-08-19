@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
+  ActionIcon,
+  Badge,
   Button,
   Group,
   SegmentedControl,
@@ -8,9 +10,11 @@ import {
   Switch,
   Text,
   TextInput,
+  Tooltip,
   useMantineColorScheme,
   useMantineTheme,
 } from '@mantine/core';
+import { Icon } from '@iconify/react';
 import AdvancedVizPlot from './AdvancedVizPlot';
 
 import {
@@ -21,10 +25,17 @@ import {
   StoredMetadata,
 } from '../../api';
 import { stableColorMap } from '../../colors';
+import { filtersExcludingOwn } from '../../selection';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { applyDataTheme, applyLayoutTheme } from './plotlyTheme';
 import { ladderise, parseNewick, type PhyloNode, type PhyloTree, toNewick } from './phylo/newick';
 import { computeLayout, descendants, type Layout } from './phylo/layout';
+import {
+  buildTreeSelectionFilter,
+  collectSubtreeTaxa,
+  findSubtreeRootByLeafSet,
+  treeSelectionValues,
+} from './phylo/subtree';
 
 interface PhylogeneticConfig {
   tree_wf_id: string;
@@ -53,6 +64,11 @@ interface Props {
   metadata: StoredMetadata & { viz_kind?: string; config?: PhylogeneticConfig };
   filters: InteractiveFilter[];
   refreshTick?: number;
+  /** Receives a `tree_selection` filter when the user filters the dashboard
+   *  to a selected clade. Pass `value: []` to clear. The parent merges by
+   *  `(index, source)`. Absent in read-only hosts — the filter button hides,
+   *  clade highlight and export still work. */
+  onFilterChange?: (filter: InteractiveFilter) => void;
 }
 
 // Muted publication-friendly palette for categorical tip colouring.
@@ -75,7 +91,7 @@ const LAYOUTS: Array<{ value: Layout; label: string }> = [
   { value: 'hierarchical', label: 'Hier' },
 ];
 
-const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
+const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFilterChange }) => {
   const { colorScheme } = useMantineColorScheme();
   const theme = useMantineTheme();
   const config = (metadata.config || {}) as PhylogeneticConfig;
@@ -91,6 +107,18 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
   const [search, setSearch] = useState<string>('');
   const [colorCol, setColorCol] = useState<string | null>(config.color_col ?? null);
   const [highlightedRootId, setHighlightedRootId] = useState<number | null>(null);
+  // Zoom/pan is off by default: Plotly's drag-to-zoom-box steals every drag
+  // and there was no way back except double-click. Toggled on, drag pans and
+  // the scroll wheel zooms.
+  const [zoomEnabled, setZoomEnabled] = useState<boolean>(false);
+  // Bumping this changes `uirevision`, discarding the user's zoom/pan and
+  // re-applying the fitted axis ranges ("Reset view").
+  const [viewEpoch, setViewEpoch] = useState<number>(0);
+  // Viewport captured when zoom is toggled off. Toggling flips the Plotly
+  // `config` (scrollZoom), which forces a plot rebuild that would snap back
+  // to the fitted ranges — baking the captured ranges into the layout keeps
+  // the view frozen instead. Cleared by "Reset view" and on layout switch.
+  const [frozenRanges, setFrozenRanges] = useState<{ x: number[]; y: number[] } | null>(null);
   // Stable universe of distinct values for the colour column — keeps tip
   // colours invariant when the user filters down to a subset.
   const [colorUniverse, setColorUniverse] = useState<string[] | null>(null);
@@ -122,6 +150,12 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
   // Tip metadata is served whole; past `advanced_viz_no_sample_max_rows` the
   // server samples it, which means tips go missing rather than blur.
   const [estimated, setEstimated] = useState(false);
+
+  // The tree's own subtree filter is stripped before fetching: it must keep
+  // showing the whole tree (its selection reads as the pink highlight, not as
+  // ghosting), and a self-applied filter would make widening the selection
+  // impossible.
+  const fetchFilters = filtersExcludingOwn(filters, metadata.index, 'tree_selection');
 
   useEffect(() => {
     if (!config.tree_dc_id) {
@@ -155,7 +189,7 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
             wfId: config.metadata_wf_id,
             dcId: config.metadata_dc_id,
             columns: Array.from(new Set(wantedCols)),
-            filters,
+            filters: fetchFilters,
             vizKind: 'phylogenetic',
           })
         : Promise.resolve(null);
@@ -185,7 +219,7 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
     return () => {
       cancelled = true;
     };
-  }, [config.tree_dc_id, config.metadata_wf_id, config.metadata_dc_id, JSON.stringify(filters), refreshTick]);
+  }, [config.tree_dc_id, config.metadata_wf_id, config.metadata_dc_id, JSON.stringify(fetchFilters), refreshTick]);
 
   // ---- Tree object (memo) -------------------------------------------------
   const tree = useMemo<PhyloTree | null>(() => {
@@ -258,6 +292,63 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
     if (!root) return new Set();
     return new Set(descendants(root).map((n) => n.id));
   }, [tree, highlightedRootId]);
+
+  // ---- Subtree selection → dashboard filter -------------------------------
+  const selectionTaxa = useMemo<string[]>(
+    () => (tree && highlightedRootId != null ? collectSubtreeTaxa(tree, highlightedRootId) : []),
+    [tree, highlightedRootId],
+  );
+  const selectionName = useMemo<string | null>(() => {
+    if (!tree || highlightedRootId == null) return null;
+    return tree.nodes.find((n) => n.id === highlightedRootId)?.name ?? null;
+  }, [tree, highlightedRootId]);
+  // Own emitted filter, read back out of the filter list (the only record of
+  // it — see `fetchFilters` above). Also drives restore-after-remount.
+  const ownFilterValues = useMemo<string[]>(
+    () => treeSelectionValues(filters, metadata.index),
+    [filters, metadata.index],
+  );
+  const filterActive = ownFilterValues.length > 0;
+  // Whether the emitted filter matches the current highlight — when the user
+  // moves the highlight to another clade while a filter is active, the button
+  // flips back to "Filter to subtree" and emitting replaces the old entry.
+  const selectionMatchesFilter = useMemo<boolean>(() => {
+    if (!filterActive || selectionTaxa.length !== ownFilterValues.length) return false;
+    const own = new Set(ownFilterValues);
+    return selectionTaxa.every((t) => own.has(t));
+  }, [filterActive, selectionTaxa, ownFilterValues]);
+  const canFilter = Boolean(onFilterChange && config.metadata_dc_id);
+
+  const emitTreeFilter = (values: string[]) => {
+    if (!onFilterChange || !config.metadata_dc_id) return;
+    onFilterChange(
+      buildTreeSelectionFilter(
+        metadata.index,
+        config.metadata_dc_id,
+        config.taxon_col || 'taxon',
+        values,
+      ),
+    );
+  };
+
+  const clearSelection = () => {
+    setHighlightedRootId(null);
+    if (filterActive) emitTreeFilter([]);
+  };
+
+  // Node ids are reassigned on every parse, so a highlight can't survive a
+  // change of the newick text itself…
+  useEffect(() => {
+    setHighlightedRootId(null);
+  }, [newick]);
+  // …instead the selection is re-derived by taxon names from the emitted
+  // filter — which also restores it after a tab switch remounts the
+  // component. Functional update so a highlight the user moved to another
+  // clade isn't snapped back while the old filter is still in the list.
+  useEffect(() => {
+    if (!tree || ownFilterValues.length === 0) return;
+    setHighlightedRootId((prev) => (prev != null ? prev : findSubtreeRootByLeafSet(tree, ownFilterValues)));
+  }, [tree, JSON.stringify(ownFilterValues)]);
 
   // ---- Filter-derived "tips in scope" set --------------------------------
   // Sidebar / global filters narrow the metadata DC; any leaf whose taxon
@@ -521,6 +612,76 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
     };
   }, [tree, layout, isDark, tipColors, highlightedIds, search, showBranchLengths, tipsInScope]);
 
+  // Zoom/pan knobs live outside the heavy figure memo so toggling them never
+  // recomputes the tree layout. `uirevision` keeps the user's viewport across
+  // highlight / search / filter recomputes (the memo above hard-sets axis
+  // ranges on every run and would otherwise reset the view each time); it is
+  // keyed on the layout kind — switching Rect→Circ resets cleanly — and on
+  // `viewEpoch` for the explicit "Reset view" action. Deliberately NOT keyed
+  // on `zoomEnabled`: toggling zoom off freezes the current view rather than
+  // resetting it.
+  const plotLayout = useMemo(() => {
+    if (!figure) return null;
+    return {
+      ...figure.layout,
+      // Fresh axis objects AND range arrays each time: Plotly's pan handler
+      // mutates `range` in place on the layout it is handed, and a mutated
+      // range leaking back into the memoized figure both breaks "Reset view"
+      // (it would re-apply the panned range) and desyncs uirevision's idea of
+      // what the supplied range is (snapping the view on the next recompute).
+      xaxis: {
+        ...figure.layout.xaxis,
+        range: frozenRanges ? [...frozenRanges.x] : [...figure.layout.xaxis.range],
+      },
+      yaxis: {
+        ...figure.layout.yaxis,
+        range: frozenRanges ? [...frozenRanges.y] : [...figure.layout.yaxis.range],
+      },
+      dragmode: zoomEnabled ? ('pan' as const) : (false as const),
+      uirevision: `phylo:${layout}:${viewEpoch}`,
+    };
+  }, [figure, zoomEnabled, layout, viewEpoch, frozenRanges]);
+
+  // Scroll-zoom is opt-in via the toolbar toggle — always-on wheel capture
+  // steals page scroll (see RarefactionRenderer for the rationale). The hover
+  // modebar is hidden: the toolbar is the single control point.
+  const plotConfig = useMemo(
+    () => ({
+      displaylogo: false,
+      responsive: true,
+      displayModeBar: false,
+      scrollZoom: zoomEnabled,
+      doubleClick: zoomEnabled ? ('reset' as const) : (false as const),
+    }),
+    [zoomEnabled],
+  );
+
+  // Unique div id so the toggle handler can read the live viewport off the
+  // Plotly graph div (react-plotly exposes no ref to it).
+  const plotDivId = `phylo-plot-${metadata.index}`;
+
+  const toggleZoom = () => {
+    if (zoomEnabled) {
+      // Turning zoom off — freeze whatever viewport the user is looking at.
+      const gd = document.getElementById(plotDivId) as any;
+      const xr = gd?._fullLayout?.xaxis?.range;
+      const yr = gd?._fullLayout?.yaxis?.range;
+      if (xr && yr) setFrozenRanges({ x: [...xr], y: [...yr] });
+    }
+    setZoomEnabled(!zoomEnabled);
+  };
+
+  const resetView = () => {
+    setFrozenRanges(null);
+    setViewEpoch((e) => e + 1);
+  };
+
+  // A different layout kind recomputes every coordinate — a frozen viewport
+  // from the previous kind would show an arbitrary crop of the new one.
+  useEffect(() => {
+    setFrozenRanges(null);
+  }, [layout]);
+
   // ---- Controls -----------------------------------------------------------
   const colorOptions: { value: string; label: string }[] = useMemo(() => {
     if (!metaCols || metaCols.length === 0) return [];
@@ -606,17 +767,103 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
         label="Branch lengths"
       />
       </Stack>
+    </Stack>
+  );
+
+  // ---- Always-visible toolbar (zoom/pan + subtree actions) ----------------
+  // Rendered in the frame body: the `controls` stack above only reaches the
+  // Settings popover, which is exactly why the old Clear/Export buttons went
+  // unnoticed. Subtree actions appear only while a clade is selected.
+  const toolbar = (
+    <Group gap="xs" px="sm" pb={4} wrap="wrap" data-testid="phylo-toolbar">
+      <Tooltip
+        label={zoomEnabled ? 'Zoom on — scroll to zoom, drag to pan' : 'Enable zoom & pan'}
+        withArrow
+      >
+        <ActionIcon
+          size="sm"
+          variant={zoomEnabled ? 'filled' : 'default'}
+          aria-pressed={zoomEnabled}
+          aria-label="Toggle zoom & pan"
+          data-testid="phylo-zoom-toggle"
+          onClick={toggleZoom}
+        >
+          <Icon icon="mdi:magnify-plus-outline" width={14} height={14} />
+        </ActionIcon>
+      </Tooltip>
+      <Tooltip label="Reset view" withArrow>
+        <ActionIcon
+          size="sm"
+          variant="default"
+          aria-label="Reset view"
+          data-testid="phylo-reset-view"
+          onClick={resetView}
+        >
+          <Icon icon="mdi:fit-to-screen" width={14} height={14} />
+        </ActionIcon>
+      </Tooltip>
       {highlightedRootId != null ? (
-        <Group gap="xs" grow>
-          <Button size="compact-xs" variant="light" color="pink" onClick={() => setHighlightedRootId(null)}>
-            Clear subtree
-          </Button>
-          <Button size="compact-xs" variant="subtle" color="pink" onClick={exportSelectedNewick}>
+        <>
+          <Badge color="pink" variant="light" data-testid="phylo-selection-badge">
+            {`${selectionName ?? 'clade'} · ${selectionTaxa.length} tips`}
+          </Badge>
+          {canFilter ? (
+            <Button
+              size="compact-xs"
+              color="pink"
+              variant={selectionMatchesFilter ? 'filled' : 'light'}
+              data-testid="phylo-filter-subtree"
+              onClick={() =>
+                selectionMatchesFilter ? emitTreeFilter([]) : emitTreeFilter(selectionTaxa)
+              }
+            >
+              {selectionMatchesFilter ? 'Filtered — clear' : 'Filter to subtree'}
+            </Button>
+          ) : null}
+          <Button
+            size="compact-xs"
+            variant="subtle"
+            color="pink"
+            data-testid="phylo-export-newick"
+            onClick={exportSelectedNewick}
+          >
             Export .nwk
           </Button>
-        </Group>
+          <Tooltip label="Clear selection" withArrow>
+            <ActionIcon
+              size="sm"
+              variant="subtle"
+              color="pink"
+              aria-label="Clear subtree selection"
+              data-testid="phylo-clear-selection"
+              onClick={clearSelection}
+            >
+              <Icon icon="mdi:close" width={14} height={14} />
+            </ActionIcon>
+          </Tooltip>
+        </>
+      ) : filterActive ? (
+        // The filter is live but its clade no longer maps onto this tree
+        // (renamed tips, changed topology) — keep it visible and escapable.
+        <>
+          <Badge color="pink" variant="light" data-testid="phylo-selection-badge">
+            {`subtree filter · ${ownFilterValues.length} tips`}
+          </Badge>
+          <Tooltip label="Clear subtree filter" withArrow>
+            <ActionIcon
+              size="sm"
+              variant="subtle"
+              color="pink"
+              aria-label="Clear subtree filter"
+              data-testid="phylo-clear-selection"
+              onClick={clearSelection}
+            >
+              <Icon icon="mdi:close" width={14} height={14} />
+            </ActionIcon>
+          </Tooltip>
+        </>
       ) : null}
-    </Stack>
+    </Group>
   );
 
   // ---- Categorical legend (rendered as Mantine badges below the chart) ---
@@ -655,7 +902,15 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
     // accept either shape.
     const id = Array.isArray(cd) ? cd[0] : cd;
     if (id == null) return;
-    setHighlightedRootId((prev) => (prev === id ? null : (id as number)));
+    if (id === highlightedRootId) {
+      // Re-clicking the selected node deselects — and drops the subtree
+      // filter with it, so a selection can't outlive its visible anchor.
+      clearSelection();
+    } else {
+      // A different node only moves the highlight; filtering stays an
+      // explicit toolbar action.
+      setHighlightedRootId(id as number);
+    }
   };
 
   return (
@@ -671,16 +926,18 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
       dataColumns={metaCols}
     >
       <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%' }}>
+        {toolbar}
         {legend}
         <div style={{ flex: '1 1 auto', minHeight: 0 }}>
-          {figure ? (
+          {figure && plotLayout ? (
             <AdvancedVizPlot
+              divId={plotDivId}
               data={applyDataTheme(figure.data, isDark, theme) as any}
-              layout={applyLayoutTheme(figure.layout as any, isDark, theme) as any}
+              layout={applyLayoutTheme(plotLayout as any, isDark, theme) as any}
               onClick={onPlotClick}
               useResizeHandler
               style={{ width: '100%', height: '100%' }}
-              config={{ displaylogo: false, responsive: true } as any}
+              config={plotConfig as any}
             />
           ) : null}
         </div>

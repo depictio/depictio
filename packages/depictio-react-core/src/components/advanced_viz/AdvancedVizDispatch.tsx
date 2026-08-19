@@ -34,14 +34,17 @@ interface AdvancedVizDispatchProps {
   metadata: StoredMetadata;
   filters: InteractiveFilter[];
   refreshTick?: number;
+  /** Selection-as-filter callback, forwarded to renderers that emit one
+   *  (currently the phylogeny's subtree filter). Other renderers ignore it. */
+  onFilterChange?: (filter: InteractiveFilter) => void;
   extraActions?: React.ReactNode;
   showDragHandle?: boolean;
 }
 
 /**
  * `viz_kind` → renderer. Every renderer takes the same
- * `{ metadata, filters, refreshTick }` props, so the dispatch is a lookup
- * rather than a chain of comparisons. `ancombc_differentials` was collapsed
+ * `{ metadata, filters, refreshTick, onFilterChange? }` props, so the dispatch
+ * is a lookup rather than a chain of comparisons. `ancombc_differentials` was collapsed
  * into `da_barplot` — legacy persisted dashboards still carry the old kind
  * string and need the same renderer.
  */
@@ -90,6 +93,7 @@ const RENDERERS: Record<string, React.ComponentType<any>> = {
 const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
   metadata,
   filters,
+  onFilterChange,
   refreshTick,
   extraActions,
   showDragHandle,
@@ -132,7 +136,12 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
   const vizKind = (metadata.viz_kind as string) || '';
   const Renderer = RENDERERS[vizKind];
   const inner = Renderer ? (
-    <Renderer metadata={metadata} filters={filters} refreshTick={refreshTick} />
+    <Renderer
+      metadata={metadata}
+      filters={filters}
+      refreshTick={refreshTick}
+      onFilterChange={onFilterChange}
+    />
   ) : (
     <div className="dashboard-error" style={{ fontSize: '0.75rem' }}>
       Unknown advanced viz kind: "{vizKind}"
