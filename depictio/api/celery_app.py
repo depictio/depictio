@@ -103,7 +103,7 @@ def generate_dashboard_screenshot_dual(
 
     from beanie import init_beanie
     from celery.exceptions import Ignore
-    from motor.motor_asyncio import AsyncIOMotorClient
+    from pymongo import AsyncMongoClient
 
     from depictio.api.v1.configs.logging_init import logger
     from depictio.api.v1.services.screenshot_service import (
@@ -158,7 +158,7 @@ def generate_dashboard_screenshot_dual(
         """Async wrapper: initializes MongoDB and runs Playwright screenshot generation."""
         from depictio.api.v1.configs.config import MONGODB_URL
 
-        client = AsyncIOMotorClient(MONGODB_URL)
+        client: AsyncMongoClient = AsyncMongoClient(MONGODB_URL)
         try:
             await init_beanie(
                 database=client[settings.mongodb.db_name],
@@ -171,7 +171,7 @@ def generate_dashboard_screenshot_dual(
                 filename_prefix=filename_prefix,
             )
         finally:
-            client.close()
+            await client.close()
 
     try:
         result = asyncio.run(async_screenshot_task())

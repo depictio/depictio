@@ -45,7 +45,7 @@ def api_login(yaml_config_path: str = "~/.depictio/CLI.yaml") -> dict:
     # than httpx's 5 s default. 120 s is well past any reasonable
     # cold-path; the call still returns as soon as the server responds.
     # 30 s wasn't enough in CI minikube/compose environments where the
-    # first Beanie query pays the full motor + driver init cost.
+    # first Beanie query pays the full async-driver init cost.
     response = get_http_client().post(
         f"{depictio_CLI_config['api_base_url']}/depictio/api/v1/cli/validate_cli_config",
         json=depictio_CLI_config,
