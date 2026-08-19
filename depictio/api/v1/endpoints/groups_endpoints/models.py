@@ -6,7 +6,7 @@ and never shared with the CLI/models layer. The persisted schema lives in
 ``depictio.models.models.users.Group`` / ``GroupBeanie``.
 """
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 from depictio.models.models.base import PyObjectId
 
@@ -42,6 +42,9 @@ class GroupDetail(BaseModel):
     description: str | None = None
     sso_managed: bool = False
     pi_id: str | None = None
+    #: P.I. designated by email before that person had an account — applied on
+    #: their first login. Mutually exclusive with a resolved ``pi_id``.
+    pending_pi_email: str | None = None
     admin_ids: list[str] = Field(default_factory=list)
     members: list[GroupMemberOut] = Field(default_factory=list)
 
@@ -57,6 +60,10 @@ class GroupCreateRequest(BaseModel):
     name: str
     description: str | None = None
     pi_id: PyObjectId | None = None
+    #: Alternative to ``pi_id`` for a P.I. with no account yet. An address that
+    #: does resolve to an existing user is treated exactly like ``pi_id``;
+    #: anything else is parked until that person first signs in.
+    pi_email: EmailStr | None = None
 
     @field_validator("name")
     @classmethod
@@ -74,3 +81,9 @@ class GroupUpdateRequest(BaseModel):
         if v is None:
             return v
         return _validate_group_name(v)
+
+
+class GroupPendingPIRequest(BaseModel):
+    """Park (or, with ``email=None``, clear) a group's deferred P.I."""
+
+    email: EmailStr | None = None

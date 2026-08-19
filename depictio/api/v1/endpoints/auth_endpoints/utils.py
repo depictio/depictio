@@ -14,6 +14,9 @@ from fastapi import HTTPException
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
+from depictio.api.v1.endpoints.groups_endpoints.pending_pi import (
+    claim_pending_pi_groups,
+)
 from depictio.models.models.google_oauth import GoogleUserInfo
 from depictio.models.models.users import UserBeanie
 
@@ -168,5 +171,15 @@ async def create_or_get_user(
 
     await new_user.save()
     logger.info(f"Created new OAuth user: {new_user.id}")
+    # Apply any group P.I. designation parked on this address. Best-effort for
+    # the same reason as in _create_user_in_db: the account exists, and an
+    # unclaimed designation stays parked for a later login.
+    try:
+        await claim_pending_pi_groups(new_user)
+    except Exception as claim_error:
+        logger.error(
+            f"Pending P.I. claim failed for {new_user.email} (designation stays parked): "
+            f"{claim_error}"
+        )
 
     return new_user, True

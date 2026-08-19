@@ -539,6 +539,31 @@ class TestGroup:
         assert dumped["admin_ids"] == [str(admin_id)]
         assert dumped["pi_id"] == str(admin_id)
 
+    def test_pending_pi_email_is_casefolded(self):
+        """The parked address is normalized so the claim lookup is an
+        equality match."""
+        group = Group(name="Lab X", pending_pi_email="  PI.Person@Example.ORG ")
+
+        assert group.pending_pi_email == "pi.person@example.org"
+
+    def test_blank_pending_pi_email_becomes_none(self):
+        """Whitespace-only input means "no pending P.I."."""
+        group = Group(name="Lab X", pending_pi_email="   ")
+
+        assert group.pending_pi_email is None
+
+    def test_pending_pi_email_rejects_malformed_address(self):
+        with pytest.raises(ValidationError):
+            Group(name="Lab X", pending_pi_email="not-an-email")
+
+    def test_resolved_pi_clears_pending_designation(self):
+        """A real P.I. supersedes a parked email — they can never coexist."""
+        pi_id = PyObjectId()
+        group = Group(name="Lab X", pi_id=pi_id, pending_pi_email="pi@example.org")
+
+        assert group.pending_pi_email is None
+        assert str(group.pi_id) == str(pi_id)
+
 
 # ---------------------------------
 # Tests for GroupBase

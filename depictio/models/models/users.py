@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Any
 
 from beanie import Document, PydanticObjectId
 from pydantic import BaseModel, EmailStr, Field, field_serializer, field_validator, model_validator
@@ -187,7 +188,20 @@ class Group(MongoModel):
     users_ids: list[PyObjectId] = Field(default_factory=list)
     admin_ids: list[PyObjectId] = Field(default_factory=list)
     pi_id: PyObjectId | None = None
+    # Email of a P.I. designated before that person has a Depictio account.
+    # Claimed on their first login in any auth mode (password registration,
+    # OAuth, SAML) — see api/v1/endpoints/groups_endpoints/pending_pi.py.
+    pending_pi_email: EmailStr | None = None
     sso_managed: bool = False
+
+    @field_validator("pending_pi_email", mode="before")
+    @classmethod
+    def _normalize_pending_pi_email(cls, value: Any) -> Any:
+        """Store the parked email casefolded so the claim lookup is a plain
+        equality match; blank strings mean "no pending P.I."."""
+        if isinstance(value, str):
+            return value.strip().lower() or None
+        return value
 
     @field_serializer("admin_ids")
     def serialize_admin_ids(self, admin_ids: list[PyObjectId]) -> list[str]:
@@ -209,6 +223,9 @@ class Group(MongoModel):
                 member_ids.add(str(admin_id))
         if self.pi_id is not None and str(self.pi_id) not in member_ids:
             self.users_ids.append(self.pi_id)
+        # A resolved P.I. always wins over a parked designation.
+        if self.pi_id is not None:
+            self.pending_pi_email = None
         return self
 
 

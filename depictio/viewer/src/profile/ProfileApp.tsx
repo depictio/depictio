@@ -316,7 +316,8 @@ const UserInfoRow: React.FC<{ label: string; value: string }> = ({ label, value 
 
 /** Same Paper chrome as UserInfoRow, but the value is a badge-per-group.
  *  Crown marks the groups the user is P.I. of, shield the ones they
- *  administer. */
+ *  administer. Each badge deep-links into /groups, which is the only entry
+ *  point to the personal groups page (the sidebar entry lives in /admin). */
 const GroupsInfoRow: React.FC<{ groups: MyGroup[] }> = ({ groups }) => (
   <Paper p="sm" radius="md" withBorder data-testid="profile-info-groups">
     <Group justify="space-between" align="flex-start">
@@ -332,6 +333,9 @@ const GroupsInfoRow: React.FC<{ groups: MyGroup[] }> = ({ groups }) => (
           {groups.map((group) => (
             <Badge
               key={group.id}
+              component="a"
+              href={`/groups?group=${group.id}`}
+              style={{ cursor: 'pointer' }}
               color={group.is_pi ? 'yellow' : group.is_group_admin ? 'blue' : 'gray'}
               variant="light"
               size="sm"

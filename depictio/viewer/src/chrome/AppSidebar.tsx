@@ -20,7 +20,6 @@ import { useCurrentUser } from '../hooks/useCurrentUser';
 export type SidebarSection =
   | 'dashboards'
   | 'projects'
-  | 'groups'
   | 'admin'
   | 'about'
   | 'profile'
@@ -53,13 +52,6 @@ const NAV_ENTRIES: NavEntry[] = [
     color: 'teal',
   },
   {
-    key: 'groups',
-    label: 'Groups',
-    icon: 'mdi:account-multiple-outline',
-    href: '/groups',
-    color: 'grape',
-  },
-  {
     key: 'admin',
     label: 'Administration',
     icon: 'material-symbols:settings',
@@ -88,13 +80,11 @@ const AppSidebar: React.FC<AppSidebarProps> = ({ active }) => {
   const { user } = useCurrentUser();
 
   // Show the Administration link only to admins (matches the Dash sidebar
-  // visibility callback at sidebar.py:721-756). Groups is for any
-  // authenticated user — hidden while anonymous.
-  const entries = NAV_ENTRIES.filter((entry) => {
-    if (entry.key === 'admin') return Boolean(user?.is_admin);
-    if (entry.key === 'groups') return Boolean(user);
-    return true;
-  });
+  // visibility callback at sidebar.py:721-756). Group administration lives
+  // inside that page; members reach their own groups from /profile.
+  const entries = NAV_ENTRIES.filter(
+    (entry) => entry.key !== 'admin' || Boolean(user?.is_admin),
+  );
 
   return (
     <Stack gap="sm" h="100%" justify="space-between">

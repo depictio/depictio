@@ -2750,6 +2750,9 @@ export interface GroupDetail {
   description?: string | null;
   sso_managed: boolean;
   pi_id?: string | null;
+  /** P.I. designated by email before that person had an account. Applied on
+   *  their first login (any auth mode); mutually exclusive with `pi_id`. */
+  pending_pi_email?: string | null;
   admin_ids: string[];
   members: GroupMember[];
 }
@@ -2778,6 +2781,9 @@ export async function createGroup(input: {
   name: string;
   description?: string;
   pi_id?: string;
+  /** Alternative to `pi_id` for a P.I. with no account yet — an address that
+   *  already resolves to a user is applied immediately, otherwise parked. */
+  pi_email?: string;
 }): Promise<GroupDetail> {
   const res = await authFetch(`${API_BASE}/groups`, {
     method: 'POST',
@@ -2838,6 +2844,21 @@ export async function setGroupAdmin(
     { method: 'POST' },
   );
   if (!res.ok) await throwHttpDetailError(res, 'Failed to update group admin');
+  return res.json();
+}
+
+/** Sysadmin only: park a P.I. designation on an email address, for someone
+ *  who has not signed in yet. An address that already has an account is
+ *  applied immediately; `null` clears the parked designation. */
+export async function setGroupPendingPI(
+  groupId: string,
+  email: string | null,
+): Promise<GroupDetail> {
+  const res = await authFetch(`${API_BASE}/groups/${groupId}/pending-pi`, {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to update pending P.I.');
   return res.json();
 }
 

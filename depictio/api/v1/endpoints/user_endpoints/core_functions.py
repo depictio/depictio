@@ -9,6 +9,9 @@ from pydantic import EmailStr, validate_call
 
 from depictio.api.v1.configs.config import ALGORITHM, PUBLIC_KEY_PATH, settings
 from depictio.api.v1.configs.logging_init import logger
+from depictio.api.v1.endpoints.groups_endpoints.pending_pi import (
+    claim_pending_pi_groups,
+)
 from depictio.api.v1.endpoints.user_endpoints.utils import create_access_token
 from depictio.api.v1.key_utils import get_public_key
 from depictio.models.models.base import PyObjectId
@@ -722,6 +725,17 @@ async def _create_user_in_db(
 
     try:
         await user_beanie.create()
+        # A sysadmin may have named this address as a group's P.I. before the
+        # account existed — apply those designations now. Best-effort: the
+        # account is already created, and a failure here leaves the email
+        # parked on the group for a later login to claim, so it must never
+        # turn a successful registration into a 500.
+        try:
+            await claim_pending_pi_groups(user_beanie)
+        except Exception as claim_error:
+            logger.error(
+                f"Pending P.I. claim failed for {email} (designation stays parked): {claim_error}"
+            )
         return {
             "success": True,
             "message": "User created successfully",
