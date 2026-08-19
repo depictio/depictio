@@ -339,6 +339,8 @@ export interface DashboardData {
   /** Ordering + icons for the left panel's filter sections. */
   filter_sections?: FilterSectionSpec[];
   grid_sections?: FilterSectionSpec[];
+  /** Funnel filtering (issue #939): author-level opt-in, off by default. */
+  funnel_filtering?: boolean;
   /** Project-level realtime config — only when ``enabled === true`` should
    *  the viewer mount the WebSocket subscription / live-updates indicator. */
   project_realtime?: { enabled: boolean; debounce_ms: number };
@@ -575,6 +577,62 @@ export async function fetchBreakdown(
     { signal },
   );
   if (!res.ok) throw new Error(`Failed to fetch breakdown: ${res.status}`);
+  return res.json();
+}
+
+// =============================================================================
+// Funnel filtering (issue #939)
+// =============================================================================
+
+/** One interactive component's funnel result: which of its values still lead
+ *  to a non-empty result set under every OTHER active filter. */
+export interface FunnelTargetResult {
+  status: 'ok' | 'unrestricted' | 'unsupported' | 'error';
+  column?: string;
+  dc_id?: string;
+  values?: string[];
+  truncated?: boolean;
+}
+
+/** One stage of the funnel overview: the filter applied at this step and the
+ *  per-DC row counts after applying every filter up to and including it. */
+export interface FunnelStage {
+  index?: string;
+  label?: string | null;
+  column_name?: string | null;
+  dc_id?: string;
+  value?: unknown;
+  rows_by_dc: Record<string, number | null>;
+}
+
+export interface FunnelValuesResponse {
+  targets: Record<string, FunnelTargetResult>;
+  stages: FunnelStage[] | null;
+  initial_rows_by_dc: Record<string, number | null> | null;
+  dc_labels: Record<string, string>;
+  filter_count: number;
+}
+
+/** Compute funnel-filtering data: per-component available values under the
+ *  current filters minus each component's own selection, and (optionally) the
+ *  cumulative per-DC row counts backing the funnel overview. */
+export async function fetchFunnelValues(
+  dashboardId: string,
+  filters: unknown[],
+  targetIndexes: string[],
+  includeStages = false,
+  signal?: AbortSignal,
+): Promise<FunnelValuesResponse> {
+  const res = await authFetch(`${API_BASE}/dashboards/funnel_values/${dashboardId}`, {
+    method: 'POST',
+    body: JSON.stringify({
+      filters,
+      target_indexes: targetIndexes,
+      include_stages: includeStages,
+    }),
+    signal,
+  });
+  if (!res.ok) throw new Error(`Failed to fetch funnel values: ${res.status}`);
   return res.json();
 }
 
@@ -3874,6 +3932,47 @@ export async function fetchMultiQCSampleMappings(
     return body.sample_mappings as Record<string, string[]>;
   }
   return (body ?? {}) as Record<string, string[]>;
+}
+
+/** One source value's resolution outcome in the mapping-inspection view. */
+export interface LinkMappingPreviewRow {
+  source_value: string;
+  matched: boolean;
+  /** exact | variant | base | source-suffix | passthrough, or the resolver
+   *  name for non-sample_mapping resolvers. */
+  via: string;
+  resolved: string[];
+}
+
+export interface LinkMappingPreviewResponse {
+  link_id: string;
+  resolver: string;
+  source_dc_id: string;
+  source_column: string;
+  target_dc_id: string;
+  target_type: string;
+  case_sensitive: boolean;
+  mappings_source: 'link_config' | 'multiqc_live' | 'none';
+  source_values_total: number;
+  truncated: boolean;
+  matched_count: number;
+  unmapped_count: number;
+  rows: LinkMappingPreviewRow[];
+  orphan_targets: string[];
+}
+
+/** Full sample ↔ link mapping table for one link — backs the debug/inspect
+ *  view in the link editor (issue #938). */
+export async function fetchLinkMappingPreview(
+  projectId: string,
+  linkId: string,
+  limit = 500,
+): Promise<LinkMappingPreviewResponse> {
+  const res = await authFetch(
+    `${API_BASE}/links/${projectId}/${linkId}/mapping-preview?limit=${limit}`,
+  );
+  if (!res.ok) await throwHttpError(res, 'Failed to fetch mapping preview');
+  return res.json();
 }
 
 // =============================================================================

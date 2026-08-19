@@ -39,13 +39,39 @@ import React, {
   useState,
 } from 'react';
 
-import { fetchMultiQCSampleMappings, fetchUniqueValues, StoredMetadata } from './api';
+import {
+  fetchFunnelValues,
+  fetchMultiQCSampleMappings,
+  fetchUniqueValues,
+  InteractiveFilter,
+  StoredMetadata,
+} from './api';
+
+/** Funnel result for one interactive component (issue #939). */
+export interface FunnelComponentState {
+  status: 'ok' | 'unrestricted' | 'unsupported' | 'error';
+  /** Values that still lead to a non-empty result set — null when the
+   *  component is unrestricted (every value available). */
+  set: Set<string> | null;
+  truncated: boolean;
+}
 
 interface AvailableValuesContextValue {
-  /** Trigger a compute for this (dc_id, column) if not already done. */
-  request: (dcId: string, columnName: string) => void;
-  /** Get the cached intersection or null if not yet computed / not applicable. */
-  getSet: (dcId: string, columnName: string) => Set<string> | null;
+  /** Trigger a compute for this (dc_id, column) if not already done. When
+   *  `ownIndex` is provided the component is also registered as a funnel
+   *  target (its availability is recomputed on every filter change while the
+   *  funnel toggle is on). */
+  request: (dcId: string, columnName: string, ownIndex?: string) => void;
+  /** Get the availability Set, or null when everything is available / not yet
+   *  computed. With the funnel active and `ownIndex` given, returns the live
+   *  funnel set (filters minus the component's own selection); otherwise the
+   *  static cross-DC intersection. */
+  getSet: (dcId: string, columnName: string, ownIndex?: string) => Set<string> | null;
+  /** Whether funnel filtering is currently on (drives the colored option
+   *  markers and per-component badges). */
+  funnelActive: boolean;
+  /** Detailed funnel state for one component, or null when inactive/unknown. */
+  getFunnelState: (ownIndex: string) => FunnelComponentState | null;
 }
 
 const AvailableValuesContext =
@@ -153,15 +179,89 @@ export interface AvailableFilterValuesProviderProps {
    *  absent, multiqc DCs are skipped and the intersection falls back to
    *  whatever delta-table DCs contribute. */
   projectId?: string;
+  /** Funnel filtering (issue #939). When `enabled`, registered components'
+   *  availability is recomputed on every (debounced) filter change: the
+   *  backend answers, per component, which of its values still lead to a
+   *  non-empty result set under every OTHER active filter — cross-DC links
+   *  included. Pass the shell's debounced filter list so the funnel refetch
+   *  cadence matches figures/cards. */
+  funnel?: {
+    enabled: boolean;
+    dashboardId: string;
+    filters: InteractiveFilter[];
+  };
   children: React.ReactNode;
+}
+
+/** Stable identity for a filter list — mirrors the shell's stableFilterKey. */
+function funnelFilterKey(filters: InteractiveFilter[]): string {
+  return JSON.stringify(
+    filters
+      .map((f) => [f.index, f.source ?? null, f.value] as const)
+      .sort((a, b) => String(a[0]).localeCompare(String(b[0]))),
+  );
 }
 
 export const AvailableFilterValuesProvider: React.FC<
   AvailableFilterValuesProviderProps
-> = ({ dashboardMetadata, projectId, children }) => {
+> = ({ dashboardMetadata, projectId, funnel, children }) => {
   const [cache, setCache] = useState<Record<string, Set<string> | null>>({});
   // Tracks which keys are currently being computed so we don't double-fetch.
   const inFlightRef = useRef<Set<string>>(new Set());
+
+  // --- Funnel layer (issue #939) ---------------------------------------
+  const funnelEnabled = Boolean(funnel?.enabled && funnel.dashboardId);
+  // Components that asked for funnel data (via useAvailableSet's ownIndex).
+  const funnelTargetsRef = useRef<Set<string>>(new Set());
+  const [funnelTargetsVersion, setFunnelTargetsVersion] = useState(0);
+  const [funnelState, setFunnelState] = useState<{
+    key: string;
+    targets: Record<string, FunnelComponentState>;
+  } | null>(null);
+
+  const funnelKey = useMemo(
+    () => (funnelEnabled && funnel ? funnelFilterKey(funnel.filters) : ''),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [funnelEnabled, funnel?.filters],
+  );
+
+  useEffect(() => {
+    if (!funnelEnabled || !funnel) {
+      setFunnelState(null);
+      return;
+    }
+    const indexes = Array.from(funnelTargetsRef.current);
+    if (indexes.length === 0) return;
+
+    const controller = new AbortController();
+    // Small extra debounce on top of the shell's deferred filters: a burst of
+    // component registrations on mount collapses into one request.
+    const timer = window.setTimeout(() => {
+      fetchFunnelValues(funnel.dashboardId, funnel.filters, indexes, false, controller.signal)
+        .then((res) => {
+          const targets: Record<string, FunnelComponentState> = {};
+          for (const [index, t] of Object.entries(res.targets || {})) {
+            targets[index] = {
+              status: t.status,
+              set: t.status === 'ok' ? new Set((t.values || []).map(String)) : null,
+              truncated: Boolean(t.truncated),
+            };
+          }
+          setFunnelState({ key: funnelKey, targets });
+        })
+        .catch((err) => {
+          if (controller.signal.aborted) return;
+          console.warn('[funnel] fetchFunnelValues failed:', err);
+        });
+    }, 150);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+    // funnelKey is the stable identity of funnel.filters.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [funnelEnabled, funnel?.dashboardId, funnelKey, funnelTargetsVersion]);
 
   const dcs = useMemo(
     () => collectDataDcs(dashboardMetadata),
@@ -184,7 +284,12 @@ export const AvailableFilterValuesProvider: React.FC<
   }, [dcSignature]);
 
   const request = useCallback(
-    (dcId: string, columnName: string) => {
+    (dcId: string, columnName: string, ownIndex?: string) => {
+      if (ownIndex && !funnelTargetsRef.current.has(ownIndex)) {
+        funnelTargetsRef.current.add(ownIndex);
+        // Re-arm the funnel effect so newly mounted components get computed.
+        setFunnelTargetsVersion((v) => v + 1);
+      }
       if (!dcId || !columnName) return;
       const k = key(dcId, columnName);
       if (k in cache) return;
@@ -279,14 +384,35 @@ export const AvailableFilterValuesProvider: React.FC<
     [cache, dcs, effectiveProjectId],
   );
 
-  const getSet = useCallback(
-    (dcId: string, columnName: string): Set<string> | null => {
-      return cache[key(dcId, columnName)] ?? null;
+  const getFunnelState = useCallback(
+    (ownIndex: string): FunnelComponentState | null => {
+      if (!funnelEnabled || !funnelState) return null;
+      return funnelState.targets[ownIndex] ?? null;
     },
-    [cache],
+    [funnelEnabled, funnelState],
   );
 
-  const value = useMemo(() => ({ request, getSet }), [request, getSet]);
+  const getSet = useCallback(
+    (dcId: string, columnName: string, ownIndex?: string): Set<string> | null => {
+      if (funnelEnabled && ownIndex) {
+        const st = funnelState?.targets[ownIndex];
+        if (st) {
+          if (st.status === 'ok') return st.set;
+          if (st.status === 'unrestricted') return null;
+          // unsupported / error → fall through to the static intersection.
+        }
+        // Not computed yet → static intersection keeps the display sensible
+        // while the funnel request is in flight.
+      }
+      return cache[key(dcId, columnName)] ?? null;
+    },
+    [cache, funnelEnabled, funnelState],
+  );
+
+  const value = useMemo(
+    () => ({ request, getSet, funnelActive: funnelEnabled, getFunnelState }),
+    [request, getSet, funnelEnabled, getFunnelState],
+  );
 
   return (
     <AvailableValuesContext.Provider value={value}>
@@ -305,12 +431,24 @@ export const AvailableFilterValuesProvider: React.FC<
 export function useAvailableSet(
   dcId: string | undefined,
   columnName: string | undefined,
+  ownIndex?: string,
 ): Set<string> | null {
   const ctx = useContext(AvailableValuesContext);
   useEffect(() => {
     if (!ctx || !dcId || !columnName) return;
-    ctx.request(dcId, columnName);
-  }, [ctx, dcId, columnName]);
+    ctx.request(dcId, columnName, ownIndex);
+  }, [ctx, dcId, columnName, ownIndex]);
   if (!ctx || !dcId || !columnName) return null;
-  return ctx.getSet(dcId, columnName);
+  return ctx.getSet(dcId, columnName, ownIndex);
+}
+
+/** Whether funnel filtering is active, plus this component's funnel state
+ *  (drives the colored option markers and the per-component "n/N" badge). */
+export function useFunnelState(ownIndex: string | undefined): {
+  active: boolean;
+  state: FunnelComponentState | null;
+} {
+  const ctx = useContext(AvailableValuesContext);
+  if (!ctx || !ownIndex) return { active: false, state: null };
+  return { active: ctx.funnelActive, state: ctx.getFunnelState(ownIndex) };
 }

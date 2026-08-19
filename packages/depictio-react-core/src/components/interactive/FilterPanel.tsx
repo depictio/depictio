@@ -133,6 +133,16 @@ export interface FilterPanelProps {
    *  opaque node: the apps put the docked map panel here, and this component
    *  has no business knowing that. */
   footer?: React.ReactNode;
+  /** Funnel filtering (issue #939). Omitted → the controls are hidden (the
+   *  dashboard hasn't opted in, or the host — e.g. the editor — doesn't wire
+   *  it). `onOpenView` opens the funnel overview modal; it's only offered
+   *  while the toggle is on, since the overview is computed by the same
+   *  opt-in machinery. */
+  funnel?: {
+    enabled: boolean;
+    onToggle: () => void;
+    onOpenView: () => void;
+  };
 }
 
 function readDensity(): FilterPanelDensity {
@@ -161,6 +171,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
   collapsed = false,
   onToggleCollapsed,
   footer,
+  funnel,
 }) => {
   const [density, setDensity] = useState<FilterPanelDensity>(readDensity);
   const [search, setSearch] = useState('');
@@ -722,6 +733,43 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
           )}
         </Group>
         <Group gap={4} wrap="nowrap">
+          {funnel && (
+            <Tooltip
+              label={
+                funnel.enabled
+                  ? 'Funnel filtering on — values with no remaining results are greyed out'
+                  : 'Enable funnel filtering'
+              }
+              withArrow
+              openDelay={400}
+            >
+              <ActionIcon
+                variant={funnel.enabled ? 'filled' : 'subtle'}
+                color={funnel.enabled ? 'teal' : 'gray'}
+                size="sm"
+                aria-label="Toggle funnel filtering"
+                aria-pressed={funnel.enabled}
+                onClick={funnel.onToggle}
+                data-testid="funnel-toggle"
+              >
+                <Icon icon="mdi:filter-variant" width={16} height={16} />
+              </ActionIcon>
+            </Tooltip>
+          )}
+          {funnel?.enabled && (
+            <Tooltip label="Show the funnel overview" withArrow openDelay={400}>
+              <ActionIcon
+                variant="subtle"
+                color="teal"
+                size="sm"
+                aria-label="Show funnel overview"
+                onClick={funnel.onOpenView}
+                data-testid="funnel-view-button"
+              >
+                <Icon icon="mdi:chart-sankey" width={16} height={16} />
+              </ActionIcon>
+            </Tooltip>
+          )}
           {collapsibleKeys.length > 0 && (
             <Tooltip
               label={anyOpen ? 'Collapse all' : 'Expand all'}

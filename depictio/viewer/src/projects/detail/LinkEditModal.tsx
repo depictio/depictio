@@ -1,10 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
+  Badge,
   Box,
   Button,
   Code,
+  Collapse,
   Group,
+  Loader,
   Modal,
   ScrollArea,
   Select,
@@ -15,11 +18,18 @@ import {
   Textarea,
   TextInput,
   Title,
+  Tooltip,
+  useMantineColorScheme,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
+import { AgGridReact } from 'ag-grid-react';
+import type { ColDef, ICellRendererParams } from 'ag-grid-community';
+import 'ag-grid-community/styles/ag-grid.css';
+import 'ag-grid-community/styles/ag-theme-alpine.css';
 
 import {
   createProjectLink,
+  fetchLinkMappingPreview,
   fetchMultiQCSampleMappings,
   fetchSpecs,
   updateProjectLink,
@@ -28,6 +38,8 @@ import type {
   CreateLinkInput,
   DCLink,
   DCLinkConfig,
+  LinkMappingPreviewResponse,
+  LinkMappingPreviewRow,
   LinkResolverName,
   LinkTargetType,
   ResolverInfo,
@@ -276,11 +288,14 @@ const LinkEditModal: React.FC<LinkEditModalProps> = ({
       };
     }
     if (resolver === 'sample_mapping') {
-      // Prefer the auto-loaded MultiQC mappings; otherwise parse JSON textarea.
+      // MultiQC targets: do NOT freeze the auto-loaded mappings into the
+      // link. The server re-fetches live mappings at resolution time when
+      // the link carries none — persisting a snapshot here meant a MultiQC
+      // re-ingest kept resolving against stale samples forever (#938). The
+      // table shown in the editor is a preview, not the stored config.
+      // Non-MultiQC targets keep the manual JSON path.
       let mappings: Record<string, string[]> | undefined;
-      if (autoMappings) {
-        mappings = autoMappings;
-      } else if (mappingsJson.trim()) {
+      if (targetType !== 'multiqc' && mappingsJson.trim()) {
         try {
           mappings = JSON.parse(mappingsJson);
         } catch (err) {
@@ -292,6 +307,10 @@ const LinkEditModal: React.FC<LinkEditModalProps> = ({
         resolver,
         mappings,
         target_field: targetField || undefined,
+        // Sample names are matched case-insensitively in practice (MultiQC
+        // tools freely re-case names); the model default of `true` was never
+        // surfaced by this UI and silently made real-world links strict.
+        case_sensitive: false,
       };
     }
     return { resolver };
@@ -510,6 +529,10 @@ const LinkEditModal: React.FC<LinkEditModalProps> = ({
           />
         )}
 
+        {editing && link && (
+          <LinkMappingInspector projectId={projectId} linkId={link.id} />
+        )}
+
         <Textarea
           label="Description (optional)"
           value={description}
@@ -638,6 +661,230 @@ const SampleMappingEditor: React.FC<SampleMappingEditorProps> = ({
         value={targetField}
         onChange={(e) => onTargetFieldChange(e.currentTarget.value)}
       />
+    </Stack>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// Mapping inspection (issue #938)
+// ---------------------------------------------------------------------------
+
+const VIA_LABELS: Record<string, string> = {
+  exact: 'Exact key',
+  variant: 'Variant name',
+  base: 'Suffix-stripped key',
+  'source-suffix': 'Suffix-stripped value',
+  passthrough: 'No match',
+};
+
+interface LinkMappingInspectorProps {
+  projectId: string;
+  linkId: string;
+}
+
+/**
+ * Debug/inspect view for one link's sample ↔ target mapping.
+ *
+ * Fetches `/links/{project}/{link}/mapping-preview` lazily on expand and
+ * renders every distinct source value with its resolution outcome in an AG
+ * Grid (quick-filterable, sortable), plus the target-side orphans — so a
+ * mismatch is visible from both directions instead of silently matching
+ * nothing at render time.
+ */
+const LinkMappingInspector: React.FC<LinkMappingInspectorProps> = ({ projectId, linkId }) => {
+  const { colorScheme } = useMantineColorScheme();
+  const isDark = colorScheme === 'dark';
+
+  const [expanded, setExpanded] = useState(false);
+  const [data, setData] = useState<LinkMappingPreviewResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [unmappedOnly, setUnmappedOnly] = useState(false);
+
+  useEffect(() => {
+    if (!expanded || data || loading) return;
+    setLoading(true);
+    setError(null);
+    fetchLinkMappingPreview(projectId, linkId)
+      .then(setData)
+      .catch((err) => setError(err instanceof Error ? err.message : String(err)))
+      .finally(() => setLoading(false));
+  }, [expanded, data, loading, projectId, linkId]);
+
+  const rows = useMemo(() => {
+    const all = data?.rows ?? [];
+    return unmappedOnly ? all.filter((r) => !r.matched) : all;
+  }, [data, unmappedOnly]);
+
+  const colDefs = useMemo<ColDef<LinkMappingPreviewRow>[]>(
+    () => [
+      {
+        headerName: 'Source value',
+        field: 'source_value',
+        flex: 1,
+        minWidth: 140,
+        sortable: true,
+      },
+      {
+        headerName: 'Status',
+        field: 'matched',
+        width: 120,
+        sortable: true,
+        cellRenderer: (p: ICellRendererParams<LinkMappingPreviewRow>) =>
+          p.value ? (
+            <Badge size="sm" variant="light" color="teal" style={{ textTransform: 'none' }}>
+              matched
+            </Badge>
+          ) : (
+            <Badge size="sm" variant="light" color="orange" style={{ textTransform: 'none' }}>
+              unmapped
+            </Badge>
+          ),
+      },
+      {
+        headerName: 'Via',
+        field: 'via',
+        width: 170,
+        sortable: true,
+        valueFormatter: (p) => VIA_LABELS[p.value as string] ?? String(p.value ?? ''),
+      },
+      {
+        headerName: 'Resolves to',
+        field: 'resolved',
+        flex: 2,
+        minWidth: 200,
+        sortable: false,
+        valueFormatter: (p) => (Array.isArray(p.value) ? p.value.join(', ') : ''),
+      },
+    ],
+    [],
+  );
+
+  return (
+    <Stack gap="xs">
+      <Group justify="space-between" wrap="nowrap">
+        <Group gap="xs">
+          <Icon icon="mdi:magnify-scan" width={18} color="var(--mantine-color-teal-6)" />
+          <Text size="sm" fw={600}>
+            Inspect mapping
+          </Text>
+          {data && (
+            <>
+              <Tooltip label="Source values that resolve through the link" withArrow>
+                <Badge size="sm" variant="light" color="teal" style={{ textTransform: 'none' }}>
+                  {data.matched_count} matched
+                </Badge>
+              </Tooltip>
+              <Tooltip label="Source values the link cannot map" withArrow>
+                <Badge size="sm" variant="light" color="orange" style={{ textTransform: 'none' }}>
+                  {data.unmapped_count} unmapped
+                </Badge>
+              </Tooltip>
+              {data.orphan_targets.length > 0 && (
+                <Tooltip
+                  label="Target-side samples no source value reaches"
+                  withArrow
+                >
+                  <Badge size="sm" variant="light" color="gray" style={{ textTransform: 'none' }}>
+                    {data.orphan_targets.length} orphan targets
+                  </Badge>
+                </Tooltip>
+              )}
+            </>
+          )}
+        </Group>
+        <Button
+          size="compact-xs"
+          variant="subtle"
+          color="teal"
+          onClick={() => setExpanded((v) => !v)}
+          rightSection={
+            <Icon icon={expanded ? 'mdi:chevron-up' : 'mdi:chevron-down'} width={14} />
+          }
+          data-testid="mapping-inspector-toggle"
+        >
+          {expanded ? 'Hide' : 'Show'}
+        </Button>
+      </Group>
+      <Collapse in={expanded}>
+        <Stack gap="xs">
+          {loading && (
+            <Group gap="xs">
+              <Loader size="xs" />
+              <Text size="sm" c="dimmed">
+                Resolving every source value through the link…
+              </Text>
+            </Group>
+          )}
+          {error && (
+            <Alert color="orange" variant="light">
+              {error}
+            </Alert>
+          )}
+          {data && (
+            <>
+              <Group gap="xs" wrap="nowrap">
+                <TextInput
+                  size="xs"
+                  flex={1}
+                  placeholder="Search values…"
+                  leftSection={<Icon icon="mdi:magnify" width={14} />}
+                  value={search}
+                  onChange={(e) => setSearch(e.currentTarget.value)}
+                />
+                <Switch
+                  size="xs"
+                  label="Unmapped only"
+                  checked={unmappedOnly}
+                  onChange={(e) => setUnmappedOnly(e.currentTarget.checked)}
+                />
+              </Group>
+              <Box
+                className={isDark ? 'ag-theme-alpine-dark' : 'ag-theme-alpine'}
+                style={{ height: 280, width: '100%' }}
+                data-testid="mapping-inspector-grid"
+              >
+                <AgGridReact<LinkMappingPreviewRow>
+                  rowData={rows}
+                  columnDefs={colDefs}
+                  headerHeight={32}
+                  rowHeight={32}
+                  suppressCellFocus
+                  quickFilterText={search}
+                  overlayNoRowsTemplate={
+                    '<span style="color:var(--mantine-color-dimmed);font-size:12px">No source values to inspect.</span>'
+                  }
+                />
+              </Box>
+              <Text size="xs" c="dimmed">
+                {data.source_values_total} distinct source values in{' '}
+                <Code>{data.source_column}</Code>
+                {data.truncated ? ` — showing the first ${data.rows.length}` : ''}. Mappings:{' '}
+                {data.mappings_source === 'multiqc_live'
+                  ? 'fetched live from the MultiQC reports'
+                  : data.mappings_source === 'link_config'
+                    ? 'frozen on the link'
+                    : 'none'}
+                {data.case_sensitive ? ' · case-sensitive' : ' · case-insensitive'}.
+              </Text>
+              {data.orphan_targets.length > 0 && (
+                <Text size="xs" c="dimmed">
+                  Orphan targets:{' '}
+                  {data.orphan_targets.slice(0, 12).map((t) => (
+                    <Code key={t} mr={4}>
+                      {t}
+                    </Code>
+                  ))}
+                  {data.orphan_targets.length > 12
+                    ? `… +${data.orphan_targets.length - 12} more`
+                    : ''}
+                </Text>
+              )}
+            </>
+          )}
+        </Stack>
+      </Collapse>
     </Stack>
   );
 };

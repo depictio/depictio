@@ -258,6 +258,9 @@ export {
   deleteProjectLink,
   listLinkResolvers,
   fetchMultiQCSampleMappings,
+  fetchLinkMappingPreview,
+  // Funnel filtering (issue #939)
+  fetchFunnelValues,
   // MultiQC management (multipart uploads)
   createMultiQCDataCollection,
   checkMultiQCUniformity,
@@ -353,11 +356,16 @@ export {
 export type { EditorFilterPayload } from './editorFilters';
 
 // Cross-DC available-values intersection (powers greying-out unavailable
-// options in interactive filter dropdowns).
+// options in interactive filter dropdowns) + the funnel-filtering layer on
+// top of it (issue #939).
 export {
   AvailableFilterValuesProvider,
   useAvailableSet,
+  useFunnelState,
 } from './availableValues';
+export type { FunnelComponentState } from './availableValues';
+export { default as FunnelView } from './components/interactive/FunnelView';
+export type { FunnelViewProps } from './components/interactive/FunnelView';
 
 // Real-time event subscription (WebSocket /events/ws)
 export { useDataCollectionUpdates, useMonitoringEvents, ADMIN_MONITORING_CHANNEL } from './realtime';
@@ -462,6 +470,12 @@ export type {
   CreateLinkInput,
   UpdateLinkInput,
   ResolverInfo,
+  LinkMappingPreviewRow,
+  LinkMappingPreviewResponse,
+  // Funnel filtering types (issue #939)
+  FunnelTargetResult,
+  FunnelStage,
+  FunnelValuesResponse,
   // MultiQC management types
   CreateMultiQCDCInput,
   MultiQCMutationResult,
