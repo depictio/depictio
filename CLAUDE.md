@@ -96,6 +96,9 @@ Route dispatch is plain regex in `depictio/viewer/src/main.tsx` +
   `dashboards/*.yaml` and `.db_seeds/*.json`
 - Multi-tab dashboards: one JSON per tab (e.g. nf-core `dashboard_multiqc.json`)
 - Reseed a running instance in place: `depictio/dev_scripts/reseed_project.py` (`/reseed`)
+- nf-core template versions: seeding/CLI/CI/docs auto-resolve the **highest** version dir
+  (`nf-core/<pipeline>/latest` works as a template id). New version = run
+  `scripts/bump_template_version.py` + its checklist — see `docs/template-versioning.md`
 
 ### Data Flow
 CLI ingests data → Delta/S3/MongoDB → API serves → React viewer renders

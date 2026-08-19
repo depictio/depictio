@@ -562,6 +562,21 @@ def build_drift_report(
     for tag, ref, path in optional_absent:
         lines.append(f"- ⚪ `{tag}` ({ref}) → {path} — optional route, not exercised by megatest")
     lines.append("")
+
+    # Next step: the bump itself is manual (demo data + seeds need a human) —
+    # hand the maintainer the exact command. See docs/template-versioning.md.
+    if new_version != local_version:
+        lines += [
+            "## Next steps",
+            "Template still valid (or once the drift above is fixed), ship the new version with:",
+            "```",
+            f"python scripts/bump_template_version.py --pipeline {pipeline} "
+            f"--new-version {new_version}",
+            "```",
+            "then follow its checklist (docs/template-versioning.md). Seeding, CLI "
+            "(`--template …/latest`), CI and docs all pick the new version up automatically.",
+            "",
+        ]
     return "\n".join(lines), n_problems
 
 
