@@ -91,6 +91,10 @@ CANONICAL_SCHEMAS: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
     # UpSet — no canonical column-role schema; the renderer enumerates
     # binary columns at compute time. Editor validation is a no-op.
     "upset_plot": {},
+    # 3D structure — file-backed (the .pdb/.cif lives in a `structure` DC,
+    # served via /advanced_viz/structure/{dc_id}/file). No tabular payload,
+    # so editor validation is a no-op.
+    "molecule_3d": {},
     "ma": {
         "feature_id": _STRING,
         "avg_log_intensity": _FLOAT,
@@ -294,6 +298,7 @@ ROLE_NAMES: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
         ),
     },
     "upset_plot": {},
+    "molecule_3d": {},
     "ma": {
         "feature_id": frozenset({"feature_id", "gene_id", "id"}),
         "avg_log_intensity": frozenset(
@@ -410,6 +415,7 @@ _OPTIONAL_ROLES: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
     },
     "complex_heatmap": {},
     "upset_plot": {},
+    "molecule_3d": {},
     "ma": {
         "significance": _FLOAT,
         "label": _STRING,
@@ -629,7 +635,10 @@ def validate_binding(config: VizConfig, dc_schema: dict[str, str]) -> list[Bindi
 _MIN_FLOAT_COLS: dict[AdvancedVizKind, int] = {"complex_heatmap": 8}
 _MIN_INT_COLS: dict[AdvancedVizKind, int] = {"upset_plot": 3}
 _MIN_STRING_COLS: dict[AdvancedVizKind, int] = {"sankey": 2}
-_KIND_REQUIRES_DC_TYPE: dict[AdvancedVizKind, str] = {"phylogenetic": "phylogeny"}
+_KIND_REQUIRES_DC_TYPE: dict[AdvancedVizKind, str] = {
+    "phylogenetic": "phylogeny",
+    "molecule_3d": "structure",
+}
 _EMBEDDING_LIVE_MIN_NUMERIC = 10
 
 # Float columns whose name is purely a statistic (DESeq2-style results) — used

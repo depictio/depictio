@@ -169,14 +169,16 @@ SECONDARY_DC_KEYS = {
     "metadata_dc_id": "metadata_wf_id",
 }
 
-# Two kinds never call /advanced_viz/data with their own dc_id, so probing it
+# These kinds never call /advanced_viz/data with their own dc_id, so probing it
 # would report a failure the viewer never sees:
 #   phylogenetic  reads its tree from /advanced_viz/phylogeny/{tree_dc_id}/newick,
 #                 and that dc has no Delta table by design (PhylogeneticRenderer.tsx).
 #                 Its only data-leg call is for metadata_dc_id, covered separately.
 #   coverage_track dispatches compute_coverage_track and nothing else
 #                 (CoverageTrackRenderer.tsx).
-NO_DATA_LEG = {"phylogenetic", "coverage_track"}
+#   molecule_3d   reads its structure from /advanced_viz/structure/{dc_id}/file,
+#                 and that dc has no Delta table by design (Molecule3DRenderer.tsx).
+NO_DATA_LEG = {"phylogenetic", "coverage_track", "molecule_3d"}
 
 
 @dataclass

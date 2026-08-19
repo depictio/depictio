@@ -240,6 +240,16 @@ _KIND_METADATA: dict[AdvancedVizKind, dict[str, Any]] = {
         "description": "Flow across N ordered categorical levels (e.g. sample → lineage → clade). Server-side aggregation, client-side colour / opacity tweaks.",
         "icon": "tabler:chart-sankey",
     },
+    "molecule_3d": {
+        "label": "3D molecular structure",
+        "description": (
+            "Interactive 3D protein/molecule viewer (3Dmol.js) for a PDB/mmCIF "
+            "structure DC — cartoon/trace/stick/sphere representations, "
+            "spectrum/chain/pLDDT colouring. Structure DCs are file-backed; "
+            "builder binding is not wired yet (seed/YAML-only, like phylogenetic)."
+        ),
+        "icon": "tabler:atom-2",
+    },
 }
 
 
@@ -1511,14 +1521,8 @@ def poll_compute_sankey(
     return _poll_compute(job_id, current_user)
 
 
-@advanced_viz_endpoint_router.get(
-    "/phylogeny/{data_collection_id}/newick", response_class=PlainTextResponse
-)
-def get_phylogeny_newick(
-    data_collection_id: PyObjectId,
-    current_user=Depends(get_user_or_anonymous),
-) -> str:
-    """Return the raw Newick string for a phylogeny DC.
+def _read_file_backed_dc(dc_oid: ObjectId, kind_label: str) -> str:
+    """Return the raw text of a file-backed DC (phylogeny tree, structure).
 
     Resolves the file location in two ways: (1) prefer the file registered
     by the CLI scan in ``files_collection``; (2) for reference datasets
@@ -1528,18 +1532,11 @@ def get_phylogeny_newick(
     embedded in the project — there is no top-level ``data_collections``
     document for them — so we can't ``find_one({"_id": dc_oid})`` directly.
 
-    Returns local file contents directly; stream S3-hosted trees via boto3.
+    Returns local file contents directly; streams S3-hosted files via boto3.
+    ``kind_label`` only flavours the error messages ("Phylogeny"/"Structure").
+    The caller is responsible for the ``_assert_dc_access`` gate.
     """
     from depictio.api.v1.db import files_collection, projects_collection
-
-    try:
-        dc_oid = ObjectId(str(data_collection_id))
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"Invalid dc_id: {exc}") from exc
-
-    # Same vulnerability class as /advanced_viz/data: caller-supplied dc_id
-    # returning raw data — gate on project-level access before any file read.
-    _assert_dc_access(dc_oid, current_user)
 
     # Build a list of candidate paths and try each. The CLI scan records the
     # *host* path it saw when the user ran depictio-cli on their laptop
@@ -1570,7 +1567,10 @@ def get_phylogeny_newick(
     if not candidates:
         raise HTTPException(
             status_code=404,
-            detail="Phylogeny file not registered (no entry in files_collection and no scan_parameters.filename in the project's DC config).",
+            detail=(
+                f"{kind_label} file not registered (no entry in files_collection and "
+                "no scan_parameters.filename in the project's DC config)."
+            ),
         )
 
     # Resolve to the first existing local path (or any s3:// URL — those go
@@ -1591,34 +1591,67 @@ def get_phylogeny_newick(
         raise HTTPException(
             status_code=404,
             detail=(
-                "Phylogeny file location resolved but none of the candidate paths "
+                f"{kind_label} file location resolved but none of the candidate paths "
                 f"exist on the backend filesystem: {candidates}"
             ),
         )
 
     try:
         if file_path.startswith("s3://"):
-            import boto3
+            from depictio.api.v1.s3 import s3_client
 
-            from depictio.api.v1.configs.config import settings
-
-            s3 = boto3.client(
-                "s3",
-                endpoint_url=settings.minio.endpoint_url,
-                aws_access_key_id=settings.minio.aws_access_key_id,
-                aws_secret_access_key=settings.minio.aws_secret_access_key,
-                verify=settings.minio.verify_tls,
-            )
             _, _, rest = file_path.partition("s3://")
             bucket, _, key = rest.partition("/")
-            obj = s3.get_object(Bucket=bucket, Key=key)
+            obj = s3_client.get_object(Bucket=bucket, Key=key)
             return obj["Body"].read().decode("utf-8")
         with open(file_path) as fh:
             return fh.read()
     except FileNotFoundError as exc:
         # Don't leak server-side paths in the response — log them instead.
-        logger.warning("phylogeny file not found at %s", file_path)
-        raise HTTPException(status_code=404, detail="Phylogeny file not found") from exc
+        logger.warning("%s file not found at %s", kind_label.lower(), file_path)
+        raise HTTPException(status_code=404, detail=f"{kind_label} file not found") from exc
     except Exception as exc:
-        logger.warning("phylogeny newick read failed: %s", exc, exc_info=True)
-        raise HTTPException(status_code=500, detail="Failed to read phylogeny") from exc
+        logger.warning("%s file read failed: %s", kind_label.lower(), exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to read {kind_label.lower()}") from exc
+
+
+@advanced_viz_endpoint_router.get(
+    "/phylogeny/{data_collection_id}/newick", response_class=PlainTextResponse
+)
+def get_phylogeny_newick(
+    data_collection_id: PyObjectId,
+    current_user=Depends(get_user_or_anonymous),
+) -> str:
+    """Return the raw Newick string for a phylogeny DC (see _read_file_backed_dc)."""
+    try:
+        dc_oid = ObjectId(str(data_collection_id))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid dc_id: {exc}") from exc
+
+    # Same vulnerability class as /advanced_viz/data: caller-supplied dc_id
+    # returning raw data — gate on project-level access before any file read.
+    _assert_dc_access(dc_oid, current_user)
+    return _read_file_backed_dc(dc_oid, "Phylogeny")
+
+
+@advanced_viz_endpoint_router.get(
+    "/structure/{data_collection_id}/file", response_class=PlainTextResponse
+)
+def get_structure_file(
+    data_collection_id: PyObjectId,
+    current_user=Depends(get_user_or_anonymous),
+) -> str:
+    """Return the raw PDB/mmCIF text for a structure DC (see _read_file_backed_dc).
+
+    Consumed by the molecule_3d React renderer, which hands the text to
+    3Dmol.js for parsing — the backend never interprets the structure.
+    """
+    try:
+        dc_oid = ObjectId(str(data_collection_id))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid dc_id: {exc}") from exc
+
+    # Same vulnerability class as /advanced_viz/data: caller-supplied dc_id
+    # returning raw data — gate on project-level access before any file read.
+    _assert_dc_access(dc_oid, current_user)
+    return _read_file_backed_dc(dc_oid, "Structure")

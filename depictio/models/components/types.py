@@ -44,6 +44,7 @@ AdvancedVizKind = Literal[
     "oncoplot",
     "coverage_track",
     "sankey",
+    "molecule_3d",
 ]
 
 # Map visualization types

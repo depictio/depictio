@@ -59,6 +59,8 @@ KIND_SAMPLING_POLICY: dict[AdvancedVizKind, SamplingPolicy] = {
     "complex_heatmap": "none",
     "sankey": "none",
     "phylogenetic": "none",
+    # File-backed — the renderer never calls /advanced_viz/data.
+    "molecule_3d": "none",
 }
 
 #: The role whose tail a ``tail`` kind must keep, and whether the interesting

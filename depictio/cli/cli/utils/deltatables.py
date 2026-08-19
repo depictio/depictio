@@ -607,6 +607,18 @@ def client_aggregate_data(
             ),
         }
 
+    # Structure DCs are file-backed too; the scan phase registers the
+    # .pdb/.cif in `files`, and the structure-serving endpoint reads it on
+    # demand. No delta table, no further processing.
+    if data_collection.config.type.lower() == "structure":
+        return {
+            "result": "success",
+            "message": (
+                "Structure DC registered; structure file served on demand "
+                "(no delta-table materialisation needed)."
+            ),
+        }
+
     # Handle transformed (recipe-based) data collections.
     # Init seeding for reference datasets pops the `transform` block while
     # keeping `source: transformed` so the React viewer can still surface the
