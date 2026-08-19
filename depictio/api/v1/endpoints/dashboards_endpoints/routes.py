@@ -25,7 +25,6 @@ from depictio.api.v1.endpoints.dashboards_endpoints.core_functions import (
     get_parent_dashboard_title,
     load_dashboards_from_db,
     reorder_child_tabs,
-    sync_tab_family_permissions,
 )
 from depictio.api.v1.endpoints.user_endpoints.routes import (
     get_current_user,
@@ -180,7 +179,8 @@ def check_project_permission(
         required_permission: "owner", "editor", or "viewer"
 
     Returns:
-        bool: True if user has required permission or project is public
+        bool: True if user has required permission, or the project is public
+        and only viewer access is required
     """
     if user.is_admin:
         return True
@@ -189,12 +189,13 @@ def check_project_permission(
     if not project:
         return False
 
-    # In anonymous mode, anonymous users can only access public projects
+    # A public project grants READ access only. Editor/owner must come from
+    # explicit permissions below — otherwise any signed-in visitor of a public
+    # (e.g. demo) project could edit or delete its dashboards.
     if hasattr(user, "is_anonymous") and user.is_anonymous:
-        return project.get("is_public", False)
+        return required_permission == "viewer" and project.get("is_public", False)
 
-    # Check if project is public
-    if project.get("is_public", False):
+    if project.get("is_public", False) and required_permission == "viewer":
         return True
 
     user_id = ObjectId(user.id)
@@ -216,6 +217,33 @@ def check_project_permission(
             or any(viewer.get("_id") == user_id for viewer in permissions.get("viewers", []))
             or "*" in permissions.get("viewers", [])
         )
+
+
+def is_dashboard_owner(dashboard_doc: dict, user: User) -> bool:
+    """
+    Check whether the user is an owner of the dashboard *document* itself.
+
+    Project permissions are the primary authorization model, but dashboards
+    duplicated by visitors of a public project (the demo walkthrough flow)
+    are owned by users who hold no role on the project. Document ownership
+    lets them keep editing/deleting their own copies without granting
+    project-wide editor rights to everyone on a public project.
+    """
+    if not user or getattr(user, "is_anonymous", False):
+        return False
+    user_id = str(user.id)
+    owners = (dashboard_doc.get("permissions") or {}).get("owners") or []
+    return any(str(owner.get("_id")) == user_id for owner in owners)
+
+
+def check_dashboard_mutation_permission(
+    dashboard_doc: dict, user: User, required_permission: str
+) -> bool:
+    """Project-level permission, with a bypass for the dashboard's own owners."""
+    project_id = dashboard_doc.get("project_id")
+    if project_id and check_project_permission(project_id, user, required_permission):
+        return True
+    return is_dashboard_owner(dashboard_doc, user)
 
 
 def get_project_visibility(project_id: PyObjectId) -> bool:
@@ -458,72 +486,6 @@ async def list_all_dashboards(
     return result["dashboards"]
 
 
-@dashboards_endpoint_router.post("/toggle_public_status/{dashboard_id}")
-async def make_dashboard_public(
-    dashboard_id: PyObjectId,
-    params: dict,
-    current_user: User = Depends(get_current_user),
-):
-    """
-    Toggle dashboard visibility. Dashboard visibility now inherits from project visibility.
-    Only project owners can change project (and thus dashboard) visibility.
-    """
-    _public_status = params.get("is_public", None)
-    if _public_status is None:
-        return {
-            "success": False,
-            "message": "No public status provided. Use 'is_public' parameter.",
-        }
-
-    dashboard = dashboards_collection.find_one({"dashboard_id": dashboard_id})
-    if not dashboard:
-        raise HTTPException(
-            status_code=404, detail=f"Dashboard with ID '{dashboard_id}' not found."
-        )
-
-    project_id = dashboard.get("project_id")
-    if not project_id:
-        raise HTTPException(status_code=500, detail="Dashboard is not associated with a project.")
-
-    if not check_project_permission(project_id, current_user, "owner"):
-        raise HTTPException(
-            status_code=403, detail="Only project owners can change dashboard visibility."
-        )
-
-    project_result = projects_collection.find_one_and_update(
-        {"_id": ObjectId(project_id)},
-        {"$set": {"is_public": _public_status}},
-        return_document=True,
-    )
-
-    if not project_result:
-        raise HTTPException(status_code=404, detail="Project not found.")
-
-    dashboards_update_result = dashboards_collection.update_many(
-        {"project_id": ObjectId(project_id)},
-        {"$set": {"is_public": _public_status}},
-    )
-
-    # Also sync child tab permissions for any main tabs in this project
-    # This ensures tab families have consistent permissions
-    main_tabs = dashboards_collection.find(
-        {"project_id": ObjectId(project_id), "is_main_tab": {"$ne": False}}
-    )
-    child_tabs_updated = 0
-    for main_tab in main_tabs:
-        child_tabs_updated += sync_tab_family_permissions(
-            main_tab["dashboard_id"], new_is_public=_public_status
-        )
-
-    return {
-        "success": True,
-        "message": f"Project and all its dashboards changed visibility to: {'public' if _public_status else 'private'}",
-        "is_public": _public_status,
-        "dashboards_updated": dashboards_update_result.modified_count,
-        "child_tabs_updated": child_tabs_updated,
-    }
-
-
 @dashboards_endpoint_router.post("/edit/{dashboard_id}")
 async def edit_dashboard(
     dashboard_id: PyObjectId,
@@ -565,7 +527,7 @@ async def edit_dashboard(
     if not project_id:
         raise HTTPException(status_code=500, detail="Dashboard is not associated with a project.")
 
-    if not check_project_permission(project_id, current_user, "editor"):
+    if not check_dashboard_mutation_permission(dashboard, current_user, "editor"):
         raise HTTPException(
             status_code=403, detail="You don't have permission to edit this dashboard."
         )
@@ -643,10 +605,19 @@ async def save_dashboard(
                 status_code=500, detail="Dashboard is not associated with a project."
             )
 
-        if not check_project_permission(project_id, current_user, "editor"):
+        if not check_dashboard_mutation_permission(existing_dashboard, current_user, "editor"):
             raise HTTPException(
                 status_code=403, detail="You don't have permission to update this dashboard."
             )
+
+        # Visibility, permissions and project binding all have dedicated,
+        # owner-gated paths (project visibility toggle, creation-time
+        # stamping, no-move rule shared with /edit). The client round-trips
+        # the whole document, so leaving them in the payload would let any
+        # editor rewrite them — mass-assignment.
+        save_payload.pop("is_public", None)
+        save_payload.pop("permissions", None)
+        save_payload.pop("project_id", None)
 
         result = dashboards_collection.find_one_and_update(
             {"dashboard_id": dashboard_id},
@@ -654,6 +625,23 @@ async def save_dashboard(
             return_document=True,
         )
     else:
+        project_id = save_payload.get("project_id")
+        if not project_id:
+            raise HTTPException(
+                status_code=422, detail="Dashboard is not associated with a project."
+            )
+        # Creating (or duplicating) a dashboard requires at least read access
+        # to the target project; without this, any caller could write into a
+        # project it cannot even see.
+        if not check_project_permission(project_id, current_user, "viewer"):
+            raise HTTPException(
+                status_code=403,
+                detail="You don't have permission to create a dashboard in this project.",
+            )
+        # Visibility is project-driven: dashboards are born with their
+        # project's flag, whatever the client sent.
+        save_payload["is_public"] = get_project_visibility(project_id)
+
         result = dashboards_collection.find_one_and_update(
             {"dashboard_id": dashboard_id},
             # `$setOnInsert` applies only when this upsert actually inserts, so
@@ -737,7 +725,7 @@ async def delete_dashboard(
     if not project_id:
         raise HTTPException(status_code=500, detail="Dashboard is not associated with a project.")
 
-    if not check_project_permission(project_id, current_user, "owner"):
+    if not check_dashboard_mutation_permission(dashboard, current_user, "owner"):
         raise HTTPException(
             status_code=404,
             detail=f"Dashboard with ID '{dashboard_id}' not found or access denied.",
@@ -809,7 +797,7 @@ async def update_tab(
     if not project_id:
         raise HTTPException(status_code=500, detail="Dashboard is not associated with a project.")
 
-    if not check_project_permission(project_id, current_user, "editor"):
+    if not check_dashboard_mutation_permission(dashboard, current_user, "editor"):
         raise HTTPException(status_code=403, detail="You don't have permission to edit this tab.")
 
     # Build update fields based on what was provided
@@ -892,7 +880,7 @@ async def delete_tab(
     if not project_id:
         raise HTTPException(status_code=500, detail="Tab is not associated with a project.")
 
-    if not check_project_permission(project_id, current_user, "editor"):
+    if not check_dashboard_mutation_permission(dashboard, current_user, "editor"):
         raise HTTPException(status_code=403, detail="You don't have permission to delete this tab.")
 
     # Store parent dashboard ID for navigation after delete
@@ -967,7 +955,7 @@ async def reorder_tabs(
     if not project_id:
         raise HTTPException(status_code=500, detail="Dashboard is not associated with a project.")
 
-    if not check_project_permission(project_id, current_user, "editor"):
+    if not check_dashboard_mutation_permission(parent_dashboard, current_user, "editor"):
         raise HTTPException(status_code=403, detail="You don't have permission to reorder tabs.")
 
     # Perform the reorder
@@ -4829,6 +4817,10 @@ def _import_multi_tab_dashboard(
 
     main_dashboard_dict = main_lite.to_full()
     main_dashboard_dict["is_main_tab"] = True  # Ensure it's marked as main tab
+    # Visibility is project-driven; `to_full()` defaults to private, which
+    # would also reset an existing public dashboard on --overwrite.
+    project_is_public = get_project_visibility(project_id)
+    main_dashboard_dict["is_public"] = project_is_public
 
     # Set dashboard ID and project
     main_dashboard_id = existing_main["dashboard_id"] if existing_main else ObjectId()
@@ -4902,6 +4894,7 @@ def _import_multi_tab_dashboard(
             )
 
         tab_dashboard_dict = tab_lite.to_full()
+        tab_dashboard_dict["is_public"] = project_is_public
         tab_dashboard_dict["is_main_tab"] = False
         tab_dashboard_dict["parent_dashboard_id"] = main_dashboard_id
         tab_dashboard_dict["tab_order"] = idx + 1  # Start from 1 (main tab is 0)
@@ -5128,6 +5121,9 @@ async def import_dashboard_from_yaml(
         )
 
     dashboard_dict = lite.to_full()
+    # Visibility is project-driven; `to_full()` defaults to private, which
+    # would also reset an existing public dashboard on --overwrite.
+    dashboard_dict["is_public"] = get_project_visibility(project_id)
 
     # Handle tab relationships for child tabs
     if not lite.is_main_tab and lite.parent_dashboard_tag:

@@ -243,7 +243,7 @@ def sync_yaml_to_mongodb(filepath: str, event_type: str) -> dict[str, Any]:
     """
     from bson import ObjectId
 
-    from depictio.api.v1.db import dashboards_collection
+    from depictio.api.v1.db import dashboards_collection, projects_collection
     from depictio.models.models.dashboards import DashboardData
     from depictio.models.yaml_serialization import import_dashboard_from_file
 
@@ -298,7 +298,12 @@ def sync_yaml_to_mongodb(filepath: str, event_type: str) -> dict[str, Any]:
         # Update existing dashboard, preserving critical fields
         dashboard_dict["project_id"] = existing["project_id"]
         dashboard_dict["permissions"] = existing.get("permissions", {})
-        dashboard_dict["is_public"] = existing.get("is_public", False)
+        # Visibility is project-driven; derive it from the parent project
+        # rather than trusting the (possibly stale) dashboard flag.
+        project = projects_collection.find_one({"_id": existing["project_id"]}, {"is_public": 1})
+        dashboard_dict["is_public"] = (
+            project.get("is_public", False) if project else existing.get("is_public", False)
+        )
         dashboard_dict["version"] = existing.get("version", 0) + 1
         dashboard_dict["last_saved_ts"] = utc_now_str()
         dashboard_dict["creation_time"] = preserved_creation_time(

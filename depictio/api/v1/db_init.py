@@ -420,14 +420,9 @@ async def create_dashboard_from_json(
         needs_update = False
         update_fields: dict = {}
 
-        # In public/demo mode, ensure existing reference dashboards stay public so
-        # a pod restart (without a DB wipe) doesn't leave them private and invisible
-        # to anonymous/temporary visitors. We do NOT force this in standard mode —
-        # that would silently revert an operator-driven privacy lockdown (the #779
-        # concern).
-        if settings.auth.is_public_mode and not _check.get("is_public", False):
-            update_fields["is_public"] = True
-            needs_update = True
+        # Visibility is project-driven and converged by
+        # reconcile_dashboard_visibility() at the end of initialize_db, so no
+        # per-dashboard is_public fix-up is needed here.
 
         # Only force static DC ID if specified (for single-DC dashboards like Iris)
         if static_dc_id:
@@ -526,14 +521,12 @@ async def create_dashboard_from_json(
         viewers=[],
     )
 
-    # Reference dashboards are public ONLY when the server runs in public/demo
-    # mode — anonymous/temporary visitors must be able to browse the curated demo
-    # content. On standard deployments they stay private, preserving the #779
-    # security fix (anonymous browsing would otherwise expose all stored_metadata
-    # to the internet). Demo mode implies public mode, so gating on
-    # ``is_public_mode`` covers it. The dashboard owner (admin_user) always has
-    # full access regardless.
-    dashboard_data.is_public = settings.auth.is_public_mode
+    # Visibility is project-driven: save_dashboard stamps `is_public` from the
+    # parent project on insert, so reference dashboards follow their (public)
+    # reference project. On standard deployments "public" only reaches
+    # authenticated users — anonymous access still requires public mode, so the
+    # #779 concern (anonymous internet browsing of stored_metadata) is handled
+    # by the auth mode, not by hiding the flag.
 
     # Create the dashboard object into the database
     response = await save_dashboard(
@@ -845,6 +838,16 @@ async def initialize_db(wipe: bool = False) -> UserBeanie | None:
             admin_user=admin_user, only=seed_filter
         )
         logger.info(f"Created {len([p for p in dashboard_payloads if p])} dashboards")
+
+    # Visibility is project-driven: converge any dashboard whose `is_public`
+    # flag drifted from its project (pre-existing deployments, older seeds).
+    from depictio.api.v1.endpoints.dashboards_endpoints.core_functions import (
+        reconcile_dashboard_visibility,
+    )
+
+    corrected = reconcile_dashboard_visibility()
+    if corrected:
+        logger.info(f"Synced is_public with parent project for {corrected} dashboards")
 
     logger.info("Database initialization completed successfully.")
 

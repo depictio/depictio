@@ -1,10 +1,13 @@
 """Regression tests for the public/demo-mode deployment fixes.
 
-Covers two behaviors that regressed/were tightened after the #779 security work:
+Covers behaviors tightened after the #779 security work:
 
-1. Reference dashboards must be seeded ``is_public=True`` ONLY when the server runs
-   in public/demo mode, and stay private on standard deployments (preserving the
-   #779 lockdown). See ``create_dashboard_from_json`` in ``db_init``.
+1. Dashboard visibility is project-driven: the seeding path defers to
+   ``save_dashboard``, whose insert branch stamps ``is_public`` from the parent
+   project — reference dashboards follow their (public) reference project.
+   Anonymous exposure is governed by the auth mode (public mode), not by
+   hiding the flag. See ``create_dashboard_from_json`` in ``db_init`` and the
+   insert branch of ``save_dashboard``.
 2. A temporary (public/demo) user's TTL must slide forward on every token refresh so
    an active visitor is authorized for the duration of their session and never lapses
    back to the anonymous fallback identity mid-session. See
@@ -26,18 +29,20 @@ IRIS_SEED = REPO_ROOT / "depictio" / "projects" / "init" / "iris" / ".db_seeds" 
 
 
 # ---------------------------------------------------------------------------
-# Regression A — reference dashboards public only in public/demo mode
+# Regression A — dashboard visibility is project-driven, whatever the mode
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize("is_public_mode", [True, False])
 @pytest.mark.asyncio
-async def test_reference_dashboard_is_public_follows_public_mode(is_public_mode: bool) -> None:
-    """``create_dashboard_from_json`` seeds ``is_public`` from ``is_public_mode``.
+async def test_reference_dashboard_seeding_defers_visibility_to_save(
+    is_public_mode: bool,
+) -> None:
+    """``create_dashboard_from_json`` no longer overrides ``is_public``.
 
-    The bundled seed JSON ships ``is_public=True``, but the create path must override
-    it to mirror the server's auth mode: public in public/demo deployments, private
-    everywhere else.
+    Visibility is project-driven: the insert branch of ``save_dashboard`` stamps
+    the flag from the parent project, so the seeding path must pass the data
+    through untouched — identically in public and standard mode.
     """
     from depictio.api.v1 import db_init
 
@@ -64,7 +69,10 @@ async def test_reference_dashboard_is_public_follows_public_mode(is_public_mode:
     ):
         await db_init.create_dashboard_from_json(admin_user, str(IRIS_SEED), static_dc_id="")
 
-    assert captured["data"].is_public is is_public_mode
+    # Whatever the auth mode, the seeding path passes the seed JSON's value
+    # through unchanged (iris ships is_public=True) — the authoritative value
+    # is stamped from the parent project by save_dashboard's insert branch.
+    assert captured["data"].is_public is True
 
 
 # ---------------------------------------------------------------------------

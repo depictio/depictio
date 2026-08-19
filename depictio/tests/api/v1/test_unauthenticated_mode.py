@@ -623,7 +623,10 @@ class TestAnonymousDashboardListing:
     """Regression tests for anonymous-user dashboard listing in public mode.
 
     Anonymous users must see dashboards in *any* public project, consistent
-    with how projects are listed, while private dashboards must not leak.
+    with how projects are listed. Visibility is project-driven: every
+    dashboard of a public project is public (kept in sync by the project
+    toggle cascade and the startup reconciliation), so the listing filters
+    on accessible projects only — exactly like GET /dashboards/get/{id}.
     """
 
     def _make_anonymous_user(self):
@@ -671,11 +674,13 @@ class TestAnonymousDashboardListing:
         assert len(result["dashboards"]) == 1
         assert result["dashboards"][0]["dashboard_id"] == "dash-1"
 
-        # The widened project visibility must NOT loosen the dashboard-level
-        # guard: anonymous users still only get public dashboards (or ones they
-        # own), so private dashboards in a public project never leak.
+        # Visibility is project-driven: the dashboard query scopes to the
+        # accessible (public) projects and applies no dashboard-level
+        # is_public/owner filter — listing matches what /get serves.
         dashboard_query = dashboards_coll.find.call_args[0][0]
-        assert {"is_public": True} in dashboard_query["$or"]
+        assert dashboard_query["project_id"] == {"$in": [project_id]}
+        assert "$or" not in dashboard_query
+        assert "is_public" not in dashboard_query
 
     def test_anonymous_project_query_has_no_admin_owner_filter(self):
         """The anonymous project-visibility query must not require an admin owner."""
