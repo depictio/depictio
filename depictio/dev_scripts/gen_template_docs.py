@@ -26,6 +26,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -425,6 +426,31 @@ def _output_slug(template_path: Path, templates_root: Path) -> str:
     return "-".join(rel.parts)
 
 
+_VERSION_DIR_RE = re.compile(r"^\d+(\.\d+)*$")
+
+
+def _latest_aliases(template_paths: list[Path], templates_root: Path) -> dict[str, Path]:
+    """Map ``<pipeline>-latest`` alias slugs to the highest-version template.
+
+    Narrative docs pages include the alias partial (e.g. ``ampliseq-latest.md``)
+    instead of a pinned ``ampliseq-2.16.0.md``, so a new template version updates
+    the docs with a single re-run of this script — no page edits.
+    """
+    by_pipeline: dict[str, list[Path]] = {}
+    for template_path in template_paths:
+        rel = template_path.parent.relative_to(templates_root)
+        if len(rel.parts) < 2 or not _VERSION_DIR_RE.match(rel.parts[-1]):
+            continue  # unversioned template layout — no alias to maintain
+        by_pipeline.setdefault("-".join(rel.parts[:-1]), []).append(template_path)
+    return {
+        f"{pipeline}-latest": max(
+            paths,
+            key=lambda p: tuple(int(x) for x in p.parent.name.split(".")),
+        )
+        for pipeline, paths in by_pipeline.items()
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -453,9 +479,36 @@ def main(argv: list[str] | None = None) -> int:
         sys.exit(f"No template.yaml found under {templates_root}")
 
     stale: list[str] = []
+    rendered: dict[Path, str] = {}
     for template_path in template_paths:
         content = render_template(template_path)
+        rendered[template_path] = content
         out_path = out_dir / f"{_output_slug(template_path, templates_root)}.md"
+        existing = out_path.read_text() if out_path.is_file() else None
+
+        if args.check:
+            if existing != content:
+                stale.append(str(out_path.relative_to(docs_root)))
+            continue
+
+        if existing == content:
+            print(f"unchanged  {out_path.relative_to(docs_root)}")
+            continue
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(content)
+        print(f"wrote      {out_path.relative_to(docs_root)}")
+
+    # Version-less `<pipeline>-latest.md` aliases: narrative pages include these
+    # so a new template version only needs a re-run of this script, not page edits.
+    for alias_slug, template_path in sorted(
+        _latest_aliases(template_paths, templates_root).items()
+    ):
+        versioned_slug = _output_slug(template_path, templates_root)
+        content = (
+            f"<!-- Alias of {versioned_slug}.md — always tracks the newest "
+            f"template version. -->\n" + rendered[template_path]
+        )
+        out_path = out_dir / f"{alias_slug}.md"
         existing = out_path.read_text() if out_path.is_file() else None
 
         if args.check:

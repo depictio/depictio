@@ -213,7 +213,7 @@ async def create_initial_dashboards(
             "name": "iris",
             "json_path": os.path.join(
                 projects_base,
-                ReferenceDatasetRegistry.DATASET_PATHS["iris"],
+                ReferenceDatasetRegistry.resolve_dataset_rel_path("iris"),
                 ".db_seeds",
                 "dashboard.json",
             ),
@@ -223,7 +223,7 @@ async def create_initial_dashboards(
             "name": "penguins",
             "json_path": os.path.join(
                 projects_base,
-                ReferenceDatasetRegistry.DATASET_PATHS["penguins"],
+                ReferenceDatasetRegistry.resolve_dataset_rel_path("penguins"),
                 ".db_seeds",
                 "dashboard.json",
             ),
@@ -233,7 +233,7 @@ async def create_initial_dashboards(
             "name": "ampliseq_multiqc",
             "json_path": os.path.join(
                 projects_base,
-                ReferenceDatasetRegistry.DATASET_PATHS["ampliseq"],
+                ReferenceDatasetRegistry.resolve_dataset_rel_path("ampliseq"),
                 ".db_seeds",
                 "dashboard_multiqc.json",
             ),
@@ -244,7 +244,7 @@ async def create_initial_dashboards(
             "name": "ampliseq_alpha_diversity",
             "json_path": os.path.join(
                 projects_base,
-                ReferenceDatasetRegistry.DATASET_PATHS["ampliseq"],
+                ReferenceDatasetRegistry.resolve_dataset_rel_path("ampliseq"),
                 ".db_seeds",
                 "dashboard_alpha_diversity.json",
             ),
@@ -254,7 +254,7 @@ async def create_initial_dashboards(
             "name": "ampliseq_community",
             "json_path": os.path.join(
                 projects_base,
-                ReferenceDatasetRegistry.DATASET_PATHS["ampliseq"],
+                ReferenceDatasetRegistry.resolve_dataset_rel_path("ampliseq"),
                 ".db_seeds",
                 "dashboard_community.json",
             ),
@@ -265,7 +265,7 @@ async def create_initial_dashboards(
             "name": "ampliseq_differential",
             "json_path": os.path.join(
                 projects_base,
-                ReferenceDatasetRegistry.DATASET_PATHS["ampliseq"],
+                ReferenceDatasetRegistry.resolve_dataset_rel_path("ampliseq"),
                 ".db_seeds",
                 "dashboard_differential.json",
             ),
@@ -275,7 +275,7 @@ async def create_initial_dashboards(
             "name": "ampliseq_ordination",
             "json_path": os.path.join(
                 projects_base,
-                ReferenceDatasetRegistry.DATASET_PATHS["ampliseq"],
+                ReferenceDatasetRegistry.resolve_dataset_rel_path("ampliseq"),
                 ".db_seeds",
                 "dashboard_ordination.json",
             ),
@@ -289,7 +289,7 @@ async def create_initial_dashboards(
             "name": "ampliseq_phylogeny",
             "json_path": os.path.join(
                 projects_base,
-                ReferenceDatasetRegistry.DATASET_PATHS["ampliseq"],
+                ReferenceDatasetRegistry.resolve_dataset_rel_path("ampliseq"),
                 ".db_seeds",
                 "dashboard_phylogeny.json",
             ),
@@ -303,7 +303,7 @@ async def create_initial_dashboards(
                 "name": f"advanced_viz_{slug}",
                 "json_path": os.path.join(
                     projects_base,
-                    ReferenceDatasetRegistry.DATASET_PATHS["advanced_viz_showcase"],
+                    ReferenceDatasetRegistry.resolve_dataset_rel_path("advanced_viz_showcase"),
                     ".db_seeds",
                     f"dashboard_{slug}.json",
                 ),
@@ -346,7 +346,7 @@ async def create_initial_dashboards(
                 "name": f"viralrecon_{slug}",
                 "json_path": os.path.join(
                     projects_base,
-                    ReferenceDatasetRegistry.DATASET_PATHS["viralrecon"],
+                    ReferenceDatasetRegistry.resolve_dataset_rel_path("viralrecon"),
                     ".db_seeds",
                     f"dashboard_{slug}.json",
                 ),
