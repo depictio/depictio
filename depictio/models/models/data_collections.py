@@ -215,7 +215,15 @@ class DataCollectionConfig(MongoModel):
 
     @field_validator("type", mode="before")
     def validate_type(cls, v):
-        allowed_values = ["table", "jbrowse2", "multiqc", "image", "geojson", "phylogeny", "structure"]
+        allowed_values = [
+            "table",
+            "jbrowse2",
+            "multiqc",
+            "image",
+            "geojson",
+            "phylogeny",
+            "structure",
+        ]
         lower_v = v.lower()
         if lower_v not in allowed_values:
             raise ValueError(f"type must be one of {allowed_values}")
