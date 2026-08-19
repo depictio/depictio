@@ -10,7 +10,9 @@
  * depictio/models/components/{card,figure,interactive,table,multiqc,image,map}.py.
  */
 import { create } from 'zustand';
+import { readEditorFilters } from 'depictio-react-core';
 import type {
+  InteractiveFilter,
   StoredMetadata,
   FigureVisualizationDefinition,
   FigureVisualizationSummary,
@@ -89,6 +91,16 @@ export interface BuilderState {
   // Existing component snapshot (edit mode only)
   existing: StoredMetadata | null;
 
+  // Active dashboard filters carried across the full-page navigation into the
+  // builder (seeded from the editor's per-tab store on init — see
+  // editorFilters.ts). Previews apply them so the design view shows the data
+  // the component will actually render under the dashboard's current filters.
+  dashboardFilters: InteractiveFilter[];
+  // Preview-only toggle for the banner in StepDesign: a heavily filtered
+  // preview can be legitimately empty, so authors can flip back to the full
+  // dataset. Never persisted into the component metadata.
+  applyDashboardFilters: boolean;
+
   // 'unset' = mode choice screen; 'manual' = stepper; 'catalog' = catalog browser or pre-fill
   sourceMode: 'unset' | 'manual' | 'catalog';
   // Set true when the builder was initiated from a catalog suggestion. Steps
@@ -144,6 +156,7 @@ export interface BuilderActions {
     source: { toolName: string; outputId: string; description?: string };
   }) => void;
   loadExisting: (m: StoredMetadata) => void;
+  setApplyDashboardFilters: (b: boolean) => void;
   setSaving: (b: boolean) => void;
   setSaveError: (e: string | null) => void;
   setPreviewReady: (b: boolean) => void;
@@ -176,6 +189,8 @@ const INITIAL: BuilderState = {
       "Enter code and click 'Execute Code' to see preview on the left.",
   },
   existing: null,
+  dashboardFilters: [],
+  applyDashboardFilters: true,
   sourceMode: 'unset',
   catalogMode: false,
   catalogSource: null,
@@ -192,6 +207,9 @@ export const useBuilderStore = create<BuilderState & BuilderActions>((set) => ({
       mode,
       dashboardId,
       componentId,
+      // Seeded here rather than by the pages so the INITIAL spread can never
+      // clobber it — init() is the one entry point both pages share.
+      dashboardFilters: readEditorFilters(dashboardId),
       step: mode === 'edit' ? 2 : 0,
     }),
   setStep: (n) => set({ step: n }),
@@ -265,6 +283,10 @@ export const useBuilderStore = create<BuilderState & BuilderActions>((set) => ({
       mode: 'create',
       dashboardId: s.dashboardId,
       componentId: s.componentId,
+      // Catalog pre-fill replaces the config, not the visit — the dashboard's
+      // filter carry-over must survive this INITIAL spread too.
+      dashboardFilters: s.dashboardFilters,
+      applyDashboardFilters: s.applyDashboardFilters,
       componentType,
       wfId,
       dcId,
@@ -316,6 +338,7 @@ export const useBuilderStore = create<BuilderState & BuilderActions>((set) => ({
       config,
     });
   },
+  setApplyDashboardFilters: (b) => set({ applyDashboardFilters: b }),
   setSaving: (b) => set({ saving: b }),
   setSaveError: (e) => set({ saveError: e }),
   setPreviewReady: (b) => set({ previewReady: b }),
