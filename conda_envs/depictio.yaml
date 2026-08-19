@@ -24,7 +24,6 @@ dependencies:
   - flask-caching
   - gunicorn
   - httpx==0.28.1
-  - motor
   - mypy-boto3-s3
   - numpy==2.2.3
   - orjson

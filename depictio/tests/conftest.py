@@ -29,3 +29,21 @@ _PYTEST_DEFAULTS = {
 
 for _k, _v in _PYTEST_DEFAULTS.items():
     os.environ.setdefault(_k, _v)
+
+
+# beanie >= 2.1 passes list_collection_names(nameOnly=True, authorizedCollections=True)
+# during init_beanie; mongomock 4.3.0 / mongomock-motor 0.0.36 accept neither kwarg.
+# Both are no-ops against a mock (privilege filtering and a projection hint), so drop
+# them before delegating. Remove once mongomock supports the kwargs upstream.
+import mongomock.database  # noqa: E402
+
+_orig_list_collection_names = mongomock.database.Database.list_collection_names
+
+
+def _list_collection_names_shim(self, filter=None, session=None, **kwargs):  # type: ignore[no-untyped-def]
+    kwargs.pop("nameOnly", None)
+    kwargs.pop("authorizedCollections", None)
+    return _orig_list_collection_names(self, filter=filter, session=session, **kwargs)
+
+
+mongomock.database.Database.list_collection_names = _list_collection_names_shim
