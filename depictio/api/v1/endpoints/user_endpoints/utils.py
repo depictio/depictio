@@ -55,25 +55,12 @@ def _ensure_mongodb_connection(max_attempts: int = 5, sleep_interval: int = 5) -
             time.sleep(sleep_interval)
 
 
-@validate_call(validate_return=True)
-async def get_users_by_group_id(group_id: PydanticObjectId) -> list[UserBeanie]:
-    """
-    Retrieve all users that belong to a specific group by group ID.
-    """
-    # Find users where the groups array contains a reference to this group ID
-    users = await UserBeanie.find(
-        {"groups": {"$elemMatch": {"$ref": "groups", "$id": group_id}}}
-    ).to_list()
-
-    return users
-
-
 @validate_call()
 async def create_group_helper_beanie(
     group: GroupBeanie,
 ) -> dict[str, bool | str | GroupBeanie | PyObjectId | PydanticObjectId | None]:
     """
-    Create a group in the database using Beanie ODM.
+    Create a group in the database using Beanie ODM (insert-only, idempotent).
 
     Args:
         group: The group to be created.
@@ -81,9 +68,12 @@ async def create_group_helper_beanie(
     Returns:
         dict: A dictionary containing the result of the group creation.
     """
-    existing_group = await GroupBeanie.find_one({"name": group.name})
+    # Insert-only: an existing group (matched by _id OR name) is returned as-is
+    # so re-seeding (db_init) never clobbers admin-curated users_ids/admin_ids/
+    # pi_id on the seeded groups.
+    existing_group = await GroupBeanie.find_one({"$or": [{"_id": group.id}, {"name": group.name}]})
     if existing_group:
-        return {"success": False, "message": "Group already exists", "group": existing_group}
+        return {"success": True, "message": "Group already exists", "group": existing_group}
 
     try:
         await group.insert()

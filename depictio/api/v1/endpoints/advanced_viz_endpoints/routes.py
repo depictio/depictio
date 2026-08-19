@@ -54,15 +54,14 @@ def _assert_dc_access(data_collection_id: ObjectId, current_user) -> None:
     the ``GET /deltatables/get/{dc_id}`` convention.
     """
     from depictio.api.v1.db import projects_collection
+    from depictio.api.v1.permissions import build_access_query, get_user_group_ids
 
-    match_clause: dict = {"workflows.data_collections._id": data_collection_id}
-    if not getattr(current_user, "is_admin", False):
-        match_clause["$or"] = [
-            {"permissions.owners._id": current_user.id},
-            {"permissions.viewers._id": current_user.id},
-            {"permissions.viewers": "*"},
-            {"is_public": True},
-        ]
+    is_admin = getattr(current_user, "is_admin", False)
+    group_ids = [] if is_admin else get_user_group_ids(current_user.id)
+    match_clause: dict = {
+        "workflows.data_collections._id": data_collection_id,
+        **build_access_query(current_user, "viewer", group_ids),
+    }
     if not projects_collection.find_one(match_clause, {"_id": 1}):
         raise HTTPException(
             status_code=404,

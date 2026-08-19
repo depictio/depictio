@@ -25,9 +25,12 @@ const PERMISSIONS_URL = `/projects/${IRIS_PROJECT_ID}/permissions`;
 
 const TEST_EMAIL = credentials.testUser.email;
 
-/** Row in the ag-grid for a given member email. */
+/** Row in the members ag-grid for a given email. Scoped to the users grid
+ *  container — the page now renders a second (groups) ag-grid below it. */
 function gridRow(page: import("@playwright/test").Page, email: string) {
-  return page.locator(".ag-row", { hasText: email });
+  return page
+    .locator("[data-testid='permissions-users-grid']")
+    .locator(".ag-row", { hasText: email });
 }
 
 /** Remove the test user from the grid if present (idempotent cleanup). */
@@ -57,7 +60,9 @@ test.describe("Project Permissions", () => {
       "Iris reference project not seeded in this stack.",
     );
     // Wait for the members grid to render rows (the seeded owner at minimum).
-    await expect(page.locator(".ag-row").first()).toBeVisible({ timeout: 15_000 });
+    await expect(
+      page.locator("[data-testid='permissions-users-grid'] .ag-row").first(),
+    ).toBeVisible({ timeout: 15_000 });
   });
 
   test("admin sees management controls enabled", async ({ page }) => {

@@ -1,8 +1,10 @@
+from types import SimpleNamespace
 from typing import Any
 
 from bson import ObjectId
 
 from depictio.api.v1.db import dashboards_collection, projects_collection
+from depictio.api.v1.permissions import build_access_query, get_user_group_ids
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 from depictio.models.timestamps import objectid_creation_str
 
@@ -182,6 +184,14 @@ def load_dashboards_from_db(owner, admin_mode=False, user=None, include_child_ta
         from depictio.api.v1.configs.config import settings
 
         user_id = ObjectId(owner)
+        is_admin_user = bool(user and getattr(user, "is_admin", False))
+        is_anonymous_user = bool(user and getattr(user, "is_anonymous", False))
+        # Admins bypass filtering and anonymous users never hold group grants,
+        # so skip the groups lookup for both.
+        group_ids = [] if (is_admin_user or is_anonymous_user) else get_user_group_ids(user_id)
+        # `user` may be None here (legacy callers pass only `owner`), so build
+        # the query against a shim carrying the resolved user_id.
+        access_user = SimpleNamespace(id=user_id, is_admin=False, is_anonymous=False)
 
         if user and hasattr(user, "is_anonymous") and user.is_anonymous:
             if settings.auth.is_single_user_mode:
@@ -207,15 +217,7 @@ def load_dashboards_from_db(owner, admin_mode=False, user=None, include_child_ta
             # Regular authenticated users can access projects based on permissions
             accessible_projects = list(
                 projects_collection.find(
-                    {
-                        "$or": [
-                            {"permissions.owners._id": user_id},
-                            {"permissions.editors._id": user_id},
-                            {"permissions.viewers._id": user_id},
-                            {"permissions.viewers": {"$in": ["*"]}},
-                            {"is_public": True},
-                        ]
-                    },
+                    build_access_query(access_user, "viewer", group_ids),
                     {"_id": 1},
                 )
             )
@@ -227,12 +229,10 @@ def load_dashboards_from_db(owner, admin_mode=False, user=None, include_child_ta
         # This prevents non-public dashboards (e.g. admin test dashboards)
         # from leaking to anonymous/temporary users via public projects.
         if not settings.auth.is_single_user_mode and user and not getattr(user, "is_admin", False):
+            owned_query = build_access_query(access_user, "owner", group_ids)
             query: dict = {
                 "project_id": {"$in": accessible_project_ids},
-                "$or": [
-                    {"permissions.owners._id": user_id},
-                    {"is_public": True},
-                ],
+                "$or": [*owned_query["$or"], {"is_public": True}],
             }
         else:
             query: dict = {"project_id": {"$in": accessible_project_ids}}

@@ -186,11 +186,18 @@ def test_assert_dc_access_denies_non_member():
     from depictio.api.v1.endpoints.advanced_viz_endpoints.routes import _assert_dc_access
 
     dc_id = ObjectId()
-    non_admin = MagicMock(is_admin=False, id=ObjectId())
-    admin = MagicMock(is_admin=True, id=ObjectId())
+    non_admin = MagicMock(is_admin=False, is_anonymous=False, id=ObjectId())
+    admin = MagicMock(is_admin=True, is_anonymous=False, id=ObjectId())
 
     mock_collection = MagicMock()
-    with patch("depictio.api.v1.db.projects_collection", mock_collection):
+    # The access query now resolves group membership from the groups
+    # collection — stub it so the test never dials a real Mongo.
+    mock_groups = MagicMock()
+    mock_groups.find.return_value = []
+    with (
+        patch("depictio.api.v1.db.projects_collection", mock_collection),
+        patch("depictio.api.v1.db.groups_collection", mock_groups),
+    ):
         # Non-member, non-admin: denied with 404 and the query carries the
         # membership $or clause.
         mock_collection.find_one.return_value = None

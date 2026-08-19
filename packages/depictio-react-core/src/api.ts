@@ -2407,10 +2407,20 @@ export interface DashboardPermissionsUser {
   id?: string;
   email: string;
 }
+/** Group snapshot embedded in permissions blocks ({id, name} only —
+ *  membership always resolves live server-side). */
+export interface PermissionsGroup {
+  _id?: string;
+  id?: string;
+  name: string;
+}
 export interface DashboardPermissions {
   owners?: DashboardPermissionsUser[];
   viewers?: DashboardPermissionsUser[];
   editors?: DashboardPermissionsUser[];
+  group_owners?: PermissionsGroup[];
+  group_editors?: PermissionsGroup[];
+  group_viewers?: PermissionsGroup[];
 }
 
 /** Full dashboard list entry. Superset of `DashboardSummary` — the same
@@ -2695,6 +2705,9 @@ export interface ProjectPermissionsInput {
     owners?: DashboardPermissionsUser[];
     editors?: DashboardPermissionsUser[];
     viewers?: DashboardPermissionsUser[];
+    group_owners?: PermissionsGroup[];
+    group_editors?: PermissionsGroup[];
+    group_viewers?: PermissionsGroup[];
   };
 }
 
@@ -2706,6 +2719,159 @@ export async function updateProjectPermissions(
     body: JSON.stringify(input),
   });
   if (!res.ok) await throwHttpError(res, 'Failed to update permissions');
+}
+
+// ---- Groups (user groups: membership, group admins, project sharing)
+
+export interface GroupSummary {
+  id: string;
+  name: string;
+  description?: string | null;
+  member_count: number;
+  sso_managed: boolean;
+}
+
+export interface MyGroup extends GroupSummary {
+  is_group_admin: boolean;
+  is_pi: boolean;
+}
+
+export interface GroupMember {
+  id: string;
+  email: string;
+  display_name?: string | null;
+  is_group_admin: boolean;
+  is_pi: boolean;
+}
+
+export interface GroupDetail {
+  id: string;
+  name: string;
+  description?: string | null;
+  sso_managed: boolean;
+  pi_id?: string | null;
+  /** P.I. designated by email before that person had an account. Applied on
+   *  their first login (any auth mode); mutually exclusive with `pi_id`. */
+  pending_pi_email?: string | null;
+  admin_ids: string[];
+  members: GroupMember[];
+}
+
+/** Any authenticated user may list groups (names only, for sharing pickers). */
+export async function listGroups(): Promise<GroupSummary[]> {
+  const res = await authFetch(`${API_BASE}/groups/list`);
+  if (!res.ok) await throwHttpError(res, 'Failed to list groups');
+  return res.json();
+}
+
+export async function listMyGroups(): Promise<MyGroup[]> {
+  const res = await authFetch(`${API_BASE}/groups/mine`);
+  if (!res.ok) await throwHttpError(res, 'Failed to list your groups');
+  return res.json();
+}
+
+/** Full detail incl. members — sysadmins, group admins and members only. */
+export async function fetchGroup(groupId: string): Promise<GroupDetail> {
+  const res = await authFetch(`${API_BASE}/groups/${groupId}`);
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to fetch group');
+  return res.json();
+}
+
+export async function createGroup(input: {
+  name: string;
+  description?: string;
+  pi_id?: string;
+  /** Alternative to `pi_id` for a P.I. with no account yet — an address that
+   *  already resolves to a user is applied immediately, otherwise parked. */
+  pi_email?: string;
+}): Promise<GroupDetail> {
+  const res = await authFetch(`${API_BASE}/groups`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to create group');
+  return res.json();
+}
+
+export async function updateGroup(
+  groupId: string,
+  input: { name?: string; description?: string },
+): Promise<GroupDetail> {
+  const res = await authFetch(`${API_BASE}/groups/${groupId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to update group');
+  return res.json();
+}
+
+export async function deleteGroup(groupId: string): Promise<void> {
+  const res = await authFetch(`${API_BASE}/groups/${groupId}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to delete group');
+}
+
+export async function addGroupMember(
+  groupId: string,
+  userId: string,
+): Promise<GroupDetail> {
+  const res = await authFetch(`${API_BASE}/groups/${groupId}/members/${userId}`, {
+    method: 'POST',
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to add group member');
+  return res.json();
+}
+
+export async function removeGroupMember(
+  groupId: string,
+  userId: string,
+): Promise<GroupDetail> {
+  const res = await authFetch(`${API_BASE}/groups/${groupId}/members/${userId}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to remove group member');
+  return res.json();
+}
+
+export async function setGroupAdmin(
+  groupId: string,
+  userId: string,
+  makeAdmin: boolean,
+): Promise<GroupDetail> {
+  const res = await authFetch(
+    `${API_BASE}/groups/${groupId}/admins/${userId}/${makeAdmin ? 'True' : 'False'}`,
+    { method: 'POST' },
+  );
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to update group admin');
+  return res.json();
+}
+
+/** Sysadmin only: park a P.I. designation on an email address, for someone
+ *  who has not signed in yet. An address that already has an account is
+ *  applied immediately; `null` clears the parked designation. */
+export async function setGroupPendingPI(
+  groupId: string,
+  email: string | null,
+): Promise<GroupDetail> {
+  const res = await authFetch(`${API_BASE}/groups/${groupId}/pending-pi`, {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to update pending P.I.');
+  return res.json();
+}
+
+/** Sysadmin only: designate the group's P.I. (auto-added to members+admins). */
+export async function setGroupPI(
+  groupId: string,
+  userId: string,
+): Promise<GroupDetail> {
+  const res = await authFetch(`${API_BASE}/groups/${groupId}/pi/${userId}`, {
+    method: 'POST',
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to set group P.I.');
+  return res.json();
 }
 
 /** Upload a project .zip and create the project from its contents.
@@ -3461,6 +3627,10 @@ export interface ProfileUser {
   is_temporary: boolean;
   registration_date?: string | null;
   last_login?: string | null;
+  /** SSO-provided profile attributes (UserBaseUI.display_name/title) —
+   *  present only when populated by sso_sync on SAML/OAuth login. */
+  display_name?: string | null;
+  title?: string | null;
 }
 
 export async function fetchCurrentUserFull(): Promise<ProfileUser | null> {
@@ -3476,6 +3646,8 @@ export async function fetchCurrentUserFull(): Promise<ProfileUser | null> {
     is_temporary: Boolean(data.is_temporary),
     registration_date: (data.registration_date as string | null | undefined) ?? null,
     last_login: (data.last_login as string | null | undefined) ?? null,
+    display_name: (data.display_name as string | null | undefined) ?? null,
+    title: (data.title as string | null | undefined) ?? null,
   };
 }
 

@@ -3,6 +3,7 @@ import {
   ActionIcon,
   AppShell,
   Avatar,
+  Badge,
   Box,
   Button,
   Center,
@@ -23,7 +24,9 @@ import {
   clearSession,
   fetchAuthStatus,
   fetchCurrentUserFull,
+  listMyGroups,
   type AuthStatusResponse,
+  type MyGroup,
   type ProfileUser,
 } from 'depictio-react-core';
 
@@ -76,6 +79,7 @@ function buttonStates(status: AuthStatusResponse | null): {
 const ProfileApp: React.FC = () => {
   const [user, setUser] = useState<ProfileUser | null>(null);
   const [status, setStatus] = useState<AuthStatusResponse | null>(null);
+  const [myGroups, setMyGroups] = useState<MyGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [editPasswordOpened, { open: openEditPassword, close: closeEditPassword }] =
     useDisclosure(false);
@@ -90,11 +94,18 @@ const ProfileApp: React.FC = () => {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    Promise.all([fetchCurrentUserFull(), fetchAuthStatus()])
-      .then(([u, s]) => {
+    Promise.all([
+      fetchCurrentUserFull(),
+      fetchAuthStatus(),
+      // Groups are decorative on this page — never fail the whole profile
+      // when the endpoint is unavailable (e.g. anonymous session).
+      listMyGroups().catch(() => [] as MyGroup[]),
+    ])
+      .then(([u, s, g]) => {
         if (cancelled) return;
         setUser(u);
         setStatus(s);
+        setMyGroups(g);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -206,10 +217,15 @@ const ProfileApp: React.FC = () => {
 
                   <Stack gap="xs" style={{ padding: '16px 0' }}>
                     <UserInfoRow label="Email" value={user.email} />
+                    {user.display_name && (
+                      <UserInfoRow label="Name" value={user.display_name} />
+                    )}
+                    {user.title && <UserInfoRow label="Title" value={user.title} />}
                     <UserInfoRow label="Database ID" value={user.id || 'N/A'} />
                     <UserInfoRow label="Registration Date" value={user.registration_date || 'N/A'} />
                     <UserInfoRow label="Last login" value={user.last_login || 'N/A'} />
                     <UserInfoRow label="Admin" value={user.is_admin ? 'Yes' : 'No'} />
+                    <GroupsInfoRow groups={myGroups} />
                   </Stack>
 
                   <Group gap="md" justify="flex-start" mt="lg">
@@ -294,6 +310,49 @@ const UserInfoRow: React.FC<{ label: string; value: string }> = ({ label, value 
       <Text size="sm" style={{ wordBreak: 'break-word' }}>
         {value}
       </Text>
+    </Group>
+  </Paper>
+);
+
+/** Same Paper chrome as UserInfoRow, but the value is a badge-per-group.
+ *  Crown marks the groups the user is P.I. of, shield the ones they
+ *  administer. Each badge deep-links into /groups, which is the only entry
+ *  point to the personal groups page (the sidebar entry lives in /admin). */
+const GroupsInfoRow: React.FC<{ groups: MyGroup[] }> = ({ groups }) => (
+  <Paper p="sm" radius="md" withBorder data-testid="profile-info-groups">
+    <Group justify="space-between" align="flex-start">
+      <Text fw="bold" size="sm">
+        Groups
+      </Text>
+      {groups.length === 0 ? (
+        <Text size="sm" c="dimmed">
+          None
+        </Text>
+      ) : (
+        <Group gap={6} justify="flex-end" style={{ flex: 1 }}>
+          {groups.map((group) => (
+            <Badge
+              key={group.id}
+              component="a"
+              href={`/groups?group=${group.id}`}
+              style={{ cursor: 'pointer' }}
+              color={group.is_pi ? 'yellow' : group.is_group_admin ? 'blue' : 'gray'}
+              variant="light"
+              size="sm"
+              radius="sm"
+              leftSection={
+                group.is_pi ? (
+                  <Icon icon="mdi:crown-outline" width={12} />
+                ) : group.is_group_admin ? (
+                  <Icon icon="mdi:shield-account-outline" width={12} />
+                ) : undefined
+              }
+            >
+              {group.name}
+            </Badge>
+          ))}
+        </Group>
+      )}
     </Group>
   </Paper>
 );

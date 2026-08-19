@@ -223,6 +223,18 @@ export {
   renameDataCollection,
   deleteDataCollection,
   createDataCollectionFromUpload,
+  // Groups (membership, group admins, project sharing)
+  listGroups,
+  listMyGroups,
+  fetchGroup,
+  createGroup,
+  updateGroup,
+  deleteGroup,
+  addGroupMember,
+  removeGroupMember,
+  setGroupAdmin,
+  setGroupPI,
+  setGroupPendingPI,
   // Admin
   listAllUsers,
   deleteUser,
@@ -299,6 +311,11 @@ export type {
   CatalogPreviewRender,
   CatalogPreviewPayload,
   BreakdownPayloadDTO,
+  PermissionsGroup,
+  GroupSummary,
+  MyGroup,
+  GroupMember,
+  GroupDetail,
 } from './api';
 // Selection-as-filter helpers (Plotly/AG Grid → InteractiveFilter)
 export {

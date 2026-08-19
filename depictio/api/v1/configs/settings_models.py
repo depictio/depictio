@@ -332,6 +332,26 @@ class AuthConfig(BaseSettings):
         default=None, description="Google OAuth redirect URI"
     )
 
+    # --- SAML attribute mappings (SSO attribute sync) -------------------------
+    # Independent of the SAML connection fields introduced by PR #968 — these
+    # only configure which assertion attributes sso_sync.sync_sso_user reads.
+    # Kept last among the field declarations to minimize merge conflicts.
+    saml_attribute_groups: Optional[str] = Field(
+        default=None,
+        description="SAML attribute name carrying group memberships (e.g. 'memberOf'). "
+        "When set, sso_managed groups are mirrored from the assertion on every login.",
+    )
+    saml_attribute_title: Optional[str] = Field(
+        default=None, description="SAML attribute name carrying the user's title"
+    )
+    saml_attribute_display_name: Optional[str] = Field(
+        default=None, description="SAML attribute name carrying the user's display name"
+    )
+    saml_attribute_login: Optional[str] = Field(
+        default=None, description="SAML attribute name carrying the user's login/username"
+    )
+    # --- end SAML attribute mappings ------------------------------------------
+
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_AUTH_", case_sensitive=False)
 
     def __init__(self, **data: Any) -> None:

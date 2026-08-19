@@ -24,6 +24,7 @@ from playwright.async_api import Page, async_playwright
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import dashboards_collection, projects_collection
+from depictio.api.v1.permissions import get_user_group_ids
 from depictio.api.v1.services.screenshot_helpers import (
     HOST_UNREACHABLE_MARKERS,
     apply_init_script,
@@ -78,8 +79,12 @@ def check_dashboard_owner_permission_sync(dashboard_id: str, user_id: str) -> bo
             return False
 
         user_obj_id = ObjectId(user_id)
+        group_ids = _group_ids_for_user(user_obj_id)
 
-        if _any_owner_matches(dashboard.get("permissions", {}).get("owners"), user_obj_id):
+        dashboard_perms = dashboard.get("permissions", {}) or {}
+        if _any_owner_matches(dashboard_perms.get("owners"), user_obj_id) or _any_group_matches(
+            dashboard_perms.get("group_owners"), group_ids
+        ):
             return True
 
         project_id = dashboard.get("project_id")
@@ -91,11 +96,35 @@ def check_dashboard_owner_permission_sync(dashboard_id: str, user_id: str) -> bo
             logger.warning(f"Project not found: {project_id}")
             return False
 
-        return _any_owner_matches(project.get("permissions", {}).get("owners"), user_obj_id)
+        project_perms = project.get("permissions", {}) or {}
+        return _any_owner_matches(project_perms.get("owners"), user_obj_id) or _any_group_matches(
+            project_perms.get("group_owners"), group_ids
+        )
 
     except Exception as e:
         logger.error(f"Error checking dashboard ownership: {e}")
         return False
+
+
+def _group_ids_for_user(user_obj_id: ObjectId) -> list[ObjectId]:
+    """Resolve the user's group ids via this module's own Mongo client.
+
+    The Celery worker imports this module with its own pymongo client, so the
+    groups collection is derived from the same database handle backing
+    ``dashboards_collection`` instead of a separate import. Tolerates stubbed
+    collections (tests) and lookup failures by degrading to no groups.
+    """
+    try:
+        groups = dashboards_collection.database[settings.mongodb.collections.groups_collection]
+        return get_user_group_ids(user_obj_id, groups_collection=groups)
+    except Exception as e:
+        logger.debug(f"Group membership lookup unavailable for {user_obj_id}: {e}")
+        return []
+
+
+def _any_group_matches(group_entries: object, group_ids: list[ObjectId]) -> bool:
+    """Return True if any group permission entry matches one of ``group_ids``."""
+    return any(_any_owner_matches(group_entries, gid) for gid in group_ids)
 
 
 def _any_owner_matches(owners: object, user_obj_id: ObjectId) -> bool:

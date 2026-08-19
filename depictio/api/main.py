@@ -396,6 +396,17 @@ if _VIEWER_DIST.is_dir() and _VIEWER_ASSETS.is_dir() and _VIEWER_INDEX.is_file()
     async def _serve_profile_spa(_path: str) -> FileResponse:
         return _spa_index()
 
+    # /groups → React groups page (my-groups list + group-admin management).
+    # Same SPA bundle; main.tsx detects the path prefix and renders
+    # <GroupsApp/>.
+    @app.get("/groups")
+    async def _serve_groups_spa_root() -> FileResponse:
+        return _spa_index()
+
+    @app.get("/groups/{_path:path}")
+    async def _serve_groups_spa(_path: str) -> FileResponse:
+        return _spa_index()
+
     @app.get("/cli-agents")
     async def _serve_cli_agents_spa_root() -> FileResponse:
         return _spa_index()

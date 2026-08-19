@@ -79,6 +79,7 @@ pre-commit run --all-files         # mandatory after all code changes
 | `/dashboards` | management |
 | `/dashboard/{id}` | viewer |
 | `/dashboard-edit/{id}` | editor (`+ /component/add/{id}`, `/component/edit/{id}`) |
+| `/groups` | my-groups list + group-admin management |
 | `/about`, `/admin`, `/profile`, `/cli-agents` | supporting pages |
 
 Route dispatch is plain regex in `depictio/viewer/src/main.tsx` +

@@ -3,6 +3,7 @@ from fastapi import HTTPException
 
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import projects_collection
+from depictio.api.v1.permissions import build_access_query, get_user_group_ids
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 from depictio.models.models.projects import Project, ProjectResponse
 from depictio.models.models.users import User
@@ -12,19 +13,8 @@ from depictio.models.timestamps import objectid_creation_str
 # Core functions
 def _async_get_all_projects(current_user: User, projects_collection) -> list[Project]:
     """Core function to get all projects for a user."""
-    current_user_id = ObjectId(current_user.id)
-
-    query = {
-        "$or": [
-            {"permissions.owners._id": current_user_id},
-            {"permissions.editors._id": current_user_id},
-            {"permissions.viewers._id": current_user_id},
-            {"is_public": True},
-        ],
-    }
-
-    if current_user.is_admin:
-        query = {}
+    group_ids = [] if current_user.is_admin else get_user_group_ids(current_user.id)
+    query = build_access_query(current_user, "viewer", group_ids)
 
     projects = list(projects_collection.find(query))
     if projects:
@@ -46,19 +36,11 @@ def _async_get_project_from_id(
     project_id: PyObjectId, current_user: User, projects_collection
 ) -> dict:
     """Core function to get a project by ID."""
-    current_user_id = ObjectId(current_user.id)
+    group_ids = [] if current_user.is_admin else get_user_group_ids(current_user.id)
     query = {
         "_id": ObjectId(project_id),
-        "$or": [
-            {"permissions.owners._id": current_user_id},
-            {"permissions.editors._id": current_user_id},
-            {"permissions.viewers._id": current_user_id},
-            {"is_public": True},
-        ],
+        **build_access_query(current_user, "viewer", group_ids),
     }
-
-    if current_user.is_admin:
-        query = {"_id": ObjectId(project_id)}
 
     project = projects_collection.find_one(query)
     if not project:
@@ -72,18 +54,11 @@ def _async_get_project_from_name(
     project_name: str, current_user: User, projects_collection
 ) -> dict:
     """Core function to get a project by name."""
-    # Find projects where current_user is either an owner or a viewer
+    group_ids = [] if current_user.is_admin else get_user_group_ids(current_user.id)
     query = {
         "name": project_name,
-        "$or": [
-            {"permissions.owners._id": current_user.id},
-            {"permissions.viewers._id": current_user.id},
-            {"permissions.viewers": "*"},  # This makes projects with "*" publicly accessible
-        ],
+        **build_access_query(current_user, "viewer", group_ids),
     }
-
-    if current_user.is_admin:
-        query = {"name": project_name}
 
     project = projects_collection.find_one(query)
     if not project:
@@ -221,21 +196,11 @@ async def get_project_with_delta_locations(project_id: PyObjectId, current_user:
     Raises:
         HTTPException: If project not found or access denied
     """
-    current_user_id = ObjectId(current_user.id)
-
-    # Permission check query
+    group_ids = [] if current_user.is_admin else get_user_group_ids(current_user.id)
     permission_query = {
         "_id": ObjectId(project_id),
-        "$or": [
-            {"permissions.owners._id": current_user_id},
-            {"permissions.editors._id": current_user_id},
-            {"permissions.viewers._id": current_user_id},
-            {"is_public": True},
-        ],
+        **build_access_query(current_user, "viewer", group_ids),
     }
-
-    if current_user.is_admin:
-        permission_query = {"_id": ObjectId(project_id)}
 
     # MongoDB aggregation pipeline to join with DeltaTableAggregated
     pipeline = [

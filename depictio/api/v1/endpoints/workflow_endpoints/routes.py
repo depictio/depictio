@@ -8,6 +8,7 @@ from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import projects_collection, workflows_collection
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user, get_user_or_anonymous
 from depictio.api.v1.endpoints.workflow_endpoints.utils import compare_models
+from depictio.api.v1.permissions import build_access_query, get_user_group_ids
 from depictio.models.models.base import convert_objectid_to_str
 from depictio.models.models.users import User, UserBase
 from depictio.models.models.workflows import Workflow
@@ -21,16 +22,8 @@ async def get_all_workflows(current_user: User = Depends(get_current_user)):
     if not current_user:
         raise HTTPException(status_code=404, detail="User not found.")
 
-    user_id = current_user.id
-
-    query = {
-        "$or": [
-            {"permissions.owners._id": user_id},
-            {"permissions.viewers._id": user_id},
-            {"permissions.viewers": "*"},
-            {"is_public": True},
-        ]
-    }
+    group_ids = [] if current_user.is_admin else get_user_group_ids(current_user.id)
+    query = build_access_query(current_user, "viewer", group_ids)
 
     workflows_cursor = list(workflows_collection.find(query))
     if not workflows_cursor:
@@ -63,17 +56,10 @@ async def get_workflow_from_args(
             detail="Workflow name and engine are required to get a workflow.",
         )
 
-    user_id = current_user.id
+    group_ids = [] if current_user.is_admin else get_user_group_ids(current_user.id)
 
     base_query = {"name": name, "engine": engine}
-    base_permissions = {
-        "$or": [
-            {"permissions.owners._id": user_id},
-            {"permissions.viewers._id": user_id},
-            {"permissions.viewers": "*"},
-            {"is_public": True},
-        ]
-    }
+    base_permissions = build_access_query(current_user, "viewer", group_ids)
 
     if permissions_request:
         for elem in permissions_request["$or"]:
@@ -114,18 +100,15 @@ async def get_workflow_from_id(
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+    group_ids = [] if current_user.is_admin else get_user_group_ids(current_user.id)
+
     # Use MongoDB aggregation to directly retrieve the specific workflow
     pipeline = [
         # Match projects containing this workflow and with appropriate permissions
         {
             "$match": {
                 "workflows._id": workflow_oid,
-                "$or": [
-                    {"permissions.owners._id": current_user.id},
-                    {"permissions.viewers._id": current_user.id},
-                    {"permissions.viewers": "*"},
-                    {"is_public": True},
-                ],
+                **build_access_query(current_user, "viewer", group_ids),
             }
         },
         # Unwind the workflows array
@@ -166,18 +149,15 @@ async def get_workflow_tag_from_id(
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+    group_ids = [] if current_user.is_admin else get_user_group_ids(current_user.id)
+
     # Use MongoDB aggregation to directly retrieve the specific workflow
     pipeline = [
         # Match projects containing this workflow and with appropriate permissions
         {
             "$match": {
                 "workflows._id": workflow_oid,
-                "$or": [
-                    {"permissions.owners._id": current_user.id},
-                    {"permissions.viewers._id": current_user.id},
-                    {"permissions.viewers": "*"},
-                    {"is_public": True},
-                ],
+                **build_access_query(current_user, "viewer", group_ids),
             }
         },
         # Unwind the workflows array
@@ -215,10 +195,11 @@ async def create_workflow(workflow: dict, current_user: User = Depends(get_curre
     if not workflow:
         raise HTTPException(status_code=400, detail="Workflow is required to create it.")
 
+    group_ids = [] if current_user.is_admin else get_user_group_ids(current_user.id)
     existing_workflow = workflows_collection.find_one(
         {
             "workflow_tag": workflow["workflow_tag"],
-            "permissions.owners._id": current_user.id,
+            **build_access_query(current_user, "owner", group_ids),
         }
     )
 
@@ -256,10 +237,11 @@ async def update_workflow(workflow: Workflow, current_user: User = Depends(get_c
     if not workflow:
         raise HTTPException(status_code=400, detail="Workflow is required to update it.")
 
+    group_ids = [] if current_user.is_admin else get_user_group_ids(current_user.id)
     existing_workflow = workflows_collection.find_one(
         {
             "workflow_tag": workflow.workflow_tag,
-            "permissions.owners._id": current_user.id,
+            **build_access_query(current_user, "owner", group_ids),
         }
     )
 

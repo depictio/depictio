@@ -39,6 +39,7 @@ from depictio.api.v1.endpoints.user_endpoints.routes import (
     get_current_user,
     get_user_or_anonymous,
 )
+from depictio.api.v1.permissions import build_access_query, get_user_group_ids
 from depictio.models.models.multiqc_reports import MultiQCReport
 from depictio.models.models.users import User
 
@@ -595,14 +596,11 @@ async def multiqc_preview(
     # (including the anonymous-admin used in single-user/public mode) wouldn't
     # appear in the project's permissions list, so they skip the owner/viewer
     # filter — otherwise they'd get a spurious 404 on previews they don't own.
-    permission_query: dict = {"workflows.data_collections._id": ObjectId(dc_id)}
-    if not current_user.is_admin:
-        permission_query["$or"] = [
-            {"permissions.owners._id": current_user.id},
-            {"permissions.viewers._id": current_user.id},
-            {"permissions.viewers": "*"},
-            {"is_public": True},
-        ]
+    group_ids = [] if current_user.is_admin else get_user_group_ids(current_user.id)
+    permission_query: dict = {
+        "workflows.data_collections._id": ObjectId(dc_id),
+        **build_access_query(current_user, "viewer", group_ids),
+    }
     project_doc = projects_collection.find_one(permission_query)
     if not project_doc:
         raise HTTPException(status_code=404, detail="Data collection not found or access denied.")

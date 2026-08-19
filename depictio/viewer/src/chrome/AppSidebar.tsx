@@ -80,7 +80,8 @@ const AppSidebar: React.FC<AppSidebarProps> = ({ active }) => {
   const { user } = useCurrentUser();
 
   // Show the Administration link only to admins (matches the Dash sidebar
-  // visibility callback at sidebar.py:721-756).
+  // visibility callback at sidebar.py:721-756). Group administration lives
+  // inside that page; members reach their own groups from /profile.
   const entries = NAV_ENTRIES.filter(
     (entry) => entry.key !== 'admin' || Boolean(user?.is_admin),
   );
