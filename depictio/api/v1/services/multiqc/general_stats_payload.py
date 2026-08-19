@@ -759,7 +759,9 @@ def _build_mode_payload(
         _sample_groups,
     ) = result
 
-    if selected_samples:
+    # ``None`` = no filter; ``[]`` = active filters matched no sample and the
+    # table must come back empty rather than unfiltered.
+    if selected_samples is not None:
         df_for_display = df_for_display[
             df_for_display["Sample Name"].astype(str).isin([str(s) for s in selected_samples])
         ].reset_index(drop=True)

@@ -252,6 +252,16 @@ class DashboardDataLite(BaseModel):
         default=None, description="Workflow system (e.g., 'nf-core', 'snakemake')"
     )
 
+    # Funnel filtering (issue #939). Opt-in and default-off on purpose: it
+    # recomputes availability on every filter change, which has a real cost.
+    funnel_filtering: bool = Field(
+        default=False,
+        description="Enable funnel filtering: values in other interactive "
+        "components that no longer lead to a non-empty result set are "
+        "visually distinguished, and the cascading restriction can be "
+        "inspected in a funnel overview.",
+    )
+
     # Left filter panel presentation (ordering + icons for named sections)
     filter_sections: list[FilterSectionSpec] = Field(
         default_factory=list,
@@ -378,6 +388,7 @@ class DashboardDataLite(BaseModel):
         "icon_color",
         "icon_variant",
         "workflow_system",
+        "funnel_filtering",
         "filter_sections",
         "grid_sections",
     ]
@@ -1069,6 +1080,7 @@ class DashboardDataLite(BaseModel):
             # "declared nowhere, sorted by first appearance".
             filter_sections=dashboard_data.get("filter_sections") or [],
             grid_sections=dashboard_data.get("grid_sections") or [],
+            funnel_filtering=bool(dashboard_data.get("funnel_filtering", False)),
             # Tab fields
             is_main_tab=dashboard_data.get("is_main_tab", True),
             tab_order=dashboard_data.get("tab_order", 0),
@@ -1137,6 +1149,7 @@ class DashboardDataLite(BaseModel):
             # order sections and render their icons.
             "filter_sections": [s.model_dump() for s in self.filter_sections],
             "grid_sections": [s.model_dump() for s in self.grid_sections],
+            "funnel_filtering": self.funnel_filtering,
             # parent_dashboard_tag is resolved to parent_dashboard_id during import
         }
 
@@ -1463,6 +1476,8 @@ class DashboardData(MongoModel):
     # sections existed, which renders exactly as it did then.
     filter_sections: list[FilterSectionSpec] = []
     grid_sections: list[FilterSectionSpec] = []
+    # Funnel filtering (issue #939) — author-level opt-in, off by default.
+    funnel_filtering: bool = False
     buttons_data: dict = {
         "unified_edit_mode": True,  # Default edit mode ON for dashboard owners
         "add_components_button": {"count": 0},
