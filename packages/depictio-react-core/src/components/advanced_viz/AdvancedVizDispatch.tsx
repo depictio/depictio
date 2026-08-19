@@ -20,6 +20,7 @@ import SunburstRenderer from './SunburstRenderer';
 import OncoplotRenderer from './OncoplotRenderer';
 import CoverageTrackRenderer from './CoverageTrackRenderer';
 import SankeyRenderer from './SankeyRenderer';
+import Molecule3DRenderer from './Molecule3DRenderer';
 import {
   AdvancedVizDataPopover,
   AdvancedVizExtrasProvider,
@@ -65,6 +66,7 @@ const RENDERERS: Record<string, React.ComponentType<any>> = {
   oncoplot: OncoplotRenderer,
   coverage_track: CoverageTrackRenderer,
   sankey: SankeyRenderer,
+  molecule_3d: Molecule3DRenderer,
 };
 
 /**
