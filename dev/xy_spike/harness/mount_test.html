@@ -1,0 +1,65 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>xy mount test — two charts, external JS, no Reflex</title>
+<style>
+  html, body { margin: 0; font-family: system-ui, sans-serif; }
+  .row { display: flex; gap: 16px; padding: 16px; }
+  .cell { flex: 1; height: 420px; border: 1px solid #ccc; }
+</style>
+</head>
+<body>
+<div class="row">
+  <div id="chartA" class="cell"></div>
+  <div id="chartB" class="cell"></div>
+</div>
+<script src="./standalone.js"></script>
+<script>
+  // Verification harness for issue #945 path 1: mount xy charts from the
+  // wheel's standalone.js + Figure.build_payload() output, outside Reflex
+  // and outside to_html(). Records every xy:* CustomEvent for Playwright.
+  window.__xyEvents = [];
+  window.__views = {};
+  window.__ready = false;
+
+  function summarize(name, detail) {
+    const d = detail || {};
+    return {
+      name,
+      keys: Object.keys(d),
+      total: d.total,
+      hasPolygon: !!d.polygon,
+      hasRange: !!d.range,
+      index: d.index,
+      row: d.row,
+      trace: typeof d.trace === "number" ? d.trace : (d.trace && d.trace.id),
+      viewKeys: d.view ? Object.keys(d.view) : null,
+    };
+  }
+
+  for (const ev of ["xy:select", "xy:click", "xy:hover", "xy:view_change"]) {
+    document.addEventListener(ev, (e) => {
+      window.__xyEvents.push(summarize(ev, e.detail));
+    });
+  }
+
+  async function mount(el, n) {
+    const [spec, blobResp] = await Promise.all([
+      fetch(`./spec_${n}.json`).then((r) => r.json()),
+      fetch(`./blob_${n}.bin`).then((r) => r.arrayBuffer()),
+    ]);
+    return xy.renderStandalone(
+      document.getElementById(el), spec, new Uint8Array(blobResp),
+    );
+  }
+
+  (async () => {
+    window.__views.a = await mount("chartA", 50000);
+    window.__views.b = await mount("chartB", 20000);
+    window.__ids = await fetch("./ids_50000.json").then((r) => r.json());
+    window.__ready = true;
+  })().catch((e) => { window.__mountError = String(e && e.stack || e); });
+</script>
+</body>
+</html>

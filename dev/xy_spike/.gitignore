@@ -1,0 +1,10 @@
+data/
+results/raw/
+harness/node_modules/
+harness/spec_*.json
+harness/blob_*.bin
+harness/ids_*.json
+harness/standalone.js
+harness/single.html
+harness/package-lock.json
+bench_pages/
