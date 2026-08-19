@@ -271,12 +271,12 @@ async def reseed(
     for name in dataset_names:
         _ = _resolve_static_ids(name)  # validate up-front
 
-    # Initialise Motor + Beanie ODM — required for UserBeanie/ProjectBeanie/
-    # TokenBeanie queries used downstream. The API process does this on
-    # startup; standalone scripts have to do it themselves.
-    from depictio.api.v1.services.lifespan import init_motor_beanie
+    # Initialise the async MongoDB client + Beanie ODM — required for
+    # UserBeanie/ProjectBeanie/TokenBeanie queries used downstream. The API
+    # process does this on startup; standalone scripts have to do it themselves.
+    from depictio.api.v1.services.lifespan import init_pymongo_beanie
 
-    await init_motor_beanie()
+    await init_pymongo_beanie()
 
     if dashboards_only:
         logger.info(f"reseed: dashboards-only refresh for {dataset_names}")

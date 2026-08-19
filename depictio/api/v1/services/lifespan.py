@@ -8,13 +8,11 @@ background processing, and cleanup.
 import os
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from typing import cast
 
 import pymongo
 from beanie import init_beanie
 from fastapi import FastAPI
-from motor.motor_asyncio import AsyncIOMotorClient
-from pymongo.asynchronous.database import AsyncDatabase
+from pymongo import AsyncMongoClient
 
 from depictio.api.v1.configs.config import MONGODB_URL, settings
 from depictio.api.v1.configs.logging_init import logger
@@ -46,15 +44,15 @@ from depictio.models.models.users import (
 WORKER_ID = os.getpid()
 
 
-async def init_motor_beanie() -> None:
-    """Initialize Motor (async MongoDB client) and Beanie ODM.
+async def init_pymongo_beanie() -> None:
+    """Initialize the async MongoDB client (pymongo) and Beanie ODM.
 
     Connection pool sizing:
     - maxPoolSize: 25 per worker (4 workers = ~100 total connections)
     - minPoolSize: 5 per worker (maintains 20 baseline connections)
     - Prevents connection exhaustion under load in K8s environment
     """
-    client = AsyncIOMotorClient(
+    client: AsyncMongoClient = AsyncMongoClient(
         MONGODB_URL,
         maxPoolSize=25,  # Limit per worker to prevent exhaustion
         minPoolSize=5,  # Maintain baseline connections
@@ -62,7 +60,7 @@ async def init_motor_beanie() -> None:
         waitQueueTimeoutMS=5000,  # Fail fast if pool exhausted
     )
     await init_beanie(
-        database=cast(AsyncDatabase, client[settings.mongodb.db_name]),
+        database=client[settings.mongodb.db_name],
         document_models=[
             TokenBeanie,
             GroupBeanie,
@@ -334,7 +332,7 @@ async def lifespan(_app: FastAPI):
     - Real-time event services
     """
     # Startup
-    await init_motor_beanie()
+    await init_pymongo_beanie()
     should_initialize = await handle_initialization()
     background_task = start_background_services(should_initialize)
     start_yaml_services(should_initialize)
