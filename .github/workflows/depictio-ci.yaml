@@ -961,14 +961,14 @@ jobs:
           source venv/bin/activate
           echo "📋 Testing template validation (offline)..."
 
-          # Validate known template project configs
-          depictio-cli config check \
-            --project-config-path ../projects/nf-core/ampliseq/2.16.0/template.yaml \
-            --CLI-config-path admin_config.yaml 2>&1 || true
-
-          depictio-cli config check \
-            --project-config-path ../projects/nf-core/ampliseq/2.14.0/template.yaml \
-            --CLI-config-path admin_config.yaml 2>&1 || true
+          # Validate every shipped ampliseq template version (version-agnostic:
+          # a new template drop is validated with zero workflow changes)
+          for tpl in ../projects/nf-core/ampliseq/*/template.yaml; do
+            echo "— checking $tpl"
+            depictio-cli config check \
+              --project-config-path "$tpl" \
+              --CLI-config-path admin_config.yaml 2>&1 || true
+          done
 
           echo "✅ Template validation passed"
 
@@ -1589,7 +1589,7 @@ jobs:
           echo "🚀 Running full template pipeline: depictio run --template..."
 
           depictio-cli run \
-            --template nf-core/ampliseq/2.16.0 \
+            --template nf-core/ampliseq/latest \
             --data-root "$DATA_DIR" \
             --project-name "Ampliseq CI Template Test" \
             --var SAMPLESHEET_FILE="$DATA_DIR/samplesheet.csv" \
@@ -1640,7 +1640,9 @@ jobs:
           # If any goes missing (.dockerignore tightening, .gitignore drop,
           # accidental rm), the corresponding dashboard tiles 404 on every
           # fresh deploy — catch it here, not in production.
-          PROJ=/app/depictio/projects/nf-core/viralrecon/3.0.0
+          # Resolve the newest shipped template version (same rule as the seeding)
+          PROJ=$(docker compose exec -T depictio-backend sh -c \
+            'ls -d /app/depictio/projects/nf-core/viralrecon/[0-9]* | sort -V | tail -1')
           MISSED=0
           for f in \
             $PROJ/run_1/multiqc/multiqc_data/multiqc.parquet \
