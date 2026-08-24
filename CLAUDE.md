@@ -98,7 +98,7 @@ Route dispatch is plain regex in `depictio/viewer/src/main.tsx` +
 - Reseed a running instance in place: `depictio/dev_scripts/reseed_project.py` (`/reseed`)
 - nf-core template versions: seeding/CLI/CI/docs auto-resolve the **highest** version dir
   (`nf-core/<pipeline>/latest` works as a template id). New version = run
-  `scripts/bump_template_version.py` + its checklist — see `docs/template-versioning.md`
+  `scripts/bump_template_version.py` + follow the checklist it prints
 
 ### Data Flow
 CLI ingests data → Delta/S3/MongoDB → API serves → React viewer renders

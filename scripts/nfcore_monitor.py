@@ -564,7 +564,7 @@ def build_drift_report(
     lines.append("")
 
     # Next step: the bump itself is manual (demo data + seeds need a human) —
-    # hand the maintainer the exact command. See docs/template-versioning.md.
+    # hand the maintainer the exact command.
     if new_version != local_version:
         lines += [
             "## Next steps",
@@ -573,8 +573,8 @@ def build_drift_report(
             f"python scripts/bump_template_version.py --pipeline {pipeline} "
             f"--new-version {new_version}",
             "```",
-            "then follow its checklist (docs/template-versioning.md). Seeding, CLI "
-            "(`--template …/latest`), CI and docs all pick the new version up automatically.",
+            "then follow the checklist it prints. Seeding, CLI (`--template …/latest`), "
+            "CI and docs all pick the new version up automatically.",
             "",
         ]
     return "\n".join(lines), n_problems

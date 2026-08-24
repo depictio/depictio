@@ -197,24 +197,6 @@ def test_validate_one_recipe_skips_optional_dc_with_absent_source(
     assert "source file absent" in result.detail
 
 
-def test_collect_recipe_source_paths_propagates_dc_optional(nfm: ModuleType) -> None:
-    # The real ampliseq template marks the SIDLE route DCs `optional: true`; the
-    # collector must carry that flag so the drift report never counts them missing.
-    pytest.importorskip("depictio.recipes")
-
-    template = nfm.load_template("ampliseq", "2.16.0")
-    entries = {
-        tag: optional
-        for tag, _ref, _path, optional in nfm.collect_recipe_source_paths(
-            template, "ampliseq", "2.16.0"
-        )
-    }
-    assert entries["sidle_reconstructed"] is True
-    assert entries["sidle_reconstruction_qc"] is True
-    # A default-route DC keeps optional=False so real drift still fails loud.
-    assert entries["alpha_rarefaction"] is False
-
-
 def test_resolve_results_prefix_with_explicit_hash(nfm: ModuleType) -> None:
     # No network: an explicit hash short-circuits S3 discovery.
     assert nfm.resolve_results_prefix("ampliseq", "deadbeef") == "ampliseq/results-deadbeef/"

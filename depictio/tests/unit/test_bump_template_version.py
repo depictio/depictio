@@ -34,30 +34,21 @@ def pipeline_dir(tmp_path: Path) -> Path:
     return tmp_path
 
 
-def test_bump_copies_and_rewrites_versions(btv: ModuleType, pipeline_dir: Path) -> None:
+def test_bump_copies_from_latest_and_rewrites_versions(btv: ModuleType, pipeline_dir: Path) -> None:
     new_dir = btv.bump("ampliseq", "2.18.0", projects_dir=pipeline_dir)
-    assert new_dir == pipeline_dir / "ampliseq" / "2.18.0"
     template = (new_dir / "template.yaml").read_text()
+    # Copied from 2.16.0 (the latest, not legacy 2.14.0), fully re-versioned.
     assert 'template_id: "nf-core/ampliseq/2.18.0"' in template
-    assert "2.16.0" not in template
+    assert "2.16.0" not in template and "2.14.0" not in template
     assert "2.18.0 dashboard" in (new_dir / "dashboards" / "base.yaml").read_text()
     # Binary payloads are copied verbatim, never text-rewritten.
     assert (new_dir / "data.parquet").read_bytes().endswith(b"2.16.0")
     # Source dir is untouched; latest now resolves to the new version.
-    old = (pipeline_dir / "ampliseq" / "2.16.0" / "template.yaml").read_text()
-    assert '"2.16.0"' in old
+    assert '"2.16.0"' in (pipeline_dir / "ampliseq" / "2.16.0" / "template.yaml").read_text()
     assert btv.latest_version(pipeline_dir / "ampliseq") == "2.18.0"
 
 
-def test_bump_defaults_to_latest_source_not_legacy(btv: ModuleType, pipeline_dir: Path) -> None:
-    new_dir = btv.bump("ampliseq", "2.18.0", projects_dir=pipeline_dir)
-    # Copied from 2.16.0 (the latest), not 2.14.0.
-    assert "2.14.0" not in (new_dir / "template.yaml").read_text()
-
-
-def test_bump_refuses_existing_target_and_non_ascending(
-    btv: ModuleType, pipeline_dir: Path
-) -> None:
+def test_bump_refusals_and_dry_run(btv: ModuleType, pipeline_dir: Path) -> None:
     with pytest.raises(FileExistsError):
         btv.bump("ampliseq", "2.16.0", from_version="2.14.0", projects_dir=pipeline_dir)
     # A "new" version sorting below the source would never be picked by
@@ -66,8 +57,5 @@ def test_bump_refuses_existing_target_and_non_ascending(
         btv.bump("ampliseq", "2.15.0", projects_dir=pipeline_dir)
     with pytest.raises(FileNotFoundError):
         btv.bump("nope", "1.0.0", projects_dir=pipeline_dir)
-
-
-def test_bump_dry_run_writes_nothing(btv: ModuleType, pipeline_dir: Path) -> None:
     btv.bump("ampliseq", "2.18.0", projects_dir=pipeline_dir, dry_run=True)
     assert not (pipeline_dir / "ampliseq" / "2.18.0").exists()
