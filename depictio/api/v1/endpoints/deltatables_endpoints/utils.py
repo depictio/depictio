@@ -428,9 +428,13 @@ def precompute_columns_specs(
             "string"
         ):
             try:
-                value_counts = aggregated_df[column].value_counts(dropna=True)
+                value_counts = (
+                    lf.select(pl.col(column).drop_nulls().value_counts(sort=True))
+                    .unnest(column)
+                    .collect()
+                )
                 unique_values = [
-                    str(v) for v in value_counts.index.tolist()[:_UNIQUE_VALUES_PREVIEW_CAP]
+                    str(v) for v in value_counts[column].to_list()[:_UNIQUE_VALUES_PREVIEW_CAP]
                 ]
                 if unique_values:
                     tmp_dict["specs"]["unique_values"] = unique_values
