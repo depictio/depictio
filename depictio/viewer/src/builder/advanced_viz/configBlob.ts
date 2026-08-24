@@ -42,11 +42,18 @@ export function buildAdvancedVizConfigBlob(
   if (vizKind === 'coverage_track') {
     blob.view_mode = columnMapping.sample ? 'aggregate' : 'overlay';
   }
-  // Overlay the catalog/live viz-control extras (e.g. manhattan score_threshold,
-  // top_n_labels, marker sizes) the preview rendered with — but never let them
-  // override the role bindings derived from the *current* column_mapping, which
-  // reflect any edits made in the builder. See extractVizControlExtras.
-  return { ...blob, ...extractVizControlExtras(presetConfig) };
+  // Three layers, lowest first:
+  //  - role-derived keys the preset carries that this mapping cannot produce
+  //    (see extractRoleDerivedFallbacks),
+  //  - the bindings just derived from `column_mapping`, which reflect any edits
+  //    made in the builder and therefore win,
+  //  - the viz-control extras (manhattan score_threshold, top_n_labels, marker
+  //    sizes...) the preview rendered with.
+  return {
+    ...extractRoleDerivedFallbacks(presetConfig, blob),
+    ...blob,
+    ...extractVizControlExtras(presetConfig),
+  };
 }
 
 /** Role-derived / structural keys that `buildAdvancedVizConfigBlob` owns from
@@ -73,4 +80,30 @@ export function extractVizControlExtras(
     if (!isRoleDerivedKey(k)) extras[k] = v;
   }
   return extras;
+}
+
+/** Role-derived keys a preset config carries that the current `column_mapping`
+ *  has no way to produce.
+ *
+ *  The catalog's `roles` is a flat role→column map, so a list-typed binding has
+ *  no role to travel in: a sunburst's `rank_cols` is derived from the data by
+ *  the catalog and arrives *only* in the preset. Dropping it — which is what
+ *  treating every role-derived key as "the mapping owns this" used to do — left
+ *  the added component with an abundance column and no hierarchy, and it
+ *  rendered "missing data binding".
+ *
+ *  Only keys absent from `blob` are filled in, so an actual binding from the
+ *  mapping is never overridden. */
+function extractRoleDerivedFallbacks(
+  presetConfig: Record<string, unknown> | null | undefined,
+  blob: Record<string, unknown>,
+): Record<string, unknown> {
+  if (!presetConfig) return {};
+  const fallbacks: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(presetConfig)) {
+    if (!isRoleDerivedKey(k)) continue; // already carried by the extras layer
+    if (k in blob) continue; // the mapping produced it — that one wins
+    fallbacks[k] = v;
+  }
+  return fallbacks;
 }

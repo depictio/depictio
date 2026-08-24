@@ -4412,6 +4412,21 @@ export interface CatalogRender {
   dict_kwargs?: Record<string, string>;
   column?: string;
   aggregation?: string;
+  /** card only: the secondary-metric strip. `aggregations` drives the stats
+   *  layouts; the rest configure the categorical / QC / progress ones. Mirrors
+   *  `Render` in depictio/models/components/advanced_viz/catalog.py. */
+  aggregations?: string[];
+  secondary_layout?: string;
+  breakdown_col?: string | null;
+  top_n_count?: number;
+  coverage_max?: number | null;
+  threshold_value?: number | null;
+  threshold_direction?: string;
+  threshold_warn?: number | null;
+  attrition_cols?: string[];
+  trend_col?: string | null;
+  /** multiqc only: the report module this render surfaces. */
+  section?: string;
   code?: string;
   /** card: the secondary strip. A catalog card can declare all of these, and
    *  the offline preview renders them — so Add has to carry them across or the
@@ -4448,10 +4463,16 @@ export interface CatalogOutputMatch {
   output_id: string;
   /** Short display label declared by the catalog (`name:` on the output). */
   name: string;
+  /** The tool that produced the numbers, when the catalog tool aggregates
+   *  others (MultiQC sections). Null when the tool is the producer. */
+  origin_tool?: string | null;
   description: string;
   dc_id: string;
   wf_id: string;
   dc_tag: string;
+  /** Collection type ("table", "multiqc", …) — decides whether the source rows
+   *  can be previewed. */
+  dc_type?: string | null;
   renders_as: CatalogRender[];
   /** Static provenance from the catalog YAML — what the picker's details
    *  popover shows, so it needs no second request per selected output. */
@@ -4460,6 +4481,8 @@ export interface CatalogOutputMatch {
   fixture?: string | null;
   nf_core_url?: string | null;
   biotools_url?: string | null;
+  /** GitHub blob URL of the catalog YAML declaring this output. */
+  source_url?: string | null;
   find?: { filename?: string; path_glob?: string };
 }
 

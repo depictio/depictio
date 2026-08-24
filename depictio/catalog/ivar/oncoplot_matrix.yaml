@@ -1,0 +1,16 @@
+id: ivar_oncoplot_matrix
+name: Mutation matrix
+mode: variants/matrix
+description: >-
+  Sample by gene mutation matrix derived from the long variant table, one row
+  per observed sample/gene/effect combination.
+find: { filename: "variants_long_table.csv" } # same raw file as the long table
+recipe: nf-core/viralrecon/oncoplot_canonical.py
+fixture: oncoplot_matrix.tsv
+renders_as:
+  - { id: mutation_matrix, component: advanced_viz, kind: oncoplot, roles: {sample_id: sample_id, gene: gene, mutation_type: mutation_type} }
+  # Both breakdown columns are required by the recipe schema, so the strips
+  # cannot fall back to an empty bar on a run that omits an optional column.
+  - { component: card, column: sample_id, aggregation: nunique, secondary_layout: top_n, breakdown_col: gene, top_n_count: 3 }
+  - { component: card, column: gene, aggregation: nunique, secondary_layout: top_n, breakdown_col: mutation_type, top_n_count: 3 }
+  - { component: table }

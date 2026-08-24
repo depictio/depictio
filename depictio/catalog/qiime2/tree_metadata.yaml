@@ -1,0 +1,16 @@
+id: qiime2_tree_metadata
+name: ASV taxonomy table
+mode: taxonomy/classify
+description: >-
+  Per-ASV classification: the assigned taxon, its rank columns and the
+  classifier confidence. Annotates the phylogenetic tree, and stands on its own
+  as the taxonomy assignment table.
+find: { path_glob: "**/qiime2/taxonomy/taxonomy.tsv" }
+recipe: nf-core/ampliseq/tree_metadata_canonical.py
+fixture: tree_metadata.tsv
+renders_as:
+  # `uniqueness` needs no second column, so it survives a run whose taxonomy
+  # table carries no rank columns (they are optional in the recipe schema).
+  - { component: card, column: taxon, aggregation: nunique, secondary_layout: uniqueness }
+  - { component: card, column: confidence, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: table }

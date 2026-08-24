@@ -20,34 +20,36 @@ import {
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import type { CatalogModule, CatalogOutputMatch, CatalogRender } from 'depictio-react-core';
-import { fetchCatalogCompose, upsertComponent } from 'depictio-react-core';
+import {
+  componentTypeVisual,
+  fetchAdvancedVizKinds,
+  fetchCatalogCompose,
+  fetchMultiQCBuilderOptions,
+  upsertComponent,
+} from 'depictio-react-core';
 import { useBuilderStore } from '../store/useBuilderStore';
 import type { ComponentType } from '../store/useBuilderStore';
 import { buildMetadata } from '../buildMetadata';
-import CatalogPreviewPanel, { catalogUseRef } from './CatalogPreviewPanel';
+import CatalogPreviewPanel, {
+  catalogUseRef,
+  matchTitle,
+  renderVariant,
+} from './CatalogPreviewPanel';
+import type { VizKinds } from './CatalogPreviewPanel';
 
 interface CatalogTabProps {
   projectId: string;
 }
 
-const COMPONENT_COLORS: Record<string, string> = {
-  figure:       'blue',
-  card:         'teal',
-  table:        'gray',
-  interactive:  'lime',
-  advanced_viz: 'violet',
-  multiqc:      'orange',
-};
-
-const COMPONENT_LABELS: Record<string, string> = {
-  figure:       'Figure',
-  card:         'Card',
-  table:        'Table',
-  advanced_viz: 'Advanced viz',
-  multiqc:      'MultiQC',
-};
-
-function buildConfigFromRender(render: CatalogRender): Record<string, unknown> {
+/** Translate one catalog render into the builder-store config the component
+ *  type expects.
+ *
+ *  Async because a MultiQC render names a module but not a plot, and only the
+ *  collection itself knows which plots its report carries. */
+async function buildConfigFromRender(
+  render: CatalogRender,
+  dcId: string,
+): Promise<Record<string, unknown>> {
   if (render.component === 'advanced_viz') {
     // `preset_config` carries the catalog preview's computed config (role
     // bindings + data-derived viz-control defaults). buildMetadata overlays its
@@ -113,7 +115,41 @@ function buildConfigFromRender(render: CatalogRender): Record<string, unknown> {
         : {}),
     };
   }
+  if (render.component === 'multiqc') {
+    return multiqcConfigForSection(dcId, render.section);
+  }
   return {};
+}
+
+/** Resolve a catalog `section` (a MultiQC *module*) to the concrete
+ *  `selected_module` / `selected_plot` pair the renderer needs.
+ *
+ *  The catalog cannot name a plot: which plots exist depends on the report the
+ *  pipeline actually produced. So ask the collection, through the same endpoint
+ *  MultiQCBuilder uses, and take the module's first plot — which is also the one
+ *  the catalog preview renders.
+ *
+ *  Report anchors are module-prefixed (`samtools_bowtie2`, `ivar_variants`)
+ *  while the catalog names the module (`samtools`, `ivar`), so an exact match is
+ *  tried first and a prefix match second — the same normalisation the compose
+ *  endpoint applies when it decides which sections a report carries. */
+async function multiqcConfigForSection(
+  dcId: string,
+  section: string | undefined,
+): Promise<Record<string, unknown>> {
+  const opts = await fetchMultiQCBuilderOptions(dcId);
+  const modulePrefix = (anchor: string) => anchor.split(/[-_]/)[0];
+  const anchor =
+    (section && opts.modules.find((m) => m === section)) ||
+    (section && opts.modules.find((m) => modulePrefix(m) === section)) ||
+    opts.modules[0];
+  return {
+    selected_module: anchor ?? null,
+    selected_plot: (anchor && opts.plots[anchor]?.[0]) ?? null,
+    selected_dataset: null,
+    s3_locations: opts.s3_locations ?? [],
+    is_general_stats: anchor === 'general_stats',
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -123,29 +159,58 @@ function buildConfigFromRender(render: CatalogRender): Record<string, unknown> {
 interface MatchRowProps {
   match: CatalogOutputMatch;
   selected: boolean;
+  vizKinds: VizKinds;
   onClick: () => void;
 }
 
-const MatchRow: React.FC<MatchRowProps> = ({ match, selected, onClick }) => {
+/** The dot a render's component type gets, in the app's one palette. */
+const RenderDot: React.FC<{ type: string; size?: number }> = ({ type, size = 7 }) => (
+  <Box
+    w={size}
+    h={size}
+    style={{ borderRadius: '50%', background: componentTypeVisual(type).color, flexShrink: 0 }}
+  />
+);
+
+const MatchRow: React.FC<MatchRowProps> = ({ match, selected, vizKinds, onClick }) => {
   // The identifiers and the full sentence are what made every row four lines
   // tall. The row shows the catalog's own short `name`; the sentence and the
   // ids go to the tooltip. `renders_as` becomes coloured dots — the count and
   // the mix of component types are legible at a glance, the labels were not
   // worth a line.
+  //
+  // The tooltip is where those dots get their legend, so it repeats the same
+  // dot next to each name: a grey "Advanced viz · Card" line explained the
+  // count but not which colour was which.
   const detail = (
-    <Stack gap={2}>
+    <Stack gap={4}>
       <Text size="xs">{match.description || match.output_id}</Text>
       <Text size="xs" c="dimmed" ff="monospace">{match.output_id}</Text>
       <Text size="xs" c="dimmed">collection: {match.dc_tag}</Text>
-      <Text size="xs" c="dimmed">
-        {match.renders_as.map((r) => COMPONENT_LABELS[r.component] ?? r.component).join(' · ')}
-      </Text>
+      <Stack gap={2} mt={2}>
+        {match.renders_as.map((r, i) => {
+          const visual = componentTypeVisual(r.component);
+          const variant = renderVariant(r, vizKinds);
+          return (
+            <Group key={i} gap={6} wrap="nowrap">
+              <RenderDot type={r.component} size={6} />
+              <Text size="xs">{visual.label}</Text>
+              {variant && variant !== visual.label && (
+                <Text size="xs" c="dimmed">{variant}</Text>
+              )}
+            </Group>
+          );
+        })}
+      </Stack>
     </Stack>
   );
   return (
     <Tooltip label={detail} withArrow position="right" openDelay={350} multiline maw={340}>
       <UnstyledButton
         onClick={onClick}
+        data-testid="catalog-match"
+        data-output-id={match.output_id}
+        data-dc-tag={match.dc_tag}
         w="100%"
         px="md"
         py={7}
@@ -157,19 +222,11 @@ const MatchRow: React.FC<MatchRowProps> = ({ match, selected, onClick }) => {
       >
         <Group gap={6} wrap="nowrap" align="center">
           <Text size="sm" fw={selected ? 600 : 400} lineClamp={1} style={{ flex: 1, minWidth: 0 }}>
-            {match.name || match.output_id}
+            {matchTitle(match)}
           </Text>
           <Group gap={3} wrap="nowrap" style={{ flexShrink: 0 }}>
             {match.renders_as.map((r, i) => (
-              <Box
-                key={i}
-                w={7}
-                h={7}
-                style={{
-                  borderRadius: '50%',
-                  background: `var(--mantine-color-${COMPONENT_COLORS[r.component] ?? 'gray'}-6)`,
-                }}
-              />
+              <RenderDot key={i} type={r.component} />
             ))}
           </Group>
         </Group>
@@ -182,22 +239,70 @@ const MatchRow: React.FC<MatchRowProps> = ({ match, selected, onClick }) => {
 // Tool section header
 // ---------------------------------------------------------------------------
 
-const ToolLabel: React.FC<{ module: CatalogModule; count: number }> = ({ module, count }) => (
-  <Group gap="sm" wrap="nowrap">
-    <Icon icon="mdi:toolbox-outline" width={16} color="var(--mantine-color-violet-6)" />
-    <Stack gap={0} style={{ minWidth: 0 }}>
-      <Text size="sm" fw={700} lineClamp={1}>
-        {module.tool_name}
-      </Text>
-      <Text size="xs" c="dimmed" lineClamp={1} style={{ fontFamily: 'monospace', fontSize: 10 }}>
-        {module.tool_id}
-      </Text>
-    </Stack>
-    <Badge size="xs" variant="light" color="violet" ml="auto" style={{ flexShrink: 0 }}>
-      {count}
-    </Badge>
-  </Group>
-);
+/** The tool's sub-functions, as its matched outputs declare them.
+ *
+ *  `mode` is the catalog's existing name for the part of a tool an output comes
+ *  out of: QIIME 2's plugin (`diversity/beta`), mosdepth's run mode
+ *  (`amplicon`), iVar's subcommand (`variants`), the producing tool behind a
+ *  MultiQC section (`bcftools`). Deduplicated on the leading segment, since
+ *  `diversity` and `diversity/beta` are the same plugin.
+ *
+ *  `run` is dropped: it is what a single-purpose tool's only mode is called
+ *  (Pangolin, Nextclade) and it says nothing.
+ */
+function toolModes(module: CatalogModule): string[] {
+  const modes = new Set<string>();
+  for (const match of module.matches) {
+    const mode = (match.mode || '').split('/')[0].trim();
+    if (mode && mode !== 'run') modes.add(mode);
+  }
+  return [...modes].sort();
+}
+
+/** How many sub-functions fit on the accordion's second line before the rest
+ *  becomes a "+n" the header's tooltip spells out. */
+const TOOL_MODES_SHOWN = 3;
+
+// No per-tool icon: the catalog has no icon to give, and the same toolbox glyph
+// on every row carried no information while costing a column of a narrow panel.
+const ToolLabel: React.FC<{ module: CatalogModule; count: number }> = ({ module, count }) => {
+  // The second line used to repeat `tool_id`, which for most tools is the name
+  // again in lowercase ("QIIME 2" / "qiime2"). What is worth the line is which
+  // parts of the tool this project actually has.
+  const modes = toolModes(module);
+  const shown = modes.slice(0, TOOL_MODES_SHOWN);
+  const subtitle = modes.length
+    ? shown.join(' · ') + (modes.length > shown.length ? ` +${modes.length - shown.length}` : '')
+    : module.tool_id;
+  const label = (
+    <Group gap="sm" wrap="nowrap">
+      <Stack gap={0} style={{ minWidth: 0 }}>
+        <Text size="sm" fw={700} lineClamp={1}>
+          {module.tool_name}
+        </Text>
+        <Text size="xs" c="dimmed" lineClamp={1} style={{ fontFamily: 'monospace', fontSize: 10 }}>
+          {subtitle}
+        </Text>
+      </Stack>
+      <Badge size="xs" variant="light" color="violet" ml="auto" style={{ flexShrink: 0 }}>
+        {count}
+      </Badge>
+    </Group>
+  );
+  if (modes.length <= shown.length) return label;
+  return (
+    <Tooltip
+      label={`${module.tool_id} — ${modes.join(', ')}`}
+      withArrow
+      position="right"
+      multiline
+      maw={300}
+      openDelay={350}
+    >
+      {label}
+    </Tooltip>
+  );
+};
 
 // ---------------------------------------------------------------------------
 // Facet filter group — a labelled Chip.Group with per-option counts
@@ -236,6 +341,9 @@ const Facet: React.FC<FacetProps> = ({ label, options, selected, onChange }) => 
 
 const CatalogTab: React.FC<CatalogTabProps> = ({ projectId }) => {
   const [modules, setModules] = useState<CatalogModule[] | null>(null);
+  // Labels + descriptions for advanced-viz renders. The catalog only stores the
+  // `viz_kind` string, and "stacked_taxonomy" is not what the viz is called.
+  const [vizKinds, setVizKinds] = useState<VizKinds>(() => new Map());
   const [error, setError] = useState<string | null>(null);
   const [selectedMatch, setSelectedMatch] = useState<CatalogOutputMatch | null>(null);
   const [selectedToolId, setSelectedToolId] = useState('');
@@ -253,6 +361,14 @@ const CatalogTab: React.FC<CatalogTabProps> = ({ projectId }) => {
   const initFromCatalog = useBuilderStore((s) => s.initFromCatalog);
   const dashboardId = useBuilderStore((s) => s.dashboardId);
   const componentId = useBuilderStore((s) => s.componentId);
+
+  useEffect(() => {
+    // Cached in the API client after the first call, and purely decorative:
+    // a failure leaves the raw viz_kind as the label rather than blocking.
+    fetchAdvancedVizKinds()
+      .then((kinds) => setVizKinds(new Map(kinds.map((k) => [k.viz_kind, k]))))
+      .catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     if (!projectId) return;
@@ -286,7 +402,7 @@ const CatalogTab: React.FC<CatalogTabProps> = ({ projectId }) => {
     }
     return {
       types: [...types.entries()]
-        .map(([value, count]) => ({ value, label: COMPONENT_LABELS[value] ?? value, count }))
+        .map(([value, count]) => ({ value, label: componentTypeVisual(value).label, count }))
         .sort((a, b) => a.label.localeCompare(b.label)),
       dcs: [...dcs.entries()]
         .map(([value, count]) => ({ value, label: value, count }))
@@ -315,6 +431,7 @@ const CatalogTab: React.FC<CatalogTabProps> = ({ projectId }) => {
       return (
         mod.tool_name.toLowerCase().includes(q) ||
         mod.tool_id.toLowerCase().includes(q) ||
+        matchTitle(m).toLowerCase().includes(q) ||
         m.description.toLowerCase().includes(q) ||
         m.output_id.toLowerCase().includes(q) ||
         m.dc_tag.toLowerCase().includes(q)
@@ -331,42 +448,52 @@ const CatalogTab: React.FC<CatalogTabProps> = ({ projectId }) => {
     setSelectedToolName(mod.tool_name);
   };
 
+  /** Seed the builder store from one catalog render. Returns false when the
+   *  render's config could not be resolved (only MultiQC can fail here) — the
+   *  store is still seeded, so the caller lands the user in the Design step
+   *  with the collection bound and the selection left to make. */
+  const seedStore = async (
+    match: CatalogOutputMatch,
+    toolId: string,
+    toolName: string,
+    render: CatalogRender,
+  ): Promise<boolean> => {
+    let config: Record<string, unknown> = {};
+    let resolved = true;
+    try {
+      config = await buildConfigFromRender(render, match.dc_id);
+    } catch {
+      resolved = false;
+    }
+    initFromCatalog({
+      componentType: render.component as ComponentType,
+      wfId: match.wf_id,
+      dcId: match.dc_id,
+      projectId,
+      config,
+      source: {
+        toolId,
+        toolName,
+        outputId: match.output_id,
+        description: match.description,
+        use: catalogUseRef(toolId, match.output_id, render),
+      },
+    });
+    return resolved;
+  };
+
   const handleAdd = (match: CatalogOutputMatch, toolId: string, toolName: string) =>
-    (render: CatalogRender) => {
-      initFromCatalog({
-        componentType: render.component as ComponentType,
-        wfId: match.wf_id,
-        dcId: match.dc_id,
-        projectId,
-        config: buildConfigFromRender(render),
-        source: {
-          toolId,
-          toolName,
-          outputId: match.output_id,
-          description: match.description,
-          use: catalogUseRef(toolId, match.output_id, render),
-        },
-      });
+    async (render: CatalogRender) => {
+      await seedStore(match, toolId, toolName, render);
     };
 
   // Quick-add: pre-fill store, build metadata, save to backend, navigate.
   const handleDirectAdd = (match: CatalogOutputMatch, toolId: string, toolName: string) =>
     async (render: CatalogRender) => {
       if (!dashboardId || !componentId) return;
-      initFromCatalog({
-        componentType: render.component as ComponentType,
-        wfId: match.wf_id,
-        dcId: match.dc_id,
-        projectId,
-        config: buildConfigFromRender(render),
-        source: {
-          toolId,
-          toolName,
-          outputId: match.output_id,
-          description: match.description,
-          use: catalogUseRef(toolId, match.output_id, render),
-        },
-      });
+      // An unresolved config would be saved as a component that cannot render,
+      // with no way back to fix it — show the Design step instead.
+      if (!(await seedStore(match, toolId, toolName, render))) return;
       // Zustand set() is synchronous — read the updated state immediately.
       const state = useBuilderStore.getState();
       try {
@@ -375,7 +502,7 @@ const CatalogTab: React.FC<CatalogTabProps> = ({ projectId }) => {
         window.location.assign(`/dashboard-edit/${dashboardId}`);
       } catch {
         // Fall back to Edit & Add so the user can fix the issue in the Design step.
-        // (initFromCatalog is already called above, so the Design step will show.)
+        // (seedStore is already called above, so the Design step will show.)
       }
     };
 
@@ -460,6 +587,7 @@ const CatalogTab: React.FC<CatalogTabProps> = ({ projectId }) => {
         {/* Search + facets */}
         <Box px="md" py="sm" style={{ borderBottom: '1px solid var(--mantine-color-default-border)' }}>
           <TextInput
+            data-testid="catalog-search"
             placeholder="Search tools, outputs, files…"
             value={search}
             onChange={(e) => setSearch(e.currentTarget.value)}
@@ -539,7 +667,7 @@ const CatalogTab: React.FC<CatalogTabProps> = ({ projectId }) => {
             >
               {filteredModules.map((module) => (
                 <Accordion.Item key={module.tool_id} value={module.tool_id}>
-                  <Accordion.Control>
+                  <Accordion.Control data-testid="catalog-tool" data-tool-id={module.tool_id}>
                     <ToolLabel module={module} count={module.matches.length} />
                   </Accordion.Control>
                   <Accordion.Panel>
@@ -553,6 +681,7 @@ const CatalogTab: React.FC<CatalogTabProps> = ({ projectId }) => {
                             key={`${match.dc_id}-${match.output_id}`}
                             match={match}
                             selected={isSelected}
+                            vizKinds={vizKinds}
                             onClick={() => selectMatch(module, match)}
                           />
                         );
@@ -573,6 +702,7 @@ const CatalogTab: React.FC<CatalogTabProps> = ({ projectId }) => {
             match={selectedMatch}
             toolId={selectedToolId}
             toolName={selectedToolName}
+            vizKinds={vizKinds}
             onAdd={handleAdd(selectedMatch, selectedToolId, selectedToolName)}
             onDirectAdd={handleDirectAdd(selectedMatch, selectedToolId, selectedToolName)}
           />

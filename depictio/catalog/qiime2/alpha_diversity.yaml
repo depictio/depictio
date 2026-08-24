@@ -32,8 +32,8 @@ renders_as:
       fig.for_each_annotation(lambda a: a.update(text=a.text.split("=")[-1]))
       fig.update_layout(showlegend=True, legend_title_text="habitat", boxmode="group")
   # one Tukey box-plot distribution card per metric (hero average + box-plot strip)
-  - { component: card, column: shannon,           aggregation: average, secondary_layout: box_plot }
-  - { component: card, column: observed_features, aggregation: average, secondary_layout: box_plot }
-  - { component: card, column: faith_pd,          aggregation: average, secondary_layout: box_plot }
-  - { component: card, column: evenness,          aggregation: average, secondary_layout: box_plot }
+  - { component: card, column: shannon,           aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: observed_features, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: faith_pd,          aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: evenness,          aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
   - { component: table }

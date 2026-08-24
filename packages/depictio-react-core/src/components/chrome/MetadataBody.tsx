@@ -3,25 +3,15 @@ import { Badge, Box, Code, Collapse, Divider, Group, Stack, Text, Tooltip, Unsty
 import { Icon } from '@iconify/react';
 
 import { StoredMetadata } from '../../api';
+import { componentTypeVisual } from '../../componentTypeMeta';
 import CatalogOrigin from './CatalogOrigin';
 
 interface MetadataBodyProps {
   metadata: StoredMetadata;
 }
 
-// Per-type icon + label + accent, mirroring the builder's component grid so the
-// inspector reads as the same visual system as the creation flow.
-const TYPE_META: Record<string, { icon: string; label: string; color: string }> = {
-  figure:       { icon: 'mdi:graph-box',                    label: 'Figure',       color: 'grape' },
-  card:         { icon: 'formkit:number',                   label: 'Card',         color: 'teal' },
-  interactive:  { icon: 'bx:slider-alt',                    label: 'Interactive',  color: 'lime' },
-  table:        { icon: 'octicon:table-24',                 label: 'Table',        color: 'blue' },
-  multiqc:      { icon: 'mdi:chart-line',                   label: 'MultiQC',      color: 'orange' },
-  image:        { icon: 'mdi:image-area',                   label: 'Image',        color: 'pink' },
-  map:          { icon: 'mdi:map-marker-multiple',          label: 'Map',          color: 'violet' },
-  text:         { icon: 'mdi:text-box-edit',                label: 'Text',         color: 'pink' },
-  advanced_viz: { icon: 'mdi:chart-scatter-plot-hexbin',    label: 'Advanced viz', color: 'grape' },
-};
+/** 10% of an accent, for the icon tile behind it. */
+const tint = (hex: string) => `${hex}1A`;
 
 type Row = { label: string; value: string };
 
@@ -144,11 +134,7 @@ const MetadataBody: React.FC<MetadataBodyProps> = ({ metadata }) => {
   const rows = React.useMemo(() => summaryRows(metadata), [metadata]);
   const src = metadata.catalog_source;
 
-  const type = TYPE_META[metadata.component_type] ?? {
-    icon: 'mdi:puzzle',
-    label: metadata.component_type,
-    color: 'gray',
-  };
+  const type = componentTypeVisual(metadata.component_type);
   const title = (metadata.title as string) || '';
 
   return (
@@ -160,14 +146,14 @@ const MetadataBody: React.FC<MetadataBodyProps> = ({ metadata }) => {
             width: 34,
             height: 34,
             borderRadius: 8,
-            background: `var(--mantine-color-${type.color}-light)`,
+            background: tint(type.color),
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             flexShrink: 0,
           }}
         >
-          <Icon icon={type.icon} width={20} color={`var(--mantine-color-${type.color}-6)`} />
+          <Icon icon={type.icon} width={20} color={type.color} />
         </Box>
         <Box style={{ minWidth: 0 }}>
           <Group gap={6} wrap="nowrap">

@@ -1,5 +1,6 @@
 id: multiqc_fastqc
 name: Raw-read QC
+origin_tool: FastQC
 mode: fastqc
 description: Raw-read sequencing QC (per-base quality, GC content, duplication, adapter content) — FastQC plots aggregated by MultiQC.
 find: { path_glob: "**/multiqc/multiqc_data/multiqc.parquet" }

@@ -21,10 +21,13 @@ from fastapi.responses import HTMLResponse
 from depictio.api.v1.configs.security_headers import csp_with_script_nonce
 from depictio.api.v1.db import files_collection, multiqc_collection, projects_collection
 from depictio.api.v1.endpoints.user_endpoints.routes import get_user_or_anonymous
+from depictio.api.v1.source_links import github_blob_url
 from depictio.catalog.payload import (
     CatalogPayloadError,
     advanced_viz_persist_config,
     build_payload,
+    json_safe,
+    multiqc_module,
 )
 from depictio.models.components.advanced_viz.catalog import load_catalog_entries
 from depictio.models.models.users import User
@@ -88,6 +91,9 @@ def _match_dc_to_catalog(
                         "tool_name": entry.name,
                         "output_id": output.id,
                         "name": output.name or output.id,
+                        # The producing tool, when the catalog tool aggregates
+                        # other tools' output (MultiQC). None everywhere else.
+                        "origin_tool": output.origin_tool,
                         "description": output.description or "",
                         # Static provenance, straight off the already-loaded catalog
                         # YAML: it costs nothing here and saves the picker a second
@@ -98,6 +104,9 @@ def _match_dc_to_catalog(
                         "nf_core_url": output.nf_core_url or entry.nf_core_url,
                         "biotools_url": output.biotools_url or entry.biotools_url,
                         "find": output.find.model_dump(exclude_none=True),
+                        # Where this offer is declared, so the picker can link to
+                        # the module definition rather than only describing it.
+                        "source_url": github_blob_url(output._source_file),
                         "renders_as": [
                             _render_to_dict(r, output) for r in (output.renders_as or [])
                         ],
@@ -114,6 +123,12 @@ def _multiqc_sections(dc_id: str) -> set[str] | None:
     that only ran two. The ingested report already records which modules it holds,
     so use that as the discriminator. `data_collection_id` is stored as a string
     in this collection, not an ObjectId.
+
+    What is stored are MultiQC *anchors*, and a module that ran more than once is
+    anchored per run (`samtools_bowtie2`, `samtools_ivar`, `ivar_variants`), while
+    a catalog output's `section` names the module itself. `multiqc_module` is the
+    normalisation the preview payload already applies to the same anchors, so both
+    sides of the catalog agree on what a section means.
     """
     doc = multiqc_collection.find_one({"data_collection_id": dc_id}, {"metadata.modules": 1})
     if not doc:
@@ -124,7 +139,7 @@ def _multiqc_sections(dc_id: str) -> set[str] | None:
         # empty. `_parsed_multiqc_report` in dashboards_endpoints treats it the
         # same way: keep every component rather than silently dropping them all.
         return None
-    return {str(m).lower() for m in modules}
+    return {multiqc_module(str(m).lower()) for m in modules}
 
 
 def _keep_present_multiqc_sections(
@@ -172,6 +187,7 @@ def _add_matches(
     dc_id: str,
     wf_id: str,
     dc_tag: str,
+    dc_type: str,
     seen: set[tuple[str, str, str]],
 ) -> None:
     for match in matches:
@@ -196,6 +212,9 @@ def _add_matches(
                 "dc_id": dc_id,
                 "wf_id": wf_id,
                 "dc_tag": dc_tag,
+                # The picker previews the collection's own rows next to the
+                # offer, and a MultiQC report has none to show.
+                "dc_type": dc_type,
             }
         )
 
@@ -273,6 +292,7 @@ async def compose_project(
                     dc_id_str,
                     wf_id,
                     dc_tag,
+                    dc_type,
                     seen,
                 )
 
@@ -287,6 +307,7 @@ async def compose_project(
                     dc_id_str,
                     wf_id,
                     dc_tag,
+                    dc_type,
                     seen,
                 )
 
@@ -336,6 +357,7 @@ async def compose_project(
                 dc_id=dc_id_str,
                 wf_id=meta["wf_id"],
                 dc_tag=meta["dc_tag"],
+                dc_type=meta["dc_type"],
                 seen=seen,
             )
 
@@ -363,8 +385,11 @@ async def preview_output_payload(
         for output in entry.outputs:
             if output.id == output_id:
                 try:
-                    payload = build_payload(output, theme="light", tool=entry)
-                    return payload
+                    # Same normalisation the embedded bundle gets: a plotly trace
+                    # built on a pandas frame keeps numpy arrays, which FastAPI's
+                    # serialiser refuses outright (500), and NaN, which it emits
+                    # as a bare token no browser will parse.
+                    return json_safe(build_payload(output, theme="light", tool=entry))
                 except CatalogPayloadError as exc:
                     raise HTTPException(status_code=422, detail=str(exc)) from exc
                 except Exception:

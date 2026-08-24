@@ -40,7 +40,7 @@ def test_every_tool_is_a_folder_with_module_yaml():
     entries = {e.id: e for e in load_catalog_entries()}
     for tool_id in entries:
         assert (catalog / tool_id / "module.yaml").is_file()
-    assert len(entries["ivar"].outputs) == 1  # single-output tool
+    assert len(entries["multiqc"].outputs) > 1  # multi-output tool
     assert len(entries["qiime2"].outputs) >= 5  # multi-output tool
 
 
@@ -318,8 +318,42 @@ def test_alpha_diversity_has_code_figure_and_metric_cards():
     fig = next(r for r in out.renders_as if r.component == "figure")
     assert fig.code and "fig = px.box" in fig.code  # code-mode figure
     card = next(r for r in out.renders_as if r.component == "card")
-    assert card.aggregation == "average" and card.secondary_layout == "box_plot"  # Tukey card
+    # Tukey card: median hero (the box's own centre) + the box_plot_stats
+    # aggregation, which is what makes the server compute the strip at all.
+    assert card.aggregation == "median" and card.secondary_layout == "box_plot"
+    assert card.aggregations == ["box_plot_stats"]
     assert out.fixture == "alpha_diversity.tsv"  # co-located in qiime2/
+
+
+def test_every_bundled_card_declares_a_secondary_strip():
+    """No bundled card is a bare hero number.
+
+    A lone aggregate says nothing about spread or composition, so every card the
+    catalog offers declares a secondary layout — and the two families that are
+    computed from an aggregation list (`box_plot` and the stats layouts) declare
+    that list too, since the server keys the computation off it and a card with
+    the layout but no `aggregations` renders as a bare number.
+    """
+    from depictio.api.v1.services.card_metrics import NUMERIC_LAYOUTS
+
+    # Layouts that carry their own config field instead of an aggregation list.
+    SELF_DESCRIBING = {"top_n", "concentration", "composition", "donut", "coverage", "gauge"}
+    bare: list[str] = []
+    missing_aggs: list[str] = []
+    for entry in load_catalog_entries():
+        for output in entry.outputs:
+            for render in output.renders_as:
+                if render.component != "card":
+                    continue
+                where = f"{entry.id}/{output.id}:{render.column}"
+                layout = render.secondary_layout
+                if not layout:
+                    bare.append(where)
+                elif layout not in SELF_DESCRIBING and layout not in NUMERIC_LAYOUTS:
+                    if not render.aggregations:
+                        missing_aggs.append(f"{where} ({layout})")
+    assert bare == [], f"cards with no secondary strip: {bare}"
+    assert missing_aggs == [], f"cards whose layout needs `aggregations`: {missing_aggs}"
 
 
 def test_fixture_is_co_located_and_readable():
@@ -358,7 +392,8 @@ def test_all_recipe_output_roles_resolve_against_the_recipe():
 
 
 def test_ivar_roles_match_recipe_output():
-    ivar = next(e for e in load_catalog_entries() if e.id == "ivar").outputs[0]
+    entry = next(e for e in load_catalog_entries() if e.id == "ivar")
+    ivar = next(o for o in entry.outputs if o.id == "ivar_variants_long")
     cols = set(recipe_output_columns(ivar.recipe))
     assert {"sample", "CHROM", "POS", "AF", "GENE", "EFFECT"} <= cols  # post-recipe (sample, AF)
 
@@ -1076,3 +1111,43 @@ def test_short_names_are_unique_within_a_tool():
         names = [o.name for o in entry.outputs if o.name]
         dupes = {n for n in names if names.count(n) > 1}
         assert not dupes, f"tool {entry.id!r} reuses output name(s): {sorted(dupes)}"
+
+
+# MultiQC is an aggregator: its outputs are other tools' numbers, so each one
+# names its producer. The two exceptions are pipeline-generated custom content.
+_MULTIQC_WITHOUT_ORIGIN = {"multiqc_summary", "multiqc_summary_metrics"}
+
+
+def test_multiqc_outputs_name_their_origin_tool():
+    multiqc = next(e for e in load_catalog_entries() if e.id == "multiqc")
+    missing = [
+        o.id
+        for o in multiqc.outputs
+        if o.id not in _MULTIQC_WITHOUT_ORIGIN and not (o.origin_tool or "").strip()
+    ]
+    assert not missing, f"MultiQC outputs without an `origin_tool:`: {missing}"
+    unexpected = [
+        o.id for o in multiqc.outputs if o.id in _MULTIQC_WITHOUT_ORIGIN and o.origin_tool
+    ]
+    assert not unexpected, f"pipeline-generated sections must not claim a tool: {unexpected}"
+
+
+def test_origin_tool_is_only_for_aggregator_tools():
+    """A tool that produces its own output does not repeat its name per output."""
+    claimed = [
+        f"{entry.id}/{output.id}"
+        for entry in load_catalog_entries()
+        if entry.id != "multiqc"
+        for output in entry.outputs
+        if output.origin_tool
+    ]
+    assert not claimed, f"origin_tool set outside an aggregator tool: {claimed}"
+
+
+def test_loader_records_the_yaml_each_output_came_from():
+    """`_source_file` is what lets the API link an output to its definition."""
+    for entry in load_catalog_entries():
+        for output in entry.outputs:
+            path = output._source_file
+            assert path is not None and path.is_file(), f"{entry.id}/{output.id}"
+            assert path.suffix == ".yaml"

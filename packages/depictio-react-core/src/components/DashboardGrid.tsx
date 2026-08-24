@@ -105,6 +105,43 @@ interface DashboardGridProps {
 }
 
 /**
+ * The stored `lg` layout, scaled to every breakpoint.
+ *
+ * Given only `lg`, react-grid-layout derives the others by cloning it and
+ * running `correctBounds`, which *clamps* `w` to the column count rather than
+ * scaling it. A half-width tile (w 4 of 8) therefore stays w 4 and becomes a
+ * full row at `sm` (4 of 4), so the same dashboard read as half-width in one
+ * surface and full-width in another purely because their containers sit either
+ * side of a breakpoint. Scaling proportionally keeps a half-width tile half a
+ * row everywhere, while still degrading to fewer, wider columns on a phone.
+ *
+ * Scale the column EDGES, never `x` and `w` separately: rounding each of those
+ * on its own lets a row that tiled exactly at `lg` stop tiling. Four `w: 2`
+ * cards at x 0/2/4/6 scale to widths 2/2/2/2 at `md` (6 columns) but to x
+ * 0/2/3/4, so the last three overlap, and react-grid-layout then breaks the row
+ * apart to resolve the collision. Rounding the shared edge once gives both
+ * neighbours the same answer, so a boundary that coincided still coincides.
+ */
+function responsiveLayouts(lg: Layout[]): Record<string, Layout[]> {
+  const scale = (cols: number) =>
+    lg.map((item) => {
+      const edge = (v: number) => Math.round((v * cols) / GRID_MAX_COLS);
+      // Every tile keeps at least one column, so a row with more tiles than the
+      // breakpoint has columns still collides — there is no honest way to fit
+      // five cards into two columns, and the grid stacks them instead.
+      const x = Math.min(cols - 1, Math.max(0, edge(item.x)));
+      const right = Math.min(cols, Math.max(x + 1, edge(item.x + item.w)));
+      return { ...item, x, w: right - x };
+    });
+  return {
+    lg,
+    md: scale(GRID_COL_COUNTS.md),
+    sm: scale(GRID_COL_COUNTS.sm),
+    xs: scale(GRID_COL_COUNTS.xs),
+  };
+}
+
+/**
  * Renders the dashboard component tree inside react-grid-layout. Depictio's
  * stored_layout_data uses dash-dynamic-grid-layout's format, which is a thin
  * wrapper over react-grid-layout — same {i, x, y, w, h} shape works directly.
@@ -394,7 +431,10 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
       // Lone-row widening runs HERE, against the section's own members — never
       // against the flat union, where co-authored rows from sibling sections
       // overlap and shove each other apart (see `normalizeLayout`'s pack flag).
-      return isDraggable || isResizable ? packed : widenLoneRows(packed);
+      // Gated on `mine`, i.e. the section's positions as stored: an item the
+      // author left alone on its row keeps its width, only one that lost a
+      // neighbour gets widened.
+      return isDraggable || isResizable ? packed : widenLoneRows(packed, rowMateSet(mine));
     },
     [layouts, isDraggable, isResizable],
   );
@@ -525,7 +565,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
     ) : (
     <ResponsiveGridLayout
       className="layout"
-      layouts={{ lg: layoutsForSection(section.members) }}
+      layouts={responsiveLayouts(layoutsForSection(section.members))}
       // Shared geometry (see gridConfig.ts): `lg` keeps the authoring 8-column
       // grid down to narrow content widths so opening the panels shrinks
       // components instead of wrapping them; fewer columns are a phone-only
@@ -781,7 +821,7 @@ export function normalizeLayout(
   // editor pass (when we briefly used cols=12) would be off-grid otherwise
   // and react-grid-layout would stack everything at y=0.
   const COLS = GRID_MAX_COLS;
-  const matched = items
+  const normalized = items
     .map((it) => {
       const w = Math.max(1, Math.min(it.w ?? 1, COLS));
       const x = Math.max(0, Math.min(it.x ?? 0, COLS - w));
@@ -807,9 +847,14 @@ export function normalizeLayout(
         h,
         static: !interactive,
       };
-    })
-    .filter((it) => indexSet.has(it.i));
+    });
+  const matched = normalized.filter((it) => indexSet.has(it.i));
   const matchedIds = new Set(matched.map((it) => it.i));
+  // Which items shared a row in the *stored* layout, before anything was
+  // filtered out. This is what tells "alone because a neighbour was hidden at
+  // render time" apart from "alone because that is the layout" — see
+  // widenLoneRows, which may only touch the first kind.
+  const hadRowMate = rowMateSet(normalized);
 
   // Place missing items (e.g. cards never recorded in right_panel_layout_data)
   // immediately below the lowest existing row in a 2-column auto-flow. We
@@ -848,7 +893,7 @@ export function normalizeLayout(
   // In editor mode (interactive=true) we leave the layout untouched: items are
   // non-static there, RGL compacts naturally after every drag/resize.
   if (interactive || !pack) return merged;
-  return widenLoneRows(compactVerticallyForStatic(merged));
+  return widenLoneRows(compactVerticallyForStatic(merged), hadRowMate);
 }
 
 /**
@@ -871,20 +916,44 @@ function compactVerticallyForStatic(items: Layout[]): Layout[] {
   return placed;
 }
 
+/** Do two layout items share a horizontal band? */
+function overlapsVertically(a: Layout, b: Layout): boolean {
+  return !(a.y + a.h <= b.y || b.y + b.h <= a.y);
+}
+
+/** Which of `items` share a row with at least one other? The gate for
+ *  `widenLoneRows` — pass the layout as *stored*, before anything is dropped. */
+function rowMateSet(items: Layout[]): Set<string> {
+  return new Set(
+    items
+      .filter((it) => items.some((o) => o.i !== it.i && overlapsVertically(it, o)))
+      .map((it) => it.i),
+  );
+}
+
 /**
- * Widen any item that ends up alone on its row to fill the grid, so a dropped
- * component never leaves a half-width card sitting beside an empty gap. An item
- * is "alone" when no other item shares its vertical band; only sub-full-width
- * items are touched, and nothing is reordered. Mirrors the server's
- * `_recompact_main_grid` lone-row rule for layouts the server didn't re-pack.
+ * Widen an item that ends up alone on its row *because a neighbour was dropped*,
+ * so a hidden component never leaves a half-width card sitting beside an empty
+ * gap. Mirrors the server's `_recompact_main_grid` lone-row rule for layouts the
+ * server didn't re-pack.
+ *
+ * `hadRowMate` is the gate, and it is the whole point: an item the author left
+ * alone on its row at half width must keep that width. Widening every lone item
+ * made the viewer disagree with the editor about the size of the same tile —
+ * the editor leaves the layout untouched, so a `w: 4` figure was half a row
+ * there and a full row here.
  */
-function widenLoneRows(items: Layout[], cols = GRID_MAX_COLS): Layout[] {
-  const overlapsVertically = (a: Layout, b: Layout) =>
-    !(a.y + a.h <= b.y || b.y + b.h <= a.y);
+function widenLoneRows(
+  items: Layout[],
+  hadRowMate: Set<string>,
+  cols = GRID_MAX_COLS,
+): Layout[] {
   return items.map((item) => {
-    if (item.w >= cols) return item;
-    const hasRowMate = items.some((other) => other !== item && overlapsVertically(item, other));
-    return hasRowMate ? item : { ...item, x: 0, w: cols };
+    if (item.w >= cols || !hadRowMate.has(item.i)) return item;
+    const stillHasRowMate = items.some(
+      (other) => other !== item && overlapsVertically(item, other),
+    );
+    return stillHasRowMate ? item : { ...item, x: 0, w: cols };
   });
 }
 

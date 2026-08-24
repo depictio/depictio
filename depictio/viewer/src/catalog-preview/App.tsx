@@ -17,6 +17,18 @@ function readHashRenderId(): string | null {
   return m ? decodeURIComponent(m[1]) : null;
 }
 
+/** Read the tile height the embedder wants the single render pinned to
+ *  (#tile_h=204). Set by the builder's catalog picker for card renders, whose
+ *  viewport is deliberately taller than the tile so the metric strip's tooltip
+ *  has somewhere to go — an iframe clips it otherwise. Absent everywhere else,
+ *  and the render then fills the viewport as before. */
+function readHashTileHeight(): number | null {
+  const m = window.location.hash.match(/[#&]tile_h=(\d+)/);
+  if (!m) return null;
+  const value = Number(m[1]);
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
 /** Read the selected output id from the URL hash (#output=...). */
 function readHashOutputId(): string | null {
   const m = window.location.hash.match(/[#&]output=([^&]*)/);
@@ -32,6 +44,23 @@ const CatalogApp: React.FC<{ g: CatalogGlobal }> = ({ g }) => {
 
   // Hash takes priority over injected value (works without backend restart).
   const renderId = readHashRenderId() ?? g.initialRenderId ?? null;
+  const tileHeight = readHashTileHeight();
+
+  // The embedder paints the surface behind a pinned tile, so the document must
+  // not paint one of its own: an opaque page would draw a slab across the
+  // headroom the tile's tooltips need. `html` is the one that matters —
+  // Mantine's reset leaves `body` transparent and colours the root element.
+  useEffect(() => {
+    if (tileHeight === null) return;
+    const root = document.documentElement;
+    const previous = { html: root.style.background, body: document.body.style.background };
+    root.style.background = 'transparent';
+    document.body.style.background = 'transparent';
+    return () => {
+      root.style.background = previous.html;
+      document.body.style.background = previous.body;
+    };
+  }, [tileHeight]);
 
   // Drive gallery↔detail through the History API so the browser back/forward
   // buttons navigate (and #output=<id> deep-links a detail view).
@@ -65,7 +94,15 @@ const CatalogApp: React.FC<{ g: CatalogGlobal }> = ({ g }) => {
   if (entry) {
     // Hide "back to catalog" when there's nothing to go back to (single preview).
     const onBack = totalOutputs > 1 ? () => navigate(null) : undefined;
-    return <OutputView entry={entry} onBack={onBack} theme={g.theme} renderId={renderId} />;
+    return (
+      <OutputView
+        entry={entry}
+        onBack={onBack}
+        theme={g.theme}
+        renderId={renderId}
+        tileHeight={tileHeight}
+      />
+    );
   }
   return <Gallery tools={tools} onOpen={navigate} theme={g.theme} />;
 };

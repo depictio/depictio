@@ -412,6 +412,15 @@ class CatalogOutput(BaseModel):
     # the catalog's to choose. Optional for third-party catalogs; every bundled
     # output declares one (enforced by the catalog tests).
     name: str | None = None
+    # The third-party tool the output actually comes from, when the catalog tool
+    # is an aggregator rather than the producer: a MultiQC section is MultiQC's
+    # file but FastQC's or Cutadapt's numbers, and a picker that only says
+    # "Raw-read QC" hides which tool ran. Declared, not derived: MultiQC persists
+    # anchors (`fastqc`, `samtools_bowtie2`), the report's own display names are
+    # decorated by the pipeline ("PREPROCESS: FastQC (raw reads)"), and the
+    # MultiQC package ships no anchor-to-name registry. Left unset when the tool
+    # itself is the producer, or when the section is pipeline-generated content.
+    origin_tool: str | None = None
     mode: str | None = None
     description: str = ""
 
@@ -445,6 +454,10 @@ class CatalogOutput(BaseModel):
     # `fixture` is resolved relative to it → fixtures are co-located with the
     # module's YAML.
     _source_dir: Path | None = PrivateAttr(default=None)
+    # The YAML file itself (set by the loader). `_source_dir` alone only gets a
+    # caller as far as the tool folder, and the picker links to the module's own
+    # definition.
+    _source_file: Path | None = PrivateAttr(default=None)
 
     def fixture_file(self) -> Path | None:
         """Resolved path of the co-located fixture, if any."""
@@ -578,7 +591,9 @@ def _load_tool_dir(directory: Path) -> CatalogEntry:
     for path in sorted(directory.glob("*.yaml")):
         if path.name == _MODULE_FILE:
             continue
-        outputs.append(CatalogOutput.model_validate(yaml.safe_load(path.read_text())))
+        output = CatalogOutput.model_validate(yaml.safe_load(path.read_text()))
+        output._source_file = path
+        outputs.append(output)
     if not outputs:
         raise ValueError(f"tool folder {directory} has no output files")
     entry = CatalogEntry(**tool.model_dump(), outputs=outputs)
@@ -604,6 +619,7 @@ def load_entries_from_dir(directory: Path) -> list[CatalogEntry]:
                     entry = CatalogEntry.model_validate(raw)
                     for out in entry.outputs:
                         out._source_dir = path.parent  # fixtures next to the flat file
+                        out._source_file = path  # a flat file holds the whole tool
                     entries.append(entry)
         except Exception as exc:
             raise ValueError(f"invalid catalog entry {path}: {exc}") from exc

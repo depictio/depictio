@@ -117,3 +117,64 @@ def test_box_plot_card_payload() -> None:
     stats = payload["data"]["cards"]["secondary"][card["index"]]["box_plot_stats"]
     assert {"q1", "q3", "median", "lower_whisker", "upper_whisker", "outliers"} <= set(stats)
     assert stats["q1"] <= stats["median"] <= stats["q3"]
+
+
+def test_top_n_card_payload_carries_the_breakdown() -> None:
+    """A categorical card previews its `__breakdown__`, not a bare number.
+
+    The picker's preview must show the strip the added component will draw,
+    which for `top_n` means the shares computed by the same service the saved
+    card's compute path uses.
+    """
+    payload = build_payload(_get_output("ivar_oncoplot_matrix"), "light")
+    card = next(
+        m
+        for m in payload["renders"]
+        if m["component_type"] == "card" and m["column_name"] == "sample_id"
+    )
+    assert card["secondary_layout"] == "top_n"
+    assert card["breakdown_col"] == "gene"
+    breakdown = payload["data"]["cards"]["secondary"][card["index"]]["__breakdown__"]
+    assert breakdown["column"] == "gene"
+    assert 1 <= len(breakdown["top"]) <= card["top_n_count"]
+    assert 0.0 < breakdown["top_share"] <= 1.0
+
+
+def test_numeric_layout_card_payload() -> None:
+    """`uniqueness` (and its NUMERIC_LAYOUTS siblings) preview through the
+    shared ``card_metrics`` service, keyed as ``__<layout>__``."""
+    payload = build_payload(_get_output("qiime2_tree_metadata"), "light")
+    card = next(
+        m
+        for m in payload["renders"]
+        if m["component_type"] == "card" and m["column_name"] == "taxon"
+    )
+    assert card["secondary_layout"] == "uniqueness"
+    assert "__uniqueness__" in payload["data"]["cards"]["secondary"][card["index"]]
+
+
+def test_every_bundled_card_previews_its_strip() -> None:
+    """Whatever a card declares, the preview computes something for it.
+
+    Guards the layout→payload dispatch: a layout added to the catalog that the
+    preview does not know how to compute would otherwise silently render as a
+    hero number in the picker and as a full card on the dashboard.
+    """
+    missing: list[str] = []
+    for entry in load_catalog_entries():
+        for output in entry.outputs:
+            cards = [r for r in output.renders_as if r.component == "card"]
+            if not cards:
+                continue
+            payload = build_payload(output, "light")
+            secondary = payload["data"]["cards"]["secondary"]
+            for meta in payload["renders"]:
+                if meta.get("component_type") != "card" or meta.get("_error"):
+                    continue
+                layout = meta.get("secondary_layout")
+                # coverage/gauge draw from the hero value + coverage_max alone.
+                if not layout or layout in ("coverage", "gauge"):
+                    continue
+                if not secondary.get(meta["index"]):
+                    missing.append(f"{output.id}:{meta['column_name']} ({layout})")
+    assert missing == [], f"cards whose strip did not compute: {missing}"

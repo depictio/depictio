@@ -27,6 +27,7 @@ interface ChoiceCardProps {
   description: string;
   badge: string;
   onClick: () => void;
+  testId: string;
 }
 
 const ChoiceCard: React.FC<ChoiceCardProps> = ({
@@ -39,11 +40,13 @@ const ChoiceCard: React.FC<ChoiceCardProps> = ({
   description,
   badge,
   onClick,
+  testId,
 }) => (
   <Paper
     withBorder
     p="xl"
     radius="md"
+    data-testid={testId}
     onClick={onClick}
     style={{
       cursor: 'pointer',
@@ -131,6 +134,7 @@ const ChoiceScreen: React.FC<ChoiceScreenProps> = ({ onManual, onCatalog }) => (
           title="New component"
           description="Choose a component type, connect your data, and configure the design step by step."
           badge="Manual"
+          testId="component-source-manual"
           onClick={onManual}
         />
         <ChoiceCard
@@ -141,6 +145,7 @@ const ChoiceScreen: React.FC<ChoiceScreenProps> = ({ onManual, onCatalog }) => (
           title="Pick from catalog"
           description="Depictio recognizes the bioinformatics tools behind your data and suggests ready-to-add visualizations."
           badge="Catalog"
+          testId="component-source-catalog"
           onClick={onCatalog}
         />
       </SimpleGrid>

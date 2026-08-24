@@ -1,5 +1,6 @@
 id: multiqc_snpeff
 name: Variant effects
+origin_tool: SnpEff
 mode: snpeff
 description: Variant functional-effect annotation summary (impact, class, region) — SnpEff, via MultiQC.
 find: { path_glob: "**/multiqc/multiqc_data/multiqc.parquet" }

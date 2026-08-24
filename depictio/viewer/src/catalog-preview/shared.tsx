@@ -6,6 +6,7 @@
 import React from 'react';
 import { ActionIcon, Anchor, Badge, Box, Button, CopyButton, Group, Text, Tooltip } from '@mantine/core';
 import { Icon } from '@iconify/react';
+import { componentTypeVisual } from 'depictio-react-core';
 import logoRaw from '../../public/logos/logo_black.svg?raw';
 import logoWhiteRaw from '../../public/logos/logo_white.svg?raw';
 
@@ -19,26 +20,13 @@ export const logoFor = (theme?: string) => (theme === 'dark' ? LOGO_WHITE_SRC : 
  *  (Projects uses teal; each app/section gets its own flat Mantine color). */
 export const CATALOG_ACCENT = 'violet';
 
-/** Component type → badge style, mirrored from depictio/dash/component_metadata.py
- *  (colors/icons kept in sync by hand to stay Dash-free).
- *
- *  advanced_viz follows the builder's type grid (`builder/componentTypes.ts`)
- *  rather than the Dash original: the old orange was MultiQC's orange, so the
- *  two component types were indistinguishable wherever both appear. */
-export const COMPONENT_META: Record<string, { name: string; color: string; icon: string }> = {
-  figure: { name: 'Figure', color: '#9966cc', icon: 'mdi:graph-box' },
-  card: { name: 'Card', color: '#45b8ac', icon: 'formkit:number' },
-  interactive: { name: 'Interactive', color: '#8bc34a', icon: 'bx:slider-alt' },
-  table: { name: 'Table', color: '#6495ed', icon: 'octicon:table-24' },
-  advanced_viz: { name: 'Advanced viz', color: '#d6336c', icon: 'mdi:chart-scatter-plot-hexbin' },
-  multiqc: { name: 'MultiQC', color: '#f68b33', icon: 'mdi:chart-line' },
-  map: { name: 'Map', color: '#7a5dc7', icon: 'mdi:map-marker-multiple' },
-  image: { name: 'Image', color: '#e6779f', icon: 'mdi:image-area' },
-  text: { name: 'Text', color: '#e6779f', icon: 'mdi:text-box-edit' },
+/** Component type → badge style. One registry for the whole app; see
+ *  `componentTypeMeta` in depictio-react-core. `name` is kept as the key here
+ *  because both views already read `meta.name`. */
+export const metaFor = (t: string) => {
+  const visual = componentTypeVisual(t);
+  return { name: visual.label, color: visual.color, icon: visual.icon };
 };
-
-export const metaFor = (t: string) =>
-  COMPONENT_META[t] || { name: t, color: '#868e96', icon: 'mdi:shape-outline' };
 
 /** Colored depictio-style component-type badge. */
 export const TypeBadge: React.FC<{ type: string; size?: string }> = ({ type, size = 'sm' }) => {

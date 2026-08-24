@@ -22,6 +22,7 @@ from depictio.api.v1.db import (
     multiqc_collection,
     runs_collection,
 )
+from depictio.api.v1.source_links import github_blob_url
 
 # DC statuses surfaced in the report.
 STATUS_IDENTIFIED = "identified"  # included + files found and/or aggregated
@@ -32,9 +33,6 @@ STATUS_GATED_OUT = "gated_out"  # excluded by a template conditional / missing-f
 # (legacy projects created before the manifest was persisted — gated-out DCs are unknown there).
 SOURCE_MANIFEST = "template_manifest"
 SOURCE_LIVE = "live_project"
-
-# Recipe source lives in the depictio repo; link to it on the default branch.
-RECIPE_REPO_BASE = "https://github.com/depictio/depictio/blob/main/"
 
 
 def _recipe_github_url(recipe_ref: str | None) -> str | None:
@@ -47,14 +45,9 @@ def _recipe_github_url(recipe_ref: str | None) -> str | None:
     if not recipe_ref:
         return None
     try:
-        from pathlib import Path
-
-        import depictio.recipes as recipes_pkg
         from depictio.recipes import resolve_recipe_path
 
-        repo_root = Path(recipes_pkg.__file__).resolve().parents[2]
-        rel = resolve_recipe_path(recipe_ref).resolve().relative_to(repo_root)
-        return RECIPE_REPO_BASE + str(rel)
+        return github_blob_url(resolve_recipe_path(recipe_ref))
     except Exception:
         return None
 

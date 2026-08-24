@@ -57,7 +57,6 @@ from depictio.api.v1.db import (
     initialization_collection,
     multiqc_collection,
     projects_collection,
-    runs_collection,
     tokens_collection,
     users_collection,
 )
@@ -108,8 +107,10 @@ def _drop_project_and_dependents(dataset_name: str) -> None:
         data_collections_collection.delete_many({"_id": {"$in": oids}})
         deltatables_collection.delete_many({"data_collection_id": {"$in": oids + str_query}})
         files_collection.delete_many({"data_collection_id": {"$in": oids + str_query}})
-        runs_collection.delete_many({"data_collection_id": {"$in": oids + str_query}})
         multiqc_collection.delete_many({"data_collection_id": {"$in": oids + str_query}})
+        # Runs are keyed by workflow, never by collection — `_cascade_delete_project`
+        # above is what removes them, and a leftover run makes the next scan skip
+        # the whole workflow.
 
 
 async def _admin_user_and_token() -> tuple[UserBeanie, dict]:

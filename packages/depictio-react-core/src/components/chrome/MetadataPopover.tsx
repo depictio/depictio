@@ -12,11 +12,16 @@ interface MetadataPopoverProps {
 /**
  * Popover wrapper around `MetadataBody`. The inspector's Info tab renders the
  * same body docked; keeping the content in one component is what stops the two
- * from drifting. The trigger icon turns violet when the component was added
- * from the tools catalog, echoing the "Catalog" badge in the body itself.
+ * from drifting.
+ *
+ * One colour, always. The trigger used to turn violet for a catalog-added
+ * component, which made the same component's icon violet on a dashboard and
+ * cyan in the catalog preview (where nothing is stamped as catalog-sourced yet):
+ * a colour that meant "which surface am I on" rather than "what is this".
+ * Catalog origin has its own violet action in the same cluster (`CatalogButton`),
+ * so this one is free to just mean metadata.
  */
 const MetadataPopover: React.FC<MetadataPopoverProps> = ({ metadata }) => {
-  const isCatalog = Boolean(metadata.catalog_source);
   return (
     <Popover position="bottom-end" withArrow shadow="md" width={380}>
       <Popover.Target>

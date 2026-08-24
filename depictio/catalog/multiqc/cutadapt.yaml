@@ -1,5 +1,6 @@
 id: multiqc_cutadapt
 name: Adapter trimming
+origin_tool: Cutadapt
 mode: cutadapt
 description: Adapter/primer trimming summary (filtered reads, trimmed sequence lengths) — Cutadapt, surfaced via MultiQC.
 find: { path_glob: "**/multiqc/multiqc_data/multiqc.parquet" }

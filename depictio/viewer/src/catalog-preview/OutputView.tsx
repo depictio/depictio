@@ -335,9 +335,22 @@ const CollapsibleBar: React.FC<{
 const BareOutputView: React.FC<{
   target: StoredMetadata;
   renderOne: (m: StoredMetadata) => React.ReactNode;
-}> = ({ target, renderOne }) => {
+  /** Pin the component to this pixel height instead of filling the viewport.
+   *  The picker sends it for cards, whose iframe is taller than the tile so a
+   *  metric tooltip has room; without the pin the card would simply grow into
+   *  that room and the tooltip would be clipped again. */
+  tileHeight?: number | null;
+}> = ({ target, renderOne, tileHeight }) => {
   return (
-    <Box style={{ display: 'flex', flexDirection: 'column', height: '100vh', boxSizing: 'border-box' }}>
+    <Box
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100vh',
+        boxSizing: 'border-box',
+        background: tileHeight ? 'transparent' : undefined,
+      }}
+    >
 
       {/* No chrome. This view is what the builder's catalog picker embeds in an
         * iframe, and the panel around that iframe already names the output and
@@ -347,7 +360,16 @@ const BareOutputView: React.FC<{
         * the gallery) keeps its bars — nothing frames it there. */}
 
       {/* Component fills remaining height — same layout as a dashboard grid cell */}
-      <Box style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+      <Box
+        style={{
+          flex: tileHeight ? '0 0 auto' : 1,
+          height: tileHeight ?? undefined,
+          minHeight: 0,
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+      >
         {renderOne(target)}
       </Box>
 
@@ -362,7 +384,8 @@ const OutputView: React.FC<{
   onBack?: () => void;
   theme?: string;
   renderId?: string | null;
-}> = ({ entry, onBack, theme, renderId }) => {
+  tileHeight?: number | null;
+}> = ({ entry, onBack, theme, renderId, tileHeight }) => {
   const out = entry.output;
   const fixture = entry.fixturePreview;
   const renders = entry.renders as unknown as StoredMetadata[];
@@ -405,7 +428,7 @@ const OutputView: React.FC<{
     const target = renders.find((m) => m.index === renderId) ?? renders[0];
     if (!target) return null;
     return (
-      <BareOutputView target={target} renderOne={renderOne} />
+      <BareOutputView target={target} renderOne={renderOne} tileHeight={tileHeight} />
     );
   }
 

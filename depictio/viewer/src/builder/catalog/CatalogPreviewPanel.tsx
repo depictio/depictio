@@ -1,11 +1,14 @@
 /**
- * Right panel: one header band, then the preview fills everything below it.
+ * Right panel: one header band, the preview, and the source data behind it.
  *
  * The band carries only what identifies the offered component and the two ways
- * to take it. Everything else that used to have its own row — the data
- * collection, the output id, the fixture, the recipe, the `find` rule, the
- * upstream links — is one click away in the details popover, because it is
- * reference material rather than something to read on every selection.
+ * to take it. The reference material (output id, fixture, `find` rule, upstream
+ * links, the catalog YAML itself) is one click away in the details popover,
+ * because it is looked up, not read on every selection.
+ *
+ * What is *not* one click away is the data collection: the offer is an
+ * abstraction over a real collection, and the user has to be able to tie the two
+ * together, so the tag sits in the header and its rows are a disclosure away.
  *
  * The render switcher appears only when an output offers more than one render;
  * most offer exactly one, and a tab strip holding a single tab is pure chrome.
@@ -13,43 +16,56 @@
 import React, { useEffect, useState } from 'react';
 import {
   ActionIcon,
+  Anchor,
   Badge,
   Box,
   Button,
   Code,
+  Collapse,
   Group,
   Popover,
   Stack,
   Text,
   Tooltip,
+  UnstyledButton,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
-import type { CatalogOutputMatch, CatalogRender } from 'depictio-react-core';
+import type {
+  AdvancedVizKindDescriptor,
+  CatalogOutputMatch,
+  CatalogRender,
+} from 'depictio-react-core';
+import { componentTypeVisual, defaultLayoutForType } from 'depictio-react-core';
 import PreviewLoading from '../shared/PreviewLoading';
-import { defaultLayoutForType } from 'depictio-react-core';
+import DataPreviewTable from '../data/DataPreviewTable';
+
+export type VizKinds = Map<string, AdvancedVizKindDescriptor>;
 
 interface CatalogPreviewPanelProps {
   match: CatalogOutputMatch;
   toolId: string;
   toolName: string;
+  /** Advanced-viz kind metadata, keyed by `viz_kind` (labels + descriptions). */
+  vizKinds: VizKinds;
   onAdd: (render: CatalogRender) => void;
   onDirectAdd: (render: CatalogRender) => void;
 }
 
-const COMP_META: Record<string, { icon: string; color: string; label: string }> = {
-  figure:       { icon: 'mdi:chart-bar',          color: 'blue',   label: 'Figure' },
-  card:         { icon: 'formkit:number',         color: 'teal',   label: 'Card' },
-  table:        { icon: 'octicon:table-24',       color: 'gray',   label: 'Table' },
-  advanced_viz: { icon: 'mdi:chart-scatter-plot', color: 'violet', label: 'Advanced viz' },
-  multiqc:      { icon: 'mdi:chart-line',         color: 'orange', label: 'MultiQC' },
-};
-
-export function renderVariant(render: CatalogRender): string {
-  if (render.kind)        return render.kind.replace(/_/g, ' ');
-  if (render.visu_type)   return render.visu_type;
-  if (render.aggregation) return render.column ? `${render.aggregation} · ${render.column}` : render.aggregation;
-  if (render.code)        return 'custom code';
+/** What distinguishes one render of an output from its siblings. */
+export function renderVariant(render: CatalogRender, vizKinds: VizKinds): string {
+  if (render.kind) return vizKinds.get(render.kind)?.label ?? render.kind.replace(/_/g, ' ');
+  if (render.visu_type) return render.visu_type;
+  if (render.aggregation)
+    return render.column ? `${render.aggregation} · ${render.column}` : render.aggregation;
+  if (render.code) return 'custom code';
   return '';
+}
+
+/** One-line explanation of a render, for a tooltip. Advanced viz has a real
+ *  description served with the kind; the other components describe themselves. */
+function renderHint(render: CatalogRender, vizKinds: VizKinds): string {
+  if (render.kind) return vizKinds.get(render.kind)?.description ?? '';
+  return componentTypeVisual(render.component).label;
 }
 
 // ---------------------------------------------------------------------------
@@ -72,6 +88,12 @@ export function catalogUseRef(
   return `${toolId}/${ref}`;
 }
 
+/** "Adapter trimming (Cutadapt)" — the aggregator names its producer. */
+export function matchTitle(match: CatalogOutputMatch): string {
+  const name = match.name || match.output_id;
+  return match.origin_tool ? `${name} (${match.origin_tool})` : name;
+}
+
 const PREVIEW_BASE = '/depictio/api/v1/catalog/output';
 
 // DashboardGrid's lg-breakpoint geometry (see DashboardGrid.tsx). Mirrored here
@@ -80,8 +102,31 @@ const GRID_COLS = 8;
 const GRID_ROW_HEIGHT = 100;
 const GRID_MARGIN_X = 12;
 const GRID_MARGIN_Y = 4;
+// Empty room left below a card's tile inside the iframe.
+//
+// An iframe clips at its viewport edge no matter the z-index, and a metric
+// strip's tooltip (the Tukey five-number summary, a top-N breakdown) is taller
+// than the 204px a 2x2 card tile gets — so framed at exactly the tile size the
+// tooltip was cut in half with no way to reach the rest of it. The tile keeps
+// its real size; the headroom is transparent and only exists for what the tile
+// raises above itself.
+const CARD_TOOLTIP_HEADROOM = 240;
 
 // ---------------------------------------------------------------------------
+// Details popover pieces
+// ---------------------------------------------------------------------------
+
+const DetailSection: React.FC<{ title: string; children: React.ReactNode }> = ({
+  title,
+  children,
+}) => (
+  <Box>
+    <Text size="xs" fw={700} c="dimmed" tt="uppercase" mb={4}>
+      {title}
+    </Text>
+    <Stack gap={3}>{children}</Stack>
+  </Box>
+);
 
 const DetailRow: React.FC<{ label: string; children: React.ReactNode; mono?: boolean }> = ({
   label,
@@ -89,26 +134,65 @@ const DetailRow: React.FC<{ label: string; children: React.ReactNode; mono?: boo
   mono,
 }) => (
   <Group gap={8} wrap="nowrap" align="flex-start">
-    <Text size="xs" c="dimmed" w={72} style={{ flexShrink: 0 }}>
+    <Text size="xs" c="dimmed" w={78} style={{ flexShrink: 0 }}>
       {label}
     </Text>
     {mono ? (
-      <Code fz={11} style={{ wordBreak: 'break-all' }}>{children}</Code>
+      <Code fz={11} style={{ wordBreak: 'break-all' }}>
+        {children}
+      </Code>
     ) : (
-      <Text size="xs" style={{ lineHeight: 1.4, wordBreak: 'break-word' }}>{children}</Text>
+      <Text size="xs" style={{ lineHeight: 1.4, wordBreak: 'break-word' }}>
+        {children}
+      </Text>
     )}
   </Group>
 );
+
+/** External link that shows where it goes: icon, readable label, full URL on hover. */
+const OutLink: React.FC<{ href: string; icon: string; label: string }> = ({
+  href,
+  icon,
+  label,
+}) => (
+  <Anchor href={href} target="_blank" rel="noreferrer" size="xs" title={href}>
+    <Group gap={4} wrap="nowrap" component="span" display="inline-flex">
+      <Icon icon={icon} width={13} />
+      <Text span>{label}</Text>
+      <Icon icon="mdi:open-in-new" width={11} />
+    </Group>
+  </Anchor>
+);
+
+/** Component-type chip, in the app's one component palette. */
+const TypeChip: React.FC<{ type: string }> = ({ type }) => {
+  const visual = componentTypeVisual(type);
+  return (
+    <Badge
+      size="xs"
+      radius="sm"
+      variant="light"
+      color={visual.color}
+      leftSection={<Icon icon={visual.icon} width={11} />}
+    >
+      {visual.label}
+    </Badge>
+  );
+};
+
+// ---------------------------------------------------------------------------
 
 const CatalogPreviewPanel: React.FC<CatalogPreviewPanelProps> = ({
   match,
   toolId,
   toolName,
+  vizKinds,
   onAdd,
   onDirectAdd,
 }) => {
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [copied, setCopied] = useState(false);
+  const [sourceOpen, setSourceOpen] = useState(false);
   // Each selection reloads the whole single-file preview bundle, which is not
   // instant. Same treatment as every other builder preview rather than a blank
   // frame — see shared/PreviewLoading.
@@ -119,21 +203,38 @@ const CatalogPreviewPanel: React.FC<CatalogPreviewPanelProps> = ({
   const [loadedUrl, setLoadedUrl] = useState<string | null>(null);
   const renders = match.renders_as;
 
-  // A newly selected output may offer fewer renders than the previous one.
-  useEffect(() => setSelectedIdx(0), [match.output_id, match.dc_id]);
+  // A newly selected output may offer fewer renders than the previous one, and
+  // its source data is a different collection.
+  useEffect(() => {
+    setSelectedIdx(0);
+    setSourceOpen(false);
+  }, [match.output_id, match.dc_id]);
 
   const current = renders[selectedIdx] ?? renders[0];
   const renderId = `${match.output_id}-${selectedIdx}`;
+  const box = defaultLayoutForType(current?.component ?? '', 'right', 0);
+  const tileHeight = box.h * GRID_ROW_HEIGHT + (box.h - 1) * GRID_MARGIN_Y;
+  // A card paints its own surface (DepictioCard is a Paper with its own radius,
+  // border and background), so the frame's chrome would only double it — and
+  // dropping it is what lets the iframe stand taller than the tile without a
+  // border drawn across the middle of it.
+  const isCard = current?.component === 'card';
+
   // render_id via hash: read by the bundle's own JS (no backend restart needed).
   // ?render_id= also sent as an optimisation hint for the backend to filter payload size.
-  const previewUrl = `${PREVIEW_BASE}/${encodeURIComponent(match.output_id)}/preview-html?render_id=${encodeURIComponent(renderId)}#render_id=${encodeURIComponent(renderId)}`;
+  // `tile_h` pins the component to its dashboard height inside a taller
+  // viewport; without it the bundle stretches the single render to fill 100vh
+  // and the headroom would just make the card bigger.
+  const previewUrl =
+    `${PREVIEW_BASE}/${encodeURIComponent(match.output_id)}/preview-html` +
+    `?render_id=${encodeURIComponent(renderId)}` +
+    `#render_id=${encodeURIComponent(renderId)}${isCard ? `&tile_h=${tileHeight}` : ''}`;
 
   const previewLoading = loadedUrl !== previewUrl;
 
   const useRef = current ? catalogUseRef(toolId, match.output_id, current) : undefined;
   const useSnippet = useRef ? `use: ${useRef}` : '';
-  const title = match.name || match.output_id;
-  const box = defaultLayoutForType(current?.component ?? '', 'right', 0);
+  const matchedOn = match.find?.path_glob || match.find?.filename;
 
   const copyUse = async () => {
     if (!useSnippet) return;
@@ -147,7 +248,15 @@ const CatalogPreviewPanel: React.FC<CatalogPreviewPanelProps> = ({
   };
 
   return (
-    <Stack gap={0} h="100%" style={{ minHeight: 0 }}>
+    <Stack
+      gap={0}
+      h="100%"
+      style={{ minHeight: 0 }}
+      data-testid="catalog-preview-panel"
+      data-output-id={match.output_id}
+      data-dc-tag={match.dc_tag}
+      data-render-count={renders.length}
+    >
 
       {/* Header — identity on the left, everything actionable on the right */}
       <Group
@@ -162,7 +271,17 @@ const CatalogPreviewPanel: React.FC<CatalogPreviewPanelProps> = ({
           <Badge variant="dot" color="violet" size="sm" style={{ flexShrink: 0 }}>
             {toolName}
           </Badge>
-          <Text size="sm" fw={600} style={{ flexShrink: 0 }}>{title}</Text>
+          <Text size="sm" fw={600} style={{ flexShrink: 0 }}>{matchTitle(match)}</Text>
+          <Tooltip label="The ingested data collection this render reads" withArrow>
+            <Code fz={10} style={{ flexShrink: 0 }}>
+              <Icon
+                icon="mdi:database-outline"
+                width={11}
+                style={{ verticalAlign: '-1px', marginRight: 3 }}
+              />
+              {match.dc_tag}
+            </Code>
+          </Tooltip>
           {match.description && (
             <Text size="xs" c="dimmed" lineClamp={1} style={{ minWidth: 0 }}>
               {match.description}
@@ -171,7 +290,7 @@ const CatalogPreviewPanel: React.FC<CatalogPreviewPanelProps> = ({
         </Group>
 
         <Group gap={6} wrap="nowrap" style={{ flexShrink: 0 }}>
-          <Popover position="bottom-end" withArrow shadow="md" width={380}>
+          <Popover position="bottom-end" withArrow shadow="md" width={400}>
             <Popover.Target>
               <Tooltip label="Details" withArrow>
                 <ActionIcon variant="subtle" color="gray" size="md" aria-label="Output details">
@@ -179,40 +298,55 @@ const CatalogPreviewPanel: React.FC<CatalogPreviewPanelProps> = ({
                 </ActionIcon>
               </Tooltip>
             </Popover.Target>
-            <Popover.Dropdown p="sm">
-              <Stack gap={3}>
-                <DetailRow label="Tool">{toolName} ({toolId})</DetailRow>
-                <DetailRow label="Output" mono>{match.output_id}</DetailRow>
-                {match.mode && <DetailRow label="Mode">{match.mode}</DetailRow>}
-                <DetailRow label="Collection" mono>{match.dc_tag}</DetailRow>
-                {match.find?.path_glob && (
-                  <DetailRow label="Matches" mono>{match.find.path_glob}</DetailRow>
-                )}
-                {match.find?.filename && !match.find?.path_glob && (
-                  <DetailRow label="Matches" mono>{match.find.filename}</DetailRow>
-                )}
-                {match.recipe && <DetailRow label="Recipe" mono>{match.recipe}</DetailRow>}
-                {match.fixture && <DetailRow label="Preview on" mono>{match.fixture}</DetailRow>}
-                {match.description && <DetailRow label="About">{match.description}</DetailRow>}
-                {(match.nf_core_url || match.biotools_url) && (
-                  <Group gap="sm" mt={4}>
+            <Popover.Dropdown p="md">
+              <Stack gap="sm">
+                {/* Identity: what is being offered, and as what */}
+                <Box>
+                  <Text size="sm" fw={700} mb={4} style={{ lineHeight: 1.2 }}>
+                    {matchTitle(match)}
+                  </Text>
+                  {match.description && (
+                    <Text size="xs" c="dimmed" style={{ lineHeight: 1.45 }}>
+                      {match.description}
+                    </Text>
+                  )}
+                  <Group gap={4} mt={6}>
+                    {renders.map((r, i) => (
+                      <TypeChip key={i} type={r.component} />
+                    ))}
+                  </Group>
+                </Box>
+
+                <DetailSection title="Source">
+                  <DetailRow label="Collection" mono>{match.dc_tag}</DetailRow>
+                  {match.dc_type && <DetailRow label="Type">{match.dc_type}</DetailRow>}
+                  {matchedOn && <DetailRow label="Matches" mono>{matchedOn}</DetailRow>}
+                  {match.recipe && <DetailRow label="Recipe" mono>{match.recipe}</DetailRow>}
+                </DetailSection>
+
+                <DetailSection title="Catalog">
+                  <DetailRow label="Tool">{toolName} ({toolId})</DetailRow>
+                  <DetailRow label="Output" mono>{match.output_id}</DetailRow>
+                  {match.mode && <DetailRow label="Mode">{match.mode}</DetailRow>}
+                  {match.fixture && <DetailRow label="Preview on" mono>{match.fixture}</DetailRow>}
+                </DetailSection>
+
+                {(match.source_url || match.nf_core_url || match.biotools_url) && (
+                  <DetailSection title="Links">
+                    {match.source_url && (
+                      <OutLink
+                        href={match.source_url}
+                        icon="mdi:github"
+                        label="depictio module definition"
+                      />
+                    )}
                     {match.nf_core_url && (
-                      <Text
-                        size="xs" c="teal" component="a"
-                        href={match.nf_core_url} target="_blank" rel="noreferrer"
-                      >
-                        nf-core module
-                      </Text>
+                      <OutLink href={match.nf_core_url} icon="mdi:dna" label="nf-core module" />
                     )}
                     {match.biotools_url && (
-                      <Text
-                        size="xs" c="teal" component="a"
-                        href={match.biotools_url} target="_blank" rel="noreferrer"
-                      >
-                        bio.tools
-                      </Text>
+                      <OutLink href={match.biotools_url} icon="mdi:tools" label="bio.tools entry" />
                     )}
-                  </Group>
+                  </DetailSection>
                 )}
               </Stack>
             </Popover.Dropdown>
@@ -256,6 +390,8 @@ const CatalogPreviewPanel: React.FC<CatalogPreviewPanelProps> = ({
             color="violet"
             variant="filled"
             leftSection={<Icon icon="mdi:plus" width={15} />}
+            data-testid="catalog-add"
+            data-component={current?.component}
             onClick={() => onDirectAdd(current)}
           >
             Add
@@ -269,6 +405,7 @@ const CatalogPreviewPanel: React.FC<CatalogPreviewPanelProps> = ({
                 color="violet"
                 variant="subtle"
                 leftSection={<Icon icon="mdi:pencil-plus-outline" width={15} />}
+                data-testid="catalog-edit-add"
                 onClick={() => onAdd(current)}
               >
                 Edit
@@ -291,28 +428,33 @@ const CatalogPreviewPanel: React.FC<CatalogPreviewPanelProps> = ({
           }}
         >
           {renders.map((r, i) => {
-            const meta = COMP_META[r.component] ?? { icon: 'mdi:puzzle', color: 'gray', label: r.component };
-            const variant = renderVariant(r);
+            const visual = componentTypeVisual(r.component);
+            const variant = renderVariant(r, vizKinds);
+            const hint = renderHint(r, vizKinds);
             const active = selectedIdx === i;
             return (
-              <Button
-                key={i}
-                size="xs"
-                variant={active ? 'light' : 'subtle'}
-                color={meta.color}
-                leftSection={<Icon icon={meta.icon} width={13} />}
-                onClick={() => setSelectedIdx(i)}
-                // Mantine's button label is `overflow: hidden` on a line box the
-                // same height as the font, so descenders (the g in "coverage",
-                // "average") are cut off. Giving the label real leading and
-                // letting it overflow removes the whole class of clipping.
-                styles={{
-                  root: { fontWeight: active ? 600 : 400, flexShrink: 0 },
-                  label: { lineHeight: 1.5, overflow: 'visible' },
-                }}
-              >
-                {variant || meta.label}
-              </Button>
+              <Tooltip key={i} label={hint} withArrow multiline maw={300} disabled={!hint}>
+                <Button
+                  size="xs"
+                  variant={active ? 'light' : 'subtle'}
+                  color={visual.color}
+                  leftSection={<Icon icon={visual.icon} width={13} />}
+                  data-testid="catalog-render-tab"
+                  data-render-index={i}
+                  data-component={r.component}
+                  onClick={() => setSelectedIdx(i)}
+                  // Mantine's button label is `overflow: hidden` on a line box the
+                  // same height as the font, so descenders (the g in "coverage",
+                  // "average") are cut off. Giving the label real leading and
+                  // letting it overflow removes the whole class of clipping.
+                  styles={{
+                    root: { fontWeight: active ? 600 : 400, flexShrink: 0 },
+                    label: { lineHeight: 1.5, overflow: 'visible' },
+                  }}
+                >
+                  {variant || visual.label}
+                </Button>
+              </Tooltip>
             );
           })}
         </Group>
@@ -346,13 +488,17 @@ const CatalogPreviewPanel: React.FC<CatalogPreviewPanelProps> = ({
           style={{
             position: 'relative',
             width: `calc(((100% - ${GRID_MARGIN_X * (GRID_COLS - 1)}px) / ${GRID_COLS}) * ${box.w} + ${(box.w - 1) * GRID_MARGIN_X}px)`,
-            height: box.h * GRID_ROW_HEIGHT + (box.h - 1) * GRID_MARGIN_Y,
+            height: tileHeight + (isCard ? CARD_TOOLTIP_HEADROOM : 0),
             flexShrink: 0,
             overflow: 'hidden',
-            borderRadius: 'var(--mantine-radius-md)',
-            border: '1px solid var(--mantine-color-default-border)',
-            background: 'var(--mantine-color-body)',
-            boxShadow: 'var(--mantine-shadow-xs)',
+            ...(isCard
+              ? {}
+              : {
+                  borderRadius: 'var(--mantine-radius-md)',
+                  border: '1px solid var(--mantine-color-default-border)',
+                  background: 'var(--mantine-color-body)',
+                  boxShadow: 'var(--mantine-shadow-xs)',
+                }),
           }}
         >
           {previewLoading && <PreviewLoading label="Loading preview…" />}
@@ -372,6 +518,38 @@ const CatalogPreviewPanel: React.FC<CatalogPreviewPanelProps> = ({
             title={`Preview: ${match.output_id}`}
           />
         </Box>
+      </Box>
+
+      {/* Source data — the rows the preview is an abstraction over. Closed by
+        * default and only mounted when opened, so no request is made for a
+        * collection the user never asks about. */}
+      <Box style={{ borderTop: '1px solid var(--mantine-color-default-border)', flexShrink: 0 }}>
+        <UnstyledButton
+          onClick={() => setSourceOpen((o) => !o)}
+          w="100%"
+          px="lg"
+          py={8}
+          aria-expanded={sourceOpen}
+        >
+          <Group gap={6} wrap="nowrap">
+            <Icon
+              icon={sourceOpen ? 'mdi:chevron-down' : 'mdi:chevron-right'}
+              width={15}
+              color="var(--mantine-color-dimmed)"
+            />
+            <Text size="xs" fw={700} c="dimmed" tt="uppercase">
+              Source data
+            </Text>
+            <Code fz={10}>{match.dc_tag}</Code>
+          </Group>
+        </UnstyledButton>
+        <Collapse in={sourceOpen}>
+          <Box px="lg" pb="md" style={{ maxHeight: 520, overflow: 'auto' }}>
+            {sourceOpen && (
+              <DataPreviewTable dcId={match.dc_id} dcType={match.dc_type ?? null} shape={null} />
+            )}
+          </Box>
+        </Collapse>
       </Box>
 
     </Stack>

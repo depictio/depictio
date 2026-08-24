@@ -8,6 +8,6 @@ find: { path_glob: "**/multiqc/summary_variants_metrics_mqc.csv" }
 recipe: multiqc/summary_metrics.py
 fixture: summary_metrics.tsv
 renders_as:
-  - { component: card, column: pct_genome_covered_10x, aggregation: average } # mean ≥10× breadth
-  - { component: card, column: num_variants_total, aggregation: average } # mean variant load
+  - { component: card, column: pct_genome_covered_10x, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot } # ≥10× breadth
+  - { component: card, column: num_variants_total, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot } # variant load
   - { component: table }

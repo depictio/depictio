@@ -603,3 +603,7 @@ export type {
 // package in its Vite config so both apps use one consent implementation.
 export { capture, initTelemetry, isOptedOut, setOptOut } from './telemetry';
 export type { TelemetryConfig } from './telemetry';
+
+export { COMPONENT_TYPE_VISUALS, componentTypeVisual } from './componentTypeMeta';
+export type { ComponentTypeVisual } from './componentTypeMeta';
+export { brandColors } from './brandColors';

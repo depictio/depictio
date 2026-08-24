@@ -14,4 +14,6 @@ columns:
 fixture: amplicon_coverage.tsv
 renders_as:
   - { id: coverage_track_amplicon, component: advanced_viz, kind: coverage_track, roles: {chromosome: chrom, position: start, value: coverage} }
-  - { component: card, column: coverage, aggregation: average } # mean amplicon depth
+  # Depth is the one number a coverage table is read for, and a mean alone
+  # hides the drop-outs: the Tukey strip shows the spread and the outliers.
+  - { component: card, column: coverage, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }

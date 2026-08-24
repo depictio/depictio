@@ -1,5 +1,6 @@
 id: multiqc_kraken
 name: Read classification
+origin_tool: Kraken 2
 mode: kraken
 description: Taxonomic read classification (top species/clades) — Kraken2, surfaced via MultiQC.
 find: { path_glob: "**/multiqc/multiqc_data/multiqc.parquet" }

@@ -1,5 +1,6 @@
 id: multiqc_mosdepth
 name: Coverage distribution
+origin_tool: mosdepth
 mode: mosdepth
 description: Coverage-depth distribution and per-contig coverage — mosdepth, surfaced via MultiQC.
 find: { path_glob: "**/multiqc/multiqc_data/multiqc.parquet" }

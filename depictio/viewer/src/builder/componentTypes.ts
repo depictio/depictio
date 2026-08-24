@@ -1,9 +1,13 @@
 /**
  * Component type registry for the stepper grid + builder dispatch.
- * Mirrors depictio/dash/layouts/stepper_parts/part_two.py and
- * depictio/dash/component_metadata.py so the grid order/icons/colors stay
- * visually identical to the Dash editor.
+ *
+ * Order, wording and the MultiQC routing flag live here; the icon and the accent
+ * come from `componentTypeVisual` in depictio-react-core, which is the one place
+ * every surface (this grid, the catalog picker, the gallery, the metadata
+ * inspector) reads them from.
  */
+import { componentTypeVisual } from 'depictio-react-core';
+
 import type { ComponentType } from './store/useBuilderStore';
 
 export interface ComponentTypeMeta {
@@ -21,84 +25,43 @@ export interface ComponentTypeMeta {
   multiqcAware?: boolean;
 }
 
+/** Grid entry: shared icon + accent, with this file's own order and wording. */
+function entry(
+  type: ComponentType,
+  description: string,
+  extra: { iconBg?: string; badgeBg?: string; multiqcAware?: boolean } = {},
+): ComponentTypeMeta {
+  const visual = componentTypeVisual(type);
+  const { iconBg, ...rest } = extra;
+  return {
+    type,
+    label: visual.label,
+    description,
+    icon: visual.icon,
+    iconBg: iconBg ?? visual.color,
+    ...rest,
+  };
+}
+
 export const COMPONENT_TYPES: ComponentTypeMeta[] = [
-  {
-    type: 'figure',
-    label: 'Figure',
-    description: 'Interactive data visualizations',
-    icon: 'mdi:graph-box',
-    iconBg: '#9966cc',
-    multiqcAware: true,
-  },
-  {
-    type: 'card',
-    label: 'Card',
-    description: 'Statistical summary cards',
-    icon: 'formkit:number',
-    iconBg: '#45b8ac',
-  },
-  {
-    type: 'interactive',
-    label: 'Interactive',
-    description: 'Interactive data controls',
-    icon: 'bx:slider-alt',
-    iconBg: '#8bc34a',
-  },
-  {
-    type: 'table',
-    label: 'Table',
-    description: 'Data tables and grids',
-    icon: 'octicon:table-24',
-    iconBg: '#6495ed',
-  },
-  {
-    type: 'multiqc',
-    label: 'MultiQC',
-    description: 'MultiQC quality control reports and visualizations',
-    // For MultiQC the Dash editor uses an SVG image — we use the same
-    // multiqc icon class to honor light/dark theming.
-    icon: 'mdi:chart-line',
+  entry('figure', 'Interactive data visualizations', { multiqcAware: true }),
+  entry('card', 'Statistical summary cards'),
+  entry('interactive', 'Interactive data controls'),
+  entry('table', 'Data tables and grids'),
+  // The MultiQC tile draws the themed logo, not an icon on an accent tile.
+  entry('multiqc', 'MultiQC quality control reports and visualizations', {
     iconBg: 'transparent',
     badgeBg: '#201637', // MultiQC brand purple, from multiqc_icon_color.svg
-  },
-  {
-    type: 'image',
-    label: 'Image',
-    description: 'Interactive image grid with modal viewer',
-    icon: 'mdi:image-area',
-    iconBg: '#e6779f',
-  },
-  {
-    type: 'map',
-    label: 'Map',
-    description: 'Geospatial map visualization with markers',
-    icon: 'mdi:map-marker-multiple',
-    iconBg: '#7A5DC7',
-  },
-  {
-    type: 'text',
-    label: 'Text',
-    description: 'Section headings and notes to document the dashboard',
-    icon: 'mdi:text-box-edit',
-    iconBg: '#e91e63',
-  },
-  {
-    type: 'advanced_viz',
-    label: 'Advanced viz',
-    description: 'Composite analysis viz: volcano, clustering, Manhattan, taxonomy bar',
-    icon: 'mdi:chart-scatter-plot-hexbin',
-    iconBg: '#d6336c',
-  },
+  }),
+  entry('image', 'Interactive image grid with modal viewer'),
+  entry('map', 'Geospatial map visualization with markers'),
+  entry('text', 'Section headings and notes to document the dashboard'),
+  entry(
+    'advanced_viz',
+    'Composite analysis viz: volcano, clustering, Manhattan, taxonomy bar',
+  ),
 ];
 
 export function getComponentTypeMeta(t: ComponentType): ComponentTypeMeta {
-  return (
-    COMPONENT_TYPES.find((c) => c.type === t) || {
-      type: t,
-      label: t,
-      description: '',
-      icon: 'mdi:help-circle',
-      iconBg: '#999',
-    }
-  );
+  return COMPONENT_TYPES.find((c) => c.type === t) || entry(t, '');
 }

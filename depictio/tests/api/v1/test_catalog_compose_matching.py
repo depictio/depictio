@@ -17,6 +17,7 @@ from depictio.api.v1.endpoints.catalog_endpoints.routes import (
     _keep_present_multiqc_sections,
     _match_dc_to_catalog,
 )
+from depictio.catalog.payload import multiqc_module
 from depictio.models.components.advanced_viz.catalog import load_catalog_entries
 
 # A seeded reference project materialises every recipe DC as `{dc_tag}.tsv` next
@@ -120,16 +121,16 @@ class TestDedupe:
         """A DC can match through both its path and its recipe."""
         modules: dict[str, dict[str, Any]] = {}
         seen: set[tuple[str, str, str]] = set()
-        _add_matches(modules, [self.MATCH], "dc1", "wf1", "ancombc_results", seen)
-        _add_matches(modules, [self.MATCH], "dc1", "wf1", "ancombc_results", seen)
+        _add_matches(modules, [self.MATCH], "dc1", "wf1", "ancombc_results", "table", seen)
+        _add_matches(modules, [self.MATCH], "dc1", "wf1", "ancombc_results", "table", seen)
 
         assert len(modules["qiime2"]["matches"]) == 1
 
     def test_the_same_output_on_two_collections_is_kept(self):
         modules: dict[str, dict[str, Any]] = {}
         seen: set[tuple[str, str, str]] = set()
-        _add_matches(modules, [self.MATCH], "dc1", "wf1", "tag1", seen)
-        _add_matches(modules, [self.MATCH], "dc2", "wf1", "tag2", seen)
+        _add_matches(modules, [self.MATCH], "dc1", "wf1", "tag1", "table", seen)
+        _add_matches(modules, [self.MATCH], "dc2", "wf1", "tag2", "table", seen)
 
         assert len(modules["qiime2"]["matches"]) == 2
 
@@ -155,3 +156,111 @@ class TestMultiqcSectionFilter:
             "renders_as": [{"component": "table"}],
         }
         assert _keep_present_multiqc_sections([match], set()) == [match]
+
+
+class TestMultiqcAnchorNormalisation:
+    """A report anchors a module per run, a catalog output names the module."""
+
+    @pytest.mark.parametrize(
+        ("anchor", "module"),
+        [
+            ("fastqc", "fastqc"),
+            ("samtools_bowtie2", "samtools"),
+            ("samtools_markduplicates", "samtools"),
+            ("ivar_variants", "ivar"),
+            ("quast_variants", "quast"),
+            ("summary_variants_metrics", "summary"),
+            ("mosdepth-cumcov", "mosdepth"),
+        ],
+    )
+    def test_anchor_resolves_to_its_module(self, anchor, module):
+        assert multiqc_module(anchor) == module
+
+    def test_per_run_anchors_no_longer_drop_their_section(self, entries):
+        """The whole point: these four were silently missing from every report."""
+        matches = _match_dc_to_catalog(entries, basename="multiqc.parquet", full_path=RAW_MULTIQC)
+        present = {
+            multiqc_module(a)
+            for a in [
+                "ivar_variants",
+                "samtools_bowtie2",
+                "quast_variants",
+                "summary_variants_metrics",
+            ]
+        }
+        kept = _ids(_keep_present_multiqc_sections(matches, present))
+        assert {"multiqc_ivar", "multiqc_samtools", "multiqc_quast", "multiqc_summary"} <= kept
+
+
+class TestMatchPayload:
+    def test_multiqc_matches_carry_their_origin_tool(self, entries):
+        matches = _match_dc_to_catalog(entries, basename="multiqc.parquet", full_path=RAW_MULTIQC)
+        origins = {m["output_id"]: m["origin_tool"] for m in matches}
+        assert origins["multiqc_cutadapt"] == "Cutadapt"
+        assert origins["multiqc_fastqc"] == "FastQC"
+        # pipeline-generated custom content has no upstream tool to name
+        assert origins["multiqc_summary"] is None
+
+    def test_every_match_links_to_the_yaml_that_declares_it(self, entries):
+        matches = _match_dc_to_catalog(entries, recipe="qiime2/ancombc.py")
+        assert matches
+        for match in matches:
+            assert match["source_url"].endswith("depictio/catalog/qiime2/ancombc.yaml")
+
+    def test_recipe_only_lookup_finds_the_new_module_outputs(self, entries):
+        """The outputs added for collections that previously matched nothing."""
+        for recipe, output_id in [
+            ("qiime2/embedding_pcoa.py", "qiime2_embedding_pcoa"),
+            ("qiime2/taxonomy_composition.py", "qiime2_taxonomy_composition"),
+            ("qiime2/taxonomy_heatmap.py", "qiime2_taxonomy_heatmap"),
+            ("nf-core/ampliseq/complex_heatmap_canonical.py", "qiime2_clustered_heatmap"),
+            ("nf-core/ampliseq/ma_canonical.py", "qiime2_ma"),
+            ("nf-core/ampliseq/bray_curtis_canonical.py", "qiime2_bray_curtis"),
+            ("nf-core/ampliseq/tree_metadata_canonical.py", "qiime2_tree_metadata"),
+            ("nf-core/viralrecon/oncoplot_canonical.py", "ivar_oncoplot_matrix"),
+        ]:
+            assert output_id in _ids(_match_dc_to_catalog(entries, recipe=recipe)), recipe
+
+    def test_compositions_stay_out_of_the_catalog(self, entries):
+        """Cross-sample compositions are dashboard work, not a module's output."""
+        for recipe in [
+            "nf-core/ampliseq/upset_canonical.py",
+            "nf-core/viralrecon/upset_canonical.py",
+            "nf-core/viralrecon/variant_feature_matrix_canonical.py",
+        ]:
+            assert _match_dc_to_catalog(entries, recipe=recipe) == []
+
+    def test_the_collection_type_reaches_the_client(self):
+        modules: dict[str, dict[str, Any]] = {}
+        match = {"tool_id": "t", "tool_name": "T", "output_id": "o", "renders_as": []}
+        _add_matches(modules, [match], "dc1", "wf1", "tag1", "multiqc", set())
+        assert modules["t"]["matches"][0]["dc_type"] == "multiqc"
+
+
+class TestPreviewPayloadSerialisation:
+    """`/preview-payload` returns the payload as JSON, not through the bundle.
+
+    A plotly trace built on a pandas frame keeps numpy arrays and NaN, which the
+    embedded-bundle path already normalises. The JSON endpoint used to hand the
+    raw dict to FastAPI, which raised on the arrays — a 500 on every output whose
+    preview holds one.
+    """
+
+    def test_numpy_and_non_finite_survive_the_json_endpoint(self):
+        import json
+
+        import numpy as np
+
+        from depictio.catalog.payload import json_safe
+
+        payload = {
+            "figures": {"a": {"x": np.array([1, 2, 3]), "y": [float("nan"), 1.0]}},
+            "n": np.int64(7),
+            "nested": [{"z": np.array([[1.0, float("inf")]])}],
+        }
+        safe = json_safe(payload)
+        assert json.loads(json.dumps(safe)) == {
+            "figures": {"a": {"x": [1, 2, 3], "y": [None, 1.0]}},
+            "n": 7,
+            "nested": [{"z": [[1.0, None]]}],
+        }

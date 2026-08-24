@@ -1,0 +1,15 @@
+id: qiime2_embedding_pcoa
+name: Beta-diversity ordination
+mode: diversity/beta
+description: >-
+  Two-dimensional PCoA ordination of the samples, computed from the
+  relative-abundance table. One point per sample.
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/qiime2/diversitycore
+# The recipe chains off the abundance matrix rather than reading a QIIME 2
+# artefact directly, so `find` names the raw table at the head of that chain.
+find: { path_glob: "**/qiime2/rel_abundance_tables/rel-table-*.tsv" }
+recipe: qiime2/embedding_pcoa.py
+fixture: embedding_pcoa.tsv
+renders_as:
+  - { id: embedding, component: advanced_viz, kind: embedding, roles: {sample_id: sample_id, dim_1: dim_1, dim_2: dim_2} }
+  - { component: table }
