@@ -80,7 +80,13 @@ test.describe("Active filters propagate into the builder and new components", ()
     // --- Add a MultiSelect interactive filter on `variety` via the builder ---
     await page.locator("[data-tour-id='editor-add-component']").click();
     await page.waitForURL(/\/component\/add\//, { timeout: 15_000 });
-    await page.locator(".component-selection-card").filter({ hasText: "Interactive" }).click();
+    // Exact match: "Interactive" is also a substring of the Figure ("Interactive
+    // data visualizations") and Image ("Interactive image grid...") card
+    // descriptions, so a plain hasText match resolves to 3 cards.
+    await page
+      .locator(".component-selection-card")
+      .filter({ has: page.getByText("Interactive", { exact: true }) })
+      .click();
     await pickIrisDataCollection(page);
     await page.getByRole("button", { name: "Next Step" }).click();
 
