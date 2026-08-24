@@ -63,7 +63,9 @@ jobs:
           source venv/bin/activate
           uv pip install -e ".[dev]"
           uv pip uninstall -y polars polars-runtime-32 2>/dev/null || true
-          uv pip install --force-reinstall "polars-lts-cpu[numpy,pandas,pyarrow,excel,deltalake]==1.19.0"
+          # Same pin as depictio-ci / catalog-ci (bumped in #985 for the
+          # deltalake write_delta() skew) — this workflow was created before it.
+          uv pip install --force-reinstall "polars-lts-cpu[numpy,pandas,pyarrow,excel,deltalake]==1.33.1"
 
       # ── Node toolchain ──────────────────────────────────────────────────────
       - name: Set up pnpm
