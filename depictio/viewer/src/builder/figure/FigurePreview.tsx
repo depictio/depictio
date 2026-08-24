@@ -13,6 +13,7 @@ import Plot from 'react-plotly.js';
 import { previewFigure } from 'depictio-react-core';
 import type { FigureResponse } from 'depictio-react-core';
 import { useBuilderStore } from '../store/useBuilderStore';
+import { useBuilderPreviewFilters } from '../useBuilderPreviewFilters';
 import { buildMetadata } from '../buildMetadata';
 
 const DEBOUNCE_MS = 400;
@@ -26,8 +27,11 @@ const FigurePreview: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const reqId = useRef(0);
 
+  const previewFilters = useBuilderPreviewFilters();
+
   // Inputs that affect UI-mode preview rendering. Code mode is excluded so
-  // typing in the editor doesn't trigger a request.
+  // typing in the editor doesn't trigger a request. The active dashboard
+  // filters are part of the key: toggling "Apply to preview" must refire.
   const inputKey = JSON.stringify({
     componentType: state.componentType,
     wfId: state.wfId,
@@ -35,6 +39,7 @@ const FigurePreview: React.FC = () => {
     visuType: state.visuType,
     figureMode: state.figureMode,
     dictKwargs: state.dictKwargs,
+    filters: previewFilters,
   });
 
   useEffect(() => {
@@ -54,7 +59,7 @@ const FigurePreview: React.FC = () => {
       const id = ++reqId.current;
       setLoading(true);
       setError(null);
-      previewFigure({ metadata: buildMetadata(state) })
+      previewFigure({ metadata: buildMetadata(state), filters: previewFilters })
         .then((res) => {
           if (reqId.current !== id) return;
           setFigure(res);

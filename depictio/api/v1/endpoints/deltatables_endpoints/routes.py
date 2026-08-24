@@ -703,6 +703,107 @@ async def get_unique_values(
         raise HTTPException(status_code=500, detail=f"Failed to read unique values: {e}")
 
 
+def _resolve_delta_location(data_collection_id: PyObjectId, current_user: User) -> str:
+    """Permission-check ``data_collection_id`` and return its Delta location.
+
+    The shared opening of every read endpoint below: aggregate the permission
+    pipeline, find the DC's deltatable document, pull the table location.
+    Raises the same 404s those endpoints raised inline.
+    """
+    pipeline = _build_permission_pipeline(data_collection_id, current_user)
+    if not list(projects_collection.aggregate(pipeline)):
+        raise HTTPException(status_code=404, detail="Data collection not found or access denied.")
+
+    deltatables_list = list(deltatables_collection.find({"data_collection_id": data_collection_id}))
+    if not deltatables_list:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No DeltaTable found for Data Collection ID {data_collection_id}.",
+        )
+    delta_table_location = deltatables_list[-1].get("delta_table_location")
+    if not delta_table_location:
+        raise HTTPException(
+            status_code=404, detail="Delta table location not found in deltatable document."
+        )
+    return delta_table_location
+
+
+def _breakdown_response(
+    data_collection_id: PyObjectId,
+    column: str,
+    breakdown_col: str,
+    aggregation: str,
+    top_n_count: int,
+    filter_metadata: list[dict],
+    current_user: User,
+):
+    """Shared body of the breakdown GET (unfiltered) and POST (filtered) routes."""
+    delta_table_location = _resolve_delta_location(data_collection_id, current_user)
+
+    # The builder re-requests this on every keystroke-ish config change (layout
+    # switch, breakdown column, top-N). Salting on the aggregation version means
+    # an ingest invalidates it for free, same contract as ``unique_values``.
+    # Filtered requests skip the cache entirely: the key doesn't encode filter
+    # state, and salting it would fill the cache with transient combinations.
+    from depictio.api.v1.deltatables_utils import _get_aggregation_version, apply_filters_to_scan
+
+    dc_id_str = str(data_collection_id)
+    cache_key = (
+        f"breakdown_{dc_id_str}_{column}_{breakdown_col}_{aggregation}_{top_n_count}_"
+        f"{_get_aggregation_version(dc_id_str)}"
+    )
+    if not filter_metadata:
+        try:
+            from depictio.api.cache import get_cache
+
+            cached = get_cache().get(cache_key)
+            if cached is not None:
+                return cached
+        except Exception as exc:  # the cache is an optimisation, never a dependency
+            logger.debug(f"breakdown: cache read failed for {cache_key}: {exc}")
+
+    try:
+        lazy = pl.scan_delta(delta_table_location, storage_options=polars_s3_config)
+        # Project before grouping: a breakdown reads two columns, and on a wide
+        # collection loading the rest is the whole cost of the request. Filter
+        # columns must ride along in the projection or the filters would be
+        # applied to a frame that no longer contains them.
+        filter_cols = [
+            c
+            for f in filter_metadata
+            if (c := f.get("column_name") or (f.get("metadata") or {}).get("column_name"))
+        ]
+        wanted = list(dict.fromkeys([c for c in (breakdown_col, column) if c]))
+        available = set(lazy.collect_schema().names())
+        missing = [c for c in wanted if c not in available]
+        if missing:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Column(s) {missing} not found in data collection {dc_id_str}.",
+            )
+        projected = list(dict.fromkeys(wanted + [c for c in filter_cols if c in available]))
+        payload = compute_breakdown(
+            apply_filters_to_scan(lazy.select(projected), filter_metadata).select(wanted),
+            column=column,
+            breakdown_col=breakdown_col,
+            aggregation=aggregation,
+            top_n_count=top_n_count,
+        )
+        if not filter_metadata:
+            try:
+                from depictio.api.cache import get_cache
+
+                get_cache().set(cache_key, payload)
+            except Exception as exc:
+                logger.debug(f"breakdown: cache write failed for {cache_key}: {exc}")
+        return payload
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error computing breakdown on {breakdown_col!r} for {dc_id_str}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to compute breakdown: {e}")
+
+
 @deltatables_endpoint_router.get("/breakdown/{data_collection_id}")
 async def get_breakdown(
     data_collection_id: PyObjectId,
@@ -721,9 +822,9 @@ async def get_breakdown(
     33/33/34; the names and the shape were both invented, which made a correct
     builder look broken.
 
-    Computed against the *unfiltered* table: the builder has no interactive
-    filter state, and the saved card recomputes under whatever filters the
-    dashboard carries.
+    Computed against the *unfiltered* table. When the builder carries active
+    dashboard filters it uses the POST variant below instead, so the preview
+    matches what the saved card will show under those filters.
 
     Args:
         data_collection_id: Target data collection.
@@ -741,72 +842,47 @@ async def get_breakdown(
         HTTPException: 404 if the DC / delta table / column is missing, 403 if
         the user may not read it, 500 on a read error.
     """
-    pipeline = _build_permission_pipeline(data_collection_id, current_user)
-    if not list(projects_collection.aggregate(pipeline)):
-        raise HTTPException(status_code=404, detail="Data collection not found or access denied.")
-
-    deltatables_list = list(deltatables_collection.find({"data_collection_id": data_collection_id}))
-    if not deltatables_list:
-        raise HTTPException(
-            status_code=404,
-            detail=f"No DeltaTable found for Data Collection ID {data_collection_id}.",
-        )
-    delta_table_location = deltatables_list[-1].get("delta_table_location")
-    if not delta_table_location:
-        raise HTTPException(
-            status_code=404, detail="Delta table location not found in deltatable document."
-        )
-
-    # The builder re-requests this on every keystroke-ish config change (layout
-    # switch, breakdown column, top-N). Salting on the aggregation version means
-    # an ingest invalidates it for free, same contract as ``unique_values``.
-    from depictio.api.v1.deltatables_utils import _get_aggregation_version
-
-    dc_id_str = str(data_collection_id)
-    cache_key = (
-        f"breakdown_{dc_id_str}_{column}_{breakdown_col}_{aggregation}_{top_n_count}_"
-        f"{_get_aggregation_version(dc_id_str)}"
+    return _breakdown_response(
+        data_collection_id,
+        column,
+        breakdown_col,
+        aggregation,
+        top_n_count,
+        filter_metadata=[],
+        current_user=current_user,
     )
-    try:
-        from depictio.api.cache import get_cache
 
-        cached = get_cache().get(cache_key)
-        if cached is not None:
-            return cached
-    except Exception as exc:  # the cache is an optimisation, never a dependency
-        logger.debug(f"breakdown: cache read failed for {cache_key}: {exc}")
 
-    try:
-        lazy = pl.scan_delta(delta_table_location, storage_options=polars_s3_config)
-        # Project before grouping: a breakdown reads two columns, and on a wide
-        # collection loading the rest is the whole cost of the request.
-        wanted = list(dict.fromkeys([c for c in (breakdown_col, column) if c]))
-        available = set(lazy.collect_schema().names())
-        missing = [c for c in wanted if c not in available]
-        if missing:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Column(s) {missing} not found in data collection {dc_id_str}.",
-            )
-        payload = compute_breakdown(
-            lazy.select(wanted),
-            column=column,
-            breakdown_col=breakdown_col,
-            aggregation=aggregation,
-            top_n_count=top_n_count,
-        )
-        try:
-            from depictio.api.cache import get_cache
+@deltatables_endpoint_router.post("/breakdown/{data_collection_id}")
+async def get_breakdown_filtered(
+    data_collection_id: PyObjectId,
+    request: dict,
+    current_user: User = Depends(get_user_or_anonymous),
+):
+    """Filtered flavour of the breakdown preview.
 
-            get_cache().set(cache_key, payload)
-        except Exception as exc:
-            logger.debug(f"breakdown: cache write failed for {cache_key}: {exc}")
-        return payload
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error computing breakdown on {breakdown_col!r} for {dc_id_str}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to compute breakdown: {e}")
+    Body: ``{"column", "breakdown_col", "aggregation", "top_n_count",
+    "filters": [InteractiveFilter, ...]}``. Same payload as the GET, computed
+    under the dashboard's active filters so the card builder previews the
+    distribution the saved card will actually show (#329). Filters whose
+    column isn't in this DC are skipped (see ``apply_filters_to_scan``);
+    filtered responses bypass the breakdown cache.
+    """
+    from depictio.api.v1.deltatables_utils import clean_filter_payload
+
+    column = str(request.get("column") or "")
+    breakdown_col = str(request.get("breakdown_col") or "")
+    if not column or not breakdown_col:
+        raise HTTPException(status_code=400, detail="column and breakdown_col are required.")
+    return _breakdown_response(
+        data_collection_id,
+        column,
+        breakdown_col,
+        str(request.get("aggregation") or "count"),
+        int(request.get("top_n_count") or 3),
+        filter_metadata=clean_filter_payload(request.get("filters")),
+        current_user=current_user,
+    )
 
 
 @deltatables_endpoint_router.post("/card_metric/{data_collection_id}")
@@ -830,36 +906,34 @@ async def get_card_metric(
     Returns the layout's payload, or ``null`` when the config is incomplete or
     the data cannot support it (a constant column has no histogram). The
     builder then renders no strip rather than a misleading one.
+
+    ``filters`` (optional, ``InteractiveFilter`` list) narrows the frame first,
+    so the builder can preview the strip under the dashboard's active filters
+    (#329). ``layout: "hero"`` is a preview-only pseudo-layout returning
+    ``{"value": <scalar>}`` — the card's hero aggregation computed on the
+    (possibly filtered) frame, replacing the static precomputed spec value the
+    builder shows when no filters are active.
     """
+    from depictio.api.v1.deltatables_utils import apply_filters_to_scan, clean_filter_payload
+    from depictio.api.v1.services.card_metrics import hero_value
+
     layout = str(request.get("layout") or "")
     column = str(request.get("column") or "")
-    if layout not in NUMERIC_LAYOUTS or not column:
+    if (layout not in NUMERIC_LAYOUTS and layout != "hero") or not column:
         raise HTTPException(
             status_code=400,
-            detail=f"layout must be one of {NUMERIC_LAYOUTS} and column is required.",
+            detail=f"layout must be 'hero' or one of {NUMERIC_LAYOUTS} and column is required.",
         )
 
-    pipeline = _build_permission_pipeline(data_collection_id, current_user)
-    if not list(projects_collection.aggregate(pipeline)):
-        raise HTTPException(status_code=404, detail="Data collection not found or access denied.")
-
-    deltatables_list = list(deltatables_collection.find({"data_collection_id": data_collection_id}))
-    if not deltatables_list:
-        raise HTTPException(
-            status_code=404,
-            detail=f"No DeltaTable found for Data Collection ID {data_collection_id}.",
-        )
-    delta_table_location = deltatables_list[-1].get("delta_table_location")
-    if not delta_table_location:
-        raise HTTPException(
-            status_code=404, detail="Delta table location not found in deltatable document."
-        )
+    delta_table_location = _resolve_delta_location(data_collection_id, current_user)
+    filter_metadata = clean_filter_payload(request.get("filters"))
 
     try:
         lazy = pl.scan_delta(delta_table_location, storage_options=polars_s3_config)
         # Project to the columns this layout reads. ``attrition`` walks a list
         # of stage columns and ``trend`` needs its axis alongside the hero
-        # column; the rest read the hero column alone.
+        # column; the rest read the hero column alone. Filter columns must ride
+        # along or the filters would target a frame that no longer has them.
         wanted = [
             column,
             *[str(c) for c in (request.get("attrition_cols") or []) if c],
@@ -872,7 +946,17 @@ async def get_card_metric(
                 status_code=404,
                 detail=f"Column {column!r} not found in data collection {data_collection_id}.",
             )
-        return numeric_layout_payload(lazy.select(wanted), request, column, layout)
+        filter_cols = [
+            c
+            for f in filter_metadata
+            if (c := f.get("column_name") or (f.get("metadata") or {}).get("column_name"))
+            and c in available
+        ]
+        projected = list(dict.fromkeys(wanted + filter_cols))
+        frame = apply_filters_to_scan(lazy.select(projected), filter_metadata).select(wanted)
+        if layout == "hero":
+            return {"value": hero_value(frame, column, str(request.get("aggregation") or ""))}
+        return numeric_layout_payload(frame, request, column, layout)
     except HTTPException:
         raise
     except Exception as e:
@@ -942,23 +1026,7 @@ async def get_preview(
     Heavy work (Polars scan + collect) runs on Celery when
     `settings.celery.offload_preview` is true (default).
     """
-    pipeline = _build_permission_pipeline(data_collection_id, current_user)
-    project_result = list(projects_collection.aggregate(pipeline))
-    if not project_result:
-        raise HTTPException(status_code=404, detail="Data collection not found or access denied.")
-
-    deltatables_list = list(deltatables_collection.find({"data_collection_id": data_collection_id}))
-    if not deltatables_list:
-        raise HTTPException(
-            status_code=404,
-            detail=f"No DeltaTable found for Data Collection ID {data_collection_id}.",
-        )
-
-    delta_table_location = deltatables_list[-1].get("delta_table_location")
-    if not delta_table_location:
-        raise HTTPException(
-            status_code=404, detail="Delta table location not found in deltatable document."
-        )
+    delta_table_location = _resolve_delta_location(data_collection_id, current_user)
 
     offload = settings.celery.offload_preview
     response.headers["X-Celery-Path"] = "offloaded" if offload else "inline"
@@ -973,6 +1041,50 @@ async def get_preview(
         raise
     except Exception as e:
         logger.error(f"Error reading delta table preview: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to read delta table preview: {e}")
+
+
+@deltatables_endpoint_router.post("/preview/{data_collection_id}")
+async def get_preview_filtered(
+    response: Response,
+    data_collection_id: PyObjectId,
+    request: dict,
+    current_user: User = Depends(get_user_or_anonymous),
+):
+    """Filtered flavour of the preview above, for the component builder.
+
+    Body: ``{"limit": int = 100, "filters": [InteractiveFilter, ...]}``. The
+    rows AND ``total_rows`` reflect the filtered frame, so the builder's
+    "Showing X of N rows" matches what the dashboard's components show under
+    the same filters (#329). Filters whose column isn't in this DC are skipped
+    (cross-DC filters can't be link-resolved without dashboard context — see
+    ``apply_filters_to_scan``). The GET stays for unfiltered callers.
+    """
+    from depictio.api.v1.deltatables_utils import clean_filter_payload
+
+    delta_table_location = _resolve_delta_location(data_collection_id, current_user)
+    filter_metadata = clean_filter_payload(request.get("filters"))
+    limit = int(request.get("limit") or 100)
+
+    offload = settings.celery.offload_preview
+    response.headers["X-Celery-Path"] = "offloaded" if offload else "inline"
+    try:
+        return await offload_or_run(
+            preview_deltatable_task,
+            (
+                {
+                    "delta_table_location": delta_table_location,
+                    "limit": limit,
+                    "filter_metadata": filter_metadata,
+                },
+            ),
+            offload=offload,
+            label=f"deltatable_preview dc={data_collection_id} filters={len(filter_metadata)}",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error reading filtered delta table preview: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to read delta table preview: {e}")
 
 

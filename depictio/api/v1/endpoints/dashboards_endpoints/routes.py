@@ -1763,24 +1763,13 @@ def _build_filter_metadata(filters: list[dict]) -> list[dict]:
     Carries ``filter_expr`` through (top-level or under ``metadata``) so the
     server-side pipeline can AND the source's row-scoping expression alongside
     the user-supplied value.
+
+    Delegates to the shared ``clean_filter_payload`` so the render endpoints
+    and the builder-preview endpoints clean filters identically.
     """
-    out: list[dict] = []
-    for f in filters:
-        meta = f.get("metadata") or {}
-        column_name = f.get("column_name") or meta.get("column_name")
-        if not column_name or f.get("value") in (None, [], ""):
-            continue
-        entry: dict = {
-            "interactive_component_type": f.get("interactive_component_type")
-            or meta.get("interactive_component_type"),
-            "column_name": column_name,
-            "value": f.get("value"),
-        }
-        filter_expr = f.get("filter_expr") or meta.get("filter_expr")
-        if filter_expr:
-            entry["filter_expr"] = filter_expr
-        out.append(entry)
-    return out
+    from depictio.api.v1.deltatables_utils import clean_filter_payload
+
+    return clean_filter_payload(filters)
 
 
 @dataclass(frozen=True)
