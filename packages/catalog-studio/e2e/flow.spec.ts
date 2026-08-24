@@ -34,7 +34,9 @@ test('author a tool end-to-end and export a zip', async ({ page }) => {
   await page.getByRole('button', { name: 'Next', exact: true }).click();
 
   // ── Step 3: Export ────────────────────────────────────────────────────────
-  await expect(page.getByText('# yaml-language-server:')).toBeVisible();
+  // Both module.yaml and <output>.yaml carry a (per-shape) schema header now,
+  // and Mantine keeps both tab panels mounted — so match the first.
+  await expect(page.getByText('# yaml-language-server:').first()).toBeVisible();
   const [download] = await Promise.all([
     page.waitForEvent('download'),
     page.getByRole('button', { name: 'Download zip' }).click(),

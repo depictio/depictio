@@ -43,7 +43,7 @@ describe('renderToFlow', () => {
 describe('genModuleYaml', () => {
   it('emits the schema header + identity, omitting empty fields', () => {
     const yaml = genModuleYaml(tool);
-    expect(yaml).toContain('# yaml-language-server: $schema=../catalog.schema.json');
+    expect(yaml).toContain('# yaml-language-server: $schema=../module.schema.json');
     expect(yaml).toContain('id: mytool');
     expect(yaml).toContain('name: "My Tool"');
     expect(yaml).toContain('nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/mytool');

@@ -234,7 +234,11 @@ export function appendRendersToYaml(rawYaml: string, renders: RenderSpec[]): str
 
 export function genModuleYaml(tool: ToolMeta): string {
   const lines: string[] = [
-    '# yaml-language-server: $schema=../catalog.schema.json',
+    // Per-shape schema: catalog.schema.json describes a whole flat ENTRY
+    // (`required: [id, name, outputs]`, extras forbidden), so pointing a
+    // module.yaml at it made every schema-aware editor red-underline the file
+    // the contributor had just generated.
+    '# yaml-language-server: $schema=../module.schema.json',
     `id: ${flowScalar(tool.id)}`,
     `name: ${flowScalar(tool.name)}`,
   ];
@@ -253,7 +257,10 @@ export function genOutputYaml(
   fixtureFileName: string,
   renders: RenderSpec[],
 ): string {
-  const lines: string[] = [`id: ${flowScalar(outputId(tool.id, output.slug))}`];
+  const lines: string[] = [
+    '# yaml-language-server: $schema=../output.schema.json',
+    `id: ${flowScalar(outputId(tool.id, output.slug))}`,
+  ];
   if (output.description) lines.push(`description: ${flowScalar(output.description)}`);
   lines.push(`find: ${flowMap([['path_glob', output.path_glob]])}`);
   lines.push(`fixture: ${flowScalar(fixtureFileName)}`);

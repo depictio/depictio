@@ -642,12 +642,27 @@ def test_ground_render_dtypes():
 # ---------------------------------------------------------------------------
 
 
-def test_committed_json_schema_is_current():
+@pytest.mark.parametrize(
+    ("filename", "model", "flag"),
+    [
+        ("catalog.schema.json", "CatalogEntry", "entry"),
+        # A folder splits an entry in two, so each half needs its own schema:
+        # the generated YAMLs carry `$schema=../{module,output}.schema.json` in
+        # their yaml-language-server header. Pointing them at the whole-entry
+        # schema (required `outputs`, extras forbidden) made every editor flag
+        # a freshly generated file as invalid.
+        ("module.schema.json", "CatalogTool", "module"),
+        ("output.schema.json", "CatalogOutput", "output"),
+    ],
+)
+def test_committed_json_schema_is_current(filename, model, flag):
     import json
 
-    schema_path = REPO_ROOT / "depictio" / "catalog" / "catalog.schema.json"
+    import depictio.models.components.advanced_viz.catalog as catalog_models
+
+    schema_path = REPO_ROOT / "depictio" / "catalog" / filename
     committed = json.loads(schema_path.read_text())
-    assert committed == CatalogEntry.model_json_schema(), (
-        "catalog.schema.json is stale — run: "
-        "depictio catalog schema -o depictio/catalog/catalog.schema.json"
+    assert committed == getattr(catalog_models, model).model_json_schema(), (
+        f"{filename} is stale — run: "
+        f"depictio dev catalog schema --model {flag} -o depictio/catalog/{filename}"
     )

@@ -11,17 +11,34 @@ on:
       - "packages/catalog-studio/**"
       - "packages/depictio-react-core/**"
       - "packages/depictio-components/**"
-      - "depictio/catalog/catalog.schema.json"
-      - "depictio/models/components/advanced_viz/schemas.py"
+      # Compiled into the app through the `depictio-builder` alias.
+      - "depictio/viewer/src/builder/**"
+      # Snapshot sources: catalog.json (manifest), kinds.json, figureParams.json,
+      # catalog.schema.json.
+      - "depictio/catalog/**"
+      - "depictio/models/components/advanced_viz/**"
+      - "depictio/models/components/lite.py"
+      - "depictio/api/v1/services/figure/definitions.py"
+      - "depictio/api/v1/services/figure/parameter_discovery.py"
       - "depictio/cli/cli/commands/catalog.py"
       - ".github/workflows/catalog-studio-ci.yaml"
   push:
     branches: [main]
     paths:
       - "packages/catalog-studio/**"
-      - "depictio/catalog/catalog.schema.json"
-      - "depictio/models/components/advanced_viz/schemas.py"
+      - "packages/depictio-react-core/**"
+      - "packages/depictio-components/**"
+      # Compiled into the app through the `depictio-builder` alias.
+      - "depictio/viewer/src/builder/**"
+      # Snapshot sources: catalog.json (manifest), kinds.json, figureParams.json,
+      # catalog.schema.json.
+      - "depictio/catalog/**"
+      - "depictio/models/components/advanced_viz/**"
+      - "depictio/models/components/lite.py"
+      - "depictio/api/v1/services/figure/definitions.py"
+      - "depictio/api/v1/services/figure/parameter_discovery.py"
       - "depictio/cli/cli/commands/catalog.py"
+      - ".github/workflows/catalog-studio-ci.yaml"
 
 jobs:
   catalog-studio:
@@ -70,19 +87,27 @@ jobs:
         run: pnpm --filter catalog-studio run test
 
       - name: Build (regenerates snapshots from source via genKinds)
+        # STRICT_GEN turns "Python unavailable — keeping the committed snapshot"
+        # into a failure. Without it the drift check below passes whenever
+        # regeneration silently no-ops, which is the opposite of what it checks.
+        env:
+          CATALOG_STUDIO_STRICT_GEN: "1"
         run: |
           source venv/bin/activate
           pnpm --filter catalog-studio run build
 
       - name: Snapshot drift check
-        # The build regenerated kinds.json + figureParams.json + catalog.schema.json
-        # from the Python source. If they differ from the committed snapshots,
-        # fail — regenerate locally and commit.
+        # The build regenerated every snapshot from the Python source. If any
+        # differs from the committed copy, fail — regenerate locally and commit.
+        # catalog.json matters most: it is the append flow's view of the current
+        # catalog and the recognition step's source of truth.
         run: |
           git diff --exit-code -- \
             packages/catalog-studio/public/kinds.json \
             packages/catalog-studio/public/figureParams.json \
+            packages/catalog-studio/public/catalog.json \
             packages/catalog-studio/public/catalog.schema.json \
+            packages/catalog-studio/src/catalog/generated/ \
           || (echo "::error::snapshots out of date — run 'pnpm --filter catalog-studio genkinds' and commit." && exit 1)
 
       - name: Round-trip — generated entry must pass catalog validate

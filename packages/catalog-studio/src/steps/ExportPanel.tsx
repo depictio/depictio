@@ -10,14 +10,19 @@ import AppendedYamlPreview from './AppendedYamlPreview';
 import { validateAll } from '../catalog/grounding';
 import { oauthConfigured, signIn, getStoredToken, clearStoredToken, devToken } from '../catalog/githubOAuth';
 import { openCatalogPr, openAddRendersPr, openNewOutputPr, resolveTarget } from '../catalog/github';
+import type { PrTarget } from '../catalog/github';
 import { useUpstreamFile } from '../catalog/upstreamFile';
 import type { KindsMap } from '../types';
 
 // Fallback when OAuth isn't configured for the deployment: point GitHub's web
 // uploader at the existing parent dir (a non-existent <tool>/ dir 404s) and have
 // the user drag the unzipped <tool>/ folder in — GitHub keeps the subpath, forks,
-// and opens the PR. No token.
-const CATALOG_UPLOAD_URL = 'https://github.com/depictio/depictio/upload/main/depictio/catalog';
+// and opens the PR. No token. Derived from the resolved target so VITE_GH_TARGET
+// redirects this path too — it used to send testers at the production repo.
+const uploadUrl = (t: PrTarget) =>
+  `https://github.com/${t.owner}/${t.repo}/upload/${t.base}/depictio/catalog`;
+const editUrl = (t: PrTarget, path: string) =>
+  `https://github.com/${t.owner}/${t.repo}/edit/${t.base}/${path}`;
 
 type PrPhase = { status: 'idle' | 'working' | 'done' | 'error'; message?: string; url?: string };
 
@@ -91,10 +96,9 @@ export default function ExportPanel({ kinds }: { kinds: KindsMap }) {
   const contributeViaUpload = async () => {
     await doDownload();
     // Existing tool → GitHub's edit page for that file; new tool → the uploader.
+    const t = resolveTarget();
     const url =
-      existing && existing.yamlPath
-        ? `https://github.com/depictio/depictio/edit/main/${existing.yamlPath}`
-        : CATALOG_UPLOAD_URL;
+      existing && existing.yamlPath ? editUrl(t, existing.yamlPath) : uploadUrl(t);
     window.open(url, '_blank', 'noopener,noreferrer');
   };
 
@@ -251,6 +255,20 @@ export default function ExportPanel({ kinds }: { kinds: KindsMap }) {
         )}
       </Group>
 
+      {!canPr && (
+        <Text size="xs" c="dimmed">
+          One-click PR is off in this deployment: it needs <Code>VITE_GH_CLIENT_ID</Code> and{' '}
+          <Code>VITE_GH_OAUTH_WORKER_URL</Code> at build time (Vite inlines them). See{' '}
+          <Anchor
+            href="https://github.com/depictio/depictio/blob/main/packages/catalog-studio/oauth-worker/README.md"
+            target="_blank"
+            rel="noreferrer"
+          >
+            oauth-worker/README
+          </Anchor>
+          . The steps below work without any token.
+        </Text>
+      )}
       {canPr ? (
         <>
           {pr.status === 'working' && (

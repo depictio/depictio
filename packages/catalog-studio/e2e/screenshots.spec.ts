@@ -64,6 +64,6 @@ test('capture documentation screenshots', async ({ page }) => {
   await page.getByRole('button', { name: 'Next', exact: true }).click();
 
   // 6) Export step — generated files + submit.
-  await page.getByText('# yaml-language-server:').waitFor();
+  await page.getByText('# yaml-language-server:').first().waitFor();
   await page.screenshot({ path: shot('06-export'), fullPage: true });
 });

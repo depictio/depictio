@@ -31,6 +31,7 @@ def _stdout_off_the_wire() -> Iterator[None]:
     with contextlib.redirect_stdout(sys.stderr):
         yield
 
+
 # Maintainer / CI commands (catalog authoring, index maintenance, schema export).
 # Mounted under the hidden top-level `dev` group — kept out of the user-facing
 # `catalog` help, but still callable as `depictio dev catalog <cmd>`.
@@ -494,8 +495,27 @@ def catalog_refresh_index() -> None:
         raise typer.Exit(code=1)
 
 
+# The three shapes a catalog YAML can take, and the model that describes each.
+# A folder splits an entry across files, so `module.yaml` and `<output>.yaml`
+# each need their OWN schema: pointing them at the whole-entry schema (which
+# requires `outputs` and forbids extras) makes every editor flag them as invalid.
+_SCHEMA_MODELS = {
+    "entry": ("CatalogEntry", "a flat single-file entry (tool fields + `outputs`)"),
+    "module": ("CatalogTool", "a folder's `module.yaml` (tool identity only)"),
+    "output": ("CatalogOutput", "a folder's `<output>.yaml` (find/recipe/renders_as)"),
+}
+
+
 @dev_app.command("schema")
 def catalog_schema(
+    model: Annotated[
+        str,
+        typer.Option(
+            "--model",
+            "-m",
+            help=f"Which shape to describe: {', '.join(_SCHEMA_MODELS)} (default: entry).",
+        ),
+    ] = "entry",
     output: Annotated[
         str | None,
         typer.Option("--output", "-o", help="Write the JSON Schema here (default: stdout)"),
@@ -504,12 +524,16 @@ def catalog_schema(
     """Emit the JSON Schema for a catalog file (regenerate the committed copy)."""
     import json
 
-    from depictio.models.components.advanced_viz.catalog import CatalogEntry
+    import depictio.models.components.advanced_viz.catalog as catalog_models
 
-    text = json.dumps(CatalogEntry.model_json_schema(), indent=2) + "\n"
+    if model not in _SCHEMA_MODELS:
+        typer.echo(f"  Unknown --model {model!r}; expected one of {', '.join(_SCHEMA_MODELS)}")
+        raise typer.Exit(code=1)
+    class_name, _description = _SCHEMA_MODELS[model]
+    text = json.dumps(getattr(catalog_models, class_name).model_json_schema(), indent=2) + "\n"
     if output:
         Path(output).write_text(text)
-        typer.echo(f"  Wrote JSON Schema to {output}")
+        typer.echo(f"  Wrote {model} JSON Schema to {output}")
     else:
         typer.echo(text)
 

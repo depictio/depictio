@@ -116,7 +116,29 @@ copies:
 - `public/figureParams.json` ← `depictio dev catalog figure-params --json`
   (figure builder's viz list + per-viz parameter specs; lets depictio's
   `FigureUIMode` render its parameter accordion offline)
+- `public/catalog.json` ← `depictio dev catalog manifest --json`
+  (the existing catalog: duplicate detection, the recognition panel, and the
+  base the "add a visualization" preview appends to)
 - `public/catalog.schema.json` ← copy of `depictio/catalog/catalog.schema.json`
+- `src/catalog/generated/cardSpec.ts` ← the card enums *derived* from that
+  schema, so a `secondary_layout` added in depictio can't silently go missing
+  from the exporter (`src/catalog/cardRules.ts` turns it into a compile error)
 
-CI's drift check regenerates and `git diff --exit-code`s these, so a stale
-snapshot fails the build.
+CI's drift check regenerates and `git diff --exit-code`s all of these, with
+`CATALOG_STUDIO_STRICT_GEN=1` so a regeneration that silently no-ops fails
+instead of leaving the check to pass against unchanged snapshots.
+
+### Deployment (GitHub Pages)
+
+`deploy-catalog-studio.yaml` needs two **repository variables** for the
+one-click PR to work; without them the deployed app silently falls back to
+zip + web upload (the Export step says so):
+
+| Variable | Value |
+|---|---|
+| `VITE_GH_CLIENT_ID` | the GitHub OAuth App's client id (public) |
+| `VITE_GH_OAUTH_WORKER_URL` | the deployed worker's `/exchange` endpoint |
+
+Vite inlines them at build time — there is no runtime config, so changing
+either means a redeploy. The OAuth client *secret* lives only in the Cloudflare
+Worker; see [`oauth-worker/README.md`](./oauth-worker/README.md).
