@@ -1,5 +1,5 @@
 import { Anchor, Loader, Stack, Text } from '@mantine/core';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { handleGoogleCallback, persistSession } from 'depictio-react-core';
 import AuthCard from './AuthCard';
 
@@ -32,8 +32,16 @@ function safePostAuthTarget(candidate: string | null | undefined): string {
  */
 export default function GoogleOAuthCallback() {
   const [error, setError] = useState<string | null>(null);
+  // Run exactly once. React StrictMode invokes effects twice in dev, and both
+  // the authorization code and the CSRF state are single-use — a second
+  // exchange is guaranteed to fail and would surface as a spurious error on
+  // an otherwise successful sign-in.
+  const handledRef = useRef(false);
 
   useEffect(() => {
+    if (handledRef.current) return;
+    handledRef.current = true;
+
     const url = new URL(window.location.href);
     const code = url.searchParams.get('code');
     const state = url.searchParams.get('state');
@@ -48,10 +56,8 @@ export default function GoogleOAuthCallback() {
       return;
     }
 
-    let cancelled = false;
     (async () => {
       const result = await handleGoogleCallback(code, state);
-      if (cancelled) return;
       if (result.success && result.session) {
         persistSession(result.session);
         window.location.assign(safePostAuthTarget(result.redirect_url));
@@ -59,8 +65,6 @@ export default function GoogleOAuthCallback() {
       }
       setError(result.message || 'Google sign-in failed.');
     })();
-
-    return () => { cancelled = true; };
   }, []);
 
   return (

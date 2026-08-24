@@ -14,61 +14,48 @@ from fastapi import HTTPException
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
-from depictio.models.models.google_oauth import GoogleUserInfo
+from depictio.models.models.google_oauth import GoogleUserInfo, OAuthStateBeanie
 from depictio.models.models.users import UserBeanie
 
-# In-memory state storage (in production, use Redis or database)
-_oauth_states: dict[str, datetime] = {}
+# How long a user has to finish the Google consent screen before the state
+# minted for their login attempt stops being accepted.
+OAUTH_STATE_EXPIRY_MINUTES = 10
 
 
-def generate_oauth_state() -> str:
-    """Generate a secure random state parameter for OAuth CSRF protection."""
-    from depictio.api.v1.configs.logging_init import logger
+async def generate_oauth_state() -> str:
+    """Mint a secure random state parameter for OAuth CSRF protection.
 
+    The nonce is persisted so the callback — which may be served by any
+    worker or replica — can recognise it. Expired rows are reaped by the
+    collection's TTL index, so there is nothing to clean up here.
+    """
     state = secrets.token_urlsafe(32)
-    # Store state with expiration (10 minutes)
-    expiry = datetime.now() + timedelta(minutes=10)
-    _oauth_states[state] = expiry
-    logger.debug(f"Generated OAuth state: {state}, expires at: {expiry}")
+    expiry = datetime.now() + timedelta(minutes=OAUTH_STATE_EXPIRY_MINUTES)
+    await OAuthStateBeanie(state=state, expire_datetime=expiry).save()
+    logger.debug(f"Generated OAuth state, expires at: {expiry}")
     return state
 
 
-def validate_oauth_state(state: str) -> bool:
-    """Validate OAuth state parameter and remove if valid."""
-    import os
+async def validate_oauth_state(state: str) -> bool:
+    """Consume an OAuth state: it is valid once, and only before it expires.
 
-    from depictio.api.v1.configs.logging_init import logger
+    The lookup and the delete are a single atomic operation, so two callbacks
+    racing on the same nonce cannot both be accepted — exactly one wins.
+    """
+    # find_one_and_delete rather than Beanie's read-then-delete: the latter
+    # leaves a window in which a replayed callback could pass validation.
+    consumed = await OAuthStateBeanie.get_pymongo_collection().find_one_and_delete({"state": state})
 
-    # In development mode, skip state validation due to multi-worker issues
-    if os.getenv("DEPICTIO_DEV_MODE", "false").lower() == "true":
-        logger.debug(f"DEPICTIO_DEV_MODE: Skipping OAuth state validation for: {state}")
-        return True
-
-    logger.debug(f"Validating OAuth state: {state}")
-    logger.debug(f"Current stored states: {list(_oauth_states.keys())}")
-
-    if state not in _oauth_states:
-        logger.warning(f"State {state} not found in stored states")
+    if consumed is None:
+        logger.warning("OAuth state not found: already used, expired, or never issued")
         return False
 
-    # Check if state is expired
-    if _oauth_states[state] < datetime.now():
-        logger.warning(f"State {state} has expired")
-        del _oauth_states[state]
+    if consumed["expire_datetime"] <= datetime.now():
+        logger.warning("OAuth state has expired")
         return False
 
-    # Remove used state
-    del _oauth_states[state]
-    logger.debug(f"State {state} validated successfully")
+    logger.debug("OAuth state validated successfully")
     return True
-
-
-def cleanup_expired_states() -> None:
-    """Clean up expired OAuth states."""
-    now = datetime.now()
-    expired_states = [state for state, expiry in _oauth_states.items() if expiry < now]
-    for state in expired_states:
-        del _oauth_states[state]
 
 
 async def exchange_code_for_token(code: str) -> dict[str, Any]:
