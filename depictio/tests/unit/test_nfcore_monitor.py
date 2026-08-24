@@ -76,7 +76,9 @@ def test_build_drift_report_counts_missing_and_resolved(nfm: ModuleType) -> None
     )
     assert n_problems == 1
     assert "qiime2/ancombc/gone.csv" in report
-    assert "2 resolved, 1 missing" in report
+    assert "1 resolved, 1 missing, 1 optional-absent" in report
+    # optional-absent stays visible (coverage) but is never counted as drift
+    assert "qiime2/whatever/optional.csv — optional route, not exercised by megatest" in report
     assert "2.16.0 → 2.17.0" in report
     assert "action needed" in report  # overall status reflects the missing path
 
@@ -140,6 +142,59 @@ def test_validate_one_recipe_skips_dc_ref_recipes(nfm: ModuleType, tmp_path: Pat
     )
     assert result.status == "SKIPPED"
     assert "dc_ref" in result.detail
+
+
+def test_validate_one_recipe_skips_optional_dc_with_absent_source(
+    nfm: ModuleType, tmp_path: Path
+) -> None:
+    # An `optional: true` DC (route-gated, e.g. ampliseq multiregion/SIDLE) whose
+    # source file the default-profile megatest never produces must be SKIPPED,
+    # not FAILed — absence is pruning, not drift.
+    pytest.importorskip("depictio.recipes")
+    from types import SimpleNamespace
+
+    module = SimpleNamespace(
+        SOURCES=[
+            SimpleNamespace(
+                dc_ref=None,
+                glob_pattern=None,
+                ref="reconstructed",
+                path="sidle/reconstructed/reconstructed_merged.tsv",
+                optional=False,
+            )
+        ]
+    )
+    result = nfm._validate_one_recipe(
+        "sidle_reconstructed",
+        "nf-core/ampliseq/sidle_reconstructed.py",
+        module,
+        {},
+        {},
+        "ampliseq/results-x/",
+        {},  # megatest has no sidle/ files at all
+        tmp_path,
+        "2.16.0",
+        50.0,
+        dc_optional=True,
+    )
+    assert result.status == "SKIPPED"
+    assert "optional route not exercised" in result.detail
+    # Without the DC-level flag the same absence is a genuine failure.
+    result = nfm._validate_one_recipe(
+        "sidle_reconstructed",
+        "nf-core/ampliseq/sidle_reconstructed.py",
+        module,
+        {},
+        {},
+        "ampliseq/results-x/",
+        {},
+        tmp_path,
+        "2.16.0",
+        50.0,
+        dc_optional=False,
+    )
+    assert result.status == "FAIL"
+    assert "source file absent" in result.detail
 
 
 def test_resolve_results_prefix_with_explicit_hash(nfm: ModuleType) -> None:

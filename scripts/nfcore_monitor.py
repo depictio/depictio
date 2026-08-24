@@ -263,10 +263,14 @@ def _template_vars(template: dict) -> dict[str, str]:
 
 
 def _iter_recipe_dcs(template: dict, version: str):
-    """Yield ``(dc_tag, recipe_name, module_or_None, overrides, load_error)`` per recipe DC.
+    """Yield ``(dc_tag, recipe_name, module_or_None, overrides, load_error, dc_optional)``.
 
     Loads each transformed data collection's recipe module (reused by both the
-    path-existence check and the recipe-execution check).
+    path-existence check and the recipe-execution check). ``dc_optional`` is the
+    DC-level ``optional: true`` template flag: such DCs belong to a route the
+    pipeline only produces under non-default parameters (e.g. ampliseq
+    multiregion/SIDLE), so their sources being absent from the default-profile
+    megatest is expected, not drift.
     """
     from depictio.recipes import load_recipe
 
@@ -284,12 +288,13 @@ def _iter_recipe_dcs(template: dict, version: str):
                 for ref, so in (transform.get("source_overrides") or {}).items()
             }
             tag = dc.get("data_collection_tag", "")
+            dc_optional = bool(dc.get("optional"))
             try:
                 module = load_recipe(recipe_name, version)
             except Exception as exc:  # noqa: BLE001 - reported, never crashes the run
-                yield (tag, recipe_name, None, overrides, str(exc))
+                yield (tag, recipe_name, None, overrides, str(exc), dc_optional)
             else:
-                yield (tag, recipe_name, module, overrides, None)
+                yield (tag, recipe_name, module, overrides, None, dc_optional)
 
 
 def collect_recipe_source_paths(
@@ -299,11 +304,14 @@ def collect_recipe_source_paths(
 
     Loads each transformed DC's recipe, takes its file-based ``SOURCES`` (skipping
     ``dc_ref`` joins), applies the DC's ``source_overrides``, and substitutes
-    template variables.
+    template variables. ``optional`` is true when either the recipe source or the
+    owning DC is optional (route-gated DCs prune cleanly when absent).
     """
     variables = _template_vars(template)
     entries: list[tuple[str, str, str, bool]] = []
-    for tag, recipe_name, module, overrides, load_error in _iter_recipe_dcs(template, version):
+    for tag, recipe_name, module, overrides, load_error, dc_optional in _iter_recipe_dcs(
+        template, version
+    ):
         if load_error:
             print(f"  ! could not load recipe {recipe_name}: {load_error}", file=sys.stderr)
             continue
@@ -313,7 +321,9 @@ def collect_recipe_source_paths(
             raw = overrides.get(src.ref, src.path)
             if not raw:
                 continue
-            entries.append((tag, src.ref, substitute_vars(raw, variables), bool(src.optional)))
+            entries.append(
+                (tag, src.ref, substitute_vars(raw, variables), bool(src.optional) or dc_optional)
+            )
     return entries
 
 
@@ -338,11 +348,16 @@ def _validate_one_recipe(
     workdir: Path,
     version: str,
     max_file_mb: float,
+    dc_optional: bool = False,
 ) -> RecipeCheck:
     """Download a file-based recipe's sources and actually run it (transform + schema).
 
     Recipes that consume upstream DCs (``dc_ref``) don't read megatest files
     directly, so they can't break from an nf-core layout change — skipped here.
+    An ``optional: true`` DC (route-gated, e.g. ampliseq multiregion/SIDLE) whose
+    source is absent is likewise skipped: the megatest runs the default profile
+    only, so the route's files are expected to be missing — that's pruning, not
+    drift.
     """
     from depictio.recipes import execute_recipe
 
@@ -361,6 +376,13 @@ def _validate_one_recipe(
         if "{" in rel:
             return RecipeCheck(dc_tag, recipe_name, "SKIPPED", f"unresolved var in {rel}")
         if rel not in sizes:
+            if dc_optional or src.optional:
+                return RecipeCheck(
+                    dc_tag,
+                    recipe_name,
+                    "SKIPPED",
+                    f"optional route not exercised by megatest (source absent: {rel})",
+                )
             return RecipeCheck(dc_tag, recipe_name, "FAIL", f"source file absent: {rel}")
         if sizes[rel] > max_file_mb * 1_000_000:
             return RecipeCheck(
@@ -391,7 +413,9 @@ def validate_recipes(
     variables = _template_vars(template)
     sizes = dict(objects)
     results: list[RecipeCheck] = []
-    for tag, recipe_name, module, overrides, load_error in _iter_recipe_dcs(template, version):
+    for tag, recipe_name, module, overrides, load_error, dc_optional in _iter_recipe_dcs(
+        template, version
+    ):
         if load_error:
             results.append(RecipeCheck(tag, recipe_name, "FAIL", f"import failed: {load_error}"))
             continue
@@ -407,6 +431,7 @@ def validate_recipes(
                 workdir,
                 version,
                 max_file_mb,
+                dc_optional=dc_optional,
             )
         )
     return results
@@ -476,9 +501,15 @@ def build_drift_report(
     key_set = set(keys)
     resolved: list[tuple[str, str, str]] = []
     missing: list[tuple[str, str, str]] = []
+    optional_absent: list[tuple[str, str, str]] = []
     for tag, ref, path, optional in source_paths:
-        if _path_resolves(path, keys, key_set) or optional:
+        if _path_resolves(path, keys, key_set):
             resolved.append((tag, ref, path))
+        elif optional:
+            # Route-gated DC (template `optional: true`): the megatest's default
+            # profile never produces it, so absence is expected — surfaced for
+            # coverage visibility but never counted as drift.
+            optional_absent.append((tag, ref, path))
         else:
             missing.append((tag, ref, path))
 
@@ -520,15 +551,32 @@ def build_drift_report(
 
     # Layer 1: path existence
     lines.append(
-        f"## Source paths — {len(resolved)} resolved, {len(missing)} missing "
-        f"(of {len(source_paths)})"
+        f"## Source paths — {len(resolved)} resolved, {len(missing)} missing, "
+        f"{len(optional_absent)} optional-absent (of {len(source_paths)})"
     )
     for tag, ref, path in missing:
         lines.append(f"- ❌ `{tag}` ({ref}) → {path}")
         hint = _nearest_prefix(path, keys)
         if hint:
             lines.append(f"  - _nearest existing prefix:_ `{hint}`")
+    for tag, ref, path in optional_absent:
+        lines.append(f"- ⚪ `{tag}` ({ref}) → {path} — optional route, not exercised by megatest")
     lines.append("")
+
+    # Next step: the bump itself is manual (demo data + seeds need a human) —
+    # hand the maintainer the exact command.
+    if new_version != local_version:
+        lines += [
+            "## Next steps",
+            "Template still valid (or once the drift above is fixed), ship the new version with:",
+            "```",
+            f"python scripts/bump_template_version.py --pipeline {pipeline} "
+            f"--new-version {new_version}",
+            "```",
+            "then follow the checklist it prints. Seeding, CLI (`--template …/latest`), "
+            "CI and docs all pick the new version up automatically.",
+            "",
+        ]
     return "\n".join(lines), n_problems
 
 

@@ -386,14 +386,38 @@ class ReferenceDatasetRegistry:
                     f"for project {project.name}"
                 )
 
-    # Dataset name → relative path under depictio/projects/
+    # Dataset name → relative path under depictio/projects/. Versioned template
+    # projects (nf-core) are declared without a version: the seeding resolves the
+    # highest version directory at run time so a new template drop (e.g. ampliseq
+    # 2.18.0) is picked up with zero code changes.
     DATASET_PATHS: dict[str, str] = {
         "iris": os.path.join("init", "iris"),
         "penguins": os.path.join("init", "penguins"),
-        "ampliseq": os.path.join("nf-core", "ampliseq", "2.16.0"),
+        "ampliseq": os.path.join("nf-core", "ampliseq"),
         "advanced_viz_showcase": os.path.join("init", "advanced_viz_showcase"),
-        "viralrecon": os.path.join("nf-core", "viralrecon", "3.0.0"),
+        "viralrecon": os.path.join("nf-core", "viralrecon"),
     }
+
+    @classmethod
+    def resolve_dataset_rel_path(cls, dataset_name: str) -> str:
+        """Relative path under depictio/projects/ with the version dir resolved.
+
+        Non-versioned datasets pass through; versioned ones (no template YAML at
+        the declared path) get their highest version directory appended.
+        """
+        from depictio.cli.cli.utils.templates import latest_template_version
+
+        rel_path = cls.DATASET_PATHS[dataset_name]
+        base_dir = Path(__file__).resolve().parents[2] / "projects" / rel_path
+        if any((base_dir / f).is_file() for f in ("template.yaml", "project.yaml")):
+            return rel_path
+        version = latest_template_version(base_dir)
+        if version is None:
+            raise FileNotFoundError(
+                f"No template YAML (direct or versioned) for dataset '{dataset_name}' "
+                f"under {base_dir}"
+            )
+        return os.path.join(rel_path, version)
 
     @classmethod
     def resolve_template_for_init(
@@ -522,7 +546,7 @@ class ReferenceDatasetRegistry:
         cls, dataset_name: str, admin_user: UserBeanie, token_payload: dict[str, Any]
     ) -> dict[str, Any]:
         """Create a reference project with proper static IDs."""
-        rel_path = cls.DATASET_PATHS[dataset_name]
+        rel_path = cls.resolve_dataset_rel_path(dataset_name)
         project_dir = os.path.join(
             os.path.dirname(__file__),
             "..",

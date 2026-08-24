@@ -20,6 +20,8 @@ project ships a `template.yaml` (everything under
 Required:
 
 - `<template-id>`: e.g. `nf-core/viralrecon/3.0.0`, `nf-core/ampliseq/2.16.0`.
+  The version segment may be `latest` or omitted (`nf-core/ampliseq/latest`,
+  `nf-core/ampliseq`) — both resolve to the highest shipped template version.
   Looked up by walking `depictio/projects/` for a matching `template.yaml`
   where `template.template_id` equals the argument.
 - `--data-root <path>`: directory containing the pipeline output the template
