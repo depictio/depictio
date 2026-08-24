@@ -39,7 +39,8 @@
       "color": "indigo",
       "description": "Petal and sepal ranges, one collapsible card each",
       "collapsed": false,
-      "persistent": false
+      "persistent": false,
+      "pin": "top"
     },
     {
       "name": "Scoped views",
@@ -47,7 +48,8 @@
       "color": "pink",
       "description": "Options computed from a pre-filtered subset",
       "collapsed": true,
-      "persistent": false
+      "persistent": false,
+      "pin": "top"
     }
   ],
   "grid_sections": [
@@ -57,7 +59,8 @@
       "color": "teal",
       "description": "Shape, spread and measurement resolution of the two petal columns",
       "collapsed": false,
-      "persistent": false
+      "persistent": false,
+      "pin": "top"
     },
     {
       "name": "Variety separation",
@@ -65,7 +68,8 @@
       "color": "violet",
       "description": "How far a petal cut-off gets you toward naming the variety",
       "collapsed": false,
-      "persistent": false
+      "persistent": false,
+      "pin": "top"
     }
   ],
   "stored_metadata": [

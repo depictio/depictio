@@ -379,9 +379,19 @@ const App: React.FC = () => {
     () => foreignPersistentSections.filter((s) => s.kind === 'filter'),
     [foreignPersistentSections],
   );
+  // Grid sections split by the edge their author pinned them to. `pin` is
+  // unset on sections written before it existed, and 'top' is what they got.
   const foreignGridSections = useMemo(
     () => foreignPersistentSections.filter((s) => s.kind === 'grid'),
     [foreignPersistentSections],
+  );
+  const topGridSections = useMemo(
+    () => foreignGridSections.filter((s) => s.spec.pin !== 'bottom'),
+    [foreignGridSections],
+  );
+  const bottomGridSections = useMemo(
+    () => foreignGridSections.filter((s) => s.spec.pin === 'bottom'),
+    [foreignGridSections],
   );
 
   /**
@@ -911,19 +921,25 @@ const App: React.FC = () => {
             >
               {/* Persistent grid sections owned by sibling tabs — the
                   "always in view" slot a metadata table lands in on every tab.
-                  Above the tab's own grid, so landing on any tab starts with
-                  the family-wide context. Sections this tab owns render inside
+                  `pin: top` opens the tab with the family-wide context;
+                  `pin: bottom` puts it after this tab's own content, so a
+                  shared reference block does not precede the tab's own
+                  introduction. Sections this tab owns render inside
                   DashboardGrid below, where they stay editable. */}
-              {foreignGridSections.length > 0 && (
+              {topGridSections.length > 0 && (
                 <PersistentSectionsHost
-                  sections={foreignGridSections}
+                  sections={topGridSections}
                   familyId={crossTab.familyId}
+                  slot="top"
                   filters={deferredFilters}
                   onFilterChange={handleFilterChange}
                   refreshTick={refreshTick}
                 />
               )}
-              <Box style={{ flex: 1, minHeight: 0 }}>
+              {/* Only claims the leftover height when nothing follows it —
+                  otherwise a short grid would push the bottom-pinned sections
+                  to the fold with a gap above them. */}
+              <Box style={{ flex: bottomGridSections.length > 0 ? '0 0 auto' : 1, minHeight: 0 }}>
                 {rightComponents.length === 0 ? (
                   <Center style={{ height: '100%', minHeight: 320 }}>
                     <Stack align="center" gap="md" maw={420}>
@@ -981,6 +997,16 @@ const App: React.FC = () => {
                   />
                 )}
               </Box>
+              {bottomGridSections.length > 0 && (
+                <PersistentSectionsHost
+                  sections={bottomGridSections}
+                  familyId={crossTab.familyId}
+                  slot="bottom"
+                  filters={deferredFilters}
+                  onFilterChange={handleFilterChange}
+                  refreshTick={refreshTick}
+                />
+              )}
             </Box>
           </div>
           {/* Full-width footer spanning both the filter panel and the content

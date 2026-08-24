@@ -317,10 +317,14 @@ export interface FilterSectionSpec {
   description?: string | null;
   collapsed?: boolean;
   /** Render this section on every tab of the dashboard family: grid sections
-   *  appear read-only above each sibling tab's own content, filter sections'
+   *  appear read-only alongside each sibling tab's own content, filter sections'
    *  controls join every tab's filter panel and their values survive tab
    *  switches. No effect on single-tab dashboards. */
   persistent?: boolean;
+  /** Which edge a persistent section sits at, on every tab of the family
+   *  including the one that owns it. Unset means 'top'. Ignored unless
+   *  `persistent` is set. */
+  pin?: 'top' | 'bottom' | null;
 }
 
 export interface DashboardData {

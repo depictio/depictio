@@ -45,7 +45,9 @@ const SectionRow: React.FC<SectionRowProps> = ({
           )}
           {spec.persistent && (
             <Tooltip
-              label="Pinned to every tab of this dashboard; filter values set in it survive tab switches"
+              label={`Pinned to every tab of this dashboard, ${
+                spec.pin === 'bottom' ? 'after' : 'before'
+              } each tab's own sections; filter values set in it survive tab switches`}
               withArrow
               multiline
               w={260}
