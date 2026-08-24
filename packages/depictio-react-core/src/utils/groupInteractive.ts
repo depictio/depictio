@@ -100,8 +100,10 @@ export function sectionComponents(
 
   // Declared sections come first, in declaration order, even when a component
   // for a later-declared one appears earlier in stored_metadata. Persistent
-  // sections outrank the rest: they render first on every tab of the family,
-  // so the shared content sits in the same place wherever the viewer lands.
+  // sections then move to the edge their `pin` names, so the shared content
+  // sits in the same place wherever the viewer lands — including on the tab
+  // that owns it, which is why the reorder happens here rather than only in
+  // the fan-out host.
   const order: string[] = specs.map((s) => s.name);
   const bucketed = new Map<string, StoredMetadata[]>();
   const unsectioned: StoredMetadata[] = [];
@@ -119,10 +121,18 @@ export function sectionComponents(
     bucketed.get(name)!.push(m);
   }
 
-  const isPersistent = (name: string) => Boolean(specByName.get(name)?.persistent);
+  // `pin` only means something for a persistent section: an ordinary one keeps
+  // its declared position. Unset defaults to 'top', the placement persistent
+  // sections had before `pin` existed.
+  const pinOf = (name: string): 'top' | 'bottom' | null => {
+    const spec = specByName.get(name);
+    if (!spec?.persistent) return null;
+    return spec.pin === 'bottom' ? 'bottom' : 'top';
+  };
   const orderedNames = [
-    ...order.filter(isPersistent),
-    ...order.filter((name) => !isPersistent(name)),
+    ...order.filter((name) => pinOf(name) === 'top'),
+    ...order.filter((name) => pinOf(name) === null),
+    ...order.filter((name) => pinOf(name) === 'bottom'),
   ];
 
   const out: ComponentSection[] = [];

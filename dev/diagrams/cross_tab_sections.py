@@ -54,7 +54,8 @@ def build_fanout() -> Sketch:
 
     The two right-hand boxes are what the diagram exists for — a persistent
     section splits by kind, and the two halves reach a sibling tab by different
-    routes (a host above the grid, and the tab's own filter panel).
+    routes (a host at the grid's top or bottom edge, and the tab's own filter
+    panel).
     """
     s = Sketch(FANOUT_W, FANOUT_H)
 
@@ -120,9 +121,9 @@ def build_fanout() -> Sketch:
         "PersistentSectionsHost",
         (
             "the owner's grid section, pinned",
-            "above the viewing tab's own grid,",
-            "read-only; members fetched",
-            "against the owner tab's id",
+            "above or below the viewing tab's",
+            "own grid (pin), read-only; members",
+            "fetched against the owner tab's id",
         ),
     )
     panel = Box(

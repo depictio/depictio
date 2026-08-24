@@ -1,5 +1,5 @@
 import React from 'react';
-import { ActionIcon, Badge, Box, Button, Group, Loader, Title, Tooltip, useMantineColorScheme } from '@mantine/core';
+import { ActionIcon, Badge, Box, Button, Group, Loader, Menu, Title, Tooltip, useMantineColorScheme } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import type { DashboardData, DashboardSummary } from 'depictio-react-core';
@@ -52,14 +52,15 @@ interface HeaderProps {
   cardsLoading?: boolean;
   /** 'view' (default) shows Edit; 'edit' shows View + Add + Save. */
   mode?: 'view' | 'edit';
-  /** Edit-mode only: invoked when the user clicks "Add component". */
+  /** Edit-mode only: opens the component builder. */
   onAddComponent?: () => void;
-  /** Edit-mode only: opens the Sections manager. */
-  onOpenSections?: () => void;
+  /** Edit-mode only: opens the add-section dialog. The "Add" menu is add-only —
+   *  editing sections happens from the "…" on each section header. */
+  onAddSection?: () => void;
   /** Edit-mode only: invoked when the user clicks "Save". Should force-flush any pending debounced save. */
   onSave?: () => void;
   /** True when the current user owns this dashboard. When false, the
-   *  Edit / Add component / Save buttons render disabled with a tooltip
+   *  Edit / Add / Save buttons render disabled with a tooltip
    *  explaining why — the backend enforces the same rule with 403s. The
    *  default is `true` so callers that haven't been migrated keep working,
    *  matching prior behavior. */
@@ -98,7 +99,7 @@ const Header: React.FC<HeaderProps> = ({
   cardsLoading = false,
   mode = 'view',
   onAddComponent,
-  onOpenSections,
+  onAddSection,
   onSave,
   isOwner = true,
   rightExtras,
@@ -247,43 +248,52 @@ const Header: React.FC<HeaderProps> = ({
       {/* Right region — colors mirror depictio/dash/layouts/header.py */}
       <Group gap={8} wrap="nowrap" style={{ flexShrink: 0 }}>
         <PoweredBy withRightBorder />
+        {/* One Add menu rather than a button per thing that can be added: the
+            two entries name what appears, and the menu stays add-only. An
+            existing section is edited from the "…" on its own header. */}
         {mode === 'edit' && onAddComponent && (
-          <Tooltip
-            label="You can only edit dashboards you own. Duplicate this one to get your own copy."
-            disabled={isOwner}
-            withArrow
-          >
-            <Button
-              leftSection={<Icon icon="mdi:plus-circle" width={14} />}
-              color="green"
-              variant="filled"
-              size="xs"
-              onClick={onAddComponent}
-              disabled={!dashboardId || !isOwner}
-              data-tour-id="editor-add-component"
-            >
-              Add component
-            </Button>
-          </Tooltip>
-        )}
-        {mode === 'edit' && onOpenSections && (
-          <Tooltip
-            label="You can only edit dashboards you own. Duplicate this one to get your own copy."
-            disabled={isOwner}
-            withArrow
-          >
-            <Button
-              leftSection={<Icon icon="mdi:format-list-group" width={14} />}
-              color="grape"
-              variant="filled"
-              size="xs"
-              onClick={onOpenSections}
-              disabled={!dashboardId || !isOwner}
-              data-tour-id="editor-sections"
-            >
-              Sections
-            </Button>
-          </Tooltip>
+          <Menu shadow="md" width={200} position="bottom-end">
+            <Menu.Target>
+              {/* Tooltip inside the target, around the button: `Menu.Target`
+                  and `Tooltip` both need a ref-able child, and a `Menu` is a
+                  function component — wrapping the Menu in the Tooltip drops
+                  the ref and the menu stops opening. */}
+              <Tooltip
+                label="You can only edit dashboards you own. Duplicate this one to get your own copy."
+                disabled={isOwner}
+                withArrow
+              >
+                <Button
+                  leftSection={<Icon icon="mdi:plus-circle" width={14} />}
+                  rightSection={<Icon icon="mdi:chevron-down" width={14} />}
+                  color="green"
+                  variant="filled"
+                  size="xs"
+                  disabled={!dashboardId || !isOwner}
+                  data-tour-id="editor-add-component"
+                >
+                  Add
+                </Button>
+              </Tooltip>
+            </Menu.Target>
+            <Menu.Dropdown>
+              <Menu.Item
+                leftSection={<Icon icon="mdi:view-grid-plus-outline" width={14} />}
+                onClick={onAddComponent}
+              >
+                Component
+              </Menu.Item>
+              {onAddSection && (
+                <Menu.Item
+                  leftSection={<Icon icon="mdi:format-list-group" width={14} />}
+                  onClick={onAddSection}
+                  data-testid="add-section"
+                >
+                  Section
+                </Menu.Item>
+              )}
+            </Menu.Dropdown>
+          </Menu>
         )}
         {mode === 'edit' && onSave && (
           <Tooltip

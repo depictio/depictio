@@ -11,12 +11,13 @@
  * drag can't overwrite each other.
  */
 import React, { useEffect } from 'react';
-import { Modal, Stack, Tabs, Text } from '@mantine/core';
+import { Group, Modal, Stack, Tabs, Text, Title } from '@mantine/core';
 import { Icon } from '@iconify/react';
-import type { DashboardData } from 'depictio-react-core';
+import type { DashboardData, FilterSectionSpec } from 'depictio-react-core';
 
 import SectionList from './SectionList';
-import type { SectionOp } from './sectionMutations';
+import { SECTION_ACCENT } from './SectionModal';
+import type { SectionKind, SectionOp } from './sectionMutations';
 import { sectionsFor } from './sectionMutations';
 
 export interface SectionsModalProps {
@@ -24,6 +25,9 @@ export interface SectionsModalProps {
   onClose: () => void;
   dashboard: DashboardData | null;
   onOp: (op: SectionOp) => void;
+  /** Both hand off to `SectionModal`; this one closes while it is open. */
+  onAdd: (kind: SectionKind) => void;
+  onEdit: (kind: SectionKind, spec: FilterSectionSpec) => void;
 }
 
 const SectionsModal: React.FC<SectionsModalProps> = ({
@@ -31,6 +35,8 @@ const SectionsModal: React.FC<SectionsModalProps> = ({
   onClose,
   dashboard,
   onOp,
+  onAdd,
+  onEdit,
 }) => {
   // Sections a component names but the dashboard never declared are invisible to
   // the manager until they exist as specs. Writing them out on open is what lets
@@ -50,24 +56,35 @@ const SectionsModal: React.FC<SectionsModalProps> = ({
     <Modal
       opened={opened}
       onClose={onClose}
-      title="Sections"
+      withCloseButton
       centered
       size="lg"
       radius="md"
       overlayProps={{ blur: 2 }}
     >
+      <Group justify="center" gap="sm" mb="xs">
+        <Icon
+          icon="mdi:format-list-group"
+          width={28}
+          height={28}
+          color={`var(--mantine-color-${SECTION_ACCENT}-6)`}
+        />
+        <Title order={3} c={SECTION_ACCENT} m={0}>
+          Sections
+        </Title>
+      </Group>
       {!dashboard ? (
         <Text size="sm" c="dimmed">
           Loading…
         </Text>
       ) : (
         <Stack gap="md">
-          <Text size="sm" c="dimmed">
+          <Text size="sm" c="dimmed" ta="center">
             Sections group components under a collapsible header. The filter panel and
             the dashboard grid keep separate lists, so the same name can mean a
             different section in each.
           </Text>
-          <Tabs defaultValue="grid" keepMounted={false}>
+          <Tabs defaultValue="grid" keepMounted={false} color={SECTION_ACCENT}>
             <Tabs.List>
               <Tabs.Tab value="grid" leftSection={<Icon icon="mdi:view-grid-outline" width={14} />}>
                 Dashboard grid ({sectionsFor(dashboard, 'grid').length})
@@ -81,10 +98,22 @@ const SectionsModal: React.FC<SectionsModalProps> = ({
             </Tabs.List>
 
             <Tabs.Panel value="grid" pt="md">
-              <SectionList kind="grid" dashboard={dashboard} onOp={onOp} />
+              <SectionList
+                kind="grid"
+                dashboard={dashboard}
+                onOp={onOp}
+                onAdd={onAdd}
+                onEdit={onEdit}
+              />
             </Tabs.Panel>
             <Tabs.Panel value="filter" pt="md">
-              <SectionList kind="filter" dashboard={dashboard} onOp={onOp} />
+              <SectionList
+                kind="filter"
+                dashboard={dashboard}
+                onOp={onOp}
+                onAdd={onAdd}
+                onEdit={onEdit}
+              />
             </Tabs.Panel>
           </Tabs>
         </Stack>

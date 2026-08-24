@@ -22,9 +22,16 @@ export interface PersistentSectionsHostProps {
   /** Family id — the collapse state is keyed on it so folding a persistent
    *  section on one tab keeps it folded on every other. */
   familyId: string | null;
+  /** Which edge this host renders at. Only used to key the collapse state:
+   *  the two hosts a tab can mount must not write over each other's folds. */
+  slot: 'top' | 'bottom';
   filters: InteractiveFilter[];
   onFilterChange?: (filter: InteractiveFilter) => void;
   refreshTick?: number;
+  /** Editor-only per-section action, rendered in the section header. A section
+   *  fanned out here can only be changed on the tab that owns it, so the editor
+   *  puts a jump to that tab where the "…" sits on an editable section. */
+  renderSectionActions?: (section: PersistentSection) => React.ReactNode;
 }
 
 /** A section fanned out from another tab is keyed by owner + name: two tabs
@@ -33,7 +40,8 @@ const hostSectionKey = (s: PersistentSection) => `${s.owner_dashboard_id}:${s.sp
 
 /**
  * Renders the family's persistent grid sections on tabs that do not own them —
- * the "always in view" slot a metadata table lands in on every tab.
+ * the "always in view" slot a metadata table lands in on every tab. The caller
+ * mounts one host per `pin` edge, above and below the tab's own grid.
  *
  * Read-only by design: the section's geometry lives in its owner tab's
  * `right_panel_layout_data`, and this host must never feed a foreign section's
@@ -50,9 +58,11 @@ const hostSectionKey = (s: PersistentSection) => `${s.owner_dashboard_id}:${s.sp
 const PersistentSectionsHost: React.FC<PersistentSectionsHostProps> = ({
   sections,
   familyId,
+  slot,
   filters,
   onFilterChange,
   refreshTick,
+  renderSectionActions,
 }) => {
   const renderable = useMemo(
     () =>
@@ -70,7 +80,7 @@ const PersistentSectionsHost: React.FC<PersistentSectionsHostProps> = ({
     [renderable],
   );
   const collapse = useCollapseState(
-    `grid-section-collapsed:${familyId ?? 'family'}:persistent`,
+    `grid-section-collapsed:${familyId ?? 'family'}:persistent:${slot}`,
     collapsedByDefault,
   );
 
@@ -184,7 +194,10 @@ const PersistentSectionsHost: React.FC<PersistentSectionsHostProps> = ({
   const keys = renderable.map((s) => hostSectionKey(s.section));
 
   return (
-    <div ref={wrapperRef} style={{ width: '100%', overflowX: 'hidden' }}>
+    // `flexShrink: 0`: the viewer mounts this inside a fixed-height column
+    // flex container, which would otherwise squeeze a shrinkable host down to
+    // zero height as soon as the tab's own grid fills the column.
+    <div ref={wrapperRef} style={{ width: '100%', overflowX: 'hidden', flexShrink: 0 }}>
       <SectionAccordion
         value={keys.filter((k) => collapse.isOpen(k))}
         onChange={(open) => applyAccordionValue(open, keys, collapse)}
@@ -192,7 +205,12 @@ const PersistentSectionsHost: React.FC<PersistentSectionsHostProps> = ({
         {renderable.map(({ section, members }) => {
           const key = hostSectionKey(section);
           return (
-            <SectionAccordionItem key={key} value={key} color={section.spec.color}>
+            <SectionAccordionItem
+              key={key}
+              value={key}
+              color={section.spec.color}
+              actions={renderSectionActions?.(section)}
+            >
               <Accordion.Control>
                 <SectionHeader spec={section.spec} name={section.spec.name} />
               </Accordion.Control>

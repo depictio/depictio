@@ -64,9 +64,9 @@
   <path d="M909.3,264.4 C910.9,220.2 908.7,172.6 909.6,127.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
   <text x="1100.0" y="155.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">PersistentSectionsHost</text>
   <text x="1100.0" y="179.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">the owner's grid section, pinned</text>
-  <text x="1100.0" y="200.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">above the viewing tab's own grid,</text>
-  <text x="1100.0" y="221.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">read-only; members fetched</text>
-  <text x="1100.0" y="242.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">against the owner tab's id</text>
+  <text x="1100.0" y="200.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">above or below the viewing tab's</text>
+  <text x="1100.0" y="221.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">own grid (pin), read-only; members</text>
+  <text x="1100.0" y="242.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">fetched against the owner tab's id</text>
   <rect x="910.0" y="318.0" width="380.0" height="126.0" rx="6" fill="#e7f5ff"/>
   <path d="M909.4,318.7 C1036.4,319.3 1164.4,317.2 1290.1,318.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
   <path d="M909.3,318.7 C1035.4,316.6 1163.9,317.8 1290.2,318.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>

@@ -180,6 +180,7 @@ class TestToFullPassthrough:
                 "description": None,
                 "collapsed": False,
                 "persistent": False,
+                "pin": "top",
             }
         ]
 
@@ -379,3 +380,37 @@ class TestPersistentFlag:
         )
         yaml_text = DashboardDataLite.from_full(dash.to_full()).to_yaml()
         assert "persistent: true" in yaml_text
+
+
+class TestPinField:
+    """`pin` says which edge a persistent section sits at, on every tab of the
+    family including the one that owns it. It exists so "shows everywhere" and
+    "leads the page" stop being the same decision: a reference table wants the
+    first, not the second."""
+
+    def test_defaults_to_top(self):
+        """The placement persistent sections had before `pin` existed."""
+        assert FilterSectionSpec(name="Sample metadata").pin == "top"
+
+    def test_accepts_bottom(self):
+        assert FilterSectionSpec(name="Sample metadata", pin="bottom").pin == "bottom"
+
+    def test_rejects_any_other_edge(self):
+        with pytest.raises(ValidationError):
+            FilterSectionSpec(name="Sample metadata", pin="middle")  # type: ignore[arg-type]
+
+    def test_survives_a_round_trip(self):
+        dash = _dashboard(
+            [_figure("f", section="Sample metadata")],
+            grid_sections=[{"name": "Sample metadata", "persistent": True, "pin": "bottom"}],
+        )
+        back = DashboardDataLite.from_full(dash.to_full())
+        assert back.grid_sections[0].pin == "bottom"
+
+    def test_exported_yaml_carries_the_edge(self):
+        dash = _dashboard(
+            [_figure("f", section="Sample metadata")],
+            grid_sections=[{"name": "Sample metadata", "persistent": True, "pin": "bottom"}],
+        )
+        yaml_text = DashboardDataLite.from_full(dash.to_full()).to_yaml()
+        assert "pin: bottom" in yaml_text

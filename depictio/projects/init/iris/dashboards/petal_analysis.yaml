@@ -9,7 +9,8 @@ project_tag: "Iris Dataset Project Data Analysis"
 # Child tab of the Iris overview dashboard. The variety filter and the raw-data
 # table are NOT declared here: the overview marks its "Variety" filter section
 # and "Raw Data" grid section persistent, so both reach this tab through the
-# cross-tab fan-out (and the variety picked survives the tab switch).
+# cross-tab fan-out (and the variety picked survives the tab switch). The table
+# is pinned to the bottom there, so this tab still opens on its own intro text.
 is_main_tab: false
 parent_dashboard_tag: "Iris Dataset Analysis"
 tab_order: 1

@@ -216,3 +216,15 @@ def test_family_without_persistent_sections_returns_empty_list() -> None:
     main = _main_tab(filter_sections=[])
     with _Ctx([main, child]):
         assert _call()["persistent_sections"] == []
+
+
+def test_pin_reaches_the_client_verbatim() -> None:
+    """`pin` decides which edge the viewer's host renders the section at, so it
+    has to survive the fan-out — the endpoint hands the spec back untouched."""
+    child = _child_tab(
+        grid_sections=[{"name": "Sample metadata", "persistent": True, "pin": "bottom"}]
+    )
+    with _Ctx([_main_tab(), child]):
+        result = _call()
+    grid = next(s for s in result["persistent_sections"] if s["kind"] == "grid")
+    assert grid["spec"]["pin"] == "bottom"

@@ -22,6 +22,8 @@ main_tab_name: "Overview"
 filter_sections:
   # Persistent: this filter renders in every tab's panel and the variety picked
   # here survives tab switches (FilterSectionSpec.persistent, cross-tab fan-out).
+  # `pin` is left at its default "top": a shared filter is what the panel should
+  # open with, on every tab.
   - name: "Variety"
     icon: "mdi:filter-variant"
     color: "blue"
@@ -55,14 +57,18 @@ grid_sections:
     icon: "mdi:chart-bell-curve"
     color: "violet"
     description: "Where the three varieties separate, and where they do not"
-  # Persistent: the raw-data table renders (read-only) at the top of every tab
-  # in the family — the "records in view on landing" slot of issue #858.
+  # Persistent: the raw-data table renders (read-only) on every tab in the
+  # family — the "records in view wherever you land" slot of issue #858.
+  # `pin: bottom` puts it after each tab's own sections: it is reference
+  # material, so it should not come before the tab's own introduction. Set it
+  # to "top" (the default) for shared content that has to lead instead.
   - name: "Raw Data"
     icon: "mdi:table"
     color: "gray"
     description: "Per-flower records behind every figure, shown on every tab"
     collapsed: true
     persistent: true
+    pin: "bottom"
 
 components:
   # ── Narrative intro ────────────────────────────────────────────────
