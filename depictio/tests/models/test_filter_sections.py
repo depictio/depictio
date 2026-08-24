@@ -414,3 +414,54 @@ class TestPinField:
         )
         yaml_text = DashboardDataLite.from_full(dash.to_full()).to_yaml()
         assert "pin: bottom" in yaml_text
+
+
+# ---------------------------------------------------------------------------
+# Text components carry no data binding through an export
+# ---------------------------------------------------------------------------
+
+
+class TestTextComponentExport:
+    """`to_full` binds neither a workflow nor a data collection to a text
+    component. An export that inherited a collection tag from a leftover
+    `dc_config` produced a component the import could not resolve — no
+    `workflow_tag` to resolve it against — so every text component was dropped
+    on the way back in, which is what broke the iris YAML round-trip."""
+
+    def _full_with_text(self, **extra) -> dict:
+        return {
+            "title": "Test",
+            "stored_metadata": [
+                {
+                    "index": "text-1",
+                    "component_type": "text",
+                    "title": "Intro",
+                    "data_collection_tag": "",
+                    "workflow_tag": "",
+                    **extra,
+                }
+            ],
+        }
+
+    def test_leftover_dc_config_is_not_exported(self):
+        full = self._full_with_text(dc_config={"data_collection_tag": "iris_table"})
+        comp = DashboardDataLite.from_full(full).components[0]
+        assert comp.data_collection_tag in (None, "")  # type: ignore[union-attr]
+        assert comp.workflow_tag in (None, "")  # type: ignore[union-attr]
+
+    def test_a_bound_figure_still_exports_its_tags(self):
+        full = {
+            "title": "Test",
+            "stored_metadata": [
+                {
+                    "index": "fig-1",
+                    "component_type": "figure",
+                    "visu_type": "scatter",
+                    "workflow_tag": "python/iris_workflow",
+                    "dc_config": {"data_collection_tag": "iris_table"},
+                }
+            ],
+        }
+        comp = DashboardDataLite.from_full(full).components[0]
+        assert comp.data_collection_tag == "iris_table"  # type: ignore[union-attr]
+        assert comp.workflow_tag == "python/iris_workflow"  # type: ignore[union-attr]
