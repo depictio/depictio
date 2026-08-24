@@ -184,39 +184,92 @@ const indentBlock = (text: string, spaces: number) =>
     .join('\n');
 
 export interface AppendResult {
-  /** The merged YAML text (what gets committed / downloaded). */
+  /** The merged YAML text (what gets committed / downloaded). Unchanged from
+   *  the input when `problem` is set. */
   yaml: string;
   /** 0-based indices (into `yaml.split('\n')`) of the inserted render lines,
    *  so the Export preview can highlight exactly what was appended. */
   addedLines: number[];
+  /** Set when the file's `renders_as` is in a shape this textual splice cannot
+   *  edit safely. The caller must surface it and refuse to write — silently
+   *  producing broken YAML (or a second `renders_as` key, which YAML resolves
+   *  to the LAST one, dropping every existing render) is far worse than asking
+   *  for a hand edit. */
+  problem?: string;
+}
+
+/** The `renders_as:` line, or -1. Only a top-level (column 0) key counts: an
+ *  indented one belongs to something else, and appending a second top-level key
+ *  would silently shadow it. */
+function findRendersAsLine(lines: string[]): number {
+  return lines.findIndex((l) => /^renders_as\s*:/.test(l));
 }
 
 /**
  * Append new `renders_as` items to an existing output YAML's raw text, leaving
  * everything else (comments, identity, fixture, existing renders) untouched, and
- * report which lines were inserted (for the preview highlight). Handles a
- * populated block, an inline empty `renders_as: []`, and a missing `renders_as:`
- * key. Used for "add a visualization to an existing tool".
+ * report which lines were inserted (for the preview highlight).
+ *
+ * Deliberately textual rather than a YAML round-trip: the catalog files carry
+ * comments, a schema header and hand-tuned formatting that a re-dump would
+ * flatten. The cost is that a few legal shapes cannot be spliced safely — those
+ * come back as `problem` rather than as silently mangled output.
  */
 export function appendRenders(rawYaml: string, renders: RenderSpec[]): AppendResult {
   if (!renders.length) return { yaml: rawYaml, addedLines: [] };
+  const crlf = /\r\n/.test(rawYaml);
+  const source = crlf ? rawYaml.replace(/\r\n/g, '\n') : rawYaml;
+  const eol = crlf ? '\r\n' : '\n';
+  const done = (parts: string[], addedLines: number[]): AppendResult => {
+    // `lines` carries a trailing '' from the final newline; drop any trailing
+    // blanks so the file ends with exactly one newline.
+    const trimmed = [...parts];
+    while (trimmed.length && trimmed[trimmed.length - 1].trim() === '') trimmed.pop();
+    return { yaml: trimmed.join(eol) + eol, addedLines };
+  };
+  const refuse = (problem: string): AppendResult => ({ yaml: rawYaml, addedLines: [], problem });
+
   const itemLines = renders.map((r) => indentBlock(renderToSnippet(r), 2)).join('\n').split('\n');
   const range = (start: number) => Array.from({ length: itemLines.length }, (_, i) => start + i);
-  const lines = rawYaml.replace(/\n*$/, '\n').split('\n'); // trailing '' from the final \n
-  const idx = lines.findIndex((l) => /^renders_as\s*:/.test(l));
+  const lines = source.replace(/\n*$/, '\n').split('\n'); // trailing '' from the final \n
+  const idx = findRendersAsLine(lines);
 
   if (idx === -1) {
-    // No renders_as key: append a fresh block at EOF (drop the trailing '' first).
+    // Guard the nested case before treating "no key" as "append a fresh block":
+    // a second top-level renders_as would win and drop the existing renders.
+    if (lines.some((l) => /^\s+renders_as\s*:/.test(l))) {
+      return refuse(
+        'This file nests `renders_as` under another key. Appending a second top-level ' +
+          '`renders_as` would silently replace the existing one, so edit the file by hand.',
+      );
+    }
+    // No renders_as key at all: append a fresh block at EOF (drop the trailing '').
     const body = lines.slice(0, -1);
-    const merged = [...body, 'renders_as:', ...itemLines];
-    return { yaml: merged.join('\n') + '\n', addedLines: range(body.length + 1) };
+    return done([...body, 'renders_as:', ...itemLines], range(body.length + 1));
+    // NB: addedLines is offset by the 'renders_as:' line we just inserted.
   }
-  if (/^renders_as\s*:\s*\[\s*\]\s*$/.test(lines[idx])) {
-    lines[idx] = 'renders_as:';
+
+  const keyLine = lines[idx];
+  // `renders_as: []` — optionally followed by a comment, which the old anchored
+  // regex missed, sending an empty list down the block path and splicing block
+  // items straight after an inline sequence (invalid YAML).
+  const emptyInline = keyLine.match(/^renders_as\s*:\s*\[\s*\](\s*#.*)?$/);
+  if (emptyInline) {
+    lines[idx] = `renders_as:${emptyInline[1] ?? ''}`;
     lines.splice(idx + 1, 0, ...itemLines);
-    return { yaml: lines.join('\n').replace(/\n*$/, '\n'), addedLines: range(idx + 1) };
+    return done(lines, range(idx + 1));
   }
-  // Find the end of the block: the first later line at column 0 that isn't blank
+  // A non-empty FLOW sequence (`renders_as: [ {...}, ... ]`, possibly spanning
+  // lines). Splicing block items into it produces invalid YAML, and matching
+  // brackets properly here would mean writing a YAML parser.
+  if (/^renders_as\s*:\s*\[/.test(keyLine)) {
+    return refuse(
+      'This file writes `renders_as` as a flow sequence (`[ … ]`). Converting it to block ' +
+        'style is a judgement call about the file\'s formatting, so edit it by hand.',
+    );
+  }
+
+  // Block style. Find the end: the first later line at column 0 that isn't blank
   // (a new top-level key or comment), else EOF; then back up over blank lines so
   // the new items sit right after the last existing item.
   let end = idx + 1;
@@ -224,7 +277,7 @@ export function appendRenders(rawYaml: string, renders: RenderSpec[]): AppendRes
   let insertAt = end;
   while (insertAt > idx + 1 && lines[insertAt - 1].trim() === '') insertAt--;
   lines.splice(insertAt, 0, ...itemLines);
-  return { yaml: lines.join('\n').replace(/\n*$/, '\n'), addedLines: range(insertAt) };
+  return done(lines, range(insertAt));
 }
 
 /** As {@link appendRenders} but returning only the merged YAML text. */

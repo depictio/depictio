@@ -1,6 +1,6 @@
 import { defineConfig, devices } from '@playwright/test';
 
-// The app is served under Vite base '/depictio/'. Drive it via `vite preview`
+// The app is served under Vite base '/depictio/'. Driven via `vite preview`
 // against a fresh build so e2e matches what Pages ships.
 const PORT = 4188;
 const BASE = `http://127.0.0.1:${PORT}/depictio/`;
@@ -31,12 +31,18 @@ export default defineConfig({
     },
   ],
   webServer: {
-    // Invoke vite directly (NOT `pnpm run dev -- …`, whose `--` makes vite
-    // ignore the flags and bind the default port). Serves at the Vite base with
-    // no pre-build; committed public/kinds.json + catalog.schema.json are used.
-    command: `pnpm exec vite --port ${PORT} --strictPort --host 127.0.0.1`,
+    // Drive the PRODUCTION bundle, not the dev server: base-path handling,
+    // tree-shaking and the pyodide/monaco dynamic chunks only exist after a
+    // real build, so a build-only breakage used to pass e2e and still ship.
+    // PW_DEV_SERVER=1 swaps in the dev server for fast local iteration.
+    // (Invoke vite directly — `pnpm run dev -- …` makes vite ignore the flags
+    // and bind the default port.)
+    command: process.env.PW_DEV_SERVER
+      ? `pnpm exec vite --port ${PORT} --strictPort --host 127.0.0.1`
+      : `pnpm run build && pnpm exec vite preview --port ${PORT} --strictPort --host 127.0.0.1`,
     url: BASE,
     reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
+    // The build is part of the command, so allow for it.
+    timeout: 300_000,
   },
 });

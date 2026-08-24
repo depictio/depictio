@@ -42,12 +42,20 @@ export default function TypeGrid({ onPick }: { onPick: (t: ComponentType) => voi
             radius="md"
             p="lg"
             shadow="sm"
+            // The primary "Add visualization" entry point: it was a div with an
+            // onClick, so the whole builder was unreachable by keyboard.
+            component="button"
+            type="button"
+            aria-label={t.label}
             onClick={() => onPick(t.type)}
             style={{
               cursor: 'pointer',
               textAlign: 'center',
               transition: 'transform 0.2s ease, box-shadow 0.2s ease',
               height: '100%',
+              width: '100%',
+              font: 'inherit',
+              color: 'inherit',
               gridColumn: inLastRow ? `${startCol} / span 2` : 'span 2',
             }}
             className="cs-type-card"

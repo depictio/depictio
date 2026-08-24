@@ -261,6 +261,50 @@ def catalog_columns(
     render_records_table([{"Column": c} for c in cols], title=f"Output columns of {recipe}")
 
 
+def _check_fixture_sanity(entries) -> list[str]:
+    """Catch fixtures that ground the bindings but say nothing about the tool.
+
+    Both cases have shipped: a fixture with a header and no data (grounds every
+    column name, proves nothing), and a demo table pasted in from somewhere else
+    — the same file under two different tools. Column-level relevance is a human
+    judgement, but "empty" and "this is literally another tool's fixture" are not.
+    """
+    import hashlib
+
+    problems: list[str] = []
+    # digest -> (tool id, output id) of the first output that used it.
+    by_digest: dict[str, tuple[str, str]] = {}
+    for entry in entries:
+        for out in entry.outputs:
+            path = out.fixture_file()
+            if not path:
+                continue
+            try:
+                data = path.read_bytes()
+            except OSError as exc:
+                problems.append(f"{out.id}: fixture {out.fixture} → {exc}")
+                continue
+            # Header + at least one data row. Parquet is binary; leave it alone.
+            if path.suffix in (".tsv", ".csv"):
+                rows = [line for line in data.splitlines() if line.strip()]
+                if len(rows) < 2:
+                    problems.append(
+                        f"{out.id}: fixture {out.fixture} has no data rows — it grounds every "
+                        "binding while showing nothing about the output"
+                    )
+            digest = hashlib.sha256(data).hexdigest()
+            twin = by_digest.get(digest)
+            # Sharing a fixture between two outputs of the SAME tool is normal
+            # (one file, two views of it); sharing across tools is a copy-paste.
+            if twin is not None and twin[0] != entry.id:
+                problems.append(
+                    f"{out.id}: fixture {out.fixture} is byte-identical to {twin[1]}'s — a "
+                    "fixture must be a sample of THIS output"
+                )
+            by_digest.setdefault(digest, (entry.id, out.id))
+    return problems
+
+
 @dev_app.command("validate")
 def catalog_validate(
     path: Annotated[
@@ -302,6 +346,9 @@ def catalog_validate(
 
     # nf-core module + EDAM term existence (against the vendored indices).
     problems: list[str] = check_existence(entries)
+    # A fixture is what every binding is grounded against, so a placeholder one
+    # makes the whole entry meaningless while still passing every other check.
+    problems.extend(_check_fixture_sanity(entries))
     # Ground each render's bound columns against the real data shape:
     # the fixture (most complete) > the recipe's EXPECTED_SCHEMA > declared columns.
     # Beyond name existence, dtypes are checked too (advanced_viz roles + numeric

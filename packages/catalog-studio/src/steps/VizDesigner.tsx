@@ -197,9 +197,44 @@ export default function VizDesigner({ kinds }: { kinds: KindsMap }) {
   const addRender = useStudioStore((s) => s.addRender);
   const removeRender = useStudioStore((s) => s.removeRender);
   const updateRender = useStudioStore((s) => s.updateRender);
+  const setStep = useStudioStore((s) => s.setStep);
   const [modalOpen, setModalOpen] = useState(false);
 
-  if (!fixture) return <Text c="dimmed">Drop a fixture first.</Text>;
+  if (!fixture) {
+    // Reached from "add a visualization here" on an output whose fixture the
+    // manifest can't embed (parquet: no CSV text, no declared columns). That is
+    // ~12 of the catalog's 28 outputs today, and the old bare "Drop a fixture
+    // first." left them dead-ended — the Fixture step is a click away, but
+    // nothing said so.
+    if (existing) {
+      return (
+        <Alert
+          color="yellow"
+          variant="light"
+          icon={<Icon icon="mdi:table-off" />}
+          title={`No sample data for ${existing.outputSlug}`}
+        >
+          <Stack gap="sm" align="flex-start">
+            <Text size="sm">
+              This output's fixture isn't a CSV/TSV the app can read (parquet outputs carry no
+              inline sample), so there are no columns to bind against. Drop a sample of{' '}
+              <Code>{existing.outputSlug}</Code> on the Fixture step and come back — it is used
+              for the preview only and is not committed by the append flow.
+            </Text>
+            <Button
+              size="xs"
+              variant="light"
+              leftSection={<Icon icon="mdi:chevron-left" />}
+              onClick={() => setStep(1)}
+            >
+              Go to Fixture
+            </Button>
+          </Stack>
+        </Alert>
+      );
+    }
+    return <Text c="dimmed">Drop a fixture first.</Text>;
+  }
 
   const baseId = outputId(tool.id || 'tool', output.slug || 'output');
   const fileName = `${output.slug || 'output'}.yaml`;

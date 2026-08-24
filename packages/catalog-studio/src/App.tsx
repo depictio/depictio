@@ -1,4 +1,5 @@
-import { AppShell, Stepper, Container, Group, Button, Box } from '@mantine/core';
+import { useState } from 'react';
+import { AppShell, Stepper, Container, Group, Button, Box, Alert, Code } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import AppHeader from './components/AppHeader';
 import { useStudioStore, newOutputSlugClash } from './state/useStudioStore';
@@ -22,6 +23,13 @@ export default function App() {
   const renders = useStudioStore((s) => s.renders);
   const existing = useStudioStore((s) => s.existing);
   const newOutputTarget = useStudioStore((s) => s.newOutputTarget);
+  const reset = useStudioStore((s) => s.reset);
+
+  // A draft is restored from localStorage on load. Say so once, with a way out:
+  // silently resuming someone else's half-finished entry is worse than losing it.
+  const [restored, setRestored] = useState(
+    () => useStudioStore.getState().renders.length > 0 || Boolean(useStudioStore.getState().tool.id),
+  );
 
   // Gate forward navigation on the minimum each step needs.
   const canLeave = (i: number): boolean => {
@@ -66,6 +74,41 @@ export default function App() {
             <Stepper.Step label="Visualizations" description="Bind columns" icon={<Icon icon="mdi:chart-box-outline" />} />
             <Stepper.Step label="Export" description="Zip or PR" icon={<Icon icon="mdi:download" />} />
           </Stepper>
+
+          {restored && (
+            <Alert
+              color="gray"
+              variant="light"
+              mb="md"
+              withCloseButton
+              onClose={() => setRestored(false)}
+              icon={<Icon icon="mdi:content-save-outline" />}
+              title="Draft restored"
+            >
+              <Group justify="space-between" wrap="nowrap" gap="md">
+                <span>
+                  Picking up where you left off
+                  {tool.id ? (
+                    <>
+                      {' '}
+                      (<Code>{tool.id}</Code>)
+                    </>
+                  ) : null}
+                  . Drafts stay in this browser and never leave it.
+                </span>
+                <Button
+                  size="xs"
+                  variant="default"
+                  onClick={() => {
+                    reset();
+                    setRestored(false);
+                  }}
+                >
+                  Start over
+                </Button>
+              </Group>
+            </Alert>
+          )}
 
           <Box mih={360}>
             {step === 0 && <ToolForm catalog={catalog} />}

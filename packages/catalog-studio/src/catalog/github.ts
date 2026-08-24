@@ -45,14 +45,52 @@ async function gh<T>(token: string, method: string, path: string, body?: unknown
     body: body ? JSON.stringify(body) : undefined,
   });
   if (!res.ok) {
-    const detail = await res.text().catch(() => '');
+    const raw = await res.text().catch(() => '');
+    // GitHub's useful text is in `message` (+ `errors[].message`); the previous
+    // blind 200-char slice of the whole JSON body usually cut it off.
+    let detail = raw.slice(0, 300);
+    try {
+      const parsed = JSON.parse(raw) as {
+        message?: string;
+        errors?: Array<{ message?: string; field?: string; code?: string }>;
+      };
+      const extra = (parsed.errors ?? [])
+        .map((e) => e.message ?? [e.field, e.code].filter(Boolean).join(' '))
+        .filter(Boolean)
+        .join('; ');
+      detail = [parsed.message, extra].filter(Boolean).join(' — ') || detail;
+    } catch {
+      /* not JSON — keep the truncated body */
+    }
     if (res.status === 401) {
       throw new Error(
         'GitHub rejected the token (401 Bad credentials). Sign in again, or if using a local ' +
           'VITE_GH_TOKEN make sure it is the actual token value (not a literal `$(gh auth token)`).',
       );
     }
-    throw new Error(`GitHub ${method} ${path} → ${res.status} ${detail.slice(0, 200)}`);
+    if (res.status === 403) {
+      // Two very different 403s: a missing scope, and the abuse/secondary rate
+      // limiter. The retry-after headers only appear on the latter.
+      const retryAfter = res.headers.get('retry-after');
+      const remaining = res.headers.get('x-ratelimit-remaining');
+      if (retryAfter || remaining === '0' || /rate limit|abuse|secondary/i.test(detail)) {
+        throw new Error(
+          `GitHub is rate-limiting this token${retryAfter ? ` — retry in ${retryAfter}s` : ''}. ` +
+            'Wait a moment and try again; nothing was committed.',
+        );
+      }
+      throw new Error(
+        `GitHub refused the request (403): ${detail}. If you denied the \`public_repo\` scope at ` +
+          'sign-in, sign out and grant it — the PR needs it to push to your fork.',
+      );
+    }
+    if (res.status === 422) {
+      throw new Error(
+        `GitHub rejected the request (422): ${detail}. This usually means a pull request for this ` +
+          'branch already exists, or there is nothing to commit.',
+      );
+    }
+    throw new Error(`GitHub ${method} ${path} → ${res.status} ${detail}`);
   }
   return (res.status === 204 ? (undefined as T) : ((await res.json()) as T));
 }
@@ -364,7 +402,9 @@ export async function openAddRendersPr(
               `in ${args.yamlPath} upstream. Rename the render${clashing.length > 1 ? 's' : ''} and try again.`,
           );
         }
-        const updatedYaml = appendRenders(live, args.renders).yaml;
+        const appended = appendRenders(live, args.renders);
+        if (appended.problem) throw new Error(`${args.yamlPath}: ${appended.problem}`);
+        const updatedYaml = appended.yaml;
         const drifted = args.snapshotYaml != null && args.snapshotYaml.trim() !== live.trim();
         const body = [
           '## Summary',

@@ -140,3 +140,16 @@ jobs:
 
       - name: Run Playwright flow test
         run: pnpm --filter catalog-studio run e2e
+
+      # `trace: 'on-first-retry'` is pointless without this: a CI-only failure
+      # left its trace on a runner that is about to be destroyed.
+      - name: Upload Playwright artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            packages/catalog-studio/playwright-report/
+            packages/catalog-studio/test-results/
+          retention-days: 7
+          if-no-files-found: ignore

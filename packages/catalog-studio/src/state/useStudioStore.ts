@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { createJSONStorage, persist } from 'zustand/middleware';
 import type { Dtype, ParsedFixture, RenderSpec, ToolMeta, OutputMeta } from '../types';
 import type { ManifestOutput, ManifestRender, ManifestTool } from '../catalog/catalog';
 import { parseFixture } from '../catalog/parseFixture';
@@ -138,100 +139,205 @@ async function refreshExistingFromUpstream(
   }));
 }
 
-export const useStudioStore = create<StudioState>((set, get) => ({
-  step: 0,
-  tool: { ...emptyTool },
-  output: { ...emptyOutput },
-  fixture: null,
-  renders: [],
-  existing: null,
-  newOutputTarget: null,
-  dismissedMatchId: null,
-
-  setStep: (step) => set({ step }),
-  setTool: (patch) => set((s) => ({ tool: { ...s.tool, ...patch } })),
-  setOutput: (patch) => set((s) => ({ output: { ...s.output, ...patch } })),
-  setFixture: (fixture) => set({ fixture }),
-  addRender: (render) =>
-    set((s) => {
-      // Give every render a default, editable, tool-unique id so it's reusable
-      // via `use: <tool>/<id>` out of the box.
-      let spec = render;
-      if (!spec.id) {
-        const base = defaultRenderId(render) || 'render';
-        // Avoid colliding with sibling new renders AND the existing tool's
-        // render ids (unique within a tool → the `use: <tool>/<id>` handle).
-        const taken = new Set(
-          [...s.renders.map((r) => r.id), ...(s.existing?.baseRenderIds ?? [])].filter(Boolean),
-        );
-        let id = base;
-        for (let n = 2; taken.has(id); n++) id = `${base}_${n}`;
-        spec = { ...render, id } as RenderSpec;
-      }
-      return { renders: [...s.renders, spec] };
-    }),
-  updateRender: (uid, patch) =>
-    set((s) => ({
-      renders: s.renders.map((r) => (r.uid === uid ? ({ ...r, ...patch } as RenderSpec) : r)),
-    })),
-  removeRender: (uid) => set((s) => ({ renders: s.renders.filter((r) => r.uid !== uid) })),
-  startExisting: (tool, output) => {
-    // The manifest is a build-time snapshot; pull the live file in the
-    // background so new render ids are deduped against what is actually in the
-    // catalog today, not against a copy that may be weeks old.
-    if (output.yamlPath) void refreshExistingFromUpstream(set, get, output.yamlPath);
-    return set(() => ({
-      step: 2, // jump straight to Visualizations — identity & fixture come from the catalog
-      tool: identityFromManifest(tool),
-      output: {
-        slug: output.slug,
-        path_glob: output.path_glob ?? '',
-        description: output.description,
-      },
-      fixture: fixtureFromManifest(output),
-      renders: [],
-      existing: {
-        toolId: tool.id,
-        toolName: tool.name,
-        outputId: output.id,
-        outputSlug: output.slug,
-        yamlPath: output.yamlPath ?? '',
-        rawYaml: output.rawYaml ?? '',
-        baseRenders: output.renders_as ?? [],
-        baseRenderIds: (output.renders_as ?? [])
-          .map((r) => r.id)
-          .filter((x): x is string => Boolean(x)),
-      },
-      newOutputTarget: null,
-    }));
+/** localStorage that degrades instead of throwing.
+ *
+ *  A fixture can be a few MB of raw text, which is enough to blow the ~5 MB
+ *  budget; an uncaught QuotaExceededError there would surface as a broken app,
+ *  not a lost draft. Retry once without the bulky `fixture.raw`, then give up
+ *  quietly — the in-memory session is unaffected either way. */
+const draftStorage: Storage = {
+  get length() {
+    return localStorage.length;
   },
-  startNewOutput: (tool) =>
-    set(() => ({
-      // Stay on the Tool step: the new output's slug/path_glob is authored there,
-      // then a fresh fixture + renders are added like a new tool from step 1 on.
-      step: 0,
-      tool: identityFromManifest(tool),
-      output: { ...emptyOutput },
-      fixture: null,
-      renders: [],
-      existing: null,
-      newOutputTarget: {
-        toolId: tool.id,
-        toolName: tool.name,
-        dir: tool.dir ?? `depictio/catalog/${tool.id}`,
-        existingOutputSlugs: tool.outputs.map((o) => o.slug),
-      },
-    })),
-  setDismissedMatch: (toolId) => set({ dismissedMatchId: toolId }),
-  reset: () =>
-    set({
-      step: 0,
-      tool: { ...emptyTool },
-      output: { ...emptyOutput },
-      fixture: null,
-      renders: [],
-      existing: null,
-      newOutputTarget: null,
-      dismissedMatchId: null,
+  clear: () => localStorage.clear(),
+  key: (i) => localStorage.key(i),
+  getItem: (k) => {
+    try {
+      return localStorage.getItem(k);
+    } catch {
+      return null;
+    }
+  },
+  removeItem: (k) => {
+    try {
+      localStorage.removeItem(k);
+    } catch {
+      /* nothing to do */
+    }
+  },
+  setItem: (k, v) => {
+    try {
+      localStorage.setItem(k, v);
+      return;
+    } catch {
+      /* too big — fall through and retry without the fixture text */
+    }
+    try {
+      const parsed = JSON.parse(v) as { state?: { fixture?: { raw?: string } } };
+      if (parsed.state?.fixture?.raw) parsed.state.fixture.raw = '';
+      localStorage.setItem(k, JSON.stringify(parsed));
+    } catch {
+      /* draft persistence is best-effort; the session itself still works */
+    }
+  },
+};
+
+/** localStorage key. Bumping the version (below) discards older drafts rather
+ *  than trying to migrate a shape that has changed. */
+const DRAFT_KEY = 'depictio-studio-draft';
+
+/** What survives a reload. `rows` is deliberately excluded and re-parsed from
+ *  `raw` on rehydrate: it is the bulk of the state and pure derived data, so
+ *  persisting it would blow the ~5 MB localStorage budget for nothing. The
+ *  columns ARE kept, because an append-mode fixture rebuilt from a parquet
+ *  output's manifest entry has columns but no raw text to re-parse. */
+type PersistedFixture = Omit<ParsedFixture, 'rows'>;
+
+function stripRows(fixture: ParsedFixture): PersistedFixture {
+  const { rows: _rows, ...rest } = fixture;
+  return rest;
+}
+
+type PersistedDraft = {
+  step: number;
+  tool: ToolMeta;
+  output: OutputMeta;
+  fixture: PersistedFixture | null;
+  renders: RenderSpec[];
+  existing: ExistingTarget | null;
+  newOutputTarget: NewOutputTarget | null;
+  dismissedMatchId: string | null;
+};
+
+export const useStudioStore = create<StudioState>()(
+  persist<StudioState, [], [], PersistedDraft>(
+    (set, get) => ({
+    step: 0,
+    tool: { ...emptyTool },
+    output: { ...emptyOutput },
+    fixture: null,
+    renders: [],
+    existing: null,
+    newOutputTarget: null,
+    dismissedMatchId: null,
+
+    setStep: (step) => set({ step }),
+    setTool: (patch) => set((s) => ({ tool: { ...s.tool, ...patch } })),
+    setOutput: (patch) => set((s) => ({ output: { ...s.output, ...patch } })),
+    setFixture: (fixture) => set({ fixture }),
+    addRender: (render) =>
+      set((s) => {
+        // Give every render a default, editable, tool-unique id so it's reusable
+        // via `use: <tool>/<id>` out of the box.
+        let spec = render;
+        if (!spec.id) {
+          const base = defaultRenderId(render) || 'render';
+          // Avoid colliding with sibling new renders AND the existing tool's
+          // render ids (unique within a tool → the `use: <tool>/<id>` handle).
+          const taken = new Set(
+            [...s.renders.map((r) => r.id), ...(s.existing?.baseRenderIds ?? [])].filter(Boolean),
+          );
+          let id = base;
+          for (let n = 2; taken.has(id); n++) id = `${base}_${n}`;
+          spec = { ...render, id } as RenderSpec;
+        }
+        return { renders: [...s.renders, spec] };
+      }),
+    updateRender: (uid, patch) =>
+      set((s) => ({
+        renders: s.renders.map((r) => (r.uid === uid ? ({ ...r, ...patch } as RenderSpec) : r)),
+      })),
+    removeRender: (uid) => set((s) => ({ renders: s.renders.filter((r) => r.uid !== uid) })),
+    startExisting: (tool, output) => {
+      // The manifest is a build-time snapshot; pull the live file in the
+      // background so new render ids are deduped against what is actually in the
+      // catalog today, not against a copy that may be weeks old.
+      if (output.yamlPath) void refreshExistingFromUpstream(set, get, output.yamlPath);
+      return set(() => ({
+        step: 2, // jump straight to Visualizations — identity & fixture come from the catalog
+        tool: identityFromManifest(tool),
+        output: {
+          slug: output.slug,
+          path_glob: output.path_glob ?? '',
+          description: output.description,
+        },
+        fixture: fixtureFromManifest(output),
+        renders: [],
+        existing: {
+          toolId: tool.id,
+          toolName: tool.name,
+          outputId: output.id,
+          outputSlug: output.slug,
+          yamlPath: output.yamlPath ?? '',
+          rawYaml: output.rawYaml ?? '',
+          baseRenders: output.renders_as ?? [],
+          baseRenderIds: (output.renders_as ?? [])
+            .map((r) => r.id)
+            .filter((x): x is string => Boolean(x)),
+        },
+        newOutputTarget: null,
+      }));
+    },
+    startNewOutput: (tool) =>
+      set(() => ({
+        // Stay on the Tool step: the new output's slug/path_glob is authored there,
+        // then a fresh fixture + renders are added like a new tool from step 1 on.
+        step: 0,
+        tool: identityFromManifest(tool),
+        output: { ...emptyOutput },
+        fixture: null,
+        renders: [],
+        existing: null,
+        newOutputTarget: {
+          toolId: tool.id,
+          toolName: tool.name,
+          dir: tool.dir ?? `depictio/catalog/${tool.id}`,
+          existingOutputSlugs: tool.outputs.map((o) => o.slug),
+        },
+      })),
+    setDismissedMatch: (toolId) => set({ dismissedMatchId: toolId }),
+    reset: () =>
+      set({
+        step: 0,
+        tool: { ...emptyTool },
+        output: { ...emptyOutput },
+        fixture: null,
+        renders: [],
+        existing: null,
+        newOutputTarget: null,
+        dismissedMatchId: null,
+      }),
     }),
-}));
+    {
+      name: DRAFT_KEY,
+      version: 1,
+      storage: createJSONStorage(() => draftStorage),
+      // A reload used to destroy the whole entry — identity, the dropped
+      // fixture, every render. The popup OAuth flow was built to avoid exactly
+      // that, but F5 and back-navigation were not covered.
+      partialize: (state): PersistedDraft => ({
+        step: state.step,
+        tool: state.tool,
+        output: state.output,
+        fixture: state.fixture ? stripRows(state.fixture) : null,
+        renders: state.renders,
+        existing: state.existing,
+        newOutputTarget: state.newOutputTarget,
+        dismissedMatchId: state.dismissedMatchId,
+      }),
+      merge: (persisted, current) => {
+        const draft = persisted as PersistedDraft | undefined;
+        if (!draft) return current;
+        // Re-derive the rows from the raw text rather than storing them; a
+        // columns-only fixture (parquet output in append mode) has no raw text
+        // and keeps its declared columns with an empty row set.
+        const fixture: ParsedFixture | null = draft.fixture
+          ? draft.fixture.raw
+            ? parseFixture(draft.fixture.fileName, draft.fixture.raw)
+            : { ...draft.fixture, rows: [] }
+          : null;
+        return { ...current, ...draft, fixture };
+      },
+    },
+  ),
+);

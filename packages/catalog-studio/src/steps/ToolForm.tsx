@@ -174,7 +174,7 @@ export default function ToolForm({ catalog }: { catalog: CatalogManifest }) {
         <Text size="sm" fw={600} mb={6}>
           Tool source
         </Text>
-        <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="sm">
+        <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="sm" role="radiogroup" aria-label="Tool source">
           {SOURCES.map((s) => {
             const selected = s.value === tool.source;
             return (
@@ -183,9 +183,20 @@ export default function ToolForm({ catalog }: { catalog: CatalogManifest }) {
                 withBorder
                 radius="md"
                 p="sm"
+                // A real radio: the source picker was a div with an onClick, so
+                // it could not be reached or activated from the keyboard at all.
+                component="button"
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                aria-label={s.label}
                 onClick={() => pickSource(s.value)}
                 style={{
                   cursor: 'pointer',
+                  width: '100%',
+                  textAlign: 'left',
+                  font: 'inherit',
+                  color: 'inherit',
                   borderColor: selected ? 'var(--mantine-color-blue-filled)' : undefined,
                   borderWidth: selected ? 2 : 1,
                   background: selected ? 'var(--mantine-color-blue-light)' : undefined,

@@ -64,6 +64,9 @@ export default function ExportPanel({ kinds }: { kinds: KindsMap }) {
 
   const issues = fixture ? validateAll(renders, fixture.columns, kinds) : [];
   const errors = issues.filter((i) => i.severity === 'error');
+  // The textual splice refuses a few legal YAML shapes rather than corrupting
+  // them; when it does, there is nothing valid to download or commit.
+  const appendProblem = append?.problem ?? null;
 
   if (!fixture || (!entry && !existing)) return <Text c="dimmed">Complete the earlier steps first.</Text>;
 
@@ -78,28 +81,40 @@ export default function ExportPanel({ kinds }: { kinds: KindsMap }) {
   };
 
   const doDownload = async () => {
-    if (existing && updatedYaml) {
-      downloadBlob(`${existing.outputSlug}.yaml`, new Blob([updatedYaml], { type: 'text/yaml' }));
-      return;
+    try {
+      if (existing) {
+        if (appendProblem || !updatedYaml) return;
+        downloadBlob(`${existing.outputSlug}.yaml`, new Blob([updatedYaml], { type: 'text/yaml' }));
+        return;
+      }
+      if (!entry) return;
+      const zip = new JSZip();
+      const dir = zip.folder(tool.id)!;
+      // New output on an existing tool: only the new files — module.yaml already exists.
+      if (!newOutputTarget) dir.file('module.yaml', entry.moduleYaml);
+      dir.file(entry.outputYamlName, entry.outputYaml);
+      dir.file(entry.fixtureName, entry.fixtureContent);
+      const zipName = newOutputTarget ? `${tool.id}-${output.slug}.zip` : `${tool.id}-catalog.zip`;
+      downloadBlob(zipName, await zip.generateAsync({ type: 'blob' }));
+    } catch (e) {
+      // Previously an unhandled rejection with no UI feedback at all.
+      notifications.show({ color: 'red', message: `Download failed: ${(e as Error).message}` });
     }
-    if (!entry) return;
-    const zip = new JSZip();
-    const dir = zip.folder(tool.id)!;
-    // New output on an existing tool: only the new files — module.yaml already exists.
-    if (!newOutputTarget) dir.file('module.yaml', entry.moduleYaml);
-    dir.file(entry.outputYamlName, entry.outputYaml);
-    dir.file(entry.fixtureName, entry.fixtureContent);
-    const zipName = newOutputTarget ? `${tool.id}-${output.slug}.zip` : `${tool.id}-catalog.zip`;
-    downloadBlob(zipName, await zip.generateAsync({ type: 'blob' }));
   };
 
   const contributeViaUpload = async () => {
-    await doDownload();
-    // Existing tool → GitHub's edit page for that file; new tool → the uploader.
+    // Open the tab FIRST, while the click's user-activation is still live: after
+    // an await, Safari and Firefox block the popup and the flow dead-ends.
     const t = resolveTarget();
-    const url =
-      existing && existing.yamlPath ? editUrl(t, existing.yamlPath) : uploadUrl(t);
-    window.open(url, '_blank', 'noopener,noreferrer');
+    const url = existing && existing.yamlPath ? editUrl(t, existing.yamlPath) : uploadUrl(t);
+    const tab = window.open(url, '_blank', 'noopener,noreferrer');
+    if (!tab) {
+      notifications.show({
+        color: 'yellow',
+        message: 'Your browser blocked the GitHub tab — allow popups for this site, or open it manually.',
+      });
+    }
+    await doDownload();
   };
 
   const doOpenPr = async () => {
@@ -145,11 +160,15 @@ export default function ExportPanel({ kinds }: { kinds: KindsMap }) {
       setPr({ status: 'done', url: result.prUrl });
       notifications.show({ color: 'teal', message: 'Pull request opened.' });
     } catch (e) {
-      // A stale/insufficient token is the usual culprit — drop it so the next
-      // attempt re-runs sign-in.
-      clearStoredToken();
-      setSignedIn(false);
-      setPr({ status: 'error', message: (e as Error).message });
+      const message = (e as Error).message;
+      // Only an auth failure justifies dropping the token: doing it on ANY
+      // error (a 422, a dropped connection, a refused append) forced a fresh
+      // OAuth popup for problems that had nothing to do with credentials.
+      if (/\b401\b|Bad credentials|rejected the token/i.test(message)) {
+        clearStoredToken();
+        setSignedIn(false);
+      }
+      setPr({ status: 'error', message });
     }
   };
 
@@ -211,6 +230,7 @@ export default function ExportPanel({ kinds }: { kinds: KindsMap }) {
         <Button
           size="md"
           color="green"
+          disabled={Boolean(appendProblem)}
           leftSection={<Icon icon={existing ? 'mdi:file-download-outline' : 'mdi:folder-zip-outline'} />}
           onClick={doDownload}
         >
@@ -235,6 +255,7 @@ export default function ExportPanel({ kinds }: { kinds: KindsMap }) {
             <Button
               size="md"
               variant="light"
+              disabled={Boolean(appendProblem)}
               leftSection={<Icon icon="mdi:github" />}
               loading={pr.status === 'working'}
               onClick={doOpenPr}
@@ -345,6 +366,17 @@ export default function ExportPanel({ kinds }: { kinds: KindsMap }) {
             {existing ? existing.yamlPath : targetDir}
           </Badge>
         </Group>
+        {appendProblem && (
+          <Alert
+            color="red"
+            variant="light"
+            mb="sm"
+            icon={<Icon icon="mdi:file-alert-outline" />}
+            title="This file needs a hand edit"
+          >
+            {appendProblem}
+          </Alert>
+        )}
         {existing && upstream.status === 'ok' && upstream.drifted && (
           <Alert
             color="blue"
