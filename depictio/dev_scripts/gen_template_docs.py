@@ -26,12 +26,11 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import re
 import sys
 from pathlib import Path
 from typing import Any
 
-from depictio.cli.cli.utils.templates import _load_yaml
+from depictio.cli.cli.utils.templates import _load_yaml, latest_template_version
 from depictio.models.models.templates import TemplateConditional, TemplateMetadata
 from depictio.recipes import load_recipe, resolve_recipe_path
 
@@ -426,29 +425,26 @@ def _output_slug(template_path: Path, templates_root: Path) -> str:
     return "-".join(rel.parts)
 
 
-_VERSION_DIR_RE = re.compile(r"^\d+(\.\d+)*$")
-
-
 def _latest_aliases(template_paths: list[Path], templates_root: Path) -> dict[str, Path]:
     """Map ``<pipeline>-latest`` alias slugs to the highest-version template.
 
     Narrative docs pages include the alias partial (e.g. ``ampliseq-latest.md``)
     instead of a pinned ``ampliseq-2.16.0.md``, so a new template version updates
-    the docs with a single re-run of this script — no page edits.
+    the docs with a single re-run of this script — no page edits. Reuses the same
+    version resolution as seeding/CLI (``latest_template_version``).
     """
-    by_pipeline: dict[str, list[Path]] = {}
-    for template_path in template_paths:
-        rel = template_path.parent.relative_to(templates_root)
-        if len(rel.parts) < 2 or not _VERSION_DIR_RE.match(rel.parts[-1]):
-            continue  # unversioned template layout — no alias to maintain
-        by_pipeline.setdefault("-".join(rel.parts[:-1]), []).append(template_path)
-    return {
-        f"{pipeline}-latest": max(
-            paths,
-            key=lambda p: tuple(int(x) for x in p.parent.name.split(".")),
-        )
-        for pipeline, paths in by_pipeline.items()
+    pipeline_dirs = {
+        template_path.parent.parent
+        for template_path in template_paths
+        if len(template_path.parent.relative_to(templates_root).parts) >= 2
     }
+    aliases: dict[str, Path] = {}
+    for pipeline_dir in pipeline_dirs:
+        version = latest_template_version(pipeline_dir)
+        if version:
+            slug = "-".join((*pipeline_dir.relative_to(templates_root).parts, "latest"))
+            aliases[slug] = pipeline_dir / version / "template.yaml"
+    return aliases
 
 
 def main(argv: list[str] | None = None) -> int:

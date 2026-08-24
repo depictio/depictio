@@ -32,24 +32,14 @@ import shutil
 import sys
 from pathlib import Path
 
+from depictio.cli.cli.utils.templates import latest_template_version as latest_version
+
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 NFCORE_PROJECTS_DIR = _REPO_ROOT / "depictio" / "projects" / "nf-core"
 _VERSION_RE = re.compile(r"^\d+(\.\d+)*$")
 
 # Never rewrite content in these (binary or data) suffixes.
 _BINARY_SUFFIXES = {".parquet", ".biom", ".gz", ".png", ".pdf", ".qza", ".qzv", ".nwk"}
-
-
-def latest_version(pipeline_dir: Path) -> str | None:
-    """Highest numeric version subdirectory holding a template.yaml."""
-    versions = [
-        d.name
-        for d in pipeline_dir.iterdir()
-        if d.is_dir() and _VERSION_RE.match(d.name) and (d / "template.yaml").is_file()
-    ]
-    if not versions:
-        return None
-    return max(versions, key=lambda v: tuple(int(p) for p in v.split(".")))
 
 
 def rewrite_versions(new_dir: Path, old_version: str, new_version: str) -> list[Path]:
