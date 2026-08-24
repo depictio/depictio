@@ -113,6 +113,11 @@ const TypeCard: React.FC<TypeCardProps> = ({
       shadow={selected ? 'md' : 'sm'}
       onClick={onClick}
       className="component-selection-card"
+      // Type-scoped hook for e2e: several cards mention another card's label in
+      // their description ("Interactive data visualizations" on Figure,
+      // "Interactive image grid" on Image), so a text filter over
+      // .component-selection-card cannot address one card unambiguously.
+      data-testid={`component-type-${meta.type}`}
       style={{
         cursor: disabled ? 'not-allowed' : 'pointer',
         opacity: disabled ? 0.5 : 1,
