@@ -1,4 +1,5 @@
 id: multiqc_samtools
+name: Alignment flagstats
 mode: samtools
 description: Alignment flagstat summaries (mapped %, properly paired) — samtools, via MultiQC.
 find: { path_glob: "**/multiqc/multiqc_data/multiqc.parquet" }

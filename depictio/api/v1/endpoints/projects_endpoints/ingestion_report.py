@@ -231,6 +231,11 @@ def _dc_source_inputs(config: dict, data_root: str | None) -> list[str]:
     recipe = transform.get("recipe")
     if not recipe:
         return []
+    # A materialized DC ships as a pre-computed seed file: the recipe never ran
+    # here and its raw SOURCES are not on disk, so resolving them would list
+    # paths that do not exist. The recipe itself still shows as lineage.
+    if transform.get("materialized"):
+        return []
     overrides = transform.get("source_overrides") or {}
     out: list[str] = []
     try:

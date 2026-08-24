@@ -2199,9 +2199,15 @@ export function gridBoxHeight(h: number): number {
   return h * GRID_ROW_HEIGHT + Math.max(0, h - 1) * GRID_ROW_GAP;
 }
 
-// Default grid box for a freshly-created component. Sizes track the seeded
-// dashboards under depictio/projects/<project>/.db_seeds/dashboard*.json —
-// small KPI tiles for cards, full-width tables, medium plots elsewhere.
+/** Default grid box for a freshly-created component, in `DashboardGrid` units
+ *  (`cols=8`, `rowHeight=100`, `margin=[12, 4]` at the lg breakpoint). Sizes
+ *  track the seeded dashboards under
+ *  depictio/projects/<project>/.db_seeds/dashboard*.json — small KPI tiles for
+ *  cards, full-width tables, medium plots elsewhere.
+ *
+ *  Exported because the catalog preview frames its iframe to the same box — a
+ *  preview that fills whatever space it is given tells you nothing about how a
+ *  card will actually look on the dashboard. */
 export function defaultLayoutForType(
   componentType: string,
   panel: 'left' | 'right',
@@ -4440,11 +4446,21 @@ export interface CatalogRender {
 
 export interface CatalogOutputMatch {
   output_id: string;
+  /** Short display label declared by the catalog (`name:` on the output). */
+  name: string;
   description: string;
   dc_id: string;
   wf_id: string;
   dc_tag: string;
   renders_as: CatalogRender[];
+  /** Static provenance from the catalog YAML — what the picker's details
+   *  popover shows, so it needs no second request per selected output. */
+  mode?: string | null;
+  recipe?: string | null;
+  fixture?: string | null;
+  nf_core_url?: string | null;
+  biotools_url?: string | null;
+  find?: { filename?: string; path_glob?: string };
 }
 
 export interface CatalogModule {

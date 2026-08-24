@@ -23,18 +23,6 @@
 }
 /* "From catalog" flag — always visible, pinned top-left, out of the way of the
  * hover-only action row at top-right. Sits above the renderer's own Paper. */
-.depictio-catalog-flag {
-  position: absolute;
-  top: 8px;
-  left: 8px;
-  z-index: 1002;
-  pointer-events: auto;
-  opacity: 0.85;
-  transition: opacity 0.15s ease;
-}
-.depictio-component-chrome:hover .depictio-catalog-flag {
-  opacity: 1;
-}
 .depictio-component-actions {
   position: absolute;
   top: 12px;

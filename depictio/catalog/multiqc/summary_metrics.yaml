@@ -1,4 +1,5 @@
 id: multiqc_summary_metrics
+name: Variant-calling summary
 mode: summary-variants-metrics
 description: >-
   Per-sample variant-calling summary (reads mapped, coverage, SNP/indel/total

@@ -3,6 +3,7 @@ import { Badge, Box, Code, Collapse, Divider, Group, Stack, Text, Tooltip, Unsty
 import { Icon } from '@iconify/react';
 
 import { StoredMetadata } from '../../api';
+import CatalogOrigin from './CatalogOrigin';
 
 interface MetadataBodyProps {
   metadata: StoredMetadata;
@@ -139,7 +140,6 @@ const KeyValue: React.FC<{ label: string; children: React.ReactNode; mono?: bool
  */
 const MetadataBody: React.FC<MetadataBodyProps> = ({ metadata }) => {
   const [rawOpen, setRawOpen] = React.useState(false);
-  const [copied, setCopied] = React.useState(false);
   const json = React.useMemo(() => JSON.stringify(metadata, null, 2), [metadata]);
   const rows = React.useMemo(() => summaryRows(metadata), [metadata]);
   const src = metadata.catalog_source;
@@ -150,17 +150,6 @@ const MetadataBody: React.FC<MetadataBodyProps> = ({ metadata }) => {
     color: 'gray',
   };
   const title = (metadata.title as string) || '';
-
-  const copyUse = async () => {
-    if (!src?.use) return;
-    try {
-      await navigator.clipboard.writeText(`use: ${src.use}`);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1500);
-    } catch {
-      /* clipboard denied */
-    }
-  };
 
   return (
     <Stack gap="sm">
@@ -219,41 +208,7 @@ const MetadataBody: React.FC<MetadataBodyProps> = ({ metadata }) => {
       )}
 
       {/* Catalog origin */}
-      {src && (
-        <Box
-          style={{
-            border: '1px solid var(--mantine-color-violet-2)',
-            background: 'var(--mantine-color-violet-0)',
-            borderRadius: 8,
-            padding: 8,
-          }}
-        >
-          <SectionTitle icon="mdi:toolbox-outline" color="violet">
-            From the tools catalog
-          </SectionTitle>
-          <Stack gap={3}>
-            {src.toolName && (
-              <KeyValue label="Tool">
-                {src.toolName}
-                {src.toolId ? ` (${src.toolId})` : ''}
-              </KeyValue>
-            )}
-            {src.outputId && <KeyValue label="Output" mono>{src.outputId}</KeyValue>}
-            {src.description && <KeyValue label="Description">{src.description}</KeyValue>}
-            {src.use && (
-              <Group gap={6} wrap="nowrap" align="center">
-                <Text size="xs" c="dimmed" w={78} style={{ flexShrink: 0 }}>Reference</Text>
-                <Code fz={11}>use: {src.use}</Code>
-                <Tooltip label={copied ? 'Copied!' : 'Copy snippet'} withArrow>
-                  <ActionIcon variant="subtle" color="violet" size="xs" onClick={copyUse} aria-label="Copy use snippet">
-                    <Icon icon={copied ? 'mdi:check' : 'mdi:content-copy'} width={13} />
-                  </ActionIcon>
-                </Tooltip>
-              </Group>
-            )}
-          </Stack>
-        </Box>
-      )}
+      {src && <CatalogOrigin source={src} />}
 
       <Divider my={2} />
 

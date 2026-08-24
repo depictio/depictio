@@ -1,4 +1,5 @@
 id: metaphlan_profile
+name: Taxonomic profile
 mode: profile
 description: Per-sample taxonomic relative-abundance profile.
 find: { filename: "*_profile.txt" }

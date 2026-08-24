@@ -1,4 +1,5 @@
 id: mosdepth_amplicon_heatmap
+name: Amplicon coverage matrix
 mode: amplicon
 description: Log10 amplicon-coverage matrix (samples × amplicons).
 find: { path_glob: "**/mosdepth/amplicon/all_samples.mosdepth.heatmap.tsv" }

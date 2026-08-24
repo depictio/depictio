@@ -22,6 +22,7 @@ from pathlib import Path
 import pytest
 
 from depictio.api.main import _SECURITY_HEADERS
+from depictio.api.v1.configs.security_headers import csp_with_script_nonce
 from depictio.models.components.constants import MAP_STYLES
 
 CSP = _SECURITY_HEADERS["Content-Security-Policy"]
@@ -101,3 +102,26 @@ class TestNginxMirrorsTheApi:
             return out
 
         assert parsed(match.group(1)) == parsed(CSP)
+
+
+def test_script_nonce_variant_only_adds_the_nonce():
+    """The catalog-preview response relaxes script-src by one nonce, nothing else.
+
+    Its bundle is a single inline `<script type="module">`, which the shipped
+    `script-src 'self'` parses and then refuses to run.
+    """
+    relaxed = csp_with_script_nonce("t3stN0nce")
+
+    assert _directive(relaxed, "script-src") == [
+        "'self'",
+        "'nonce-t3stN0nce'",
+        *_directive(CSP, "script-src")[1:],
+    ]
+    assert "'unsafe-inline'" not in _directive(relaxed, "script-src")
+
+    for chunk in CSP.split(";"):
+        name = chunk.split()[0]
+        if name != "script-src":
+            assert _directive(relaxed, name) == _directive(CSP, name), (
+                f"{name} must be untouched by the nonce variant"
+            )

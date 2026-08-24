@@ -406,6 +406,12 @@ class CatalogOutput(BaseModel):
     """One file a tool emits → one or more dashboard renders."""
 
     id: str
+    # Short display label, e.g. "Amplicon coverage". This is what a picker or a
+    # gallery lists; `description` is the full sentence behind it and is too long
+    # to scan. Declared per output rather than derived from `id` so the wording is
+    # the catalog's to choose. Optional for third-party catalogs; every bundled
+    # output declares one (enforced by the catalog tests).
+    name: str | None = None
     mode: str | None = None
     description: str = ""
 

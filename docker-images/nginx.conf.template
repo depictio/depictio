@@ -104,6 +104,28 @@ server {
         add_header Cache-Control "no-cache";
     }
 
+    # Catalog-preview HTML. Same upstream as /depictio/api/, but this location
+    # deliberately re-declares the security headers WITHOUT a Content-Security-
+    # Policy: nginx's `add_header` inheritance is all-or-nothing per block, so
+    # re-declaring the others here drops the server-level CSP for this route and
+    # lets the backend's own nonce-bearing policy through untouched. Two CSP
+    # headers would be intersected by the browser, and the server-level one has
+    # no nonce, so the preview bundle's inline script would still be refused.
+    location ~ ^/depictio/api/v1/catalog/output/[^/]+/preview-html {
+        set $upstream ${DEPICTIO_API_UPSTREAM}; proxy_pass http://$upstream;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_buffering off;
+        proxy_read_timeout 3600s;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        add_header Permissions-Policy "camera=(), microphone=(), geolocation=(), interest-cohort=()" always;
+        add_header Strict-Transport-Security $depictio_hsts always;
+    }
+
     # API + WebSocket. Upgrade headers cover the realtime events channel.
     # proxy_buffering off keeps SSE / chunked responses flowing without
     # nginx holding them until the buffer fills.

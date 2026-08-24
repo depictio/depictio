@@ -17,6 +17,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Badge,
+  Collapse,
   Divider,
   Group,
   MultiSelect,
@@ -29,6 +30,7 @@ import {
   TextInput,
   Title,
   Tooltip,
+  UnstyledButton,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
@@ -543,6 +545,54 @@ const AdvancedVizBuilder: React.FC = () => {
     return { recommendedKinds: rec, otherKinds: rest };
   }, [matchedKinds, scoreMap, suggestions]);
 
+  // Every required role already has a column — which is the state a component
+  // arrives in when it came from the catalog, and the state a manual build ends
+  // in. Nothing left to do here, so the bindings block starts collapsed.
+  const allRequiredBound = useMemo(
+    () =>
+      requiredRoles.length > 0 &&
+      requiredRoles.every(([role]) => {
+        const v = columnMapping[role];
+        return Array.isArray(v) ? v.length > 0 : Boolean(v);
+      }),
+    [requiredRoles, columnMapping],
+  );
+
+  /** A titled block that starts collapsed.
+   *
+   *  Both places this is used are reference material rather than the next thing
+   *  to do: the long tail of visualisation kinds once the recommended ones are
+   *  on screen, and the binding table once every required role already has a
+   *  column (which is always the case when the component came from the
+   *  catalog). Collapsed they cost one line each; the header keeps them
+   *  discoverable, and the count says what is inside. */
+  const Disclosure: React.FC<{
+    title: string;
+    count?: number;
+    defaultOpen?: boolean;
+    children: React.ReactNode;
+  }> = ({ title, count, defaultOpen = false, children }) => {
+    const [open, setOpen] = useState(defaultOpen);
+    return (
+      <Stack gap={6}>
+        <UnstyledButton onClick={() => setOpen((v) => !v)}>
+          <Group gap={6} wrap="nowrap">
+            <Icon
+              icon={open ? 'mdi:chevron-down' : 'mdi:chevron-right'}
+              width={16}
+              color="var(--mantine-color-dimmed)"
+            />
+            <Text fw={600} size="sm">{title}</Text>
+            {count != null && (
+              <Badge size="xs" variant="light" color="gray" radius="sm">{count}</Badge>
+            )}
+          </Group>
+        </UnstyledButton>
+        <Collapse in={open}>{children}</Collapse>
+      </Stack>
+    );
+  };
+
   /** Render a titled grid of kind tiles with a fit-score badge. Tiles are
    *  always selectable; a tooltip surfaces which roles are missing/weak. */
   const renderKindSection = (
@@ -642,18 +692,23 @@ const AdvancedVizBuilder: React.FC = () => {
         recommendedKinds.length ? 'Recommended for this data collection' : null,
         recommendedKinds,
       )}
-      {renderKindSection(
-        recommendedKinds.length ? 'Other visualisations' : 'Visualisations',
-        otherKinds,
+      {recommendedKinds.length ? (
+        otherKinds.length > 0 && (
+          <Disclosure title="Other visualisations" count={otherKinds.length}>
+            {renderKindSection(null, otherKinds)}
+          </Disclosure>
+        )
+      ) : (
+        renderKindSection('Visualisations', otherKinds)
       )}
 
       {selectedKind ? (
         <Paper withBorder p="md" radius="md">
-          <Stack gap="xs">
-            <Text fw={600}>Column bindings</Text>
+          <Disclosure title="Column bindings" defaultOpen={!allRequiredBound}>
+           <Stack gap="xs">
             <Paper withBorder p="xs" radius="sm">
               <Stack gap={4}>
-                <Text size="xs" fw={500}>Bindings overview</Text>
+                <Text size="xs" fw={500}>Roles reference</Text>
                 <Text size="xs" c="dimmed">
                   The roles this visualization binds. Hover a binding below for full details.
                 </Text>
@@ -901,7 +956,8 @@ const AdvancedVizBuilder: React.FC = () => {
                 ) : null}
               </>
             )}
-          </Stack>
+           </Stack>
+          </Disclosure>
         </Paper>
       ) : null}
 

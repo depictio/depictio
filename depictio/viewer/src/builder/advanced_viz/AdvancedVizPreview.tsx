@@ -76,6 +76,12 @@ const AdvancedVizPreview: React.FC<Props> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vizKind, cmKey, presetKey, wfId, dcId, bindingsValid]);
 
+  // `debouncing` is raised from an effect, so it is still false on the first
+  // render after arriving with bindings already valid — hitting "Edit" on a
+  // catalog render, where everything is pre-bound. That frame would show the
+  // "pick a viz kind" prompt, which is both a flash and untrue.
+  const settling = bindingsValid && !debouncedConfig;
+
   const metadata: StoredMetadata | null = useMemo(() => {
     if (!debouncedConfig) return null;
     return {
@@ -96,8 +102,8 @@ const AdvancedVizPreview: React.FC<Props> = ({
   return (
     <PreviewPanel
       minHeight={520}
-      loading={debouncing}
-      empty={!metadata && !debouncing}
+      loading={debouncing || settling}
+      empty={!metadata && !debouncing && !settling}
       emptyMessage="Pick a viz kind and bind required columns to see a live preview."
     >
       {metadata && (

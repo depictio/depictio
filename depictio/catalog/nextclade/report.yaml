@@ -1,4 +1,5 @@
 id: nextclade_report
+name: Clade assignment
 mode: run
 description: Per-sample clade assignment + sequence QC.
 find: { path_glob: "**/nextclade/*.csv" }

@@ -1,4 +1,5 @@
 id: qiime2_alpha_diversity
+name: Alpha diversity
 mode: diversity
 description: Multi-metric alpha-diversity per sample (shannon, evenness, faith_pd…).
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/qiime2/diversitycore

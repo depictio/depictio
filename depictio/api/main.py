@@ -19,6 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from depictio.api.v1.configs.config import settings
+from depictio.api.v1.configs.security_headers import SECURITY_HEADERS
 from depictio.api.v1.endpoints.routers import router
 from depictio.api.v1.json_response import CustomJSONResponse
 from depictio.api.v1.middleware.analytics_middleware import AnalyticsMiddleware
@@ -127,49 +128,10 @@ _logger = logging.getLogger(__name__)
 # defaults. The viewer SPA also sets equivalents at the nginx edge — these
 # are a defence-in-depth fallback for direct backend-port access.
 # ---------------------------------------------------------------------------
-_SECURITY_HEADERS: dict[str, str] = {
-    "X-Content-Type-Options": "nosniff",
-    "X-Frame-Options": "SAMEORIGIN",
-    "Referrer-Policy": "strict-origin-when-cross-origin",
-    "Permissions-Policy": "camera=(), microphone=(), geolocation=(), interest-cohort=()",
-    # CSP: the React SPA bundle requires its own assets only; ag-grid / Mantine
-    # ship CSS-in-JS so 'unsafe-inline' is required for style-src. WebSockets to
-    # the same origin are needed for the realtime events stream.
-    #
-    # 'unsafe-eval' is required for WebGL: Plotly draws `scattergl` / `scatter3d`
-    # through regl, which compiles each draw command at runtime via the Function
-    # constructor (`Function.apply(null, ...)` in the vendor-plotly chunk).
-    # Without it every gl trace throws EvalError at first draw, so Volcano,
-    # Manhattan, DotPlot, QQ, Lollipop and Embedding render nothing. The Vite
-    # dev server only appears to work because it sends no CSP at all.
-    # 'wasm-unsafe-eval' covers the Pyodide runtime behind figure Code Mode.
-    #
-    # connect-src also has to name the basemap CDNs, because maplibre fetches a
-    # map's style, glyphs, sprite and vector tiles with fetch/XHR rather than as
-    # images — `img-src https:` does not cover them. Without these a map
-    # component renders its legend over blank white and logs "Style is not done
-    # loading". The three styles Depictio offers (see MAP_STYLES in
-    # depictio/models/components/constants.py) resolve to:
-    #   carto-positron / carto-darkmatter → basemaps.cartocdn.com (style.json),
-    #     which in turn points at tiles.basemaps.cartocdn.com (glyphs, sprite,
-    #     TileJSON) and tiles-{a,b,c,d}.basemaps.cartocdn.com (the .mvt tiles)
-    #   open-street-map → tile.openstreetmap.org
-    # The bare apex is listed separately: a `*.` wildcard does not match it.
-    "Content-Security-Policy": (
-        "default-src 'self'; "
-        "script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval'; "
-        "style-src 'self' 'unsafe-inline'; "
-        "img-src 'self' data: blob: https:; "
-        "font-src 'self' data:; "
-        "connect-src 'self' ws: wss: "
-        "https://basemaps.cartocdn.com https://*.basemaps.cartocdn.com "
-        "https://tile.openstreetmap.org; "
-        "frame-ancestors 'self'; "
-        "object-src 'none'; "
-        "base-uri 'self'; "
-        "form-action 'self'"
-    ),
-}
+# The policy itself lives in `depictio.api.v1.configs.security_headers` so a
+# route can derive a nonce-bearing variant without importing this module (which
+# imports every router). Re-exported here under its historical name.
+_SECURITY_HEADERS = SECURITY_HEADERS
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):

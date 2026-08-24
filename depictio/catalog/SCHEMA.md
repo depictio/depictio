@@ -64,6 +64,7 @@ existence-checking validates; the derived fields are trusted until a future
 | Field | MUST/CAN | Type | Notes |
 |---|---|---|---|
 | `id` | **MUST** | str | Globally-unique. |
+| `name` | **MUST** | str | Short display label, e.g. `Amplicon coverage`. What a picker or gallery lists — `description` is the full sentence behind it and is too long to scan. Optional on the model so a third-party catalog can omit it; every bundled output declares one, and must be unique within its tool. |
 | `find` | **MUST** | Find | How to recognise the raw file. |
 | `mode` | CAN | str | Running mode / subcommand. |
 | `description` | CAN | str | |

@@ -1,4 +1,5 @@
 id: multiqc_summary
+name: Pipeline summary
 mode: summary
 description: Per-sample pipeline summary metrics (assembly + variant calling) — viralrecon summary tables, via MultiQC.
 find: { path_glob: "**/multiqc/multiqc_data/multiqc.parquet" }

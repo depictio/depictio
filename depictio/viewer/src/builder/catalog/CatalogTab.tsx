@@ -4,15 +4,18 @@ import {
   Alert,
   Badge,
   Box,
+  Button,
   Center,
   Chip,
   Group,
   Loader,
+  Popover,
   ScrollArea,
   Stack,
   Text,
   TextInput,
   Title,
+  Tooltip,
   UnstyledButton,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
@@ -123,41 +126,57 @@ interface MatchRowProps {
   onClick: () => void;
 }
 
-const MatchRow: React.FC<MatchRowProps> = ({ match, selected, onClick }) => (
-  <UnstyledButton
-    onClick={onClick}
-    w="100%"
-    px="md"
-    py="sm"
-    style={{
-      borderLeft: `3px solid ${selected ? 'var(--mantine-color-violet-6)' : 'transparent'}`,
-      background: selected ? 'var(--mantine-color-violet-0)' : 'transparent',
-      transition: 'background 120ms',
-    }}
-  >
-    <Text size="sm" fw={selected ? 600 : 400} lineClamp={2}>
-      {match.description || match.output_id}
-    </Text>
-    <Text size="xs" c="dimmed" lineClamp={1} mt={2} style={{ fontFamily: 'monospace', fontSize: 11 }}>
-      {match.output_id}
-    </Text>
-    <Text size="xs" c="dimmed" lineClamp={1} mt={1}>
-      {match.dc_tag}
-    </Text>
-    <Group gap={4} mt={4} wrap="wrap">
-      {match.renders_as.map((r, i) => (
-        <Badge
-          key={i}
-          size="xs"
-          variant={selected ? 'filled' : 'dot'}
-          color={COMPONENT_COLORS[r.component] ?? 'gray'}
-        >
-          {r.component}
-        </Badge>
-      ))}
-    </Group>
-  </UnstyledButton>
-);
+const MatchRow: React.FC<MatchRowProps> = ({ match, selected, onClick }) => {
+  // The identifiers and the full sentence are what made every row four lines
+  // tall. The row shows the catalog's own short `name`; the sentence and the
+  // ids go to the tooltip. `renders_as` becomes coloured dots — the count and
+  // the mix of component types are legible at a glance, the labels were not
+  // worth a line.
+  const detail = (
+    <Stack gap={2}>
+      <Text size="xs">{match.description || match.output_id}</Text>
+      <Text size="xs" c="dimmed" ff="monospace">{match.output_id}</Text>
+      <Text size="xs" c="dimmed">collection: {match.dc_tag}</Text>
+      <Text size="xs" c="dimmed">
+        {match.renders_as.map((r) => COMPONENT_LABELS[r.component] ?? r.component).join(' · ')}
+      </Text>
+    </Stack>
+  );
+  return (
+    <Tooltip label={detail} withArrow position="right" openDelay={350} multiline maw={340}>
+      <UnstyledButton
+        onClick={onClick}
+        w="100%"
+        px="md"
+        py={7}
+        style={{
+          borderLeft: `3px solid ${selected ? 'var(--mantine-color-violet-6)' : 'transparent'}`,
+          background: selected ? 'var(--mantine-color-violet-0)' : 'transparent',
+          transition: 'background 120ms',
+        }}
+      >
+        <Group gap={6} wrap="nowrap" align="center">
+          <Text size="sm" fw={selected ? 600 : 400} lineClamp={1} style={{ flex: 1, minWidth: 0 }}>
+            {match.name || match.output_id}
+          </Text>
+          <Group gap={3} wrap="nowrap" style={{ flexShrink: 0 }}>
+            {match.renders_as.map((r, i) => (
+              <Box
+                key={i}
+                w={7}
+                h={7}
+                style={{
+                  borderRadius: '50%',
+                  background: `var(--mantine-color-${COMPONENT_COLORS[r.component] ?? 'gray'}-6)`,
+                }}
+              />
+            ))}
+          </Group>
+        </Group>
+      </UnstyledButton>
+    </Tooltip>
+  );
+};
 
 // ---------------------------------------------------------------------------
 // Tool section header
@@ -223,8 +242,9 @@ const CatalogTab: React.FC<CatalogTabProps> = ({ projectId }) => {
   const [selectedToolName, setSelectedToolName] = useState('');
   const [search, setSearch] = useState('');
 
-  // Facet filters, auto-derived from the compose result (see facet options below).
-  const [toolFilter, setToolFilter] = useState<string[]>([]);
+  // Facet filters, auto-derived from the compose result (see facet options
+  // below). There is deliberately no tool facet: the accordion already groups
+  // by tool, and its headers carried exactly the same counts.
   const [typeFilter, setTypeFilter] = useState<string[]>([]);
   const [dcFilter, setDcFilter] = useState<string[]>([]);
   // Which tool accordion items are expanded (controlled — start all-open).
@@ -251,13 +271,9 @@ const CatalogTab: React.FC<CatalogTabProps> = ({ projectId }) => {
 
   // ── Facet options with counts (from the full, unfiltered module set) ──────
   const facetOptions = useMemo(() => {
-    const tools = new Map<string, { label: string; count: number }>();
     const types = new Map<string, number>();
     const dcs = new Map<string, number>();
     for (const mod of modules ?? []) {
-      const t = tools.get(mod.tool_id) ?? { label: mod.tool_name, count: 0 };
-      t.count += mod.matches.length;
-      tools.set(mod.tool_id, t);
       for (const m of mod.matches) {
         dcs.set(m.dc_tag, (dcs.get(m.dc_tag) ?? 0) + 1);
         const seen = new Set<string>();
@@ -269,9 +285,6 @@ const CatalogTab: React.FC<CatalogTabProps> = ({ projectId }) => {
       }
     }
     return {
-      tools: [...tools.entries()]
-        .map(([value, v]) => ({ value, label: v.label, count: v.count }))
-        .sort((a, b) => a.label.localeCompare(b.label)),
       types: [...types.entries()]
         .map(([value, count]) => ({ value, label: COMPONENT_LABELS[value] ?? value, count }))
         .sort((a, b) => a.label.localeCompare(b.label)),
@@ -281,12 +294,11 @@ const CatalogTab: React.FC<CatalogTabProps> = ({ projectId }) => {
     };
   }, [modules]);
 
-  const anyFilterActive =
-    search.trim() !== '' || toolFilter.length > 0 || typeFilter.length > 0 || dcFilter.length > 0;
+  const activeFacetCount = typeFilter.length + dcFilter.length;
+  const anyFilterActive = search.trim() !== '' || activeFacetCount > 0;
 
   const clearFilters = () => {
     setSearch('');
-    setToolFilter([]);
     setTypeFilter([]);
     setDcFilter([]);
   };
@@ -309,10 +321,9 @@ const CatalogTab: React.FC<CatalogTabProps> = ({ projectId }) => {
       );
     };
     return modules
-      .filter((mod) => !toolFilter.length || toolFilter.includes(mod.tool_id))
       .map((mod) => ({ ...mod, matches: mod.matches.filter((m) => matchPasses(mod, m)) }))
       .filter((mod) => mod.matches.length > 0);
-  }, [modules, search, toolFilter, typeFilter, dcFilter]);
+  }, [modules, search, typeFilter, dcFilter]);
 
   const selectMatch = (mod: CatalogModule, match: CatalogOutputMatch) => {
     setSelectedMatch(match);
@@ -368,15 +379,25 @@ const CatalogTab: React.FC<CatalogTabProps> = ({ projectId }) => {
       }
     };
 
+  // The three pre-list states fill the surface the browser occupies, the same
+  // way the split panel below does. `py="xl"` alone left them pinned to the top
+  // of an otherwise empty screen.
   // ── Loading ──────────────────────────────────────────────────────────────
   if (!modules && !error) {
-    return <Center py="xl"><Loader size="sm" /></Center>;
+    return (
+      <Center style={{ flex: 1 }} mih={520}>
+        <Stack align="center" gap={4}>
+          <Loader size="sm" />
+          <Text size="xs" c="dimmed">Matching your data against the catalog…</Text>
+        </Stack>
+      </Center>
+    );
   }
 
   // ── Error ────────────────────────────────────────────────────────────────
   if (error) {
     return (
-      <Center py="xl">
+      <Center style={{ flex: 1 }} mih={520}>
         <Alert color="red" title="Could not load catalog">{error}</Alert>
       </Center>
     );
@@ -385,7 +406,7 @@ const CatalogTab: React.FC<CatalogTabProps> = ({ projectId }) => {
   // ── Empty ────────────────────────────────────────────────────────────────
   if (modules?.length === 0) {
     return (
-      <Center py="xl">
+      <Center style={{ flex: 1 }} mih={520}>
         <Box
           maw={480}
           w="100%"
@@ -453,20 +474,45 @@ const CatalogTab: React.FC<CatalogTabProps> = ({ projectId }) => {
             size="sm"
           />
 
-          <Stack gap="sm" mt="sm">
-            <Facet label="Tool" options={facetOptions.tools} selected={toolFilter} onChange={setToolFilter} />
-            <Facet label="Component" options={facetOptions.types} selected={typeFilter} onChange={setTypeFilter} />
-            <Facet label="Data collection" options={facetOptions.dcs} selected={dcFilter} onChange={setDcFilter} />
-          </Stack>
+          {/* Facets behind a disclosure: fully expanded they cost ~185px above
+            * the list, which is most of what a narrow panel has to show results
+            * in. The badge keeps a hidden filter from being a mystery. */}
+          {(facetOptions.types.length > 1 || facetOptions.dcs.length > 1) && (
+            <Group justify="space-between" mt={6} wrap="nowrap">
+              <Popover position="bottom-start" withArrow shadow="md" width={300}>
+                <Popover.Target>
+                  <Button
+                    size="compact-xs"
+                    variant={activeFacetCount ? 'light' : 'subtle'}
+                    color={activeFacetCount ? 'violet' : 'gray'}
+                    leftSection={<Icon icon="mdi:filter-variant" width={14} />}
+                    rightSection={
+                      activeFacetCount ? (
+                        <Badge size="xs" circle variant="filled" color="violet">
+                          {activeFacetCount}
+                        </Badge>
+                      ) : null
+                    }
+                  >
+                    Filters
+                  </Button>
+                </Popover.Target>
+                <Popover.Dropdown p="sm">
+                  <Stack gap="sm">
+                    <Facet label="Component" options={facetOptions.types} selected={typeFilter} onChange={setTypeFilter} />
+                    <Facet label="Data collection" options={facetOptions.dcs} selected={dcFilter} onChange={setDcFilter} />
+                  </Stack>
+                </Popover.Dropdown>
+              </Popover>
 
-          {anyFilterActive && (
-            <Group justify="flex-end" mt="xs">
-              <UnstyledButton onClick={clearFilters}>
-                <Group gap={4}>
-                  <Icon icon="mdi:filter-remove-outline" width={14} color="var(--mantine-color-violet-6)" />
-                  <Text size="xs" c="violet" fw={600}>Clear filters</Text>
-                </Group>
-              </UnstyledButton>
+              {anyFilterActive && (
+                <UnstyledButton onClick={clearFilters}>
+                  <Group gap={4}>
+                    <Icon icon="mdi:filter-remove-outline" width={13} color="var(--mantine-color-violet-6)" />
+                    <Text size="xs" c="violet" fw={600}>Clear</Text>
+                  </Group>
+                </UnstyledButton>
+              )}
             </Group>
           )}
         </Box>

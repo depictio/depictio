@@ -1,4 +1,5 @@
 id: mosdepth_genome_coverage
+name: Genome coverage
 mode: genome
 description: Genome-wide coverage in windows, aggregated across all samples.
 find: { path_glob: "**/mosdepth/genome/all_samples.mosdepth.coverage.tsv" }

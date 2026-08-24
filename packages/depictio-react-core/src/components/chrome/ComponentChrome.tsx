@@ -3,7 +3,7 @@ import { ActionIcon, Group } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import { StoredMetadata } from '../../api';
-import CatalogFlag from './CatalogFlag';
+import CatalogButton from './CatalogButton';
 import MetadataPopover from './MetadataPopover';
 import FullscreenButton from './FullscreenButton';
 import InspectButton from './InspectButton';
@@ -17,6 +17,7 @@ import './chrome.css';
 
 export type ChromeAction =
   | 'inspect'
+  | 'catalog'
   | 'metadata'
   | 'fullscreen'
   | 'download'
@@ -157,6 +158,9 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
   const inspector = useInspectorControl();
   const actions: ChromeAction[] = [];
   if (inspector) actions.push('inspect');
+  // Same reasoning as `inspect`: whether this action exists is a property of
+  // the component's provenance, not of its type.
+  if (metadata.catalog_source) actions.push('catalog');
   actions.push(...actionsFor(componentType));
 
   /**
@@ -192,6 +196,9 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
             onInspect={inspector.select}
           />
         );
+      case 'catalog':
+        if (!metadata.catalog_source) return null;
+        return <CatalogButton key="catalog" source={metadata.catalog_source} />;
       case 'metadata':
         return <MetadataPopover key="metadata" metadata={metadata} />;
       case 'fullscreen':
@@ -291,9 +298,6 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
           : undefined
       }
     >
-      {metadata.catalog_source && (
-        <CatalogFlag source={metadata.catalog_source} />
-      )}
       <Group
         gap={compact ? 2 : 4}
         className={

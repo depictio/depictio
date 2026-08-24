@@ -1,4 +1,5 @@
 id: multiqc_ivar
+name: Primer trimming
 mode: ivar
 description: Amplicon primer-trimming and variant section metrics — iVar, surfaced via MultiQC.
 find: { path_glob: "**/multiqc/multiqc_data/multiqc.parquet" }

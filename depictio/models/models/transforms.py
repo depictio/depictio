@@ -62,6 +62,9 @@ class TransformConfig(BaseModel):
 
     recipe: str  # Recipe name, e.g. "nf-core/ampliseq/alpha_diversity.py"
     source_overrides: dict[str, SourceOverride] | None = None
+    # Output already computed and shipped as a seed file: keep the lineage, never
+    # re-run the recipe. Set by the init resolver, never declared in a YAML.
+    materialized: bool = False
 
     model_config = ConfigDict(extra="forbid")
 

@@ -1052,3 +1052,27 @@ def test_committed_json_schema_is_current(filename, model, flag):
         f"{filename} is stale — run: "
         f"depictio dev catalog schema --model {flag} -o depictio/catalog/{filename}"
     )
+
+
+def test_every_bundled_output_declares_a_short_name():
+    """`name` is what a picker lists; `description` is too long to scan.
+
+    Optional on the model so a third-party catalog can omit it, but every output
+    shipped here must carry one — otherwise the UI silently falls back to the
+    raw id and the list reads like a database dump.
+    """
+    missing = [
+        f"{entry.id}/{output.id}"
+        for entry in load_catalog_entries()
+        for output in entry.outputs
+        if not (output.name or "").strip()
+    ]
+    assert not missing, f"catalog outputs without a `name:`: {missing}"
+
+
+def test_short_names_are_unique_within_a_tool():
+    """Two entries under the same tool header must be tellable apart."""
+    for entry in load_catalog_entries():
+        names = [o.name for o in entry.outputs if o.name]
+        dupes = {n for n in names if names.count(n) > 1}
+        assert not dupes, f"tool {entry.id!r} reuses output name(s): {sorted(dupes)}"

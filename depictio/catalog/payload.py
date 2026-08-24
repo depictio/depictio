@@ -1054,8 +1054,13 @@ def _json_safe(o: Any) -> Any:
     return o
 
 
-def _inject(payload: dict[str, Any]) -> str:
-    """Embed a computed payload into the prebuilt single-file bundle."""
+def _inject(payload: dict[str, Any], nonce: str | None = None) -> str:
+    """Embed a computed payload into the prebuilt single-file bundle.
+
+    ``nonce`` stamps the bundle's module script so a caller serving this over
+    HTTP can admit exactly that script through a `script-src` policy. Opening
+    the file from disk needs no nonce, which is why it is optional.
+    """
     if not TEMPLATE_PATH.exists():
         raise CatalogPayloadError(
             f"catalog-preview bundle not built: {TEMPLATE_PATH} is missing — run "
@@ -1063,6 +1068,18 @@ def _inject(payload: dict[str, Any]) -> str:
         )
     blob = json.dumps(_json_safe(payload), default=str).replace("</", "<\\/")
     html = TEMPLATE_PATH.read_text().replace("__CATALOG_PAYLOAD__", blob)
+    if nonce is not None:
+        # Only the module tag: it is the bundle's sole executable script, and
+        # matching bare "<script" would also rewrite the tag strings that appear
+        # inside its own inlined JS. The payload <script> is application/json,
+        # which never executes, so it needs no nonce.
+        marker = '<script type="module"'
+        if marker not in html:
+            raise CatalogPayloadError(
+                f"catalog-preview bundle at {TEMPLATE_PATH} has no {marker!r} tag to "
+                "nonce — rebuild it with `cd depictio/viewer && pnpm run build:catalog-preview`"
+            )
+        html = html.replace(marker, f'<script nonce="{nonce}" type="module"', 1)
     # Patch server-relative logo paths → inline data URIs so they render offline.
     for server_path, data_uri in _logo_data_uris().items():
         html = html.replace(server_path, data_uri)
@@ -1074,6 +1091,7 @@ def render_html(
     theme: str = "light",
     tool: Any = None,
     render_id: str | None = None,
+    nonce: str | None = None,
 ) -> str:
     """Inject a single output (wrapped as a one-item gallery) into the bundle.
 
@@ -1109,9 +1127,9 @@ def render_html(
         "tools": [tool_group],
         "data": blob["data"],
     }
-    return _inject(payload)
+    return _inject(payload, nonce)
 
 
-def render_gallery_html(entries: Any, theme: str = "light") -> str:
+def render_gallery_html(entries: Any, theme: str = "light", nonce: str | None = None) -> str:
     """Inject the whole catalog (gallery + every output's live payload)."""
-    return _inject(build_gallery_payload(entries, theme))
+    return _inject(build_gallery_payload(entries, theme), nonce)

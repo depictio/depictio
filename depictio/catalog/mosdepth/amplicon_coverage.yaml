@@ -1,4 +1,5 @@
 id: mosdepth_amplicon_coverage
+name: Amplicon coverage
 mode: amplicon
 description: Per-amplicon coverage depth, aggregated across all samples (bindable as-is).
 find: { path_glob: "**/mosdepth/amplicon/all_samples.mosdepth.coverage.tsv" }

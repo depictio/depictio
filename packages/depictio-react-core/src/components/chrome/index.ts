@@ -7,6 +7,8 @@ export { default as ComponentChrome, actionsFor } from './ComponentChrome';
 export type { ComponentChromeProps, ChromeAction } from './ComponentChrome';
 export { default as MetadataPopover } from './MetadataPopover';
 export { default as MetadataBody } from './MetadataBody';
+export { default as CatalogButton } from './CatalogButton';
+export { default as CatalogOrigin } from './CatalogOrigin';
 export { default as FullscreenButton } from './FullscreenButton';
 export { default as InspectButton } from './InspectButton';
 export { InspectorProvider, useInspectorControl } from './InspectorContext';
