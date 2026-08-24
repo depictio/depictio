@@ -57,22 +57,50 @@ jobs:
           # Reported as a number rather than the raw response body: a property that
           # is a blob of JSON cannot be charted or compared week to week.
           #
-          # Every fetch here retries, because collection failures are now fatal to
-          # the run: pypistats answers 429 readily enough that a single unlucky
-          # request would otherwise turn a Monday morning red for no reason.
-          for pkg in depictio-cli depictio; do
+          # depictio-cli is the only package this project publishes to PyPI — the
+          # server ships as container images and a Helm chart. `depictio` used to be
+          # polled here too and answered 404 every single week, which pinned the
+          # final gate red permanently over a distribution channel that does not
+          # exist.
+          #
+          # pypistats throttles by source IP and hosted runners share theirs, so 429
+          # is routine rather than exceptional: a descriptive User-Agent and a slow
+          # backoff get through it far more often than the default curl UA and a 5s
+          # delay did. When a fetch is throttled anyway it is recorded as throttled,
+          # not failed — see the gate at the end of the job for why that distinction
+          # decides the colour of the run.
+          ua="depictio-telemetry/1.0 (+https://github.com/${GITHUB_REPOSITORY})"
+          for pkg in depictio-cli; do
             url="https://pypistats.org/api/packages/${pkg}/recent"
-            if body=$(curl -sSf --max-time 30 --retry 3 --retry-delay 5 --retry-all-errors "$url"); then
-              downloads=$(jq -r '.data.last_month' <<<"$body")
-              echo "${pkg}: ${downloads} downloads last month"
-              echo "${pkg}=${downloads}" >> "$GITHUB_OUTPUT"
-            else
-              echo "::error::Could not fetch PyPI stats for ${pkg}"
-              # $RUNNER_TEMP, not a job-level env var: the `runner` context is
-              # not available where job env is evaluated, so hoisting this path
-              # would silently resolve it to /collection-errors.txt.
-              echo "pypi/${pkg}" >> "$RUNNER_TEMP/collection-errors.txt"
-            fi
+            body="$RUNNER_TEMP/pypistats-${pkg}.json"
+            # The status comes out of the same request that fetches the body, via
+            # -w. Re-probing the URL after a failure would race the throttle
+            # window: the retries can exhaust on 429 and a second request seconds
+            # later answer 200, which would file a throttle as a hard error and
+            # turn the run red for the opposite of the reason it failed.
+            # `|| true` keeps -w's output while swallowing curl's exit 22, which
+            # -f raises on any HTTP error.
+            status=$(curl -sSf --max-time 30 --retry 5 --retry-delay 20 --retry-all-errors \
+              -H "User-Agent: ${ua}" -H "Accept: application/json" \
+              -o "$body" -w '%{http_code}' "$url" || true)
+            # $RUNNER_TEMP, not a job-level env var: the `runner` context is
+            # not available where job env is evaluated, so hoisting this path
+            # would silently resolve it to /collection-errors.txt.
+            case "$status" in
+              200)
+                downloads=$(jq -r '.data.last_month' <"$body")
+                echo "${pkg}: ${downloads} downloads last month"
+                echo "${pkg}=${downloads}" >> "$GITHUB_OUTPUT"
+                ;;
+              429)
+                echo "::warning::pypistats throttled the runner (429) for ${pkg}"
+                echo "pypi/${pkg}" >> "$RUNNER_TEMP/collection-throttled.txt"
+                ;;
+              *)
+                echo "::error::Could not fetch PyPI stats for ${pkg} (HTTP ${status:-000})"
+                echo "pypi/${pkg}" >> "$RUNNER_TEMP/collection-errors.txt"
+                ;;
+            esac
           done
 
       - name: Collect repository traffic
@@ -128,7 +156,6 @@ jobs:
         if: always() && env.POSTHOG_API_KEY != ''
         env:
           PYPI_DEPICTIO_CLI: ${{ steps.pypi.outputs.depictio-cli }}
-          PYPI_DEPICTIO: ${{ steps.pypi.outputs.depictio }}
           TRAFFIC_CLONES: ${{ steps.traffic.outputs.clones }}
           TRAFFIC_CLONES_UNIQUES: ${{ steps.traffic.outputs.clones_uniques }}
           TRAFFIC_VIEWS: ${{ steps.traffic.outputs.views }}
@@ -156,8 +183,16 @@ jobs:
               # metrics that were fine.
               return int(raw) if raw and raw != "null" else None
 
-          errors = pathlib.Path(os.environ["RUNNER_TEMP"]) / "collection-errors.txt"
-          uncollected = errors.read_text().split() if errors.exists() else []
+          # Throttled collectors are as absent from the snapshot as failed ones,
+          # so both land in `uncollected`: the chart must show the same gap
+          # either way. The split only decides whether the run goes red.
+          temp = pathlib.Path(os.environ["RUNNER_TEMP"])
+          uncollected = [
+              name
+              for f in ("collection-errors.txt", "collection-throttled.txt")
+              if (temp / f).exists()
+              for name in (temp / f).read_text().split()
+          ]
 
           body = {
               "api_key": os.environ["POSTHOG_API_KEY"],
@@ -165,7 +200,6 @@ jobs:
               "distinct_id": "depictio-ci-metrics",
               "properties": {
                   "pypi_depictio_cli": metric("PYPI_DEPICTIO_CLI"),
-                  "pypi_depictio": metric("PYPI_DEPICTIO"),
                   "github_clones": metric("TRAFFIC_CLONES"),
                   "github_clones_unique": metric("TRAFFIC_CLONES_UNIQUES"),
                   "github_views": metric("TRAFFIC_VIEWS"),
@@ -192,13 +226,27 @@ jobs:
         # run red. A `::warning::` in a workflow that runs unattended on Mondays is
         # a failure nobody ever sees, which is how two of these three metrics went
         # uncollected without anyone noticing.
+        #
+        # Upstream throttling is the one thing that does not go red. A weekly job
+        # that is red every single week teaches the project to ignore it, which
+        # costs exactly the signal this gate exists to give. A 429 also loses
+        # nothing permanently: PyPI download windows are re-fetchable next Monday,
+        # unlike the traffic API's 14-day retention. So a throttled collector is
+        # reported as a warning and still shows as a gap in the chart, while a
+        # collector that is genuinely broken — a 404, a 5xx, a bad token — is what
+        # actually fails the run.
         if: always()
         run: |
           set -euo pipefail
           errors="$RUNNER_TEMP/collection-errors.txt"
+          throttled="$RUNNER_TEMP/collection-throttled.txt"
+          if [ -s "$throttled" ]; then
+            echo "Metrics throttled upstream this run (retried next Monday):"
+            cat "$throttled"
+          fi
           if [ -s "$errors" ]; then
             echo "Metrics that could not be collected this run:"
             cat "$errors"
             exit 1
           fi
-          echo "All distribution metrics collected."
+          echo "No distribution metric failed to collect."
