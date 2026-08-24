@@ -335,6 +335,7 @@ export type {
   CatalogPreviewRender,
   CatalogPreviewPayload,
   BreakdownPayloadDTO,
+  CatalogSource,
 } from './api';
 // Selection-as-filter helpers (Plotly/AG Grid → InteractiveFilter)
 export {

@@ -3,6 +3,7 @@ import { ActionIcon, Group } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import { StoredMetadata } from '../../api';
+import CatalogFlag from './CatalogFlag';
 import MetadataPopover from './MetadataPopover';
 import FullscreenButton from './FullscreenButton';
 import InspectButton from './InspectButton';
@@ -290,6 +291,9 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
           : undefined
       }
     >
+      {metadata.catalog_source && (
+        <CatalogFlag source={metadata.catalog_source} />
+      )}
       <Group
         gap={compact ? 2 : 4}
         className={

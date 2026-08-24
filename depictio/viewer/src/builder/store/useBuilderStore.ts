@@ -106,8 +106,16 @@ export interface BuilderState {
   // Set true when the builder was initiated from a catalog suggestion. Steps
   // 0 and 1 are skipped; the design step shows a dismissable catalog banner.
   catalogMode: boolean;
-  // When catalogMode, the tool+output that supplied the pre-fill (for the banner).
-  catalogSource: { toolName: string; outputId: string; description?: string } | null;
+  // When catalogMode, the tool+output that supplied the pre-fill (for the banner,
+  // the "from catalog" flag, and the metadata inspector). `use` is the
+  // `<tool>/<ref>` snippet the render maps to (advanced_viz), when applicable.
+  catalogSource: {
+    toolId?: string;
+    toolName: string;
+    outputId: string;
+    description?: string;
+    use?: string;
+  } | null;
 
   // UI status flags
   saving: boolean;
@@ -153,7 +161,13 @@ export interface BuilderActions {
     dcId: string;
     projectId: string;
     config: Record<string, unknown>;
-    source: { toolName: string; outputId: string; description?: string };
+    source: {
+      toolId?: string;
+      toolName: string;
+      outputId: string;
+      description?: string;
+      use?: string;
+    };
   }) => void;
   loadExisting: (m: StoredMetadata) => void;
   setApplyDashboardFilters: (b: boolean) => void;
