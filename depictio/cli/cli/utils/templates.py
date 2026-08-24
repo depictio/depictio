@@ -881,7 +881,10 @@ def resolve_template(
     if project_name:
         resolved_config["name"] = project_name
     elif "name" not in resolved_config or not resolved_config.get("name"):
-        resolved_config["name"] = f"{template_id} - {Path(data_root).name}"
+        # template_metadata.template_id (resolved), not the raw template_id param —
+        # otherwise "nf-core/ampliseq/latest" runs all name-collide under one
+        # generic project name instead of the concrete version actually ingested.
+        resolved_config["name"] = f"{template_metadata.template_id} - {Path(data_root).name}"
 
     # 9. Build TemplateOrigin for DB tracking
     expected_dcs = _build_expected_dcs(dc_superset, resolved_config, removal_reasons)

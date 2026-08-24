@@ -969,7 +969,9 @@ def register_run_command(app: typer.Typer):
         # Final summary
         rich_print_section_separator("Depictio-CLI Run Summary")
         if is_template_mode:
-            rich_print_checked_statement(f"Template used: {template}", "info")
+            # Resolved id, not the raw --template arg — "nf-core/ampliseq/latest"
+            # would otherwise print unresolved, hiding which version actually ran.
+            rich_print_checked_statement(f"Template used: {template_metadata.template_id}", "info")
         if success_count == total_steps:
             rich_print_checked_statement(
                 f"Depictio-CLI run completed successfully! ({success_count}/{total_steps} steps)",
