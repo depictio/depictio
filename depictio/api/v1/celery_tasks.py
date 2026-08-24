@@ -583,29 +583,37 @@ def build_multiqc_preview(payload: dict) -> dict:
 
 @celery_app.task(name="depictio.deltatables.preview", soft_time_limit=60, time_limit=120)
 def preview_deltatable(payload: dict) -> dict:
-    """Heavy body of `GET /deltatables/preview/{id}`.
+    """Heavy body of `GET`/`POST /deltatables/preview/{id}`.
 
     Input shape:
-        {"delta_table_location": str, "limit": int}
+        {"delta_table_location": str, "limit": int,
+         "filter_metadata": [...]}    # optional, cleaned InteractiveFilter list
+
+    With ``filter_metadata``, both the returned rows and ``total_rows`` are
+    computed on the filtered frame, so the builder's "Showing X of N rows"
+    reflects the dashboard's active filters.
     """
     import polars as pl
 
+    from depictio.api.v1.deltatables_utils import apply_filters_to_scan
     from depictio.api.v1.endpoints.deltatables_endpoints.routes import sanitize_for_json
     from depictio.api.v1.s3 import polars_s3_config
 
     delta_loc = payload["delta_table_location"]
     limit = max(1, min(int(payload.get("limit", 100)), 1000))
+    filter_metadata = payload.get("filter_metadata") or []
 
     started = time.monotonic()
-    df = pl.scan_delta(delta_loc, storage_options=polars_s3_config).head(limit).collect()
-    total_rows, total_cols = (
-        pl.scan_delta(delta_loc, storage_options=polars_s3_config).collect().shape
+    scan = apply_filters_to_scan(
+        pl.scan_delta(delta_loc, storage_options=polars_s3_config), filter_metadata
     )
+    df = scan.head(limit).collect()
+    total_rows, total_cols = scan.collect().shape
     rows = sanitize_for_json(df.to_dicts())
     elapsed_ms = int((time.monotonic() - started) * 1000)
     logger.info(
         f"celery_tasks.preview_deltatable rows={limit}/{total_rows} cols={total_cols} "
-        f"elapsed_ms={elapsed_ms}"
+        f"filters={len(filter_metadata)} elapsed_ms={elapsed_ms}"
     )
 
     return {
@@ -613,6 +621,7 @@ def preview_deltatable(payload: dict) -> dict:
         "rows": rows,
         "total_rows": total_rows,
         "total_columns": total_cols,
+        "filter_applied": bool(filter_metadata),
     }
 
 

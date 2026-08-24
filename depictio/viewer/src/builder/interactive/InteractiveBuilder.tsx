@@ -42,6 +42,7 @@ import {
 } from 'depictio-react-core';
 import type { StoredMetadata } from 'depictio-react-core';
 import { useBuilderStore } from '../store/useBuilderStore';
+import { useBuilderPreviewFilters } from '../useBuilderPreviewFilters';
 import ColumnSelect from '../shared/ColumnSelect';
 import DesignShell from '../shared/DesignShell';
 import PreviewPanel from '../shared/PreviewPanel';
@@ -129,6 +130,7 @@ const InteractivePreview: React.FC = () => {
   const config = useBuilderStore((s) => s.config) as InteractiveConfig;
   const dcId = useBuilderStore((s) => s.dcId);
   const wfId = useBuilderStore((s) => s.wfId);
+  const previewFilters = useBuilderPreviewFilters();
 
   const { interactive_component_type, column_name, column_type, title, color, icon_name } =
     config;
@@ -166,28 +168,30 @@ const InteractivePreview: React.FC = () => {
     } as StoredMetadata['default_state'],
   };
 
+  // The dashboard's active filters (minus this component's own) so the
+  // control previews the option sets / ranges viewers will actually see.
   let renderer: React.ReactNode;
   switch (interactive_component_type) {
     case 'MultiSelect':
     case 'Select':
-      renderer = <MultiSelectRenderer metadata={metadata} filters={[]} />;
+      renderer = <MultiSelectRenderer metadata={metadata} filters={previewFilters} />;
       break;
     case 'RangeSlider':
-      renderer = <RangeSliderRenderer metadata={metadata} filters={[]} />;
+      renderer = <RangeSliderRenderer metadata={metadata} filters={previewFilters} />;
       break;
     case 'Slider':
-      renderer = <SliderRenderer metadata={metadata} filters={[]} />;
+      renderer = <SliderRenderer metadata={metadata} filters={previewFilters} />;
       break;
     case 'DateRangePicker':
     case 'DatePicker':
-      renderer = <DatePickerRenderer metadata={metadata} filters={[]} />;
+      renderer = <DatePickerRenderer metadata={metadata} filters={previewFilters} />;
       break;
     case 'SegmentedControl':
-      renderer = <SegmentedControlRenderer metadata={metadata} filters={[]} />;
+      renderer = <SegmentedControlRenderer metadata={metadata} filters={previewFilters} />;
       break;
     case 'Switch':
     case 'Checkbox':
-      renderer = <CheckboxSwitchRenderer metadata={metadata} filters={[]} />;
+      renderer = <CheckboxSwitchRenderer metadata={metadata} filters={previewFilters} />;
       break;
     default:
       renderer = null;

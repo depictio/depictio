@@ -20,6 +20,7 @@ import { AgGridReact } from 'ag-grid-react';
 import type { ColDef } from 'ag-grid-community';
 import { fetchDataCollectionPreview } from 'depictio-react-core';
 import type { PreviewResult } from 'depictio-react-core';
+import { useBuilderPreviewFilters } from '../useBuilderPreviewFilters';
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-quartz.css';
 
@@ -36,16 +37,19 @@ const DataPreviewTable: React.FC<Props> = ({ dcId, dcType, shape }) => {
   const [data, setData] = useState<PreviewResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const previewFilters = useBuilderPreviewFilters();
+  const filterKey = JSON.stringify(previewFilters);
 
   useEffect(() => {
     if (isMultiQC || !dcId) return;
     setLoading(true);
     setError(null);
-    fetchDataCollectionPreview(dcId, 100)
+    fetchDataCollectionPreview(dcId, 100, previewFilters)
       .then((res) => setData(res))
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false));
-  }, [dcId, isMultiQC]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dcId, isMultiQC, filterKey]);
 
   const columnDefs = useMemo<ColDef[]>(() => {
     if (!data?.columns) return [];
@@ -125,7 +129,11 @@ const DataPreviewTable: React.FC<Props> = ({ dcId, dcType, shape }) => {
     );
   }
 
-  const totalRowsAll = shape?.num_rows ?? data.total_rows ?? data.rows.length;
+  // Under active dashboard filters the server's total is the filtered count;
+  // the static shape (whole collection) would contradict the rows on screen.
+  const totalRowsAll = data.filter_applied
+    ? (data.total_rows ?? data.rows.length)
+    : (shape?.num_rows ?? data.total_rows ?? data.rows.length);
   const totalCols = shape?.num_columns ?? data.columns.length;
 
   return (

@@ -22,15 +22,18 @@ import React, { useEffect, useState } from 'react';
 import { Center, Text } from '@mantine/core';
 import { DepictioCard } from 'depictio-components';
 import { useBuilderStore } from '../store/useBuilderStore';
+import { useBuilderPreviewFilters } from '../useBuilderPreviewFilters';
 import PreviewPanel from '../shared/PreviewPanel';
 import { autoCardTitle } from './cardTitle';
 import {
   SecondaryMetrics,
   fetchBreakdown,
+  fetchCardHeroValue,
   fetchCardMetric,
   isBreakdownLayout,
   isNumericLayout,
   type BreakdownPayloadDTO,
+  type InteractiveFilter,
   type SecondaryLayout,
 } from 'depictio-react-core';
 
@@ -114,10 +117,12 @@ function useBreakdownPreview(
   aggregation: string | undefined,
   topNCount: number,
   enabled: boolean,
+  filters: InteractiveFilter[],
 ): { payload: BreakdownPayloadDTO | null; loading: boolean; error: string | null } {
   const [payload, setPayload] = useState<BreakdownPayloadDTO | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const filterKey = JSON.stringify(filters);
 
   useEffect(() => {
     if (!enabled || !dcId || !column || !breakdownCol) {
@@ -129,7 +134,15 @@ function useBreakdownPreview(
     const ctrl = new AbortController();
     setLoading(true);
     setError(null);
-    fetchBreakdown(dcId, column, breakdownCol, aggregation || 'count', topNCount, ctrl.signal)
+    fetchBreakdown(
+      dcId,
+      column,
+      breakdownCol,
+      aggregation || 'count',
+      topNCount,
+      ctrl.signal,
+      filters,
+    )
       .then((res) => {
         setPayload(res);
         setLoading(false);
@@ -141,7 +154,8 @@ function useBreakdownPreview(
         setLoading(false);
       });
     return () => ctrl.abort();
-  }, [enabled, dcId, column, breakdownCol, aggregation, topNCount]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled, dcId, column, breakdownCol, aggregation, topNCount, filterKey]);
 
   return { payload, loading, error };
 }
@@ -159,11 +173,13 @@ function useNumericPreview(
   layout: SecondaryLayout,
   layoutConfig: Record<string, unknown>,
   enabled: boolean,
+  filters: InteractiveFilter[],
 ): { payload: Record<string, unknown> | null; loading: boolean; error: string | null } {
   const [payload, setPayload] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const configKey = JSON.stringify(layoutConfig);
+  const filterKey = JSON.stringify(filters);
 
   useEffect(() => {
     if (!enabled || !dcId || !column) {
@@ -175,7 +191,7 @@ function useNumericPreview(
     const ctrl = new AbortController();
     setLoading(true);
     setError(null);
-    fetchCardMetric(dcId, layout, column, JSON.parse(configKey), ctrl.signal)
+    fetchCardMetric(dcId, layout, column, JSON.parse(configKey), ctrl.signal, filters)
       .then((res) => {
         setPayload(res);
         setLoading(false);
@@ -187,9 +203,51 @@ function useNumericPreview(
         setLoading(false);
       });
     return () => ctrl.abort();
-  }, [enabled, dcId, column, layout, configKey]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled, dcId, column, layout, configKey, filterKey]);
 
   return { payload, loading, error };
+}
+
+/** The hero scalar under active dashboard filters.
+ *
+ *  With no filters this stays inert (``value: undefined``) and the component
+ *  keeps its zero-request static path — the precomputed ``col.specs`` value.
+ *  With filters active, the hero is recomputed server-side on the filtered
+ *  frame so it cannot contradict the (also filtered) secondary strip. */
+function useHeroValue(
+  dcId: string | null,
+  column: string | undefined,
+  aggregation: string | undefined,
+  filters: InteractiveFilter[],
+): { value: unknown; loading: boolean } {
+  const [value, setValue] = useState<unknown>(undefined);
+  const [loading, setLoading] = useState(false);
+  const filterKey = JSON.stringify(filters);
+
+  useEffect(() => {
+    if (filters.length === 0 || !dcId || !column || !aggregation) {
+      setValue(undefined);
+      setLoading(false);
+      return;
+    }
+    const ctrl = new AbortController();
+    setLoading(true);
+    fetchCardHeroValue(dcId, column, aggregation, filters, ctrl.signal)
+      .then((v) => {
+        setValue(v);
+        setLoading(false);
+      })
+      .catch((err: unknown) => {
+        if ((err as { name?: string })?.name === 'AbortError') return;
+        setValue(undefined);
+        setLoading(false);
+      });
+    return () => ctrl.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dcId, column, aggregation, filterKey]);
+
+  return { value, loading };
 }
 
 const CardPreview: React.FC = () => {
@@ -215,6 +273,7 @@ const CardPreview: React.FC = () => {
   };
   const cols = useBuilderStore((s) => s.cols);
   const dcId = useBuilderStore((s) => s.dcId);
+  const previewFilters = useBuilderPreviewFilters();
 
   const layout: SecondaryLayout = config.secondary_layout ?? 'vertical';
   // Hooks must run unconditionally, so this sits above the early return for an
@@ -230,6 +289,7 @@ const CardPreview: React.FC = () => {
     config.aggregation,
     config.top_n_count ?? 3,
     isBreakdownLayout(layout),
+    previewFilters,
   );
 
   const {
@@ -249,6 +309,14 @@ const CardPreview: React.FC = () => {
       trend_col: config.trend_col ?? null,
     },
     isNumericLayout(layout),
+    previewFilters,
+  );
+
+  const { value: filteredHero } = useHeroValue(
+    dcId,
+    config.column_name,
+    config.aggregation,
+    previewFilters,
   );
 
   if (!config.column_name || !config.aggregation) {
@@ -262,7 +330,15 @@ const CardPreview: React.FC = () => {
   }
 
   const col = cols.find((c) => c.name === config.column_name);
-  const rawValue = col?.specs?.[config.aggregation as string];
+  // Static path: the precomputed spec describes the unfiltered collection.
+  // Under active dashboard filters the server-computed hero replaces it (kept
+  // as the placeholder while the fetch is in flight, so the value doesn't
+  // flash to "—" on every filter toggle).
+  const staticValue = col?.specs?.[config.aggregation as string];
+  const rawValue =
+    previewFilters.length > 0 && filteredHero !== undefined && filteredHero !== null
+      ? filteredHero
+      : staticValue;
   const value = formatValue(rawValue);
 
   const effectiveTitle =
