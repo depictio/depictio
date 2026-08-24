@@ -53,6 +53,9 @@ export default function RecognizedTool({
               variant="light"
               p="sm"
               icon={<Icon icon="mdi:file-document-outline" />}
+              // Stable hook for the e2e: the visible label is just the slug, and
+              // several outputs share substrings.
+              data-output={output.slug}
             >
               <Group justify="space-between" align="flex-start" wrap="nowrap" gap="sm">
                 <div style={{ minWidth: 0 }}>

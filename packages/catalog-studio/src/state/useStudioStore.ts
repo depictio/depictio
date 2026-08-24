@@ -20,8 +20,13 @@ export interface ExistingTarget {
   outputSlug: string;
   /** Repo-relative path of the output's YAML — the append target. */
   yamlPath: string;
-  /** The output YAML's current text (new renders are inserted under renders_as). */
+  /** The output YAML's current text: starts as the build-time snapshot and is
+   *  replaced by the live upstream file as soon as it loads. New renders are
+   *  inserted under its `renders_as`. */
   rawYaml: string;
+  /** The snapshot as shipped in `public/catalog.json`, kept immutable so the UI
+   *  can tell the author their preview was rebased on a newer upstream file. */
+  snapshotYaml: string;
   /** Existing renders, shown read-only so the author doesn't duplicate them. */
   baseRenders: ManifestRender[];
   baseRenderIds: string[];
@@ -270,6 +275,7 @@ export const useStudioStore = create<StudioState>()(
           outputSlug: output.slug,
           yamlPath: output.yamlPath ?? '',
           rawYaml: output.rawYaml ?? '',
+          snapshotYaml: output.rawYaml ?? '',
           baseRenders: output.renders_as ?? [],
           baseRenderIds: (output.renders_as ?? [])
             .map((r) => r.id)

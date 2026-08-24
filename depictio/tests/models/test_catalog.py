@@ -589,8 +589,16 @@ def test_cli_commands_smoke():
     maintainer = (
         ["columns", "qiime2/ancombc.py"],  # module-owned recipe (co-located in catalog/qiime2/)
         ["schema"],
+        ["schema", "--model", "module"],
+        ["schema", "--model", "output"],
         ["match", str(run)],
         ["compose", str(run)],
+        # The three snapshot generators catalog-studio's build depends on. They
+        # were never smoke-tested, which is how `figure-params` shipped printing
+        # a DEBUG line before its JSON.
+        ["kinds"],
+        ["manifest"],
+        ["figure-params"],
     )
     for args in user_facing:
         result = runner.invoke(app, args)
@@ -598,6 +606,32 @@ def test_cli_commands_smoke():
     for args in maintainer:
         result = runner.invoke(dev_app, args)
         assert result.exit_code == 0, f"dev {args} → {result.stdout}"
+
+
+@pytest.mark.parametrize("command", ["kinds", "manifest", "figure-params", "schema"])
+def test_cli_json_output_is_machine_readable(command):
+    """`--json` must put NOTHING on stdout but the payload.
+
+    catalog-studio's `genKinds.ts` only checks that stdout starts with `{`; a
+    stray log line in front means it silently keeps the committed snapshot
+    instead of regenerating, so the drift check then passes against a stale
+    file. `figure-params` did exactly this (depictio's logger writes to stdout).
+    """
+    import json
+
+    runner, _app, dev_app = _cli()
+    args = [command] if command == "schema" else [command, "--json"]
+    result = runner.invoke(dev_app, args)
+    assert result.exit_code == 0, result.stdout
+    payload = json.loads(result.stdout)  # raises if anything precedes the JSON
+    assert isinstance(payload, dict) and payload
+
+
+def test_cli_schema_rejects_an_unknown_model():
+    runner, _app, dev_app = _cli()
+    result = runner.invoke(dev_app, ["schema", "--model", "nonsense"])
+    assert result.exit_code == 1
+    assert "nonsense" in result.stdout
 
 
 # ---------------------------------------------------------------------------
@@ -635,6 +669,197 @@ def test_ground_render_dtypes():
 
     # No dtype info (e.g. a recipe output) → checks are skipped.
     assert ground_render_dtypes("o", bad, {}) == []
+
+
+# ---------------------------------------------------------------------------
+# read_fixture_schema: the dtypes every binding is grounded against
+# ---------------------------------------------------------------------------
+
+
+def test_read_fixture_schema_csv_and_tsv(tmp_path):
+    from depictio.models.components.advanced_viz.catalog import read_fixture_schema
+
+    csv = tmp_path / "a.csv"
+    csv.write_text("gene,cov,flag\nBRCA1,120,true\nTP53,98,false\n")
+    assert read_fixture_schema(csv) == {"gene": "String", "cov": "Int64", "flag": "Boolean"}
+
+    tsv = tmp_path / "a.tsv"
+    tsv.write_text("gene\tcov\nBRCA1\t120\n")
+    assert read_fixture_schema(tsv) == {"gene": "String", "cov": "Int64"}
+
+
+def test_read_fixture_schema_all_empty_column_is_a_string_not_a_hole(tmp_path):
+    from depictio.models.components.advanced_viz.catalog import read_fixture_schema
+
+    csv = tmp_path / "a.csv"
+    csv.write_text("gene,note\nBRCA1,\nTP53,\n")
+    # A Null dtype would match no role spec and no numeric aggregation, so an
+    # all-empty column would fail every binding rather than simply being unused.
+    assert read_fixture_schema(csv)["note"] == "String"
+
+
+def test_read_fixture_schema_parquet_dtypes_are_not_parametrised(tmp_path):
+    """`ALLOWED_DTYPES` and the role specs speak base names.
+
+    `str(pl.Datetime)` is `Datetime(time_unit='us', time_zone=None)`, which
+    matches nothing — a parquet fixture with a datetime or list column used to
+    make every binding to it look like a dtype error.
+    """
+    import datetime
+
+    import polars as pl
+
+    from depictio.models.components.advanced_viz.catalog import (
+        ALLOWED_DTYPES,
+        read_fixture_schema,
+    )
+
+    path = tmp_path / "a.parquet"
+    pl.DataFrame(
+        {"when": [datetime.datetime(2024, 1, 1)], "many": [[1, 2]], "value": [1.5]}
+    ).write_parquet(path)
+    schema = read_fixture_schema(path)
+    assert schema == {"when": "Datetime", "many": "List", "value": "Float64"}
+    assert set(schema.values()) <= ALLOWED_DTYPES
+
+
+# ---------------------------------------------------------------------------
+# Fixture sanity: a fixture that grounds everything and shows nothing
+# ---------------------------------------------------------------------------
+
+
+def _write_tool(directory, tool_id, fixture_text, fixture_name="results.csv"):
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / "module.yaml").write_text(f"id: {tool_id}\nname: {tool_id}\n")
+    (directory / "results.yaml").write_text(
+        f'id: {tool_id}_results\nfind: {{path_glob: "**/{tool_id}/*.csv"}}\n'
+        f"fixture: {fixture_name}\n"
+        "renders_as:\n  - {{ component: card, column: a, aggregation: count }}\n".replace(
+            "{{", "{"
+        ).replace("}}", "}")
+    )
+    (directory / fixture_name).write_text(fixture_text)
+
+
+def test_validate_rejects_a_fixture_with_no_data_rows(tmp_path):
+    runner, _app, dev_app = _cli()
+    _write_tool(tmp_path / "emptyfix", "emptyfix", "a,b\n")
+    result = runner.invoke(dev_app, ["validate", "--path", str(tmp_path / "emptyfix")])
+    assert result.exit_code == 1
+    assert "no data rows" in result.stdout
+
+
+def test_validate_rejects_a_fixture_copied_from_another_tool(tmp_path):
+    # The failure mode PR #904 shipped: a demo table dropped in as the sample
+    # for an unrelated output. Grounding is happy; the entry describes nothing.
+    runner, _app, dev_app = _cli()
+    shared = "a,b\n1,2\n"
+    _write_tool(tmp_path / "toola", "toola", shared)
+    _write_tool(tmp_path / "toolb", "toolb", shared)
+    result = runner.invoke(dev_app, ["validate", "--path", str(tmp_path)])
+    assert result.exit_code == 1
+    assert "byte-identical" in result.stdout
+
+
+def test_validate_allows_two_outputs_of_one_tool_to_share_a_fixture(tmp_path):
+    runner, _app, dev_app = _cli()
+    directory = tmp_path / "sametool"
+    _write_tool(directory, "sametool", "a,b\n1,2\n")
+    (directory / "second.yaml").write_text(
+        'id: sametool_second\nfind: {path_glob: "**/sametool/*.tsv"}\n'
+        "fixture: results.csv\n"
+        "renders_as:\n  - { component: card, column: b, aggregation: count }\n"
+    )
+    result = runner.invoke(dev_app, ["validate", "--path", str(directory)])
+    assert result.exit_code == 0, result.stdout
+
+
+# ---------------------------------------------------------------------------
+# nf-core URL normalisation + per-layout card requirements
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://github.com/nf-core/modules/tree/master/modules/nf-core/ivar/consensus",
+        "https://github.com/nf-core/modules/tree/master/modules/nf-core/ivar/consensus/meta.yml",
+        "https://github.com/nf-core/modules/tree/master/modules/nf-core/ivar/consensus/main.nf",
+        "https://github.com/nf-core/modules/tree/master/modules/nf-core/ivar/consensus/",
+    ],
+)
+def test_nf_core_module_is_read_from_the_url_the_docs_link_to(url):
+    """The docs link to meta.yml; the vendored index holds module directories.
+
+    Existence checking compares the two, so without this the real modules a
+    contributor pastes were rejected as unknown.
+    """
+    from depictio.models.components.advanced_viz.catalog import _nf_core_module
+
+    assert _nf_core_module(url) == "ivar/consensus"
+
+
+def test_nf_core_module_ignores_a_non_module_url():
+    from depictio.models.components.advanced_viz.catalog import _nf_core_module
+
+    assert _nf_core_module("https://example.org/tool") is None
+    assert _nf_core_module(None) is None
+
+
+@pytest.mark.parametrize(
+    ("layout", "companion"),
+    [
+        ("top_n", {"breakdown_col": "sample"}),
+        ("concentration", {"breakdown_col": "sample"}),
+        ("composition", {"breakdown_col": "sample"}),
+        ("donut", {"breakdown_col": "sample"}),
+        ("coverage", {"coverage_max": 100.0}),
+        ("gauge", {"coverage_max": 100.0}),
+        ("threshold", {"threshold_value": 30.0}),
+        ("attrition", {"attrition_cols": ["mapped"]}),
+        ("trend", {"trend_col": "day"}),
+    ],
+)
+def test_card_layout_requires_its_companion_field(layout, companion):
+    """Each secondary_layout needs a companion field; catalog-studio mirrors this
+    table in `cardRules.ts` so the author is told before CI is."""
+    from pydantic import ValidationError as PydanticValidationError
+
+    from depictio.models.components.advanced_viz.catalog import Render
+
+    base = {"component": "card", "column": "cov", "aggregation": "average"}
+    with pytest.raises(PydanticValidationError):
+        Render(**base, secondary_layout=layout)
+    Render(**base, secondary_layout=layout, **companion)  # complete → accepted
+
+
+@pytest.mark.parametrize("layout", ["vertical", "compact", "grid", "box_plot", "histogram"])
+def test_card_layouts_with_no_companion_field(layout):
+    from depictio.models.components.advanced_viz.catalog import Render
+
+    Render(component="card", column="cov", aggregation="average", secondary_layout=layout)
+
+
+def test_card_bound_columns_include_the_layout_companions():
+    """trend/attrition bind extra columns, so grounding must see them."""
+    from depictio.models.components.advanced_viz.catalog import Render
+
+    trend = Render(
+        component="card",
+        column="cov",
+        aggregation="average",
+        secondary_layout="trend",
+        trend_col="day",
+    )
+    assert "day" in trend.bound_columns()
+    attrition = Render(
+        component="card",
+        column="raw",
+        aggregation="sum",
+        secondary_layout="attrition",
+        attrition_cols=["trimmed", "mapped"],
+    )
+    assert {"raw", "trimmed", "mapped"} <= attrition.bound_columns()
 
 
 # ---------------------------------------------------------------------------

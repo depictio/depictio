@@ -548,6 +548,18 @@ def read_fixture_columns(path: Path) -> list[str]:
     return list(read_fixture_schema(path).keys())
 
 
+def _dtype_name(dtype: object) -> str:
+    """Base polars dtype name, without its parameters.
+
+    ``str(pl.Datetime)`` renders as ``Datetime(time_unit='us', time_zone=None)``
+    and ``List(Int64)`` likewise, but `ALLOWED_DTYPES` and the role dtype specs
+    both speak base names. Left parametrised, a parquet fixture's datetime or
+    list column could never match anything, so every binding to one was reported
+    as a dtype error.
+    """
+    return str(dtype).split("(", 1)[0]
+
+
 def read_fixture_schema(path: Path) -> dict[str, str]:
     """Read a fixture's ``{column: polars-dtype-name}`` schema (csv/tsv/parquet).
 
@@ -558,10 +570,10 @@ def read_fixture_schema(path: Path) -> dict[str, str]:
     import polars as pl
 
     if path.suffix == ".parquet":
-        return {name: str(dtype) for name, dtype in pl.read_parquet_schema(path).items()}
+        return {name: _dtype_name(dtype) for name, dtype in pl.read_parquet_schema(path).items()}
     sep = "\t" if path.suffix == ".tsv" else ","
     schema = pl.read_csv(path, separator=sep, infer_schema_length=10_000).schema
-    return {name: str(dtype) for name, dtype in schema.items()}
+    return {name: _dtype_name(dtype) for name, dtype in schema.items()}
 
 
 def recipe_output_columns(recipe_ref: str) -> list[str]:

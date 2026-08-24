@@ -53,7 +53,9 @@ export default function ExportPanel({ kinds }: { kinds: KindsMap }) {
   // Preview + download rebase on the file as it is upstream right now; the
   // build-time snapshot is only the fallback when the fetch fails (offline,
   // private fork). The PR path re-reads at its own base commit regardless.
-  const upstream = useUpstreamFile(existing?.yamlPath ?? null, existing?.rawYaml ?? null);
+  // Compare against the SHIPPED snapshot, not `rawYaml` — the store refreshes
+  // that from upstream on entry, which would make every file look unchanged.
+  const upstream = useUpstreamFile(existing?.yamlPath ?? null, existing?.snapshotYaml ?? null);
   const baseYaml =
     upstream.status === 'ok' ? upstream.text : (existing?.rawYaml ?? null);
   const append = useMemo(
@@ -149,7 +151,7 @@ export default function ExportPanel({ kinds }: { kinds: KindsMap }) {
                 // note in the PR body that the preview was built against an
                 // older copy.
                 renders,
-                snapshotYaml: existing.rawYaml,
+                snapshotYaml: existing.snapshotYaml,
               },
               resolveTarget(),
               onProgress,

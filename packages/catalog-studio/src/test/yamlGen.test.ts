@@ -283,3 +283,51 @@ describe('card layouts', () => {
     expect(yaml).toContain('filter_expr: "coverage > 10"');
   });
 });
+
+describe('appendRenders — shapes it must NOT corrupt', () => {
+  const add: RenderSpec[] = [{ uid: 'n', component: 'table', id: 'new_table' }];
+
+  it('handles an empty list with a trailing comment', () => {
+    // The old regex was anchored `\s*$`, so the comment sent this down the
+    // block path and spliced list items after an inline sequence.
+    const src = 'id: t_out\nrenders_as: []  # nothing yet\n';
+    const { yaml, problem } = appendRenders(src, add);
+    expect(problem).toBeUndefined();
+    expect(yaml).not.toMatch(/renders_as:\s*\[\s*\]/);
+    expect(yaml).toContain('renders_as:  # nothing yet');
+    expect(yaml).toContain('- { id: new_table, component: table }');
+  });
+
+  it('refuses a flow sequence rather than splicing outside the brackets', () => {
+    const src = 'id: t_out\nrenders_as: [\n  { component: table },\n]\n';
+    const { yaml, problem } = appendRenders(src, add);
+    expect(problem).toMatch(/flow sequence/i);
+    expect(yaml).toBe(src); // untouched
+  });
+
+  it('refuses a nested renders_as instead of appending a second top-level key', () => {
+    // YAML resolves duplicate keys to the LAST one, so appending would have
+    // silently deleted every existing render.
+    const src = 'id: t_out\noutputs:\n  - id: a\n    renders_as:\n      - { component: table }\n';
+    const { yaml, problem } = appendRenders(src, add);
+    expect(problem).toMatch(/nests `renders_as`/i);
+    expect(yaml).toBe(src);
+  });
+
+  it('preserves CRLF line endings', () => {
+    const src = 'id: t_out\r\nrenders_as:\r\n  - { component: table }\r\n';
+    const { yaml } = appendRenders(src, add);
+    expect(yaml.split('\r\n').length).toBeGreaterThan(3);
+    expect(yaml).not.toMatch(/[^\r]\n/);
+  });
+
+  it('leaves the file alone when there is nothing to add', () => {
+    const src = 'id: t_out\nrenders_as:\n  - { component: table }\n';
+    expect(appendRenders(src, []).yaml).toBe(src);
+  });
+
+  it('ends the file with exactly one newline', () => {
+    const src = 'id: t_out\nrenders_as:\n  - { component: table }\n\n\n';
+    expect(appendRenders(src, add).yaml.endsWith('}\n')).toBe(true);
+  });
+});

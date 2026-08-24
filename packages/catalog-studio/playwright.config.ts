@@ -40,6 +40,13 @@ export default defineConfig({
     command: process.env.PW_DEV_SERVER
       ? `pnpm exec vite --port ${PORT} --strictPort --host 127.0.0.1`
       : `pnpm run build && pnpm exec vite preview --port ${PORT} --strictPort --host 127.0.0.1`,
+    // Build with OAuth "configured" so the one-click PR path exists to test.
+    // The values are inert: the e2e routes both github.com and the worker, and
+    // the client id is public by design.
+    env: {
+      VITE_GH_CLIENT_ID: 'e2e-client-id',
+      VITE_GH_OAUTH_WORKER_URL: 'https://oauth-worker.test/exchange',
+    },
     url: BASE,
     reuseExistingServer: !process.env.CI,
     // The build is part of the command, so allow for it.

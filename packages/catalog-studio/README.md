@@ -80,11 +80,16 @@ this app's own `yamlGen` must pass `dev catalog validate` (see `scripts/genGolde
 ## Development
 
 ```bash
-pnpm --filter catalog-studio dev        # http://localhost:5173/depictio/
-pnpm --filter catalog-studio test       # vitest
-pnpm --filter catalog-studio build      # production build → dist/
-pnpm --filter catalog-studio e2e        # Playwright flow test
+pnpm --filter catalog-studio dev            # http://localhost:5173/depictio/
+pnpm --filter catalog-studio test           # vitest
+pnpm --filter catalog-studio test:coverage  # + a v8 coverage summary
+pnpm --filter catalog-studio build          # production build → dist/
+pnpm --filter catalog-studio e2e            # Playwright: build → vite preview
 ```
+
+`e2e` builds and serves the production bundle, so it takes ~1 min; set
+`PW_DEV_SERVER=1` to run against the dev server while iterating. The PR journeys
+route `api.github.com` and the OAuth worker, so no token is involved.
 
 ### Reuse from the monorepo
 

@@ -54,5 +54,14 @@ export default defineConfig({
     globals: true,
     environment: 'jsdom',
     include: ['src/**/*.test.{ts,tsx}'],
+    coverage: {
+      provider: 'v8',
+      // The logic worth covering. Components are exercised by Playwright, the
+      // generated card spec is generated, and the two build scripts are covered
+      // by the CI round-trip rather than by unit tests.
+      include: ['src/catalog/**', 'src/viz/**', 'src/state/**', 'src/builder/columnSpecs.ts'],
+      exclude: ['src/catalog/generated/**'],
+      reporter: ['text-summary', 'html'],
+    },
   },
 });

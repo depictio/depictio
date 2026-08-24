@@ -15,3 +15,4 @@ playwright-report/
 .env.*.local
 # Cloudflare Worker local secrets.
 oauth-worker/.dev.vars
+coverage/
