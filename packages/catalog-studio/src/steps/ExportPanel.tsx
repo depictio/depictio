@@ -10,6 +10,7 @@ import AppendedYamlPreview from './AppendedYamlPreview';
 import { validateAll } from '../catalog/grounding';
 import { oauthConfigured, signIn, getStoredToken, clearStoredToken, devToken } from '../catalog/githubOAuth';
 import { openCatalogPr, openAddRendersPr, openNewOutputPr, resolveTarget } from '../catalog/github';
+import { useUpstreamFile } from '../catalog/upstreamFile';
 import type { KindsMap } from '../types';
 
 // Fallback when OAuth isn't configured for the deployment: point GitHub's web
@@ -44,9 +45,15 @@ export default function ExportPanel({ kinds }: { kinds: KindsMap }) {
     });
   }, [tool, output, fixture, renders, existing]);
 
+  // Preview + download rebase on the file as it is upstream right now; the
+  // build-time snapshot is only the fallback when the fetch fails (offline,
+  // private fork). The PR path re-reads at its own base commit regardless.
+  const upstream = useUpstreamFile(existing?.yamlPath ?? null, existing?.rawYaml ?? null);
+  const baseYaml =
+    upstream.status === 'ok' ? upstream.text : (existing?.rawYaml ?? null);
   const append = useMemo(
-    () => (existing ? appendRenders(existing.rawYaml, renders) : null),
-    [existing, renders],
+    () => (existing && baseYaml != null ? appendRenders(baseYaml, renders) : null),
+    [existing, baseYaml, renders],
   );
   const updatedYaml = append?.yaml ?? null;
 
@@ -111,15 +118,19 @@ export default function ExportPanel({ kinds }: { kinds: KindsMap }) {
     const onProgress = (m: string) => setPr({ status: 'working', message: m });
     try {
       const result =
-        existing && updatedYaml
+        existing
           ? await openAddRendersPr(
               token,
               {
                 toolId: existing.toolId,
                 outputSlug: existing.outputSlug,
                 yamlPath: existing.yamlPath,
-                updatedYaml,
-                count: renders.length,
+                // The renders, not the merged text: the PR re-appends them to
+                // the file as it stands upstream. `snapshotYaml` is only used to
+                // note in the PR body that the preview was built against an
+                // older copy.
+                renders,
+                snapshotYaml: existing.rawYaml,
               },
               resolveTarget(),
               onProgress,
@@ -316,6 +327,32 @@ export default function ExportPanel({ kinds }: { kinds: KindsMap }) {
             {existing ? existing.yamlPath : targetDir}
           </Badge>
         </Group>
+        {existing && upstream.status === 'ok' && upstream.drifted && (
+          <Alert
+            color="blue"
+            variant="light"
+            mb="sm"
+            icon={<Icon icon="mdi:source-branch-sync" />}
+            title="Rebased on the current file"
+          >
+            <Code>{existing.yamlPath}</Code> has changed upstream since this build's catalog
+            snapshot. The preview below (and the PR) append to the current version, so nothing
+            already merged is reverted.
+          </Alert>
+        )}
+        {existing && upstream.status === 'error' && (
+          <Alert
+            color="yellow"
+            variant="light"
+            mb="sm"
+            icon={<Icon icon="mdi:cloud-off-outline" />}
+            title="Showing the snapshot, not the live file"
+          >
+            Could not read <Code>{existing.yamlPath}</Code> from GitHub ({upstream.message}), so
+            the preview uses this build's snapshot. Opening the PR still re-reads the live file,
+            but a downloaded YAML may be based on an outdated copy.
+          </Alert>
+        )}
         {existing && append ? (
           <AppendedYamlPreview yaml={append.yaml} addedLines={append.addedLines} />
         ) : entry && newOutputTarget ? (

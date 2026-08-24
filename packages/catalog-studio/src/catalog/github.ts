@@ -5,7 +5,10 @@
  * API: fork → create branch → blobs → tree → commit → PR. The three files land
  * under `depictio/catalog/<tool>/`.
  */
+import { appendRenders } from './yamlGen';
 import type { GeneratedEntry } from './yamlGen';
+import { decodeBase64 } from './base64';
+import type { RenderSpec } from '../types';
 
 export interface PrTarget {
   owner: string;
@@ -83,8 +86,23 @@ export interface PrFile {
   content: string;
 }
 
+/** What a late-bound file resolver gets: a reader bound to the exact commit the
+ *  PR is about to branch from. */
+export interface PrBaseContext {
+  baseSha: string;
+  /** Upstream file content at `baseSha`, or null when the path doesn't exist. */
+  readFile(path: string): Promise<string | null>;
+}
+
 export interface PrSpec {
-  files: PrFile[];
+  /** Fixed content — for PRs that only add files. */
+  files?: PrFile[];
+  /** Content computed once the base commit is known. A PR that MODIFIES an
+   *  existing file must use this: committing a blob built from a build-time
+   *  snapshot silently reverts everything merged into that file since the
+   *  snapshot was taken, and a full-file overwrite produces no git conflict to
+   *  warn anyone. May also refine the PR body from the resolved content. */
+  resolveFiles?: (ctx: PrBaseContext) => Promise<{ files: PrFile[]; body?: string }>;
   /** Branch name stem, e.g. the tool id. */
   branchSlug: string;
   commitMessage: string;
@@ -124,6 +142,31 @@ export async function openFilesPr(
     `/repos/${owner}/${repo}/git/commits/${baseSha}`,
   );
 
+  // Resolve late-bound content against baseSha, BEFORE the branch exists, so an
+  // append is rebased on exactly the commit it will be parented on.
+  let files = spec.files ?? [];
+  let body = spec.body;
+  if (spec.resolveFiles) {
+    onProgress('Reading the current file from GitHub…');
+    const readFile = async (path: string): Promise<string | null> => {
+      try {
+        const res = await gh<{ content?: string; encoding?: string }>(
+          token,
+          'GET',
+          `/repos/${owner}/${repo}/contents/${path.split('/').map(encodeURIComponent).join('/')}?ref=${baseSha}`,
+        );
+        if (!res.content) return null;
+        return res.encoding === 'base64' ? decodeBase64(res.content) : res.content;
+      } catch {
+        return null;
+      }
+    };
+    const resolved = await spec.resolveFiles({ baseSha, readFile });
+    files = resolved.files;
+    if (resolved.body) body = resolved.body;
+  }
+  if (!files.length) throw new Error('Nothing to commit — no files resolved for this PR.');
+
   const branch = `tools-studio/${spec.branchSlug}-${Date.now().toString(36)}`;
   onProgress('Creating a branch…');
   await gh(token, 'POST', `/repos/${login}/${repo}/git/refs`, {
@@ -133,7 +176,7 @@ export async function openFilesPr(
 
   onProgress('Committing files…');
   const tree = [];
-  for (const f of spec.files) {
+  for (const f of files) {
     const blob = await gh<{ sha: string }>(token, 'POST', `/repos/${login}/${repo}/git/blobs`, {
       content: f.content,
       encoding: 'utf-8',
@@ -158,7 +201,7 @@ export async function openFilesPr(
     title: spec.title,
     head: `${login}:${branch}`,
     base,
-    body: spec.body,
+    body,
   });
 
   return { prUrl: pr.html_url, branch };
@@ -267,39 +310,92 @@ export async function openNewOutputPr(
   );
 }
 
-/** Append-to-existing PR: one modified output YAML at `yamlPath`. */
+/** Render ids already present in a raw output YAML (`- id: foo` / `{ id: foo,`). */
+export function renderIdsIn(rawYaml: string): Set<string> {
+  const ids = new Set<string>();
+  for (const m of rawYaml.matchAll(/(?:^\s*-\s*(?:\{\s*)?|,\s*)id:\s*["']?([A-Za-z0-9_.-]+)/gm)) {
+    ids.add(m[1]);
+  }
+  return ids;
+}
+
+/**
+ * Append-to-existing PR: one modified output YAML at `yamlPath`.
+ *
+ * The file content is built INSIDE the PR flow, from the upstream file at the
+ * exact commit we branch from — never from `catalog.json`'s build-time snapshot.
+ * Committing a snapshot-derived blob overwrites whatever landed in that file
+ * since the snapshot, and because it is a whole-file write git reports no
+ * conflict: the renders simply disappear.
+ */
 export async function openAddRendersPr(
   token: string,
-  args: { toolId: string; outputSlug: string; yamlPath: string; updatedYaml: string; count: number },
+  args: {
+    toolId: string;
+    outputSlug: string;
+    yamlPath: string;
+    renders: RenderSpec[];
+    /** What the app previewed the append against, for the drift note. */
+    snapshotYaml?: string;
+  },
   target: PrTarget = DEFAULT_TARGET,
   onProgress: (msg: string) => void = () => {},
 ): Promise<OpenPrResult> {
-  const plural = args.count > 1 ? 's' : '';
-  const body = [
-    '## Summary',
-    `Adds ${args.count} visualization${plural} to the existing **${args.toolId}** tool ` +
-      `(output \`${args.outputSlug}\`), authored with [Depictio Tools Studio](https://depictio.github.io/depictio/).`,
-    '',
-    `Only \`${args.yamlPath}\` changes — new item${plural} appended under \`renders_as\`.`,
-    '',
-    '## Validation',
-    'CI `dev catalog validate` is the authoritative check for this entry.',
-    '',
-    `<details><summary>${args.yamlPath}</summary>`,
-    '',
-    '```yaml',
-    args.updatedYaml.trimEnd(),
-    '```',
-    '</details>',
-  ].join('\n');
+  const count = args.renders.length;
+  const plural = count > 1 ? 's' : '';
   return openFilesPr(
     token,
     {
-      files: [{ path: args.yamlPath, content: args.updatedYaml }],
+      resolveFiles: async ({ readFile }) => {
+        const live = await readFile(args.yamlPath);
+        if (live == null) {
+          throw new Error(
+            `\`${args.yamlPath}\` no longer exists on the target branch — it was probably ` +
+              'renamed or removed. Reload the Studio to pick up the current catalog.',
+          );
+        }
+        // Ids must be unique within the tool; the ones we deduped against came
+        // from the snapshot, so re-check against what is actually upstream.
+        const taken = renderIdsIn(live);
+        const clashing = args.renders.map((r) => r.id).filter((id): id is string => !!id && taken.has(id));
+        if (clashing.length) {
+          throw new Error(
+            `Render id${clashing.length > 1 ? 's' : ''} ${clashing.join(', ')} already exist${clashing.length > 1 ? '' : 's'} ` +
+              `in ${args.yamlPath} upstream. Rename the render${clashing.length > 1 ? 's' : ''} and try again.`,
+          );
+        }
+        const updatedYaml = appendRenders(live, args.renders).yaml;
+        const drifted = args.snapshotYaml != null && args.snapshotYaml.trim() !== live.trim();
+        const body = [
+          '## Summary',
+          `Adds ${count} visualization${plural} to the existing **${args.toolId}** tool ` +
+            `(output \`${args.outputSlug}\`), authored with [Depictio Tools Studio](https://depictio.github.io/depictio/).`,
+          '',
+          `Only \`${args.yamlPath}\` changes — new item${plural} appended under \`renders_as\`.`,
+          ...(drifted
+            ? [
+                '',
+                `> The file had changed upstream since this Studio build's snapshot; the new ` +
+                  `render${plural} were re-appended to the current version, so nothing is reverted.`,
+              ]
+            : []),
+          '',
+          '## Validation',
+          'CI `dev catalog validate` is the authoritative check for this entry.',
+          '',
+          `<details><summary>${args.yamlPath}</summary>`,
+          '',
+          '```yaml',
+          updatedYaml.trimEnd(),
+          '```',
+          '</details>',
+        ].join('\n');
+        return { files: [{ path: args.yamlPath, content: updatedYaml }], body };
+      },
       branchSlug: `${args.toolId}-${args.outputSlug}`,
-      commitMessage: `feat(catalog): add ${args.count} render${plural} to ${args.toolId}`,
-      title: `Add ${args.count} visualization${plural} to ${args.toolId}`,
-      body,
+      commitMessage: `feat(catalog): add ${count} render${plural} to ${args.toolId}`,
+      title: `Add ${count} visualization${plural} to ${args.toolId}`,
+      body: '',
     },
     target,
     onProgress,

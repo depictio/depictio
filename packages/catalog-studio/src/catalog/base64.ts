@@ -5,3 +5,11 @@ export function encodeBase64(text: string): string {
   for (const b of bytes) binary += String.fromCharCode(b);
   return btoa(binary);
 }
+
+/** Inverse of {@link encodeBase64}. The GitHub contents API returns base64 with
+ *  embedded newlines, which `atob` rejects — strip whitespace first. */
+export function decodeBase64(b64: string): string {
+  const binary = atob(b64.replace(/\s+/g, ''));
+  const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
+  return new TextDecoder().decode(bytes);
+}

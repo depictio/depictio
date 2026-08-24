@@ -3,6 +3,8 @@ import type { Dtype, ParsedFixture, RenderSpec, ToolMeta, OutputMeta } from '../
 import type { ManifestOutput, ManifestRender, ManifestTool } from '../catalog/catalog';
 import { parseFixture } from '../catalog/parseFixture';
 import { defaultRenderId } from '../viz/renderMeta';
+import { fetchUpstreamFile } from '../catalog/upstreamFile';
+import { renderIdsIn } from '../catalog/github';
 
 let uidCounter = 0;
 export const nextUid = () => `r${++uidCounter}`;
@@ -107,7 +109,36 @@ function fixtureFromManifest(output: ManifestOutput): ParsedFixture | null {
   return null;
 }
 
-export const useStudioStore = create<StudioState>((set) => ({
+/** Replace the snapshot copy of the target output YAML with the live one.
+ *  Best-effort: offline or rate-limited, the snapshot stays and the Export step
+ *  says so. Only touches `existing` if the wizard is still on the same file. */
+async function refreshExistingFromUpstream(
+  set: (fn: (s: StudioState) => Partial<StudioState>) => void,
+  get: () => StudioState,
+  yamlPath: string,
+): Promise<void> {
+  let text: string;
+  try {
+    text = await fetchUpstreamFile(yamlPath);
+  } catch {
+    return;
+  }
+  const current = get().existing;
+  if (!current || current.yamlPath !== yamlPath) return;
+  set((s) => ({
+    existing: s.existing
+      ? {
+          ...s.existing,
+          rawYaml: text,
+          // Ids are unique within a tool; dedupe against the live set so the
+          // PR-time check doesn't reject a render the user already named.
+          baseRenderIds: [...new Set([...s.existing.baseRenderIds, ...renderIdsIn(text)])],
+        }
+      : s.existing,
+  }));
+}
+
+export const useStudioStore = create<StudioState>((set, get) => ({
   step: 0,
   tool: { ...emptyTool },
   output: { ...emptyOutput },
@@ -144,8 +175,12 @@ export const useStudioStore = create<StudioState>((set) => ({
       renders: s.renders.map((r) => (r.uid === uid ? ({ ...r, ...patch } as RenderSpec) : r)),
     })),
   removeRender: (uid) => set((s) => ({ renders: s.renders.filter((r) => r.uid !== uid) })),
-  startExisting: (tool, output) =>
-    set(() => ({
+  startExisting: (tool, output) => {
+    // The manifest is a build-time snapshot; pull the live file in the
+    // background so new render ids are deduped against what is actually in the
+    // catalog today, not against a copy that may be weeks old.
+    if (output.yamlPath) void refreshExistingFromUpstream(set, get, output.yamlPath);
+    return set(() => ({
       step: 2, // jump straight to Visualizations — identity & fixture come from the catalog
       tool: identityFromManifest(tool),
       output: {
@@ -168,7 +203,8 @@ export const useStudioStore = create<StudioState>((set) => ({
           .filter((x): x is string => Boolean(x)),
       },
       newOutputTarget: null,
-    })),
+    }));
+  },
   startNewOutput: (tool) =>
     set(() => ({
       // Stay on the Tool step: the new output's slug/path_glob is authored there,
