@@ -4874,11 +4874,50 @@ def _tab_has_visualization_components(
     return False
 
 
-def _tab_meets_minimum(dashboard_dict: dict, dc_meta: dict[str, dict] | None = None) -> bool:
+def _family_fans_out_a_filter(docs: list[dict]) -> bool:
+    """True if some document in the family declares a persistent filter section
+    that actually holds a control.
+
+    A persistent filter section renders in *every* tab's panel (see
+    `FilterSectionSpec.persistent`), so a tab can legitimately carry no filter of
+    its own and still be sliceable. Without this, such a tab looks filter-less to
+    `_tab_meets_minimum` and is dropped on import — which is what silently cost
+    the iris family its petal tab once that tab started relying on the overview's
+    shared variety picker.
+
+    Reads the *lite* YAML documents, since this runs before the per-tab dicts
+    exist. A section declared on a tab that is itself dropped is counted too:
+    that tab necessarily has filters of its own (its section's members live
+    there), so it only ever drops for want of visualisations, and the cost of the
+    approximation is a surviving filter-less tab rather than a lost one.
+    """
+    for doc in docs:
+        persistent = {
+            spec.get("name")
+            for spec in (doc.get("filter_sections") or [])
+            if spec.get("persistent") and spec.get("name")
+        }
+        if not persistent:
+            continue
+        for component in doc.get("components") or []:
+            if (
+                component.get("component_type") == "interactive"
+                and component.get("section") in persistent
+            ):
+                return True
+    return False
+
+
+def _tab_meets_minimum(
+    dashboard_dict: dict,
+    dc_meta: dict[str, dict] | None = None,
+    family_fans_out_a_filter: bool = False,
+) -> bool:
     """True if a (filtered) tab keeps at least one filter AND one standard component.
 
     Mandatory minimum for any surviving tab: a user can both *slice* (≥1 surviving
-    interactive component) and *see* (≥1 surviving non-metadata visualisation).
+    interactive component, or one reaching it from a persistent filter section
+    elsewhere in the family) and *see* (≥1 surviving non-metadata visualisation).
     Every tab's template is curated so at least one of its filters binds to a DC
     that survives the run's route (e.g. the MultiQC tab's sample filter binds to
     the always-present `multiqc_data` DC, Ordination carries a Phylum filter on
@@ -4886,7 +4925,7 @@ def _tab_meets_minimum(dashboard_dict: dict, dc_meta: dict[str, dict] | None = N
     genuinely absent — never a tab that still has analysis to show.
     """
     dc_meta = dc_meta or {}
-    has_filter = any(
+    has_filter = family_fans_out_a_filter or any(
         c.get("component_type") == "interactive" for c in dashboard_dict.get("stored_metadata", [])
     )
     return has_filter and _tab_has_visualization_components(dashboard_dict, dc_meta)
@@ -4990,6 +5029,9 @@ def _import_multi_tab_dashboard(
     # Import child tabs
     imported_tabs = []
     dc_meta = _build_dc_meta(project_id)
+    family_filter = _family_fans_out_a_filter(
+        [main_dashboard_data, *(tabs_data or [])],
+    )
     for idx, tab_data in enumerate(tabs_data):
         tab_yaml = yaml.dump(tab_data, default_flow_style=False, allow_unicode=True)
         tab_lite = DashboardDataLite.from_yaml(tab_yaml)
@@ -5039,18 +5081,25 @@ def _import_multi_tab_dashboard(
         for component in tab_dashboard_dict.get("stored_metadata", []):
             _resolve_workflow_tags(component, project_id=project_id)
             _regenerate_component_fields(component)
+        before_filtering = len(tab_dashboard_dict.get("stored_metadata") or [])
         _filter_unresolved_components(tab_dashboard_dict, project_id=project_id)
+        was_pruned = len(tab_dashboard_dict.get("stored_metadata") or []) < before_filtering
         _regenerate_component_indices(tab_dashboard_dict)
 
-        # Self-adapting dashboard: a tab is only worth showing if filtering left it
-        # with at least one filter AND one non-metadata visualisation (its minimum
-        # useful form). A tab reduced below that — all its purpose-built DCs
-        # absent/unpopulated for this run (e.g. a taxonomy tab on a skip_qiime run
-        # reduced to the sample metadata table, or a QC tab left with one lonely
-        # plot and no filter) — is dropped. Tabs are separate docs, so "hidden" =
+        # Self-adapting dashboard: a tab *reduced* by filtering is only worth
+        # showing if it kept at least one filter AND one non-metadata
+        # visualisation (its minimum useful form). A tab reduced below that —
+        # all its purpose-built DCs absent/unpopulated for this run (e.g. a
+        # taxonomy tab on a skip_qiime run reduced to the sample metadata table,
+        # or a QC tab left with one lonely plot and no filter) — is dropped.
+        #
+        # Only when filtering actually removed something. A tab authored against
+        # a single `metatype: Metadata` collection (iris is one) is exactly what
+        # its author wrote, not the residue of a pruned one, and the unconditional
+        # gate dropped it on every import. Tabs are separate docs, so "hidden" =
         # "not inserted"; drop any stale existing copy on overwrite so re-imports
         # stay idempotent.
-        if not _tab_meets_minimum(tab_dashboard_dict, dc_meta):
+        if was_pruned and not _tab_meets_minimum(tab_dashboard_dict, dc_meta, family_filter):
             logger.info(
                 f"Skipping tab '{tab_lite.title}': below minimum (needs ≥1 filter + ≥1 "
                 "non-metadata component) after filtering — its data collections are "

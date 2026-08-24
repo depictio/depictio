@@ -848,13 +848,22 @@ class DashboardDataLite(BaseModel):
                 "data_collection_tag", ""
             )
 
+            # Text components are stand-alone: `to_full` binds neither a workflow
+            # nor a data collection to them. Exporting a collection tag inherited
+            # from a leftover `dc_config` produced a component the import could
+            # not resolve — there is no `workflow_tag` to resolve it against — so
+            # every text component was silently dropped on the way back in.
+            if comp_type == "text":
+                workflow_tag = ""
+                data_collection_tag = ""
+
             # Log warning if mandatory tags are missing
-            if not workflow_tag:
+            if comp_type != "text" and not workflow_tag:
                 logger.warning(
                     f"Component {tag} (type: {comp_type}) missing workflow_tag. "
                     f"Component has wf_id: {comp.get('wf_id') is not None}"
                 )
-            if not data_collection_tag:
+            if comp_type != "text" and not data_collection_tag:
                 logger.warning(
                     f"Component {tag} (type: {comp_type}) missing data_collection_tag. "
                     f"Component has dc_id: {comp.get('dc_id') is not None}"
