@@ -10,8 +10,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
+from depictio.api.v1.endpoints.auth_endpoints.utils import (
+    generate_oauth_state,
+    validate_oauth_state,
+)
 from depictio.models.models.base import PyObjectId
+from depictio.models.models.google_oauth import OAuthStateBeanie
 from depictio.models.models.users import User
+from depictio.tests.api.v1.endpoints.user_endpoints.conftest import beanie_setup
 
 
 @pytest.fixture
@@ -83,7 +89,14 @@ def client():
 class TestGoogleOAuthLogin:
     """Test Google OAuth login initiation endpoint."""
 
-    def test_google_oauth_login_redirect_url_generation(self, client, google_oauth_config):
+    @patch(
+        "depictio.api.v1.endpoints.auth_endpoints.google_oauth_routes.generate_oauth_state",
+        new_callable=AsyncMock,
+        return_value="test-state",
+    )
+    def test_google_oauth_login_redirect_url_generation(
+        self, _mock_generate_state, client, google_oauth_config
+    ):
         """Test that Google OAuth login generates correct redirect URL."""
         with patch(
             "depictio.api.v1.endpoints.auth_endpoints.google_oauth_routes.settings"
@@ -139,7 +152,10 @@ class TestGoogleOAuthLogin:
 class TestGoogleOAuthCallback:
     """Test Google OAuth callback endpoint."""
 
-    @patch("depictio.api.v1.endpoints.auth_endpoints.google_oauth_routes.validate_oauth_state")
+    @patch(
+        "depictio.api.v1.endpoints.auth_endpoints.google_oauth_routes.validate_oauth_state",
+        new_callable=AsyncMock,
+    )
     @patch(
         "depictio.api.v1.endpoints.auth_endpoints.google_oauth_routes.fetch_google_user_info",
         new_callable=AsyncMock,
@@ -247,7 +263,10 @@ class TestGoogleOAuthCallback:
             mock_user_beanie.assert_called()
             new_user_mock.save.assert_called_once()
 
-    @patch("depictio.api.v1.endpoints.auth_endpoints.google_oauth_routes.validate_oauth_state")
+    @patch(
+        "depictio.api.v1.endpoints.auth_endpoints.google_oauth_routes.validate_oauth_state",
+        new_callable=AsyncMock,
+    )
     @patch(
         "depictio.api.v1.endpoints.auth_endpoints.google_oauth_routes.fetch_google_user_info",
         new_callable=AsyncMock,
@@ -339,7 +358,10 @@ class TestGoogleOAuthCallback:
         assert response.status_code == 422
         assert "field required" in str(response.json()["detail"]).lower()
 
-    @patch("depictio.api.v1.endpoints.auth_endpoints.google_oauth_routes.validate_oauth_state")
+    @patch(
+        "depictio.api.v1.endpoints.auth_endpoints.google_oauth_routes.validate_oauth_state",
+        new_callable=AsyncMock,
+    )
     @patch("depictio.api.v1.endpoints.auth_endpoints.utils.httpx.AsyncClient")
     def test_google_oauth_callback_token_exchange_failure(
         self, mock_httpx_client, mock_validate_state, client, google_oauth_config
@@ -379,7 +401,10 @@ class TestGoogleOAuthCallback:
             assert response.status_code == 400
             assert "Failed to exchange authorization code" in response.json()["detail"]
 
-    @patch("depictio.api.v1.endpoints.auth_endpoints.google_oauth_routes.validate_oauth_state")
+    @patch(
+        "depictio.api.v1.endpoints.auth_endpoints.google_oauth_routes.validate_oauth_state",
+        new_callable=AsyncMock,
+    )
     @patch(
         "depictio.api.v1.endpoints.auth_endpoints.google_oauth_routes.fetch_google_user_info",
         new_callable=AsyncMock,
@@ -497,7 +522,15 @@ class TestGoogleOAuthModels:
 class TestGoogleOAuthIntegration:
     """Integration tests for Google OAuth flow."""
 
-    @patch("depictio.api.v1.endpoints.auth_endpoints.google_oauth_routes.validate_oauth_state")
+    @patch(
+        "depictio.api.v1.endpoints.auth_endpoints.google_oauth_routes.generate_oauth_state",
+        new_callable=AsyncMock,
+        return_value="test-state",
+    )
+    @patch(
+        "depictio.api.v1.endpoints.auth_endpoints.google_oauth_routes.validate_oauth_state",
+        new_callable=AsyncMock,
+    )
     @patch(
         "depictio.api.v1.endpoints.auth_endpoints.google_oauth_routes.fetch_google_user_info",
         new_callable=AsyncMock,
@@ -518,6 +551,7 @@ class TestGoogleOAuthIntegration:
         mock_exchange_code,
         mock_fetch_user_info,
         mock_validate_state,
+        _mock_generate_state,
         client,
         google_oauth_config,
         google_token_response,
@@ -617,3 +651,49 @@ class TestGoogleOAuthIntegration:
                 "/auth/google/callback", params={"code": "test", "state": "test"}
             )
             assert callback_response.status_code == 403
+
+
+class TestOAuthStateStore:
+    """The CSRF state must survive the hop between the two OAuth requests.
+
+    ``/auth/google/login`` and ``/auth/google/callback`` are separate HTTP
+    requests, and a deployment running several uvicorn workers (or several
+    replicas) will route them to different processes. These tests pin the
+    state to shared storage rather than process memory.
+    """
+
+    @pytest.mark.asyncio
+    @beanie_setup(models=[OAuthStateBeanie])
+    async def test_state_is_readable_by_another_process(self):
+        # Minting and validating never share module state here — a fresh
+        # import is exactly what a second worker would see.
+        state = await generate_oauth_state()
+
+        assert await validate_oauth_state(state) is True
+
+    @pytest.mark.asyncio
+    @beanie_setup(models=[OAuthStateBeanie])
+    async def test_state_is_single_use(self):
+        state = await generate_oauth_state()
+
+        assert await validate_oauth_state(state) is True
+        # Replaying the same callback must not authenticate a second time.
+        assert await validate_oauth_state(state) is False
+
+    @pytest.mark.asyncio
+    @beanie_setup(models=[OAuthStateBeanie])
+    async def test_expired_state_is_rejected_and_burned(self):
+        expired = OAuthStateBeanie(
+            state="stale-state",
+            expire_datetime=datetime.now() - timedelta(minutes=1),
+        )
+        await expired.save()
+
+        assert await validate_oauth_state("stale-state") is False
+        # Rejected states are consumed too, so they cannot be retried.
+        assert await OAuthStateBeanie.find_one({"state": "stale-state"}) is None
+
+    @pytest.mark.asyncio
+    @beanie_setup(models=[OAuthStateBeanie])
+    async def test_unknown_state_is_rejected(self):
+        assert await validate_oauth_state("never-issued") is False

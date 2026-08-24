@@ -32,7 +32,7 @@ jobs:
           else
             echo "⚠️ Fallback to LTS polars"
             uv pip uninstall polars || true
-            uv pip install "polars-lts-cpu==1.22.0"
+            uv pip install "polars-lts-cpu==1.33.1"
           fi
           python -c "import polars; print(f'Polars {polars.__version__}')"
       - name: Test CLI

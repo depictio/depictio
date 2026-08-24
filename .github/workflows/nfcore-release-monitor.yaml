@@ -100,7 +100,7 @@ jobs:
           uv pip install -e ".[dev]"
           # Recipes need polars-lts-cpu (same pin as the quality/catalog jobs)
           uv pip uninstall -y polars polars-runtime-32 2>/dev/null || true
-          uv pip install --force-reinstall "polars-lts-cpu[numpy,pandas,pyarrow,excel,deltalake]==1.19.0"
+          uv pip install --force-reinstall "polars-lts-cpu[numpy,pandas,pyarrow,excel,deltalake]==1.33.1"
 
       - name: Generate megatest drift report
         id: gen

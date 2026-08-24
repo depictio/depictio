@@ -207,13 +207,19 @@ async def create_initial_dashboards(
     from depictio.api.v1.db_init_reference_datasets import STATIC_IDS, ReferenceDatasetRegistry
 
     projects_base = os.path.join(os.path.dirname(__file__), "..", "..", "projects")
+    # Resolve each dataset's (possibly versioned) path once — dashboards_config
+    # below references the same dataset up to 23 times (advanced_viz_showcase).
+    rel_paths = {
+        name: ReferenceDatasetRegistry.resolve_dataset_rel_path(name)
+        for name in ("iris", "penguins", "ampliseq", "advanced_viz_showcase", "viralrecon")
+    }
 
     dashboards_config = [
         {
             "name": "iris",
             "json_path": os.path.join(
                 projects_base,
-                ReferenceDatasetRegistry.DATASET_PATHS["iris"],
+                rel_paths["iris"],
                 ".db_seeds",
                 "dashboard.json",
             ),
@@ -237,7 +243,7 @@ async def create_initial_dashboards(
             "name": "penguins",
             "json_path": os.path.join(
                 projects_base,
-                ReferenceDatasetRegistry.DATASET_PATHS["penguins"],
+                rel_paths["penguins"],
                 ".db_seeds",
                 "dashboard.json",
             ),
@@ -247,7 +253,7 @@ async def create_initial_dashboards(
             "name": "ampliseq_multiqc",
             "json_path": os.path.join(
                 projects_base,
-                ReferenceDatasetRegistry.DATASET_PATHS["ampliseq"],
+                rel_paths["ampliseq"],
                 ".db_seeds",
                 "dashboard_multiqc.json",
             ),
@@ -258,7 +264,7 @@ async def create_initial_dashboards(
             "name": "ampliseq_alpha_diversity",
             "json_path": os.path.join(
                 projects_base,
-                ReferenceDatasetRegistry.DATASET_PATHS["ampliseq"],
+                rel_paths["ampliseq"],
                 ".db_seeds",
                 "dashboard_alpha_diversity.json",
             ),
@@ -268,7 +274,7 @@ async def create_initial_dashboards(
             "name": "ampliseq_community",
             "json_path": os.path.join(
                 projects_base,
-                ReferenceDatasetRegistry.DATASET_PATHS["ampliseq"],
+                rel_paths["ampliseq"],
                 ".db_seeds",
                 "dashboard_community.json",
             ),
@@ -279,7 +285,7 @@ async def create_initial_dashboards(
             "name": "ampliseq_differential",
             "json_path": os.path.join(
                 projects_base,
-                ReferenceDatasetRegistry.DATASET_PATHS["ampliseq"],
+                rel_paths["ampliseq"],
                 ".db_seeds",
                 "dashboard_differential.json",
             ),
@@ -289,7 +295,7 @@ async def create_initial_dashboards(
             "name": "ampliseq_ordination",
             "json_path": os.path.join(
                 projects_base,
-                ReferenceDatasetRegistry.DATASET_PATHS["ampliseq"],
+                rel_paths["ampliseq"],
                 ".db_seeds",
                 "dashboard_ordination.json",
             ),
@@ -303,7 +309,7 @@ async def create_initial_dashboards(
             "name": "ampliseq_phylogeny",
             "json_path": os.path.join(
                 projects_base,
-                ReferenceDatasetRegistry.DATASET_PATHS["ampliseq"],
+                rel_paths["ampliseq"],
                 ".db_seeds",
                 "dashboard_phylogeny.json",
             ),
@@ -317,7 +323,7 @@ async def create_initial_dashboards(
                 "name": f"advanced_viz_{slug}",
                 "json_path": os.path.join(
                     projects_base,
-                    ReferenceDatasetRegistry.DATASET_PATHS["advanced_viz_showcase"],
+                    rel_paths["advanced_viz_showcase"],
                     ".db_seeds",
                     f"dashboard_{slug}.json",
                 ),
@@ -360,7 +366,7 @@ async def create_initial_dashboards(
                 "name": f"viralrecon_{slug}",
                 "json_path": os.path.join(
                     projects_base,
-                    ReferenceDatasetRegistry.DATASET_PATHS["viralrecon"],
+                    rel_paths["viralrecon"],
                     ".db_seeds",
                     f"dashboard_{slug}.json",
                 ),

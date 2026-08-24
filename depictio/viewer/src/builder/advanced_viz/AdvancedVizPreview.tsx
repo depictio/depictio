@@ -3,8 +3,9 @@
  *
  * Builds a synthetic StoredMetadata from the current viz_kind + column mapping
  * and dispatches it through ComponentRenderer (same path the dashboard viewer
- * uses at runtime), with no interactive filters. Debounces config edits so
- * each keystroke in the Select dropdowns doesn't fire a fetch.
+ * uses at runtime), under the dashboard's active filters carried into the
+ * builder (see useBuilderPreviewFilters). Debounces config edits so each
+ * keystroke in the Select dropdowns doesn't fire a fetch.
  *
  * `onReady` fires (true) once the bindings are valid AND the debounce has
  * fired — i.e. the synthetic config is structurally complete and the renderer
@@ -19,6 +20,7 @@ import type { StoredMetadata } from 'depictio-react-core';
 
 import PreviewPanel from '../shared/PreviewPanel';
 import { buildAdvancedVizConfigBlob } from './configBlob';
+import { useBuilderPreviewFilters } from '../useBuilderPreviewFilters';
 
 interface Props {
   vizKind: string;
@@ -43,6 +45,7 @@ const AdvancedVizPreview: React.FC<Props> = ({
   onReady,
   presetConfig,
 }) => {
+  const previewFilters = useBuilderPreviewFilters();
   const cmKey = JSON.stringify(columnMapping);
   const presetKey = JSON.stringify(presetConfig ?? null);
   const [debouncedConfig, setDebouncedConfig] = useState<Record<string, unknown> | null>(
@@ -102,7 +105,7 @@ const AdvancedVizPreview: React.FC<Props> = ({
           <ComponentRenderer
             dashboardId="__preview__"
             metadata={metadata}
-            filters={[]}
+            filters={previewFilters}
             showDragHandle={false}
           />
         </div>

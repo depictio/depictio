@@ -85,6 +85,8 @@ import {
   MapPanelSurface,
   FILTER_PANEL_RAIL_WIDTH,
   countActiveFilters,
+  readEditorFilters,
+  writeEditorFilters,
 } from 'depictio-react-core';
 import type {
   DashboardData,
@@ -198,7 +200,15 @@ const EditorApp: React.FC = () => {
   const [allDashboards, setAllDashboards] = useState<DashboardSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState<InteractiveFilter[]>([]);
+  // Seed synchronously from the per-tab store so a builder round-trip (add or
+  // edit a component — a full page navigation) comes back with the filters
+  // still active and every tile's FIRST fetch already filtered (#196). An
+  // effect-time hydrate would let the grid fetch once unfiltered first, which
+  // is exactly the bug this fixes.
+  const [filters, setFilters] = useState<InteractiveFilter[]>(() => {
+    const id = extractDashboardId();
+    return id ? readEditorFilters(id) : [];
+  });
   const [cardValues, setCardValues] = useState<Record<string, unknown>>({});
   const [cardSecondaryValues, setCardSecondaryValues] = useState<
     Record<string, Record<string, unknown>>
@@ -308,6 +318,15 @@ const EditorApp: React.FC = () => {
       .then(([dash, all]) => {
         applyDashboard(dash);
         setAllDashboards(all);
+        // Drop seeded filters whose emitting component no longer exists (it
+        // was deleted while the user was in the builder) — a ghost filter
+        // would keep narrowing the grid with nothing on screen to release it.
+        // Floating-map selections are exempt: a floating component lives on
+        // another tab's stored_metadata, so an unknown index is expected there.
+        const known = new Set((dash.stored_metadata || []).map((m) => m.index));
+        setFilters((prev) =>
+          prev.filter((f) => known.has(f.index) || f.source === 'map_selection'),
+        );
       })
       .catch((err) => {
         setError(`Failed to load dashboard: ${err.message || err}`);
@@ -345,6 +364,15 @@ const EditorApp: React.FC = () => {
     return () => clearTimeout(timer);
   }, [dashboard, dashboardId, stableFilterKey(filters)]);
 
+  // Mirror the live filters into the per-tab store so they survive the
+  // builder's full-page round-trip (see editorFilters.ts). Writing on every
+  // change (rather than at the navigation sites) keeps AddComponentButton /
+  // GridItemEditOverlay free of filter plumbing; clearing all filters removes
+  // the entry, so "Reset" leaves nothing behind.
+  useEffect(() => {
+    if (dashboardId) writeEditorFilters(dashboardId, filters);
+  }, [dashboardId, stableFilterKey(filters)]);
+
   const handleFilterChange = useCallback(
     (update: InteractiveFilter) => {
       const enriched = enrichFilterWithDcId(update, dashboard?.stored_metadata);
@@ -353,9 +381,12 @@ const EditorApp: React.FC = () => {
     [dashboard],
   );
 
-  // Authors see the panel as viewers will. Cross-tab filter persistence is
-  // deliberately viewer-only, though: an editing session's filter state is
-  // scratch, and carrying it between tabs would be surprising here.
+  // Authors see the panel as viewers will. Cross-tab (floating) filter
+  // persistence is deliberately viewer-only: an editing session's filter state
+  // is scratch across dashboards, and carrying it between tabs would be
+  // surprising here. Same-dashboard persistence within this browser tab is a
+  // different matter — see editorFilters.ts, which keeps filters alive across
+  // the builder round-trip.
   const crossTab = useCrossTabComponents(dashboardId ?? '');
 
   // Persistent sections owned by *sibling* tabs. They render here exactly as

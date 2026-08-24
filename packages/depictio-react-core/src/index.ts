@@ -151,6 +151,7 @@ export {
   fetchUniqueValues,
   fetchBreakdown,
   fetchCardMetric,
+  fetchCardHeroValue,
   fetchColumnRange,
   fetchComponentData,
   bulkComputeCards,
@@ -344,6 +345,12 @@ export {
   persistableCrossTabFilters,
 } from './crossTabFilters';
 export type { CrossTabFilterPayload } from './crossTabFilters';
+export {
+  readEditorFilters,
+  writeEditorFilters,
+  clearEditorFilters,
+} from './editorFilters';
+export type { EditorFilterPayload } from './editorFilters';
 
 // Cross-DC available-values intersection (powers greying-out unavailable
 // options in interactive filter dropdowns).

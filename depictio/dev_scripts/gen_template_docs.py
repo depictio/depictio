@@ -30,7 +30,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from depictio.cli.cli.utils.templates import _load_yaml
+from depictio.cli.cli.utils.templates import _load_yaml, latest_template_version
 from depictio.models.models.templates import TemplateConditional, TemplateMetadata
 from depictio.recipes import load_recipe, resolve_recipe_path
 
@@ -425,6 +425,28 @@ def _output_slug(template_path: Path, templates_root: Path) -> str:
     return "-".join(rel.parts)
 
 
+def _latest_aliases(template_paths: list[Path], templates_root: Path) -> dict[str, Path]:
+    """Map ``<pipeline>-latest`` alias slugs to the highest-version template.
+
+    Narrative docs pages include the alias partial (e.g. ``ampliseq-latest.md``)
+    instead of a pinned ``ampliseq-2.16.0.md``, so a new template version updates
+    the docs with a single re-run of this script — no page edits. Reuses the same
+    version resolution as seeding/CLI (``latest_template_version``).
+    """
+    pipeline_dirs = {
+        template_path.parent.parent
+        for template_path in template_paths
+        if len(template_path.parent.relative_to(templates_root).parts) >= 2
+    }
+    aliases: dict[str, Path] = {}
+    for pipeline_dir in pipeline_dirs:
+        version = latest_template_version(pipeline_dir)
+        if version:
+            slug = "-".join((*pipeline_dir.relative_to(templates_root).parts, "latest"))
+            aliases[slug] = pipeline_dir / version / "template.yaml"
+    return aliases
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -453,9 +475,36 @@ def main(argv: list[str] | None = None) -> int:
         sys.exit(f"No template.yaml found under {templates_root}")
 
     stale: list[str] = []
+    rendered: dict[Path, str] = {}
     for template_path in template_paths:
         content = render_template(template_path)
+        rendered[template_path] = content
         out_path = out_dir / f"{_output_slug(template_path, templates_root)}.md"
+        existing = out_path.read_text() if out_path.is_file() else None
+
+        if args.check:
+            if existing != content:
+                stale.append(str(out_path.relative_to(docs_root)))
+            continue
+
+        if existing == content:
+            print(f"unchanged  {out_path.relative_to(docs_root)}")
+            continue
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(content)
+        print(f"wrote      {out_path.relative_to(docs_root)}")
+
+    # Version-less `<pipeline>-latest.md` aliases: narrative pages include these
+    # so a new template version only needs a re-run of this script, not page edits.
+    for alias_slug, template_path in sorted(
+        _latest_aliases(template_paths, templates_root).items()
+    ):
+        versioned_slug = _output_slug(template_path, templates_root)
+        content = (
+            f"<!-- Alias of {versioned_slug}.md — always tracks the newest "
+            f"template version. -->\n" + rendered[template_path]
+        )
+        out_path = out_dir / f"{alias_slug}.md"
         existing = out_path.read_text() if out_path.is_file() else None
 
         if args.check:

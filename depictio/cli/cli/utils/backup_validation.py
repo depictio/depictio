@@ -227,11 +227,26 @@ def check_backup_collections_coverage() -> Dict[str, Any]:
         missing_validators = expected_set - validators_set
 
         # Only consider core collections (filter out utility collections like 'test', 'initialization')
-        # Also exclude 'tokens' which is intentionally excluded from backup/restore
+        # Also exclude 'tokens' which is intentionally excluded from backup/restore.
+        # Derived / regenerable collections are excluded too: they are rebuilt from
+        # source data and never need to be part of the MongoDB backup set:
+        #   - 'jbrowse'            : derived track configuration
+        #   - 'multiqc'            : parsed MultiQC reports (regenerated on ingestion)
+        #   - 'multiqc_prerender'  : prerender cache (regenerated on demand)
+        derived_collections = ["jbrowse", "multiqc", "multiqc_prerender"]
+        # 'task_events' (14-day TTL ledger) and 'app_logs' (capped, size-bounded)
+        # self-expire by design — nothing meaningful survives a restore. 'telemetry'
+        # holds anonymous installation stats, not user data — no restore value.
+        # 'ingestion_runs' is real audit/lineage data (no TTL) but isn't wired into
+        # _create_mongodb_backup's collections_config yet either — excluded here to
+        # match current reality, not a judgment that it shouldn't ever be backed up;
+        # adding real backup coverage for it is a separate, deliberate change.
+        ledger_collections = ["task_events", "app_logs", "telemetry", "ingestion_runs"]
         core_collections = {
             col
             for col in collections_in_settings
-            if col not in ["test", "initialization", "jbrowse", "tokens"]
+            if col
+            not in ["test", "initialization", "tokens", *derived_collections, *ledger_collections]
         }
         missing_from_expected_core = core_collections - expected_set
 

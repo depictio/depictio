@@ -543,7 +543,27 @@ export async function fetchBreakdown(
   aggregation = 'count',
   topNCount = 3,
   signal?: AbortSignal,
+  filters: InteractiveFilter[] = [],
 ): Promise<BreakdownPayloadDTO> {
+  // The POST variant computes the same payload under the dashboard's active
+  // filters (and bypasses the server-side breakdown cache); unfiltered
+  // callers keep the cached GET.
+  if (filters.length > 0) {
+    const res = await authFetch(`${API_BASE}/deltatables/breakdown/${dcId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        column,
+        breakdown_col: breakdownCol,
+        aggregation,
+        top_n_count: topNCount,
+        filters,
+      }),
+      signal,
+    });
+    if (!res.ok) throw new Error(`Failed to fetch breakdown: ${res.status}`);
+    return res.json();
+  }
   const params = new URLSearchParams({
     column,
     breakdown_col: breakdownCol,
@@ -574,15 +594,39 @@ export async function fetchCardMetric(
   column: string,
   config: Record<string, unknown> = {},
   signal?: AbortSignal,
+  filters: InteractiveFilter[] = [],
 ): Promise<Record<string, unknown> | null> {
   const res = await authFetch(`${API_BASE}/deltatables/card_metric/${dcId}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ...config, layout, column }),
+    body: JSON.stringify({ ...config, layout, column, filters }),
     signal,
   });
   if (!res.ok) throw new Error(`Failed to fetch card metric: ${res.status}`);
   return res.json();
+}
+
+/** A card's hero scalar computed live under the dashboard's active filters.
+ *  Backs the builder preview when filters are carried in: the static
+ *  precomputed spec describes the unfiltered collection, so a filtered
+ *  preview needs the reduction evaluated on the filtered frame. Resolves to
+ *  ``null`` when the column/aggregation can't be computed. */
+export async function fetchCardHeroValue(
+  dcId: string,
+  column: string,
+  aggregation: string,
+  filters: InteractiveFilter[],
+  signal?: AbortSignal,
+): Promise<unknown> {
+  const res = await authFetch(`${API_BASE}/deltatables/card_metric/${dcId}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ layout: 'hero', column, aggregation, filters }),
+    signal,
+  });
+  if (!res.ok) throw new Error(`Failed to fetch card hero value: ${res.status}`);
+  const payload = (await res.json()) as { value?: unknown } | null;
+  return payload?.value ?? null;
 }
 
 /** What a numeric slider needs to know about its column: the bounds, plus the
@@ -1758,15 +1802,29 @@ export async function fetchDeltaShape(dcId: string): Promise<DcShapeResponse> {
 export interface PreviewResult {
   columns: string[];
   rows: Array<Record<string, unknown>>;
+  /** Filtered row count when `filter_applied`, else the full table's. */
   total_rows: number;
   total_columns: number;
+  /** True when the server narrowed the frame with dashboard filters. */
+  filter_applied?: boolean;
 }
 
 export async function fetchDataCollectionPreview(
   dcId: string,
   limit = 100,
+  filters: InteractiveFilter[] = [],
 ): Promise<PreviewResult> {
-  const res = await authFetch(`${API_BASE}/deltatables/preview/${dcId}?limit=${limit}`);
+  // Unfiltered callers keep the existing GET; the POST variant applies the
+  // dashboard's active filters server-side so builder previews match what the
+  // dashboard's components show (rows AND total_rows are filtered).
+  const res =
+    filters.length === 0
+      ? await authFetch(`${API_BASE}/deltatables/preview/${dcId}?limit=${limit}`)
+      : await authFetch(`${API_BASE}/deltatables/preview/${dcId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ limit, filters }),
+        });
   if (!res.ok) {
     throw new Error(`Failed to fetch preview: ${res.status}`);
   }

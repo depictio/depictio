@@ -28,6 +28,51 @@ from depictio.models.models.templates import (
 
 _TEMPLATE_VAR_RE = re.compile(r"\{([A-Z0-9_]+)\}")
 
+# A template version directory: purely numeric dotted segments (e.g. "2.16.0").
+_VERSION_DIR_RE = re.compile(r"^\d+(\.\d+)*$")
+
+
+def latest_template_version(pipeline_dir: Path) -> str | None:
+    """Highest numeric version subdirectory of ``pipeline_dir`` holding a template YAML.
+
+    Returns e.g. ``"2.16.0"`` for ``depictio/projects/nf-core/ampliseq/``, or None
+    when the directory has no versioned template subdirectories.
+    """
+    if not pipeline_dir.is_dir():
+        return None
+    versions = [
+        d.name
+        for d in pipeline_dir.iterdir()
+        if d.is_dir()
+        and _VERSION_DIR_RE.match(d.name)
+        and any((d / f).is_file() for f in ("template.yaml", "project.yaml"))
+    ]
+    if not versions:
+        return None
+    return max(versions, key=lambda v: tuple(int(p) for p in v.split(".")))
+
+
+def _resolve_template_id_in(projects_dir: Path, template_id: str) -> str:
+    """Resolve ``latest`` / version-less template ids against one projects root.
+
+    ``nf-core/ampliseq/latest`` and ``nf-core/ampliseq`` both resolve to the
+    highest version directory that ships a template YAML (e.g.
+    ``nf-core/ampliseq/2.16.0``). Ids that already point at a concrete template
+    directory pass through untouched.
+    """
+    parts = [p for p in template_id.split("/") if p]
+    if parts and parts[-1] == "latest":
+        version = latest_template_version(projects_dir / Path(*parts[:-1]))
+        if version:
+            return "/".join([*parts[:-1], version])
+        return template_id
+    template_dir = projects_dir / Path(*parts) if parts else projects_dir
+    if not any((template_dir / f).is_file() for f in ("template.yaml", "project.yaml")):
+        version = latest_template_version(template_dir)
+        if version:
+            return "/".join([*parts, version])
+    return template_id
+
 
 def _load_yaml(path: str) -> dict:
     """Load a YAML file and return its contents as a dict."""
@@ -45,6 +90,11 @@ def locate_template(template_id: str) -> Path:
     Looks for template.yaml first (dedicated template file), then falls back to
     project.yaml (for backwards compatibility).
 
+    The version segment may be ``latest`` or omitted entirely
+    (``nf-core/ampliseq/latest`` / ``nf-core/ampliseq``): both resolve to the
+    highest version directory shipping a template, so callers never need to
+    hardcode a pinned version.
+
     Args:
         template_id: Template identifier (e.g., 'nf-core/ampliseq/2.16.0').
 
@@ -56,7 +106,8 @@ def locate_template(template_id: str) -> Path:
     """
     # Resolve relative to depictio package root
     package_root = Path(__file__).resolve().parents[4]  # cli/cli/utils/ -> depictio/
-    template_dir = package_root / "depictio" / "projects" / template_id
+    projects_dir = package_root / "depictio" / "projects"
+    template_dir = projects_dir / _resolve_template_id_in(projects_dir, template_id)
 
     # Prefer template.yaml (dedicated template file) over project.yaml (fixture)
     for filename in ("template.yaml", "project.yaml"):
@@ -66,7 +117,8 @@ def locate_template(template_id: str) -> Path:
 
     # Also try without the package nesting (for installed packages)
     alt_root = Path(__file__).resolve().parents[3]  # cli/cli/utils/ -> cli/
-    alt_dir = alt_root / "projects" / template_id
+    alt_projects_dir = alt_root / "projects"
+    alt_dir = alt_projects_dir / _resolve_template_id_in(alt_projects_dir, template_id)
     for filename in ("template.yaml", "project.yaml"):
         candidate = alt_dir / filename
         if candidate.is_file():
@@ -829,7 +881,10 @@ def resolve_template(
     if project_name:
         resolved_config["name"] = project_name
     elif "name" not in resolved_config or not resolved_config.get("name"):
-        resolved_config["name"] = f"{template_id} - {Path(data_root).name}"
+        # template_metadata.template_id (resolved), not the raw template_id param —
+        # otherwise "nf-core/ampliseq/latest" runs all name-collide under one
+        # generic project name instead of the concrete version actually ingested.
+        resolved_config["name"] = f"{template_metadata.template_id} - {Path(data_root).name}"
 
     # 9. Build TemplateOrigin for DB tracking
     expected_dcs = _build_expected_dcs(dc_superset, resolved_config, removal_reasons)

@@ -553,3 +553,39 @@ def numeric_layout_payload(
         return compute_attrition(frame, stages, str(card.get("aggregation") or "sum"))
 
     return None
+
+
+def hero_value(frame: pl.DataFrame | pl.LazyFrame, column: str, aggregation: str) -> Any:
+    """A card's hero scalar, computed live on ``frame``.
+
+    Exists for the builder preview under active dashboard filters: the static
+    precomputed spec (``col.specs[aggregation]``) describes the unfiltered
+    collection, so a filtered preview needs the reduction evaluated against the
+    filtered frame instead. Reuses the exact expression + coercion pair the
+    saved-card pushdown path uses (``_agg_expr`` / ``_coerce_agg_result``), so
+    the preview's hero and the saved card's value cannot disagree. Imported at
+    call time: that module imports this one at module level.
+
+    Returns ``None`` when the column is missing or the aggregation has no lazy
+    expression form (``mode``, ``box_plot_stats`` — the fallback paths need
+    materialised values, which a preview shouldn't force).
+    """
+    from depictio.api.v1.endpoints.dashboards_endpoints.routes import (
+        _agg_expr,
+        _coerce_agg_result,
+    )
+
+    available = set(
+        frame.collect_schema().names() if isinstance(frame, pl.LazyFrame) else frame.columns
+    )
+    if column not in available:
+        return None
+    expr = _agg_expr(column, aggregation)
+    if expr is None:
+        return None
+    lazy = frame if isinstance(frame, pl.LazyFrame) else frame.lazy()
+    try:
+        raw = lazy.select(expr.alias("__hero__")).collect().row(0)[0]
+    except Exception:
+        return None
+    return _coerce_agg_result(raw, aggregation)

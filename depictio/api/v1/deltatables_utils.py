@@ -1197,6 +1197,78 @@ def _apply_scan_filters(
     return delta_scan
 
 
+def clean_filter_payload(filters: list[dict] | None) -> list[dict]:
+    """Convert React ``InteractiveFilter`` payloads into ``filter_metadata`` entries.
+
+    Same contract as the dashboards render endpoints (their
+    ``_build_filter_metadata`` delegates here): reads ``column_name`` /
+    ``interactive_component_type`` from the top level or the nested
+    ``metadata`` dict, drops entries missing a column or carrying an empty
+    value (``None`` / ``[]`` / ``""`` — those wouldn't survive
+    ``process_metadata_and_filter`` anyway), and carries ``filter_expr``
+    through so the source's row scoping is applied alongside the selection.
+    """
+    out: list[dict] = []
+    for f in filters or []:
+        meta = f.get("metadata") or {}
+        column_name = f.get("column_name") or meta.get("column_name")
+        if not column_name or f.get("value") in (None, [], ""):
+            continue
+        entry: dict = {
+            "interactive_component_type": f.get("interactive_component_type")
+            or meta.get("interactive_component_type"),
+            "column_name": column_name,
+            "value": f.get("value"),
+        }
+        filter_expr = f.get("filter_expr") or meta.get("filter_expr")
+        if filter_expr:
+            entry["filter_expr"] = filter_expr
+        out.append(entry)
+    return out
+
+
+def apply_filters_to_scan(scan: pl.LazyFrame, filter_metadata: list[dict] | None) -> pl.LazyFrame:
+    """AND ``filter_metadata`` onto a lazy frame, schema-guarded.
+
+    The preview flavour of ``_apply_scan_filters``: reads the schema straight
+    off the scan instead of the DC dtype cache, so it works for any lazy frame
+    (a projected scan, an in-memory test frame) without a DC id.
+
+    Filters whose column is absent from the frame are skipped rather than
+    failing the whole load. This is the deliberate cross-DC policy for the
+    builder-preview endpoints (matching ``/advanced_viz/data``): a dashboard's
+    filter on another DC's column can't be link-resolved here because these
+    endpoints have no dashboard context — link resolution needs the project
+    and the dashboard's stored metadata. The one blind spot is a same-named
+    column in a different DC, which will be applied; acceptable for a preview.
+    """
+    if not filter_metadata:
+        return scan
+
+    try:
+        schema = dict(scan.collect_schema())
+    except Exception as e:
+        logger.warning(f"apply_filters_to_scan: cannot read scan schema ({e}); skipping filters")
+        return scan
+
+    usable: list[dict] = []
+    for component in filter_metadata:
+        meta = component.get("metadata") or {}
+        col = component.get("column_name") or meta.get("column_name")
+        if col and col not in schema:
+            logger.info(
+                "apply_filters_to_scan: skipping filter on column %r — not in frame",
+                col,
+            )
+            continue
+        usable.append(component)
+
+    filter_expressions = process_metadata_and_filter(usable, schema)
+    for expr in filter_expressions:
+        scan = scan.filter(expr)
+    return scan
+
+
 def _estimate_frame_size_bytes(delta_scan: pl.LazyFrame) -> int:
     """Cheaply estimate a lazy frame's materialised footprint (bytes).
 
