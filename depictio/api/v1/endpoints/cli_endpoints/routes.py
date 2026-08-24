@@ -1,10 +1,12 @@
 from datetime import datetime
+from typing import Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Header
 
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.endpoints.user_endpoints.core_functions import _async_fetch_user_from_id
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
+from depictio.api.v1.telemetry.cli_versions import record_cli_version
 from depictio.models.models.cli import CLIConfig, CLIValidationResponse
 from depictio.models.models.users import TokenBeanie, User
 
@@ -15,8 +17,17 @@ cli_endpoint_router = APIRouter()
 async def validate_cli_config_endpoint(
     cli_config: CLIConfig,
     current_user: User = Depends(get_current_user),
+    x_depictio_cli_version: Optional[str] = Header(default=None),
 ):
     """Validate CLI configuration and token.
+
+    Also the point where the calling CLI's version is noted, since ``api_login``
+    makes this the de-facto preflight for every CLI command. Recording it here
+    rather than in a middleware keeps the cost to the one request that already
+    exists, and works even when the CLI's own outbound telemetry is switched off —
+    the version is a header on a request the user is making anyway. Only the
+    version string is kept; the hostname header the CLI also sends is never read
+    for telemetry.
 
     SECURITY: now requires a valid bearer token in the ``Authorization`` header
     (``get_current_user``). Previously this endpoint had NO auth dependency, so
@@ -31,6 +42,8 @@ async def validate_cli_config_endpoint(
     ``Authorization: Bearer <access_token>`` (it can reuse
     ``generate_api_headers`` from ``depictio/cli/cli/utils/common.py``).
     """
+    record_cli_version(x_depictio_cli_version)
+
     token = cli_config.user.token
 
     _token_check = await TokenBeanie.find_one(

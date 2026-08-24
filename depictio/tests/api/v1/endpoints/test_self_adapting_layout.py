@@ -97,6 +97,65 @@ def test_recompact_clamps_oversized_width():
 
 
 # --------------------------------------------------------------------------- #
+# _recompact_main_grid — section awareness
+# --------------------------------------------------------------------------- #
+
+
+def test_recompact_without_sections_is_unchanged():
+    """A dashboard that declares no section packs as one grid, as it always did."""
+    items = [
+        {"i": "box-a", "x": 0, "y": 0, "w": 4, "h": 2},
+        {"i": "box-b", "x": 0, "y": 2, "w": 4, "h": 2},
+    ]
+    flat = _recompact_main_grid(items)
+    sectionless = _recompact_main_grid(items, {"box-a": None, "box-b": None})
+    assert flat == sectionless
+    # Both survivors pack onto one row rather than each sitting alone.
+    assert len(_rows(flat)) == 1
+
+
+def test_recompact_never_packs_across_a_section_boundary():
+    """Two half-width cards in different sections must not share a row: each
+    section draws its own sub-grid, so that row would straddle two headers."""
+    items = [
+        {"i": "box-a", "x": 0, "y": 0, "w": 4, "h": 2},
+        {"i": "box-b", "x": 0, "y": 2, "w": 4, "h": 2},
+    ]
+    out = _recompact_main_grid(items, {"box-a": "QC", "box-b": "Taxonomy"})
+    by_i = {it["i"]: it for it in out}
+    assert by_i["box-a"]["y"] != by_i["box-b"]["y"]
+    # Alone in its section, each is widened to the full grid.
+    assert by_i["box-a"]["w"] == _GRID_COLS
+    assert by_i["box-b"]["w"] == _GRID_COLS
+
+
+def test_recompact_stacks_sections_without_overlap():
+    """Sections stack, so the flat array stays valid as one grid — which is what
+    the dashboard falls back to if its sections are later removed."""
+    items = [
+        {"i": "box-a", "x": 0, "y": 0, "w": 8, "h": 3},
+        {"i": "box-b", "x": 0, "y": 3, "w": 8, "h": 2},
+    ]
+    out = _recompact_main_grid(items, {"box-a": "QC", "box-b": "Taxonomy"})
+    by_i = {it["i"]: it for it in out}
+    assert by_i["box-a"]["y"] == 0
+    assert by_i["box-b"]["y"] == 3  # starts below the first section's bottom
+
+
+def test_recompact_packs_within_a_section():
+    """Inside one section the existing shelf-packing still applies."""
+    items = [
+        {"i": "box-a", "x": 0, "y": 0, "w": 4, "h": 2},
+        {"i": "box-b", "x": 0, "y": 2, "w": 4, "h": 2},
+        {"i": "box-c", "x": 0, "y": 4, "w": 8, "h": 2},
+    ]
+    out = _recompact_main_grid(items, {"box-a": "QC", "box-b": "QC", "box-c": "Taxonomy"})
+    by_i = {it["i"]: it for it in out}
+    assert by_i["box-a"]["y"] == by_i["box-b"]["y"]  # same section → same row
+    assert by_i["box-c"]["y"] == 2
+
+
+# --------------------------------------------------------------------------- #
 # _tab_meets_minimum / _tab_has_visualization_components
 # --------------------------------------------------------------------------- #
 

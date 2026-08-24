@@ -2,7 +2,12 @@
  * Thin fetch wrapper for Depictio's FastAPI backend. Preserves the same auth
  * contract as the Dash app: JWT bearer token from localStorage, with a public
  * fallback that relies on get_user_or_anonymous middleware for anonymous mode.
+ *
+ * All requests go through `authFetch`, which owns token refresh and 401
+ * recovery. Do not attach the bearer by hand — see its docstring for why.
  */
+
+import { enqueueFetch } from './fetchQueue';
 
 const API_BASE = '/depictio/api/v1';
 
@@ -24,18 +29,6 @@ function readStoredSession(): Record<string, unknown> | null {
   } catch {
     return null;
   }
-}
-
-function authHeaders(): Record<string, string> {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
-  const session = readStoredSession();
-  const token = session?.access_token;
-  if (typeof token === 'string' && token) {
-    headers.Authorization = `Bearer ${token}`;
-  }
-  return headers;
 }
 
 /** Send the user back to the login page when their session can no longer be
@@ -76,7 +69,57 @@ async function refreshAccessToken(refreshToken: string): Promise<{
  *  cache. Reset to null when the refresh resolves. */
 let pendingRefresh: Promise<string | null> | null = null;
 
-async function ensureFreshAccessToken(): Promise<string | null> {
+/** Incremented by ``clearSession``. A refresh started before a logout must not
+ *  write its result back afterwards.
+ *
+ *  Logout is client-side only: the refresh token stays valid server-side for 7
+ *  days, so a late write does not just restore stale bytes, it restores a
+ *  *working* session and the user is silently signed back in. The window is
+ *  real because every authenticated request now refreshes through here, and a
+ *  page like /profile has several in flight at the moment the button is
+ *  clicked. Writers capture the epoch before awaiting and drop their result if
+ *  it moved. */
+let sessionEpoch = 0;
+
+/** Persist a refreshed token, unless the session was cleared while we awaited.
+ *  Returns false when the write was dropped. */
+function persistRefreshedSession(
+  epoch: number,
+  base: Record<string, unknown> | null,
+  refreshed: { access_token: string; expire_datetime: string },
+): boolean {
+  if (epoch !== sessionEpoch) return false;
+  try {
+    localStorage.setItem(SESSION_KEY, JSON.stringify({ ...base, ...refreshed }));
+  } catch {
+    // ignore quota / private mode
+  }
+  return true;
+}
+
+/** Parse a timestamp the API produced, as UTC.
+ *
+ * The backend stamps expiries with a naive `datetime.now()` in a UTC container
+ * and serialises them without an offset. `Date.parse` reads an offset-less ISO
+ * string as *local* time, which skews the comparison by the viewer's UTC
+ * offset: east of UTC every token looks already dead, so the client refreshes
+ * ahead of every request; west of UTC a dead token still looks live, so the
+ * proactive refresh never fires and the 401 retry has to catch it. The admin
+ * and dashboard panels already pin these timestamps to UTC the same way. */
+function parseBackendTimestamp(iso: string): number {
+  const hasOffset = /(?:Z|[+-]\d{2}:?\d{2})$/.test(iso);
+  return Date.parse(hasOffset ? iso : `${iso}Z`);
+}
+
+/** Current access token, refreshed first if it is at or near expiry.
+ *
+ * Exported for the callers that cannot go through `authFetch`: a WebSocket
+ * carries its credential in the URL, so it has to resolve the token itself.
+ *
+ * `windowMs` widens "near expiry" for the keep-alive, which polls on its own
+ * interval and has to refresh anything that would lapse before its next tick —
+ * see `KEEPALIVE_REFRESH_WINDOW_MS`. Per-request callers want the default. */
+async function ensureFreshAccessToken(windowMs = REFRESH_WINDOW_MS): Promise<string | null> {
   const session = readStoredSession();
   const access = typeof session?.access_token === 'string' ? session.access_token : null;
   const refresh = typeof session?.refresh_token === 'string' ? session.refresh_token : null;
@@ -84,29 +127,28 @@ async function ensureFreshAccessToken(): Promise<string | null> {
 
   if (!access || !refresh) return access;
 
-  const expireMs = expireIso ? Date.parse(expireIso) : NaN;
-  if (Number.isFinite(expireMs) && expireMs - Date.now() > REFRESH_WINDOW_MS) {
+  const expireMs = expireIso ? parseBackendTimestamp(expireIso) : NaN;
+  if (Number.isFinite(expireMs) && expireMs - Date.now() > windowMs) {
     return access;
   }
 
   if (!pendingRefresh) {
+    const epoch = sessionEpoch;
     pendingRefresh = (async () => {
       try {
         const refreshed = await refreshAccessToken(refresh);
         if (!refreshed) return null;
-        const next = { ...session, ...refreshed };
-        try {
-          localStorage.setItem(SESSION_KEY, JSON.stringify(next));
-        } catch {
-          // ignore quota / private mode
-        }
+        if (!persistRefreshedSession(epoch, session, refreshed)) return null;
         return refreshed.access_token;
       } finally {
         pendingRefresh = null;
       }
     })();
   }
+  const epochBefore = sessionEpoch;
   const next = await pendingRefresh;
+  // Logged out mid-refresh: there is no current token to report.
+  if (epochBefore !== sessionEpoch) return null;
   return next ?? access;
 }
 
@@ -115,6 +157,17 @@ async function ensureFreshAccessToken(): Promise<string | null> {
  * access token when it's near expiry, and on a 401 retries once with a freshly
  * minted access token. After persistent 401s the session is cleared so the
  * SPA falls back to the unauthenticated path on the next route resolution.
+ *
+ * Every authenticated request in the app goes through here, and must: a login
+ * mints a 1 h access token against a 7 day refresh token, so anything that
+ * attaches the stored bearer itself starts failing an hour into the session.
+ * Endpoints behind strict `get_current_user` surface that as a bare 401
+ * "Invalid token"; the larger number behind `get_user_or_anonymous` are worse,
+ * silently answering as the anonymous user, so a signed-in user's own projects
+ * just stop appearing in the list.
+ *
+ * Content-Type is set to application/json only for string bodies, leaving the
+ * browser to stamp the multipart boundary on FormData uploads.
  */
 async function authFetch(url: string, init: RequestInit = {}): Promise<Response> {
   await ensureFreshAccessToken();
@@ -138,17 +191,16 @@ async function authFetch(url: string, init: RequestInit = {}): Promise<Response>
     redirectToAuth();
     return first;
   }
+  const epoch = sessionEpoch;
   const refreshed = await refreshAccessToken(refresh);
   if (!refreshed) {
     clearSession();
     redirectToAuth();
     return first;
   }
-  try {
-    localStorage.setItem(SESSION_KEY, JSON.stringify({ ...existing, ...refreshed }));
-  } catch {
-    // ignore
-  }
+  // Logged out while the retry was in flight — do not resurrect the session,
+  // and do not re-issue the request as the user who just signed out.
+  if (!persistRefreshedSession(epoch, existing, refreshed)) return first;
   const retryHeaders = new Headers(init.headers || {});
   retryHeaders.set('Authorization', `Bearer ${refreshed.access_token}`);
   if (!retryHeaders.has('Content-Type') && init.body && typeof init.body === 'string') {
@@ -218,18 +270,52 @@ export interface StoredMetadata {
   interactive_component_type?: string;
   default_state?: { default_value?: unknown; default_range?: unknown; options?: unknown[] };
   /** Visual grouping — interactive components sharing the same `group` are
-   *  rendered together inside one Mantine Paper. Up to 3 per group. */
+   *  rendered together inside one collapsible Mantine Paper. See
+   *  MAX_INTERACTIVE_GROUP_SIZE in depictio/models/components/constants.py. */
   group?: string;
-  /** Layout placement: 'left' (default — Filters sidebar) or 'top' (top panel
-   *  above the dashboard grid). Currently only 'Timeline' may use 'top'. */
-  placement?: 'left' | 'top';
+  /** Outer level of the filter panel: components sharing a `section` render
+   *  inside one accordion item. Presentation comes from
+   *  `DashboardData.filter_sections`. */
+  section?: string;
+  /** Layout placement. The allowed values depend on the component type:
+   *  interactive components use 'left' (default — Filters sidebar) or 'top'
+   *  (top panel above the grid, currently 'Timeline' only); maps use 'grid'
+   *  (default — a normal tile) or 'floating' (the floating panel, reachable
+   *  from every tab). Anything lifted out of the grid gets no layout entry. */
+  placement?: 'left' | 'top' | 'grid' | 'floating';
+  /** How the panel presents itself on a viewer's first visit — a card in one of
+   *  its two sizes, docked below the filter panel, or hidden behind the header
+   *  control. Their own saved preference wins thereafter. Maps with
+   *  `placement: 'floating'` only. */
+  floating_initial_state?: 'compact' | 'expanded' | 'docked' | 'hidden';
   /** Default timescale for the Timeline interactive component. */
   timescale?: 'year' | 'month' | 'day' | 'hour' | 'minute';
   /** When set, controls tick-mark visibility on Slider / RangeSlider / Timeline.
    *  When omitted, the renderer defaults to visible for ungrouped components and
    *  hidden for components inside a group (compact mode). */
   show_marks?: boolean;
+  // Table
+  /** Column allowlist for table components — when non-empty, only these
+   *  columns are rendered (empty / undefined = show all columns). */
+  columns?: string[];
+  /** Compact table row + header heights. */
+  compact?: boolean;
+  /** Grid placement. `y` doubles as the render-queue priority so components
+   *  nearer the top of the dashboard are fetched first (see `fetchQueue`). */
+  layout?: { x?: number; y?: number; w?: number; h?: number };
   [key: string]: unknown;
+}
+
+/** Presentation of one left-panel filter section. Mirrors FilterSectionSpec in
+ *  depictio/models/models/dashboards.py. */
+export interface FilterSectionSpec {
+  name: string;
+  icon?: string | null;
+  /** Mantine palette name. Unset renders neutral; an unrecognised name falls
+   *  back to the theme default rather than throwing. */
+  color?: string | null;
+  description?: string | null;
+  collapsed?: boolean;
 }
 
 export interface DashboardData {
@@ -241,6 +327,9 @@ export interface DashboardData {
   stored_layout_data?: unknown;
   left_panel_layout_data?: unknown;
   right_panel_layout_data?: unknown;
+  /** Ordering + icons for the left panel's filter sections. */
+  filter_sections?: FilterSectionSpec[];
+  grid_sections?: FilterSectionSpec[];
   /** Project-level realtime config — only when ``enabled === true`` should
    *  the viewer mount the WebSocket subscription / live-updates indicator. */
   project_realtime?: { enabled: boolean; debounce_ms: number };
@@ -253,11 +342,58 @@ export interface DashboardData {
 
 /** Fetch dashboard including stored_metadata. Mirrors what the Dash viewer reads. */
 export async function fetchDashboard(dashboardId: string): Promise<DashboardData> {
-  const res = await fetch(`${API_BASE}/dashboards/get/${dashboardId}`, {
-    headers: authHeaders(),
-  });
+  const res = await authFetch(`${API_BASE}/dashboards/get/${dashboardId}`);
   if (!res.ok) throw new Error(`Failed to fetch dashboard: ${res.status}`);
   return res.json();
+}
+
+/** A component lifted out of the grid into the floating panel, paired with the
+ *  tab that owns it. `dashboard_id` is the *owning* tab, which is what the
+ *  renderer must fetch against — it is not necessarily the tab being viewed. */
+export interface FloatingComponent {
+  dashboard_id: string;
+  tab_title?: string;
+  metadata: StoredMetadata;
+}
+
+export interface FloatingComponentsResponse {
+  /** Id of the tab family (the main tab). Panel state and cross-tab filter
+   *  persistence are keyed on this, not on the tab currently being viewed. */
+  parent_dashboard_id: string | null;
+  components: FloatingComponent[];
+}
+
+/**
+ * Fetch the floating components of the whole tab family (parent + siblings).
+ * `/dashboards/list` omits `stored_metadata` for non-admins, so a child tab
+ * cannot otherwise see a map authored on one of its siblings.
+ *
+ * Resolves to an empty result rather than throwing: a missing floating panel
+ * must never take the dashboard down with it.
+ */
+export async function fetchFloatingComponents(
+  dashboardId: string,
+): Promise<FloatingComponentsResponse> {
+  const empty: FloatingComponentsResponse = { parent_dashboard_id: null, components: [] };
+  try {
+    const res = await authFetch(
+      `${API_BASE}/dashboards/floating_components/${dashboardId}`,
+    );
+    if (!res.ok) return empty;
+    const data = await res.json();
+    if (!Array.isArray(data?.components)) return empty;
+    return {
+      parent_dashboard_id: data.parent_dashboard_id ?? null,
+      components: data.components,
+    };
+  } catch (err) {
+    // Network failure or malformed body. Resolving empty rather than rejecting
+    // matters beyond the panel itself: the caller uses this result to validate
+    // filters hydrated from storage, and a rejection would leave a stale
+    // cross-tab selection applied with nothing left to prune it.
+    console.warn('[api] fetchFloatingComponents failed:', err);
+    return empty;
+  }
 }
 
 /**
@@ -281,9 +417,7 @@ export interface DashboardSummary {
 }
 
 export async function fetchAllDashboards(): Promise<DashboardSummary[]> {
-  const res = await fetch(`${API_BASE}/dashboards/list?include_child_tabs=true`, {
-    headers: authHeaders(),
-  });
+  const res = await authFetch(`${API_BASE}/dashboards/list?include_child_tabs=true`);
   if (!res.ok) return [];
   const data = await res.json();
   return Array.isArray(data) ? data : data.dashboards || [];
@@ -291,9 +425,7 @@ export async function fetchAllDashboards(): Promise<DashboardSummary[]> {
 
 /** Fetch precomputed column specs for a data collection (includes aggregations). */
 export async function fetchSpecs(dcId: string): Promise<Record<string, unknown>> {
-  const res = await fetch(`${API_BASE}/deltatables/specs/${dcId}`, {
-    headers: authHeaders(),
-  });
+  const res = await authFetch(`${API_BASE}/deltatables/specs/${dcId}`);
   if (!res.ok) throw new Error(`Failed to fetch specs: ${res.status}`);
   return res.json();
 }
@@ -315,13 +447,133 @@ export async function fetchUniqueValues(
 ): Promise<string[]> {
   const params = new URLSearchParams({ column: columnName });
   if (filterExpr) params.set('filter_expr', filterExpr);
-  const res = await fetch(
-    `${API_BASE}/deltatables/unique_values/${dcId}?${params.toString()}`,
-    { headers: authHeaders() },
-  );
+  const res = await authFetch(`${API_BASE}/deltatables/unique_values/${dcId}?${params.toString()}`);
   if (!res.ok) throw new Error(`Failed to fetch unique values: ${res.status}`);
   const body = (await res.json()) as { values?: string[] };
   return body.values || [];
+}
+
+/** The ``__breakdown__`` payload for a card's categorical strip, computed
+ *  server-side against the real data.
+ *
+ *  Same shape and same helper ``bulk_compute_cards`` uses for a saved card, so
+ *  the builder preview shows the card's actual categories and distribution.
+ *  The preview used to invent ``Bucket 1/2/3`` at a uniform 33/33/34 split.
+ */
+export interface BreakdownPayloadDTO {
+  column: string;
+  total: number;
+  top: { name: string; count: number; percent: number }[];
+  top_share: number;
+  unique_values: number;
+  breakdown_kind?: string;
+  evenness?: number | null;
+}
+
+export async function fetchBreakdown(
+  dcId: string,
+  column: string,
+  breakdownCol: string,
+  aggregation = 'count',
+  topNCount = 3,
+  signal?: AbortSignal,
+  filters: InteractiveFilter[] = [],
+): Promise<BreakdownPayloadDTO> {
+  // The POST variant computes the same payload under the dashboard's active
+  // filters (and bypasses the server-side breakdown cache); unfiltered
+  // callers keep the cached GET.
+  if (filters.length > 0) {
+    const res = await authFetch(`${API_BASE}/deltatables/breakdown/${dcId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        column,
+        breakdown_col: breakdownCol,
+        aggregation,
+        top_n_count: topNCount,
+        filters,
+      }),
+      signal,
+    });
+    if (!res.ok) throw new Error(`Failed to fetch breakdown: ${res.status}`);
+    return res.json();
+  }
+  const params = new URLSearchParams({
+    column,
+    breakdown_col: breakdownCol,
+    aggregation,
+    top_n_count: String(topNCount),
+  });
+  const res = await authFetch(
+    `${API_BASE}/deltatables/breakdown/${dcId}?${params.toString()}`,
+    { signal },
+  );
+  if (!res.ok) throw new Error(`Failed to fetch breakdown: ${res.status}`);
+  return res.json();
+}
+
+/** Payload for a card's numeric / QC secondary layout (histogram, threshold,
+ *  completeness, attrition), computed server-side by the same dispatcher the
+ *  saved card uses.
+ *
+ *  ``config`` carries the card's own field names (``threshold_value``,
+ *  ``threshold_direction``, ``threshold_warn``, ``attrition_cols``,
+ *  ``aggregation``). Resolves to ``null`` when the config is incomplete or the
+ *  data cannot support the layout — a constant column has no histogram — and
+ *  the caller then renders no strip.
+ */
+export async function fetchCardMetric(
+  dcId: string,
+  layout: string,
+  column: string,
+  config: Record<string, unknown> = {},
+  signal?: AbortSignal,
+  filters: InteractiveFilter[] = [],
+): Promise<Record<string, unknown> | null> {
+  const res = await authFetch(`${API_BASE}/deltatables/card_metric/${dcId}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...config, layout, column, filters }),
+    signal,
+  });
+  if (!res.ok) throw new Error(`Failed to fetch card metric: ${res.status}`);
+  return res.json();
+}
+
+/** A card's hero scalar computed live under the dashboard's active filters.
+ *  Backs the builder preview when filters are carried in: the static
+ *  precomputed spec describes the unfiltered collection, so a filtered
+ *  preview needs the reduction evaluated on the filtered frame. Resolves to
+ *  ``null`` when the column/aggregation can't be computed. */
+export async function fetchCardHeroValue(
+  dcId: string,
+  column: string,
+  aggregation: string,
+  filters: InteractiveFilter[],
+  signal?: AbortSignal,
+): Promise<unknown> {
+  const res = await authFetch(`${API_BASE}/deltatables/card_metric/${dcId}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ layout: 'hero', column, aggregation, filters }),
+    signal,
+  });
+  if (!res.ok) throw new Error(`Failed to fetch card hero value: ${res.status}`);
+  const payload = (await res.json()) as { value?: unknown } | null;
+  return payload?.value ?? null;
+}
+
+/** What a numeric slider needs to know about its column: the bounds, plus the
+ *  granularity the bounds are drawn from. `dtype` and `unique` are what tell a
+ *  three-year survey column apart from a continuous measurement, so the slider
+ *  can stop on 2008 instead of on 2007.34 — see `buildNumericScale`. */
+export interface ColumnRange {
+  min: number | null;
+  max: number | null;
+  /** Polars dtype as recorded in the DC specs ("int64", "float64", …). */
+  dtype?: string | null;
+  /** Distinct value count from the DC specs. */
+  unique?: number | null;
 }
 
 /** Numeric range bounds for a column — backs RangeSlider min/max.
@@ -330,7 +582,7 @@ export async function fetchUniqueValues(
 export async function fetchColumnRange(
   dcId: string,
   columnName: string,
-): Promise<{ min: number | null; max: number | null }> {
+): Promise<ColumnRange> {
   const specs = await fetchSpecs(dcId);
   if (Array.isArray(specs)) {
     // List shape: [{name, type, specs}]
@@ -341,6 +593,8 @@ export async function fetchColumnRange(
     return {
       min: typeof s.min === 'number' ? s.min : null,
       max: typeof s.max === 'number' ? s.max : null,
+      dtype: typeof entry?.type === 'string' ? (entry.type as string) : null,
+      unique: typeof s.unique === 'number' ? s.unique : null,
     };
   }
   // Dict shape (legacy)
@@ -349,6 +603,8 @@ export async function fetchColumnRange(
   return {
     min: typeof s.min === 'number' ? s.min : null,
     max: typeof s.max === 'number' ? s.max : null,
+    dtype: typeof s.type === 'string' ? (s.type as string) : null,
+    unique: typeof s.unique === 'number' ? s.unique : null,
   };
 }
 
@@ -393,11 +649,10 @@ export async function fetchComponentData(
   componentId: string,
   filters: InteractiveFilter[],
 ): Promise<{ value?: unknown; secondary_metrics?: unknown; comparison?: unknown }> {
-  const res = await fetch(
+  const res = await authFetch(
     `${API_BASE}/dashboards/get_component_data/${dashboardId}/${componentId}`,
     {
       method: 'POST',
-      headers: authHeaders(),
       body: JSON.stringify({ filters }),
     },
   );
@@ -430,11 +685,10 @@ export async function bulkComputeCards(
   filters: InteractiveFilter[],
   componentIds?: string[],
 ): Promise<BulkComputeResponse> {
-  const res = await fetch(
+  const res = await authFetch(
     `${API_BASE}/dashboards/bulk_compute_cards/${dashboardId}`,
     {
       method: 'POST',
-      headers: authHeaders(),
       body: JSON.stringify({ filters, component_ids: componentIds }),
     },
   );
@@ -445,7 +699,19 @@ export async function bulkComputeCards(
 /** Server-rendered Plotly figure for one component. */
 export interface FigureResponse {
   figure: { data?: unknown[]; layout?: Record<string, unknown> };
-  metadata: { visu_type?: string; filter_applied?: boolean };
+  metadata: {
+    visu_type?: string;
+    filter_applied?: boolean;
+    /** True when the scatter-family figure was downsampled / the source was
+     *  row-capped before plotting (see `full_data_loaded`). */
+    was_sampled?: boolean;
+    /** Points actually plotted (post-sampling). */
+    displayed_data_count?: number;
+    /** True source row count (post-filter), for the "N of M" indicator. */
+    total_data_count?: number;
+    /** True when every point was rendered (no cap applied / full_load). */
+    full_data_loaded?: boolean;
+  };
 }
 
 export async function renderFigure(
@@ -453,13 +719,15 @@ export async function renderFigure(
   componentId: string,
   filters: InteractiveFilter[],
   theme: 'light' | 'dark' = 'light',
+  fullLoad = false,
+  signal?: AbortSignal,
 ): Promise<FigureResponse> {
-  const res = await fetch(
+  const res = await authFetch(
     `${API_BASE}/dashboards/render_figure/${dashboardId}/${componentId}`,
     {
       method: 'POST',
-      headers: authHeaders(),
-      body: JSON.stringify({ filters, theme }),
+      body: JSON.stringify({ filters, theme, full_load: fullLoad }),
+      signal,
     },
   );
   if (!res.ok) throw new Error(`Failed to render figure: ${res.status}`);
@@ -516,7 +784,7 @@ export interface AdvancedVizKindDescriptor {
 
 /** Metadata used by the builder's viz-kind picker. Cached on first load. */
 export async function fetchAdvancedVizKinds(): Promise<AdvancedVizKindDescriptor[]> {
-  const res = await fetch(`${API_BASE}/advanced_viz/kinds`, { headers: authHeaders() });
+  const res = await authFetch(`${API_BASE}/advanced_viz/kinds`);
   if (!res.ok) throw new Error(`Failed to fetch advanced viz kinds: ${res.status}`);
   return res.json();
 }
@@ -525,9 +793,7 @@ export async function fetchAdvancedVizKinds(): Promise<AdvancedVizKindDescriptor
  *  validate that the user's role→column binding matches the canonical
  *  schema declared in depictio/models/components/advanced_viz/schemas.py. */
 export async function fetchPolarsSchema(dcId: string): Promise<Record<string, string>> {
-  const res = await fetch(`${API_BASE}/datacollections/polars_schema/${dcId}`, {
-    headers: authHeaders(),
-  });
+  const res = await authFetch(`${API_BASE}/datacollections/polars_schema/${dcId}`);
   if (!res.ok) throw new Error(`Failed to fetch polars schema: ${res.status}`);
   return res.json();
 }
@@ -558,10 +824,7 @@ export interface VizSuggestionsResponse {
 export async function fetchVizSuggestions(
   dcId: string,
 ): Promise<VizSuggestionsResponse> {
-  const res = await fetch(
-    `${API_BASE}/datacollections/viz-suggestions/${dcId}`,
-    { headers: authHeaders() },
-  );
+  const res = await authFetch(`${API_BASE}/datacollections/viz-suggestions/${dcId}`);
   if (!res.ok) throw new Error(`Failed to fetch viz suggestions: ${res.status}`);
   return res.json();
 }
@@ -569,33 +832,86 @@ export async function fetchVizSuggestions(
 export interface AdvancedVizDataResponse {
   columns: string[];
   rows: Record<string, unknown[]>;
+  /** Returned rows (== the sampled count when `sampled` is true). */
   row_count: number;
+  /** Rows before sampling — feeds the "N / M" reduction badge. */
+  total_rows?: number;
+  /** True when the server randomly downsampled the frame. */
+  sampled?: boolean;
+  /** Which reduction the server applied and whether the frame is the whole
+   *  filtered set. `degraded` is the one that matters to a renderer which
+   *  aggregates its rows: it means the frame was sampled anyway (the DC
+   *  exceeded the no-sample ceiling), so any sum or ranking taken off it is an
+   *  estimate rather than a total. */
+  sampling?: { policy: string; exact: boolean; degraded: boolean };
   filter_applied: boolean;
+}
+
+/** The rows a tail-preserving reduction must keep whole — the significant end
+ *  of `column`. Sent by the renderers that draw a threshold line, so the server
+ *  keeps exactly the rows the plot would mark as hits instead of guessing a
+ *  cutoff. `direction` is `low` for a raw p-value, `high` for a -log10 score,
+ *  `both` for a signed effect size. */
+export interface AdvancedVizTailSpec {
+  column: string;
+  direction: 'low' | 'high' | 'both';
+  threshold: number;
+}
+
+export interface AdvancedVizDataRequest {
+  wfId: string;
+  dcId: string;
+  columns: string[];
+  filters: InteractiveFilter[];
+  /** Explicit row cap. Suppresses sampling entirely — for callers that want a
+   *  specific bound (heatmap/upset previews), not a representative frame. */
+  limitRows?: number;
+  /** Bypass sampling and raise the scan cap — the renderer's Load-All toggle,
+   *  mirroring the scatter figure full-load contract. Ignored when `limitRows`
+   *  is given. */
+  fullLoad?: boolean;
+  /** Selects the server-side reduction policy. Renderers should always send
+   *  their own kind: without it the server samples uniformly, which is wrong
+   *  for any renderer that aggregates the rows it receives. Typed against the
+   *  union rather than `string` because an unrecognised kind is not an error
+   *  on the wire — it silently falls back to that uniform sample. */
+  vizKind?: AdvancedVizKind;
+  /** Role -> bound column name, so the server can find the column a policy
+   *  needs (e.g. which column carries significance). */
+  roles?: Record<string, string>;
+  tail?: AdvancedVizTailSpec;
 }
 
 /** Project a column subset from a DC + apply global filters. Rendering is
  *  done entirely on the client so intra-viz controls (thresholds, top-N,
  *  rank dropdown) don't round-trip to the server. */
 export async function fetchAdvancedVizData(
-  wfId: string,
-  dcId: string,
-  columns: string[],
-  filters: InteractiveFilter[],
-  limitRows?: number,
+  req: AdvancedVizDataRequest,
+  signal?: AbortSignal,
 ): Promise<AdvancedVizDataResponse> {
-  const res = await fetch(`${API_BASE}/advanced_viz/data`, {
-    method: 'POST',
-    headers: authHeaders(),
-    body: JSON.stringify({
-      wf_id: wfId,
-      dc_id: dcId,
-      columns,
-      filter_metadata: filters,
-      limit_rows: limitRows,
-    }),
+  // Queued here rather than at each call site: ~15 advanced-viz renderers each
+  // own an unguarded fetch, and this is the single choke point they all pass
+  // through. Bounding it keeps a dashboard's mount burst from saturating the
+  // API pool ahead of the figures and tables the user is looking at.
+  return enqueueFetch(async () => {
+    const res = await authFetch(`${API_BASE}/advanced_viz/data`, {
+      method: 'POST',
+      body: JSON.stringify({
+        wf_id: req.wfId,
+        dc_id: req.dcId,
+        columns: req.columns,
+        filter_metadata: req.filters,
+        limit_rows: req.limitRows,
+        full_load: req.fullLoad,
+        viz_kind: req.vizKind,
+        roles: req.roles,
+        tail: req.tail,
+      }),
+      signal,
+    });
+    if (!res.ok) throw new Error(`Failed to fetch advanced viz data: ${res.status}`);
+    return res.json();
   });
-  if (!res.ok) throw new Error(`Failed to fetch advanced viz data: ${res.status}`);
-  return res.json();
 }
 
 export interface ComputeEmbeddingPayload {
@@ -641,9 +957,8 @@ export interface ComputeEmbeddingJob {
 export async function dispatchComputeEmbedding(
   payload: ComputeEmbeddingPayload,
 ): Promise<ComputeEmbeddingJob> {
-  const res = await fetch(`${API_BASE}/advanced_viz/compute_embedding`, {
+  const res = await authFetch(`${API_BASE}/advanced_viz/compute_embedding`, {
     method: 'POST',
-    headers: authHeaders(),
     body: JSON.stringify(payload),
   });
   if (!res.ok) throw new Error(`Failed to dispatch compute_embedding: ${res.status}`);
@@ -652,9 +967,7 @@ export async function dispatchComputeEmbedding(
 
 /** Poll a previously-dispatched embedding compute. */
 export async function pollComputeEmbedding(jobId: string): Promise<ComputeEmbeddingJob> {
-  const res = await fetch(`${API_BASE}/advanced_viz/compute_embedding/${jobId}`, {
-    headers: authHeaders(),
-  });
+  const res = await authFetch(`${API_BASE}/advanced_viz/compute_embedding/${jobId}`);
   if (!res.ok) throw new Error(`Failed to poll compute_embedding: ${res.status}`);
   return res.json();
 }
@@ -695,9 +1008,8 @@ export interface ComplexHeatmapJob {
 export async function dispatchComplexHeatmap(
   payload: ComplexHeatmapPayload,
 ): Promise<ComplexHeatmapJob> {
-  const res = await fetch(`${API_BASE}/advanced_viz/compute_complex_heatmap`, {
+  const res = await authFetch(`${API_BASE}/advanced_viz/compute_complex_heatmap`, {
     method: 'POST',
-    headers: authHeaders(),
     body: JSON.stringify(payload),
   });
   if (!res.ok) throw new Error(`Failed to dispatch compute_complex_heatmap: ${res.status}`);
@@ -706,9 +1018,7 @@ export async function dispatchComplexHeatmap(
 
 /** Poll the ComplexHeatmap Celery task. */
 export async function pollComplexHeatmap(jobId: string): Promise<ComplexHeatmapJob> {
-  const res = await fetch(`${API_BASE}/advanced_viz/compute_complex_heatmap/${jobId}`, {
-    headers: authHeaders(),
-  });
+  const res = await authFetch(`${API_BASE}/advanced_viz/compute_complex_heatmap/${jobId}`);
   if (!res.ok) throw new Error(`Failed to poll compute_complex_heatmap: ${res.status}`);
   return res.json();
 }
@@ -746,9 +1056,8 @@ export interface UpsetJob {
 
 /** Dispatch an UpSet-plot Celery task. */
 export async function dispatchUpset(payload: UpsetPayload): Promise<UpsetJob> {
-  const res = await fetch(`${API_BASE}/advanced_viz/compute_upset`, {
+  const res = await authFetch(`${API_BASE}/advanced_viz/compute_upset`, {
     method: 'POST',
-    headers: authHeaders(),
     body: JSON.stringify(payload),
   });
   if (!res.ok) throw new Error(`Failed to dispatch compute_upset: ${res.status}`);
@@ -757,9 +1066,7 @@ export async function dispatchUpset(payload: UpsetPayload): Promise<UpsetJob> {
 
 /** Poll an UpSet-plot Celery task. */
 export async function pollUpset(jobId: string): Promise<UpsetJob> {
-  const res = await fetch(`${API_BASE}/advanced_viz/compute_upset/${jobId}`, {
-    headers: authHeaders(),
-  });
+  const res = await authFetch(`${API_BASE}/advanced_viz/compute_upset/${jobId}`);
   if (!res.ok) throw new Error(`Failed to poll compute_upset: ${res.status}`);
   return res.json();
 }
@@ -816,9 +1123,8 @@ export interface CoverageTrackJob {
 export async function dispatchCoverageTrack(
   payload: CoverageTrackPayload,
 ): Promise<CoverageTrackJob> {
-  const res = await fetch(`${API_BASE}/advanced_viz/compute_coverage_track`, {
+  const res = await authFetch(`${API_BASE}/advanced_viz/compute_coverage_track`, {
     method: 'POST',
-    headers: authHeaders(),
     body: JSON.stringify(payload),
   });
   if (!res.ok) throw new Error(`Failed to dispatch compute_coverage_track: ${res.status}`);
@@ -827,9 +1133,7 @@ export async function dispatchCoverageTrack(
 
 /** Poll a previously-dispatched coverage-track compute. */
 export async function pollCoverageTrack(jobId: string): Promise<CoverageTrackJob> {
-  const res = await fetch(`${API_BASE}/advanced_viz/compute_coverage_track/${jobId}`, {
-    headers: authHeaders(),
-  });
+  const res = await authFetch(`${API_BASE}/advanced_viz/compute_coverage_track/${jobId}`);
   if (!res.ok) throw new Error(`Failed to poll compute_coverage_track: ${res.status}`);
   return res.json();
 }
@@ -873,9 +1177,8 @@ export interface SankeyJob {
 
 /** Dispatch a Sankey / categorical-flow Celery task. */
 export async function dispatchSankey(payload: SankeyPayload): Promise<SankeyJob> {
-  const res = await fetch(`${API_BASE}/advanced_viz/compute_sankey`, {
+  const res = await authFetch(`${API_BASE}/advanced_viz/compute_sankey`, {
     method: 'POST',
-    headers: authHeaders(),
     body: JSON.stringify(payload),
   });
   if (!res.ok) throw new Error(`Failed to dispatch compute_sankey: ${res.status}`);
@@ -884,9 +1187,7 @@ export async function dispatchSankey(payload: SankeyPayload): Promise<SankeyJob>
 
 /** Poll a previously-dispatched Sankey compute. */
 export async function pollSankey(jobId: string): Promise<SankeyJob> {
-  const res = await fetch(`${API_BASE}/advanced_viz/compute_sankey/${jobId}`, {
-    headers: authHeaders(),
-  });
+  const res = await authFetch(`${API_BASE}/advanced_viz/compute_sankey/${jobId}`);
   if (!res.ok) throw new Error(`Failed to poll compute_sankey: ${res.status}`);
   return res.json();
 }
@@ -894,9 +1195,7 @@ export async function pollSankey(jobId: string): Promise<SankeyJob> {
 
 /** Fetch the raw Newick string for a phylogeny-type DC. */
 export async function fetchPhylogenyNewick(dcId: string): Promise<string> {
-  const res = await fetch(`${API_BASE}/advanced_viz/phylogeny/${dcId}/newick`, {
-    headers: authHeaders(),
-  });
+  const res = await authFetch(`${API_BASE}/advanced_viz/phylogeny/${dcId}/newick`);
   if (!res.ok) throw new Error(`Failed to fetch phylogeny newick: ${res.status}`);
   return res.text();
 }
@@ -911,6 +1210,14 @@ export interface TableResponse {
   sort_by?: string | null;
   /** Effective sort direction. */
   sort_dir?: 'asc' | 'desc';
+  /** True when the table is too large to sort (see `table_sort_max_rows`) and
+   *  rows come back in natural scan order. The grid must drop its sort
+   *  affordance rather than offer one the server will discard. */
+  sort_disabled?: boolean;
+  /** Data-collection aggregation version. Natural order is stable across
+   *  appends but a Delta compaction reorders the scan, so a change here means
+   *  cached row blocks may no longer line up and must be purged. */
+  data_version?: string | number | null;
 }
 
 export async function renderTable(
@@ -921,12 +1228,12 @@ export async function renderTable(
   limit = 100,
   sortBy?: string | null,
   sortDir: 'asc' | 'desc' = 'desc',
+  signal?: AbortSignal,
 ): Promise<TableResponse> {
-  const res = await fetch(
+  const res = await authFetch(
     `${API_BASE}/dashboards/render_table/${dashboardId}/${componentId}`,
     {
       method: 'POST',
-      headers: authHeaders(),
       body: JSON.stringify({
         filters,
         start,
@@ -934,6 +1241,7 @@ export async function renderTable(
         sort_by: sortBy ?? null,
         sort_dir: sortDir,
       }),
+      signal,
     },
   );
   if (!res.ok) throw new Error(`Failed to render table: ${res.status}`);
@@ -972,11 +1280,10 @@ export async function fetchImagePaths(
   sortBy?: string | null,
   sortDir: 'asc' | 'desc' = 'desc',
 ): Promise<ImageGridResponse> {
-  const res = await fetch(
+  const res = await authFetch(
     `${API_BASE}/dashboards/render_image_paths/${dashboardId}/${componentId}`,
     {
       method: 'POST',
-      headers: authHeaders(),
       body: JSON.stringify({ filters, max, sort_by: sortBy ?? null, sort_dir: sortDir }),
     },
   );
@@ -991,16 +1298,48 @@ export async function renderMap(
   filters: InteractiveFilter[],
   theme: 'light' | 'dark' = 'light',
 ): Promise<FigureResponse> {
-  const res = await fetch(
+  const res = await authFetch(
     `${API_BASE}/dashboards/render_map/${dashboardId}/${componentId}`,
     {
       method: 'POST',
-      headers: authHeaders(),
       body: JSON.stringify({ filters, theme }),
     },
   );
   if (!res.ok) throw new Error(`Failed to render map: ${res.status}`);
   return res.json();
+}
+
+/** Rows behind a map component, for the viewer's "show data" table. Every
+ *  column of the data collection, in `{col: values}` form — deliberately the
+ *  same shape `fetchAdvancedVizData` returns, so both feed the same grid. */
+export interface MapDataResponse {
+  columns: string[];
+  rows: Record<string, unknown[]>;
+  row_count: number;
+  total_rows: number;
+  truncated: boolean;
+  filter_applied: boolean;
+}
+
+export async function fetchMapData(
+  dashboardId: string,
+  componentId: string,
+  filters: InteractiveFilter[],
+  signal?: AbortSignal,
+): Promise<MapDataResponse> {
+  // Not queued through `enqueueFetch`, unlike `fetchAdvancedVizData` above:
+  // this fires when the user opens the popover, and making it wait behind a
+  // dashboard's mount-time request burst would read as a broken button.
+  const res = await authFetch(
+    `${API_BASE}/dashboards/map_data/${dashboardId}/${componentId}`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ filters }),
+      signal,
+    },
+  );
+  if (!res.ok) throw new Error(`Failed to fetch map data: ${res.status}`);
+  return (await res.json()) as MapDataResponse;
 }
 
 /** JBrowse 2 iframe session payload. The standalone JBrowse server runs at
@@ -1022,11 +1361,10 @@ export async function fetchJBrowseSession(
   filters: InteractiveFilter[],
   theme: 'light' | 'dark' = 'light',
 ): Promise<JBrowseSessionResponse> {
-  const res = await fetch(
+  const res = await authFetch(
     `${API_BASE}/dashboards/render_jbrowse/${dashboardId}/${componentId}`,
     {
       method: 'POST',
-      headers: authHeaders(),
       body: JSON.stringify({ filters, theme }),
     },
   );
@@ -1059,11 +1397,10 @@ export async function renderMultiQC(
   filters: InteractiveFilter[],
   theme: 'light' | 'dark' = 'light',
 ): Promise<MultiQCRenderResult> {
-  const res = await fetch(
+  const res = await authFetch(
     `${API_BASE}/dashboards/render_multiqc/${dashboardId}/${componentId}`,
     {
       method: 'POST',
-      headers: authHeaders(),
       body: JSON.stringify({ filters, theme }),
     },
   );
@@ -1126,11 +1463,10 @@ export async function renderMultiQCGeneralStats(
   componentId: string,
   filters: InteractiveFilter[] = [],
 ): Promise<GeneralStatsPayload> {
-  const res = await fetch(
+  const res = await authFetch(
     `${API_BASE}/dashboards/render_multiqc_general_stats/${dashboardId}/${componentId}`,
     {
       method: 'POST',
-      headers: authHeaders(),
       body: JSON.stringify({ filters }),
     },
   );
@@ -1148,6 +1484,33 @@ export async function fetchServerStatus(): Promise<ServerStatusResponse> {
   const res = await fetch(`${API_BASE}/utils/status`, { cache: 'no-cache' });
   if (!res.ok) return { status: 'offline' };
   return res.json();
+}
+
+/**
+ * Runtime configuration the frontend cannot know at build time.
+ *
+ * The viewer ships as a static nginx-served bundle, so per-deployment values like
+ * the Google Analytics measurement ID cannot be baked into the image — every
+ * operator would need their own build. This endpoint supplies them at boot
+ * instead. Public and unauthenticated, since it is read before login.
+ */
+export interface PublicConfigResponse {
+  google_analytics?: {
+    enabled: boolean;
+    tracking_id: string | null;
+  };
+}
+
+export async function fetchPublicConfig(): Promise<PublicConfigResponse> {
+  try {
+    const res = await fetch(`${API_BASE}/utils/public-config`, { cache: 'no-cache' });
+    if (!res.ok) return {};
+    return await res.json();
+  } catch {
+    // Optional configuration. An older backend without this route, or a network
+    // blip, must not stop the app from starting.
+    return {};
+  }
 }
 
 /** Current user — anonymous-tolerant. Returns null for missing/invalid token. */
@@ -1175,18 +1538,16 @@ export async function updateTab(
   dashboardId: string,
   payload: UpdateTabPayload,
 ): Promise<void> {
-  const res = await fetch(`${API_BASE}/dashboards/tab/${dashboardId}`, {
+  const res = await authFetch(`${API_BASE}/dashboards/tab/${dashboardId}`, {
     method: 'PATCH',
-    headers: authHeaders(),
     body: JSON.stringify(payload),
   });
   if (!res.ok) await throwHttpError(res, 'Failed to update tab');
 }
 
 export async function deleteTab(dashboardId: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/dashboards/tab/${dashboardId}`, {
+  const res = await authFetch(`${API_BASE}/dashboards/tab/${dashboardId}`, {
     method: 'DELETE',
-    headers: authHeaders(),
   });
   if (!res.ok) await throwHttpError(res, 'Failed to delete tab');
 }
@@ -1200,9 +1561,8 @@ export async function reorderTabs(
   parentDashboardId: string,
   tabOrders: TabOrderEntry[],
 ): Promise<void> {
-  const res = await fetch(`${API_BASE}/dashboards/tabs/reorder`, {
+  const res = await authFetch(`${API_BASE}/dashboards/tabs/reorder`, {
     method: 'POST',
-    headers: authHeaders(),
     body: JSON.stringify({
       parent_dashboard_id: parentDashboardId,
       tab_orders: tabOrders,
@@ -1256,9 +1616,8 @@ export async function createTab(
     tab_icon_color: fields.tab_icon_color ?? null,
   };
 
-  const res = await fetch(`${API_BASE}/dashboards/save/${newId}`, {
+  const res = await authFetch(`${API_BASE}/dashboards/save/${newId}`, {
     method: 'POST',
-    headers: authHeaders(),
     body: JSON.stringify(payload),
   });
   if (!res.ok) await throwHttpError(res, 'Failed to create tab');
@@ -1289,9 +1648,7 @@ export interface WorkflowEntry {
  *  Mirrors GET /workflows/get_all_workflows. Note: requires a logged-in user;
  *  anonymous sessions get an empty list. */
 export async function fetchWorkflowsForUser(): Promise<WorkflowEntry[]> {
-  const res = await fetch(`${API_BASE}/workflows/get_all_workflows`, {
-    headers: authHeaders(),
-  });
+  const res = await authFetch(`${API_BASE}/workflows/get_all_workflows`);
   if (!res.ok) return [];
   const data = await res.json();
   return Array.isArray(data) ? data : [];
@@ -1318,10 +1675,7 @@ export async function fetchProjectFromDashboard(
   project: { _id: string; workflows: WorkflowEntry[]; [k: string]: unknown };
   delta_locations: Record<string, string>;
 }> {
-  const res = await fetch(
-    `${API_BASE}/projects/get/from_dashboard_id/${dashboardId}`,
-    { headers: authHeaders() },
-  );
+  const res = await authFetch(`${API_BASE}/projects/get/from_dashboard_id/${dashboardId}`);
   if (!res.ok) {
     throw new Error(
       `Failed to fetch project for dashboard ${dashboardId}: ${res.status}`,
@@ -1372,9 +1726,7 @@ export interface DcShapeResponse {
 
 /** Row/column counts for a delta table — for the step-one preview pane. */
 export async function fetchDeltaShape(dcId: string): Promise<DcShapeResponse> {
-  const res = await fetch(`${API_BASE}/deltatables/shape/${dcId}`, {
-    headers: authHeaders(),
-  });
+  const res = await authFetch(`${API_BASE}/deltatables/shape/${dcId}`);
   if (!res.ok) return {};
   return res.json();
 }
@@ -1384,18 +1736,29 @@ export async function fetchDeltaShape(dcId: string): Promise<DcShapeResponse> {
 export interface PreviewResult {
   columns: string[];
   rows: Array<Record<string, unknown>>;
+  /** Filtered row count when `filter_applied`, else the full table's. */
   total_rows: number;
   total_columns: number;
+  /** True when the server narrowed the frame with dashboard filters. */
+  filter_applied?: boolean;
 }
 
 export async function fetchDataCollectionPreview(
   dcId: string,
   limit = 100,
+  filters: InteractiveFilter[] = [],
 ): Promise<PreviewResult> {
-  const res = await fetch(
-    `${API_BASE}/deltatables/preview/${dcId}?limit=${limit}`,
-    { headers: authHeaders() },
-  );
+  // Unfiltered callers keep the existing GET; the POST variant applies the
+  // dashboard's active filters server-side so builder previews match what the
+  // dashboard's components show (rows AND total_rows are filtered).
+  const res =
+    filters.length === 0
+      ? await authFetch(`${API_BASE}/deltatables/preview/${dcId}?limit=${limit}`)
+      : await authFetch(`${API_BASE}/deltatables/preview/${dcId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ limit, filters }),
+        });
   if (!res.ok) {
     throw new Error(`Failed to fetch preview: ${res.status}`);
   }
@@ -1407,9 +1770,7 @@ export async function fetchDataCollectionPreview(
 export async function fetchDataCollectionConfig(
   dcId: string,
 ): Promise<Record<string, unknown>> {
-  const res = await fetch(`${API_BASE}/datacollections/specs/${dcId}`, {
-    headers: authHeaders(),
-  });
+  const res = await authFetch(`${API_BASE}/datacollections/specs/${dcId}`);
   if (!res.ok) return {};
   return res.json();
 }
@@ -1425,9 +1786,8 @@ export interface FigurePreviewRequest {
 export async function previewFigure(
   body: FigurePreviewRequest,
 ): Promise<FigureResponse> {
-  const res = await fetch(`${API_BASE}/figure/preview`, {
+  const res = await authFetch(`${API_BASE}/figure/preview`, {
     method: 'POST',
-    headers: authHeaders(),
     body: JSON.stringify({
       filters: [],
       theme: 'light',
@@ -1452,9 +1812,8 @@ export interface MultiQCPreviewRequest {
 export async function previewMultiQC(
   body: MultiQCPreviewRequest,
 ): Promise<FigureResponse> {
-  const res = await fetch(`${API_BASE}/multiqc/preview`, {
+  const res = await authFetch(`${API_BASE}/multiqc/preview`, {
     method: 'POST',
-    headers: authHeaders(),
     body: JSON.stringify({ theme: 'light', ...body }),
   });
   if (!res.ok) await throwHttpDetailError(res, 'MultiQC preview failed');
@@ -1476,10 +1835,7 @@ export interface MultiQCBuilderOptions {
 export async function fetchMultiQCBuilderOptions(
   dcId: string,
 ): Promise<MultiQCBuilderOptions> {
-  const res = await fetch(
-    `${API_BASE}/multiqc/builder_options?data_collection_id=${dcId}`,
-    { headers: authHeaders() },
-  );
+  const res = await authFetch(`${API_BASE}/multiqc/builder_options?data_collection_id=${dcId}`);
   if (!res.ok) {
     throw new Error(`Failed to fetch MultiQC options: ${res.status}`);
   }
@@ -1500,9 +1856,8 @@ export async function analyzeFigureCode(
   code: string,
   visuTypeHint?: string,
 ): Promise<CodeAnalysis> {
-  const res = await fetch(`${API_BASE}/figure/analyze_code`, {
+  const res = await authFetch(`${API_BASE}/figure/analyze_code`, {
     method: 'POST',
-    headers: authHeaders(),
     body: JSON.stringify({ code, visu_type: visuTypeHint }),
   });
   if (!res.ok) {
@@ -1573,9 +1928,8 @@ export interface FigureVisualizationSummary {
 export async function fetchFigureParameterDiscovery(
   vizType: string,
 ): Promise<FigureVisualizationDefinition> {
-  const res = await fetch(
+  const res = await authFetch(
     `${API_BASE}/figure/parameter-discovery/${encodeURIComponent(vizType)}`,
-    { headers: authHeaders() },
   );
   if (!res.ok) await throwHttpDetailError(res, 'Parameter discovery failed');
   return res.json();
@@ -1586,9 +1940,7 @@ export async function fetchFigureParameterDiscovery(
 export async function fetchFigureVisualizationList(): Promise<
   FigureVisualizationSummary[]
 > {
-  const res = await fetch(`${API_BASE}/figure/visualizations`, {
-    headers: authHeaders(),
-  });
+  const res = await authFetch(`${API_BASE}/figure/visualizations`);
   if (!res.ok) await throwHttpDetailError(res, 'Visualization list failed');
   return res.json();
 }
@@ -1695,9 +2047,8 @@ export async function upsertComponent(
     ];
   }
 
-  const res = await fetch(`${API_BASE}/dashboards/save/${dashboardId}`, {
+  const res = await authFetch(`${API_BASE}/dashboards/save/${dashboardId}`, {
     method: 'POST',
-    headers: authHeaders(),
     body: JSON.stringify(payload),
   });
   if (!res.ok) await throwHttpError(res, 'Failed to save component');
@@ -1715,16 +2066,15 @@ export async function saveDashboardNotes(
 ): Promise<void> {
   const dashboard = await fetchDashboard(dashboardId);
   const payload: DashboardData = { ...dashboard, notes_content: notesContent };
-  const res = await fetch(`${API_BASE}/dashboards/save/${dashboardId}`, {
+  const res = await authFetch(`${API_BASE}/dashboards/save/${dashboardId}`, {
     method: 'POST',
-    headers: authHeaders(),
     body: JSON.stringify(payload),
   });
   if (!res.ok) await throwHttpError(res, 'Failed to save dashboard notes');
 }
 
 export async function fetchCurrentUser(): Promise<CurrentUser | null> {
-  const res = await fetch(`${API_BASE}/auth/me/optional`, { headers: authHeaders() });
+  const res = await authFetch(`${API_BASE}/auth/me/optional`);
   if (!res.ok) return null;
   // Endpoint returns `{auth_mode, user: {id, email, is_admin}, ...}`. Older
   // shape (flat user object) is tolerated for forward/backward compat.
@@ -1770,6 +2120,17 @@ export interface AuthStatusResponse {
    *  treat absent as `false`. */
   registration_disabled?: boolean;
   google_oauth_enabled: boolean;
+  /** Development mode (DEPICTIO_DEV_MODE). Suppresses the walkthrough. */
+  is_dev_mode?: boolean;
+  /** Explicit walkthrough kill switch (DEPICTIO_WALKTHROUGH_DISABLED). */
+  walkthrough_disabled?: boolean;
+  /** TTL of a temporary public-mode user. */
+  temporary_user_expiry_hours?: number;
+  /** Sub-hour component of the temporary-user TTL. */
+  temporary_user_expiry_minutes?: number;
+  /** Component inspector feature flag. Older backends omit this — treat absent
+   *  as `false`, which keeps the inspect action off everywhere. */
+  inspector_enabled?: boolean;
 }
 
 /** Session payload persisted to localStorage['local-store'] on successful auth.
@@ -1793,9 +2154,31 @@ export interface SessionPayload {
   expiration_time?: string | null;
 }
 
-/** Fetch the auth state + mode flags. Drives which UI the /auth page renders. */
+/** Fetch the auth state + mode flags. Drives which UI the /auth page renders.
+ *
+ * Deliberately NOT routed through `authFetch`. This endpoint answers a
+ * question — "is the stored credential currently good?" — and `authFetch`
+ * would answer it by *making* it good: it refreshes a near-expiry or absent
+ * expiry token before sending, so the probe reports a healthy session it
+ * created itself.
+ *
+ * That is wrong everywhere, but it actively breaks logout. Signing out only
+ * clears the client's copy of the token; the refresh token stays valid
+ * server-side for 7 days. `/auth` then mounts, calls this to decide what to
+ * render, mints a fresh access token off that still-live refresh token, sees a
+ * logged-in user, and redirects straight back to `/dashboards`.
+ *
+ * Sending the stored bearer as-is gives the honest answer: the backend
+ * resolves the user when the token is genuinely live and returns
+ * `user: null` when it is not. Expiry recovery belongs to the requests that
+ * actually need a working credential, and they go through `authFetch`.
+ */
 export async function fetchAuthStatus(): Promise<AuthStatusResponse> {
-  const res = await fetch(`${API_BASE}/auth/me/optional`, { headers: authHeaders() });
+  const session = readStoredSession();
+  const token = typeof session?.access_token === 'string' ? session.access_token : null;
+  const res = await fetch(`${API_BASE}/auth/me/optional`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  });
   if (!res.ok) {
     return {
       auth_mode: 'standard',
@@ -1974,8 +2357,14 @@ export function persistSession(session: SessionPayload): void {
   }
 }
 
-/** Clear the persisted session — used for logout. */
+/** Clear the persisted session — used for logout.
+ *
+ *  Also invalidates any refresh already in flight. Logout only removes the
+ *  client's copy of the credential (there is no server-side revocation), so a
+ *  refresh that resolved after this point would write back a *working* session
+ *  and sign the user straight back in. */
 export function clearSession(): void {
+  sessionEpoch += 1;
   try {
     localStorage.removeItem(SESSION_KEY);
   } catch {
@@ -1995,7 +2384,73 @@ export async function validateSession(): Promise<boolean> {
   return readStoredSession()?.access_token != null;
 }
 
-export { authFetch, refreshAccessToken };
+/** How often the keep-alive re-checks the stored token. Must be comfortably
+ *  shorter than the access-token lifetime (1 h as minted by `/auth/refresh`)
+ *  so a token never lapses between ticks. */
+const KEEPALIVE_INTERVAL_MS = 5 * 60_000;
+
+/** Window the keep-alive refreshes within. It must exceed the tick interval,
+ *  otherwise a tick can land just outside the window, decline to refresh, and
+ *  let the token expire before the next tick fires — leaving a multi-minute
+ *  hole of exactly the "Invalid token" failures this is meant to prevent. The
+ *  margin absorbs timer jitter and throttling in background tabs. */
+const KEEPALIVE_REFRESH_WINDOW_MS = KEEPALIVE_INTERVAL_MS * 2;
+
+let keepAliveTimer: ReturnType<typeof setInterval> | null = null;
+
+/**
+ * Keep the stored access token continuously fresh for the life of the page.
+ *
+ * `authFetch` already refreshes near expiry, so a page that keeps making
+ * requests looks after itself. This is for the gaps: a token that lapses while
+ * a dashboard sits idle, and the credentials that never pass through a fetch
+ * at all — a realtime WebSocket carries its token in the URL and can only read
+ * whatever is in storage at the moment it connects or reconnects.
+ *
+ * Ticking on a timer also means the first click after an idle hour does not
+ * pay for a refresh round-trip before it does anything.
+ *
+ * Idempotent: repeat calls reuse the existing timer. Also refreshes on tab
+ * refocus, since timers are throttled (or frozen) in background tabs.
+ */
+export function startSessionKeepAlive(): () => void {
+  if (typeof window === 'undefined') return () => {};
+  if (keepAliveTimer !== null) return stopSessionKeepAlive;
+
+  const tick = () => {
+    // No session yet (or signed out) — nothing to keep alive.
+    if (!readStoredSession()?.refresh_token) return;
+    void ensureFreshAccessToken(KEEPALIVE_REFRESH_WINDOW_MS).catch(() => {
+      /* offline / transient: the next tick retries */
+    });
+  };
+
+  keepAliveTimer = setInterval(tick, KEEPALIVE_INTERVAL_MS);
+
+  // A backgrounded tab has its timers throttled, so it can return to the
+  // foreground with an already-stale token. Top up as soon as it's visible.
+  document.addEventListener('visibilitychange', onVisible);
+  return stopSessionKeepAlive;
+}
+
+function onVisible(): void {
+  if (document.visibilityState === 'visible') {
+    if (!readStoredSession()?.refresh_token) return;
+    void ensureFreshAccessToken(KEEPALIVE_REFRESH_WINDOW_MS).catch(() => {});
+  }
+}
+
+export function stopSessionKeepAlive(): void {
+  if (keepAliveTimer !== null) {
+    clearInterval(keepAliveTimer);
+    keepAliveTimer = null;
+  }
+  if (typeof document !== 'undefined') {
+    document.removeEventListener('visibilitychange', onVisible);
+  }
+}
+
+export { authFetch, ensureFreshAccessToken, refreshAccessToken };
 
 // ---- Dashboard management (list / create / edit / delete / import / export)
 //
@@ -2036,10 +2491,7 @@ export interface DashboardListEntry extends DashboardSummary {
 export async function listDashboards(
   includeChildTabs = true,
 ): Promise<DashboardListEntry[]> {
-  const res = await fetch(
-    `${API_BASE}/dashboards/list?include_child_tabs=${includeChildTabs}`,
-    { headers: authHeaders() },
-  );
+  const res = await authFetch(`${API_BASE}/dashboards/list?include_child_tabs=${includeChildTabs}`);
   if (!res.ok) await throwHttpError(res, 'Failed to list dashboards');
   const data = await res.json();
   return Array.isArray(data) ? data : (data?.dashboards ?? []);
@@ -2055,7 +2507,10 @@ export interface ProjectListEntry {
   name: string;
   project_type?: 'basic' | 'advanced';
   is_public?: boolean;
+  /** Creation time, UTC "YYYY-MM-DD HH:MM:SS". */
   registration_time?: string;
+  /** Last modification time, UTC. Empty when never edited since creation. */
+  last_modified?: string;
   yaml_config_path?: string | null;
   data_management_platform_project_url?: string | null;
   permissions?: DashboardPermissions;
@@ -2064,9 +2519,7 @@ export interface ProjectListEntry {
 }
 
 export async function listProjects(): Promise<ProjectListEntry[]> {
-  const res = await fetch(`${API_BASE}/projects/get/all`, {
-    headers: authHeaders(),
-  });
+  const res = await authFetch(`${API_BASE}/projects/get/all`);
   if (!res.ok) return [];
   const data = await res.json();
   return Array.isArray(data) ? data : [];
@@ -2081,9 +2534,7 @@ export async function fetchProject(
 ): Promise<{ project: ProjectListEntry; delta_locations: Record<string, string> }> {
   const params = new URLSearchParams({ project_id: projectId });
   if (options.skipEnrichment) params.set('skip_enrichment', 'true');
-  const res = await fetch(`${API_BASE}/projects/get/from_id?${params}`, {
-    headers: authHeaders(),
-  });
+  const res = await authFetch(`${API_BASE}/projects/get/from_id?${params}`);
   if (!res.ok) await throwHttpError(res, `Failed to fetch project ${projectId}`);
   const data = await res.json();
   // skip_enrichment=true returns the project dict directly; the default
@@ -2164,9 +2615,7 @@ export interface IngestionReport {
 export async function fetchIngestionReport(
   projectId: string,
 ): Promise<IngestionReport> {
-  const res = await fetch(`${API_BASE}/projects/ingestion-report/${projectId}`, {
-    headers: authHeaders(),
-  });
+  const res = await authFetch(`${API_BASE}/projects/ingestion-report/${projectId}`);
   if (!res.ok) await throwHttpError(res, `Failed to fetch ingestion report ${projectId}`);
   return (await res.json()) as IngestionReport;
 }
@@ -2176,9 +2625,7 @@ export async function fetchIngestionReport(
 export async function fetchIngestionHealth(
   projectId: string,
 ): Promise<IngestionSummary> {
-  const res = await fetch(`${API_BASE}/projects/ingestion-health/${projectId}`, {
-    headers: authHeaders(),
-  });
+  const res = await authFetch(`${API_BASE}/projects/ingestion-health/${projectId}`);
   if (!res.ok) await throwHttpError(res, `Failed to fetch ingestion health ${projectId}`);
   return (await res.json()) as IngestionSummary;
 }
@@ -2197,9 +2644,7 @@ export interface RegisteredFile {
 export async function fetchDataCollectionFiles(
   dataCollectionId: string,
 ): Promise<RegisteredFile[]> {
-  const res = await fetch(`${API_BASE}/files/list/${dataCollectionId}`, {
-    headers: authHeaders(),
-  });
+  const res = await authFetch(`${API_BASE}/files/list/${dataCollectionId}`);
   if (!res.ok) await throwHttpError(res, `Failed to list files for ${dataCollectionId}`);
   return (await res.json()) as RegisteredFile[];
 }
@@ -2246,9 +2691,8 @@ export async function createProject(
     permissions: { owners: [ownerEntry], editors: [], viewers: [] },
     workflows: [],
   };
-  const res = await fetch(`${API_BASE}/projects/create`, {
+  const res = await authFetch(`${API_BASE}/projects/create`, {
     method: 'POST',
-    headers: authHeaders(),
     body: JSON.stringify(payload),
   });
   if (!res.ok) await throwHttpError(res, 'Failed to create project');
@@ -2274,9 +2718,8 @@ export async function updateProject(
 ): Promise<void> {
   const { project } = await fetchProject(projectId, { skipEnrichment: true });
   const merged: Record<string, unknown> = { ...project, ...input };
-  const res = await fetch(`${API_BASE}/projects/update`, {
+  const res = await authFetch(`${API_BASE}/projects/update`, {
     method: 'PUT',
-    headers: authHeaders(),
     body: JSON.stringify(merged),
   });
   if (!res.ok) await throwHttpError(res, 'Failed to update project');
@@ -2286,9 +2729,8 @@ export async function updateProject(
  *  data collections, runs, MultiQC, JBrowse refs, AND child dashboards. */
 export async function deleteProject(projectId: string): Promise<void> {
   const params = new URLSearchParams({ project_id: projectId });
-  const res = await fetch(`${API_BASE}/projects/delete?${params}`, {
+  const res = await authFetch(`${API_BASE}/projects/delete?${params}`, {
     method: 'DELETE',
-    headers: authHeaders(),
   });
   if (!res.ok) await throwHttpError(res, 'Failed to delete project');
 }
@@ -2298,9 +2740,9 @@ export async function toggleProjectVisibility(
   isPublic: boolean,
 ): Promise<void> {
   const params = new URLSearchParams({ is_public: isPublic ? 'true' : 'false' });
-  const res = await fetch(
+  const res = await authFetch(
     `${API_BASE}/projects/toggle_public_private/${projectId}?${params}`,
-    { method: 'POST', headers: authHeaders() },
+    { method: 'POST', },
   );
   if (!res.ok) await throwHttpError(res, 'Failed to toggle project visibility');
 }
@@ -2317,9 +2759,8 @@ export interface ProjectPermissionsInput {
 export async function updateProjectPermissions(
   input: ProjectPermissionsInput,
 ): Promise<void> {
-  const res = await fetch(`${API_BASE}/projects/update_project_permissions`, {
+  const res = await authFetch(`${API_BASE}/projects/update_project_permissions`, {
     method: 'POST',
-    headers: authHeaders(),
     body: JSON.stringify(input),
   });
   if (!res.ok) await throwHttpError(res, 'Failed to update permissions');
@@ -2335,14 +2776,10 @@ export async function importProjectZip(
   const formData = new FormData();
   formData.append('file', file);
   const params = new URLSearchParams({ overwrite: overwrite ? 'true' : 'false' });
-  // Build headers WITHOUT Content-Type — the browser stamps the multipart
-  // boundary automatically when given a FormData body. Strip it from the
-  // shared authHeaders() to avoid corrupting the multipart frame.
-  const headers = { ...authHeaders() } as Record<string, string>;
-  delete headers['Content-Type'];
-  const res = await fetch(`${API_BASE}/migrate/import-project-zip?${params}`, {
+  // No Content-Type: the browser stamps the multipart boundary itself for a
+  // FormData body, and authFetch only defaults the header for string bodies.
+  const res = await authFetch(`${API_BASE}/migrate/import-project-zip?${params}`, {
     method: 'POST',
-    headers,
     body: formData,
   });
   if (!res.ok) await throwHttpError(res, 'Failed to import project');
@@ -2358,9 +2795,7 @@ export async function fetchUserByEmail(email: string): Promise<{
   is_admin?: boolean;
 } | null> {
   const params = new URLSearchParams({ email });
-  const res = await fetch(`${API_BASE}/auth/fetch_user/from_email?${params}`, {
-    headers: authHeaders(),
-  });
+  const res = await authFetch(`${API_BASE}/auth/fetch_user/from_email?${params}`);
   if (res.status === 404) return null;
   if (!res.ok) await throwHttpError(res, 'User lookup failed');
   const data = await res.json();
@@ -2377,9 +2812,8 @@ export async function fetchUserByEmail(email: string): Promise<{
  *  wrap it in a Blob and trigger a browser download. Mirrors the Dash
  *  flow at projects.py:2360 (`/migrate/export-project`). */
 export async function exportProjectZip(projectId: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/migrate/export-project`, {
+  const res = await authFetch(`${API_BASE}/migrate/export-project`, {
     method: 'POST',
-    headers: authHeaders(),
     body: JSON.stringify({ project_id: projectId, mode: 'all' }),
   });
   if (!res.ok) await throwHttpError(res, 'Failed to export project');
@@ -2441,10 +2875,7 @@ export async function fetchMultiQCByDataCollection(
   dcId: string,
   limit = 50,
 ): Promise<MultiQCReportsList> {
-  const res = await fetch(
-    `${API_BASE}/multiqc/reports/data-collection/${dcId}?limit=${limit}`,
-    { headers: authHeaders() },
-  );
+  const res = await authFetch(`${API_BASE}/multiqc/reports/data-collection/${dcId}?limit=${limit}`);
   if (!res.ok) await throwHttpError(res, 'Failed to fetch MultiQC reports');
   return res.json();
 }
@@ -2454,9 +2885,8 @@ export async function renameDataCollection(
   dcId: string,
   newTag: string,
 ): Promise<void> {
-  const res = await fetch(`${API_BASE}/datacollections/${dcId}/name`, {
+  const res = await authFetch(`${API_BASE}/datacollections/${dcId}/name`, {
     method: 'PUT',
-    headers: authHeaders(),
     body: JSON.stringify({ new_name: newTag }),
   });
   if (!res.ok) await throwHttpError(res, 'Failed to rename data collection');
@@ -2464,9 +2894,8 @@ export async function renameDataCollection(
 
 /** Delete a data collection by ID. Cascades to files, delta tables, runs. */
 export async function deleteDataCollection(dcId: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/datacollections/${dcId}`, {
+  const res = await authFetch(`${API_BASE}/datacollections/${dcId}`, {
     method: 'DELETE',
-    headers: authHeaders(),
   });
   if (!res.ok) await throwHttpError(res, 'Failed to delete data collection');
 }
@@ -2514,13 +2943,8 @@ export async function createDataCollectionFromUpload(
   if (input.lonColumn) fd.append('lon_column', input.lonColumn);
   fd.append('file', input.file, input.file.name);
 
-  // Strip Content-Type so the browser sets the multipart boundary itself.
-  const headers = authHeaders();
-  delete headers['Content-Type'];
-
-  const res = await fetch(`${API_BASE}/datacollections/create_from_upload`, {
+  const res = await authFetch(`${API_BASE}/datacollections/create_from_upload`, {
     method: 'POST',
-    headers,
     body: fd,
   });
   if (!res.ok) {
@@ -2575,9 +2999,8 @@ export async function createDashboard(input: CreateDashboardInput): Promise<stri
     is_main_tab: true,
     tab_order: 0,
   };
-  const res = await fetch(`${API_BASE}/dashboards/save/${newId}`, {
+  const res = await authFetch(`${API_BASE}/dashboards/save/${newId}`, {
     method: 'POST',
-    headers: authHeaders(),
     body: JSON.stringify(payload),
   });
   if (!res.ok) await throwHttpError(res, 'Failed to create dashboard');
@@ -2598,18 +3021,16 @@ export async function editDashboard(
   dashboardId: string,
   input: EditDashboardInput,
 ): Promise<void> {
-  const res = await fetch(`${API_BASE}/dashboards/edit/${dashboardId}`, {
+  const res = await authFetch(`${API_BASE}/dashboards/edit/${dashboardId}`, {
     method: 'POST',
-    headers: authHeaders(),
     body: JSON.stringify(input),
   });
   if (!res.ok) await throwHttpError(res, 'Failed to edit dashboard');
 }
 
 export async function deleteDashboard(dashboardId: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/dashboards/delete/${dashboardId}`, {
+  const res = await authFetch(`${API_BASE}/dashboards/delete/${dashboardId}`, {
     method: 'DELETE',
-    headers: authHeaders(),
   });
   if (!res.ok) await throwHttpError(res, 'Failed to delete dashboard');
 }
@@ -2643,9 +3064,8 @@ export async function duplicateDashboard(sourceDashboardId: string): Promise<str
     last_saved_ts: '',
   };
 
-  const res = await fetch(`${API_BASE}/dashboards/save/${newId}`, {
+  const res = await authFetch(`${API_BASE}/dashboards/save/${newId}`, {
     method: 'POST',
-    headers: authHeaders(),
     body: JSON.stringify(payload),
   });
   if (!res.ok) await throwHttpError(res, 'Failed to duplicate dashboard');
@@ -2654,9 +3074,7 @@ export async function duplicateDashboard(sourceDashboardId: string): Promise<str
   // is itself a child tab — in that case there's nothing to enumerate, so we
   // silently swallow non-2xx responses.
   try {
-    const tabsRes = await fetch(`${API_BASE}/dashboards/tabs/${sourceDashboardId}`, {
-      headers: authHeaders(),
-    });
+    const tabsRes = await authFetch(`${API_BASE}/dashboards/tabs/${sourceDashboardId}`);
     if (tabsRes.ok) {
       const tabsData = (await tabsRes.json()) as {
         child_tabs?: Array<{ dashboard_id: string; tab_order?: number; title?: string }>;
@@ -2680,9 +3098,8 @@ export async function duplicateDashboard(sourceDashboardId: string): Promise<str
           tab_order: child.tab_order ?? (childSource.tab_order as number) ?? 0,
           last_saved_ts: '',
         };
-        const childRes = await fetch(`${API_BASE}/dashboards/save/${newChildId}`, {
+        const childRes = await authFetch(`${API_BASE}/dashboards/save/${newChildId}`, {
           method: 'POST',
-          headers: authHeaders(),
           body: JSON.stringify(childPayload),
         });
         if (!childRes.ok) {
@@ -2724,11 +3141,10 @@ export async function importDashboardJson(
     params.set('validate_integrity', String(opts.validateIntegrity));
   }
   const qs = params.toString();
-  const res = await fetch(
+  const res = await authFetch(
     `${API_BASE}/dashboards/import/json${qs ? `?${qs}` : ''}`,
     {
       method: 'POST',
-      headers: authHeaders(),
       body: JSON.stringify(jsonContent),
     },
   );
@@ -2745,10 +3161,11 @@ export async function importDashboardYaml(
   if (opts.projectId) params.set('project_id', opts.projectId);
   if (opts.overwrite !== undefined) params.set('overwrite', String(opts.overwrite));
   const qs = params.toString();
-  const headers: Record<string, string> = { ...authHeaders(), 'Content-Type': 'text/plain' };
-  const res = await fetch(
+  const res = await authFetch(
     `${API_BASE}/dashboards/import/yaml${qs ? `?${qs}` : ''}`,
-    { method: 'POST', headers, body: yamlContent },
+    // Explicit Content-Type — the body is raw YAML, which authFetch would
+    // otherwise default to application/json.
+    { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: yamlContent },
   );
   if (!res.ok) await throwHttpDetailError(res, 'Failed to import YAML dashboard');
   return res.json();
@@ -2759,9 +3176,8 @@ export async function importDashboardYaml(
 export async function validateDashboardJson(
   jsonContent: Record<string, unknown>,
 ): Promise<{ valid: boolean; errors?: unknown[] }> {
-  const res = await fetch(`${API_BASE}/dashboards/json/validate`, {
+  const res = await authFetch(`${API_BASE}/dashboards/json/validate`, {
     method: 'POST',
-    headers: authHeaders(),
     body: JSON.stringify(jsonContent),
   });
   if (!res.ok) return { valid: false, errors: [`HTTP ${res.status}`] };
@@ -2772,9 +3188,7 @@ export async function validateDashboardJson(
 export async function exportDashboardJson(
   dashboardId: string,
 ): Promise<Record<string, unknown>> {
-  const res = await fetch(`${API_BASE}/dashboards/${dashboardId}/json`, {
-    headers: authHeaders(),
-  });
+  const res = await authFetch(`${API_BASE}/dashboards/${dashboardId}/json`);
   if (!res.ok) await throwHttpError(res, 'Failed to export dashboard');
   return res.json();
 }
@@ -2800,16 +3214,15 @@ export interface AdminUser {
 }
 
 export async function listAllUsers(): Promise<AdminUser[]> {
-  const res = await fetch(`${API_BASE}/auth/list`, { headers: authHeaders() });
+  const res = await authFetch(`${API_BASE}/auth/list`);
   if (!res.ok) await throwHttpError(res, 'Failed to list users');
   const data = await res.json();
   return Array.isArray(data) ? data : [];
 }
 
 export async function deleteUser(userId: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/auth/delete/${userId}`, {
+  const res = await authFetch(`${API_BASE}/auth/delete/${userId}`, {
     method: 'DELETE',
-    headers: authHeaders(),
   });
   if (!res.ok) await throwHttpError(res, 'Failed to delete user');
 }
@@ -2819,9 +3232,9 @@ export async function deleteUser(userId: string): Promise<void> {
  *  the Dash callback). We send the Python-style capitalized form for parity. */
 export async function setUserAdmin(userId: string, isAdmin: boolean): Promise<void> {
   const flag = isAdmin ? 'True' : 'False';
-  const res = await fetch(
+  const res = await authFetch(
     `${API_BASE}/auth/turn_sysadmin/${userId}/${flag}`,
-    { method: 'POST', headers: authHeaders() },
+    { method: 'POST', },
   );
   if (!res.ok) await throwHttpError(res, 'Failed to update admin status');
 }
@@ -2841,7 +3254,7 @@ export interface AdminProject {
 }
 
 export async function listAllProjects(): Promise<AdminProject[]> {
-  const res = await fetch(`${API_BASE}/projects/get/all`, { headers: authHeaders() });
+  const res = await authFetch(`${API_BASE}/projects/get/all`);
   if (!res.ok) await throwHttpError(res, 'Failed to list all projects');
   const data = await res.json();
   return Array.isArray(data) ? data : [];
@@ -2867,9 +3280,7 @@ export async function listAllDashboards(
   includeChildTabs = false,
 ): Promise<AdminDashboard[]> {
   const qs = includeChildTabs ? '?include_child_tabs=true' : '';
-  const res = await fetch(`${API_BASE}/dashboards/list_all${qs}`, {
-    headers: authHeaders(),
-  });
+  const res = await authFetch(`${API_BASE}/dashboards/list_all${qs}`);
   if (!res.ok) await throwHttpError(res, 'Failed to list all dashboards');
   const data = await res.json();
   return Array.isArray(data) ? data : [];
@@ -2883,21 +3294,210 @@ export interface ExampleProject {
 }
 
 export async function listExampleProjects(): Promise<ExampleProject[]> {
-  const res = await fetch(`${API_BASE}/projects/admin/examples`, { headers: authHeaders() });
+  const res = await authFetch(`${API_BASE}/projects/admin/examples`);
   if (!res.ok) await throwHttpError(res, 'Failed to list example projects');
   const data = await res.json();
   return Array.isArray(data) ? data : [];
 }
 
 export async function cleanExampleProjects(): Promise<{ deleted: ExampleProject[] }> {
-  const res = await fetch(`${API_BASE}/projects/admin/clean_examples`, {
+  const res = await authFetch(`${API_BASE}/projects/admin/clean_examples`, {
     method: 'POST',
-    headers: authHeaders(),
   });
   if (!res.ok) await throwHttpError(res, 'Failed to clean example projects');
   const data = await res.json();
   const deleted = Array.isArray(data?.deleted) ? (data.deleted as ExampleProject[]) : [];
   return { deleted };
+}
+
+// ---- Admin "Log & Task" monitoring (/monitoring) ------------------------
+//
+// Back the admin Monitoring tab. All read endpoints are admin-gated server
+// side and 404 in public/demo mode; the SPA hides the tab in those modes too.
+
+/** A persisted Celery task lifecycle record. */
+export interface MonitoringTaskEvent {
+  task_id: string;
+  task_name: string;
+  kind: 'figure' | 'screenshot' | 'multiqc' | 'advanced_viz' | 'deltatable' | 'other';
+  status: 'pending' | 'started' | 'success' | 'failure' | 'retry' | 'revoked';
+  args_repr?: string;
+  dashboard_id?: string | null;
+  dc_id?: string | null;
+  queue?: string | null;
+  worker?: string | null;
+  started_at?: string | null;
+  finished_at?: string | null;
+  duration_ms?: number | null;
+  error?: string | null;
+  traceback?: string | null;
+  result_summary?: string | null;
+  logs?: string[];
+  created_at?: string;
+  updated_at?: string;
+}
+
+/** A CLI ingestion-run record. */
+export interface MonitoringIngestionRun {
+  run_id: string;
+  source?: 'cli' | 'ui';
+  cli_instance_label?: string | null;
+  cli_hostname?: string | null;
+  cli_version?: string | null;
+  user_id?: string | null;
+  email?: string | null;
+  project_id?: string | null;
+  project_name?: string | null;
+  command: string;
+  command_line?: string | null;
+  cli_config_path?: string | null;
+  project_config_path?: string | null;
+  data_root?: string | null;
+  data_collections?: MonitoringIngestionDataCollection[];
+  status: 'running' | 'success' | 'partial' | 'failed';
+  steps?: { name: string; status: string; detail?: string | null }[];
+  /** Step currently running (live async ingestion); null for finished runs. */
+  current_step?: string | null;
+  error?: string | null;
+  started_at?: string;
+  finished_at?: string | null;
+}
+
+/** Per-data-collection summary + local scan paths captured for an ingestion run. */
+export interface MonitoringIngestionDataCollection {
+  tag: string;
+  type?: string | null;
+  format?: string | null;
+  scan_mode?: string | null;
+  scan_pattern?: string | null;
+  locations?: string[];
+  file_count?: number | null;
+}
+
+/** A recent application log line from the capped collection. */
+export interface MonitoringAppLog {
+  ts: string;
+  level: string;
+  logger: string;
+  source: 'api' | 'celery';
+  message: string;
+  pathname?: string | null;
+  lineno?: number | null;
+}
+
+/** Live worker/broker health snapshot. */
+export interface MonitoringHealth {
+  status: string;
+  hostname?: string;
+  workers: string[];
+  worker_count: number;
+  active_count: number;
+  events_enabled: boolean;
+  live_updates: boolean;
+}
+
+/** Monitoring calls go through ``authFetch``, as every endpoint here now does.
+ *  The admin "Log & Task" tab is the surface that made it necessary: it polls
+ *  unattended for hours, so an access token attached without an expiry check
+ *  lapses mid-session and every poll then 401s with FastAPI's "Invalid token",
+ *  with nothing to trigger a refresh. */
+function monitoringQuery(params: Record<string, string | number | undefined>): string {
+  const qs = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== '') qs.set(key, String(value));
+  }
+  const s = qs.toString();
+  return s ? `?${s}` : '';
+}
+
+export async function fetchMonitoringTasks(opts: {
+  status?: string;
+  kind?: string;
+  sinceSeconds?: number;
+  limit?: number;
+  skip?: number;
+} = {}): Promise<MonitoringTaskEvent[]> {
+  const qs = monitoringQuery({
+    status: opts.status,
+    kind: opts.kind,
+    since_seconds: opts.sinceSeconds,
+    limit: opts.limit,
+    skip: opts.skip,
+  });
+  const res = await authFetch(`${API_BASE}/monitoring/tasks${qs}`);
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to load tasks');
+  const data = await res.json();
+  return Array.isArray(data?.tasks) ? (data.tasks as MonitoringTaskEvent[]) : [];
+}
+
+export async function fetchMonitoringTask(taskId: string): Promise<MonitoringTaskEvent> {
+  const res = await authFetch(`${API_BASE}/monitoring/tasks/${taskId}`);
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to load task');
+  return (await res.json()) as MonitoringTaskEvent;
+}
+
+export async function fetchIngestionRuns(opts: {
+  instance?: string;
+  status?: string;
+  projectId?: string;
+  limit?: number;
+  skip?: number;
+} = {}): Promise<MonitoringIngestionRun[]> {
+  const qs = monitoringQuery({
+    instance: opts.instance,
+    status: opts.status,
+    project_id: opts.projectId,
+    limit: opts.limit,
+    skip: opts.skip,
+  });
+  const res = await authFetch(`${API_BASE}/monitoring/ingestion${qs}`);
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to load ingestion runs');
+  const data = await res.json();
+  return Array.isArray(data?.runs) ? (data.runs as MonitoringIngestionRun[]) : [];
+}
+
+export async function fetchIngestionRun(runId: string): Promise<MonitoringIngestionRun> {
+  const res = await authFetch(`${API_BASE}/monitoring/ingestion/${runId}`);
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to load ingestion run');
+  return (await res.json()) as MonitoringIngestionRun;
+}
+
+export async function fetchAppLogs(opts: {
+  level?: string;
+  source?: string;
+  limit?: number;
+} = {}): Promise<MonitoringAppLog[]> {
+  const qs = monitoringQuery({ level: opts.level, source: opts.source, limit: opts.limit });
+  const res = await authFetch(`${API_BASE}/monitoring/logs${qs}`);
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to load logs');
+  const data = await res.json();
+  return Array.isArray(data?.logs) ? (data.logs as MonitoringAppLog[]) : [];
+}
+
+export async function fetchMonitoringHealth(): Promise<MonitoringHealth> {
+  const res = await authFetch(`${API_BASE}/monitoring/health`);
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to load monitoring health');
+  return (await res.json()) as MonitoringHealth;
+}
+
+/** Read the current app-log capture floor (admin-only). */
+export async function fetchLogCaptureLevel(): Promise<string> {
+  const res = await authFetch(`${API_BASE}/monitoring/logs/level`);
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to load log level');
+  const data = await res.json();
+  return typeof data?.level === 'string' ? data.level : 'WARNING';
+}
+
+/** Set the runtime app-log capture floor (admin-only). Applies live in the API
+ *  process and is broadcast best-effort to Celery workers. */
+export async function setLogCaptureLevel(level: string): Promise<string> {
+  const res = await authFetch(`${API_BASE}/monitoring/logs/level`, {
+    method: 'POST',
+    body: JSON.stringify({ level }),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to set log level');
+  const data = await res.json();
+  return typeof data?.level === 'string' ? data.level : level;
 }
 
 // ---- Profile + CLI token management (/profile, /cli-agents) -----
@@ -2922,7 +3522,7 @@ export interface ProfileUser {
 }
 
 export async function fetchCurrentUserFull(): Promise<ProfileUser | null> {
-  const res = await fetch(`${API_BASE}/auth/me`, { headers: authHeaders() });
+  const res = await authFetch(`${API_BASE}/auth/me`);
   if (!res.ok) return null;
   const data = (await res.json()) as Record<string, unknown>;
   if (!data || typeof data.email !== 'string') return null;
@@ -2941,9 +3541,8 @@ export async function fetchCurrentUserFull(): Promise<ProfileUser | null> {
  *  server-side and rejects equal old/new. Throws Error(<detail>) on non-200
  *  so the caller can surface the message verbatim. */
 export async function editPassword(oldPassword: string, newPassword: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/auth/edit_password`, {
+  const res = await authFetch(`${API_BASE}/auth/edit_password`, {
     method: 'POST',
-    headers: authHeaders(),
     body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }),
   });
   if (!res.ok) await throwHttpDetailError(res, 'Password update failed');
@@ -2962,9 +3561,7 @@ export interface CliToken {
 
 export async function listLongLivedTokens(): Promise<CliToken[]> {
   const params = new URLSearchParams({ token_lifetime: 'long-lived' });
-  const res = await fetch(`${API_BASE}/auth/list_tokens?${params.toString()}`, {
-    headers: authHeaders(),
-  });
+  const res = await authFetch(`${API_BASE}/auth/list_tokens?${params.toString()}`);
   if (!res.ok) await throwHttpError(res, 'Failed to list tokens');
   const data = await res.json();
   if (!Array.isArray(data)) return [];
@@ -2993,9 +3590,8 @@ export interface CreatedToken {
 }
 
 export async function createLongLivedToken(name: string): Promise<CreatedToken> {
-  const res = await fetch(`${API_BASE}/auth/me/tokens`, {
+  const res = await authFetch(`${API_BASE}/auth/me/tokens`, {
     method: 'POST',
-    headers: authHeaders(),
     body: JSON.stringify({ name }),
   });
   if (!res.ok) await throwHttpDetailError(res, 'Failed to create token');
@@ -3014,9 +3610,8 @@ export async function createLongLivedToken(name: string): Promise<CreatedToken> 
 }
 
 export async function deleteLongLivedToken(tokenId: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/auth/me/tokens/${encodeURIComponent(tokenId)}`, {
+  const res = await authFetch(`${API_BASE}/auth/me/tokens/${encodeURIComponent(tokenId)}`, {
     method: 'DELETE',
-    headers: authHeaders(),
   });
   if (!res.ok) await throwHttpDetailError(res, 'Failed to delete token');
 }
@@ -3027,9 +3622,8 @@ export async function deleteLongLivedToken(tokenId: string): Promise<void> {
 export type CliAgentConfig = Record<string, unknown>;
 
 export async function generateAgentConfig(token: CreatedToken): Promise<CliAgentConfig> {
-  const res = await fetch(`${API_BASE}/auth/generate_agent_config`, {
+  const res = await authFetch(`${API_BASE}/auth/generate_agent_config`, {
     method: 'POST',
-    headers: authHeaders(),
     body: JSON.stringify({
       user_id: token.user_id,
       access_token: token.access_token,
@@ -3101,10 +3695,6 @@ export interface ResolverInfo {
 }
 
 export async function listProjectLinks(projectId: string): Promise<DCLink[]> {
-  // Use authFetch (not raw fetch + authHeaders) so a stale access_token gets
-  // silently refreshed and retried instead of bubbling up as a 401 "Invalid
-  // token". The links endpoint uses strict get_current_user — there's no
-  // anonymous fallback to recover from a bad header.
   const res = await authFetch(`${API_BASE}/links/${projectId}`);
   if (!res.ok) await throwHttpError(res, 'Failed to list project links');
   const body = await res.json();
@@ -3192,9 +3782,7 @@ function normalizeResolver(item: unknown): ResolverInfo | null {
 }
 
 export async function listLinkResolvers(projectId: string): Promise<ResolverInfo[]> {
-  const res = await fetch(`${API_BASE}/links/${projectId}/resolvers`, {
-    headers: authHeaders(),
-  });
+  const res = await authFetch(`${API_BASE}/links/${projectId}/resolvers`);
   if (!res.ok) await throwHttpError(res, 'Failed to list resolvers');
   const body = await res.json();
   const raw: unknown[] = Array.isArray(body) ? body : (body?.resolvers ?? []);
@@ -3209,10 +3797,7 @@ export async function fetchMultiQCSampleMappings(
   projectId: string,
   dcId: string,
 ): Promise<Record<string, string[]>> {
-  const res = await fetch(
-    `${API_BASE}/links/${projectId}/multiqc/${dcId}/sample-mappings`,
-    { headers: authHeaders() },
-  );
+  const res = await authFetch(`${API_BASE}/links/${projectId}/multiqc/${dcId}/sample-mappings`);
   if (!res.ok) await throwHttpError(res, 'Failed to fetch sample mappings');
   const body = await res.json();
   if (body?.sample_mappings && typeof body.sample_mappings === 'object') {
@@ -3256,10 +3841,7 @@ async function postMultiQCUpload(
   for (const [key, value] of Object.entries(extraFields)) fd.append(key, value);
   for (const file of files) fd.append('files', file, file.name);
 
-  const headers = authHeaders();
-  delete headers['Content-Type'];
-
-  const res = await fetch(url, { method: 'POST', headers, body: fd });
+  const res = await authFetch(url, { method: 'POST', body: fd });
   if (!res.ok) await throwHttpDetailError(res, 'MultiQC upload failed');
   return (await res.json()) as MultiQCMutationResult;
 }
@@ -3294,11 +3876,8 @@ export async function checkMultiQCUniformity(
 ): Promise<MultiQCUniformityCheckResult> {
   const fd = new FormData();
   for (const file of files) fd.append('files', file, file.name);
-  const headers = authHeaders();
-  delete headers['Content-Type'];
-  const res = await fetch(`${API_BASE}/datacollections/multiqc_uniformity_check`, {
+  const res = await authFetch(`${API_BASE}/datacollections/multiqc_uniformity_check`, {
     method: 'POST',
-    headers,
     body: fd,
   });
   if (!res.ok) await throwHttpDetailError(res, 'MultiQC uniformity check failed');
@@ -3353,10 +3932,7 @@ async function postTableUpload(url: string, files: File[]): Promise<TableMutatio
   const fd = new FormData();
   for (const file of files) fd.append('files', file, file.name);
 
-  const headers = authHeaders();
-  delete headers['Content-Type'];
-
-  const res = await fetch(url, { method: 'POST', headers, body: fd });
+  const res = await authFetch(url, { method: 'POST', body: fd });
   if (!res.ok) await throwHttpDetailError(res, 'Table upload failed');
   return (await res.json()) as TableMutationResult;
 }

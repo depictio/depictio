@@ -19,7 +19,9 @@ import pytest
 
 from depictio.cli.cli.utils.templates import (
     _apply_conditionals,
+    _resolve_template_id_in,
     _strip_ids,
+    latest_template_version,
     locate_template,
     substitute_template_variables,
 )
@@ -36,6 +38,40 @@ class TestLocateTemplate:
         """Unknown template ID raises FileNotFoundError with a helpful message."""
         with pytest.raises(FileNotFoundError, match="not found"):
             locate_template("nonexistent/pipeline/9.9.9")
+
+
+class TestLatestTemplateVersion:
+    @staticmethod
+    def _make_versions(root: Path, pipeline: str, versions: list[str]) -> Path:
+        pipeline_dir = root / pipeline
+        for version in versions:
+            (pipeline_dir / version).mkdir(parents=True)
+            (pipeline_dir / version / "template.yaml").write_text("template: {}\n")
+        return pipeline_dir
+
+    def test_picks_highest_numeric_version_with_template(self, tmp_path: Path) -> None:
+        # 2.9.0 < 2.16.0 numerically even though "2.9.0" > "2.16.0" as a string.
+        pipeline_dir = self._make_versions(tmp_path, "ampliseq", ["2.14.0", "2.9.0", "2.16.0"])
+        (pipeline_dir / "recipes").mkdir()  # non-version dir must not win
+        (pipeline_dir / "9.9.9").mkdir()  # version dir without template.yaml
+        assert latest_template_version(pipeline_dir) == "2.16.0"
+        assert latest_template_version(tmp_path / "missing") is None
+
+    def test_resolve_template_id_latest_versionless_and_passthrough(self, tmp_path: Path) -> None:
+        self._make_versions(tmp_path / "nf-core", "ampliseq", ["2.14.0", "2.16.0"])
+        assert _resolve_template_id_in(tmp_path, "nf-core/ampliseq/latest") == (
+            "nf-core/ampliseq/2.16.0"
+        )
+        assert _resolve_template_id_in(tmp_path, "nf-core/ampliseq") == "nf-core/ampliseq/2.16.0"
+        # Explicit versions, unversioned projects and unresolvable ids pass through
+        # untouched (locate_template's own not-found error then fires).
+        assert _resolve_template_id_in(tmp_path, "nf-core/ampliseq/2.14.0") == (
+            "nf-core/ampliseq/2.14.0"
+        )
+        (tmp_path / "init" / "iris").mkdir(parents=True)
+        (tmp_path / "init" / "iris" / "project.yaml").write_text("name: iris\n")
+        assert _resolve_template_id_in(tmp_path, "init/iris") == "init/iris"
+        assert _resolve_template_id_in(tmp_path, "nope/nothing/latest") == "nope/nothing/latest"
 
 
 class TestSubstituteTemplateVariables:

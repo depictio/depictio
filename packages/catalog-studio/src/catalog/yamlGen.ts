@@ -8,18 +8,35 @@
 import type { CardRender, OutputMeta, RenderSpec, ToolMeta } from '../types';
 import { canonicalNfCoreUrl } from './fromNfCore';
 
-/** True if a scalar can be emitted plain (no quotes) in YAML flow context. */
+/** Words PyYAML's implicit resolvers turn into booleans or null. */
+const YAML_BOOL_OR_NULL = /^(y|yes|n|no|true|false|on|off|null|~)$/i;
+
+/** True if a scalar can be emitted plain (no quotes) in YAML flow context.
+ *
+ *  The leading character MUST be a letter or `_`. That is the whole point: every
+ *  scalar PyYAML resolves to a non-string starts with a digit, sign, dot or
+ *  tilde — `30`, `1.5`, `.inf`, `2024-01-01` (a date), `12:30` (sexagesimal).
+ *  Emitting those plain produced `dict_kwargs: {nbinsx: 30}`, which the catalog
+ *  model (`dict_kwargs: dict[str, str]`) rejects outright, since Pydantic v2
+ *  does not coerce int/bool → str. Letters/digits/_-./: after the first char
+ *  keep URLs (https://…) unquoted; spaces and globs (`*`) still get quoted, and
+ *  no `: ` (colon-space) can occur since spaces aren't allowed — safe in both
+ *  block and flow contexts.
+ */
 function isPlainSafe(s: string): boolean {
-  // Letters/digits/_-./: — enough to keep URLs (https://…) unquoted while still
-  // quoting spaced names and globs (`*`). No `: ` (colon-space) can occur since
-  // spaces aren't allowed, so this is safe in both block and flow contexts.
-  return /^[A-Za-z0-9_][A-Za-z0-9_.\-/:]*$/.test(s);
+  if (!/^[A-Za-z_][A-Za-z0-9_.\-/:]*$/.test(s)) return false;
+  return !YAML_BOOL_OR_NULL.test(s);
 }
 
 /** Serialize a scalar for a YAML flow mapping value. */
 function flowScalar(v: string): string {
   if (isPlainSafe(v)) return v;
   return JSON.stringify(v); // valid YAML double-quoted string
+}
+
+/** `[a, b]` flow sequence of scalars (e.g. a card's `attrition_cols`). */
+function flowList(values: string[]): string {
+  return `[${values.map(flowScalar).join(', ')}]`;
 }
 
 /** `{k1: v1, k2: v2}` flow mapping from ordered [key, value] pairs. */
@@ -43,17 +60,16 @@ export function renderToFlow(render: RenderSpec): string {
     return `{ ${idp}component: figure, visu_type: ${render.visu_type}, dict_kwargs: ${kwargs} }`;
   }
   if (render.component === 'card') {
-    const parts: [string, string][] = [
+    const head: [string, string][] = [
       ['component', 'card'],
       ['column', render.column],
       ['aggregation', render.aggregation],
     ];
-    if (render.aggregations?.length) {
-      // aggregations is a flow SEQUENCE, not a mapping — emit inline.
-      const seq = `[${render.aggregations.join(', ')}]`;
-      return `{ ${idp}${parts.map(([k, v]) => `${k}: ${flowScalar(v)}`).join(', ')}, aggregations: ${seq}${cardTailFlow(render)} }`;
-    }
-    return `{ ${idp}${parts.map(([k, v]) => `${k}: ${flowScalar(v)}`).join(', ')}${cardTailFlow(render)} }`;
+    const parts = [
+      ...head.map(([k, v]) => `${k}: ${flowScalar(v)}`),
+      ...cardFieldFragments(render),
+    ];
+    return `{ ${idp}${parts.join(', ')} }`;
   }
   if (render.component === 'table') {
     return `{ ${idp}component: table }`;
@@ -67,15 +83,31 @@ export function renderToFlow(render: RenderSpec): string {
   return `{ ${idp}component: advanced_viz, kind: ${render.kind}, roles: ${roles} }`;
 }
 
-/** Optional card fields (secondary_layout / breakdown_col / top_n_count /
- *  coverage_max) as a trailing flow fragment, each only when set. */
-function cardTailFlow(render: CardRender): string {
+/** Every optional card field, as ordered `key: value` fragments.
+ *
+ *  Single source for both the flow and the block writer — they used to carry
+ *  their own copies of the field list and drifted apart. The set mirrors the
+ *  card block of `Render` in the catalog model; numeric fields are emitted
+ *  unquoted on purpose (the model types them as int/float, unlike dict_kwargs). */
+function cardFieldFragments(render: CardRender): string[] {
   const bits: string[] = [];
+  // aggregations is a flow SEQUENCE, not a mapping.
+  if (render.aggregations?.length) bits.push(`aggregations: [${render.aggregations.join(', ')}]`);
   if (render.secondary_layout) bits.push(`secondary_layout: ${render.secondary_layout}`);
   if (render.breakdown_col) bits.push(`breakdown_col: ${flowScalar(render.breakdown_col)}`);
   if (typeof render.top_n_count === 'number') bits.push(`top_n_count: ${render.top_n_count}`);
   if (typeof render.coverage_max === 'number') bits.push(`coverage_max: ${render.coverage_max}`);
-  return bits.length ? `, ${bits.join(', ')}` : '';
+  if (typeof render.threshold_value === 'number')
+    bits.push(`threshold_value: ${render.threshold_value}`);
+  if (render.threshold_direction)
+    bits.push(`threshold_direction: ${render.threshold_direction}`);
+  if (typeof render.threshold_warn === 'number')
+    bits.push(`threshold_warn: ${render.threshold_warn}`);
+  if (render.attrition_cols?.length)
+    bits.push(`attrition_cols: ${flowList(render.attrition_cols)}`);
+  if (render.trend_col) bits.push(`trend_col: ${flowScalar(render.trend_col)}`);
+  if (render.filter_expr) bits.push(`filter_expr: ${flowScalar(render.filter_expr)}`);
+  return bits;
 }
 
 /** Above this rendered width a flow `{ … }` item is expanded to block YAML so
@@ -98,13 +130,13 @@ function renderToBlock(render: RenderSpec): string[] {
     return lines;
   }
   if (render.component === 'card') {
-    const lines = [...idLine, 'component: card', `column: ${flowScalar(render.column)}`, `aggregation: ${render.aggregation}`];
-    if (render.aggregations?.length) lines.push(`aggregations: [${render.aggregations.join(', ')}]`);
-    if (render.secondary_layout) lines.push(`secondary_layout: ${render.secondary_layout}`);
-    if (render.breakdown_col) lines.push(`breakdown_col: ${flowScalar(render.breakdown_col)}`);
-    if (typeof render.top_n_count === 'number') lines.push(`top_n_count: ${render.top_n_count}`);
-    if (typeof render.coverage_max === 'number') lines.push(`coverage_max: ${render.coverage_max}`);
-    return lines;
+    return [
+      ...idLine,
+      'component: card',
+      `column: ${flowScalar(render.column)}`,
+      `aggregation: ${render.aggregation}`,
+      ...cardFieldFragments(render),
+    ];
   }
   if (render.component === 'advanced_viz') {
     const lines = [...idLine, 'component: advanced_viz', `kind: ${render.kind}`];

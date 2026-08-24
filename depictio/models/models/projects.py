@@ -1,6 +1,5 @@
 import os
 import re
-from datetime import datetime
 from typing import Literal
 
 from beanie import Document
@@ -16,6 +15,7 @@ from depictio.models.models.realtime import RealtimeConfig
 from depictio.models.models.templates import TemplateOrigin
 from depictio.models.models.users import Permission
 from depictio.models.models.workflows import Workflow, WorkflowResponse
+from depictio.models.timestamps import utc_now_str
 
 
 class ProjectPermissionRequest(BaseModel):
@@ -35,9 +35,11 @@ class Project(MongoModel):
     permissions: Permission
     is_public: bool = False
     hash: str | None = None
-    registration_time: str = Field(
-        default_factory=lambda: datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    )
+    # Creation timestamp, UTC, "%Y-%m-%d %H:%M:%S".
+    registration_time: str = Field(default_factory=utc_now_str)
+    # Last modification timestamp, UTC. Stamped by the API on every update;
+    # empty on projects that have never been edited since creation.
+    last_modified: str = ""
     project_type: Literal["basic", "advanced"] = "basic"
     realtime: RealtimeConfig | None = None  # Optional real-time event configuration
     template_origin: TemplateOrigin | None = None  # Tracks if project was created from a template

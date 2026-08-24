@@ -46,7 +46,7 @@ const ProjectsList: React.FC<ProjectsListProps> = ({
   onEdit,
   onDelete,
 }) => {
-  const { prefs, setSearch, setFilters, setOnlyPinned, clearFilters } =
+  const { prefs, setSearch, setFilters, setOnlyPinned, setDensity, clearFilters } =
     useProjectViewPrefs();
   const { pinnedIds, togglePin } = useProjectPins();
 
@@ -227,6 +227,8 @@ const ProjectsList: React.FC<ProjectsListProps> = ({
           isAdmin={isAdmin}
           pinnedIds={pinnedIds}
           pinDisabled={createDisabled}
+          density={prefs.density}
+          onSetDensity={setDensity}
           onView={onView}
           onEdit={onEdit}
           onDelete={onDelete}

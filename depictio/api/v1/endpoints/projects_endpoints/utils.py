@@ -6,6 +6,7 @@ from depictio.api.v1.db import projects_collection
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 from depictio.models.models.projects import Project, ProjectResponse
 from depictio.models.models.users import User
+from depictio.models.timestamps import objectid_creation_str
 
 
 # Core functions
@@ -27,6 +28,14 @@ def _async_get_all_projects(current_user: User, projects_collection) -> list[Pro
 
     projects = list(projects_collection.find(query))
     if projects:
+        # Backfill timestamps for documents written before they were stored:
+        # every ObjectId embeds its generation time, so the listing can always
+        # show a real creation date (issue #932).
+        for project in projects:
+            if not project.get("registration_time"):
+                project["registration_time"] = objectid_creation_str(
+                    project.get("_id")
+                ) or project.get("last_modified", "")
         projects = [ProjectResponse.from_mongo(project) for project in projects]
         return projects
     else:

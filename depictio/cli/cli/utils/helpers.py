@@ -3,6 +3,7 @@ from typing import Any
 from pydantic import validate_call
 
 from depictio.cli.cli.utils.deltatables import client_aggregate_data
+from depictio.cli.cli.utils.ingest_timing import ingest_run
 from depictio.cli.cli.utils.rich_utils import rich_print_checked_statement
 from depictio.cli.cli.utils.scan import scan_files_for_data_collection
 from depictio.cli.cli_logging import logger
@@ -105,12 +106,13 @@ def process_data_collection_helper(
         return result
     elif mode == "process":
         logger.info("{task} data collection...")
-        result = client_aggregate_data(
-            data_collection=dc,
-            CLI_config=CLI_config,
-            command_parameters=command_parameters,
-            workflow=wf,
-        )
+        with ingest_run(dc.data_collection_tag, dc.config.type):
+            result = client_aggregate_data(
+                data_collection=dc,
+                CLI_config=CLI_config,
+                command_parameters=command_parameters,
+                workflow=wf,
+            )
         return result
     else:
         raise ValueError(f"Invalid mode: {mode}. Must be 'scan' or 'process'")

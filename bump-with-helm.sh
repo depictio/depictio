@@ -42,6 +42,14 @@ if git log -1 --pretty=%B | grep -q "Bump version"; then
     git add helm-charts/depictio/Chart.yaml uv.lock
     git commit --amend --no-edit
     # git push && git push --tags
+
+    # bump2version tagged the pre-amend commit, which the amend above orphaned.
+    # Re-point the tag at the amended commit, otherwise v${NEW_VERSION} is not
+    # reachable from main and its tree carries a stale Chart.yaml / uv.lock.
+    if git rev-parse -q --verify "refs/tags/v${NEW_VERSION}" >/dev/null; then
+        TAG_MSG=$(git tag -l --format='%(contents:subject)' "v${NEW_VERSION}")
+        git tag -f -a "v${NEW_VERSION}" -m "${TAG_MSG:-Bump version: ${NEW_VERSION}}" HEAD
+    fi
 fi
 
 # Move the 'stable' tag for non-beta releases

@@ -1,9 +1,11 @@
 """Unit tests for MapLiteComponent model validation."""
 
 import pytest
+import yaml
 from pydantic import ValidationError
 
 from depictio.models.components.lite import MapLiteComponent
+from depictio.models.models.dashboards import DashboardDataLite
 
 # ============================================================================
 # Fixtures
@@ -287,3 +289,195 @@ class TestMapLiteComponentValidation:
                 choropleth_aggregation=agg,
             )
             assert comp.choropleth_aggregation == agg
+
+
+# ============================================================================
+# Placement: grid tile vs floating panel
+# ============================================================================
+
+
+class TestMapLiteComponentPlacement:
+    """A map may be lifted out of the grid into the dashboard-wide floating panel."""
+
+    def test_defaults_to_grid(self, sample_scatter_map: MapLiteComponent):
+        """Floating is opt-in: an unannotated map stays a normal grid tile."""
+        assert sample_scatter_map.placement == "grid"
+        assert sample_scatter_map.floating_initial_state == "compact"
+
+    @pytest.mark.parametrize("placement", ["grid", "floating"])
+    def test_valid_placements(self, placement: str):
+        comp = MapLiteComponent(
+            tag=f"map-{placement}",
+            lat_column="lat",
+            lon_column="lon",
+            placement=placement,
+        )
+        assert comp.placement == placement
+
+    def test_rejects_unknown_placement(self):
+        """'top' is the *interactive* placement — it must not leak onto maps."""
+        with pytest.raises(ValidationError, match="Invalid placement 'top'"):
+            MapLiteComponent(
+                tag="bad-placement",
+                lat_column="lat",
+                lon_column="lon",
+                placement="top",
+            )
+
+    @pytest.mark.parametrize("state", ["compact", "expanded", "docked", "hidden"])
+    def test_valid_floating_initial_states(self, state: str):
+        comp = MapLiteComponent(
+            tag=f"map-{state}",
+            lat_column="lat",
+            lon_column="lon",
+            placement="floating",
+            floating_initial_state=state,
+        )
+        assert comp.floating_initial_state == state
+
+    def test_rejects_unknown_floating_initial_state(self):
+        with pytest.raises(ValidationError, match="Invalid floating_initial_state 'huge'"):
+            MapLiteComponent(
+                tag="bad-state",
+                lat_column="lat",
+                lon_column="lon",
+                placement="floating",
+                floating_initial_state="huge",
+            )
+
+    def test_floating_composes_with_selection(self):
+        """The point of a floating map is cross-filtering, so the two must coexist."""
+        comp = MapLiteComponent(
+            tag="floating-filter",
+            lat_column="lat",
+            lon_column="lon",
+            placement="floating",
+            selection_enabled=True,
+            selection_column="sample_id",
+        )
+        assert comp.placement == "floating"
+        assert comp.selection_enabled is True
+
+
+# ============================================================================
+# Placement round-trips through the dashboard layout and YAML export
+# ============================================================================
+
+
+def _dashboard_with(map_component: dict) -> DashboardDataLite:
+    """A dashboard holding one map plus one card, so layout emptiness is meaningful."""
+    return DashboardDataLite(
+        version="1.0.0",
+        title="Placement test",
+        project_tag="proj",
+        components=[
+            map_component,
+            {
+                "tag": "a-card",
+                "component_type": "card",
+                "workflow_tag": "wf/x",
+                "data_collection_tag": "dc",
+                "column_name": "latitude",
+                "aggregation": "mean",
+            },
+        ],
+    )
+
+
+_MAP_BASE = {
+    "tag": "sites",
+    "component_type": "map",
+    "workflow_tag": "wf/x",
+    "data_collection_tag": "dc",
+    "lat_column": "latitude",
+    "lon_column": "longitude",
+}
+
+
+class TestMapPlacementLayout:
+    """A floating map is rendered by the React shell, so it must claim no grid slot."""
+
+    def test_grid_map_gets_a_layout_item(self):
+        full = _dashboard_with(dict(_MAP_BASE)).to_full()
+        assert len(full["right_panel_layout_data"]) == 2
+
+    def test_floating_map_gets_no_layout_item(self):
+        full = _dashboard_with({**_MAP_BASE, "placement": "floating"}).to_full()
+        layout = full["right_panel_layout_data"]
+        assert len(layout) == 1, "only the card should occupy the grid"
+
+        map_index = next(
+            c["index"] for c in full["stored_metadata"] if c["component_type"] == "map"
+        )
+        assert all(item["i"] != f"box-{map_index}" for item in layout)
+
+    def test_floating_map_still_reaches_stored_metadata(self):
+        """It leaves the grid, not the dashboard — the panel reads it from here."""
+        full = _dashboard_with({**_MAP_BASE, "placement": "floating"}).to_full()
+        stored = next(c for c in full["stored_metadata"] if c["component_type"] == "map")
+        assert stored["placement"] == "floating"
+        assert stored["floating_initial_state"] == "compact"
+
+    def test_floating_map_does_not_leave_a_gap(self):
+        """Skipping it must not consume an auto-layout row the card then skips over."""
+        full = _dashboard_with({**_MAP_BASE, "placement": "floating"}).to_full()
+        assert full["right_panel_layout_data"][0]["y"] == 0
+
+
+class TestMapPlacementExport:
+    """Export keeps YAML terse: only non-default placement is written out."""
+
+    def _exported_map(self, **overrides) -> dict:
+        full_map = {
+            "index": "map-1",
+            "component_type": "map",
+            "wf_id": "wf",
+            "dc_id": "dc",
+            "map_type": "scatter_map",
+            "lat_column": "latitude",
+            "lon_column": "longitude",
+            "map_style": "open-street-map",
+            "opacity": 1.0,
+            "size_max": 15,
+            "featureidkey": "id",
+            "selection_enabled": False,
+            "placement": "grid",
+            "floating_initial_state": "compact",
+        }
+        full_map.update(overrides)
+        lite = DashboardDataLite.from_full(
+            {
+                "dashboard_id": "d1",
+                "title": "T",
+                "project_id": "p1",
+                "version": "1.0.0",
+                "stored_metadata": [full_map],
+            }
+        )
+        comp = lite.components[0]
+        return comp if isinstance(comp, dict) else comp.model_dump(exclude_unset=True)
+
+    def test_grid_default_is_omitted(self):
+        comp = self._exported_map()
+        assert "placement" not in comp
+        assert "floating_initial_state" not in comp
+
+    def test_floating_is_exported(self):
+        comp = self._exported_map(placement="floating", floating_initial_state="expanded")
+        assert comp["placement"] == "floating"
+        assert comp["floating_initial_state"] == "expanded"
+
+    def test_floating_with_default_state_omits_the_state(self):
+        comp = self._exported_map(placement="floating")
+        assert comp["placement"] == "floating"
+        assert "floating_initial_state" not in comp
+
+    def test_survives_a_full_yaml_round_trip(self):
+        lite = _dashboard_with(
+            {**_MAP_BASE, "placement": "floating", "floating_initial_state": "hidden"}
+        )
+        reimported = DashboardDataLite(**yaml.safe_load(lite.to_yaml()))
+        comp = reimported.components[0]
+        comp = comp if isinstance(comp, dict) else comp.model_dump()
+        assert comp["placement"] == "floating"
+        assert comp["floating_initial_state"] == "hidden"

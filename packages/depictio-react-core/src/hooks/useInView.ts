@@ -13,6 +13,12 @@ import { useEffect, useRef, useState } from 'react';
  * `rootMargin` lets us pre-warm just before scroll arrives — '200px' is a
  * sensible default for above-the-fold panels.
  */
+
+/** How long to wait before the fallback rect probe runs. Long enough for
+ *  react-grid-layout to measure its container and position the panels (it does
+ *  so within the first frames), short enough that a throttled-observer
+ *  environment isn't left staring at loaders. */
+const PROBE_DELAY_MS = 400;
 export function useInView<T extends Element>(
   rootMargin: string = '200px',
 ): [React.MutableRefObject<T | null>, boolean] {
@@ -27,23 +33,10 @@ export function useInView<T extends Element>(
       setInView(true);
       return;
     }
-    // Synchronous viewport check first: if the element is already on-screen
-    // (or within ``rootMargin`` of it) we can flip ``inView`` immediately
-    // without waiting for the observer's first callback. Some environments
-    // (background tabs, embedded iframes, headless automation) throttle
-    // IntersectionObserver such that the initial entry never fires —
-    // without this fast path the component stays stuck in its loader state.
-    const margin = parseInt(rootMargin, 10) || 0;
-    const rect = node.getBoundingClientRect();
-    if (
-      rect.bottom > -margin &&
-      rect.top < window.innerHeight + margin &&
-      rect.right > -margin &&
-      rect.left < window.innerWidth + margin
-    ) {
-      setInView(true);
-      return;
-    }
+
+    // The observer is the authority. It is attached first and left to fire on
+    // its own schedule, which is *after* layout — so it sees where the panel
+    // actually ended up.
     const obs = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
@@ -54,7 +47,46 @@ export function useInView<T extends Element>(
       { rootMargin },
     );
     obs.observe(node);
-    return () => obs.disconnect();
+
+    // Safety net for environments (background tabs, embedded iframes, headless
+    // automation) that throttle IntersectionObserver so the initial entry never
+    // fires, leaving the panel stuck in its loader.
+    //
+    // Deliberately deferred rather than synchronous: react-grid-layout has to
+    // measure the container before it can position anything, so on the first
+    // commit every panel still sits at the grid origin and a rect probe there
+    // reports the whole dashboard as on-screen. That flipped ~20 of 30 panels
+    // in-view at once, defeating the deferral this hook exists for and inflating
+    // the load indicator's denominator to near the full component count.
+    const probe = () => {
+      const el = ref.current;
+      if (!el) return;
+      const margin = parseInt(rootMargin, 10) || 0;
+      const rect = el.getBoundingClientRect();
+      // An element with no area is not on screen, whatever its coordinates say.
+      // A collapsed container (`height: 0` + `overflow: hidden`, which is what
+      // Mantine's Collapse and Accordion.Panel render) gives its children a
+      // zero-height rect parked at the container's own y — inside the viewport
+      // by every test below, so the probe declared them visible and started
+      // their fetch. The observer, which measures actual intersection, is left
+      // attached and still fires if the element is later revealed.
+      if (rect.width === 0 && rect.height === 0) return;
+      if (
+        rect.bottom > -margin &&
+        rect.top < window.innerHeight + margin &&
+        rect.right > -margin &&
+        rect.left < window.innerWidth + margin
+      ) {
+        setInView(true);
+        obs.disconnect();
+      }
+    };
+    const timer = window.setTimeout(probe, PROBE_DELAY_MS);
+
+    return () => {
+      obs.disconnect();
+      window.clearTimeout(timer);
+    };
   }, [inView, rootMargin]);
 
   return [ref, inView];

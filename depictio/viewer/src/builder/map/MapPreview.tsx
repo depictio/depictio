@@ -10,9 +10,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Stack, Text } from '@mantine/core';
 import Plot from 'react-plotly.js';
-import { fetchDataCollectionPreview } from 'depictio-react-core';
+import { collapseMapAttribution, fetchDataCollectionPreview } from 'depictio-react-core';
 import type { PreviewResult } from 'depictio-react-core';
 import { useBuilderStore } from '../store/useBuilderStore';
+import { useBuilderPreviewFilters } from '../useBuilderPreviewFilters';
 import PreviewPanel from '../shared/PreviewPanel';
 
 interface MapConfig {
@@ -33,6 +34,8 @@ const MapPreview: React.FC = () => {
   const [data, setData] = useState<PreviewResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const previewFilters = useBuilderPreviewFilters();
+  const filterKey = JSON.stringify(previewFilters);
 
   useEffect(() => {
     if (!dcId || !config.lat_column || !config.lon_column) {
@@ -42,7 +45,7 @@ const MapPreview: React.FC = () => {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetchDataCollectionPreview(dcId, 200)
+    fetchDataCollectionPreview(dcId, 200, previewFilters)
       .then((res) => {
         if (!cancelled) setData(res);
       })
@@ -55,7 +58,8 @@ const MapPreview: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [dcId, config.lat_column, config.lon_column]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dcId, config.lat_column, config.lon_column, filterKey]);
 
   const fig = useMemo(() => {
     if (!data?.rows?.length || !config.lat_column || !config.lon_column) return null;
@@ -167,6 +171,8 @@ const MapPreview: React.FC = () => {
           config={{ displaylogo: false, responsive: true }}
           useResizeHandler
           style={{ width: '100%', height: 320 }}
+          onInitialized={(_f, gd) => collapseMapAttribution(gd)}
+          onUpdate={(_f, gd) => collapseMapAttribution(gd)}
         />
       )}
     </PreviewPanel>

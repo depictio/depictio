@@ -16,6 +16,7 @@ import {
   InteractiveFilter,
   StoredMetadata,
 } from '../../api';
+import { isStaleFetch } from '../../fetchQueue';
 import { stableColorMap } from '../../colors';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragment } from './plotlyTheme';
@@ -118,6 +119,19 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
   const [rows, setRows] = useState<Record<string, unknown[]> | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  // Server-side downsampling state (mirrors the scatter-figure Load-All UX).
+  const [fullLoad, setFullLoad] = useState(false);
+  const [reduction, setReduction] = useState<{
+    displayed: number;
+    total: number;
+    sampled: boolean;
+    degraded: boolean;
+  } | null>(null);
+
+  const filterSig = JSON.stringify(filters);
+  useEffect(() => {
+    setFullLoad(false);
+  }, [filterSig]);
 
   useEffect(() => {
     if (!metadata.wf_id || !metadata.dc_id || requiredCols.length < 4) {
@@ -126,22 +140,42 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
       return;
     }
     let cancelled = false;
+    const ctrl = new AbortController();
     setLoading(true);
     setError(null);
-    fetchAdvancedVizData(metadata.wf_id, metadata.dc_id, requiredCols, filters)
+    fetchAdvancedVizData(
+      {
+        wfId: metadata.wf_id,
+        dcId: metadata.dc_id,
+        columns: requiredCols,
+        filters,
+        fullLoad,
+        vizKind: 'stacked_taxonomy',
+      },
+      ctrl.signal,
+    )
       .then((res) => {
-        if (!cancelled) setRows(res.rows);
+        if (cancelled) return;
+        setRows(res.rows);
+        setReduction({
+          displayed: res.row_count,
+          total: res.total_rows ?? res.row_count,
+          sampled: Boolean(res.sampled),
+          degraded: Boolean(res.sampling?.degraded),
+        });
       })
       .catch((err: unknown) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
+        if (cancelled || isStaleFetch(err)) return;
+        setError(err instanceof Error ? err.message : String(err));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
     return () => {
       cancelled = true;
+      ctrl.abort();
     };
-  }, [metadata.wf_id, metadata.dc_id, JSON.stringify(requiredCols), JSON.stringify(filters), refreshTick]);
+  }, [metadata.wf_id, metadata.dc_id, JSON.stringify(requiredCols), filterSig, refreshTick, fullLoad]);
 
   const { figure, allRanks } = useMemo(() => {
     if (!rows) return { figure: null, allRanks: [] as string[] };
@@ -346,7 +380,11 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
     };
   }, [rows, config, rank, topN, normalise, sampleSort, showLegend, logY, isDark, theme, taxonUniverse]);
 
-  const controls = (
+  // Memoised so AdvancedVizFrame's `extras` useMemo stays stable — an unmemoised
+  // element re-fires the frame's publish effect and loops it against
+  // ComponentRenderer's setState ("Maximum update depth exceeded").
+  const controls = useMemo(
+    () => (
     <Stack gap="xs">
       <Select
         size="xs"
@@ -412,6 +450,8 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
         </Stack>
       ) : null}
     </Stack>
+    ),
+    [rank, sampleSort, topN, normalise, showLegend, logY, allRanks],
   );
 
   return (
@@ -424,6 +464,19 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
       emptyMessage={rows && Object.values(rows)[0]?.length === 0 ? 'No data' : undefined}
       dataRows={rows ?? undefined}
       dataColumns={requiredCols}
+      estimated={Boolean(reduction?.degraded)}
+      reduction={
+        reduction && (reduction.sampled || fullLoad)
+          ? {
+              displayed: reduction.displayed,
+              total: reduction.total,
+              sampled: reduction.sampled,
+              full: fullLoad,
+              loading,
+              onToggle: () => setFullLoad((v) => !v),
+            }
+          : undefined
+      }
     >
       {figure ? (
         <Plot

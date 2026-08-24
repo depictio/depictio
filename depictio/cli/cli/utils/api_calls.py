@@ -408,6 +408,73 @@ def api_upsert_runs_batch(
     return response
 
 
+def api_monitoring_ingestion_start(
+    CLI_config: CLIConfig,
+    command: str = "run",
+    project_id: str | None = None,
+    project_name: str | None = None,
+    cli_version: str | None = None,
+    command_line: str | None = None,
+    cli_config_path: str | None = None,
+    project_config_path: str | None = None,
+    data_root: str | None = None,
+) -> str | None:
+    """Open a server-side ingestion-run record. Best-effort.
+
+    Returns the server-assigned ``run_id`` on success, or ``None`` if monitoring
+    is disabled/unreachable — the caller must never let this abort the ingestion.
+    """
+    try:
+        url = f"{CLI_config.api_base_url}/depictio/api/v1/monitoring/ingestion/start"
+        payload = {
+            "command": command,
+            "project_id": project_id,
+            "project_name": project_name,
+            "cli_version": cli_version,
+            "command_line": command_line,
+            "cli_config_path": cli_config_path,
+            "project_config_path": project_config_path,
+            "data_root": data_root,
+        }
+        response = get_http_client().post(
+            url, json=payload, headers=generate_api_headers(CLI_config), timeout=30.0
+        )
+        if response.status_code == 200:
+            return response.json().get("run_id")
+        logger.debug(f"Monitoring ingestion start skipped (HTTP {response.status_code})")
+    except Exception as exc:
+        logger.debug(f"Monitoring ingestion start failed (non-fatal): {exc}")
+    return None
+
+
+def api_monitoring_ingestion_finish(
+    CLI_config: CLIConfig,
+    run_id: str,
+    status: str = "success",
+    steps: list[dict] | None = None,
+    error: str | None = None,
+    project_id: str | None = None,
+    data_collections: list[dict] | None = None,
+) -> None:
+    """Close a server-side ingestion-run record. Best-effort; never raises."""
+    if not run_id:
+        return
+    try:
+        url = f"{CLI_config.api_base_url}/depictio/api/v1/monitoring/ingestion/{run_id}/finish"
+        payload = {
+            "status": status,
+            "steps": steps or [],
+            "error": error,
+            "project_id": project_id,
+            "data_collections": data_collections or [],
+        }
+        get_http_client().post(
+            url, json=payload, headers=generate_api_headers(CLI_config), timeout=30.0
+        )
+    except Exception as exc:
+        logger.debug(f"Monitoring ingestion finish failed (non-fatal): {exc}")
+
+
 @validate_call
 def api_delete_run(run_id: str, CLI_config: CLIConfig) -> httpx.Response:
     """
@@ -818,6 +885,33 @@ def api_check_duplicate_multiqc_report(
     except Exception as e:
         logger.warning(f"Error checking for duplicate report: {e}")
         return None
+
+
+def api_get_multiqc_s3_locations(data_collection_id: str, CLI_config: "CLIConfig") -> list[str]:
+    """Return every MultiQC report's S3 parquet location for a data collection.
+
+    Authoritative full set (all reports, unpaginated), used by the offline
+    figure prerender to decide whether this run is a fresh ingest (its local
+    files reproduce the full aggregation) before building figures keyed over
+    that set. Returns an empty list on any error — the caller then skips
+    prerender rather than building against an incomplete set.
+    """
+    url = (
+        f"{CLI_config.api_base_url}/depictio/api/v1/multiqc/prerender/"
+        f"{data_collection_id}/s3-locations"
+    )
+    headers = generate_api_headers(CLI_config)
+    try:
+        response = get_http_client().get(url, headers=headers, timeout=30.0)
+        if response.status_code == 200:
+            return list(response.json().get("s3_locations", []))
+        logger.warning(
+            f"Failed to fetch MultiQC s3-locations: HTTP {response.status_code} - {response.text}"
+        )
+        return []
+    except Exception as e:
+        logger.warning(f"Error fetching MultiQC s3-locations: {e}")
+        return []
 
 
 def api_delete_multiqc_report(

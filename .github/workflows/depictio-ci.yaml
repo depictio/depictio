@@ -68,7 +68,7 @@ jobs:
           enable-cache: true
 
       - name: "Set up Python"
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version-file: "pyproject.toml"
           cache-dependency-path: "pyproject.toml"
@@ -87,13 +87,13 @@ jobs:
           uv pip uninstall -y polars polars-runtime-32 2>/dev/null || true
 
           # Ensure correct polars-lts-cpu version is installed (required for MultiQC)
-          echo "📦 Installing polars-lts-cpu 1.19.0..."
-          uv pip install --force-reinstall "polars-lts-cpu[numpy,pandas,pyarrow,excel,deltalake]==1.19.0"
+          echo "📦 Installing polars-lts-cpu 1.33.1..."
+          uv pip install --force-reinstall "polars-lts-cpu[numpy,pandas,pyarrow,excel,deltalake]==1.33.1"
 
           # Verify only polars-lts-cpu is installed
           echo "✅ Verifying polars installation..."
           uv pip list | grep -i polars
-          python -c "import polars; assert '1.19' in polars.__version__, f'Wrong version: {polars.__version__}'; print(f'✅ Polars {polars.__version__} verified')"
+          python -c "import polars; assert '1.33' in polars.__version__, f'Wrong version: {polars.__version__}'; print(f'✅ Polars {polars.__version__} verified')"
 
       - name: Run Ruff formatting check
         run: |
@@ -897,7 +897,7 @@ jobs:
           enable-cache: true
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version-file: "pyproject.toml"
           cache-dependency-path: "pyproject.toml"
@@ -961,14 +961,14 @@ jobs:
           source venv/bin/activate
           echo "📋 Testing template validation (offline)..."
 
-          # Validate known template project configs
-          depictio-cli config check \
-            --project-config-path ../projects/nf-core/ampliseq/2.16.0/template.yaml \
-            --CLI-config-path admin_config.yaml 2>&1 || true
-
-          depictio-cli config check \
-            --project-config-path ../projects/nf-core/ampliseq/2.14.0/template.yaml \
-            --CLI-config-path admin_config.yaml 2>&1 || true
+          # Validate every shipped ampliseq template version (version-agnostic:
+          # a new template drop is validated with zero workflow changes)
+          for tpl in ../projects/nf-core/ampliseq/*/template.yaml; do
+            echo "— checking $tpl"
+            depictio-cli config check \
+              --project-config-path "$tpl" \
+              --CLI-config-path admin_config.yaml 2>&1 || true
+          done
 
           echo "✅ Template validation passed"
 
@@ -1589,7 +1589,7 @@ jobs:
           echo "🚀 Running full template pipeline: depictio run --template..."
 
           depictio-cli run \
-            --template nf-core/ampliseq/2.16.0 \
+            --template nf-core/ampliseq/latest \
             --data-root "$DATA_DIR" \
             --project-name "Ampliseq CI Template Test" \
             --var SAMPLESHEET_FILE="$DATA_DIR/samplesheet.csv" \
@@ -1640,7 +1640,9 @@ jobs:
           # If any goes missing (.dockerignore tightening, .gitignore drop,
           # accidental rm), the corresponding dashboard tiles 404 on every
           # fresh deploy — catch it here, not in production.
-          PROJ=/app/depictio/projects/nf-core/viralrecon/3.0.0
+          # Resolve the newest shipped template version (same rule as the seeding)
+          PROJ=$(docker compose exec -T depictio-backend sh -c \
+            'ls -d /app/depictio/projects/nf-core/viralrecon/[0-9]* | sort -V | tail -1')
           MISSED=0
           for f in \
             $PROJ/run_1/multiqc/multiqc_data/multiqc.parquet \
@@ -1719,7 +1721,7 @@ jobs:
           enable-cache: true
 
       - name: "Set up Python"
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version-file: "pyproject.toml"
           cache-dependency-path: "pyproject.toml"
@@ -2706,7 +2708,7 @@ jobs:
       # Node + Playwright setup runs while the docker stack boots; the
       # explicit health gate below is the only wait.
       - name: Set up Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: "20"
           cache: npm

@@ -1,3 +1,5 @@
+import { formatDateTime } from '../../lib/datetime';
+
 /** True for icon values that point at an image file (e.g. workflow logos
  *  shipped with the Dash app at `/assets/images/logos/...`). */
 export function isImagePath(s: string | null | undefined): boolean {
@@ -26,28 +28,36 @@ export function resolveAssetUrl(s: string): string {
   return s;
 }
 
-/** Format `last_saved_ts` (ISO or "%Y-%m-%d %H:%M:%S") as "yyyy-mm-dd HH:MM"
- *  to match `dashboards_management.py:607-611`. */
+/** Format `last_saved_ts` (ISO or "%Y-%m-%d %H:%M:%S", always UTC on the wire)
+ *  as "yyyy-mm-dd HH:MM" **in the viewer's local timezone**.
+ *  Thin re-export kept for the existing call sites; see `lib/datetime.ts`. */
 export function formatLastSaved(raw: string): string {
-  const d = new Date(raw.replace('Z', '+00:00'));
-  if (Number.isNaN(d.getTime())) return raw;
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return formatDateTime(raw, raw);
+}
+
+/** Version key for a dashboard's thumbnail URL.
+ *  Prefers `screenshot_ts` (stamped by the worker once the PNG is actually on
+ *  disk) and falls back to `last_saved_ts` for documents predating that field. */
+export function screenshotVersion(dashboard: {
+  screenshot_ts?: string;
+  last_saved_ts?: string;
+}): string | undefined {
+  return dashboard.screenshot_ts || dashboard.last_saved_ts || undefined;
 }
 
 export function screenshotUrl(
   dashboardId: string,
   theme: 'light' | 'dark',
-  lastSavedTs?: string,
+  version?: string,
 ): string {
-  // Cache-bust on every save: the auto-screenshot job overwrites the file
-  // in place, so without a versioned URL the browser keeps showing the old
-  // image until a hard reload. ``last_saved_ts`` changes whenever the
-  // dashboard is saved (and the screenshot job runs as part of save), so
-  // it's the right version key.
+  // Cache-bust whenever the PNG is regenerated: the screenshot job overwrites
+  // the file in place, so without a versioned URL the browser keeps showing the
+  // old image until a hard reload. Pass `screenshotVersion(dashboard)` — it
+  // advances when the *image* changes, which `last_saved_ts` alone no longer
+  // does now that saves and screenshots are tracked separately (issue #932).
   const base = `/static/screenshots/${dashboardId}_${theme}.png`;
-  if (!lastSavedTs) return base;
-  return `${base}?v=${encodeURIComponent(lastSavedTs)}`;
+  if (!version) return base;
+  return `${base}?v=${encodeURIComponent(version)}`;
 }
 
 /** Returns `value` when it's a non-empty string, otherwise `fallback`.

@@ -32,7 +32,7 @@ jobs:
           enable-cache: true
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version-file: "pyproject.toml"
 
@@ -43,7 +43,7 @@ jobs:
           uv pip install -e ".[dev]"
           # MultiQC/recipes need polars-lts-cpu (same pin as the quality job)
           uv pip uninstall -y polars polars-runtime-32 2>/dev/null || true
-          uv pip install --force-reinstall "polars-lts-cpu[numpy,pandas,pyarrow,excel,deltalake]==1.19.0"
+          uv pip install --force-reinstall "polars-lts-cpu[numpy,pandas,pyarrow,excel,deltalake]==1.33.1"
 
       - name: Validate bio-catalog
         # schema + component/roles + renders grounded against fixtures/recipes +

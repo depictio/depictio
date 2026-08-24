@@ -14,6 +14,7 @@ const TextPreview: React.FC = () => {
     title?: string;
     order?: number | string;
     alignment?: string;
+    vertical_alignment?: string;
     body?: string;
   };
   const componentId = useBuilderStore((s) => s.componentId);
@@ -31,6 +32,7 @@ const TextPreview: React.FC = () => {
           ? Number(config.order)
           : 1,
     alignment: config.alignment ?? 'left',
+    vertical_alignment: config.vertical_alignment ?? 'center',
     body: config.body ?? '',
   };
 

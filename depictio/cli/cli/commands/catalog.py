@@ -7,12 +7,29 @@ that grounds every `renders_as` role against the recipe's real output columns.
 
 from __future__ import annotations
 
+import contextlib
+import sys
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Annotated
 
 import typer
 
 app = typer.Typer()
+
+
+@contextlib.contextmanager
+def _stdout_off_the_wire() -> Iterator[None]:
+    """Keep incidental library output off stdout while building a `--json` payload.
+
+    depictio's logger writes to stdout, so a single DEBUG line in front of the
+    payload makes the output unparseable. `genKinds.ts` only checks that stdout
+    starts with `{`, so a polluted stream is not an error there — it silently
+    falls back to the stale committed snapshot. Redirect during collection; the
+    payload itself is written after the block.
+    """
+    with contextlib.redirect_stdout(sys.stderr):
+        yield
 
 # Maintainer / CI commands (catalog authoring, index maintenance, schema export).
 # Mounted under the hidden top-level `dev` group — kept out of the user-facing
@@ -696,29 +713,38 @@ def catalog_figure_params(
     """
     import json
 
-    from depictio.api.v1.services.figure.definitions import (
-        get_available_visualizations,
-        get_visualization_definition,
-    )
-
     visualizations: list[dict[str, object]] = []
     params: dict[str, object] = {}
-    for v in get_available_visualizations():
-        group = v.group.value if hasattr(v.group, "value") else str(v.group)
-        visualizations.append(
-            {
-                "name": v.name,
-                "label": v.label,
-                "description": v.description,
-                "icon": v.icon,
-                "group": group,
-            }
+    failed: list[str] = []
+    # Parameter discovery logs to stdout on import; keep it off the JSON stream.
+    with _stdout_off_the_wire():
+        from depictio.api.v1.services.figure.definitions import (
+            get_available_visualizations,
+            get_visualization_definition,
         )
-        try:
-            viz_def = get_visualization_definition(v.name.lower())
-            params[v.name.lower()] = viz_def.model_dump(mode="json")
-        except Exception as exc:  # a single bad viz shouldn't sink the snapshot
-            typer.echo(f"  WARN: parameter discovery failed for {v.name!r}: {exc}", err=True)
+
+        for v in get_available_visualizations():
+            group = v.group.value if hasattr(v.group, "value") else str(v.group)
+            visualizations.append(
+                {
+                    "name": v.name,
+                    "label": v.label,
+                    "description": v.description,
+                    "icon": v.icon,
+                    "group": group,
+                }
+            )
+            try:
+                viz_def = get_visualization_definition(v.name.lower())
+                params[v.name.lower()] = viz_def.model_dump(mode="json")
+            except Exception as exc:  # a single bad viz shouldn't sink the snapshot
+                failed.append(v.name)
+                typer.echo(f"  WARN: parameter discovery failed for {v.name!r}: {exc}", err=True)
+    # A partial snapshot silently degrades the offline figure builder, so make it
+    # a hard failure rather than a warning nobody reads.
+    if failed:
+        typer.echo(f"  INVALID: parameter discovery failed for {sorted(failed)}", err=True)
+        raise typer.Exit(code=1)
 
     payload = {"visualizations": visualizations, "params": params}
 

@@ -20,6 +20,7 @@ import { Icon } from '@iconify/react';
 
 import type { RealtimeMode, RealtimeStatus } from '../realtime';
 import type { RealtimeJournalEntry } from '../hooks/useRealtimeJournal';
+import { batchIdsFromPayload } from '../highlight';
 
 interface RealtimeIndicatorProps {
   status: RealtimeStatus;
@@ -34,6 +35,14 @@ interface RealtimeIndicatorProps {
   journal?: RealtimeJournalEntry[];
   /** Wipes the journal — both in-memory state and the localStorage entry. */
   onClearJournal?: () => void;
+  /** Pin the batch of rows a past event added, re-highlighting them across the
+   *  dashboard. Only offered on entries whose payload carries added ids. */
+  onHighlightBatch?: (entry: RealtimeJournalEntry) => void;
+  /** Clear any pinned batch highlight. */
+  onClearHighlight?: () => void;
+  /** ``batchKey`` of the currently-pinned batch (an entry's ``receivedAt``),
+   *  used to mark the active row. Undefined when nothing is pinned. */
+  activeHighlightKey?: string;
 }
 
 const STATUS_LABELS: Record<RealtimeStatus, string> = {
@@ -47,6 +56,14 @@ const STATUS_COLORS: Record<RealtimeStatus, string> = {
   connected: 'teal',
   disconnected: 'gray',
 };
+
+/** Accent for a journal row's left border: yellow when it's the pinned
+ *  highlight, else teal/orange by the sign of the row delta, else blue. */
+function journalRowBorderColor(highlighted: boolean, rowDelta: number | undefined): string {
+  if (highlighted) return 'var(--mantine-color-yellow-5)';
+  if (rowDelta === undefined || rowDelta === 0) return 'var(--mantine-color-blue-5)';
+  return rowDelta > 0 ? 'var(--mantine-color-teal-5)' : 'var(--mantine-color-orange-5)';
+}
 
 /**
  * Status pill + control menu mirroring the disabled Dash plumbing's
@@ -64,6 +81,9 @@ const RealtimeIndicator: React.FC<RealtimeIndicatorProps> = ({
   onAcknowledgePending,
   journal,
   onClearJournal,
+  onHighlightBatch,
+  onClearHighlight,
+  activeHighlightKey,
 }) => {
   const [opened, setOpened] = useState(false);
   // Newest first — most recent event is the most interesting.
@@ -147,6 +167,20 @@ const RealtimeIndicator: React.FC<RealtimeIndicatorProps> = ({
                   <Badge size="xs" variant="light" color="gray">
                     {journalNewestFirst.length}
                   </Badge>
+                  {onClearHighlight && activeHighlightKey && (
+                    <Anchor
+                      component="button"
+                      type="button"
+                      size="xs"
+                      c="orange"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onClearHighlight();
+                      }}
+                    >
+                      Clear highlight
+                    </Anchor>
+                  )}
                   {onClearJournal && journalNewestFirst.length > 0 && (
                     <Anchor
                       component="button"
@@ -175,6 +209,10 @@ const RealtimeIndicator: React.FC<RealtimeIndicatorProps> = ({
                       <JournalRow
                         key={`${entry.receivedAt}-${idx}`}
                         entry={entry}
+                        onHighlight={onHighlightBatch}
+                        highlighted={
+                          !!activeHighlightKey && entry.receivedAt === activeHighlightKey
+                        }
                       />
                     ))}
                   </Stack>
@@ -188,7 +226,14 @@ const RealtimeIndicator: React.FC<RealtimeIndicatorProps> = ({
   );
 };
 
-const JournalRow: React.FC<{ entry: RealtimeJournalEntry }> = ({ entry }) => {
+const JournalRow: React.FC<{
+  entry: RealtimeJournalEntry;
+  /** Pin this entry's batch as the active highlight. Absent when the host
+   *  doesn't support batch highlighting. */
+  onHighlight?: (entry: RealtimeJournalEntry) => void;
+  /** True when this entry's batch is the currently-pinned highlight. */
+  highlighted?: boolean;
+}> = ({ entry, onHighlight, highlighted }) => {
   // The backend's ``_build_event_payload`` packs project / DC tags and a live
   // row-count into ``payload``. Surface the most meaningful fields in the
   // compact row, push everything else into the HoverCard.
@@ -261,6 +306,11 @@ const JournalRow: React.FC<{ entry: RealtimeJournalEntry }> = ({ entry }) => {
     }
   })();
 
+  // Highlightable only when the batch actually carries added ids the renderers
+  // can key on. Reuse ``batchIdsFromPayload`` so the button's presence matches
+  // exactly what ``applyHighlight`` will act on (no dead-end button).
+  const canHighlight = !!onHighlight && batchIdsFromPayload(payload) !== null;
+
   return (
     <HoverCard
       width={420}
@@ -274,38 +324,57 @@ const JournalRow: React.FC<{ entry: RealtimeJournalEntry }> = ({ entry }) => {
       <HoverCard.Target>
         <Box
           style={{
-            borderLeft: `2px solid ${
-              rowDelta !== undefined && rowDelta !== 0
-                ? rowDelta > 0
-                  ? 'var(--mantine-color-teal-5)'
-                  : 'var(--mantine-color-orange-5)'
-                : 'var(--mantine-color-blue-5)'
-            }`,
+            borderLeft: `2px solid ${journalRowBorderColor(!!highlighted, rowDelta)}`,
             paddingLeft: 8,
             cursor: 'help',
+            backgroundColor: highlighted
+              ? 'var(--mantine-color-yellow-light)'
+              : undefined,
+            borderRadius: highlighted ? 4 : undefined,
           }}
         >
           <Group justify="space-between" wrap="nowrap" gap={6}>
             <Text size="xs" fw={500}>
               {time}
             </Text>
-            {/* Prefer row_delta (the actual change) over the absolute row_count.
-                Falls back to row_count when there's no prev version (very
-                first commit). */}
-            {rowDelta !== undefined && rowDelta !== 0 ? (
-              <Text
-                size="xs"
-                fw={600}
-                c={rowDelta > 0 ? 'teal.6' : 'orange.6'}
-              >
-                {rowDelta > 0 ? '+' : ''}
-                {rowDelta} {Math.abs(rowDelta) === 1 ? 'row' : 'rows'}
-              </Text>
-            ) : rowCount !== undefined ? (
-              <Text size="xs" fw={500} c="blue.6">
-                {rowCount} {rowCount === 1 ? 'row' : 'rows'}
-              </Text>
-            ) : null}
+            <Group gap={4} wrap="nowrap">
+              {/* Prefer row_delta (the actual change) over the absolute row_count.
+                  Falls back to row_count when there's no prev version (very
+                  first commit). */}
+              {rowDelta !== undefined && rowDelta !== 0 ? (
+                <Text
+                  size="xs"
+                  fw={600}
+                  c={rowDelta > 0 ? 'teal.6' : 'orange.6'}
+                >
+                  {rowDelta > 0 ? '+' : ''}
+                  {rowDelta} {Math.abs(rowDelta) === 1 ? 'row' : 'rows'}
+                </Text>
+              ) : rowCount !== undefined ? (
+                <Text size="xs" fw={500} c="blue.6">
+                  {rowCount} {rowCount === 1 ? 'row' : 'rows'}
+                </Text>
+              ) : null}
+              {canHighlight && (
+                <Tooltip
+                  label={highlighted ? 'Highlighted' : 'Highlight these rows'}
+                  withArrow
+                >
+                  <ActionIcon
+                    size="xs"
+                    variant={highlighted ? 'filled' : 'subtle'}
+                    color="yellow"
+                    aria-label="Highlight this batch"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onHighlight?.(entry);
+                    }}
+                  >
+                    <Icon icon="tabler:highlight" width={13} height={13} />
+                  </ActionIcon>
+                </Tooltip>
+              )}
+            </Group>
           </Group>
           <Group gap={6} wrap="nowrap">
             <Text size="xs" c="dimmed" lineClamp={1} style={{ flex: 1, minWidth: 0 }}>

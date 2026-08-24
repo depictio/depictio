@@ -15,6 +15,7 @@ import { Icon } from '@iconify/react';
 import { fetchDataCollectionPreview } from 'depictio-react-core';
 import type { PreviewResult } from 'depictio-react-core';
 import { useBuilderStore } from '../store/useBuilderStore';
+import { useBuilderPreviewFilters } from '../useBuilderPreviewFilters';
 import PreviewPanel from '../shared/PreviewPanel';
 
 const ImagePreview: React.FC = () => {
@@ -28,6 +29,8 @@ const ImagePreview: React.FC = () => {
   const [data, setData] = useState<PreviewResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const previewFilters = useBuilderPreviewFilters();
+  const filterKey = JSON.stringify(previewFilters);
 
   useEffect(() => {
     if (!dcId || !config.image_column) {
@@ -37,7 +40,7 @@ const ImagePreview: React.FC = () => {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetchDataCollectionPreview(dcId, 24)
+    fetchDataCollectionPreview(dcId, 24, previewFilters)
       .then((res) => {
         if (!cancelled) setData(res);
       })
@@ -50,7 +53,8 @@ const ImagePreview: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [dcId, config.image_column]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dcId, config.image_column, filterKey]);
 
   if (!config.image_column) {
     return (

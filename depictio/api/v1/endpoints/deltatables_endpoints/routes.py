@@ -23,6 +23,8 @@ from depictio.api.v1.db import deltatables_collection, projects_collection, user
 from depictio.api.v1.endpoints.deltatables_endpoints.utils import precompute_columns_specs
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user, get_user_or_anonymous
 from depictio.api.v1.s3 import polars_s3_config
+from depictio.api.v1.services.card_breakdown import compute_breakdown
+from depictio.api.v1.services.card_metrics import NUMERIC_LAYOUTS, numeric_layout_payload
 from depictio.api.v1.utils import agg_functions
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 from depictio.models.models.deltatables import (
@@ -33,6 +35,49 @@ from depictio.models.models.deltatables import (
 from depictio.models.models.users import User
 
 deltatables_endpoint_router = APIRouter()
+
+
+def _delta_identity_hash(delta_table_location: str, storage_options: dict) -> str:
+    """Hash the identity of a Delta table from its log, without reading data.
+
+    This replaces a ``df.hash_rows()`` over the fully materialised frame, which
+    on a ~14M-row data collection cost a full read plus a numpy round-trip and
+    contributed to OOM-killing the worker. The resulting digest is *not* a
+    content hash: it covers the table version and the active files (path, size,
+    modification time), which change whenever the data does. That is all the
+    value is ever used for — it is salted with ``datetime.now()`` by the caller,
+    so no two upserts ever produce comparable digests anyway; downstream
+    (``RealtimeIndicator``) only tests it for inequality.
+    """
+    from deltalake import DeltaTable
+
+    dt = DeltaTable(delta_table_location, storage_options=storage_options)
+    parts = [str(dt.version())]
+    try:
+        actions = pl.from_arrow(dt.get_add_actions(flatten=True))
+        if not isinstance(actions, pl.DataFrame):
+            # A single-column result comes back as a Series; the fallback below
+            # handles it rather than this branch guessing at its shape.
+            raise TypeError(f"get_add_actions yielded {type(actions).__name__}, not a table")
+        wanted = [c for c in ("path", "size_bytes", "modification_time") if c in actions.columns]
+        parts += ["|".join(str(v) for v in row) for row in sorted(actions.select(wanted).rows())]
+    except Exception as e:
+        logger.warning(f"get_add_actions unavailable ({e}); hashing the file list instead.")
+        parts += sorted(dt.file_uris())
+    return hashlib.sha256("\n".join(parts).encode()).hexdigest()
+
+
+def _previous_column_types(deltatable_doc: dict | None) -> dict[str, str]:
+    """Column name -> type recorded by the latest aggregation, if any.
+
+    Feeding these back into ``precompute_columns_specs`` keeps a re-ingest from
+    silently changing the type a saved dashboard component was built against.
+    """
+    aggregations = (deltatable_doc or {}).get("aggregation") or []
+    if not aggregations:
+        return {}
+    specs = aggregations[-1].get("aggregation_columns_specs") or []
+    return {s["name"]: s["type"] for s in specs if s.get("name") and s.get("type")}
 
 
 def sanitize_for_json(obj):
@@ -101,6 +146,8 @@ async def upsert_deltatable(
     dc_type = dc_data.get("config", {}).get("type", "")
     is_multiqc = dc_type.lower() == "multiqc"
 
+    query_dt = deltatables_collection.find_one({"data_collection_id": data_collection_oid})
+
     # For MultiQC, skip delta table validation since it's stored as raw parquet
     if is_multiqc:
         # Create minimal hash for MultiQC without reading the file
@@ -109,18 +156,20 @@ async def upsert_deltatable(
         ).hexdigest()
         results = []  # Column specs not computed for MultiQC (empty list required by Pydantic)
     else:
-        # Standard delta table validation and column spec computation
-        df = pl.read_delta(payload.delta_table_location, storage_options=polars_s3_config)
-        results = precompute_columns_specs(df, agg_functions, dc_data)
+        # Standard delta table validation and column spec computation. The scan
+        # stays lazy: precompute_columns_specs only needs per-column
+        # aggregations, and materialising a multi-GB data collection here is
+        # what used to get the worker OOM-killed.
+        lf = pl.scan_delta(payload.delta_table_location, storage_options=polars_s3_config)
+        results = precompute_columns_specs(
+            lf, agg_functions, dc_data, previous_types=_previous_column_types(query_dt)
+        )
 
-        hash_series = df.hash_rows(seed=0)
-        hash_bytes = hash_series.to_numpy().tobytes()
-        hash_df = hashlib.sha256(hash_bytes).hexdigest()
+        hash_df = _delta_identity_hash(payload.delta_table_location, polars_s3_config)
         final_hash = hashlib.sha256(
             f"{payload.delta_table_location}{datetime.now()}{hash_df}".encode()
         ).hexdigest()
 
-    query_dt = deltatables_collection.find_one({"data_collection_id": data_collection_oid})
     if query_dt:
         deltatable = DeltaTableAggregated.from_mongo(query_dt)
         version = (
@@ -253,7 +302,48 @@ async def upsert_deltatable(
                 },
             )
 
+    # Broadcast a real-time event so connected dashboards refresh. The change
+    # stream watcher only watches data_collections, not the deltatables
+    # collection, so an upsert would otherwise complete silently. Mirrors the
+    # test-trigger endpoint's invalidate-then-broadcast pattern.
+    await _broadcast_dc_update(str(data_collection_oid))
+
     return {"message": "DeltaTableAggregated upserted successfully", "result": "success"}
+
+
+async def _broadcast_dc_update(dc_id: str) -> None:
+    """Invalidate the DC cache and broadcast a data-collection-updated event to all subscribers."""
+    from datetime import timezone
+
+    from depictio.api.v1.deltatables_utils import invalidate_data_collection_cache
+    from depictio.api.v1.endpoints.events_endpoints.routes import _build_event_payload
+    from depictio.api.v1.services.events import connection_manager
+    from depictio.models.models.realtime import EventMessage, EventSourceType, EventType
+
+    dropped = invalidate_data_collection_cache(dc_id)
+    logger.info(f"Upsert {dc_id}: invalidated {dropped} cached DataFrame(s)")
+
+    # Build the same rich payload the test-trigger path produces (row delta vs.
+    # the previous delta version, new-id sample, aggregation version/hash/time,
+    # live row count) so the RealtimeIndicator journal has something to show.
+    # Runs after the upsert recorded a fresh aggregation entry, so the version/
+    # hash/time reflect the write that just landed. Best-effort, never raises.
+    payload = _build_event_payload(dc_id, operation="upsert")
+
+    event = EventMessage(
+        event_type=EventType.DATA_COLLECTION_UPDATED,
+        source_type=EventSourceType.MONGODB_CHANGES,
+        timestamp=datetime.now(timezone.utc),
+        data_collection_id=dc_id,
+        payload=payload,
+    )
+
+    subscribed = connection_manager.get_all_subscribed_dashboards()
+    for dashboard_id in subscribed:
+        event_copy = event.model_copy(update={"dashboard_id": dashboard_id})
+        await connection_manager.broadcast_to_dashboard(dashboard_id, event_copy)
+
+    logger.info(f"Upsert event broadcast for DC {dc_id} to {len(subscribed)} dashboard(s)")
 
 
 def _owned_or_admin_query(current_user: User, base: dict) -> dict:
@@ -513,16 +603,25 @@ async def get_unique_values(
     if (dc_doc.get("config", {}).get("type") or "").lower() == "multiqc":
         from depictio.api.v1.db import multiqc_collection
 
-        mqc = multiqc_collection.find_one(
+        # multiqc_collection stores one document per report, each carrying only
+        # its own report's samples. A multi-report DC therefore has N docs, so a
+        # find_one() would surface just one arbitrary report's samples. Union
+        # canonical_samples (fallback samples) across ALL report docs so the
+        # filter dropdown reflects the aggregate — mirrors the all-docs
+        # aggregation in _resolve_multiqc_sample_filter.
+        union: set[str] = set()
+        for rep in multiqc_collection.find(
             {
                 "data_collection_id": {
                     "$in": [ObjectId(str(data_collection_id)), str(data_collection_id)]
                 }
-            }
-        )
-        md = (mqc or {}).get("metadata") or {}
-        samples = md.get("canonical_samples") or md.get("samples") or []
-        values_str = sorted({str(v) for v in samples})[:limit]
+            },
+            {"metadata.canonical_samples": 1, "metadata.samples": 1},
+        ):
+            md = rep.get("metadata") or {}
+            for v in md.get("canonical_samples") or md.get("samples") or []:
+                union.add(str(v))
+        values_str = sorted(union)[:limit]
         return {"column": column, "values": values_str}
 
     deltatables_list = list(deltatables_collection.find({"data_collection_id": data_collection_id}))
@@ -537,6 +636,28 @@ async def get_unique_values(
         raise HTTPException(
             status_code=404, detail="Delta table location not found in deltatable document."
         )
+
+    # Cached option lists. ``unique()`` has to see every value and Polars can't
+    # push ``limit`` through it, so this is a full column scan — repeated on every
+    # mount of every MultiSelect, on every dashboard load, for a list that only
+    # changes when the data does. The aggregation version salt is part of the key,
+    # so an ingest invalidates it for free (same contract as the frame cache).
+    from depictio.api.v1.deltatables_utils import _get_aggregation_version
+
+    dc_id_str = str(data_collection_id)
+    cache_key = (
+        f"unique_values_{dc_id_str}_{column}_{limit}_"
+        f"{filter_expr or 'nofilter'}_{_get_aggregation_version(dc_id_str)}"
+    )
+    try:
+        from depictio.api.cache import get_cache
+
+        cached = get_cache().get(cache_key)
+        if cached is not None:
+            logger.debug(f"unique_values: cache hit for {column} on {dc_id_str}")
+            return {"column": column, "values": cached}
+    except Exception as exc:  # the cache is an optimisation, never a dependency
+        logger.debug(f"unique_values: cache read failed for {cache_key}: {exc}")
 
     try:
         lazy = pl.scan_delta(delta_table_location, storage_options=polars_s3_config)
@@ -568,12 +689,279 @@ async def get_unique_values(
         values = df[column].drop_nulls().to_list()
         # Stable ordering — MultiSelect UX expects sorted strings.
         values_str = sorted({str(v) for v in values})
+        try:
+            from depictio.api.cache import get_cache
+
+            get_cache().set(cache_key, values_str)
+        except Exception as exc:
+            logger.debug(f"unique_values: cache write failed for {cache_key}: {exc}")
         return {"column": column, "values": values_str}
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error fetching unique values for column {column}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to read unique values: {e}")
+
+
+def _resolve_delta_location(data_collection_id: PyObjectId, current_user: User) -> str:
+    """Permission-check ``data_collection_id`` and return its Delta location.
+
+    The shared opening of every read endpoint below: aggregate the permission
+    pipeline, find the DC's deltatable document, pull the table location.
+    Raises the same 404s those endpoints raised inline.
+    """
+    pipeline = _build_permission_pipeline(data_collection_id, current_user)
+    if not list(projects_collection.aggregate(pipeline)):
+        raise HTTPException(status_code=404, detail="Data collection not found or access denied.")
+
+    deltatables_list = list(deltatables_collection.find({"data_collection_id": data_collection_id}))
+    if not deltatables_list:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No DeltaTable found for Data Collection ID {data_collection_id}.",
+        )
+    delta_table_location = deltatables_list[-1].get("delta_table_location")
+    if not delta_table_location:
+        raise HTTPException(
+            status_code=404, detail="Delta table location not found in deltatable document."
+        )
+    return delta_table_location
+
+
+def _breakdown_response(
+    data_collection_id: PyObjectId,
+    column: str,
+    breakdown_col: str,
+    aggregation: str,
+    top_n_count: int,
+    filter_metadata: list[dict],
+    current_user: User,
+):
+    """Shared body of the breakdown GET (unfiltered) and POST (filtered) routes."""
+    delta_table_location = _resolve_delta_location(data_collection_id, current_user)
+
+    # The builder re-requests this on every keystroke-ish config change (layout
+    # switch, breakdown column, top-N). Salting on the aggregation version means
+    # an ingest invalidates it for free, same contract as ``unique_values``.
+    # Filtered requests skip the cache entirely: the key doesn't encode filter
+    # state, and salting it would fill the cache with transient combinations.
+    from depictio.api.v1.deltatables_utils import _get_aggregation_version, apply_filters_to_scan
+
+    dc_id_str = str(data_collection_id)
+    cache_key = (
+        f"breakdown_{dc_id_str}_{column}_{breakdown_col}_{aggregation}_{top_n_count}_"
+        f"{_get_aggregation_version(dc_id_str)}"
+    )
+    if not filter_metadata:
+        try:
+            from depictio.api.cache import get_cache
+
+            cached = get_cache().get(cache_key)
+            if cached is not None:
+                return cached
+        except Exception as exc:  # the cache is an optimisation, never a dependency
+            logger.debug(f"breakdown: cache read failed for {cache_key}: {exc}")
+
+    try:
+        lazy = pl.scan_delta(delta_table_location, storage_options=polars_s3_config)
+        # Project before grouping: a breakdown reads two columns, and on a wide
+        # collection loading the rest is the whole cost of the request. Filter
+        # columns must ride along in the projection or the filters would be
+        # applied to a frame that no longer contains them.
+        filter_cols = [
+            c
+            for f in filter_metadata
+            if (c := f.get("column_name") or (f.get("metadata") or {}).get("column_name"))
+        ]
+        wanted = list(dict.fromkeys([c for c in (breakdown_col, column) if c]))
+        available = set(lazy.collect_schema().names())
+        missing = [c for c in wanted if c not in available]
+        if missing:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Column(s) {missing} not found in data collection {dc_id_str}.",
+            )
+        projected = list(dict.fromkeys(wanted + [c for c in filter_cols if c in available]))
+        payload = compute_breakdown(
+            apply_filters_to_scan(lazy.select(projected), filter_metadata).select(wanted),
+            column=column,
+            breakdown_col=breakdown_col,
+            aggregation=aggregation,
+            top_n_count=top_n_count,
+        )
+        if not filter_metadata:
+            try:
+                from depictio.api.cache import get_cache
+
+                get_cache().set(cache_key, payload)
+            except Exception as exc:
+                logger.debug(f"breakdown: cache write failed for {cache_key}: {exc}")
+        return payload
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error computing breakdown on {breakdown_col!r} for {dc_id_str}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to compute breakdown: {e}")
+
+
+@deltatables_endpoint_router.get("/breakdown/{data_collection_id}")
+async def get_breakdown(
+    data_collection_id: PyObjectId,
+    column: str,
+    breakdown_col: str,
+    aggregation: str = "count",
+    top_n_count: int = 3,
+    current_user: User = Depends(get_user_or_anonymous),
+):
+    """Top-N breakdown of ``breakdown_col``, for the card builder's live preview.
+
+    Returns the same ``__breakdown__`` payload ``bulk_compute_cards`` attaches to
+    a saved card — same helper, same per-group aggregation, same evenness — so
+    the preview shows the card's real categories and real distribution instead
+    of guessing. The preview used to synthesise ``Bucket 1/2/3`` split evenly at
+    33/33/34; the names and the shape were both invented, which made a correct
+    builder look broken.
+
+    Computed against the *unfiltered* table. When the builder carries active
+    dashboard filters it uses the POST variant below instead, so the preview
+    matches what the saved card will show under those filters.
+
+    Args:
+        data_collection_id: Target data collection.
+        column: The card's hero column (decides the per-group reduction).
+        breakdown_col: Categorical column to group by.
+        aggregation: The card's hero aggregation (``count`` / ``nunique`` / ``sum``).
+        top_n_count: How many groups to surface, clamped to 1..5 by the helper.
+        current_user: Authenticated or anonymous user (permission-checked).
+
+    Returns:
+        ``{"column", "total", "top": [{name, count, percent}], "top_share",
+        "unique_values", "breakdown_kind", "evenness"}``.
+
+    Raises:
+        HTTPException: 404 if the DC / delta table / column is missing, 403 if
+        the user may not read it, 500 on a read error.
+    """
+    return _breakdown_response(
+        data_collection_id,
+        column,
+        breakdown_col,
+        aggregation,
+        top_n_count,
+        filter_metadata=[],
+        current_user=current_user,
+    )
+
+
+@deltatables_endpoint_router.post("/breakdown/{data_collection_id}")
+async def get_breakdown_filtered(
+    data_collection_id: PyObjectId,
+    request: dict,
+    current_user: User = Depends(get_user_or_anonymous),
+):
+    """Filtered flavour of the breakdown preview.
+
+    Body: ``{"column", "breakdown_col", "aggregation", "top_n_count",
+    "filters": [InteractiveFilter, ...]}``. Same payload as the GET, computed
+    under the dashboard's active filters so the card builder previews the
+    distribution the saved card will actually show (#329). Filters whose
+    column isn't in this DC are skipped (see ``apply_filters_to_scan``);
+    filtered responses bypass the breakdown cache.
+    """
+    from depictio.api.v1.deltatables_utils import clean_filter_payload
+
+    column = str(request.get("column") or "")
+    breakdown_col = str(request.get("breakdown_col") or "")
+    if not column or not breakdown_col:
+        raise HTTPException(status_code=400, detail="column and breakdown_col are required.")
+    return _breakdown_response(
+        data_collection_id,
+        column,
+        breakdown_col,
+        str(request.get("aggregation") or "count"),
+        int(request.get("top_n_count") or 3),
+        filter_metadata=clean_filter_payload(request.get("filters")),
+        current_user=current_user,
+    )
+
+
+@deltatables_endpoint_router.post("/card_metric/{data_collection_id}")
+async def get_card_metric(
+    data_collection_id: PyObjectId,
+    request: dict,
+    current_user: User = Depends(get_user_or_anonymous),
+):
+    """Payload for a card's numeric / QC secondary layout, for the live preview.
+
+    Runs the same dispatcher ``bulk_compute_cards`` runs for a saved card, so
+    the builder shows the values the dashboard will show. POST rather than GET
+    because ``attrition`` carries an ordered column list, which does not belong
+    in a query string.
+
+    Body: ``{"layout": ..., "column": ..., ...card config fields...}`` — the
+    same field names the card metadata uses (``threshold_value``,
+    ``threshold_direction``, ``threshold_warn``, ``attrition_cols``,
+    ``aggregation``).
+
+    Returns the layout's payload, or ``null`` when the config is incomplete or
+    the data cannot support it (a constant column has no histogram). The
+    builder then renders no strip rather than a misleading one.
+
+    ``filters`` (optional, ``InteractiveFilter`` list) narrows the frame first,
+    so the builder can preview the strip under the dashboard's active filters
+    (#329). ``layout: "hero"`` is a preview-only pseudo-layout returning
+    ``{"value": <scalar>}`` — the card's hero aggregation computed on the
+    (possibly filtered) frame, replacing the static precomputed spec value the
+    builder shows when no filters are active.
+    """
+    from depictio.api.v1.deltatables_utils import apply_filters_to_scan, clean_filter_payload
+    from depictio.api.v1.services.card_metrics import hero_value
+
+    layout = str(request.get("layout") or "")
+    column = str(request.get("column") or "")
+    if (layout not in NUMERIC_LAYOUTS and layout != "hero") or not column:
+        raise HTTPException(
+            status_code=400,
+            detail=f"layout must be 'hero' or one of {NUMERIC_LAYOUTS} and column is required.",
+        )
+
+    delta_table_location = _resolve_delta_location(data_collection_id, current_user)
+    filter_metadata = clean_filter_payload(request.get("filters"))
+
+    try:
+        lazy = pl.scan_delta(delta_table_location, storage_options=polars_s3_config)
+        # Project to the columns this layout reads. ``attrition`` walks a list
+        # of stage columns and ``trend`` needs its axis alongside the hero
+        # column; the rest read the hero column alone. Filter columns must ride
+        # along or the filters would target a frame that no longer has them.
+        wanted = [
+            column,
+            *[str(c) for c in (request.get("attrition_cols") or []) if c],
+            *([str(request["trend_col"])] if request.get("trend_col") else []),
+        ]
+        available = set(lazy.collect_schema().names())
+        wanted = list(dict.fromkeys([c for c in wanted if c in available]))
+        if not wanted:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Column {column!r} not found in data collection {data_collection_id}.",
+            )
+        filter_cols = [
+            c
+            for f in filter_metadata
+            if (c := f.get("column_name") or (f.get("metadata") or {}).get("column_name"))
+            and c in available
+        ]
+        projected = list(dict.fromkeys(wanted + filter_cols))
+        frame = apply_filters_to_scan(lazy.select(projected), filter_metadata).select(wanted)
+        if layout == "hero":
+            return {"value": hero_value(frame, column, str(request.get("aggregation") or ""))}
+        return numeric_layout_payload(frame, request, column, layout)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error computing {layout} on {column!r}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to compute {layout}: {e}")
 
 
 @deltatables_endpoint_router.get("/shape/{data_collection_id}")
@@ -638,23 +1026,7 @@ async def get_preview(
     Heavy work (Polars scan + collect) runs on Celery when
     `settings.celery.offload_preview` is true (default).
     """
-    pipeline = _build_permission_pipeline(data_collection_id, current_user)
-    project_result = list(projects_collection.aggregate(pipeline))
-    if not project_result:
-        raise HTTPException(status_code=404, detail="Data collection not found or access denied.")
-
-    deltatables_list = list(deltatables_collection.find({"data_collection_id": data_collection_id}))
-    if not deltatables_list:
-        raise HTTPException(
-            status_code=404,
-            detail=f"No DeltaTable found for Data Collection ID {data_collection_id}.",
-        )
-
-    delta_table_location = deltatables_list[-1].get("delta_table_location")
-    if not delta_table_location:
-        raise HTTPException(
-            status_code=404, detail="Delta table location not found in deltatable document."
-        )
+    delta_table_location = _resolve_delta_location(data_collection_id, current_user)
 
     offload = settings.celery.offload_preview
     response.headers["X-Celery-Path"] = "offloaded" if offload else "inline"
@@ -669,6 +1041,50 @@ async def get_preview(
         raise
     except Exception as e:
         logger.error(f"Error reading delta table preview: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to read delta table preview: {e}")
+
+
+@deltatables_endpoint_router.post("/preview/{data_collection_id}")
+async def get_preview_filtered(
+    response: Response,
+    data_collection_id: PyObjectId,
+    request: dict,
+    current_user: User = Depends(get_user_or_anonymous),
+):
+    """Filtered flavour of the preview above, for the component builder.
+
+    Body: ``{"limit": int = 100, "filters": [InteractiveFilter, ...]}``. The
+    rows AND ``total_rows`` reflect the filtered frame, so the builder's
+    "Showing X of N rows" matches what the dashboard's components show under
+    the same filters (#329). Filters whose column isn't in this DC are skipped
+    (cross-DC filters can't be link-resolved without dashboard context — see
+    ``apply_filters_to_scan``). The GET stays for unfiltered callers.
+    """
+    from depictio.api.v1.deltatables_utils import clean_filter_payload
+
+    delta_table_location = _resolve_delta_location(data_collection_id, current_user)
+    filter_metadata = clean_filter_payload(request.get("filters"))
+    limit = int(request.get("limit") or 100)
+
+    offload = settings.celery.offload_preview
+    response.headers["X-Celery-Path"] = "offloaded" if offload else "inline"
+    try:
+        return await offload_or_run(
+            preview_deltatable_task,
+            (
+                {
+                    "delta_table_location": delta_table_location,
+                    "limit": limit,
+                    "filter_metadata": filter_metadata,
+                },
+            ),
+            offload=offload,
+            label=f"deltatable_preview dc={data_collection_id} filters={len(filter_metadata)}",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error reading filtered delta table preview: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to read delta table preview: {e}")
 
 

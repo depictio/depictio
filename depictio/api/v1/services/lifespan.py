@@ -35,6 +35,7 @@ from depictio.api.v1.services.yaml_sync import (
 from depictio.api.v1.tasks.cleanup_tasks import start_cleanup_tasks
 from depictio.api.v1.utils import clean_screenshots
 from depictio.models.models.analytics import UserActivity, UserSession
+from depictio.models.models.google_oauth import OAuthStateBeanie
 from depictio.models.models.projects import ProjectBeanie
 from depictio.models.models.users import (
     GroupBeanie,
@@ -68,6 +69,7 @@ async def init_motor_beanie() -> None:
             GroupBeanie,
             UserBeanie,
             MagicLinkTicketBeanie,
+            OAuthStateBeanie,
             ProjectBeanie,
             UserSession,
             UserActivity,
@@ -211,6 +213,44 @@ async def stop_event_services() -> None:
         await event_service.stop()
 
 
+def start_monitoring_storage(should_initialize: bool) -> None:
+    """Set up the monitoring ledger.
+
+    Index + capped-collection creation runs only on the initializing worker (no
+    need for N workers to race), but the app-log handler attaches in every API
+    worker so each process's logs are captured. Never fails boot.
+    """
+    if not settings.monitoring.enabled:
+        return
+    try:
+        from depictio.api.v1.monitoring.log_handler import install_app_log_handler
+        from depictio.api.v1.monitoring.store import ensure_monitoring_storage
+
+        if should_initialize:
+            ensure_monitoring_storage()
+        install_app_log_handler(source="api")
+        logger.info(f"Worker {WORKER_ID}: Monitoring storage ready")
+    except Exception as exc:
+        logger.warning(f"Worker {WORKER_ID}: Monitoring storage setup failed: {exc}")
+
+
+def start_installation_telemetry() -> None:
+    """Start the anonymous installation-telemetry heartbeat. Never fails boot.
+
+    Note the missing ``should_initialize`` argument, unlike every other service
+    here. That flag is true only on a deployment's first-ever boot, so gating the
+    heartbeat on it would report an installation once and then never again. The
+    task therefore runs in every worker and deduplicates through a MongoDB guard —
+    see ``depictio/api/v1/telemetry/guard.py``.
+    """
+    try:
+        from depictio.api.v1.telemetry.tasks import start_telemetry
+
+        start_telemetry()
+    except Exception as exc:
+        logger.warning(f"Worker {WORKER_ID}: Telemetry startup failed: {exc}")
+
+
 def start_multiqc_prewarm(should_initialize: bool) -> None:
     """Fire-and-forget MultiQC prewarm for every dashboard at startup.
 
@@ -301,7 +341,9 @@ async def lifespan(_app: FastAPI):
     background_task = start_background_services(should_initialize)
     start_yaml_services(should_initialize)
     await start_event_services(should_initialize)
+    start_monitoring_storage(should_initialize)
     start_multiqc_prewarm(should_initialize)
+    start_installation_telemetry()
 
     yield
 

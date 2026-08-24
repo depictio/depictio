@@ -1,13 +1,16 @@
 import React from 'react';
-import { Paper, Stack, Group, Text, Checkbox, Switch } from '@mantine/core';
-import { Icon } from '@iconify/react';
+import { Checkbox, Switch } from '@mantine/core';
+import { CompactControlSlot } from 'depictio-components';
 
 import { InteractiveFilter, StoredMetadata } from '../../api';
+import { INTERACTIVE_FRAME, InteractiveFrame, InteractiveTitle } from './frame';
 
 interface CheckboxSwitchRendererProps {
   metadata: StoredMetadata;
   filters: InteractiveFilter[];
   onChange?: (filter: InteractiveFilter) => void;
+  /** Compact rendering — drops the frame, relies on the parent group's card. */
+  compact?: boolean;
 }
 
 /**
@@ -29,6 +32,7 @@ const CheckboxSwitchRenderer: React.FC<CheckboxSwitchRendererProps> = ({
   metadata,
   filters,
   onChange,
+  compact,
 }) => {
   const subType = metadata.interactive_component_type;
   if (subType !== 'Checkbox' && subType !== 'Switch') {
@@ -44,11 +48,6 @@ const CheckboxSwitchRenderer: React.FC<CheckboxSwitchRendererProps> = ({
       ? (filterEntry.value as boolean)
       : defaultBool;
 
-  const displayTitle =
-    metadata.title ||
-    (metadata.column_name ? `Filter on ${metadata.column_name}` : '');
-  const iconCol = metadata.icon_color || 'var(--mantine-color-blue-6)';
-
   const emit = (next: boolean) => {
     onChange?.({
       index: metadata.index,
@@ -60,40 +59,15 @@ const CheckboxSwitchRenderer: React.FC<CheckboxSwitchRendererProps> = ({
   };
 
   return (
-    <Paper
-      p="md"
-      radius="md"
-      shadow="xs"
-      withBorder
-      className="dashboard-component-hover"
-      style={{
-        height: '100%',
-        display: 'flex',
-        flexDirection: 'column',
-        boxSizing: 'border-box',
-      }}
-    >
-      <Stack gap="xs" style={{ flex: 1 }}>
-        {displayTitle && (
-          <Group gap="xs" align="center" wrap="nowrap">
-            {metadata.icon_name && (
-              <Icon
-                icon={metadata.icon_name}
-                width={18}
-                height={18}
-                style={{ color: iconCol, flexShrink: 0 }}
-              />
-            )}
-            <Text fw={600} size="sm">
-              {displayTitle}
-            </Text>
-          </Group>
-        )}
+    <InteractiveFrame compact={compact}>
+      <InteractiveTitle metadata={metadata} compact={compact} />
+      <CompactControlSlot compact={compact}>
         {subType === 'Checkbox' ? (
           <Checkbox
             checked={checked}
             onChange={(event) => emit(event.currentTarget.checked)}
             color={metadata.icon_color || undefined}
+            size={compact ? 'xs' : INTERACTIVE_FRAME.controlSize}
             label={metadata.column_name || undefined}
           />
         ) : (
@@ -101,11 +75,12 @@ const CheckboxSwitchRenderer: React.FC<CheckboxSwitchRendererProps> = ({
             checked={checked}
             onChange={(event) => emit(event.currentTarget.checked)}
             color={metadata.icon_color || undefined}
+            size={compact ? 'xs' : INTERACTIVE_FRAME.controlSize}
             label={metadata.column_name || undefined}
           />
         )}
-      </Stack>
-    </Paper>
+      </CompactControlSlot>
+    </InteractiveFrame>
   );
 };
 

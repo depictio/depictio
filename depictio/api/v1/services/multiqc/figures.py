@@ -4,10 +4,8 @@ Pure data processing — produces Plotly figure dicts the React viewer renders
 client-side. No Dash UI dependencies.
 """
 
-import contextlib
 import hashlib
 import os
-import re
 import tempfile
 import threading
 import time
@@ -20,66 +18,18 @@ import plotly.graph_objects as go
 from depictio.api.cache import get_cache
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
-from depictio.api.v1.services.multiqc.themes import get_theme_template
+
+# Figure construction + cache-key hashing are single-sourced in the CLI-shipped
+# shared module so the API render path and the CLI offline prerender produce
+# byte-identical figures and byte-identical keys (key equality is what lets the
+# server resolve a CLI-uploaded figure).
+from depictio.cli.cli.utils.multiqc_figures import (
+    build_multiqc_figure,
+    multiqc_figure_cache_key,
+)
 
 # Global lock to prevent concurrent MultiQC operations (MultiQC global state is not thread-safe)
 _multiqc_lock = threading.RLock()
-
-# 8-digit hex (#rrggbbaa). Some MultiQC heatmaps (e.g. FastQC "Status Checks")
-# emit an alpha-bearing hex for "no-data" cells; Plotly's heatmap `colorscale`
-# property rejects 8-digit hex at assignment time, so the figure can't even be
-# built. We normalise such colors to rgba() (see _patch_colorscale_alpha).
-_HEX8_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{8}$")
-
-
-def _hex8_to_rgba(color: object) -> object:
-    """Convert a #rrggbbaa hex string to an rgba() string; pass anything else through."""
-    if isinstance(color, str) and _HEX8_COLOR_RE.match(color):
-        r, g, b, a = (int(color[i : i + 2], 16) for i in (1, 3, 5, 7))
-        return f"rgba({r}, {g}, {b}, {round(a / 255, 4)})"
-    return color
-
-
-def _sanitize_colorscale(value: object) -> object:
-    """Rewrite 8-digit-hex colors inside a [[pos, color], ...] colorscale to rgba()."""
-    if not isinstance(value, (list, tuple)):
-        return value
-    out = []
-    for entry in value:
-        if isinstance(entry, (list, tuple)) and len(entry) == 2:
-            out.append([entry[0], _hex8_to_rgba(entry[1])])
-        else:
-            out.append(entry)
-    return out
-
-
-@contextlib.contextmanager
-def _patch_colorscale_alpha():
-    """Temporarily tolerate 8-digit-hex colorscales during figure construction.
-
-    Plotly validates the `colorscale` property on assignment and raises on
-    8-digit hex, which would abort MultiQC's ``get_figure``. We wrap the
-    validator so that, *only* when the original validation fails, the colorscale
-    is retried with its alpha-hex colors converted to rgba(). Valid colorscales
-    are untouched, and the original validator is always restored.
-    """
-    from _plotly_utils.basevalidators import ColorscaleValidator
-
-    original = ColorscaleValidator.validate_coerce
-
-    def patched(self, v):
-        try:
-            return original(self, v)
-        except ValueError:
-            return original(self, _sanitize_colorscale(v))
-
-    # setattr (not direct assignment) so the temporary method swap on this
-    # third-party validator class doesn't trip static method-type checks.
-    setattr(ColorscaleValidator, "validate_coerce", patched)
-    try:
-        yield
-    finally:
-        setattr(ColorscaleValidator, "validate_coerce", original)
 
 
 # Tracks which DC's report (keyed by ``_generate_cache_key(s3_locations)``) is
@@ -261,38 +211,17 @@ def _generate_cache_key(s3_locations: List[str]) -> str:
     return f"multiqc:state:{hash_digest}"
 
 
-def _generate_figure_cache_key(
-    s3_locations: List[str],
-    module: str,
-    plot: str,
-    dataset_id: Optional[str] = None,
-    theme: str = "light",
-    filter_sig: Optional[str] = None,
-    dc_id: Optional[str] = None,
-) -> str:
-    """Generate cache key for a rendered figure.
-
-    `dc_id` is embedded literally in the key so a DC-scoped invalidation
-    (`cache.delete_pattern(f"dc={dc_id}")`) can drop every figure variant for
-    that DC after an append/replace/clear, regardless of theme/filter combo.
-    """
-    sorted_locations = sorted(s3_locations)
-    key_parts = [
-        "|".join(sorted_locations),
-        module,
-        plot,
-        str(dataset_id),
-        theme,
-        filter_sig or "",
-    ]
-    key_str = "::".join(key_parts)
-    hash_digest = hashlib.sha256(key_str.encode()).hexdigest()[:16]
-    return f"multiqc:figure:dc={dc_id or 'none'}:{hash_digest}"
-
-
-# Public alias so callers (e.g. FastAPI endpoints) can layer filter-aware
-# caching on top of the unfiltered baseline that `create_multiqc_plot` caches.
-generate_figure_cache_key = _generate_figure_cache_key
+# Figure cache key — the shared implementation, exposed under the two names this
+# module has always published. Both the API render path and the CLI offline
+# prerender must hash identical keys: the server can only resolve a CLI-uploaded
+# figure if both sides agree on this key. `dc_id` is embedded literally so a
+# DC-scoped invalidation (`cache.delete_pattern(f"dc={dc_id}")`) drops every
+# figure variant for that DC after an append/replace/clear, regardless of
+# theme/filter combo. `generate_figure_cache_key` is the public alias callers
+# (e.g. FastAPI endpoints) use to layer filter-aware caching on top of the
+# unfiltered baseline that `create_multiqc_plot` caches.
+_generate_figure_cache_key = multiqc_figure_cache_key
+generate_figure_cache_key = multiqc_figure_cache_key
 
 
 def _get_or_parse_multiqc_logs(s3_locations: List[str], use_s3_cache: bool = True) -> bool:
@@ -478,13 +407,11 @@ def create_multiqc_plot(
     :func:`generate_figure_cache_key` — this helper only caches the unfiltered
     baseline.
     """
-    # Register the mantine_light/mantine_dark Plotly templates this figure uses
-    # (Dash/dmc removed). Covers the worker prerender path too, which has no
-    # endpoint-level guard.
-    from depictio.api.v1.services.figure.mantine_templates import ensure_mantine_templates
-
-    ensure_mantine_templates()
-
+    # ``multiqc`` is needed for the reparse-retry diagnostics below.
+    # Template registration is handled by ``get_theme_template`` itself, so it
+    # holds on the cached return below too — which never reaches
+    # ``build_multiqc_figure``, and whose figure a caller may re-template for the
+    # other theme.
     import multiqc
 
     cache = get_cache()
@@ -527,11 +454,11 @@ def create_multiqc_plot(
         # Cloudpickle round-trips the parsed `multiqc.report` for cross-worker
         # reuse, but the restored object can come back without populated
         # `report.modules` (silent loss of `Module` instances). When that
-        # happens, get_plot raises "Module X is not found" even though the
-        # underlying parquet contains the module. Detect, drop the bad cache
-        # entry, force a fresh parse, and retry once.
+        # happens, get_plot (inside build_multiqc_figure) raises "Module X is
+        # not found" even though the underlying parquet contains the module.
+        # Detect, drop the bad cache entry, force a fresh parse, and retry once.
         try:
-            plot_obj = multiqc.get_plot(module, plot)
+            fig = build_multiqc_figure(module, plot, dataset_id, theme)
         except ValueError as ve:
             if "is not found" not in str(ve):
                 raise
@@ -541,7 +468,7 @@ def create_multiqc_plot(
             )
             _force_reparse(s3_locations, use_s3_cache=use_s3_cache, ve=ve)
             try:
-                plot_obj = multiqc.get_plot(module, plot)
+                fig = build_multiqc_figure(module, plot, dataset_id, theme)
             except ValueError as retry_err:
                 available: list[str] = []
                 try:
@@ -552,23 +479,6 @@ def create_multiqc_plot(
                     f"MultiQC module '{module}' not in parsed report after re-parse. "
                     f"s3_locations={s3_locations}, available_modules={available}"
                 ) from retry_err
-
-        if not plot_obj or not hasattr(plot_obj, "get_figure"):
-            raise ValueError(f"Failed to get plot object for {module}/{plot}")
-
-        # Tolerate alpha-hex colorscales (e.g. FastQC "Status Checks") that
-        # Plotly would otherwise reject when the heatmap trace is constructed.
-        with _patch_colorscale_alpha():
-            fig = plot_obj.get_figure(dataset_id=dataset_id if dataset_id else 0)
-
-    fig.update_layout(
-        title=f"{module.upper()}: {plot}",
-        template=get_theme_template(theme),
-        autosize=True,
-        width=None,
-        height=None,
-        margin=dict(t=60, l=60, r=60, b=60),
-    )
 
     try:
         cache.set(fig_cache_key, fig.to_dict(), ttl=MULTIQC_CACHE_TTL_SECONDS)

@@ -184,3 +184,102 @@ describe('appendRenders addedLines', () => {
     expect(addedLines.map((i) => out[i]).join('\n')).toContain('code: |-');
   });
 });
+
+describe('YAML scalar quoting (values must survive the round-trip as strings)', () => {
+  // `dict_kwargs` is Dict[str, str] in the catalog model and Pydantic v2 refuses
+  // to coerce int/bool → str, so anything PyYAML would resolve to a non-string
+  // has to leave here quoted. Depictio's figure builder genuinely writes numbers
+  // (NumberInput) and booleans (Switch) into dictKwargs.
+  const kw = (dict_kwargs: Record<string, string>): RenderSpec => ({
+    uid: 'q',
+    component: 'figure',
+    visu_type: 'histogram',
+    dict_kwargs,
+  });
+
+  it('quotes numeric parameter values', () => {
+    expect(renderToFlow(kw({ x: 'a', nbinsx: '30' }))).toContain('nbinsx: "30"');
+    expect(renderToFlow(kw({ x: 'a', opacity: '0.5' }))).toContain('opacity: "0.5"');
+    expect(renderToFlow(kw({ x: 'a', n: '-2' }))).toContain('n: "-2"');
+    expect(renderToFlow(kw({ x: 'a', n: '1e3' }))).toContain('n: "1e3"');
+  });
+
+  it('quotes booleans and null-ish words in any case', () => {
+    for (const v of ['true', 'True', 'FALSE', 'yes', 'No', 'on', 'off', 'null', '~']) {
+      expect(renderToFlow(kw({ x: 'a', p: v }))).toContain(`p: ${JSON.stringify(v)}`);
+    }
+  });
+
+  it('quotes values YAML would read as a date or a sexagesimal', () => {
+    expect(renderToFlow(kw({ x: '2024-01-01' }))).toContain('x: "2024-01-01"');
+    expect(renderToFlow(kw({ x: '12:30' }))).toContain('x: "12:30"');
+  });
+
+  it('still emits plain identifiers and URLs unquoted', () => {
+    expect(renderToFlow(kw({ x: 'log2fc', color: 'sample_id' }))).toContain('x: log2fc, color: sample_id');
+    expect(genModuleYaml({ ...tool, homepage: 'https://example.org/a-b_c' })).toContain(
+      'homepage: https://example.org/a-b_c',
+    );
+  });
+});
+
+describe('card layouts', () => {
+  it('emits every companion field a layout requires', () => {
+    const r: RenderSpec = {
+      uid: 'c',
+      component: 'card',
+      column: 'cov',
+      aggregation: 'average',
+      secondary_layout: 'threshold',
+      threshold_value: 100,
+      threshold_direction: 'min',
+      threshold_warn: 80,
+    };
+    const flow = renderToFlow(r);
+    expect(flow).toContain('secondary_layout: threshold');
+    expect(flow).toContain('threshold_value: 100');
+    expect(flow).toContain('threshold_direction: min');
+    expect(flow).toContain('threshold_warn: 80');
+  });
+
+  it('emits attrition_cols as a flow sequence', () => {
+    const r: RenderSpec = {
+      uid: 'c',
+      component: 'card',
+      column: 'raw',
+      aggregation: 'sum',
+      secondary_layout: 'attrition',
+      attrition_cols: ['trimmed', 'mapped'],
+    };
+    expect(renderToFlow(r)).toContain('attrition_cols: [trimmed, mapped]');
+  });
+
+  it('keeps numeric card fields unquoted (the model types them as int/float)', () => {
+    const r: RenderSpec = {
+      uid: 'c',
+      component: 'card',
+      column: 'cov',
+      aggregation: 'average',
+      secondary_layout: 'gauge',
+      coverage_max: 200,
+    };
+    expect(renderToFlow(r)).toContain('coverage_max: 200');
+  });
+
+  it('block form carries the same fields as the flow form', () => {
+    const r: RenderSpec = {
+      uid: 'c',
+      component: 'card',
+      column: 'coverage_of_the_whole_genome',
+      aggregation: 'average',
+      secondary_layout: 'donut',
+      breakdown_col: 'sample_identifier_column',
+      filter_expr: 'coverage > 10',
+    };
+    // Long enough to force the block writer — the two used to drift apart.
+    const yaml = genOutputYaml(tool, output, 'f.csv', [r]);
+    expect(yaml).toContain('secondary_layout: donut');
+    expect(yaml).toContain('breakdown_col: sample_identifier_column');
+    expect(yaml).toContain('filter_expr: "coverage > 10"');
+  });
+});

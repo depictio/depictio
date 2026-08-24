@@ -6,12 +6,36 @@
  * catalog-studio roles panel (its own local state), not this store.
  */
 import { useBuilderStore } from 'depictio-builder/store/useBuilderStore';
-import { FIGURE_COLUMN_KWARGS, type Aggregation, type RenderSpec } from '../types';
+import {
+  FIGURE_COLUMN_KWARGS,
+  type Aggregation,
+  type RenderSpec,
+  type SecondaryLayout,
+  type ThresholdDirection,
+} from '../types';
+import {
+  SECONDARY_LAYOUTS,
+  THRESHOLD_DIRECTIONS,
+} from './generated/cardSpec';
 import { nextUid } from '../state/useStudioStore';
 
 /** Depictio card-method key → catalog aggregation enum. */
 function normalizeAggregation(agg: string): Aggregation {
   return (agg === 'unique' ? 'nunique' : agg) as Aggregation;
+}
+
+/** The builder types these loosely; narrow against the generated enums so a
+ *  layout depictio grows but the catalog doesn't accept can't reach the YAML. */
+function asLayout(value: string): SecondaryLayout | undefined {
+  return (SECONDARY_LAYOUTS as readonly string[]).includes(value)
+    ? (value as SecondaryLayout)
+    : undefined;
+}
+
+function asDirection(value: string): ThresholdDirection | undefined {
+  return (THRESHOLD_DIRECTIONS as readonly string[]).includes(value)
+    ? (value as ThresholdDirection)
+    : undefined;
 }
 
 /** Stringify a dict_kwargs value (schema requires Dict[str, str]). */
@@ -57,14 +81,23 @@ export function renderSpecFromStore(): RenderSpec | null {
   }
 
   if (s.componentType === 'card') {
+    // Key names match depictio's CardBuilder config bundle 1:1 (see
+    // depictio/viewer/src/builder/card/CardBuilder.tsx) — the layout-specific
+    // companions are what the catalog model requires per secondary_layout, so
+    // dropping any of them here produced a card `dev catalog validate` rejects.
     const cfg = s.config as {
       column_name?: string;
       aggregation?: string;
       aggregations?: string[];
       secondary_layout?: string;
-      breakdown_col?: string;
+      breakdown_col?: string | null;
       top_n_count?: number;
-      coverage_max?: number;
+      coverage_max?: number | null;
+      threshold_value?: number | null;
+      threshold_direction?: string;
+      threshold_warn?: number | null;
+      attrition_cols?: string[] | null;
+      trend_col?: string | null;
     };
     if (!cfg.column_name || !cfg.aggregation) return null;
     return {
@@ -75,10 +108,17 @@ export function renderSpecFromStore(): RenderSpec | null {
       ...(cfg.aggregations?.length
         ? { aggregations: cfg.aggregations.map(normalizeAggregation) }
         : {}),
-      ...(cfg.secondary_layout ? { secondary_layout: cfg.secondary_layout as never } : {}),
+      ...(cfg.secondary_layout ? { secondary_layout: asLayout(cfg.secondary_layout) } : {}),
       ...(cfg.breakdown_col ? { breakdown_col: cfg.breakdown_col } : {}),
       ...(typeof cfg.top_n_count === 'number' ? { top_n_count: cfg.top_n_count } : {}),
       ...(typeof cfg.coverage_max === 'number' ? { coverage_max: cfg.coverage_max } : {}),
+      ...(typeof cfg.threshold_value === 'number'
+        ? { threshold_value: cfg.threshold_value }
+        : {}),
+      ...(cfg.threshold_direction ? { threshold_direction: asDirection(cfg.threshold_direction) } : {}),
+      ...(typeof cfg.threshold_warn === 'number' ? { threshold_warn: cfg.threshold_warn } : {}),
+      ...(cfg.attrition_cols?.length ? { attrition_cols: [...cfg.attrition_cols] } : {}),
+      ...(cfg.trend_col ? { trend_col: cfg.trend_col } : {}),
     };
   }
 

@@ -89,12 +89,22 @@ test.describe("Public Mode", () => {
       });
 
       const cards = page.locator("[data-testid='dashboard-card']");
-      // CI stacks boot without reference-project seeds — nothing to click
-      // through. Locally (seeded stack) we verify the full view path.
+      // Stacks without reference-project seeds have no card to click through.
+      // When dashboards ARE seeded (CI demo stack, or a local seeded stack) we
+      // verify the full view path.
       const count = await cards.count();
       test.skip(count === 0, "No public dashboards seeded in this stack.");
 
-      await cards.first().click();
+      // Click the title anchor rather than the card's geometric centre: the
+      // card body is a plain <div>, so a centre click can land on non-navigating
+      // text (e.g. a tall card's subtitle) and open nothing. The title link is
+      // the anchor that wraps the heading — always visible, unlike the thumbnail
+      // carousel slides, whose off-screen links aren't reliably clickable.
+      const openLink = cards
+        .first()
+        .getByRole("link")
+        .filter({ has: page.getByRole("heading") });
+      await openLink.click();
       await expect(page).toHaveURL(/\/dashboard\//, { timeout: 15_000 });
       await expect(page.locator("body")).not.toContainText("404");
     });

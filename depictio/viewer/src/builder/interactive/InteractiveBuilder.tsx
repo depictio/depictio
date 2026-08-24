@@ -16,19 +16,25 @@
  * The right pane shows the live preview (`InteractivePreview`) of the chosen
  * control, identical to the Dash "Resulting interactive component" panel.
  */
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
+  Autocomplete,
   Card,
   Center,
   ColorInput,
+  Fieldset,
+  SegmentedControl,
   Select,
   Stack,
+  Switch,
+  Text,
   TextInput,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import {
   CheckboxSwitchRenderer,
   DatePickerRenderer,
+  fetchDashboard,
   MultiSelectRenderer,
   RangeSliderRenderer,
   SegmentedControlRenderer,
@@ -36,6 +42,7 @@ import {
 } from 'depictio-react-core';
 import type { StoredMetadata } from 'depictio-react-core';
 import { useBuilderStore } from '../store/useBuilderStore';
+import { useBuilderPreviewFilters } from '../useBuilderPreviewFilters';
 import ColumnSelect from '../shared/ColumnSelect';
 import DesignShell from '../shared/DesignShell';
 import PreviewPanel from '../shared/PreviewPanel';
@@ -90,23 +97,24 @@ const ICON_OPTIONS: { value: string; label: string }[] = [
   { value: 'mdi:calendar-range', label: 'Calendar' },
 ];
 
-const TITLE_SIZES: { value: string; label: string }[] = [
-  { value: 'xs', label: 'Extra Small' },
-  { value: 'sm', label: 'Small' },
-  { value: 'md', label: 'Medium' },
-  { value: 'lg', label: 'Large' },
-  { value: 'xl', label: 'Extra Large' },
-];
-
 interface InteractiveConfig {
   interactive_component_type?: string;
   column_name?: string;
   column_type?: string;
   title?: string;
-  title_size?: string;
   color?: string;
   icon_name?: string;
+  // Left-panel placement — consumed by FilterPanel in depictio-react-core.
+  section?: string;
+  group?: string;
+  placement?: string;
+  show_marks?: boolean;
 }
+
+/** Variants whose renderers read `show_marks`. */
+const MARKS_VARIANTS = ['Slider', 'RangeSlider', 'Timeline'];
+/** Mirrors TOP_PANEL_INTERACTIVE_TYPES in depictio/models/components/constants.py. */
+const TOP_PLACEMENT_VARIANTS = ['Timeline'];
 
 /**
  * Live preview that mounts the SAME renderer the dashboard grid uses
@@ -122,6 +130,7 @@ const InteractivePreview: React.FC = () => {
   const config = useBuilderStore((s) => s.config) as InteractiveConfig;
   const dcId = useBuilderStore((s) => s.dcId);
   const wfId = useBuilderStore((s) => s.wfId);
+  const previewFilters = useBuilderPreviewFilters();
 
   const { interactive_component_type, column_name, column_type, title, color, icon_name } =
     config;
@@ -159,28 +168,30 @@ const InteractivePreview: React.FC = () => {
     } as StoredMetadata['default_state'],
   };
 
+  // The dashboard's active filters (minus this component's own) so the
+  // control previews the option sets / ranges viewers will actually see.
   let renderer: React.ReactNode;
   switch (interactive_component_type) {
     case 'MultiSelect':
     case 'Select':
-      renderer = <MultiSelectRenderer metadata={metadata} filters={[]} />;
+      renderer = <MultiSelectRenderer metadata={metadata} filters={previewFilters} />;
       break;
     case 'RangeSlider':
-      renderer = <RangeSliderRenderer metadata={metadata} filters={[]} />;
+      renderer = <RangeSliderRenderer metadata={metadata} filters={previewFilters} />;
       break;
     case 'Slider':
-      renderer = <SliderRenderer metadata={metadata} filters={[]} />;
+      renderer = <SliderRenderer metadata={metadata} filters={previewFilters} />;
       break;
     case 'DateRangePicker':
     case 'DatePicker':
-      renderer = <DatePickerRenderer metadata={metadata} filters={[]} />;
+      renderer = <DatePickerRenderer metadata={metadata} filters={previewFilters} />;
       break;
     case 'SegmentedControl':
-      renderer = <SegmentedControlRenderer metadata={metadata} filters={[]} />;
+      renderer = <SegmentedControlRenderer metadata={metadata} filters={previewFilters} />;
       break;
     case 'Switch':
     case 'Checkbox':
-      renderer = <CheckboxSwitchRenderer metadata={metadata} filters={[]} />;
+      renderer = <CheckboxSwitchRenderer metadata={metadata} filters={previewFilters} />;
       break;
     default:
       renderer = null;
@@ -199,6 +210,47 @@ const InteractiveBuilder: React.FC = () => {
   const config = useBuilderStore((s) => s.config) as InteractiveConfig;
   const patchConfig = useBuilderStore((s) => s.patchConfig);
   const cols = useBuilderStore((s) => s.cols);
+  const dashboardId = useBuilderStore((s) => s.dashboardId);
+  const componentId = useBuilderStore((s) => s.componentId);
+
+  // The dashboard's other interactive components, used only to suggest the
+  // group names already in use. Group stays free text, so a failed fetch
+  // degrades to "no suggestions" rather than blocking authoring. (Section is
+  // picked from the dashboard's declared list by `SectionSelect` instead.)
+  const [siblings, setSiblings] = useState<StoredMetadata[]>([]);
+  useEffect(() => {
+    if (!dashboardId) return;
+    let cancelled = false;
+    fetchDashboard(dashboardId)
+      .then((dash) => {
+        if (cancelled) return;
+        setSiblings(
+          (dash.stored_metadata || []).filter(
+            (m) =>
+              m.component_type === 'interactive' &&
+              String(m.index) !== String(componentId),
+          ),
+        );
+      })
+      .catch((err) => {
+        console.warn('[InteractiveBuilder] section/group suggestions unavailable:', err);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [dashboardId, componentId]);
+
+  // Groups are scoped to the chosen section: a group may not span two sections
+  // (validate_interactive_groups in depictio/models/models/dashboards.py), so
+  // offering another section's groups here would only produce invalid YAML.
+  const groupOptions = useMemo(() => {
+    const scope = config.section
+      ? siblings.filter((m) => m.section === config.section)
+      : siblings.filter((m) => !m.section);
+    return [
+      ...new Set(scope.map((m) => m.group).filter((g): g is string => Boolean(g))),
+    ].sort();
+  }, [siblings, config.section]);
 
   const nunique = useMemo<number | undefined>(() => {
     if (!config.column_name) return undefined;
@@ -226,17 +278,30 @@ const InteractiveBuilder: React.FC = () => {
   }, [config.column_type, variants, config.interactive_component_type, patchConfig]);
 
   // Defaults applied once on first mount, mirroring Dash design_ui defaults
-  // (Icon='bx:slider-alt', Title Size='md').
+  // (Icon='bx:slider-alt'). No title size: interactive titles render at one
+  // fixed size so the Filters panel stays uniform — see
+  // `components/interactive/frame.tsx` in depictio-react-core.
   useEffect(() => {
     patchConfig({
       icon_name: config.icon_name ?? 'bx:slider-alt',
-      title_size: config.title_size ?? 'md',
       color: config.color ?? '',
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const selected = config.interactive_component_type;
+  const supportsTop = TOP_PLACEMENT_VARIANTS.includes(selected ?? '');
+  const supportsMarks = MARKS_VARIANTS.includes(selected ?? '');
+
+  // Switching an existing top-placed Timeline to another variant would leave
+  // `placement: 'top'` on a type the model rejects, so drop it here as well as
+  // in buildInteractive — the user sees the control revert instead of hitting
+  // a save error.
+  useEffect(() => {
+    if (config.placement === 'top' && !supportsTop) {
+      patchConfig({ placement: 'left' });
+    }
+  }, [config.placement, supportsTop, patchConfig]);
 
   const form = (
     <Card withBorder shadow="sm" p="md" radius="md">
@@ -318,14 +383,56 @@ const InteractiveBuilder: React.FC = () => {
           }
         />
 
-        <Select
-          label="Title Size"
-          description="Choose the size of the component title"
-          data={TITLE_SIZES}
-          value={config.title_size ?? 'md'}
-          onChange={(val) => patchConfig({ title_size: val ?? 'md' })}
-          allowDeselect={false}
-        />
+        <Fieldset legend="Panel placement" variant="filled" radius="md">
+          <Stack gap="sm">
+            <Text size="xs" c="dimmed">
+              Groups stack a few related controls inside one compact card, within
+              whichever section this control belongs to. Leave it empty to render
+              the control on its own.
+            </Text>
+
+            <Autocomplete
+              label="Group"
+              description="Controls sharing a group render together in one collapsible card"
+              placeholder="No group"
+              data={groupOptions}
+              value={config.group ?? ''}
+              onChange={(val) => patchConfig({ group: val })}
+              leftSection={<Icon icon="mdi:card-multiple-outline" width={14} />}
+              clearable
+            />
+
+            <div>
+              <Text size="sm" fw={500} mb={4}>
+                Placement
+              </Text>
+              <SegmentedControl
+                fullWidth
+                size="xs"
+                value={config.placement === 'top' ? 'top' : 'left'}
+                onChange={(val) => patchConfig({ placement: val })}
+                data={[
+                  { value: 'left', label: 'Left panel' },
+                  { value: 'top', label: 'Bottom strip', disabled: !supportsTop },
+                ]}
+              />
+              {!supportsTop && (
+                <Text size="xs" c="dimmed" mt={4}>
+                  The full-width strip is reserved for the Timeline control.
+                </Text>
+              )}
+            </div>
+
+            {supportsMarks && (
+              <Switch
+                label="Show tick marks"
+                description="Leave off inside a group for a denser panel"
+                checked={config.show_marks === true}
+                onChange={(e) => patchConfig({ show_marks: e.currentTarget.checked })}
+              />
+            )}
+          </Stack>
+        </Fieldset>
       </Stack>
     </Card>
   );

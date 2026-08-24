@@ -73,6 +73,16 @@ class LayoutItem(BaseModel):
 
 _VALUE_ERROR_PREFIX = re.compile(r"^Value error,\s*")
 
+# `placement` means something different per component type and so defaults
+# differently: an interactive control lives in the left filter panel, a map is a
+# normal grid tile. Kept in step with the `placement` fields on
+# `InteractiveLiteComponent` / `MapLiteComponent`. Types absent here carry no
+# placement at all, so nothing is ever skipped for them.
+_DEFAULT_PLACEMENT: dict[str, str] = {
+    "interactive": "left",
+    "map": "grid",
+}
+
 
 def _strip_value_error_prefix(msg: str) -> str:
     """Remove Pydantic v2's 'Value error, ' prefix from a message."""
@@ -107,6 +117,43 @@ def _parse_component_lines(raw_msg: str) -> list[dict[str, Any]]:
 # ============================================================================
 # DashboardDataLite - User-friendly YAML format
 # ============================================================================
+
+
+class FilterSectionSpec(BaseModel):
+    """Presentation of one left-panel filter section.
+
+    Only needed to override a section's defaults. A section named by a
+    component's ``section`` field but absent from ``filter_sections`` still
+    renders — expanded, no icon — and sorts after the declared ones.
+
+    Example YAML:
+        filter_sections:
+          - name: Sample
+            icon: mdi:test-tube
+            color: teal
+          - name: Quality
+            icon: mdi:check-decagram
+            collapsed: true
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(..., description="Section name, matched against a component's `section`")
+    icon: str | None = Field(default=None, description="Iconify id shown in the section header")
+    color: str | None = Field(
+        default=None,
+        description="Mantine palette name (e.g. 'teal') tinting the section's icon and badge. "
+        "Left unset the header renders neutral. Not validated against the palette: an "
+        "unknown name falls back to the theme default rather than failing the import.",
+    )
+    description: str | None = Field(
+        default=None, description="Short hint rendered under the section header"
+    )
+    collapsed: bool = Field(
+        default=False,
+        description="Start the section collapsed. Defaults to expanded so no filter is "
+        "hidden on first visit.",
+    )
 
 
 class DashboardDataLite(BaseModel):
@@ -189,6 +236,22 @@ class DashboardDataLite(BaseModel):
         default=None, description="Workflow system (e.g., 'nf-core', 'snakemake')"
     )
 
+    # Left filter panel presentation (ordering + icons for named sections)
+    filter_sections: list[FilterSectionSpec] = Field(
+        default_factory=list,
+        description="Optional presentation for the left panel's filter sections. "
+        "Declaring a section here fixes its position and lets it carry an icon, a "
+        "description and a default collapse state.",
+    )
+    # Main grid presentation. A separate list from `filter_sections` on purpose:
+    # a section named "QC" in the filter panel and one in the grid are two
+    # different placements that happen to share a name.
+    grid_sections: list[FilterSectionSpec] = Field(
+        default_factory=list,
+        description="Optional presentation for the main grid's sections. Same shape "
+        "as `filter_sections`, applied to non-interactive components.",
+    )
+
     # Components using Lite models
     components: list[LiteComponent | dict[str, Any]] = Field(
         default_factory=list, description="List of dashboard components"
@@ -238,21 +301,29 @@ class DashboardDataLite(BaseModel):
 
     @model_validator(mode="after")
     def validate_interactive_groups(self) -> "DashboardDataLite":
-        """Enforce that no `group` exceeds MAX_INTERACTIVE_GROUP_SIZE members."""
+        """Enforce group size and one-section-per-group.
+
+        A group split across two sections has no single place to render, so the
+        panel would have to silently pick one and drop the other members.
+        """
         from depictio.models.components.constants import MAX_INTERACTIVE_GROUP_SIZE
 
         counts: dict[str, int] = {}
+        sections_per_group: dict[str, set[str | None]] = {}
         for comp in self.components:
             if isinstance(comp, dict):
                 if comp.get("component_type") != "interactive":
                     continue
                 group = comp.get("group")
+                section = comp.get("section")
             else:
                 if getattr(comp, "component_type", None) != "interactive":
                     continue
                 group = getattr(comp, "group", None)
+                section = getattr(comp, "section", None)
             if group:
                 counts[group] = counts.get(group, 0) + 1
+                sections_per_group.setdefault(group, set()).add(section or None)
 
         oversized = {g: n for g, n in counts.items() if n > MAX_INTERACTIVE_GROUP_SIZE}
         if oversized:
@@ -260,6 +331,15 @@ class DashboardDataLite(BaseModel):
             raise ValueError(
                 f"Interactive component groups exceed the maximum size of "
                 f"{MAX_INTERACTIVE_GROUP_SIZE}: {details}"
+            )
+
+        split = {g: s for g, s in sections_per_group.items() if len(s) > 1}
+        if split:
+            details = ", ".join(
+                f"'{g}' spans sections {sorted(str(x) for x in s)}" for g, s in split.items()
+            )
+            raise ValueError(
+                f"Interactive component groups must sit in a single section: {details}"
             )
         return self
 
@@ -282,6 +362,8 @@ class DashboardDataLite(BaseModel):
         "icon_color",
         "icon_variant",
         "workflow_system",
+        "filter_sections",
+        "grid_sections",
     ]
 
     @staticmethod
@@ -431,6 +513,7 @@ class DashboardDataLite(BaseModel):
                 "code_content",
                 "selection_enabled",
                 "selection_column",
+                "max_points",
             ],
             "card": [
                 # mandatory
@@ -451,6 +534,7 @@ class DashboardDataLite(BaseModel):
             "table": [
                 # optional user-defined
                 "columns",
+                "compact",
                 "page_size",
                 "sortable",
                 "filterable",
@@ -507,7 +591,7 @@ class DashboardDataLite(BaseModel):
         _GENERATED: set[str] = {"tag", "index", "layout", "title"}
 
         mandatory_keys = _MANDATORY_COMMON | _MANDATORY_BY_TYPE.get(comp_type, set())
-        table_defaults = {"page_size": 10, "sortable": True, "filterable": True}
+        table_defaults = {"page_size": 100, "sortable": True, "filterable": True}
         is_table = comp_type == "table"
 
         field_order = DashboardDataLite._get_component_field_order(comp_type)
@@ -772,6 +856,25 @@ class DashboardDataLite(BaseModel):
             comp_layout = layout_lookup.get(comp_index_str, {"x": 0, "y": 0, "w": 6, "h": 4})
             lite_comp["layout"] = comp_layout
 
+            # Placement & grouping — the mirror of what `to_full` writes, so an
+            # export round-trips the left panel's structure instead of flattening
+            # every control back into one ungrouped list. Emitted from the shared
+            # prologue rather than the interactive branch: a component type that
+            # never carries these keys simply contributes nothing.
+            #
+            # `placement` is skipped at its per-type default so the export stays
+            # the minimal diff from the model — writing `placement: grid` on every
+            # map is noise, and the map branch below would then have no way to
+            # take it back out.
+            default_placement = _DEFAULT_PLACEMENT.get(comp_type)
+            for field in ("placement", "group", "section", "timescale", "show_marks"):
+                val = comp.get(field)
+                if val is None:
+                    continue
+                if field == "placement" and val == default_placement:
+                    continue
+                lite_comp[field] = val
+
             if comp.get("title"):
                 lite_comp["title"] = comp["title"]
 
@@ -786,6 +889,8 @@ class DashboardDataLite(BaseModel):
                     lite_comp["code_content"] = comp["code_content"]
                 if comp.get("selection_enabled") is not None:
                     lite_comp["selection_enabled"] = comp["selection_enabled"]
+                if comp.get("max_points") is not None:
+                    lite_comp["max_points"] = comp["max_points"]
 
             elif comp_type == "card":
                 lite_comp["aggregation"] = comp.get("aggregation", "")
@@ -827,7 +932,9 @@ class DashboardDataLite(BaseModel):
             elif comp_type == "table":
                 if comp.get("columns"):
                     lite_comp["columns"] = comp["columns"]
-                if comp.get("page_size") and comp["page_size"] != 10:
+                if comp.get("compact"):
+                    lite_comp["compact"] = comp["compact"]
+                if comp.get("page_size") and comp["page_size"] != 100:
                     lite_comp["page_size"] = comp["page_size"]
                 if comp.get("sortable") is False:
                     lite_comp["sortable"] = False
@@ -853,6 +960,8 @@ class DashboardDataLite(BaseModel):
                     "opacity": 1.0,
                     "size_max": 15,
                     "featureidkey": "id",
+                    "placement": "grid",
+                    "floating_initial_state": "compact",
                 }
                 # Fields exported whenever truthy
                 _MAP_TRUTHY_FIELDS = [
@@ -913,6 +1022,11 @@ class DashboardDataLite(BaseModel):
             title=dashboard_data.get("title", "Untitled Dashboard"),
             subtitle=dashboard_data.get("subtitle", ""),
             components=lite_components,
+            # Section presentation, so an exported dashboard keeps its accordion
+            # order, icons and default collapse rather than falling back to
+            # "declared nowhere, sorted by first appearance".
+            filter_sections=dashboard_data.get("filter_sections") or [],
+            grid_sections=dashboard_data.get("grid_sections") or [],
             # Tab fields
             is_main_tab=dashboard_data.get("is_main_tab", True),
             tab_order=dashboard_data.get("tab_order", 0),
@@ -977,6 +1091,10 @@ class DashboardDataLite(BaseModel):
             "main_tab_name": self.main_tab_name,
             "tab_icon": self.tab_icon,
             "tab_icon_color": self.tab_icon_color,
+            # Left-panel section presentation, carried through so the viewer can
+            # order sections and render their icons.
+            "filter_sections": [s.model_dump() for s in self.filter_sections],
+            "grid_sections": [s.model_dump() for s in self.grid_sections],
             # parent_dashboard_tag is resolved to parent_dashboard_id during import
         }
 
@@ -1000,6 +1118,12 @@ class DashboardDataLite(BaseModel):
             full_comp = build_base_component(comp_dict)
             comp_type = comp_dict.get("component_type", "figure")
 
+            # `section` applies to every component type — the left panel groups
+            # its interactive controls by it, the main grid groups everything
+            # else. Written here rather than per-branch so a new component type
+            # can't silently lose it.
+            full_comp["section"] = comp_dict.get("section")
+
             if comp_type == "figure":
                 # Support figure_params (new YAML key) and dict_kwargs (legacy/internal)
                 figure_params = comp_dict.get("figure_params") or comp_dict.get("dict_kwargs", {})
@@ -1013,6 +1137,7 @@ class DashboardDataLite(BaseModel):
                         "total_data_count": 0,
                         "was_sampled": False,
                         "filter_applied": False,
+                        "max_points": comp_dict.get("max_points"),
                         # Selection filtering fields
                         "selection_enabled": comp_dict.get("selection_enabled", False),
                         "selection_column": comp_dict.get("selection_column"),
@@ -1028,13 +1153,20 @@ class DashboardDataLite(BaseModel):
                         "value": None,
                         "aggregations": comp_dict.get("aggregations"),
                         "filter_expr": comp_dict.get("filter_expr"),
-                        # Multi-metric layout style: vertical / compact /
-                        # box_plot / top_n / coverage / concentration. The
-                        # last three need extra config fields plumbed through:
+                        # Multi-metric layout style — see
+                        # ``CardLiteComponent.secondary_layout`` for the full
+                        # list. Everything past the distribution layouts
+                        # (vertical / compact / box_plot) needs extra config
+                        # fields plumbed through:
                         "secondary_layout": comp_dict.get("secondary_layout", "vertical"),
                         "breakdown_col": comp_dict.get("breakdown_col"),
                         "top_n_count": comp_dict.get("top_n_count", 3),
                         "coverage_max": comp_dict.get("coverage_max"),
+                        "threshold_value": comp_dict.get("threshold_value"),
+                        "threshold_direction": comp_dict.get("threshold_direction", "min"),
+                        "threshold_warn": comp_dict.get("threshold_warn"),
+                        "attrition_cols": comp_dict.get("attrition_cols") or [],
+                        "trend_col": comp_dict.get("trend_col"),
                     }
                 )
                 for f in [
@@ -1075,9 +1207,11 @@ class DashboardDataLite(BaseModel):
                 full_comp.update(
                     {
                         "columns": comp_dict.get("columns", []),
-                        "page_size": comp_dict.get("page_size", 10),
+                        "page_size": comp_dict.get("page_size", 100),
                         "sortable": comp_dict.get("sortable", True),
                         "filterable": comp_dict.get("filterable", True),
+                        # Compact row/header heights in the React TableRenderer.
+                        "compact": comp_dict.get("compact", False),
                         # Row selection filtering fields
                         "row_selection_enabled": comp_dict.get("row_selection_enabled", False),
                         "row_selection_column": comp_dict.get("row_selection_column"),
@@ -1135,6 +1269,8 @@ class DashboardDataLite(BaseModel):
                     "choropleth_aggregation": None,
                     "color_continuous_scale": None,
                     "range_color": None,
+                    "placement": "grid",
+                    "floating_initial_state": "compact",
                 }
                 for field, default in _MAP_FULL_DEFAULTS.items():
                     full_comp[field] = comp_dict.get(field, default)
@@ -1169,7 +1305,8 @@ class DashboardDataLite(BaseModel):
 
             elif comp_type == "text":
                 # Section-header text tile: TextRenderer.tsx reads `order` (H1-H6),
-                # `alignment`, `body`, and inherits `title` from the base.
+                # `alignment`, `vertical_alignment`, `body`, and inherits `title`
+                # from the base.
                 order = comp_dict.get("order", 1)
                 try:
                     order_int = max(1, min(6, int(order)))
@@ -1177,6 +1314,7 @@ class DashboardDataLite(BaseModel):
                     order_int = 1
                 full_comp["order"] = order_int
                 full_comp["alignment"] = comp_dict.get("alignment", "left")
+                full_comp["vertical_alignment"] = comp_dict.get("vertical_alignment", "center")
                 full_comp["body"] = comp_dict.get("body", "")
 
             full_components.append(full_comp)
@@ -1197,6 +1335,14 @@ class DashboardDataLite(BaseModel):
             comp_obj = self.components[idx]
             comp_dict = comp_obj if isinstance(comp_obj, dict) else comp_obj.model_dump()
             comp_type = comp.get("component_type", "figure")
+
+            # Components lifted out of the grid get no layout item at all: the
+            # React shell lays them out itself. 'top' is the Timeline in the
+            # TopPanel, 'floating' is a map in the floating panel. Skipping
+            # before the auto-layout below also keeps them from consuming a
+            # vertical slot the grid would then render as a gap.
+            if comp.get("placement") in ("top", "floating"):
+                continue
 
             # Extract x/y/w/h from nested layout (new format), flat fields (legacy), or auto-generate
             layout_nested = comp_dict.get("layout", {})
@@ -1234,10 +1380,6 @@ class DashboardDataLite(BaseModel):
                 layout_item["resizeHandles"] = ["se", "s", "e", "sw", "w"]
 
             if comp_type == "interactive":
-                # Top-placement components (e.g. Timeline) live in the React
-                # TopPanel, which lays them out inline — no grid entry needed.
-                if comp.get("placement") == "top":
-                    continue
                 left_panel_layout_data.append(layout_item)
             else:
                 right_panel_layout_data.append(layout_item)
@@ -1275,6 +1417,10 @@ class DashboardData(MongoModel):
     # Dual-panel layout storage (for left/right grid layouts)
     left_panel_layout_data: list = []
     right_panel_layout_data: list = []
+    # Left-panel filter section presentation. Empty for dashboards saved before
+    # sections existed, which renders exactly as it did then.
+    filter_sections: list[FilterSectionSpec] = []
+    grid_sections: list[FilterSectionSpec] = []
     buttons_data: dict = {
         "unified_edit_mode": True,  # Default edit mode ON for dashboard owners
         "add_components_button": {"count": 0},
@@ -1290,6 +1436,14 @@ class DashboardData(MongoModel):
     permissions: Permission
     is_public: bool = False
     last_saved_ts: str = ""
+    # Creation timestamp, UTC, "%Y-%m-%d %H:%M:%S". Stamped once on insert and
+    # never overwritten by saves, so it stays distinct from `last_saved_ts`.
+    # Empty on legacy documents — the API backfills it from the ObjectId.
+    creation_time: str = ""
+    # Set by the screenshot worker when the thumbnail PNGs land on disk. Used
+    # purely as a cache-buster for the listing thumbnails; deliberately separate
+    # from `last_saved_ts` so a background screenshot never looks like an edit.
+    screenshot_ts: str = ""
     project_id: PyObjectId
 
     # Tab support (backward compatible)

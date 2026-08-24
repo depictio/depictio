@@ -299,6 +299,102 @@ def _process_table_uploads(
 
     _, dc_dict = _load_table_dc(data_collection_id, current_user)
 
+    # Best-effort ingestion-run ledger so UI uploads show in the admin
+    # "Ingestion" pane next to CLI runs. Monitoring failures never block upload.
+    run_id = _begin_ui_ingestion_run(
+        mode=mode, data_collection_id=data_collection_id, current_user=current_user
+    )
+    try:
+        result = _write_table_upload(
+            data_collection_id=data_collection_id,
+            decoded_files=decoded_files,
+            current_user=current_user,
+            mode=mode,
+            dc_dict=dc_dict,
+        )
+    except Exception as exc:
+        _finish_ui_ingestion_run(run_id, "failed", error=str(exc))
+        raise
+    _finish_ui_ingestion_run(
+        run_id,
+        "success",
+        detail=(
+            f"DC {data_collection_id}: {result['rows_added']} row(s) added, "
+            f"{result['rows_total']} total"
+        ),
+    )
+    return result
+
+
+def _begin_ui_ingestion_run(*, mode: str, data_collection_id: str, current_user) -> str | None:
+    """Best-effort: open an ingestion-run ledger record for a UI table upload.
+
+    Mirrors the CLI ``/monitoring/ingestion/start`` write so UI uploads appear in
+    the admin "Ingestion" pane alongside CLI runs. Never raises — monitoring must
+    not be able to break a real upload.
+    """
+    monitoring = getattr(settings, "monitoring", None)
+    if monitoring is None or not getattr(monitoring, "enabled", False):
+        return None
+    try:
+        import socket
+        import uuid
+
+        from depictio.api.v1.monitoring import store
+        from depictio.models.models.monitoring import IngestionRun
+
+        run_id = str(uuid.uuid4())
+        store.create_ingestion_run(
+            IngestionRun(
+                run_id=run_id,
+                source="ui",
+                command=f"ui-{mode}",
+                cli_instance_label="Web UI",
+                cli_hostname=socket.gethostname(),
+                user_id=str(getattr(current_user, "id", "") or "") or None,
+                email=getattr(current_user, "email", None),
+                status="running",
+            )
+        )
+        return run_id
+    except Exception as exc:
+        logger.debug(f"UI ingestion-run start not recorded: {exc}")
+        return None
+
+
+def _finish_ui_ingestion_run(
+    run_id: str | None,
+    status: str,
+    *,
+    detail: str | None = None,
+    error: str | None = None,
+) -> None:
+    """Best-effort close of a UI ingestion-run record. Never raises."""
+    if not run_id:
+        return
+    try:
+        from depictio.api.v1.monitoring import store
+        from depictio.models.models.monitoring import IngestionStep
+
+        steps = [IngestionStep(name="upload", status=status, detail=detail).model_dump()]
+        store.finish_ingestion_run(
+            run_id, status=status, steps=steps, error=error, finished_at=datetime.now()
+        )
+    except Exception as exc:
+        logger.debug(f"UI ingestion-run finish not recorded: {exc}")
+
+
+def _write_table_upload(
+    *,
+    data_collection_id: str,
+    decoded_files: list[tuple[bytes, str]],
+    current_user,
+    mode: str,
+    dc_dict: dict,
+) -> dict:
+    """Read the uploaded files, optionally merge with the existing delta, write it
+    back, and bump the aggregation version. Pure ingestion work — the caller owns
+    validation and ingestion-run bookkeeping."""
     dc_props = (dc_dict.get("config") or {}).get("dc_specific_properties") or {}
     file_format = (dc_props.get("format") or "csv").lower()
     polars_kwargs = dict(dc_props.get("polars_kwargs") or {})

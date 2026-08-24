@@ -1,5 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Paper, Loader, Text, Stack, useMantineColorScheme } from '@mantine/core';
+import {
+  Paper,
+  Text,
+  Stack,
+  Badge,
+  Group,
+  useMantineColorScheme,
+} from '@mantine/core';
 import { AgGridReact } from 'ag-grid-react';
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-alpine.css';
@@ -14,11 +21,16 @@ import type {
 } from 'ag-grid-community';
 
 import { renderTable, InteractiveFilter, StoredMetadata } from '../api';
+import { LoadAllState } from './chrome/LoadAllButton';
 import { extractRowSelection } from '../selection';
 import { useInView } from '../hooks/useInView';
+import { enqueueFetch, isStaleFetch } from '../fetchQueue';
 import { useNewItemIds } from '../hooks/useNewItemIds';
 import { useTransientFlag } from '../hooks/useTransientFlag';
+import { ActiveHighlight } from '../highlight';
 import RefetchOverlay from './RefetchOverlay';
+import ComponentSkeleton from './ComponentSkeleton';
+import { useReportLoadStatus } from './DashboardLoadingProvider';
 
 interface TableRendererProps {
   dashboardId: string;
@@ -32,10 +44,31 @@ interface TableRendererProps {
   onFilterChange?: (filter: InteractiveFilter) => void;
   /** Counter to force refetch on realtime updates even when filters are unchanged. */
   refreshTick?: number;
+  /** Batch to glow — a live arrival (auto-fade) or a pinned re-selection from
+   *  the event log. Its ``ids`` are matched against each row's id column. */
+  activeHighlight?: ActiveHighlight | null;
+  /** Reports the paginated/full state so the chrome can render a "load all
+   *  rows" action icon consistent with the figure. */
+  onLoadAllState?: (state: LoadAllState | null) => void;
 }
 
-const CACHE_BLOCK_SIZE = 100;
 const MAX_BLOCKS_IN_CACHE = 10;
+const DEFAULT_PAGE_SIZE = 100;
+/** Pages the full set must span before the chrome offers "load all rows".
+ *  Tied to the author's own page size rather than an absolute row count: a
+ *  dashboard that deliberately shows 15 rows at a time has said the table is a
+ *  peek at the data, so it reaches "clicking through this is tedious" far
+ *  sooner than one paging at 100. */
+const LOAD_ALL_MIN_PAGES = 5;
+// Server clamps a single render_table request to 500 rows; "Show all" pages
+// through in chunks of this size up to the client-side safety ceiling below.
+const SERVER_MAX_LIMIT = 500;
+// Hard ceiling on rows pulled fully into the browser via "Show all" — beyond
+// this the client-side grid would jank; we truncate and warn instead.
+const TABLE_FULL_LOAD_CAP = 20000;
+
+const clampPageSize = (v: unknown): number =>
+  typeof v === 'number' && v > 0 ? Math.min(Math.floor(v), SERVER_MAX_LIMIT) : DEFAULT_PAGE_SIZE;
 
 /**
  * Renders a table component via AG Grid using the infinite row model. The
@@ -52,12 +85,23 @@ const TableRenderer: React.FC<TableRendererProps> = ({
   agGridApiRef,
   onFilterChange,
   refreshTick,
+  activeHighlight,
+  onLoadAllState,
 }) => {
   const [colDefs, setColDefs] = useState<ColDef[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [total, setTotal] = useState(0);
   const [ready, setReady] = useState(false);
+  // "Show all" mode: pull every row (up to a cap) into a client-side grid so
+  // the user can scroll/search the whole table on demand. Off by default —
+  // the grid stays server-paged (never > a page in the browser).
+  const [showAll, setShowAll] = useState(false);
+  const [allRows, setAllRows] = useState<Record<string, unknown>[] | null>(null);
+  const [allLoading, setAllLoading] = useState(false);
+  const [allTruncated, setAllTruncated] = useState(false);
+
+  const pageSize = clampPageSize(metadata.page_size);
   const { colorScheme } = useMantineColorScheme();
   const isDark = colorScheme === 'dark';
   const [containerRef, inView] = useInView<HTMLDivElement>('200px');
@@ -87,6 +131,10 @@ const TableRenderer: React.FC<TableRendererProps> = ({
     sortBy: null,
     sortDir: 'desc',
   });
+  // Data version the currently-cached row blocks were fetched against. Only
+  // meaningful for unsorted tables, whose row order is the scan's own (see the
+  // purge in ``datasource.getRows``).
+  const dataVersionRef = useRef<string | number | null>(null);
 
   // One-shot bootstrap: fetch column defs + total row count via a tiny
   // (start=0, limit=1) call. The infinite row model then takes over for
@@ -102,9 +150,23 @@ const TableRenderer: React.FC<TableRendererProps> = ({
   useEffect(() => {
     if (!inView || ready) return;
     let cancelled = false;
+    const ctrl = new AbortController();
     setLoading(true);
     setError(null);
-    renderTable(dashboardId, metadata.index, filtersForFetch, 0, 1)
+    enqueueFetch(
+      () =>
+        renderTable(
+          dashboardId,
+          metadata.index,
+          filtersForFetch,
+          0,
+          1,
+          undefined,
+          'desc',
+          ctrl.signal,
+        ),
+      metadata.layout?.y ?? 0,
+    )
       .then((res) => {
         if (cancelled) return;
         const selectionOn =
@@ -116,8 +178,16 @@ const TableRenderer: React.FC<TableRendererProps> = ({
         // dashboard agree on which columns are visible.
         const colsJson =
           (metadata.cols_json as Record<string, { hide?: boolean }> | undefined) ?? {};
+        // Optional YAML `columns` allowlist ("Columns to display"). When
+        // non-empty, restrict the grid to exactly those columns (the
+        // /render_table endpoint still returns every column). Combined with
+        // the per-column cols_json[].hide flag from the builder.
+        const allowList =
+          Array.isArray(metadata.columns) && metadata.columns.length > 0
+            ? new Set(metadata.columns)
+            : null;
         const visibleColumns = res.columns.filter(
-          (c) => colsJson[c.field]?.hide !== true,
+          (c) => colsJson[c.field]?.hide !== true && (!allowList || allowList.has(c.field)),
         );
         // Default sort: prefer whatever column the server picked (it does
         // its own ``acquisition*`` lookup so ingest order matches the image
@@ -126,22 +196,56 @@ const TableRenderer: React.FC<TableRendererProps> = ({
         // fallback to visible columns so we never default-sort on a hidden
         // one. If the server's pick is itself hidden, drop it too — the
         // user has chosen not to surface that column.
+        // The server refuses to sort tables past ``table_sort_max_rows``: a sort
+        // has to see every row, so on a multi-million-row table one page costs
+        // seconds instead of milliseconds. When it says so, every client-side
+        // fallback below must stand down too — otherwise we'd send a ``sort_by``
+        // the server discards and render unsorted rows under a sorted header,
+        // which the infinite row model has no way to detect.
+        const sortDisabled = res.sort_disabled === true;
         const serverSort = res.sort_by as string | null | undefined;
         const serverSortVisible =
-          serverSort && visibleColumns.some((c) => c.field === serverSort)
+          !sortDisabled && serverSort && visibleColumns.some((c) => c.field === serverSort)
             ? serverSort
             : null;
-        const defaultSortField =
-          serverSortVisible ??
-          visibleColumns
-            .map((c) => c.field)
-            .find(
-              (f) =>
-                /acquisition/i.test(f) && /(time|date|stamp)/i.test(f),
-            ) ??
+        const acquisitionSortField = sortDisabled
+          ? null
+          : (serverSortVisible ??
+            visibleColumns
+              .map((c) => c.field)
+              .find(
+                (f) =>
+                  /acquisition/i.test(f) && /(time|date|stamp)/i.test(f),
+              ) ??
+            null);
+        // Last-resort default: newest-first on the row-id column (``index_index``
+        // etc.) when it's visible AND numeric. A numeric ingest counter is
+        // monotonic, so descending surfaces the most recently added rows at the
+        // top — keeping the realtime new-row highlight in view (matching the
+        // newest-first image gallery) instead of stranding new rows at the bottom
+        // in natural ingest order. Gated on numeric dtype so a string selection
+        // column (``sample_id`` etc.) isn't lexicographically mis-sorted; those
+        // tables keep their prior natural order. Only used when no
+        // acquisition-timestamp sort applies.
+        const rowIdCol =
+          (typeof metadata.row_selection_column === 'string' &&
+            metadata.row_selection_column) ||
+          (typeof metadata.selection_column === 'string' &&
+            metadata.selection_column) ||
           null;
-        const defaultSortDir =
-          (res.sort_dir as 'asc' | 'desc' | undefined) ?? 'desc';
+        const rowIdColMeta = rowIdCol
+          ? visibleColumns.find((c) => c.field === rowIdCol)
+          : undefined;
+        const rowIdSortField =
+          !sortDisabled && rowIdColMeta && rowIdColMeta.type === 'numericColumn'
+            ? rowIdCol
+            : null;
+        const defaultSortField = acquisitionSortField ?? rowIdSortField;
+        // Acquisition sort honours the server's direction (defaulting desc);
+        // the row-id fallback is always descending (newest first).
+        const defaultSortDir: 'asc' | 'desc' = acquisitionSortField
+          ? ((res.sort_dir as 'asc' | 'desc' | undefined) ?? 'desc')
+          : 'desc';
         sortRef.current = { sortBy: defaultSortField, sortDir: defaultSortDir };
         setColDefs(
           visibleColumns.map((c, i) => {
@@ -156,7 +260,10 @@ const TableRenderer: React.FC<TableRendererProps> = ({
             return {
               field: c.field,
               headerName: c.headerName,
-              sortable: true,
+              // Removing the affordance is the honest signal: AG Grid drops the
+              // chevron and the click handler, so the user is never shown a
+              // sort control that silently does nothing.
+              sortable: !sortDisabled,
               filter: isNumeric ? 'agNumberColumnFilter' : true,
               resizable: true,
               cellClass: isNumeric ? 'ag-right-aligned-cell' : undefined,
@@ -175,7 +282,9 @@ const TableRenderer: React.FC<TableRendererProps> = ({
         setReady(true);
       })
       .catch((err) => {
-        if (cancelled) return;
+        // Superseded / aborted rounds are expected when the user keeps moving a
+        // filter — not something to surface as a broken table.
+        if (cancelled || isStaleFetch(err)) return;
         setError(err?.message || String(err));
       })
       .finally(() => {
@@ -183,12 +292,19 @@ const TableRenderer: React.FC<TableRendererProps> = ({
       });
     return () => {
       cancelled = true;
+      ctrl.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dashboardId, metadata.index, inView, ready]);
 
   const showInitialLoader = !inView || (!ready && loading);
   const showRefetchOverlay = ready && loading;
+
+  // Report load status to the dashboard registry. Off-screen → pending (null).
+  useReportLoadStatus(
+    metadata.index,
+    !inView ? null : ready ? 'ready' : error ? 'error' : 'loading',
+  );
 
   // When filters change after the grid is mounted, purge the cache so the
   // grid re-requests rows with the new filter state. Watch ``filtersForFetch``
@@ -200,6 +316,58 @@ const TableRenderer: React.FC<TableRendererProps> = ({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(filtersForFetch), ready, refreshTick]);
+
+  // A new filter slice changes the row set — drop back to the paginated
+  // (server-paged) view so the user re-opts into a full load for the new data.
+  useEffect(() => {
+    setShowAll(false);
+    setAllRows(null);
+    setAllTruncated(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(filtersForFetch)]);
+
+  // Pull every row (capped) into memory by paging the server in chunks, then
+  // hand them to a client-side grid. Respects the server's 500-row/request
+  // clamp and the client-side ceiling; truncates + warns beyond the cap.
+  const loadAllRows = async () => {
+    setShowAll(true);
+    setAllLoading(true);
+    setAllTruncated(false);
+    setError(null);
+    try {
+      const cap = Math.min(total || TABLE_FULL_LOAD_CAP, TABLE_FULL_LOAD_CAP);
+      const rows: Record<string, unknown>[] = [];
+      for (let start = 0; start < cap; start += SERVER_MAX_LIMIT) {
+        const chunk = Math.min(SERVER_MAX_LIMIT, cap - start);
+        const res = await renderTable(
+          dashboardId,
+          metadata.index,
+          filtersRef.current,
+          start,
+          chunk,
+          sortRef.current.sortBy,
+          sortRef.current.sortDir,
+        );
+        rows.push(...(res.rows as Record<string, unknown>[]));
+        if (typeof res.total === 'number') setTotal(res.total);
+        if (res.rows.length < chunk) break; // reached the end early
+      }
+      setAllRows(rows);
+      setAllTruncated((total || 0) > TABLE_FULL_LOAD_CAP);
+    } catch (err) {
+      setError((err as Error)?.message || String(err));
+      setShowAll(false);
+      setAllRows(null);
+    } finally {
+      setAllLoading(false);
+    }
+  };
+
+  const exitShowAll = () => {
+    setShowAll(false);
+    setAllRows(null);
+    setAllTruncated(false);
+  };
 
   // ── New-row highlight pipeline ────────────────────────────────────────────
   // Snapshot the first page's IDs (by ``row_selection_column`` if defined,
@@ -216,11 +384,21 @@ const TableRenderer: React.FC<TableRendererProps> = ({
   useEffect(() => {
     if (!rowIdColumn || !ready) return;
     let cancelled = false;
-    const pageSize =
+    const ctrl = new AbortController();
+    const snapshotPageSize =
       typeof metadata.page_size === 'number'
         ? Math.min(Math.max(metadata.page_size as number, 1), 200)
         : 50;
-    renderTable(dashboardId, metadata.index, filtersForFetch, 0, pageSize)
+    renderTable(
+      dashboardId,
+      metadata.index,
+      filtersForFetch,
+      0,
+      snapshotPageSize,
+      undefined,
+      'desc',
+      ctrl.signal,
+    )
       .then((res) => {
         if (cancelled) return;
         const ids: string[] = [];
@@ -235,6 +413,7 @@ const TableRenderer: React.FC<TableRendererProps> = ({
       });
     return () => {
       cancelled = true;
+      ctrl.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dashboardId, metadata.index, ready, rowIdColumn, JSON.stringify(filtersForFetch), refreshTick]);
@@ -246,14 +425,47 @@ const TableRenderer: React.FC<TableRendererProps> = ({
       : 3000;
   const highlightActive = useTransientFlag(refreshTick, highlightDurationMs);
 
+  // Per-batch highlight, payload-driven — glow the exact ids a batch added,
+  // matched on the batch's own ``idColumn`` (the DC-wide column the backend
+  // diffed), which every row carries in ``params.data``. This is ADDITIVE with
+  // the legacy first-page diff below: live arrivals glow via either path, and a
+  // sticky batch (re-selected from the event log) re-glows with no refetch.
+  const batchDcMatch =
+    !!activeHighlight &&
+    (!activeHighlight.dcId || activeHighlight.dcId === metadata.dc_id);
+  const batchIdColumn = activeHighlight?.idColumn;
+  const batchIds = useMemo(
+    () => (batchDcMatch && batchIdColumn ? new Set(activeHighlight!.ids) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [batchDcMatch, batchIdColumn, activeHighlight?.ids],
+  );
+  const batchFadeActive = useTransientFlag(activeHighlight?.nonce, highlightDurationMs);
+  const batchHighlightOn = batchDcMatch && (activeHighlight!.sticky || batchFadeActive);
+  const batchSticky = !!activeHighlight?.sticky;
+
   const getRowClass = useMemo(() => {
-    if (!rowIdColumn || !highlightActive || newRowIds.size === 0) return undefined;
+    const legacyOn = !!rowIdColumn && highlightActive && newRowIds.size > 0;
+    const batchOn =
+      batchHighlightOn && !!batchIds && !!batchIdColumn && batchIds.size > 0;
+    if (!legacyOn && !batchOn) return undefined;
     return (params: { data?: Record<string, unknown> }) => {
-      const v = params.data?.[rowIdColumn];
-      if (v === null || v === undefined) return undefined;
-      return newRowIds.has(String(v)) ? 'depictio-row-new' : undefined;
+      const data = params.data;
+      if (!data) return undefined;
+      // A pinned batch gets the steady ``-pinned`` class (stays until cleared);
+      // live arrivals (batch or legacy diff) get the one-shot ``-new`` flash.
+      if (batchOn) {
+        const bv = data[batchIdColumn!];
+        if (bv != null && batchIds!.has(String(bv))) {
+          return batchSticky ? 'depictio-row-pinned' : 'depictio-row-new';
+        }
+      }
+      if (legacyOn) {
+        const lv = data[rowIdColumn!];
+        if (lv != null && newRowIds.has(String(lv))) return 'depictio-row-new';
+      }
+      return undefined;
     };
-  }, [rowIdColumn, highlightActive, newRowIds]);
+  }, [rowIdColumn, highlightActive, newRowIds, batchIds, batchIdColumn, batchHighlightOn, batchSticky]);
 
   // AG Grid only evaluates ``getRowClass`` when a row is first drawn. The
   // new-row highlight resolves via an async snapshot fetch that lands *after*
@@ -269,16 +481,39 @@ const TableRenderer: React.FC<TableRendererProps> = ({
       getRows: (params: IGetRowsParams) => {
         const start = params.startRow;
         const limit = params.endRow - params.startRow;
-        renderTable(
-          dashboardId,
-          metadata.index,
-          filtersRef.current,
+        // Queued: AG Grid's infinite row model fires several blocks at once on
+        // first paint, and they'd otherwise contend with every other component's
+        // render. Earlier blocks get priority so the visible rows arrive first.
+        enqueueFetch(
+          () =>
+            renderTable(
+              dashboardId,
+              metadata.index,
+              filtersRef.current,
+              start,
+              limit,
+              sortRef.current.sortBy,
+              sortRef.current.sortDir,
+            ),
           start,
-          limit,
-          sortRef.current.sortBy,
-          sortRef.current.sortDir,
         )
           .then((res) => {
+            // An unsorted table is served in Delta scan order. That order is
+            // stable while files are only appended, but a compaction (OPTIMIZE /
+            // vacuum) rewrites the active file list and reorders the scan — at
+            // which point already-cached blocks no longer line up with freshly
+            // fetched ones, and the grid silently shows some rows twice and
+            // others not at all. The data version changes when that can have
+            // happened, so purge and restart paging from a consistent snapshot.
+            const version = res.data_version ?? null;
+            if (version !== null && dataVersionRef.current === null) {
+              dataVersionRef.current = version;
+            } else if (version !== null && version !== dataVersionRef.current) {
+              dataVersionRef.current = version;
+              params.failCallback();
+              gridApiRef.current?.purgeInfiniteCache();
+              return;
+            }
             // lastRow tells the grid the total — required so the scrollbar is
             // accurate and the grid stops asking past the end.
             const lastRow =
@@ -289,7 +524,11 @@ const TableRenderer: React.FC<TableRendererProps> = ({
             if (typeof res.total === 'number') setTotal(res.total);
           })
           .catch((err) => {
-            setError(err?.message || String(err));
+            // A filter change purges the grid's cache and drops every block
+            // still queued for the old filters. Those rejections are the
+            // mechanism working, not an error to show the user — the grid is
+            // already re-requesting the same blocks for the new filters.
+            if (!isStaleFetch(err)) setError(err?.message || String(err));
             params.failCallback();
           });
       },
@@ -303,6 +542,9 @@ const TableRenderer: React.FC<TableRendererProps> = ({
   // header click itself doesn't reorder rows because the infinite row model
   // doesn't have all rows loaded — we MUST go back to the server.
   const onSortChanged = (event: SortChangedEvent) => {
+    // In "Show all" (client-side) mode AG Grid sorts the in-memory rows itself
+    // — no server round-trip, and purgeInfiniteCache would throw.
+    if (showAll) return;
     const sorted = event.api.getColumnState().find((c) => c.sort);
     sortRef.current = {
       sortBy: sorted?.colId ?? null,
@@ -335,7 +577,11 @@ const TableRenderer: React.FC<TableRendererProps> = ({
         defaultState: { sort: null },
       });
     }
-    event.api.setGridOption('datasource', datasource);
+    // The datasource only applies to the infinite (server-paged) row model.
+    // In "Show all" mode the grid is client-side with rowData, so skip it.
+    if (!showAll) {
+      event.api.setGridOption('datasource', datasource);
+    }
   };
 
   const selectionEnabled = Boolean(metadata.row_selection_enabled) && !!onFilterChange;
@@ -368,6 +614,54 @@ const TableRenderer: React.FC<TableRendererProps> = ({
     [],
   );
 
+  // Page-size options for the pagination footer — always include the
+  // configured page size so AG Grid doesn't warn about a missing selector value.
+  const pageSizeSelector = useMemo(
+    () => Array.from(new Set([pageSize, 10, 25, 50, 100])).sort((a, b) => a - b),
+    [pageSize],
+  );
+
+  // The table is "reduced" whenever the full set spans more than one page.
+  const hasReduction = ready && (total > pageSize || showAll);
+
+  // ...but spanning a second page is not on its own a reason to offer "load
+  // all". The figure only offers it when the server actually sampled the data
+  // (`renderMeta.was_sampled`), i.e. when something was genuinely withheld; the
+  // table's equivalent is paging deep enough that clicking through is the worse
+  // way to read it. Without this, all but the smallest table carried the icon
+  // and its "may be slow on large datasets" tooltip — on a few hundred rows
+  // that is noise attached to a warning that isn't true.
+  const offerLoadAll = ready && (total > pageSize * LOAD_ALL_MIN_PAGES || showAll);
+
+  // Publish the paginated/full state to the chrome so it can render the same
+  // "load all" action icon the figure uses (consistent affordance + placement).
+  useEffect(() => {
+    if (!onLoadAllState) return;
+    onLoadAllState(
+      offerLoadAll
+        ? {
+            reduced: !showAll,
+            full: showAll,
+            loading: allLoading,
+            toggle: showAll ? exitShowAll : loadAllRows,
+            noun: 'rows',
+          }
+        : null,
+    );
+    // exitShowAll/loadAllRows are stable enough across the tracked deps.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onLoadAllState, offerLoadAll, showAll, allLoading]);
+
+  // Informational row-count indicator — same styling/placement as the figure's
+  // point indicator. The load-all toggle lives in the chrome (above).
+  const rowBadge = hasReduction ? (
+    <Badge variant="light" color="gray" size="xs" radius="sm">
+      {showAll
+        ? `${(allRows?.length ?? 0).toLocaleString()} rows (all)`
+        : `${total.toLocaleString()} rows`}
+    </Badge>
+  ) : null;
+
   return (
     <Paper
       ref={containerRef}
@@ -382,65 +676,81 @@ const TableRenderer: React.FC<TableRendererProps> = ({
         flexDirection: 'column',
       }}
     >
-      {metadata.title && (
-        <Text fw={600} size="sm" mb="xs">
-          {metadata.title}
-          {total > 0 && (
-            <Text component="span" c="dimmed" size="xs" ml="xs">
-              ({total} rows)
+      {(metadata.title || rowBadge) && (
+        <Group gap="xs" mb="xs" wrap="nowrap">
+          {metadata.title && (
+            <Text fw={600} size="sm">
+              {metadata.title}
             </Text>
           )}
-        </Text>
+          {rowBadge}
+        </Group>
       )}
-      {showInitialLoader && (
-        <Stack align="center" justify="center" gap="xs" style={{ flex: 1 }}>
-          <Loader size="sm" />
-          <Text size="xs" c="dimmed">Loading rows…</Text>
-        </Stack>
-      )}
+      {showInitialLoader && <ComponentSkeleton variant="table" />}
       {error && !ready && (
         <Stack style={{ flex: 1 }} justify="center" align="center">
           <Text size="sm" c="red">Table failed: {error}</Text>
         </Stack>
       )}
       {ready && (
-        <div
-          className={isDark ? 'ag-theme-alpine-dark' : 'ag-theme-alpine'}
-          style={{ width: '100%', flex: 1, minHeight: 0, position: 'relative' }}
-        >
-          <AgGridReact
-            columnDefs={colDefs}
-            defaultColDef={defaultColDef}
-            rowModelType="infinite"
-            cacheBlockSize={CACHE_BLOCK_SIZE}
-            maxBlocksInCache={MAX_BLOCKS_IN_CACHE}
-            rowHeight={metadata.compact ? 28 : undefined}
-            headerHeight={metadata.compact ? 32 : undefined}
-            onGridReady={onGridReady}
-            getRowClass={getRowClass}
-            getRowId={
-              rowIdColumn
-                ? (params: { data?: Record<string, unknown> }) =>
-                    String(params.data?.[rowIdColumn] ?? '')
-                : undefined
-            }
-            // Polars columns can contain ``.`` (iris: ``sepal.length``,
-            // ``petal.width``). Without this, AG Grid treats the dot as a
-            // path separator and tries ``row.sepal.length`` (nested), which
-            // fails because the row has flat keys → empty cells.
-            suppressFieldDotNotation
-            rowSelection={selectionEnabled ? 'multiple' : undefined}
-            // Plain click adds/removes from the selection set — without this
-            // AG Grid Community requires Ctrl/Shift modifiers, which is not
-            // discoverable. The checkbox column rendered on the first column
-            // (configured in ``setColDefs`` above) gives users a visual cue.
-            rowMultiSelectWithClick={selectionEnabled || undefined}
-            suppressRowClickSelection={selectionEnabled ? false : undefined}
-            onSelectionChanged={selectionEnabled ? onSelectionChanged : undefined}
-            onSortChanged={onSortChanged}
-          />
-          <RefetchOverlay visible={showRefetchOverlay} />
-        </div>
+        <>
+          {showAll && allTruncated && (
+            <Text size="xs" c="orange" mb={6}>
+              Table exceeds {TABLE_FULL_LOAD_CAP.toLocaleString()} rows — showing the
+              first {TABLE_FULL_LOAD_CAP.toLocaleString()} only.
+            </Text>
+          )}
+          <div
+            className={isDark ? 'ag-theme-alpine-dark' : 'ag-theme-alpine'}
+            style={{ width: '100%', flex: 1, minHeight: 0, position: 'relative' }}
+          >
+            <AgGridReact
+              // Remount when switching row models — AG Grid can't swap
+              // infinite ↔ client-side on a live instance.
+              key={showAll ? 'client' : 'infinite'}
+              columnDefs={colDefs}
+              defaultColDef={defaultColDef}
+              {...(showAll
+                ? { rowData: allRows ?? [] }
+                : {
+                    rowModelType: 'infinite' as const,
+                    cacheBlockSize: pageSize,
+                    maxBlocksInCache: MAX_BLOCKS_IN_CACHE,
+                  })}
+              pagination
+              paginationPageSize={pageSize}
+              // Infinite row model requires paginationPageSize === cacheBlockSize,
+              // so a size selector (which changes page size) can't be offered
+              // there — only in client-side "Show all" mode.
+              paginationPageSizeSelector={showAll ? pageSizeSelector : false}
+              rowHeight={metadata.compact ? 28 : undefined}
+              headerHeight={metadata.compact ? 32 : undefined}
+              onGridReady={onGridReady}
+              getRowClass={getRowClass}
+              getRowId={
+                rowIdColumn
+                  ? (params: { data?: Record<string, unknown> }) =>
+                      String(params.data?.[rowIdColumn] ?? '')
+                  : undefined
+              }
+              // Polars columns can contain ``.`` (iris: ``sepal.length``,
+              // ``petal.width``). Without this, AG Grid treats the dot as a
+              // path separator and tries ``row.sepal.length`` (nested), which
+              // fails because the row has flat keys → empty cells.
+              suppressFieldDotNotation
+              rowSelection={selectionEnabled ? 'multiple' : undefined}
+              // Plain click adds/removes from the selection set — without this
+              // AG Grid Community requires Ctrl/Shift modifiers, which is not
+              // discoverable. The checkbox column rendered on the first column
+              // (configured in ``setColDefs`` above) gives users a visual cue.
+              rowMultiSelectWithClick={selectionEnabled || undefined}
+              suppressRowClickSelection={selectionEnabled ? false : undefined}
+              onSelectionChanged={selectionEnabled ? onSelectionChanged : undefined}
+              onSortChanged={onSortChanged}
+            />
+            <RefetchOverlay visible={showRefetchOverlay || (showAll && allLoading)} />
+          </div>
+        </>
       )}
     </Paper>
   );

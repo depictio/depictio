@@ -12,6 +12,7 @@ import {
   Alert,
   Group,
   Loader,
+  NumberInput,
   Select,
   Stack,
   Text,
@@ -86,8 +87,30 @@ const FigureUIMode: React.FC<FigureUIModeProps> = ({ hideCrossFilter = false }) 
   const config = useBuilderStore((s) => s.config) as {
     selection_enabled?: boolean;
     selection_column?: string;
+    max_points?: number | null;
   };
   const patchConfig = useBuilderStore((s) => s.patchConfig);
+
+  // Mark-per-row plots (scatter family + line/area/bar/ecdf) are the ones the
+  // backend downsamples, so the max-points control is only meaningful for them.
+  // Keep this list in sync with `_SAMPLABLE_PLOT_TYPES` in
+  // depictio/api/v1/services/figure/figure_builder.py — if they drift, the
+  // control shows/hides on the wrong visu types.
+  const isPointPlot = useMemo(
+    () =>
+      [
+        'scatter',
+        'scatter_3d',
+        'scatter_ternary',
+        'scatter_polar',
+        'strip',
+        'line',
+        'area',
+        'bar',
+        'ecdf',
+      ].includes(visuType),
+    [visuType],
+  );
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -313,6 +336,22 @@ const FigureUIMode: React.FC<FigureUIModeProps> = ({ hideCrossFilter = false }) 
             />
           )}
         </Accordion>
+      )}
+
+      {isPointPlot && (
+        <NumberInput
+          label="Max points"
+          description="Downsample above this count (blank = global default). Viewers can still load all points on demand."
+          // min 1: blank means "use the global default"; disabling the cap
+          // entirely is a viewer-side action ("Load all"), not an authoring one.
+          min={1}
+          step={1000}
+          placeholder="Global default"
+          value={typeof config.max_points === 'number' ? config.max_points : ''}
+          onChange={(v) =>
+            patchConfig({ max_points: typeof v === 'number' && v > 0 ? v : null })
+          }
+        />
       )}
     </Stack>
   );

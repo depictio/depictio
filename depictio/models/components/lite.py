@@ -24,10 +24,13 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from depictio.models.components.constants import (
     AGGREGATION_COMPATIBILITY,
     COLUMN_TYPES,
+    FLOATING_PANEL_STATES,
     INTERACTIVE_COMPATIBILITY,
     INTERACTIVE_PLACEMENTS,
+    MAP_PLACEMENTS,
     MAP_STYLES,
     MAP_TYPES,
+    MAX_INTERACTIVE_GROUP_SIZE,
     TIMELINE_TIMESCALES,
     TOP_PANEL_INTERACTIVE_TYPES,
     VISU_TYPES,
@@ -65,6 +68,17 @@ class BaseLiteComponent(BaseModel):
     title_align: str = Field(
         default="left",
         description="Title alignment: 'left' (default), 'center', or 'right'",
+    )
+
+    # Layout
+    section: str | None = Field(
+        default=None,
+        description="Optional section name. Components sharing a section render "
+        "together under one collapsible accordion header — in the left filter panel "
+        "for interactive components, in the main grid for every other type. "
+        "Components with no section render above the first section. Declare a "
+        "section's icon and default collapse state via the dashboard-level "
+        "`filter_sections` (left panel) or `grid_sections` (main grid) list.",
     )
 
     # Data source references (human-readable tags)
@@ -212,6 +226,9 @@ class CardLiteComponent(BaseLiteComponent):
     # Multi-metric layout style.
     #   - ``vertical`` (default): stacked secondary aggregations under the hero
     #   - ``compact``: horizontal strip of secondary aggregations
+    #   - ``grid``: two columns of secondary aggregations. The readable option
+    #     between four and six, where ``compact`` squeezes each column below a
+    #     legible width and ``vertical`` grows taller than the card.
     #   - ``box_plot``: Tukey box-and-whisker from min/q1/median/q3/max
     #   - ``top_n``: mini horizontal bar chart of the top-N values of
     #     ``breakdown_col`` (cardinality view for ``count`` / ``nunique``
@@ -219,26 +236,75 @@ class CardLiteComponent(BaseLiteComponent):
     #   - ``coverage``: horizontal fill bar of ``value / coverage_max`` (e.g.
     #     "44 of 44 samples"). No extra server compute — the renderer reads
     #     the card's hero value as the numerator.
+    #   - ``gauge``: the same ``value / coverage_max``, drawn as a dial. Reads
+    #     faster when the number is a *level* rather than a quantity; same
+    #     relationship to ``coverage`` as ``donut`` has to ``composition``.
     #   - ``concentration``: same backend as ``top_n`` (groups by
     #     ``breakdown_col``) but the renderer surfaces only the top-N share
     #     (e.g. "Top 3 cover 18%").
+    #   - ``composition``: same backend as ``top_n``, drawn as a single 100%-wide
+    #     stacked bar (top-N segments + an "Other" remainder) with an evenness
+    #     caption. Where ``top_n`` ranks and ``concentration`` quantifies
+    #     dominance, this one shows what the column is *made of*, and whether it
+    #     is balanced.
+    #   - ``donut``: same backend again, drawn as a ring with the distinct-value
+    #     count in the hole and a legend beside it. Part-of-a-whole reads faster
+    #     on a ring than on a bar — one dominant category is a visibly
+    #     three-quarter-full circle.
+    #   - ``histogram``: binned sparkline of the column. The one view ``box_plot``
+    #     structurally cannot give: a five-number summary is blind to modality,
+    #     so a bimodal column and a flat one draw the same box.
+    #   - ``threshold``: pass / warn / fail counts against ``threshold_value``.
+    #     The QC question every sequencing pipeline asks and no other layout
+    #     answers — a box-plot shows the spread but never says whether three
+    #     samples are unusable.
+    #   - ``completeness``: filled vs missing (null) values. A hero ``count``
+    #     already skips nulls, so a card can look complete while the column is
+    #     half empty.
+    #   - ``uniqueness``: distinct vs repeated values. The other half of the
+    #     data-quality pair — ``completeness`` counts what is absent, this
+    #     counts what is duplicated, which nothing else surfaces because
+    #     nothing is missing.
+    #   - ``attrition``: retention across ``attrition_cols`` in pipeline order
+    #     (reads in → trimmed → mapped → deduplicated).
+    #   - ``trend``: the hero aggregation per bucket of ``trend_col``. Where
+    #     ``attrition`` walks a sequence of columns, this walks the values of
+    #     one — the only layout that answers "is this number moving".
     secondary_layout: Literal[
-        "vertical", "compact", "box_plot", "top_n", "coverage", "concentration"
+        "vertical",
+        "compact",
+        "grid",
+        "box_plot",
+        "top_n",
+        "coverage",
+        "gauge",
+        "concentration",
+        "composition",
+        "donut",
+        "histogram",
+        "threshold",
+        "completeness",
+        "uniqueness",
+        "attrition",
+        "trend",
     ] = Field(
         default="vertical",
         description=(
-            "Layout of the secondary strip. ``vertical`` / ``compact`` use the "
-            "``aggregations`` list; ``box_plot`` uses ``box_plot_stats``; ``top_n`` "
-            "and ``concentration`` use ``breakdown_col``; ``coverage`` uses "
-            "``coverage_max``."
+            "Layout of the secondary strip. ``vertical`` / ``compact`` / ``grid`` use "
+            "the ``aggregations`` list; ``box_plot`` uses ``box_plot_stats``; ``top_n``, "
+            "``concentration``, ``composition`` and ``donut`` use ``breakdown_col``; "
+            "``coverage`` and ``gauge`` use ``coverage_max``; ``trend`` uses "
+            "``trend_col``; ``histogram``, ``completeness`` and ``uniqueness`` need no "
+            "extra config."
         ),
     )
     breakdown_col: str | None = Field(
         default=None,
         description=(
-            "Column to group by when ``secondary_layout`` is ``top_n`` or "
-            "``concentration``. The renderer shows the top-N most-frequent values "
-            "of this column (and their share of the total). Ignored otherwise."
+            "Column to group by when ``secondary_layout`` is ``top_n``, "
+            "``concentration``, ``composition`` or ``donut``. The renderer shows "
+            "the top-N most-frequent values of this column (and their share of "
+            "the total). Ignored otherwise."
         ),
     )
     top_n_count: int = Field(
@@ -247,18 +313,62 @@ class CardLiteComponent(BaseLiteComponent):
         le=5,
         description=(
             "Number of values to surface in the secondary strip when "
-            "``secondary_layout`` is ``top_n`` or ``concentration``. Capped at "
-            "5 — past that the strip becomes illegibly cramped at typical card "
-            "sizes (w=2, h=2 ≈ 280×120 px)."
+            "``secondary_layout`` is ``top_n``, ``concentration``, "
+            "``composition`` or ``donut``. Capped at 5 — past that the strip "
+            "becomes illegibly cramped at typical card sizes "
+            "(w=2, h=2 ≈ 280×120 px)."
         ),
     )
     coverage_max: float | None = Field(
         default=None,
         description=(
-            "Denominator for ``secondary_layout: coverage`` — the theoretical "
-            "maximum the hero value can reach (e.g. 44 samples in the cohort, "
-            "11 SARS-CoV-2 ORFs). When null the renderer falls back to plain "
+            "Denominator for ``secondary_layout: coverage`` and ``gauge`` — the "
+            "theoretical maximum the hero value can reach (e.g. 44 samples in the "
+            "cohort, 11 SARS-CoV-2 ORFs). When null the renderer falls back to plain "
             "vertical layout."
+        ),
+    )
+    trend_col: str | None = Field(
+        default=None,
+        description=(
+            "Ordered column the ``secondary_layout: trend`` sparkline is bucketed "
+            "along — a date, a timestamp, or any sortable number (a run index, a "
+            "year). The card's own column is what gets aggregated inside each "
+            "bucket; without this the strip is not rendered."
+        ),
+    )
+    threshold_value: float | None = Field(
+        default=None,
+        description=(
+            "QC cut-off for ``secondary_layout: threshold``. Rows are counted as "
+            "passing or failing against it; without a value the strip is not "
+            "rendered."
+        ),
+    )
+    threshold_direction: Literal["min", "max"] = Field(
+        default="min",
+        description=(
+            "Which side of ``threshold_value`` passes. ``min`` means at-least "
+            "(coverage, %Q30 — higher is better), ``max`` means at-most "
+            "(duplication, contamination — lower is better). Explicit because "
+            "inferring it would silently invert a QC verdict."
+        ),
+    )
+    threshold_warn: float | None = Field(
+        default=None,
+        description=(
+            "Optional softer cut-off between pass and fail. Ignored unless it "
+            "lies on the failing side of ``threshold_value``, where a warn band "
+            "is the only place it is meaningful."
+        ),
+    )
+    attrition_cols: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Ordered stage columns for ``secondary_layout: attrition``, after "
+            "the card's own column (which is the first stage). The order is the "
+            "pipeline's order and is the content of the chart — the stages are "
+            "never sorted by value."
         ),
     )
 
@@ -367,7 +477,8 @@ class InteractiveLiteComponent(BaseLiteComponent):
     group: str | None = Field(
         default=None,
         description="Optional group identifier. Interactive components sharing the same "
-        "group are rendered together inside one card. Up to 3 components per group.",
+        "group are rendered together inside one collapsible card. Up to "
+        f"{MAX_INTERACTIVE_GROUP_SIZE} components per group.",
     )
 
     # Timeline-specific
@@ -475,6 +586,7 @@ class TextLiteComponent(BaseLiteComponent):
           title: Within-Sample Diversity
           order: 2
           alignment: left
+          vertical_alignment: top
           body: |
             Shannon, observed features, and Faith's PD measure
             within-sample richness and evenness.
@@ -484,7 +596,16 @@ class TextLiteComponent(BaseLiteComponent):
 
     order: int = Field(default=1, ge=1, le=6, description="Heading level (H1–H6; clamped 1..6)")
     alignment: Literal["left", "center", "right"] = Field(
-        default="left", description="Text alignment for the title and body"
+        default="left", description="Horizontal alignment of the title and body"
+    )
+    # Centred rather than top-aligned, because a text tile is almost never the
+    # height of its own text: the grid sizes it in whole row units, so a
+    # one-line heading in an `h: 2` tile spends the remainder as dead space
+    # under the text and reads as a rendering slip rather than a choice. Top
+    # alignment is still one word away for anyone who wants it.
+    vertical_alignment: Literal["top", "center", "bottom"] = Field(
+        default="center",
+        description="Vertical placement of the text block within its tile",
     )
     body: str = Field(default="", description="Optional paragraph below the heading")
 
@@ -509,7 +630,7 @@ class TableLiteComponent(BaseLiteComponent):
 
     # Table options (optional)
     columns: list[str] = Field(default_factory=list, description="Columns to display (empty = all)")
-    page_size: int = Field(default=10, description="Rows per page")
+    page_size: int = Field(default=100, description="Rows per page")
     sortable: bool = Field(default=True, description="Enable column sorting")
     filterable: bool = Field(default=True, description="Enable column filtering")
 
@@ -677,6 +798,21 @@ class MapLiteComponent(BaseLiteComponent):
     # Display title
     title: str | None = Field(default=None, description="Title displayed above the map")
 
+    # Layout placement
+    placement: str = Field(
+        default="grid",
+        description="Where to render this map: 'grid' (default — a normal dashboard "
+        "tile) or 'floating' (a collapsible panel reachable from every tab of the "
+        "dashboard).",
+    )
+    floating_initial_state: str = Field(
+        default="compact",
+        description="How that panel presents itself on a viewer's first visit: "
+        "'compact' or 'expanded' (a draggable card), 'docked' (pinned below the "
+        "filter panel) or 'hidden' (reachable from the header). Their own saved "
+        "preference takes over from then on. Ignored when placement='grid'.",
+    )
+
     # Pass-through kwargs for extra Plotly Express parameters
     dict_kwargs: dict[str, Any] = Field(
         default_factory=dict,
@@ -693,6 +829,17 @@ class MapLiteComponent(BaseLiteComponent):
         if self.map_style not in MAP_STYLES:
             valid = ", ".join(MAP_STYLES)
             raise ValueError(f"Invalid map_style '{self.map_style}'. Valid values: {valid}")
+
+        if self.placement not in MAP_PLACEMENTS:
+            valid = ", ".join(MAP_PLACEMENTS)
+            raise ValueError(f"Invalid placement '{self.placement}'. Valid values: {valid}")
+
+        if self.floating_initial_state not in FLOATING_PANEL_STATES:
+            valid = ", ".join(FLOATING_PANEL_STATES)
+            raise ValueError(
+                f"Invalid floating_initial_state '{self.floating_initial_state}'. "
+                f"Valid values: {valid}"
+            )
 
         if self.selection_enabled and not self.selection_column:
             raise ValueError("selection_column is required when selection_enabled=True")

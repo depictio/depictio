@@ -53,27 +53,13 @@ export interface ToolMeta {
 
 export type FigureVisuType = 'scatter' | 'line' | 'bar' | 'box' | 'histogram' | 'heatmap';
 
-// Matches the catalog schema's aggregation enum (card render). Depictio's card
-// builder exposes this full set; `fromBuilderStore` aliases its 'unique' →
-// 'nunique' so the emitted value stays within this enum.
-export type Aggregation =
-  | 'count'
-  | 'sum'
-  | 'average'
-  | 'median'
-  | 'min'
-  | 'max'
-  | 'range'
-  | 'variance'
-  | 'std_dev'
-  | 'skewness'
-  | 'kurtosis'
-  | 'percentile'
-  | 'q1'
-  | 'q3'
-  | 'box_plot_stats'
-  | 'nunique'
-  | 'mode';
+// The card enums come from `generated/cardSpec.ts`, derived from
+// catalog.schema.json at build time — they used to be hand-copied here and fell
+// a release behind depictio. `fromBuilderStore` aliases the builder's 'unique'
+// → 'nunique' so the emitted value stays within the aggregation enum.
+import type { Aggregation, SecondaryLayout, ThresholdDirection } from './catalog/generated/cardSpec';
+
+export type { Aggregation, SecondaryLayout, ThresholdDirection };
 
 /** plotly-express kwargs the catalog treats as column references (grounded). */
 export const FIGURE_COLUMN_KWARGS = [
@@ -107,14 +93,6 @@ export interface FigureRender {
   _previewFigure?: { data: unknown[]; layout: Record<string, unknown> };
 }
 
-export type SecondaryLayout =
-  | 'vertical'
-  | 'compact'
-  | 'box_plot'
-  | 'top_n'
-  | 'coverage'
-  | 'concentration';
-
 export interface CardRender {
   uid: string;
   component: 'card';
@@ -124,9 +102,21 @@ export interface CardRender {
   /** Optional multi-metric strip (depictio card builder). */
   aggregations?: Aggregation[];
   secondary_layout?: SecondaryLayout;
+  /** Group-by column — required by top_n / concentration / composition / donut. */
   breakdown_col?: string;
   top_n_count?: number;
+  /** Denominator — required by coverage / gauge. */
   coverage_max?: number;
+  /** QC cut-off — required by threshold. */
+  threshold_value?: number;
+  threshold_direction?: ThresholdDirection;
+  threshold_warn?: number;
+  /** Ordered stages after the card's own column — required by attrition. */
+  attrition_cols?: string[];
+  /** Ordered axis the sparkline buckets along — required by trend. */
+  trend_col?: string;
+  /** Optional polars pre-filter applied before the aggregation. */
+  filter_expr?: string;
 }
 
 export interface TableRender {

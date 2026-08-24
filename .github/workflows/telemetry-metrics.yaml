@@ -1,0 +1,252 @@
+# Snapshots the distribution metrics that no runtime telemetry can see.
+#
+# The heartbeat in depictio/api/v1/telemetry/ counts *running* installations. This
+# workflow captures the funnel in front of that — downloads, clones, and Tools
+# Studio contributions — none of which any deployed instance knows about.
+#
+# The GitHub traffic API is the reason this runs on a schedule rather than on
+# demand: GitHub retains only the last 14 days of clone and view counts, so
+# unsampled history is lost permanently. Everything else here is cumulative and
+# could be fetched at any time.
+#
+# Traffic needs a `TRAFFIC_READ_TOKEN` repository secret (a PAT with repo scope);
+# the default GITHUB_TOKEN cannot be granted the access those endpoints require.
+# Until that secret exists, the clone and view counts are the one thing here that
+# is genuinely not being collected.
+name: Telemetry metrics snapshot
+
+on:
+  schedule:
+    - cron: "0 5 * * 1" # Mondays 05:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: read # the Tools Studio count goes through the issue search API
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    # Declared at job level so the guard on the forwarding step can read it —
+    # a step's own `env:` block is not visible to that step's `if:`.
+    # Falls back to the public write-only project token that ships in the source
+    # anyway, so this works without any repository secret; set the secret only to
+    # redirect the snapshot elsewhere.
+    env:
+      POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY || 'phc_Auxev6EYhAUhApdp9QXRfGUWFhti3mgVjyowXjpmcgQw' }}
+      # The traffic API needs push access to the repository, which no `permissions:`
+      # key can grant the default GITHUB_TOKEN — `administration` is not among them.
+      # So traffic is collected only when a PAT is configured, and the step is
+      # skipped rather than failed when it is not. Without this the workflow would
+      # go red every Monday over an access level it cannot obtain.
+      TRAFFIC_TOKEN: ${{ secrets.TRAFFIC_READ_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Collect PyPI download counts
+        id: pypi
+        run: |
+          set -euo pipefail
+          # pypistats' public API, no auth required. `last_month` is the least
+          # noisy of the available windows — daily numbers swing wildly with CI.
+          # Reported as a number rather than the raw response body: a property that
+          # is a blob of JSON cannot be charted or compared week to week.
+          #
+          # depictio-cli is the only package this project publishes to PyPI — the
+          # server ships as container images and a Helm chart. `depictio` used to be
+          # polled here too and answered 404 every single week, which pinned the
+          # final gate red permanently over a distribution channel that does not
+          # exist.
+          #
+          # pypistats throttles by source IP and hosted runners share theirs, so 429
+          # is routine rather than exceptional: a descriptive User-Agent and a slow
+          # backoff get through it far more often than the default curl UA and a 5s
+          # delay did. When a fetch is throttled anyway it is recorded as throttled,
+          # not failed — see the gate at the end of the job for why that distinction
+          # decides the colour of the run.
+          ua="depictio-telemetry/1.0 (+https://github.com/${GITHUB_REPOSITORY})"
+          for pkg in depictio-cli; do
+            url="https://pypistats.org/api/packages/${pkg}/recent"
+            body="$RUNNER_TEMP/pypistats-${pkg}.json"
+            # The status comes out of the same request that fetches the body, via
+            # -w. Re-probing the URL after a failure would race the throttle
+            # window: the retries can exhaust on 429 and a second request seconds
+            # later answer 200, which would file a throttle as a hard error and
+            # turn the run red for the opposite of the reason it failed.
+            # `|| true` keeps -w's output while swallowing curl's exit 22, which
+            # -f raises on any HTTP error.
+            status=$(curl -sSf --max-time 30 --retry 5 --retry-delay 20 --retry-all-errors \
+              -H "User-Agent: ${ua}" -H "Accept: application/json" \
+              -o "$body" -w '%{http_code}' "$url" || true)
+            # $RUNNER_TEMP, not a job-level env var: the `runner` context is
+            # not available where job env is evaluated, so hoisting this path
+            # would silently resolve it to /collection-errors.txt.
+            case "$status" in
+              200)
+                downloads=$(jq -r '.data.last_month' <"$body")
+                echo "${pkg}: ${downloads} downloads last month"
+                echo "${pkg}=${downloads}" >> "$GITHUB_OUTPUT"
+                ;;
+              429)
+                echo "::warning::pypistats throttled the runner (429) for ${pkg}"
+                echo "pypi/${pkg}" >> "$RUNNER_TEMP/collection-throttled.txt"
+                ;;
+              *)
+                echo "::error::Could not fetch PyPI stats for ${pkg} (HTTP ${status:-000})"
+                echo "pypi/${pkg}" >> "$RUNNER_TEMP/collection-errors.txt"
+                ;;
+            esac
+          done
+
+      - name: Collect repository traffic
+        id: traffic
+        # Skipped, visibly, when no PAT is configured. See TRAFFIC_TOKEN above.
+        if: env.TRAFFIC_TOKEN != ''
+        env:
+          GH_TOKEN: ${{ secrets.TRAFFIC_READ_TOKEN }}
+        run: |
+          set -euo pipefail
+          for endpoint in clones views; do
+            if body=$(curl -sSf --max-time 30 --retry 3 --retry-delay 5 --retry-all-errors \
+                -H "Authorization: Bearer ${GH_TOKEN}" \
+                -H "Accept: application/vnd.github+json" \
+                "https://api.github.com/repos/${GITHUB_REPOSITORY}/traffic/${endpoint}"); then
+              read -r total uniques < <(jq -r '"\(.count) \(.uniques)"' <<<"$body")
+              echo "${endpoint}: ${total} (${uniques} unique)"
+              echo "${endpoint}=${total}" >> "$GITHUB_OUTPUT"
+              echo "${endpoint}_uniques=${uniques}" >> "$GITHUB_OUTPUT"
+            else
+              echo "::error::Could not fetch ${endpoint} traffic"
+              echo "traffic/${endpoint}" >> "$RUNNER_TEMP/collection-errors.txt"
+            fi
+          done
+
+      - name: Count Tools Studio contributions
+        id: studio
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # The Tools Studio opens PRs from branches prefixed `tools-studio/`.
+          # Counting them measures completed contributions — the only Studio metric
+          # that reflects someone finishing the flow rather than merely loading it.
+          query='repo:${{ github.repository }} is:pr head:tools-studio/'
+          if body=$(curl -sSf --max-time 30 --retry 3 --retry-delay 5 --retry-all-errors \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              --get --data-urlencode "q=${query}" \
+              "https://api.github.com/search/issues"); then
+            total=$(jq -r '.total_count' <<<"$body")
+            echo "tools-studio PRs: ${total}"
+            echo "pull_requests=${total}" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::Could not count Tools Studio PRs"
+            echo "tools-studio/pull-requests" >> "$RUNNER_TEMP/collection-errors.txt"
+          fi
+
+      - name: Forward to the telemetry collector
+        # always(): a collector step that exits non-zero must not also cost the
+        # metrics that did collect. Whatever was gathered still gets sent, and the
+        # last step is what turns the run red.
+        if: always() && env.POSTHOG_API_KEY != ''
+        env:
+          PYPI_DEPICTIO_CLI: ${{ steps.pypi.outputs.depictio-cli }}
+          TRAFFIC_CLONES: ${{ steps.traffic.outputs.clones }}
+          TRAFFIC_CLONES_UNIQUES: ${{ steps.traffic.outputs.clones_uniques }}
+          TRAFFIC_VIEWS: ${{ steps.traffic.outputs.views }}
+          TRAFFIC_VIEWS_UNIQUES: ${{ steps.traffic.outputs.views_uniques }}
+          TOOLS_STUDIO_PRS: ${{ steps.studio.outputs.pull_requests }}
+        run: |
+          set -euo pipefail
+          # Sent as a server-side event so distribution metrics land in the same
+          # place as the runtime heartbeat, instead of needing a second dashboard.
+          #
+          # Everything collected above is forwarded. Traffic in particular has to
+          # leave this job: GitHub keeps only 14 days of it, so a number that is
+          # merely printed into a log is a number the project has permanently lost.
+          python - <<'EOF'
+          import json
+          import os
+          import pathlib
+          import urllib.request
+
+          def metric(name):
+              """Collected value as an int, or None when that collector failed."""
+              raw = os.environ.get(name, "").strip()
+              # `jq -r` prints the literal "null" for a missing field, which would
+              # otherwise reach int() and take down the whole forward, losing the
+              # metrics that were fine.
+              return int(raw) if raw and raw != "null" else None
+
+          # Throttled collectors are as absent from the snapshot as failed ones,
+          # so both land in `uncollected`: the chart must show the same gap
+          # either way. The split only decides whether the run goes red.
+          temp = pathlib.Path(os.environ["RUNNER_TEMP"])
+          uncollected = [
+              name
+              for f in ("collection-errors.txt", "collection-throttled.txt")
+              if (temp / f).exists()
+              for name in (temp / f).read_text().split()
+          ]
+
+          body = {
+              "api_key": os.environ["POSTHOG_API_KEY"],
+              "event": "distribution_snapshot",
+              "distinct_id": "depictio-ci-metrics",
+              "properties": {
+                  "pypi_depictio_cli": metric("PYPI_DEPICTIO_CLI"),
+                  "github_clones": metric("TRAFFIC_CLONES"),
+                  "github_clones_unique": metric("TRAFFIC_CLONES_UNIQUES"),
+                  "github_views": metric("TRAFFIC_VIEWS"),
+                  "github_views_unique": metric("TRAFFIC_VIEWS_UNIQUES"),
+                  "tools_studio_pull_requests": metric("TOOLS_STUDIO_PRS"),
+                  # Present so a gap in a chart can be told apart from a genuine
+                  # zero: a null property here means the collector failed, and this
+                  # says which one.
+                  "uncollected": uncollected,
+                  "repository": os.environ.get("GITHUB_REPOSITORY", ""),
+              },
+          }
+          request = urllib.request.Request(
+              "https://eu.i.posthog.com/i/v0/e/",
+              data=json.dumps(body).encode(),
+              headers={"Content-Type": "application/json"},
+          )
+          with urllib.request.urlopen(request, timeout=15) as response:
+              print("collector responded", response.status)
+          EOF
+
+      - name: Fail if any metric could not be collected
+        # Runs after the forward so a partial snapshot still lands, then turns the
+        # run red. A `::warning::` in a workflow that runs unattended on Mondays is
+        # a failure nobody ever sees, which is how two of these three metrics went
+        # uncollected without anyone noticing.
+        #
+        # Upstream throttling is the one thing that does not go red. A weekly job
+        # that is red every single week teaches the project to ignore it, which
+        # costs exactly the signal this gate exists to give. A 429 also loses
+        # nothing permanently: PyPI download windows are re-fetchable next Monday,
+        # unlike the traffic API's 14-day retention. So a throttled collector is
+        # reported as a warning and still shows as a gap in the chart, while a
+        # collector that is genuinely broken — a 404, a 5xx, a bad token — is what
+        # actually fails the run.
+        if: always()
+        run: |
+          set -euo pipefail
+          errors="$RUNNER_TEMP/collection-errors.txt"
+          throttled="$RUNNER_TEMP/collection-throttled.txt"
+          if [ -s "$throttled" ]; then
+            echo "Metrics throttled upstream this run (retried next Monday):"
+            cat "$throttled"
+          fi
+          if [ -s "$errors" ]; then
+            echo "Metrics that could not be collected this run:"
+            cat "$errors"
+            exit 1
+          fi
+          echo "No distribution metric failed to collect."

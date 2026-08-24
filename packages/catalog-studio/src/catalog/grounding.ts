@@ -12,6 +12,7 @@ import {
   type KindsMap,
   type RenderSpec,
 } from '../types';
+import { cardLayoutProblem } from './cardRules';
 
 export interface GroundingIssue {
   renderUid: string;
@@ -58,8 +59,12 @@ export function boundColumns(render: RenderSpec): string[] {
       if (v) cols.add(v);
     }
   } else if (render.component === 'card') {
+    // Mirrors Render.bound_columns() in the catalog model — trend/attrition
+    // layouts bind extra columns and must be grounded like the rest.
     if (render.column) cols.add(render.column);
     if (render.breakdown_col) cols.add(render.breakdown_col);
+    if (render.trend_col) cols.add(render.trend_col);
+    render.attrition_cols?.forEach((c) => c && cols.add(c));
   }
   // interactive + table bind no columns in the catalog (component-only renders).
   return [...cols];
@@ -106,6 +111,15 @@ export function validateRender(
       severity: 'error',
       message: 'Card needs an aggregation.',
     });
+  }
+
+  // Each secondary_layout has a companion field the catalog model requires;
+  // surface it here rather than letting the contributor find it in CI.
+  if (render.component === 'card') {
+    const problem = cardLayoutProblem(render);
+    if (problem) {
+      issues.push({ renderUid: render.uid, severity: 'error', message: problem });
+    }
   }
 
   // Card numeric aggregations require a numeric column (mirrors CI's

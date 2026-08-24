@@ -656,6 +656,11 @@ async def get_current_user_info_optional(
         "google_oauth_enabled": settings.auth.google_oauth_enabled,
         "temporary_user_expiry_hours": settings.auth.temporary_user_expiry_hours,
         "temporary_user_expiry_minutes": settings.auth.temporary_user_expiry_minutes,
+        # Viewer feature flags ride along here rather than on an endpoint of
+        # their own, keeping the SPA's whole chrome decision to one page-load
+        # round-trip. Readers coerce with `Boolean(...)`, so an older backend
+        # that omits the key degrades to the feature being off.
+        "inspector_enabled": getattr(settings.viewer, "inspector_enabled", False),
     }
 
 

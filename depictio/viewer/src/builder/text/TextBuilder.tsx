@@ -32,17 +32,25 @@ const ALIGNMENT_OPTIONS = [
   { value: 'right', label: 'Right' },
 ];
 
+const VERTICAL_ALIGNMENT_OPTIONS = [
+  { value: 'top', label: 'Top' },
+  { value: 'center', label: 'Center' },
+  { value: 'bottom', label: 'Bottom' },
+];
+
 const TextBuilder: React.FC = () => {
   const config = useBuilderStore((s) => s.config) as {
     title?: string;
     order?: number | string;
     alignment?: string;
+    vertical_alignment?: string;
     body?: string;
   };
   const patchConfig = useBuilderStore((s) => s.patchConfig);
 
   const orderStr = String(config.order ?? 1);
   const alignment = config.alignment ?? 'left';
+  const verticalAlignment = config.vertical_alignment ?? 'center';
 
   const form = (
     <Stack gap="md">
@@ -69,12 +77,27 @@ const TextBuilder: React.FC = () => {
 
       <Stack gap={4}>
         <Text size="sm" fw={500}>
-          Alignment
+          Horizontal alignment
         </Text>
         <SegmentedControl
           value={alignment}
           onChange={(val) => patchConfig({ alignment: val })}
           data={ALIGNMENT_OPTIONS}
+          fullWidth
+        />
+      </Stack>
+
+      <Stack gap={4}>
+        <Text size="sm" fw={500}>
+          Vertical alignment
+        </Text>
+        <Text size="xs" c="dimmed">
+          Where the text sits when the tile is taller than the text.
+        </Text>
+        <SegmentedControl
+          value={verticalAlignment}
+          onChange={(val) => patchConfig({ vertical_alignment: val })}
+          data={VERTICAL_ALIGNMENT_OPTIONS}
           fullWidth
         />
       </Stack>

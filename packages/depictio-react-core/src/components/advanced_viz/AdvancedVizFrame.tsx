@@ -1,13 +1,34 @@
-import React, { useContext, useEffect, useMemo } from 'react';
-import { Alert, Badge, Group, Loader, Paper, Stack, Text } from '@mantine/core';
+import React, { useCallback, useContext, useEffect, useMemo, useRef } from 'react';
+import { Alert, Badge, Group, Paper, Stack, Text, Tooltip } from '@mantine/core';
 
 import ErrorBoundary from '../ErrorBoundary';
+import ComponentSkeleton from '../ComponentSkeleton';
+import { ComponentIndexContext, useReportLoadStatus } from '../DashboardLoadingProvider';
 import {
-  AdvancedVizDataPopover,
   AdvancedVizExtrasContext,
-  AdvancedVizSettingsPopover,
+  type AdvancedVizExtrasPayload,
   type TierAnnotation,
 } from './AdvancedVizExtras';
+
+/**
+ * Server-side downsampling state, mirroring the scatter-figure reduction badge
+ * + Load-All toggle. When `sampled` (or `full`) is set, the frame shows an
+ * "N / M pts" badge and publishes a Load-All ActionIcon into the chrome row.
+ */
+export interface AdvancedVizReduction {
+  /** Rows currently shown (post-sampling). */
+  displayed: number;
+  /** Rows before sampling. */
+  total: number;
+  /** Server randomly downsampled the returned frame. */
+  sampled: boolean;
+  /** Full frame currently loaded (Load-All engaged). */
+  full: boolean;
+  /** A full-load refetch is in flight. */
+  loading: boolean;
+  /** Flip between the sampled and full views. */
+  onToggle: () => void;
+}
 
 interface AdvancedVizFrameProps {
   /** Inner content (the viz itself). */
@@ -49,6 +70,21 @@ interface AdvancedVizFrameProps {
    * dict's iteration order, so renderers should pass an ordered object.
    */
   counts?: Record<string, number>;
+  /**
+   * Server-side downsampling state. When present and reduced/full, the frame
+   * renders an "N / M pts" badge and a Load-All toggle in the chrome row,
+   * matching the scatter-figure UX.
+   */
+  reduction?: AdvancedVizReduction;
+  /**
+   * The rows behind this viz were sampled even though it aggregates them, so
+   * the values on screen are estimates rather than totals. Set from the
+   * server's `sampling.degraded` — see `advanced_viz_no_sample_max_rows`. The
+   * frame renders a warning badge; it is deliberately separate from
+   * `reduction`, since the renderers that most need to say this are the ones
+   * with no Load-All toggle to hang it off.
+   */
+  estimated?: boolean;
 }
 
 /** Subtle Mantine theme colour for each canonical tier name (no hardcoded
@@ -95,30 +131,72 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
   dataColumns,
   tierAnnotation,
   counts,
+  reduction,
+  estimated,
 }) => {
   const publish = useContext(AdvancedVizExtrasContext);
 
-  // Render the popovers as a single React node and publish it. ComponentRenderer
-  // reads it via useState and threads it through wrapWithChrome's extraActions
-  // slot. The popovers themselves portal their dropdown content so even if the
-  // chrome row fades out on mouseleave, an OPEN popover stays visible.
-  const extras = useMemo(() => {
-    const nodes: React.ReactNode[] = [];
-    if (controls) {
-      nodes.push(<AdvancedVizSettingsPopover key="settings" controls={controls} />);
-    }
+  // Report this panel's load status to the dashboard registry (drives the
+  // header progress bar). Index arrives via context from AdvancedVizDispatch so
+  // we don't thread it through all ~20 per-viz renderers. No-ops with no
+  // provider (catalog preview / editor).
+  const componentIndex = useContext(ComponentIndexContext);
+  useReportLoadStatus(
+    componentIndex ?? '',
+    componentIndex ? (loading ? 'loading' : error ? 'error' : 'ready') : null,
+  );
+
+  // Only surface the reduction affordances once the frame is actually reduced
+  // (or fully loaded) — an unsampled small frame has nothing to expand.
+  const showReduction = Boolean(reduction && (reduction.sampled || reduction.full));
+
+  // Depend on `reduction`'s *primitive* fields, not the object identity. Several
+  // renderers build `reduction={{ …, onToggle: () => … }}` inline, i.e. a fresh
+  // object with a fresh callback every render; depending on the object would
+  // recompute `extras` every render, re-fire the publish effect below, and —
+  // because `publish` setStates in ComponentRenderer, which re-renders this
+  // subtree — loop until React aborts with "Maximum update depth exceeded".
+  // Reading the primitives keeps `extras` stable across renders that didn't
+  // change anything, and the ref lets the Load-All toggle call the latest
+  // `onToggle` without its identity churn invalidating the memo.
+  const redPresent = Boolean(reduction);
+  const redFull = reduction?.full ?? false;
+  const redLoading = reduction?.loading ?? false;
+  const onToggleRef = useRef(reduction?.onToggle);
+  onToggleRef.current = reduction?.onToggle;
+  const stableToggle = useCallback(() => onToggleRef.current?.(), []);
+
+  // Publish what this renderer has, not how to draw it. AdvancedVizDispatch
+  // turns the payload back into the popovers; the inspector turns the same
+  // fields into docked tabs. Publishing finished popovers, as this once did,
+  // left the inspector with nothing it could re-present.
+  const extras = useMemo<AdvancedVizExtrasPayload | null>(() => {
+    const payload: AdvancedVizExtrasPayload = {};
+    if (controls) payload.controls = controls;
     if (dataRows) {
-      nodes.push(
-        <AdvancedVizDataPopover
-          key="data"
-          dataRows={dataRows}
-          dataColumns={dataColumns}
-          tierAnnotation={tierAnnotation}
-        />,
-      );
+      payload.data = { rows: dataRows, columns: dataColumns, tierAnnotation };
     }
-    return nodes.length ? <>{nodes}</> : null;
-  }, [controls, dataRows, dataColumns, tierAnnotation]);
+    if (redPresent && showReduction) {
+      payload.reduction = {
+        reduced: !redFull,
+        full: redFull,
+        loading: redLoading,
+        toggle: stableToggle,
+        noun: 'points',
+      };
+    }
+    return Object.keys(payload).length ? payload : null;
+  }, [
+    controls,
+    dataRows,
+    dataColumns,
+    tierAnnotation,
+    redPresent,
+    redFull,
+    redLoading,
+    stableToggle,
+    showReduction,
+  ]);
 
   useEffect(() => {
     if (!publish) return;
@@ -141,7 +219,7 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
           borderWidth: 1.5,
         }}
       >
-        {title || subtitle || (counts && Object.keys(counts).length > 0) ? (
+        {title || subtitle || (counts && Object.keys(counts).length > 0) || showReduction || estimated ? (
           <Stack gap={2} mb="xs">
             {title ? (
               <Text fw={600} size="sm" lineClamp={1}>
@@ -187,20 +265,38 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
                 })}
               </Group>
             ) : null}
+            {reduction && showReduction ? (
+              <Group gap={4} wrap="nowrap" mt={2}>
+                <Badge variant="light" color="gray" size="xs" radius="sm">
+                  {reduction.full
+                    ? `${reduction.displayed.toLocaleString()} pts (all)`
+                    : `${reduction.displayed.toLocaleString()} / ${reduction.total.toLocaleString()} pts`}
+                </Badge>
+              </Group>
+            ) : null}
+            {estimated ? (
+              // "10,000 / 5,000,000 pts" on a chart that sums its rows reads as
+              // a display cap. It isn't: the values themselves are off by the
+              // sampling stride, and that has to be said outright.
+              <Group gap={4} wrap="nowrap" mt={2}>
+                <Tooltip
+                  label="This chart derives its values from the rows it receives, and the collection was too large to send whole — what is shown is an estimate."
+                  multiline
+                  w={260}
+                  withArrow
+                >
+                  <Badge variant="light" color="orange" size="xs" radius="sm">
+                    estimated
+                  </Badge>
+                </Tooltip>
+              </Group>
+            ) : null}
           </Stack>
         ) : null}
         <div style={{ flex: '1 1 auto', minHeight: 0, position: 'relative' }}>
           {loading ? (
-            <div
-              style={{
-                position: 'absolute',
-                inset: 0,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <Loader size="sm" />
+            <div style={{ position: 'absolute', inset: 0, display: 'flex' }}>
+              <ComponentSkeleton variant="block" />
             </div>
           ) : error ? (
             <Alert color="red" title="Failed to render" variant="light">

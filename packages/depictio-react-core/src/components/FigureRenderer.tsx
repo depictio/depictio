@@ -1,5 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Paper, Loader, Text, Stack, useMantineColorScheme } from '@mantine/core';
+import {
+  Paper,
+  Text,
+  Stack,
+  Badge,
+  Group,
+  useMantineColorScheme,
+} from '@mantine/core';
 import Plot from 'react-plotly.js';
 // Vite resolve.alias in depictio/viewer/vite.config.ts rewrites bare
 // `plotly.js` to `plotly.js/dist/plotly`, so this import grabs the prebuilt
@@ -7,13 +14,19 @@ import Plot from 'react-plotly.js';
 // `buffer/` source walk, no extra bundle weight, single Plotly instance.
 import Plotly from 'plotly.js';
 
-import { renderFigure, InteractiveFilter, StoredMetadata } from '../api';
+import { renderFigure, InteractiveFilter, StoredMetadata, FigureResponse } from '../api';
+import { enqueueFetch, isStaleFetch } from '../fetchQueue';
 import { extractScatterSelection } from '../selection';
 import { useInView } from '../hooks/useInView';
 import { useNewItemIds } from '../hooks/useNewItemIds';
 import { useTransientFlag } from '../hooks/useTransientFlag';
+import { ActiveHighlight } from '../highlight';
 import { asNumberArray, extractCustomdataIds } from '../plotlyData';
+import { adaptGlTraces, PlotlyTrace, useWebglSlot } from '../webglBudget';
 import RefetchOverlay from './RefetchOverlay';
+import ComponentSkeleton from './ComponentSkeleton';
+import { useReportLoadStatus } from './DashboardLoadingProvider';
+import { LoadAllState } from './chrome/LoadAllButton';
 
 interface FigureRendererProps {
   dashboardId: string;
@@ -24,6 +37,12 @@ interface FigureRendererProps {
   onFilterChange?: (filter: InteractiveFilter) => void;
   /** Counter to force refetch on realtime updates even when filters are unchanged. */
   refreshTick?: number;
+  /** Batch to glow — a live arrival (auto-fade) or a pinned re-selection from
+   *  the event log. Its ``ids`` are matched against the scatter customdata. */
+  activeHighlight?: ActiveHighlight | null;
+  /** Reports the sample/full state so the chrome can render a "load all points"
+   *  action icon. ``null`` when the figure isn't downsampled. */
+  onLoadAllState?: (state: LoadAllState | null) => void;
 }
 
 /**
@@ -44,8 +63,14 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
   filters,
   onFilterChange,
   refreshTick,
+  activeHighlight,
+  onLoadAllState,
 }) => {
   const [figure, setFigure] = useState<{ data?: unknown[]; layout?: Record<string, unknown> } | null>(null);
+  const [renderMeta, setRenderMeta] = useState<FigureResponse['metadata'] | null>(null);
+  // User opted to render every point for this component (bypasses the cap).
+  // Reset whenever the filters change so a new slice starts capped again.
+  const [fullLoad, setFullLoad] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { colorScheme } = useMantineColorScheme();
@@ -84,12 +109,36 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
     [filters, metadata.index],
   );
 
+  // A new filter slice may have a different point count — go back to the capped
+  // render so the user re-opts into a full load for the new data.
+  useEffect(() => {
+    setFullLoad(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(filtersForFetch)]);
+
   useEffect(() => {
     if (!inView) return;
     let cancelled = false;
+    // Abort the request itself, not just its result handling: a stale render
+    // otherwise keeps its queue slot and its API worker for as long as it takes
+    // to finish work nobody will look at.
+    const ctrl = new AbortController();
     setLoading(true);
     setError(null);
-    renderFigure(dashboardId, metadata.index, filtersForFetch, theme)
+    // Queued so a dense dashboard doesn't fire every figure's render at once;
+    // the vertical position is the priority, so the top of the page paints first.
+    enqueueFetch(
+      () =>
+        renderFigure(
+          dashboardId,
+          metadata.index,
+          filtersForFetch,
+          theme,
+          fullLoad,
+          ctrl.signal,
+        ),
+      metadata.layout?.y ?? 0,
+    )
       .then((res) => {
         if (cancelled) return;
         // Keep the previous figure mounted while the next response is in
@@ -97,9 +146,13 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
         // this avoids the full SVG teardown/init the old "unmount + full
         // loader" pattern triggered.
         setFigure(res.figure);
+        setRenderMeta(res.metadata ?? null);
       })
       .catch((err) => {
-        if (cancelled) return;
+        // A superseded round is the user changing their mind, not a failure:
+        // surfacing it would flash an error on a component that is about to be
+        // re-rendered anyway.
+        if (cancelled || isStaleFetch(err)) return;
         setError(err?.message || String(err));
       })
       .finally(() => {
@@ -107,9 +160,10 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
       });
     return () => {
       cancelled = true;
+      ctrl.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dashboardId, metadata.index, JSON.stringify(filtersForFetch), theme, inView, refreshTick]);
+  }, [dashboardId, metadata.index, JSON.stringify(filtersForFetch), theme, inView, refreshTick, fullLoad]);
 
   // First-paint loader vs refetch overlay: only show the big "Rendering…"
   // block until we have something to show; subsequent fetches keep the
@@ -117,6 +171,13 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
   const isInitialLoad = figure === null;
   const showInitialLoader = (!inView || (isInitialLoad && loading));
   const showRefetchOverlay = !isInitialLoad && loading;
+
+  // Report load status to the dashboard registry. Off-screen → pending (null);
+  // once we have a figure it stays "ready" through any refetch overlay.
+  useReportLoadStatus(
+    metadata.index,
+    !inView ? null : figure != null ? 'ready' : error ? 'error' : 'loading',
+  );
 
   const emitSelection = (values: string[]) => {
     if (!onFilterChange) return;
@@ -244,11 +305,34 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
   const newIds = useNewItemIds(figureIds, refreshTick);
   const highlightActive = useTransientFlag(refreshTick, highlightDurationMs);
 
-  // Build an overlay trace (one per realtime tick) with markers at the new
-  // points' coordinates. We re-derive x/y from the trace's own arrays by
-  // matching customdata index → trace index. No mutation of existing traces.
+  // Per-batch highlight, payload-driven. The scatter overlay only carries the
+  // selection column's values in customdata, so a batch can only match when its
+  // ``idColumn`` equals ``selectionColumn``. This is ADDITIVE with the legacy
+  // client-side diff: live arrivals overlay via either path, a sticky batch
+  // re-overlays with no refetch.
+  const batchColumnAligned =
+    !!activeHighlight &&
+    (!activeHighlight.dcId || activeHighlight.dcId === metadata.dc_id) &&
+    (!activeHighlight.idColumn || activeHighlight.idColumn === selectionColumn);
+  const batchFadeActive = useTransientFlag(activeHighlight?.nonce, highlightDurationMs);
+  const batchHighlightOn =
+    batchColumnAligned && (activeHighlight!.sticky || batchFadeActive);
+  // Union of the legacy diff (when its window is open) and the batch ids (when
+  // its gate is on) — the overlay marks every id in the combined set.
+  const effectiveIds = useMemo<Set<string>>(() => {
+    const s = new Set<string>();
+    if (highlightActive) newIds.forEach((id) => s.add(id));
+    if (batchHighlightOn) activeHighlight!.ids.forEach((id) => s.add(id));
+    return s;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [highlightActive, newIds, batchHighlightOn, activeHighlight?.ids]);
+  const overlayActive = (highlightActive && newIds.size > 0) || batchHighlightOn;
+
+  // Build an overlay trace with markers at the highlighted points' coordinates.
+  // We re-derive x/y from the trace's own arrays by matching customdata index →
+  // trace index. No mutation of existing traces.
   const overlayTrace = useMemo<Record<string, unknown> | null>(() => {
-    if (!highlightActive || !isScatterLike || newIds.size === 0 || !figure) return null;
+    if (!overlayActive || !isScatterLike || effectiveIds.size === 0 || !figure) return null;
     const data = (figure.data as Array<{
       x?: unknown;
       y?: unknown;
@@ -262,7 +346,7 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
       const xArr = asNumberArray(trace?.x);
       const yArr = asNumberArray(trace?.y);
       for (let i = 0; i < ids.length; i++) {
-        if (newIds.has(ids[i]) && i < xArr.length && i < yArr.length) {
+        if (effectiveIds.has(ids[i]) && i < xArr.length && i < yArr.length) {
           xs.push(xArr[i]);
           ys.push(yArr[i]);
         }
@@ -284,12 +368,18 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
       showlegend: false,
       name: '__depictio_new_items',
     };
-  }, [highlightActive, isScatterLike, newIds, figure, selectionColumnIndex, highlightColor]);
+  }, [overlayActive, isScatterLike, effectiveIds, figure, selectionColumnIndex, highlightColor]);
+
+  // Plotly Express emits `scattergl` above ~1000 points and the server passes
+  // that verdict through in the figure JSON, so scatter figures are the ones
+  // that consume the scarce GL contexts. Aggregated visus (bar, box,
+  // histogram) never do and don't take a slot — see webglBudget.
+  const glGranted = useWebglSlot(isScatterLike);
 
   const figureData = useMemo<unknown[]>(() => {
-    const base = (figure?.data as unknown[]) || [];
+    const base = adaptGlTraces(((figure?.data as PlotlyTrace[]) || []), glGranted);
     return overlayTrace ? [...base, overlayTrace] : base;
-  }, [figure, overlayTrace]);
+  }, [figure, overlayTrace, glGranted]);
 
   const layout = useMemo<Record<string, unknown>>(() => {
     const base: Record<string, unknown> = {
@@ -319,6 +409,51 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
     return base;
   }, [figure, selectionEnabled, metadata.selection_mode, refreshTick]);
 
+  // "N of M points" indicator. Passive/informational — the full-load toggle
+  // itself lives in the component chrome (see the onLoadAllState effect below),
+  // matching the table's row indicator for a consistent look and placement.
+  const reductionBadge = useMemo(() => {
+    if (!renderMeta) return null;
+    const displayed = renderMeta.displayed_data_count;
+    const total = renderMeta.total_data_count;
+    if (typeof displayed !== 'number') return null;
+    if (renderMeta.was_sampled && typeof total === 'number') {
+      return (
+        <Badge variant="light" color="gray" size="xs" radius="sm">
+          {displayed.toLocaleString()} / {total.toLocaleString()} pts
+        </Badge>
+      );
+    }
+    if (fullLoad && renderMeta.full_data_loaded) {
+      return (
+        <Badge variant="light" color="gray" size="xs" radius="sm">
+          {displayed.toLocaleString()} pts (all)
+        </Badge>
+      );
+    }
+    return null;
+  }, [renderMeta, fullLoad]);
+
+  // Publish the sample/full state so the chrome can render the "load all points"
+  // action icon in the same cluster as reset / fullscreen. Bidirectional: the
+  // toggle flips back to the sampled view once fully loaded.
+  useEffect(() => {
+    if (!onLoadAllState) return;
+    const canToggle =
+      !!renderMeta && (renderMeta.was_sampled || (fullLoad && !!renderMeta.full_data_loaded));
+    onLoadAllState(
+      canToggle
+        ? {
+            reduced: !fullLoad,
+            full: fullLoad,
+            loading,
+            toggle: () => setFullLoad((v) => !v),
+            noun: 'points',
+          }
+        : null,
+    );
+  }, [onLoadAllState, renderMeta, fullLoad, loading]);
+
   return (
     <Paper
       ref={containerRef}
@@ -333,17 +468,17 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
         flexDirection: 'column',
       }}
     >
-      {metadata.title && (
-        <Text fw={600} size="sm" mb="xs">
-          {metadata.title}
-        </Text>
+      {(metadata.title || reductionBadge) && (
+        <Group gap="xs" mb="xs" wrap="nowrap">
+          {metadata.title && (
+            <Text fw={600} size="sm">
+              {metadata.title}
+            </Text>
+          )}
+          {reductionBadge}
+        </Group>
       )}
-      {showInitialLoader && (
-        <Stack align="center" justify="center" gap="xs" style={{ flex: 1 }}>
-          <Loader size="sm" />
-          <Text size="xs" c="dimmed">Rendering figure…</Text>
-        </Stack>
-      )}
+      {showInitialLoader && <ComponentSkeleton variant="block" />}
       {error && isInitialLoad && (
         <Stack style={{ flex: 1 }} justify="center" align="center">
           <Text size="sm" c="red">Figure failed: {error}</Text>

@@ -1,6 +1,6 @@
 [project]
 name = "depictio-cli"
-version = "1.1.4-b2"
+version = "1.5.2"
 description = "Depictio CLI to interact with the Depictio API"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -66,6 +66,9 @@ packages = [
   "depictio.api.v1",
   "depictio.api.v1.configs",
   "depictio.recipes",
+  # Shared anonymous telemetry. The server-only half lives in
+  # depictio.api.v1.telemetry, which is deliberately NOT shipped here.
+  "depictio.telemetry",
 ]
 
 # Add explicit package data if needed

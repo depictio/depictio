@@ -1,14 +1,20 @@
 import { useEffect, useState } from 'react';
 
+import { fetchAuthStatus } from 'depictio-react-core';
+
 /**
  * Calls /depictio/api/v1/auth/me/optional to identify the current user.
  * Anonymous-tolerant: returns null on missing/invalid token (HTTP 200 with
  * body `null`, or any non-2xx). The strict `/auth/me` would 401 for anon —
  * the React viewer needs the optional variant so the badge degrades to
  * "Sign In" instead of erroring.
+ *
+ * Goes through `fetchAuthStatus` rather than `authFetch` on purpose: this is
+ * an identity *probe*, and `authFetch` would refresh the token before asking,
+ * i.e. answer "who am I?" by first making sure the answer is "somebody". The
+ * chrome that owns this hook is mounted on `/auth` too, so a minting probe
+ * signs a just-logged-out user straight back in. See `fetchAuthStatus`.
  */
-
-const ME_URL = '/depictio/api/v1/auth/me/optional';
 
 export interface CurrentUser {
   /** MongoDB ObjectId of the user. Required for project permissions checks
@@ -49,23 +55,11 @@ export interface UseCurrentUserResult {
   temporaryUserExpiryHours: number;
   /** Sub-hour TTL component for temporary public-mode users. */
   temporaryUserExpiryMinutes: number;
+  /** True when the server enables the docked inspector panel
+   *  (`DEPICTIO_VIEWER_INSPECTOR_ENABLED=true`). While false, the component
+   *  info and notes surfaces stay in their existing popover and drawer. */
+  inspectorEnabled: boolean;
   loading: boolean;
-}
-
-function authHeaders(): Record<string, string> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  try {
-    const stored = localStorage.getItem('local-store');
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      if (parsed?.access_token) {
-        headers.Authorization = `Bearer ${parsed.access_token}`;
-      }
-    }
-  } catch {
-    // ignore malformed localStorage
-  }
-  return headers;
 }
 
 export function useCurrentUser(): UseCurrentUserResult {
@@ -78,63 +72,30 @@ export function useCurrentUser(): UseCurrentUserResult {
   const [isSingleUserMode, setIsSingleUserMode] = useState<boolean>(false);
   const [temporaryUserExpiryHours, setTemporaryUserExpiryHours] = useState<number>(24);
   const [temporaryUserExpiryMinutes, setTemporaryUserExpiryMinutes] = useState<number>(0);
+  const [inspectorEnabled, setInspectorEnabled] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(ME_URL, { headers: authHeaders() });
-        if (!res.ok) {
-          if (!cancelled) {
-            setUser(null);
-            setLoading(false);
-          }
-          return;
-        }
-        // Backend now returns { auth_mode, user, is_public_mode, is_demo_mode,
-        // is_single_user_mode }. Older shape (just user) is tolerated for
-        // forward/backward compat during rollout.
-        const data = (await res.json()) as
-          | {
-              auth_mode?: AuthMode;
-              user?: { id?: string; email?: string; is_admin?: boolean } | null;
-              id?: string;
-              email?: string;
-              is_admin?: boolean;
-              is_public_mode?: boolean;
-              is_demo_mode?: boolean;
-              is_dev_mode?: boolean;
-              walkthrough_disabled?: boolean;
-              is_single_user_mode?: boolean;
-              temporary_user_expiry_hours?: number;
-              temporary_user_expiry_minutes?: number;
-            }
-          | null;
+        const data = await fetchAuthStatus();
         if (cancelled) return;
-        const mode: AuthMode = (data?.auth_mode as AuthMode) ?? 'standard';
-        const u =
-          data?.user ??
-          (data?.email
-            ? { id: data.id, email: data.email, is_admin: data.is_admin }
-            : null);
-        setAuthMode(mode);
-        setIsPublicMode(Boolean(data?.is_public_mode));
-        setIsDemoMode(Boolean(data?.is_demo_mode));
-        setIsDevMode(Boolean(data?.is_dev_mode));
-        setWalkthroughDisabled(Boolean(data?.walkthrough_disabled));
-        setIsSingleUserMode(Boolean(data?.is_single_user_mode));
-        if (typeof data?.temporary_user_expiry_hours === 'number') {
+        setAuthMode((data.auth_mode as AuthMode) ?? 'standard');
+        setIsPublicMode(Boolean(data.is_public_mode));
+        setIsDemoMode(Boolean(data.is_demo_mode));
+        setIsDevMode(Boolean(data.is_dev_mode));
+        setWalkthroughDisabled(Boolean(data.walkthrough_disabled));
+        setIsSingleUserMode(Boolean(data.is_single_user_mode));
+        setInspectorEnabled(Boolean(data.inspector_enabled));
+        if (typeof data.temporary_user_expiry_hours === 'number') {
           setTemporaryUserExpiryHours(data.temporary_user_expiry_hours);
         }
-        if (typeof data?.temporary_user_expiry_minutes === 'number') {
+        if (typeof data.temporary_user_expiry_minutes === 'number') {
           setTemporaryUserExpiryMinutes(data.temporary_user_expiry_minutes);
         }
-        setUser(
-          u && u.email
-            ? { id: u.id, email: u.email, is_admin: Boolean(u.is_admin) }
-            : null,
-        );
+        const u = data.user;
+        setUser(u?.email ? { id: u.id, email: u.email, is_admin: Boolean(u.is_admin) } : null);
       } catch {
         if (!cancelled) setUser(null);
       } finally {
@@ -156,6 +117,7 @@ export function useCurrentUser(): UseCurrentUserResult {
     isSingleUserMode,
     temporaryUserExpiryHours,
     temporaryUserExpiryMinutes,
+    inspectorEnabled,
     loading,
   };
 }

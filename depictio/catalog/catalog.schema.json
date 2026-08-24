@@ -336,10 +336,20 @@
               "enum": [
                 "vertical",
                 "compact",
+                "grid",
                 "box_plot",
                 "top_n",
                 "coverage",
-                "concentration"
+                "gauge",
+                "concentration",
+                "composition",
+                "donut",
+                "histogram",
+                "threshold",
+                "completeness",
+                "uniqueness",
+                "attrition",
+                "trend"
               ],
               "type": "string"
             },
@@ -387,6 +397,65 @@
           ],
           "default": null,
           "title": "Coverage Max"
+        },
+        "threshold_value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Threshold Value"
+        },
+        "threshold_direction": {
+          "anyOf": [
+            {
+              "enum": [
+                "min",
+                "max"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Threshold Direction"
+        },
+        "threshold_warn": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Threshold Warn"
+        },
+        "attrition_cols": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Attrition Cols",
+          "type": "array"
+        },
+        "trend_col": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Trend Col"
         },
         "filter_expr": {
           "anyOf": [

@@ -221,7 +221,14 @@ const ComplexHeatmapRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
   useEffect(() => {
     if (!metadata.wf_id || !metadata.dc_id || previewCols.length < 1) return;
     let cancelled = false;
-    fetchAdvancedVizData(metadata.wf_id, metadata.dc_id, previewCols, filters, 200)
+    fetchAdvancedVizData({
+      wfId: metadata.wf_id,
+      dcId: metadata.dc_id,
+      columns: previewCols,
+      filters,
+      limitRows: 200,
+      vizKind: 'complex_heatmap',
+    })
       .then((res) => {
         if (!cancelled) setDataRows(res.rows);
       })

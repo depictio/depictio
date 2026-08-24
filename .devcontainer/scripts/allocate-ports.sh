@@ -67,16 +67,22 @@ collect_docker_reserved_ports() {
 
 # Returns 0 if the host port is unavailable, 1 if free to bind.
 # Order matters:
-#   1. Ours already → free: compose recreates the container, releasing the bind.
-#   2. Another project's reservation → unavailable, even with no live listener.
+#   1. Another project's reservation → unavailable, even with no live listener.
+#      This MUST be checked first: a stale container of *ours* can hold a
+#      binding for a port a *live* neighbour also reserves (e.g. two worktrees
+#      that both scanned to offset 100 while the other's containers were down).
+#      Checking "ours" first would call such a port free and the scan would keep
+#      handing back an offset that `up` can never bind → "port is already
+#      allocated".
+#   2. Ours only → free: compose recreates the container, releasing the bind.
 #   3. Otherwise fall back to a live-listener probe (lsof, then /dev/tcp).
 # Treating our own bindings as free is what keeps re-runs STABLE: without it,
 # this instance's running mongo/redis would look "busy" and the scan would drift
 # to a new offset every time.
 port_in_use() {
   local port=$1
-  case "$OWN_RESERVED_PORTS" in *" $port "*) return 1 ;; esac
   case "$OTHER_RESERVED_PORTS" in *" $port "*) return 0 ;; esac
+  case "$OWN_RESERVED_PORTS" in *" $port "*) return 1 ;; esac
   if command -v lsof >/dev/null 2>&1; then
     lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1
     return $?

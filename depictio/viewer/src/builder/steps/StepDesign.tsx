@@ -3,19 +3,28 @@
  * Used by both CreateComponentPage (final step) and EditComponentPage (only step).
  */
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Button, Center, Stack, Text, Title } from '@mantine/core';
+import { Alert, Button, Center, Group, Paper, Stack, Switch, Text, Title } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import { notifications } from '@mantine/notifications';
 import { fetchSpecs, upsertComponent } from 'depictio-react-core';
 import { useBuilderStore } from '../store/useBuilderStore';
 import type { ColumnSpec } from '../store/useBuilderStore';
 import ComponentBuilder from '../ComponentBuilder';
+import SectionSelect from '../shared/SectionSelect';
 import { buildMetadata } from '../buildMetadata';
 import { getComponentTypeMeta } from '../componentTypes';
 
 const StepDesign: React.FC = () => {
   const state = useBuilderStore();
   const [savedRedirect, setSavedRedirect] = useState(false);
+
+  // Filters the previews can apply: the dashboard's active ones minus any this
+  // component emitted itself (mirrors useBuilderPreviewFilters, but unhooked
+  // from the toggle — the banner must keep showing the count while the toggle
+  // is off, or there'd be no way to turn it back on).
+  const carriedFilters = state.dashboardFilters.filter(
+    (f) => String(f.index) !== String(state.componentId),
+  );
 
   // Safety net: if user lands on this step without cols loaded (e.g. StepData
   // didn't run to completion before they clicked Next, or edit mode skipped
@@ -109,7 +118,46 @@ const StepDesign: React.FC = () => {
         </Text>
       </Stack>
 
+      {/* MultiQC previews render pre-aggregated report plots (no row-filter
+          concept) and text components have no data at all — no banner there. */}
+      {carriedFilters.length > 0 &&
+        state.componentType !== 'text' &&
+        state.componentType !== 'multiqc' && (
+          <Paper withBorder radius="md" p="sm" data-testid="builder-filter-banner">
+            <Group justify="space-between" wrap="nowrap">
+              <Group gap="xs" wrap="nowrap">
+                <Icon icon="mdi:filter-variant" width={18} />
+                <Text size="sm">
+                  Previewing with {carriedFilters.length} active dashboard filter
+                  {carriedFilters.length === 1 ? '' : 's'}
+                </Text>
+              </Group>
+              <Switch
+                size="sm"
+                checked={state.applyDashboardFilters}
+                onChange={(e) => state.setApplyDashboardFilters(e.currentTarget.checked)}
+                label="Apply to preview"
+                data-testid="builder-filter-toggle"
+              />
+            </Group>
+            {state.applyDashboardFilters && (
+              <Text size="xs" c="dimmed" mt={4}>
+                A heavily filtered preview can be empty — toggle off to preview the
+                full dataset. The saved component always follows the dashboard's
+                live filters.
+              </Text>
+            )}
+          </Paper>
+        )}
+
       <ComponentBuilder />
+
+      {/* Placement, not appearance — so it sits outside the per-type builder,
+          which keeps it identical for every component type instead of nine
+          near-copies. */}
+      <Paper withBorder radius="md" p="md">
+        <SectionSelect />
+      </Paper>
 
       {state.saveError && (
         <Alert color="red" title="Save error">

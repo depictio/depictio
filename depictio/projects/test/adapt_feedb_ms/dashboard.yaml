@@ -4,12 +4,51 @@ subtitle: "Real-time monitoring of virtual microscopy experiment phenotype data"
 project_tag: "Adaptive Feedback Microscopy"
 dashboard_id: "750a1b2c3d4e5f6a7b8c9d20"
 
+# Sidebar tab: neutral "Dashboard" pill in grey/black tones (tab_icon_color:
+# dark → Mantine near-black active fill, matching the monochrome dashboard icon).
+main_tab_name: "Dashboard"
+tab_icon: "mdi:view-dashboard"
+tab_icon_color: "dark"
+
+# Left-panel sections — the collapsible outer level, above `group`. Optional:
+# a section named by a component but omitted here still renders, expanded and
+# without an icon. Declaring it fixes its position in the panel and lets it
+# carry an icon, a colour, a hint and a default collapse state.
+#
+# Icons must come from the curated list the editor's Sections manager offers
+# (depictio/viewer/src/components/sections/sectionIcons.ts): the viewer bundles
+# only the Iconify ids written as literals in its own source, so an id from
+# anywhere else renders blank in a built app.
+filter_sections:
+  - name: "Sample"
+    icon: "mdi:bacteria-outline"
+    color: "teal"
+    description: "Which cells to look at"
+  - name: "Morphology"
+    icon: "mdi:shape-outline"
+    color: "violet"
+    collapsed: true
+
 components:
-  # ── Top Panel: Timeline scrubber (placement: top) ────────────────────────
-  # Sits in a slim conditional bar above the dashboard grid (right column
-  # only). Lets the user constrain every downstream component to a single
-  # acquisition window. Switchable timescale (year/month/day/hour/minute) at
-  # runtime.
+  # ── Narrative intro (grid, right column, full width) ─────────────────────
+  - tag: dashboard-intro
+    component_type: text
+    title: "Adaptive Feedback Microscopy — Real-time Monitor"
+    order: 3
+    alignment: left
+    body: "Real-time cell phenotypes from **SVLT** (*Serving Vision to Living Things*) — on-demand computer vision that segments each acquired microscopy image into RoiSets and classifies every object on the fly. Scope with the **acquisition window** (footer) and **left-panel filters**."
+    layout:
+      x: 0
+      y: 0
+      w: 8
+      h: 1
+
+  # ── Timeline scrubber (placement: top → rendered as full-width footer) ────
+  # `placement: top` routes this into the viewer's dedicated interactive panel,
+  # which the React viewer renders as an always-visible, full-width footer
+  # spanning both the filter sidebar and the content column. Lets the user
+  # constrain every downstream component to a single acquisition window.
+  # Switchable timescale (year/month/day/hour/minute) at runtime.
 
   - tag: acquisition-timeline
     component_type: interactive
@@ -37,6 +76,7 @@ components:
     column_name: classifications_taxa
     column_type: object
     filter_expr: "col('features_area') > 100"
+    section: "Sample"
     title: "Taxa Class (large cells only)"
     icon_name: mdi:bacteria
     layout:
@@ -45,11 +85,12 @@ components:
       w: 1
       h: 3
 
-  # ── Combined "Shape filters" group ───────────────────────────────────────
-  # Three interactive components sharing the same `group` are rendered
-  # together inside one Mantine Paper — visual grouping only, each control
-  # still emits its own filter and they AND together via the existing
-  # filter pipeline (max 3 components per group is enforced server-side).
+  # ── Combined "Shape filters" group, inside the "Morphology" section ──────
+  # Interactive components sharing the same `group` render together inside one
+  # collapsible card — visual grouping only, each control still emits its own
+  # filter and they AND together via the existing filter pipeline. Group size
+  # is capped server-side (MAX_INTERACTIVE_GROUP_SIZE), and every member of a
+  # group must sit in the same `section`.
 
   - tag: area-range-filter
     component_type: interactive
@@ -59,6 +100,7 @@ components:
     column_name: features_area
     column_type: float64
     group: "Shape filters"
+    section: "Morphology"
     title: "Cell Area"
     icon_name: mdi:vector-square
     layout:
@@ -75,6 +117,7 @@ components:
     column_name: features_eccentricity
     column_type: float64
     group: "Shape filters"
+    section: "Morphology"
     title: "Eccentricity"
     icon_name: mdi:shape-outline
     layout:
@@ -91,6 +134,7 @@ components:
     column_name: features_solidity
     column_type: float64
     group: "Shape filters"
+    section: "Morphology"
     title: "Solidity"
     icon_name: mdi:diamond-stone
     layout:
@@ -99,7 +143,11 @@ components:
       w: 1
       h: 3
 
-  # ── Right Panel Row 0 (y=0, h=3): 4 summary cards ─────────────────────
+  # ── Right Panel Row (y=2, h=5): 4 summary cards (uniform height) ──────
+  # First two are single-metric cards; the last two are Tukey box-plot
+  # distribution cards (aggregations: [box_plot_stats] + secondary_layout:
+  # box_plot) — hero = median, with the full five-number summary + whiskers
+  # + outliers rendered as a compact box-and-whisker strip.
 
   - tag: total-cells
     component_type: card
@@ -113,9 +161,9 @@ components:
     icon_color: "#2196F3"
     layout:
       x: 0
-      y: 0
+      y: 1
       w: 2
-      h: 4
+      h: 2
 
   - tag: mean-area
     component_type: card
@@ -129,22 +177,21 @@ components:
     icon_color: "#4CAF50"
     layout:
       x: 2
-      y: 0
+      y: 1
       w: 2
-      h: 4
+      h: 2
 
-  # Multi-metrics card: hero (average) + secondary rows (min/max/std_dev).
-  # Server returns secondary_values via /bulk_compute_cards; CardRenderer
-  # stacks the secondary rows under the hero.
+  # Tukey distribution card — box_plot_stats returns the compound five-number
+  # summary (min/Q1/median/Q3/max) + 1.5×IQR whiskers + outliers; the
+  # box_plot secondary layout draws it as a box-and-whisker strip.
   - tag: mean-solidity
     component_type: card
     workflow_tag: python/microscopy_workflow
     data_collection_tag: microscopy_phenobase
-    aggregation: average
+    aggregation: median
     aggregations:
-      - min
-      - max
-      - std_dev
+      - box_plot_stats
+    secondary_layout: box_plot
     column_name: features_solidity
     column_type: float64
     title: "Solidity Stats"
@@ -152,20 +199,18 @@ components:
     icon_color: "#FF9800"
     layout:
       x: 4
-      y: 0
+      y: 1
       w: 2
-      h: 5
+      h: 2
 
   - tag: area-summary
     component_type: card
     workflow_tag: python/microscopy_workflow
     data_collection_tag: microscopy_phenobase
-    aggregation: average
+    aggregation: median
     aggregations:
-      - median
-      - std_dev
-      - min
-      - max
+      - box_plot_stats
+    secondary_layout: box_plot
     column_name: features_area
     column_type: float64
     icon_name: mdi:chart-box-outline
@@ -173,11 +218,14 @@ components:
     title: "Area Stats"
     layout:
       x: 6
-      y: 0
+      y: 1
       w: 2
-      h: 5
+      h: 2
 
-  # ── Right Panel Row 5 (y=4, h=5): scatter plots ───────────────────────
+  # ── Scatter row (y=3, h=5): the two highest-signal relationships ──────
+  # Trimmed from five figures to two — the taxa-balance bar, area box, and
+  # area histogram duplicated what the Tukey cards already show, so they were
+  # dropped. Styled clean (plotly_white, unit axis labels, soft opacity).
 
   - tag: morphology-scatter
     component_type: figure
@@ -188,14 +236,17 @@ components:
       x: features_area
       y: features_eccentricity
       color: classifications_taxa
-      color_discrete_map: '{"1": "#636EFA", "2": "#EF553B"}'
+      color_discrete_map: '{"1": "#4C6EF5", "2": "#F76707"}'
       category_orders: '{"classifications_taxa": [1, 2]}'
-      title: "Area vs Eccentricity"
+      labels: '{"features_area": "Cell area (px\u00b2)", "features_eccentricity": "Eccentricity", "classifications_taxa": "Taxa"}'
+      opacity: 0.85
+      template: plotly_white
+      title: "Morphology \u2014 Area vs Eccentricity"
     selection_enabled: true
     selection_column: index_index
     layout:
       x: 0
-      y: 5
+      y: 3
       w: 4
       h: 5
 
@@ -208,117 +259,53 @@ components:
       x: features_intensity_mean-0
       y: features_intensity_mean-2
       color: classifications_taxa
-      color_discrete_map: '{"1": "#636EFA", "2": "#EF553B"}'
+      color_discrete_map: '{"1": "#4C6EF5", "2": "#F76707"}'
       category_orders: '{"classifications_taxa": [1, 2]}'
-      title: "Red vs Blue Intensity"
+      labels: '{"features_intensity_mean-0": "Red channel intensity", "features_intensity_mean-2": "Blue channel intensity", "classifications_taxa": "Taxa"}'
+      opacity: 0.85
+      template: plotly_white
+      title: "Intensity \u2014 Red vs Blue channel"
     selection_enabled: true
     selection_column: index_index
     layout:
       x: 4
-      y: 5
+      y: 3
       w: 4
       h: 5
 
-  # ── Right Panel Row 10 (y=8, h=4): taxa balance + box plot ─────────────
-
-  - tag: taxa-histogram
-    component_type: figure
-    workflow_tag: python/microscopy_workflow
-    data_collection_tag: microscopy_phenobase
-    visu_type: bar
-    mode: code
-    code_content: |
-      import plotly.express as px
-      import polars as pl
-      df_modified = df.group_by("classifications_taxa").len().sort("classifications_taxa").with_columns(pl.col("classifications_taxa").cast(pl.Utf8)).to_pandas()
-      fig = px.bar(
-          df_modified,
-          x="classifications_taxa",
-          y="len",
-          color="classifications_taxa",
-          color_discrete_map={"1": "#636EFA", "2": "#EF553B"},
-          category_orders={"classifications_taxa": ["1", "2"]},
-          labels={"len": "Count", "classifications_taxa": "Taxa"},
-          title="Taxa Class Balance",
-      )
-    layout:
-      x: 0
-      y: 10
-      w: 4
-      h: 4
-
-  - tag: area-box-by-taxa
-    component_type: figure
-    workflow_tag: python/microscopy_workflow
-    data_collection_tag: microscopy_phenobase
-    visu_type: box
-    dict_kwargs:
-      x: classifications_taxa
-      y: features_area
-      color: classifications_taxa
-      color_discrete_map: '{"1": "#636EFA", "2": "#EF553B"}'
-      category_orders: '{"classifications_taxa": [1, 2]}'
-      title: "Area Distribution by Taxa"
-    layout:
-      x: 4
-      y: 10
-      w: 4
-      h: 4
-
-  # ── Right Panel Row 12 (y=12, h=4): area histogram full width ─────────
-
-  - tag: area-histogram
-    component_type: figure
-    workflow_tag: python/microscopy_workflow
-    data_collection_tag: microscopy_phenobase
-    visu_type: histogram
-    dict_kwargs:
-      x: features_area
-      color: classifications_taxa
-      color_discrete_map: '{"1": "#636EFA", "2": "#EF553B"}'
-      category_orders: '{"classifications_taxa": [1, 2]}'
-      title: "Area Distribution"
-    layout:
-      x: 0
-      y: 14
-      w: 8
-      h: 4
-
-  # ── Right Panel Row 16 (y=16, h=5): image gallery + detail table ──────
-
+  # ── Cell gallery (full width, compact thumbnail strip) ───────────────
   - tag: cell-gallery
     component_type: image
     workflow_tag: python/microscopy_workflow
     data_collection_tag: microscopy_phenobase
     image_column: patches_patches_2d_rgb_path
     s3_base_folder: "s3://depictio-bucket/750a1b2c3d4e5f6a7b8c9d10/images/phenobase/"
-    thumbnail_size: 120
-    columns: 4
-    max_images: 50
+    thumbnail_size: 140
+    columns: 6
+    max_images: 500
     layout:
       x: 0
-      y: 18
-      w: 3
-      h: 5
+      y: 8
+      w: 8
+      h: 6
 
+  # ── Detail table (full width, compact, key columns only) ─────────────
   - tag: detail-table
     component_type: table
     workflow_tag: python/microscopy_workflow
     data_collection_tag: microscopy_phenobase
+    compact: true
     columns:
       - index_index
       - classifications_taxa
       - features_area
       - features_eccentricity
       - features_solidity
-      - features_intensity_mean-0
-      - features_intensity_mean-2
-      - coord_counter
-    page_size: 15
+    page_size: 8
     row_selection_enabled: true
     row_selection_column: index_index
     layout:
-      x: 3
-      y: 18
-      w: 5
-      h: 5
+      x: 0
+      y: 14
+      w: 8
+      h: 4

@@ -3,6 +3,7 @@ import { NumberInput, ScrollArea, Stack, Tabs, useMantineColorScheme, useMantine
 import Plot from 'react-plotly.js';
 
 import { fetchAdvancedVizData, InteractiveFilter, StoredMetadata } from '../../api';
+import { isStaleFetch } from '../../fetchQueue';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragment } from './plotlyTheme';
 
@@ -51,6 +52,19 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
   const [rows, setRows] = useState<Record<string, unknown[]> | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  // Server-side downsampling state (mirrors the scatter-figure Load-All UX).
+  const [fullLoad, setFullLoad] = useState(false);
+  const [reduction, setReduction] = useState<{
+    displayed: number;
+    total: number;
+    sampled: boolean;
+    degraded: boolean;
+  } | null>(null);
+
+  const filterSig = JSON.stringify(filters);
+  useEffect(() => {
+    setFullLoad(false);
+  }, [filterSig]);
 
   useEffect(() => {
     if (!metadata.wf_id || !metadata.dc_id || requiredCols.length < 3) {
@@ -59,22 +73,42 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
       return;
     }
     let cancelled = false;
+    const ctrl = new AbortController();
     setLoading(true);
     setError(null);
-    fetchAdvancedVizData(metadata.wf_id, metadata.dc_id, requiredCols, filters)
+    fetchAdvancedVizData(
+      {
+        wfId: metadata.wf_id,
+        dcId: metadata.dc_id,
+        columns: requiredCols,
+        filters,
+        fullLoad,
+        vizKind: 'da_barplot',
+      },
+      ctrl.signal,
+    )
       .then((res) => {
-        if (!cancelled) setRows(res.rows);
+        if (cancelled) return;
+        setRows(res.rows);
+        setReduction({
+          displayed: res.row_count,
+          total: res.total_rows ?? res.row_count,
+          sampled: Boolean(res.sampled),
+          degraded: Boolean(res.sampling?.degraded),
+        });
       })
       .catch((err: unknown) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
+        if (cancelled || isStaleFetch(err)) return;
+        setError(err instanceof Error ? err.message : String(err));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
     return () => {
       cancelled = true;
+      ctrl.abort();
     };
-  }, [metadata.wf_id, metadata.dc_id, JSON.stringify(requiredCols), JSON.stringify(filters), refreshTick]);
+  }, [metadata.wf_id, metadata.dc_id, JSON.stringify(requiredCols), filterSig, refreshTick, fullLoad]);
 
   // Group rows by contrast once — both the tabs list and the active panel
   // read from the same Map so contrast switching never re-traverses raw rows.
@@ -180,27 +214,34 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
     };
   };
 
-  const controls = (
-    <Stack gap="xs">
-      <NumberInput
-        size="xs"
-        label="Top-N per panel"
-        value={topN}
-        onChange={(v) => setTopN(Math.max(1, Number(v) || 15))}
-        min={1}
-        max={50}
-      />
-      <NumberInput
-        size="xs"
-        label="Significance threshold"
-        value={sigThreshold}
-        onChange={(v) => setSigThreshold(Math.max(0, Math.min(1, Number(v) || 0.05)))}
-        min={0}
-        max={1}
-        step={0.01}
-        decimalScale={3}
-      />
-    </Stack>
+  // Memoised so AdvancedVizFrame's `extras` useMemo doesn't invalidate on every
+  // render — an unmemoised element re-fires the frame's publish effect and loops
+  // it against ComponentRenderer's setState ("Maximum update depth exceeded").
+  // Mirrors the other renderers (Sunburst/Volcano/…) which already memoise this.
+  const controls = useMemo(
+    () => (
+      <Stack gap="xs">
+        <NumberInput
+          size="xs"
+          label="Top-N per panel"
+          value={topN}
+          onChange={(v) => setTopN(Math.max(1, Number(v) || 15))}
+          min={1}
+          max={50}
+        />
+        <NumberInput
+          size="xs"
+          label="Significance threshold"
+          value={sigThreshold}
+          onChange={(v) => setSigThreshold(Math.max(0, Math.min(1, Number(v) || 0.05)))}
+          min={0}
+          max={1}
+          step={0.01}
+          decimalScale={3}
+        />
+      </Stack>
+    ),
+    [topN, sigThreshold],
   );
 
   // Per-panel height for the faceted "All" view. Tight enough to fit several
@@ -259,6 +300,19 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
       emptyMessage={rows && Object.values(rows)[0]?.length === 0 ? 'No data' : undefined}
       dataRows={rows ?? undefined}
       dataColumns={requiredCols}
+      estimated={Boolean(reduction?.degraded)}
+      reduction={
+        reduction && (reduction.sampled || fullLoad)
+          ? {
+              displayed: reduction.displayed,
+              total: reduction.total,
+              sampled: reduction.sampled,
+              full: fullLoad,
+              loading,
+              onToggle: () => setFullLoad((v) => !v),
+            }
+          : undefined
+      }
     >
       {tabValues.length > 0 ? (
         <Tabs

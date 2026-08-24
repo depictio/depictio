@@ -7,7 +7,6 @@ import {
   Group,
   HoverCard,
   Image,
-  Loader,
   Modal,
   Paper,
   ScrollArea,
@@ -27,7 +26,10 @@ import {
 } from '../api';
 import { useNewItemIds } from '../hooks/useNewItemIds';
 import { useTransientFlag } from '../hooks/useTransientFlag';
+import { ActiveHighlight } from '../highlight';
 import RefetchOverlay from './RefetchOverlay';
+import ComponentSkeleton from './ComponentSkeleton';
+import { useReportLoadStatus } from './DashboardLoadingProvider';
 
 interface ImageRendererProps {
   dashboardId: string;
@@ -39,6 +41,9 @@ interface ImageRendererProps {
   onFilterChange?: (filter: InteractiveFilter) => void;
   /** Counter to force refetch on realtime updates even when filters are unchanged. */
   refreshTick?: number;
+  /** Batch to glow — a live arrival (auto-fade) or a pinned re-selection from
+   *  the event log. Its ``ids`` are matched against each card's row-id key. */
+  activeHighlight?: ActiveHighlight | null;
 }
 
 /**
@@ -63,6 +68,7 @@ const ImageRenderer: React.FC<ImageRendererProps> = ({
   filters = [],
   onFilterChange,
   refreshTick,
+  activeHighlight,
 }) => {
   const imageColumn = (metadata.image_column as string) || '';
   const s3BaseFolder = (metadata.s3_base_folder as string) || '';
@@ -96,6 +102,12 @@ const ImageRenderer: React.FC<ImageRendererProps> = ({
   // Last thumbnail the user clicked — used as the anchor for shift+click
   // range selection. Reset to null when the selection is externally cleared.
   const lastClickedRowIdRef = useRef<string | null>(null);
+
+  // Report load status to the dashboard registry (image grid fetches on mount).
+  useReportLoadStatus(
+    metadata.index,
+    response != null ? 'ready' : error ? 'error' : 'loading',
+  );
 
   // When the parent clears the filter (reset icon, "reset all filters"), we
   // need to drop the local selection so the cards reflect it. We detect
@@ -254,6 +266,66 @@ const ImageRenderer: React.FC<ImageRendererProps> = ({
   );
   const newItemKeys = useNewItemIds(itemKeys, refreshTick);
   const highlightActive = useTransientFlag(refreshTick, highlightDurationMs);
+
+  // Per-batch highlight (WHAT × WHEN, payload-driven). ``activeHighlight`` names
+  // the exact ids a batch added, as values of the batch's own ``idColumn`` (the
+  // DC-wide column the backend diffed, e.g. ``index_index``). We match each card
+  // on THAT column — which every row carries in ``it.row`` — rather than the
+  // component's selection column, so highlighting works even when the two
+  // differ. Sticky batches (re-selected from the event log) stay lit; live
+  // arrivals fade after ``highlightDurationMs``.
+  const batchDcMatch =
+    !!activeHighlight &&
+    (!activeHighlight.dcId || activeHighlight.dcId === metadata.dc_id);
+  const batchIdColumn = activeHighlight?.idColumn;
+  const batchIds = useMemo(
+    () => (batchDcMatch && batchIdColumn ? new Set(activeHighlight!.ids) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [batchDcMatch, batchIdColumn, activeHighlight?.ids],
+  );
+  // A live arrival fires the highlight nonce and a data refresh at the same
+  // moment, but the gallery re-fetch is async: the batch's rows often mount a
+  // beat later (worse under the API's post-write respec lag). Arming the fade on
+  // the nonce alone can burn the whole window before those rows render — leaving
+  // them un-glowed. So arm it when the batch's rows are actually PRESENT in the
+  // fetched items instead. Keyed on nonce too, so a new batch re-arms; undefined
+  // until present so ``useTransientFlag`` doesn't start (and waste) the timer.
+  const batchRowsPresent = useMemo(
+    () =>
+      !!batchIds &&
+      !!batchIdColumn &&
+      items.some((it) => it.row[batchIdColumn] != null && batchIds.has(String(it.row[batchIdColumn]))),
+    [items, batchIds, batchIdColumn],
+  );
+  const batchFadeKey =
+    batchDcMatch && batchRowsPresent ? `${activeHighlight?.nonce}` : undefined;
+  const batchFadeActive = useTransientFlag(batchFadeKey, highlightDurationMs);
+  const batchHighlightOn = batchDcMatch && (activeHighlight!.sticky || batchFadeActive);
+  const batchSticky = !!activeHighlight?.sticky;
+
+  // Does this card belong to the active batch? (batch's own id column looked up
+  // on the row — see ActiveHighlight.idColumn.)
+  const cardInBatch = (row: Record<string, unknown>): boolean =>
+    !!batchIds &&
+    !!batchIdColumn &&
+    row[batchIdColumn] != null &&
+    batchIds.has(String(row[batchIdColumn]));
+
+  // Resolve a card's highlight class. A PINNED batch (re-selected from the event
+  // log) gets the steady ``depictio-card-pinned`` style so it stays lit until
+  // cleared; a live arrival (legacy client-side diff, or a non-sticky batch)
+  // gets the one-shot ``depictio-card-new`` glow that fades. Batch + legacy are
+  // additive so live highlights fire even when no batch targets this component.
+  const cardHighlightClass = (it: {
+    rowId: string;
+    relPath: string;
+    row: Record<string, unknown>;
+  }): string | null => {
+    if (batchHighlightOn && batchSticky && cardInBatch(it.row)) return 'depictio-card-pinned';
+    const legacyLive = highlightActive && newItemKeys.has(rowIdColumn ? it.rowId : it.relPath);
+    const batchLive = batchHighlightOn && !batchSticky && cardInBatch(it.row);
+    return legacyLive || batchLive ? 'depictio-card-new' : null;
+  };
 
   const selectionEnabled = !!onFilterChange && !!imageColumn;
 
@@ -421,14 +493,7 @@ const ImageRenderer: React.FC<ImageRendererProps> = ({
 
       {/* Initial fetch (no response yet): show the big loader. Subsequent
           fetches keep the existing grid mounted with a small overlay. */}
-      {response === null && loading && (
-        <Stack align="center" justify="center" gap="xs" mih={200}>
-          <Loader size="sm" />
-          <Text size="xs" c="dimmed">
-            Loading images…
-          </Text>
-        </Stack>
-      )}
+      {response === null && loading && <ComponentSkeleton variant="image" />}
 
       {error && response === null && (
         <Stack mih={200} justify="center" align="center">
@@ -453,11 +518,8 @@ const ImageRenderer: React.FC<ImageRendererProps> = ({
             <SimpleGrid cols={columns} spacing="xs" verticalSpacing="xs" p={4}>
               {items.map((it) => {
                 const selected = selectedRowIds.has(it.rowId);
-                const isNew =
-                  highlightActive &&
-                  newItemKeys.has(rowIdColumn ? it.rowId : it.relPath);
                 const cardClasses = [
-                  isNew ? 'depictio-card-new' : null,
+                  cardHighlightClass(it),
                   selected ? 'depictio-card-selected' : null,
                 ]
                   .filter(Boolean)
@@ -465,7 +527,7 @@ const ImageRenderer: React.FC<ImageRendererProps> = ({
                 return (
                   <Box key={it.key} pos="relative">
                     <HoverCard
-                      width={320}
+                      width={400}
                       shadow="md"
                       openDelay={350}
                       closeDelay={80}
@@ -510,6 +572,15 @@ const ImageRenderer: React.FC<ImageRendererProps> = ({
                               w="100%"
                               fit="cover"
                               loading="lazy"
+                              // The wrapping Mantine Card is display:flex /
+                              // flex-direction:column, so the image inherits
+                              // `flex: 0 1 0%` and its fixed `h` is ignored —
+                              // each thumbnail stretches to its patch's
+                              // intrinsic size (ragged, uneven heights).
+                              // `flex: none` (0 0 auto) restores the fixed
+                              // height so every thumbnail is exactly
+                              // `thumbnailSize` tall and `fit=cover` can crop.
+                              style={{ flex: 'none' }}
                               fallbackSrc="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='1.5'><path d='M3 5h18v14H3z'/><circle cx='9' cy='10' r='2'/><path d='M21 17l-6-6-9 9'/></svg>"
                             />
                           </Card>
@@ -520,18 +591,32 @@ const ImageRenderer: React.FC<ImageRendererProps> = ({
                           <Text fw={600} size="sm" truncate>
                             {it.filename}
                           </Text>
-                          {Object.entries(it.row as Record<string, unknown>).map(
-                            ([k, v]) => (
-                              <Group key={k} gap="xs" wrap="nowrap" justify="space-between">
-                                <Text size="xs" c="dimmed" truncate>
-                                  {k}
-                                </Text>
-                                <Text size="xs" ff="monospace" truncate maw={180} ta="right">
-                                  {v == null ? '—' : String(v)}
-                                </Text>
-                              </Group>
-                            ),
-                          )}
+                          {/* Rows with many columns overflow the viewport — scroll
+                              the metadata list internally, keeping the filename
+                              header pinned above it. */}
+                          <ScrollArea.Autosize mah={320} type="auto" offsetScrollbars>
+                            <Stack gap={4}>
+                              {Object.entries(it.row as Record<string, unknown>).map(
+                                ([k, v]) => (
+                                  <Group key={k} gap="xs" wrap="nowrap" align="flex-start" justify="space-between">
+                                    <Text size="xs" c="dimmed" style={{ flexShrink: 0, maxWidth: '45%' }} truncate>
+                                      {k}
+                                    </Text>
+                                    {/* Wrap long values (paths, hashes) instead of
+                                        truncating so the full metadata is readable. */}
+                                    <Text
+                                      size="xs"
+                                      ff="monospace"
+                                      ta="right"
+                                      style={{ minWidth: 0, wordBreak: 'break-word' }}
+                                    >
+                                      {v == null ? '—' : String(v)}
+                                    </Text>
+                                  </Group>
+                                ),
+                              )}
+                            </Stack>
+                          </ScrollArea.Autosize>
                         </Stack>
                       </HoverCard.Dropdown>
                     </HoverCard>

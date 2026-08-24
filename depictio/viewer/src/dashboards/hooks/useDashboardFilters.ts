@@ -13,6 +13,7 @@ import type {
   GroupBy,
   SortBy,
 } from './useDashboardViewPrefs';
+import { timestampSortKey } from '../../lib/datetime';
 
 export interface DashboardSection {
   key: string;
@@ -88,10 +89,10 @@ function compareGroups(
     }
     case 'recent':
     default: {
-      const at = typeof a.parent.last_saved_ts === 'string' ? a.parent.last_saved_ts : '';
-      const bt = typeof b.parent.last_saved_ts === 'string' ? b.parent.last_saved_ts : '';
-      // Recent first.
-      return bt.localeCompare(at);
+      // Compare as epoch ms, not lexically: the wire format is not always the
+      // same shape (naive "YYYY-MM-DD HH:MM:SS" vs ISO with an offset), so
+      // string ordering would interleave the two. Recent first.
+      return timestampSortKey(b.parent.last_saved_ts) - timestampSortKey(a.parent.last_saved_ts);
     }
   }
 }

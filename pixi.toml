@@ -56,7 +56,7 @@ start-all = { cmd = "echo 'Starting API...' && python depictio/api/run.py", depe
 # Testing tasks
 # =============================================================================
 test = "pytest depictio/tests/ -xvs"
-test-fast = "pytest depictio/tests/ -x --ignore=depictio/tests/e2e-tests"
+test-fast = "pytest depictio/tests/ -x"
 
 # =============================================================================
 # Code quality tasks

@@ -58,7 +58,7 @@ services:
     restart: unless-stopped
 
   depictio-backend:
-    image: ghcr.io/depictio/depictio-api:${DEPICTIO_VERSION:-1.1.4-b2}
+    image: ghcr.io/depictio/depictio-api:${DEPICTIO_VERSION:-1.5.2}
     container_name: depictio-backend
     ports:
       # Loopback-only: front with a TLS proxy for external access.
@@ -79,6 +79,20 @@ services:
       DEPICTIO_BOOTSTRAP_SEED_TEST_USER: "${DEPICTIO_BOOTSTRAP_SEED_TEST_USER:-false}"
       DEPICTIO_BOOTSTRAP_TEST_USER_EMAIL: "${DEPICTIO_BOOTSTRAP_TEST_USER_EMAIL:-test_user@example.com}"
       DEPICTIO_BOOTSTRAP_TEST_USER_PASSWORD: "${DEPICTIO_BOOTSTRAP_TEST_USER_PASSWORD:-test_pwd}"
+      # Anonymous installation telemetry — see .env.example and docs/telemetry.md.
+      # Set DEPICTIO_TELEMETRY_ENABLED=false (or DO_NOT_TRACK=1) in .env to opt out.
+      # The kind is stated rather than guessed: a Compose container and a Helm pod
+      # look identical from the inside.
+      DEPICTIO_TELEMETRY_ENABLED: "${DEPICTIO_TELEMETRY_ENABLED:-true}"
+      DEPICTIO_TELEMETRY_DEPLOYMENT_KIND: "${DEPICTIO_TELEMETRY_DEPLOYMENT_KIND:-docker-compose}"
+      # Forwarded so the automatic CI suppression works through the container
+      # boundary. These are set on the machine running Compose, not inside the
+      # container, so without this a pipeline that brings Depictio up on every
+      # commit reports each run as a separate installation. Empty when unset,
+      # which detect_ci() reads as "not CI".
+      CI: "${CI:-}"
+      GITHUB_ACTIONS: "${GITHUB_ACTIONS:-}"
+      GITLAB_CI: "${GITLAB_CI:-}"
     command: ["/app/run_fastapi.sh"]
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:8058/health > /dev/null"]
@@ -98,7 +112,7 @@ services:
         required: false
 
   depictio-viewer:
-    image: ghcr.io/depictio/depictio-viewer:${DEPICTIO_VERSION:-1.1.4-b2}
+    image: ghcr.io/depictio/depictio-viewer:${DEPICTIO_VERSION:-1.5.2}
     container_name: depictio-viewer
     ports:
       - 5080:8080
@@ -116,7 +130,7 @@ services:
   depictio-celery-worker:
     container_name: depictio-celery-worker
     # Always enabled — the dashboard editor (stepper / design mode) needs it.
-    image: ghcr.io/depictio/depictio-worker:${DEPICTIO_VERSION:-1.1.4-b2}
+    image: ghcr.io/depictio/depictio-worker:${DEPICTIO_VERSION:-1.5.2}
     volumes:
       - depictio_keys:/app/depictio/keys
       # Shared with the backend (see above) — worker writes screenshots here.

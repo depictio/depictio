@@ -14,6 +14,16 @@ fullnameOverride: ""
 # some (e.g. EMBL ops-k1: ops-k1.embl.de) customise it.
 clusterDomain: "cluster.local"
 
+# Inject the legacy Docker-link service environment variables
+# (<SVC>_PORT_<port>_TCP_ADDR, ...) into every pod. Kubernetes defaults this to
+# true, which means each pod inherits one block of variables per Service in its
+# namespace. On busy clusters that environment grows large enough to break
+# execve's argument limit — the viewer's nginx entrypoint crashlooped on
+# `20-envsubst-on-templates.sh: envsubst: Argument list too long` — and Depictio
+# resolves every dependency through DNS anyway, so none of those variables are
+# read. Keep this false unless something in your deployment relies on them.
+enableServiceLinks: false
+
 # Application configuration
 appname: "depictio"
 
@@ -210,12 +220,15 @@ minio:
     labels: {}
     hosts: []
     tls: []
+  httpRoute:
+    annotations: {}
+    filters: []
 
 # Backend settings
 backend:
   image:
     repository: ghcr.io/depictio/depictio-api # FastAPI backend image (post-Dash split)
-    tag: "1.1.4-b2"
+    tag: "1.5.2"
     pullPolicy: Always
   replicas: 1 # Balanced for stability and performance
   resources:
@@ -277,6 +290,28 @@ backend:
     DEPICTIO_ANALYTICS_TRACK_ANONYMOUS_USERS: "true"
     DEPICTIO_ANALYTICS_CLEANUP_ENABLED: "true"
 
+    # Anonymous installation telemetry
+    # Sends an anonymous daily heartbeat (random installation ID, version,
+    # deployment kind, enabled features, and deployment size as coarse buckets)
+    # so the project can count installations — GHCR publishes no pull counts for
+    # the images or this chart, so there is no other signal.
+    # Never sends emails, names, hostnames, URLs, IPs, paths or secrets.
+    # Audit the exact payload: GET /depictio/api/v1/utils/telemetry/preview
+    # Details: docs/telemetry.md
+    DEPICTIO_TELEMETRY_ENABLED: "true"
+    # Stated explicitly by this chart rather than auto-detected — distinguishes a
+    # Helm install from a hand-rolled deployment, which would otherwise both just
+    # look like "kubernetes" from inside the pod.
+    DEPICTIO_TELEMETRY_DEPLOYMENT_KIND: "helm"
+    # Configured (not live) replica count and CPU/memory requests/limits are
+    # derived from backend.replicas / backend.resources below by
+    # templates/configmaps.yaml — not repeated here as literals that could drift
+    # out of sync with the actual deployment shape.
+    # Set false to send only the install identity and version, no size metrics.
+    DEPICTIO_TELEMETRY_INCLUDE_USAGE_METRICS: "true"
+    # Set true to log the payload instead of sending it.
+    DEPICTIO_TELEMETRY_DEBUG: "false"
+
     # Google Analytics configuration (GA4)
     # Enable to track page views, user interactions, and engagement metrics
     # Get your tracking ID from Google Analytics dashboard (Property → Data Streams)
@@ -323,6 +358,9 @@ backend:
     labels: {}
     hosts: []
     tls: []
+  httpRoute:
+    annotations: {}
+    filters: []
 
 # Celery Worker settings
 celery:
@@ -330,7 +368,7 @@ celery:
   image:
     # Distinct worker image (Celery + Playwright/chromium for screenshots).
     repository: ghcr.io/depictio/depictio-worker
-    tag: "1.1.4-b2"
+    tag: "1.5.2"
     pullPolicy: Always
   replicas: 1
   resources:
@@ -365,7 +403,7 @@ celery:
 viewer:
   image:
     repository: ghcr.io/depictio/depictio-viewer # nginx + built React SPA
-    tag: "1.1.4-b2"
+    tag: "1.5.2"
     pullPolicy: Always
   replicas: 1 # Balanced for stability and performance
   # Deployment update strategy. Default "Recreate" matches the other
@@ -414,6 +452,29 @@ viewer:
 podDisruptionBudget:
   enabled: false
   minAvailable: 1
+
+# Gateway API (HTTPRoute) configuration.
+# Enable this instead of ingress when the cluster uses a Gateway API controller.
+# gateway.parentRefs points to the Gateway resource(s) the HTTPRoute attaches to.
+# Separate HTTPRoutes are always created for frontend, backend, and minio.
+# Auth filters (gateway-implementation-specific) go in gateway.filters (frontend only)
+# or backend.httpRoute.filters / minio.httpRoute.filters.
+gateway:
+  enabled: false
+  # parentRefs defines the Gateway this HTTPRoute attaches to.
+  parentRefs: []
+  # Optional metadata for all HTTPRoute resources.
+  labels: {}
+  annotations: {}
+  # Arbitrary ExtensionRef / RequestRedirect / etc. filters for the frontend HTTPRoute.
+  # Backend and MinIO routes never inherit these.
+  filters: []
+  # NGINX Gateway Fabric SnippetsFilter for injecting raw nginx config into the
+  # frontend HTTPRoute. Serve populates snippets at deploy time (auth_request for
+  # private/project access). Ignored when gateway.enabled is false.
+  snippetsFilter:
+    enabled: false
+    snippets: []
 
 # Generic base ingress values
 ingress:

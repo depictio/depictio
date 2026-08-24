@@ -88,6 +88,9 @@ const SunburstRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
   const [rows, setRows] = useState<Record<string, unknown[]> | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  // The server serves this kind whole because the renderer aggregates its rows;
+  // past `advanced_viz_no_sample_max_rows` it samples anyway and says so here.
+  const [estimated, setEstimated] = useState(false);
   const [colourRankUniverse, setColourRankUniverse] = useState<string[] | null>(null);
 
   useEffect(() => {
@@ -99,9 +102,17 @@ const SunburstRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetchAdvancedVizData(metadata.wf_id, metadata.dc_id, requiredCols, filters)
+    fetchAdvancedVizData({
+      wfId: metadata.wf_id,
+      dcId: metadata.dc_id,
+      columns: requiredCols,
+      filters,
+      vizKind: 'sunburst',
+    })
       .then((res) => {
-        if (!cancelled) setRows(res.rows);
+        if (cancelled) return;
+        setRows(res.rows);
+        setEstimated(Boolean(res.sampling?.degraded));
       })
       .catch((err: unknown) => {
         if (!cancelled) setError(err instanceof Error ? err.message : String(err));
@@ -317,6 +328,7 @@ const SunburstRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
 
   return (
     <AdvancedVizFrame
+      estimated={estimated}
       title={metadata.title || 'Sunburst'}
       subtitle={(metadata as any).description || (metadata as any).subtitle}
       controls={controls}

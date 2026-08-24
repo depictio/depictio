@@ -21,9 +21,53 @@ const fixtureName = 'golden.csv';
 const raw = readFileSync(join(pkgRoot, 'e2e', 'golden', fixtureName), 'utf8');
 const fixture = parseFixture(fixtureName, raw);
 
+// Keep this list adversarial, not representative: every entry exists because
+// emitting it naively produced YAML the catalog model rejects.
 const renders: RenderSpec[] = [
-  { uid: 'r1', component: 'figure', visu_type: 'histogram', dict_kwargs: { x: 'log2fc', color: 'sample' } },
+  // Numeric + boolean plotly params: they must reach the YAML *quoted*, since
+  // `dict_kwargs` is Dict[str, str] and Pydantic v2 won't coerce int/bool → str.
+  {
+    uid: 'r1',
+    component: 'figure',
+    visu_type: 'histogram',
+    dict_kwargs: { x: 'log2fc', color: 'sample', nbinsx: '30', log_y: 'true', title: 'Golden histogram' },
+  },
   { uid: 'r2', component: 'card', column: 'coverage', aggregation: 'average' },
+  // One card per layout family that requires a companion field, so a missing
+  // mapping in fromBuilderStore/yamlGen fails the round-trip instead of a PR.
+  {
+    uid: 'r2b',
+    component: 'card',
+    column: 'coverage',
+    aggregation: 'average',
+    secondary_layout: 'threshold',
+    threshold_value: 100,
+    threshold_direction: 'min',
+  },
+  {
+    uid: 'r2c',
+    component: 'card',
+    column: 'coverage',
+    aggregation: 'average',
+    secondary_layout: 'donut',
+    breakdown_col: 'sample',
+  },
+  {
+    uid: 'r2d',
+    component: 'card',
+    column: 'coverage',
+    aggregation: 'average',
+    secondary_layout: 'trend',
+    trend_col: 'log2fc',
+  },
+  {
+    uid: 'r2e',
+    component: 'card',
+    column: 'coverage',
+    aggregation: 'average',
+    secondary_layout: 'gauge',
+    coverage_max: 200,
+  },
   { uid: 'r3', component: 'table' },
   { uid: 'r4', component: 'interactive' },
   {

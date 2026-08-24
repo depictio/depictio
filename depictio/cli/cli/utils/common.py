@@ -47,7 +47,30 @@ def generate_api_headers(CLI_config: CLIConfig | dict) -> dict:
     # Get the token from the CLI configuration
     token = cli_config_dict["user"]["token"]["access_token"]
 
-    return {"Authorization": f"Bearer {token}"}
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # Tag every request with the CLI instance identity so the server can
+    # distinguish multiple CLIs talking to one instance (admin monitoring).
+    import socket
+
+    headers["X-Depictio-CLI-Host"] = socket.gethostname()
+    instance_label = cli_config_dict.get("instance_label")
+    if instance_label:
+        headers["X-Depictio-CLI-Instance"] = str(instance_label)
+
+    # Version rides along on requests the user is already making, so the server
+    # can report which CLI versions are in live use without the CLI opening any
+    # extra connection — and it keeps working when CLI telemetry is switched off,
+    # since this is the operator's own instance receiving it. Unlike the host
+    # header above, the version is safe to forward onwards in aggregate.
+    try:
+        from depictio.cli.cli.utils.telemetry import cli_version
+
+        headers["X-Depictio-CLI-Version"] = cli_version()
+    except Exception as exc:  # pragma: no cover - never block a request on this
+        logger.debug(f"Could not attach CLI version header: {exc}")
+
+    return headers
 
 
 @validate_call(validate_return=True)
@@ -72,6 +95,10 @@ def validate_depictio_cli_config(depictio_cli_config: dict) -> CLIConfig:
         user=depictio_cli_config["user"],
         api_base_url=depictio_cli_config.get("api_base_url", depictio_cli_config.get("base_url")),
         s3_storage=depictio_cli_config.get("s3_storage", depictio_cli_config.get("s3")),
+        # Previously dropped here, so an `instance_label` set in the YAML never
+        # reached CLIConfig and the X-Depictio-CLI-Instance header was never sent
+        # via this path — the admin monitoring UI showed hostnames only.
+        instance_label=depictio_cli_config.get("instance_label"),
     )
     logger.info(f"Depictio CLI configuration validated: {config}")
     return config

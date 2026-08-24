@@ -178,28 +178,30 @@ def generate_dashboard_screenshot_dual(
 
         if result["status"] == "success":
             logger.info(f"✅ Screenshots generated for dashboard {dashboard_id}")
-            # Bump `last_saved_ts` once the PNGs are on disk so the React
-            # listing's `screenshotUrl(..., last_saved_ts)` cache-buster
+            # Bump `screenshot_ts` once the PNGs are on disk so the React
+            # listing's `screenshotUrl(..., screenshot_ts)` cache-buster
             # advances. Without this, a viewer that loaded the listing while
             # the Playwright job was still running has cached the OLD bytes
             # against the URL the save endpoint just minted — and would never
             # refetch until the next save bumped the timestamp again.
+            # NB: this deliberately does NOT touch `last_saved_ts` — that field
+            # is the user-visible "modified" time, and a background screenshot
+            # is not a user modification (issue #932).
             try:
-                from datetime import datetime
-
                 from depictio.api.v1.db import dashboards_collection
+                from depictio.models.timestamps import utc_now_str
 
                 dashboards_collection.update_one(
                     {"dashboard_id": dashboard_id},
                     {
                         "$set": {
-                            "last_saved_ts": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                            "screenshot_ts": utc_now_str(),
                         }
                     },
                 )
             except Exception as exc:  # noqa: BLE001 — non-fatal best-effort bump
                 logger.warning(
-                    "Could not bump last_saved_ts after screenshot for %s: %s",
+                    "Could not bump screenshot_ts after screenshot for %s: %s",
                     dashboard_id,
                     exc,
                 )
@@ -949,6 +951,20 @@ def prewarm_multiqc_dc_all_plots(self, dc_id: str) -> dict:
 
 # Background callbacks are registered by flask_dispatcher.py when apps are created
 # Management, Viewer, and Editor apps each have their own callback registry
+
+
+# Register monitoring signal handlers (task lifecycle → MongoDB ledger) and the
+# per-task log capture handler. Imported for side effects; gated by the
+# monitoring feature flag. Never let a monitoring import error break the worker.
+if settings.monitoring.enabled:
+    try:
+        from depictio.api.v1.monitoring import task_signals  # noqa: F401
+    except Exception as _exc:  # pragma: no cover - defensive
+        import logging as _logging
+
+        _logging.getLogger(__name__).warning(
+            "monitoring: failed to register task signal handlers: %s", _exc
+        )
 
 
 # Auto-discovery of tasks on app start

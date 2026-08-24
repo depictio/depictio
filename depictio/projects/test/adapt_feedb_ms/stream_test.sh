@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Stream test driver for the adapt_feedb_ms realtime dashboard.
-# Each "tick" appends one row to phenobase.csv, re-runs depictio-cli to
-# rewrite the delta table, and POSTs to /events/test-trigger so the
-# WebSocket subscribers receive a `data_collection_updated` event with
-# row_delta + new_ids in the payload.
+# Each "tick" appends one row to phenobase.csv and re-runs depictio-cli. The
+# CLI re-ingest hits /deltatables/upsert, which broadcasts a
+# `data_collection_updated` event on its own — so subscribed viewers refresh
+# with NO dev endpoints required (works with DEPICTIO_ENABLE_DEV_ENDPOINTS off).
 #
-# NOTE: /events/test-trigger is a dev-only endpoint gated behind
-# DEPICTIO_ENABLE_DEV_ENDPOINTS — start the API with that set to true,
-# otherwise the POST below returns 404.
+# Optional: set TRIGGER_WS=1 to also POST /events/test-trigger after each tick
+# for a richer WS payload digest (row_delta + new_ids + conns). That endpoint is
+# dev-only (DEPICTIO_ENABLE_DEV_ENDPOINTS=true) — leave TRIGGER_WS off otherwise.
 #
 # Modes:
 #   reset                       Wipe CSV down to 2 seed rows, run CLI.
@@ -22,21 +22,31 @@
 #                               payload digest.
 #
 # Watch the dashboard at:
-#   http://localhost:8055/dashboard/69f899234da0b143a8538e0e
+#   $API_URL/dashboard/750a1b2c3d4e5f6a7b8c9d20
+#
+# Defaults target a stock local Depictio (stable docker-compose: API :8058,
+# CLI config ~/.depictio/CLI.yaml). Override any of API_URL / CLI_CONFIG /
+# DEPICTIO_CLI by exporting the matching env var first.
 
 set -euo pipefail
 
 MODE="${1:-reset}"
 
-WORKTREE="/Users/tweber/Gits/workspaces/depictio-workspace/depictio-worktrees/viralrecon-template-dashboard"
-CSV="$WORKTREE/depictio/projects/test/adapt_feedb_ms/phenobase.csv"
-CLI_CONFIG="$WORKTREE/depictio/.depictio/test_user_config.yaml"
-PROJECT_CONFIG="$WORKTREE/depictio/projects/test/adapt_feedb_ms/project.yaml"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CSV="$SCRIPT_DIR/phenobase.csv"
+PROJECT_CONFIG="$SCRIPT_DIR/project.yaml"
+CLI_CONFIG="${CLI_CONFIG:-$HOME/.depictio/CLI.yaml}"
+DEPICTIO_CLI="${DEPICTIO_CLI:-depictio-cli}"
+TRIGGER_WS="${TRIGGER_WS:-0}"   # 1 = also ping the dev-only /events/test-trigger for a payload digest
 DC_ID="750a1b2c3d4e5f6a7b8c9d10"
-DASHBOARD_ID="69f899234da0b143a8538e0e"
-API_URL="http://localhost:8055"
+DASHBOARD_ID="750a1b2c3d4e5f6a7b8c9d20"
+API_URL="${API_URL:-http://localhost:8058}"
 
-HEADER="index_index,coord_counter,acquisition_timestamp,features_area,features_eccentricity,features_solidity,features_intensity_mean-0,features_intensity_mean-1,features_intensity_mean-2,bounding_box_x0,bounding_box_y0,classifications_taxa,patches_patches_2d_rgb_path"
+# Column names mirror the SVLT flattened PhenoBase schema (group-prefixed), so
+# a CSV-driven run and a live run_simulation.sh run feed the dashboard
+# identically. Note meta_acquisition_timestamp (not bare acquisition_timestamp)
+# — the acquisition-timeline component binds to that exact name.
+HEADER="index_index,coord_counter,meta_acquisition_timestamp,features_area,features_eccentricity,features_solidity,features_intensity_mean-0,features_intensity_mean-1,features_intensity_mean-2,bounding_box_x0,bounding_box_y0,classifications_taxa,patches_patches_2d_rgb_path"
 
 # Predefined "nice" seed rows. Used by `reset` and consumed first by
 # `stream`/`bump`. Past row 8 we generate synthetic rows so the test can run
@@ -88,7 +98,7 @@ next_row() {
 }
 
 run_cli() {
-  ( cd "$WORKTREE" && /opt/homebrew/bin/uv run --no-sync python -m depictio.cli run \
+  "$DEPICTIO_CLI" run \
       --CLI-config-path "$CLI_CONFIG" \
       --project-config-path "$PROJECT_CONFIG" \
       --update-config \
@@ -96,7 +106,7 @@ run_cli() {
       --overwrite \
       --skip-dashboard-import \
       --skip-s3-check \
-      --skip-join 2>&1 | tail -1 )
+      --skip-join 2>&1 | tail -1
 }
 
 # Trigger + format the response into one digestible line:
@@ -157,7 +167,7 @@ bump_n() {
     echo "[$i/$n] CSV had ${before} data rows"
     append_one
     run_cli
-    trigger_ws
+    [ "$TRIGGER_WS" = "1" ] && trigger_ws || echo "  [ws] broadcast via CLI upsert"
     echo ""
   done
 }
@@ -207,7 +217,7 @@ case "$MODE" in
       printf '[tick %d] CSV has %d data row(s) — appending\n' "$tick" "$before"
       append_one
       run_cli
-      trigger_ws
+      [ "$TRIGGER_WS" = "1" ] && trigger_ws || echo "  [ws] broadcast via CLI upsert"
       if [ "$MAX" -gt 0 ] && [ "$tick" -ge "$MAX" ]; then
         echo "=== DONE: added $tick row(s) ==="
         break
@@ -222,9 +232,11 @@ case "$MODE" in
     echo "Data rows: $rows"
     echo "Dashboard: $API_URL/dashboard/$DASHBOARD_ID"
     echo "Last DC: $DC_ID"
-    echo ""
-    echo "Latest payload (test-trigger, no append):"
-    trigger_ws
+    if [ "$TRIGGER_WS" = "1" ]; then
+      echo ""
+      echo "Latest payload (test-trigger, no append):"
+      trigger_ws
+    fi
     ;;
 
   *)

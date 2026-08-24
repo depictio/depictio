@@ -1,4 +1,9 @@
-import React from 'react';
+// REQUIRED FIRST: registers the bundled Iconify icons. Without it every
+// <Icon/> tries to fetch its data from the public Iconify API, which the
+// deployed CSP blocks, and all icons render empty. See src/icons.ts.
+import './icons';
+
+import React, { Suspense } from 'react';
 import ReactDOM from 'react-dom/client';
 import { MantineProvider } from '@mantine/core';
 import { Notifications } from '@mantine/notifications';
@@ -19,30 +24,41 @@ import '@mantine/dates/styles.css';
 import '@mantine/tiptap/styles.css';
 import './styles/app.css';
 
-import App from './App';
-import EditorApp from './EditorApp';
-import AuthApp from './auth/AuthApp';
-import DashboardsApp from './dashboards/DashboardsApp';
-import ProjectsApp from './projects/ProjectsApp';
-import ProjectDetailApp from './projects/detail/ProjectDetailApp';
-import PermissionsApp from './projects/detail/PermissionsApp';
-import AboutApp from './about/AboutApp';
-import AdminApp from './admin/AdminApp';
-import ProfileApp from './profile/ProfileApp';
-import CliAgentsApp from './cli-agents/CliAgentsApp';
-import CreateComponentPage from './builder/CreateComponentPage';
-import EditComponentPage from './builder/EditComponentPage';
+// Each route tree is its own async chunk. Only one tree renders per page load
+// (resolveTree picks it by pathname), so eagerly importing all thirteen forced
+// the entry bundle to carry every route's dependencies — including the
+// plotly/tiptap/ag-grid the builder and project-detail previews pull in — onto
+// the dashboard viewer's boot path. Lazy imports keep the viewer route from
+// downloading the editor/builder stack (and vice-versa); Vite fetches the
+// chosen tree's chunk on demand behind the Suspense boundary below.
+const App = React.lazy(() => import('./App'));
+const EditorApp = React.lazy(() => import('./EditorApp'));
+const AuthApp = React.lazy(() => import('./auth/AuthApp'));
+const DashboardsApp = React.lazy(() => import('./dashboards/DashboardsApp'));
+const ProjectsApp = React.lazy(() => import('./projects/ProjectsApp'));
+const ProjectDetailApp = React.lazy(() => import('./projects/detail/ProjectDetailApp'));
+const PermissionsApp = React.lazy(() => import('./projects/detail/PermissionsApp'));
+const AboutApp = React.lazy(() => import('./about/AboutApp'));
+const AdminApp = React.lazy(() => import('./admin/AdminApp'));
+const ProfileApp = React.lazy(() => import('./profile/ProfileApp'));
+const CliAgentsApp = React.lazy(() => import('./cli-agents/CliAgentsApp'));
+const CreateComponentPage = React.lazy(() => import('./builder/CreateComponentPage'));
+const EditComponentPage = React.lazy(() => import('./builder/EditComponentPage'));
 import { matchEditorRoute } from './builder/routeMatch';
 import {
   ErrorBoundary,
   clearSession,
   createTemporaryUser,
   fetchAuthStatus,
+  fetchPublicConfig,
   getAnonymousSession,
   persistSession,
+  startSessionKeepAlive,
   validateSession,
 } from 'depictio-react-core';
+import BootSplash from './components/BootSplash';
 import { depictioTheme } from './theme';
+import { initGoogleAnalytics } from './googleAnalytics';
 import { WalkthroughHost } from './walkthrough';
 
 // Client-side route resolution. FastAPI serves index.html for all paths under
@@ -216,6 +232,22 @@ async function bootstrapSession(): Promise<void> {
   }
 }
 
+/** Load per-deployment frontend config and act on it. Never blocks the render.
+ *
+ * Fire-and-forget on purpose: analytics is not worth a millisecond of time to
+ * first paint, and a backend that doesn't serve `/utils/public-config` (an older
+ * version) must leave the app entirely unaffected. */
+function bootstrapPublicConfig(): void {
+  void fetchPublicConfig()
+    .then((config) => {
+      const ga = config.google_analytics;
+      if (ga?.enabled && ga.tracking_id) {
+        initGoogleAnalytics(ga.tracking_id);
+      }
+    })
+    .catch(() => undefined);
+}
+
 // Bare SPA root → dashboards list. Vite/FastAPI mount the SPA at
 // `/dashboard/` so asset URLs resolve correctly, but that path on its
 // own has no dashboard id to render. Bounce unparameterized hits (`/`,
@@ -226,7 +258,12 @@ const isBareRoot = /^\/(dashboard\/?)?$/.test(window.location.pathname);
 if (isBareRoot) {
   window.location.replace('/dashboards');
 } else {
+  bootstrapPublicConfig();
   bootstrapSession().finally(() => {
+    // Keep the access token fresh for the whole page session. Without this a
+    // long-open view (dashboard filters, admin monitoring) outlives the 1h
+    // token and every subsequent request 401s with "Invalid token".
+    startSessionKeepAlive();
     ReactDOM.createRoot(document.getElementById('root')!).render(
       <React.StrictMode>
         <MantineProvider theme={depictioTheme} defaultColorScheme={readInitialColorScheme()}>
@@ -235,7 +272,11 @@ if (isBareRoot) {
               internally for ``dmc.DatePickerInput``. */}
           <DatesProvider settings={{ locale: 'en', firstDayOfWeek: 1 }}>
             <Notifications position="bottom-right" />
-            <ErrorBoundary>{resolveTree()}</ErrorBoundary>
+            <ErrorBoundary>
+              <Suspense fallback={<BootSplash />}>
+                {resolveTree()}
+              </Suspense>
+            </ErrorBoundary>
             <WalkthroughHost />
           </DatesProvider>
         </MantineProvider>

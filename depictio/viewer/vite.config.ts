@@ -82,6 +82,35 @@ export default defineConfig({
     // turned OFF in the Docker viewer-builder stage via VITE_NO_SOURCEMAP
     // so the image build fits inside typical container memory caps.
     sourcemap: process.env.VITE_NO_SOURCEMAP !== 'true',
+    rollupOptions: {
+      output: {
+        // Split the heavy visualisation vendors into their own chunks so the
+        // entry bundle no longer carries plotly + ag-grid + all renderers as
+        // one ~8.6MB block the browser must parse before first paint. Every
+        // module that imports these is lazy-loaded (see ComponentRenderer's
+        // React.lazy renderers), so Rollup emits these as ASYNC chunks —
+        // `manualChunks` only consolidates each vendor into a single shared
+        // chunk instead of duplicating it per lazy renderer.
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return undefined;
+          // `plotly.js` matches the aliased `plotly.js/dist/plotly` too, and
+          // react-plotly.js pulls the same instance — keep them together.
+          if (id.includes('plotly.js') || id.includes('react-plotly.js')) {
+            return 'vendor-plotly';
+          }
+          if (id.includes('ag-grid-community') || id.includes('ag-grid-react')) {
+            return 'vendor-aggrid';
+          }
+          if (id.includes('cytoscape')) {
+            return 'vendor-cytoscape';
+          }
+          if (id.includes('@mantine')) {
+            return 'vendor-mantine';
+          }
+          return undefined;
+        },
+      },
+    },
   },
   server: {
     port: 5173,

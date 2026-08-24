@@ -6,6 +6,57 @@ title: "Iris Dataset Analysis"
 subtitle: "Overview of sepal/petal measurements across the three Iris varieties"
 project_tag: "Iris Dataset Project Data Analysis"
 
+# `filter_sections` and `grid_sections` are two independent lists: the first
+# groups the left panel's interactive controls, the second groups everything
+# else in the main grid.
+#
+# Every Iconify id used here — section icons, card icons, filter icons — must
+# already appear as a literal somewhere in the viewer's own TypeScript source.
+# `scripts/generate-icon-subset.mjs` builds the bundled icon set by scanning
+# that source, and the app's `connect-src 'self'` CSP blocks the runtime Iconify
+# API, so an id only a YAML knows about renders blank in a built deployment (it
+# still shows under the Vite dev server, which sends no CSP). Section icons have
+# the narrower list the editor's Sections manager offers
+# (depictio/viewer/src/components/sections/sectionIcons.ts).
+filter_sections:
+  - name: "Variety"
+    icon: "mdi:filter-variant"
+    color: "blue"
+    description: "Which flowers to look at"
+  - name: "Measurements"
+    icon: "mdi:ruler"
+    color: "indigo"
+    description: "All four measurement ranges, folded into one card"
+  - name: "Scoped views"
+    icon: "mdi:tune"
+    color: "pink"
+    description: "Options computed from a pre-filtered subset"
+    collapsed: true
+
+# Main-grid sections — the right panel's collapsible outer level. Components
+# join one by setting `section:`; anything that sets none (the intro text here)
+# renders above the accordion, ungrouped. A folded section keeps its cards'
+# values visible in its header, so folding simplifies the dashboard without
+# hiding its numbers.
+grid_sections:
+  - name: "Cohort"
+    icon: "mdi:counter"
+    color: "teal"
+    description: "What the 150 records are made of, and how precisely they were measured"
+  - name: "Measurements"
+    icon: "mdi:ruler"
+    color: "indigo"
+    description: "One card per measurement, each with the summary its own shape calls for"
+  - name: "Distributions"
+    icon: "mdi:chart-bell-curve"
+    color: "violet"
+    description: "Where the three varieties separate, and where they do not"
+  - name: "Raw Data"
+    icon: "mdi:table"
+    color: "gray"
+    description: "Per-flower records behind every figure above"
+    collapsed: true
+
 components:
   # ── Narrative intro ────────────────────────────────────────────────
   - tag: text-overview-intro
@@ -13,64 +64,13 @@ components:
     title: "Iris Dataset — Overview"
     order: 2
     alignment: left
-    body: "Fisher's classic 150-flower dataset across three varieties (*Setosa*, *Versicolor*, *Virginica*). Filters on the left refine every tile."
+    body: "Fisher's classic 150-flower dataset across three varieties (*Setosa*, *Versicolor*, *Virginica*). Filters on the left refine every tile; each section leads with its numbers, then its figures."
     layout: {x: 0, y: 0, w: 8, h: 1}
 
-  # ── Multi-metric summary cards ─────────────────────────────────────
-  - tag: sepal-length-summary
+  # ── Cohort cards — one row of four, w=2 each ───────────────────────
+  - tag: card-flowers
     component_type: card
-    workflow_tag: python/iris_workflow
-    data_collection_tag: iris_table
-    aggregation: median
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
-    column_name: sepal.length
-    column_type: float64
-    icon_name: mdi:flower-outline
-    icon_color: "#9C27B0"
-    title_color: "#9C27B0"
-    title_font_size: xl
-    value_font_size: xl
-    title: "Sepal Length"
-    layout: {x: 0, y: 1, w: 4, h: 2}
-
-  - tag: petal-length-summary
-    component_type: card
-    workflow_tag: python/iris_workflow
-    data_collection_tag: iris_table
-    aggregation: median
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
-    column_name: petal.length
-    column_type: float64
-    icon_name: mdi:leaf
-    icon_color: "#43A047"
-    title_color: "#43A047"
-    title_font_size: xl
-    value_font_size: xl
-    title: "Petal Length"
-    layout: {x: 4, y: 1, w: 4, h: 2}
-
-  - tag: variety-breakdown
-    component_type: card
-    workflow_tag: python/iris_workflow
-    data_collection_tag: iris_table
-    aggregation: nunique
-    column_name: variety
-    column_type: object
-    secondary_layout: top_n
-    breakdown_col: variety
-    top_n_count: 3
-    icon_name: mdi:flower-tulip
-    icon_color: "#2196F3"
-    title_color: "#2196F3"
-    title_font_size: xl
-    value_font_size: xl
-    title: "Unique Varieties"
-    layout: {x: 0, y: 3, w: 4, h: 2}
-
-  - tag: sample-coverage
-    component_type: card
+    section: "Cohort"
     workflow_tag: python/iris_workflow
     data_collection_tag: iris_table
     aggregation: count
@@ -81,54 +81,157 @@ components:
     icon_name: mdi:counter
     icon_color: "#4CAF50"
     title_color: "#4CAF50"
-    title_font_size: xl
+    title_font_size: md
     value_font_size: xl
-    title: "Sample Count"
-    layout: {x: 4, y: 3, w: 2, h: 2}
+    title: "Flowers"
+    layout: {x: 0, y: 1, w: 2, h: 2}
 
-  - tag: large-sepal-count
+  - tag: card-varieties
     component_type: card
+    section: "Cohort"
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    aggregation: nunique
+    column_name: variety
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: variety
+    top_n_count: 3
+    icon_name: mdi:chart-donut
+    icon_color: "#2196F3"
+    title_color: "#2196F3"
+    title_font_size: md
+    value_font_size: xl
+    title: "Varieties"
+    layout: {x: 2, y: 1, w: 2, h: 2}
+
+  # ``uniqueness`` counts what is *repeated*, which nothing else surfaces here:
+  # petal width takes far fewer distinct values than there are flowers, because
+  # the measurements were recorded to the nearest 0.1 cm.
+  - tag: card-petal-width-resolution
+    component_type: card
+    section: "Cohort"
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    aggregation: nunique
+    column_name: petal.width
+    column_type: float64
+    secondary_layout: uniqueness
+    icon_name: mdi:decimal
+    icon_color: "#00897B"
+    title_color: "#00897B"
+    title_font_size: md
+    value_font_size: xl
+    title: "Petal width values"
+    layout: {x: 4, y: 1, w: 2, h: 2}
+
+  # ``filter_expr`` narrows the rows before the hero count, and ``gauge`` draws
+  # it as a level against the whole cohort. 2.5 cm is the petal length no Setosa
+  # reaches, so this dial is the non-Setosa share of the dataset.
+  - tag: card-long-petals
+    component_type: card
+    section: "Cohort"
     workflow_tag: python/iris_workflow
     data_collection_tag: iris_table
     aggregation: count
-    column_name: sepal.length
-    column_type: float64
-    filter_expr: "col('sepal.length') > 6"
-    icon_name: mdi:filter-check-outline
-    icon_color: "#607D8B"
-    title_color: "#607D8B"
-    title_font_size: lg
-    value_font_size: xl
-    title: "Sepal > 6 cm"
-    layout: {x: 6, y: 3, w: 2, h: 2}
-
-  # ── Interactive filters (left sidebar) ─────────────────────────────
-  - tag: sepal-length-filter
-    component_type: interactive
-    workflow_tag: python/iris_workflow
-    data_collection_tag: iris_table
-    interactive_component_type: RangeSlider
-    column_name: sepal.length
-    column_type: float64
-    custom_color: "#4C72B0"
-    icon_name: mdi:ruler
-    title: "Sepal length (cm)"
-    layout: {x: 0, y: 0, w: 1, h: 3}
-
-  - tag: petal-length-filter
-    component_type: interactive
-    workflow_tag: python/iris_workflow
-    data_collection_tag: iris_table
-    interactive_component_type: RangeSlider
     column_name: petal.length
     column_type: float64
-    custom_color: "#55A467"
-    icon_name: mdi:ruler
-    title: "Petal length (cm)"
-    layout: {x: 0, y: 3, w: 1, h: 3}
+    filter_expr: "col('petal.length') > 2.5"
+    secondary_layout: gauge
+    coverage_max: 150
+    icon_name: mdi:gauge
+    icon_color: "#607D8B"
+    title_color: "#607D8B"
+    title_font_size: md
+    value_font_size: xl
+    title: "Petals > 2.5 cm"
+    layout: {x: 6, y: 1, w: 2, h: 2}
 
+  # ── Measurement cards — one row of four, w=2 each ──────────────────
+  # Four columns, four secondary layouts, picked from what each column actually
+  # does: the sepal measurements are unimodal (a Tukey box and a quartile grid
+  # describe them fully), the petal measurements are bimodal (a five-number
+  # summary would draw them the same as a flat column) and petal width has a
+  # cut-off that splits the dataset cleanly in two.
+  - tag: card-sepal-length
+    component_type: card
+    section: "Measurements"
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: sepal.length
+    column_type: float64
+    icon_name: mdi:chart-box-outline
+    icon_color: "#9C27B0"
+    title_color: "#9C27B0"
+    title_font_size: md
+    value_font_size: xl
+    title: "Sepal Length"
+    layout: {x: 0, y: 3, w: 2, h: 2}
+
+  - tag: card-sepal-width
+    component_type: card
+    section: "Measurements"
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    aggregation: median
+    aggregations: [min, q1, q3, max]
+    secondary_layout: grid
+    column_name: sepal.width
+    column_type: float64
+    icon_name: mdi:grid-large
+    icon_color: "#7E57C2"
+    title_color: "#7E57C2"
+    title_font_size: md
+    value_font_size: xl
+    title: "Sepal Width"
+    layout: {x: 2, y: 3, w: 2, h: 2}
+
+  - tag: card-petal-length
+    component_type: card
+    section: "Measurements"
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    aggregation: median
+    secondary_layout: histogram
+    column_name: petal.length
+    column_type: float64
+    icon_name: mdi:chart-histogram
+    icon_color: "#43A047"
+    title_color: "#43A047"
+    title_font_size: md
+    value_font_size: xl
+    title: "Petal Length"
+    layout: {x: 4, y: 3, w: 2, h: 2}
+
+  # ``threshold`` is the only layout that returns a verdict rather than a shape.
+  # 0.8 cm is above every Setosa petal and below every other flower's, so the
+  # pass/fail split here is exactly the Setosa / not-Setosa split.
+  - tag: card-petal-width
+    component_type: card
+    section: "Measurements"
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    aggregation: count
+    secondary_layout: threshold
+    threshold_value: 0.8
+    threshold_direction: min
+    column_name: petal.width
+    column_type: float64
+    icon_name: mdi:check-decagram
+    icon_color: "#F4511E"
+    title_color: "#F4511E"
+    title_font_size: md
+    value_font_size: xl
+    title: "Petal width cut-off"
+    layout: {x: 6, y: 3, w: 2, h: 2}
+
+  # ── Interactive filters — left panel, one section each ─────────────
   - tag: variety-filter
     component_type: interactive
+    section: "Variety"
     workflow_tag: python/iris_workflow
     data_collection_tag: iris_table
     interactive_component_type: MultiSelect
@@ -137,10 +240,73 @@ components:
     custom_color: "#DD8452"
     icon_name: mdi:filter-variant
     title: "Variety"
+    layout: {x: 0, y: 0, w: 1, h: 3}
+
+  # The four measurement sliders share a `group`, so the section holds one
+  # collapsible card instead of four stacked ones — the nesting the left panel
+  # is built around (section → group → control).
+  - tag: sepal-length-filter
+    component_type: interactive
+    section: "Measurements"
+    group: "Measurement ranges"
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    interactive_component_type: RangeSlider
+    column_name: sepal.length
+    column_type: float64
+    custom_color: "#4C72B0"
+    icon_name: mdi:ruler
+    title: "Sepal length (cm)"
+    layout: {x: 0, y: 3, w: 1, h: 3}
+
+  - tag: sepal-width-filter
+    component_type: interactive
+    section: "Measurements"
+    group: "Measurement ranges"
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    interactive_component_type: RangeSlider
+    column_name: sepal.width
+    column_type: float64
+    custom_color: "#8172B2"
+    icon_name: mdi:ruler
+    title: "Sepal width (cm)"
     layout: {x: 0, y: 6, w: 1, h: 3}
 
+  - tag: petal-length-filter
+    component_type: interactive
+    section: "Measurements"
+    group: "Measurement ranges"
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    interactive_component_type: RangeSlider
+    column_name: petal.length
+    column_type: float64
+    custom_color: "#55A467"
+    icon_name: mdi:ruler
+    title: "Petal length (cm)"
+    layout: {x: 0, y: 9, w: 1, h: 3}
+
+  - tag: petal-width-filter
+    component_type: interactive
+    section: "Measurements"
+    group: "Measurement ranges"
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    interactive_component_type: RangeSlider
+    column_name: petal.width
+    column_type: float64
+    custom_color: "#937860"
+    icon_name: mdi:ruler
+    title: "Petal width (cm)"
+    layout: {x: 0, y: 12, w: 1, h: 3}
+
+  # `filter_expr` narrows the rows the dropdown's options are computed from, so
+  # this one lists only the varieties that have a flower with a sepal over 6 cm
+  # — Setosa never appears.
   - tag: large-sepal-variety-filter
     component_type: interactive
+    section: "Scoped views"
     workflow_tag: python/iris_workflow
     data_collection_tag: iris_table
     interactive_component_type: MultiSelect
@@ -148,11 +314,11 @@ components:
     column_type: object
     filter_expr: "col('sepal.length') > 6"
     custom_color: "#C44E52"
-    icon_name: mdi:filter-check
+    icon_name: mdi:filter-cog-outline
     title: "Variety (sepal > 6 cm)"
-    layout: {x: 0, y: 9, w: 1, h: 3}
+    layout: {x: 0, y: 15, w: 1, h: 3}
 
-  # ── Figures ────────────────────────────────────────────────────────
+  # ── Distribution figures ───────────────────────────────────────────
   # Hero: scatter matrix across all 4 measurement columns. Both halves
   # rendered for symmetry; diagonal acts as a per-variable distribution
   # tick strip. Rendered via code mode because `scatter_matrix` is a
@@ -160,12 +326,13 @@ components:
   # supported by the lite YAML schema.
   - tag: iris-scatter-matrix
     component_type: figure
+    section: "Distributions"
     workflow_tag: python/iris_workflow
     data_collection_tag: iris_table
     visu_type: scatter
     mode: code
     title: "Iris pairwise measurements"
-    description: "Scatter matrix across all four measurements (seaborn deep palette). Off-diagonal = pairwise scatter, diagonal = per-variable distribution."
+    description: "Scatter matrix across all four measurements (seaborn deep palette). Off-diagonal = pairwise scatter, diagonal = per-variable distribution. Every panel involving a petal measurement shows Setosa detached; no sepal-only panel does."
     title_size: h3
     code_content: |
       df_pd = df.to_pandas()
@@ -178,32 +345,19 @@ components:
       )
       fig.update_traces(diagonal_visible=True, showupperhalf=True, marker=dict(size=4, opacity=0.75, line=dict(width=0.4, color='white')))
       fig.update_layout(dragmode='select')
-    layout: {x: 0, y: 5, w: 8, h: 7}
+    layout: {x: 0, y: 5, w: 8, h: 6}
 
-  - tag: sepal-histogram
+  # The two boxes are a deliberate pair: same chart, same scale treatment,
+  # different column — petal length separates all three varieties, sepal length
+  # leaves Versicolor and Virginica overlapping.
+  - tag: petal-length-box
     component_type: figure
-    workflow_tag: python/iris_workflow
-    data_collection_tag: iris_table
-    visu_type: histogram
-    title: "Sepal Length Distribution (overlay)"
-    description: "Per-variety overlay; bars semi-transparent to expose overlap."
-    title_size: h3
-    dict_kwargs:
-      x: sepal.length
-      color: variety
-      nbins: 20
-      barmode: overlay
-      opacity: 0.7
-      color_discrete_map: '{"Setosa": "#4C72B0", "Versicolor": "#DD8452", "Virginica": "#55A467"}'
-    layout: {x: 0, y: 12, w: 4, h: 5}
-
-  - tag: petal-box
-    component_type: figure
+    section: "Distributions"
     workflow_tag: python/iris_workflow
     data_collection_tag: iris_table
     visu_type: box
     title: "Petal Length by Variety"
-    description: "Box + all points; notched to show median CIs."
+    description: "Box + all points; notched to show median CIs. The three boxes barely touch — petal length alone almost classifies the dataset."
     title_size: h3
     dict_kwargs:
       x: variety
@@ -212,18 +366,37 @@ components:
       points: all
       notched: true
       color_discrete_map: '{"Setosa": "#4C72B0", "Versicolor": "#DD8452", "Virginica": "#55A467"}'
-    layout: {x: 4, y: 12, w: 4, h: 5}
+    layout: {x: 0, y: 11, w: 4, h: 5}
+
+  - tag: sepal-length-box
+    component_type: figure
+    section: "Distributions"
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    visu_type: box
+    title: "Sepal Length by Variety"
+    description: "The same chart on the sepal side: Versicolor and Virginica overlap across most of their range, which is why the sepal-only panels of the matrix look mixed."
+    title_size: h3
+    dict_kwargs:
+      x: variety
+      y: sepal.length
+      color: variety
+      points: all
+      notched: true
+      color_discrete_map: '{"Setosa": "#4C72B0", "Versicolor": "#DD8452", "Virginica": "#55A467"}'
+    layout: {x: 4, y: 11, w: 4, h: 5}
 
   # Bivariate scatter with marginal distributions (violin top, rug right).
   # Five visual channels: x, y, color, size, symbol — packs four numeric
   # columns + the variety category into a single tile.
   - tag: sepal-petal-bivariate
     component_type: figure
+    section: "Distributions"
     workflow_tag: python/iris_workflow
     data_collection_tag: iris_table
     visu_type: scatter
     title: "Sepal vs Petal Length (bivariate + marginals)"
-    description: "Colour + symbol = variety, size = sepal width. Top marginal = violin, right marginal = rug ticks."
+    description: "Colour + symbol = variety, size = sepal width. Top marginal = violin, right marginal = rug ticks. The gap in the right-hand rug is the same 2.5 cm cut the Petals > 2.5 cm card counts."
     title_size: h3
     dict_kwargs:
       x: sepal.length
@@ -236,16 +409,17 @@ components:
       marginal_y: rug
       opacity: 0.85
       color_discrete_map: '{"Setosa": "#4C72B0", "Versicolor": "#DD8452", "Virginica": "#55A467"}'
-    layout: {x: 0, y: 17, w: 8, h: 5}
+    layout: {x: 0, y: 16, w: 8, h: 5}
 
   # ── Data table ─────────────────────────────────────────────────────
   - tag: data-table
     component_type: table
+    section: "Raw Data"
     workflow_tag: python/iris_workflow
     data_collection_tag: iris_table
     title: "Iris Dataset"
     description: "Complete iris flower measurements across the three varieties."
     title_size: h3
     title_align: left
-    page_size: 15
-    layout: {x: 0, y: 22, w: 8, h: 5}
+    page_size: 100
+    layout: {x: 0, y: 21, w: 8, h: 5}

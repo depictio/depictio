@@ -1,0 +1,85 @@
+# Floating Map Demo Project
+# ============================================================================
+# Minimal two-DC project whose only job is to exercise the *floating* map
+# placement: a map that leaves the dashboard grid and stays reachable from
+# every tab, cross-filtering whichever tab you are on.
+#
+# The data is a trimmed copy of the nf-core/ampliseq reference run (same 12
+# German water/soil samples): `sampling_sites` carries the coordinates, and
+# `taxonomy` is the per-sample composition it filters through the link below.
+# ============================================================================
+id: "661c3d4e5f6a7b8c9d0e1f00"
+name: "Floating Map Demo"
+is_public: true
+workflows:
+  - id: "661c3d4e5f6a7b8c9d0e1f01"
+    name: "floating_map_demo_workflow"
+    engine:
+      name: "python"
+    data_location:
+      structure: "flat"
+      locations:
+        - depictio/projects/test/floating_map_demo
+    data_collections:
+      - id: "661c3d4e5f6a7b8c9d0e1f02"
+        data_collection_tag: "sampling_sites"
+        description: "Sampling sites with coordinates — the map's data source"
+        config:
+          type: "Table"
+          # No `metatype` on purpose. It is a free-form string and the only
+          # value the code ever branches on is "Metadata", which would be wrong
+          # here: it makes the importer's `_tab_meets_minimum` check discount
+          # every component bound to this DC, dropping tab 1 as "nothing to
+          # look at". This table IS the primary data, not a sidecar.
+          scan:
+            mode: single
+            scan_parameters:
+              filename: depictio/projects/test/floating_map_demo/sampling_sites.tsv
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              try_parse_dates: true
+            columns_description:
+              sample: "Sample identifier — the join key to `taxonomy` and the map's selection column"
+              habitat: "Environment type (Riverwater, Groundwater, Sediment, Soil)"
+              city: "Nearest city to the sampling site"
+              latitude: "Sampling site latitude (decimal degrees)"
+              longitude: "Sampling site longitude (decimal degrees)"
+              sampling_date: "Date the sample was collected"
+
+      - id: "661c3d4e5f6a7b8c9d0e1f03"
+        data_collection_tag: "taxonomy"
+        description: "Per-sample relative abundance by phylum"
+        config:
+          type: "Table"
+          scan:
+            mode: single
+            scan_parameters:
+              filename: depictio/projects/test/floating_map_demo/taxonomy.tsv
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              sample: "Sample identifier — matches sampling_sites.sample"
+              Kingdom: "Taxonomic kingdom"
+              Phylum: "Taxonomic phylum"
+              taxonomy: "Full taxonomy string"
+              rel_abundance: "Relative abundance within the sample (0-1)"
+
+# ============================================================================
+# Cross-DC link. This is what makes the floating map worth having: a selection
+# made on the map (which lives in the sampling_sites DC) reaches the taxonomy
+# components on the *other* tab.
+# ============================================================================
+links:
+  - source_dc_id: "661c3d4e5f6a7b8c9d0e1f02"  # sampling_sites
+    source_column: "sample"
+    target_dc_id: "661c3d4e5f6a7b8c9d0e1f03"  # taxonomy
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter taxonomy by the samples selected on the map"
+    enabled: true

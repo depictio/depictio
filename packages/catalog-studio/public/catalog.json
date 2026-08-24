@@ -27,6 +27,7 @@
           "renders_as": [
             {
               "aggregations": [],
+              "attrition_cols": [],
               "component": "advanced_viz",
               "dict_kwargs": {},
               "id": "lollipop",
@@ -39,6 +40,7 @@
             },
             {
               "aggregations": [],
+              "attrition_cols": [],
               "component": "advanced_viz",
               "dict_kwargs": {},
               "id": "oncoplot",
@@ -51,6 +53,7 @@
             },
             {
               "aggregations": [],
+              "attrition_cols": [],
               "component": "advanced_viz",
               "dict_kwargs": {},
               "id": "manhattan",
@@ -63,6 +66,7 @@
             },
             {
               "aggregations": [],
+              "attrition_cols": [],
               "component": "figure",
               "dict_kwargs": {
                 "color": "EFFECT",
@@ -108,6 +112,7 @@
           "renders_as": [
             {
               "aggregations": [],
+              "attrition_cols": [],
               "component": "advanced_viz",
               "dict_kwargs": {},
               "id": "stacked_taxonomy",
@@ -121,6 +126,7 @@
             },
             {
               "aggregations": [],
+              "attrition_cols": [],
               "component": "table",
               "dict_kwargs": {},
               "roles": {}
@@ -164,6 +170,7 @@
           "renders_as": [
             {
               "aggregations": [],
+              "attrition_cols": [],
               "component": "advanced_viz",
               "dict_kwargs": {},
               "id": "coverage_track_amplicon",
@@ -177,6 +184,7 @@
             {
               "aggregation": "average",
               "aggregations": [],
+              "attrition_cols": [],
               "column": "coverage",
               "component": "card",
               "dict_kwargs": {},
@@ -204,6 +212,7 @@
           "renders_as": [
             {
               "aggregations": [],
+              "attrition_cols": [],
               "component": "advanced_viz",
               "dict_kwargs": {},
               "id": "complex_heatmap",
@@ -232,6 +241,7 @@
           "renders_as": [
             {
               "aggregations": [],
+              "attrition_cols": [],
               "component": "advanced_viz",
               "dict_kwargs": {},
               "id": "coverage_track_genome",
@@ -245,6 +255,7 @@
             {
               "aggregation": "average",
               "aggregations": [],
+              "attrition_cols": [],
               "column": "value",
               "component": "card",
               "dict_kwargs": {},
@@ -282,6 +293,7 @@
           "renders_as": [
             {
               "aggregations": [],
+              "attrition_cols": [],
               "component": "multiqc",
               "dict_kwargs": {},
               "roles": {},
@@ -308,6 +320,7 @@
           "renders_as": [
             {
               "aggregations": [],
+              "attrition_cols": [],
               "component": "multiqc",
               "dict_kwargs": {},
               "roles": {},
@@ -334,6 +347,7 @@
           "renders_as": [
             {
               "aggregations": [],
+              "attrition_cols": [],
               "component": "multiqc",
               "dict_kwargs": {},
               "roles": {},
@@ -360,6 +374,7 @@
           "renders_as": [
             {
               "aggregations": [],
+              "attrition_cols": [],
               "component": "multiqc",
               "dict_kwargs": {},
               "roles": {},
@@ -386,6 +401,7 @@
           "renders_as": [
             {
               "aggregations": [],
+              "attrition_cols": [],
               "component": "multiqc",
               "dict_kwargs": {},
               "roles": {},
@@ -412,6 +428,7 @@
           "renders_as": [
             {
               "aggregations": [],
+              "attrition_cols": [],
               "component": "multiqc",
               "dict_kwargs": {},
               "roles": {},
@@ -438,6 +455,7 @@
           "renders_as": [
             {
               "aggregations": [],
+              "attrition_cols": [],
               "component": "multiqc",
               "dict_kwargs": {},
               "roles": {},
@@ -464,6 +482,7 @@
           "renders_as": [
             {
               "aggregations": [],
+              "attrition_cols": [],
               "component": "multiqc",
               "dict_kwargs": {},
               "roles": {},
@@ -490,6 +509,7 @@
           "renders_as": [
             {
               "aggregations": [],
+              "attrition_cols": [],
               "component": "multiqc",
               "dict_kwargs": {},
               "roles": {},
@@ -516,6 +536,7 @@
           "renders_as": [
             {
               "aggregations": [],
+              "attrition_cols": [],
               "component": "multiqc",
               "dict_kwargs": {},
               "roles": {},
@@ -542,6 +563,7 @@
           "renders_as": [
             {
               "aggregations": [],
+              "attrition_cols": [],
               "component": "multiqc",
               "dict_kwargs": {},
               "roles": {},
@@ -568,6 +590,7 @@
           "renders_as": [
             {
               "aggregations": [],
+              "attrition_cols": [],
               "component": "multiqc",
               "dict_kwargs": {},
               "roles": {},
@@ -596,6 +619,7 @@
             {
               "aggregation": "average",
               "aggregations": [],
+              "attrition_cols": [],
               "column": "pct_genome_covered_10x",
               "component": "card",
               "dict_kwargs": {},
@@ -604,6 +628,7 @@
             {
               "aggregation": "average",
               "aggregations": [],
+              "attrition_cols": [],
               "column": "num_variants_total",
               "component": "card",
               "dict_kwargs": {},
@@ -611,6 +636,7 @@
             },
             {
               "aggregations": [],
+              "attrition_cols": [],
               "component": "table",
               "dict_kwargs": {},
               "roles": {}
@@ -648,6 +674,7 @@
           "renders_as": [
             {
               "aggregations": [],
+              "attrition_cols": [],
               "component": "figure",
               "dict_kwargs": {
                 "color": "qc_overallStatus",
@@ -659,6 +686,7 @@
             {
               "aggregation": "average",
               "aggregations": [],
+              "attrition_cols": [],
               "column": "coverage",
               "component": "card",
               "dict_kwargs": {},
@@ -666,6 +694,7 @@
             },
             {
               "aggregations": [],
+              "attrition_cols": [],
               "component": "table",
               "dict_kwargs": {},
               "roles": {}
@@ -703,6 +732,7 @@
           "renders_as": [
             {
               "aggregations": [],
+              "attrition_cols": [],
               "component": "figure",
               "dict_kwargs": {
                 "color": "qc_status",
@@ -713,6 +743,7 @@
             },
             {
               "aggregations": [],
+              "attrition_cols": [],
               "component": "table",
               "dict_kwargs": {},
               "roles": {}
@@ -751,6 +782,7 @@
           "renders_as": [
             {
               "aggregations": [],
+              "attrition_cols": [],
               "code": "# reshape wide -> long so each metric becomes a facet panel (stays polars)\ndf_modified = df.unpivot(\n    index=[\"sample_id\", \"habitat\"],\n    on=[\"shannon\", \"observed_features\", \"faith_pd\", \"evenness\"],\n    variable_name=\"metric\",\n    value_name=\"value\",\n)\n\nfig = px.box(\n    df_modified,\n    x=\"habitat\", y=\"value\", color=\"habitat\",\n    facet_col=\"metric\", facet_col_wrap=2, points=\"all\",\n    category_orders={\"metric\": [\"shannon\", \"observed_features\", \"faith_pd\", \"evenness\"]},\n    title=\"Alpha diversity by habitat\",\n)\n\nfig.update_yaxes(matches=None)  # each panel keeps its own scale\nfig.for_each_annotation(lambda a: a.update(text=a.text.split(\"=\")[-1]))\nfig.update_layout(showlegend=True, legend_title_text=\"habitat\", boxmode=\"group\")\n",
               "component": "figure",
               "dict_kwargs": {},
@@ -759,6 +791,7 @@
             {
               "aggregation": "average",
               "aggregations": [],
+              "attrition_cols": [],
               "column": "shannon",
               "component": "card",
               "dict_kwargs": {},
@@ -768,6 +801,7 @@
             {
               "aggregation": "average",
               "aggregations": [],
+              "attrition_cols": [],
               "column": "observed_features",
               "component": "card",
               "dict_kwargs": {},
@@ -777,6 +811,7 @@
             {
               "aggregation": "average",
               "aggregations": [],
+              "attrition_cols": [],
               "column": "faith_pd",
               "component": "card",
               "dict_kwargs": {},
@@ -786,6 +821,7 @@
             {
               "aggregation": "average",
               "aggregations": [],
+              "attrition_cols": [],
               "column": "evenness",
               "component": "card",
               "dict_kwargs": {},
@@ -794,6 +830,7 @@
             },
             {
               "aggregations": [],
+              "attrition_cols": [],
               "component": "table",
               "dict_kwargs": {},
               "roles": {}
@@ -821,6 +858,7 @@
           "renders_as": [
             {
               "aggregations": [],
+              "attrition_cols": [],
               "component": "advanced_viz",
               "dict_kwargs": {},
               "id": "rarefaction_alpha",
@@ -854,6 +892,7 @@
           "renders_as": [
             {
               "aggregations": [],
+              "attrition_cols": [],
               "component": "advanced_viz",
               "dict_kwargs": {},
               "id": "volcano",
@@ -866,6 +905,7 @@
             },
             {
               "aggregations": [],
+              "attrition_cols": [],
               "component": "advanced_viz",
               "dict_kwargs": {},
               "id": "da_barplot",
@@ -878,6 +918,7 @@
             },
             {
               "aggregations": [],
+              "attrition_cols": [],
               "component": "advanced_viz",
               "dict_kwargs": {},
               "id": "qq",
@@ -909,6 +950,7 @@
           "renders_as": [
             {
               "aggregations": [],
+              "attrition_cols": [],
               "component": "advanced_viz",
               "dict_kwargs": {},
               "id": "rarefaction",
@@ -942,6 +984,7 @@
           "renders_as": [
             {
               "aggregations": [],
+              "attrition_cols": [],
               "component": "advanced_viz",
               "dict_kwargs": {},
               "id": "sunburst",
@@ -952,6 +995,7 @@
             },
             {
               "aggregations": [],
+              "attrition_cols": [],
               "component": "advanced_viz",
               "dict_kwargs": {},
               "id": "complex_heatmap",
@@ -981,6 +1025,7 @@
           "renders_as": [
             {
               "aggregations": [],
+              "attrition_cols": [],
               "component": "advanced_viz",
               "dict_kwargs": {},
               "id": "stacked_taxonomy",
@@ -1015,6 +1060,7 @@
           "renders_as": [
             {
               "aggregations": [],
+              "attrition_cols": [],
               "component": "advanced_viz",
               "dict_kwargs": {},
               "id": "sunburst_taxonomy",
@@ -1046,6 +1092,7 @@
           "renders_as": [
             {
               "aggregations": [],
+              "attrition_cols": [],
               "component": "advanced_viz",
               "dict_kwargs": {},
               "id": "stacked_taxonomy_barplot",

@@ -9,22 +9,17 @@
 #     -f values.yaml \
 #     -f examples/values-google-analytics.yaml
 
-# Backend configuration
+# The BACKEND is the only place these belong. The viewer ships as a static,
+# pre-built bundle served by nginx, so it cannot read environment variables at
+# runtime — it fetches this configuration from the API at boot instead
+# (GET /depictio/api/v1/utils/public-config). Earlier revisions of this file also
+# set the keys under `frontend.env`, where nothing ever read them.
 backend:
   env:
     # Enable Google Analytics tracking
     DEPICTIO_GOOGLE_ANALYTICS_ENABLED: "true"
 
     # Set your GA4 Measurement ID (get from Google Analytics dashboard)
-    DEPICTIO_GOOGLE_ANALYTICS_TRACKING_ID: "G-XXXXXXXXXX"
-
-# Frontend configuration
-frontend:
-  env:
-    # Enable Google Analytics tracking in the Dash frontend
-    DEPICTIO_GOOGLE_ANALYTICS_ENABLED: "true"
-
-    # Set your GA4 Measurement ID (must match backend)
     DEPICTIO_GOOGLE_ANALYTICS_TRACKING_ID: "G-XXXXXXXXXX"
 
 # =====================================================
@@ -42,11 +37,16 @@ frontend:
 # Features
 # =====================================================
 #
-# When enabled, Google Analytics will track:
-# - Page views and navigation events
-# - User types (authenticated, anonymous, temporary)
-# - Custom events for dashboard interactions
-# - Session duration and engagement metrics
+# When enabled, Google Analytics will track page views and session engagement in
+# the React viewer. Advertising features (Google Signals and ad personalization)
+# are switched off and IP anonymization is on, since this is product analytics for
+# a research tool.
 #
-# This works alongside Depictio's internal analytics system
-# providing both detailed behavioral data and standard web metrics.
+# This is one of three separate, independent systems — do not confuse them:
+#
+# 1. Google Analytics (this file) — per-deployment web analytics. Opt-in, and the
+#    data goes to YOUR GA4 property, not to the Depictio maintainers.
+# 2. DEPICTIO_ANALYTICS_* — Depictio's own session/activity tracking. Stays in
+#    your MongoDB and is never transmitted anywhere. Opt-in.
+# 3. DEPICTIO_TELEMETRY_* — anonymous installation counting sent to the Depictio
+#    maintainers. Enabled by default; see docs/telemetry.md to review or disable.

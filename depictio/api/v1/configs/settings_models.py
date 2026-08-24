@@ -5,6 +5,11 @@ from typing import Any, Literal, Optional
 from pydantic import AliasChoices, Field, SecretStr, computed_field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Import kept to the dependency-free constants module on purpose — this file is
+# the earliest import in every context and must not pull in httpx.
+from depictio.telemetry.constants import DEFAULT_API_KEY as DEFAULT_TELEMETRY_API_KEY
+from depictio.telemetry.constants import DEFAULT_ENDPOINT as DEFAULT_TELEMETRY_ENDPOINT
+
 # Passwords we refuse to accept on a server boot. Lower-cased before comparison.
 _WEAK_PASSWORDS: frozenset[str] = frozenset(
     {
@@ -133,6 +138,13 @@ class ViewerConfig(ServiceConfig):
     auto_generate_figures: bool = Field(
         default=False, description="Enable automatic figure generation in UI mode"
     )
+    inspector_enabled: bool = Field(
+        default=False,
+        description="Show the dashboard inspector: a docked right-hand panel carrying "
+        "the selected component's info and notes. Off by default while it is validated "
+        "against the reference dashboards; with it off those surfaces stay in the "
+        "popovers and drawers they live in today.",
+    )
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_VIEWER_")
 
@@ -173,6 +185,15 @@ class MongoDBConfig(ServiceConfig):
         projects_collection: str = Field(default="projects")
         multiqc_collection: str = Field(default="multiqc")
         multiqc_prerender_collection: str = Field(default="multiqc_prerender")
+        task_events_collection: str = Field(default="task_events")
+        ingestion_runs_collection: str = Field(default="ingestion_runs")
+        app_logs_collection: str = Field(default="app_logs")
+        # Holds the anonymous installation identity and the per-day send guards.
+        # Deliberately its own collection: the wipe path in lifespan.py clears
+        # everything except the init lock out of `initialization`, so an identity
+        # stored there would be regenerated on every dev wipe and inflate the
+        # project's installation count.
+        telemetry_collection: str = Field(default="telemetry")
         test_collection: str = Field(default="test")
 
     collections: Collections = Field(default_factory=Collections)
@@ -795,6 +816,34 @@ class EventsConfig(BaseSettings):
         return f"redis://{self.redis_host}:{self.redis_port}/{self.redis_db}"
 
 
+class MonitoringConfig(BaseSettings):
+    """Configuration for the admin "Log & Task" monitoring feature.
+
+    Backs the admin-only monitoring tab that surfaces Celery task history, CLI
+    ingestion runs, and recent application logs. Persistence is a durable
+    MongoDB ledger; live updates ride the real-time events WebSocket when
+    ``settings.events.enabled`` is also true.
+    """
+
+    enabled: bool = Field(default=True, description="Enable the admin monitoring feature")
+    retention_days: int = Field(
+        default=14, description="TTL (days) for task_events records before automatic expiry"
+    )
+    app_log_min_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = Field(
+        default="WARNING", description="Minimum level captured into the app_logs collection"
+    )
+    app_log_capped_mb: int = Field(
+        default=64, description="Size cap (MB) of the capped app_logs collection"
+    )
+    live_updates: bool = Field(
+        default=True,
+        description="Push live task/ingestion status changes over the events WebSocket "
+        "(only active when events.enabled is also true)",
+    )
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_MONITORING_")
+
+
 class DashboardYAMLConfig(BaseSettings):
     """Configuration for YAML-based dashboard management.
 
@@ -919,6 +968,103 @@ class PerformanceConfig(BaseSettings):
     http_client_timeout: int = Field(default=30)
     api_request_timeout: int = Field(default=60)
 
+    # Component render caps — bound how many rows a single figure/table render
+    # materialises so large Delta tables stay responsive (and don't OOM).
+    figure_max_points: int = Field(
+        default=10_000,
+        description=(
+            "Target marker count for per-row point plots (scatter family). Above "
+            "this the figure is downsampled before serialising to Plotly — the "
+            "dominant cost is the serialised trace size + browser WebGL draw, so "
+            "this is kept modest for snappy interaction. Per-component "
+            "`max_points` overrides this."
+        ),
+    )
+    advanced_viz_no_sample_max_rows: int = Field(
+        default=2_000_000,
+        description=(
+            "Row ceiling for the advanced-viz kinds that must not be sampled. "
+            "Their renderers aggregate client-side (per-sample sums, top-N "
+            "rankings), so a sample changes the values rather than their "
+            "resolution — see `models/components/advanced_viz/sampling.py`. "
+            "Those kinds are served whole, but a data collection large enough "
+            "to exhaust the API process has to be reduced somehow: past this "
+            "count the request falls back to a uniform sample and the response "
+            "reports `sampling.exact = false` so the renderer can mark the "
+            "figure approximate instead of presenting an estimate as a total. "
+            "0 disables the ceiling (unbounded loads)."
+        ),
+    )
+    advanced_viz_tail_p_threshold: float = Field(
+        default=0.05,
+        description=(
+            "Significance cutoff below which a volcano/manhattan row is kept "
+            "whole rather than sampled. A uniform sample of a 17M-row DE table "
+            "keeps ~0.06% of the hits, i.e. none — the plot becomes a cloud "
+            "with nothing to label. Only a fallback: renderers send the "
+            "threshold their own plot draws its line at, and that wins."
+        ),
+    )
+    advanced_viz_tail_effect_threshold: float = Field(
+        default=1.0,
+        description=(
+            "Same, for the kinds whose tail is a signed effect size (MA's log2 "
+            "fold change): rows with |effect| at or above this are kept whole. "
+            "1.0 is a two-fold change, the conventional default line."
+        ),
+    )
+    box_sample_rows_per_group: int = Field(
+        default=0,
+        description=(
+            "Rows sampled per box-plot group before computing the quartiles; 0 "
+            "(the default) computes them exactly. A box plot's quartiles are "
+            "order statistics, so unlike the other aggregate figures they cannot "
+            "be answered by a pushdown — the scan has to be sorted. Sampling per "
+            "group (rather than globally) keeps small groups intact while "
+            "bounding the sort on the large ones, and min/max/count stay exact "
+            "either way, so the whiskers do not move. "
+            "Off by default because it trades a sort for an *extra scan*: the "
+            "exact extremes must be read before the per-group strides are known. "
+            "On warm local parquet that was a 3.7x win at 17M rows, but on a "
+            "cold S3-backed Delta table the read dominates and the second pass "
+            "can cost more than the sort it removes. Enable it only where the "
+            "sort has been measured to be the bottleneck."
+        ),
+    )
+    box_sample_max_groups: int = Field(
+        default=64,
+        description=(
+            "Group-count ceiling above which box quartiles are computed exactly "
+            "rather than sampled. Grouped quantiles get *cheaper* as cardinality "
+            "rises (each group's sort is smaller), so past this point sampling "
+            "costs more than it saves — measured at ~64 groups on a 14M-row frame."
+        ),
+    )
+    figure_max_load_rows: int = Field(
+        default=500_000,
+        description=(
+            "Row ceiling loaded from Delta for a point-plot / code-mode figure "
+            "(memory bound). Beyond it the figure samples the first N rows loaded "
+            "rather than the whole table. Bypassed when the client requests a full "
+            "load."
+        ),
+    )
+    table_sort_max_rows: int = Field(
+        default=1_000_000,
+        description=(
+            "Post-filter row count above which a table is served in natural "
+            "(scan) order instead of being sorted. A sort must see every row, so "
+            "it scales with the table while an unsorted page does not — measured "
+            "on one 100-row page: 87 ms sorted at 1M rows, 957 ms at 5M, 6254 ms "
+            "at 20M, against a flat ~6 ms unsorted. The response reports "
+            "`sort_disabled` so the grid can drop the sort affordance rather "
+            "than show unsorted rows under a sorted header. 0 disables the gate."
+        ),
+    )
+    # Table rows-per-page has no server-side default here: the component model
+    # (TableLiteComponent.page_size) already defaults to 100, and the React grid
+    # reads that value directly — a settings knob would be dead config.
+
     # Playwright/browser timeouts (in milliseconds)
     browser_navigation_timeout: int = Field(default=60000)  # 60s default
     browser_page_load_timeout: int = Field(default=90000)  # 90s default
@@ -987,6 +1133,106 @@ class AnalyticsConfig(BaseSettings):
     )
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_ANALYTICS_")
+
+
+class TelemetryConfig(BaseSettings):
+    """Configuration for anonymous *outbound* installation telemetry.
+
+    Distinct from :class:`AnalyticsConfig`, which records per-user sessions into
+    this deployment's own MongoDB and never transmits anything. This one sends
+    anonymous, aggregate, bucketed data to the Depictio maintainers so the project
+    can tell how many installations exist and which features are used — GHCR
+    publishes no pull counts for either the container images or the OCI Helm
+    chart, so there is otherwise no signal at all.
+
+    Enabled by default, which is only defensible because opting out is one
+    variable, ``DO_NOT_TRACK`` is honoured, the exact payload is documented in
+    ``docs/telemetry.md``, and an admin endpoint renders what would be sent.
+    Nothing identifying is ever collected; see
+    :mod:`depictio.telemetry.schema` for the enforced payload shape.
+    """
+
+    enabled: bool = Field(
+        default=True,
+        description=(
+            "Send anonymous installation telemetry. Set false to disable entirely. "
+            "Also suppressed by DO_NOT_TRACK, in CI, under pytest, and when "
+            "DEPICTIO_MONGODB_WIPE is set."
+        ),
+    )
+    endpoint: str = Field(
+        default=DEFAULT_TELEMETRY_ENDPOINT,
+        description="Collector ingestion URL (PostHog-compatible capture endpoint).",
+    )
+    api_key: str = Field(
+        default=DEFAULT_TELEMETRY_API_KEY,
+        description=(
+            "Collector project token. Public write-only key; carries no read access. "
+            "Defaults to Depictio's own PostHog project — override only to point at "
+            "your own collector. Empty disables sending."
+        ),
+    )
+    interval_hours: int = Field(
+        default=24,
+        description="Hours between heartbeat attempts. At most one send per UTC day either way.",
+        ge=1,
+        le=168,
+    )
+    deployment_kind: str | None = Field(
+        default=None,
+        description=(
+            "Override the detected deployment kind: helm, kubernetes, "
+            "docker-compose, docker-compose-dev, docker, devcontainer or local. "
+            "Auto-detected when unset."
+        ),
+    )
+    include_usage_metrics: bool = Field(
+        default=True,
+        description=(
+            "Include bucketed deployment-size counts (users, projects, dashboards, …). "
+            "Disable to send only the install identity and version."
+        ),
+    )
+    replicas: int | None = Field(
+        default=None,
+        description=(
+            "Configured backend replica count, stated by the Helm chart from its own "
+            "values.yaml. Unset outside Helm."
+        ),
+    )
+    cpu_request: str | None = Field(
+        default=None,
+        description=(
+            "Configured backend CPU request as a raw Kubernetes quantity (e.g. '0.5', "
+            "'500m'), stated by the Helm chart. Parsed to millicores before it can "
+            "reach the telemetry payload; never sent as-is."
+        ),
+    )
+    cpu_limit: str | None = Field(
+        default=None,
+        description="Configured backend CPU limit, same format and handling as cpu_request.",
+    )
+    memory_request: str | None = Field(
+        default=None,
+        description=(
+            "Configured backend memory request as a raw Kubernetes quantity (e.g. "
+            "'1Gi'), stated by the Helm chart. Parsed to MiB before it can reach the "
+            "telemetry payload; never sent as-is."
+        ),
+    )
+    memory_limit: str | None = Field(
+        default=None,
+        description="Configured backend memory limit, same format and handling as memory_request.",
+    )
+    debug: bool = Field(
+        default=False,
+        description=(
+            "Log the payload that would be sent instead of sending it. Lets an "
+            "operator audit telemetry on their own deployment before deciding."
+        ),
+    )
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_TELEMETRY_")
 
 
 class GoogleAnalyticsConfig(BaseSettings):
@@ -1077,11 +1323,13 @@ class Settings(BaseSettings):
     jbrowse: JBrowseConfig = Field(default_factory=JBrowseConfig)
     backup: BackupConfig = Field(default_factory=BackupConfig)
     events: EventsConfig = Field(default_factory=EventsConfig)
+    monitoring: MonitoringConfig = Field(default_factory=MonitoringConfig)
     dashboard_yaml: DashboardYAMLConfig = Field(default_factory=DashboardYAMLConfig)
 
     # Observability & development
     performance: PerformanceConfig = Field(default_factory=PerformanceConfig)
     analytics: AnalyticsConfig = Field(default_factory=AnalyticsConfig)
+    telemetry: TelemetryConfig = Field(default_factory=TelemetryConfig)
     google_analytics: GoogleAnalyticsConfig = Field(default_factory=GoogleAnalyticsConfig)
     profiling: ProfilingConfig = Field(default_factory=ProfilingConfig)
 
