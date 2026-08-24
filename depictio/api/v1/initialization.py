@@ -40,7 +40,13 @@ async def run_initialization(
     if s3_config_input is None:
         s3_config_input = settings.minio
 
-    S3_storage_checks(s3_config_input, checks or ["s3"])
+    # "bucket" (HeadBucket) + "write" (put/delete a test object) are scoped to
+    # the configured bucket and are what actually matters for startup. "s3"
+    # (ListBuckets) is account-wide and fails outright against a
+    # least-privilege, bucket-scoped credential (e.g. EMBL's NetApp S3
+    # buckets, which only ever issue per-bucket keys) even when that
+    # credential works fine for everything the app actually does.
+    S3_storage_checks(s3_config_input, checks or ["bucket", "write"])
 
     admin_user = await initialize_db(wipe=bool(settings.mongodb.wipe))
 
