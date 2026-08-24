@@ -72,15 +72,12 @@ interface DashboardGridProps {
    *  grid's accordion sections. Empty means no sections, i.e. one flat grid. */
   gridSections?: FilterSectionSpec[];
   /**
-   * Host-provided per-section extras. Called with the section name (`null` for
-   * the unsectioned grid, which has no header). `trailing` lands in the section
-   * header, beside the fold control rather than inside it — the editor puts
-   * its "…" section actions there, so a section is edited from where it is
-   * seen.
+   * Host-provided per-section actions, beside the fold control rather than
+   * inside it. Called with the section name (`null` for the unsectioned grid,
+   * which has no header). The editor puts its "…" here, so a section is edited
+   * from where it is seen.
    */
-  renderSectionExtras?: (
-    sectionName: string | null,
-  ) => { actions?: React.ReactNode } | null;
+  renderSectionActions?: (sectionName: string | null) => React.ReactNode;
 }
 
 /**
@@ -112,7 +109,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
   onLayoutChange,
   renderItemOverlay,
   gridSections,
-  renderSectionExtras,
+  renderSectionActions,
 }) => {
   // Memoised because it feeds the deps of everything below: rebuilding this
   // array on every render (a panel toggle, a collapse click) would invalidate
@@ -558,7 +555,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
               key={section.key}
               value={section.key}
               color={section.spec?.color}
-              actions={renderSectionExtras?.(section.sectionName ?? null)?.actions}
+              actions={renderSectionActions?.(section.sectionName ?? null)}
             >
               <Accordion.Control>
                 <SectionHeader

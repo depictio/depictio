@@ -14,10 +14,10 @@
  * Save button in StepDesign.
  */
 import React, { useEffect, useMemo, useState } from 'react';
-import { Paper, Stack, Text } from '@mantine/core';
 import { ComponentRenderer } from 'depictio-react-core';
 import type { StoredMetadata } from 'depictio-react-core';
 
+import PreviewPanel from '../shared/PreviewPanel';
 import { buildAdvancedVizConfigBlob } from './configBlob';
 
 interface Props {
@@ -48,15 +48,23 @@ const AdvancedVizPreview: React.FC<Props> = ({
   const [debouncedConfig, setDebouncedConfig] = useState<Record<string, unknown> | null>(
     null,
   );
+  // The debounce window is the one stretch nothing else covers: the renderer
+  // draws its own skeleton once it has the config, but until the timer fires
+  // the pane still shows the previous plot (or the empty hint) with no sign
+  // that an edit is on its way.
+  const [debouncing, setDebouncing] = useState(false);
 
   useEffect(() => {
     if (!bindingsValid) {
       setDebouncedConfig(null);
+      setDebouncing(false);
       onReady?.(false);
       return;
     }
+    setDebouncing(true);
     const t = window.setTimeout(() => {
       setDebouncedConfig(buildAdvancedVizConfigBlob(vizKind, columnMapping, presetConfig));
+      setDebouncing(false);
       onReady?.(true);
     }, DEBOUNCE_MS);
     return () => window.clearTimeout(t);
@@ -78,36 +86,28 @@ const AdvancedVizPreview: React.FC<Props> = ({
     } as unknown as StoredMetadata;
   }, [debouncedConfig, vizKind, wfId, dcId]);
 
+  // The same panel every other builder's preview uses, so this one gets the
+  // shared loading / empty treatment instead of a second set of conventions.
   // minHeight 520 fits Manhattan / heatmap / phylogenetic which need real
-  // vertical room — 320 cropped them. `overflow: hidden` keeps any renderer
-  // that misbehaves from leaking into the surrounding form rows.
+  // vertical room — 320 cropped them.
   return (
-    <Paper
-      withBorder
-      p="sm"
-      radius="md"
-      style={{ minHeight: 520, overflow: 'hidden' }}
+    <PreviewPanel
+      minHeight={520}
+      loading={debouncing}
+      empty={!metadata && !debouncing}
+      emptyMessage="Pick a viz kind and bind required columns to see a live preview."
     >
-      <Stack gap={6} style={{ height: '100%' }}>
-        <Text size="xs" fw={600} c="dimmed">
-          Live preview
-        </Text>
-        {metadata ? (
-          <div style={{ flex: 1, minHeight: 480, position: 'relative' }}>
-            <ComponentRenderer
-              dashboardId="__preview__"
-              metadata={metadata}
-              filters={[]}
-              showDragHandle={false}
-            />
-          </div>
-        ) : (
-          <Text size="xs" c="dimmed" ta="center" mt="lg">
-            Pick a viz kind and bind required columns to see a live preview.
-          </Text>
-        )}
-      </Stack>
-    </Paper>
+      {metadata && (
+        <div style={{ height: '100%', minHeight: 480, position: 'relative' }}>
+          <ComponentRenderer
+            dashboardId="__preview__"
+            metadata={metadata}
+            filters={[]}
+            showDragHandle={false}
+          />
+        </div>
+      )}
+    </PreviewPanel>
   );
 };
 

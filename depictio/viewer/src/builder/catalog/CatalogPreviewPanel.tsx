@@ -3,7 +3,7 @@
  * A compact tab row at the top lets the user switch between renders_as entries.
  * The "Add to dashboard" button lives in the same row as the tabs.
  */
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Badge,
   Box,
@@ -15,6 +15,8 @@ import {
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import type { CatalogOutputMatch, CatalogRender } from 'depictio-react-core';
+
+import { PreviewLoading } from '../shared/PreviewPanel';
 
 interface CatalogPreviewPanelProps {
   match: CatalogOutputMatch;
@@ -49,6 +51,12 @@ const CatalogPreviewPanel: React.FC<CatalogPreviewPanelProps> = ({ match, toolNa
   // render_id via hash: read by the bundle's own JS (no backend restart needed).
   // ?render_id= also sent as an optimisation hint for the backend to filter payload size.
   const previewUrl = `${PREVIEW_BASE}/${encodeURIComponent(match.output_id)}/preview-html?render_id=${encodeURIComponent(renderId)}#render_id=${encodeURIComponent(renderId)}`;
+
+  // The iframe paints white until its document arrives, which on a heavy render
+  // reads as "the panel is broken". Reset on every URL so switching render tabs
+  // shows the spinner again, and clear it on the frame's own load event.
+  const [previewLoaded, setPreviewLoaded] = useState(false);
+  useEffect(() => setPreviewLoaded(false), [previewUrl]);
 
   return (
     <Stack gap={0} h="100%" style={{ minHeight: 0 }}>
@@ -123,10 +131,23 @@ const CatalogPreviewPanel: React.FC<CatalogPreviewPanelProps> = ({ match, toolNa
       </Group>
 
       {/* Full-height bare component preview */}
-      <Box style={{ flex: 1, minHeight: 0 }}>
+      <Box style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+        {!previewLoaded && (
+          <Box
+            style={{
+              position: 'absolute',
+              inset: 0,
+              zIndex: 2,
+              background: 'var(--mantine-color-body)',
+            }}
+          >
+            <PreviewLoading label="Loading preview…" />
+          </Box>
+        )}
         <iframe
           key={previewUrl}
           src={previewUrl}
+          onLoad={() => setPreviewLoaded(true)}
           style={{ width: '100%', height: '100%', border: 'none', display: 'block' }}
           title={`Preview: ${match.output_id}`}
         />

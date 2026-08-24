@@ -111,14 +111,11 @@ export interface FilterPanelProps {
   /** Editor-only per-component actions (edit / duplicate / delete). */
   renderItemOverlay?: (component: StoredMetadata) => React.ReactNode;
   /**
-   * Host-provided per-section extras, mirroring `DashboardGrid`'s prop of the
-   * same name. Called with the section name; `actions` lands beside the
-   * section's fold control. The editor puts its "…" there so the panel's
-   * sections are reached the same way the grid's are.
+   * Host-provided per-section actions, mirroring `DashboardGrid`'s prop of the
+   * same name: they land beside the section's fold control. The editor puts its
+   * "…" there so the panel's sections are reached the same way the grid's are.
    */
-  renderSectionExtras?: (
-    sectionName: string | null,
-  ) => { actions?: React.ReactNode } | null;
+  renderSectionActions?: (sectionName: string | null) => React.ReactNode;
   /** Section names that stay read-only even in edit mode — the persistent
    *  sections a sibling tab owns. They are shown so the author sees the panel
    *  a viewer will get, but they are edited on their owner tab, and their
@@ -158,7 +155,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
   refreshTick,
   editMode = false,
   renderItemOverlay,
-  renderSectionExtras,
+  renderSectionActions,
   readOnlySections,
   onLayoutChange,
   collapsed = false,
@@ -241,6 +238,19 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
   const [measuredSpans, setMeasuredSpans] = useState<Record<string, number>>({});
   const cardRefs = useRef<Map<string, HTMLElement>>(new Map());
   const observerRef = useRef<ResizeObserver | null>(null);
+  // One stable callback per key: an inline arrow would be a new ref on every
+  // render, so React would detach and re-attach every card each time and the
+  // observer would re-fire for all of them.
+  const cardRefCbs = useRef<Map<string, (node: HTMLDivElement | null) => void>>(new Map());
+  const cardRef = useCallback((key: string) => {
+    let cb = cardRefCbs.current.get(key);
+    if (!cb) {
+      cb = (node: HTMLDivElement | null) => registerCard(key, node);
+      cardRefCbs.current.set(key, cb);
+    }
+    return cb;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const registerCard = useCallback((key: string, node: HTMLDivElement | null) => {
     const observer = observerRef.current;
     const prev = cardRefs.current.get(key);
@@ -482,7 +492,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
                 stretched to the item anyway — measuring it would just hand back
                 the height we are trying to correct. */}
             <div
-              ref={(node) => registerCard(g.key, node)}
+              ref={cardRef(g.key)}
               data-group-key={g.key}
               style={{ flexShrink: 0 }}
             >
@@ -552,7 +562,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
               <SectionAccordionItem
                 key={s.key}
                 value={s.key}
-                actions={renderSectionExtras?.(s.sectionName ?? null)?.actions}
+                actions={renderSectionActions?.(s.sectionName ?? null)}
               >
                 <Accordion.Control>{renderSectionHeader(s)}</Accordion.Control>
                 <Accordion.Panel>
