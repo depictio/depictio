@@ -105,7 +105,7 @@ function rowsForMember(member: InteractiveGroup['members'][number]): number {
  * pays for its header plus one slot per member, and shrinks to just the header
  * while collapsed.
  */
-export function groupRowSpan(group: InteractiveGroup, collapsed = false): number {
+function groupRowSpan(group: InteractiveGroup, collapsed = false): number {
   if (!group.groupName) return rowsForMember(group.members[0]);
   if (collapsed) return GROUP_HEADER_H;
   return GROUP_HEADER_H + group.members.reduce((sum, m) => sum + rowsForMember(m), 0);

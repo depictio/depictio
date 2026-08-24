@@ -166,6 +166,35 @@ async function saveDashboard(
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
+/**
+ * The "…" a section header carries in the editor.
+ *
+ * One mark for "this section's settings" wherever a section is drawn — the
+ * grid, the filter panel, and a section fanned out from another tab, which
+ * differ only in where the click leads and in what the tooltip says.
+ */
+const SectionActionButton: React.FC<{
+  label: string;
+  ariaLabel?: string;
+  onActivate: () => void;
+}> = ({ label, ariaLabel = 'Edit section', onActivate }) => (
+  <Tooltip label={label} withArrow multiline w={240}>
+    <ActionIcon
+      size="sm"
+      variant="subtle"
+      color="gray"
+      aria-label={ariaLabel}
+      data-testid="section-edit-actions"
+      onClick={(e) => {
+        e.stopPropagation();
+        onActivate();
+      }}
+    >
+      <Icon icon="mdi:dots-vertical" width={16} />
+    </ActionIcon>
+  </Tooltip>
+);
+
 const EditorApp: React.FC = () => {
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [allDashboards, setAllDashboards] = useState<DashboardSummary[]>([]);
@@ -441,28 +470,42 @@ const EditorApp: React.FC = () => {
     [handleSectionOp],
   );
 
+  /** Layout entries for components this document actually holds.
+   *
+   *  The read-only rendering already keeps fanned-out members out of the
+   *  editable grids, but that rule is spread across a section flag and a merge
+   *  skip. This is the boundary where it has to hold no matter what: an entry
+   *  keyed on another tab's component would be an orphan in this dashboard's
+   *  layout, and the components it belongs to would still live over there. */
+  const ownLayoutOnly = useCallback((layout: Layout[], cur: DashboardData) => {
+    const own = new Set((cur.stored_metadata ?? []).map((m) => m.index));
+    return layout.filter((item) => own.has(stripBoxPrefix(String(item.i))));
+  }, []);
+
   const handleLeftLayoutChange = useCallback(
     (newLayout: Layout[]) => {
       const cur = dashboardRef.current;
       if (!cur) return;
+      const next = ownLayoutOnly(newLayout, cur);
       // Skip no-op writes during the initial mount where react-grid-layout
       // emits the layout it was just given.
       const prev = cur.left_panel_layout_data;
-      if (layoutsEqual(prev, newLayout)) return;
-      scheduleSave({ ...cur, left_panel_layout_data: newLayout });
+      if (layoutsEqual(prev, next)) return;
+      scheduleSave({ ...cur, left_panel_layout_data: next });
     },
-    [scheduleSave],
+    [scheduleSave, ownLayoutOnly],
   );
 
   const handleRightLayoutChange = useCallback(
     (newLayout: Layout[]) => {
       const cur = dashboardRef.current;
       if (!cur) return;
+      const next = ownLayoutOnly(newLayout, cur);
       const prev = cur.right_panel_layout_data;
-      if (layoutsEqual(prev, newLayout)) return;
-      scheduleSave({ ...cur, right_panel_layout_data: newLayout });
+      if (layoutsEqual(prev, next)) return;
+      scheduleSave({ ...cur, right_panel_layout_data: next });
     },
-    [scheduleSave],
+    [scheduleSave, ownLayoutOnly],
   );
 
   /** Delete: strip from stored_metadata + both layouts, save, then refetch. */
@@ -713,10 +756,24 @@ const EditorApp: React.FC = () => {
     const foreign = foreignFilterSections.map((s) => s.spec).filter((s) => !names.has(s.name));
     return foreign.length ? [...own, ...foreign] : own;
   }, [dashboard?.filter_sections, foreignFilterSections]);
-  const readOnlyPanelSections = useMemo(
-    () => foreignFilterSections.map((s) => s.spec.name),
-    [foreignFilterSections],
+  // Same exclusion as `panelFilterSections`, and it has to be: a section is
+  // read-only because a sibling tab owns it, and an own section that happens to
+  // share the name is a different section. Without this, declaring a section
+  // named like a sibling's persistent one would freeze this tab's own filters —
+  // no drag, no per-component menu — and drop them from every later
+  // `left_panel_layout_data` write, since the merge skips read-only sections.
+  /** Component ids this dashboard document holds, as opposed to the ones fanned
+   *  out from sibling tabs. */
+  const ownComponentIndices = useMemo(
+    () => new Set((dashboard?.stored_metadata ?? []).map((m) => m.index)),
+    [dashboard?.stored_metadata],
   );
+  const readOnlyPanelSections = useMemo(() => {
+    const ownNames = new Set((dashboard?.filter_sections ?? []).map((s) => s.name));
+    return foreignFilterSections
+      .map((s) => s.spec.name)
+      .filter((name) => !ownNames.has(name));
+  }, [dashboard?.filter_sections, foreignFilterSections]);
   /** Open the add/edit dialog on one section, by name.
    *
    *  A section a component names but the dashboard never declared has no spec
@@ -739,38 +796,15 @@ const EditorApp: React.FC = () => {
     [handleSectionOp],
   );
   // A section is edited from where it is seen: its header carries the same "…"
-  // a component's chrome does, and it opens that section's settings. Named
-  // sections only — the unsectioned bucket has no header to host it.
-  const makeSectionExtras = useCallback(
-    (kind: SectionKind) => (sectionName: string | null) => {
-      if (sectionName === null) return null;
-      return {
-        actions: (
-          <Tooltip label={`Edit “${sectionName}”`} withArrow>
-            <ActionIcon
-              size="sm"
-              variant="subtle"
-              color="gray"
-              aria-label="Edit section"
-              data-testid="section-edit-actions"
-              onClick={(e) => {
-                e.stopPropagation();
-                openSectionEditor(kind, sectionName);
-              }}
-            >
-              <Icon icon="mdi:dots-vertical" width={16} />
-            </ActionIcon>
-          </Tooltip>
-        ),
-      };
-    },
-    [openSectionEditor],
-  );
-  const renderSectionExtras = useMemo(() => makeSectionExtras('grid'), [makeSectionExtras]);
-  const renderOwnSectionExtras = useMemo(
-    () => makeSectionExtras('filter'),
-    [makeSectionExtras],
-  );
+  // a component's chrome does. Named sections only — the unsectioned bucket has
+  // no header to host it.
+  const renderGridSectionAction = (sectionName: string | null) =>
+    sectionName === null ? null : (
+      <SectionActionButton
+        label={`Edit “${sectionName}”`}
+        onActivate={() => openSectionEditor('grid', sectionName)}
+      />
+    );
   // Filter names and dc_ids are resolved against the family, not just this
   // tab: a fanned-out control has no entry in this dashboard's metadata, so
   // the active-filter summary would fall back to the raw column name.
@@ -804,7 +838,11 @@ const EditorApp: React.FC = () => {
   // Per-filter edit / duplicate / delete menu. FilterPanel injects it into
   // each control's chrome, including controls nested inside a group card.
   const renderFilterItemOverlay = useCallback(
-    (component: StoredMetadata) => (
+    (component: StoredMetadata) =>
+      // A control fanned out from a sibling tab can share a bucket with this
+      // tab's own filters when both sections carry the same name. It is not in
+      // this document, so none of these actions could reach it.
+      !ownComponentIndices.has(component.index) ? null : (
       <GridItemEditOverlay
         dashboardId={dashboardId!}
         componentId={component.index}
@@ -825,6 +863,7 @@ const EditorApp: React.FC = () => {
       filterSections,
       handleMoveToSection,
       filterGroupSizes,
+      ownComponentIndices,
     ],
   );
 
@@ -1214,12 +1253,12 @@ const EditorApp: React.FC = () => {
    *  where the dialog came from is what makes editing several sections in a
    *  row bearable. */
   const handleCloseSectionModal = useCallback(() => {
-    setSectionModal((prev) => {
-      if (prev.fromManager) openSections();
-      return { ...prev, open: false };
-    });
+    // Outside the updater: React re-invokes those in dev, and this one opens a
+    // dialog.
+    if (sectionModal.fromManager) openSections();
+    setSectionModal((prev) => ({ ...prev, open: false }));
     flushSectionSave();
-  }, [openSections, flushSectionSave]);
+  }, [sectionModal.fromManager, openSections, flushSectionSave]);
 
   /** "Manage all sections", the other direction of the same swap. */
   const handleManageAllSections = useCallback(() => {
@@ -1252,64 +1291,37 @@ const EditorApp: React.FC = () => {
    *  than leave it inert on every other tab, its header carries a jump to the
    *  tab that owns it. Flushes first: the navigation is a full page load and
    *  would drop a pending layout save. */
-  const goToOwnerTab = useCallback(
-    (ownerDashboardId: string) => {
-      flushSectionSave();
-      window.location.assign(`/dashboard-edit/${ownerDashboardId}`);
-    },
-    [flushSectionSave],
-  );
-  const renderOwnerTabAction = useCallback(
-    (ownerDashboardId: string, ownerTabTitle?: string) => (
-      <Tooltip
-        label={`Owned by ${ownerTabTitle ? `“${ownerTabTitle}”` : 'another tab'} — open that tab to edit it`}
-        withArrow
-        multiline
-        w={240}
-      >
-        <ActionIcon
-          size="sm"
-          variant="subtle"
-          color="gray"
-          aria-label="Edit on the owning tab"
-          data-testid="section-edit-actions"
-          onClick={(e) => {
-            e.stopPropagation();
-            goToOwnerTab(ownerDashboardId);
-          }}
-        >
-          {/* Same mark as an editable section's action: one affordance for
-              "this section's settings", wherever the section is seen. Where it
-              leads differs, and the tooltip is what says so. */}
-          <Icon icon="mdi:dots-vertical" width={16} />
-        </ActionIcon>
-      </Tooltip>
-    ),
-    [goToOwnerTab],
-  );
-  const renderPersistentSectionActions = useCallback(
-    (section: PersistentSection) =>
-      renderOwnerTabAction(section.owner_dashboard_id, section.owner_tab_title),
-    [renderOwnerTabAction],
+  const goToOwnerTab = (ownerDashboardId: string) => {
+    flushSectionSave();
+    window.location.assign(`/dashboard-edit/${ownerDashboardId}`);
+  };
+  const renderPersistentSectionAction = (section: PersistentSection) => (
+    <SectionActionButton
+      label={`Owned by ${
+        section.owner_tab_title ? `“${section.owner_tab_title}”` : 'another tab'
+      } — open that tab to edit it`}
+      ariaLabel="Edit on the owning tab"
+      onActivate={() => goToOwnerTab(section.owner_dashboard_id)}
+    />
   );
   // The panel's list also holds the persistent sections a sibling tab owns.
-  // Those get the jump instead of the manager: the manager only knows this
-  // dashboard's own specs. The grid needs no such branch — its foreign
-  // sections render in `PersistentSectionsHost`, which takes its own action.
-  const foreignFilterSectionsByName = useMemo(
-    () => new Map(foreignFilterSections.map((s) => [s.spec.name, s])),
-    [foreignFilterSections],
+  // Those get the jump instead of this tab's editor: the modal only knows this
+  // dashboard's own specs. The grid needs no such branch — its foreign sections
+  // render in `PersistentSectionsHost`, which takes its own action.
+  const foreignFilterSectionsByName = new Map(
+    foreignFilterSections.map((s) => [s.spec.name, s] as const),
   );
-  const renderPanelSectionExtras = useCallback(
-    (sectionName: string | null) => {
-      const foreign = sectionName === null ? undefined : foreignFilterSectionsByName.get(sectionName);
-      if (foreign) {
-        return { actions: renderPersistentSectionActions(foreign) };
-      }
-      return renderOwnSectionExtras(sectionName);
-    },
-    [renderOwnSectionExtras, renderPersistentSectionActions, foreignFilterSectionsByName],
-  );
+  const renderPanelSectionAction = (sectionName: string | null) => {
+    if (sectionName === null) return null;
+    const foreign = foreignFilterSectionsByName.get(sectionName);
+    if (foreign) return renderPersistentSectionAction(foreign);
+    return (
+      <SectionActionButton
+        label={`Edit “${sectionName}”`}
+        onActivate={() => openSectionEditor('filter', sectionName)}
+      />
+    );
+  };
 
   /** Force-save: cancel any pending debounce and POST current state now.
    *  Mirrors depictio/dash/layouts/save.py:save_dashboard_minimal — uses
@@ -1508,7 +1520,7 @@ const EditorApp: React.FC = () => {
                   layoutData={dashboard.left_panel_layout_data}
                   filterSections={panelFilterSections}
                   readOnlySections={readOnlyPanelSections}
-                  renderSectionExtras={renderPanelSectionExtras}
+                  renderSectionActions={renderPanelSectionAction}
                   dashboardId={dashboardId}
                   // No refreshTick: the editor threads no realtime refresh
                   // counter into any of its grids, so the left panel matches
@@ -1557,7 +1569,7 @@ const EditorApp: React.FC = () => {
                   slot="top"
                   filters={filters}
                   onFilterChange={handleFilterChange}
-                  renderSectionActions={renderPersistentSectionActions}
+                  renderSectionActions={renderPersistentSectionAction}
                 />
               )}
               <RightComponentGrid
@@ -1577,7 +1589,7 @@ const EditorApp: React.FC = () => {
                 onAddComponent={handleAddComponent}
                 activeHighlight={activeHighlight}
                 onMoveToSection={handleMoveToSection}
-                renderSectionExtras={renderSectionExtras}
+                renderSectionActions={renderGridSectionAction}
               />
               {bottomGridSections.length > 0 && (
                 <PersistentSectionsHost
@@ -1586,7 +1598,7 @@ const EditorApp: React.FC = () => {
                   slot="bottom"
                   filters={filters}
                   onFilterChange={handleFilterChange}
-                  renderSectionActions={renderPersistentSectionActions}
+                  renderSectionActions={renderPersistentSectionAction}
                 />
               )}
             </Box>
@@ -1725,10 +1737,8 @@ interface RightComponentGridProps {
   /** Fired by each cell's "Move to section" action. The names on offer are
    *  derived from `gridSections`, which this component already receives. */
   onMoveToSection: (componentId: string, section: string | null) => void;
-  /** Per-section header actions — the "…" that opens that section's settings. */
-  renderSectionExtras?: (
-    sectionName: string | null,
-  ) => { actions?: React.ReactNode } | null;
+  /** Per-section header action — the "…" that opens that section's settings. */
+  renderSectionActions?: (sectionName: string | null) => React.ReactNode;
 }
 
 /**
@@ -1756,7 +1766,7 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
   onAddComponent,
   activeHighlight,
   onMoveToSection,
-  renderSectionExtras,
+  renderSectionActions,
 }) => {
   const allComponents = useMemo(
     () => [...cardComponents, ...otherComponents],
@@ -1815,7 +1825,7 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
       isDraggable={true}
       isResizable={true}
       editMode={true}
-      renderSectionExtras={renderSectionExtras}
+      renderSectionActions={renderSectionActions}
       onLayoutChange={onLayoutChange}
       renderItemOverlay={(componentId, metadata) => (
         <GridItemEditOverlay
