@@ -16,13 +16,15 @@ back to the zip download + GitHub web-upload flow — nothing breaks.
    - Authorization callback URL: `https://depictio.github.io/depictio-catalog-studio/oauth-callback.html`
    - Copy the **Client ID**; generate a **Client secret**.
 
-2. **Deploy the worker:**
+2. **Deploy the worker.** `wrangler.toml` already carries the client id and the
+   Pages origin, so there is nothing to edit. Run it through `npx` rather than
+   installing it globally — `npm i -g` only works if npm's global `bin` is on
+   your `PATH`, which it often isn't:
    ```bash
    cd packages/catalog-studio/oauth-worker
-   npm i -g wrangler        # or: pnpm dlx wrangler
-   # set the public client id + your Pages origin in wrangler.toml [vars]
-   wrangler secret put GH_CLIENT_SECRET   # paste the OAuth App client secret
-   wrangler deploy
+   npx wrangler login                       # authorises your Cloudflare account
+   npx wrangler secret put GH_CLIENT_SECRET # paste the OAuth App client secret
+   npx wrangler deploy
    ```
    Note the deployed URL, e.g. `https://depictio-catalog-studio-oauth.<subdomain>.workers.dev`.
 
@@ -55,7 +57,7 @@ This exercises the risky part (`github.ts`) end-to-end. `VITE_GH_TOKEN` is DEV-o
 **B. Faithful — full popup OAuth locally with `wrangler dev`.**
 1. In your OAuth App, add a second callback: `http://localhost:5173/depictio-catalog-studio/oauth-callback.html`.
 2. `cd oauth-worker && cp .dev.vars.example .dev.vars` and put the client secret in `.dev.vars`.
-3. `wrangler dev --var GH_CLIENT_ID:<id> --var ALLOWED_ORIGIN:http://localhost:5173` (serves `:8787`).
+3. `npx wrangler dev --var GH_CLIENT_ID:<id> --var ALLOWED_ORIGIN:http://localhost:5173` (serves `:8787`).
 4. `packages/catalog-studio/.env.local`: `VITE_GH_CLIENT_ID=<id>` and
    `VITE_GH_OAUTH_WORKER_URL=http://localhost:8787/exchange`, then `pnpm dev`.
 
