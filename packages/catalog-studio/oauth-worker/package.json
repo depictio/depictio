@@ -1,0 +1,19 @@
+{
+  "name": "depictio-catalog-studio-oauth",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Cloudflare Worker performing the GitHub OAuth code->token exchange for Catalog Studio.",
+  "scripts": {
+    "login": "wrangler login",
+    "check": "wrangler deploy --dry-run",
+    "secret": "wrangler secret put GH_CLIENT_SECRET",
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev"
+  },
+  "devDependencies": {
+    "wrangler": "4.86.0"
+  },
+  "engines": {
+    "node": ">=20.3.0"
+  }
+}

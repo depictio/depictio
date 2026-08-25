@@ -17,16 +17,28 @@ back to the zip download + GitHub web-upload flow — nothing breaks.
    - Copy the **Client ID**; generate a **Client secret**.
 
 2. **Deploy the worker.** `wrangler.toml` already carries the client id and the
-   Pages origin, so there is nothing to edit. Run it through `npx` rather than
-   installing it globally — `npm i -g` only works if npm's global `bin` is on
-   your `PATH`, which it often isn't:
+   Pages origin, so there is nothing to edit:
    ```bash
    cd packages/catalog-studio/oauth-worker
-   npx wrangler login                       # authorises your Cloudflare account
-   npx wrangler secret put GH_CLIENT_SECRET # paste the OAuth App client secret
-   npx wrangler deploy
+   npm install          # wrangler, pinned here as a devDependency
+   npm run check        # compiles the worker + echoes its bindings, no deploy
+   npm run login        # authorises your Cloudflare account
+   npm run secret       # paste the OAuth App client secret
+   npm run deploy
    ```
    Note the deployed URL, e.g. `https://depictio-catalog-studio-oauth.<subdomain>.workers.dev`.
+
+   wrangler is pinned to **4.86.0**, the last release that accepts Node 20
+   (`>=20.3.0`); 4.87 onwards requires Node 22, while both this repo's workflows
+   run Node 20. Installing from this `package.json` therefore works on the same
+   Node the rest of the project uses — `npx wrangler@latest` does not, and fails
+   with "Wrangler requires at least Node.js v22.0.0".
+
+   This directory is deliberately **outside** the pnpm workspace
+   (`pnpm-workspace.yaml` globs `packages/*`, which does not reach it), so
+   wrangler never enters the root lockfile: nothing in the app build, the CI
+   drift check or the Pages deploy depends on it. Install it with plain `npm`,
+   here, only when you actually deploy the worker.
 
 3. **Configure the Studio build** — set these Vite env vars (e.g. in the
    `deploy-catalog-studio.yaml` workflow or a `.env.production`):
@@ -57,7 +69,7 @@ This exercises the risky part (`github.ts`) end-to-end. `VITE_GH_TOKEN` is DEV-o
 **B. Faithful — full popup OAuth locally with `wrangler dev`.**
 1. In your OAuth App, add a second callback: `http://localhost:5173/depictio-catalog-studio/oauth-callback.html`.
 2. `cd oauth-worker && cp .dev.vars.example .dev.vars` and put the client secret in `.dev.vars`.
-3. `npx wrangler dev --var GH_CLIENT_ID:<id> --var ALLOWED_ORIGIN:http://localhost:5173` (serves `:8787`).
+3. `npm run dev -- --var GH_CLIENT_ID:<id> --var ALLOWED_ORIGIN:http://localhost:5173` (serves `:8787`).
 4. `packages/catalog-studio/.env.local`: `VITE_GH_CLIENT_ID=<id>` and
    `VITE_GH_OAUTH_WORKER_URL=http://localhost:8787/exchange`, then `pnpm dev`.
 
