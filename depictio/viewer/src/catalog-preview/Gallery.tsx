@@ -519,10 +519,10 @@ const Gallery: React.FC<{ tools: ToolEntry[]; onOpen: (id: string) => void; them
             {tools.length} tools · {totalOutputs} outputs
           </Badge>
           {/* Catalog Studio — the no-backend web app to author a new tool entry.
-              Hosted on GitHub Pages under the project base path. */}
+              Hosted on GitHub Pages from the depictio-catalog-studio showcase repo. */}
           <Button
             component="a"
-            href="https://depictio.github.io/depictio/"
+            href="https://depictio.github.io/depictio-catalog-studio/"
             target="_blank"
             rel="noreferrer"
             variant="light"
