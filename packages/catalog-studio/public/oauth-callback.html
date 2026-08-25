@@ -9,7 +9,7 @@
     <p>Completing GitHub sign-in — you can close this window.</p>
     <script>
       // OAuth popup callback: hand the `code` (+ `state`) back to the opener and
-      // close. The opener (Tools Studio) validates `state`, exchanges the code
+      // close. The opener (Catalog Studio) validates `state`, exchanges the code
       // for a token via the worker, and drives the PR — so the main window keeps
       // all of the authored entry (no full-page redirect that would wipe it).
       (function () {
@@ -25,7 +25,7 @@
           window.close();
         } else {
           document.body.innerHTML =
-            '<p>Sign-in complete, but this window was not opened by Tools Studio. Please close it and retry.</p>';
+            '<p>Sign-in complete, but this window was not opened by Catalog Studio. Please close it and retry.</p>';
         }
       })();
     </script>

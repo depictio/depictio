@@ -1,5 +1,5 @@
 /**
- * "Sign in with GitHub" for the static Tools Studio — a popup OAuth flow that
+ * "Sign in with GitHub" for the static Catalog Studio — a popup OAuth flow that
  * never navigates the main window, so the authored entry (tool/fixture/renders)
  * survives. The popup returns to `public/oauth-callback.html`, which postMessages
  * the `code` back here; we validate `state`, then exchange the code for a user

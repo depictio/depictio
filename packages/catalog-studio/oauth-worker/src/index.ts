@@ -1,5 +1,5 @@
 /**
- * Cloudflare Worker: GitHub OAuth code→token exchange for Depictio Tools Studio.
+ * Cloudflare Worker: GitHub OAuth code→token exchange for Depictio Catalog Studio.
  *
  * The Studio is a static GitHub-Pages SPA, so it cannot hold the OAuth client
  * secret. This tiny stateless worker performs the one step that requires the

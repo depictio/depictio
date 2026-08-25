@@ -313,7 +313,7 @@ export default function ExportPanel({ kinds }: { kinds: KindsMap }) {
           )}
           {pr.status === 'idle' && (
             <Text size="xs" c="dimmed">
-              One click: sign in with GitHub, and Tools Studio forks{' '}
+              One click: sign in with GitHub, and Catalog Studio forks{' '}
               <Code>{target.owner}/{target.repo}</Code>,{' '}
               {mode === 'append' && existing ? (
                 <>commits the updated <Code>{existing.yamlPath}</Code></>

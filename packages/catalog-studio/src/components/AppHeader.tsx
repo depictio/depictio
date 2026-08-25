@@ -3,8 +3,8 @@ import { Icon } from '@iconify/react';
 import { useColorScheme } from '../hooks/useColorScheme';
 
 /**
- * Top bar (height 56). Left: the Tools Catalog mark (depictio pinwheel + hammer,
- * theme-agnostic) and the "Depictio Tools Studio" wordmark in Virgil. Right: a
+ * Top bar (height 56). Left: the depictio Catalog mark (depictio pinwheel + hammer,
+ * theme-agnostic) and the "Depictio Catalog Studio" wordmark in Virgil. Right: a
  * compact Docs link and the dark-mode toggle. Neutral chrome — the brand colour
  * comes from the logo and the component-type cards.
  */
@@ -22,14 +22,14 @@ export default function AppHeader() {
         {/* Colored, transparent mark — reads on light and dark, no swap needed. */}
         <img
           src={`${import.meta.env.BASE_URL}logos/tools_catalog_logo.png`}
-          alt="Depictio Tools Studio"
+          alt="Depictio Catalog Studio"
           height={30}
           width={30}
           style={{ objectFit: 'contain' }}
         />
         <div style={{ lineHeight: 1.05 }}>
           <Title order={4} style={{ fontFamily: 'Virgil', fontWeight: 400 }}>
-            Depictio Tools Studio
+            Depictio Catalog Studio
           </Title>
           <Text size="xs" c="dimmed">
             Contribute a tool to the catalog

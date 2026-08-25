@@ -1,7 +1,7 @@
-# Tools Studio — GitHub OAuth worker
+# Catalog Studio — GitHub OAuth worker
 
 A ~60-line stateless [Cloudflare Worker](https://developers.cloudflare.com/workers/) that lets the
-static Tools Studio open a pull request with **"Sign in with GitHub"** (no PAT, no pasted token).
+static Catalog Studio open a pull request with **"Sign in with GitHub"** (no PAT, no pasted token).
 The Studio is a GitHub-Pages SPA, so it can't hold the OAuth **client secret** — this worker does the
 single step that needs it (exchanging the authorize `code` for a user token). The fork + multi-file
 commit + PR all happen in the browser afterwards with that token.
@@ -12,8 +12,8 @@ back to the zip download + GitHub web-upload flow — nothing breaks.
 ## One-time setup
 
 1. **Register a GitHub OAuth App** (org `depictio` → Settings → Developer settings → OAuth Apps):
-   - Homepage URL: `https://depictio.github.io/depictio/`
-   - Authorization callback URL: `https://depictio.github.io/depictio/oauth-callback.html`
+   - Homepage URL: `https://depictio.github.io/catalog-studio/`
+   - Authorization callback URL: `https://depictio.github.io/catalog-studio/oauth-callback.html`
    - Copy the **Client ID**; generate a **Client secret**.
 
 2. **Deploy the worker:**
@@ -53,7 +53,7 @@ The Export step shows **Open pull request**; it runs the real fork → commit �
 This exercises the risky part (`github.ts`) end-to-end. `VITE_GH_TOKEN` is DEV-only and never ships.
 
 **B. Faithful — full popup OAuth locally with `wrangler dev`.**
-1. In your OAuth App, add a second callback: `http://localhost:5173/depictio/oauth-callback.html`.
+1. In your OAuth App, add a second callback: `http://localhost:5173/catalog-studio/oauth-callback.html`.
 2. `cd oauth-worker && cp .dev.vars.example .dev.vars` and put the client secret in `.dev.vars`.
 3. `wrangler dev --var GH_CLIENT_ID:<id> --var ALLOWED_ORIGIN:http://localhost:5173` (serves `:8787`).
 4. `packages/catalog-studio/.env.local`: `VITE_GH_CLIENT_ID=<id>` and

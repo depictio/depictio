@@ -1,7 +1,7 @@
 /**
  * Per-render display metadata, mirroring depictio's catalog-preview
  * `shared.tsx` COMPONENT_META + `payload.py` _render_variant / _render_binds,
- * so catalog-studio's visualization list looks like the Tools Catalog result
+ * so catalog-studio's visualization list looks like the depictio Catalog result
  * (same colors/icons, variant sublabel, and role→column "binds").
  */
 import { FIGURE_COLUMN_KWARGS, type KindsMap, type RenderSpec } from '../types';

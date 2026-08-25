@@ -1,4 +1,4 @@
-# Depictio Tools Studio
+# Depictio Catalog Studio
 
 A **100 % client-side** web app (GitHub Pages, no backend) for contributing a
 tool to the depictio catalog. Pick a tool source (nf-core / Snakemake / Galaxy),
@@ -7,7 +7,7 @@ builder** — and either **download a zip** or open a **one-click pull request**
 (*Sign in with GitHub*) against `depictio/depictio`. The tool data lives in
 [`depictio/catalog/`](../../depictio/catalog/), not a separate repo.
 
-**Live app:** https://depictio.github.io/depictio/
+**Live app:** https://depictio.github.io/catalog-studio/
 
 ## The flow
 
@@ -40,7 +40,7 @@ builder** — and either **download a zip** or open a **one-click pull request**
 | **2. Fixture** — drop the output file; it's parsed client-side and shown in an ag-grid table (this file grounds the bindings in CI). | ![Fixture step](docs/screenshots/02-fixture.png) |
 | **3a. Add a visualization** — depictio's component-type grid (figure / card / table / interactive / advanced_viz). | ![Component types](docs/screenshots/03-component-types.png) |
 | **3b. Figure builder** — depictio's real UI (preview-left / properties-right) with a UI/Code toggle; Code Mode runs Plotly-Express in-browser via Pyodide. | ![Figure builder](docs/screenshots/04-figure-builder.png) |
-| **3c. Render card** — mirrors the Tools Catalog result, with tabs *For dashboard users* (preview + `use:` reuse snippet) and *For catalog developers* (render id + `renders_as`). | ![Render card](docs/screenshots/05-render-card.png) |
+| **3c. Render card** — mirrors the depictio Catalog result, with tabs *For dashboard users* (preview + `use:` reuse snippet) and *For catalog developers* (render id + `renders_as`). | ![Render card](docs/screenshots/05-render-card.png) |
 | **4. Export** — the generated files for this tool + one-click PR (or zip). | ![Export step](docs/screenshots/06-export.png) |
 
 ## What it generates
@@ -80,7 +80,7 @@ this app's own `yamlGen` must pass `dev catalog validate` (see `scripts/genGolde
 ## Development
 
 ```bash
-pnpm --filter catalog-studio dev            # http://localhost:5173/depictio/
+pnpm --filter catalog-studio dev            # http://localhost:5173/catalog-studio/
 pnpm --filter catalog-studio test           # vitest
 pnpm --filter catalog-studio test:coverage  # + a v8 coverage summary
 pnpm --filter catalog-studio build          # production build → dist/
@@ -135,15 +135,34 @@ instead of leaving the check to pass against unchanged snapshots.
 
 ### Deployment (GitHub Pages)
 
-`deploy-catalog-studio.yaml` needs two **repository variables** for the
-one-click PR to work; without them the deployed app silently falls back to
-zip + web upload (the Export step says so):
+The app is built here and published to a **showcase repository**,
+[`depictio/catalog-studio`](https://github.com/depictio/catalog-studio), which
+holds only the built site. A Pages site's URL path is its repository name, so
+this is what buys the dedicated `/catalog-studio/` path instead of `/depictio/`
+— which would read like the project's own site while the docs actually live at
+`/depictio-docs/`. The source stays in this monorepo, so the `depictio-builder`
+alias and the committed catalog snapshots keep working unchanged.
 
-| Variable | Value |
-|---|---|
-| `VITE_GH_CLIENT_ID` | the GitHub OAuth App's client id (public) |
-| `VITE_GH_OAUTH_WORKER_URL` | the deployed worker's `/exchange` endpoint |
+`deploy-catalog-studio.yaml` builds on every push to `main` that touches the app
+(or the in-repo schema/catalog it snapshots) and force-pushes `dist/` to that
+repo's `gh-pages` branch as a single commit.
 
-Vite inlines them at build time — there is no runtime config, so changing
-either means a redeploy. The OAuth client *secret* lives only in the Cloudflare
-Worker; see [`oauth-worker/README.md`](./oauth-worker/README.md).
+One-time setup, all in this repo's *Settings → Secrets and variables → Actions*
+except where noted:
+
+| Name | Kind | Value |
+|---|---|---|
+| `CATALOG_STUDIO_DEPLOY_TOKEN` | secret | fine-grained PAT scoped to `depictio/catalog-studio` only, **Contents: Read and write** |
+| `VITE_GH_CLIENT_ID` | variable | the GitHub OAuth App's client id (public) |
+| `VITE_GH_OAUTH_WORKER_URL` | variable | the deployed worker's `/exchange` endpoint |
+
+Plus, in `depictio/catalog-studio`: *Settings → Pages → Source: **Deploy from a
+branch**, branch `gh-pages`, folder `/`*.
+
+Each is independently optional and degrades loudly rather than silently:
+without the token the workflow builds and warns instead of publishing; without
+the two variables the deployed app falls back to zip + web upload and the Export
+step says so. Vite inlines the variables at build time — there is no runtime
+config, so changing either means a redeploy. The OAuth client *secret* lives
+only in the Cloudflare Worker; see
+[`oauth-worker/README.md`](./oauth-worker/README.md).

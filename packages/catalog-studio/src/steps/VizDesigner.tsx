@@ -29,7 +29,7 @@ import type { KindsMap, ParsedFixture, RenderSpec } from '../types';
 const slugify = (s: string) =>
   s.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
 
-/** One added visualization, styled like the Tools Catalog `ComponentCard`
+/** One added visualization, styled like the depictio Catalog `ComponentCard`
  *  (colored type icon + name/variant + render index, role→column binds, a
  *  collapsible `renders_as` snippet, and the live preview). */
 function RenderCard({
@@ -248,7 +248,7 @@ export default function VizDesigner({ kinds }: { kinds: KindsMap }) {
           </Title>
           <Text c="dimmed" size="sm">
             Add dashboard components with depictio's component builder. Each card mirrors how it
-            appears in the depictio Tools Catalog.
+            appears in the depictio Catalog.
           </Text>
         </div>
         <Button leftSection={<Icon icon="mdi:plus" />} color="blue" onClick={() => setModalOpen(true)}>

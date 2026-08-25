@@ -1,12 +1,21 @@
 name: deploy-catalog-studio
 
-# Build the backend-less Catalog Studio SPA and publish it to GitHub Pages at
-# https://depictio.github.io/depictio/ (Vite base '/depictio/'). Path-filtered
-# so it only runs when the app (or the in-repo schema/kinds it snapshots) change.
+# Build the backend-less Catalog Studio SPA and publish it to its own showcase
+# repository, depictio/catalog-studio, whose GitHub Pages site serves
+# https://depictio.github.io/catalog-studio/ (Vite base '/catalog-studio/').
 #
-# The build reads committed snapshots (public/kinds.json + public/catalog.schema.json);
-# their freshness is enforced by the drift check in catalog-studio-ci.yaml, so
-# this deploy job stays lean (pure Node — no Python).
+# Why a second repository: a Pages site's URL path is its repository name, so
+# publishing from depictio/depictio can only ever be /depictio/ — which reads
+# like the project's own site while the documentation actually lives at
+# /depictio-docs/. The showcase repo holds ONLY the built site; the source
+# stays here, so the `depictio-builder` alias and the committed catalog
+# snapshots keep working exactly as they do in CI.
+#
+# Path-filtered so it only runs when the app (or the in-repo schema/kinds it
+# snapshots) change. The build reads committed snapshots
+# (public/kinds.json + public/catalog.schema.json); their freshness is enforced
+# by the drift check in catalog-studio-ci.yaml, so this job stays lean
+# (pure Node — no Python).
 on:
   push:
     branches: [main]
@@ -22,19 +31,18 @@ on:
       - ".github/workflows/deploy-catalog-studio.yaml"
   workflow_dispatch:
 
-# Least-privilege token for Pages deploy.
+# This workflow only reads this repository; the write happens in the showcase
+# repo through DEPLOY_TOKEN, never through GITHUB_TOKEN.
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
-# Never run two Pages deploys at once; let the newest win.
+# Never run two deploys at once; let the newest win.
 concurrency:
-  group: pages
+  group: catalog-studio-pages
   cancel-in-progress: true
 
 jobs:
-  build:
+  deploy:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v7
@@ -68,22 +76,42 @@ jobs:
           VITE_GH_OAUTH_WORKER_URL: ${{ vars.VITE_GH_OAUTH_WORKER_URL }}
         run: |
           if [ -z "${VITE_GH_CLIENT_ID}" ] || [ -z "${VITE_GH_OAUTH_WORKER_URL}" ]; then
-            echo "::warning::VITE_GH_CLIENT_ID / VITE_GH_OAUTH_WORKER_URL are unset —           deploying WITHOUT one-click PR (zip + web-upload fallback).           Set them as repository variables to enable it."
+            echo "::warning::VITE_GH_CLIENT_ID / VITE_GH_OAUTH_WORKER_URL are unset — \
+          deploying WITHOUT one-click PR (zip + web-upload fallback). \
+          Set them as repository variables to enable it."
           fi
           pnpm --filter catalog-studio run build
 
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: packages/catalog-studio/dist
+      - name: Publish to depictio/catalog-studio
+        # CATALOG_STUDIO_DEPLOY_TOKEN: a fine-grained PAT scoped to
+        # depictio/catalog-studio ONLY, with Contents: Read and write. When it is
+        # absent the workflow stops here with a clear message instead of failing
+        # on an opaque git 403 (e.g. on a fork, where the secret is not exposed).
+        env:
+          DEPLOY_TOKEN: ${{ secrets.CATALOG_STUDIO_DEPLOY_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${DEPLOY_TOKEN}" ]; then
+            echo "::warning::CATALOG_STUDIO_DEPLOY_TOKEN is unset — built the site but skipped publishing."
+            exit 0
+          fi
+          DIST=packages/catalog-studio/dist
+          # Pages would otherwise run Jekyll and drop any asset directory
+          # starting with an underscore.
+          touch "$DIST/.nojekyll"
+          # A SPA served from a subpath: unknown routes must fall back to the
+          # entry document rather than Pages' own 404.
+          cp "$DIST/index.html" "$DIST/404.html"
 
-  deploy:
-    needs: build
-    runs-on: ubuntu-22.04
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+          cd "$DIST"
+          git init -q
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Deploy Catalog Studio from ${GITHUB_REPOSITORY}@${GITHUB_SHA}"
+          # A single-commit force push: the showcase repo is a build output, so
+          # it carries no history worth preserving and stays small over time.
+          git push -q --force \
+            "https://x-access-token:${DEPLOY_TOKEN}@github.com/depictio/catalog-studio.git" \
+            HEAD:refs/heads/gh-pages
+          echo "Published https://depictio.github.io/catalog-studio/"
