@@ -280,6 +280,7 @@ const Header: React.FC<HeaderProps> = ({
               <Menu.Item
                 leftSection={<Icon icon="mdi:view-grid-plus-outline" width={14} />}
                 onClick={onAddComponent}
+                data-testid="add-component"
               >
                 Component
               </Menu.Item>
