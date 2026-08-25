@@ -1,0 +1,149 @@
+# Catalog CLI smoke — the landing board for the CLI-imported project.
+#
+# Import with:
+#   depictio-cli dashboard import \
+#     depictio/projects/test/catalog_cli_smoke/dashboards/overview.yaml \
+#     --config <cli-config> --overwrite
+#
+# Every tile below is one of the catalog's own `renders_as` entries for the
+# collection it binds, transcribed rather than invented — so if the picker offers
+# something this board cannot draw, the two have drifted.
+#
+# The `catalog_source` blocks are the second thing under test. The picker writes
+# them client-side when you add a component; a YAML-authored one has to survive
+# `depictio-cli dashboard import` for an imported board to show the same catalog
+# provenance in the component chrome as a hand-built one.
+
+version: 1
+title: "Catalog CLI Smoke"
+subtitle: "Catalog renders on collections the CLI ingested and computed"
+project_tag: "Catalog CLI Smoke"
+
+components:
+  # --- mosdepth: the no-recipe lane, matched on the scanned file's path ----
+  - tag: card-amplicon-coverage
+    catalog_source:
+      toolId: mosdepth
+      toolName: mosdepth
+      outputId: mosdepth_amplicon_coverage
+      description: "Per-amplicon coverage depth, aggregated across all samples (bindable as-is)."
+    component_type: card
+    workflow_tag: python/catalog_cli_smoke
+    data_collection_tag: mosdepth_amplicon_coverage
+    title: Amplicon coverage
+    column_name: coverage
+    column_type: int64
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:chart-bell-curve
+    layout: { x: 0, y: 0, w: 2, h: 3 }
+
+  - tag: adv-coverage-track
+    catalog_source:
+      toolId: mosdepth
+      toolName: mosdepth
+      outputId: mosdepth_amplicon_coverage
+      description: "Per-amplicon coverage depth, aggregated across all samples (bindable as-is)."
+    component_type: advanced_viz
+    workflow_tag: python/catalog_cli_smoke
+    data_collection_tag: mosdepth_amplicon_coverage
+    title: Coverage along the amplicon panel
+    title_size: h3
+    viz_kind: coverage_track
+    config:
+      viz_kind: coverage_track
+      chromosome_col: chrom
+      position_col: start
+      value_col: coverage
+      sample_col: sample
+    layout: { x: 2, y: 0, w: 6, h: 3 }
+
+  # --- QIIME 2: recipes computed by the CLI at ingest ----------------------
+  - tag: figure-taxonomy-composition
+    catalog_source:
+      toolId: qiime2
+      toolName: QIIME 2
+      outputId: qiime2_taxonomy_composition
+      description: "Long-format taxon counts per sample, melted from the taxa barplot export, with the taxonomy string split back into its ranks."
+    component_type: figure
+    workflow_tag: python/catalog_cli_smoke
+    data_collection_tag: taxonomy_composition
+    title: Taxon counts per sample
+    title_size: h3
+    visu_type: bar
+    dict_kwargs:
+      x: sample
+      y: count
+      color: Phylum
+    layout: { x: 0, y: 3, w: 4, h: 3 }
+
+  - tag: adv-rel-abundance-sunburst
+    catalog_source:
+      toolId: qiime2
+      toolName: QIIME 2
+      outputId: qiime2_rel_abundance
+      description: "Per-sample relative-abundance table with taxonomy ranks."
+    component_type: advanced_viz
+    workflow_tag: python/catalog_cli_smoke
+    data_collection_tag: taxonomy_rel_abundance
+    title: Relative abundance by rank
+    title_size: h3
+    viz_kind: sunburst
+    config:
+      viz_kind: sunburst
+      # The catalog render binds `abundance` only; the hierarchy is whatever rank
+      # columns the recipe emitted, which here stops at Phylum.
+      rank_cols: [Kingdom, Phylum]
+      abundance_col: rel_abundance
+    layout: { x: 4, y: 3, w: 4, h: 3 }
+
+  # --- viral amplicon ------------------------------------------------------
+  - tag: figure-pangolin-lineages
+    catalog_source:
+      toolId: pangolin
+      toolName: Pangolin
+      outputId: pangolin_report
+      description: "Per-sample PANGO lineage report."
+    component_type: figure
+    workflow_tag: python/catalog_cli_smoke
+    data_collection_tag: pangolin_lineages
+    title: Lineage calls
+    title_size: h3
+    visu_type: histogram
+    dict_kwargs:
+      x: lineage
+      color: qc_status
+    layout: { x: 0, y: 6, w: 4, h: 3 }
+
+  - tag: figure-variant-af
+    catalog_source:
+      toolId: ivar
+      toolName: iVar
+      outputId: ivar_variants_long
+      description: "Per-sample annotated variant calls (long table)."
+    component_type: figure
+    workflow_tag: python/catalog_cli_smoke
+    data_collection_tag: variants_long
+    title: Allele-frequency distribution
+    title_size: h3
+    visu_type: histogram
+    dict_kwargs:
+      x: AF
+      color: EFFECT
+    layout: { x: 4, y: 6, w: 4, h: 3 }
+
+  # --- the dc_ref chain: computed from taxonomy_rel_abundance -------------
+  - tag: table-bray-curtis
+    catalog_source:
+      toolId: qiime2
+      toolName: QIIME 2
+      outputId: qiime2_bray_curtis
+      description: "Sample by sample Bray-Curtis dissimilarity matrix computed from the relative-abundance table."
+    component_type: table
+    workflow_tag: python/catalog_cli_smoke
+    data_collection_tag: bray_curtis_canonical
+    title: Bray-Curtis distances
+    title_size: h3
+    layout: { x: 0, y: 9, w: 8, h: 3 }

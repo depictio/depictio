@@ -2722,6 +2722,10 @@ jobs:
           sed -i 's/^DEPICTIO_AUTH_PUBLIC_MODE=.*/DEPICTIO_AUTH_PUBLIC_MODE=${{ matrix.public_mode }}/' docker-compose/.env
           sed -i 's/^DEPICTIO_AUTH_DEMO_MODE=.*/DEPICTIO_AUTH_DEMO_MODE=${{ matrix.demo_mode }}/' docker-compose/.env
           sed -i 's/^#* *DEPICTIO_DEV_MODE=.*/DEPICTIO_DEV_MODE=true/' docker-compose/.env
+          # Seed the catalog conformance project on top of the default set. It is
+          # opt-in because it is a test fixture, and the catalog coverage spec is
+          # the only thing that needs it.
+          echo "DEPICTIO_SEED_EXTRA_PROJECTS=catalog_conformance" >> docker-compose/.env
           mkdir -p data/depictioDB data/minio_data data/prof_files data/cache data/redis
           chmod 777 data data/depictioDB data/minio_data data/prof_files data/cache data/redis
 
@@ -2803,6 +2807,7 @@ jobs:
       - name: Run Playwright tests (${{ matrix.auth_mode }})
         run: |
           cd depictio/tests/e2e-playwright
+          CATALOG_CONFORMANCE_REQUIRED=1 \
           PLAYWRIGHT_BASE_URL=http://localhost:5080 \
           PLAYWRIGHT_API_URL=http://localhost:8058 \
           npx playwright test

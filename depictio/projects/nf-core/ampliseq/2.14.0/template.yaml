@@ -170,6 +170,8 @@ workflows:
               "taxonomy": "Taxonomic classification (Kingdom;Phylum)"
               "count": "Raw sequence count for this taxonomy"
               "habitat": "Habitat type of the sample"
+              "Kingdom": "Kingdom level"
+              "Phylum": "Phylum level"
 
       - data_collection_tag: "taxonomy_rel_abundance"
         description: "Taxonomic relative abundance at Phylum level (from raw abundance table)"

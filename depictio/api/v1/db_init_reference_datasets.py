@@ -1,6 +1,7 @@
 """Reference dataset initialization with static ID management."""
 
 import copy
+import json
 import os
 import re as _re
 from pathlib import Path
@@ -226,6 +227,37 @@ STATIC_IDS = {
     },
 }
 
+# Reference projects that are NOT seeded by default. They exist for the test
+# suite, so they stay out of ordinary deployments until DEPICTIO_SEED_EXTRA_PROJECTS
+# names one.
+OPTIONAL_DATASETS = ("catalog_conformance",)
+
+
+def _load_generated_static_ids(dataset_name: str) -> dict[str, Any]:
+    """Read an id table a project generates for itself.
+
+    The conformance project's collections are derived from the catalog, so they
+    come and go with it — a hand-maintained id table above would need editing
+    every time a module is added, which is the friction that project exists to
+    remove. Its generator writes `static_ids.json` instead.
+    """
+    path = (
+        Path(__file__).resolve().parents[2] / "projects" / "init" / dataset_name / "static_ids.json"
+    )
+    try:
+        return cast(dict[str, Any], json.loads(path.read_text()))
+    except (OSError, ValueError) as exc:
+        # Best-effort, like every other reference dataset: a missing or broken
+        # id table drops this one project rather than taking startup down.
+        logger.warning(f"No usable static ids for optional dataset '{dataset_name}': {exc}")
+        return {}
+
+
+for _optional in OPTIONAL_DATASETS:
+    _ids = _load_generated_static_ids(_optional)
+    if _ids:
+        STATIC_IDS[_optional] = _ids
+
 
 class ReferenceDatasetRegistry:
     """Central registry for reference datasets with static ID management."""
@@ -400,6 +432,7 @@ class ReferenceDatasetRegistry:
         "ampliseq": os.path.join("nf-core", "ampliseq"),
         "advanced_viz_showcase": os.path.join("init", "advanced_viz_showcase"),
         "viralrecon": os.path.join("nf-core", "viralrecon"),
+        "catalog_conformance": os.path.join("init", "catalog_conformance"),
     }
 
     @classmethod
@@ -696,6 +729,7 @@ async def create_reference_datasets(
     admin_user: UserBeanie,
     token_payload: dict[str, Any],
     only: set[str] | None = None,
+    extra: set[str] | None = None,
 ) -> list[dict[str, Any]]:
     """Create all reference datasets (iris, penguins, ampliseq).
 
@@ -704,6 +738,9 @@ async def create_reference_datasets(
         token_payload: Default admin token payload for authenticated creation.
         only: Optional allowlist of dataset names to seed (from
             ``DEPICTIO_SEED_PROJECTS``). ``None`` seeds all of them.
+        extra: Optional dataset names to seed *in addition* (from
+            ``DEPICTIO_SEED_EXTRA_PROJECTS``). Only names in
+            ``OPTIONAL_DATASETS`` are honoured.
 
     Note: ampliseq dataset uses 16S rRNA microbiome data from nf-core/ampliseq.
     Data files are included under depictio/projects/nf-core/ampliseq/2.16.0/.
@@ -740,7 +777,15 @@ async def create_reference_datasets(
             ", ".join(datasets_to_create) or "(none matched)",
         )
     else:
-        datasets_to_create = all_datasets
+        datasets_to_create = list(all_datasets)
+
+    # Optional datasets are additive, not part of the default set. Appending
+    # after the allowlist is applied is deliberate: asking for the conformance
+    # project must not also mean giving up iris and the rest.
+    for name in OPTIONAL_DATASETS:
+        if name in (extra or set()) and name in STATIC_IDS:
+            datasets_to_create.append(name)
+            logger.info("DEPICTIO_SEED_EXTRA_PROJECTS — also seeding: %s", name)
 
     for dataset_name in datasets_to_create:
         logger.info(f"Creating reference dataset: {dataset_name}")

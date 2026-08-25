@@ -1,0 +1,35 @@
+{
+  "project": "fc9a651d95d98a4baedb8315",
+  "workflows": {
+    "catalog_conformance": "045f1f968289500c09ea3939"
+  },
+  "data_collections": {
+    "ivar_variants_long": "f7cf57984ff91bc0a9c56aa2",
+    "mosdepth_amplicon_heatmap": "125be31f418373fc3af51f4d",
+    "mosdepth_genome_coverage": "e74743af38abd00631cdb34e",
+    "multiqc_summary_metrics": "3cf123b9eb22bf9491168b2d",
+    "nextclade_report": "08a79b4e8079f80a7509bc8e",
+    "qiime2_bray_curtis": "6d60044d1cca13f5dfab8456",
+    "qiime2_clustered_heatmap": "9525f9aeb7255a53004b6273",
+    "qiime2_ma": "1304ff22d61cd7d217491544",
+    "qiime2_sunburst_canonical": "a61dbb35ce24950dac9c240a",
+    "qiime2_rel_abundance": "40d0e43149b0392ea5b2d98a",
+    "qiime2_tree_metadata": "21d7e662493c672338b43566",
+    "ivar_oncoplot_matrix": "1dcce553641691a85fef1ef7",
+    "pangolin_report": "503f301de57d976501111a94",
+    "qiime2_alpha_diversity": "5d8c077c82bf9cf520696a31",
+    "qiime2_alpha_rarefaction": "fc135f0717eafe511f9f0e92",
+    "qiime2_ancombc": "a66102058930b45a0d14e53a",
+    "qiime2_embedding_pcoa": "25858881944e9dca5d327606",
+    "qiime2_rarefaction_canonical": "509a3ae1bc75b630fc256f9a",
+    "qiime2_stacked_taxonomy_canonical": "699d5b99fbfd6ea1284b97db",
+    "qiime2_taxonomy_composition": "05f969cd3e8e71e3f5f44e03",
+    "qiime2_taxonomy_heatmap": "91160b8b0941b0eabd936b82",
+    "metaphlan_profile": "1a4e0ceb9acb74eb0809fde7",
+    "mosdepth_amplicon_coverage": "514e95803abf5b1bcbc9f60d",
+    "multiqc_report": "7a60dd03a5c6749cc2bfea48"
+  },
+  "dashboards": {
+    "catalog_conformance_overview": "eae7caf89548988de9aa71eb"
+  }
+}

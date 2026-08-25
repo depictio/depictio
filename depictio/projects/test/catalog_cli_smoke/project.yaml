@@ -1,0 +1,161 @@
+# Catalog CLI smoke — a small project the catalog picker should recognise, that
+# gets there the way a real user does: `depictio-cli run` on staged pipeline
+# output, recipes executed for real.
+#
+# The seeded companion, depictio/projects/init/catalog_conformance/, covers every
+# catalog output but ships each recipe's *result* as a pre-computed seed. Nothing
+# in it exercises the CLI, the recipe engine, or a `dc_ref` chain. This project is
+# deliberately the opposite trade: six collections, all four ways a collection can
+# reach the catalog matcher.
+#
+#   taxonomy_rel_abundance       recipe, single-file source
+#   bray_curtis_canonical        recipe, dc_ref source (reads the DC above)
+#   taxonomy_composition         recipe, single-file source
+#   variants_long                recipe, glob source
+#   pangolin_lineages            recipe, glob source spanning per-sample files
+#   mosdepth_amplicon_coverage   no recipe — matched on the scanned file's path
+#
+# Paths are repo-relative, so run the CLI from the repository root. Regenerate the
+# staged raw files with scripts/generate_fixtures.py.
+#
+# The two tools use different sample universes (SRR* from the 16S fixtures,
+# SAMPLE_* from the viral ones) because their catalog fixtures do. Nothing here
+# joins across them, so the mismatch is cosmetic.
+
+id: "68a1c5e04f2b7d9e30110001"
+name: "Catalog CLI Smoke"
+project_type: advanced
+is_public: true
+
+workflows:
+  - id: "68a1c5e04f2b7d9e30110002"
+    name: "catalog_cli_smoke"
+    engine:
+      name: "python"
+      version: "3.12"
+    description: "Staged QIIME 2 + viral amplicon output, ingested through the CLI"
+    data_location:
+      structure: "flat"
+      locations:
+        - depictio/projects/test/catalog_cli_smoke/run_1
+
+    data_collections:
+      # --- QIIME 2 ---------------------------------------------------------
+      # Must keep this tag: bray_curtis_canonical resolves it by name through
+      # its `dc_ref` source, and it must be processed first, so it stays above.
+      - id: "68a1c5e04f2b7d9e30110003"
+        data_collection_tag: "taxonomy_rel_abundance"
+        description: "Per-sample relative abundance with taxonomy ranks (from the wide QIIME 2 table)"
+        config:
+          type: "Table"
+          metatype: "Aggregated"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/ampliseq/taxonomy_rel_abundance.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              sample: "Sample identifier"
+              taxonomy: "Taxonomic lineage (Kingdom;Phylum)"
+              rel_abundance: "Relative abundance (0-1)"
+              Kingdom: "Kingdom rank"
+              Phylum: "Phylum rank"
+
+      - id: "68a1c5e04f2b7d9e30110004"
+        data_collection_tag: "bray_curtis_canonical"
+        description: "Sample x sample Bray-Curtis distance matrix, computed from the DC above"
+        config:
+          type: "Table"
+          metatype: "Aggregated"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/ampliseq/bray_curtis_canonical.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              sample: "Sample identifier (matrix row index)"
+
+      - id: "68a1c5e04f2b7d9e30110005"
+        data_collection_tag: "taxonomy_composition"
+        description: "Long-format taxon counts per sample, melted from the taxa barplot export"
+        config:
+          type: "Table"
+          metatype: "Aggregated"
+          source: "transformed"
+          transform:
+            recipe: "qiime2/taxonomy_composition.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              sample: "Sample identifier"
+              taxonomy: "Taxonomic lineage (Kingdom;Phylum)"
+              count: "Raw sequence count"
+              habitat: "Sample habitat, carried through from the barplot export"
+
+      # --- viral amplicon --------------------------------------------------
+      - id: "68a1c5e04f2b7d9e30110006"
+        data_collection_tag: "variants_long"
+        description: "Per-sample variant calls, normalised from the raw variants long table"
+        config:
+          type: "Table"
+          metatype: "Aggregated"
+          source: "transformed"
+          transform:
+            recipe: "ivar/variants_long.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              sample: "Sample identifier"
+              CHROM: "Reference sequence"
+              POS: "Variant position"
+              REF: "Reference allele"
+              ALT: "Alternative allele"
+              AF: "Allele frequency (0-1)"
+              GENE: "Gene annotation"
+              EFFECT: "Variant effect"
+              FUNCLASS: "Functional class, derived from EFFECT"
+              mutation_label: "Formatted mutation label (GENE:REFposALT)"
+
+      - id: "68a1c5e04f2b7d9e30110007"
+        data_collection_tag: "pangolin_lineages"
+        description: "PANGO lineage calls, concatenated from the per-sample Pangolin CSVs"
+        config:
+          type: "Table"
+          metatype: "Aggregated"
+          source: "transformed"
+          transform:
+            recipe: "pangolin/pangolin_lineages.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              sample: "Sample identifier, extracted from the consensus FASTA header"
+              lineage: "PANGO lineage designation"
+              conflict: "Lineage assignment conflict score"
+              scorpio_call: "Scorpio constellation call"
+              qc_status: "Pangolin QC verdict (pass/fail)"
+
+      # The one collection with no recipe: the catalog recognises it from the
+      # path of the file the scan registered, which is the other half of the
+      # matcher and the only half a raw pipeline output ever reaches.
+      - id: "68a1c5e04f2b7d9e30110008"
+        data_collection_tag: "mosdepth_amplicon_coverage"
+        description: "Per-amplicon coverage depth across samples (raw mosdepth output)"
+        config:
+          type: "Table"
+          metatype: "Aggregated"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "variants/bowtie2/mosdepth/amplicon/all_samples.mosdepth.coverage.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              chrom: "Reference sequence"
+              start: "Amplicon start position"
+              end: "Amplicon end position"
+              region: "Amplicon name"
+              coverage: "Mean read depth for the amplicon"
+              sample: "Sample identifier"

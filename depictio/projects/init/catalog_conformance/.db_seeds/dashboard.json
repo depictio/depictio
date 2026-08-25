@@ -1,0 +1,668 @@
+{
+  "_id": {
+    "$oid": "eae7caf89548988de9aa71eb"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": "eae7caf89548988de9aa71eb",
+  "version": 3,
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_metadata": [
+    {
+      "index": "2a6342df-dc55-4bab-98f6-a9d940602a86",
+      "component_type": "text",
+      "title": "What this project is",
+      "workflow_tag": "python/catalog_conformance",
+      "data_collection_tag": "metaphlan_profile",
+      "wf_id": {
+        "$oid": "045f1f968289500c09ea3939"
+      },
+      "dc_id": {
+        "$oid": "1a4e0ceb9acb74eb0809fde7"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Taxonomic profile \u2014 raw MetaPhlAn output, recognised by find",
+        "data_collection_tag": "metaphlan_profile",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "1a4e0ceb9acb74eb0809fde7"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-25T12:23:37.804253",
+      "title_size": "h3",
+      "title_align": "left",
+      "section": null,
+      "order": 1,
+      "alignment": "left",
+      "vertical_alignment": "center",
+      "body": "Every data collection here is generated from **depictio/catalog/**: one per distinct recipe, one per recipe-free output, plus a synthetic MultiQC report. It exists so the catalog e2e suite covers every module the catalog declares, rather than whatever the nf-core reference projects happen to ingest. Regenerate with `scripts/generate_project.py` after adding a module.\n",
+      "wf_tag": "python/catalog_conformance"
+    },
+    {
+      "index": "4280c7a6-eb07-4b9a-beff-c1cee2f3f627",
+      "component_type": "card",
+      "title": "Amplicon coverage",
+      "workflow_tag": "python/catalog_conformance",
+      "data_collection_tag": "mosdepth_amplicon_coverage",
+      "wf_id": {
+        "$oid": "045f1f968289500c09ea3939"
+      },
+      "dc_id": {
+        "$oid": "514e95803abf5b1bcbc9f60d"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Amplicon coverage \u2014 raw mosdepth output, recognised by find",
+        "data_collection_tag": "mosdepth_amplicon_coverage",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "514e95803abf5b1bcbc9f60d"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-25T12:23:37.804290",
+      "title_size": "sm",
+      "title_align": "left",
+      "catalog_source": {
+        "toolId": "mosdepth",
+        "toolName": "mosdepth",
+        "outputId": "mosdepth_amplicon_coverage",
+        "description": "Per-amplicon coverage depth, aggregated across all samples (bindable as-is)."
+      },
+      "section": null,
+      "aggregation": "median",
+      "column_name": "coverage",
+      "column_type": "float64",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "box_plot",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:chart-bell-curve",
+      "wf_tag": "python/catalog_conformance"
+    },
+    {
+      "index": "df5274db-5d50-48ad-9c30-21abd3783728",
+      "component_type": "card",
+      "title": "Distinct taxa",
+      "workflow_tag": "python/catalog_conformance",
+      "data_collection_tag": "qiime2_tree_metadata",
+      "wf_id": {
+        "$oid": "045f1f968289500c09ea3939"
+      },
+      "dc_id": {
+        "$oid": "21d7e662493c672338b43566"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "ASV taxonomy table \u2014 recipe output (nf-core/ampliseq/tree_metadata_canonical.py), seeded from the catalog fixture",
+        "data_collection_tag": "qiime2_tree_metadata",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "21d7e662493c672338b43566"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-25T12:23:37.804304",
+      "title_size": "sm",
+      "title_align": "left",
+      "catalog_source": {
+        "toolId": "qiime2",
+        "toolName": "QIIME 2",
+        "outputId": "qiime2_tree_metadata",
+        "description": "Per-ASV classification: the assigned taxon, its rank columns and the classifier confidence. Annotates the phylogenetic tree, and stands on its own as the taxonomy assignment table."
+      },
+      "section": null,
+      "aggregation": "nunique",
+      "column_name": "taxon",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "uniqueness",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:family-tree",
+      "wf_tag": "python/catalog_conformance"
+    },
+    {
+      "index": "9b4d4544-f3ac-4394-8bb1-bf44673f860d",
+      "component_type": "card",
+      "title": "Classifier confidence",
+      "workflow_tag": "python/catalog_conformance",
+      "data_collection_tag": "qiime2_tree_metadata",
+      "wf_id": {
+        "$oid": "045f1f968289500c09ea3939"
+      },
+      "dc_id": {
+        "$oid": "21d7e662493c672338b43566"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "ASV taxonomy table \u2014 recipe output (nf-core/ampliseq/tree_metadata_canonical.py), seeded from the catalog fixture",
+        "data_collection_tag": "qiime2_tree_metadata",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "21d7e662493c672338b43566"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-25T12:23:37.804313",
+      "title_size": "sm",
+      "title_align": "left",
+      "catalog_source": {
+        "toolId": "qiime2",
+        "toolName": "QIIME 2",
+        "outputId": "qiime2_tree_metadata",
+        "description": "Per-ASV classification: the assigned taxon, its rank columns and the classifier confidence. Annotates the phylogenetic tree, and stands on its own as the taxonomy assignment table."
+      },
+      "section": null,
+      "aggregation": "average",
+      "column_name": "confidence",
+      "column_type": "float64",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "box_plot",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:check-decagram",
+      "wf_tag": "python/catalog_conformance"
+    },
+    {
+      "index": "ae1e03e2-cf82-435b-b8d3-e1c74c32c738",
+      "component_type": "card",
+      "title": "Shannon diversity",
+      "workflow_tag": "python/catalog_conformance",
+      "data_collection_tag": "qiime2_alpha_diversity",
+      "wf_id": {
+        "$oid": "045f1f968289500c09ea3939"
+      },
+      "dc_id": {
+        "$oid": "5d8c077c82bf9cf520696a31"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Alpha diversity \u2014 recipe output (qiime2/alpha_diversity_multi_canonical.py), seeded from the catalog fixture",
+        "data_collection_tag": "qiime2_alpha_diversity",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "5d8c077c82bf9cf520696a31"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-25T12:23:37.804323",
+      "title_size": "sm",
+      "title_align": "left",
+      "catalog_source": {
+        "toolId": "qiime2",
+        "toolName": "QIIME 2",
+        "outputId": "qiime2_alpha_diversity",
+        "description": "Multi-metric alpha-diversity per sample (shannon, evenness, faith_pd\u2026)."
+      },
+      "section": null,
+      "aggregation": "median",
+      "column_name": "shannon",
+      "column_type": "float64",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "box_plot",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:leaf",
+      "wf_tag": "python/catalog_conformance"
+    },
+    {
+      "index": "d9d6bc08-e7e5-43a6-952d-32f59e79df24",
+      "component_type": "multiqc",
+      "title": "FastQC sequence counts",
+      "workflow_tag": "python/catalog_conformance",
+      "data_collection_tag": "multiqc_report",
+      "wf_id": {
+        "$oid": "045f1f968289500c09ea3939"
+      },
+      "dc_id": {
+        "$oid": "7a60dd03a5c6749cc2bfea48"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic MultiQC report carrying every section the catalog declares",
+        "data_collection_tag": "multiqc_report",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "7a60dd03a5c6749cc2bfea48"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-25T12:23:37.804331",
+      "description": "From the synthetic report \u2014 the raw lane, matched on path_glob.",
+      "title_size": "h3",
+      "title_align": "left",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_fastqc",
+        "description": "Raw-read sequencing QC (per-base quality, GC content, duplication, adapter content) \u2014 FastQC plots aggregated by MultiQC."
+      },
+      "section": null,
+      "selected_module": "fastqc",
+      "selected_plot": "Sequence Counts",
+      "wf_tag": "python/catalog_conformance"
+    },
+    {
+      "index": "a189a5b2-6c93-45f3-842e-0cb82f9525a0",
+      "component_type": "advanced_viz",
+      "title": "MetaPhlAn taxonomic profile",
+      "workflow_tag": "python/catalog_conformance",
+      "data_collection_tag": "metaphlan_profile",
+      "wf_id": {
+        "$oid": "045f1f968289500c09ea3939"
+      },
+      "dc_id": {
+        "$oid": "1a4e0ceb9acb74eb0809fde7"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Taxonomic profile \u2014 raw MetaPhlAn output, recognised by find",
+        "data_collection_tag": "metaphlan_profile",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "1a4e0ceb9acb74eb0809fde7"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-25T12:23:37.804352",
+      "description": "The one catalog tool no reference project ingests.",
+      "title_size": "h3",
+      "title_align": "left",
+      "catalog_source": {
+        "toolId": "metaphlan",
+        "toolName": "MetaPhlAn",
+        "outputId": "metaphlan_profile",
+        "description": "Per-sample taxonomic relative-abundance profile."
+      },
+      "section": null,
+      "viz_kind": "stacked_taxonomy",
+      "config": {
+        "viz_kind": "stacked_taxonomy",
+        "sample_id_col": "sample_id",
+        "taxon_col": "taxon",
+        "rank_col": "rank",
+        "abundance_col": "relative_abundance",
+        "default_rank": null,
+        "top_n": 20,
+        "sort_by": "abundance",
+        "normalise_to_one": true,
+        "annotation_strips": null
+      },
+      "wf_tag": "python/catalog_conformance"
+    },
+    {
+      "index": "4c1e0331-4087-483b-aaa3-b1c9c1f9ddbf",
+      "component_type": "advanced_viz",
+      "title": "Differential abundance",
+      "workflow_tag": "python/catalog_conformance",
+      "data_collection_tag": "qiime2_ancombc",
+      "wf_id": {
+        "$oid": "045f1f968289500c09ea3939"
+      },
+      "dc_id": {
+        "$oid": "a66102058930b45a0d14e53a"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Differential abundance \u2014 recipe output (qiime2/ancombc.py), seeded from the catalog fixture",
+        "data_collection_tag": "qiime2_ancombc",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "a66102058930b45a0d14e53a"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-25T12:23:37.804361",
+      "description": "Recipe-matched collection \u2014 qiime2/ancombc.py.",
+      "title_size": "h3",
+      "title_align": "left",
+      "catalog_source": {
+        "toolId": "qiime2",
+        "toolName": "QIIME 2",
+        "outputId": "qiime2_ancombc",
+        "description": "ANCOM-BC differential-abundance results. The tool writes one CSV per statistic per contrast; the recipe joins + melts them into a long table."
+      },
+      "section": null,
+      "viz_kind": "volcano",
+      "config": {
+        "viz_kind": "volcano",
+        "feature_id_col": "id",
+        "effect_size_col": "lfc",
+        "significance_col": "q_val",
+        "label_col": null,
+        "category_col": null,
+        "significance_is_neg_log10": false,
+        "significance_threshold": 0.05,
+        "effect_threshold": 1.0,
+        "top_n_labels": 20
+      },
+      "wf_tag": "python/catalog_conformance"
+    },
+    {
+      "index": "25e162b6-0f65-4ade-a1a2-7a4ee8ecebb0",
+      "component_type": "figure",
+      "title": "Taxon counts per sample",
+      "workflow_tag": "python/catalog_conformance",
+      "data_collection_tag": "qiime2_taxonomy_composition",
+      "wf_id": {
+        "$oid": "045f1f968289500c09ea3939"
+      },
+      "dc_id": {
+        "$oid": "05f969cd3e8e71e3f5f44e03"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Taxon counts per sample \u2014 recipe output (qiime2/taxonomy_composition.py), seeded from the catalog fixture",
+        "data_collection_tag": "qiime2_taxonomy_composition",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "05f969cd3e8e71e3f5f44e03"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-25T12:23:37.804382",
+      "title_size": "h3",
+      "title_align": "left",
+      "catalog_source": {
+        "toolId": "qiime2",
+        "toolName": "QIIME 2",
+        "outputId": "qiime2_taxonomy_composition",
+        "description": "Long-format taxon counts per sample, melted from the taxa barplot export, with the taxonomy string split back into its ranks."
+      },
+      "section": null,
+      "visu_type": "bar",
+      "dict_kwargs": {
+        "x": "sample",
+        "y": "count",
+        "color": "Phylum"
+      },
+      "mode": "ui",
+      "code_content": null,
+      "displayed_data_count": 0,
+      "total_data_count": 0,
+      "was_sampled": false,
+      "filter_applied": false,
+      "max_points": null,
+      "selection_enabled": false,
+      "selection_column": null,
+      "wf_tag": "python/catalog_conformance"
+    },
+    {
+      "index": "d08bd071-020f-499c-87ae-0fb5ecd66471",
+      "component_type": "table",
+      "title": "MetaPhlAn profile rows",
+      "workflow_tag": "python/catalog_conformance",
+      "data_collection_tag": "metaphlan_profile",
+      "wf_id": {
+        "$oid": "045f1f968289500c09ea3939"
+      },
+      "dc_id": {
+        "$oid": "1a4e0ceb9acb74eb0809fde7"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Taxonomic profile \u2014 raw MetaPhlAn output, recognised by find",
+        "data_collection_tag": "metaphlan_profile",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "1a4e0ceb9acb74eb0809fde7"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-25T12:23:37.804401",
+      "title_size": "h3",
+      "title_align": "left",
+      "catalog_source": {
+        "toolId": "metaphlan",
+        "toolName": "MetaPhlAn",
+        "outputId": "metaphlan_profile",
+        "description": "Per-sample taxonomic relative-abundance profile."
+      },
+      "section": null,
+      "columns": [],
+      "page_size": 100,
+      "sortable": true,
+      "filterable": true,
+      "compact": false,
+      "row_selection_enabled": false,
+      "row_selection_column": null,
+      "wf_tag": "python/catalog_conformance"
+    }
+  ],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [],
+  "right_panel_layout_data": [
+    {
+      "i": "box-2a6342df-dc55-4bab-98f6-a9d940602a86",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 1,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-4280c7a6-eb07-4b9a-beff-c1cee2f3f627",
+      "x": 0,
+      "y": 1,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-df5274db-5d50-48ad-9c30-21abd3783728",
+      "x": 2,
+      "y": 1,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-9b4d4544-f3ac-4394-8bb1-bf44673f860d",
+      "x": 4,
+      "y": 1,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-ae1e03e2-cf82-435b-b8d3-e1c74c32c738",
+      "x": 6,
+      "y": 1,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-d9d6bc08-e7e5-43a6-952d-32f59e79df24",
+      "x": 0,
+      "y": 3,
+      "w": 4,
+      "h": 3,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-a189a5b2-6c93-45f3-842e-0cb82f9525a0",
+      "x": 4,
+      "y": 3,
+      "w": 4,
+      "h": 3,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-4c1e0331-4087-483b-aaa3-b1c9c1f9ddbf",
+      "x": 0,
+      "y": 6,
+      "w": 4,
+      "h": 3,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-25e162b6-0f65-4ade-a1a2-7a4ee8ecebb0",
+      "x": 4,
+      "y": 6,
+      "w": 4,
+      "h": 3,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-d08bd071-020f-499c-87ae-0fb5ecd66471",
+      "x": 0,
+      "y": 9,
+      "w": 8,
+      "h": 3,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "filter_sections": [],
+  "grid_sections": [],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "Catalog Conformance",
+  "subtitle": "One tile per component type, from catalog-derived collections",
+  "icon": "mdi:view-dashboard",
+  "icon_color": "orange",
+  "icon_variant": "filled",
+  "workflow_system": "none",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": false,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": false,
+  "last_saved_ts": "2026-08-25 12:23:37",
+  "creation_time": "2026-08-25 12:03:04",
+  "screenshot_ts": "",
+  "project_id": {
+    "$oid": "fc9a651d95d98a4baedb8315"
+  },
+  "is_main_tab": true,
+  "parent_dashboard_id": null,
+  "tab_order": 0,
+  "main_tab_name": null,
+  "tab_icon": null,
+  "tab_icon_color": null,
+  "parent_dashboard_title": null,
+  "project_realtime": null
+}

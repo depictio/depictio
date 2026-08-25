@@ -587,6 +587,16 @@ def _load_tool_dir(directory: Path) -> CatalogEntry:
     if not module_path.exists():
         raise ValueError(f"tool folder {directory} is missing {_MODULE_FILE}")
     tool = CatalogTool.model_validate(yaml.safe_load(module_path.read_text()))
+    if tool.id != directory.name:
+        # The folder name is the tool's address: the viewer builds the "browse this
+        # tool on GitHub" link from the tool id alone, and the docs and the
+        # conformance project both address a tool by that path. An id that
+        # disagreed with its folder would send all three somewhere that does not
+        # exist, so it is rejected here rather than half-working downstream.
+        raise ValueError(
+            f"tool folder {directory} declares id {tool.id!r}; "
+            f"the id must match the folder name ({directory.name!r})"
+        )
     outputs: list[CatalogOutput] = []
     for path in sorted(directory.glob("*.yaml")):
         if path.name == _MODULE_FILE:
