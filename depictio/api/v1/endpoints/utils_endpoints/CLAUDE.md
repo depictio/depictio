@@ -96,3 +96,31 @@ let Plotly finish drawing before the capture.
   at `:5173`). Uses the file-based token loader and the shared helpers.
 - **`dev/advanced_viz_docs_screenshots/capture_react_screenshots.py`** —
   hits `/screenshot-react-dual/{id}` over HTTP, one viz_kind at a time.
+
+## Session Guards
+
+The capture session authenticates by seeding the admin token into
+`localStorage` before navigation, so two failure modes are handled
+explicitly in `screenshot_service.py`:
+
+- **Token selection** — `get_admin_auth_token()` walks the admin's
+  unexpired tokens newest-first and returns the first one whose signature
+  verifies against the current public key (`_signed_by_current_keypair`).
+  Expiry is not a disqualifier: the SPA refreshes an expired access token
+  from its refresh token. A *signature* failure is terminal — it means the
+  token was minted under a previous keypair, which happens when a fresh
+  `keys` volume is deployed against a database that outlived it. Without
+  the check, the oldest token (the seeded `default_token`) wins natural
+  order and the whole pipeline runs against a credential the backend
+  refuses.
+- **`/auth` redirect** — an unusable session does not fail the navigation.
+  `bootstrapSession` reads `user: null` from `/auth/me/optional` and
+  replaces the URL with `/auth`, so the capture would silently write the
+  login form over a good thumbnail. `_is_auth_redirect(page.url)` aborts
+  the run before any capture, returns `status="error"`, and leaves the
+  existing PNGs on disk (Celery only bumps `screenshot_ts` on success, so
+  the listing keeps serving the previous shot).
+
+Recovering a deployment in that state means re-minting the admin token —
+`initialize_db` is gated on `initialization_complete` and will not do it
+on restart.
