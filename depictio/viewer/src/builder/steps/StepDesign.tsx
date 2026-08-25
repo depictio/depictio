@@ -10,7 +10,6 @@ import { fetchSpecs, upsertComponent } from 'depictio-react-core';
 import { useBuilderStore } from '../store/useBuilderStore';
 import type { ColumnSpec } from '../store/useBuilderStore';
 import ComponentBuilder from '../ComponentBuilder';
-import SectionSelect from '../shared/SectionSelect';
 import { buildMetadata } from '../buildMetadata';
 import { getComponentTypeMeta } from '../componentTypes';
 
@@ -151,13 +150,6 @@ const StepDesign: React.FC = () => {
         )}
 
       <ComponentBuilder />
-
-      {/* Placement, not appearance — so it sits outside the per-type builder,
-          which keeps it identical for every component type instead of nine
-          near-copies. */}
-      <Paper withBorder radius="md" p="md">
-        <SectionSelect />
-      </Paper>
 
       {state.saveError && (
         <Alert color="red" title="Save error">
