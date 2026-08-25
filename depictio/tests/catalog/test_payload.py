@@ -9,14 +9,17 @@ from __future__ import annotations
 
 import polars as pl
 import pytest
+from pydantic import TypeAdapter, ValidationError
 
 from depictio.catalog.payload import (
     CatalogPayloadError,
     _aggregate,
     _table_payload,
+    advanced_viz_persist_config,
     build_payload,
 )
 from depictio.models.components.advanced_viz.catalog import load_catalog_entries
+from depictio.models.components.advanced_viz.configs import VizConfig
 
 FLAGSHIP = "qiime2_alpha_diversity"
 
@@ -178,3 +181,32 @@ def test_every_bundled_card_previews_its_strip() -> None:
                 if not secondary.get(meta["index"]):
                     missing.append(f"{output.id}:{meta['column_name']} ({layout})")
     assert missing == [], f"cards whose strip did not compute: {missing}"
+
+
+def test_every_advanced_viz_offer_persists_a_valid_config() -> None:
+    """What the catalog offers must be storable, not merely renderable.
+
+    ``advanced_viz_persist_config`` is what a catalog-added component actually
+    writes into ``stored_metadata``, and every per-kind config model forbids
+    unknown keys. The dashboard save path does not validate, though, so a config
+    with a stray key is written happily and only fails much later: on an export,
+    a re-import, or a validate. Four offers were in exactly that state (manhattan
+    ``top_n_labels``, and three heatmaps emitting ``index_col`` where the model
+    declares ``index_column``), so the gap is not hypothetical.
+    """
+    adapter = TypeAdapter(VizConfig)
+    invalid: list[str] = []
+    for entry in load_catalog_entries():
+        for output in entry.outputs:
+            for render in output.renders_as or []:
+                if render.component != "advanced_viz":
+                    continue
+                config = advanced_viz_persist_config(output, render)
+                if config is None:
+                    continue  # not groundable against the fixture; nothing to store
+                try:
+                    adapter.validate_python(config)
+                except ValidationError as exc:
+                    first = exc.errors()[0]
+                    invalid.append(f"{output.id} ({render.kind}): {first['loc']} {first['msg']}")
+    assert invalid == [], f"catalog offers whose persisted config is invalid: {invalid}"

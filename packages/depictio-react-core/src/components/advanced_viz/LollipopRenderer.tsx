@@ -26,6 +26,7 @@ import {
   plotlyThemeColors,
   plotlyThemeFragment,
 } from './plotlyTheme';
+import { usePersistedVizControl } from './usePersistedVizControl';
 
 interface LollipopConfig {
   feature_id_col: string;
@@ -58,20 +59,22 @@ const LollipopRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
   const config = (metadata.config || {}) as LollipopConfig;
   const maxSubplotGenes = config.max_subplot_genes ?? 6;
 
-  const [pointSize, setPointSize] = useState<number>(8);
-  const [stemWidth, setStemWidth] = useState<number>(1.2);
-  const [scalePointsByEffect, setScalePointsByEffect] = useState<boolean>(true);
-  const [showStems, setShowStems] = useState<boolean>(true);
-  const [markerOutline, setMarkerOutline] = useState<boolean>(false);
+  const [pointSize, setPointSize] = usePersistedVizControl(metadata, 'point_size', 8);
+  const [stemWidth, setStemWidth] = usePersistedVizControl(metadata, 'stem_width', 1.2);
+  const [scalePointsByEffect, setScalePointsByEffect] = usePersistedVizControl(metadata, 'scale_points_by_effect', true);
+  const [showStems, setShowStems] = usePersistedVizControl(metadata, 'show_stems', true);
+  const [markerOutline, setMarkerOutline] = usePersistedVizControl(metadata, 'marker_outline', false);
   // The instance (or dashboard) brand colorway, when there is one. It
   // becomes an option here and the default, so a branded deployment's
   // figures match its chrome without the viewer having to pick.
   const brandPalette = brandColorway(theme);
-  const [palette, setPalette] = useState<'brand' | 'tab10' | 'tab20'>(
+  const [palette, setPalette] = usePersistedVizControl<'brand' | 'tab10' | 'tab20'>(
+    metadata,
+    'palette',
     brandPalette ? 'brand' : 'tab10',
   );
-  const [geneSort, setGeneSort] = useState<GeneSort>('count');
-  const [topNLabels, setTopNLabels] = useState<number>(0);
+  const [geneSort, setGeneSort] = usePersistedVizControl<GeneSort>(metadata, 'gene_sort', 'count');
+  const [topNLabels, setTopNLabels] = usePersistedVizControl(metadata, 'top_n_labels', 0);
 
   const requiredCols = useMemo(
     () =>

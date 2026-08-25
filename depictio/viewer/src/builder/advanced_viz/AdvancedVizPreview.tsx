@@ -15,8 +15,8 @@
  * Save button in StepDesign.
  */
 import React, { useEffect, useMemo, useState } from 'react';
-import { ComponentRenderer } from 'depictio-react-core';
-import type { StoredMetadata } from 'depictio-react-core';
+import { AdvancedVizConfigDraftProvider, ComponentRenderer } from 'depictio-react-core';
+import type { StoredMetadata, VizConfigDraftSink } from 'depictio-react-core';
 
 import PreviewPanel from '../shared/PreviewPanel';
 import { buildAdvancedVizConfigBlob } from './configBlob';
@@ -32,6 +32,10 @@ interface Props {
   /** Catalog/saved preset whose viz-control extras (threshold, top-N…) the
    *  preview should reflect, so Edit & Add matches the catalog preview. */
   presetConfig?: Record<string, unknown> | null;
+  /** Sink for Tier-2 control changes made inside the preview's own settings
+   *  popover. Supplying it is what turns that popover from a viewing aid into
+   *  the builder's Tier-2 editor; omitting it leaves the old behaviour. */
+  onVizControlChange?: (patch: Record<string, unknown>) => void;
 }
 
 const DEBOUNCE_MS = 300;
@@ -44,6 +48,7 @@ const AdvancedVizPreview: React.FC<Props> = ({
   bindingsValid,
   onReady,
   presetConfig,
+  onVizControlChange,
 }) => {
   const previewFilters = useBuilderPreviewFilters();
   const cmKey = JSON.stringify(columnMapping);
@@ -95,6 +100,14 @@ const AdvancedVizPreview: React.FC<Props> = ({
     } as unknown as StoredMetadata;
   }, [debouncedConfig, vizKind, wfId, dcId]);
 
+  // Memoised because it is a context value: a fresh identity every render would
+  // re-render the whole preview subtree on each keystroke in a binding Select.
+  // The preview owns exactly one component, so the index it reports is ignored.
+  const draftSink: VizConfigDraftSink | null = useMemo(
+    () => (onVizControlChange ? (_index, patch) => onVizControlChange(patch) : null),
+    [onVizControlChange],
+  );
+
   // The same panel every other builder's preview uses, so this one gets the
   // shared loading / empty treatment instead of a second set of conventions.
   // minHeight 520 fits Manhattan / heatmap / phylogenetic which need real
@@ -108,12 +121,14 @@ const AdvancedVizPreview: React.FC<Props> = ({
     >
       {metadata && (
         <div style={{ height: '100%', minHeight: 480, position: 'relative' }}>
-          <ComponentRenderer
-            dashboardId="__preview__"
-            metadata={metadata}
-            filters={previewFilters}
-            showDragHandle={false}
-          />
+          <AdvancedVizConfigDraftProvider value={draftSink}>
+            <ComponentRenderer
+              dashboardId="__preview__"
+              metadata={metadata}
+              filters={previewFilters}
+              showDragHandle={false}
+            />
+          </AdvancedVizConfigDraftProvider>
         </div>
       )}
     </PreviewPanel>

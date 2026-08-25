@@ -12,7 +12,7 @@
  * store drive which surface renders. The same `<ComponentBuilder>` powers the
  * Design step here and `EditComponentPage`.
  */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   AppShell,
   Button,
@@ -28,11 +28,14 @@ import {
 import { Icon } from '@iconify/react';
 import { fetchDashboard } from 'depictio-react-core';
 import { useBuilderStore } from './store/useBuilderStore';
+import type { SourceMode } from './store/useBuilderStore';
 import StepType from './steps/StepType';
 import StepData from './steps/StepData';
 import StepDesign from './steps/StepDesign';
 import ChoiceScreen from './ChoiceScreen';
 import CatalogTab from './catalog/CatalogTab';
+import BrandMark from '../chrome/BrandMark';
+import { COMPONENT_SOURCE } from './componentSource';
 
 export interface CreateComponentPageProps {
   dashboardId: string;
@@ -80,6 +83,55 @@ const CreateComponentPage: React.FC<CreateComponentPageProps> = ({
   const showChoice = sourceMode === 'unset';
   const showCatalogBrowser = sourceMode === 'catalog' && !catalogMode;
   const showStepper = !showChoice && !showCatalogBrowser;
+
+  // Browser back/forward across the in-page steps.
+  //
+  // The whole Add-component flow lives on one URL: picking the catalog, then
+  // opening an offer to customise it, are zustand flag changes rather than
+  // navigations. So the browser's Back button saw nothing to go back to and
+  // left the flow entirely for the dashboard, losing the work in progress,
+  // while the header's own "Back to catalog" button worked fine. Each surface
+  // now gets a history entry carrying just enough to restore it.
+  //
+  // The URL deliberately does not change: the route already identifies the
+  // component being created, and a per-step URL would be a second source of
+  // truth for state the store already owns.
+  const surfaceKey = `${sourceMode}:${catalogMode}`;
+  const lastSurface = useRef<string | null>(null);
+  const fromPopstate = useRef(false);
+
+  useEffect(() => {
+    const entry = { builder: { sourceMode, catalogMode } };
+    if (lastSurface.current === null) {
+      window.history.replaceState({ ...window.history.state, ...entry }, '');
+    } else if (lastSurface.current !== surfaceKey && !fromPopstate.current) {
+      window.history.pushState({ ...window.history.state, ...entry }, '');
+    }
+    fromPopstate.current = false;
+    lastSurface.current = surfaceKey;
+  }, [surfaceKey, sourceMode, catalogMode]);
+
+  useEffect(() => {
+    const onPop = (event: PopStateEvent) => {
+      const builder = (
+        event.state as { builder?: { sourceMode: SourceMode; catalogMode: boolean } } | null
+      )?.builder;
+      // An entry from before this page (or from the preview iframe) is somebody
+      // else's; let the browser handle it as a real navigation.
+      if (!builder) return;
+      fromPopstate.current = true;
+      // Only the surface flags are restored. The seeded config is left alone so
+      // stepping back to the browser and forward again returns to the offer
+      // already loaded rather than re-deriving it.
+      useBuilderStore.setState(
+        builder.catalogMode
+          ? { sourceMode: builder.sourceMode, catalogMode: true, step: 2 }
+          : { sourceMode: builder.sourceMode, catalogMode: false },
+      );
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
 
   const cancel = () => {
     window.location.assign(`/dashboard-edit/${dashboardId}`);
@@ -129,12 +181,16 @@ const CreateComponentPage: React.FC<CreateComponentPageProps> = ({
     );
   })();
 
-  const headerTitle = showCatalogBrowser
-    ? 'Pick from catalog'
-    : sourceMode === 'catalog'
+  // Both header states of the catalog path show the catalog's own mark, so the
+  // band agrees with the tile directly beneath it and with the badge the added
+  // component ends up carrying.
+  const headerSource = sourceMode === 'catalog' ? COMPONENT_SOURCE.catalog : COMPONENT_SOURCE.manual;
+  // The catalog's Design step is the one state whose title is not just the
+  // name of the source it came from.
+  const headerTitle =
+    sourceMode === 'catalog' && !showCatalogBrowser
       ? 'Customize catalog component'
-      : 'New component';
-  const headerIcon = sourceMode === 'catalog' ? 'mdi:shape-plus' : 'mdi:plus-box';
+      : headerSource.label;
 
   return (
     <AppShell
@@ -145,8 +201,17 @@ const CreateComponentPage: React.FC<CreateComponentPageProps> = ({
       <AppShell.Header>
         <Group h="100%" px="md" justify="space-between">
           <Group gap="xs">
+            <BrandMark />
             {headerBack}
-            <Icon icon={headerIcon} width={22} />
+            {headerSource.image ? (
+              <img
+                src={headerSource.image}
+                alt=""
+                style={{ width: 22, height: 22, objectFit: 'contain', display: 'block' }}
+              />
+            ) : (
+              <Icon icon={headerSource.icon} width={22} />
+            )}
             <Title order={5}>{headerTitle}</Title>
           </Group>
           <Button variant="default" size="xs" onClick={cancel}>
@@ -165,14 +230,38 @@ const CreateComponentPage: React.FC<CreateComponentPageProps> = ({
           </Container>
         )}
 
-        {showCatalogBrowser && (
+        {/* Hidden rather than unmounted.
+          *
+          * The catalog browser holds a lot of where-you-were: which tool is
+          * expanded, which output is selected, which render tab, the search
+          * text, the facet chips, the scroll position. All of it is React-local
+          * state, so unmounting on the way into the Design step threw it away
+          * and "Back to catalog" landed on the first output of the first tool
+          * every time. Toggling visibility keeps the lot for free, with no
+          * state to lift, serialise or restore.
+          *
+          * `display` is toggled inside the inline style rather than through the
+          * `hidden` attribute: the inline `display: flex` below would override
+          * the low-specificity `[hidden] { display: none }` UA rule. `none`
+          * also drops the subtree from the accessibility tree and the tab
+          * order, so nothing behind the stepper is reachable.
+          *
+          * Mounted only once the catalog path is taken, so the manual path
+          * never pays for the project-wide compose request. `sourceMode` stays
+          * 'catalog' across the Design-step round-trip and only clears on
+          * "Methods", which is a deliberate clean slate anyway. */}
+        {sourceMode === 'catalog' && (
           <Container
             fluid
             px="md"
             py={0}
             // Header (50) + AppShell.Main md padding (16 top+bottom) → leave room
             // so the split panel fills the viewport without a second scrollbar.
-            style={{ height: 'calc(100vh - 82px)', display: 'flex', flexDirection: 'column' }}
+            style={{
+              height: 'calc(100vh - 82px)',
+              display: showCatalogBrowser ? 'flex' : 'none',
+              flexDirection: 'column',
+            }}
           >
             {projectId === undefined ? (
               <Center style={{ flex: 1 }}>

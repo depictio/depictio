@@ -3,27 +3,18 @@
  * component from scratch (the manual stepper) or picks a pre-configured one that
  * depictio recognised from the project's ingested data (the catalog browser).
  *
- * The catalog tile carries the depictio *tools* branding: the pinwheel + violet
- * hammer logo (`tools_catalog_logo.png`) and the violet accent used everywhere
- * the catalog surfaces (`CATALOG_ACCENT` in catalog-preview/shared.tsx,
- * advanced_viz = violet in the builder).
+ * The labels, glyphs and accents come from `componentSource.ts`, which the
+ * header band above these tiles reads too, so the two cannot disagree about
+ * what the catalog looks like.
  */
 import React from 'react';
 import { Badge, Box, Center, Paper, SimpleGrid, Stack, Text, Title } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
-// Served from depictio/viewer/public/logos under the SPA base (/dashboard/).
-const TOOLS_CATALOG_LOGO = '/dashboard/logos/tools_catalog_logo.png';
+import { COMPONENT_SOURCE, type ComponentSourceVisual } from './componentSource';
 
 interface ChoiceCardProps {
-  /** Iconify id — used when `image` is not provided. */
-  icon?: string;
-  /** Image src (e.g. the tools-catalog logo) — takes precedence over `icon`. */
-  image?: string;
-  iconColor: string;
-  iconBg: string;
-  accentColor: string;
-  title: string;
+  source: ComponentSourceVisual;
   description: string;
   badge: string;
   onClick: () => void;
@@ -31,12 +22,7 @@ interface ChoiceCardProps {
 }
 
 const ChoiceCard: React.FC<ChoiceCardProps> = ({
-  icon,
-  image,
-  iconColor,
-  iconBg,
-  accentColor,
-  title,
+  source: { label, icon, image, accent },
   description,
   badge,
   onClick,
@@ -57,14 +43,14 @@ const ChoiceCard: React.FC<ChoiceCardProps> = ({
       textAlign: 'center',
       transition: 'transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease',
       minHeight: 260,
-      borderColor: `var(--mantine-color-${accentColor}-3)`,
+      borderColor: `var(--mantine-color-${accent}-3)`,
     }}
     styles={{
       root: {
         '&:hover': {
           transform: 'translateY(-4px)',
           boxShadow: 'var(--mantine-shadow-lg)',
-          borderColor: `var(--mantine-color-${accentColor}-5)`,
+          borderColor: `var(--mantine-color-${accent}-5)`,
         },
         '&:active': {
           transform: 'translateY(-1px)',
@@ -77,31 +63,31 @@ const ChoiceCard: React.FC<ChoiceCardProps> = ({
         width: 88,
         height: 88,
         borderRadius: image ? 16 : '50%',
-        background: iconBg,
+        background: `var(--mantine-color-${accent}-0)`,
         flexShrink: 0,
       }}
     >
       {image ? (
         <img
           src={image}
-          alt={title}
+          alt={label}
           style={{ width: 60, height: 60, objectFit: 'contain' }}
         />
       ) : (
-        <Icon icon={icon ?? 'mdi:help-circle'} width={40} color={iconColor} />
+        <Icon icon={icon} width={40} color={`var(--mantine-color-${accent}-6)`} />
       )}
     </Center>
 
     <Stack gap={6} align="center" style={{ flex: 1 }}>
       <Title order={3} fw={700}>
-        {title}
+        {label}
       </Title>
       <Text size="sm" c="dimmed" maw={320}>
         {description}
       </Text>
     </Stack>
 
-    <Badge variant="light" color={accentColor} size="md" radius="xl">
+    <Badge variant="light" color={accent} size="md" radius="xl">
       {badge}
     </Badge>
   </Paper>
@@ -127,22 +113,14 @@ const ChoiceScreen: React.FC<ChoiceScreenProps> = ({ onManual, onCatalog }) => (
 
       <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="xl" style={{ maxWidth: 860, width: '100%' }}>
         <ChoiceCard
-          icon="mdi:puzzle-plus"
-          iconColor="var(--mantine-color-blue-6)"
-          iconBg="var(--mantine-color-blue-0)"
-          accentColor="blue"
-          title="New component"
+          source={COMPONENT_SOURCE.manual}
           description="Choose a component type, connect your data, and configure the design step by step."
           badge="Manual"
           testId="component-source-manual"
           onClick={onManual}
         />
         <ChoiceCard
-          image={TOOLS_CATALOG_LOGO}
-          iconColor="var(--mantine-color-violet-6)"
-          iconBg="var(--mantine-color-violet-0)"
-          accentColor="violet"
-          title="Pick from catalog"
+          source={COMPONENT_SOURCE.catalog}
           description="Depictio recognizes the bioinformatics tools behind your data and suggests ready-to-add visualizations."
           badge="Catalog"
           testId="component-source-catalog"

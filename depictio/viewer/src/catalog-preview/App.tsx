@@ -6,6 +6,7 @@
  * schema, so this is the only place that branches.
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { AdvancedVizConfigDraftProvider } from 'depictio-react-core';
 import Gallery from './Gallery';
 import OutputView from './OutputView';
 import type { CatalogGlobal, OutputEntry } from './shared';
@@ -33,6 +34,27 @@ function readHashTileHeight(): number | null {
 function readHashOutputId(): string | null {
   const m = window.location.hash.match(/[#&]output=([^&]*)/);
   return m ? decodeURIComponent(m[1]) : null;
+}
+
+/** Forward a Tier-2 control change to whoever embedded this preview.
+ *
+ * The preview runs in its own document inside an iframe, so the builder's
+ * in-process draft context cannot reach across. Without this hop, a dot size or
+ * palette tuned in the picker's own settings popover showed in the preview and
+ * was then silently dropped by Add, which is precisely where the preview is
+ * supposed to be telling the truth about what you are about to get.
+ *
+ * The message carries the render it belongs to so the embedder can ignore
+ * anything that arrives after the selection has moved on, and it is posted to
+ * this document's own origin, which is the embedder's too. */
+function postConfigDraft(renderId: string | null) {
+  return (componentIndex: string, patch: Record<string, unknown>) => {
+    if (window.parent === window) return;
+    window.parent.postMessage(
+      { type: 'depictio:viz-config-draft', renderId, componentIndex, patch },
+      window.location.origin,
+    );
+  };
 }
 
 const CatalogApp: React.FC<{ g: CatalogGlobal }> = ({ g }) => {
@@ -82,6 +104,8 @@ const CatalogApp: React.FC<{ g: CatalogGlobal }> = ({ g }) => {
     return () => window.removeEventListener('popstate', onPop);
   }, []);
 
+  const draftSink = useMemo(() => postConfigDraft(renderId), [renderId]);
+
   const entry: OutputEntry | undefined = useMemo(() => {
     if (!selected) return undefined;
     for (const t of tools) {
@@ -91,20 +115,21 @@ const CatalogApp: React.FC<{ g: CatalogGlobal }> = ({ g }) => {
     return undefined;
   }, [selected, tools]);
 
-  if (entry) {
-    // Hide "back to catalog" when there's nothing to go back to (single preview).
-    const onBack = totalOutputs > 1 ? () => navigate(null) : undefined;
-    return (
-      <OutputView
-        entry={entry}
-        onBack={onBack}
-        theme={g.theme}
-        renderId={renderId}
-        tileHeight={tileHeight}
-      />
-    );
-  }
-  return <Gallery tools={tools} onOpen={navigate} theme={g.theme} />;
+  const body = entry ? (
+    <OutputView
+      entry={entry}
+      onBack={totalOutputs > 1 ? () => navigate(null) : undefined}
+      theme={g.theme}
+      renderId={renderId}
+      tileHeight={tileHeight}
+    />
+  ) : (
+    <Gallery tools={tools} onOpen={navigate} theme={g.theme} />
+  );
+
+  return (
+    <AdvancedVizConfigDraftProvider value={draftSink}>{body}</AdvancedVizConfigDraftProvider>
+  );
 };
 
 export default CatalogApp;

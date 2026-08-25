@@ -35,6 +35,7 @@ import AdvancedVizFrame from './AdvancedVizFrame';
 import { applyDataTheme, applyLayoutTheme } from './plotlyTheme';
 import { ladderise, parseNewick, type PhyloNode, type PhyloTree, toNewick } from './phylo/newick';
 import { computeLayout, descendants, type Layout } from './phylo/layout';
+import { usePersistedVizControl } from './usePersistedVizControl';
 import { pruneToTips } from './phylo/prune';
 import { cladeExtent, collapseNodes } from './phylo/collapse';
 import {
@@ -154,8 +155,8 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
   const isDark = colorScheme === 'dark';
 
   // ---- Tier-2 (intra-viz) controls ----------------------------------------
-  const [layout, setLayout] = useState<Layout>(config.default_layout ?? 'rectangular');
-  const [doLadderise, setDoLadderise] = useState<boolean>(config.ladderize ?? true);
+  const [layout, setLayout] = usePersistedVizControl<Layout>(metadata, 'default_layout', 'rectangular');
+  const [doLadderise, setDoLadderise] = usePersistedVizControl(metadata, 'ladderize', true);
   // Which metadata column supplies the tip label. `null` means the Newick name
   // — an ASV hash on an amplicon tree, which is why `label_col` exists and why
   // it now actually reaches the labels instead of only being fetched.
@@ -187,8 +188,10 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
   // capped toggle — `show_branch_lengths` in a dashboard config still means
   // "I want to read lengths", so it seeds that one.
   const [showScaleBar, setShowScaleBar] = useState<boolean>(true);
-  const [showBranchLabels, setShowBranchLabels] = useState<boolean>(
-    config.show_branch_lengths ?? false,
+  const [showBranchLabels, setShowBranchLabels] = usePersistedVizControl(
+    metadata,
+    'show_branch_lengths',
+    false,
   );
   // Focus prunes the tree to the tips still in scope instead of ghosting the
   // rest. Off by default: ghosting answers "where is my selection in the
@@ -196,7 +199,11 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
   // silently swapping one for the other on the first filter would be a
   // surprise. See phylo/prune.ts.
   const [focusMode, setFocusMode] = useState<boolean>(false);
+  // Search is a way of looking at the tree, not a property of it.
   const [search, setSearch] = useState<string>('');
+  // `color_col` is a column binding, owned by the builder's mapping rather than
+  // by this popover: routed through the Tier-2 channel it would be classified
+  // role-derived and silently dropped on the way to the saved config.
   const [colorCol, setColorCol] = useState<string | null>(config.color_col ?? null);
   const [highlightedRootId, setHighlightedRootId] = useState<number | null>(null);
   // Zoom/pan is off by default: Plotly's drag-to-zoom-box steals every drag

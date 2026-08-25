@@ -153,7 +153,7 @@ const OutputInfoPanel: React.FC<{ out: OutputInfo }> = ({ out }) => (
             {out.nf_core_url ? (
               <IdentityLink
                 href={out.nf_core_url}
-                icon="mdi:github"
+                icon="simple-icons:nfcore"
                 label={nfCoreLabel(out.nf_core_url)}
               />
             ) : null}

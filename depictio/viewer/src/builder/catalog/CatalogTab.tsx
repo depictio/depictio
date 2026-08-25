@@ -30,6 +30,7 @@ import {
 import { useBuilderStore } from '../store/useBuilderStore';
 import type { ComponentType } from '../store/useBuilderStore';
 import { buildMetadata } from '../buildMetadata';
+import { rolesFromConfigBlob } from '../advanced_viz/configBlob';
 import CatalogPreviewPanel, {
   catalogUseRef,
   matchTitle,
@@ -54,9 +55,19 @@ async function buildConfigFromRender(
     // `preset_config` carries the catalog preview's computed config (role
     // bindings + data-derived viz-control defaults). buildMetadata overlays its
     // non-role extras so the added component renders exactly like its preview.
+    //
+    // The mapping is seeded from that grounded config *and* the declared roles,
+    // declared last so they win. A list-typed binding has no role to travel in
+    // — a sunburst declares only `abundance` and gets its hierarchy inferred
+    // server-side — so reading the roles alone left the binding form short of a
+    // requirement the offer actually satisfies, and "Edit" rejected an offer
+    // whose preview had just rendered.
     return {
       viz_kind: render.kind ?? null,
-      column_mapping: render.roles ?? {},
+      column_mapping: {
+        ...rolesFromConfigBlob(render.kind, render.config),
+        ...(render.roles ?? {}),
+      },
       preset_config: render.config ?? null,
     };
   }
@@ -250,29 +261,42 @@ const MatchRow: React.FC<MatchRowProps> = ({ match, selected, vizKinds, onClick 
  *  `run` is dropped: it is what a single-purpose tool's only mode is called
  *  (Pangolin, Nextclade) and it says nothing.
  */
-function toolModes(module: CatalogModule): string[] {
-  const modes = new Set<string>();
+/**
+ * The parts of a tool this project actually has: a MultiQC section, a mosdepth
+ * mode, a QIIME 2 step.
+ *
+ * Labelled with the *producing* tool wherever the catalog names one — MultiQC
+ * aggregates other tools, so "BCFtools" says more than the `bcftools` anchor —
+ * and with the output's own mode otherwise.
+ */
+function toolFacets(module: CatalogModule): string[] {
+  const labels = new Set<string>();
   for (const match of module.matches) {
     const mode = (match.mode || '').split('/')[0].trim();
-    if (mode && mode !== 'run') modes.add(mode);
+    // `run` is the catch-all mode of a single-output tool: it names nothing the
+    // tool name has not already said.
+    const label = match.origin_tool || (mode && mode !== 'run' ? mode : '');
+    if (label) labels.add(label);
   }
-  return [...modes].sort();
+  return [...labels].sort((a, b) => a.localeCompare(b));
 }
 
 /** How many sub-functions fit on the accordion's second line before the rest
- *  becomes a "+n" the header's tooltip spells out. */
+ *  becomes a "+n" the header's tooltip spells out in full. */
 const TOOL_MODES_SHOWN = 3;
 
-// No per-tool icon: the catalog has no icon to give, and the same toolbox glyph
-// on every row carried no information while costing a column of a narrow panel.
+// No per-tool icon: the catalog has no icon to give, and repeating the catalog's
+// own hammer on every row carried no information while costing a column of a
+// narrow panel.
 const ToolLabel: React.FC<{ module: CatalogModule; count: number }> = ({ module, count }) => {
   // The second line used to repeat `tool_id`, which for most tools is the name
   // again in lowercase ("QIIME 2" / "qiime2"). What is worth the line is which
   // parts of the tool this project actually has.
-  const modes = toolModes(module);
-  const shown = modes.slice(0, TOOL_MODES_SHOWN);
-  const subtitle = modes.length
-    ? shown.join(' · ') + (modes.length > shown.length ? ` +${modes.length - shown.length}` : '')
+  const facets = toolFacets(module);
+  const shown = facets.slice(0, TOOL_MODES_SHOWN);
+  const subtitle = facets.length
+    ? shown.join(' · ') +
+      (facets.length > shown.length ? ` +${facets.length - shown.length}` : '')
     : module.tool_id;
   const label = (
     <Group gap="sm" wrap="nowrap">
@@ -289,14 +313,27 @@ const ToolLabel: React.FC<{ module: CatalogModule; count: number }> = ({ module,
       </Badge>
     </Group>
   );
-  if (modes.length <= shown.length) return label;
+  // The subtitle can only ever show three, and on MultiQC that hides nine. The
+  // tooltip is where the whole list lives: the tool named once at the top, then
+  // one line per part of it this project has, so the row reads as a heading over
+  // its sub-tools rather than as a truncated run-on.
+  if (!facets.length) return label;
   return (
     <Tooltip
-      label={`${module.tool_id} — ${modes.join(', ')}`}
+      label={
+        <Stack gap={2}>
+          <Text size="xs" fw={700}>
+            {module.tool_name}
+          </Text>
+          {facets.map((facet) => (
+            <Text key={facet} size="xs" style={{ fontFamily: 'monospace', fontSize: 10 }}>
+              {facet}
+            </Text>
+          ))}
+        </Stack>
+      }
       withArrow
       position="right"
-      multiline
-      maw={300}
       openDelay={350}
     >
       {label}
@@ -457,6 +494,7 @@ const CatalogTab: React.FC<CatalogTabProps> = ({ projectId }) => {
     toolId: string,
     toolName: string,
     render: CatalogRender,
+    previewOverrides: Record<string, unknown> | null,
   ): Promise<boolean> => {
     let config: Record<string, unknown> = {};
     let resolved = true;
@@ -464,6 +502,12 @@ const CatalogTab: React.FC<CatalogTabProps> = ({ projectId }) => {
       config = await buildConfigFromRender(render, match.dc_id);
     } catch {
       resolved = false;
+    }
+    // Whatever the author tuned in the preview's own settings popover travels
+    // with the offer, on both Add and Edit, so the component that lands is the
+    // one they were looking at rather than the catalog's untouched default.
+    if (previewOverrides && Object.keys(previewOverrides).length > 0) {
+      config = { ...config, viz_overrides: previewOverrides };
     }
     initFromCatalog({
       componentType: render.component as ComponentType,
@@ -483,17 +527,17 @@ const CatalogTab: React.FC<CatalogTabProps> = ({ projectId }) => {
   };
 
   const handleAdd = (match: CatalogOutputMatch, toolId: string, toolName: string) =>
-    async (render: CatalogRender) => {
-      await seedStore(match, toolId, toolName, render);
+    async (render: CatalogRender, overrides: Record<string, unknown> | null) => {
+      await seedStore(match, toolId, toolName, render, overrides);
     };
 
   // Quick-add: pre-fill store, build metadata, save to backend, navigate.
   const handleDirectAdd = (match: CatalogOutputMatch, toolId: string, toolName: string) =>
-    async (render: CatalogRender) => {
+    async (render: CatalogRender, overrides: Record<string, unknown> | null) => {
       if (!dashboardId || !componentId) return;
       // An unresolved config would be saved as a component that cannot render,
       // with no way back to fix it — show the Design step instead.
-      if (!(await seedStore(match, toolId, toolName, render))) return;
+      if (!(await seedStore(match, toolId, toolName, render, overrides))) return;
       // Zustand set() is synchronous — read the updated state immediately.
       const state = useBuilderStore.getState();
       try {

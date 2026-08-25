@@ -1,6 +1,7 @@
 import React from 'react';
-import { Anchor, Group, Text, useComputedColorScheme } from '@mantine/core';
+import { Anchor, Group, Text } from '@mantine/core';
 
+import DepictioLogo from './DepictioLogo';
 import { useBrandLogoMode } from './useBrandLogoMode';
 
 /**
@@ -24,7 +25,6 @@ interface PoweredByProps {
 
 const PoweredBy: React.FC<PoweredByProps> = ({ withRightBorder = false }) => {
   const logoMode = useBrandLogoMode();
-  const isDark = useComputedColorScheme('light') === 'dark';
 
   // `'inherit'` is exactly when BrandLogo shows the depictio wordmark.
   if (logoMode === 'inherit') return null;
@@ -50,20 +50,7 @@ const PoweredBy: React.FC<PoweredByProps> = ({ withRightBorder = false }) => {
         <Text size="xs" c="dimmed" fw={700}>
           Powered by
         </Text>
-        {/* `logo_black.svg` and `logo_white.svg` are byte-identical (a base64-
-            embedded PNG inside an SVG wrapper), so swapping `src` does nothing.
-            Dark mode inverts the embedded raster with a CSS filter instead,
-            preserving brand hues — same trick as `BrandLogo`. */}
-        <img
-          src="/dashboard/logos/logo_black.svg"
-          alt="Depictio"
-          style={{
-            height: 20,
-            width: 'auto',
-            display: 'block',
-            filter: isDark ? 'invert(1) hue-rotate(180deg)' : undefined,
-          }}
-        />
+        <DepictioLogo height={20} />
       </Group>
     </Anchor>
   );

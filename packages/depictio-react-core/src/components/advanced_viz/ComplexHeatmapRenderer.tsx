@@ -22,6 +22,7 @@ import {
 } from '../../api';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { applyDataTheme, applyLayoutTheme } from './plotlyTheme';
+import { usePersistedVizControl } from './usePersistedVizControl';
 
 interface ComplexHeatmapConfig {
   /** Deprecated/unused: data comes from the component's resolved dc_id
@@ -61,16 +62,27 @@ const ComplexHeatmapRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
 
   // Tier-2 controls — change any of these and a new Celery task is
   // dispatched (cache-keyed so repeats are instant).
-  const [clusterRows, setClusterRows] = useState<boolean>(config.cluster_rows ?? true);
-  const [clusterCols, setClusterCols] = useState<boolean>(config.cluster_cols ?? true);
-  const [normalize, setNormalize] = useState<NonNullable<ComplexHeatmapConfig['normalize']>>(
-    config.normalize ?? 'none',
+  const [clusterRows, setClusterRows] = usePersistedVizControl<boolean>(
+    metadata,
+    'cluster_rows',
+    true,
   );
-  const [clusterMethod, setClusterMethod] = useState<NonNullable<
-    ComplexHeatmapConfig['cluster_method']
-  >>(config.cluster_method ?? 'ward');
-  // Row-annotation columns — editable in the popover. Seeded from config so
-  // the dashboard author's defaults still apply on first paint.
+  const [clusterCols, setClusterCols] = usePersistedVizControl<boolean>(
+    metadata,
+    'cluster_cols',
+    true,
+  );
+  const [normalize, setNormalize] = usePersistedVizControl<
+    NonNullable<ComplexHeatmapConfig['normalize']>
+  >(metadata, 'normalize', 'none');
+  const [clusterMethod, setClusterMethod] = usePersistedVizControl<
+    NonNullable<ComplexHeatmapConfig['cluster_method']>
+  >(metadata, 'cluster_method', 'ward');
+  // Editable in the popover but deliberately not persisted through the Tier-2
+  // channel: this is a column binding, and bindings are owned by the builder's
+  // mapping. Routed through the override channel it would be stripped as
+  // role-derived on the way to the saved blob, so the write would look accepted
+  // and then vanish.
   const [rowAnnotationCols, setRowAnnotationCols] = useState<string[]>(
     config.row_annotation_cols ?? [],
   );

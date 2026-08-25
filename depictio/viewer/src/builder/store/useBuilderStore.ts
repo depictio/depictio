@@ -53,6 +53,10 @@ export interface ColumnSpec {
   specs?: Record<string, unknown>;
 }
 
+/** Which surface the Add-component page is showing. Named because the page's
+ *  history entries carry it too. */
+export type SourceMode = 'unset' | 'manual' | 'catalog';
+
 export interface BuilderState {
   // Mode + ids
   mode: 'create' | 'edit';
@@ -102,7 +106,7 @@ export interface BuilderState {
   applyDashboardFilters: boolean;
 
   // 'unset' = mode choice screen; 'manual' = stepper; 'catalog' = catalog browser or pre-fill
-  sourceMode: 'unset' | 'manual' | 'catalog';
+  sourceMode: SourceMode;
   // Set true when the builder was initiated from a catalog suggestion. Steps
   // 0 and 1 are skipped; the design step shows a dismissable catalog banner.
   catalogMode: boolean;
@@ -154,7 +158,7 @@ export interface BuilderActions {
     fig: { data: unknown[]; layout: Record<string, unknown> } | null,
   ) => void;
   setCodeStatus: (s: { title: string; color: string; message: string }) => void;
-  setSourceMode: (mode: 'unset' | 'manual' | 'catalog') => void;
+  setSourceMode: (mode: SourceMode) => void;
   initFromCatalog: (patch: {
     componentType: ComponentType;
     wfId: string;

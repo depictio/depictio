@@ -27,6 +27,7 @@ import {
 import { resolveCategoricalPalette, stableColorMap, TAB10_PALETTE } from '../../colors';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { applyDataTheme, applyLayoutTheme, plotlyThemeColors } from './plotlyTheme';
+import { usePersistedVizControl } from './usePersistedVizControl';
 
 type ComputeMethod = 'pca' | 'umap' | 'tsne' | 'pcoa';
 
@@ -64,26 +65,28 @@ const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
   const theme = useMantineTheme();
   const isDark = colorScheme === 'dark';
   const config = (metadata.config || {}) as EmbeddingConfig;
-  const [pointSize, setPointSize] = useState<number>(config.point_size ?? 7);
-  const [showCentroids, setShowCentroids] = useState<boolean>(false);
-  const [markerOutline, setMarkerOutline] = useState<boolean>(false);
+  const [pointSize, setPointSize] = usePersistedVizControl(metadata, 'point_size', 7);
+  const [showCentroids, setShowCentroids] = usePersistedVizControl(metadata, 'show_centroids', false);
+  const [markerOutline, setMarkerOutline] = usePersistedVizControl(metadata, 'marker_outline', false);
   type LegendPos = 'right' | 'bottom' | 'in-tr' | 'hidden';
-  const [legendPos, setLegendPos] = useState<LegendPos>('right');
-  const [ncontours, setNcontours] = useState<number>(14);
-  const [densityOpacity, setDensityOpacity] = useState<number>(0.45);
-  const [colorBy, setColorBy] = useState<string | null>(
+  const [legendPos, setLegendPos] = usePersistedVizControl<LegendPos>(metadata, 'legend_pos', 'right');
+  const [ncontours, setNcontours] = usePersistedVizControl(metadata, 'ncontours', 14);
+  const [densityOpacity, setDensityOpacity] = usePersistedVizControl(metadata, 'density_opacity', 0.45);
+  const [colorBy, setColorBy] = usePersistedVizControl<string | null>(
+    metadata,
+    'default_color_by',
     config.cluster_col || config.color_col || null,
   );
-  const [showDensity, setShowDensity] = useState<boolean>(Boolean(config.show_density));
+  const [showDensity, setShowDensity] = usePersistedVizControl(metadata, 'show_density', false);
 
   // 3D toggle — disabled when no dim_3_col is configured. Default 2D: most
   // clustering reads happen in 2D and the third axis is opt-in.
   const has3DConfigured = Boolean(config.dim_3_col);
-  const [view3D, setView3D] = useState<boolean>(false);
+  const [view3D, setView3D] = usePersistedVizControl(metadata, 'view_3d', false);
   // Reverse-colourscale only meaningful for the continuous (numeric) branch.
   // Spectral runs red→blue by default; reverse=true → blue=low / red=high,
   // which matches most clustering-narrative defaults.
-  const [reverseScale, setReverseScale] = useState<boolean>(true);
+  const [reverseScale, setReverseScale] = usePersistedVizControl(metadata, 'reverse_scale', true);
 
   // Per-component schema lookup so the Hover-columns MultiSelect can list any
   // non-binding column from the DC.
@@ -108,7 +111,7 @@ const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
 
   // Hover-columns the user has picked. Each becomes one customdata slot in
   // the trace; the template references them by index.
-  const [hoverCols, setHoverCols] = useState<string[]>([]);
+  const [hoverCols, setHoverCols] = usePersistedVizControl<string[]>(metadata, 'hover_cols', []);
 
   const [colorUniverse, setColorUniverse] = useState<string[] | null>(null);
   useEffect(() => {
@@ -132,9 +135,9 @@ const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
   // ---- Live-compute mode state -------------------------------------------
   const liveMode = Boolean(config.compute_method);
   const [method, setMethod] = useState<ComputeMethod>(config.compute_method ?? 'pca');
-  const [nNeighbors, setNNeighbors] = useState<number>(config.umap_n_neighbors ?? 15);
-  const [minDist, setMinDist] = useState<number>(config.umap_min_dist ?? 0.1);
-  const [perplexity, setPerplexity] = useState<number>(config.tsne_perplexity ?? 30);
+  const [nNeighbors, setNNeighbors] = usePersistedVizControl(metadata, 'umap_n_neighbors', 15);
+  const [minDist, setMinDist] = usePersistedVizControl(metadata, 'umap_min_dist', 0.1);
+  const [perplexity, setPerplexity] = usePersistedVizControl(metadata, 'tsne_perplexity', 30);
 
   const requiredCols = useMemo(() => {
     const cols = [config.sample_id_col, config.dim_1_col, config.dim_2_col].filter(Boolean) as string[];

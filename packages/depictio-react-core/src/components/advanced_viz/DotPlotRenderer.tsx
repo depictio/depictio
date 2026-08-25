@@ -20,6 +20,7 @@ import {
 import { adaptGlTrace, SVG_MAX_POINTS, useWebglSlot } from '../../webglBudget';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragment } from './plotlyTheme';
+import { usePersistedVizControl } from './usePersistedVizControl';
 
 interface DotPlotConfig {
   cluster_col: string;
@@ -45,18 +46,18 @@ const DotPlotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
   const isDark = colorScheme === 'dark';
   const config = (metadata.config || {}) as DotPlotConfig;
 
-  const [maxSize, setMaxSize] = useState<number>(config.max_dot_size ?? 22);
-  const [minSize, setMinSize] = useState<number>(config.min_dot_size ?? 2);
-  const [reverseScale, setReverseScale] = useState<boolean>(false);
-  const [colourScale, setColourScale] = useState<ColourScale>('Viridis');
-  const [logTransform, setLogTransform] = useState<boolean>(false);
-  const [geneSort, setGeneSort] = useState<AxisSort>('name');
-  const [clusterSort, setClusterSort] = useState<AxisSort>('name');
-  const [annotateTopN, setAnnotateTopN] = useState<number>(0);
-  const [markerOutline, setMarkerOutline] = useState<boolean>(true);
+  const [maxSize, setMaxSize] = usePersistedVizControl(metadata, 'max_dot_size', 22);
+  const [minSize, setMinSize] = usePersistedVizControl(metadata, 'min_dot_size', 2);
+  const [reverseScale, setReverseScale] = usePersistedVizControl(metadata, 'reverse_scale', false);
+  const [colourScale, setColourScale] = usePersistedVizControl<ColourScale>(metadata, 'colour_scale', 'Viridis');
+  const [logTransform, setLogTransform] = usePersistedVizControl(metadata, 'log_transform', false);
+  const [geneSort, setGeneSort] = usePersistedVizControl<AxisSort>(metadata, 'gene_sort', 'name');
+  const [clusterSort, setClusterSort] = usePersistedVizControl<AxisSort>(metadata, 'cluster_sort', 'name');
+  const [annotateTopN, setAnnotateTopN] = usePersistedVizControl(metadata, 'annotate_top_n', 0);
+  const [markerOutline, setMarkerOutline] = usePersistedVizControl(metadata, 'marker_outline', true);
   // A dot plot of every gene is both illegible and slow, so by default only the
   // most cluster-discriminating genes are shown; Load-All (below) lifts the cap.
-  const [maxGenes, setMaxGenes] = useState<number>(50);
+  const [maxGenes, setMaxGenes] = usePersistedVizControl(metadata, 'max_genes', 50);
   const [fullGenes, setFullGenes] = useState<boolean>(false);
 
   const requiredCols = useMemo(

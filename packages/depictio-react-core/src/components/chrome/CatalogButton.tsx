@@ -23,7 +23,7 @@ const CatalogButton: React.FC<{ source: CatalogSource }> = ({ source }) => (
         withArrow
       >
         <ActionIcon variant="light" color="violet" size="sm" aria-label="Catalog origin">
-          <Icon icon="mdi:toolbox-outline" width={16} height={16} />
+          <Icon icon="mdi:hammer" width={16} height={16} />
         </ActionIcon>
       </Tooltip>
     </Popover.Target>

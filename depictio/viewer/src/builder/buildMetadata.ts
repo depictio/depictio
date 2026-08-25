@@ -10,7 +10,7 @@ import type { StoredMetadata } from 'depictio-react-core';
 import { defaultInteractiveTitle, readMultiqcSelection } from 'depictio-react-core';
 import type { BuilderState } from './store/useBuilderStore';
 import { autoCardTitle } from './card/cardTitle';
-import { buildAdvancedVizConfigBlob } from './advanced_viz/configBlob';
+import { buildAdvancedVizConfigBlob, mergedPresetConfig } from './advanced_viz/configBlob';
 
 /** Augment an unknown record with type-narrowing safety. */
 function as<T extends Record<string, unknown>>(v: unknown): T {
@@ -351,11 +351,17 @@ function buildAdvancedViz(
     column_mapping?: Record<string, string | string[]>;
     preset_config?: Record<string, unknown> | null;
     config?: Record<string, unknown> | null;
+    viz_overrides?: Record<string, unknown> | null;
   }>(state.config);
   // `preset_config` (catalog add) and `config` (edit-mode rehydration of a saved
   // component) both carry viz-control extras the role mapping can't express;
   // overlay them so the threshold/top-N/etc. survive Add and re-Save.
-  const preset = c.preset_config ?? c.config ?? null;
+  //
+  // `viz_overrides` sits on top: those are the Tier-2 changes the author made in
+  // the live preview's settings popover, so they beat whatever the catalog or
+  // the last save proposed. Both travel as viz-control extras through
+  // buildAdvancedVizConfigBlob's third layer, so nothing else here changes.
+  const preset = mergedPresetConfig(c);
   return {
     ...existing,
     ...base,

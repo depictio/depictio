@@ -27,6 +27,7 @@ import {
   plotlyThemeColors,
   plotlyThemeFragment,
 } from './plotlyTheme';
+import { usePersistedVizControl } from './usePersistedVizControl';
 
 interface RarefactionConfig {
   sample_id_col: string;
@@ -118,8 +119,8 @@ const RarefactionRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }
   const config = (metadata.config || {}) as RarefactionConfig;
   const isDark = colorScheme === 'dark';
 
-  const [showCI, setShowCI] = useState<boolean>(config.show_ci ?? true);
-  const [topN, setTopN] = useState<number>(60);
+  const [showCI, setShowCI] = usePersistedVizControl(metadata, 'show_ci', true);
+  const [topN, setTopN] = usePersistedVizControl(metadata, 'top_n', 60);
   const [groupBy, setGroupBy] = useState<string | null>(config.group_col ?? null);
   const [activeMetric, setActiveMetric] = useState<string>(config.metric_col);
 

@@ -10,8 +10,10 @@
  * abstraction over a real collection, and the user has to be able to tie the two
  * together, so the tag sits in the header and its rows are a disclosure away.
  *
- * The render switcher appears only when an output offers more than one render;
- * most offer exactly one, and a tab strip holding a single tab is pure chrome.
+ * The render switcher always shows, even for the many outputs that offer exactly
+ * one render. A strip that comes and goes moved the preview up and down between
+ * selections, and the single-render case is precisely the one where nothing else
+ * on the band says what the offer will land on the dashboard as.
  */
 import React, { useEffect, useState } from 'react';
 import {
@@ -35,7 +37,7 @@ import type {
   CatalogOutputMatch,
   CatalogRender,
 } from 'depictio-react-core';
-import { componentTypeVisual, defaultLayoutForType } from 'depictio-react-core';
+import { catalogToolUrl, componentTypeVisual, defaultLayoutForType } from 'depictio-react-core';
 import PreviewLoading from '../shared/PreviewLoading';
 import DataPreviewTable from '../data/DataPreviewTable';
 
@@ -47,8 +49,8 @@ interface CatalogPreviewPanelProps {
   toolName: string;
   /** Advanced-viz kind metadata, keyed by `viz_kind` (labels + descriptions). */
   vizKinds: VizKinds;
-  onAdd: (render: CatalogRender) => void;
-  onDirectAdd: (render: CatalogRender) => void;
+  onAdd: (render: CatalogRender, overrides: Record<string, unknown> | null) => void;
+  onDirectAdd: (render: CatalogRender, overrides: Record<string, unknown> | null) => void;
 }
 
 /** What distinguishes one render of an output from its siblings. */
@@ -201,6 +203,10 @@ const CatalogPreviewPanel: React.FC<CatalogPreviewPanelProps> = ({
   // an effect runs after the render in which `previewUrl` changed, so that one
   // render would still show the previous frame as loaded.
   const [loadedUrl, setLoadedUrl] = useState<string | null>(null);
+  // Tier-2 edits made inside the preview's own settings popover. The preview is
+  // a separate document, so they arrive by postMessage rather than through the
+  // in-process draft context the builder's own preview uses.
+  const [previewOverrides, setPreviewOverrides] = useState<Record<string, unknown> | null>(null);
   const renders = match.renders_as;
 
   // A newly selected output may offer fewer renders than the previous one, and
@@ -208,7 +214,12 @@ const CatalogPreviewPanel: React.FC<CatalogPreviewPanelProps> = ({
   useEffect(() => {
     setSelectedIdx(0);
     setSourceOpen(false);
+    setPreviewOverrides(null);
   }, [match.output_id, match.dc_id]);
+
+  // A different render is a different component; its predecessor's controls do
+  // not carry over.
+  useEffect(() => setPreviewOverrides(null), [selectedIdx]);
 
   const current = renders[selectedIdx] ?? renders[0];
   const renderId = `${match.output_id}-${selectedIdx}`;
@@ -232,9 +243,27 @@ const CatalogPreviewPanel: React.FC<CatalogPreviewPanelProps> = ({
 
   const previewLoading = loadedUrl !== previewUrl;
 
+  // Only messages from this preview, for the render currently on screen, and
+  // only from our own origin. `renderId` changes with the selection, so a patch
+  // posted just before a switch cannot land on the render that replaced it.
+  useEffect(() => {
+    const onMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      const data = event.data as
+        | { type?: string; renderId?: string; patch?: Record<string, unknown> }
+        | null;
+      if (!data || data.type !== 'depictio:viz-config-draft') return;
+      if (data.renderId !== renderId || !data.patch) return;
+      setPreviewOverrides((prev) => ({ ...(prev ?? {}), ...data.patch }));
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [renderId]);
+
   const useRef = current ? catalogUseRef(toolId, match.output_id, current) : undefined;
   const useSnippet = useRef ? `use: ${useRef}` : '';
   const matchedOn = match.find?.path_glob || match.find?.filename;
+  const toolUrl = catalogToolUrl(toolId);
 
   const copyUse = async () => {
     if (!useSnippet) return;
@@ -332,17 +361,27 @@ const CatalogPreviewPanel: React.FC<CatalogPreviewPanelProps> = ({
                   {match.fixture && <DetailRow label="Preview on" mono>{match.fixture}</DetailRow>}
                 </DetailSection>
 
-                {(match.source_url || match.nf_core_url || match.biotools_url) && (
+                {(toolUrl || match.source_url || match.nf_core_url || match.biotools_url) && (
                   <DetailSection title="Links">
+                    {/* The tool's folder before the one output's YAML: it is what
+                        someone wanting to add or fix a render actually needs, and
+                        it holds the recipe and the fixture the file alone omits. */}
+                    {toolUrl && (
+                      <OutLink
+                        href={toolUrl}
+                        icon="mdi:github"
+                        label={`depictio/catalog/${toolId}`}
+                      />
+                    )}
                     {match.source_url && (
                       <OutLink
                         href={match.source_url}
                         icon="mdi:github"
-                        label="depictio module definition"
+                        label="this output's definition"
                       />
                     )}
                     {match.nf_core_url && (
-                      <OutLink href={match.nf_core_url} icon="mdi:dna" label="nf-core module" />
+                      <OutLink href={match.nf_core_url} icon="simple-icons:nfcore" label="nf-core module" />
                     )}
                     {match.biotools_url && (
                       <OutLink href={match.biotools_url} icon="mdi:tools" label="bio.tools entry" />
@@ -393,7 +432,7 @@ const CatalogPreviewPanel: React.FC<CatalogPreviewPanelProps> = ({
             leftSection={<Icon icon="mdi:plus" width={15} />}
             data-testid="catalog-add"
             data-component={current?.component}
-            onClick={() => onDirectAdd(current)}
+            onClick={() => onDirectAdd(current, previewOverrides)}
           >
             Add
           </Button>
@@ -407,7 +446,7 @@ const CatalogPreviewPanel: React.FC<CatalogPreviewPanelProps> = ({
                 variant="subtle"
                 leftSection={<Icon icon="mdi:pencil-plus-outline" width={15} />}
                 data-testid="catalog-edit-add"
-                onClick={() => onAdd(current)}
+                onClick={() => onAdd(current, previewOverrides)}
               >
                 Edit
               </Button>
@@ -416,50 +455,48 @@ const CatalogPreviewPanel: React.FC<CatalogPreviewPanelProps> = ({
         </Group>
       </Group>
 
-      {/* Render switcher — only when there is a choice to make */}
-      {renders.length > 1 && (
-        <Group
-          px="lg"
-          py={6}
-          gap={4}
-          wrap="wrap"
-          style={{
-            borderBottom: '1px solid var(--mantine-color-default-border)',
-            flexShrink: 0,
-          }}
-        >
-          {renders.map((r, i) => {
-            const visual = componentTypeVisual(r.component);
-            const variant = renderVariant(r, vizKinds);
-            const hint = renderHint(r, vizKinds);
-            const active = selectedIdx === i;
-            return (
-              <Tooltip key={i} label={hint} withArrow multiline maw={300} disabled={!hint}>
-                <Button
-                  size="xs"
-                  variant={active ? 'light' : 'subtle'}
-                  color={visual.color}
-                  leftSection={<Icon icon={visual.icon} width={13} />}
-                  data-testid="catalog-render-tab"
-                  data-render-index={i}
-                  data-component={r.component}
-                  onClick={() => setSelectedIdx(i)}
-                  // Mantine's button label is `overflow: hidden` on a line box the
-                  // same height as the font, so descenders (the g in "coverage",
-                  // "average") are cut off. Giving the label real leading and
-                  // letting it overflow removes the whole class of clipping.
-                  styles={{
-                    root: { fontWeight: active ? 600 : 400, flexShrink: 0 },
-                    label: { lineHeight: 1.5, overflow: 'visible' },
-                  }}
-                >
-                  {variant || visual.label}
-                </Button>
-              </Tooltip>
-            );
-          })}
-        </Group>
-      )}
+      {/* Render switcher — see the file header for why it is unconditional. */}
+      <Group
+        px="lg"
+        py={6}
+        gap={4}
+        wrap="wrap"
+        style={{
+          borderBottom: '1px solid var(--mantine-color-default-border)',
+          flexShrink: 0,
+        }}
+      >
+        {renders.map((r, i) => {
+          const visual = componentTypeVisual(r.component);
+          const variant = renderVariant(r, vizKinds);
+          const hint = renderHint(r, vizKinds);
+          const active = selectedIdx === i;
+          return (
+            <Tooltip key={i} label={hint} withArrow multiline maw={300} disabled={!hint}>
+              <Button
+                size="xs"
+                variant={active ? 'light' : 'subtle'}
+                color={visual.color}
+                leftSection={<Icon icon={visual.icon} width={13} />}
+                data-testid="catalog-render-tab"
+                data-render-index={i}
+                data-component={r.component}
+                onClick={() => setSelectedIdx(i)}
+                // Mantine's button label is `overflow: hidden` on a line box the
+                // same height as the font, so descenders (the g in "coverage",
+                // "average") are cut off. Giving the label real leading and
+                // letting it overflow removes the whole class of clipping.
+                styles={{
+                  root: { fontWeight: active ? 600 : 400, flexShrink: 0 },
+                  label: { lineHeight: 1.5, overflow: 'visible' },
+                }}
+              >
+                {variant || visual.label}
+              </Button>
+            </Tooltip>
+          );
+        })}
+      </Group>
 
       {/* Preview framed at the box the component will actually get.
         *

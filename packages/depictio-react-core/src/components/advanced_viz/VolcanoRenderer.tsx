@@ -19,6 +19,7 @@ import {
 import { isStaleFetch } from '../../fetchQueue';
 import { adaptGlTrace, SVG_MAX_POINTS, useWebglSlot } from '../../webglBudget';
 import AdvancedVizFrame from './AdvancedVizFrame';
+import { usePersistedVizControl } from './usePersistedVizControl';
 import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragment } from './plotlyTheme';
 
 interface VolcanoConfig {
@@ -45,16 +46,22 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
   const isDark = colorScheme === 'dark';
   const config = (metadata.config || {}) as VolcanoConfig;
 
-  // Tier-2 local controls (never enter the global filter array).
-  const [sigThreshold, setSigThreshold] = useState<number>(
-    config.significance_threshold ?? 0.05,
+  // Tier-2 controls (never enter the global filter array). The thresholds and
+  // the label budget say what the chart is, so they persist; the search box is
+  // a way of looking at it and stays local.
+  const [sigThreshold, setSigThreshold] = usePersistedVizControl<number>(
+    metadata,
+    'significance_threshold',
+    0.05,
   );
-  const [effectThreshold, setEffectThreshold] = useState<number>(
-    config.effect_threshold ?? 1.0,
+  const [effectThreshold, setEffectThreshold] = usePersistedVizControl<number>(
+    metadata,
+    'effect_threshold',
+    1.0,
   );
-  const [topN, setTopN] = useState<number>(config.top_n_labels ?? 20);
+  const [topN, setTopN] = usePersistedVizControl<number>(metadata, 'top_n_labels', 20);
   const [search, setSearch] = useState<string>('');
-  const [showLabels, setShowLabels] = useState<boolean>(true);
+  const [showLabels, setShowLabels] = usePersistedVizControl(metadata, 'show_labels', true);
 
   const requiredCols = useMemo(
     () => [

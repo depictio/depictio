@@ -19,6 +19,7 @@ import { fetchDashboard } from 'depictio-react-core';
 import type { StoredMetadata } from 'depictio-react-core';
 import { useBuilderStore } from './store/useBuilderStore';
 import StepDesign from './steps/StepDesign';
+import BrandMark from '../chrome/BrandMark';
 
 export interface EditComponentPageProps {
   dashboardId: string;
@@ -64,6 +65,7 @@ const EditComponentPage: React.FC<EditComponentPageProps> = ({
       <AppShell.Header>
         <Group h="100%" px="md" justify="space-between">
           <Group gap="xs">
+            <BrandMark />
             <Icon icon="mdi:pencil" width={22} />
             <Title order={5}>Edit component</Title>
           </Group>

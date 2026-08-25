@@ -20,6 +20,7 @@ import {
 import { resolveCategoricalPalette, stableColorMap, TAB10_PALETTE } from '../../colors';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragment } from './plotlyTheme';
+import { usePersistedVizControl } from './usePersistedVizControl';
 
 interface QQConfig {
   p_value_col: string;
@@ -40,10 +41,10 @@ const QQRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
   const isDark = colorScheme === 'dark';
   const config = (metadata.config || {}) as QQConfig;
 
-  const [showCi, setShowCi] = useState<boolean>(config.show_ci ?? true);
-  const [showIdentity, setShowIdentity] = useState<boolean>(true);
-  const [pointSize, setPointSize] = useState<number>(5);
-  const [topNLabels, setTopNLabels] = useState<number>(0);
+  const [showCi, setShowCi] = usePersistedVizControl(metadata, 'show_ci', true);
+  const [showIdentity, setShowIdentity] = usePersistedVizControl(metadata, 'show_identity', true);
+  const [pointSize, setPointSize] = usePersistedVizControl(metadata, 'point_size', 5);
+  const [topNLabels, setTopNLabels] = usePersistedVizControl(metadata, 'top_n_labels', 0);
 
   const requiredCols = useMemo(
     () =>

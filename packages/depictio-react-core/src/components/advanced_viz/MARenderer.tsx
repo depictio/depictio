@@ -19,6 +19,7 @@ import { isStaleFetch } from '../../fetchQueue';
 import { adaptGlTrace, SVG_MAX_POINTS, useWebglSlot } from '../../webglBudget';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragment } from './plotlyTheme';
+import { usePersistedVizControl } from './usePersistedVizControl';
 
 interface MAConfig {
   feature_id_col: string;
@@ -43,11 +44,12 @@ const MARenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
   const isDark = colorScheme === 'dark';
   const config = (metadata.config || {}) as MAConfig;
 
-  const [sigThreshold, setSigThreshold] = useState<number>(config.significance_threshold ?? 0.05);
-  const [fcThreshold, setFcThreshold] = useState<number>(config.fold_change_threshold ?? 1.0);
-  const [topN, setTopN] = useState<number>(config.top_n_labels ?? 15);
+  const [sigThreshold, setSigThreshold] = usePersistedVizControl(metadata, 'significance_threshold', 0.05);
+  const [fcThreshold, setFcThreshold] = usePersistedVizControl(metadata, 'fold_change_threshold', 1.0);
+  const [topN, setTopN] = usePersistedVizControl(metadata, 'top_n_labels', 15);
+  // Search is where the reader is looking right now, not what the chart is.
   const [search, setSearch] = useState<string>('');
-  const [showLabels, setShowLabels] = useState<boolean>(true);
+  const [showLabels, setShowLabels] = usePersistedVizControl(metadata, 'show_labels', true);
 
   const requiredCols = useMemo(
     () => [

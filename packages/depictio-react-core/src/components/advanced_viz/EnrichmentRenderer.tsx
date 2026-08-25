@@ -12,6 +12,7 @@ import Plot from 'react-plotly.js';
 import { fetchAdvancedVizData, InteractiveFilter, StoredMetadata } from '../../api';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragment } from './plotlyTheme';
+import { usePersistedVizControl } from './usePersistedVizControl';
 
 interface EnrichmentConfig {
   term_col: string;
@@ -35,11 +36,11 @@ const EnrichmentRenderer: React.FC<Props> = ({ metadata, filters, refreshTick })
   const config = (metadata.config || {}) as EnrichmentConfig;
   const isDark = colorScheme === 'dark';
 
-  const [topN, setTopN] = useState<number>(config.top_n ?? 20);
-  const [padjThreshold, setPadjThreshold] = useState<number>(config.padj_threshold ?? 0.05);
+  const [topN, setTopN] = usePersistedVizControl(metadata, 'top_n', 20);
+  const [padjThreshold, setPadjThreshold] = usePersistedVizControl(metadata, 'padj_threshold', 0.05);
   const [selectedSources, setSelectedSources] = useState<string[]>([]);
   type ColourBy = 'neg_log10_padj' | 'abs_nes' | 'nes_sign' | 'gene_count';
-  const [colourBy, setColourBy] = useState<ColourBy>('neg_log10_padj');
+  const [colourBy, setColourBy] = usePersistedVizControl<ColourBy>(metadata, 'default_colour_by', 'neg_log10_padj');
 
   const requiredCols = useMemo(() => {
     const cols = [

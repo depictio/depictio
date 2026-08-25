@@ -22,6 +22,7 @@ import {
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { applyDataTheme, applyLayoutTheme } from './plotlyTheme';
 import { GenomeAnnotation, resolveAnnotation } from './genome_annotations';
+import { usePersistedVizControl, useVizConfigWriter } from './usePersistedVizControl';
 
 interface CoverageTrackConfig {
   chromosome_col: string;
@@ -77,19 +78,33 @@ const CoverageTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTick
   const { colorScheme } = useMantineColorScheme();
   const isDark = colorScheme === 'dark';
 
-  const [yScale, setYScale] = useState<'linear' | 'log'>(config.y_scale ?? 'linear');
+  const [yScale, setYScale] = usePersistedVizControl<'linear' | 'log'>(
+    metadata,
+    'y_scale',
+    'linear',
+  );
   // Bump from 0 → 5 so the default plot is de-noised. 200-bp bins × 5 ≈ 1 kb
   // rolling window — preserves dropout structure, kills high-frequency wiggle.
-  const [smoothingWindow, setSmoothingWindow] = useState<number>(config.smoothing_window ?? 5);
-  const [colorBy, setColorBy] = useState<NonNullable<CoverageTrackConfig['color_by']>>(
-    config.color_by ?? (config.category_col ? 'category' : 'sample'),
+  const [smoothingWindow, setSmoothingWindow] = usePersistedVizControl<number>(
+    metadata,
+    'smoothing_window',
+    5,
   );
+  const [colorBy, setColorBy] = usePersistedVizControl<
+    NonNullable<CoverageTrackConfig['color_by']>
+  >(metadata, 'color_by', config.category_col ? 'category' : 'sample');
   // When a view_mode is persisted in config (e.g. set at catalog-add time),
   // use it directly — no auto-detection needed. Otherwise hold null until data
   // arrives so the sample count can drive the sensible default.
+  //
+  // Plain state rather than usePersistedVizControl, because the effect below
+  // sets it too: an auto-detected default is not a choice anyone made, and
+  // writing it to the config would freeze one run's sample count into the
+  // component. Only the author's own pick is persisted, on the control itself.
   const [viewMode, setViewMode] = useState<ViewMode | null>(config.view_mode ?? null);
-  const [showAnnotationStrip, setShowAnnotationStrip] = useState<boolean>(true);
-  const [showIndividuals, setShowIndividuals] = useState<boolean>(true);
+  const writeConfig = useVizConfigWriter(metadata);
+  const [showAnnotationStrip, setShowAnnotationStrip] = usePersistedVizControl(metadata, 'show_annotation_lane', true);
+  const [showIndividuals, setShowIndividuals] = usePersistedVizControl(metadata, 'show_individuals', true);
   const [selectedChromosomes, setSelectedChromosomes] = useState<string[]>(
     config.chromosomes_filter ?? [],
   );
@@ -606,7 +621,10 @@ const CoverageTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTick
           size="xs"
           fullWidth
           value={viewMode ?? 'overlay'}
-          onChange={(v) => setViewMode(v as ViewMode)}
+          onChange={(v) => {
+            setViewMode(v as ViewMode);
+            writeConfig({ view_mode: v });
+          }}
           data={[
             { value: 'aggregate', label: 'Aggregate' },
             { value: 'facet', label: 'Per-sample' },

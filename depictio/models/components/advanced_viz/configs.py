@@ -47,6 +47,9 @@ class VolcanoConfig(_BaseVizConfig):
     significance_threshold: float = Field(default=0.05, description="Default p/padj cutoff")
     effect_threshold: float = Field(default=1.0, description="Default |effect_size| cutoff")
     top_n_labels: int = Field(default=20, ge=0, description="How many top features to label")
+    show_labels: bool = Field(
+        default=True, description="Draw text labels on the highlighted points"
+    )
 
 
 class EmbeddingConfig(_BaseVizConfig):
@@ -110,6 +113,30 @@ class EmbeddingConfig(_BaseVizConfig):
 
     show_density: bool = Field(default=False, description="Overlay density contours")
     point_size: int = Field(default=6, ge=1, le=30)
+    default_color_by: str | None = Field(
+        default=None,
+        description=(
+            "Initial value for the Colour-by dropdown. Falls back to "
+            "``cluster_col`` then ``color_col`` when unset."
+        ),
+    )
+    show_centroids: bool = Field(default=False, description="Mark each colour group's centroid")
+    marker_outline: bool = Field(default=False, description="Draw a thin outline around each point")
+    legend_pos: Literal["right", "bottom", "in-tr", "hidden"] = Field(
+        default="right", description="Where the colour legend sits"
+    )
+    ncontours: int = Field(default=14, ge=1, description="Contour count for the density overlay")
+    density_opacity: float = Field(
+        default=0.45, ge=0, le=1, description="Opacity of the density overlay"
+    )
+    view_3d: bool = Field(
+        default=False,
+        description="Plot the third dimension; only available when dim_3_col is bound",
+    )
+    reverse_scale: bool = Field(default=True, description="Reverse the continuous colour scale")
+    hover_cols: list[str] = Field(
+        default_factory=list, description="Extra columns to show in the hover tooltip"
+    )
 
 
 class ManhattanConfig(_BaseVizConfig):
@@ -194,6 +221,16 @@ class ManhattanConfig(_BaseVizConfig):
             "``Score``, or one of ``color_by_columns``. Defaults to ``Chromosome``."
         ),
     )
+    top_n_labels: int = Field(
+        default=8,
+        ge=0,
+        description=(
+            "How many of the most extreme points carry a text label. The catalog "
+            "payload builder has always emitted this and the renderer has always "
+            "read it; the field was simply missing, so every catalog-added "
+            "Manhattan wrote a config that no longer validated on re-import."
+        ),
+    )
 
 
 class StackedTaxonomyConfig(_BaseVizConfig):
@@ -231,6 +268,11 @@ class StackedTaxonomyConfig(_BaseVizConfig):
             "automatically — no recipe change needed beyond emitting the column."
         ),
     )
+    sample_sort: Literal["input", "total_abundance", "first_taxon"] = Field(
+        default="input", description="Order of samples along the x axis"
+    )
+    show_legend: bool = Field(default=True, description="Show the taxon colour legend")
+    log_y: bool = Field(default=False, description="Log-scale the abundance axis")
 
 
 class RarefactionConfig(_BaseVizConfig):
@@ -271,6 +313,7 @@ class RarefactionConfig(_BaseVizConfig):
         ),
     )
     show_ci: bool = Field(default=True, description="Shade ±1 SE band around each sample's curve")
+    top_n: int = Field(default=60, ge=1, description="How many samples to draw before truncating")
 
 
 class DaBarplotConfig(_BaseVizConfig):
@@ -331,6 +374,9 @@ class EnrichmentConfig(_BaseVizConfig):
 
     padj_threshold: float = Field(default=0.05, ge=0.0, le=1.0)
     top_n: int = Field(default=20, ge=1)
+    default_colour_by: Literal["neg_log10_padj", "abs_nes", "nes_sign", "gene_count"] = Field(
+        default="neg_log10_padj", description="Which quantity drives the point colour"
+    )
 
 
 class ComplexHeatmapConfig(_BaseVizConfig):
@@ -442,6 +488,22 @@ class UpsetPlotConfig(_BaseVizConfig):
             "Use to pin domain palettes (e.g. habitat → Set1) consistently across tiles."
         ),
     )
+    default_annotation_cols: list[str] | None = Field(
+        default=None,
+        description=(
+            "Columns shown as annotation rows under the intersection matrix on "
+            "first paint. Read by the renderer since the annotation strip was "
+            "added; the field was missing here, so the value could be rendered "
+            "but never validated."
+        ),
+    )
+    show_values: bool = Field(
+        default=False, description="Print the count above each intersection bar"
+    )
+    show_annotations: bool = Field(
+        default=True,
+        description="Master toggle for the set-size bars and annotation tracks",
+    )
 
 
 class PhylogeneticConfig(_BaseVizConfig):
@@ -551,6 +613,9 @@ class MAConfig(_BaseVizConfig):
     significance_threshold: float = Field(default=0.05, ge=0.0, le=1.0)
     fold_change_threshold: float = Field(default=1.0, ge=0.0)
     top_n_labels: int = Field(default=15, ge=0)
+    show_labels: bool = Field(
+        default=True, description="Draw text labels on the highlighted points"
+    )
 
 
 class DotPlotConfig(_BaseVizConfig):
@@ -576,6 +641,24 @@ class DotPlotConfig(_BaseVizConfig):
 
     max_dot_size: int = Field(default=22, ge=4, le=60, description="Max marker size in pixels")
     min_dot_size: int = Field(default=2, ge=0, le=20)
+    colour_scale: Literal[
+        "Viridis", "Plasma", "Inferno", "Cividis", "Magma", "RdBu", "Spectral"
+    ] = Field(default="Viridis", description="Continuous colour scale for mean expression")
+    reverse_scale: bool = Field(default=False, description="Reverse the colour scale")
+    log_transform: bool = Field(
+        default=False, description="Log-transform mean expression before colouring"
+    )
+    gene_sort: Literal["name", "mean", "frac"] = Field(
+        default="name", description="Ordering of the gene axis"
+    )
+    cluster_sort: Literal["name", "mean", "frac"] = Field(
+        default="name", description="Ordering of the cluster axis"
+    )
+    annotate_top_n: int = Field(
+        default=0, ge=0, description="Label this many highest-mean dots; 0 draws none"
+    )
+    marker_outline: bool = Field(default=True, description="Draw an outline around each dot")
+    max_genes: int = Field(default=50, ge=1, description="How many genes to draw before truncating")
 
 
 class LollipopConfig(_BaseVizConfig):
@@ -606,6 +689,24 @@ class LollipopConfig(_BaseVizConfig):
         ge=1,
         description="When the gene universe exceeds this, switch to a single-gene picker",
     )
+    point_size: int = Field(default=8, ge=1, le=40, description="Head size of each lollipop")
+    stem_width: float = Field(
+        default=1.2, ge=0, le=10, description="Line width of the lollipop stems"
+    )
+    scale_points_by_effect: bool = Field(
+        default=True, description="Scale head size by the effect column"
+    )
+    show_stems: bool = Field(default=True, description="Draw the stems under the heads")
+    marker_outline: bool = Field(default=False, description="Draw an outline around each head")
+    palette: Literal["tab10", "tab20"] = Field(
+        default="tab10", description="Categorical palette for the effect categories"
+    )
+    gene_sort: Literal["name", "count", "effect"] = Field(
+        default="count", description="Ordering of the gene subplots"
+    )
+    top_n_labels: int = Field(
+        default=0, ge=0, description="Label this many most extreme points; 0 draws none"
+    )
 
 
 class QQConfig(_BaseVizConfig):
@@ -625,6 +726,11 @@ class QQConfig(_BaseVizConfig):
         default=None, description="Optional stratification column (one trace per value)"
     )
     show_ci: bool = Field(default=True, description="Shade the 95% null CI band")
+    show_identity: bool = Field(default=True, description="Draw the y = x reference line")
+    point_size: int = Field(default=5, ge=1, le=30, description="Marker size")
+    top_n_labels: int = Field(
+        default=0, ge=0, description="Label this many most extreme points; 0 draws none"
+    )
 
 
 class SunburstConfig(_BaseVizConfig):
@@ -650,6 +756,39 @@ class SunburstConfig(_BaseVizConfig):
             "domain palettes (e.g. Habitat → Set1) so the same category lands "
             "on the same colour as the matching PCoA / UpSet / heatmap tiles."
         ),
+    )
+    # Ring controls. The two rank pickers store a rank *name* rather than an
+    # index into ``rank_cols``: re-binding the hierarchy would leave an index
+    # pointing at a different rank, silently changing the chart someone saved.
+    start_rank: str | None = Field(
+        default=None,
+        description=(
+            "Which rank forms the innermost ring. Null starts at the root of "
+            "``rank_cols``. A name no longer present falls back to the root."
+        ),
+    )
+    colour_by_rank: str | None = Field(
+        default=None,
+        description=(
+            "Which rank drives the colour key. Null, or a rank outside the "
+            "visible window, colours by the innermost visible ring."
+        ),
+    )
+    max_depth: int = Field(
+        default=3,
+        ge=1,
+        description="How many rings to draw from the start rank outwards",
+    )
+    palette: Literal["tab10", "tab20"] = Field(
+        default="tab20",
+        description="Categorical palette for the colour key; tab20 for wider hierarchies",
+    )
+    show_counts: bool = Field(default=True, description="Label each arc with its share of the root")
+    min_percent: float = Field(
+        default=0.5,
+        ge=0,
+        le=50,
+        description="Hide arcs below this share of the root, as a percentage",
     )
 
 
@@ -724,6 +863,19 @@ class CoverageTrackConfig(_BaseVizConfig):
         default=None,
         description="Optional whitelist of samples to display; null = all samples",
     )
+    view_mode: Literal["aggregate", "facet", "overlay"] | None = Field(
+        default=None,
+        description=(
+            "How multiple samples share the track: one aggregate line, one lane "
+            "each, or all overlaid. Null lets the renderer pick from the sample "
+            "count once the data arrives. The builder has always written this key "
+            "and the renderer has always read it; the field was missing, so the "
+            "resulting config failed validation on export and re-import."
+        ),
+    )
+    show_individuals: bool = Field(
+        default=True, description="Draw the per-sample traces under the aggregate"
+    )
 
 
 class SankeyConfig(_BaseVizConfig):
@@ -791,6 +943,14 @@ class SankeyConfig(_BaseVizConfig):
             raise ValueError("step_cols must not contain duplicate column names")
         return v
 
+    depth: int | None = Field(
+        default=None,
+        ge=2,
+        description=(
+            "How many of ``available_step_cols`` to draw. Null uses the length of ``step_cols``."
+        ),
+    )
+
 
 class OncoplotConfig(_BaseVizConfig):
     """Oncoplot / co-mutation matrix (sample × gene × mutation type).
@@ -805,6 +965,9 @@ class OncoplotConfig(_BaseVizConfig):
     gene_col: str = Field(default="gene", description="Gene identifier column (y axis)")
     mutation_type_col: str = Field(
         default="mutation_type", description="Categorical mutation-type column (cell colour)"
+    )
+    sort_by_freq: bool = Field(
+        default=True, description="Order genes by mutation frequency rather than by name"
     )
 
 

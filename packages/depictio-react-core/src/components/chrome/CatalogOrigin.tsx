@@ -1,8 +1,9 @@
 import React from 'react';
-import { ActionIcon, Box, Code, Group, Stack, Text, Tooltip } from '@mantine/core';
+import { ActionIcon, Anchor, Box, Code, Group, Stack, Text, Tooltip } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import type { CatalogSource } from '../../api';
+import { catalogToolUrl } from '../../catalogLinks';
 
 /**
  * Where a catalog-added component came from: tool, output, description and the
@@ -16,6 +17,7 @@ const CatalogOrigin: React.FC<{ source: CatalogSource; framed?: boolean }> = ({
   framed = true,
 }) => {
   const [copied, setCopied] = React.useState(false);
+  const toolUrl = catalogToolUrl(source.toolId);
 
   const copyUse = async () => {
     if (!source.use) return;
@@ -42,7 +44,7 @@ const CatalogOrigin: React.FC<{ source: CatalogSource; framed?: boolean }> = ({
       }
     >
       <Group gap={6} mb={6} wrap="nowrap">
-        <Icon icon="mdi:toolbox-outline" width={13} color="var(--mantine-color-violet-6)" />
+        <Icon icon="mdi:hammer" width={13} color="var(--mantine-color-violet-6)" />
         <Text size="xs" fw={700} c="violet" tt="uppercase">
           From the tools catalog
         </Text>
@@ -77,6 +79,23 @@ const CatalogOrigin: React.FC<{ source: CatalogSource; framed?: boolean }> = ({
                 <Icon icon={copied ? 'mdi:check' : 'mdi:content-copy'} width={13} />
               </ActionIcon>
             </Tooltip>
+          </Group>
+        )}
+        {/* The catalog entry itself. Everything above says what the tool is; this
+            is the only way from a tile on a dashboard to the definition that put
+            it there — the module YAML, its recipe and its fixture. */}
+        {toolUrl && (
+          <Group gap={8} wrap="nowrap" align="flex-start">
+            <Text size="xs" c="dimmed" w={78} style={{ flexShrink: 0 }}>
+              Definition
+            </Text>
+            <Anchor href={toolUrl} target="_blank" rel="noreferrer" size="xs" title={toolUrl}>
+              <Group gap={4} wrap="nowrap" component="span" display="inline-flex">
+                <Icon icon="mdi:github" width={13} />
+                <Text span>depictio/catalog/{source.toolId}</Text>
+                <Icon icon="mdi:open-in-new" width={11} />
+              </Group>
+            </Anchor>
           </Group>
         )}
       </Stack>

@@ -23,6 +23,7 @@ import {
 } from '../../api';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { applyDataTheme, applyLayoutTheme } from './plotlyTheme';
+import { usePersistedVizControl } from './usePersistedVizControl';
 
 interface SankeyConfig {
   step_cols: string[];
@@ -79,19 +80,19 @@ const SankeyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => 
   // Initial depth: prefer the configured step_cols length so dashboards can
   // override; otherwise fall back to 3 (a balanced default that picks the
   // first three ranks, e.g. Kingdom → Phylum → Class for taxonomy DCs).
-  const [depth, setDepth] = useState<number>(
+  const [depth, setDepth] = usePersistedVizControl(
+    metadata,
+    'depth',
     Math.max(2, Math.min(allSteps.length, (config.step_cols || []).length || 3)),
   );
   const effectiveStepCols = useMemo<string[]>(() => allSteps.slice(0, depth), [allSteps, depth]);
-  const [sortMode, setSortMode] = useState<NonNullable<SankeyConfig['sort_mode']>>(
-    config.sort_mode ?? 'total_flow',
-  );
-  const [colorMode, setColorMode] = useState<NonNullable<SankeyConfig['color_mode']>>(
-    config.color_mode ?? 'source',
-  );
-  const [linkOpacity, setLinkOpacity] = useState<number>(config.link_opacity ?? 0.5);
-  const [minLinkValue, setMinLinkValue] = useState<number>(config.min_link_value ?? 0);
-  const [showNodeLabels, setShowNodeLabels] = useState<boolean>(config.show_node_labels ?? true);
+  type SortMode = NonNullable<SankeyConfig['sort_mode']>;
+  type ColorMode = NonNullable<SankeyConfig['color_mode']>;
+  const [sortMode, setSortMode] = usePersistedVizControl<SortMode>(metadata, 'sort_mode', 'total_flow');
+  const [colorMode, setColorMode] = usePersistedVizControl<ColorMode>(metadata, 'color_mode', 'source');
+  const [linkOpacity, setLinkOpacity] = usePersistedVizControl(metadata, 'link_opacity', 0.5);
+  const [minLinkValue, setMinLinkValue] = usePersistedVizControl(metadata, 'min_link_value', 0);
+  const [showNodeLabels, setShowNodeLabels] = usePersistedVizControl(metadata, 'show_node_labels', true);
   const [stepFilters, setStepFilters] = useState<Record<string, string[]>>({});
 
   const [result, setResult] = useState<SankeyResult | null>(null);
