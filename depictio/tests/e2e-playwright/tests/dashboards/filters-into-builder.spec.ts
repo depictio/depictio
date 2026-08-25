@@ -150,17 +150,17 @@ test.describe("Active filters propagate into the builder and new components", ()
     // #196 — back in the editor, the filter survived the round-trip…
     await expect(page.getByText("Setosa").first()).toBeVisible({ timeout: 20_000 });
 
-    // …and the freshly added table renders pre-filtered: its row-count badge
-    // says 50, never 150. (Row-content assertions would be unsound here —
-    // iris.csv lists all 50 Setosa rows first, so page one of an UNfiltered
-    // table also shows only Setosa.)
-    const tableItem = page
-      .locator(".react-grid-item")
-      .filter({ hasText: /rows/ })
-      .first();
-    await expect(tableItem).toBeVisible({ timeout: 30_000 });
-    await expect(tableItem.getByText(/^50 rows$/)).toBeVisible({ timeout: 30_000 });
-    await expect(tableItem.getByText(/^150 rows$/)).toHaveCount(0);
+    // …and the freshly added table renders pre-filtered. The grid's table carries
+    // its total in the pager, not in a "N rows" badge — that wording only exists
+    // in the builder's preview. "1 to 50 of 50" on a single page is the filtered
+    // set; unfiltered, the same table reads "of 150" across three pages.
+    // (Row-content assertions would be unsound here — iris.csv lists all 50
+    // Setosa rows first, so page one of an UNfiltered table also shows only
+    // Setosa. The total is what discriminates.)
+    await expect(page.getByText(/1 to 50 of 50/).first()).toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(page.getByText(/of 150/)).toHaveCount(0);
 
     // Cleanup.
     await page.goto("/dashboards");
