@@ -9,7 +9,11 @@ from typing import Any, cast
 from bson import ObjectId
 
 from depictio.api.v1.configs.logging_init import logger
-from depictio.cli.cli.utils.templates import _apply_conditionals, substitute_template_variables
+from depictio.cli.cli.utils.templates import (
+    _apply_conditionals,
+    materialize_recipe_seeds,
+    substitute_template_variables,
+)
 from depictio.models.models.base import PyObjectId
 from depictio.models.models.templates import TemplateConditional
 from depictio.models.models.users import Permission, UserBase, UserBeanie
@@ -482,62 +486,17 @@ class ReferenceDatasetRegistry:
                 and lnk.get("target_dc_tag") not in skipped_dc_tags
             ]
 
-        # 5. Convert recipe DCs → file-scan DCs (skipping any whose seed file is missing)
-        missing_seed_dc_tags: set[str] = set()
-        for workflow in config.get("workflows", []):
-            surviving = []
-            for dc in workflow.get("data_collections", []):
-                dc_config = dc.get("config", {})
-                if dc_config.get("source") == "transformed" and "transform" in dc_config:
-                    dc_tag = dc["data_collection_tag"]
-                    # Convention: pre-computed files are named {dc_tag}.tsv
-                    pre_computed_path = os.path.join(data_root, f"{dc_tag}.tsv")
-                    if not os.path.exists(pre_computed_path):
-                        # Drop the DC rather than letting the workflow scan abort on a
-                        # missing recipe seed (one missing file otherwise sinks every
-                        # other DC in the workflow — see scan_files_for_data_collection).
-                        missing_seed_dc_tags.add(dc_tag)
-                        logger.warning(
-                            f"Init resolver: skipping recipe DC '{dc_tag}' — "
-                            f"pre-computed seed not found at {pre_computed_path}"
-                        )
-                        continue
-                    # Keep ``source: transformed`` on the DC so the React
-                    # viewer (data-source info card, admin panel, builder
-                    # dropdown) surfaces the lineage — the data IS the output
-                    # of a recipe, just materialised as a seed file rather
-                    # than computed at scan time. Only the ``transform`` step
-                    # itself is dropped (it's been replaced with the file scan).
-                    dc_config.pop("transform", None)
-                    dc_config["scan"] = {
-                        "mode": "single",
-                        "scan_parameters": {"filename": pre_computed_path},
-                    }
-                    # Bundled recipe seeds are tab-separated by convention
-                    # ({data_root}/{dc_tag}.tsv). The template's original
-                    # `dc_specific_properties.format` describes the recipe's
-                    # *input* source (e.g. summary_metrics consumes a real
-                    # CSV from multiqc), which is irrelevant once we've
-                    # replaced the recipe with a file_scan. Force the seed
-                    # format to TSV so polars uses the right separator —
-                    # otherwise a CSV-declared, TSV-bundled DC parses the
-                    # whole tab-row as one column.
-                    dc_specific = dc_config.get("dc_specific_properties") or {}
-                    dc_specific["format"] = "tsv"
-                    dc_config["dc_specific_properties"] = dc_specific
-                    logger.debug(
-                        f"Init resolver: converted recipe DC '{dc_tag}' → file scan: {pre_computed_path}"
-                    )
-                surviving.append(dc)
-            workflow["data_collections"] = surviving
-
+        # 5. Convert recipe DCs → file-scan DCs (dropping any whose seed is missing).
+        #    Shared with the CLI's --template path so the two producers cannot
+        #    drift; `drop_missing=True` keeps the init behaviour where one absent
+        #    seed would otherwise sink every other DC in the workflow (see
+        #    scan_files_for_data_collection).
+        _, missing_seed_dc_tags = materialize_recipe_seeds(config, data_root, drop_missing=True)
         if missing_seed_dc_tags:
-            config["links"] = [
-                lnk
-                for lnk in config.get("links", [])
-                if lnk.get("source_dc_tag") not in missing_seed_dc_tags
-                and lnk.get("target_dc_tag") not in missing_seed_dc_tags
-            ]
+            logger.warning(
+                f"Init resolver: dropped {len(missing_seed_dc_tags)} recipe DC(s) "
+                f"without a pre-computed seed: {', '.join(missing_seed_dc_tags)}"
+            )
 
         return config
 
