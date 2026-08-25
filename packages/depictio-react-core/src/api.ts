@@ -2601,8 +2601,13 @@ export interface IngestionReport {
     applied_at: string | null;
     data_root: string | null;
   } | null;
-  /** 'template_manifest' (faithful) | 'live_project' (legacy fallback) */
-  manifest_source: string;
+  /**
+   * Where the expected-collection list came from. 'template_manifest' compares
+   * against the manifest frozen when the template was applied; 'live_project'
+   * is assembled from the project's current collections, so gated-out
+   * collections are unknown rather than zero.
+   */
+  manifest_source: 'template_manifest' | 'live_project';
   variables: Array<{ name: string; value: string }>;
   data_collections: IngestionDataCollection[];
   runs: IngestionRun[];

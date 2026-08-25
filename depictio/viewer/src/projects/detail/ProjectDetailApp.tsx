@@ -383,10 +383,6 @@ const ProjectDetailApp: React.FC = () => {
   const projectType: 'basic' | 'advanced' =
     project?.project_type === 'advanced' ? 'advanced' : 'basic';
 
-  // The ingestion report only makes sense for template-instantiated projects
-  // (it compares against the frozen expected-DC manifest). Surface a tab when so.
-  const hasTemplate = useMemo(() => !!(project && parseTemplate(project)), [project]);
-
   // Tag → DC id, so identified ingestion rows can lazily list their files.
   const dcIdByTag = useMemo(() => {
     const map: Record<string, string> = {};
@@ -582,7 +578,7 @@ const ProjectDetailApp: React.FC = () => {
               return (
                 <Stack gap="lg">
                   <ProjectHeader project={project} projectType={projectType} />
-                  {hasTemplate && projectId ? (
+                  {projectId ? (
                     <Tabs value={activeTab} onChange={setActiveTab} keepMounted={false}>
                       <Tabs.List mb="md">
                         <Tabs.Tab

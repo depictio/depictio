@@ -140,7 +140,7 @@ const DashboardInfoBody: React.FC<DashboardInfoBodyProps> = ({ dashboard, active
             value={<TemplateChip parsed={parsedTemplate} verbose />}
           />
         )}
-        {parsedTemplate && projectId && (
+        {projectId && (
           <MetaRow
             icon="mdi:clipboard-check-outline"
             color="indigo"
