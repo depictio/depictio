@@ -263,7 +263,7 @@ const FigureUIMode: React.FC = () => {
         </Alert>
       )}
 
-      {cachedSpec && (
+      {(cachedSpec || isPointPlot) && (
         <Accordion
           variant="separated"
           radius="md"
@@ -318,7 +318,7 @@ const FigureUIMode: React.FC = () => {
            *  per-bin envelopes with no useful filter target, so we hide the
            *  toggle entirely on those. FigureRenderer + ComponentRenderer
            *  enforce the same gate defensively for legacy metadata. */}
-          {(visuType === 'scatter' || visuType === 'scatter_3d') && (
+          {cachedSpec && (visuType === 'scatter' || visuType === 'scatter_3d') && (
             <CrossFilterSection
               enabled={Boolean(config.selection_enabled)}
               onEnabledChange={(checked) =>
@@ -329,23 +329,36 @@ const FigureUIMode: React.FC = () => {
               columnDescription="Column to extract from selected points"
             />
           )}
-        </Accordion>
-      )}
 
-      {isPointPlot && (
-        <NumberInput
-          label="Max points"
-          description="Downsample above this count (blank = global default). Viewers can still load all points on demand."
-          // min 1: blank means "use the global default"; disabling the cap
-          // entirely is a viewer-side action ("Load all"), not an authoring one.
-          min={1}
-          step={1000}
-          placeholder="Global default"
-          value={typeof config.max_points === 'number' ? config.max_points : ''}
-          onChange={(v) =>
-            patchConfig({ max_points: typeof v === 'number' && v > 0 ? v : null })
-          }
-        />
+          {isPointPlot && (
+            <Accordion.Item value="performance">
+              <Accordion.Control
+                icon={<Icon icon="mdi:speedometer" width={18} height={18} />}
+              >
+                <Text fw={700} size="sm">
+                  Performance
+                </Text>
+              </Accordion.Control>
+              <Accordion.Panel>
+                <Stack gap="sm">
+                  <NumberInput
+                    label="Max points"
+                    description="Downsample above this count (blank = global default). Viewers can still load all points on demand."
+                    // min 1: blank means "use the global default"; disabling the cap
+                    // entirely is a viewer-side action ("Load all"), not an authoring one.
+                    min={1}
+                    step={1000}
+                    placeholder="Global default"
+                    value={typeof config.max_points === 'number' ? config.max_points : ''}
+                    onChange={(v) =>
+                      patchConfig({ max_points: typeof v === 'number' && v > 0 ? v : null })
+                    }
+                  />
+                </Stack>
+              </Accordion.Panel>
+            </Accordion.Item>
+          )}
+        </Accordion>
       )}
     </Stack>
   );
