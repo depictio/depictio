@@ -4,7 +4,7 @@ import react from '@vitejs/plugin-react';
 import path from 'node:path';
 
 // Catalog Studio is a static, backend-less SPA served from GitHub Pages at
-// https://depictio.github.io/catalog-studio/ — hence base '/catalog-studio/'. It consumes
+// https://depictio.github.io/depictio-catalog-studio/ — hence base '/depictio-catalog-studio/'. It consumes
 // the source of the sibling workspace packages directly (no build step in
 // those packages), so the resolve.alias + dedupe block below mirrors
 // depictio/viewer/vite.config.ts verbatim. Do NOT drop the plotly.js regex
@@ -12,7 +12,7 @@ import path from 'node:path';
 // `require('buffer/')` shim (optimizeDeps crash) and shared components hit a
 // duplicate @mantine/core ("MantineProvider was not found").
 export default defineConfig({
-  base: '/catalog-studio/',
+  base: '/depictio-catalog-studio/',
   plugins: [react()],
   resolve: {
     alias: [

@@ -7,7 +7,7 @@ builder** — and either **download a zip** or open a **one-click pull request**
 (*Sign in with GitHub*) against `depictio/depictio`. The tool data lives in
 [`depictio/catalog/`](../../depictio/catalog/), not a separate repo.
 
-**Live app:** https://depictio.github.io/catalog-studio/
+**Live app:** https://depictio.github.io/depictio-catalog-studio/
 
 ## The flow
 
@@ -80,7 +80,7 @@ this app's own `yamlGen` must pass `dev catalog validate` (see `scripts/genGolde
 ## Development
 
 ```bash
-pnpm --filter catalog-studio dev            # http://localhost:5173/catalog-studio/
+pnpm --filter catalog-studio dev            # http://localhost:5173/depictio-catalog-studio/
 pnpm --filter catalog-studio test           # vitest
 pnpm --filter catalog-studio test:coverage  # + a v8 coverage summary
 pnpm --filter catalog-studio build          # production build → dist/
@@ -136,9 +136,9 @@ instead of leaving the check to pass against unchanged snapshots.
 ### Deployment (GitHub Pages)
 
 The app is built here and published to a **showcase repository**,
-[`depictio/catalog-studio`](https://github.com/depictio/catalog-studio), which
+[`depictio/depictio-catalog-studio`](https://github.com/depictio/depictio-catalog-studio), which
 holds only the built site. A Pages site's URL path is its repository name, so
-this is what buys the dedicated `/catalog-studio/` path instead of `/depictio/`
+this is what buys the dedicated `/depictio-catalog-studio/` path instead of `/depictio/`
 — which would read like the project's own site while the docs actually live at
 `/depictio-docs/`. The source stays in this monorepo, so the `depictio-builder`
 alias and the committed catalog snapshots keep working unchanged.
@@ -152,11 +152,11 @@ except where noted:
 
 | Name | Kind | Value |
 |---|---|---|
-| `CATALOG_STUDIO_DEPLOY_TOKEN` | secret | fine-grained PAT scoped to `depictio/catalog-studio` only, **Contents: Read and write** |
+| `CATALOG_STUDIO_DEPLOY_TOKEN` | secret | fine-grained PAT scoped to `depictio/depictio-catalog-studio` only, **Contents: Read and write** |
 | `VITE_GH_CLIENT_ID` | variable | the GitHub OAuth App's client id (public) |
 | `VITE_GH_OAUTH_WORKER_URL` | variable | the deployed worker's `/exchange` endpoint |
 
-Plus, in `depictio/catalog-studio`: *Settings → Pages → Source: **Deploy from a
+Plus, in `depictio/depictio-catalog-studio`: *Settings → Pages → Source: **Deploy from a
 branch**, branch `gh-pages`, folder `/`*.
 
 Each is independently optional and degrades loudly rather than silently:

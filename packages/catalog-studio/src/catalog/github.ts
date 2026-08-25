@@ -255,7 +255,7 @@ export async function openCatalogPr(
   const dir = `depictio/catalog/${entry.toolId}`;
   const body = [
     '## Summary',
-    `Adds the **${entry.toolId}** tool to the catalog, authored with [Depictio Catalog Studio](https://depictio.github.io/catalog-studio/).`,
+    `Adds the **${entry.toolId}** tool to the catalog, authored with [Depictio Catalog Studio](https://depictio.github.io/depictio-catalog-studio/).`,
     '',
     `## Files (\`${dir}/\`)`,
     '| File | Purpose |',
@@ -311,7 +311,7 @@ export async function openNewOutputPr(
   const body = [
     '## Summary',
     `Adds a new output **${entry.outputSlug}** to the existing **${entry.toolId}** tool, ` +
-      'authored with [Depictio Catalog Studio](https://depictio.github.io/catalog-studio/).',
+      'authored with [Depictio Catalog Studio](https://depictio.github.io/depictio-catalog-studio/).',
     '',
     `## Files (\`${dir}/\`)`,
     '| File | Purpose |',
@@ -409,7 +409,7 @@ export async function openAddRendersPr(
         const body = [
           '## Summary',
           `Adds ${count} visualization${plural} to the existing **${args.toolId}** tool ` +
-            `(output \`${args.outputSlug}\`), authored with [Depictio Catalog Studio](https://depictio.github.io/catalog-studio/).`,
+            `(output \`${args.outputSlug}\`), authored with [Depictio Catalog Studio](https://depictio.github.io/depictio-catalog-studio/).`,
           '',
           `Only \`${args.yamlPath}\` changes — new item${plural} appended under \`renders_as\`.`,
           ...(drifted

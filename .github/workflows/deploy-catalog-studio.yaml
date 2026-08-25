@@ -1,8 +1,8 @@
 name: deploy-catalog-studio
 
 # Build the backend-less Catalog Studio SPA and publish it to its own showcase
-# repository, depictio/catalog-studio, whose GitHub Pages site serves
-# https://depictio.github.io/catalog-studio/ (Vite base '/catalog-studio/').
+# repository, depictio/depictio-catalog-studio, whose GitHub Pages site serves
+# https://depictio.github.io/depictio-catalog-studio/ (Vite base '/depictio-catalog-studio/').
 #
 # Why a second repository: a Pages site's URL path is its repository name, so
 # publishing from depictio/depictio can only ever be /depictio/ — which reads
@@ -82,9 +82,9 @@ jobs:
           fi
           pnpm --filter catalog-studio run build
 
-      - name: Publish to depictio/catalog-studio
+      - name: Publish to depictio/depictio-catalog-studio
         # CATALOG_STUDIO_DEPLOY_TOKEN: a fine-grained PAT scoped to
-        # depictio/catalog-studio ONLY, with Contents: Read and write. When it is
+        # depictio/depictio-catalog-studio ONLY, with Contents: Read and write. When it is
         # absent the workflow stops here with a clear message instead of failing
         # on an opaque git 403 (e.g. on a fork, where the secret is not exposed).
         env:
@@ -112,6 +112,6 @@ jobs:
           # A single-commit force push: the showcase repo is a build output, so
           # it carries no history worth preserving and stays small over time.
           git push -q --force \
-            "https://x-access-token:${DEPLOY_TOKEN}@github.com/depictio/catalog-studio.git" \
+            "https://x-access-token:${DEPLOY_TOKEN}@github.com/depictio/depictio-catalog-studio.git" \
             HEAD:refs/heads/gh-pages
-          echo "Published https://depictio.github.io/catalog-studio/"
+          echo "Published https://depictio.github.io/depictio-catalog-studio/"

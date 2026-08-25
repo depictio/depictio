@@ -1,9 +1,9 @@
 import { defineConfig, devices } from '@playwright/test';
 
-// The app is served under Vite base '/catalog-studio/'. Driven via `vite preview`
+// The app is served under Vite base '/depictio-catalog-studio/'. Driven via `vite preview`
 // against a fresh build so e2e matches what Pages ships.
 const PORT = 4188;
-const BASE = `http://127.0.0.1:${PORT}/catalog-studio/`;
+const BASE = `http://127.0.0.1:${PORT}/depictio-catalog-studio/`;
 
 export default defineConfig({
   testDir: './e2e',

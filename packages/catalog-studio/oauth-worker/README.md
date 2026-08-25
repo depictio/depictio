@@ -12,8 +12,8 @@ back to the zip download + GitHub web-upload flow — nothing breaks.
 ## One-time setup
 
 1. **Register a GitHub OAuth App** (org `depictio` → Settings → Developer settings → OAuth Apps):
-   - Homepage URL: `https://depictio.github.io/catalog-studio/`
-   - Authorization callback URL: `https://depictio.github.io/catalog-studio/oauth-callback.html`
+   - Homepage URL: `https://depictio.github.io/depictio-catalog-studio/`
+   - Authorization callback URL: `https://depictio.github.io/depictio-catalog-studio/oauth-callback.html`
    - Copy the **Client ID**; generate a **Client secret**.
 
 2. **Deploy the worker:**
@@ -53,7 +53,7 @@ The Export step shows **Open pull request**; it runs the real fork → commit �
 This exercises the risky part (`github.ts`) end-to-end. `VITE_GH_TOKEN` is DEV-only and never ships.
 
 **B. Faithful — full popup OAuth locally with `wrangler dev`.**
-1. In your OAuth App, add a second callback: `http://localhost:5173/catalog-studio/oauth-callback.html`.
+1. In your OAuth App, add a second callback: `http://localhost:5173/depictio-catalog-studio/oauth-callback.html`.
 2. `cd oauth-worker && cp .dev.vars.example .dev.vars` and put the client secret in `.dev.vars`.
 3. `wrangler dev --var GH_CLIENT_ID:<id> --var ALLOWED_ORIGIN:http://localhost:5173` (serves `:8787`).
 4. `packages/catalog-studio/.env.local`: `VITE_GH_CLIENT_ID=<id>` and
