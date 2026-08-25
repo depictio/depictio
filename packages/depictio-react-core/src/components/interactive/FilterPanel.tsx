@@ -37,6 +37,7 @@ import {
 import {
   gridLayoutToMemberLayout,
   groupsToGridLayout,
+  rowSpanForHeight,
   orderGroupsByLayout,
 } from '../../utils/leftPanelLayout';
 import ComponentRenderer from '../ComponentRenderer';
@@ -68,6 +69,9 @@ import ActiveFilterSummary from './ActiveFilterSummary';
 // Compact filter rows: rowHeight 40 with h=2 gives 80px per row, tighter than
 // the 100px Dash default so more filters fit before scrolling.
 const ROW_HEIGHT = 40;
+/** Vertical gap react-grid-layout leaves between rows; needed to turn a
+ *  measured pixel height back into a row span. */
+const GRID_MARGIN = 8;
 const DENSITY_STORAGE_KEY = 'filter-panel-density';
 // Below this many controls the search box costs more room than it saves.
 const SEARCH_THRESHOLD = 8;
@@ -106,6 +110,17 @@ export interface FilterPanelProps {
   editMode?: boolean;
   /** Editor-only per-component actions (edit / duplicate / delete). */
   renderItemOverlay?: (component: StoredMetadata) => React.ReactNode;
+  /**
+   * Host-provided per-section actions, mirroring `DashboardGrid`'s prop of the
+   * same name: they land beside the section's fold control. The editor puts its
+   * "…" there so the panel's sections are reached the same way the grid's are.
+   */
+  renderSectionActions?: (sectionName: string | null) => React.ReactNode;
+  /** Section names that stay read-only even in edit mode — the persistent
+   *  sections a sibling tab owns. They are shown so the author sees the panel
+   *  a viewer will get, but they are edited on their owner tab, and their
+   *  members must never reach this dashboard's `left_panel_layout_data`. */
+  readOnlySections?: string[];
   /** Editor-only. Receives a component-keyed layout ready to persist. */
   onLayoutChange?: (layout: Layout[]) => void;
   /** Renders the icon rail instead of the panel. Owned by the app, which also
@@ -140,6 +155,8 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
   refreshTick,
   editMode = false,
   renderItemOverlay,
+  renderSectionActions,
+  readOnlySections,
   onLayoutChange,
   collapsed = false,
   onToggleCollapsed,
@@ -206,6 +223,89 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
   // component's saved position, so reordering is frozen until it clears.
   const searching = search.trim().length > 0;
   const dragEnabled = editMode && !searching;
+
+  /**
+   * Group key → rows its rendered card actually needs.
+   *
+   * `groupRowSpan` estimates from the member types, and the estimate is too
+   * generous for a group card (its members render far more compactly than they
+   * do on their own) and for a slider whose marks are off — leaving a tall
+   * empty band under the card, since the grid never shrinks an item to its
+   * contents. Measuring the card we drew and converting back to rows fixes both
+   * without another table of magic numbers. It settles in one pass: the card's
+   * height does not depend on the item's.
+   */
+  const [measuredSpans, setMeasuredSpans] = useState<Record<string, number>>({});
+  const cardRefs = useRef<Map<string, HTMLElement>>(new Map());
+  const observerRef = useRef<ResizeObserver | null>(null);
+  // One stable callback per key: an inline arrow would be a new ref on every
+  // render, so React would detach and re-attach every card each time and the
+  // observer would re-fire for all of them.
+  const cardRefCbs = useRef<Map<string, (node: HTMLDivElement | null) => void>>(new Map());
+  const cardRef = useCallback((key: string) => {
+    let cb = cardRefCbs.current.get(key);
+    if (!cb) {
+      cb = (node: HTMLDivElement | null) => registerCard(key, node);
+      cardRefCbs.current.set(key, cb);
+    }
+    return cb;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const registerCard = useCallback((key: string, node: HTMLDivElement | null) => {
+    const observer = observerRef.current;
+    const prev = cardRefs.current.get(key);
+    if (prev && prev !== node) observer?.unobserve(prev);
+    if (!node) {
+      cardRefs.current.delete(key);
+      return;
+    }
+    cardRefs.current.set(key, node);
+    observer?.observe(node);
+  }, []);
+
+  useEffect(() => {
+    if (!editMode || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver((entries) => {
+      // The key travels on the element rather than through a reverse lookup:
+      // the ref callback is re-created every render, so the map it fills is
+      // briefly empty exactly when the observer fires.
+      const measured = entries
+        .map((entry) => ({
+          key: (entry.target as HTMLElement).dataset.groupKey,
+          rows: rowSpanForHeight(
+            entry.target.getBoundingClientRect().height,
+            ROW_HEIGHT,
+            GRID_MARGIN,
+          ),
+        }))
+        .filter((m): m is { key: string; rows: number } => Boolean(m.key));
+      if (measured.length === 0) return;
+      setMeasuredSpans((prev) => {
+        let next = prev;
+        for (const { key, rows } of measured) {
+          if (prev[key] === rows) continue;
+          if (next === prev) next = { ...prev };
+          next[key] = rows;
+        }
+        return next;
+      });
+    });
+    observerRef.current = observer;
+    for (const el of cardRefs.current.values()) observer.observe(el);
+    return () => {
+      observer.disconnect();
+      observerRef.current = null;
+    };
+  }, [editMode]);
+
+  // A foreign persistent section renders as it does in the viewer even here:
+  // no drag handles, no per-component actions, and no contribution to the
+  // layout this dashboard persists.
+  const readOnlyNames = useMemo(() => new Set(readOnlySections ?? []), [readOnlySections]);
+  const isReadOnly = useCallback(
+    (section: InteractiveSection) => Boolean(section.sectionName && readOnlyNames.has(section.sectionName)),
+    [readOnlyNames],
+  );
 
   const toggleDensity = useCallback(() => {
     setDensity((prev) => {
@@ -288,7 +388,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
     measureRef.current();
   }, [sections, renderedSections]);
 
-  const renderGroup = (group: InteractiveSection['groups'][number]) => {
+  const renderGroup = (group: InteractiveSection['groups'][number], readOnly = false) => {
     if (group.groupName) {
       return (
         <InteractiveGroupCard
@@ -300,8 +400,8 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
           collapsible
           open={collapse.isOpen(group.key)}
           onToggle={() => collapse.toggle(group.key)}
-          renderMemberActions={renderItemOverlay}
-          showDragHandle={dragEnabled}
+          renderMemberActions={readOnly ? undefined : renderItemOverlay}
+          showDragHandle={dragEnabled && !readOnly}
         />
       );
     }
@@ -313,8 +413,8 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
         onFilterChange={onFilterChange}
         refreshTick={refreshTick}
         compact={compactMembers}
-        showDragHandle={dragEnabled}
-        extraActions={renderItemOverlay?.(m)}
+        showDragHandle={dragEnabled && !readOnly}
+        extraActions={readOnly ? undefined : renderItemOverlay?.(m)}
       />
     );
   };
@@ -332,8 +432,12 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
       const merged: Layout[] = [];
       let y = 0;
       for (const s of sections) {
+        // A read-only section has no grid of its own, so it has no order to
+        // merge — and its members belong to another dashboard's layout.
+        if (isReadOnly(s)) continue;
         const layout =
-          sectionLayoutsRef.current.get(s.key) ?? groupsToGridLayout(s.groups, isCollapsed);
+          sectionLayoutsRef.current.get(s.key) ??
+          groupsToGridLayout(s.groups, isCollapsed, measuredSpans);
         for (const item of gridLayoutToMemberLayout(layout, s.groups)) {
           merged.push({ ...item, y });
           y += item.h;
@@ -341,15 +445,16 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
       }
       onLayoutChange?.(merged);
     },
-    [onLayoutChange, sections, searching, isCollapsed],
+    [onLayoutChange, sections, searching, isCollapsed, isReadOnly, measuredSpans],
   );
 
   const renderSectionBody = (section: InteractiveSection) => {
-    if (!editMode) {
+    const readOnly = isReadOnly(section);
+    if (!editMode || readOnly) {
       return (
         <Stack gap="sm">
           {section.groups.map((g) => (
-            <React.Fragment key={g.key}>{renderGroup(g)}</React.Fragment>
+            <React.Fragment key={g.key}>{renderGroup(g, readOnly)}</React.Fragment>
           ))}
         </Stack>
       );
@@ -357,13 +462,13 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
     return (
       <GridLayout
         className="layout left-filter-grid"
-        layout={groupsToGridLayout(section.groups, isCollapsed)}
+        layout={groupsToGridLayout(section.groups, isCollapsed, measuredSpans)}
         cols={1}
         rowHeight={ROW_HEIGHT}
         // Inside a section box the grid gets the room the box leaves; the
         // unsectioned bucket has no box and spans the panel.
         width={section.sectionName ? Math.max(80, measuredWidth - sectionInset) : measuredWidth}
-        margin={[8, 8]}
+        margin={[GRID_MARGIN, GRID_MARGIN]}
         containerPadding={[0, 0]}
         isDraggable={dragEnabled}
         isResizable={false}
@@ -382,7 +487,17 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
               flexDirection: 'column',
             }}
           >
-            {renderGroup(g)}
+            {/* The measured wrapper, one level in: react-grid-layout clones its
+                own child and overwrites any ref put on it, and that child is
+                stretched to the item anyway — measuring it would just hand back
+                the height we are trying to correct. */}
+            <div
+              ref={cardRef(g.key)}
+              data-group-key={g.key}
+              style={{ flexShrink: 0 }}
+            >
+              {renderGroup(g)}
+            </div>
           </div>
         ))}
       </GridLayout>
@@ -444,7 +559,11 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
             {named.map((s) => (
               // No `color`: the panel's rails stay neutral so they don't pair
               // up with the grid's. See `SectionAccordionItem`.
-              <SectionAccordionItem key={s.key} value={s.key}>
+              <SectionAccordionItem
+                key={s.key}
+                value={s.key}
+                actions={renderSectionActions?.(s.sectionName ?? null)}
+              >
                 <Accordion.Control>{renderSectionHeader(s)}</Accordion.Control>
                 <Accordion.Panel>
                   {/* Plain wrapper so the width available inside the section box

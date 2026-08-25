@@ -105,10 +105,24 @@ function rowsForMember(member: InteractiveGroup['members'][number]): number {
  * pays for its header plus one slot per member, and shrinks to just the header
  * while collapsed.
  */
-export function groupRowSpan(group: InteractiveGroup, collapsed = false): number {
+function groupRowSpan(group: InteractiveGroup, collapsed = false): number {
   if (!group.groupName) return rowsForMember(group.members[0]);
   if (collapsed) return GROUP_HEADER_H;
   return GROUP_HEADER_H + group.members.reduce((sum, m) => sum + rowsForMember(m), 0);
+}
+
+/**
+ * Rows a card of `px` pixels needs, given the grid's own geometry.
+ *
+ * `groupRowSpan` can only estimate: a control's height depends on what it
+ * renders (a slider's tick labels, a group card's compact member rows, a
+ * collapsed body), and the same member is drawn differently on its own than
+ * inside a group. The editor measures the card it actually drew and converts
+ * back through this, so the item stops being taller than its contents.
+ */
+export function rowSpanForHeight(px: number, rowHeight: number, margin: number): number {
+  if (!(px > 0)) return 1;
+  return Math.max(1, Math.ceil((px + margin) / (rowHeight + margin)));
 }
 
 /**
@@ -116,15 +130,18 @@ export function groupRowSpan(group: InteractiveGroup, collapsed = false): number
  *
  * @param isCollapsed - reads the panel's collapse state so a folded group
  *   gives its space back instead of leaving a gap.
+ * @param measured - group key → rows measured from the rendered card. Used
+ *   where present; `groupRowSpan` is the first-paint estimate behind it.
  */
 export function groupsToGridLayout(
   groups: InteractiveGroup[],
   isCollapsed?: (key: string) => boolean,
+  measured?: Record<string, number>,
 ): Layout[] {
   const out: Layout[] = [];
   let y = 0;
   for (const g of groups) {
-    const h = groupRowSpan(g, isCollapsed?.(g.key) ?? false);
+    const h = measured?.[g.key] ?? groupRowSpan(g, isCollapsed?.(g.key) ?? false);
     out.push({ i: g.key, x: 0, y, w: 1, h });
     y += h;
   }

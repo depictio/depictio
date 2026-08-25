@@ -1,5 +1,6 @@
 import React from 'react';
-import { Accordion, Group, Text } from '@mantine/core';
+import { Accordion, Box, Group, Text, Tooltip } from '@mantine/core';
+import { Icon } from '@iconify/react';
 
 import type { FilterSectionSpec } from '../api';
 import type { CollapseState } from '../hooks/useCollapseState';
@@ -58,19 +59,43 @@ export const SectionAccordionItem: React.FC<{
    * identifies a section without claiming a region.
    */
   color?: string | null;
+  /**
+   * Interactive controls for the section — the editor's "…", typically.
+   *
+   * A sibling of `Accordion.Control`, never inside it: the control *is* a
+   * `<button>`, and a button inside a button is invalid DOM that React warns
+   * about and that swallows the inner click in some browsers. Non-interactive
+   * trimmings (a folded section's metrics, a count badge) belong in
+   * `SectionHeader`'s own slots instead.
+   */
+  actions?: React.ReactNode;
+  /** Exactly an `Accordion.Control` followed by an `Accordion.Panel`. */
   children: React.ReactNode;
-}> = ({ value, color, children }) => (
-  <Accordion.Item
-    value={value}
-    style={
-      color
-        ? ({ '--section-accent': sectionColorVar(color) } as React.CSSProperties)
-        : undefined
-    }
-  >
-    {children}
-  </Accordion.Item>
-);
+}> = ({ value, color, actions, children }) => {
+  const [control, panel] = React.Children.toArray(children);
+  return (
+    <Accordion.Item
+      value={value}
+      style={
+        color
+          ? ({ '--section-accent': sectionColorVar(color) } as React.CSSProperties)
+          : undefined
+      }
+    >
+      {actions ? (
+        <Box style={{ display: 'flex', alignItems: 'center' }}>
+          <Box style={{ flex: 1, minWidth: 0 }}>{control}</Box>
+          <Box pr="sm" style={{ flexShrink: 0 }}>
+            {actions}
+          </Box>
+        </Box>
+      ) : (
+        control
+      )}
+      {panel}
+    </Accordion.Item>
+  );
+};
 
 export const SectionHeader: React.FC<{
   spec?: FilterSectionSpec | null;
@@ -102,6 +127,28 @@ export const SectionHeader: React.FC<{
             {name}
           </Text>
           {badge}
+          {/* Rendered here rather than by each caller so a persistent section
+              is marked the same in the grid, the filter panel and the
+              cross-tab host. A pin, not a text badge: the header is already
+              dense, and the tooltip carries the explanation. */}
+          {spec?.persistent && (
+            <Tooltip
+              label={`Pinned to every tab of this dashboard, ${
+                spec?.pin === 'bottom' ? 'after' : 'before'
+              } each tab's own sections; filter values set in it survive tab switches`}
+              withArrow
+              multiline
+              w={260}
+            >
+              <Icon
+                icon="mdi:pin"
+                width={14}
+                height={14}
+                color="var(--mantine-color-dimmed)"
+                style={{ flexShrink: 0, transform: 'rotate(30deg)' }}
+              />
+            </Tooltip>
+          )}
         </Group>
         {spec?.description && (
           <Text size="sm" c="dimmed" truncate>

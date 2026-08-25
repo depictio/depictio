@@ -323,4 +323,3 @@ jobs:
           depictio-cli config check \
             --project-config-path ../projects/init/iris/project.yaml \
             --CLI-config-path admin_config.yaml
-

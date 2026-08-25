@@ -35,16 +35,27 @@ echo "=== Step 1: export original dashboard ==="
 "$CLI" dashboard export "$IRIS_ID" --config "$CONFIG" --output "$TMP/yaml1.yaml"
 
 echo "=== Step 2: patch title + strip dashboard_id ==="
+# A dashboard with tabs exports as `main_dashboard` + `tabs`, so the title and
+# the ids are one level down and every tab carries its own. Patching only the
+# top level left the payload pointing at the original dashboard, and the import
+# came back 409 "already exists" — which is what this step is meant to avoid.
 "$PYTHON" -c "
 import yaml, uuid
 p = '$TMP/yaml1.yaml'
 d = yaml.safe_load(open(p))
-d['title'] = 'roundtrip-test-' + uuid.uuid4().hex[:8]
-d.pop('dashboard_id', None)
+token = uuid.uuid4().hex[:8]
+title = 'roundtrip-test-' + token
+root = d['main_dashboard'] if 'main_dashboard' in d else d
+root['title'] = title
+root.pop('dashboard_id', None)
+for tab in (d.get('tabs') or []):
+    # Tab titles are unique per project too, so they need the same treatment.
+    tab['title'] = str(tab.get('title', 'tab')) + '-' + token
+    tab.pop('dashboard_id', None)
 open('$TMP/modified.yaml', 'w').write(
     yaml.dump(d, allow_unicode=True, sort_keys=False, default_flow_style=False, indent=4)
 )
-print('Modified title:', d['title'])
+print('Modified title:', title, '(+ %d tab(s))' % len(d.get('tabs') or []))
 "
 
 echo "=== Step 3: import modified YAML ==="

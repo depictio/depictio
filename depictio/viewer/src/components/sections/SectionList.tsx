@@ -1,4 +1,10 @@
-/** The section list for one namespace (filter panel or dashboard grid). */
+/**
+ * The section list for one namespace (filter panel or dashboard grid).
+ *
+ * A list and nothing more: reorder, edit, delete. Creating and editing both
+ * happen in `SectionModal`, so this raises `onAdd` / `onEdit` rather than
+ * growing a second copy of the form inside a row.
+ */
 import React, { useState } from 'react';
 import {
   Alert,
@@ -9,12 +15,13 @@ import {
   Select,
   Stack,
   Text,
+  Title,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import type { DashboardData, FilterSectionSpec } from 'depictio-react-core';
 
-import SectionForm from './SectionForm';
 import SectionRow from './SectionRow';
+import { SECTION_ACCENT } from './SectionModal';
 import type { SectionKind, SectionOp } from './sectionMutations';
 import { memberCounts, sectionsFor } from './sectionMutations';
 
@@ -24,11 +31,19 @@ export interface SectionListProps {
   kind: SectionKind;
   dashboard: DashboardData;
   onOp: (op: SectionOp) => void;
+  /** Opens `SectionModal` on a new section in this namespace. */
+  onAdd: (kind: SectionKind) => void;
+  /** Opens `SectionModal` on an existing section. */
+  onEdit: (kind: SectionKind, spec: FilterSectionSpec) => void;
 }
 
-const SectionList: React.FC<SectionListProps> = ({ kind, dashboard, onOp }) => {
-  /** null = nothing being edited, '' = the create form, otherwise a section name. */
-  const [editing, setEditing] = useState<string | null>(null);
+const SectionList: React.FC<SectionListProps> = ({
+  kind,
+  dashboard,
+  onOp,
+  onAdd,
+  onEdit,
+}) => {
   const [deleting, setDeleting] = useState<FilterSectionSpec | null>(null);
   const [deleteMode, setDeleteMode] = useState<'unsectioned' | 'move'>('unsectioned');
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
@@ -36,9 +51,6 @@ const SectionList: React.FC<SectionListProps> = ({ kind, dashboard, onOp }) => {
   const specs = sectionsFor(dashboard, kind);
   const counts = memberCounts(dashboard, kind);
   const otherNames = new Set(sectionsFor(dashboard, OTHER[kind]).map((s) => s.name));
-
-  const namesExcept = (self?: string) =>
-    specs.filter((s) => s.name !== self).map((s) => s.name.toLowerCase());
 
   const startDelete = (spec: FilterSectionSpec) => {
     const count = counts.get(spec.name) ?? 0;
@@ -70,73 +82,60 @@ const SectionList: React.FC<SectionListProps> = ({ kind, dashboard, onOp }) => {
 
   return (
     <Stack gap="sm">
-      {specs.length === 0 && editing === null && (
+      {specs.length === 0 && (
         <Alert variant="light" color="gray" icon={<Icon icon="mdi:information-outline" />}>
           No sections yet. Add one, then move components into it from the component&apos;s ⋮
           menu or while editing it.
         </Alert>
       )}
 
-      {specs.map((spec, i) =>
-        editing === spec.name ? (
-          <SectionForm
-            key={spec.name}
-            initial={spec}
-            taken={namesExcept(spec.name)}
-            onCancel={() => setEditing(null)}
-            onSubmit={(next) => {
-              // One op, keyed on the section's *current* name: `patch.name`
-              // carries the rename and the reducer retargets the members.
-              onOp({ op: 'update', kind, name: spec.name, patch: next });
-              setEditing(null);
-            }}
-          />
-        ) : (
-          <SectionRow
-            key={spec.name}
-            spec={spec}
-            memberCount={counts.get(spec.name) ?? 0}
-            canMoveUp={i > 0}
-            canMoveDown={i < specs.length - 1}
-            sharedName={otherNames.has(spec.name)}
-            onMove={(dir) => onOp({ op: 'move', kind, name: spec.name, dir })}
-            onEdit={() => setEditing(spec.name)}
-            onDelete={() => startDelete(spec)}
-          />
-        ),
-      )}
-
-      {editing === '' ? (
-        <SectionForm
-          initial={null}
-          taken={namesExcept()}
-          onCancel={() => setEditing(null)}
-          onSubmit={(spec) => {
-            onOp({ op: 'create', kind, spec });
-            setEditing(null);
-          }}
+      {specs.map((spec, i) => (
+        <SectionRow
+          key={spec.name}
+          spec={spec}
+          memberCount={counts.get(spec.name) ?? 0}
+          canMoveUp={i > 0}
+          canMoveDown={i < specs.length - 1}
+          sharedName={otherNames.has(spec.name)}
+          onMove={(dir) => onOp({ op: 'move', kind, name: spec.name, dir })}
+          onEdit={() => onEdit(kind, spec)}
+          onDelete={() => startDelete(spec)}
         />
-      ) : (
-        <Group>
-          <Button
-            variant="light"
-            size="xs"
-            leftSection={<Icon icon="mdi:plus" width={14} />}
-            onClick={() => setEditing('')}
-          >
-            Add section
-          </Button>
-        </Group>
-      )}
+      ))}
+
+      <Group>
+        <Button
+          variant="light"
+          color={SECTION_ACCENT}
+          radius="md"
+          leftSection={<Icon icon="mdi:plus" width={16} />}
+          onClick={() => onAdd(kind)}
+        >
+          Add section
+        </Button>
+      </Group>
 
       <Modal
         opened={deleting !== null}
         onClose={() => setDeleting(null)}
-        title={deleting ? `Delete “${deleting.name}”` : ''}
+        withCloseButton
         centered
+        size="md"
         radius="md"
+        overlayProps={{ blur: 2 }}
       >
         <Stack gap="md">
+          <Group justify="center" gap="sm" mb="xs">
+            <Icon
+              icon="mdi:trash-can-outline"
+              width={28}
+              height={28}
+              color="var(--mantine-color-red-6)"
+            />
+            <Title order={3} c="red" m={0}>
+              Delete “{deleting?.name}”
+            </Title>
+          </Group>
           <Text size="sm">
             {deletingCount} component{deletingCount === 1 ? ' is' : 's are'} in this section.
             Deleting the section does not delete them.
@@ -162,13 +161,19 @@ const SectionList: React.FC<SectionListProps> = ({ kind, dashboard, onOp }) => {
               comboboxProps={{ withinPortal: false }}
             />
           )}
-          <Group justify="flex-end" gap="sm">
-            <Button variant="default" size="xs" onClick={() => setDeleting(null)}>
+          <Group justify="flex-end" gap="md" mt="sm">
+            <Button
+              variant="outline"
+              color="gray"
+              radius="md"
+              onClick={() => setDeleting(null)}
+            >
               Cancel
             </Button>
             <Button
               color="red"
-              size="xs"
+              radius="md"
+              leftSection={<Icon icon="mdi:trash-can-outline" width={16} />}
               disabled={deleteMode === 'move' && !deleteTarget}
               onClick={confirmDelete}
             >

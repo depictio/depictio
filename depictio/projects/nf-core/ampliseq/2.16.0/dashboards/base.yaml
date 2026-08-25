@@ -9,6 +9,15 @@ main_dashboard:
   icon_color: green
   workflow_system: nf-core
   dashboard_id: 646b0f3c1e4a2d7f8e5b8ca2
+  # Persistent: these sample filters render in every tab's filter panel and the
+  # values picked in them survive tab switches (cross-tab fan-out; see
+  # FilterSectionSpec.persistent).
+  filter_sections:
+  - name: Sample filters
+    icon: mdi:filter-variant
+    color: teal
+    description: Applies to every tab
+    persistent: true
   components:
   - component_type: text
     workflow_tag: ampliseq
@@ -41,6 +50,7 @@ main_dashboard:
       icon_name: mdi:flask
     title_align: left
     placement: left
+    section: Sample filters
     tag: interactive-multiqc-sample-filter-78c9c2
     index: multiqc-sample-filter
     layout:
@@ -61,6 +71,7 @@ main_dashboard:
       icon_name: mdi:earth
     title_align: left
     placement: left
+    section: Sample filters
     tag: interactive-multiqc-habitat-filter-d8ca83
     index: multiqc-habitat-filter
     layout:
@@ -512,6 +523,15 @@ tabs:
   icon_color: green
   workflow_system: nf-core
   dashboard_id: 646b0f3c1e4a2d7f8e5b8cb3
+  # Persistent: the sample-metadata table renders (read-only) at the top of
+  # every tab in the family — the issue-#858 "metadata in view on landing" slot.
+  grid_sections:
+  - name: Sample metadata
+    icon: mdi:table-account
+    color: teal
+    description: Project metadata table, shown on every tab
+    collapsed: true
+    persistent: true
   components:
   - component_type: text
     workflow_tag: ampliseq
@@ -640,6 +660,7 @@ tabs:
     row_selection_enabled: false
     title_size: sm
     title_align: left
+    section: Sample metadata
     tag: table-table-16e587
     layout:
       x: 0

@@ -19,7 +19,7 @@ Component Architecture:
 
 import re
 from pathlib import Path
-from typing import Any, ClassVar, Optional
+from typing import Any, ClassVar, Literal, Optional
 
 import yaml
 from pydantic import (
@@ -153,6 +153,22 @@ class FilterSectionSpec(BaseModel):
         default=False,
         description="Start the section collapsed. Defaults to expanded so no filter is "
         "hidden on first visit.",
+    )
+    persistent: bool = Field(
+        default=False,
+        description="Render this section on every tab of the dashboard family. Grid "
+        "sections appear read-only alongside each sibling tab's own content; filter "
+        "sections' controls appear in every tab's filter panel and their values "
+        "survive tab switches. No effect on single-tab dashboards.",
+    )
+    pin: Literal["top", "bottom"] = Field(
+        default="top",
+        description="Where a persistent section sits relative to the tab's other "
+        "sections: 'top' before them, 'bottom' after. Applied on every tab of the "
+        "family, the owning one included, so the section keeps the same place "
+        "wherever the viewer lands. 'bottom' is what a reference block (a raw-data "
+        "table, a legend) usually wants: present everywhere without preceding the "
+        "tab's own introduction. Ignored unless `persistent` is set.",
     )
 
 
@@ -821,10 +837,6 @@ class DashboardDataLite(BaseModel):
         for idx, comp in enumerate(dashboard_data.get("stored_metadata", [])):
             comp_type = comp.get("component_type", "figure")
 
-            # Generate semantic tag with format: {type}-{semantic_id}-{hash[:6]}
-            # Uses existing index if available, otherwise generates from component data
-            tag = comp.get("tag") or generate_component_id(comp, idx)
-
             # Extract workflow and data collection tags (mandatory fields)
             workflow_tag = comp.get("workflow_tag") or comp.get("wf_tag", "")
             dc_config = comp.get("dc_config", {})
@@ -832,13 +844,43 @@ class DashboardDataLite(BaseModel):
                 "data_collection_tag", ""
             )
 
+            # Text components are stand-alone: `to_full` binds neither a workflow
+            # nor a data collection to them. Exporting a collection tag inherited
+            # from a leftover `dc_config` produced a component the import could
+            # not resolve — there is no `workflow_tag` to resolve it against — so
+            # every text component was silently dropped on the way back in.
+            if comp_type == "text":
+                workflow_tag = ""
+                data_collection_tag = ""
+
+            # Generate semantic tag with format: {type}-{semantic_id}-{hash[:6]}
+            # Uses existing index if available, otherwise generates from component data.
+            #
+            # The hash is fed the bindings this export actually writes, not the
+            # ones the stored document happens to carry. A text component whose
+            # stored `dc_config` still names a collection would otherwise hash
+            # with that collection here and without it after a round-trip — the
+            # import writes no binding back — so its tag changed on every cycle.
+            # Non-text components are unaffected: their resolved tags are what
+            # the hash already read.
+            tag = comp.get("tag") or generate_component_id(
+                {
+                    **comp,
+                    "workflow_tag": workflow_tag,
+                    "wf_tag": workflow_tag,
+                    "data_collection_tag": data_collection_tag,
+                    "dc_config": {},
+                },
+                idx,
+            )
+
             # Log warning if mandatory tags are missing
-            if not workflow_tag:
+            if comp_type != "text" and not workflow_tag:
                 logger.warning(
                     f"Component {tag} (type: {comp_type}) missing workflow_tag. "
                     f"Component has wf_id: {comp.get('wf_id') is not None}"
                 )
-            if not data_collection_tag:
+            if comp_type != "text" and not data_collection_tag:
                 logger.warning(
                     f"Component {tag} (type: {comp_type}) missing data_collection_tag. "
                     f"Component has dc_id: {comp.get('dc_id') is not None}"

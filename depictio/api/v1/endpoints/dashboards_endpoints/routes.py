@@ -3344,6 +3344,54 @@ def map_data_endpoint(
     }
 
 
+def _resolve_tab_family(
+    dashboard_id: PyObjectId,
+    current_user: User,
+    projection: dict[str, int],
+) -> tuple[PyObjectId, list[dict[str, Any]]]:
+    """Resolve a dashboard's whole tab family, permission-checked.
+
+    The family is the parent plus all its children; a main tab is its own
+    parent. Returns the family id and the tabs sorted by ``tab_order``.
+    Raises 404 for an unknown dashboard and 403 when the caller lacks viewer
+    permission on the owning project.
+    """
+    dashboard_data = dashboards_collection.find_one(
+        {"dashboard_id": dashboard_id},
+        {"project_id": 1, "parent_dashboard_id": 1},
+    )
+    if not dashboard_data:
+        raise HTTPException(status_code=404, detail=f"Dashboard '{dashboard_id}' not found.")
+
+    project_id = dashboard_data.get("project_id")
+    if not project_id or not check_project_permission(project_id, current_user, "viewer"):
+        raise HTTPException(status_code=403, detail="Permission denied.")
+
+    parent_id = dashboard_data.get("parent_dashboard_id") or dashboard_id
+    family = dashboards_collection.find(
+        {"$or": [{"dashboard_id": parent_id}, {"parent_dashboard_id": parent_id}]},
+        projection,
+    )
+    tabs = sorted(family, key=lambda t: (t.get("tab_order") is None, t.get("tab_order") or 0))
+    return parent_id, tabs
+
+
+def _floating_components_of(tabs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The family's floating maps, each paired with its owning tab."""
+    components: list[dict[str, Any]] = []
+    for tab in tabs:
+        for meta in tab.get("stored_metadata") or []:
+            if meta.get("component_type") == "map" and meta.get("placement") == "floating":
+                components.append(
+                    {
+                        "dashboard_id": str(tab.get("dashboard_id")),
+                        "tab_title": tab.get("title"),
+                        "metadata": convert_objectid_to_str(meta),
+                    }
+                )
+    return components
+
+
 @dashboards_endpoint_router.get("/floating_components/{dashboard_id}")
 def get_floating_components(
     dashboard_id: PyObjectId,
@@ -3362,40 +3410,107 @@ def get_floating_components(
     parameter and gates on the same project-level permission, so rendering tab
     A's map while viewing tab B needs no special casing.
     """
-    dashboard_data = dashboards_collection.find_one(
-        {"dashboard_id": dashboard_id},
-        {"project_id": 1, "parent_dashboard_id": 1},
-    )
-    if not dashboard_data:
-        raise HTTPException(status_code=404, detail=f"Dashboard '{dashboard_id}' not found.")
-
-    project_id = dashboard_data.get("project_id")
-    if not project_id or not check_project_permission(project_id, current_user, "viewer"):
-        raise HTTPException(status_code=403, detail="Permission denied.")
-
-    # The family is the parent plus all its children; a main tab is its own parent.
-    parent_id = dashboard_data.get("parent_dashboard_id") or dashboard_id
-    family = dashboards_collection.find(
-        {"$or": [{"dashboard_id": parent_id}, {"parent_dashboard_id": parent_id}]},
+    parent_id, tabs = _resolve_tab_family(
+        dashboard_id,
+        current_user,
         {"dashboard_id": 1, "title": 1, "tab_order": 1, "stored_metadata": 1},
     )
-
-    components: list[dict[str, Any]] = []
-    for tab in sorted(family, key=lambda t: (t.get("tab_order") is None, t.get("tab_order") or 0)):
-        for meta in tab.get("stored_metadata") or []:
-            if meta.get("component_type") == "map" and meta.get("placement") == "floating":
-                components.append(
-                    {
-                        "dashboard_id": str(tab.get("dashboard_id")),
-                        "tab_title": tab.get("title"),
-                        "metadata": convert_objectid_to_str(meta),
-                    }
-                )
 
     # The viewer keys its per-dashboard panel state (and its cross-tab filter
     # persistence) on the family id, so hand it back rather than making the
     # client re-derive it from the dashboard list.
-    return {"parent_dashboard_id": str(parent_id), "components": components}
+    return {"parent_dashboard_id": str(parent_id), "components": _floating_components_of(tabs)}
+
+
+@dashboards_endpoint_router.get("/cross_tab_components/{dashboard_id}")
+def get_cross_tab_components(
+    dashboard_id: PyObjectId,
+    current_user: User = Depends(get_user_or_anonymous),
+):
+    """Return everything a tab renders on behalf of its siblings, in one request.
+
+    Supersedes ``/floating_components`` for the React viewer (that endpoint
+    stays for compatibility): alongside the family's floating maps, this
+    returns every section marked ``persistent: true`` in a tab's
+    ``grid_sections`` / ``filter_sections``, with its member components and —
+    for grid sections — the owner tab's layout entries for those members. Each
+    member carries its owning ``dashboard_id``, so render calls target the
+    owner tab exactly like floating maps do.
+
+    Sections are keyed ``(owner_dashboard_id, kind, name)``: two tabs each
+    declaring a persistent section with the same name stay two sections.
+    """
+    parent_id, tabs = _resolve_tab_family(
+        dashboard_id,
+        current_user,
+        {
+            "dashboard_id": 1,
+            "title": 1,
+            "tab_order": 1,
+            "stored_metadata": 1,
+            "grid_sections": 1,
+            "filter_sections": 1,
+            "right_panel_layout_data": 1,
+        },
+    )
+
+    persistent_sections: list[dict[str, Any]] = []
+    for tab in tabs:
+        metas = tab.get("stored_metadata") or []
+        for kind, spec_field in (("grid", "grid_sections"), ("filter", "filter_sections")):
+            for spec in tab.get(spec_field) or []:
+                if not spec.get("persistent"):
+                    continue
+                members = []
+                for meta in metas:
+                    if meta.get("section") != spec.get("name"):
+                        continue
+                    # Same membership rule as the viewer's `isFilterMember`:
+                    # interactive components live in filter sections, everything
+                    # else in grid sections. Floating maps are excluded — they
+                    # already fan out through `floating`.
+                    is_filter = meta.get("component_type") == "interactive"
+                    if is_filter != (kind == "filter"):
+                        continue
+                    if meta.get("component_type") == "map" and meta.get("placement") == "floating":
+                        continue
+                    members.append(
+                        {
+                            "dashboard_id": str(tab.get("dashboard_id")),
+                            "tab_title": tab.get("title"),
+                            "metadata": convert_objectid_to_str(meta),
+                        }
+                    )
+                member_indices = {m["metadata"].get("index") for m in members}
+                # Raw owner-tab layout entries, so the client reuses the exact
+                # parsing it already applies to its own `right_panel_layout_data`
+                # (`box-` prefixes and all). Only meaningful for grid sections.
+                layouts = (
+                    [
+                        convert_objectid_to_str(item)
+                        for item in tab.get("right_panel_layout_data") or []
+                        if isinstance(item, dict)
+                        and str(item.get("i", "")).removeprefix("box-") in member_indices
+                    ]
+                    if kind == "grid"
+                    else []
+                )
+                persistent_sections.append(
+                    {
+                        "kind": kind,
+                        "owner_dashboard_id": str(tab.get("dashboard_id")),
+                        "owner_tab_title": tab.get("title"),
+                        "spec": convert_objectid_to_str(spec),
+                        "components": members,
+                        "layouts": layouts,
+                    }
+                )
+
+    return {
+        "parent_dashboard_id": str(parent_id),
+        "floating": _floating_components_of(tabs),
+        "persistent_sections": persistent_sections,
+    }
 
 
 # ============================================================================
@@ -4759,11 +4874,50 @@ def _tab_has_visualization_components(
     return False
 
 
-def _tab_meets_minimum(dashboard_dict: dict, dc_meta: dict[str, dict] | None = None) -> bool:
+def _family_fans_out_a_filter(docs: list[dict]) -> bool:
+    """True if some document in the family declares a persistent filter section
+    that actually holds a control.
+
+    A persistent filter section renders in *every* tab's panel (see
+    `FilterSectionSpec.persistent`), so a tab can legitimately carry no filter of
+    its own and still be sliceable. Without this, such a tab looks filter-less to
+    `_tab_meets_minimum` and is dropped on import — which is what silently cost
+    the iris family its petal tab once that tab started relying on the overview's
+    shared variety picker.
+
+    Reads the *lite* YAML documents, since this runs before the per-tab dicts
+    exist. A section declared on a tab that is itself dropped is counted too:
+    that tab necessarily has filters of its own (its section's members live
+    there), so it only ever drops for want of visualisations, and the cost of the
+    approximation is a surviving filter-less tab rather than a lost one.
+    """
+    for doc in docs:
+        persistent = {
+            spec.get("name")
+            for spec in (doc.get("filter_sections") or [])
+            if spec.get("persistent") and spec.get("name")
+        }
+        if not persistent:
+            continue
+        for component in doc.get("components") or []:
+            if (
+                component.get("component_type") == "interactive"
+                and component.get("section") in persistent
+            ):
+                return True
+    return False
+
+
+def _tab_meets_minimum(
+    dashboard_dict: dict,
+    dc_meta: dict[str, dict] | None = None,
+    family_fans_out_a_filter: bool = False,
+) -> bool:
     """True if a (filtered) tab keeps at least one filter AND one standard component.
 
     Mandatory minimum for any surviving tab: a user can both *slice* (≥1 surviving
-    interactive component) and *see* (≥1 surviving non-metadata visualisation).
+    interactive component, or one reaching it from a persistent filter section
+    elsewhere in the family) and *see* (≥1 surviving non-metadata visualisation).
     Every tab's template is curated so at least one of its filters binds to a DC
     that survives the run's route (e.g. the MultiQC tab's sample filter binds to
     the always-present `multiqc_data` DC, Ordination carries a Phylum filter on
@@ -4771,7 +4925,7 @@ def _tab_meets_minimum(dashboard_dict: dict, dc_meta: dict[str, dict] | None = N
     genuinely absent — never a tab that still has analysis to show.
     """
     dc_meta = dc_meta or {}
-    has_filter = any(
+    has_filter = family_fans_out_a_filter or any(
         c.get("component_type") == "interactive" for c in dashboard_dict.get("stored_metadata", [])
     )
     return has_filter and _tab_has_visualization_components(dashboard_dict, dc_meta)
@@ -4875,6 +5029,9 @@ def _import_multi_tab_dashboard(
     # Import child tabs
     imported_tabs = []
     dc_meta = _build_dc_meta(project_id)
+    family_filter = _family_fans_out_a_filter(
+        [main_dashboard_data, *(tabs_data or [])],
+    )
     for idx, tab_data in enumerate(tabs_data):
         tab_yaml = yaml.dump(tab_data, default_flow_style=False, allow_unicode=True)
         tab_lite = DashboardDataLite.from_yaml(tab_yaml)
@@ -4924,18 +5081,25 @@ def _import_multi_tab_dashboard(
         for component in tab_dashboard_dict.get("stored_metadata", []):
             _resolve_workflow_tags(component, project_id=project_id)
             _regenerate_component_fields(component)
+        before_filtering = len(tab_dashboard_dict.get("stored_metadata") or [])
         _filter_unresolved_components(tab_dashboard_dict, project_id=project_id)
+        was_pruned = len(tab_dashboard_dict.get("stored_metadata") or []) < before_filtering
         _regenerate_component_indices(tab_dashboard_dict)
 
-        # Self-adapting dashboard: a tab is only worth showing if filtering left it
-        # with at least one filter AND one non-metadata visualisation (its minimum
-        # useful form). A tab reduced below that — all its purpose-built DCs
-        # absent/unpopulated for this run (e.g. a taxonomy tab on a skip_qiime run
-        # reduced to the sample metadata table, or a QC tab left with one lonely
-        # plot and no filter) — is dropped. Tabs are separate docs, so "hidden" =
+        # Self-adapting dashboard: a tab *reduced* by filtering is only worth
+        # showing if it kept at least one filter AND one non-metadata
+        # visualisation (its minimum useful form). A tab reduced below that —
+        # all its purpose-built DCs absent/unpopulated for this run (e.g. a
+        # taxonomy tab on a skip_qiime run reduced to the sample metadata table,
+        # or a QC tab left with one lonely plot and no filter) — is dropped.
+        #
+        # Only when filtering actually removed something. A tab authored against
+        # a single `metatype: Metadata` collection (iris is one) is exactly what
+        # its author wrote, not the residue of a pruned one, and the unconditional
+        # gate dropped it on every import. Tabs are separate docs, so "hidden" =
         # "not inserted"; drop any stale existing copy on overwrite so re-imports
         # stay idempotent.
-        if not _tab_meets_minimum(tab_dashboard_dict, dc_meta):
+        if was_pruned and not _tab_meets_minimum(tab_dashboard_dict, dc_meta, family_filter):
             logger.info(
                 f"Skipping tab '{tab_lite.title}': below minimum (needs ≥1 filter + ≥1 "
                 "non-metadata component) after filtering — its data collections are "

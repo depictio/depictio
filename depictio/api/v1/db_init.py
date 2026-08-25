@@ -226,6 +226,20 @@ async def create_initial_dashboards(
             "static_dc_id": STATIC_IDS["iris"]["data_collections"]["iris_table"],
         },
         {
+            # Child tab of the iris overview (parent_dashboard_id is pinned in
+            # the JSON). Showcases persistent cross-tab sections: the overview
+            # marks its "Variety" filter section and "Raw Data" grid section
+            # persistent, and this tab receives both through the fan-out.
+            "name": "iris_petal",
+            "json_path": os.path.join(
+                projects_base,
+                ReferenceDatasetRegistry.DATASET_PATHS["iris"],
+                ".db_seeds",
+                "dashboard_petal.json",
+            ),
+            "static_dc_id": STATIC_IDS["iris"]["data_collections"]["iris_table"],
+        },
+        {
             "name": "penguins",
             "json_path": os.path.join(
                 projects_base,
