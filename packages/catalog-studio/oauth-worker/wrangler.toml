@@ -5,5 +5,5 @@ compatibility_date = "2024-11-01"
 # Public (non-secret) config. GH_CLIENT_SECRET is set separately as a secret:
 #   wrangler secret put GH_CLIENT_SECRET
 [vars]
-GH_CLIENT_ID = "REPLACE_WITH_OAUTH_APP_CLIENT_ID"
+GH_CLIENT_ID = "Ov23ligBGVqwpTVdkchO"
 ALLOWED_ORIGIN = "https://depictio.github.io"
