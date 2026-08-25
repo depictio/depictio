@@ -449,6 +449,41 @@ class TestTextComponentExport:
         assert comp.data_collection_tag in (None, "")  # type: ignore[union-attr]
         assert comp.workflow_tag in (None, "")  # type: ignore[union-attr]
 
+    def test_tag_survives_a_round_trip_through_the_export(self):
+        """The tag hash reads the bindings the export writes, not the ones the
+        stored document carries. A seeded text component keeps a `dc_config`
+        the import never writes back, so hashing the stored value gave it one
+        tag on the way out and a different one on the next cycle — the iris
+        round-trip failed on exactly that, comparing components by tag."""
+        seeded = self._full_with_text(dc_config={"data_collection_tag": "iris_table"})
+        reimported = self._full_with_text()  # what `to_full` writes back
+
+        assert (
+            DashboardDataLite.from_full(seeded).components[0].tag  # type: ignore[union-attr]
+            == DashboardDataLite.from_full(reimported).components[0].tag  # type: ignore[union-attr]
+        )
+
+    def test_a_bound_figure_keeps_its_historical_tag(self):
+        """Only text components lose their bindings before hashing, so a bound
+        component's tag must not move — those tags are already in exported
+        YAML and in the checked-in seeds."""
+        full = {
+            "title": "Test",
+            "stored_metadata": [
+                {
+                    "index": "fig-1",
+                    "component_type": "figure",
+                    "visu_type": "scatter",
+                    "workflow_tag": "python/iris_workflow",
+                    "dc_config": {"data_collection_tag": "iris_table"},
+                }
+            ],
+        }
+        assert (
+            DashboardDataLite.from_full(full).components[0].tag  # type: ignore[union-attr]
+            == "figure-fig-1-efd181"
+        )
+
     def test_a_bound_figure_still_exports_its_tags(self):
         full = {
             "title": "Test",
