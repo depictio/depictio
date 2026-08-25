@@ -256,6 +256,7 @@ const CatalogPreviewPanel: React.FC<CatalogPreviewPanelProps> = ({
       data-output-id={match.output_id}
       data-dc-tag={match.dc_tag}
       data-render-count={renders.length}
+      data-selected-index={selectedIdx}
     >
 
       {/* Header — identity on the left, everything actionable on the right */}

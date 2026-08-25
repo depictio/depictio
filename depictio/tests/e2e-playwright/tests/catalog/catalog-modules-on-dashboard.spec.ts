@@ -68,6 +68,12 @@ async function checkComponent(
     return { problem: `${offer.label}: not on the ${surface} grid at all` };
   }
 
+  // Advanced-viz, MultiQC and JBrowse cells are behind a viewport gate
+  // (LazyMount): below the fold they render a skeleton and never fetch. A tile
+  // the user has not scrolled to is not a broken tile, so scroll to it before
+  // asking whether it drew.
+  await cell.scrollIntoViewIfNeeded().catch(() => undefined);
+
   // How wide the tile is relative to its grid — the editor and the viewer must
   // agree. They size their grids from different containers, so compare the
   // spans-the-row verdict rather than the pixels.

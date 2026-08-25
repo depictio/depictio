@@ -237,18 +237,32 @@ export async function addCatalogRender(
     )
     .first();
   await expect(row).toBeVisible({ timeout: 15_000 });
-  await row.click();
 
+  // Click-then-verify, retried: the row list re-renders as the search filter
+  // settles, and a click that lands on a node being replaced is swallowed —
+  // the panel then quietly stays on whatever was selected before, which is the
+  // first match in the first tool rather than an error anyone would notice.
   const panel = page.locator("[data-testid='catalog-preview-panel']");
-  await expect(panel).toHaveAttribute("data-output-id", offer.match.output_id, {
-    timeout: 15_000,
-  });
+  await expect(async () => {
+    await row.click({ timeout: 5_000 });
+    await expect(panel).toHaveAttribute("data-output-id", offer.match.output_id, {
+      timeout: 3_000,
+    });
+  }).toPass({ timeout: 30_000 });
 
-  // The switcher only exists when the output offers more than one render.
+  // The switcher only exists when the output offers more than one render. Same
+  // treatment: the tab strip wraps and reflows as the preview loads, so a click
+  // can hit a node that is being re-laid-out.
   if (offer.match.renders_as.length > 1) {
-    await page
-      .locator(`[data-testid='catalog-render-tab'][data-render-index='${offer.renderIndex}']`)
-      .click();
+    const tab = page.locator(
+      `[data-testid='catalog-render-tab'][data-render-index='${offer.renderIndex}']`,
+    );
+    await expect(async () => {
+      await tab.click({ timeout: 5_000 });
+      await expect(panel).toHaveAttribute("data-selected-index", String(offer.renderIndex), {
+        timeout: 3_000,
+      });
+    }).toPass({ timeout: 30_000 });
   }
 
   const add = page.locator("[data-testid='catalog-add']");

@@ -7,7 +7,12 @@ find: { path_glob: "**/qiime2/rel_abundance_tables/rel-table-*.tsv" }
 recipe: nf-core/ampliseq/taxonomy_rel_abundance.py
 fixture: rel_abundance.tsv
 renders_as:
-  # wide per-rank columns (Kingdom/Phylum) → sunburst + complex_heatmap fit;
-  # stacked_taxonomy needs a single long-format rank column this table lacks.
+  # wide per-rank columns (Kingdom/Phylum) → sunburst fits; stacked_taxonomy
+  # needs a single long-format rank column this table lacks.
+  #
+  # No complex_heatmap here: this table is long (one row per sample × taxon) and
+  # the server's heatmap reads a wide matrix off `index_column` with no pivot
+  # step, so it can only ever plot the single `rel_abundance` column. The
+  # clustered heatmap is offered by `qiime2_clustered_heatmap`, which binds the
+  # canonical taxon × sample matrix the same reshape produces.
   - { id: sunburst, component: advanced_viz, kind: sunburst, roles: {abundance: rel_abundance} }
-  - { id: complex_heatmap, component: advanced_viz, kind: complex_heatmap, roles: {} }
