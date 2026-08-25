@@ -448,9 +448,15 @@ const StepData: React.FC = () => {
             size="lg"
             variant="filled"
             color="blue"
-            style={{ background: componentMeta.iconBg }}
+            style={{ background: componentMeta.badgeBg ?? componentMeta.iconBg }}
             leftSection={
-              componentMeta.type === 'multiqc' ? null : (
+              componentMeta.type === 'multiqc' ? (
+                <img
+                  src="/dashboard/logos/multiqc_icon_white.svg"
+                  alt=""
+                  style={{ width: 14, height: 14, objectFit: 'contain' }}
+                />
+              ) : (
                 <Icon icon={componentMeta.icon} width={14} color="white" />
               )
             }
