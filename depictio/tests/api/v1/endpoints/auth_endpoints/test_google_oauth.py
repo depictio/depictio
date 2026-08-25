@@ -687,7 +687,7 @@ class TestOAuthStateStore:
             state="stale-state",
             expire_datetime=datetime.now() - timedelta(minutes=1),
         )
-        await expired.save()
+        await expired.insert()
 
         assert await validate_oauth_state("stale-state") is False
         # Rejected states are consumed too, so they cannot be retried.
