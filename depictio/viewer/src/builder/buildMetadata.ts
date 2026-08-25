@@ -25,7 +25,7 @@ export function buildMetadata(state: BuilderState): StoredMetadata {
     dc_id: state.dcId || undefined,
     project_id: state.projectId || undefined,
     // Set here rather than in each per-type branch: `section` lives on the base
-    // component model, `SectionSelect` is mounted once for every builder, and
+    // component model, `PlacementSection` is offered by every builder, and
     // `base` is spread after `existing` everywhere — so the picker's choice
     // always wins, including clearing it back to unsectioned. Empty string from
     // a cleared Select means "no section", which must persist as undefined.

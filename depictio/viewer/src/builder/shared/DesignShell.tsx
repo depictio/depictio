@@ -9,6 +9,7 @@ import React from 'react';
 import { Box, Center, Grid, Stack } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import ColumnsDescription from './ColumnsDescription';
+import PlacementSection from './PlacementSection';
 
 interface Props {
   formSlot: React.ReactNode;
@@ -26,7 +27,13 @@ const DesignShell: React.FC<Props> = ({
     <Stack gap="lg" pt="md">
       <Grid columns={24} gutter="md" align="stretch">
         <Grid.Col span={{ base: 24, md: 10 }}>
-          <Box style={{ height: '100%' }}>{formSlot}</Box>
+          {/* Placement rides at the bottom of the control column, with the rest
+              of this builder's settings, rather than full-width under both
+              columns. It hides itself when the dashboard has no sections. */}
+          <Stack gap="md" style={{ height: '100%' }}>
+            <Box>{formSlot}</Box>
+            <PlacementSection standalone />
+          </Stack>
         </Grid.Col>
         <Grid.Col span={{ base: 24, md: 1 }} visibleFrom="md">
           <Center style={{ height: '100%' }}>

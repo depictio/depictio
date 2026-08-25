@@ -49,6 +49,10 @@ const LEGEND: Array<{ key: string; desc: string }> = [
   { key: 'gated_out', desc: 'Excluded by a template condition (hover for the reason)' },
 ];
 
+// `gated_out` is dropped from the legend without a manifest: no row can carry
+// that status, so explaining it would describe something the reader cannot see.
+
+
 const HEALTH_META: Record<string, { color: string; icon: string; label: string }> = {
   ok: { color: 'green', icon: 'mdi:check-circle', label: 'Healthy' },
   partial: { color: 'yellow', icon: 'mdi:alert', label: 'Partial' },
@@ -108,23 +112,39 @@ const SummaryStat: React.FC<{
   value: React.ReactNode;
   icon: string;
   color: string;
-}> = ({ label, value, icon, color }) => (
-  <Card withBorder padding="md" radius="md">
-    <Group gap="sm" wrap="nowrap">
-      <ThemeIcon size={40} radius="md" variant="light" color={color}>
-        <Icon icon={icon} width={22} />
-      </ThemeIcon>
-      <Stack gap={0} style={{ minWidth: 0 }}>
-        <Text size="xl" fw={700} c={color === 'gray' ? undefined : color}>
-          {value}
-        </Text>
-        <Text size="xs" c="dimmed">
-          {label}
-        </Text>
-      </Stack>
-    </Group>
-  </Card>
-);
+  /** Explains a value the tile cannot state outright (e.g. an unknown count). */
+  hint?: string;
+}> = ({ label, value, icon, color, hint }) => {
+  const card = (
+    <Card withBorder padding="md" radius="md">
+      <Group gap="sm" wrap="nowrap">
+        <ThemeIcon size={40} radius="md" variant="light" color={color}>
+          <Icon icon={icon} width={22} />
+        </ThemeIcon>
+        <Stack gap={0} style={{ minWidth: 0 }}>
+          <Text size="xl" fw={700} c={color === 'gray' ? undefined : color}>
+            {value}
+          </Text>
+          <Group gap={4} wrap="nowrap">
+            <Text size="xs" c="dimmed">
+              {label}
+            </Text>
+            {hint && (
+              <Icon icon="mdi:help-circle-outline" width={12} color="var(--mantine-color-dimmed)" />
+            )}
+          </Group>
+        </Stack>
+      </Group>
+    </Card>
+  );
+  return hint ? (
+    <Tooltip label={hint} withArrow multiline maw={320} withinPortal>
+      {card}
+    </Tooltip>
+  ) : (
+    card
+  );
+};
 
 /** A compact inline "icon · label · value" metadata chip for the header row. */
 const InlineMeta: React.FC<{ icon: string; label: string; value?: string | null }> = ({
@@ -409,6 +429,27 @@ const IngestionReportPanel: React.FC<IngestionReportPanelProps> = ({
 
   const health = HEALTH_META[report.summary.health] ?? HEALTH_META.ok;
   const { summary, template } = report;
+  // No frozen manifest: the report is assembled from the collections the project
+  // currently declares. What a template excluded or pruned was never recorded,
+  // so "gated out" is unknown here — not zero — and the expected-vs-found
+  // framing has no baseline to compare against.
+  const isLive = report.manifest_source === 'live_project';
+  // A template project predating the manifest is a different story from a
+  // project that never had a template: only the former can be re-imported.
+  const isLegacyTemplate = isLive && !!template;
+  const provenance = isLive
+    ? {
+        color: 'blue',
+        icon: 'mdi:database-eye-outline',
+        label: 'Live project',
+        tip: "Built from the project's current data collections — there is no template manifest to compare against.",
+      }
+    : {
+        color: 'gray',
+        icon: 'mdi:file-document-check-outline',
+        label: 'Template manifest',
+        tip: 'Compared against the expected-collection manifest frozen when the template was applied.',
+      };
 
   return (
     <Stack gap="md">
@@ -431,22 +472,36 @@ const IngestionReportPanel: React.FC<IngestionReportPanelProps> = ({
               )}
             </div>
           </Group>
-          <Badge
-            size="lg"
-            radius="sm"
-            variant="light"
-            color={health.color}
-            leftSection={<Icon icon={health.icon} width={14} />}
-            style={{ flexShrink: 0 }}
-          >
-            {health.label}
-          </Badge>
+          <Group gap="xs" wrap="nowrap" style={{ flexShrink: 0 }}>
+            <Tooltip label={provenance.tip} withArrow multiline maw={320} withinPortal>
+              <Badge
+                size="lg"
+                radius="sm"
+                variant="default"
+                color={provenance.color}
+                leftSection={<Icon icon={provenance.icon} width={14} />}
+              >
+                {provenance.label}
+              </Badge>
+            </Tooltip>
+            <Badge
+              size="lg"
+              radius="sm"
+              variant="light"
+              color={health.color}
+              leftSection={<Icon icon={health.icon} width={14} />}
+            >
+              {health.label}
+            </Badge>
+          </Group>
         </Group>
 
         <Divider my="xs" />
 
         <Group gap="lg" wrap="wrap">
-          <InlineMeta icon="mdi:calendar-check" label="Applied" value={template?.applied_at} />
+          {template?.applied_at && (
+            <InlineMeta icon="mdi:calendar-check" label="Applied" value={template.applied_at} />
+          )}
           <InlineMeta icon="mdi:clock-outline" label="Last scan" value={report.scanned_at} />
           <InlineMeta icon="mdi:database-outline" label="Runs" value={String(report.runs.length)} />
           {template?.data_root && (
@@ -482,12 +537,20 @@ const IngestionReportPanel: React.FC<IngestionReportPanelProps> = ({
           )}
         </Group>
 
-        {report.manifest_source === 'live_project' && (
+        {isLegacyTemplate && (
           <Alert mt="xs" color="yellow" variant="light" icon={<Icon icon="mdi:information" />}>
             This project was created before ingestion-report tracking was added, so the collections
             the template skipped or gated out weren't recorded — only the collections actually
             present are listed below. Re-import it from its template (depictio run --template …) to
             get the full expected-vs-found breakdown.
+          </Alert>
+        )}
+        {isLive && !template && (
+          <Alert mt="xs" color="blue" variant="light" icon={<Icon icon="mdi:information" />}>
+            This project wasn't created from a template, so there is no manifest of expected
+            collections. Everything below is read from the collections the project declares today:
+            it shows which of them have data, but it cannot tell you whether a collection is
+            missing entirely.
           </Alert>
         )}
       </Paper>
@@ -496,8 +559,14 @@ const IngestionReportPanel: React.FC<IngestionReportPanelProps> = ({
       <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="sm">
         <SummaryStat
           icon="mdi:shield-check"
-          label="Required identified"
-          value={`${summary.required_identified}/${summary.required_total}`}
+          label={isLive ? 'Required with data' : 'Required identified'}
+          // Without a manifest the denominator is just "the collections that
+          // exist", so the ratio compares a number to itself. Show the count.
+          value={
+            isLive
+              ? summary.required_identified
+              : `${summary.required_identified}/${summary.required_total}`
+          }
           color={summary.required_missing > 0 ? 'orange' : 'green'}
         />
         <SummaryStat
@@ -508,15 +577,26 @@ const IngestionReportPanel: React.FC<IngestionReportPanelProps> = ({
         />
         <SummaryStat
           icon="mdi:check-circle-outline"
-          label="Optional identified"
-          value={`${summary.optional_identified}/${summary.optional_total}`}
+          label={isLive ? 'Optional with data' : 'Optional identified'}
+          value={
+            isLive
+              ? summary.optional_identified
+              : `${summary.optional_identified}/${summary.optional_total}`
+          }
           color="teal"
         />
         <SummaryStat
           icon="mdi:filter-remove-outline"
           label="Gated out"
-          value={summary.gated}
+          // A manifest is the only thing that records what a conditional
+          // excluded. Reporting 0 without one would assert something unverified.
+          value={isLive ? '—' : summary.gated}
           color="gray"
+          hint={
+            isLive
+              ? 'Unknown without a template manifest — exclusions were never recorded for this project.'
+              : undefined
+          }
         />
       </SimpleGrid>
 
@@ -626,7 +706,7 @@ const IngestionReportPanel: React.FC<IngestionReportPanelProps> = ({
       )}
 
       <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="xs">
-        {LEGEND.map(({ key, desc }) => {
+        {LEGEND.filter(({ key }) => !(isLive && key === 'gated_out')).map(({ key, desc }) => {
           const m = STATUS_META[key];
           return (
             <Paper key={key} withBorder radius="md" p="xs">
