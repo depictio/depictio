@@ -38,15 +38,33 @@ async function pickComponentType(page: Page, type: string): Promise<void> {
   await page.locator(`[data-testid='component-type-${type}']`).click();
 }
 
+/** A Mantine Select's field label is wired to both the input and the popup
+ *  listbox (`aria-labelledby`), so getByLabel() resolves to two elements and
+ *  every call on it fails Playwright's strict mode. Address the input by role:
+ *  the listbox is role="listbox", so only the input matches. */
+function selectInput(page: Page, label: string) {
+  return page.getByRole("textbox", { name: label });
+}
+
+/** Mantine's Switch forwards data-testid to its real <input>, which it keeps
+ *  visually hidden (1×1 and clipped). Clicking that input fails with "Element
+ *  is outside of the viewport" — `force` skips the actionability checks but
+ *  still clicks at the element's coordinates. Click the <label> bound to it
+ *  instead: that is the visible track, and what a user actually hits. */
+async function flipSwitch(page: Page, testId: string): Promise<void> {
+  const id = await page.locator(`[data-testid='${testId}']`).getAttribute("id");
+  await page.locator(`label[for='${id}']`).click();
+}
+
 /** StepData: choose the Iris data collection. Basic projects render a single
  *  "Data Collection" select; advanced ones add a "Workflow" select first. */
 async function pickIrisDataCollection(page: Page): Promise<void> {
-  const workflowSelect = page.getByLabel("Workflow");
+  const workflowSelect = selectInput(page, "Workflow");
   if (await workflowSelect.isVisible().catch(() => false)) {
     await workflowSelect.click();
     await page.locator("[role='option']").first().click();
   }
-  const dcSelect = page.getByLabel("Data Collection");
+  const dcSelect = selectInput(page, "Data Collection");
   await expect(dcSelect).toBeEnabled({ timeout: 15_000 });
   await dcSelect.click();
   await page.locator("[role='option']").first().click();
@@ -92,9 +110,9 @@ test.describe("Active filters propagate into the builder and new components", ()
     await pickIrisDataCollection(page);
     await page.getByRole("button", { name: "Next Step" }).click();
 
-    await page.getByLabel("Select your column").click();
+    await selectInput(page, "Select your column").click();
     await pickOption(page, "variety");
-    await page.getByLabel("Select your interactive component").click();
+    await selectInput(page, "Select your interactive component").click();
     await pickOption(page, "Multi-select");
     await page.locator("[data-tour-id='component-save']").click();
     await page.waitForURL(/\/dashboard-edit\/[^/]+$/, { timeout: 20_000 });
@@ -121,10 +139,9 @@ test.describe("Active filters propagate into the builder and new components", ()
     await expect(page.getByText(/of 50 rows/)).toBeVisible({ timeout: 30_000 });
 
     // The toggle flips the preview back to the unfiltered dataset and back.
-    const toggle = page.locator("[data-testid='builder-filter-toggle']");
-    await toggle.click({ force: true });
+    await flipSwitch(page, "builder-filter-toggle");
     await expect(page.getByText(/of 150 rows/)).toBeVisible({ timeout: 30_000 });
-    await toggle.click({ force: true });
+    await flipSwitch(page, "builder-filter-toggle");
     await expect(page.getByText(/of 50 rows/)).toBeVisible({ timeout: 30_000 });
 
     await page.locator("[data-tour-id='component-save']").click();
@@ -133,17 +150,17 @@ test.describe("Active filters propagate into the builder and new components", ()
     // #196 — back in the editor, the filter survived the round-trip…
     await expect(page.getByText("Setosa").first()).toBeVisible({ timeout: 20_000 });
 
-    // …and the freshly added table renders pre-filtered: its row-count badge
-    // says 50, never 150. (Row-content assertions would be unsound here —
-    // iris.csv lists all 50 Setosa rows first, so page one of an UNfiltered
-    // table also shows only Setosa.)
-    const tableItem = page
-      .locator(".react-grid-item")
-      .filter({ hasText: /rows/ })
-      .first();
-    await expect(tableItem).toBeVisible({ timeout: 30_000 });
-    await expect(tableItem.getByText(/^50 rows$/)).toBeVisible({ timeout: 30_000 });
-    await expect(tableItem.getByText(/^150 rows$/)).toHaveCount(0);
+    // …and the freshly added table renders pre-filtered. The grid's table carries
+    // its total in the pager, not in a "N rows" badge — that wording only exists
+    // in the builder's preview. "1 to 50 of 50" on a single page is the filtered
+    // set; unfiltered, the same table reads "of 150" across three pages.
+    // (Row-content assertions would be unsound here — iris.csv lists all 50
+    // Setosa rows first, so page one of an UNfiltered table also shows only
+    // Setosa. The total is what discriminates.)
+    await expect(page.getByText(/1 to 50 of 50/).first()).toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(page.getByText(/of 150/)).toHaveCount(0);
 
     // Cleanup.
     await page.goto("/dashboards");
