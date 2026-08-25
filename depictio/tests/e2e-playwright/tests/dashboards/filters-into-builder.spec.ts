@@ -38,15 +38,23 @@ async function pickComponentType(page: Page, type: string): Promise<void> {
   await page.locator(`[data-testid='component-type-${type}']`).click();
 }
 
+/** A Mantine Select's field label is wired to both the input and the popup
+ *  listbox (`aria-labelledby`), so getByLabel() resolves to two elements and
+ *  every call on it fails Playwright's strict mode. Address the input by role:
+ *  the listbox is role="listbox", so only the input matches. */
+function selectInput(page: Page, label: string) {
+  return page.getByRole("textbox", { name: label });
+}
+
 /** StepData: choose the Iris data collection. Basic projects render a single
  *  "Data Collection" select; advanced ones add a "Workflow" select first. */
 async function pickIrisDataCollection(page: Page): Promise<void> {
-  const workflowSelect = page.getByLabel("Workflow");
+  const workflowSelect = selectInput(page, "Workflow");
   if (await workflowSelect.isVisible().catch(() => false)) {
     await workflowSelect.click();
     await page.locator("[role='option']").first().click();
   }
-  const dcSelect = page.getByLabel("Data Collection");
+  const dcSelect = selectInput(page, "Data Collection");
   await expect(dcSelect).toBeEnabled({ timeout: 15_000 });
   await dcSelect.click();
   await page.locator("[role='option']").first().click();
@@ -92,9 +100,9 @@ test.describe("Active filters propagate into the builder and new components", ()
     await pickIrisDataCollection(page);
     await page.getByRole("button", { name: "Next Step" }).click();
 
-    await page.getByLabel("Select your column").click();
+    await selectInput(page, "Select your column").click();
     await pickOption(page, "variety");
-    await page.getByLabel("Select your interactive component").click();
+    await selectInput(page, "Select your interactive component").click();
     await pickOption(page, "Multi-select");
     await page.locator("[data-tour-id='component-save']").click();
     await page.waitForURL(/\/dashboard-edit\/[^/]+$/, { timeout: 20_000 });
