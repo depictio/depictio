@@ -53,6 +53,11 @@ test.describe("Cross-tab persistent sections & filters", () => {
     request,
     loginAsAdmin,
   }) => {
+    // Two full loads of the ampliseq dashboard, each waiting on its data, sit
+    // right at the suite's 60s budget — the run before this one passed only on
+    // retry. The work is genuinely slow rather than stuck, so give it room.
+    test.setTimeout(180_000);
+
     const family = await findAmpliseqFamily(request);
     test.skip(!family, "nf-core/ampliseq multi-tab dashboard not seeded on this stack");
 
