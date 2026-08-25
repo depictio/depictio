@@ -46,6 +46,16 @@ function selectInput(page: Page, label: string) {
   return page.getByRole("textbox", { name: label });
 }
 
+/** Mantine's Switch forwards data-testid to its real <input>, which it keeps
+ *  visually hidden (1×1 and clipped). Clicking that input fails with "Element
+ *  is outside of the viewport" — `force` skips the actionability checks but
+ *  still clicks at the element's coordinates. Click the <label> bound to it
+ *  instead: that is the visible track, and what a user actually hits. */
+async function flipSwitch(page: Page, testId: string): Promise<void> {
+  const id = await page.locator(`[data-testid='${testId}']`).getAttribute("id");
+  await page.locator(`label[for='${id}']`).click();
+}
+
 /** StepData: choose the Iris data collection. Basic projects render a single
  *  "Data Collection" select; advanced ones add a "Workflow" select first. */
 async function pickIrisDataCollection(page: Page): Promise<void> {
@@ -129,10 +139,9 @@ test.describe("Active filters propagate into the builder and new components", ()
     await expect(page.getByText(/of 50 rows/)).toBeVisible({ timeout: 30_000 });
 
     // The toggle flips the preview back to the unfiltered dataset and back.
-    const toggle = page.locator("[data-testid='builder-filter-toggle']");
-    await toggle.click({ force: true });
+    await flipSwitch(page, "builder-filter-toggle");
     await expect(page.getByText(/of 150 rows/)).toBeVisible({ timeout: 30_000 });
-    await toggle.click({ force: true });
+    await flipSwitch(page, "builder-filter-toggle");
     await expect(page.getByText(/of 50 rows/)).toBeVisible({ timeout: 30_000 });
 
     await page.locator("[data-tour-id='component-save']").click();
