@@ -113,5 +113,5 @@ jobs:
           # it carries no history worth preserving and stays small over time.
           git push -q --force \
             "https://x-access-token:${DEPLOY_TOKEN}@github.com/depictio/depictio-catalog-studio.git" \
-            HEAD:refs/heads/gh-pages
+            HEAD:refs/heads/main
           echo "Published https://depictio.github.io/depictio-catalog-studio/"

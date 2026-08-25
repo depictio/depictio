@@ -145,7 +145,11 @@ alias and the committed catalog snapshots keep working unchanged.
 
 `deploy-catalog-studio.yaml` builds on every push to `main` that touches the app
 (or the in-repo schema/catalog it snapshots) and force-pushes `dist/` to that
-repo's `gh-pages` branch as a single commit.
+repo's `main` branch as a single commit. There is no `gh-pages` branch: the
+repository holds nothing but the build, so a second branch would serve no
+purpose — and GitHub's *Deploy from a branch* setting only lists branches that
+already exist, so a repo whose only branch is the one being created by the
+workflow cannot have Pages enabled in the first place.
 
 One-time setup, all in this repo's *Settings → Secrets and variables → Actions*
 except where noted:
@@ -157,7 +161,7 @@ except where noted:
 | `VITE_GH_OAUTH_WORKER_URL` | variable | the deployed worker's `/exchange` endpoint |
 
 Plus, in `depictio/depictio-catalog-studio`: *Settings → Pages → Source: **Deploy from a
-branch**, branch `gh-pages`, folder `/`*.
+branch**, branch `main`, folder `/`*.
 
 Each is independently optional and degrades loudly rather than silently:
 without the token the workflow builds and warns instead of publishing; without
