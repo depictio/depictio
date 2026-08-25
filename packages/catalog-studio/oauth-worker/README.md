@@ -24,13 +24,13 @@ back to the zip download + GitHub web-upload flow — nothing breaks.
    wrangler secret put GH_CLIENT_SECRET   # paste the OAuth App client secret
    wrangler deploy
    ```
-   Note the deployed URL, e.g. `https://depictio-tools-studio-oauth.<subdomain>.workers.dev`.
+   Note the deployed URL, e.g. `https://depictio-catalog-studio-oauth.<subdomain>.workers.dev`.
 
 3. **Configure the Studio build** — set these Vite env vars (e.g. in the
    `deploy-catalog-studio.yaml` workflow or a `.env.production`):
    ```
    VITE_GH_CLIENT_ID=<OAuth App client id>
-   VITE_GH_OAUTH_WORKER_URL=https://depictio-tools-studio-oauth.<subdomain>.workers.dev/exchange
+   VITE_GH_OAUTH_WORKER_URL=https://depictio-catalog-studio-oauth.<subdomain>.workers.dev/exchange
    ```
 
 With those set, the Export step shows **Sign in with GitHub → Open pull request**. Without them, it

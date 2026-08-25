@@ -1,4 +1,4 @@
-name = "depictio-tools-studio-oauth"
+name = "depictio-catalog-studio-oauth"
 main = "src/index.ts"
 compatibility_date = "2024-11-01"
 
