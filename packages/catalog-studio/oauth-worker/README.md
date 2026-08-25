@@ -34,6 +34,15 @@ back to the zip download + GitHub web-upload flow — nothing breaks.
    Node the rest of the project uses — `npx wrangler@latest` does not, and fails
    with "Wrangler requires at least Node.js v22.0.0".
 
+   If `npm install` dies building **sharp** from source ("Please add
+   node-addon-api to your dependencies"), that is npm skipping sharp's
+   prebuilt binaries, which it declares as *optional* dependencies — a
+   long-standing npm bug. `rm -rf node_modules package-lock.json && npm install`
+   restores them. Failing that, `npm install --ignore-scripts` is safe here:
+   sharp reaches this tree only through miniflare, which `await import()`s it
+   lazily and solely to simulate the Images binding under `npm run dev`.
+   Nothing on the `check` / `login` / `secret` / `deploy` path ever loads it.
+
    This directory is deliberately **outside** the pnpm workspace
    (`pnpm-workspace.yaml` globs `packages/*`, which does not reach it), so
    wrangler never enters the root lockfile: nothing in the app build, the CI
