@@ -14,11 +14,14 @@ import {
   Stack,
   Text,
   useMantineColorScheme,
+  useMantineTheme,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import { collapseMapAttribution, fetchDataCollectionPreview } from 'depictio-react-core';
 import type { PreviewResult } from 'depictio-react-core';
 import Plot from 'react-plotly.js';
+
+import { GEO_COLOR, GEO_ICON } from '../dcBadges';
 
 interface DcLike {
   _id?: string;
@@ -78,6 +81,9 @@ function fitBoundsZoom(
 
 const CoordinatesMapPreview: React.FC<{ dc: DcLike }> = ({ dc }) => {
   const { colorScheme } = useMantineColorScheme();
+  // Plotly parses colours itself, so a CSS variable never resolves — read the
+  // grape the Geo badges use straight off the theme instead.
+  const markerColor = useMantineTheme().colors[GEO_COLOR][6];
   const dcId = dc._id ?? dc.id;
   const props = dc.config?.dc_specific_properties;
   const latCol = props?.lat_column as string | undefined;
@@ -234,6 +240,20 @@ const CoordinatesMapPreview: React.FC<{ dc: DcLike }> = ({ dc }) => {
 
   return (
     <Stack gap="xs">
+      <Group gap="xs" wrap="nowrap">
+        <Badge
+          color={GEO_COLOR}
+          variant="light"
+          size="sm"
+          radius="sm"
+          leftSection={<Icon icon={GEO_ICON} width={12} />}
+        >
+          Geo
+        </Badge>
+        <Text size="sm" c="dimmed">
+          Geo location plotted from <code>{latCol}</code> / <code>{lonCol}</code>
+        </Text>
+      </Group>
       <Group justify="space-between" gap="xs">
         <Text size="sm" c="dimmed">
           {skippedSomeRows
@@ -241,7 +261,7 @@ const CoordinatesMapPreview: React.FC<{ dc: DcLike }> = ({ dc }) => {
             : `Showing ${usableCount} point${usableCount === 1 ? '' : 's'}`}
         </Text>
         {isTruncated && (
-          <Badge color="grape" variant="light" size="sm" radius="sm">
+          <Badge color="gray" variant="light" size="sm" radius="sm">
             Preview of first {preview.rows.length} of {preview.total_rows} rows
           </Badge>
         )}
@@ -258,7 +278,7 @@ const CoordinatesMapPreview: React.FC<{ dc: DcLike }> = ({ dc }) => {
               hovertemplate,
               marker: {
                 size: 8,
-                color: 'var(--mantine-color-grape-6)',
+                color: markerColor,
                 opacity: 0.85,
               },
               name: '',

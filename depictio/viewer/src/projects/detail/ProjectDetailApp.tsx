@@ -73,7 +73,17 @@ import { AppSidebar } from '../../chrome';
 import JoinsGraph from './JoinsGraph';
 import IngestionReportPanel from './IngestionReportPanel';
 import { parseTemplate, TemplateChip, templateDocsUrl } from '../template';
-import { DcTypeIcon } from '../dcTypeIcon';
+import { DcTypeIcon, dcTypeMeta } from '../dcTypeIcon';
+import {
+  AGGREGATE_COLOR,
+  DcGeoBadge,
+  DcMetatypeBadge,
+  dcHasCoordinates,
+  dcMetatypeMeta,
+  GEO_COLOR,
+  GEO_ICON,
+  METADATA_COLOR,
+} from '../dcBadges';
 
 interface DataCollectionShape {
   _id?: string;
@@ -142,18 +152,6 @@ function getDcSizeBytes(dc: DataCollectionShape): number {
     );
   }
   return (flex.deltatable_size_bytes as number | undefined) ?? 0;
-}
-
-/** A DC is a "coordinates table" when its config carries explicit lat/lon
- *  column hints — backed by DCTableCoordinatesConfig server-side, but the
- *  dc_type stays "table". Mirrors validation.py:dc_has_coordinates. */
-function dcHasCoordinates(dc: DataCollectionShape): boolean {
-  const type = (dc.config?.type as string | undefined)?.toLowerCase();
-  if (type !== 'table') return false;
-  const props = dc.config?.dc_specific_properties as
-    | Record<string, unknown>
-    | undefined;
-  return Boolean(props?.lat_column) && Boolean(props?.lon_column);
 }
 
 /** Pick the right "where is this data stored" string for a DC. */
@@ -1508,9 +1506,9 @@ const CreateDataCollectionModal: React.FC<{
                   <Stack gap="xs">
                     {coordsGuess && !coordsConfirmed && (
                       <Alert
-                        color="grape"
+                        color={GEO_COLOR}
                         variant="light"
-                        icon={<Icon icon="mdi:map-marker-radius-outline" />}
+                        icon={<Icon icon={GEO_ICON} />}
                         data-testid="coords-detected-alert"
                       >
                         Geographic columns detected ({coordsGuess.latColumn} /{' '}
@@ -2277,8 +2275,8 @@ const DataCollectionsManagerSection: React.FC<{
           iconColor="var(--mantine-color-orange-6)"
           label="Collection Types"
           primaryDual={[
-            { count: stats.aggregate, label: 'Aggregate', color: 'orange' },
-            { count: stats.metadata, label: 'Metadata', color: 'orange' },
+            { count: stats.aggregate, label: 'Aggregate', color: AGGREGATE_COLOR },
+            { count: stats.metadata, label: 'Metadata', color: METADATA_COLOR },
           ]}
         />
         <StatCard
@@ -2484,7 +2482,7 @@ const DataCollectionsTable: React.FC<{
         highlightOnHover
         stickyHeader
         layout="fixed"
-        miw={760}
+        miw={880}
       >
         <Table.Thead>
           <Table.Tr>
@@ -2503,7 +2501,10 @@ const DataCollectionsTable: React.FC<{
               dir={sortDir}
               onSort={onSort}
             />
-            <Table.Th w={130}>Kind</Table.Th>
+            {/* Two columns, not one "Kind": what the collection is and
+                what it can power are independent of each other. */}
+            <Table.Th w={130}>Metatype</Table.Th>
+            <Table.Th w={120}>Capabilities</Table.Th>
             <SortableTh
               label="Size"
               sortKey="size"
@@ -2526,7 +2527,7 @@ const DataCollectionsTable: React.FC<{
         <Table.Tbody>
           {rows.length === 0 && (
             <Table.Tr>
-              <Table.Td colSpan={6}>
+              <Table.Td colSpan={7}>
                 <Text size="sm" c="dimmed" ta="center" py="sm">
                   No data collections match “{filter}”.
                 </Text>
@@ -2538,22 +2539,11 @@ const DataCollectionsTable: React.FC<{
             const isSelected = id === selectedDcId;
             const type = (dc.config?.type as string | undefined) || 'unknown';
             const isMultiQC = type.toLowerCase() === 'multiqc';
-            const isTable = type.toLowerCase() === 'table';
-            const isCoord = dcHasCoordinates(dc);
-            const metatype = (dc.config?.metatype as string | undefined) || null;
             const sizeBytes = getDcSizeBytes(dc);
-            // One consistent classification per DC. An aggregate table looks the
-            // same whether the backend stamped metatype="Aggregated" or left it null
-            // (inferred) — fixes the old grey "AGGREGATED" vs orange "AGGREGATE"
-            // split for what is the same thing. Coordinates is NOT part of this
-            // axis: it's an orthogonal capability (the table can power Map
-            // components) rendered as an extra "Geo" badge, so a metadata table
-            // with lat/lon columns stays visibly a metadata table.
-            const kind = (metatype || '').toLowerCase().startsWith('metadat')
-              ? { label: 'Metadata', color: 'gray' }
-              : projectType === 'advanced' && isTable
-                ? { label: 'Aggregate', color: 'orange' }
-                : null;
+            // Both axes are read from dcBadges so the row, the DC viewer and
+            // the map preview label the same collection the same way.
+            const metatypeMeta = dcMetatypeMeta(dc, projectType);
+            const isCoord = dcHasCoordinates(dc);
             return (
               <Table.Tr
                 key={id}
@@ -2577,28 +2567,22 @@ const DataCollectionsTable: React.FC<{
                   </Text>
                 </Table.Td>
                 <Table.Td>
-                  <Group gap={4} wrap="nowrap">
-                    {kind && (
-                      <Badge color={kind.color} variant="light" size="sm">
-                        {kind.label}
-                      </Badge>
-                    )}
-                    {isCoord && (
-                      <Badge
-                        color="grape"
-                        variant="light"
-                        size="sm"
-                        leftSection={<Icon icon="mdi:map-marker-radius-outline" width={12} />}
-                      >
-                        Geo
-                      </Badge>
-                    )}
-                    {!kind && !isCoord && (
-                      <Text size="xs" c="dimmed">
-                        —
-                      </Text>
-                    )}
-                  </Group>
+                  {metatypeMeta ? (
+                    <DcMetatypeBadge dc={dc} projectType={projectType} />
+                  ) : (
+                    <Text size="xs" c="dimmed">
+                      —
+                    </Text>
+                  )}
+                </Table.Td>
+                <Table.Td>
+                  {isCoord ? (
+                    <DcGeoBadge dc={dc} />
+                  ) : (
+                    <Text size="xs" c="dimmed">
+                      —
+                    </Text>
+                  )}
                 </Table.Td>
                 <Table.Td>
                   <Text size="sm">{sizeBytes > 0 ? formatBytes(sizeBytes) : '—'}</Text>
@@ -2682,17 +2666,11 @@ const DataCollectionViewer: React.FC<{
 }> = ({ dc, projectType, allDataCollections, joins, links }) => {
   const dcId = (dc._id ?? dc.id) as string;
   const type = (dc.config?.type as string | undefined) || 'unknown';
-  const metatype = (dc.config?.metatype as string | undefined) || null;
   const format =
     (dc.config?.dc_specific_properties?.format as string | undefined) || null;
   const isMultiQC = type.toLowerCase() === 'multiqc';
-  // Backend stamps `metatype: "Metadata"` on metadata tables but leaves
-  // aggregate tables with `metatype: null` (see project YAMLs and
-  // `/projects/get/all` payload). Mirror the row's fallback so the viewer
-  // surfaces the implicit "AGGREGATE" classification too.
   const isTable = type.toLowerCase() === 'table';
   const isCoordTable = dcHasCoordinates(dc);
-  const isAggregate = isTable && (metatype || '').toLowerCase() !== 'metadata';
 
   // Ranked viz-kind fit scores for this DC — surfaced in the viewer as
   // "compatible advanced visualizations" chips so users discover the affinity
@@ -2748,11 +2726,10 @@ const DataCollectionViewer: React.FC<{
             />
           )}
           <Title order={4}>{dc.data_collection_tag || dcId}</Title>
-          {isCoordTable && (
-            <Badge color="grape" variant="light" size="sm" radius="sm">
-              COORDINATES
-            </Badge>
-          )}
+          {/* Metatype and map capability are independent, so a metadata table
+              with coordinates reads as "Metadata + Geo" here. */}
+          <DcMetatypeBadge dc={dc} projectType={projectType} />
+          <DcGeoBadge dc={dc} />
         </Group>
         {detectedVizKinds.length > 0 && (
           <Alert
@@ -2792,43 +2769,23 @@ const DataCollectionViewer: React.FC<{
               <DetailRow
                 label="Type"
                 badge={
-                  <Group gap={4} wrap="nowrap">
-                    <Badge color="blue" size="sm" radius="sm">
-                      {type.toUpperCase()}
-                    </Badge>
-                    {isCoordTable && (
-                      <Badge color="grape" variant="light" size="sm" radius="sm">
-                        COORDINATES
-                      </Badge>
-                    )}
-                  </Group>
+                  <Badge color={dcTypeMeta(type).color} size="sm" radius="sm">
+                    {type.toUpperCase()}
+                  </Badge>
                 }
               />
-              {/* Metatype (Metadata vs Aggregate) is meaningful only for
-               *  CLI-driven advanced projects that fan multiple files into
-               *  one DC. Basic projects upload exactly one file per DC, so
-               *  the distinction adds noise without adding information. */}
-              {projectType === 'advanced' && metatype ? (
+              {/* Metatype is what the collection IS. Its map capability is
+               *  a separate row below rather than a second badge here, so the
+               *  two axes never look like alternatives to each other. */}
+              {dcMetatypeMeta(dc, projectType) && (
                 <DetailRow
                   label="Metatype"
-                  badge={
-                    <Badge color="gray" variant="light" size="sm" radius="sm">
-                      {metatype.toUpperCase()}
-                    </Badge>
-                  }
+                  badge={<DcMetatypeBadge dc={dc} projectType={projectType} />}
                 />
-              ) : projectType === 'advanced' && isAggregate ? (
-                <DetailRow
-                  label="Metatype"
-                  badge={
-                    <Badge color="orange" variant="light" size="sm" radius="sm">
-                      AGGREGATE
-                    </Badge>
-                  }
-                />
-              ) : null}
+              )}
               {isCoordTable && (
                 <>
+                  <DetailRow label="Capabilities" badge={<DcGeoBadge dc={dc} />} />
                   <DetailRow
                     label="Latitude column"
                     value={
@@ -2900,13 +2857,13 @@ const DataCollectionViewer: React.FC<{
               <Accordion.Control
                 icon={
                   <Icon
-                    icon="mdi:eye-outline"
+                    icon={isCoordTable ? GEO_ICON : 'mdi:eye-outline'}
                     width={18}
-                    color="var(--mantine-color-blue-6)"
+                    color={`var(--mantine-color-${isCoordTable ? GEO_COLOR : 'blue'}-6)`}
                   />
                 }
               >
-                <Text fw={600}>Preview</Text>
+                <Text fw={600}>{isCoordTable ? 'Map preview' : 'Preview'}</Text>
               </Accordion.Control>
               <Accordion.Panel>
                 {isMultiQC ? (
