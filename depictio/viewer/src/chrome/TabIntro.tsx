@@ -1,8 +1,15 @@
 import React from 'react';
-import { Box, Divider, Group, Text, Title } from '@mantine/core';
+import { Box, Divider, Group, Text, Title, useMantineColorScheme } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import type { DashboardData, DashboardSummary } from 'depictio-react-core';
+
+/** MultiQC ships its logo as a PNG/SVG path rather than an Iconify name; the
+ *  sidebar and the app header both swap it for the SPA-served themed SVG. */
+function isMultiqcIcon(path: string | null | undefined): boolean {
+  if (!path) return false;
+  return /\/assets\/images\/logos\/multiqc(\.png|_icon_(dark|white|color)\.svg)$/i.test(path);
+}
 
 interface TabIntroProps {
   dashboard: DashboardData | null;
@@ -33,7 +40,14 @@ function isImagePath(s: string | null | undefined): boolean {
  * the DASHBOARD's identity line — what the listing card shows under the title
  * — which is a statement about the whole family, not about the tab being read.
  */
+function resolveIconImage(path: string, isDark: boolean): string {
+  if (!isMultiqcIcon(path)) return path;
+  return isDark ? '/dashboard/logos/multiqc_icon_white.svg' : '/dashboard/logos/multiqc_icon_dark.svg';
+}
+
 const TabIntro: React.FC<TabIntroProps> = ({ dashboard, activeTab }) => {
+  const { colorScheme } = useMantineColorScheme();
+  const isDark = colorScheme === 'dark';
   const isChildTab = Boolean(activeTab?.parent_dashboard_id ?? dashboard?.parent_dashboard_id);
   // The parent pill carries its own label ("MultiQC"), distinct from the
   // dashboard title the breadcrumb already shows.
@@ -46,19 +60,32 @@ const TabIntro: React.FC<TabIntroProps> = ({ dashboard, activeTab }) => {
 
   const iconRaw = (activeTab?.tab_icon || activeTab?.icon) ?? null;
   const iconColor = (activeTab?.tab_icon_color || activeTab?.icon_color) ?? 'gray';
-  const showIcon = Boolean(iconRaw) && !isImagePath(iconRaw);
+  // Image-path icons (the workflow logos) render as an <img>; dropping them
+  // left the MultiQC tab — whose icon is only ever a logo — with a bare title.
+  const iconImageSrc = iconRaw && isImagePath(iconRaw) ? resolveIconImage(iconRaw, isDark) : null;
+  const showIcon = Boolean(iconRaw);
 
   return (
     <Box px={6} pt={2} pb={8}>
       <Group gap={8} align="center" wrap="nowrap">
-        {showIcon && iconRaw && (
-          <Icon
-            icon={iconRaw}
+        {iconImageSrc ? (
+          <img
+            src={iconImageSrc}
+            alt=""
             width={20}
             height={20}
-            color={`var(--mantine-color-${iconColor}-6)`}
-            style={{ flexShrink: 0 }}
+            style={{ flexShrink: 0, objectFit: 'contain' }}
           />
+        ) : (
+          iconRaw && (
+            <Icon
+              icon={iconRaw}
+              width={20}
+              height={20}
+              color={`var(--mantine-color-${iconColor}-6)`}
+              style={{ flexShrink: 0 }}
+            />
+          )
         )}
         {name && (
           <Title order={3} fw={700} style={{ minWidth: 0 }}>
