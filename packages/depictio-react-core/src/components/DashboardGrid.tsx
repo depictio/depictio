@@ -136,7 +136,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
   // array on every render (a panel toggle, a collapse click) would invalidate
   // the memoised grid cells and re-render every Plotly figure on the dashboard.
   const layouts = useMemo(
-    () => normalizeLayout(metadataList, layoutData, isDraggable || isResizable),
+    () => normalizeLayout(metadataList, layoutData, isDraggable || isResizable, false),
     [metadataList, layoutData, isDraggable, isResizable],
   );
 
@@ -349,9 +349,13 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
       // and closes the gaps the other sections' members left behind. In edit mode
       // react-grid-layout would converge to the same packing on its own; doing it
       // up front means the first paint is already right.
-      return compactVerticallyForStatic(mine);
+      const packed = compactVerticallyForStatic(mine);
+      // Lone-row widening runs HERE, against the section's own members — never
+      // against the flat union, where co-authored rows from sibling sections
+      // overlap and shove each other apart (see `normalizeLayout`'s pack flag).
+      return isDraggable || isResizable ? packed : widenLoneRows(packed);
     },
-    [layouts],
+    [layouts, isDraggable, isResizable],
   );
 
   const handleSectionLayoutChange = useCallback(
@@ -690,6 +694,15 @@ export function normalizeLayout(
   metadataList: StoredMetadata[],
   layoutData: unknown,
   interactive: boolean,
+  /**
+   * Whether to shelf-pack and widen the flat array here. DashboardGrid passes
+   * `false`: its sections each render their own grid, and the stored y values
+   * REPEAT across sections (every section starts near y=0 of its own canvas),
+   * so packing the flat union makes items from different sections collide,
+   * shove each other down, and leave singletons for `widenLoneRows` to blow up
+   * to full width. It packs per section instead (`layoutsForSection`).
+   */
+  pack = true,
 ): Layout[] {
   // Dash stores layouts as a list of { i: "box-<index>", x, y, w, h } OR as
   // { breakpoint: [...] } keyed dict. Try both shapes.
@@ -768,7 +781,8 @@ export function normalizeLayout(
   // already stored before that pass and anything hidden only at render time.)
   // In editor mode (interactive=true) we leave the layout untouched: items are
   // non-static there, RGL compacts naturally after every drag/resize.
-  return interactive ? merged : widenLoneRows(compactVerticallyForStatic(merged));
+  if (interactive || !pack) return merged;
+  return widenLoneRows(compactVerticallyForStatic(merged));
 }
 
 /**
