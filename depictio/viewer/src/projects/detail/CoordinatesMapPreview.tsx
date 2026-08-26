@@ -21,7 +21,7 @@ import { collapseMapAttribution, fetchDataCollectionPreview } from 'depictio-rea
 import type { PreviewResult } from 'depictio-react-core';
 import Plot from 'react-plotly.js';
 
-import { GEO_COLOR, GEO_ICON } from '../dcBadges';
+import { GEO_COLOR, GEO_ICON } from '../dcTypeIcon';
 
 interface DcLike {
   _id?: string;
@@ -240,18 +240,14 @@ const CoordinatesMapPreview: React.FC<{ dc: DcLike }> = ({ dc }) => {
 
   return (
     <Stack gap="xs">
-      <Group gap="xs" wrap="nowrap">
-        <Badge
-          color={GEO_COLOR}
-          variant="light"
-          size="sm"
-          radius="sm"
-          leftSection={<Icon icon={GEO_ICON} width={12} />}
-        >
-          Geo
-        </Badge>
+      <Group gap={6} wrap="nowrap">
+        <Icon
+          icon={GEO_ICON}
+          width={16}
+          color={`var(--mantine-color-${GEO_COLOR}-6)`}
+        />
         <Text size="sm" c="dimmed">
-          Geo location plotted from <code>{latCol}</code> / <code>{lonCol}</code>
+          Plotted from <code>{latCol}</code> / <code>{lonCol}</code>
         </Text>
       </Group>
       <Group justify="space-between" gap="xs">

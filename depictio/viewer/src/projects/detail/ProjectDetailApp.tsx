@@ -19,6 +19,7 @@ import {
   Tabs,
   Text,
   Title,
+  Tooltip,
   UnstyledButton,
   useMantineColorScheme,
 } from '@mantine/core';
@@ -73,17 +74,19 @@ import { AppSidebar } from '../../chrome';
 import JoinsGraph from './JoinsGraph';
 import IngestionReportPanel from './IngestionReportPanel';
 import { parseTemplate, TemplateChip, templateDocsUrl } from '../template';
-import { DcTypeIcon, dcTypeMeta } from '../dcTypeIcon';
 import {
-  AGGREGATE_COLOR,
-  DcGeoBadge,
-  DcMetatypeBadge,
+  DcTypeIcon,
   dcHasCoordinates,
-  dcMetatypeMeta,
+  dcTypeMetaFor,
   GEO_COLOR,
   GEO_ICON,
+} from '../dcTypeIcon';
+import {
+  AGGREGATE_COLOR,
+  DcMetatypeBadge,
+  dcMetatypeMeta,
   METADATA_COLOR,
-} from '../dcBadges';
+} from '../dcMetatype';
 
 interface DataCollectionShape {
   _id?: string;
@@ -2431,8 +2434,9 @@ const DataCollectionsTable: React.FC<{
 
   const rows = useMemo(() => {
     const q = filter.trim().toLowerCase();
-    const dcType = (dc: DataCollectionShape) =>
-      ((dc.config?.type as string | undefined) || '').toLowerCase();
+    // Match on the flavour the Type column shows ("geomap"), not the stored
+    // dc_type ("table"), so filtering finds what the row reads.
+    const dcType = (dc: DataCollectionShape) => dcTypeMetaFor(dc).label.toLowerCase();
     const list = dataCollections.filter(
       (dc) =>
         !q ||
@@ -2482,7 +2486,7 @@ const DataCollectionsTable: React.FC<{
         highlightOnHover
         stickyHeader
         layout="fixed"
-        miw={880}
+        miw={780}
       >
         <Table.Thead>
           <Table.Tr>
@@ -2501,10 +2505,7 @@ const DataCollectionsTable: React.FC<{
               dir={sortDir}
               onSort={onSort}
             />
-            {/* Two columns, not one "Kind": what the collection is and
-                what it can power are independent of each other. */}
             <Table.Th w={130}>Metatype</Table.Th>
-            <Table.Th w={120}>Capabilities</Table.Th>
             <SortableTh
               label="Size"
               sortKey="size"
@@ -2527,7 +2528,7 @@ const DataCollectionsTable: React.FC<{
         <Table.Tbody>
           {rows.length === 0 && (
             <Table.Tr>
-              <Table.Td colSpan={7}>
+              <Table.Td colSpan={6}>
                 <Text size="sm" c="dimmed" ta="center" py="sm">
                   No data collections match “{filter}”.
                 </Text>
@@ -2540,10 +2541,10 @@ const DataCollectionsTable: React.FC<{
             const type = (dc.config?.type as string | undefined) || 'unknown';
             const isMultiQC = type.toLowerCase() === 'multiqc';
             const sizeBytes = getDcSizeBytes(dc);
-            // Both axes are read from dcBadges so the row, the DC viewer and
-            // the map preview label the same collection the same way.
+            // The two axes come from their own modules, so the row, the DC
+            // viewer and the ingestion report name a collection the same way.
+            const typeMeta = dcTypeMetaFor(dc);
             const metatypeMeta = dcMetatypeMeta(dc, projectType);
-            const isCoord = dcHasCoordinates(dc);
             return (
               <Table.Tr
                 key={id}
@@ -2555,9 +2556,13 @@ const DataCollectionsTable: React.FC<{
               >
                 <Table.Td>
                   <Group gap={6} wrap="nowrap">
-                    <DcTypeIcon type={type} withTooltip={false} />
+                    <DcTypeIcon
+                      type={type}
+                      geo={dcHasCoordinates(dc)}
+                      withTooltip={false}
+                    />
                     <Text size="xs" c="dimmed">
-                      {type}
+                      {typeMeta.label}
                     </Text>
                   </Group>
                 </Table.Td>
@@ -2569,15 +2574,6 @@ const DataCollectionsTable: React.FC<{
                 <Table.Td>
                   {metatypeMeta ? (
                     <DcMetatypeBadge dc={dc} projectType={projectType} />
-                  ) : (
-                    <Text size="xs" c="dimmed">
-                      —
-                    </Text>
-                  )}
-                </Table.Td>
-                <Table.Td>
-                  {isCoord ? (
-                    <DcGeoBadge dc={dc} />
                   ) : (
                     <Text size="xs" c="dimmed">
                       —
@@ -2671,6 +2667,7 @@ const DataCollectionViewer: React.FC<{
   const isMultiQC = type.toLowerCase() === 'multiqc';
   const isTable = type.toLowerCase() === 'table';
   const isCoordTable = dcHasCoordinates(dc);
+  const typeMeta = dcTypeMetaFor(dc);
 
   // Ranked viz-kind fit scores for this DC — surfaced in the viewer as
   // "compatible advanced visualizations" chips so users discover the affinity
@@ -2710,26 +2707,11 @@ const DataCollectionViewer: React.FC<{
           <Title order={4}>Data Collection Viewer</Title>
         </Group>
         <Group gap="sm">
-          {isMultiQC ? (
-            <img
-              src={`${import.meta.env.BASE_URL}logos/multiqc_icon_color.svg`}
-              alt="MultiQC"
-              width={22}
-              height={22}
-              style={{ objectFit: 'contain', display: 'block' }}
-            />
-          ) : (
-            <Icon
-              icon={type === 'table' ? 'mdi:table' : 'mdi:file-document-outline'}
-              width={22}
-              color="var(--mantine-color-teal-6)"
-            />
-          )}
+          <DcTypeIcon type={type} geo={isCoordTable} size={22} withTooltip={false} />
           <Title order={4}>{dc.data_collection_tag || dcId}</Title>
-          {/* Metatype and map capability are independent, so a metadata table
-              with coordinates reads as "Metadata + Geo" here. */}
+          {/* The type glyph above says what this holds; the badge says what it
+              is within the project. The two never substitute for each other. */}
           <DcMetatypeBadge dc={dc} projectType={projectType} />
-          <DcGeoBadge dc={dc} />
         </Group>
         {detectedVizKinds.length > 0 && (
           <Alert
@@ -2769,14 +2751,24 @@ const DataCollectionViewer: React.FC<{
               <DetailRow
                 label="Type"
                 badge={
-                  <Badge color={dcTypeMeta(type).color} size="sm" radius="sm">
-                    {type.toUpperCase()}
-                  </Badge>
+                  <Tooltip
+                    label={
+                      isCoordTable
+                        ? 'Table data collection carrying latitude/longitude columns, which is what Map components bind to'
+                        : typeMeta.label
+                    }
+                    withArrow
+                    withinPortal
+                  >
+                    <Badge color={typeMeta.color} size="sm" radius="sm">
+                      {typeMeta.label.toUpperCase()}
+                    </Badge>
+                  </Tooltip>
                 }
               />
-              {/* Metatype is what the collection IS. Its map capability is
-               *  a separate row below rather than a second badge here, so the
-               *  two axes never look like alternatives to each other. */}
+              {/* Metatype is what the collection IS within its project;
+               *  the Type row above is what it holds. A geomap can be either
+               *  metadata or aggregate, so the two rows never merge. */}
               {dcMetatypeMeta(dc, projectType) && (
                 <DetailRow
                   label="Metatype"
@@ -2785,7 +2777,6 @@ const DataCollectionViewer: React.FC<{
               )}
               {isCoordTable && (
                 <>
-                  <DetailRow label="Capabilities" badge={<DcGeoBadge dc={dc} />} />
                   <DetailRow
                     label="Latitude column"
                     value={
