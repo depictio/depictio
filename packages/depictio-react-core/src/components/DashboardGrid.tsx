@@ -547,7 +547,10 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
       style={{ width: '100%', overflowX: 'hidden' }}
     >
       {unsectioned && renderGrid(unsectioned)}
-      {beforeSections}
+      {/* Ahead of `beforeSections`, not after it: the control belongs to this
+          tab's own sections, and a foreign pinned section sitting between the
+          tab's content and its section toolbar left the toolbar looking like
+          it belonged to that section instead. */}
       {named.length > 0 && (
         <Group justify="flex-end" mb={4}>
           <Button
@@ -568,6 +571,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
           </Button>
         </Group>
       )}
+      {beforeSections}
       {named.length > 0 && (
         <SectionAccordion
           value={named.filter((s) => sectionCollapse.isOpen(s.key)).map((s) => s.key)}

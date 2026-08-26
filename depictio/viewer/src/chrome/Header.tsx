@@ -92,8 +92,7 @@ interface HeaderProps {
 /**
  * Replaces the contents of `<AppShell.Header>`. Three regions:
  *   Left:  Burgers + active-tab icon + dashboard title (with parent breadcrumb)
- *   Right: PoweredBy | state icons (map, realtime) | Edit | Settings
- *          (Reset lives in the Filters panel now).
+ *   Right: PoweredBy | Edit | Settings (Reset lives in the Filters panel now).
  *
  * Visual parity with `depictio/dash/layouts/header.py:design_header`.
  */
@@ -263,27 +262,9 @@ const Header: React.FC<HeaderProps> = ({
       {/* Spacer */}
       <Box style={{ flex: 1, minWidth: 0 }} />
 
-      {/* Right region — colors mirror depictio/dash/layouts/header.py.
-          Read left to right: brand · dashboard-wide state · actions. The
-          state icons (map panel, realtime) are grouped and ruled off rather
-          than trailing the action buttons: an icon-only ghost sitting after
-          two filled labelled buttons read as an afterthought pinned to the
-          window edge, and the map's own filter badge is easy to miss there. */}
+      {/* Right region — colors mirror depictio/dash/layouts/header.py */}
       <Group gap={8} wrap="nowrap" style={{ flexShrink: 0 }}>
         <PoweredBy withRightBorder />
-        {rightExtras && (
-          <Group
-            gap={2}
-            wrap="nowrap"
-            style={{
-              paddingRight: 10,
-              marginRight: 2,
-              borderRight: '1px solid var(--mantine-color-default-border)',
-            }}
-          >
-            {rightExtras}
-          </Group>
-        )}
         {/* One Add menu rather than a button per thing that can be added: the
             two entries name what appears, and the menu stays add-only. An
             existing section is edited from the "…" on its own header. */}
