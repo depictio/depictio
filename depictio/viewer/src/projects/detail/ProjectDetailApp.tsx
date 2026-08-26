@@ -75,9 +75,11 @@ import JoinsGraph from './JoinsGraph';
 import IngestionReportPanel from './IngestionReportPanel';
 import { parseTemplate, TemplateChip, templateDocsUrl } from '../template';
 import {
+  DcGeomapBadge,
   DcTypeIcon,
   dcHasCoordinates,
   dcTypeMetaFor,
+  dcTypeSearchKey,
   GEO_COLOR,
   GEO_ICON,
 } from '../dcTypeIcon';
@@ -2434,9 +2436,10 @@ const DataCollectionsTable: React.FC<{
 
   const rows = useMemo(() => {
     const q = filter.trim().toLowerCase();
-    // Match on the flavour the Type column shows ("geomap"), not the stored
-    // dc_type ("table"), so filtering finds what the row reads.
-    const dcType = (dc: DataCollectionShape) => dcTypeMetaFor(dc).label.toLowerCase();
+    // A geomap answers to both "table" and "geomap", the two words the Type
+    // cell shows for it. Sorting on the same key keeps geomaps next to the
+    // plain tables they are a kind of.
+    const dcType = (dc: DataCollectionShape) => dcTypeSearchKey(dc);
     const list = dataCollections.filter(
       (dc) =>
         !q ||
@@ -2486,7 +2489,7 @@ const DataCollectionsTable: React.FC<{
         highlightOnHover
         stickyHeader
         layout="fixed"
-        miw={780}
+        miw={850}
       >
         <Table.Thead>
           <Table.Tr>
@@ -2496,7 +2499,7 @@ const DataCollectionsTable: React.FC<{
               activeKey={sortKey}
               dir={sortDir}
               onSort={onSort}
-              w={120}
+              w={190}
             />
             <SortableTh
               label="Data collection"
@@ -2555,15 +2558,15 @@ const DataCollectionsTable: React.FC<{
                 }}
               >
                 <Table.Td>
+                  {/* Geomap sits beside the type, never in place of it: the
+                      collection is still a table and still binds to every
+                      table component. */}
                   <Group gap={6} wrap="nowrap">
-                    <DcTypeIcon
-                      type={type}
-                      geo={dcHasCoordinates(dc)}
-                      withTooltip={false}
-                    />
+                    <DcTypeIcon type={type} withTooltip={false} />
                     <Text size="xs" c="dimmed">
                       {typeMeta.label}
                     </Text>
+                    <DcGeomapBadge dc={dc} size="xs" />
                   </Group>
                 </Table.Td>
                 <Table.Td>
@@ -2707,11 +2710,13 @@ const DataCollectionViewer: React.FC<{
           <Title order={4}>Data Collection Viewer</Title>
         </Group>
         <Group gap="sm">
-          <DcTypeIcon type={type} geo={isCoordTable} size={22} withTooltip={false} />
+          <DcTypeIcon type={type} size={22} withTooltip={false} />
           <Title order={4}>{dc.data_collection_tag || dcId}</Title>
-          {/* The type glyph above says what this holds; the badge says what it
-              is within the project. The two never substitute for each other. */}
+          {/* Three coexisting facts, never alternatives: the glyph is what the
+              collection holds, and a table carrying coordinates can be a
+              metadata table and a geomap at once. */}
           <DcMetatypeBadge dc={dc} projectType={projectType} />
+          <DcGeomapBadge dc={dc} />
         </Group>
         {detectedVizKinds.length > 0 && (
           <Alert
@@ -2751,24 +2756,17 @@ const DataCollectionViewer: React.FC<{
               <DetailRow
                 label="Type"
                 badge={
-                  <Tooltip
-                    label={
-                      isCoordTable
-                        ? 'Table data collection carrying latitude/longitude columns, which is what Map components bind to'
-                        : typeMeta.label
-                    }
-                    withArrow
-                    withinPortal
-                  >
+                  <Group gap={4} wrap="nowrap">
                     <Badge color={typeMeta.color} size="sm" radius="sm">
                       {typeMeta.label.toUpperCase()}
                     </Badge>
-                  </Tooltip>
+                    <DcGeomapBadge dc={dc} />
+                  </Group>
                 }
               />
-              {/* Metatype is what the collection IS within its project;
-               *  the Type row above is what it holds. A geomap can be either
-               *  metadata or aggregate, so the two rows never merge. */}
+              {/* Metatype is what the collection IS within its project; the
+               *  Type row above is what it holds. A geomap can be metadata or
+               *  aggregate, so the two rows never merge. */}
               {dcMetatypeMeta(dc, projectType) && (
                 <DetailRow
                   label="Metatype"
