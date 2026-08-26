@@ -11,7 +11,7 @@ Output schema (wide):
     shannon : Float64
     observed_features : Float64
     faith_pd : Float64
-    group : Utf8 (optional, joined from metadata)
+    + passthrough metadata/annotation columns as Utf8 (locality, platform, ...)
 
 Input source CSVs come in wide rarefaction form:
     sample-id, depth-1_iter-1, depth-1_iter-2, ..., depth-N_iter-M
@@ -25,10 +25,18 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# File-based sources: the three QIIME2 CSVs are read straight from the run
+# directory. They used to be `dc_ref`s to intermediate DCs that no template
+# ever declared, which made this recipe seed-only — every fresh ingestion
+# skipped the DC and the rarefaction advanced viz with it.
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="shannon", dc_ref="alpha_rarefaction_shannon"),
-    RecipeSource(ref="observed_features", dc_ref="alpha_rarefaction_observed_features"),
-    RecipeSource(ref="faith_pd", dc_ref="alpha_rarefaction_faith_pd"),
+    RecipeSource(ref="shannon", path="qiime2/alpha-rarefaction/shannon.csv", format="CSV"),
+    RecipeSource(
+        ref="observed_features",
+        path="qiime2/alpha-rarefaction/observed_features.csv",
+        format="CSV",
+    ),
+    RecipeSource(ref="faith_pd", path="qiime2/alpha-rarefaction/faith_pd.csv", format="CSV"),
     RecipeSource(ref="metadata", dc_ref="metadata", optional=True),
 ]
 
@@ -45,12 +53,11 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
 }
 
 OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {
-    # `group` is only present when the optional metadata source was supplied.
-    "group": pl.Utf8,
+    # Passthrough metadata columns (locality, platform, ...) are extra and
+    # allowed; nothing beyond the metrics is guaranteed.
 }
 
 _METADATA_ID_COL = "ID"
-_PREFERRED_GROUP_COLS = ("habitat",)
 
 
 def _unpivot_metric(df: pl.DataFrame, metric_name: str) -> pl.DataFrame:
@@ -67,8 +74,12 @@ def _unpivot_metric(df: pl.DataFrame, metric_name: str) -> pl.DataFrame:
         pl.col("depth_iter").str.extract(r"depth-(\d+)_iter-\d+").cast(pl.Int64).alias("depth"),
         pl.col("depth_iter").str.extract(r"depth-\d+_iter-(\d+)").cast(pl.Int64).alias("iter"),
     )
-    return parsed.rename({sample_col: "sample_id"}).select(
-        "sample_id", "depth", "iter", metric_name
+    return (
+        parsed.rename({sample_col: "sample_id"})
+        .select("sample_id", "depth", "iter", metric_name)
+        # observed_features arrives as Int64 from pl.read_csv; the canonical
+        # schema (and the renderer) want one numeric dtype across metrics.
+        .with_columns(pl.col(metric_name).cast(pl.Float64, strict=False))
     )
 
 
@@ -88,32 +99,43 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         pl.col("iter").cast(pl.Int64),
     )
 
-    metadata = sources.get("metadata")
-    if metadata is not None:
-        sample_id_col = next(
-            (c for c in (_METADATA_ID_COL, "sample") if c in metadata.columns), None
-        )
-        group_col = next((c for c in _PREFERRED_GROUP_COLS if c in metadata.columns), None)
-        if sample_id_col is not None and group_col is not None:
-            meta_slim = (
-                metadata.select(sample_id_col, group_col)
-                .unique(subset=[sample_id_col])
-                .rename({sample_id_col: "sample_id", group_col: "group"})
-                .with_columns(pl.col("group").cast(pl.Utf8))
-            )
-            df = df.join(meta_slim, on="sample_id", how="left")
-
-    keep = [
-        c
-        for c in (
-            "sample_id",
-            "depth",
-            "iter",
-            "shannon",
-            "observed_features",
-            "faith_pd",
-            "group",
-        )
-        if c in df.columns
+    # Group/annotation columns, so the advanced viz's `group_col: '{GROUP_COL}'`
+    # (a literal metadata column name, e.g. `locality`) can bind. Two homes:
+    # a `--metadata` run appends the metadata columns to the rarefaction CSVs
+    # themselves (everything after the depth-*_iter-* block); otherwise fall
+    # back to joining the metadata DC. Either way the columns are cast to Utf8
+    # so the renderer's numeric-column metric auto-discovery never mistakes an
+    # annotation for a metric.
+    first = sources["shannon"]
+    sample_col = first.columns[0]
+    trailing = [
+        c for c in first.columns if c != sample_col and not c.startswith("depth-")
     ]
-    return df.select(keep).sort("sample_id", "depth", "iter")
+    if trailing:
+        anno = (
+            first.select([sample_col, *trailing])
+            .unique(subset=[sample_col])
+            .rename({sample_col: "sample_id"})
+            .with_columns([pl.col(c).cast(pl.Utf8, strict=False) for c in trailing])
+        )
+        df = df.join(anno, on="sample_id", how="left")
+    else:
+        metadata = sources.get("metadata")
+        if metadata is not None:
+            sample_id_col = next(
+                (c for c in (_METADATA_ID_COL, "sample") if c in metadata.columns), None
+            )
+            if sample_id_col is not None:
+                meta_cols = [c for c in metadata.columns if c != sample_id_col]
+                meta_slim = (
+                    metadata.unique(subset=[sample_id_col])
+                    .rename({sample_id_col: "sample_id"})
+                    .with_columns(
+                        [pl.col(c).cast(pl.Utf8, strict=False) for c in meta_cols]
+                    )
+                )
+                df = df.join(meta_slim, on="sample_id", how="left")
+
+    core = ["sample_id", "depth", "iter", "shannon", "observed_features", "faith_pd"]
+    rest = [c for c in df.columns if c not in core]
+    return df.select(core + rest).sort("sample_id", "depth", "iter")

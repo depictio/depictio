@@ -4811,6 +4811,46 @@ def _resolve_workflow_tags(component: dict, project_id: PyObjectId | None = None
                         )
                         break
 
+            # Advanced-viz configs may bind EXTRA data collections by tag
+            # (e.g. the phylogenetic viz's `tree_dc_tag` / `metadata_dc_tag`).
+            # Template dashboards cannot know a fresh project's ObjectIds, so
+            # any `<base>_dc_tag` in the config overwrites the corresponding
+            # `<base>_dc_id` / `<base>_wf_id` with ids resolved in this
+            # workflow — the ids shipped in the YAML are seed-era leftovers.
+            config = component.get("config")
+            if isinstance(config, dict):
+                for key in [k for k in config if k.endswith("_dc_tag")]:
+                    extra_tag = config.get(key)
+                    if not extra_tag:
+                        continue
+                    base = key[: -len("_dc_tag")]
+                    resolved = next(
+                        (
+                            dc
+                            for dc in wf.get("data_collections", [])
+                            if dc.get("data_collection_tag") == extra_tag
+                        ),
+                        None,
+                    )
+                    if resolved is not None:
+                        config[f"{base}_dc_id"] = str(resolved["_id"])
+                        config[f"{base}_wf_id"] = str(wf["_id"])
+                        logger.debug(
+                            f"Resolved config {key}='{extra_tag}' to "
+                            f"{base}_dc_id {resolved['_id']}"
+                        )
+                    else:
+                        # A named DC this project never materialised (an
+                        # optional DC skipped at ingest). Stale seed ids would
+                        # silently fetch ANOTHER project's data — an explicit
+                        # missing binding is the honest failure mode.
+                        config[f"{base}_dc_id"] = None
+                        config[f"{base}_wf_id"] = None
+                        logger.info(
+                            f"Config {key}='{extra_tag}' not found in workflow "
+                            f"'{wf.get('name')}' — cleared {base}_dc_id/{base}_wf_id"
+                        )
+
             return
 
 

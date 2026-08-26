@@ -380,7 +380,7 @@ workflows:
               "habitat": "Sample habitat (used as colour grouping)"
 
       - data_collection_tag: "rarefaction_canonical"
-        optional: true  # seed-only: depends on intermediate DCs not produced by plain CLI ingestion
+        optional: true  # skipped cleanly when the run used --skip_alpha_rarefaction
         description: "Multi-metric rarefaction curves (sample_id/depth/iter + per-metric cols)"
         config:
           type: "Table"
@@ -396,10 +396,10 @@ workflows:
               "shannon": "Shannon entropy"
               "observed_features": "Observed ASV count"
               "faith_pd": "Faith's Phylogenetic Diversity"
-              "group": "Sample grouping column (habitat) — when metadata present"
+              "locality": "Passthrough sample-metadata columns (present when the run used --metadata)"
 
       - data_collection_tag: "alpha_diversity_multi_canonical"
-        optional: true  # seed-only: depends on intermediate DCs not produced by plain CLI ingestion
+        optional: true  # skipped cleanly when the run used --skip_diversity_indices
         description: "Per-sample multi-metric alpha-diversity (Shannon/Observed/Faith PD/Evenness)"
         config:
           type: "Table"
@@ -410,7 +410,7 @@ workflows:
             format: "TSV"
             columns_description:
               "sample_id": "Sample identifier"
-              "habitat": "Habitat type (Riverwater / Groundwater / Sediment / Soil)"
+              "locality": "Passthrough sample-metadata columns from the QIIME2 vectors"
               "shannon": "Shannon entropy"
               "observed_features": "Observed ASV count"
               "faith_pd": "Faith's Phylogenetic Diversity"

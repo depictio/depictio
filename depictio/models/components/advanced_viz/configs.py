@@ -459,6 +459,13 @@ class PhylogeneticConfig(_BaseVizConfig):
     # the /advanced_viz/phylogeny/{dc_id}/newick endpoint).
     tree_wf_id: str = Field(..., description="Workflow id of the phylogeny DC")
     tree_dc_id: str = Field(..., description="Data-collection id of the phylogeny DC")
+    # Portable alternative to the raw ids: a dashboard YAML shipped with a
+    # template cannot know the ObjectIds a fresh project will mint, so it names
+    # the DCs by tag and `_resolve_workflow_tags` rewrites the *_id fields at
+    # import time (same contract as the map's `geojson_dc_tag`).
+    tree_dc_tag: str | None = Field(
+        default=None, description="Data-collection tag of the phylogeny DC (resolved to ids at import)"
+    )
 
     # Tip-metadata source — a table DC keyed by taxon name.
     metadata_wf_id: str | None = Field(
@@ -466,6 +473,10 @@ class PhylogeneticConfig(_BaseVizConfig):
     )
     metadata_dc_id: str | None = Field(
         default=None, description="Data-collection id of the metadata table DC (optional)"
+    )
+    metadata_dc_tag: str | None = Field(
+        default=None,
+        description="Data-collection tag of the metadata table DC (resolved to ids at import)",
     )
     taxon_col: str = Field(
         default="taxon",

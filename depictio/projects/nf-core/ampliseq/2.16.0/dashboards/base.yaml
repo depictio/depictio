@@ -1559,10 +1559,15 @@ tabs:
     data_collection_tag: phylogenetic_tree_canonical
     config:
       viz_kind: phylogenetic
+      # Seed-era ids kept for the seeded demo project; on template import the
+      # *_dc_tag entries below overwrite them with this project's real ids
+      # (or clear them when the tagged DC was not materialised).
       tree_wf_id: 646b0f3c1e4a2d7f8e5b8ca3
       tree_dc_id: 646b0f3c1e4a2d7f8e5b8cdb
+      tree_dc_tag: phylogenetic_tree_canonical
       metadata_wf_id: 646b0f3c1e4a2d7f8e5b8ca3
       metadata_dc_id: 646b0f3c1e4a2d7f8e5b8cdc
+      metadata_dc_tag: phylogenetic_tree_metadata_canonical
       taxon_col: taxon
       color_col: Phylum
       label_col: null
