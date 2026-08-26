@@ -10,7 +10,6 @@ from typing import Any
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.services.multiqc.themes import get_theme_template
 
-
 # Reference viewport for the fit: the server does not know the panel's real
 # size, so assume a conservative dashboard tile. Underestimating keeps every
 # point on screen in larger panels; only a panel *narrower* than this could

@@ -21,13 +21,13 @@ import yaml
 from depictio.cli.cli_logging import logger
 from depictio.models.models.templates import (
     ExpectedDataCollection,
-    TemplateConditional,
-    TemplateMetadata,
-    TemplateOrigin,
     ProvenanceEntry,
     ProvenanceGroupRule,
     ProvenanceSource,
     ProvenanceSpec,
+    TemplateConditional,
+    TemplateMetadata,
+    TemplateOrigin,
 )
 
 _TEMPLATE_VAR_RE = re.compile(r"\{([A-Z0-9_]+)\}")
