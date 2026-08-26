@@ -296,11 +296,6 @@ const Header: React.FC<HeaderProps> = ({
             </Menu.Dropdown>
           </Menu>
         )}
-        {/* Analysis sits ahead of the document actions (Save / Edit / Settings):
-            it is a way of *reading* the dashboard, not a way of changing it, and
-            grouping the two kinds together made the Analysis button read as
-            another edit control. */}
-        {rightExtras}
         {mode === 'edit' && onSave && (
           <Tooltip
             label="You can only save dashboards you own. Duplicate this one to get your own copy."
@@ -320,6 +315,12 @@ const Header: React.FC<HeaderProps> = ({
             </Button>
           </Tooltip>
         )}
+        {/* Analysis sits between Save and Edit / Exit Edit. It is a way of
+            *reading* the dashboard rather than changing it, so it stays clear of
+            Settings and of the mode switch; putting it after Save also keeps
+            the primary action leftmost in edit mode. In view mode the Save
+            block is absent, so this lands immediately left of Edit. */}
+        {rightExtras}
         {mode === 'view' ? (
           <Tooltip
             label="You can only edit dashboards you own. Duplicate this one to get your own copy."
