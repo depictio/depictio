@@ -16,6 +16,12 @@ export interface ProvenanceEntryLike {
   source?: string;
 }
 
+/** One group of entries, as both the report endpoint and the drawer build it. */
+export interface ProvenanceGroupLike {
+  group: string;
+  entries: ProvenanceEntryLike[];
+}
+
 /** Values the CLI stringifies for "the pipeline left this alone". */
 const UNSET_VALUES = new Set(['null', 'false', '', '[]', '{}', 'none', 'NA']);
 

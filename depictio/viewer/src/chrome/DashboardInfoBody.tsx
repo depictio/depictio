@@ -7,6 +7,8 @@ import {
   CopyButton,
   Divider,
   Group,
+  Modal,
+  ScrollArea,
   Stack,
   Switch,
   Table,
@@ -20,6 +22,7 @@ import { Icon } from '@iconify/react';
 import type { DashboardData } from 'depictio-react-core';
 import { fetchProject } from 'depictio-react-core';
 import { parseTemplateOrigin, TemplateChip } from '../projects/template';
+import RunProvenanceCard from '../projects/detail/RunProvenanceCard';
 import { formatDateTime } from '../lib/datetime';
 import {
   isUnsetProvenanceValue,
@@ -113,6 +116,7 @@ const DashboardInfoBody: React.FC<DashboardInfoBodyProps> = ({ dashboard, active
   const runProvenance: ProvenanceEntryLike[] = (() => {
     const origin = projectTemplateOrigin as {
       run_provenance?: Array<{
+        source?: string;
         key?: string;
         value?: string;
         group?: string;
@@ -123,11 +127,18 @@ const DashboardInfoBody: React.FC<DashboardInfoBodyProps> = ({ dashboard, active
     return origin.run_provenance
       .filter((e) => e && e.key)
       .map((e) => ({
+        source: String(e.source ?? ''),
         key: String(e.key),
         value: String(e.value ?? ''),
         group: String(e.group ?? 'Other'),
         highlight: Boolean(e.highlight),
       }));
+  })();
+
+  const runProvenanceFiles: string[] = (() => {
+    const origin = projectTemplateOrigin as { run_provenance_files?: unknown } | null;
+    const files = origin?.run_provenance_files;
+    return Array.isArray(files) ? files.map(String) : [];
   })();
 
   return (
@@ -201,7 +212,13 @@ const DashboardInfoBody: React.FC<DashboardInfoBodyProps> = ({ dashboard, active
             icon="mdi:tune-variant"
             color="orange"
             label="Run parameters"
-            value={<RunParameters entries={runProvenance} projectId={projectId} />}
+            value={
+              <RunParameters
+                entries={runProvenance}
+                files={runProvenanceFiles}
+                projectId={projectId}
+              />
+            }
           />
         )}
         {ownerEmail && (
@@ -304,149 +321,114 @@ const CopyableId: React.FC<{ label: string; value: string }> = ({ label, value }
 );
 
 /**
- * The pipeline's own settings, inside a 400px drawer.
+ * The pipeline's own settings, from a 400px drawer.
  *
- * Two levels rather than a curated list. The template's `provenance.highlight`
- * keys open the row — the handful of settings needed to read the dashboard at
- * all (primers, truncation, filtering thresholds) — and everything else is one
- * click below, grouped and searchable exactly as in the ingestion report.
- * Nothing is withheld: highlighting decides the ORDER of discovery, not what
- * exists, which is what keeps the mechanism honest for pipelines whose
- * template never names a highlight.
+ * Two levels, because the two readings want different room. The template's
+ * `provenance.highlight` keys stay inline — the handful of settings needed to
+ * read the dashboard at all (primers, truncation, filtering thresholds), short
+ * enough for a key/value table at panel width. Everything else opens in a
+ * modal running the SAME component as the ingestion report, rather than a
+ * cramped copy of it: a 235-row grouped table needs the width, and one
+ * implementation means one behaviour to learn.
  *
- * Unset keys are folded away by default and counted, so "80 of 235" states
- * plainly that the rest are parameters the run left alone.
+ * Highlighting therefore decides the ORDER of discovery, not what exists —
+ * which is what keeps the mechanism honest for a pipeline whose template
+ * names no highlight at all.
  */
 const RunParameters: React.FC<{
   entries: ProvenanceEntryLike[];
+  files: string[];
   projectId: string | null;
-}> = ({ entries, projectId }) => {
-  const [showAll, setShowAll] = useState(false);
-  const [query, setQuery] = useState('');
-  const [hideUnset, setHideUnset] = useState(true);
-
+}> = ({ entries, files, projectId }) => {
+  const [modalOpen, setModalOpen] = useState(false);
   const highlights = useMemo(() => entries.filter((e) => e.highlight), [entries]);
-  const visible = useMemo(
-    () =>
-      entries.filter(
-        (e) => matchesProvenanceQuery(e, query) && !(hideUnset && isUnsetProvenanceValue(e.value)),
-      ),
-    [entries, query, hideUnset],
-  );
-  const grouped = useMemo(() => {
-    const byGroup = new Map<string, ProvenanceEntryLike[]>();
-    for (const e of visible) {
-      const g = e.group || 'Other';
-      const bucket = byGroup.get(g);
-      if (bucket) bucket.push(e);
-      else byGroup.set(g, [e]);
+
+  // Re-group the flat entry list the way the report's endpoint already does —
+  // consecutive runs of the same group, in collection order.
+  const groups = useMemo(() => {
+    const out: Array<{ group: string; entries: ProvenanceEntryLike[] }> = [];
+    for (const e of entries) {
+      const name = e.group || 'Other';
+      const last = out[out.length - 1];
+      if (last && last.group === name) last.entries.push(e);
+      else out.push({ group: name, entries: [e] });
     }
-    return [...byGroup.entries()];
-  }, [visible]);
-
-  const rows = (list: ProvenanceEntryLike[]) => (
-    <Table verticalSpacing={2} withRowBorders={false}>
-      <Table.Tbody>
-        {list.map((e) => (
-          <Table.Tr key={e.key}>
-            <Table.Td px={0} w={150}>
-              <Text size="xs" fw={500} style={{ overflowWrap: 'anywhere' }}>
-                {e.key}
-              </Text>
-            </Table.Td>
-            <Table.Td px={0}>
-              <Code fz={11} style={{ overflowWrap: 'anywhere' }}>
-                {e.value}
-              </Code>
-            </Table.Td>
-          </Table.Tr>
-        ))}
-      </Table.Tbody>
-    </Table>
-  );
-
-  // A search opens every group: a hit behind a folded accordion reads as no
-  // result. Same rule as the ingestion report's card.
-  const openGroups = query.trim() ? grouped.map(([g]) => g) : undefined;
+    return out;
+  }, [entries]);
 
   return (
-    <Accordion
-      variant="default"
-      chevronPosition="left"
-      styles={{
-        item: { border: 'none' },
-        control: { padding: 0 },
-        content: { padding: 0 },
-        label: { padding: 0 },
-      }}
-    >
-      <Accordion.Item value="run-params">
-        <Accordion.Control>
-          <Text size="sm" fw={500}>
-            {highlights.length > 0
-              ? `${highlights.length} key settings`
-              : `${entries.length} parameters`}
-          </Text>
-        </Accordion.Control>
-        <Accordion.Panel>
-          {highlights.length > 0 && !showAll && rows(highlights)}
-          {showAll && (
-            <Stack gap={6} mt={4}>
-              <TextInput
-                size="xs"
-                placeholder="Search parameters…"
-                value={query}
-                onChange={(e) => setQuery(e.currentTarget.value)}
-              />
-              <Group justify="space-between" gap={4} wrap="nowrap">
-                <Switch
-                  size="xs"
-                  checked={hideUnset}
-                  onChange={(e) => setHideUnset(e.currentTarget.checked)}
-                  label="Hide unset"
-                />
-                <Text size="xs" c="dimmed">
-                  {visible.length} of {entries.length}
-                </Text>
-              </Group>
-              <Accordion multiple variant="contained" radius="sm" value={openGroups}>
-                {grouped.map(([group, list]) => (
-                  <Accordion.Item key={group} value={group}>
-                    <Accordion.Control px={8} py={4}>
-                      <Group gap={6} wrap="nowrap">
-                        <Text size="xs" fw={600}>
-                          {group}
+    <>
+      <Accordion
+        variant="default"
+        chevronPosition="left"
+        styles={{
+          item: { border: 'none' },
+          control: { padding: 0 },
+          content: { padding: 0 },
+          label: { padding: 0 },
+        }}
+      >
+        <Accordion.Item value="run-params">
+          <Accordion.Control>
+            <Text size="sm" fw={500}>
+              {highlights.length > 0
+                ? `${highlights.length} key settings`
+                : `${entries.length} parameters`}
+            </Text>
+          </Accordion.Control>
+          <Accordion.Panel>
+            {highlights.length > 0 && (
+              <Table verticalSpacing={2} withRowBorders={false}>
+                <Table.Tbody>
+                  {highlights.map((e) => (
+                    <Table.Tr key={e.key}>
+                      <Table.Td px={0} w={150}>
+                        <Text size="xs" fw={500} style={{ overflowWrap: 'anywhere' }}>
+                          {e.key}
                         </Text>
-                        <Badge size="xs" variant="light" color="gray">
-                          {list.length}
-                        </Badge>
-                      </Group>
-                    </Accordion.Control>
-                    <Accordion.Panel>{rows(list)}</Accordion.Panel>
-                  </Accordion.Item>
-                ))}
-              </Accordion>
-            </Stack>
-          )}
-          <Group gap="sm" mt={6} wrap="nowrap">
-            <Anchor
-              component="button"
-              type="button"
-              size="xs"
-              fw={500}
-              onClick={() => setShowAll((v) => !v)}
-            >
-              {showAll ? 'Key settings only' : `All ${entries.length} parameters →`}
-            </Anchor>
-            {projectId && (
-              <Anchor href={`/projects/${projectId}#ingestion`} size="xs" fw={500}>
-                Ingestion report →
-              </Anchor>
+                      </Table.Td>
+                      <Table.Td px={0}>
+                        <Code fz={11} style={{ overflowWrap: 'anywhere' }}>
+                          {e.value}
+                        </Code>
+                      </Table.Td>
+                    </Table.Tr>
+                  ))}
+                </Table.Tbody>
+              </Table>
             )}
-          </Group>
-        </Accordion.Panel>
-      </Accordion.Item>
-    </Accordion>
+            <Group gap="sm" mt={6} wrap="nowrap">
+              <Anchor
+                component="button"
+                type="button"
+                size="xs"
+                fw={500}
+                onClick={() => setModalOpen(true)}
+              >
+                All {entries.length} parameters →
+              </Anchor>
+              {projectId && (
+                <Anchor href={`/projects/${projectId}#ingestion`} size="xs" fw={500}>
+                  Ingestion report →
+                </Anchor>
+              )}
+            </Group>
+          </Accordion.Panel>
+        </Accordion.Item>
+      </Accordion>
+
+      <Modal
+        opened={modalOpen}
+        onClose={() => setModalOpen(false)}
+        title="Run parameters"
+        size="xl"
+        // Above the Settings drawer that opened it.
+        zIndex={400}
+        scrollAreaComponent={ScrollArea.Autosize}
+      >
+        <RunProvenanceCard groups={groups} files={files} withCard={false} />
+      </Modal>
+    </>
   );
 };
 
