@@ -364,6 +364,7 @@ export {
   GROUP_FILTER_SOURCE,
   GROUP_FILTER_INDEX_PREFIX,
   MAX_GROUP_VALUES,
+  GROUPING_COLOR,
   COLOR_BY_NONE,
   resolveGroupRender,
   selectableSelectionFilters,

@@ -19,11 +19,10 @@ import { Icon } from '@iconify/react';
 
 import type { InteractiveFilter, StoredMetadata } from '../../api';
 import { filterDisplayLabel } from '../../activeFilters';
-import { TAB10_PALETTE } from '../../colors';
 import type { ColorByColumn } from '../../hooks/useColorByColumns';
 import {
   COLOR_BY_NONE,
-  MAX_GROUP_VALUES,
+  GROUP_SAVE_ERROR,
   defaultGroupName,
   nextGroupColor,
   selectableSelectionFilters,
@@ -31,6 +30,7 @@ import {
   type GroupingDisplay,
   type SelectionGroup,
 } from '../../selectionGroups';
+import GroupColorSwatches from '../GroupColorSwatches';
 
 export interface SelectionGroupsPanelProps {
   /** The dashboard's *user* filters — scanned for active selections to save.
@@ -74,6 +74,12 @@ export interface SelectionGroupsPanelProps {
 }
 
 const COLOR_BY_NONE_VALUE = '__depictio_none__';
+
+// The panel is dense by design (it lives in a 300px header popover), so its
+// section headings and switch labels run one step below the theme's smallest
+// token. Declared once so the three dividers and four switches can't drift.
+const SECTION_LABEL_STYLES = { label: { fontSize: 11, fontWeight: 600 } } as const;
+const CONTROL_LABEL_STYLES = { label: { fontSize: 11 } } as const;
 
 /** Overlay-vs-split control, shared by the two sections so both modes read
  *  the same way. */
@@ -209,9 +215,7 @@ const SelectionGroupsPanel: React.FC<SelectionGroupsPanelProps> = ({
     const created = onCreateGroup(selectedCandidate, finalName, color ?? defaultColor);
     if (!created) {
       // Keep the selection so the user can retry or shrink it.
-      setCreateError(
-        `Couldn't save this selection as a group — it may exceed the ${MAX_GROUP_VALUES.toLocaleString()}-value cap.`,
-      );
+      setCreateError(GROUP_SAVE_ERROR);
       return;
     }
     setCreateError(null);
@@ -227,7 +231,7 @@ const SelectionGroupsPanel: React.FC<SelectionGroupsPanelProps> = ({
         <Divider
           label="Color by column"
           labelPosition="left"
-          styles={{ label: { fontSize: 11, fontWeight: 600 } }}
+          styles={SECTION_LABEL_STYLES}
           style={{ flex: 1 }}
         />
         <Tooltip
@@ -248,7 +252,7 @@ const SelectionGroupsPanel: React.FC<SelectionGroupsPanelProps> = ({
             }
             onClick={onResetAnalysis}
             leftSection={<Icon icon="mdi:restore" width={12} height={12} />}
-            styles={{ label: { fontSize: 11 } }}
+            styles={CONTROL_LABEL_STYLES}
           >
             Reset
           </Button>
@@ -290,7 +294,7 @@ const SelectionGroupsPanel: React.FC<SelectionGroupsPanelProps> = ({
         label="Groups"
         labelPosition="left"
         mt={10}
-        styles={{ label: { fontSize: 11, fontWeight: 600 } }}
+        styles={SECTION_LABEL_STYLES}
       />
 
       <Popover
@@ -358,24 +362,7 @@ const SelectionGroupsPanel: React.FC<SelectionGroupsPanelProps> = ({
               }}
               data-autofocus
             />
-            <Group gap={4}>
-              {TAB10_PALETTE.map((c) => (
-                <ColorSwatch
-                  key={c}
-                  color={c}
-                  size={16}
-                  style={{
-                    cursor: 'pointer',
-                    outline:
-                      (color ?? defaultColor) === c
-                        ? '2px solid var(--mantine-color-blue-5)'
-                        : 'none',
-                    outlineOffset: 1,
-                  }}
-                  onClick={() => setColor(c)}
-                />
-              ))}
-            </Group>
+            <GroupColorSwatches value={color ?? defaultColor} onSelect={setColor} />
             {selectedCandidate && Array.isArray(selectedCandidate.value) && (
               <Text size="xs" c="dimmed">
                 {selectedCandidate.value.length} selected item
@@ -478,24 +465,12 @@ const SelectionGroupsPanel: React.FC<SelectionGroupsPanelProps> = ({
                       }}
                       data-autofocus
                     />
-                    <Group gap={4}>
-                      {TAB10_PALETTE.map((c) => (
-                        <ColorSwatch
-                          key={c}
-                          color={c}
-                          size={16}
-                          style={{
-                            cursor: 'pointer',
-                            outline:
-                              g.color === c ? '2px solid var(--mantine-color-blue-5)' : 'none',
-                            outlineOffset: 1,
-                          }}
-                          // Color applies immediately: the figures recolor as
-                          // feedback, no confirmation step needed.
-                          onClick={() => onUpdateGroup(g.id, { color: c })}
-                        />
-                      ))}
-                    </Group>
+                    {/* Color applies immediately: the figures recolor as
+                        feedback, no confirmation step needed. */}
+                    <GroupColorSwatches
+                      value={g.color}
+                      onSelect={(c) => onUpdateGroup(g.id, { color: c })}
+                    />
                     <Button
                       size="xs"
                       onClick={() => {
@@ -551,7 +526,7 @@ const SelectionGroupsPanel: React.FC<SelectionGroupsPanelProps> = ({
             label="Group options"
             labelPosition="left"
             mt={10}
-            styles={{ label: { fontSize: 11, fontWeight: 600 } }}
+            styles={SECTION_LABEL_STYLES}
           />
           <Stack gap={6} mt={4}>
             <Tooltip
@@ -567,7 +542,7 @@ const SelectionGroupsPanel: React.FC<SelectionGroupsPanelProps> = ({
                   onChange={(e) =>
                     onColorByChange(e.currentTarget.checked ? { kind: 'groups' } : COLOR_BY_NONE)
                   }
-                  styles={{ label: { fontSize: 11 } }}
+                  styles={CONTROL_LABEL_STYLES}
                 />
               </span>
             </Tooltip>
@@ -585,7 +560,7 @@ const SelectionGroupsPanel: React.FC<SelectionGroupsPanelProps> = ({
                       label="Show ungrouped (“Other”)"
                       checked={showOther}
                       onChange={(e) => onShowOtherChange(e.currentTarget.checked)}
-                      styles={{ label: { fontSize: 11 } }}
+                      styles={CONTROL_LABEL_STYLES}
                     />
                   </span>
                 </Tooltip>
@@ -610,7 +585,7 @@ const SelectionGroupsPanel: React.FC<SelectionGroupsPanelProps> = ({
                   // comparison exactly as it was.
                   disabled={colorBy.kind === 'column'}
                   onChange={(e) => onCompareInCardsChange(e.currentTarget.checked)}
-                  styles={{ label: { fontSize: 11 } }}
+                  styles={CONTROL_LABEL_STYLES}
                 />
               </span>
             </Tooltip>
@@ -626,7 +601,7 @@ const SelectionGroupsPanel: React.FC<SelectionGroupsPanelProps> = ({
                     label="Show overall (All)"
                     checked={showOverall}
                     onChange={(e) => onShowOverallChange(e.currentTarget.checked)}
-                    styles={{ label: { fontSize: 11 } }}
+                    styles={CONTROL_LABEL_STYLES}
                   />
                 </span>
               </Tooltip>

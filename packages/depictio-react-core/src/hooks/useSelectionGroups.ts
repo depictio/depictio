@@ -71,20 +71,31 @@ export interface SelectionGroupsApi {
   bulkOptions: BulkComputeOptions | undefined;
 }
 
+/** One storage read resolved against the defaults, shared by the mount-time
+ *  initialisers and the switch-dashboards re-hydration below so the two can't
+ *  disagree on what "no stored payload" means. */
+function hydrate(dashboardId: string | undefined) {
+  const stored = dashboardId ? readSelectionGroups(dashboardId) : null;
+  return {
+    groups: stored?.groups ?? [],
+    colorBy: stored?.colorBy ?? COLOR_BY_NONE,
+    compareInCards: stored?.compareInCards ?? false,
+    displayMode: stored?.displayMode ?? ('color' as GroupingDisplay),
+    showOther: stored?.showOther ?? true,
+    showOverall: stored?.showOverall ?? true,
+  };
+}
+
 export function useSelectionGroups(dashboardId: string | undefined): SelectionGroupsApi {
-  // One storage read shared by all six initialisers (per-state lazy
-  // initialisers would each re-parse the same localStorage payload).
-  const [stored] = useState(() => (dashboardId ? readSelectionGroups(dashboardId) : null));
-  const [groups, setGroups] = useState<SelectionGroup[]>(stored?.groups ?? []);
-  const [colorBy, setColorByState] = useState<ColorByState>(stored?.colorBy ?? COLOR_BY_NONE);
-  const [compareInCards, setCompareInCardsState] = useState<boolean>(
-    stored?.compareInCards ?? false,
-  );
-  const [displayMode, setDisplayModeState] = useState<GroupingDisplay>(
-    stored?.displayMode ?? 'color',
-  );
-  const [showOther, setShowOtherState] = useState<boolean>(stored?.showOther ?? true);
-  const [showOverall, setShowOverallState] = useState<boolean>(stored?.showOverall ?? true);
+  // Lazily read once (per-state lazy initialisers would each re-parse the same
+  // localStorage payload).
+  const [initial] = useState(() => hydrate(dashboardId));
+  const [groups, setGroups] = useState<SelectionGroup[]>(initial.groups);
+  const [colorBy, setColorByState] = useState<ColorByState>(initial.colorBy);
+  const [compareInCards, setCompareInCardsState] = useState<boolean>(initial.compareInCards);
+  const [displayMode, setDisplayModeState] = useState<GroupingDisplay>(initial.displayMode);
+  const [showOther, setShowOtherState] = useState<boolean>(initial.showOther);
+  const [showOverall, setShowOverallState] = useState<boolean>(initial.showOverall);
 
   // Which dashboard id the current state actually reflects. The write-through
   // below must not run for a dashboardId the state hasn't been re-hydrated for
@@ -100,13 +111,13 @@ export function useSelectionGroups(dashboardId: string | undefined): SelectionGr
   useEffect(() => {
     if (idRef.current === dashboardId) return;
     idRef.current = dashboardId;
-    const stored = dashboardId ? readSelectionGroups(dashboardId) : null;
-    setGroups(stored?.groups ?? []);
-    setColorByState(stored?.colorBy ?? COLOR_BY_NONE);
-    setCompareInCardsState(stored?.compareInCards ?? false);
-    setDisplayModeState(stored?.displayMode ?? 'color');
-    setShowOtherState(stored?.showOther ?? true);
-    setShowOverallState(stored?.showOverall ?? true);
+    const next = hydrate(dashboardId);
+    setGroups(next.groups);
+    setColorByState(next.colorBy);
+    setCompareInCardsState(next.compareInCards);
+    setDisplayModeState(next.displayMode);
+    setShowOtherState(next.showOther);
+    setShowOverallState(next.showOverall);
     setHydratedFor(dashboardId);
   }, [dashboardId]);
 

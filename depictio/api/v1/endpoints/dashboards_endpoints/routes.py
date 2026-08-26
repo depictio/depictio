@@ -38,7 +38,12 @@ from depictio.api.v1.services.card_breakdown import (
     evenness,
 )
 from depictio.api.v1.services.card_metrics import (
+    GROUP_COMPARABLE_LAYOUTS,
     NUMERIC_LAYOUTS,
+    compute_box_plot_stats,
+    compute_histogram,
+    compute_trend_on_grid,
+    trend_axis_grid,
 )
 from depictio.api.v1.services.card_metrics import (
     numeric_layout_payload as _numeric_layout_payload,
@@ -1498,8 +1503,6 @@ def _agg_value(col: Any, aggregation: str) -> Any:
             # `secondary_values[idx]` as this aggregation's value. Centralised
             # in card_metrics so the per-group comparison path reduces
             # identically.
-            from depictio.api.v1.services.card_metrics import compute_box_plot_stats
-
             return compute_box_plot_stats(col)
         if agg == "mode":
             m = col.mode()
@@ -1866,6 +1869,8 @@ def bulk_compute_cards(
           card_component/callbacks/core.py remains the source of truth for the
           edit path; this endpoint mirrors its math.
     """
+    import polars as pl
+
     from depictio.api.v1.deltatables_utils import load_deltatable_lite
     from depictio.api.v1.services.card_groups import compute_group_compare
     from depictio.api.v1.services.figure.groups import (
@@ -2318,16 +2323,6 @@ def bulk_compute_cards(
         # group in the group's color.
         if compare_groups:
             try:
-                import polars as pl
-
-                from depictio.api.v1.services.card_metrics import (
-                    GROUP_COMPARABLE_LAYOUTS,
-                    compute_box_plot_stats,
-                    compute_histogram,
-                    compute_trend_on_grid,
-                    trend_axis_grid,
-                )
-
                 payload_fn = None
                 gc_domain = None
                 # The tuple is the single gate: a layout absent from it keeps

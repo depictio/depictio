@@ -423,13 +423,41 @@ const EditorApp: React.FC = () => {
 
   // In-place "save selection as group" on components with a live selection
   // (mirrors App.tsx).
+  // Analysis mode, tracked separately from whether the header panel is open.
+  // Mantine dismisses a Popover on mousedown outside it, and that mousedown is
+  // the one that starts a lasso — so tying the mode to `analysisOpen` would
+  // erase every capability marker exactly when the user acts on one. Opening
+  // the panel arms the mode; only the button (or a second click on it) ends it.
+  const [analysisOpen, setAnalysisOpen] = useState(false);
+  const [analysisArmed, setAnalysisArmed] = useState(false);
+  const handleAnalysisOpenChange = useCallback((next: boolean) => {
+    setAnalysisOpen(next);
+    if (next) setAnalysisArmed(true);
+  }, []);
+  const handleAnalysisToggle = useCallback(() => {
+    const next = !analysisOpen;
+    setAnalysisOpen(next);
+    setAnalysisArmed(next);
+  }, [analysisOpen]);
+
   const saveGroupApi = useMemo(
     () => ({
       groups: groupsApi.groups,
       createGroup: groupsApi.createGroupFromFilter,
       clearSelection: handleFilterChange,
+      // "Engaged" spans both ways into analysis: the panel being open (the user
+      // is looking for where to act) and a grouping mode being on (the
+      // dashboard is already repainted by one). Outside those, capable
+      // components stay unmarked so ordinary viewing is unchanged.
+      analysisEngaged: analysisArmed || groupsApi.colorBy.kind !== 'none',
     }),
-    [groupsApi.groups, groupsApi.createGroupFromFilter, handleFilterChange],
+    [
+      groupsApi.groups,
+      groupsApi.createGroupFromFilter,
+      handleFilterChange,
+      analysisArmed,
+      groupsApi.colorBy.kind,
+    ],
   );
 
   // Authors see the panel as viewers will. Cross-tab (floating) filter
@@ -1005,8 +1033,26 @@ const EditorApp: React.FC = () => {
   // Global "Color by" column discovery + stable palette (mirrors App.tsx).
   const colorByColumns = useCategoricalColumns(dashboard?.stored_metadata);
   const colorByColumnRender = useColorByColumnRender(groupsApi.colorBy, colorByColumns);
+  // Memoised for the grid's per-item render memo (mirrors App.tsx).
+  const groupRender = useMemo(
+    () =>
+      resolveGroupRender(
+        groupsApi.colorBy,
+        groupsApi.renderGroups,
+        colorByColumnRender,
+        groupsApi.displayMode,
+        groupsApi.showOther,
+      ),
+    [
+      groupsApi.colorBy,
+      groupsApi.renderGroups,
+      colorByColumnRender,
+      groupsApi.displayMode,
+      groupsApi.showOther,
+    ],
+  );
 
-  // One node, mounted in whichever FilterPanel is on screen (mirrors App.tsx).
+  // The Grouping panel's body, mounted in the header popover (mirrors App.tsx).
   const groupsSection = (
     <SelectionGroupsPanel
       filters={filters}
@@ -1527,6 +1573,10 @@ const EditorApp: React.FC = () => {
                 <GroupingHeaderControl
                   groupCount={groupsApi.groups.length}
                   colorBy={groupsApi.colorBy}
+                  opened={analysisOpen}
+                  onOpenedChange={handleAnalysisOpenChange}
+                  armed={analysisArmed}
+                  onToggle={handleAnalysisToggle}
                 >
                   {groupsSection}
                 </GroupingHeaderControl>
@@ -1694,6 +1744,8 @@ const EditorApp: React.FC = () => {
                   slot="top"
                   filters={filters}
                   onFilterChange={handleFilterChange}
+                  groupRender={groupRender}
+                  bulkOptions={groupsApi.bulkOptions}
                   renderSectionActions={renderPersistentSectionAction}
                 />
               )}
@@ -1704,13 +1756,7 @@ const EditorApp: React.FC = () => {
                 layoutData={dashboard.right_panel_layout_data}
                 gridSections={dashboard.grid_sections}
                 filters={combinedFilters}
-                groupRender={resolveGroupRender(
-                  groupsApi.colorBy,
-                  groupsApi.renderGroups,
-                  colorByColumnRender,
-                  groupsApi.displayMode,
-                  groupsApi.showOther,
-                )}
+                groupRender={groupRender}
                 onFilterChange={handleFilterChange}
                 cardValues={cardValues}
                 cardSecondaryValues={cardSecondaryValues}
@@ -1730,6 +1776,8 @@ const EditorApp: React.FC = () => {
                   slot="bottom"
                   filters={filters}
                   onFilterChange={handleFilterChange}
+                  groupRender={groupRender}
+                  bulkOptions={groupsApi.bulkOptions}
                   renderSectionActions={renderPersistentSectionAction}
                 />
               )}

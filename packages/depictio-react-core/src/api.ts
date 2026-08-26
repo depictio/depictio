@@ -830,15 +830,12 @@ export async function bulkComputeCards(
 ): Promise<BulkComputeResponse> {
   // Group state rides in the body only when the comparison is actually on, so
   // requests without the feature stay byte-identical.
-  const groupBody: Record<string, unknown> =
-    options?.compareGroups && options.groups && options.groups.length > 0
-      ? { groups: options.groups, compare_groups: true }
-      : {};
-  if (groupBody.compare_groups && options?.showOther === false) {
-    groupBody.include_other = false;
-  }
-  if (groupBody.compare_groups && options?.showOverall === false) {
-    groupBody.include_overall = false;
+  const groupBody: Record<string, unknown> = {};
+  if (options?.compareGroups && options.groups && options.groups.length > 0) {
+    groupBody.groups = options.groups;
+    groupBody.compare_groups = true;
+    if (options.showOther === false) groupBody.include_other = false;
+    if (options.showOverall === false) groupBody.include_overall = false;
   }
   const res = await authFetch(
     `${API_BASE}/dashboards/bulk_compute_cards/${dashboardId}`,

@@ -59,6 +59,12 @@ interface TrendPoints {
   points?: { label: string; value: number | null }[];
 }
 
+/** The breakdown family: layouts whose per-group payload is a ranked `top`
+ *  list. They share a tooltip form (one rank-tinted row per category) and hide
+ *  the row's hero value, which is often `nunique` and reads as an index when
+ *  printed bare — the labelled value lives in the tooltip instead. */
+const BREAKDOWN_LAYOUTS = new Set(['donut', 'composition', 'top_n', 'concentration']);
+
 /** Slim Tukey box on a shared domain: whisker span, IQR box in the group's
  *  color, a darker median tick. The full-size BoxPlot renderer self-normalises;
  *  this one deliberately takes the domain from outside so N group rows are
@@ -201,9 +207,9 @@ const MiniGauge: React.FC<{ fraction: number; color: string }> = ({ fraction, co
 const TrendOverlay: React.FC<{
   series: { color: string; points: { value: number | null }[]; dimmed: boolean }[];
 }> = ({ series }) => {
-  const all = series.flatMap((s) => s.points.map((p) => p.value)).filter((v): v is number => {
-    return v !== null;
-  });
+  const all = series
+    .flatMap((s) => s.points.map((p) => p.value))
+    .filter((v): v is number => v !== null);
   if (!all.length) return null;
   const lo = Math.min(...all);
   const hi = Math.max(...all);
@@ -338,11 +344,6 @@ function miniRendering(
   }
 }
 
-/** Breakdown-family layouts whose hero value (often ``nunique``) reads as an
- *  index when printed bare — the row keeps the count, the labelled value
- *  lives in the tooltip. */
-const HIDE_ROW_VALUE_LAYOUTS = new Set(['donut', 'composition', 'top_n', 'concentration']);
-
 const pctText = (v: unknown) =>
   typeof v === 'number' ? `${Math.round(v * 100)}%` : '—';
 
@@ -414,14 +415,7 @@ function rowTooltip(
         <TooltipStat label="duplicated" value={(p.duplicated as number) ?? 0} />
       </>
     );
-  } else if (
-    (layout === 'donut' ||
-      layout === 'composition' ||
-      layout === 'top_n' ||
-      layout === 'concentration') &&
-    p &&
-    Array.isArray((p as BreakdownTop).top)
-  ) {
+  } else if (BREAKDOWN_LAYOUTS.has(layout ?? '') && p && Array.isArray((p as BreakdownTop).top)) {
     const top = (p as BreakdownTop).top ?? [];
     body = (
       <>
@@ -555,6 +549,7 @@ const GroupCompareStrip: React.FC<{
     (payload.layout === 'trend' ? rows.some(hasTrendPoints) : rows.some((r) => mini(r) !== null));
   const tooltipFor = (r: Row) =>
     rowTooltip(payload.layout, r, payload.aggregation, formatValue, coverageMax);
+  const valueText = (r: Row) => (r.value == null ? '—' : formatValue(r.value));
 
   if (rich && payload.layout === 'trend') {
     const withSeries = richRows.filter(hasTrendPoints);
@@ -582,7 +577,7 @@ const GroupCompareStrip: React.FC<{
                   {r.label}
                 </Text>
                 <Text size="xs" fw={600} c={r.dimmed ? 'dimmed' : undefined}>
-                  {r.value == null ? '—' : formatValue(r.value)}
+                  {valueText(r)}
                 </Text>
               </Group>
             </Tooltip>
@@ -635,7 +630,7 @@ const GroupCompareStrip: React.FC<{
                   c={r.dimmed ? 'dimmed' : undefined}
                   style={{ fontVariantNumeric: 'tabular-nums' }}
                 >
-                  {r.value == null ? '—' : formatValue(r.value)}
+                  {valueText(r)}
                 </Text>
               )}
             </Stack>
@@ -673,14 +668,14 @@ const GroupCompareStrip: React.FC<{
                 {r.label}
               </Text>
               <Box style={{ flex: '1 1 auto', minWidth: 40 }}>{mini(r)}</Box>
-              {!HIDE_ROW_VALUE_LAYOUTS.has(payload.layout ?? '') && (
+              {!BREAKDOWN_LAYOUTS.has(payload.layout ?? '') && (
                 <Text
                   size="xs"
                   fw={600}
                   c={r.dimmed ? 'dimmed' : undefined}
                   style={{ flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}
                 >
-                  {r.value == null ? '—' : formatValue(r.value)}
+                  {valueText(r)}
                 </Text>
               )}
               <Text size="xs" c="dimmed" style={{ flexShrink: 0 }}>
@@ -708,7 +703,7 @@ const GroupCompareStrip: React.FC<{
               {r.label}
             </Text>
             <Text size="xs" fw={600} c={r.dimmed ? 'dimmed' : undefined}>
-              {r.value == null ? '—' : formatValue(r.value)}
+              {valueText(r)}
             </Text>
             <Text size="xs" c="dimmed">
               ({r.count})

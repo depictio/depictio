@@ -27,7 +27,7 @@ const ResetButton: React.FC<ResetButtonProps> = ({ onResetFilter, active = false
       withArrow
     >
       <ActionIcon
-        variant={active ? 'filled' : 'light'}
+        variant={active ? 'filled' : 'subtle'}
         color="orange"
         size="sm"
         disabled={disabled}

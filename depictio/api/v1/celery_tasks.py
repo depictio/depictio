@@ -379,33 +379,39 @@ def build_figure_preview(payload: dict) -> dict:
             limit_rows=limit_rows,
             init_data=init_data,
         )
-    if color_by_group and agg_fig is None and df is not None and not group_colored:
-        # Annotate AFTER the load, never inside it — the frame caches key on
-        # filter metadata only, and this keeps grouped/ungrouped requests
-        # sharing one cached frame (see services/figure/groups.py). Sampling
-        # happens later inside `create_figure_from_data`, so the sampled subset
-        # keeps its labels.
-        group_expr = group_annotation_expr(group_defs, df.columns, dict(df.schema))
-        if group_expr is not None:
-            df = df.with_columns(group_expr)
-            if not include_other:
-                df = df.filter(pl.col(GROUP_COLUMN) != OTHER_LABEL)
-            # The agg path may have reverted dict_kwargs (scan lacked the group
-            # column) before falling through to this loader; re-apply so the
-            # kwargs and the flag can't disagree.
-            dict_kwargs = _grouped_kwargs(original_dict_kwargs)
-            group_colored = True
-        else:
-            dict_kwargs = original_dict_kwargs
-    if color_by_column and agg_fig is None and df is not None and column_colored is None:
-        # Same contract as groups on the row path: apply only when the loaded
-        # frame really carries the column, re-applying from the originals in
-        # case the agg path reverted (kwargs and flag must agree).
-        if color_by_column["column_name"] in df.columns:
-            dict_kwargs = _column_kwargs(original_dict_kwargs)
-            column_colored = color_by_column["column_name"]
-        else:
-            dict_kwargs = original_dict_kwargs
+    # Row-loader path: the overrides are (re-)applied here when the scan-level
+    # aggregation didn't run or didn't take them. The two modes are mutually
+    # exclusive by construction (``color_by_column`` is only sanitized when
+    # ``color_by_group`` is off), so one elif covers both.
+    if agg_fig is None and df is not None:
+        if color_by_group and not group_colored:
+            # Annotate AFTER the load, never inside it — the frame caches key on
+            # filter metadata only, and this keeps grouped/ungrouped requests
+            # sharing one cached frame (see services/figure/groups.py). Sampling
+            # happens later inside `create_figure_from_data`, so the sampled
+            # subset keeps its labels.
+            group_expr = group_annotation_expr(group_defs, df.columns, dict(df.schema))
+            if group_expr is not None:
+                df = df.with_columns(group_expr)
+                if not include_other:
+                    df = df.filter(pl.col(GROUP_COLUMN) != OTHER_LABEL)
+                # The agg path may have reverted dict_kwargs (scan lacked the
+                # group column) before falling through to this loader; re-apply
+                # so the kwargs and the flag can't disagree.
+                dict_kwargs = _grouped_kwargs(original_dict_kwargs)
+                group_colored = True
+            else:
+                dict_kwargs = original_dict_kwargs
+        elif color_by_column and column_colored is None:
+            # Same contract as groups on the row path: apply only when the
+            # loaded frame really carries the column, re-applying from the
+            # originals in case the agg path reverted (kwargs and flag must
+            # agree).
+            if color_by_column["column_name"] in df.columns:
+                dict_kwargs = _column_kwargs(original_dict_kwargs)
+                column_colored = color_by_column["column_name"]
+            else:
+                dict_kwargs = original_dict_kwargs
     load_ms = int((time.monotonic() - started) * 1000)
 
     _ensure_mantine_templates()

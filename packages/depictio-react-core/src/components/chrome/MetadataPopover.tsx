@@ -18,7 +18,7 @@ const MetadataPopover: React.FC<MetadataPopoverProps> = ({ metadata }) => (
   <Popover position="bottom-end" withArrow shadow="md" width={420}>
     <Popover.Target>
       <Tooltip label="Component metadata" withArrow>
-        <ActionIcon variant="light" color="cyan" size="sm" aria-label="Component metadata">
+        <ActionIcon variant="subtle" color="cyan" size="sm" aria-label="Component metadata">
           <Icon icon="mdi:information-outline" width={16} height={16} />
         </ActionIcon>
       </Tooltip>

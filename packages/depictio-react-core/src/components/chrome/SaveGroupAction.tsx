@@ -1,25 +1,17 @@
 import React, { useContext, useState } from 'react';
-import {
-  ActionIcon,
-  Button,
-  ColorSwatch,
-  Group,
-  Popover,
-  Text,
-  TextInput,
-  Tooltip,
-} from '@mantine/core';
+import { ActionIcon, Button, Popover, Text, TextInput, Tooltip } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import type { InteractiveFilter } from '../../api';
-import { TAB10_PALETTE } from '../../colors';
 import {
-  MAX_GROUP_VALUES,
+  GROUPING_COLOR,
+  GROUP_SAVE_ERROR,
   defaultGroupName,
   nextGroupColor,
   selectableSelectionFilters,
   type SelectionGroup,
 } from '../../selectionGroups';
+import GroupColorSwatches from '../GroupColorSwatches';
 
 /**
  * Everything the per-component "save selection as group" action needs from the
@@ -35,6 +27,11 @@ export interface SaveGroupApi {
   /** The root's filter-change handler; called with the emptied selection
    *  filter after a save so the `(index, source)` slot frees up. */
   clearSelection: (filter: InteractiveFilter) => void;
+  /** True while the user is working in analysis mode — the header Analysis
+   *  panel is open, or a grouping mode is repainting the dashboard. Components
+   *  a selection can be saved from advertise themselves only then, so ordinary
+   *  viewing keeps its clean chrome. */
+  analysisEngaged: boolean;
 }
 
 export const SaveGroupContext = React.createContext<SaveGroupApi | null>(null);
@@ -68,9 +65,7 @@ const SaveGroupAction: React.FC<{ filter: InteractiveFilter }> = ({ filter }) =>
   const save = () => {
     const created = api.createGroup(filter, name.trim() || placeholder, color ?? fallbackColor);
     if (!created) {
-      setError(
-        `Couldn't save this selection as a group — it may exceed the ${MAX_GROUP_VALUES.toLocaleString()}-value cap.`,
-      );
+      setError(GROUP_SAVE_ERROR);
       return;
     }
     api.clearSelection({ ...filter, value: [] });
@@ -92,8 +87,11 @@ const SaveGroupAction: React.FC<{ filter: InteractiveFilter }> = ({ filter }) =>
       <Popover.Target>
         <Tooltip label="Save selection as group" withArrow openDelay={300}>
           <ActionIcon
+            // Same glyph, same color and the same light→filled progression as
+            // the header "Analysis" button (GroupingHeaderControl): filled is
+            // the actionable state.
             variant="filled"
-            color="teal"
+            color={GROUPING_COLOR}
             size="sm"
             aria-label="Save selection as group"
             onClick={(e) => {
@@ -120,22 +118,7 @@ const SaveGroupAction: React.FC<{ filter: InteractiveFilter }> = ({ filter }) =>
           }}
           autoFocus
         />
-        <Group gap={4} mt={6} wrap="wrap">
-          {TAB10_PALETTE.map((c) => (
-            <ColorSwatch
-              key={c}
-              color={c}
-              size={16}
-              style={{
-                cursor: 'pointer',
-                outline:
-                  (color ?? fallbackColor) === c ? '2px solid var(--mantine-color-blue-5)' : 'none',
-                outlineOffset: 1,
-              }}
-              onClick={() => setColor(c)}
-            />
-          ))}
-        </Group>
+        <GroupColorSwatches value={color ?? fallbackColor} onSelect={setColor} mt={6} />
         {error && (
           <Text size="xs" c="red" mt={6}>
             {error}
@@ -148,5 +131,46 @@ const SaveGroupAction: React.FC<{ filter: InteractiveFilter }> = ({ filter }) =>
     </Popover>
   );
 };
+
+/**
+ * The passive half of the same slot: a component that *could* feed a group but
+ * has no selection yet.
+ *
+ * Without it, a selectable component is indistinguishable from a passive one
+ * until the user happens to lasso it — the capability is real but invisible.
+ * Shown only while analysis is engaged (see `SaveGroupApi.analysisEngaged`), so
+ * it points at where to act exactly when that is the task at hand, and stays
+ * out of the way the rest of the time. `SaveGroupAction` replaces it in the
+ * same slot as soon as there is a selection to save.
+ */
+export const SelectionHintAction: React.FC = () => (
+  <Tooltip
+    label="Can be grouped — select here to create an analysis group"
+    withArrow
+    openDelay={200}
+    position="bottom"
+  >
+    <ActionIcon
+      size="sm"
+      // The un-actioned half of the same progression: `light` here, `filled`
+      // once there is a selection to save. Same glyph and theme color as the
+      // header Analysis button, so a user who opened that panel recognises
+      // these as the components it is talking about.
+      variant="subtle"
+      color={GROUPING_COLOR}
+      className="dgl-no-drag"
+      // Passive marker, not a control: the selection is made on the component
+      // itself (lasso, row click, thumbnail click), so there is nothing to
+      // trigger from here. Out of the tab order for that reason, but kept in
+      // the accessibility tree and labelled — it is the only cue a screen
+      // reader gets, since the outline is purely visual.
+      tabIndex={-1}
+      aria-label="Selectable: create an analysis group from a selection here"
+      style={{ cursor: 'default' }}
+    >
+      <Icon icon="mdi:select-group" width={16} height={16} />
+    </ActionIcon>
+  </Tooltip>
+);
 
 export default SaveGroupAction;

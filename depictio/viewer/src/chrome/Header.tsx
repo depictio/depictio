@@ -296,6 +296,11 @@ const Header: React.FC<HeaderProps> = ({
             </Menu.Dropdown>
           </Menu>
         )}
+        {/* Analysis sits ahead of the document actions (Save / Edit / Settings):
+            it is a way of *reading* the dashboard, not a way of changing it, and
+            grouping the two kinds together made the Analysis button read as
+            another edit control. */}
+        {rightExtras}
         {mode === 'edit' && onSave && (
           <Tooltip
             label="You can only save dashboards you own. Duplicate this one to get your own copy."
@@ -354,7 +359,6 @@ const Header: React.FC<HeaderProps> = ({
         >
           Settings
         </Button>
-        {rightExtras}
       </Group>
     </Group>
   );

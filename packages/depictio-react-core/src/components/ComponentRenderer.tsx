@@ -1,4 +1,4 @@
-import React, { lazy, Suspense, useRef } from 'react';
+import React, { lazy, Suspense, useContext, useRef } from 'react';
 import { DepictioCard } from 'depictio-components';
 import type { GridApi } from 'ag-grid-community';
 
@@ -20,9 +20,13 @@ import SecondaryMetrics, {
 } from './card/SecondaryMetrics';
 import { wrapWithChrome } from './chrome';
 import LoadAllButton, { LoadAllState } from './chrome/LoadAllButton';
-import SaveGroupAction, { selectionCandidateFor } from './chrome/SaveGroupAction';
+import SaveGroupAction, {
+  SaveGroupContext,
+  SelectionHintAction,
+  selectionCandidateFor,
+} from './chrome/SaveGroupAction';
 import MapDataButton from './map/MapDataButton';
-import { isMapSelectionEnabled } from '../selection';
+import { isMapSelectionEnabled, supportsSelectionGrouping } from '../selection';
 import { ActiveHighlight } from '../highlight';
 import type { GroupRenderState } from '../selectionGroups';
 
@@ -90,19 +94,30 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
   showDragHandle,
   compact,
 }) => {
-  // Live selection on THIS component → offer the in-place "save selection as
-  // group" action beside the other chrome icons. It rides the chrome's
-  // persistent-when-filtering row and renders nothing when no app-level
-  // SaveGroupContext is mounted (project previews, catalog).
+  // Two states of one chrome slot, both scoped to the four selection-source
+  // component types (figure / table / map / image) that `chromeExtras` reaches:
+  //
+  //   selection present → SaveGroupAction, the in-place "save as group" action
+  //   analysis engaged  → SelectionHintAction, marking "you can select here"
+  //
+  // Both render nothing when no app-level SaveGroupContext is mounted (project
+  // previews, catalog), which is also the signal that this host is interactive
+  // at all — those roots are the ones that pass `onFilterChange` down.
+  const saveGroupApi = useContext(SaveGroupContext);
   const saveCandidate = selectionCandidateFor(filters, metadata.index);
-  const chromeExtras = saveCandidate ? (
-    <>
-      <SaveGroupAction filter={saveCandidate} />
-      {extraActions}
-    </>
-  ) : (
-    extraActions
-  );
+  const showSelectionHint =
+    !saveCandidate &&
+    Boolean(saveGroupApi?.analysisEngaged) &&
+    supportsSelectionGrouping(metadata, Boolean(saveGroupApi));
+  const chromeExtras =
+    saveCandidate || showSelectionHint ? (
+      <>
+        {saveCandidate ? <SaveGroupAction filter={saveCandidate} /> : <SelectionHintAction />}
+        {extraActions}
+      </>
+    ) : (
+      extraActions
+    );
 
   if (metadata.component_type === 'card') {
     return wrapWithChrome(

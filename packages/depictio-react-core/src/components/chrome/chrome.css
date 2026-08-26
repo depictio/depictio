@@ -38,15 +38,27 @@
   border-radius: var(--mantine-radius-sm);
   padding: 2px;
 }
-/* Soft pill background — fades in with the row on hover so the icons stay
- * legible over busy backgrounds. Promoted to always-visible when the row
- * is anchored by an active reset (`has-active-reset`) so the lone reset
- * icon doesn't float without a backdrop. */
+/* Backdrop behind the action row.
+ *
+ * Solid fill: the icons sit over plots and tables of every density, and
+ * anything translucent left them muddy against a busy one. The hairline border
+ * is what keeps this from reading as a smear of white dropped on the chart —
+ * it gives the row a defined edge, so it reads as a chip that belongs to the
+ * component. Both tokens are scheme-aware, so this is correct in dark mode too.
+ *
+ * `box-sizing` is spelled out because the border must sit inside the
+ * `inset: 0` box, or the backdrop grows 2px past the row it is backing.
+ *
+ * Visible on hover/focus, and pinned on for a row that keeps an icon on screen
+ * without hover (`has-persistent-action` — the active-reset icon, the analysis
+ * marker), which would otherwise float with nothing behind it. */
 .depictio-component-actions::before {
   content: '';
   position: absolute;
   inset: 0;
+  box-sizing: border-box;
   background: var(--mantine-color-body);
+  border: 1px solid var(--mantine-color-default-border);
   border-radius: inherit;
   opacity: 0;
   transition: opacity 0.15s ease;
@@ -54,7 +66,7 @@
 }
 .depictio-component-chrome:hover .depictio-component-actions::before,
 .depictio-component-chrome:focus-within .depictio-component-actions::before,
-.depictio-component-actions.has-active-reset::before {
+.depictio-component-actions.has-persistent-action::before {
   opacity: 1;
 }
 /* Per-child opacity so the active-reset icon can stay visible while the
@@ -100,6 +112,24 @@
   width: 12px;
   height: 12px;
 }
+/* Cards anchor their actions bottom-right instead of top-right.
+ *
+ * A card is read top-down — title, then the number it exists to show, with its
+ * icon in the top-right corner. That is exactly where this row floats, so on a
+ * card it lands on the content instead of beside it. The bottom edge is the
+ * quiet part. Orientation is untouched: cards are already horizontal via
+ * `orientationFor`, and stay so.
+ *
+ * Declared after `.is-compact` on purpose — the two have equal specificity and
+ * both set `top`, so source order is what decides. */
+.depictio-component-actions.depictio-actions-bottom {
+  top: auto;
+  bottom: 12px;
+}
+.depictio-component-actions.depictio-actions-bottom.is-compact {
+  top: auto;
+  bottom: 2px;
+}
 
 /* Vertical stack for figure/multiqc/map — mirrors the Dash editor's
  * `button_configs[type].orientation == "vertical"` from layouts/edit.py. */
@@ -115,11 +145,9 @@
 /* Only the wrapped renderer fills the fullscreen viewport. The action row is
  * the chrome's other direct child and is absolutely positioned, so it must be
  * excluded: at `height: 100%` a horizontal row (Mantine Group centres on the
- * cross axis) drops its icons to the vertical middle of the screen, and the
- * hover pill — `::before { inset: 0 }` inside the row's z-index 1100 stacking
- * context — inflates into a full-height opaque panel painted over the content.
- * Vertical rows escape both effects because their cross axis is horizontal,
- * which is why this only ever showed up on the table/AG Grid chrome. */
+ * cross axis) drops its icons to the vertical middle of the screen. Vertical
+ * rows escape that because their cross axis is horizontal, which is why this
+ * only ever showed up on the table/AG Grid chrome. */
 .depictio-component-chrome.fullscreen-active > *:not(.depictio-component-actions) {
   height: 100%;
 }
@@ -154,4 +182,39 @@
  * Mantine popover covers it and the filter button appears to do nothing. */
 .ag-popup-child {
   z-index: 500;
+}
+
+/* Analysis mode: mark the components a selection can be saved from.
+ *
+ * The renderers already draw their own <Paper withBorder/>, so this uses
+ * `outline` rather than `border` — an outline is painted outside the box model
+ * and changes no layout, which matters because these components sit in a grid
+ * whose cells are sized to the pixel. Dashed to read as an invitation rather
+ * than as the solid border of an active state, and offset inwards so it hugs
+ * the Paper's own edge instead of bleeding into the grid gutter.
+ *
+ * The color must match `GROUPING_COLOR` in selectionGroups.ts (CSS cannot read
+ * it) — deliberately NOT the theme primary, which is blue and would collide
+ * with the Edit button the Analysis control sits beside. The `-filled` token
+ * resolves per scheme, so this stays correct in light and dark. */
+.depictio-component-chrome.depictio-selection-capable > .mantine-Paper-root,
+.depictio-component-chrome.depictio-selection-capable > .depictio-fill {
+  outline: 2px dashed var(--mantine-color-violet-filled);
+  outline-offset: -2px;
+  border-radius: var(--mantine-radius-md);
+}
+/* The hint icon is the one action that must be legible without hover: it exists
+ * precisely to tell a user who is NOT yet interacting that this component is
+ * selectable, so fading it would defeat the point. Fully opaque — it is already
+ * rare (only while analysis is engaged, only on the four selectable component
+ * types), so it costs no clutter in ordinary viewing. Same escape from the
+ * hover-only default as `.depictio-active-reset` above.
+ *
+ * Deliberately WITHOUT the row's backdrop pill: unlike the reset icon (a bare
+ * subtle ActionIcon that needs something behind it), this one is a Mantine
+ * `light` variant and carries its own tint, so the pill only showed up as a
+ * white box around it. The background stays transparent until hover. */
+.depictio-component-actions > .depictio-selection-hint {
+  opacity: 1;
+  pointer-events: auto;
 }

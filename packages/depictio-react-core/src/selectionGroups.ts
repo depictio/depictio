@@ -111,6 +111,26 @@ export const GROUP_FILTER_INDEX_PREFIX = '__depictio_group__:';
  *  runaway million-point lasso must be refused rather than stored. */
 export const MAX_GROUP_VALUES = 25_000;
 
+/**
+ * The one Mantine color the whole grouping feature is drawn in: the header
+ * "Analysis" button, the per-component capability marker, and the save action.
+ *
+ * Named rather than the theme primary because the primary is blue, which is
+ * also the Edit button sitting right beside it in the header — two adjacent
+ * filled buttons in the same hue read as one control. Violet is clear of the
+ * neighbours (Save is teal, Settings is gray).
+ *
+ * The chrome outline in `components/chrome/chrome.css` has to spell the same
+ * choice as `--mantine-color-violet-filled`, since CSS cannot read this — keep
+ * the two in step.
+ */
+export const GROUPING_COLOR = 'violet';
+
+/** Shown when `groupFromSelectionFilter` refuses a selection. Shared by the
+ *  two save entry points (the Analysis panel and the per-component chrome
+ *  action) so the wording can't drift between them. */
+export const GROUP_SAVE_ERROR = `Couldn't save this selection as a group — it may exceed the ${MAX_GROUP_VALUES.toLocaleString()}-value cap.`;
+
 const STORAGE_PREFIX = 'depictio:selection-groups:';
 const STORAGE_VERSION = 2;
 
@@ -198,28 +218,23 @@ export function groupFromSelectionFilter(
  * on different columns AND together like any two dashboard filters.
  */
 export function groupsToFilters(groups: SelectionGroup[]): InteractiveFilter[] {
-  const buckets = new Map<string, { dcId?: string; columnName: string; values: string[] }>();
-  const seen = new Map<string, Set<string>>();
+  // `values` is a Set so the union stays deduplicated (overlapping groups on
+  // one column would otherwise repeat literals in the `is_in` predicate);
+  // insertion order is preserved, so the emitted list is still stable.
+  const buckets = new Map<string, { dcId?: string; columnName: string; values: Set<string> }>();
   for (const g of groups) {
     if (!g.filterActive || g.values.length === 0) continue;
     const key = `${g.dcId ?? ''}:${g.columnName}`;
     let bucket = buckets.get(key);
-    let seenVals = seen.get(key);
     if (!bucket) {
-      bucket = { dcId: g.dcId, columnName: g.columnName, values: [] };
-      seenVals = new Set<string>();
+      bucket = { dcId: g.dcId, columnName: g.columnName, values: new Set() };
       buckets.set(key, bucket);
-      seen.set(key, seenVals);
     }
-    for (const v of g.values) {
-      if (seenVals!.has(v)) continue;
-      seenVals!.add(v);
-      bucket.values.push(v);
-    }
+    for (const v of g.values) bucket.values.add(v);
   }
   return Array.from(buckets.entries()).map(([key, b]) => ({
     index: GROUP_FILTER_INDEX_PREFIX + key,
-    value: b.values,
+    value: Array.from(b.values),
     column_name: b.columnName,
     interactive_component_type: 'MultiSelect',
     source: GROUP_FILTER_SOURCE,

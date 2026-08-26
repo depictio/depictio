@@ -712,8 +712,28 @@ const App: React.FC = () => {
   // unfiltered universe so colors survive filtering).
   const colorByColumns = useCategoricalColumns(dashboard?.stored_metadata);
   const colorByColumnRender = useColorByColumnRender(groupsApi.colorBy, colorByColumns);
-  // One node, mounted in whichever FilterPanel is on screen (desktop panel or
-  // narrow drawer — never both at once).
+  // Memoised: the grid keys its per-item render memo on this object's
+  // identity, so a fresh one per render would rebuild every cell.
+  const groupRender = useMemo(
+    () =>
+      resolveGroupRender(
+        groupsApi.colorBy,
+        groupsApi.renderGroups,
+        colorByColumnRender,
+        groupsApi.displayMode,
+        groupsApi.showOther,
+      ),
+    [
+      groupsApi.colorBy,
+      groupsApi.renderGroups,
+      colorByColumnRender,
+      groupsApi.displayMode,
+      groupsApi.showOther,
+    ],
+  );
+  // The Grouping panel's body. Mounted once, inside the header "Analysis"
+  // popover (GroupingHeaderControl) — the panel is dashboard-family state and
+  // has to stay reachable when the per-tab filter panel is collapsed.
   const groupsSection = (
     <SelectionGroupsPanel
       filters={filters}
@@ -773,13 +793,41 @@ const App: React.FC = () => {
   // In-place "save selection as group" on any component with a live selection
   // (chart lasso, table rows, map polygon) — same create/clear flow as the
   // Analysis panel, without the trip to the header.
+  // Analysis mode, tracked separately from whether the header panel is open.
+  // Mantine dismisses a Popover on mousedown outside it, and that mousedown is
+  // the one that starts a lasso — so tying the mode to `analysisOpen` would
+  // erase every capability marker exactly when the user acts on one. Opening
+  // the panel arms the mode; only the button (or a second click on it) ends it.
+  const [analysisOpen, setAnalysisOpen] = useState(false);
+  const [analysisArmed, setAnalysisArmed] = useState(false);
+  const handleAnalysisOpenChange = useCallback((next: boolean) => {
+    setAnalysisOpen(next);
+    if (next) setAnalysisArmed(true);
+  }, []);
+  const handleAnalysisToggle = useCallback(() => {
+    const next = !analysisOpen;
+    setAnalysisOpen(next);
+    setAnalysisArmed(next);
+  }, [analysisOpen]);
+
   const saveGroupApi = useMemo(
     () => ({
       groups: groupsApi.groups,
       createGroup: groupsApi.createGroupFromFilter,
       clearSelection: handleFilterChange,
+      // "Engaged" spans both ways into analysis: the panel being open (the user
+      // is looking for where to act) and a grouping mode being on (the
+      // dashboard is already repainted by one). Outside those, capable
+      // components stay unmarked so ordinary viewing is unchanged.
+      analysisEngaged: analysisArmed || groupsApi.colorBy.kind !== 'none',
     }),
-    [groupsApi.groups, groupsApi.createGroupFromFilter, handleFilterChange],
+    [
+      groupsApi.groups,
+      groupsApi.createGroupFromFilter,
+      handleFilterChange,
+      analysisArmed,
+      groupsApi.colorBy.kind,
+    ],
   );
 
   return (
@@ -830,7 +878,14 @@ const App: React.FC = () => {
           rightExtras={
             <>
               {dashboard && (
-                <GroupingHeaderControl groupCount={groupsApi.groups.length} colorBy={groupsApi.colorBy}>
+                <GroupingHeaderControl
+                  groupCount={groupsApi.groups.length}
+                  colorBy={groupsApi.colorBy}
+                  opened={analysisOpen}
+                  onOpenedChange={handleAnalysisOpenChange}
+                  armed={analysisArmed}
+                  onToggle={handleAnalysisToggle}
+                >
                   {groupsSection}
                 </GroupingHeaderControl>
               )}
@@ -1067,6 +1122,8 @@ const App: React.FC = () => {
                   filters={deferredFilters}
                   onFilterChange={handleFilterChange}
                   refreshTick={refreshTick}
+                  groupRender={groupRender}
+                  bulkOptions={groupsApi.bulkOptions}
                 />
               )}
               {/* Only claims the leftover height when nothing follows it —
@@ -1124,13 +1181,7 @@ const App: React.FC = () => {
                     cardValuesLoading={cardsLoading}
                     refreshTick={refreshTick}
                     activeHighlight={activeHighlight}
-                    groupRender={resolveGroupRender(
-                      groupsApi.colorBy,
-                      groupsApi.renderGroups,
-                      colorByColumnRender,
-                      groupsApi.displayMode,
-                      groupsApi.showOther,
-                    )}
+                    groupRender={groupRender}
                     isDraggable={false}
                     isResizable={false}
                     editMode={false}
@@ -1145,6 +1196,8 @@ const App: React.FC = () => {
                   filters={deferredFilters}
                   onFilterChange={handleFilterChange}
                   refreshTick={refreshTick}
+                  groupRender={groupRender}
+                  bulkOptions={groupsApi.bulkOptions}
                 />
               )}
             </Box>
