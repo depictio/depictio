@@ -75,10 +75,9 @@ import JoinsGraph from './JoinsGraph';
 import IngestionReportPanel from './IngestionReportPanel';
 import { parseTemplate, TemplateChip, templateDocsUrl } from '../template';
 import {
-  DcGeomapBadge,
+  DcTypeBadges,
   DcTypeIcon,
   dcHasCoordinates,
-  dcTypeMetaFor,
   dcTypeSearchKey,
   GEO_COLOR,
   GEO_ICON,
@@ -2540,7 +2539,6 @@ const DataCollectionsTable: React.FC<{
             const sizeBytes = getDcSizeBytes(dc);
             // The two axes come from their own modules, so the row, the DC
             // viewer and the ingestion report name a collection the same way.
-            const typeMeta = dcTypeMetaFor(dc);
             const metatypeMeta = dcMetatypeMeta(dc, projectType);
             return (
               <Table.Tr
@@ -2552,16 +2550,11 @@ const DataCollectionsTable: React.FC<{
                 }}
               >
                 <Table.Td>
-                  {/* Geomap sits beside the type, never in place of it: the
-                      collection is still a table and still binds to every
-                      table component. */}
-                  <Group gap={6} wrap="nowrap">
-                    <DcTypeIcon type={type} withTooltip={false} />
-                    <Text size="xs" c="dimmed">
-                      {typeMeta.label}
-                    </Text>
-                    <DcGeomapBadge dc={dc} size="xs" />
-                  </Group>
+                  {/* Same component as the DC viewer's Type row: a type reads
+                      identically wherever it is shown. Geomap sits beside the
+                      type, never in place of it, since the collection is still
+                      a table and still binds to every table component. */}
+                  <DcTypeBadges dc={dc} size="xs" />
                 </Table.Td>
                 <Table.Td>
                   <Text fw={600} size="sm" style={{ wordBreak: 'break-word' }}>
@@ -2664,7 +2657,6 @@ const DataCollectionViewer: React.FC<{
   const isMultiQC = type.toLowerCase() === 'multiqc';
   const isTable = type.toLowerCase() === 'table';
   const isCoordTable = dcHasCoordinates(dc);
-  const typeMeta = dcTypeMetaFor(dc);
 
   // Ranked viz-kind fit scores for this DC — surfaced in the viewer as
   // "compatible advanced visualizations" chips so users discover the affinity
@@ -2704,13 +2696,12 @@ const DataCollectionViewer: React.FC<{
           <Title order={4}>Data Collection Viewer</Title>
         </Group>
         <Group gap="sm">
-          <DcTypeIcon type={type} size={22} withTooltip={false} />
           <Title order={4}>{dc.data_collection_tag || dcId}</Title>
-          {/* Three coexisting facts, never alternatives: the glyph is what the
-              collection holds, and a table carrying coordinates can be a
-              metadata table and a geomap at once. */}
+          {/* The same badges the manager row carries, in the same order. Three
+              coexisting facts, never alternatives: a table carrying coordinates
+              can be a metadata table and a geomap at once. */}
+          <DcTypeBadges dc={dc} />
           <DcMetatypeBadge dc={dc} projectType={projectType} />
-          <DcGeomapBadge dc={dc} />
         </Group>
         {detectedVizKinds.length > 0 && (
           <Alert
@@ -2747,17 +2738,7 @@ const DataCollectionViewer: React.FC<{
             </Group>
             <Stack gap={4}>
               <DetailRow label="Data Collection ID" value={dcId} mono />
-              <DetailRow
-                label="Type"
-                badge={
-                  <Group gap={4} wrap="nowrap">
-                    <Badge color={typeMeta.color} size="sm" radius="sm">
-                      {typeMeta.label.toUpperCase()}
-                    </Badge>
-                    <DcGeomapBadge dc={dc} />
-                  </Group>
-                }
-              />
+              <DetailRow label="Type" badge={<DcTypeBadges dc={dc} />} />
               {/* Metatype is what the collection IS within its project; the
                *  Type row above is what it holds. A geomap can be metadata or
                *  aggregate, so the two rows never merge. */}

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Badge, Tooltip } from '@mantine/core';
+import { Badge, Group, Tooltip } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 /** The type axis of a data collection: what kind of thing it holds, and so
@@ -139,3 +139,42 @@ export const DcGeomapBadge: React.FC<{ dc: DcClassifiable; size?: 'xs' | 'sm' }>
     </Tooltip>
   );
 };
+
+/** A collection's type as a badge: the type's own glyph and colour, labelled
+ *  the way DC_TYPE_ICON declares it. */
+export const DcTypeBadge: React.FC<{ dc: DcClassifiable; size?: 'xs' | 'sm' }> = ({
+  dc,
+  size = 'sm',
+}) => {
+  const meta = dcTypeMetaFor(dc);
+  return (
+    <Badge
+      color={meta.color}
+      variant="light"
+      size={size}
+      radius="sm"
+      leftSection={
+        <DcTypeIcon
+          type={dc.config?.type as string | undefined}
+          size={12}
+          withTooltip={false}
+        />
+      }
+    >
+      {meta.label}
+    </Badge>
+  );
+};
+
+/** The whole type reading for a collection: its type, plus the Geomap marker
+ *  when it carries coordinates. One component, so the manager's Type column
+ *  and the DC viewer's Type row cannot drift apart. */
+export const DcTypeBadges: React.FC<{ dc: DcClassifiable; size?: 'xs' | 'sm' }> = ({
+  dc,
+  size = 'sm',
+}) => (
+  <Group gap={4} wrap="nowrap">
+    <DcTypeBadge dc={dc} size={size} />
+    <DcGeomapBadge dc={dc} size={size} />
+  </Group>
+);
