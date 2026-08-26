@@ -11,7 +11,10 @@ from __future__ import annotations
 
 import polars as pl
 
-from depictio.api.v1.celery_tasks import _detect_upset_set_columns, _narrow_upset_sets
+from depictio.api.v1.celery_tasks import (
+    _detect_upset_set_columns,
+    _narrow_wide_matrix_columns,
+)
 
 
 def _matrix() -> pl.DataFrame:
@@ -34,26 +37,26 @@ def test_detects_binary_columns_only() -> None:
 def test_narrows_on_a_filter_carrying_set_values() -> None:
     sets = _detect_upset_set_columns(_matrix())
     filters = [{"column_name": "locality", "value": ["Athens", "Naples"]}]
-    assert _narrow_upset_sets(sets, filters) == ["Athens", "Naples"]
+    assert _narrow_wide_matrix_columns(sets, filters) == ["Athens", "Naples"]
 
 
 def test_single_value_filter_leaves_one_set() -> None:
     filters = [{"metadata": {"column_name": "locality"}, "value": "Naples"}]
-    assert _narrow_upset_sets(["Athens", "Barcelona", "Naples"], filters) == ["Naples"]
+    assert _narrow_wide_matrix_columns(["Athens", "Barcelona", "Naples"], filters) == ["Naples"]
 
 
 def test_unrelated_filter_leaves_the_sets_alone() -> None:
     # A taxonomy filter narrows ROWS (the DC has a Phylum column); it must not
     # be mistaken for a filter over the sets.
     filters = [{"column_name": "Phylum", "value": ["P1"]}]
-    assert _narrow_upset_sets(["Athens", "Barcelona", "Naples"], filters) is None
+    assert _narrow_wide_matrix_columns(["Athens", "Barcelona", "Naples"], filters) is None
 
 
 def test_selecting_every_set_is_a_no_op() -> None:
     filters = [{"column_name": "locality", "value": ["Athens", "Barcelona", "Naples"]}]
-    assert _narrow_upset_sets(["Athens", "Barcelona", "Naples"], filters) is None
+    assert _narrow_wide_matrix_columns(["Athens", "Barcelona", "Naples"], filters) is None
 
 
 def test_empty_filter_values_are_ignored() -> None:
     filters = [{"column_name": "locality", "value": []}, {"column_name": "x", "value": None}]
-    assert _narrow_upset_sets(["Athens", "Naples"], filters) is None
+    assert _narrow_wide_matrix_columns(["Athens", "Naples"], filters) is None

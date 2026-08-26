@@ -1094,36 +1094,15 @@ def compute_complex_heatmap(payload: dict) -> dict:
     if not value_columns:
         raise ValueError("compute_complex_heatmap: no numeric value columns found")
 
-    # Wide-matrix sample subsetting: sample IDs are MATRIX COLUMNS, not rows.
-    # process_metadata_and_filter's row-filter skips the value-column subset
-    # silently (the DC has no `sample` / `sample_id` ROW column). Mirror that
-    # subset here by intersecting value_columns with the filter values whose
-    # column references the sample identifier — covers both link-translated
-    # filters (column_name = "sample"/"sample_id") and direct sample picks.
-    sample_filter_values: set[str] = set()
-    for f in filter_metadata or []:
-        meta = f.get("metadata") if isinstance(f, dict) else {}
-        col = (f.get("column_name") if isinstance(f, dict) else None) or (
-            (meta or {}).get("column_name") if meta else None
-        )
-        if col not in ("sample", "sample_id"):
-            continue
-        val = f.get("value") if isinstance(f, dict) else None
-        if val in (None, [], ""):
-            continue
-        if isinstance(val, (list, tuple, set)):
-            sample_filter_values.update(str(v) for v in val)
-        else:
-            sample_filter_values.add(str(val))
-    if sample_filter_values:
-        narrowed = [c for c in value_columns if c in sample_filter_values]
-        if narrowed:
-            logger.info(
-                "compute_complex_heatmap: narrowing value_columns %d -> %d via sample filter",
-                len(value_columns),
-                len(narrowed),
-            )
-            value_columns = narrowed
+    # Wide-matrix sample subsetting: sample IDs are MATRIX COLUMNS, not rows,
+    # so the row-filter skipped them silently. Mirror the subset by matching
+    # filter VALUES against the column names — the previous version only
+    # honoured filters literally named `sample`/`sample_id`, which is not what
+    # a metadata pick (`ID`) or a map lasso sends.
+    value_columns = (
+        _narrow_wide_matrix_columns(value_columns, filter_metadata, what="heatmap columns")
+        or value_columns
+    )
 
     pdf = df.select([index_column] + value_columns + row_annotation_cols).to_pandas()
 
@@ -1328,16 +1307,27 @@ def compute_complex_heatmap(payload: dict) -> dict:
     }
 
 
-def _narrow_upset_sets(candidate_sets: list[str], filter_metadata: list | None) -> list[str] | None:
-    """Sets left standing once a filter over the set VALUES is applied.
+def _narrow_wide_matrix_columns(
+    candidates: list[str], filter_metadata: list | None, *, what: str = "sets"
+) -> list[str] | None:
+    """Matrix columns left standing once a filter over their NAMES is applied.
 
-    Returns None when no filter names sets — i.e. leave the caller's choice
-    alone — and never returns an empty list: a filter that selects none of the
-    sets is a filter about something else.
+    A wide matrix spends one axis on values that are rows everywhere else —
+    samples across a heatmap, groups across an UpSet — so a filter on that
+    dimension has no row to match and `load_deltatable_lite` skips it. The
+    mirror is a column subset, matched by VALUE: a filter whose values are
+    column names is that filter, whatever the filter's own column is called.
+    That is what makes it survive link translation, where the column name that
+    reaches us is the source DC's (`ID`, `sample`, `sample_id`, …) and no list
+    of names could be complete.
+
+    Returns None when no filter names columns — leave the caller's choice
+    alone — and never an empty list: a filter that selects none of them is a
+    filter about something else.
     """
-    if not candidate_sets:
+    if not candidates:
         return None
-    set_names = {str(c) for c in candidate_sets}
+    column_names = {str(c) for c in candidates}
     for f in filter_metadata or []:
         if not isinstance(f, dict):
             continue
@@ -1345,20 +1335,21 @@ def _narrow_upset_sets(candidate_sets: list[str], filter_metadata: list | None) 
         if val in (None, [], ""):
             continue
         values = {str(v) for v in val} if isinstance(val, (list, tuple, set)) else {str(val)}
-        hit = set_names & values
+        hit = column_names & values
         # An empty hit is an unrelated filter; a full hit is a no-op that would
         # only reorder the sets.
-        if not hit or hit == set_names:
+        if not hit or hit == column_names:
             continue
         nested = f.get("metadata") or {}
         col = f.get("column_name") or (
             nested.get("column_name") if isinstance(nested, dict) else None
         )
-        narrowed = [c for c in candidate_sets if str(c) in hit]
+        narrowed = [c for c in candidates if str(c) in hit]
         logger.info(
-            "compute_upset: narrowing sets to %d of %d via the %s filter",
+            "narrowing %s to %d of %d via the %s filter",
+            what,
             len(narrowed),
-            len(candidate_sets),
+            len(candidates),
             col or "unnamed",
         )
         return narrowed
@@ -1471,7 +1462,7 @@ def compute_upset(payload: dict) -> dict:
     # narrowing on an explicit `set_columns` made it a no-op for every
     # dashboard that didn't spell the sets out.
     candidate_sets = list(set_columns) if set_columns else _detect_upset_set_columns(df)
-    set_columns = _narrow_upset_sets(candidate_sets, filter_metadata) or set_columns
+    set_columns = _narrow_wide_matrix_columns(candidate_sets, filter_metadata) or set_columns
 
     pdf = df.to_pandas()
     compute_started = time.monotonic()
