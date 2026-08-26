@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActionIcon,
   Badge,
-  Box,
   Button,
   Collapse,
   Group,
@@ -231,6 +230,9 @@ const LinksSection: React.FC<LinksSectionProps> = ({
 
   return (
     <Paper withBorder radius="md" p="sm">
+      {/* Same header structure as the Data Collections Manager: clickable
+          title area, then the primary action, then the chevron as an
+          ActionIcon on the far right. */}
       <Group justify="space-between" wrap="nowrap">
         <UnstyledButton onClick={toggle} style={{ flex: 1, minWidth: 0 }}>
           <Group gap="xs" wrap="nowrap">
@@ -239,21 +241,29 @@ const LinksSection: React.FC<LinksSectionProps> = ({
             <Badge variant="light" size="sm">
               {links.length}
             </Badge>
-            <Box style={{ flex: 1 }} />
-            <Icon icon={opened ? 'mdi:chevron-up' : 'mdi:chevron-down'} width={22} />
           </Group>
         </UnstyledButton>
-        <Tooltip label={disabledTip} disabled={canMutate}>
-          <Button
-            data-testid="add-link-btn"
-            leftSection={<Icon icon="mdi:plus" width={16} />}
-            onClick={openCreate}
-            disabled={!canMutate}
-            size="xs"
+        <Group gap="xs" wrap="nowrap">
+          <Tooltip label={disabledTip} disabled={canMutate}>
+            <Button
+              data-testid="add-link-btn"
+              leftSection={<Icon icon="mdi:plus" width={16} />}
+              onClick={openCreate}
+              disabled={!canMutate}
+              size="xs"
+            >
+              Add link
+            </Button>
+          </Tooltip>
+          <ActionIcon
+            variant="subtle"
+            color="gray"
+            onClick={toggle}
+            aria-label={opened ? 'Collapse cross-DC links' : 'Expand cross-DC links'}
           >
-            Add link
-          </Button>
-        </Tooltip>
+            <Icon icon={opened ? 'mdi:chevron-up' : 'mdi:chevron-down'} width={22} />
+          </ActionIcon>
+        </Group>
       </Group>
 
       <Collapse in={opened}>

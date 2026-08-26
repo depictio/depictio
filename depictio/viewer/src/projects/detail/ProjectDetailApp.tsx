@@ -2197,30 +2197,64 @@ const DataCollectionsManagerSection: React.FC<{
   onCreate,
 }) => {
   return (
-    <Card withBorder radius="md" p="sm">
-      <UnstyledButton onClick={onToggle} w="100%">
+    /* Header mirrors the Cross-DC links section (LinksSection.tsx): Paper,
+       clickable title area, then the primary action and the chevron as an
+       ActionIcon on the far right. Create Data Collection lives in the
+       always-visible header — inside the Collapse it was unreachable while
+       the section was collapsed (the default). */
+    <Paper withBorder radius="md" p="sm">
+      <Group justify="space-between" wrap="nowrap">
+        <UnstyledButton onClick={onToggle} style={{ flex: 1, minWidth: 0 }}>
+          <Group gap="xs" wrap="nowrap">
+            <Icon
+              icon="mdi:database-outline"
+              width={22}
+              color="var(--mantine-color-dark-6)"
+            />
+            <Title order={4}>Data Collections Manager</Title>
+            <Badge
+              color={projectType === 'advanced' ? 'orange' : 'cyan'}
+              variant="light"
+              radius="sm"
+              size="sm"
+            >
+              {projectType === 'advanced' ? 'Advanced Project' : 'Basic Project'}
+            </Badge>
+            <Badge variant="light" color="dark" size="sm">
+              {dataCollections.length}
+            </Badge>
+          </Group>
+        </UnstyledButton>
         <Group gap="xs" wrap="nowrap">
-          <Icon
-            icon="mdi:database-outline"
-            width={22}
-            color="var(--mantine-color-dark-6)"
-          />
-          <Title order={4}>Data Collections Manager</Title>
-          <Badge
-            color={projectType === 'advanced' ? 'orange' : 'cyan'}
-            variant="light"
-            radius="sm"
-            size="sm"
+          <Button
+            data-testid="create-dc-btn"
+            color="teal"
+            size="xs"
+            leftSection={<Icon icon="mdi:plus" width={16} />}
+            disabled={!canMutate}
+            onClick={() => {
+              // Expand the section too, so the new DC lands in view.
+              if (!opened) onToggle();
+              onCreate();
+            }}
+            title={
+              canMutate
+                ? 'Create a new data collection'
+                : 'Owner permission required'
+            }
           >
-            {projectType === 'advanced' ? 'Advanced Project' : 'Basic Project'}
-          </Badge>
-          <Badge variant="light" color="dark" size="sm">
-            {dataCollections.length}
-          </Badge>
-          <Box style={{ flex: 1 }} />
-          <Icon icon={opened ? 'mdi:chevron-up' : 'mdi:chevron-down'} width={22} />
+            Create Data Collection
+          </Button>
+          <ActionIcon
+            variant="subtle"
+            color="gray"
+            onClick={onToggle}
+            aria-label={opened ? 'Collapse data collections' : 'Expand data collections'}
+          >
+            <Icon icon={opened ? 'mdi:chevron-up' : 'mdi:chevron-down'} width={22} />
+          </ActionIcon>
         </Group>
-      </UnstyledButton>
+      </Group>
 
       <Collapse in={opened}>
         <ScrollArea.Autosize mah={640} type="auto" offsetScrollbars pt="sm">
@@ -2262,28 +2296,11 @@ const DataCollectionsManagerSection: React.FC<{
       </SimpleGrid>
 
       <Paper withBorder radius="md" p="md">
-        <Group justify="space-between" mb="xs">
-          <Group gap="xs">
-            <Title order={5}>Data Collections</Title>
-            <Badge variant="light" color="dark" size="sm">
-              {dataCollections.length} COLLECTIONS
-            </Badge>
-          </Group>
-          <Button
-            data-testid="create-dc-btn"
-            color="teal"
-            size="sm"
-            leftSection={<Icon icon="mdi:plus" width={16} />}
-            disabled={!canMutate}
-            onClick={onCreate}
-            title={
-              canMutate
-                ? 'Create a new data collection'
-                : 'Owner permission required'
-            }
-          >
-            Create Data Collection
-          </Button>
+        <Group gap="xs" mb="xs">
+          <Title order={5}>Data Collections</Title>
+          <Badge variant="light" color="dark" size="sm">
+            {dataCollections.length} COLLECTIONS
+          </Badge>
         </Group>
         <DataCollectionsTable
           projectType={projectType}
@@ -2299,7 +2316,7 @@ const DataCollectionsManagerSection: React.FC<{
           </Stack>
         </ScrollArea.Autosize>
       </Collapse>
-    </Card>
+    </Paper>
   );
 };
 
