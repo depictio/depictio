@@ -25,6 +25,7 @@ import {
   readMultiqcSelection,
 } from 'depictio-react-core';
 import type { MultiQCBuilderOptions } from 'depictio-react-core';
+import { DcTypeIcon } from '../../projects/dcTypeIcon';
 import { useBuilderStore } from '../store/useBuilderStore';
 import DesignShell from '../shared/DesignShell';
 import MultiQCPreview from './MultiQCPreview';
@@ -97,13 +98,7 @@ const MultiQCBuilder: React.FC = () => {
   const form = (
     <Stack gap="md">
       <Group gap="xs" align="center">
-        <img
-          src={`${import.meta.env.BASE_URL}logos/multiqc_icon_color.svg`}
-          alt=""
-          width={20}
-          height={20}
-          style={{ objectFit: 'contain', display: 'block' }}
-        />
+        <DcTypeIcon type="multiqc" size={20} withTooltip={false} />
         <Title order={6}>MultiQC Report</Title>
       </Group>
 

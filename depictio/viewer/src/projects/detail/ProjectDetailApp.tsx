@@ -1465,24 +1465,18 @@ const CreateDataCollectionModal: React.FC<{
           variant="default"
         >
           <Tabs.List grow>
+            {/* Same glyphs the manager and the ingestion report use, so the
+                type you pick here is the type you recognise later. */}
             <Tabs.Tab
               value="table"
-              leftSection={<Icon icon="mdi:table" width={18} />}
+              leftSection={<DcTypeIcon type="table" size={18} withTooltip={false} />}
               disabled={submitting}
             >
               Table (CSV / TSV / Parquet)
             </Tabs.Tab>
             <Tabs.Tab
               value="multiqc"
-              leftSection={
-                <img
-                  src={`${import.meta.env.BASE_URL}logos/multiqc_icon_color.svg`}
-                  alt=""
-                  width={18}
-                  height={18}
-                  style={{ objectFit: 'contain', display: 'block' }}
-                />
-              }
+              leftSection={<DcTypeIcon type="multiqc" size={18} withTooltip={false} />}
               disabled={submitting}
             >
               MultiQC report(s)
@@ -3310,13 +3304,7 @@ const MultiQCReportsCard: React.FC<{ dcId: string }> = ({ dcId }) => {
   return (
     <Card withBorder radius="md" p="md">
       <Group gap="xs" mb="xs">
-        <img
-          src={`${import.meta.env.BASE_URL}logos/multiqc_icon_color.svg`}
-          alt="MultiQC"
-          width={20}
-          height={20}
-          style={{ objectFit: 'contain', display: 'block' }}
-        />
+        <DcTypeIcon type="multiqc" size={20} withTooltip={false} />
         <Text fw={600}>MultiQC Report Metadata</Text>
         <Text size="sm" c="dimmed">
           ·{' '}
