@@ -15,6 +15,7 @@ import {
   Paper,
   SimpleGrid,
   Stack,
+  Switch,
   Table,
   Text,
   TextInput,
@@ -32,6 +33,7 @@ import {
   type RegisteredFile,
 } from 'depictio-react-core';
 import { DcTypeIcon } from '../dcTypeIcon';
+import { isUnsetProvenanceValue, matchesProvenanceQuery } from '../../lib/provenance';
 
 /** Visual treatment per DC display-status. Colors are Mantine palette names
  *  (theme tokens), not literals — they recolor with the active theme. */
@@ -759,42 +761,57 @@ const RunProvenanceCard: React.FC<{
   files: string[];
 }> = ({ groups, files }) => {
   const [query, setQuery] = useState('');
+  // Unset parameters are hidden by default: half of an nf-core params file is
+  // keys the run never touched, and a page of `null` buries the decisions that
+  // were actually made. The switch is the escape hatch — nothing is dropped at
+  // collection time, so "everything" stays one click away.
+  const [hideUnset, setHideUnset] = useState(true);
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return groups;
     return groups
       .map((g) => ({
         ...g,
         entries: g.entries.filter(
-          (e) => e.key.toLowerCase().includes(q) || e.value.toLowerCase().includes(q),
+          (e) =>
+            matchesProvenanceQuery(e, query) && !(hideUnset && isUnsetProvenanceValue(e.value)),
         ),
       }))
       .filter((g) => g.entries.length > 0);
-  }, [groups, query]);
+  }, [groups, query, hideUnset]);
   // Open every group while searching — a hit hidden behind a folded accordion
   // reads as "no result".
   const openValues = query.trim() ? filtered.map((g) => g.group) : undefined;
   const total = groups.reduce((n, g) => n + g.entries.length, 0);
+  const shown = filtered.reduce((n, g) => n + g.entries.length, 0);
 
   return (
     <Card withBorder padding="md" radius="md">
       <Group justify="space-between" align="baseline" mb={4}>
         <Title order={5}>Run provenance</Title>
         <Text size="xs" c="dimmed">
-          {total} entries · {files.join(', ')}
+          {shown === total ? `${total} entries` : `${shown} of ${total} entries`} ·{' '}
+          {files.join(', ')}
         </Text>
       </Group>
       <Text size="sm" c="dimmed" mb="sm">
         Parameters, filtering thresholds and tool versions captured from the
         pipeline run itself.
       </Text>
-      <TextInput
-        size="xs"
-        mb="sm"
-        placeholder="Search parameters…"
-        value={query}
-        onChange={(e) => setQuery(e.currentTarget.value)}
-      />
+      <Group gap="sm" mb="sm" wrap="nowrap" align="center">
+        <TextInput
+          size="xs"
+          style={{ flex: 1 }}
+          placeholder="Search parameters…"
+          value={query}
+          onChange={(e) => setQuery(e.currentTarget.value)}
+        />
+        <Switch
+          size="xs"
+          checked={hideUnset}
+          onChange={(e) => setHideUnset(e.currentTarget.checked)}
+          label="Hide unset"
+          styles={{ label: { whiteSpace: 'nowrap' } }}
+        />
+      </Group>
       <Accordion multiple variant="contained" radius="md" value={openValues}>
         {filtered.map((g) => (
           <Accordion.Item key={g.group} value={g.group}>
