@@ -938,12 +938,14 @@ class DashboardDataLite(BaseModel):
                 figure_params = filter_dict_kwargs(comp.get("dict_kwargs", {}))
                 if figure_params:
                     lite_comp["figure_params"] = figure_params
-                # Export mode (ui/code), code_content, and selection_enabled
+                # Export mode (ui/code), code_content, and selection fields
                 lite_comp["mode"] = comp.get("mode", "ui")
                 if comp.get("code_content"):
                     lite_comp["code_content"] = comp["code_content"]
                 if comp.get("selection_enabled") is not None:
                     lite_comp["selection_enabled"] = comp["selection_enabled"]
+                if comp.get("selection_column"):
+                    lite_comp["selection_column"] = comp["selection_column"]
                 if comp.get("max_points") is not None:
                     lite_comp["max_points"] = comp["max_points"]
 

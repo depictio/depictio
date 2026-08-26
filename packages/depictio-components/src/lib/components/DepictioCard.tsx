@@ -1,5 +1,5 @@
 import React from 'react';
-import { Card, Stack, Text, Group, Box } from '@mantine/core';
+import { Card, Stack, Text, Group, Box, Tooltip } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import './DepictioCard.css';
 
@@ -50,6 +50,13 @@ export interface DepictioCardProps {
   secondaryStrip?: React.ReactNode;
   comparison?: CardComparison;
   filter_applied?: boolean;
+  /** Render the title and hero value on ONE line (value beside the title,
+   *  slightly smaller) — used when a rich secondaryStrip needs the height the
+   *  stacked hero row normally takes. */
+  inline_header?: boolean;
+  /** Tooltip shown when hovering the title/value header — carries the
+   *  aggregation description when the visible line is dropped. */
+  header_tooltip?: React.ReactNode;
   setProps?: (props: Partial<DepictioCardProps>) => void;
 }
 
@@ -67,8 +74,74 @@ const DepictioCard: React.FC<DepictioCardProps> = ({
   secondaryStrip,
   comparison,
   filter_applied = false,
+  inline_header = false,
+  header_tooltip,
 }) => {
   const hasCustomBg = !!background_color;
+
+  const header = inline_header ? (
+    // Title left, value right: glued side by side the two bold texts read as
+    // one string — pushing the value to the opposite edge keeps both
+    // identifiable on a single line.
+    <Group
+      gap={8}
+      align="baseline"
+      wrap="nowrap"
+      justify="space-between"
+      style={{ marginLeft: -2, minWidth: 0 }}
+    >
+      <Group gap={6} wrap="nowrap" style={{ minWidth: 0 }}>
+        {/* The watermark icon has no corner left in the compact layout, so it
+            moves beside the title — small, full-opacity, in its own color. */}
+        {icon_name && (
+          <Icon
+            icon={icon_name}
+            width={16}
+            height={16}
+            style={{ color: icon_color || title_color || 'currentColor', flexShrink: 0 }}
+          />
+        )}
+        <Text
+          size={title_font_size}
+          fw={700}
+          c={title_color || undefined}
+          truncate
+          style={{ margin: 0, minWidth: 0 }}
+        >
+          {title}
+        </Text>
+      </Group>
+      {/* The value is the number the card exists for: hero-sized even on the
+          compact one-line header, only the title yields. */}
+      <Text
+        fw={700}
+        c={title_color || undefined}
+        style={{ margin: 0, flexShrink: 0, fontSize: 28, lineHeight: 1 }}
+      >
+        {value !== null && value !== undefined ? value : '—'}
+      </Text>
+    </Group>
+  ) : (
+    <>
+      <Text
+        size={title_font_size}
+        fw={700}
+        c={title_color || undefined}
+        style={{ margin: 0, marginLeft: -2 }}
+      >
+        {title}
+      </Text>
+
+      <Text
+        size={value_font_size}
+        fw={700}
+        c={title_color || undefined}
+        style={{ margin: 0, marginLeft: -2 }}
+      >
+        {value !== null && value !== undefined ? value : '—'}
+      </Text>
+    </>
+  );
 
   return (
     <Card
@@ -107,7 +180,7 @@ const DepictioCard: React.FC<DepictioCardProps> = ({
           Inline ``width``/``height`` removed so the CSS controls sizing —
           @iconify/react renders an <svg> we can size via .depictio-card-icon
           svg{...} rules. */}
-      {icon_name && (
+      {icon_name && !inline_header && (
         <Box className="depictio-card-icon">
           <Icon
             icon={icon_name}
@@ -137,23 +210,13 @@ const DepictioCard: React.FC<DepictioCardProps> = ({
         }}
       >
         <Stack gap={4}>
-          <Text
-            size={title_font_size}
-            fw={700}
-            c={title_color || undefined}
-            style={{ margin: 0, marginLeft: -2 }}
-          >
-            {title}
-          </Text>
-
-          <Text
-            size={value_font_size}
-            fw={700}
-            c={title_color || undefined}
-            style={{ margin: 0, marginLeft: -2 }}
-          >
-            {value !== null && value !== undefined ? value : '—'}
-          </Text>
+          {header_tooltip ? (
+            <Tooltip label={header_tooltip} withArrow openDelay={300} multiline w={240}>
+              <Box style={{ cursor: 'help', minWidth: 0 }}>{header}</Box>
+            </Tooltip>
+          ) : (
+            header
+          )}
 
           {aggregation_description && (
             <Text size="xs" c="dimmed" style={{ marginLeft: -2 }}>
@@ -200,6 +263,22 @@ const DepictioCard: React.FC<DepictioCardProps> = ({
             // up to sit tight under the value text) doesn't get clipped.
             // ``hidden visible`` resolves to ``overflow-x: hidden; overflow-y: visible``.
             overflow: 'hidden visible',
+            // With the compact header the strip is the card's main content:
+            // let it take the freed height and distribute it (the strip's own
+            // containers justify space-evenly) instead of pooling dead space
+            // under a top-packed list.
+            // ``justifyContent: center`` centres strips that don't stretch
+            // themselves (the default SecondaryMetrics); the group-compare
+            // strip declares its own ``flex: 1`` and distributes instead.
+            ...(inline_header
+              ? {
+                  flex: '1 1 auto',
+                  minHeight: 0,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'center',
+                }
+              : {}),
           }}
         >
           {secondaryStrip}

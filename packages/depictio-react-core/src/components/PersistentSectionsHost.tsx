@@ -2,7 +2,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Responsive as ResponsiveGridLayout } from 'react-grid-layout';
 import { Accordion } from '@mantine/core';
 
-import type { InteractiveFilter, PersistentSection } from '../api';
+import type { BulkComputeOptions, InteractiveFilter, PersistentSection } from '../api';
+import type { GroupRenderState } from '../selectionGroups';
 import { bulkComputeCards } from '../api';
 import { useCollapseState } from '../hooks/useCollapseState';
 import {
@@ -28,6 +29,16 @@ export interface PersistentSectionsHostProps {
   filters: InteractiveFilter[];
   onFilterChange?: (filter: InteractiveFilter) => void;
   refreshTick?: number;
+  /** Color-by / split overrides (issue #89). Fanned-out members sit on the same
+   *  screen as the tab's own grid and are fed the same filters, so they must
+   *  take the same dashboard-wide visual override — otherwise turning on
+   *  "Color by species" recolors the grid and silently skips the pinned
+   *  section right above it, which reads as a broken component. */
+  groupRender?: GroupRenderState;
+  /** Group-comparison options for this host's own card bulk-compute, for the
+   *  same reason: without them a pinned card is the only one on screen with no
+   *  comparison strip. */
+  bulkOptions?: BulkComputeOptions;
   /** Editor-only per-section action, rendered in the section header. A section
    *  fanned out here can only be changed on the tab that owns it, so the editor
    *  puts a jump to that tab where the "…" sits on an editable section. */
@@ -62,6 +73,8 @@ const PersistentSectionsHost: React.FC<PersistentSectionsHostProps> = ({
   filters,
   onFilterChange,
   refreshTick,
+  groupRender,
+  bulkOptions,
   renderSectionActions,
 }) => {
   const renderable = useMemo(
@@ -140,7 +153,7 @@ const PersistentSectionsHost: React.FC<PersistentSectionsHostProps> = ({
     setCardsLoading(true);
     Promise.all(
       [...cardIdsByOwner.entries()].map(([owner, ids]) =>
-        bulkComputeCards(owner, filters, ids).catch((err) => {
+        bulkComputeCards(owner, filters, ids, bulkOptions).catch((err) => {
           console.warn('[PersistentSectionsHost] bulk-compute failed:', err);
           return null;
         }),
@@ -260,6 +273,7 @@ const PersistentSectionsHost: React.FC<PersistentSectionsHostProps> = ({
                               filters={filters}
                               onFilterChange={onFilterChange}
                               refreshTick={refreshTick}
+                              groupRender={groupRender}
                               cardValue={cardValues[member.metadata.index]}
                               cardSecondaryValues={cardSecondaryValues[member.metadata.index]}
                               cardLoading={cardsLoading}

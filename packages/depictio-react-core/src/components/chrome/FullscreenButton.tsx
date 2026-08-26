@@ -44,7 +44,7 @@ const FullscreenButton: React.FC<FullscreenButtonProps> = ({ fullscreenRef }) =>
   return (
     <Tooltip label="Toggle fullscreen" withArrow>
       <ActionIcon
-        variant="light"
+        variant="subtle"
         color="indigo"
         size="sm"
         onClick={onClick}

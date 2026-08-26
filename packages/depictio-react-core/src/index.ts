@@ -83,6 +83,10 @@ export {
 export { default as FilterPanel } from './components/interactive/FilterPanel';
 export { FILTER_PANEL_RAIL_WIDTH } from './components/interactive/FilterPanel';
 export type { FilterPanelProps } from './components/interactive/FilterPanel';
+export { default as SelectionGroupsPanel } from './components/interactive/SelectionGroupsPanel';
+export type { SelectionGroupsPanelProps } from './components/interactive/SelectionGroupsPanel';
+export { SaveGroupContext } from './components/chrome/SaveGroupAction';
+export type { SaveGroupApi } from './components/chrome/SaveGroupAction';
 export { default as InteractiveGroupCard } from './components/InteractiveGroupCard';
 // One swatch for every place a section is drawn — the two panel headers and the
 // viewer's authoring UI — so a section named "QC" never looks different
@@ -354,6 +358,36 @@ export {
   clearEditorFilters,
 } from './editorFilters';
 export type { EditorFilterPayload } from './editorFilters';
+
+// Selection groups: named, colored snapshots of selections ("select & compare")
+export {
+  GROUP_FILTER_SOURCE,
+  GROUP_FILTER_INDEX_PREFIX,
+  MAX_GROUP_VALUES,
+  GROUPING_COLOR,
+  COLOR_BY_NONE,
+  resolveGroupRender,
+  selectableSelectionFilters,
+  groupFromSelectionFilter,
+  groupsToFilters,
+  groupsRenderPayload,
+  nextGroupColor,
+  readSelectionGroups,
+  writeSelectionGroups,
+} from './selectionGroups';
+export type {
+  SelectionGroup,
+  SelectionGroupsPayload,
+  GroupRenderDef,
+  GroupRenderState,
+  ColorByState,
+  GroupingDisplay,
+} from './selectionGroups';
+export { useSelectionGroups } from './hooks/useSelectionGroups';
+export type { SelectionGroupsApi } from './hooks/useSelectionGroups';
+export { useCategoricalColumns, useColorByColumnRender } from './hooks/useColorByColumns';
+export type { ColorByColumn, ColorByColumnRender } from './hooks/useColorByColumns';
+export type { GroupSummaryRow } from './components/interactive/ActiveFilterSummary';
 
 // Cross-DC available-values intersection (powers greying-out unavailable
 // options in interactive filter dropdowns) + the funnel-filtering layer on

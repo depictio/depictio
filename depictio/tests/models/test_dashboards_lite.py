@@ -635,6 +635,29 @@ class TestDashboardDataLite:
         )
         assert tag == "my-custom-tag"
 
+    def test_from_full_exports_selection_column(self):
+        """A selection-enabled figure must export selection_column, or the lite
+        model's validator rejects the exported dashboard."""
+        full_dict = {
+            "dashboard_id": "123",
+            "title": "Test",
+            "stored_metadata": [
+                {
+                    "index": "uuid-1",
+                    "component_type": "figure",
+                    "visu_type": "scatter",
+                    "dict_kwargs": {"x": "col1", "y": "col2"},
+                    "selection_enabled": True,
+                    "selection_column": "variety",
+                },
+            ],
+        }
+        lite = DashboardDataLite.from_full(full_dict)
+        comp = lite.components[0]
+        d = comp if isinstance(comp, dict) else comp.model_dump()
+        assert d["selection_enabled"] is True
+        assert d["selection_column"] == "variety"
+
     def test_validate_yaml_valid(self, sample_dashboard_yaml: str):
         """validate_yaml() should return (True, []) for valid YAML."""
         is_valid, errors = DashboardDataLite.validate_yaml(sample_dashboard_yaml)

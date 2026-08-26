@@ -396,6 +396,10 @@ components:
       symbol: sex
       color_discrete_map: '{"Adelie": "#4C72B0", "Chinstrap": "#DD8452", "Gentoo": "#55A467"}'
       trendline: ols
+    # Cross-filtering: lasso/box selections on this scatter narrow the rest of
+    # the dashboard and can be saved as named groups ("select & compare").
+    selection_enabled: true
+    selection_column: individual_id
     layout: {x: 0, y: 10, w: 4, h: 5}
 
   - tag: box-bill-length

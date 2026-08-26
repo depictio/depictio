@@ -6,6 +6,7 @@ import 'react-resizable/css/styles.css';
 import { StoredMetadata, InteractiveFilter } from '../api';
 import type { FilterSectionSpec } from '../api';
 import { ActiveHighlight } from '../highlight';
+import type { GroupRenderState } from '../selectionGroups';
 import {
   PANEL_RESIZE_END_EVENT,
   PANEL_TOGGLE_EVENTS,
@@ -48,6 +49,9 @@ interface DashboardGridProps {
   /** The batch currently highlighted (live arrival or a pinned re-selection
    *  from the event log). Forwarded to renderers so they glow its rows. */
   activeHighlight?: ActiveHighlight | null;
+  /** Selection groups to color figures by. Forwarded to figure renderers,
+   *  which fold it into their render request. */
+  groupRender?: GroupRenderState;
   /** Allow users to drag grid items. Defaults to false (viewer-safe). */
   isDraggable?: boolean;
   /** Allow users to resize grid items. Defaults to false (viewer-safe). */
@@ -103,6 +107,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
   cardValuesLoading,
   refreshTick,
   activeHighlight,
+  groupRender,
   isDraggable = false,
   isResizable = false,
   editMode = false,
@@ -418,6 +423,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
                 cardLoading={cardValuesLoading}
                 refreshTick={refreshTick}
                 activeHighlight={activeHighlight}
+                groupRender={groupRender}
                 extraActions={showOverlays ? renderItemOverlay!(m.index, m) : undefined}
                 showDragHandle={editMode && isDraggable}
               />
@@ -437,6 +443,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
     cardValuesLoading,
     refreshTick,
     activeHighlight,
+    groupRender,
     showOverlays,
     renderItemOverlay,
     editMode,

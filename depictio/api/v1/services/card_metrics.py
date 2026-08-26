@@ -61,10 +61,91 @@ NUMERIC_LAYOUTS = (
     "uniqueness",
 )
 
+# Secondary layouts whose per-selection-group variant ships in the
+# ``__group_compare__`` payload (see ``card_groups.compute_group_compare`` and
+# the wiring in ``bulk_compute_cards``). Explicit rather than derived: a layout
+# added to NUMERIC_LAYOUTS but forgotten here silently keeps chips-only
+# comparison, which is the safe default — the reverse (a layout gated in but
+# with no compact client rendering) would ship an empty strip.
+GROUP_COMPARABLE_LAYOUTS = (
+    "box_plot",
+    "threshold",
+    "completeness",
+    "uniqueness",
+    # Shared-scale layouts: the bin grid / x-axis grid is computed once over
+    # the whole frame and every partition is reduced against it — self-scaled
+    # per-group charts would be incomparable.
+    "histogram",
+    "trend",
+    # Per-group breakdown over the card's own breakdown_col — donut gets a
+    # mini-ring per group (client caps visible groups), the other breakdown
+    # layouts degrade to one composition meter per group. Rings/meters are
+    # read alone, so divergent per-group category sets are acceptable at this
+    # scale.
+    "donut",
+    "composition",
+    "top_n",
+    "concentration",
+    # Client-computable: per-group hero value against the card's authored
+    # coverage_max / denominator; no server payload needed.
+    "coverage",
+    "gauge",
+)
+
 # Bin count for the sparkline. Twenty bars is what fits a ~260px card at a
 # legible bar width; more turns into noise, fewer hides the second mode the
 # layout exists to reveal.
 HISTOGRAM_BINS = 20
+
+
+def compute_box_plot_stats(values: pl.Series, max_outliers: int = 100) -> dict[str, Any] | None:
+    """Compound Tukey box-and-whisker payload, computed in one scan.
+
+    Extracted from the ``box_plot_stats`` pseudo-aggregation branch of the card
+    endpoint's ``_agg_value`` so the hero path and the per-group comparison
+    path reduce identically (same argument as ``compute_breakdown`` vs the
+    preview). Returns the 9-field dict the React box-plot renderer reads, or
+    ``None`` for an empty/non-numeric series.
+
+    ``max_outliers`` caps the outlier list — beyond that the dots overlap into
+    a solid bar at card scale; the count is exposed separately. Per-group
+    callers pass a much lower cap than the hero's 100: the payload is repeated
+    once per group.
+    """
+    numeric = values.cast(pl.Float64, strict=False).drop_nulls()
+    if numeric.len() == 0:
+        return None
+    mn = float(numeric.min())  # type: ignore[arg-type]
+    mx = float(numeric.max())  # type: ignore[arg-type]
+    q1 = float(numeric.quantile(0.25, interpolation="linear"))  # type: ignore[arg-type]
+    q3 = float(numeric.quantile(0.75, interpolation="linear"))  # type: ignore[arg-type]
+    median = float(numeric.median())  # type: ignore[arg-type]
+    mean = float(numeric.mean())  # type: ignore[arg-type]
+    iqr = q3 - q1
+    fence_lo = q1 - 1.5 * iqr
+    fence_hi = q3 + 1.5 * iqr
+    # Whisker = most extreme data point that's still within the fence. Falls
+    # back to min/max when the fence excludes everything (e.g. constant column
+    # → iqr=0 → both fences land on q1=q3=median).
+    within = numeric.filter((numeric >= fence_lo) & (numeric <= fence_hi))
+    lower_w = float(within.min()) if within.len() else mn  # type: ignore[arg-type]
+    upper_w = float(within.max()) if within.len() else mx  # type: ignore[arg-type]
+    outliers_series = numeric.filter((numeric < fence_lo) | (numeric > fence_hi))
+    outlier_count = int(outliers_series.len())
+    outliers = outliers_series.head(max_outliers).to_list() if outlier_count else []
+    return {
+        "min": mn,
+        "max": mx,
+        "q1": q1,
+        "q3": q3,
+        "median": median,
+        "mean": mean,
+        "lower_whisker": lower_w,
+        "upper_whisker": upper_w,
+        "outliers": outliers,
+        "outlier_count": outlier_count,
+    }
+
 
 # Buckets a trend line is cut into. Beyond this the line is drawn from more
 # points than the card has pixels, so the extra detail is invisible and the
@@ -73,10 +154,30 @@ HISTOGRAM_BINS = 20
 TREND_MAX_POINTS = 24
 
 
+def _bucket_expr(value: pl.Expr, lo: float, width: float, n: int) -> pl.Expr:
+    """Equal-width bucket index of ``value`` on the fixed grid ``[lo, lo + n*width)``."""
+    return ((value - lo) / width).floor().clip(0, n - 1).cast(pl.Int64)
+
+
+def _axis_num_expr(axis: str, temporal: bool) -> pl.Expr:
+    """Numeric form of a trend axis — temporal axes via their integer
+    representation, so one bucketing expression covers dates, timestamps and
+    plain numbers."""
+    return pl.col(axis).cast(pl.Int64) if temporal else pl.col(axis).cast(pl.Float64)
+
+
+def _classify_axis(dtype: pl.DataType) -> tuple[bool, bool, str]:
+    """``(temporal, numeric, axis_kind)`` classification of a trend axis dtype."""
+    temporal = dtype in (pl.Date, pl.Datetime) or dtype.base_type() in (pl.Date, pl.Datetime)
+    numeric = dtype.is_numeric()
+    return temporal, numeric, "temporal" if temporal else "numeric" if numeric else "categorical"
+
+
 def compute_histogram(
     frame: pl.DataFrame | pl.LazyFrame,
     column: str,
     bins: int = HISTOGRAM_BINS,
+    domain: tuple[float, float] | None = None,
 ) -> dict[str, Any] | None:
     """Binned counts for ``column``, or ``None`` when a histogram is meaningless.
 
@@ -87,6 +188,12 @@ def compute_histogram(
     Nulls are excluded from the bars — a null has no position on a numeric axis
     — but reported separately so a mostly-empty column cannot masquerade as a
     narrow distribution.
+
+    ``domain`` pins the bin grid to an externally computed ``(lo, hi)`` instead
+    of the frame's own extent — required by the per-group comparison, where
+    each partition binned on its own extent would produce incomparable bars.
+    With a domain, a single-value partition is still meaningful (one tall bar
+    on the shared axis), so the no-spread guard applies to the domain instead.
     """
     lazy = frame.lazy() if isinstance(frame, pl.DataFrame) else frame
     stats = lazy.select(
@@ -101,16 +208,31 @@ def compute_histogram(
     lo, hi = stats["min"][0], stats["max"][0]
     total = int(stats["total"][0] or 0)
     nulls = int(stats["nulls"][0] or 0)
-    if lo is None or hi is None or total - nulls <= 1 or lo == hi:
-        return None
-
-    hist = (
-        lazy.select(pl.col(column).hist(bin_count=bins, include_breakpoint=True).alias("h"))
-        .unnest("h")
-        .collect()
-    )
-    counts = [int(c or 0) for c in hist["count"].to_list()]
-    breakpoints = [float(b) for b in hist["breakpoint"].to_list()]
+    if domain is not None:
+        d_lo, d_hi = domain
+        if d_hi <= d_lo or lo is None or total - nulls < 1:
+            return None
+        width = (d_hi - d_lo) / bins
+        bucket = _bucket_expr(pl.col(column).cast(pl.Float64), d_lo, width, bins)
+        grouped = (
+            lazy.filter(pl.col(column).is_not_null())
+            .group_by(bucket.alias("__bucket__"))
+            .agg(pl.len().alias("__count__"))
+            .collect()
+        )
+        by_bucket = dict(zip(grouped["__bucket__"].to_list(), grouped["__count__"].to_list()))
+        counts = [int(by_bucket.get(i, 0)) for i in range(bins)]
+        breakpoints = [d_lo + width * (i + 1) for i in range(bins)]
+    else:
+        if lo is None or hi is None or total - nulls <= 1 or lo == hi:
+            return None
+        hist = (
+            lazy.select(pl.col(column).hist(bin_count=bins, include_breakpoint=True).alias("h"))
+            .unnest("h")
+            .collect()
+        )
+        counts = [int(c or 0) for c in hist["count"].to_list()]
+        breakpoints = [float(b) for b in hist["breakpoint"].to_list()]
     return {
         "bins": counts,
         "breakpoints": breakpoints,
@@ -410,10 +532,7 @@ def compute_trend(
     if column not in names or axis not in names:
         return None
 
-    dtype = schema[axis]
-    temporal = dtype in (pl.Date, pl.Datetime) or dtype.base_type() in (pl.Date, pl.Datetime)
-    numeric = dtype.is_numeric()
-    axis_kind = "temporal" if temporal else "numeric" if numeric else "categorical"
+    temporal, numeric, axis_kind = _classify_axis(schema[axis])
 
     reducer = _TREND_REDUCERS.get((aggregation or "count").lower(), _TREND_REDUCERS["count"])
     base = lazy.filter(pl.col(axis).is_not_null())
@@ -423,16 +542,14 @@ def compute_trend(
         return None
 
     if distinct > max_points and (temporal or numeric):
-        # Cast temporal axes to their integer representation so one expression
-        # covers dates, timestamps and plain numbers.
-        axis_num = pl.col(axis).cast(pl.Int64) if temporal else pl.col(axis).cast(pl.Float64)
+        axis_num = _axis_num_expr(axis, temporal)
         bounds = base.select(axis_num.min().alias("lo"), axis_num.max().alias("hi")).collect()
         lo = float(bounds["lo"][0])
         hi = float(bounds["hi"][0])
         width = (hi - lo) / max_points
         if width <= 0:
             return None
-        bucket = ((axis_num - lo) / width).floor().clip(0, max_points - 1).cast(pl.Int64)
+        bucket = _bucket_expr(axis_num, lo, width, max_points)
         grouped = (
             base.group_by(bucket.alias("__bucket__"))
             .agg(
@@ -469,6 +586,126 @@ def compute_trend(
         "change": ((last / first) - 1.0) if first else None,
         "min": min(values),
         "max": max(values),
+    }
+
+
+def trend_axis_grid(
+    frame: pl.DataFrame | pl.LazyFrame,
+    axis: str,
+    max_points: int = TREND_MAX_POINTS,
+) -> dict[str, Any] | None:
+    """Shared x-grid for multi-series trends, computed over the WHOLE frame.
+
+    Per-group trend series binned on their own extents would put the same
+    bucket index at different x positions — the overlay would be a lie. This
+    hoists ``compute_trend``'s bucketing decision so every partition is binned
+    against one grid: ``{"kind": "binned", lo, hi, n, temporal}`` for a
+    numeric/temporal axis, ``{"kind": "labels", labels}`` for a categorical
+    one (or a low-cardinality ordered one, where every value is its own
+    bucket).
+    """
+    lazy = frame.lazy() if isinstance(frame, pl.DataFrame) else frame
+    schema = lazy.collect_schema()
+    if axis not in set(schema.names()):
+        return None
+    temporal, numeric, axis_kind = _classify_axis(schema[axis])
+
+    base = lazy.filter(pl.col(axis).is_not_null())
+    distinct = int(base.select(pl.col(axis).n_unique()).collect().item() or 0)
+    if distinct < 2:
+        return None
+
+    if distinct > max_points and (temporal or numeric):
+        axis_num = _axis_num_expr(axis, temporal)
+        bounds = base.select(axis_num.min().alias("lo"), axis_num.max().alias("hi")).collect()
+        lo = float(bounds["lo"][0])
+        hi = float(bounds["hi"][0])
+        if hi <= lo:
+            return None
+        return {
+            "kind": "binned",
+            "lo": lo,
+            "hi": hi,
+            "n": max_points,
+            "temporal": temporal,
+            "axis_kind": axis_kind,
+        }
+    labels_df = base.select(pl.col(axis).unique().sort().alias("v")).collect()
+    labels = labels_df["v"].to_list()
+    if len(labels) > max_points:
+        labels = labels[-max_points:]
+    return {"kind": "labels", "labels": labels, "axis_kind": axis_kind}
+
+
+def compute_trend_on_grid(
+    frame: pl.DataFrame | pl.LazyFrame,
+    column: str,
+    axis: str,
+    aggregation: str,
+    grid: dict[str, Any],
+) -> dict[str, Any] | None:
+    """One trend series aligned on a shared :func:`trend_axis_grid`.
+
+    Every returned series has exactly one point per grid slot, ``value: None``
+    where the partition has no rows in that bucket — which is what lets the
+    client overlay N series on one x axis and break the line over gaps rather
+    than inventing zeros for aggregations where zero is a claim (a mean of
+    nothing is not 0).
+    """
+    lazy = frame.lazy() if isinstance(frame, pl.DataFrame) else frame
+    if column not in set(lazy.collect_schema().names()):
+        return None
+    reducer = _TREND_REDUCERS.get((aggregation or "count").lower(), _TREND_REDUCERS["count"])
+    base = lazy.filter(pl.col(axis).is_not_null())
+
+    if grid["kind"] == "binned":
+        lo, hi, n = grid["lo"], grid["hi"], int(grid["n"])
+        width = (hi - lo) / n
+        bucket = _bucket_expr(_axis_num_expr(axis, bool(grid["temporal"])), lo, width, n)
+        grouped = (
+            base.group_by(bucket.alias("__bucket__"))
+            .agg(reducer(column).alias("__value__"), pl.col(axis).min().alias("__label__"))
+            .collect()
+        )
+        by_bucket = {
+            int(b): (v, label)
+            for b, v, label in zip(
+                grouped["__bucket__"].to_list(),
+                grouped["__value__"].to_list(),
+                grouped["__label__"].to_list(),
+            )
+        }
+        points = []
+        for i in range(n):
+            v, label = by_bucket.get(i, (None, None))
+            points.append(
+                {
+                    "label": _format_axis_label(label) if label is not None else str(i),
+                    "value": float(v) if v is not None else None,
+                }
+            )
+    else:
+        labels = grid["labels"]
+        grouped = base.group_by(axis).agg(reducer(column).alias("__value__")).collect()
+        by_label = dict(zip(grouped[axis].to_list(), grouped["__value__"].to_list()))
+        points = [
+            {
+                "label": _format_axis_label(lbl),
+                "value": float(by_label[lbl]) if by_label.get(lbl) is not None else None,
+            }
+            for lbl in labels
+        ]
+
+    present = [p["value"] for p in points if p["value"] is not None]
+    if len(present) < 1:
+        return None
+    return {
+        "axis": axis,
+        "axis_kind": grid["axis_kind"],
+        "aggregation": (aggregation or "count").lower(),
+        "points": points,
+        "min": min(present),
+        "max": max(present),
     }
 
 
