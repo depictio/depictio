@@ -119,7 +119,7 @@ import GroupingHeaderControl from './components/GroupingHeaderControl';
 import SectionsModal from './components/sections/SectionsModal';
 import { applySectionOp, groupWith, sectionsFor } from './components/sections/sectionMutations';
 import type { SectionKind, SectionOp } from './components/sections/sectionMutations';
-import { Header, Sidebar, SettingsDrawer, TabModal } from './chrome';
+import { Header, Sidebar, SettingsDrawer, TabIntro, TabModal } from './chrome';
 import type { TabModalSubmitPayload } from './chrome';
 import NotesFooter from './components/NotesFooter';
 import './chrome/chrome.css';
@@ -1852,6 +1852,9 @@ const EditorApp: React.FC = () => {
                 ...contentScaleStyle,
               }}
             >
+              {/* Same placement as the viewer: the tab's description leads
+                  the canvas, ahead of any foreign pinned section. */}
+              <TabIntro dashboard={dashboard} activeTab={activeTab} />
               <RightComponentGrid
                 beforeSections={topSectionsHost}
                 dashboardId={dashboardId!}

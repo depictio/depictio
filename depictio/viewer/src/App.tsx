@@ -80,7 +80,7 @@ const ingestionBannerKey = (projectId: string) =>
  *  enough that a single deliberate change still feels immediate. */
 const FILTER_DEBOUNCE_MS = 250;
 import { notifications } from '@mantine/notifications';
-import { Header, Sidebar, SettingsDrawer } from './chrome';
+import { Header, Sidebar, SettingsDrawer, TabIntro } from './chrome';
 import { useSidebarOpen } from './hooks/useSidebarOpen';
 import { useContentScaleStyle } from './hooks/useUiScalePref';
 import { useFilterPanelOpen } from './hooks/useFilterPanelOpen';
@@ -1148,6 +1148,10 @@ const App: React.FC = () => {
                 ...contentScaleStyle,
               }}
             >
+              {/* The tab's own description, ahead of everything the canvas
+                  holds — including a foreign `pin: top` section, which would
+                  otherwise introduce another tab before this one is named. */}
+              <TabIntro dashboard={dashboard} activeTab={activeTab} />
               {/* Only claims the leftover height when nothing follows it —
                   otherwise a short grid would push the bottom-pinned sections
                   to the fold with a gap above them. */}
