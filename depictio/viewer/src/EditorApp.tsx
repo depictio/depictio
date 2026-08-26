@@ -1679,7 +1679,11 @@ const EditorApp: React.FC = () => {
           onAddSection={handleAddSection}
           onSave={handleForceSave}
           isOwner={isOwner}
+          // Undefined rather than an empty fragment when realtime is off:
+          // the header rules this slot off from the action buttons, and an
+          // empty group would leave a divider with nothing beside it.
           rightExtras={
+            dashboard || realtimeEnabled ? (
             <>
               {dashboard && (
                 <GroupingHeaderControl
@@ -1693,7 +1697,6 @@ const EditorApp: React.FC = () => {
                   {groupsSection}
                 </GroupingHeaderControl>
               )}
-              <MapPanelControl panel={mapPanel} />
               {realtimeEnabled && (
                 <span data-tour-id="realtime-indicator" style={{ display: 'inline-flex' }}>
                   <RealtimeIndicator
@@ -1716,6 +1719,7 @@ const EditorApp: React.FC = () => {
                 </span>
               )}
             </>
+            ) : undefined
           }
         />
       </AppShell.Header>
@@ -1809,6 +1813,7 @@ const EditorApp: React.FC = () => {
                   renderSectionActions={renderPanelSectionAction}
                   dashboardId={dashboardId}
                   stateScopeId={panelScopeId}
+                  headerActions={<MapPanelControl panel={mapPanel} />}
                   // No refreshTick: the editor threads no realtime refresh
                   // counter into any of its grids, so the left panel matches
                   // RightComponentGrid rather than inventing state here.
@@ -1940,6 +1945,7 @@ const EditorApp: React.FC = () => {
               dashboardId={dashboardId}
               groupSummaryRows={groupSummaryRows}
               stateScopeId={panelScopeId}
+              headerActions={<MapPanelControl panel={mapPanel} />}
             />
           </Drawer>
         )}

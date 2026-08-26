@@ -135,6 +135,11 @@ export interface FilterPanelProps {
   /** Omitted when the panel can't be collapsed (e.g. inside the mobile drawer),
    *  which also hides the collapse control. */
   onToggleCollapsed?: () => void;
+  /** Controls over dashboard-wide filtering surfaces that are not themselves
+   *  filter components — today the map panel. Rendered beside "Reset all" when
+   *  the panel is open and on the icon rail when it is collapsed, so a control
+   *  that carries a "this is filtering you" badge is never out of reach. */
+  headerActions?: React.ReactNode;
   /** Pinned below the filter list, outside its scroll area. Deliberately an
    *  opaque node: the apps put the docked map panel here, and this component
    *  has no business knowing that. */
@@ -182,6 +187,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
   onLayoutChange,
   collapsed = false,
   onToggleCollapsed,
+  headerActions,
   footer,
   funnel,
   groupSummaryRows,
@@ -677,6 +683,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
             {activeCount}
           </Badge>
         )}
+        {headerActions}
         {/* Rotated so a 44px rail still says what it is. `vertical-rl` plus a
             180° turn reads bottom-to-top, the usual direction for a label on a
             left-hand edge. `aria-hidden` because the ActionIcon above already
@@ -844,6 +851,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
               </Menu.Item>
             </Menu.Dropdown>
           </Menu>
+          {headerActions}
           {onResetAllFilters && (
             <Button
               leftSection={<Icon icon="bx:reset" width={12} />}

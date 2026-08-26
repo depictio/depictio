@@ -911,7 +911,11 @@ const App: React.FC = () => {
               <DashboardLoadIndicator metadataList={rightComponents} cardsLoading={cardsLoading} />
             ) : undefined
           }
+          // Undefined rather than an empty fragment when realtime is off:
+          // the header rules this slot off from the action buttons, and an
+          // empty group would leave a divider with nothing beside it.
           rightExtras={
+            dashboard || realtimeEnabled ? (
             <>
               {dashboard && (
                 <GroupingHeaderControl
@@ -925,7 +929,6 @@ const App: React.FC = () => {
                   {groupsSection}
                 </GroupingHeaderControl>
               )}
-              <MapPanelControl panel={mapPanel} />
               {realtimeEnabled && (
                 <span data-tour-id="realtime-indicator" style={{ display: 'inline-flex' }}>
                   <RealtimeIndicator
@@ -948,6 +951,7 @@ const App: React.FC = () => {
                 </span>
               )}
             </>
+            ) : undefined
           }
         />
       </AppShell.Header>
@@ -1102,6 +1106,7 @@ const App: React.FC = () => {
                   filterSections={panelFilterSections}
                   dashboardId={dashboardId}
                   stateScopeId={panelScopeId}
+                  headerActions={<MapPanelControl panel={mapPanel} />}
                   refreshTick={refreshTick}
                   collapsed={!filterPanelOpened}
                   onToggleCollapsed={toggleFilterPanel}
@@ -1286,6 +1291,7 @@ const App: React.FC = () => {
                 onOpenView: () => setFunnelViewOpen(true),
               }}
               groupSummaryRows={groupSummaryRows}
+              headerActions={<MapPanelControl panel={mapPanel} />}
             />
           </Drawer>
         )}
