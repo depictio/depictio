@@ -651,6 +651,14 @@ _STRONG_ROLE_SCORE = 0.75
 # Score at/above which the builder surfaces a kind under "Recommended".
 RECOMMENDED_SCORE = 0.8
 
+# Kinds with no required roles (upset_plot, sankey) can only ever be matched on
+# the shape of the table, never on what its columns are called. That is enough
+# to rank them and keep them pickable, but not enough to advertise them: a flat
+# score equal to RECOMMENDED_SCORE meant "has 2 String columns" recommended a
+# Sankey on every metadata table there is. Sit them just under the bar instead,
+# so a structural-only match is offered but never announced.
+_STRUCTURAL_ONLY_SCORE = 0.7
+
 
 @dataclass(frozen=True)
 class VizSuggestion:
@@ -698,7 +706,9 @@ def _apply_structural_gates(
         # upset_plot has no required roles — derive its score from the count of
         # binary (Int) set-membership columns.
         ints = _count_dtypes(dc_schema, _INT)
-        score = 0.8 if ints >= min_int else _GATE_PENALTY * min(ints / min_int, 1.0)
+        score = (
+            _STRUCTURAL_ONLY_SCORE if ints >= min_int else _GATE_PENALTY * min(ints / min_int, 1.0)
+        )
 
     min_string = _MIN_STRING_COLS.get(kind)
     if min_string is not None:
@@ -710,7 +720,9 @@ def _apply_structural_gates(
             for c, d in dc_schema.items()
             if d in _FLOAT
         )
-        score = 0.8 if (strings >= min_string and not stat_floats) else _GATE_PENALTY
+        score = (
+            _STRUCTURAL_ONLY_SCORE if (strings >= min_string and not stat_floats) else _GATE_PENALTY
+        )
 
     required_dc_type = _KIND_REQUIRES_DC_TYPE.get(kind)
     if required_dc_type is not None and dc_type is not None and dc_type != required_dc_type:

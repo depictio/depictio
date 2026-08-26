@@ -1672,7 +1672,7 @@ export async function createTab(
     workflow_system: 'none',
     notes_content: '',
     permissions: (parent as Record<string, unknown>).permissions ?? {},
-    is_public: false,
+    // is_public is server-stamped from the parent project on insert.
     last_saved_ts: '',
     project_id: parent.project_id,
     is_main_tab: false,
@@ -2777,7 +2777,6 @@ export async function createProject(
  *  fields, and PUTs the merged document. */
 export interface EditProjectInput {
   name?: string;
-  is_public?: boolean;
   data_management_platform_project_url?: string | null;
 }
 
@@ -3064,7 +3063,7 @@ export async function createDashboard(input: CreateDashboardInput): Promise<stri
     workflow_system: input.workflow_system || 'none',
     notes_content: '',
     permissions: { owners: [ownerEntry], editors: [], viewers: [] },
-    is_public: false,
+    // is_public is server-stamped from the parent project on insert.
     last_saved_ts: '',
     project_id: input.project_id,
     is_main_tab: true,
@@ -3128,7 +3127,7 @@ export async function duplicateDashboard(sourceDashboardId: string): Promise<str
     _id: newId,
     title: `${(source.title as string) || 'Untitled'} (copy)`,
     permissions: { owners: [ownerEntry], editors: [], viewers: [] },
-    is_public: false,
+    // is_public is server-stamped from the parent project on insert.
     is_main_tab: true,
     parent_dashboard_id: null,
     tab_order: 0,
@@ -3163,7 +3162,7 @@ export async function duplicateDashboard(sourceDashboardId: string): Promise<str
           _id: newChildId,
           title: child.title ?? (childSource.title as string) ?? 'Tab',
           permissions: { owners: [ownerEntry], editors: [], viewers: [] },
-          is_public: false,
+          // is_public is server-stamped from the parent project on insert.
           is_main_tab: false,
           parent_dashboard_id: newId,
           tab_order: child.tab_order ?? (childSource.tab_order as number) ?? 0,

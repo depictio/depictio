@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, Button, Group, Modal, Stack, Switch, TextInput } from '@mantine/core';
+import { Alert, Button, Group, Modal, Stack, Text, TextInput } from '@mantine/core';
 
 import type { EditProjectInput, ProjectListEntry } from 'depictio-react-core';
 
@@ -17,7 +17,6 @@ const EditProjectModal: React.FC<EditProjectModalProps> = ({
   onSubmit,
 }) => {
   const [name, setName] = useState('');
-  const [isPublic, setIsPublic] = useState(false);
   const [dmpUrl, setDmpUrl] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -25,7 +24,6 @@ const EditProjectModal: React.FC<EditProjectModalProps> = ({
   useEffect(() => {
     if (!opened || !project) return;
     setName(project.name || '');
-    setIsPublic(Boolean(project.is_public));
     setDmpUrl(
       typeof project.data_management_platform_project_url === 'string'
         ? project.data_management_platform_project_url
@@ -47,7 +45,6 @@ const EditProjectModal: React.FC<EditProjectModalProps> = ({
     try {
       await onSubmit(id, {
         name: name.trim(),
-        is_public: isPublic,
         data_management_platform_project_url: dmpUrl.trim() || null,
       });
     } catch (err) {
@@ -80,18 +77,10 @@ const EditProjectModal: React.FC<EditProjectModalProps> = ({
           onChange={(e) => setDmpUrl(e.currentTarget.value)}
           disabled={submitting}
         />
-        <Switch
-          label={
-            <span style={{ fontFamily: 'Virgil' }}>
-              Make this project public
-            </span>
-          }
-          description="Public projects are visible to all users"
-          checked={isPublic}
-          onChange={(e) => setIsPublic(e.currentTarget.checked)}
-          color="teal"
-          disabled={submitting}
-        />
+        <Text size="xs" c="dimmed">
+          Visibility (public/private) is managed from the project's Permissions
+          page — changing it there also updates all of its dashboards.
+        </Text>
         {error && (
           <Alert color="red" variant="light">
             {error}

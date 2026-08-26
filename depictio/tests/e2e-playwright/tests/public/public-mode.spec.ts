@@ -146,6 +146,23 @@ test.describe("Public Mode", () => {
     }) => {
       const { is_demo_mode } = await getAuthMode();
       const token = await tempUserToken(page);
+      const session = await page.evaluate(
+        () =>
+          JSON.parse(window.localStorage.getItem("local-store")!) as {
+            user_id: string;
+            email: string;
+          },
+      );
+      // Creating a dashboard requires read access to a real target project:
+      // resolve one from the seeded public dashboards (a phantom project_id
+      // is rejected as a cross-tenant write regardless of mode).
+      const listRes = await request.get(`${API_URL}${API_PREFIX}/dashboards/list`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      expect(listRes.status()).toBe(200);
+      const listed = (await listRes.json()) as Array<{ project_id?: string }>;
+      const projectId = listed.find((d) => d.project_id)?.project_id;
+      test.skip(!projectId, "No public dashboards seeded in this stack.");
       // Unique ObjectId-shaped id per attempt — each retry mints a NEW temp
       // user, who couldn't save over (or delete) a dashboard left behind by
       // the previous attempt's owner.
@@ -161,20 +178,29 @@ test.describe("Public Mode", () => {
             id: dashboardId,
             title: "Test Dashboard",
             dashboard_id: dashboardId,
-            project_id: "507f1f77bcf86cd799439012",
-            permissions: { owners: [], viewers: [] },
+            project_id: projectId,
+            // Mirror the real duplicate/create client flow: the temp user
+            // owns the document, which is what lets them edit/delete their
+            // own copy (public projects grant read, never editor/owner).
+            permissions: {
+              owners: [{ _id: session.user_id, email: session.email }],
+              editors: [],
+              viewers: [],
+            },
           },
         },
       );
       if (is_demo_mode) {
         // Demo mode INTENTIONALLY lets temporary users create dashboards
         // (24h retention) — creation succeeds. Clean up so retries and
-        // subsequent runs see a fresh state.
+        // subsequent runs see a fresh state (document ownership lets the
+        // temp user delete their own dashboard).
         expect([200, 201]).toContain(res.status());
-        await request.delete(
+        const delRes = await request.delete(
           `${API_URL}${API_PREFIX}/dashboards/delete/${dashboardId}`,
           { headers: { Authorization: `Bearer ${token}` } },
         );
+        expect([200, 201]).toContain(delRes.status());
       } else {
         // Pure public mode: anonymous/temporary users cannot create.
         expect([401, 403, 422]).toContain(res.status());
