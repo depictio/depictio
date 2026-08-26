@@ -19,6 +19,7 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 from depictio.api.v1.configs.logging_init import logger
+from depictio.api.v1.services.multiqc.sample_matching import expand_samples
 from depictio.models.models.links import LinkConfig
 
 
@@ -104,23 +105,6 @@ class SampleMappingResolver(BaseLinkResolver):
     def name(self) -> str:
         return "sample_mapping"
 
-    # Common read-pair / replicate / lane suffixes that appear on canonical IDs
-    # in MultiQC's mapping but NOT on the source DC's sample column. Stripping
-    # them lets a source value like "HG001" match keys "HG001_R1" + "HG001_R2".
-    # Restricted to suffixes with an explicit prefix letter (R/L/REP/TECH) so
-    # we don't over-strip legit IDs ending in digits like "Sample_2024" or
-    # "Patient_42" — that would silently collapse unrelated samples onto
-    # the same base bucket.
-    _SAMPLE_SUFFIX_RE = re.compile(
-        r"_(?:R\d+|L\d+|REP\d+|TECH\d+)$",
-        re.IGNORECASE,
-    )
-
-    @classmethod
-    def _strip_sample_suffix(cls, name: str) -> str:
-        """Strip ``_R1`` / ``_R2`` / ``_REP1`` / ``_L001`` style suffixes."""
-        return cls._SAMPLE_SUFFIX_RE.sub("", name)
-
     def resolve(
         self,
         source_values: list[Any],
@@ -129,58 +113,19 @@ class SampleMappingResolver(BaseLinkResolver):
     ) -> tuple[list[str], list[str]]:
         """Expand canonical IDs to sample name variants.
 
-        Lookup tries (in order):
-        1. exact key match (honouring ``case_sensitive``)
-        2. base-name match — strips ``_R1`` / ``_R2`` / ``_1`` / ``_REP1`` from
-           every mapping key and aggregates variants from any keys whose base
-           equals the source value. Without this, a link source like ``"HG001"``
-           never matches MultiQC keys like ``"HG001_R1"`` / ``"HG001_R2"``.
+        Delegates to ``depictio.api.v1.services.multiqc.sample_matching`` (the
+        shared implementation with the MultiQC figure-patching path). Lookup
+        tries, in order: exact key, variant identity, suffix-stripped key base
+        (``_R1`` / ``_L001`` / ``_REP1`` / ``_TECH1``), suffix-stripped source
+        value. Whitespace is stripped on both sides; case folding follows
+        ``link_config.case_sensitive``. A key whose variant list is empty
+        (canonical-only mapping) resolves to itself and counts as mapped.
         """
-        resolved: list[str] = []
-        unmapped: list[str] = []
-
-        mappings = link_config.mappings or {}
-        case_sensitive = bool(link_config.case_sensitive)
-
-        # Pre-bucket mapping keys by their stripped base so the per-value
-        # lookup is O(unique-bases) instead of O(keys × source_values).
-        base_to_variants: dict[str, list[str]] = {}
-        for key, variants in mappings.items():
-            base = self._strip_sample_suffix(key)
-            bucket_key = base if case_sensitive else base.lower()
-            base_to_variants.setdefault(bucket_key, []).extend(variants)
-
-        for val in source_values:
-            str_val = str(val)
-            lookup_val = str_val if case_sensitive else str_val.lower()
-
-            found_mapping: list[str] | None = None
-            if case_sensitive:
-                found_mapping = mappings.get(str_val)
-            else:
-                for key, variants in mappings.items():
-                    if key.lower() == lookup_val:
-                        found_mapping = variants
-                        break
-
-            # Fallback: match against suffix-stripped bases. Aggregates variants
-            # from every key sharing the same base (e.g. HG001_R1 + HG001_R2).
-            if not found_mapping:
-                fallback = base_to_variants.get(lookup_val)
-                if fallback:
-                    # Dedup while preserving order — the same variant can show up
-                    # from multiple keys (rare, but possible across reports).
-                    found_mapping = list(dict.fromkeys(fallback))
-
-            if found_mapping:
-                resolved.extend(found_mapping)
-                logger.debug(
-                    f"SampleMappingResolver: Expanded '{str_val}' to {len(found_mapping)} variants"
-                )
-            else:
-                resolved.append(str_val)
-                unmapped.append(str_val)
-                logger.debug(f"SampleMappingResolver: No mapping for '{str_val}' - using as-is")
+        resolved, unmapped = expand_samples(
+            source_values,
+            link_config.mappings,
+            case_sensitive=bool(link_config.case_sensitive),
+        )
 
         logger.info(
             f"SampleMappingResolver: Resolved {len(source_values)} source values "

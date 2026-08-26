@@ -34,6 +34,8 @@ import type {
   UpdateLinkInput,
 } from 'depictio-react-core';
 
+import { LinkMappingInspector } from './LinkMappingInspector';
+
 interface DataCollectionOption {
   id: string;
   tag: string;
@@ -276,11 +278,14 @@ const LinkEditModal: React.FC<LinkEditModalProps> = ({
       };
     }
     if (resolver === 'sample_mapping') {
-      // Prefer the auto-loaded MultiQC mappings; otherwise parse JSON textarea.
+      // MultiQC targets: do NOT freeze the auto-loaded mappings into the
+      // link. The server re-fetches live mappings at resolution time when
+      // the link carries none — persisting a snapshot here meant a MultiQC
+      // re-ingest kept resolving against stale samples forever (#938). The
+      // table shown in the editor is a preview, not the stored config.
+      // Non-MultiQC targets keep the manual JSON path.
       let mappings: Record<string, string[]> | undefined;
-      if (autoMappings) {
-        mappings = autoMappings;
-      } else if (mappingsJson.trim()) {
+      if (targetType !== 'multiqc' && mappingsJson.trim()) {
         try {
           mappings = JSON.parse(mappingsJson);
         } catch (err) {
@@ -292,6 +297,10 @@ const LinkEditModal: React.FC<LinkEditModalProps> = ({
         resolver,
         mappings,
         target_field: targetField || undefined,
+        // Sample names are matched case-insensitively in practice (MultiQC
+        // tools freely re-case names); the model default of `true` was never
+        // surfaced by this UI and silently made real-world links strict.
+        case_sensitive: false,
       };
     }
     return { resolver };
@@ -508,6 +517,10 @@ const LinkEditModal: React.FC<LinkEditModalProps> = ({
             targetField={targetField}
             onTargetFieldChange={setTargetField}
           />
+        )}
+
+        {editing && link && (
+          <LinkMappingInspector projectId={projectId} linkId={link.id} />
         )}
 
         <Textarea

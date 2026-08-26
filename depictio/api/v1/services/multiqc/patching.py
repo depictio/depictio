@@ -6,12 +6,8 @@ without dragging in Dash callback machinery.
 """
 
 import copy
-import re
 
-# Strip read-pair / lane / replicate suffixes (HG001_R1 -> HG001) so a base
-# sample name selected in an interactive component still matches MultiQC's
-# suffixed mapping keys.
-_SAMPLE_SUFFIX_RE = re.compile(r"_(?:R\d+|L\d+|REP\d+|TECH\d+)$", re.IGNORECASE)
+from depictio.api.v1.services.multiqc.sample_matching import expand_samples
 
 
 def expand_canonical_samples_to_variants(
@@ -19,52 +15,38 @@ def expand_canonical_samples_to_variants(
 ) -> list[str]:
     """Expand canonical sample IDs to all their MultiQC variants using stored mappings.
 
-    Lookup tries exact key first, then falls back to base-name match
-    (stripping ``_R1`` / ``_R2`` / ``_REP1`` / ``_L001`` style suffixes from
-    the mapping keys). Without the fallback, an interactive MultiSelect on
-    a sample column emitting a base name like ``HG001`` matches nothing in
-    a mapping keyed by ``HG001_R1`` / ``HG001_R2`` (MultiQC's own keying
-    when read-pair suffixes are present), so plot patching shows nothing.
+    Delegates to ``sample_matching.expand_samples`` — the shared, direction-
+    agnostic lookup (exact key, variant identity, suffix-stripped key base,
+    suffix-stripped source value; whitespace-stripped and case-insensitive
+    throughout). Without the fallbacks, an interactive MultiSelect emitting a
+    base name like ``HG001`` matches nothing in a mapping keyed by
+    ``HG001_R1`` / ``HG001_R2``, so plot patching shows nothing.
 
     When no mappings are available, returns canonical samples unchanged.
     """
     if not sample_mappings:
         return canonical_samples
 
-    # Pre-bucket keys by suffix-stripped base. Mappings come pre-aggregated
-    # across reports, so the same base can show up in multiple suffixed
-    # keys (HG001_R1 + HG001_R2) — union their variants.
-    base_to_variants: dict[str, list[str]] = {}
-    for key, variants in sample_mappings.items():
-        base = _SAMPLE_SUFFIX_RE.sub("", key).lower()
-        base_to_variants.setdefault(base, []).extend(variants)
-
-    expanded_samples: list[str] = []
-    for canonical_id in canonical_samples:
-        variants = sample_mappings.get(canonical_id)
-        if variants:
-            expanded_samples.extend(variants)
-            continue
-
-        fallback = base_to_variants.get(canonical_id.lower())
-        if fallback:
-            expanded_samples.extend(dict.fromkeys(fallback))
-            continue
-
-        expanded_samples.append(canonical_id)
-
-    return expanded_samples
+    resolved, _unmapped = expand_samples(canonical_samples, sample_mappings, case_sensitive=False)
+    return resolved
 
 
 def patch_multiqc_figures(
     figures: list[dict],
-    selected_samples: list[str],
+    selected_samples: list[str] | None,
     metadata: dict | None = None,
     trace_metadata: dict | None = None,
 ) -> list[dict]:
-    """Apply sample filtering to MultiQC figures based on interactive selections."""
-    if not figures or not selected_samples:
+    """Apply sample filtering to MultiQC figures based on interactive selections.
+
+    ``selected_samples`` semantics: ``None`` means "no sample filter" (figures
+    returned untouched); an empty list means "active filters matched no
+    sample" and every sample is filtered out — the two must not be conflated,
+    or a filter that narrows to nothing silently renders everything.
+    """
+    if not figures or selected_samples is None:
         return figures
+    selected_set = {str(s) for s in selected_samples}
 
     patched_figures = []
 
@@ -106,7 +88,7 @@ def patch_multiqc_figures(
                 filtered_samples = []
                 filtered_values = []
                 for j, sample in enumerate(sample_axis):
-                    if sample in selected_samples:
+                    if sample in selected_set:
                         filtered_samples.append(sample)
                         if j < len(value_axis):
                             filtered_values.append(value_axis[j])
@@ -116,9 +98,9 @@ def patch_multiqc_figures(
 
             elif trace_type == "heatmap":
                 if original_x and original_z:
-                    x_indices = [j for j, x in enumerate(original_x) if str(x) in selected_samples]
+                    x_indices = [j for j, x in enumerate(original_x) if str(x) in selected_set]
                     y_indices = (
-                        [j for j, y in enumerate(original_y) if str(y) in selected_samples]
+                        [j for j, y in enumerate(original_y) if str(y) in selected_set]
                         if original_y
                         else []
                     )
@@ -127,7 +109,11 @@ def patch_multiqc_figures(
                         trace["y"] = [original_y[j] for j in y_indices]
                         if isinstance(original_z, list) and original_z:
                             trace["z"] = [original_z[j] for j in y_indices if j < len(original_z)]
-                    elif x_indices:
+                    else:
+                        # Assign even when nothing matched — a selection that
+                        # matches no sample must blank the heatmap, exactly
+                        # like the bar/box/violin branches, not silently
+                        # render the full matrix.
                         trace["x"] = [original_x[j] for j in x_indices]
                         if isinstance(original_z, list) and original_z:
                             trace["z"] = [
@@ -136,14 +122,14 @@ def patch_multiqc_figures(
 
             elif trace_type in ["scatter", "scattergl"]:
                 if trace_name:
-                    trace["visible"] = trace_name in selected_samples
+                    trace["visible"] = trace_name in selected_set
                 else:
                     filtered_x = []
                     filtered_y = []
                     for j, x_val in enumerate(original_x):
                         if (
-                            str(x_val) in selected_samples
-                            or str(original_y[j] if j < len(original_y) else "") in selected_samples
+                            str(x_val) in selected_set
+                            or str(original_y[j] if j < len(original_y) else "") in selected_set
                         ):
                             filtered_x.append(x_val)
                             if j < len(original_y):

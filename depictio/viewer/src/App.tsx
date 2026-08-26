@@ -23,6 +23,7 @@ import {
   AvailableFilterValuesProvider,
   DashboardGrid,
   FilterPanel,
+  FunnelView,
   TopPanel,
   mergeFiltersBySource,
   enrichFilterWithDcId,
@@ -133,6 +134,18 @@ const App: React.FC = () => {
   // this, picking three values in a MultiSelect fires three full rounds of
   // renders and the first two are obsolete before they land.
   const [deferredFilters] = useDebouncedValue(filters, FILTER_DEBOUNCE_MS);
+
+  // Funnel filtering (issue #939). The dashboard's `funnel_filtering` field is
+  // the author's default; the panel button flips it for this page view only
+  // (viewers may lack edit rights, so the button never writes back). The field
+  // defaults to on, so only an explicit `false` disables it: a dashboard saved
+  // before the field existed has no value and must still get the funnel.
+  const [funnelEnabled, setFunnelEnabled] = useState(true);
+  const [funnelViewOpen, setFunnelViewOpen] = useState(false);
+  const funnelDefault = dashboard?.funnel_filtering !== false;
+  useEffect(() => {
+    setFunnelEnabled(funnelDefault);
+  }, [funnelDefault]);
 
   // Invalidate whatever the previous filter left queued.
   //
@@ -673,6 +686,11 @@ const App: React.FC = () => {
     <AvailableFilterValuesProvider
       dashboardMetadata={summaryMetadata}
       projectId={dashboard?.project_id}
+      funnel={
+        dashboardId
+          ? { enabled: funnelEnabled, dashboardId, filters: deferredFilters }
+          : undefined
+      }
     >
       <DashboardLoadingProvider>
       <InspectorProviders control={inspectorControl}>
@@ -889,6 +907,11 @@ const App: React.FC = () => {
                   refreshTick={refreshTick}
                   collapsed={!filterPanelOpened}
                   onToggleCollapsed={toggleFilterPanel}
+                  funnel={{
+                    enabled: funnelEnabled,
+                    onToggle: () => setFunnelEnabled((v) => !v),
+                    onOpenView: () => setFunnelViewOpen(true),
+                  }}
                   footer={
                     <MapPanelDock
                       panel={mapPanel}
@@ -1054,8 +1077,21 @@ const App: React.FC = () => {
               filterSections={panelFilterSections}
               dashboardId={dashboardId}
               refreshTick={refreshTick}
+              funnel={{
+                enabled: funnelEnabled,
+                onToggle: () => setFunnelEnabled((v) => !v),
+                onOpenView: () => setFunnelViewOpen(true),
+              }}
             />
           </Drawer>
+        )}
+        {dashboardId && (
+          <FunnelView
+            opened={funnelViewOpen}
+            onClose={() => setFunnelViewOpen(false)}
+            dashboardId={dashboardId}
+            filters={deferredFilters}
+          />
         )}
         {dashboard && dashboardId && !inspectorEnabled && (
           <NotesFooter

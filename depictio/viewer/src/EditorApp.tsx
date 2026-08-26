@@ -549,6 +549,33 @@ const EditorApp: React.FC = () => {
   );
 
   /**
+   * Persist the dashboard-level funnel-filtering default (issue #939). Same
+   * save-now pattern as delete: apply optimistically, POST the full document.
+   */
+  const handleToggleFunnelFiltering = useCallback(
+    async (enabled: boolean) => {
+      if (!dashboardId) return;
+      const cur = dashboardRef.current;
+      if (!cur) return;
+      const next = { ...cur, funnel_filtering: enabled };
+      if (saveTimer.current) {
+        clearTimeout(saveTimer.current);
+        saveTimer.current = null;
+      }
+      applyDashboard(next);
+      setSaveStatus('saving');
+      try {
+        await saveDashboard(dashboardId, next);
+        setSaveStatus('saved');
+      } catch (err) {
+        console.error('[EditorApp] funnel toggle save failed:', err);
+        setSaveStatus('error');
+      }
+    },
+    [dashboardId, applyDashboard],
+  );
+
+  /**
    * Duplicate: deep-clone the source component's stored_metadata entry, give
    * it a fresh UUID, and stack a layout entry directly below the source in
    * whichever panel (left/right) the source lives in. POSTs the full
@@ -1677,6 +1704,7 @@ const EditorApp: React.FC = () => {
         opened={settingsOpened}
         onClose={closeSettings}
         dashboard={dashboard}
+        onToggleFunnelFiltering={handleToggleFunnelFiltering}
       />
 
       <TabModal

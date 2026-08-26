@@ -3698,54 +3698,66 @@ def _empty_gs_stub_figure(
     }
 
 
+MULTIQC_SAMPLE_FILTER_COLUMNS = {
+    "sample",
+    "sample_id",
+    "sample_name",
+    "sampleid",
+    "samplename",
+    "sample-id",
+    "sample-name",
+}
+
+
 def _resolve_multiqc_sample_filter(
     dashboard_data: dict,
     component: dict,
     filters: list[dict],
-) -> list[str]:
-    """Resolve a list of dashboard interactive filters into a sample-name list.
+) -> list[str] | None:
+    """Resolve dashboard interactive filters into the MultiQC sample-name set.
 
-    Mirrors the simple branch of ``patch_multiqc_plot_with_interactive_filtering``:
-      - filters on the MultiQC DC's own ``sample`` column → values used directly
-      - filters on a different metadata DC → load the metadata DC with the
-        filters applied, then extract the join column. The join column name is
-        looked up from the project's ``DCLink`` (``link.source_column``) when
-        defined; otherwise falls back to the first match in
-        (``sample``, ``sample_id``, ``sample_name``).
-      - if the link has resolver ``sample_mapping``, the canonical IDs from the
-        metadata DC are expanded into MultiQC sample variants using the live
-        ``sample_mappings`` from the multiqc reports.
+    Two kinds of filters contribute, and every active one is a *constraint*:
+      - filters on the MultiQC DC's own sample column (any spelling in
+        ``MULTIQC_SAMPLE_FILTER_COLUMNS``, matching the frontend allowlist)
+        -> the selected values, expanded to variants;
+      - filters on a linked metadata DC -> the metadata DC is loaded with that
+        DC's own filters applied, the link's ``source_column`` values are
+        extracted and expanded to variants. Every metadata DC with an enabled
+        link contributes, not just the first one seen.
 
-    Returns an empty list when no resolvable filters are present. Logs but does
-    not raise on metadata-DC load failures.
+    The result is the INTERSECTION of all constraint sets — each active filter
+    can only narrow the sample set further. (The previous implementation
+    unioned them, so adding a second filter *widened* the result, and dropped
+    filters from any metadata DC after the first, making the outcome depend on
+    filter ordering.)
+
+    Returns:
+        ``None`` when no applicable sample filters are active (render
+        unfiltered), or the sorted list of surviving sample names — possibly
+        empty, which means "active filters matched no sample" and must render
+        an empty figure rather than an unfiltered one.
+
+    Logs but does not raise on metadata-DC load failures; a DC whose filters
+    cannot be resolved is skipped (its constraint is dropped) rather than
+    silently matching nothing.
     """
     if not filters:
-        return []
+        return None
 
     wf_id = component.get("wf_id")
     if not wf_id:
-        return []
+        return None
 
     multiqc_dc_id_str = str(component.get("dc_id") or component.get("data_collection_id") or "")
     stored_meta_index = {
         str(m.get("index")): m for m in (dashboard_data.get("stored_metadata") or [])
     }
 
-    metadata_dc_id: str | None = None
-    # Track the metadata DC's own workflow id — load_deltatable_lite needs the
-    # workflow that owns the metadata DC, not the multiqc component's workflow,
-    # because real projects often have the metadata table on a different
-    # workflow than the multiqc report. Falls back to the multiqc component's
-    # `wf_id` only if the interactive component's stored_metadata doesn't
-    # carry one (legacy components).
-    metadata_wf_id: object | None = None
-    # The stored_metadata snapshot for the source interactive component — used
-    # to build the `init_data` for `load_deltatable_lite` so the metadata DC
-    # load doesn't fall back to an unauthenticated API hop (which 404/403's
-    # on non-public projects).
-    metadata_comp_meta: dict = {}
-    direct_sample_values: list[str] = []
-    indirect_filter_metadata: list[dict] = []
+    # One entry per direct sample filter (each is its own AND constraint).
+    direct_sample_filters: list[list[str]] = []
+    # Metadata DCs keyed by dc_id: each contributes one constraint computed
+    # from ALL of its own filters applied together.
+    indirect_by_dc: dict[str, dict] = {}
 
     for f in filters:
         value = f.get("value")
@@ -3756,30 +3768,38 @@ def _resolve_multiqc_sample_filter(
         comp_dc = str(comp_meta.get("dc_id") or comp_meta.get("data_collection_id") or "")
         column_name = f.get("column_name") or comp_meta.get("column_name")
 
-        if comp_dc == multiqc_dc_id_str and column_name == "sample":
+        if (
+            comp_dc == multiqc_dc_id_str
+            and str(column_name or "").lower() in MULTIQC_SAMPLE_FILTER_COLUMNS
+        ):
             values_list = value if isinstance(value, list) else [value]
-            direct_sample_values.extend(str(v) for v in values_list)
+            direct_sample_filters.append([str(v) for v in values_list])
             continue
 
         if comp_dc and comp_dc != multiqc_dc_id_str:
-            if metadata_dc_id is None:
-                metadata_dc_id = comp_dc
-                metadata_wf_id = comp_meta.get("wf_id") or comp_meta.get("workflow_id") or wf_id
-                metadata_comp_meta = comp_meta
-            if comp_dc == metadata_dc_id:
-                indirect_filter_metadata.append(
-                    {
-                        "interactive_component_type": f.get("interactive_component_type")
-                        or comp_meta.get("interactive_component_type"),
-                        "column_name": column_name,
-                        "value": value,
-                    }
-                )
+            entry = indirect_by_dc.setdefault(
+                comp_dc,
+                {
+                    "wf_id": comp_meta.get("wf_id") or comp_meta.get("workflow_id") or wf_id,
+                    "comp_meta": comp_meta,
+                    "filters": [],
+                },
+            )
+            entry["filters"].append(
+                {
+                    "interactive_component_type": f.get("interactive_component_type")
+                    or comp_meta.get("interactive_component_type"),
+                    "column_name": column_name,
+                    "value": value,
+                }
+            )
+
+    if not direct_sample_filters and not indirect_by_dc:
+        return None
 
     # Pull live sample_mappings from the MultiQC reports so canonical IDs
     # (e.g. ``NA12878``) get expanded into the variant names that actually
-    # appear in plot traces (``NA12878_R1``, ``NA12878_R2``). Mirrors the Dash
-    # flow which calls ``expand_canonical_samples_to_variants`` unconditionally.
+    # appear in plot traces (``NA12878_R1``, ``NA12878_R2``).
     sample_mappings: dict[str, list[str]] = {}
     try:
         from depictio.api.v1.db import multiqc_collection as _mc
@@ -3802,105 +3822,116 @@ def _resolve_multiqc_sample_filter(
         expand_canonical_samples_to_variants,
     )
 
-    selected_samples: list[str] = (
-        expand_canonical_samples_to_variants(
-            list(dict.fromkeys(direct_sample_values)), sample_mappings
-        )
-        if direct_sample_values
-        else []
-    )
+    # Each constraint is expressed in variant space so intersection is
+    # well-defined regardless of whether the filter emitted canonical IDs,
+    # variant names, or a mix.
+    constraint_sets: list[set[str]] = []
 
-    if metadata_dc_id and indirect_filter_metadata:
+    for values in direct_sample_filters:
+        expanded = expand_canonical_samples_to_variants(
+            list(dict.fromkeys(values)), sample_mappings
+        )
+        constraint_sets.append({str(s) for s in expanded})
+
+    if indirect_by_dc:
         from depictio.api.v1.db import projects_collection
         from depictio.api.v1.deltatables_utils import load_deltatable_lite
 
-        # Cross-DC filtering requires an explicit DCLink (metadata_dc_id →
+        # Cross-DC filtering requires an explicit DCLink (metadata_dc_id ->
         # multiqc_dc_id). Without one we don't guess at conventional join-
         # column names — silently auto-mapping `sample` / `sample_id` /
         # `sample_name` produced surprising filter behavior when the user
-        # hadn't declared the relationship. Bail with a clear log line so the
-        # user can see why filtering didn't apply and create a link.
-        link_source_column: str | None = None
+        # hadn't declared the relationship. Skip that DC with a clear log line
+        # so the user can see why filtering didn't apply and create a link.
+        links_by_source: dict[str, str] = {}
         try:
             project_id = dashboard_data.get("project_id")
             if project_id:
                 project_doc = projects_collection.find_one({"_id": ObjectId(str(project_id))})
                 for lk in (project_doc or {}).get("links", []) or []:
                     if (
-                        str(lk.get("source_dc_id")) == str(metadata_dc_id)
-                        and str(lk.get("target_dc_id")) == multiqc_dc_id_str
+                        str(lk.get("target_dc_id")) == multiqc_dc_id_str
                         and lk.get("enabled", True)
+                        and lk.get("source_column")
                     ):
-                        link_source_column = lk.get("source_column")
-                        break
+                        links_by_source.setdefault(
+                            str(lk.get("source_dc_id")), str(lk.get("source_column"))
+                        )
         except Exception as e:
             logger.debug(f"_resolve_multiqc_sample_filter: project link lookup failed: {e}")
 
-        if not link_source_column:
-            logger.info(
-                f"_resolve_multiqc_sample_filter: no enabled DCLink from "
-                f"{metadata_dc_id} → {multiqc_dc_id_str}; cross-DC filter ignored. "
-                f"Create a link with the correct source_column to enable filtering."
-            )
-            return list(dict.fromkeys(selected_samples))
+        for metadata_dc_id, entry in indirect_by_dc.items():
+            link_source_column = links_by_source.get(str(metadata_dc_id))
+            if not link_source_column:
+                logger.info(
+                    f"_resolve_multiqc_sample_filter: no enabled DCLink from "
+                    f"{metadata_dc_id} → {multiqc_dc_id_str}; cross-DC filter ignored. "
+                    f"Create a link with the correct source_column to enable filtering."
+                )
+                continue
 
-        # Build init_data so load_deltatable_lite reads the metadata DC's
-        # delta_location directly instead of falling back to an unauthenticated
-        # internal API hop (which returns 404 on non-public projects and
-        # silently drops the cross-DC filter — what made metadata→MultiQC
-        # filtering quietly stop working). Prefer the stored_metadata's
-        # dc_config snapshot; fall back to deltatables_collection if it's
-        # missing (legacy components saved before dc_config was attached).
-        init_data: dict[str, dict] = {}
-        dc_config = metadata_comp_meta.get("dc_config") or {}
-        delta_loc = dc_config.get("delta_location")
-        if not delta_loc:
-            from depictio.api.v1.db import deltatables_collection as _dt_coll
+            metadata_comp_meta: dict = entry["comp_meta"]
+            # Build init_data so load_deltatable_lite reads the metadata DC's
+            # delta_location directly instead of falling back to an
+            # unauthenticated internal API hop (which returns 404 on
+            # non-public projects and silently drops the cross-DC filter).
+            init_data: dict[str, dict] = {}
+            dc_config = metadata_comp_meta.get("dc_config") or {}
+            delta_loc = dc_config.get("delta_location")
+            if not delta_loc:
+                from depictio.api.v1.db import deltatables_collection as _dt_coll
 
-            dt = _dt_coll.find_one({"data_collection_id": ObjectId(str(metadata_dc_id))})
-            if dt:
-                delta_loc = dt.get("delta_table_location")
-        if delta_loc:
-            init_data[str(metadata_dc_id)] = {
-                "delta_location": delta_loc,
-                "dc_type": dc_config.get("type") or "table",
-                "size_bytes": dc_config.get("size_bytes", 0),
-            }
+                dt = _dt_coll.find_one({"data_collection_id": ObjectId(str(metadata_dc_id))})
+                if dt:
+                    delta_loc = dt.get("delta_table_location")
+            if delta_loc:
+                init_data[str(metadata_dc_id)] = {
+                    "delta_location": delta_loc,
+                    "dc_type": dc_config.get("type") or "table",
+                    "size_bytes": dc_config.get("size_bytes", 0),
+                }
 
-        try:
-            wfid = metadata_wf_id or wf_id
-            meta_df = load_deltatable_lite(
-                workflow_id=ObjectId(str(wfid)) if not isinstance(wfid, ObjectId) else wfid,
-                data_collection_id=str(metadata_dc_id),
-                metadata=indirect_filter_metadata,
-                init_data=init_data or None,
-            )
-            if meta_df is not None and not meta_df.is_empty():
+            try:
+                wfid = entry["wf_id"]
+                meta_df = load_deltatable_lite(
+                    workflow_id=ObjectId(str(wfid)) if not isinstance(wfid, ObjectId) else wfid,
+                    data_collection_id=str(metadata_dc_id),
+                    metadata=entry["filters"],
+                    init_data=init_data or None,
+                )
+                if meta_df is None:
+                    continue
                 if link_source_column not in meta_df.columns:
                     logger.warning(
                         f"_resolve_multiqc_sample_filter: link.source_column "
                         f"{link_source_column!r} not in metadata DC {metadata_dc_id}; "
                         f"available columns={meta_df.columns}"
                     )
-                else:
-                    canonical = [str(s) for s in meta_df[link_source_column].unique().to_list()]
-                    # Always run the canonical→variants expansion. When no
-                    # mappings are available, this returns canonical unchanged.
-                    expanded = expand_canonical_samples_to_variants(canonical, sample_mappings)
-                    logger.debug(
-                        f"_resolve_multiqc_sample_filter: dc={metadata_dc_id} "
-                        f"join_col={link_source_column!r} canonical={len(canonical)} "
-                        f"expanded={len(expanded)} mappings_keys={len(sample_mappings)}"
-                    )
-                    selected_samples.extend(expanded)
-        except Exception as e:
-            logger.warning(
-                f"_resolve_multiqc_sample_filter: filter resolution on DC {metadata_dc_id} "
-                f"failed: {e}",
-                exc_info=True,
-            )
+                    continue
+                canonical = [str(s) for s in meta_df[link_source_column].unique().to_list()]
+                # Always run the canonical→variants expansion. When no
+                # mappings are available, this returns canonical unchanged.
+                expanded = expand_canonical_samples_to_variants(canonical, sample_mappings)
+                logger.debug(
+                    f"_resolve_multiqc_sample_filter: dc={metadata_dc_id} "
+                    f"join_col={link_source_column!r} canonical={len(canonical)} "
+                    f"expanded={len(expanded)} mappings_keys={len(sample_mappings)}"
+                )
+                # An empty set here is a real answer: the metadata filters
+                # matched no row, so no sample survives this constraint.
+                constraint_sets.append({str(s) for s in expanded})
+            except Exception as e:
+                logger.warning(
+                    f"_resolve_multiqc_sample_filter: filter resolution on DC {metadata_dc_id} "
+                    f"failed: {e}",
+                    exc_info=True,
+                )
 
-    return list(dict.fromkeys(selected_samples))
+    if not constraint_sets:
+        return None
+
+    surviving = set.intersection(*constraint_sets)
+    return sorted(surviving)
 
 
 @dashboards_endpoint_router.post("/render_multiqc/{dashboard_id}/{component_id}")
@@ -4021,11 +4052,14 @@ def render_multiqc_endpoint(
     try:
         selected_samples = _resolve_multiqc_sample_filter(dashboard_data, component, filters)
         timings["resolve_filter_ms"] = (_time.perf_counter() - t0) * 1000
-        filter_applied = bool(selected_samples)
+        # ``None`` = no sample filter; ``[]`` = filters matched no sample and
+        # the figure must come back empty — a distinct cache signature keeps
+        # the two from sharing an entry.
+        filter_applied = selected_samples is not None
         filter_sig: str | None = None
-        if filter_applied:
+        if selected_samples is not None:
             sorted_samples = sorted({str(s) for s in selected_samples})
-            filter_sig = "|".join(sorted_samples)
+            filter_sig = "|".join(sorted_samples) if sorted_samples else "__no_match__"
 
         # Salt the cache key with the latest aggregation_version for this DC
         # so realtime updates (which bump the version after the CLI rewrites
@@ -4281,7 +4315,9 @@ def render_multiqc_endpoint(
                 "plot": selected_plot,
                 "dataset_id": selected_dataset,
                 "filter_applied": filter_applied,
-                "selected_sample_count": len(selected_samples) if filter_applied else None,
+                "selected_sample_count": (
+                    len(selected_samples) if selected_samples is not None else None
+                ),
             },
         }
     except HTTPException:
@@ -4396,7 +4432,14 @@ def render_multiqc_general_stats_endpoint(
         # Mtime stat removed — same rationale as the figure cache: it fired a
         # filesystem stat on every request (even cache hits) and any S3-cache
         # refresh cold-evicted the payload. TTL handles invalidation.
-        filter_sig = "|".join(sorted(selected_samples)) if selected_samples else "all"
+        # ``None`` = unfiltered; ``[]`` = filters matched no sample (empty
+        # table) — distinct cache signatures so the two never share an entry.
+        if selected_samples is None:
+            filter_sig = "all"
+        elif selected_samples:
+            filter_sig = "|".join(sorted(selected_samples))
+        else:
+            filter_sig = "__no_match__"
         # Cover the FULL sorted s3_locations set in the key, not just
         # `raw_path` (= s3_locations[0]). Append-only mutations can leave
         # `[0]` pointing at the same parquet → key wouldn't change → stale
@@ -4436,10 +4479,10 @@ def render_multiqc_general_stats_endpoint(
         payload = build_general_stats_payload(
             parquet_path=parquet_paths,
             show_hidden=show_hidden,
-            selected_samples=selected_samples or None,
+            selected_samples=selected_samples,
         )
         timings["build_payload_ms"] = (_time.perf_counter() - _t_build0) * 1000
-        if selected_samples:
+        if selected_samples is not None:
             payload["filter_applied"] = True
             payload["selected_sample_count"] = len(selected_samples)
 
@@ -6116,3 +6159,385 @@ async def validate_json_import(
             )
 
     return validation_result
+
+
+# ============================================================================
+# Funnel filtering (issue #939)
+# ============================================================================
+
+# Bounds for the funnel endpoint: it recomputes one distinct-values query per
+# interactive component and one count per (stage x DC), so both axes are
+# capped to keep a pathological dashboard from turning the toggle into a DoS.
+FUNNEL_MAX_TARGETS = 32
+FUNNEL_MAX_VALUES = 1000
+FUNNEL_MAX_STAGES = 12
+
+
+def _funnel_filter_is_active(f: dict) -> bool:
+    """Mirrors the frontend's ``isFilterActive``: only values that narrow data count.
+
+    Membership in a tuple of empties cannot express this: ``0 in (None, [], "",
+    False)`` is True in Python, so a slider parked at 0 would be dropped here
+    while ``clean_filter_payload`` still applies it downstream. The stage list
+    is zipped positionally against the client's own active list, so the two
+    must agree exactly or every reorder row past a divergence mislabels.
+    """
+    value = f.get("value")
+    if value is None or value == "":
+        return False
+    if isinstance(value, list):
+        # A range control that was reset emits [None, None].
+        return any(v is not None for v in value)
+    return True
+
+
+def _funnel_init_data(dashboard_data: dict, dc_id: str) -> dict[str, dict] | None:
+    """init_data for ``load_deltatable_lite`` — stored dc_config first, DB fallback."""
+    for m in dashboard_data.get("stored_metadata") or []:
+        if str(m.get("dc_id")) != str(dc_id):
+            continue
+        dc_config = m.get("dc_config") or {}
+        delta_loc = dc_config.get("delta_location")
+        if delta_loc:
+            return {
+                str(dc_id): {
+                    "delta_location": delta_loc,
+                    "dc_type": dc_config.get("type") or "table",
+                    "size_bytes": dc_config.get("size_bytes", 0),
+                }
+            }
+    from depictio.api.v1.db import deltatables_collection as _dt_coll
+
+    try:
+        dt = _dt_coll.find_one({"data_collection_id": ObjectId(str(dc_id))})
+    except Exception:
+        dt = None
+    if dt and dt.get("delta_table_location"):
+        return {
+            str(dc_id): {
+                "delta_location": dt["delta_table_location"],
+                "dc_type": "table",
+                "size_bytes": 0,
+            }
+        }
+    return None
+
+
+def _funnel_is_multiqc_dc(dashboard_data: dict, dc_id: str) -> bool:
+    for m in dashboard_data.get("stored_metadata") or []:
+        if str(m.get("dc_id")) == str(dc_id):
+            dc_type = ((m.get("dc_config") or {}).get("type") or "").lower()
+            if dc_type:
+                return dc_type == "multiqc"
+            if m.get("component_type") == "multiqc":
+                return True
+    return False
+
+
+def _funnel_multiqc_canonical_universe(dc_id: str) -> tuple[list[str], dict[str, list[str]]]:
+    """Canonical sample list + mappings for a MultiQC DC (option universe)."""
+    from depictio.api.v1.db import multiqc_collection as _mc
+
+    mappings: dict[str, list[str]] = {}
+    canonical: list[str] = []
+    seen: set[str] = set()
+    try:
+        for rep in _mc.find(
+            {"data_collection_id": {"$in": [str(dc_id), ObjectId(str(dc_id))]}},
+            {"metadata.sample_mappings": 1, "metadata.canonical_samples": 1},
+        ):
+            md = rep.get("metadata") or {}
+            for k, vlist in (md.get("sample_mappings") or {}).items():
+                bucket = mappings.setdefault(str(k), [])
+                for v in vlist or []:
+                    sv = str(v)
+                    if sv not in bucket:
+                        bucket.append(sv)
+                if str(k) not in seen:
+                    seen.add(str(k))
+                    canonical.append(str(k))
+            for s in md.get("canonical_samples") or []:
+                if str(s) not in seen:
+                    seen.add(str(s))
+                    canonical.append(str(s))
+    except Exception as e:
+        logger.debug(f"funnel: multiqc universe fetch failed for {dc_id}: {e}")
+    return canonical, mappings
+
+
+def _funnel_target_values(
+    dashboard_data: dict,
+    project_id: Any,
+    access_token: str | None,
+    target_meta: dict,
+    remaining_filters: list[dict],
+) -> dict:
+    """Available values of one interactive component's column under the
+    current filter state MINUS that component's own selection.
+
+    Returns a dict with ``status`` one of:
+      - ``unrestricted``: no other active filter reaches this DC — every value
+        is available, no query was run;
+      - ``ok``: ``values`` holds the surviving values (may be empty);
+      - ``unsupported`` / ``error``: no funnel information for this component.
+    """
+    dc_id = str(target_meta.get("dc_id") or "")
+    column = str(target_meta.get("column_name") or "")
+    if not dc_id or not column:
+        return {"status": "unsupported"}
+
+    if _funnel_is_multiqc_dc(dashboard_data, dc_id):
+        # MultiQC DCs have no Delta table; their sample filter options are the
+        # canonical sample IDs. Reuse the sample-filter resolution (which
+        # already intersects every other constraint) and map the surviving
+        # variants back onto the canonical option list.
+        pseudo_component = {
+            "index": target_meta.get("index"),
+            "dc_id": dc_id,
+            "wf_id": target_meta.get("wf_id"),
+        }
+        resolved = _resolve_multiqc_sample_filter(
+            dashboard_data, pseudo_component, remaining_filters
+        )
+        if resolved is None:
+            return {"status": "unrestricted"}
+        resolved_set = {str(s) for s in resolved}
+        canonical, mappings = _funnel_multiqc_canonical_universe(dc_id)
+        available = [c for c in canonical if ({c, *(mappings.get(c) or [])} & resolved_set)]
+        return {
+            "status": "ok",
+            "values": available[:FUNNEL_MAX_VALUES],
+            "truncated": len(available) > FUNNEL_MAX_VALUES,
+        }
+
+    # Link resolution can raise LinkResolutionError (timeout, upstream HTTP
+    # error). This endpoint answers every registered component in one batch, so
+    # letting it escape would 500 the whole batch over one slow link and blank
+    # a decorative feature dashboard-wide.
+    try:
+        merged = _resolve_link_filters_cached(
+            filters=remaining_filters,
+            target_dc_id=dc_id,
+            project_id=project_id,
+            access_token=access_token,
+            component_type="funnel",
+        )
+    except Exception as e:
+        logger.warning(f"funnel: link resolution failed for {dc_id}:{column}: {e}")
+        return {"status": "error"}
+
+    filter_metadata = _build_filter_metadata(
+        [f for f in merged if str((f.get("metadata") or {}).get("dc_id") or "") == dc_id]
+    )
+    if not filter_metadata:
+        return {"status": "unrestricted"}
+
+    wf_id = target_meta.get("wf_id")
+    if not wf_id:
+        return {"status": "unsupported"}
+
+    from depictio.api.v1.deltatables_utils import load_deltatable_lite
+
+    try:
+        df = load_deltatable_lite(
+            workflow_id=wf_id if isinstance(wf_id, ObjectId) else ObjectId(str(wf_id)),
+            data_collection_id=dc_id,
+            metadata=filter_metadata,
+            init_data=_funnel_init_data(dashboard_data, dc_id),
+            select_columns=[column],
+        )
+    except Exception as e:
+        logger.warning(f"funnel: value computation failed for {dc_id}:{column}: {e}")
+        return {"status": "error"}
+
+    if column not in df.columns:
+        return {"status": "unsupported"}
+    values = sorted({str(v) for v in df[column].drop_nulls().unique().to_list()})
+    return {
+        "status": "ok",
+        "values": values[:FUNNEL_MAX_VALUES],
+        "truncated": len(values) > FUNNEL_MAX_VALUES,
+    }
+
+
+def _funnel_stage_counts(
+    dashboard_data: dict,
+    project_id: Any,
+    access_token: str | None,
+    active_filters: list[dict],
+    stage_dcs: list[str],
+) -> tuple[dict[str, int | None], list[dict]]:
+    """Cumulative row counts per DC as each active filter is applied in turn.
+
+    Returns ``(initial_rows_by_dc, stages)`` where each stage carries the
+    filter it added and the per-DC row counts after applying filters[0..k].
+    ``None`` counts mark DCs whose load failed at that stage.
+    """
+    from depictio.api.v1.deltatables_utils import load_deltatable_lite
+
+    stored_meta_index = {
+        str(m.get("index")): m for m in (dashboard_data.get("stored_metadata") or [])
+    }
+
+    def count_rows(dc_id: str, cumulative: list[dict]) -> int | None:
+        # As in _funnel_target_values: a raised LinkResolutionError here would
+        # abort the whole batch, so a failed stage degrades to an unknown count.
+        try:
+            merged = _resolve_link_filters_cached(
+                filters=cumulative,
+                target_dc_id=dc_id,
+                project_id=project_id,
+                access_token=access_token,
+                component_type="funnel",
+            )
+        except Exception as e:
+            logger.warning(f"funnel: link resolution failed for stage on {dc_id}: {e}")
+            return None
+
+        filter_metadata = _build_filter_metadata(
+            [f for f in merged if str((f.get("metadata") or {}).get("dc_id") or "") == dc_id]
+        )
+        wf_id = None
+        for m in dashboard_data.get("stored_metadata") or []:
+            if str(m.get("dc_id")) == dc_id and m.get("wf_id"):
+                wf_id = m.get("wf_id")
+                break
+        if not wf_id:
+            return None
+        try:
+            df = load_deltatable_lite(
+                workflow_id=wf_id if isinstance(wf_id, ObjectId) else ObjectId(str(wf_id)),
+                data_collection_id=dc_id,
+                metadata=filter_metadata,
+                init_data=_funnel_init_data(dashboard_data, dc_id),
+            )
+            return int(df.height)
+        except Exception as e:
+            logger.debug(f"funnel: stage count failed for {dc_id}: {e}")
+            return None
+
+    initial = {dc: count_rows(dc, []) for dc in stage_dcs}
+
+    stages: list[dict] = []
+    for k, f in enumerate(active_filters[:FUNNEL_MAX_STAGES]):
+        cumulative = active_filters[: k + 1]
+        meta = stored_meta_index.get(str(f.get("index") or "")) or {}
+        stages.append(
+            {
+                "index": f.get("index"),
+                "label": meta.get("title") or meta.get("column_name") or f.get("column_name"),
+                "column_name": f.get("column_name") or meta.get("column_name"),
+                "dc_id": str(meta.get("dc_id") or (f.get("metadata") or {}).get("dc_id") or ""),
+                "value": f.get("value"),
+                "rows_by_dc": {dc: count_rows(dc, cumulative) for dc in stage_dcs},
+            }
+        )
+    return initial, stages
+
+
+@dashboards_endpoint_router.post("/funnel_values/{dashboard_id}")
+def funnel_values_endpoint(
+    dashboard_id: PyObjectId,
+    request: dict,
+    current_user: User = Depends(get_user_or_anonymous),
+    access_token: Annotated[str | None, Depends(oauth2_scheme_optional)] = None,
+):
+    """Compute funnel-filtering data for the React viewer (issue #939).
+
+    For each requested interactive component, answers: given every OTHER
+    active filter (the component's own selection excluded — a value you
+    already picked must never grey itself out), which of this component's
+    values still lead to a non-empty result set? Cross-DC filters are
+    translated through the project's DC links exactly like figure/table
+    renders do (``_resolve_link_filters_cached``), so the funnel works across
+    linked data collections.
+
+    Request body:
+        {
+            "filters": [...],                # current filter list (viewer shape)
+            "target_indexes": ["...", ...],  # interactive components to compute
+            "include_stages": bool           # also compute the funnel overview
+        }
+
+    Response:
+        {
+            "targets": {"<index>": {"status": "ok"|"unrestricted"|"unsupported"|"error",
+                                     "column": str, "dc_id": str,
+                                     "values": [...], "truncated": bool}},
+            "stages": [...] | None,          # cumulative per-DC row counts
+            "initial_rows_by_dc": {...} | None,
+            "dc_labels": {"<dc_id>": str},
+            "filter_count": int
+        }
+    """
+    dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
+    if not dashboard_data:
+        raise HTTPException(status_code=404, detail=f"Dashboard '{dashboard_id}' not found.")
+
+    project_id = dashboard_data.get("project_id")
+    if not project_id or not check_project_permission(project_id, current_user, "viewer"):
+        raise HTTPException(status_code=403, detail="Permission denied.")
+
+    filters = request.get("filters") or []
+    target_indexes = [str(i) for i in (request.get("target_indexes") or [])][:FUNNEL_MAX_TARGETS]
+    include_stages = bool(request.get("include_stages", False))
+
+    active_filters = [f for f in filters if _funnel_filter_is_active(f)]
+
+    stored_meta_index = {
+        str(m.get("index")): m for m in (dashboard_data.get("stored_metadata") or [])
+    }
+
+    targets: dict[str, dict] = {}
+    for index in target_indexes:
+        meta = stored_meta_index.get(index)
+        if not meta or meta.get("component_type") != "interactive":
+            targets[index] = {"status": "unsupported"}
+            continue
+        remaining = [f for f in active_filters if str(f.get("index") or "") != index]
+        result = _funnel_target_values(dashboard_data, project_id, access_token, meta, remaining)
+        result.setdefault("column", meta.get("column_name"))
+        result.setdefault("dc_id", str(meta.get("dc_id") or ""))
+        targets[index] = result
+
+    stages = None
+    initial_rows_by_dc = None
+    dc_labels: dict[str, str] = {}
+    if include_stages:
+        # The DCs worth charting: every delta-backed DC referenced by data
+        # components or active filters. MultiQC DCs are skipped — they have no
+        # row-level Delta table to count.
+        stage_dcs: list[str] = []
+        seen_dcs: set[str] = set()
+        data_types = {"figure", "table", "map", "image", "card", "interactive"}
+        for m in dashboard_data.get("stored_metadata") or []:
+            dc = str(m.get("dc_id") or "")
+            if not dc or dc in seen_dcs or m.get("component_type") not in data_types:
+                continue
+            if _funnel_is_multiqc_dc(dashboard_data, dc):
+                continue
+            seen_dcs.add(dc)
+            stage_dcs.append(dc)
+
+        initial_rows_by_dc, stages = _funnel_stage_counts(
+            dashboard_data, project_id, access_token, active_filters, stage_dcs
+        )
+
+        # Human-readable DC names for the funnel view.
+        try:
+            project_doc = projects_collection.find_one({"_id": ObjectId(str(project_id))})
+            for wf in (project_doc or {}).get("workflows", []) or []:
+                for dc in wf.get("data_collections", []) or []:
+                    dc_labels[str(dc.get("_id"))] = str(
+                        dc.get("data_collection_tag") or dc.get("tag") or dc.get("_id")
+                    )
+        except Exception as e:
+            logger.debug(f"funnel: dc label lookup failed: {e}")
+
+    return {
+        "targets": targets,
+        "stages": stages,
+        "initial_rows_by_dc": initial_rows_by_dc,
+        "dc_labels": dc_labels,
+        "filter_count": len(active_filters),
+    }
