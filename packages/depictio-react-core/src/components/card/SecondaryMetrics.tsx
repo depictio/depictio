@@ -141,10 +141,22 @@ const SecondaryMetrics: React.FC<SecondaryMetricsProps> = ({
     return <BoxPlotMetric rows={rows} color={color} />;
   }
 
-  if (!rows.length) return null;
+  // ``box_plot_stats`` is the one compound aggregation — only BoxPlotMetric
+  // can draw its dict payload. A card that pairs it with a stat-list layout
+  // (the ampliseq templates shipped ``aggregations: [box_plot_stats]`` +
+  // ``secondary_layout: vertical``) used to print the literal label and
+  // ``[object Object]``. Alone, it routes to the box plot — mirroring
+  // CardBuilder's normalisation; mixed with scalar aggregations, the dict row
+  // is dropped from the list instead of stringified.
+  const scalarRows = rows.filter((r) => r.name !== 'box_plot_stats');
+  if (scalarRows.length === 0 && rows.length > 0) {
+    return <BoxPlotMetric rows={rows} color={color} />;
+  }
+
+  if (!scalarRows.length) return null;
   return (
     <StatList
-      rows={rows}
+      rows={scalarRows}
       variant={layout === 'compact' || layout === 'grid' ? layout : 'vertical'}
     />
   );

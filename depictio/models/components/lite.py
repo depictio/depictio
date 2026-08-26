@@ -418,6 +418,24 @@ class CardLiteComponent(BaseLiteComponent):
         return self
 
     @model_validator(mode="after")
+    def normalize_box_plot_stats_layout(self) -> "CardLiteComponent":
+        """Pair ``box_plot_stats`` with the one layout that can draw it.
+
+        ``box_plot_stats`` is a compound aggregation (a 10-field dict); only
+        ``secondary_layout: box_plot`` renders it. Declared alone under a
+        stat-list layout it used to surface as the literal label — so when it
+        is the only secondary aggregation, the layout is auto-corrected to
+        ``box_plot``. Mixed with scalar aggregations the layout is left alone
+        (the renderer drops the dict row from the list).
+        """
+        if (
+            self.aggregations == ["box_plot_stats"]
+            and self.secondary_layout in ("vertical", "compact", "grid")
+        ):
+            self.secondary_layout = "box_plot"
+        return self
+
+    @model_validator(mode="after")
     def validate_filter_expr_safety(self) -> "CardLiteComponent":
         """Validate filter_expr is safe if provided."""
         if self.filter_expr is not None:
