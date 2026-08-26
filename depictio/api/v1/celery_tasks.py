@@ -1328,6 +1328,62 @@ def compute_complex_heatmap(payload: dict) -> dict:
     }
 
 
+def _narrow_upset_sets(candidate_sets: list[str], filter_metadata: list | None) -> list[str] | None:
+    """Sets left standing once a filter over the set VALUES is applied.
+
+    Returns None when no filter names sets — i.e. leave the caller's choice
+    alone — and never returns an empty list: a filter that selects none of the
+    sets is a filter about something else.
+    """
+    if not candidate_sets:
+        return None
+    set_names = {str(c) for c in candidate_sets}
+    for f in filter_metadata or []:
+        if not isinstance(f, dict):
+            continue
+        val = f.get("value")
+        if val in (None, [], ""):
+            continue
+        values = {str(v) for v in val} if isinstance(val, (list, tuple, set)) else {str(val)}
+        hit = set_names & values
+        # An empty hit is an unrelated filter; a full hit is a no-op that would
+        # only reorder the sets.
+        if not hit or hit == set_names:
+            continue
+        nested = f.get("metadata") or {}
+        col = f.get("column_name") or (
+            nested.get("column_name") if isinstance(nested, dict) else None
+        )
+        narrowed = [c for c in candidate_sets if str(c) in hit]
+        logger.info(
+            "compute_upset: narrowing sets to %d of %d via the %s filter",
+            len(narrowed),
+            len(candidate_sets),
+            col or "unnamed",
+        )
+        return narrowed
+    return None
+
+
+def _detect_upset_set_columns(df) -> list[str]:
+    """Binary (0/1) columns of an UpSet matrix, in frame order.
+
+    Mirrors what plotly-upset does when `set_columns` is left to auto-detect,
+    so a set narrowed here is a set the library would also have drawn. Nulls
+    count as absent, and an all-zero column is still a set (an empty one).
+    """
+    import polars as pl
+
+    detected: list[str] = []
+    for name, dtype in zip(df.columns, df.dtypes):
+        if not (dtype.is_integer() or dtype == pl.Boolean):
+            continue
+        uniques = df.get_column(name).drop_nulls().unique().to_list()
+        if all(int(v) in (0, 1) for v in uniques):
+            detected.append(name)
+    return detected
+
+
 @celery_app.task(
     name="depictio.advanced_viz.compute_upset",
     soft_time_limit=300,
@@ -1397,33 +1453,25 @@ def compute_upset(payload: dict) -> dict:
     load_ms = int((time.monotonic() - started) * 1000)
     logger.info("compute_upset: loaded %d rows in %dms", df.height, load_ms)
 
-    # Wide-matrix set subsetting: habitats are MATRIX COLUMNS, not rows. A
-    # habitat filter from the metadata DC can't filter rows here (the DC has
-    # no `habitat` column — habitats are the set_columns themselves). Mirror
-    # the column filter by intersecting set_columns with the filter values.
-    habitat_filter_values: set[str] = set()
-    for f in filter_metadata or []:
-        meta = f.get("metadata") if isinstance(f, dict) else {}
-        col = (f.get("column_name") if isinstance(f, dict) else None) or (
-            (meta or {}).get("column_name") if meta else None
-        )
-        if col not in ("habitat", "Habitat"):
-            continue
-        val = f.get("value") if isinstance(f, dict) else None
-        if val in (None, [], ""):
-            continue
-        if isinstance(val, (list, tuple, set)):
-            habitat_filter_values.update(str(v) for v in val)
-        else:
-            habitat_filter_values.add(str(val))
-    if habitat_filter_values and set_columns:
-        narrowed = [c for c in set_columns if c in habitat_filter_values]
-        if narrowed:
-            logger.info(
-                "compute_upset: narrowing set_columns to %d habitat(s) via filter",
-                len(narrowed),
-            )
-            set_columns = narrowed
+    # Wide-matrix set subsetting: the sets are MATRIX COLUMNS, not rows. The
+    # grouping values the recipe pivoted on (habitat / locality / treatment —
+    # whatever the project's GROUP_COL is) became column NAMES here, so a
+    # filter on that column cannot filter rows: the DC has no such column and
+    # `load_deltatable_lite` skipped it. Mirror it as a COLUMN filter instead,
+    # by intersecting the set columns with the filter's values.
+    #
+    # Matched by VALUE, not by column name. Nothing in this payload names the
+    # recipe's grouping column, and hardcoding one ("habitat") only ever
+    # worked for the seed. A filter whose values ARE set names is that filter,
+    # whatever it is called; any other filter has an empty intersection and is
+    # left alone.
+    #
+    # `candidate_sets` falls back to the frame's own binary columns because
+    # `set_columns` is usually null (the library auto-detects). Gating the
+    # narrowing on an explicit `set_columns` made it a no-op for every
+    # dashboard that didn't spell the sets out.
+    candidate_sets = list(set_columns) if set_columns else _detect_upset_set_columns(df)
+    set_columns = _narrow_upset_sets(candidate_sets, filter_metadata) or set_columns
 
     pdf = df.to_pandas()
     compute_started = time.monotonic()

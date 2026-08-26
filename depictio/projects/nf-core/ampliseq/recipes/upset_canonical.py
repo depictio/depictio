@@ -64,9 +64,10 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             aggregate_function="max",
         )
         set_cols = [c for c in wide.columns if c != "taxon"]
-        return wide.with_columns(
+        wide = wide.with_columns(
             [pl.col(c).fill_null(0).cast(pl.Int8) for c in set_cols]
         ).with_columns([(pl.col(c) > 0).cast(pl.Int8) for c in set_cols])
+        return _attach_taxon_annotations(wide, df)
 
     sample_to_group = metadata.rename({_METADATA_ID_COL: "sample_id"}).select(
         "sample_id", group_col
@@ -81,4 +82,44 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
 
     wide = presence.pivot(values="present", index="taxon", on=group_col, aggregate_function="max")
     set_cols = [c for c in wide.columns if c != "taxon"]
-    return wide.with_columns([pl.col(c).fill_null(0).cast(pl.Int8) for c in set_cols])
+    wide = wide.with_columns([pl.col(c).fill_null(0).cast(pl.Int8) for c in set_cols])
+    return _attach_taxon_annotations(wide, df, exclude=(group_col,))
+
+
+def _attach_taxon_annotations(
+    wide: pl.DataFrame, source: pl.DataFrame, exclude: tuple[str, ...] = ()
+) -> pl.DataFrame:
+    """Carry the source DC's per-taxon attributes onto the presence matrix.
+
+    Without this the matrix is `taxon` + one binary column per group, and a
+    dashboard filter on a taxonomic rank (`Kingdom`, `Phylum`) has nothing to
+    bite on: the rank columns live on the source DC, so the filter is skipped
+    and the UpSet quietly ignores it. Carrying them across makes the same
+    filter narrow the matrix rows, and makes each rank available as an
+    annotation track.
+
+    Which columns come across is derived, not listed: a taxon attribute is a
+    column that is CONSTANT within every taxon. Per-sample columns (the sample
+    id, abundances) and the sample metadata joined in upstream (locality,
+    season …) vary across the rows of a taxon and drop out on their own, which
+    is what keeps this generic across pipelines and metadata schemas.
+    """
+    taxon_col = "taxon" if "taxon" in source.columns else None
+    if taxon_col is None:
+        return wide
+    candidates = [
+        c
+        for c in source.columns
+        if c not in exclude
+        and c != taxon_col
+        and c not in wide.columns
+        and source.schema[c] == pl.Utf8
+    ]
+    if not candidates:
+        return wide
+    per_taxon = source.group_by(taxon_col).agg([pl.col(c).n_unique().alias(c) for c in candidates])
+    constant = [c for c in candidates if per_taxon.get_column(c).max() == 1]
+    if not constant:
+        return wide
+    annotations = source.select([taxon_col, *constant]).unique(subset=[taxon_col])
+    return wide.join(annotations, on="taxon", how="left")
