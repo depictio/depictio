@@ -12,6 +12,11 @@ export interface ComponentTypeMeta {
   description: string;
   icon: string;
   iconBg: string; // background color for icon tile
+  /** Background for the step-2 "Selected Component" badge. Defaults to
+   *  `iconBg`; set it where `iconBg` is transparent because the tile shows an
+   *  SVG that carries its own colours — a transparent badge leaves the filled
+   *  Badge's white label on the white page, i.e. invisible. */
+  badgeBg?: string;
   /** Whether MultiQC routing applies (figure on a multiqc DC switches to multiqc). */
   multiqcAware?: boolean;
 }
@@ -54,6 +59,7 @@ export const COMPONENT_TYPES: ComponentTypeMeta[] = [
     // multiqc icon class to honor light/dark theming.
     icon: 'mdi:chart-line',
     iconBg: 'transparent',
+    badgeBg: '#201637', // MultiQC brand purple, from multiqc_icon_color.svg
   },
   {
     type: 'image',
