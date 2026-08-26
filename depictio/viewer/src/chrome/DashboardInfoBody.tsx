@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
+  Accordion,
   Anchor,
   Badge,
   Code,
@@ -7,6 +8,7 @@ import {
   Divider,
   Group,
   Stack,
+  Table,
   Text,
   Tooltip,
   ActionIcon,
@@ -98,6 +100,19 @@ const DashboardInfoBody: React.FC<DashboardInfoBodyProps> = ({ dashboard, active
 
   const parsedTemplate = parseTemplateOrigin(projectTemplateOrigin);
 
+  // The run-provenance keys the template flagged as highlights — the primer /
+  // truncation / filtering settings a reader needs to interpret the dashboard.
+  // The complete listing lives in the ingestion report; this is the digest.
+  const highlightedProvenance = (() => {
+    const origin = projectTemplateOrigin as {
+      run_provenance?: Array<{ key?: string; value?: string; highlight?: boolean }>;
+    } | null;
+    if (!origin || !Array.isArray(origin.run_provenance)) return [];
+    return origin.run_provenance
+      .filter((e) => e && e.highlight && e.key)
+      .map((e) => ({ key: String(e.key), value: String(e.value ?? '') }));
+  })();
+
   return (
     <Stack gap="md">
       {title && (
@@ -161,6 +176,58 @@ const DashboardInfoBody: React.FC<DashboardInfoBodyProps> = ({ dashboard, active
               <Anchor href={`/projects/${projectId}#ingestion`} size="sm" fw={500}>
                 View ingestion report
               </Anchor>
+            }
+          />
+        )}
+        {highlightedProvenance.length > 0 && (
+          <MetaRow
+            icon="mdi:tune-variant"
+            color="orange"
+            label="Run parameters"
+            value={
+              <Accordion
+                variant="default"
+                chevronPosition="left"
+                styles={{
+                  item: { border: 'none' },
+                  control: { padding: 0 },
+                  content: { padding: 0 },
+                  label: { padding: 0 },
+                }}
+              >
+                <Accordion.Item value="run-params">
+                  <Accordion.Control>
+                    <Text size="sm" fw={500}>
+                      {highlightedProvenance.length} key settings
+                    </Text>
+                  </Accordion.Control>
+                  <Accordion.Panel>
+                    <Table verticalSpacing={2} withRowBorders={false}>
+                      <Table.Tbody>
+                        {highlightedProvenance.map((e) => (
+                          <Table.Tr key={e.key}>
+                            <Table.Td px={0} w={150}>
+                              <Text size="xs" fw={500} style={{ overflowWrap: 'anywhere' }}>
+                                {e.key}
+                              </Text>
+                            </Table.Td>
+                            <Table.Td px={0}>
+                              <Code fz={11} style={{ overflowWrap: 'anywhere' }}>
+                                {e.value}
+                              </Code>
+                            </Table.Td>
+                          </Table.Tr>
+                        ))}
+                      </Table.Tbody>
+                    </Table>
+                    {projectId && (
+                      <Anchor href={`/projects/${projectId}#ingestion`} size="xs" fw={500}>
+                        Full run provenance →
+                      </Anchor>
+                    )}
+                  </Accordion.Panel>
+                </Accordion.Item>
+              </Accordion>
             }
           />
         )}

@@ -65,6 +65,53 @@ template:
       METADATA_ID_COL: "sample"
       GROUP_COL: "habitat"
       GROUP_COL_DISPLAY: "Habitat"
+  # How this pipeline's run provenance (parameters, filtering thresholds, tool
+  # versions) is collected at ingest — surfaced in the project's ingestion
+  # report and the dashboard Settings drawer. Keys not matched by any group
+  # rule land in 'Other'; only exclude_keys are ever omitted.
+  provenance:
+    sources:
+      - name: "params"
+        glob: "pipeline_info/params*.json"
+        format: "json"
+        pick: "latest"
+        exclude_keys:
+          - "*_ref_databases*"   # bundled reference-DB catalogs, ~78 KB of noise
+      - name: "software_versions"
+        glob: "pipeline_info/*software*versions.yml"
+        format: "yaml"
+        pick: "latest"
+        group: "Software versions"
+    groups:
+      - group: "Cutadapt (primer trimming)"
+        key_patterns: ["FW_primer", "RV_primer", "retain_untrimmed", "cutadapt_*", "double_primer", "skip_cutadapt", "illumina_pe_its", "its_partial"]
+      - group: "DADA2 (denoising & filtering)"
+        key_patterns: ["trunclenf", "trunclenr", "trunc_qmin", "trunc_rmin", "truncq", "max_ee", "min_len", "max_len", "ignore_empty_input_files", "ignore_failed_trimming", "ignore_failed_filtering", "sample_inference", "concatenate_reads", "illumina_novaseq", "binned_quality", "mergepairs_*", "dada_*"]
+      - group: "Taxonomy"
+        key_patterns: ["*_ref_taxonomy", "*ref_tax_custom*", "cut_dada_ref_taxonomy", "classifier", "sintax_*", "kraken2_*", "vsearch_*", "qiime_*", "addsh", "sidle_*", "pplace_*"]
+      - group: "QIIME2 filtering"
+        key_patterns: ["exclude_taxa", "min_frequency", "min_samples", "filter_*", "min_len_asv", "max_len_asv", "orf_*", "stop_codons"]
+      - group: "Diversity & rarefaction"
+        key_patterns: ["diversity_rarefaction_depth", "rarefaction_depth", "ancom_sample_min_count", "tax_agglom_*"]
+      - group: "Differential abundance"
+        key_patterns: ["ancombc*", "ancom", "decontam*"]
+      - group: "Metadata & categories"
+        key_patterns: ["metadata*", "picrust", "vsearch_cluster*"]
+      - group: "Run context"
+        key_patterns: ["input*", "outdir", "seed", "version", "email*", "multiregion", "config_profile_*", "custom_config_*", "trace_report_suffix", "publish_dir_mode", "pipelines_testdata_base_path", "multiqc_*", "max_multiqc_email_size", "monochrome_logs", "validate_params", "help*", "show_hidden", "modules_testdata_base_path", "platform", "save_intermediates"]
+      - group: "Skipped steps"
+        key_patterns: ["skip_*"]
+    highlight:
+      - "FW_primer"
+      - "RV_primer"
+      - "trunc_qmin"
+      - "trunc_rmin"
+      - "max_ee"
+      - "dada_ref_taxonomy"
+      - "exclude_taxa"
+      - "min_frequency"
+      - "diversity_rarefaction_depth"
+      - "ancombc"
   dashboards:
     - "dashboards/base.yaml"
   conditional:

@@ -24,6 +24,10 @@ from depictio.models.models.templates import (
     TemplateConditional,
     TemplateMetadata,
     TemplateOrigin,
+    ProvenanceEntry,
+    ProvenanceGroupRule,
+    ProvenanceSource,
+    ProvenanceSpec,
 )
 
 _TEMPLATE_VAR_RE = re.compile(r"\{([A-Z0-9_]+)\}")
@@ -705,6 +709,195 @@ def _log_removal_report(report: list[dict[str, str]]) -> None:
     logger.warning("Dashboard components referencing these will be excluded.")
 
 
+# ---------------------------------------------------------------------------
+# Run provenance collection
+# ---------------------------------------------------------------------------
+
+# Fallback when a template declares no `provenance:` block: nf-core pipelines
+# all write pipeline_info/params*.json, so at minimum the run's parameters are
+# captured, ungrouped. Templates refine this with their own sources/groups.
+_DEFAULT_PROVENANCE_SPEC = ProvenanceSpec(
+    sources=[
+        ProvenanceSource(
+            name="params",
+            glob="pipeline_info/params*.json",
+            format="json",
+            pick="latest",
+        ),
+    ],
+    groups=[ProvenanceGroupRule(group="Parameters", key_patterns=["*"])],
+)
+
+# Truncation guard for pathological values (a value is a scalar in practice;
+# a nested structure that survives exclude_keys is compact-serialised).
+_PROVENANCE_VALUE_MAX = 500
+
+
+def _provenance_format_for(path: Path, declared: str) -> str:
+    if declared != "auto":
+        return declared
+    suffix = path.suffix.lower()
+    if suffix == ".json":
+        return "json"
+    if suffix in (".yml", ".yaml"):
+        return "yaml"
+    return "tsv"
+
+
+def _flatten_provenance(obj: Any, prefix: str = "") -> dict[str, Any]:
+    """Flatten nested mappings with dotted keys; everything else is a leaf."""
+    if not isinstance(obj, dict):
+        return {prefix or "value": obj}
+    flat: dict[str, Any] = {}
+    for k, v in obj.items():
+        key = f"{prefix}.{k}" if prefix else str(k)
+        if isinstance(v, dict):
+            flat.update(_flatten_provenance(v, key))
+        else:
+            flat[key] = v
+    return flat
+
+
+def _parse_provenance_file(path: Path, fmt: str) -> dict[str, Any]:
+    if fmt == "json":
+        with open(path) as fh:
+            return _flatten_provenance(json.load(fh))
+    if fmt == "yaml":
+        with open(path) as fh:
+            return _flatten_provenance(yaml.safe_load(fh) or {})
+    # tsv: two-column key<TAB>value (extra columns ignored); '#' comments skipped
+    flat: dict[str, Any] = {}
+    with open(path) as fh:
+        for line in fh:
+            line = line.rstrip("\n")
+            if not line or line.startswith("#"):
+                continue
+            parts = line.split("\t") if "\t" in line else line.split(",")
+            if len(parts) >= 2:
+                flat[parts[0].strip()] = parts[1].strip()
+    return flat
+
+
+def _stringify_provenance_value(v: Any) -> str:
+    if v is None:
+        return "null"
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if isinstance(v, (dict, list)):
+        try:
+            out = json.dumps(v, separators=(",", ":"))
+        except (TypeError, ValueError):
+            out = str(v)
+    else:
+        out = str(v)
+    return out if len(out) <= _PROVENANCE_VALUE_MAX else out[: _PROVENANCE_VALUE_MAX - 1] + "…"
+
+
+def collect_run_provenance(
+    data_root: str,
+    spec: ProvenanceSpec | None,
+    extra_files: list[str] | None = None,
+) -> tuple[list[ProvenanceEntry], list[str]]:
+    """Collect the run's parameters / thresholds / tool versions.
+
+    Generic across pipelines: the template's ``ProvenanceSpec`` names the files
+    (globs under DATA_ROOT) and how keys map to display groups; ``extra_files``
+    (the ``--provenance-file`` CLI flag) lets a user add an arbitrary recap
+    file. Completeness is the contract: every key of every parsed file becomes
+    an entry unless an explicit ``exclude_keys`` glob drops it — keys no group
+    rule matches land in 'Other', never on the floor.
+
+    Returns (entries ordered by group appearance, list of files read).
+    Best-effort: unreadable files are logged and skipped.
+    """
+    from fnmatch import fnmatch
+
+    spec = spec or _DEFAULT_PROVENANCE_SPEC
+    root = Path(data_root)
+
+    def assign_group(key: str, source: ProvenanceSource | None) -> str:
+        if source is not None and source.group:
+            return source.group
+        for rule in spec.groups:
+            if any(fnmatch(key, pat) for pat in rule.key_patterns):
+                return rule.group
+        return "Other"
+
+    highlight = set(spec.highlight)
+    collected: list[tuple[str, str, str, Any]] = []  # (source, group, key, value)
+    files_read: list[str] = []
+
+    for source in spec.sources:
+        matches = sorted(root.glob(source.glob))
+        if not matches:
+            # sequencing-runs layouts keep pipeline_info one level down
+            matches = sorted(root.glob(f"*/{source.glob}"))
+        if not matches:
+            logger.info(f"Provenance source '{source.name}': no file matches {source.glob!r}")
+            continue
+        if source.pick == "latest":
+            matches = matches[-1:]
+        elif source.pick == "first":
+            matches = matches[:1]
+        merged: dict[str, Any] = {}
+        for path in matches:
+            try:
+                merged.update(
+                    _parse_provenance_file(path, _provenance_format_for(path, source.format))
+                )
+                try:
+                    files_read.append(str(path.relative_to(root)))
+                except ValueError:
+                    files_read.append(str(path))
+            except (OSError, ValueError, yaml.YAMLError) as e:
+                logger.warning(f"Provenance source '{source.name}': failed to parse {path}: {e}")
+        for key, value in merged.items():
+            if any(fnmatch(key, pat) for pat in source.exclude_keys):
+                continue
+            collected.append((source.name, assign_group(key, source), key, value))
+
+    for extra in extra_files or []:
+        path = Path(extra).expanduser()
+        if not path.is_file():
+            logger.warning(f"--provenance-file: {path} not found, skipped")
+            continue
+        try:
+            flat = _parse_provenance_file(path, _provenance_format_for(path, "auto"))
+        except (OSError, ValueError, yaml.YAMLError) as e:
+            logger.warning(f"--provenance-file: failed to parse {path}: {e}")
+            continue
+        files_read.append(str(path))
+        for key, value in flat.items():
+            collected.append(("user", "User provided", key, value))
+
+    # Stable presentation order: groups in spec order (Other, then User provided,
+    # last), keys alphabetical inside a group.
+    group_order = {rule.group: i for i, rule in enumerate(spec.groups)}
+    for source in spec.sources:
+        if source.group is not None:
+            group_order.setdefault(source.group, len(group_order))
+    group_order.setdefault("Other", len(group_order))
+    group_order.setdefault("User provided", len(group_order))
+
+    collected.sort(key=lambda t: (group_order.get(t[1], len(group_order)), t[2]))
+    entries = [
+        ProvenanceEntry(
+            source=src,
+            group=group,
+            key=key,
+            value=_stringify_provenance_value(value),
+            highlight=key in highlight,
+        )
+        for src, group, key, value in collected
+    ]
+    if entries:
+        logger.info(
+            f"Collected {len(entries)} run-provenance entries from "
+            f"{len(files_read)} file(s): {', '.join(files_read)}"
+        )
+    return entries, files_read
+
+
 def _introspect_pipeline_params(data_root: str, variables: dict[str, str]) -> None:
     """Read the run's nf-core ``params.json`` and set synthesized template flags.
 
@@ -837,6 +1030,7 @@ def resolve_template(
     data_root: str,
     project_name: str | None = None,
     extra_vars: dict[str, str] | None = None,
+    provenance_files: list[str] | None = None,
 ) -> tuple[dict[str, Any], TemplateMetadata, TemplateOrigin, list[Path], dict[str, str]]:
     """Load template YAML, substitute variables, apply conditionals, return resolved config.
 
@@ -892,6 +1086,13 @@ def resolve_template(
     # 3a. Introspect the run's params.json to set protocol/skip flags + auto-fill
     # METADATA_FILE (does not override explicit --var values).
     _introspect_pipeline_params(data_root_abs, variables)
+
+    # 3b. Collect the run's provenance (parameters, thresholds, tool versions)
+    # per the template's spec — persisted on TemplateOrigin for the ingestion
+    # report and the dashboard Settings drawer.
+    run_provenance, run_provenance_files = collect_run_provenance(
+        data_root_abs, template_metadata.provenance, provenance_files
+    )
 
     # 3b. Auto-detect metadata annotation columns when METADATA_FILE is provided
     if "METADATA_FILE" in variables:
@@ -1029,6 +1230,8 @@ def resolve_template(
         applied_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         config_snapshot=copy.deepcopy(resolved_config),
         expected_data_collections=expected_dcs,
+        run_provenance=run_provenance,
+        run_provenance_files=run_provenance_files,
     )
 
     # 10. Inject template_origin into config
