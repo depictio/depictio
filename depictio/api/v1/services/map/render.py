@@ -11,11 +11,34 @@ from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.services.multiqc.themes import get_theme_template
 
 
-def _compute_auto_zoom(lats: list[float], lons: list[float]) -> tuple[dict[str, float], int]:
-    """Compute center and zoom level from coordinate extent.
+# Reference viewport for the fit: the server does not know the panel's real
+# size, so assume a conservative dashboard tile. Underestimating keeps every
+# point on screen in larger panels; only a panel *narrower* than this could
+# clip edge points.
+_FIT_VIEWPORT_PX = (600, 400)
+# Fraction of a zoom level held back so edge markers are not flush against the
+# frame (matches the client-side CoordinatesMapPreview).
+_FIT_ZOOM_PADDING = 0.5
+_FIT_MAX_ZOOM = 12
+_FIT_SINGLE_POINT_ZOOM = 9
 
-    Uses the bounding box of all points to determine an appropriate
-    center point and zoom level for the map.
+
+def _lat_rad(lat: float) -> float:
+    sin = math.sin(lat * math.pi / 180.0)
+    rad = math.log((1 + sin) / (1 - sin)) / 2
+    return max(min(rad, math.pi), -math.pi) / 2
+
+
+def _compute_auto_zoom(lats: list[float], lons: list[float]) -> tuple[dict[str, float], int]:
+    """Center and zoom that frame every point, web-Mercator fit.
+
+    Mirrors the classic getBoundsZoom (and the client-side ``fitBoundsZoom``
+    in ``CoordinatesMapPreview.tsx``): project the latitude span through the
+    Mercator function, take the tighter of the lat/lon fits against a 512px
+    world tile, and hold back half a level of padding. The previous formula
+    (``int(log2(360/range)) + 1``) ignored the viewport, treated latitude
+    degrees as longitude degrees, and its ``+ 1`` landed a full level too
+    tight — Mediterranean-wide points rendered with the outer sites clipped.
 
     Args:
         lats: List of latitude values.
@@ -35,17 +58,22 @@ def _compute_auto_zoom(lats: list[float], lons: list[float]) -> tuple[dict[str, 
         "lon": (min_lon + max_lon) / 2,
     }
 
-    # Compute zoom from extent using log2-based formula
-    lat_range = max_lat - min_lat
-    lon_range = max_lon - min_lon
-    max_range = max(lat_range, lon_range)
+    if max_lat - min_lat == 0 and max_lon - min_lon == 0:
+        return center, _FIT_SINGLE_POINT_ZOOM
 
-    if max_range == 0:
-        return center, 12  # Single point
+    world = 512.0
+    width_px, height_px = _FIT_VIEWPORT_PX
+    lat_fraction = (_lat_rad(max_lat) - _lat_rad(min_lat)) / math.pi
+    lon_diff = max_lon - min_lon
+    if lon_diff < 0:
+        lon_diff += 360.0
+    lon_fraction = lon_diff / 360.0
 
-    # Approximate zoom: 360 degrees at zoom 0, halving each level
-    zoom = int(math.log2(360 / max(max_range, 0.001))) + 1
-    zoom = max(1, min(zoom, 14))  # Cap at 14 to avoid over-zooming on few points
+    eps = 1e-12
+    lat_zoom = math.log2(height_px / world / max(lat_fraction, eps))
+    lon_zoom = math.log2(width_px / world / max(lon_fraction, eps))
+    zoom = min(lat_zoom, lon_zoom) - _FIT_ZOOM_PADDING
+    zoom = max(1, min(int(zoom), _FIT_MAX_ZOOM))
 
     return center, zoom
 
