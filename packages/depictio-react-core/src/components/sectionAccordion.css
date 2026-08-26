@@ -1,21 +1,16 @@
 /*
  * Section chrome shared by the dashboard grid and the left filter panel.
  *
- * The two surfaces are drawn differently on purpose, because the same treatment
- * does not work at both widths:
+ * Both surfaces draw the same boxed treatment — border, coloured rail, body
+ * background — so a section reads as a section wherever it appears. The panel's
+ * `is-compact` variant only trims the paddings: at ~300px every pixel spent on
+ * chrome is one the filters don't get, but the box itself is what lets the eye
+ * tell where one section ends and the next begins (a bare rail proved too
+ * subtle there in practice).
  *
- * - The grid boxes each section. Across a full dashboard's width a hairline rail
- *   on the far left has nothing to group the rest of the row against, so the box
- *   is what says where a section starts and stops — the same shape folded or
- *   open, rather than a boundary that depends on how much room the content takes.
- * - The panel keeps a rail and an indent. A box a few hundred pixels wide spends
- *   its border and padding on the filters it is meant to organise, and at that
- *   width the rail is close enough to the content to group it.
- *
- * The accent's colour is set by the caller. Only the grid passes the section's
- * own colour; the filter panel leaves it neutral on purpose — two coloured edges
- * at the same heights on either side of the screen read as one paired set, and
- * the two lists of sections are unrelated.
+ * The accent's colour is set by the caller from the section spec, in the grid
+ * and in the panel alike; it falls back to the neutral border colour when a
+ * section has none.
  */
 
 .depictio-section-item {
@@ -70,7 +65,10 @@
 /* ------------------------------------------------------------- filter panel */
 
 .depictio-section-accordion.is-compact .depictio-section-item {
+  border: 1px solid var(--mantine-color-default-border);
   border-inline-start: 2px solid var(--section-accent);
+  border-radius: var(--mantine-radius-md);
+  background: var(--mantine-color-body);
   /* Deliberately tighter than a spacing token: the panel is a narrow column and
      every pixel here is one the filters don't get. Enough to hold the rail off
      the content, no more. */
@@ -91,16 +89,24 @@
 }
 
 .depictio-section-accordion.is-compact .depictio-section-control {
-  /* Flush against the rail — the indent is the item's, so the header and the
-     content start on the same line. */
-  padding-inline: 0;
+  /* Near-flush against the rail — the indent is the item's, so the header and
+     the content start on the same line; a whisker of end padding keeps the
+     hover fill off the box's border. */
+  padding-inline: 0 6px;
   padding-block: 4px;
+  /* Same concentric-corner trick as the grid variant, for the hover fill. */
+  border-radius: calc(var(--mantine-radius-md) - 1px);
 }
 
 .depictio-section-accordion.is-compact .depictio-section-item[data-active] .depictio-section-control {
   padding-block: var(--mantine-spacing-xs);
+  /* Open, the header sits above content and wants a line under it — mirrors
+     the grid variant so both surfaces read the same. */
+  border-bottom: 1px solid var(--mantine-color-default-border);
+  border-end-start-radius: 0;
+  border-end-end-radius: 0;
 }
 
 .depictio-section-accordion.is-compact .depictio-section-content {
-  padding: 0 0 var(--mantine-spacing-xs) 0;
+  padding: var(--mantine-spacing-xs) 6px var(--mantine-spacing-xs) 0;
 }

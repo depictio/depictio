@@ -51,12 +51,9 @@ export const SectionAccordion: React.FC<{
 export const SectionAccordionItem: React.FC<{
   value: string;
   /**
-   * Mantine palette name from the section spec — tints the rail. Passed by the
-   * grid only: a coloured rail in the filter panel too would put two colour
-   * columns at the same heights on either side of the screen, which reads as
-   * one paired set even though the panel's sections and the grid's are separate
-   * lists. The panel's colour stays on the icon and the count badge, where it
-   * identifies a section without claiming a region.
+   * Mantine palette name from the section spec — tints the rail. Both the grid
+   * and the filter panel pass it: the coloured rail is what makes a section
+   * recognisably the same thing on either surface.
    */
   color?: string | null;
   /**
@@ -123,9 +120,16 @@ export const SectionHeader: React.FC<{
           is the only thing left to explain it. */}
       <div style={{ minWidth: 0 }}>
         <Group gap={6} wrap="nowrap" style={{ minWidth: 0 }}>
-          <Text size="md" fw={600} truncate>
-            {name}
-          </Text>
+          {/* Tooltip carries the full text — both lines are `truncate`d and a
+              clipped name/description was otherwise unreadable, especially at
+              the filter panel's width. Always mounted rather than only when
+              clipped: measuring overflow needs a resize observer for marginal
+              gain, and an un-clipped tooltip merely repeats the line. */}
+          <Tooltip label={name} withArrow multiline w={260} openDelay={400}>
+            <Text size="md" fw={600} truncate>
+              {name}
+            </Text>
+          </Tooltip>
           {badge}
           {/* Rendered here rather than by each caller so a persistent section
               is marked the same in the grid, the filter panel and the
@@ -151,9 +155,11 @@ export const SectionHeader: React.FC<{
           )}
         </Group>
         {spec?.description && (
-          <Text size="sm" c="dimmed" truncate>
-            {spec.description}
-          </Text>
+          <Tooltip label={spec.description} withArrow multiline w={260} openDelay={400}>
+            <Text size="sm" c="dimmed" truncate>
+              {spec.description}
+            </Text>
+          </Tooltip>
         )}
       </div>
     </Group>

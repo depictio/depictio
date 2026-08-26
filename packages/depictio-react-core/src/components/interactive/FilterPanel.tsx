@@ -575,11 +575,10 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
             }
           >
             {named.map((s) => (
-              // No `color`: the panel's rails stay neutral so they don't pair
-              // up with the grid's. See `SectionAccordionItem`.
               <SectionAccordionItem
                 key={s.key}
                 value={s.key}
+                color={s.spec?.color}
                 actions={renderSectionActions?.(s.sectionName ?? null)}
               >
                 <Accordion.Control>{renderSectionHeader(s)}</Accordion.Control>
