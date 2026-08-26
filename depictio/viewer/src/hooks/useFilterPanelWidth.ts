@@ -2,7 +2,9 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { beginPanelResize, endPanelResize } from 'depictio-react-core';
 
 /**
- * Persisted, drag-adjustable width for the left filter panel.
+ * Persisted, drag-adjustable width for the left filter panel. Scoped per
+ * dashboard family, like `useFilterPanelOpen` — a width dragged on one tab
+ * carries to its siblings.
  *
  * Hand-rolled rather than built on `react-resizable`: that package ships with
  * react-grid-layout but carries no `@types` entry here, and a one-axis splitter

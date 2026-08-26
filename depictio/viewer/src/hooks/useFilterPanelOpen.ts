@@ -4,8 +4,12 @@ import { FILTER_PANEL_TOGGLE_EVENT, dispatchPanelToggle } from 'depictio-react-c
 /**
  * Persistent collapsed/expanded state for the left filter panel, modelled on
  * `useSidebarOpen`. Same storage convention (`true` = collapsed, JSON-encoded)
- * and same toggle event contract, but scoped per dashboard: which filters
- * matter is a property of the dashboard, not of the app as a whole.
+ * and same toggle event contract, but scoped per dashboard *family*: which
+ * filters matter is a property of the dashboard, not of the app as a whole —
+ * and a tab switch is a full page navigation to a sibling dashboard document,
+ * so a per-tab key would reopen the panel on every switch. The apps pass the
+ * family id once it resolves (the tab's own id stands in before that), and the
+ * key-swap effect below re-reads storage when it lands.
  *
  * Defaults to open, unlike the tab sidebar — the filters are the point of the
  * page, so hiding them on first visit would bury the feature.
@@ -39,7 +43,8 @@ function writeCollapsed(dashboardId: string | null, collapsed: boolean): void {
 }
 
 /**
- * @param dashboardId - scopes persistence; `null` falls back to a shared key.
+ * @param dashboardId - scopes persistence (the family id, in practice — see
+ *   above); `null` falls back to a shared key.
  * @param swingPx - px the content column gains when the panel collapses, i.e.
  *   `panelWidth - railWidth`. Read at toggle time so a resize between toggles
  *   is accounted for.

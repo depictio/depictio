@@ -213,6 +213,63 @@ const App: React.FC = () => {
 
   const dashboardId = extractDashboardId();
 
+  // ---- Cross-tab components: validate the hydrated filters -----------------
+  // Runs once the family's floating maps and persistent sections are known.
+  // Anything we seeded from storage that does not correspond to a
+  // still-floating map or a still-persistent filter control on *this*
+  // dashboard family is dropped: the component may have been deleted, its
+  // section un-marked persistent, or the viewer may have navigated to a
+  // different dashboard entirely (one browser tab, one storage entry).
+  const handleCrossTabResolved = useCallback((res: CrossTabComponentsResponse) => {
+    const familyId = res.parent_dashboard_id;
+    const floatIndices = new Set(res.floating.map((c) => c.metadata.index));
+    const persistentControls = new Map<string, StoredMetadata>();
+    for (const s of res.persistent_sections) {
+      if (s.kind !== 'filter') continue;
+      for (const c of s.components) persistentControls.set(c.metadata.index, c.metadata);
+    }
+
+    const stored = readCrossTabFilters();
+    const familyChanged =
+      stored != null && familyId != null && stored.parentDashboardId !== familyId;
+    const hydrated = hydratedIndicesRef.current ?? new Set<string>();
+    if (hydrated.size === 0) return;
+
+    setFilters((prev) =>
+      prev.filter((f) => {
+        if (!hydrated.has(f.index)) return true;
+        if (familyChanged) return false;
+        if (f.source === 'map_selection') return floatIndices.has(f.index);
+        // Only sourceless control values and map selections are ever
+        // persisted; anything else that got hydrated is a stale shape.
+        if (f.source !== undefined) return false;
+        const control = persistentControls.get(f.index);
+        if (!control) return false;
+        // The author may have re-pointed the control at another column or DC
+        // since the value was stored — a mismatched value must not keep
+        // filtering under the old meaning.
+        const storedDc = f.metadata?.dc_id;
+        if (storedDc && control.dc_id && storedDc !== control.dc_id) return false;
+        const storedCol = f.column_name ?? f.metadata?.column_name;
+        if (storedCol && control.column_name && storedCol !== control.column_name) return false;
+        return true;
+      }),
+    );
+    hydratedIndicesRef.current = new Set();
+    if (familyChanged) clearCrossTabFilters();
+  }, []);
+
+  // One request per page load for everything this tab renders on behalf of its
+  // siblings: floating maps + persistent sections.
+  const crossTab = useCrossTabComponents(dashboardId ?? '', handleCrossTabResolved);
+
+  // Panel chrome state is scoped to the dashboard *family*: a tab switch is a
+  // full page navigation to a sibling dashboard document, so per-dashboard
+  // keys would reset the panel on every switch. Until the family id resolves
+  // (one fetch, see useCrossTabComponents) the tab's own id stands in, and the
+  // hooks re-read storage when the key changes underneath them.
+  const panelScopeId = crossTab.familyId ?? dashboardId;
+
   // Left filter panel chrome. Width first: the collapse swing is the width the
   // content column reclaims, which is everything but the icon rail.
   const {
@@ -221,12 +278,12 @@ const App: React.FC = () => {
     layoutRef: filterPanelLayoutRef,
     beginResize: beginFilterPanelResize,
     nudge: nudgeFilterPanelWidth,
-  } = useFilterPanelWidth(dashboardId);
+  } = useFilterPanelWidth(panelScopeId);
   // The swing spans both variable tracks: collapsing takes the panel down to
   // the rail *and* the drag handle down to nothing. The grid gaps don't move,
   // so they cancel out.
   const [filterPanelOpened, toggleFilterPanel] = useFilterPanelOpen(
-    dashboardId,
+    panelScopeId,
     filterPanelWidth + FILTER_PANEL_RESIZER_WIDTH - FILTER_PANEL_RAIL_WIDTH,
   );
   // Below `sm` the panel would leave the content column unusable, so it moves
@@ -363,55 +420,6 @@ const App: React.FC = () => {
     JSON.stringify(groupsApi.bulkOptions ?? null),
   ]);
 
-  // ---- Cross-tab components: validate the hydrated filters -----------------
-  // Runs once the family's floating maps and persistent sections are known.
-  // Anything we seeded from storage that does not correspond to a
-  // still-floating map or a still-persistent filter control on *this*
-  // dashboard family is dropped: the component may have been deleted, its
-  // section un-marked persistent, or the viewer may have navigated to a
-  // different dashboard entirely (one browser tab, one storage entry).
-  const handleCrossTabResolved = useCallback((res: CrossTabComponentsResponse) => {
-    const familyId = res.parent_dashboard_id;
-    const floatIndices = new Set(res.floating.map((c) => c.metadata.index));
-    const persistentControls = new Map<string, StoredMetadata>();
-    for (const s of res.persistent_sections) {
-      if (s.kind !== 'filter') continue;
-      for (const c of s.components) persistentControls.set(c.metadata.index, c.metadata);
-    }
-
-    const stored = readCrossTabFilters();
-    const familyChanged =
-      stored != null && familyId != null && stored.parentDashboardId !== familyId;
-    const hydrated = hydratedIndicesRef.current ?? new Set<string>();
-    if (hydrated.size === 0) return;
-
-    setFilters((prev) =>
-      prev.filter((f) => {
-        if (!hydrated.has(f.index)) return true;
-        if (familyChanged) return false;
-        if (f.source === 'map_selection') return floatIndices.has(f.index);
-        // Only sourceless control values and map selections are ever
-        // persisted; anything else that got hydrated is a stale shape.
-        if (f.source !== undefined) return false;
-        const control = persistentControls.get(f.index);
-        if (!control) return false;
-        // The author may have re-pointed the control at another column or DC
-        // since the value was stored — a mismatched value must not keep
-        // filtering under the old meaning.
-        const storedDc = f.metadata?.dc_id;
-        if (storedDc && control.dc_id && storedDc !== control.dc_id) return false;
-        const storedCol = f.column_name ?? f.metadata?.column_name;
-        if (storedCol && control.column_name && storedCol !== control.column_name) return false;
-        return true;
-      }),
-    );
-    hydratedIndicesRef.current = new Set();
-    if (familyChanged) clearCrossTabFilters();
-  }, []);
-
-  // One request per page load for everything this tab renders on behalf of its
-  // siblings: floating maps + persistent sections.
-  const crossTab = useCrossTabComponents(dashboardId ?? '', handleCrossTabResolved);
 
   const floatingIndices = useMemo(
     () => new Set(crossTab.floating.map((c) => c.metadata.index)),
@@ -1066,6 +1074,7 @@ const App: React.FC = () => {
                   layoutData={dashboard.left_panel_layout_data}
                   filterSections={panelFilterSections}
                   dashboardId={dashboardId}
+                  stateScopeId={panelScopeId}
                   refreshTick={refreshTick}
                   collapsed={!filterPanelOpened}
                   onToggleCollapsed={toggleFilterPanel}
@@ -1253,6 +1262,7 @@ const App: React.FC = () => {
               layoutData={dashboard.left_panel_layout_data}
               filterSections={panelFilterSections}
               dashboardId={dashboardId}
+              stateScopeId={panelScopeId}
               refreshTick={refreshTick}
               funnel={{
                 enabled: funnelEnabled,

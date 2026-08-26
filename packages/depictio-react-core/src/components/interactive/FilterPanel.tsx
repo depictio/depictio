@@ -107,6 +107,11 @@ export interface FilterPanelProps {
   filterSections?: FilterSectionSpec[];
   /** Persisted per dashboard, so collapse state survives a reload. */
   dashboardId?: string | null;
+  /** Storage scope for the per-section collapse state. The apps pass the
+   *  dashboard *family* id (each tab is its own dashboard document, and a
+   *  section folded on one tab should stay folded on its siblings); falls back
+   *  to `dashboardId` while the family id is still resolving. */
+  stateScopeId?: string | null;
   refreshTick?: number;
   editMode?: boolean;
   /** Editor-only per-component actions (edit / duplicate / delete). */
@@ -168,6 +173,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
   layoutData,
   filterSections,
   dashboardId,
+  stateScopeId,
   refreshTick,
   editMode = false,
   renderItemOverlay,
@@ -194,7 +200,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
   // so the losing side falls back to its default on the next load. Matches the
   // `grid-section-collapsed:` naming used by DashboardGrid.
   const collapse = useCollapseState(
-    `filter-panel-sections-collapsed:${dashboardId ?? 'unknown'}`,
+    `filter-panel-sections-collapsed:${stateScopeId ?? dashboardId ?? 'unknown'}`,
     collapsedByDefault,
   );
 

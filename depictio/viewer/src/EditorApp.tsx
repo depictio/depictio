@@ -281,6 +281,16 @@ const EditorApp: React.FC = () => {
       groupsApi.groupFilters.length > 0 ? [...filters, ...groupsApi.groupFilters] : filters,
     [filters, groupsApi.groupFilters],
   );
+  // Authors see the panel as viewers will. Cross-tab (floating) filter
+  // persistence is deliberately viewer-only: an editing session's filter state
+  // is scratch across dashboards, and carrying it between tabs would be
+  // surprising here. Same-dashboard persistence within this browser tab is a
+  // different matter — see editorFilters.ts, which keeps filters alive across
+  // the builder round-trip.
+  const crossTab = useCrossTabComponents(dashboardId ?? '');
+
+  // Same family scoping as the viewer — see App.tsx `panelScopeId`.
+  const panelScopeId = crossTab.familyId ?? dashboardId;
 
   // Left filter panel chrome — same hooks and same storage keys as the viewer,
   // so collapsing or resizing in one mode carries over to the other.
@@ -290,12 +300,12 @@ const EditorApp: React.FC = () => {
     layoutRef: filterPanelLayoutRef,
     beginResize: beginFilterPanelResize,
     nudge: nudgeFilterPanelWidth,
-  } = useFilterPanelWidth(dashboardId);
+  } = useFilterPanelWidth(panelScopeId);
   // The swing spans both variable tracks: collapsing takes the panel down to
   // the rail *and* the drag handle down to nothing. The grid gaps don't move,
   // so they cancel out.
   const [filterPanelOpened, toggleFilterPanel] = useFilterPanelOpen(
-    dashboardId,
+    panelScopeId,
     filterPanelWidth + FILTER_PANEL_RESIZER_WIDTH - FILTER_PANEL_RAIL_WIDTH,
   );
   const isNarrow = useMediaQuery('(max-width: 48em)', false, { getInitialValueInEffect: false });
@@ -465,13 +475,6 @@ const EditorApp: React.FC = () => {
     ],
   );
 
-  // Authors see the panel as viewers will. Cross-tab (floating) filter
-  // persistence is deliberately viewer-only: an editing session's filter state
-  // is scratch across dashboards, and carrying it between tabs would be
-  // surprising here. Same-dashboard persistence within this browser tab is a
-  // different matter — see editorFilters.ts, which keeps filters alive across
-  // the builder round-trip.
-  const crossTab = useCrossTabComponents(dashboardId ?? '');
 
   // Persistent sections owned by *sibling* tabs. They render here exactly as
   // the viewer draws them — read-only, on their own surfaces — so an author
@@ -1780,6 +1783,7 @@ const EditorApp: React.FC = () => {
                   readOnlySections={readOnlyPanelSections}
                   renderSectionActions={renderPanelSectionAction}
                   dashboardId={dashboardId}
+                  stateScopeId={panelScopeId}
                   // No refreshTick: the editor threads no realtime refresh
                   // counter into any of its grids, so the left panel matches
                   // RightComponentGrid rather than inventing state here.
@@ -1921,6 +1925,7 @@ const EditorApp: React.FC = () => {
               filterSections={panelFilterSections}
               dashboardId={dashboardId}
               groupSummaryRows={groupSummaryRows}
+              stateScopeId={panelScopeId}
             />
           </Drawer>
         )}
