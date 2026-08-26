@@ -33,10 +33,17 @@ function isImagePath(s: string | null | undefined): boolean {
  * Deliberately not a title: the header breadcrumb already names the tab, and
  * repeating it here would put the same words on screen three times over on
  * tabs whose first component is a heading.
+ *
+ * Child tabs only. On the parent document the same field holds the DASHBOARD's
+ * identity line — what the listing card shows under the title — which is a
+ * statement about the whole family, not about the tab being read. Printed at
+ * the top of the canvas it reads as a stray caption; it stays in the header
+ * and the Info drawer, where it is about the right thing.
  */
 const TabIntro: React.FC<TabIntroProps> = ({ dashboard, activeTab }) => {
+  const isChildTab = Boolean(activeTab?.parent_dashboard_id ?? dashboard?.parent_dashboard_id);
   const subtitle = typeof dashboard?.subtitle === 'string' ? dashboard.subtitle.trim() : '';
-  if (!subtitle) return null;
+  if (!subtitle || !isChildTab) return null;
 
   const iconRaw = (activeTab?.tab_icon || activeTab?.icon) ?? null;
   const iconColor = (activeTab?.tab_icon_color || activeTab?.icon_color) ?? 'gray';
