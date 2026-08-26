@@ -16,6 +16,7 @@ Covers behaviors tightened after the #779 security work:
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -70,9 +71,12 @@ async def test_reference_dashboard_seeding_defers_visibility_to_save(
         await db_init.create_dashboard_from_json(admin_user, str(IRIS_SEED), static_dc_id="")
 
     # Whatever the auth mode, the seeding path passes the seed JSON's value
-    # through unchanged (iris ships is_public=True) — the authoritative value
-    # is stamped from the parent project by save_dashboard's insert branch.
-    assert captured["data"].is_public is True
+    # through unchanged — the authoritative value is stamped from the parent
+    # project by save_dashboard's insert branch (and converged at startup by
+    # reconcile_dashboard_visibility), so the seed's own flag is incidental and
+    # must not be read as an assertion about the deployed visibility.
+    seeded_is_public = json.loads(IRIS_SEED.read_text())["is_public"]
+    assert captured["data"].is_public is seeded_is_public
 
 
 # ---------------------------------------------------------------------------
