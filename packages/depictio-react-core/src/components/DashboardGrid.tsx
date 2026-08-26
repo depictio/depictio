@@ -631,7 +631,7 @@ const SUMMARY_CHIP_LIMIT = 4;
  * reads as those two numbers once folded — which is what makes folding a
  * section a way to simplify the dashboard rather than to hide it.
  */
-const SectionSummary: React.FC<{
+export const SectionSummary: React.FC<{
   section: ComponentSection;
   cardValues?: Record<string, unknown>;
 }> = ({ section, cardValues }) => {
