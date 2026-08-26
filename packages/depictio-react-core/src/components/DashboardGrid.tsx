@@ -82,6 +82,15 @@ interface DashboardGridProps {
    *  grid's accordion sections. Empty means no sections, i.e. one flat grid. */
   gridSections?: FilterSectionSpec[];
   /**
+   * Rendered between the unsectioned bucket and this tab's named sections —
+   * the slot the apps put the cross-tab `PersistentSectionsHost` (`pin: top`)
+   * in, so a family-wide section lands after the tab's own title/intro text
+   * (the unsectioned components) instead of above it, matching the order its
+   * owning tab draws. Opaque on purpose: its members must never enter this
+   * grid's layout merge.
+   */
+  beforeSections?: React.ReactNode;
+  /**
    * Host-provided per-section actions, beside the fold control rather than
    * inside it. Called with the section name (`null` for the unsectioned grid,
    * which has no header). The editor puts its "…" here, so a section is edited
@@ -120,6 +129,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
   onLayoutChange,
   renderItemOverlay,
   gridSections,
+  beforeSections,
   renderSectionActions,
 }) => {
   // Memoised because it feeds the deps of everything below: rebuilding this
@@ -533,6 +543,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
       style={{ width: '100%', overflowX: 'hidden' }}
     >
       {unsectioned && renderGrid(unsectioned)}
+      {beforeSections}
       {named.length > 0 && (
         <Group justify="flex-end" mb={4}>
           <Button

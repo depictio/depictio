@@ -503,6 +503,12 @@ const EditorApp: React.FC = () => {
     () => foreignGridSections.filter((s) => s.spec.pin === 'bottom'),
     [foreignGridSections],
   );
+
+  // The viewer's fan-out, previewed: read-only surfaces of their own, so a
+  // foreign `pin: top` section is visible while laying this tab out without
+  // ever entering its editable grid. Rendered through the grid's
+  // `beforeSections` slot so it sits after this tab's own unsectioned
+  // components (title / intro text), exactly as the viewer draws it.
   const mapPanel = useMapPanel({
     components: crossTab.floating,
     familyId: crossTab.familyId,
@@ -1548,6 +1554,25 @@ const EditorApp: React.FC = () => {
       onActivate={() => goToOwnerTab(section.owner_dashboard_id)}
     />
   );
+  // The viewer's fan-out, previewed: read-only surfaces of their own, so a
+  // foreign section is visible while laying this tab out without ever entering
+  // its editable grid. Handed to the grid as `beforeSections` so it lands after
+  // this tab's own unsectioned components. Declared here, below the section
+  // action renderer and `groupRender`: it reads both.
+  const topSectionsHost =
+    topGridSections.length > 0 ? (
+      <PersistentSectionsHost
+        sections={topGridSections}
+        familyId={crossTab.familyId}
+        slot="top"
+        filters={filters}
+        onFilterChange={handleFilterChange}
+        groupRender={groupRender}
+        bulkOptions={groupsApi.bulkOptions}
+        renderSectionActions={renderPersistentSectionAction}
+      />
+    ) : null;
+
   // The panel's list also holds the persistent sections a sibling tab owns.
   // Those get the jump instead of this tab's editor: the modal only knows this
   // dashboard's own specs. The grid needs no such branch — its foreign sections
@@ -1827,22 +1852,8 @@ const EditorApp: React.FC = () => {
                 ...contentScaleStyle,
               }}
             >
-              {/* The viewer's fan-out, previewed: read-only surfaces of their
-                  own, so a foreign section is visible while laying this tab
-                  out without ever entering its editable grid. */}
-              {topGridSections.length > 0 && (
-                <PersistentSectionsHost
-                  sections={topGridSections}
-                  familyId={crossTab.familyId}
-                  slot="top"
-                  filters={filters}
-                  onFilterChange={handleFilterChange}
-                  groupRender={groupRender}
-                  bulkOptions={groupsApi.bulkOptions}
-                  renderSectionActions={renderPersistentSectionAction}
-                />
-              )}
               <RightComponentGrid
+                beforeSections={topSectionsHost}
                 dashboardId={dashboardId!}
                 cardComponents={cardComponents}
                 otherComponents={otherComponents}
@@ -2004,6 +2015,9 @@ export default EditorApp;
 // ---------------------------------------------------------------------------
 
 interface RightComponentGridProps {
+  /** Forwarded to `DashboardGrid.beforeSections` (and shown above the empty
+   *  state) — the foreign `pin: top` persistent sections. */
+  beforeSections?: React.ReactNode;
   dashboardId: string;
   cardComponents: StoredMetadata[];
   otherComponents: StoredMetadata[];
@@ -2041,6 +2055,7 @@ interface RightComponentGridProps {
  * per-cell edit menu.
  */
 const RightComponentGrid: React.FC<RightComponentGridProps> = ({
+  beforeSections,
   dashboardId,
   cardComponents,
   otherComponents,
@@ -2069,6 +2084,8 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
 
   if (allComponents.length === 0) {
     return (
+      <>
+      {beforeSections}
       <Center style={{ height: '100%', minHeight: 320 }}>
         <Stack align="center" gap="md" maw={400}>
           <Box
@@ -2101,6 +2118,7 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
           </Button>
         </Stack>
       </Center>
+      </>
     );
   }
 
@@ -2110,6 +2128,7 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
       metadataList={allComponents}
       layoutData={layoutData}
       gridSections={gridSections}
+      beforeSections={beforeSections}
       filters={filters}
       onFilterChange={onFilterChange}
       cardValues={cardValues}

@@ -460,6 +460,13 @@ const App: React.FC = () => {
     [foreignGridSections],
   );
 
+  // Persistent grid sections owned by sibling tabs — the "always in view"
+  // slot a metadata table lands in on every tab. `pin: top` renders through
+  // DashboardGrid's `beforeSections` slot: after the tab's own unsectioned
+  // components (its title / intro text) but before its named sections — the
+  // same order the owning tab draws. `pin: bottom` stays a sibling after the
+  // whole grid. Sections this tab owns render inside DashboardGrid itself,
+  // where they stay editable.
   /**
    * What filter names, dc_ids and available-values are resolved against.
    *
@@ -737,6 +744,26 @@ const App: React.FC = () => {
       groupsApi.showOther,
     ],
   );
+
+  // Persistent grid sections owned by sibling tabs — the "always in view" slot
+  // a metadata table lands in on every tab. Handed to DashboardGrid as
+  // `beforeSections` so a `pin: top` section renders after this tab's own
+  // unsectioned components (its title and intro) rather than ahead of them.
+  // Declared here, below `groupRender` and `handleFilterChange`: it reads both.
+  const topSectionsHost =
+    topGridSections.length > 0 ? (
+      <PersistentSectionsHost
+        sections={topGridSections}
+        familyId={crossTab.familyId}
+        slot="top"
+        filters={deferredFilters}
+        onFilterChange={handleFilterChange}
+        refreshTick={refreshTick}
+        groupRender={groupRender}
+        bulkOptions={groupsApi.bulkOptions}
+      />
+    ) : null;
+
   // The Grouping panel's body. Mounted once, inside the header "Analysis"
   // popover (GroupingHeaderControl) — the panel is dashboard-family state and
   // has to stay reachable when the per-tab filter panel is collapsed.
@@ -1121,30 +1148,13 @@ const App: React.FC = () => {
                 ...contentScaleStyle,
               }}
             >
-              {/* Persistent grid sections owned by sibling tabs — the
-                  "always in view" slot a metadata table lands in on every tab.
-                  `pin: top` opens the tab with the family-wide context;
-                  `pin: bottom` puts it after this tab's own content, so a
-                  shared reference block does not precede the tab's own
-                  introduction. Sections this tab owns render inside
-                  DashboardGrid below, where they stay editable. */}
-              {topGridSections.length > 0 && (
-                <PersistentSectionsHost
-                  sections={topGridSections}
-                  familyId={crossTab.familyId}
-                  slot="top"
-                  filters={deferredFilters}
-                  onFilterChange={handleFilterChange}
-                  refreshTick={refreshTick}
-                  groupRender={groupRender}
-                  bulkOptions={groupsApi.bulkOptions}
-                />
-              )}
               {/* Only claims the leftover height when nothing follows it —
                   otherwise a short grid would push the bottom-pinned sections
                   to the fold with a gap above them. */}
               <Box style={{ flex: bottomGridSections.length > 0 ? '0 0 auto' : 1, minHeight: 0 }}>
                 {rightComponents.length === 0 ? (
+                  <>
+                  {topSectionsHost}
                   <Center style={{ height: '100%', minHeight: 320 }}>
                     <Stack align="center" gap="md" maw={420}>
                       <Box
@@ -1182,12 +1192,14 @@ const App: React.FC = () => {
                       )}
                     </Stack>
                   </Center>
+                  </>
                 ) : (
                   <DashboardGrid
                     dashboardId={dashboardId!}
                     metadataList={rightComponents}
                     layoutData={dashboard.right_panel_layout_data}
                     gridSections={dashboard.grid_sections}
+                    beforeSections={topSectionsHost}
                     filters={deferredFilters}
                     onFilterChange={handleFilterChange}
                     cardValues={cardValues}
