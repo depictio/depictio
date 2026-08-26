@@ -19,6 +19,7 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 from depictio.api.v1.configs.logging_init import logger
+from depictio.api.v1.services.multiqc.sample_matching import expand_samples
 from depictio.models.models.links import LinkConfig
 
 
@@ -120,8 +121,6 @@ class SampleMappingResolver(BaseLinkResolver):
         ``link_config.case_sensitive``. A key whose variant list is empty
         (canonical-only mapping) resolves to itself and counts as mapped.
         """
-        from depictio.api.v1.services.multiqc.sample_matching import expand_samples
-
         resolved, unmapped = expand_samples(
             source_values,
             link_config.mappings,

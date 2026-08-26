@@ -14,6 +14,7 @@ from typing import Any
 
 import polars as pl
 from bson import ObjectId
+from bson.errors import InvalidId
 from fastapi import APIRouter, Depends, HTTPException, Path
 
 from depictio.api.v1.configs.logging_init import logger
@@ -267,7 +268,7 @@ async def _translate_filter_values(
         )
 
 
-async def _get_multiqc_sample_mappings(target_dc_id: str) -> dict[str, list[str]]:
+def _get_multiqc_sample_mappings(target_dc_id: str) -> dict[str, list[str]]:
     """Fetch and aggregate sample mappings from ALL MultiQC reports for a DC.
 
     A single MultiQC data collection can have multiple reports (e.g., from different
@@ -723,7 +724,7 @@ async def resolve_link(
         and not link.link_config.mappings
     ):
         # Auto-fetch sample mappings from MultiQC report
-        sample_mappings = await _get_multiqc_sample_mappings(link.target_dc_id)
+        sample_mappings = _get_multiqc_sample_mappings(link.target_dc_id)
         if sample_mappings:
             # Create new config with fetched mappings
             effective_config = LinkConfig(
@@ -800,7 +801,16 @@ def _distinct_source_values(dc_id: str, column: str, cap: int) -> tuple[list[str
     """
     deltatable_doc = deltatables_collection.find_one({"data_collection_id": dc_id})
     if not deltatable_doc:
-        deltatable_doc = deltatables_collection.find_one({"data_collection_id": ObjectId(dc_id)})
+        # A link may legitimately carry a non-ObjectId dc id: DCLink permits an
+        # empty id when a tag is set, and the CLI writes a "tag:<tag>"
+        # placeholder for tags it could not resolve. Those must 404 like any
+        # other missing table, not raise InvalidId as a 500.
+        try:
+            dc_oid = ObjectId(dc_id)
+        except InvalidId:
+            dc_oid = None
+        if dc_oid is not None:
+            deltatable_doc = deltatables_collection.find_one({"data_collection_id": dc_oid})
     if not deltatable_doc or "delta_table_location" not in deltatable_doc:
         raise HTTPException(
             status_code=404,
@@ -830,7 +840,7 @@ def _distinct_source_values(dc_id: str, column: str, cap: int) -> tuple[list[str
     response_model=LinkMappingPreviewResponse,
     summary="Inspect how source values map through a link",
 )
-async def link_mapping_preview(
+def link_mapping_preview(
     project_id: str = Path(..., description="Project ID"),
     link_id: str = Path(..., description="Link ID to inspect"),
     limit: int = 500,
@@ -861,7 +871,7 @@ async def link_mapping_preview(
     mappings = link.link_config.mappings or {}
     mappings_source = "link_config" if mappings else "none"
     if not mappings and link.target_type == "multiqc":
-        mappings = await _get_multiqc_sample_mappings(str(link.target_dc_id))
+        mappings = _get_multiqc_sample_mappings(str(link.target_dc_id))
         if mappings:
             mappings_source = "multiqc_live"
 
@@ -988,7 +998,7 @@ async def get_multiqc_sample_mappings(
     _get_project_or_404(project_id, current_user)
 
     # Fetch aggregated sample mappings
-    mappings = await _get_multiqc_sample_mappings(dc_id)
+    mappings = _get_multiqc_sample_mappings(dc_id)
 
     logger.info(f"Returning {len(mappings)} aggregated sample mappings for MultiQC DC {dc_id}")
 

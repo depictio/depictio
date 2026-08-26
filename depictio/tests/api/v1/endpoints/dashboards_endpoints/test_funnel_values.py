@@ -180,3 +180,37 @@ def test_inactive_filters_are_ignored(patched_env):
     result = _call(filters, [], include_stages=True)
     assert result["filter_count"] == 1
     assert len(result["stages"]) == 1
+
+
+@pytest.mark.parametrize("falsy_value", [0, 0.0, False])
+def test_falsy_scalar_filters_still_count_as_stages(patched_env, falsy_value):
+    """A slider parked at 0 is a real constraint, not an empty filter.
+
+    Regression: the active-filter test used ``value not in (None, [], "",
+    False)``. ``0 == False`` in Python, so 0 and 0.0 were silently dropped
+    here while ``clean_filter_payload`` still applied them downstream. The
+    client zips its own active list against ``stages`` positionally, so the
+    drop mislabelled every reorder row after it.
+    """
+    filters = [
+        _filter("comp-habitat", "habitat", falsy_value),
+        _filter("comp-depth", "depth", ["3"]),
+    ]
+    result = _call(filters, [], include_stages=True)
+    assert result["filter_count"] == 2
+    assert len(result["stages"]) == 2
+
+
+def test_reset_range_filter_is_not_a_stage(patched_env):
+    """``[None, None]`` is what a reset RangeSlider emits — not a constraint.
+
+    The frontend's ``isFilterActive`` has always ignored it; the server used to
+    count it, which inflated the stage list in the other direction.
+    """
+    filters = [
+        _filter("comp-habitat", "habitat", [None, None]),
+        _filter("comp-depth", "depth", ["3"]),
+    ]
+    result = _call(filters, [], include_stages=True)
+    assert result["filter_count"] == 1
+    assert len(result["stages"]) == 1

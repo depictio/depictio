@@ -6172,9 +6172,23 @@ FUNNEL_MAX_TARGETS = 32
 FUNNEL_MAX_VALUES = 1000
 FUNNEL_MAX_STAGES = 12
 
-# Mirrors the frontend's isFilterActive: unset, empty and boolean-off values
-# are not constraints.
-_FUNNEL_INACTIVE_VALUES = (None, [], "", False)
+
+def _funnel_filter_is_active(f: dict) -> bool:
+    """Mirrors the frontend's ``isFilterActive``: only values that narrow data count.
+
+    Membership in a tuple of empties cannot express this: ``0 in (None, [], "",
+    False)`` is True in Python, so a slider parked at 0 would be dropped here
+    while ``clean_filter_payload`` still applies it downstream. The stage list
+    is zipped positionally against the client's own active list, so the two
+    must agree exactly or every reorder row past a divergence mislabels.
+    """
+    value = f.get("value")
+    if value is None or value == "":
+        return False
+    if isinstance(value, list):
+        # A range control that was reset emits [None, None].
+        return any(v is not None for v in value)
+    return True
 
 
 def _funnel_init_data(dashboard_data: dict, dc_id: str) -> dict[str, dict] | None:
@@ -6296,13 +6310,22 @@ def _funnel_target_values(
             "truncated": len(available) > FUNNEL_MAX_VALUES,
         }
 
-    merged = _resolve_link_filters_cached(
-        filters=remaining_filters,
-        target_dc_id=dc_id,
-        project_id=project_id,
-        access_token=access_token,
-        component_type="funnel",
-    )
+    # Link resolution can raise LinkResolutionError (timeout, upstream HTTP
+    # error). This endpoint answers every registered component in one batch, so
+    # letting it escape would 500 the whole batch over one slow link and blank
+    # a decorative feature dashboard-wide.
+    try:
+        merged = _resolve_link_filters_cached(
+            filters=remaining_filters,
+            target_dc_id=dc_id,
+            project_id=project_id,
+            access_token=access_token,
+            component_type="funnel",
+        )
+    except Exception as e:
+        logger.warning(f"funnel: link resolution failed for {dc_id}:{column}: {e}")
+        return {"status": "error"}
+
     filter_metadata = _build_filter_metadata(
         [f for f in merged if str((f.get("metadata") or {}).get("dc_id") or "") == dc_id]
     )
@@ -6357,13 +6380,20 @@ def _funnel_stage_counts(
     }
 
     def count_rows(dc_id: str, cumulative: list[dict]) -> int | None:
-        merged = _resolve_link_filters_cached(
-            filters=cumulative,
-            target_dc_id=dc_id,
-            project_id=project_id,
-            access_token=access_token,
-            component_type="funnel",
-        )
+        # As in _funnel_target_values: a raised LinkResolutionError here would
+        # abort the whole batch, so a failed stage degrades to an unknown count.
+        try:
+            merged = _resolve_link_filters_cached(
+                filters=cumulative,
+                target_dc_id=dc_id,
+                project_id=project_id,
+                access_token=access_token,
+                component_type="funnel",
+            )
+        except Exception as e:
+            logger.warning(f"funnel: link resolution failed for stage on {dc_id}: {e}")
+            return None
+
         filter_metadata = _build_filter_metadata(
             [f for f in merged if str((f.get("metadata") or {}).get("dc_id") or "") == dc_id]
         )
@@ -6452,7 +6482,7 @@ def funnel_values_endpoint(
     target_indexes = [str(i) for i in (request.get("target_indexes") or [])][:FUNNEL_MAX_TARGETS]
     include_stages = bool(request.get("include_stages", False))
 
-    active_filters = [f for f in filters if f.get("value") not in _FUNNEL_INACTIVE_VALUES]
+    active_filters = [f for f in filters if _funnel_filter_is_active(f)]
 
     stored_meta_index = {
         str(m.get("index")): m for m in (dashboard_data.get("stored_metadata") or [])

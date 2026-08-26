@@ -89,9 +89,8 @@ def patched_env():
         client.close()
 
 
-@pytest.mark.asyncio
-async def test_mapping_preview_reports_matches_and_orphans(patched_env):
-    response = await link_mapping_preview(
+def test_mapping_preview_reports_matches_and_orphans(patched_env):
+    response = link_mapping_preview(
         project_id=str(PROJECT_ID),
         link_id=LINK_ID,
         limit=500,
@@ -115,9 +114,8 @@ async def test_mapping_preview_reports_matches_and_orphans(patched_env):
     assert response.orphan_targets == ["ORPHAN"]
 
 
-@pytest.mark.asyncio
-async def test_mapping_preview_respects_limit(patched_env):
-    response = await link_mapping_preview(
+def test_mapping_preview_respects_limit(patched_env):
+    response = link_mapping_preview(
         project_id=str(PROJECT_ID),
         link_id=LINK_ID,
         limit=2,
@@ -128,12 +126,11 @@ async def test_mapping_preview_respects_limit(patched_env):
     assert response.source_values_total == 3
 
 
-@pytest.mark.asyncio
-async def test_mapping_preview_unknown_link_404(patched_env):
+def test_mapping_preview_unknown_link_404(patched_env):
     from fastapi import HTTPException
 
     with pytest.raises(HTTPException) as exc:
-        await link_mapping_preview(
+        link_mapping_preview(
             project_id=str(PROJECT_ID),
             link_id=str(ObjectId()),
             limit=10,

@@ -47,16 +47,7 @@ import {
   InteractiveFilter,
 } from '../../api';
 import { applyLayoutTheme, plotlyThemeColors } from '../advanced_viz/plotlyTheme';
-
-/** Mirrors the server's `_FUNNEL_INACTIVE_VALUES`: a filter holding one of
- *  these never becomes a stage, so the reorder list must not offer it either
- *  or its rows would stop lining up with the chart's bands. */
-const isActiveFilter = (f: InteractiveFilter): boolean => {
-  const v = f.value;
-  if (v === null || v === undefined || v === false || v === '') return false;
-  if (Array.isArray(v) && v.length === 0) return false;
-  return true;
-};
+import { isFilterActive } from '../../activeFilters';
 
 const formatValue = (value: unknown): string => {
   if (Array.isArray(value)) return value.map(String).join(', ');
@@ -103,7 +94,9 @@ const FunnelView: React.FC<FunnelViewProps> = ({ opened, onClose, dashboardId, f
   /** User-chosen stage order, as component indexes. Empty = dashboard order. */
   const [order, setOrder] = useState<string[]>([]);
 
-  const activeFilters = useMemo(() => filters.filter(isActiveFilter), [filters]);
+  // Must stay the shared rule: the server zips its `stages` array positionally
+  // against this list, so a divergence mislabels every row past it.
+  const activeFilters = useMemo(() => filters.filter(isFilterActive), [filters]);
 
   // Reconcile the stored order against the live filter list: keep the ranks the
   // user set for filters that are still active, drop the ones they cleared, and

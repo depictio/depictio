@@ -389,5 +389,3 @@ export const LinkMappingModal: React.FC<LinkMappingModalProps> = ({
     </Stack>
   </Modal>
 );
-
-export default LinkMappingInspector;
