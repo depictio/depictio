@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Responsive as ResponsiveGridLayout } from 'react-grid-layout';
+import { GRID_BREAKPOINTS, GRID_COL_COUNTS } from '../gridConfig';
 import { Accordion } from '@mantine/core';
 
 import type { BulkComputeOptions, InteractiveFilter, PersistentSection } from '../api';
@@ -239,8 +240,8 @@ const PersistentSectionsHost: React.FC<PersistentSectionsHostProps> = ({
                           false,
                         ),
                       }}
-                      breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480 }}
-                      cols={{ lg: 8, md: 6, sm: 4, xs: 2 }}
+                      breakpoints={GRID_BREAKPOINTS}
+                      cols={GRID_COL_COUNTS}
                       rowHeight={100}
                       width={Math.max(100, containerWidth - sectionInset)}
                       margin={[12, 4]}

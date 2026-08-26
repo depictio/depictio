@@ -1,5 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Responsive as ResponsiveGridLayout } from 'react-grid-layout';
+import {
+  GRID_BREAKPOINTS,
+  GRID_COL_COUNTS,
+  GRID_MAX_COLS,
+  GRID_WIDEST_BREAKPOINT,
+} from '../gridConfig';
 import type { Layout } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
@@ -344,7 +350,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
       // narrowed layout. Persisting that would silently overwrite the desktop
       // arrangement with its 2-column fallback the first time someone opened
       // the dashboard on a small screen.
-      if (breakpointRef.current !== 'lg') return;
+      if (breakpointRef.current !== GRID_WIDEST_BREAKPOINT) return;
       sectionLayoutsRef.current.set(sectionKey, current);
 
       const merged: Layout[] = [];
@@ -465,11 +471,12 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
     <ResponsiveGridLayout
       className="layout"
       layouts={{ lg: layoutsForSection(section.members) }}
-      // `lg` matches the historical hard-coded 8 columns, so nothing changes on
-      // a desktop. Below it the grid degrades to fewer, wider columns instead of
-      // squeezing eight of them into a phone's width.
-      breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480 }}
-      cols={{ lg: 8, md: 6, sm: 4, xs: 2 }}
+      // Shared geometry (see gridConfig.ts): `lg` keeps the authoring 8-column
+      // grid down to narrow content widths so opening the panels shrinks
+      // components instead of wrapping them; fewer columns are a phone-only
+      // fallback.
+      breakpoints={GRID_BREAKPOINTS}
+      cols={GRID_COL_COUNTS}
       onBreakpointChange={(bp) => {
         breakpointRef.current = bp;
       }}
@@ -683,7 +690,7 @@ export function normalizeLayout(
   // Also clamp w/x into the 8-col grid: positions saved by an earlier React
   // editor pass (when we briefly used cols=12) would be off-grid otherwise
   // and react-grid-layout would stack everything at y=0.
-  const COLS = 8;
+  const COLS = GRID_MAX_COLS;
   const matched = items
     .map((it) => {
       const w = Math.max(1, Math.min(it.w ?? 1, COLS));
@@ -780,7 +787,7 @@ function compactVerticallyForStatic(items: Layout[]): Layout[] {
  * items are touched, and nothing is reordered. Mirrors the server's
  * `_recompact_main_grid` lone-row rule for layouts the server didn't re-pack.
  */
-function widenLoneRows(items: Layout[], cols = 8): Layout[] {
+function widenLoneRows(items: Layout[], cols = GRID_MAX_COLS): Layout[] {
   const overlapsVertically = (a: Layout, b: Layout) =>
     !(a.y + a.h <= b.y || b.y + b.h <= a.y);
   return items.map((item) => {
