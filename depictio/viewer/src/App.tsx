@@ -672,9 +672,15 @@ const App: React.FC = () => {
       (d) => d.dashboard_id === parentId || d.parent_dashboard_id === parentId,
     );
     return family.sort((a, b) => {
-      // Parent first, then children alphabetically by title
-      if (!a.parent_dashboard_id && b.parent_dashboard_id) return -1;
-      if (a.parent_dashboard_id && !b.parent_dashboard_id) return 1;
+      // Parent (tab_order=0) first, then children by `tab_order` — the order the
+      // dashboard YAML authored and the editor already honours. Sorting by title
+      // instead, as this did, meant a viewer never saw the reading order the
+      // author laid out: on the ampliseq template it put "Sampling Campaign"
+      // (tab_order 1) last, behind every alphabetically earlier analysis tab.
+      // Title stays as the tiebreaker for tabs that carry no order.
+      const ao = a.tab_order ?? (a.parent_dashboard_id ? 1 : 0);
+      const bo = b.tab_order ?? (b.parent_dashboard_id ? 1 : 0);
+      if (ao !== bo) return ao - bo;
       return (a.title || '').localeCompare(b.title || '');
     });
   }, [dashboard, allDashboards, dashboardId]);
