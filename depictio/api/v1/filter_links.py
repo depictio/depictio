@@ -18,6 +18,7 @@ import httpx
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.deltatables_utils import LINK_NO_MATCH
+from depictio.models.models.links import resolve_link_tag_refs
 
 # Cache for link resolution results
 _link_resolution_cache: Dict[str, Dict[str, Any]] = {}
@@ -427,6 +428,9 @@ def extend_filters_via_links(
         return link_filters
 
     project_data = project_metadata.get("project", {})
+    # Resolve template-time ``tag:`` link placeholders before walking the
+    # graph — see ``resolve_link_tag_refs``.
+    resolve_link_tag_refs(project_data)
     project_id = str(project_data.get("_id", ""))
     project_links = project_data.get("links", [])
 

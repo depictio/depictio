@@ -388,3 +388,57 @@ class LinkMappingPreviewResponse(BaseModel):
     )
 
     model_config = ConfigDict(extra="forbid")
+
+
+def resolve_link_tag_refs(project: dict) -> dict:
+    """Resolve ``tag:<dc_tag>`` link placeholders against the project's own DCs.
+
+    Template-shipped links reference data collections by tag; the CLI's sync
+    step rewrites them to real DC ids after instantiation. But sync is
+    optional (``--skip-sync``, or a 409 short-circuit), and a project whose
+    links still carry ``tag:`` placeholders (or an empty id next to a set tag)
+    would silently resolve zero link paths — every cross-DC filter fan-out
+    no-ops. Normalising at read time makes link resolution independent of
+    whether that CLI step ever ran.
+
+    Mutates ``project['links']`` in place and returns the project for
+    convenience. Unknown tags are left untouched (the link then simply never
+    matches, as before).
+    """
+    links = project.get("links") or []
+    if not links:
+        return project
+
+    def _unresolved(link: dict) -> bool:
+        for id_field, tag_field in (
+            ("source_dc_id", "source_dc_tag"),
+            ("target_dc_id", "target_dc_tag"),
+        ):
+            raw = str(link.get(id_field) or "")
+            if raw.startswith("tag:") or (not raw and link.get(tag_field)):
+                return True
+        return False
+
+    if not any(_unresolved(link) for link in links if isinstance(link, dict)):
+        return project
+
+    tag_to_id: dict[str, str] = {}
+    for wf in project.get("workflows") or []:
+        for dc in wf.get("data_collections") or []:
+            tag = dc.get("data_collection_tag")
+            dc_id = dc.get("_id") or dc.get("id")
+            if tag and dc_id:
+                tag_to_id[str(tag)] = str(dc_id)
+
+    for link in links:
+        if not isinstance(link, dict):
+            continue
+        for id_field, tag_field in (
+            ("source_dc_id", "source_dc_tag"),
+            ("target_dc_id", "target_dc_tag"),
+        ):
+            raw = str(link.get(id_field) or "")
+            tag = link.get(tag_field) or (raw[4:] if raw.startswith("tag:") else None)
+            if (not raw or raw.startswith("tag:")) and tag and tag in tag_to_id:
+                link[id_field] = tag_to_id[tag]
+    return project

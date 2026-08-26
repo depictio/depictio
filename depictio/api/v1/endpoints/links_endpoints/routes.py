@@ -38,6 +38,7 @@ from depictio.models.models.links import (
     LinkResolutionRequest,
     LinkResolutionResponse,
     LinkUpdateRequest,
+    resolve_link_tag_refs,
 )
 from depictio.models.models.users import User
 
@@ -88,7 +89,10 @@ def _get_project_or_404(project_id: str, current_user: User) -> dict:
     if not has_access:
         raise HTTPException(status_code=403, detail="Access denied to project")
 
-    return project
+    # Links may still carry template-time ``tag:`` placeholders when the CLI
+    # sync step never ran (e.g. ``--skip-sync``); resolve them against this
+    # project's DCs so every consumer below matches on real ids.
+    return resolve_link_tag_refs(project)
 
 
 def _find_link_by_id(project: dict, link_id: str) -> tuple[DCLink | None, int]:

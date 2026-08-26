@@ -4064,6 +4064,7 @@ def _resolve_multiqc_sample_filter(
     if indirect_by_dc:
         from depictio.api.v1.db import projects_collection
         from depictio.api.v1.deltatables_utils import load_deltatable_lite
+        from depictio.models.models.links import resolve_link_tag_refs
 
         # Cross-DC filtering requires an explicit DCLink (metadata_dc_id ->
         # multiqc_dc_id). Without one we don't guess at conventional join-
@@ -4076,6 +4077,8 @@ def _resolve_multiqc_sample_filter(
             project_id = dashboard_data.get("project_id")
             if project_id:
                 project_doc = projects_collection.find_one({"_id": ObjectId(str(project_id))})
+                if project_doc:
+                    resolve_link_tag_refs(project_doc)
                 for lk in (project_doc or {}).get("links", []) or []:
                     if (
                         str(lk.get("target_dc_id")) == multiqc_dc_id_str
