@@ -156,7 +156,7 @@
       "passing": 16,
       "warning": 7,
       "failing": 5,
-      "pass_rate": 0.5714285714285714,
+      "pass_rate": 0.571428571429,
       "min": 12.5,
       "max": 250.0,
       "median": 64.9
@@ -172,7 +172,7 @@
       "passing": 20,
       "warning": 0,
       "failing": 8,
-      "pass_rate": 0.7142857142857143,
+      "pass_rate": 0.714285714286,
       "min": 12.5,
       "max": 250.0,
       "median": 64.9
@@ -182,7 +182,7 @@
       "total": 30,
       "filled": 28,
       "nulls": 2,
-      "fill_rate": 0.9333333333333333
+      "fill_rate": 0.933333333333
     },
     "uniqueness_sample": {
       "column": "sample",
@@ -190,7 +190,7 @@
       "measured": 30,
       "distinct": 29,
       "duplicated": 1,
-      "unique_rate": 0.9666666666666667,
+      "unique_rate": 0.966666666667,
       "nulls": 0,
       "top_repeat": {
         "name": "SRR0001",
@@ -227,17 +227,17 @@
         {
           "name": "trimmed_reads",
           "value": 29584905.0,
-          "share": 0.9194997668997669,
-          "step_share": 0.9194997668997669
+          "share": 0.9194997669,
+          "step_share": 0.9194997669
         },
         {
           "name": "mapped_reads",
           "value": 23968545.0,
-          "share": 0.7449431235431235,
-          "step_share": 0.8101612967829371
+          "share": 0.744943123543,
+          "step_share": 0.810161296783
         }
       ],
-      "retained": 0.7449431235431235
+      "retained": 0.744943123543
     },
     "trend_by_day_bucketed": {
       "column": "coverage",
@@ -303,7 +303,7 @@
         },
         {
           "label": "2024-02-06",
-          "value": 62.099999999999994
+          "value": 62.1
         },
         {
           "label": "2024-02-10",
@@ -344,7 +344,7 @@
       ],
       "first": 55.45,
       "last": 63.1,
-      "change": 0.13796212804328212,
+      "change": 0.137962128043,
       "min": 0.0,
       "max": 169.05
     },
@@ -360,7 +360,7 @@
         },
         {
           "label": "2",
-          "value": 64.46249999999999
+          "value": 64.4625
         },
         {
           "label": "3",
@@ -376,12 +376,12 @@
         },
         {
           "label": "6",
-          "value": 59.32000000000001
+          "value": 59.32
         }
       ],
       "first": 71.78,
-      "last": 59.32000000000001,
-      "change": -0.1735859570911117,
+      "last": 59.32,
+      "change": -0.173585957091,
       "min": 49.58,
       "max": 99.96
     },
@@ -447,7 +447,7 @@
       ],
       "first": 107.9,
       "last": 401.55,
-      "change": 2.7215013901760887,
+      "change": 2.72150139018,
       "min": 107.9,
       "max": 586.6
     }
@@ -506,7 +506,7 @@
       "top_share": 0.8,
       "unique_values": 5,
       "breakdown_kind": "count",
-      "evenness": 0.9349775297671233
+      "evenness": 0.934977529767
     },
     "breakdown_lineage_sum": {
       "column": "lineage",
@@ -515,33 +515,33 @@
         {
           "name": "B.1.1.7",
           "count": 586,
-          "percent": 0.3012853470437018
+          "percent": 0.301285347044
         },
         {
           "name": "B.1.617.2",
           "count": 440,
-          "percent": 0.2262210796915167
+          "percent": 0.226221079692
         },
         {
           "name": "(null)",
           "count": 409,
-          "percent": 0.2102827763496144
+          "percent": 0.21028277635
         },
         {
           "name": "P.1",
           "count": 401,
-          "percent": 0.20616966580976864
+          "percent": 0.20616966581
         },
         {
           "name": "AY.4",
           "count": 107,
-          "percent": 0.055012853470437016
+          "percent": 0.0550128534704
         }
       ],
-      "top_share": 0.9989717223650385,
+      "top_share": 0.998971722365,
       "unique_values": 5,
       "breakdown_kind": "sum",
-      "evenness": 0.9386296131264552
+      "evenness": 0.938629613126
     },
     "breakdown_self": {
       "column": "lineage",
@@ -566,7 +566,7 @@
       "top_share": 0.8,
       "unique_values": 5,
       "breakdown_kind": "nunique",
-      "evenness": 0.9349775297671233
+      "evenness": 0.934977529767
     },
     "breakdown_run_nunique": {
       "column": "run",
@@ -575,46 +575,46 @@
         {
           "name": "1",
           "count": 5,
-          "percent": 0.16666666666666666
+          "percent": 0.166666666667
         },
         {
           "name": "2",
           "count": 5,
-          "percent": 0.16666666666666666
+          "percent": 0.166666666667
         },
         {
           "name": "3",
           "count": 5,
-          "percent": 0.16666666666666666
+          "percent": 0.166666666667
         },
         {
           "name": "4",
           "count": 5,
-          "percent": 0.16666666666666666
+          "percent": 0.166666666667
         }
       ],
-      "top_share": 0.6666666666666666,
+      "top_share": 0.666666666667,
       "unique_values": 6,
       "breakdown_kind": "nunique",
-      "evenness": 0.9999999999999999
+      "evenness": 1.0
     }
   },
   "aggregations": {
     "coverage::count": 28,
     "coverage::nunique": 28,
-    "coverage::sum": 1945.4499999999998,
-    "coverage::average": 69.48035714285713,
+    "coverage::sum": 1945.45,
+    "coverage::average": 69.4803571429,
     "coverage::median": 64.9,
     "coverage::min": 12.5,
     "coverage::max": 250.0,
     "coverage::range": 237.5,
-    "coverage::variance": 1731.726729497354,
-    "coverage::std_dev": 41.61402082829,
+    "coverage::variance": 1731.7267295,
+    "coverage::std_dev": 41.6140208283,
     "coverage::q1": 46.5,
     "coverage::q3": 82.65,
     "coverage::percentile": 64.9,
-    "coverage::skewness": 3.0657845311257255,
-    "coverage::kurtosis": 13.32575330305346,
+    "coverage::skewness": 3.06578453113,
+    "coverage::kurtosis": 13.3257533031,
     "lineage::count": 27,
     "lineage::nunique": 4,
     "lineage::mode": "B.1.1.7",

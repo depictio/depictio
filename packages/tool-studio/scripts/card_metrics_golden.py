@@ -166,11 +166,24 @@ AGG_CASES = [
 ] + [("lineage", "count"), ("lineage", "nunique"), ("lineage", "mode"), ("run", "mode")]
 
 
+#: Significant digits kept for every float in the payload. Variance, std_dev
+#: and skewness are order-of-summation sensitive, so polars returns them
+#: differing in the last bits from one machine to the next — the committed
+#: golden then fails CI's byte-exact drift check even though nothing changed.
+#: The test compares numbers with a 1e-9 relative tolerance, so rounding at
+#: ~5e-13 relative loses nothing it can observe while making the file
+#: reproducible. Do not lower this below the test's tolerance.
+_SIGNIFICANT_DIGITS = 12
+
+
 def _json_safe(value):
     """NaN / Inf have no JSON spelling, and a payload carrying one is a bug the
-    test should see as such rather than as an unparseable file."""
-    if isinstance(value, float) and (math.isnan(value) or math.isinf(value)):
-        return None
+    test should see as such rather than as an unparseable file. Floats are
+    rounded so the emitted JSON is byte-identical across machines."""
+    if isinstance(value, float):
+        if math.isnan(value) or math.isinf(value):
+            return None
+        return float(f"{value:.{_SIGNIFICANT_DIGITS}g}")
     if isinstance(value, dict):
         return {k: _json_safe(v) for k, v in value.items()}
     if isinstance(value, list):

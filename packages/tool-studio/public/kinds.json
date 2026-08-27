@@ -9,6 +9,17 @@
       "required_roles": [
         "index"
       ],
+      "role_names": {
+        "index": [
+          "feature_id",
+          "gene_id",
+          "id",
+          "index",
+          "name",
+          "row",
+          "sample_id"
+        ]
+      },
       "roles": {
         "index": {
           "description": "Row identifier used as the heatmap index.",
@@ -32,6 +43,25 @@
         "position",
         "value"
       ],
+      "role_names": {
+        "chromosome": [
+          "#chrom",
+          "chr",
+          "chrom",
+          "chromosome"
+        ],
+        "position": [
+          "pos",
+          "position",
+          "start"
+        ],
+        "value": [
+          "coverage",
+          "depth",
+          "score",
+          "value"
+        ]
+      },
       "roles": {
         "category": {
           "description": "Categorical grouping / annotation.",
@@ -115,6 +145,25 @@
         "contrast",
         "lfc"
       ],
+      "role_names": {
+        "contrast": [
+          "comparison",
+          "contrast",
+          "group"
+        ],
+        "feature_id": [
+          "feature_id",
+          "gene",
+          "id",
+          "name"
+        ],
+        "lfc": [
+          "lfc",
+          "log2_fold_change",
+          "log2fc",
+          "logfc"
+        ]
+      },
       "roles": {
         "contrast": {
           "description": "Comparison / contrast label (group vs group).",
@@ -171,6 +220,30 @@
         "mean_expression",
         "frac_expressing"
       ],
+      "role_names": {
+        "cluster": [
+          "cell_type",
+          "celltype",
+          "cluster",
+          "group"
+        ],
+        "frac_expressing": [
+          "frac",
+          "frac_expressing",
+          "pct",
+          "pct_expressing"
+        ],
+        "gene": [
+          "feature",
+          "gene",
+          "marker"
+        ],
+        "mean_expression": [
+          "avg_expression",
+          "mean_expr",
+          "mean_expression"
+        ]
+      },
       "roles": {
         "cluster": {
           "description": "Cluster / cell-type label.",
@@ -218,6 +291,37 @@
         "dim_1",
         "dim_2"
       ],
+      "role_names": {
+        "dim_1": [
+          "comp1",
+          "dim1",
+          "dim_1",
+          "pc1",
+          "pca1",
+          "tsne1",
+          "tsne_1",
+          "umap1",
+          "umap_1",
+          "x"
+        ],
+        "dim_2": [
+          "comp2",
+          "dim2",
+          "dim_2",
+          "pc2",
+          "pca2",
+          "tsne2",
+          "tsne_2",
+          "umap2",
+          "umap_2",
+          "y"
+        ],
+        "sample_id": [
+          "sample",
+          "sample-id",
+          "sample_id"
+        ]
+      },
       "roles": {
         "cluster": {
           "description": "Cluster / cell-type label.",
@@ -292,6 +396,32 @@
         "padj",
         "gene_count"
       ],
+      "role_names": {
+        "gene_count": [
+          "count",
+          "gene_count",
+          "n_genes",
+          "size"
+        ],
+        "nes": [
+          "nes",
+          "normalized_enrichment_score"
+        ],
+        "padj": [
+          "fdr",
+          "p_adj",
+          "padj",
+          "q_val",
+          "qvalue"
+        ],
+        "term": [
+          "description",
+          "gene_set",
+          "go_term",
+          "pathway",
+          "term"
+        ]
+      },
       "roles": {
         "gene_count": {
           "description": "Number of genes in the set.",
@@ -355,6 +485,25 @@
         "position",
         "category"
       ],
+      "role_names": {
+        "category": [
+          "category",
+          "consequence",
+          "effect",
+          "type"
+        ],
+        "feature_id": [
+          "feature",
+          "feature_id",
+          "gene"
+        ],
+        "position": [
+          "aa_pos",
+          "pos",
+          "position",
+          "site"
+        ]
+      },
       "roles": {
         "category": {
           "description": "Categorical grouping / annotation.",
@@ -408,6 +557,27 @@
         "avg_log_intensity",
         "log2_fold_change"
       ],
+      "role_names": {
+        "avg_log_intensity": [
+          "a",
+          "avg_log_intensity",
+          "basemean",
+          "log_basemean",
+          "log_intensity"
+        ],
+        "feature_id": [
+          "feature_id",
+          "gene_id",
+          "id"
+        ],
+        "log2_fold_change": [
+          "lfc",
+          "log2_fold_change",
+          "log2foldchange",
+          "logfc",
+          "m"
+        ]
+      },
       "roles": {
         "avg_log_intensity": {
           "description": "Average log intensity \u2014 MA-plot x-axis (e.g. baseMean).",
@@ -463,6 +633,28 @@
         "pos",
         "score"
       ],
+      "role_names": {
+        "chr": [
+          "#chrom",
+          "chr",
+          "chrom",
+          "chromosome"
+        ],
+        "pos": [
+          "bp",
+          "pos",
+          "position"
+        ],
+        "score": [
+          "af",
+          "minus_log10_p",
+          "neg_log_p",
+          "p",
+          "p_value",
+          "pvalue",
+          "score"
+        ]
+      },
       "roles": {
         "chr": {
           "description": "Chromosome / contig name.",
@@ -524,6 +716,23 @@
         "gene",
         "mutation_type"
       ],
+      "role_names": {
+        "gene": [
+          "gene",
+          "hugo_symbol"
+        ],
+        "mutation_type": [
+          "consequence",
+          "effect",
+          "mutation_type",
+          "variant_classification"
+        ],
+        "sample_id": [
+          "sample",
+          "sample_id",
+          "tumor_sample_barcode"
+        ]
+      },
       "roles": {
         "gene": {
           "description": "Gene / feature name.",
@@ -561,6 +770,16 @@
       "required_roles": [
         "taxon"
       ],
+      "role_names": {
+        "taxon": [
+          "label",
+          "leaf",
+          "name",
+          "taxon",
+          "tip",
+          "tip_label"
+        ]
+      },
       "roles": {
         "color": {
           "description": "Optional column mapped to point colour.",
@@ -608,6 +827,15 @@
       "required_roles": [
         "p_value"
       ],
+      "role_names": {
+        "p_value": [
+          "fdr",
+          "p",
+          "p_value",
+          "padj",
+          "pvalue"
+        ]
+      },
       "roles": {
         "category": {
           "description": "Categorical grouping / annotation.",
@@ -647,6 +875,28 @@
         "depth",
         "metric"
       ],
+      "role_names": {
+        "depth": [
+          "depth",
+          "rarefaction_depth",
+          "sampling_depth"
+        ],
+        "metric": [
+          "chao1",
+          "evenness",
+          "faith_pd",
+          "metric",
+          "observed_features",
+          "shannon",
+          "simpson",
+          "value"
+        ],
+        "sample_id": [
+          "sample",
+          "sample-id",
+          "sample_id"
+        ]
+      },
       "roles": {
         "depth": {
           "description": "Sequencing / sampling depth.",
@@ -722,6 +972,7 @@
       "icon": "tabler:chart-sankey",
       "label": "Sankey (categorical flow)",
       "required_roles": [],
+      "role_names": {},
       "roles": {},
       "viz_kind": "sankey"
     },
@@ -737,6 +988,39 @@
         "rank",
         "abundance"
       ],
+      "role_names": {
+        "abundance": [
+          "abundance",
+          "count",
+          "fraction_total_reads",
+          "frequency",
+          "new_est_reads",
+          "reads",
+          "rel_abundance",
+          "relative_abundance"
+        ],
+        "rank": [
+          "level",
+          "rank",
+          "taxon_rank",
+          "taxonomy_lvl"
+        ],
+        "sample_id": [
+          "sample",
+          "sample-id",
+          "sample_id"
+        ],
+        "taxon": [
+          "asv",
+          "lineage",
+          "name",
+          "otu",
+          "otu_id",
+          "taxa",
+          "taxon",
+          "taxonomy"
+        ]
+      },
       "roles": {
         "abundance": {
           "description": "Abundance / count / relative frequency.",
@@ -790,6 +1074,18 @@
       "required_roles": [
         "abundance"
       ],
+      "role_names": {
+        "abundance": [
+          "abundance",
+          "count",
+          "fraction_total_reads",
+          "frequency",
+          "new_est_reads",
+          "reads",
+          "rel_abundance",
+          "relative_abundance"
+        ]
+      },
       "roles": {
         "abundance": {
           "description": "Abundance / count / relative frequency.",
@@ -817,6 +1113,7 @@
       "icon": "tabler:chart-bar-popular",
       "label": "UpSet plot",
       "required_roles": [],
+      "role_names": {},
       "roles": {},
       "viz_kind": "upset_plot"
     },
@@ -831,6 +1128,37 @@
         "effect_size",
         "significance"
       ],
+      "role_names": {
+        "effect_size": [
+          "effect_size",
+          "fc",
+          "lfc",
+          "log2_fold_change",
+          "log2fc",
+          "log2foldchange",
+          "logfc"
+        ],
+        "feature_id": [
+          "feature",
+          "feature_id",
+          "gene",
+          "gene_id",
+          "id",
+          "name",
+          "symbol"
+        ],
+        "significance": [
+          "fdr",
+          "p_adj",
+          "p_value",
+          "padj",
+          "pvalue",
+          "q_val",
+          "qval",
+          "qvalue",
+          "significance"
+        ]
+      },
       "roles": {
         "category": {
           "description": "Categorical grouping / annotation.",
